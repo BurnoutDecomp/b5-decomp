@@ -200,22 +200,22 @@ namespace DirectorIO
 
     const InputBuffer::ContactSpyInterface* InputBuffer::GetContacts() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for reading\n", CGS_ARTIST_FILE, 848));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+            "Not locked for reading\n", CGS_ARTIST_FILE, 848);
         return &mContacts;
     }
 
     const CgsContainers::BitArray<8u>* InputBuffer::GetUsedRaceCars() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 714));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 714);
         return &mUsedRaceCars;
     }
 
     const u32* InputBuffer::GetVehicleInfoArray() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 649));
+            CGS_ARTIST_FILE, 649);
         // @0x82206EF0 (`addi r3, this, 0x3238`): the eight per-car TEAM words SetVehicleTeam writes
         // (see the header) -- AllVehicleData::Update's fifth argument, lpaVehicleTeams.
         return maVehicleInfoArray;
@@ -257,7 +257,7 @@ namespace DirectorIO
     // The console body is exactly: assert the read lock, then `return this + 0x3340`.
     const CgsModule::VariableEventQueue<13312, 16>* InputBuffer::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 583));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 583);
         return &mGameActionQueue;
     }
 
@@ -309,9 +309,9 @@ namespace DirectorIO
 
     const CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 601));
+            CGS_ARTIST_FILE, 601);
         return &mTimerInterface;
     }
 
@@ -319,7 +319,7 @@ namespace DirectorIO
     // lock, calls this, and copies the game module's 48-byte snapshot over it).
     CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 592));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 592);
         return &mTimerInterface;
     }
 
@@ -327,7 +327,7 @@ namespace DirectorIO
     // `this + 0x6780`. Its only console caller is MainDirector::ProcessNewVehicleEvents.
     const BrnDirectorVehicleInputInterface* InputBuffer::GetVehicleInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 618));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 618);
         return &mVehicleDriverInputInterface;
     }
 
@@ -335,28 +335,28 @@ namespace DirectorIO
     {
         // X360 0x823B2890: the non-const (write-side) handle tests bit 3 (write-lock),
         // unlike the const read-lock overload above.
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            CGS_ARTIST_FILE, 609));
+            CGS_ARTIST_FILE, 609);
         return &mVehicleDriverInputInterface;
     }
 
     const BrnGui::GuiPFXHookEnumeration* InputBuffer::GetHookEnumeration() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        CGS_ASSERT(mbHasGotHookEnumeration, CGS_ASSERT_MESSAGE_AT("mbHasGotHookEnumeration", CGS_ARTIST_FILE, 888));
+        CGS_ASSERT_AT(mbHasGotHookEnumeration, "mbHasGotHookEnumeration", CGS_ARTIST_FILE, 888);
         return &mHookEnumeration;
     }
 
     EActiveRaceCarIndex InputBuffer::GetPlayerCarIndex() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 629));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 629);
         return mePlayerCarIndex;
     }
 
     bool InputBuffer::GetShortcutMenuState() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 830));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 830);
         return mbShortcutMenuState;
     }
 
@@ -364,37 +364,37 @@ namespace DirectorIO
 
     bool InputBuffer::HasGotHookEnumeration() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 878));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 878);
         return mbHasGotHookEnumeration;
     }
 
     bool InputBuffer::HasGotShortcutMenuEvent() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 814));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 814);
         return mbGotShortcutMenuEvent;
     }
 
     bool InputBuffer::HasGotCrashNavShownEvent() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 760));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 760);
         return mbGotCrashNavShownEvent;
     }
 
     bool InputBuffer::HasGotCrashNavHiddenEvent() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 778));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 778);
         return mbGotCrashNavHiddenEvent;
     }
 
     bool InputBuffer::HasGotColourCalibrationShownEvent() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 796));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 796);
         return mbGotColourCalibrationShownEvent;
     }
 
     bool InputBuffer::HasGotColourCalibrationHiddenEvent() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 839));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 839);
         return mbGotColourCalibrationHiddenEvent;
     }
 
@@ -504,19 +504,19 @@ namespace DirectorIO
 
     void InputBuffer::AppendContacts(const ContactSpyInterface* lpContacts)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 858));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 858);
         mContacts = *lpContacts;
     }
 
     void InputBuffer::SetControllerInfo(const void* lpControllerInfo)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 733));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 733);
         std::memcpy(mControllerInfo, lpControllerInfo, sizeof(mControllerInfo)); // 224 bytes
     }
 
     void InputBuffer::SetHookEnumeration(const BrnGui::GuiPFXHookEnumeration* lpHookEnumeration)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 868));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 868);
         std::memcpy(&mHookEnumeration, lpHookEnumeration, sizeof(mHookEnumeration));
         mbHasGotHookEnumeration = true;
     }
@@ -536,7 +536,7 @@ namespace DirectorIO
 
     void InputBuffer::SetCrashingCentreOfMass(u32 luIndex, const Matrix44Affine& lrCentreOfMass)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 686));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 686);
         // X360 copies the 4-row affine (4 * 16-byte VMX stores) into the indexed VehicleInfo's
         // mCrashingCentreOfMass (element+0x460) then sets mbHasCrashingCenterOfMass (element+0x4E5).
         mRaceCarInfo[luIndex].mCrashingCentreOfMass     = lrCentreOfMass;
@@ -545,8 +545,8 @@ namespace DirectorIO
 
     void InputBuffer::SetVehicleTeam(EActiveRaceCarIndex leIndex, s32 liTeam)
     {
-        CGS_ASSERT(leIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID, CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ARTIST_FILE, 638));
-        CGS_ASSERT(leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,    CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 639));
+        CGS_ASSERT_AT(leIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ARTIST_FILE, 638);
+        CGS_ASSERT_AT(leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,    "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 639);
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         // X360 @0x823B2938: `stw team, 0x3238 + 4 * index` -- the index'th per-car team word
         // (BridgeGameStateToDirector's last leg passes OnlineScoringOutputInterface::maePlayerTeam[i]).
@@ -582,32 +582,32 @@ namespace DirectorIO
 
     void InputBuffer::SetShortcutMenuEvent(bool lbState)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 822));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 822);
         mbShortcutMenuState    = lbState;
         mbGotShortcutMenuEvent = true;
     }
 
     void InputBuffer::SetGotCrashNavShownEvent()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 751));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 751);
         mbGotCrashNavShownEvent = true;
     }
 
     void InputBuffer::SetGotCrashNavHiddenEvent()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 769));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 769);
         mbGotCrashNavHiddenEvent = true;
     }
 
     void InputBuffer::SetGotColourCalibrationShownEvent()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 787));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 787);
         mbGotColourCalibrationShownEvent = true;
     }
 
     void InputBuffer::SetGotColourCalibrationHiddenEvent()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 805));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 805);
         mbGotColourCalibrationHiddenEvent = true;
     }
 
@@ -737,7 +737,7 @@ namespace DirectorIO
     // X360 0x822070E8 (BrnDirectorModuleIO.h:742): read-lock; return &mControllerInfo (this+0x3260).
     const ControlInput* InputBuffer::GetControll() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 742));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 742);
         return reinterpret_cast<const ControlInput*>(mControllerInfo);
     }
 

@@ -146,9 +146,9 @@ CGS_STATIC_ASSERT((sizeof(Hull) == 0x50), "X360 Hull stride");
 
 inline const Section* Hull::GetSection(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < muNumSections,
-        CGS_ASSERT_MESSAGE_AT("luIndex < muNumSections",
-            CGS_ARTIST_BRNTRAFFICHULL_FILE, 185 /* ARTIST 0x821F5310 */));
+    CGS_ASSERT_AT(luIndex < muNumSections,
+        "luIndex < muNumSections",
+            CGS_ARTIST_BRNTRAFFICHULL_FILE, 185 /* ARTIST 0x821F5310 */);
     return &mpaSections[luIndex];
 }
 
@@ -166,12 +166,12 @@ inline const f32* Hull::GetRungLengthsForSection(const Section* lpSection) const
 
 inline const Neighbour* Hull::GetNeighbour(u32 luIndex) const
 {
-    CGS_ASSERT(mpaNeighbourData != 0,
-        CGS_ASSERT_MESSAGE_AT("mpaNeighbourData",
-            CGS_ARTIST_BRNTRAFFICHULL_FILE, 247 /* ARTIST 0x821F5388 */));
-    CGS_ASSERT(luIndex < muNumNeighbours,
-        CGS_ASSERT_MESSAGE_AT("luIndex < muNumNeighbours",
-            CGS_ARTIST_BRNTRAFFICHULL_FILE, 248 /* ARTIST 0x821F53B0 */));
+    CGS_ASSERT_AT(mpaNeighbourData != 0,
+        "mpaNeighbourData",
+            CGS_ARTIST_BRNTRAFFICHULL_FILE, 247 /* ARTIST 0x821F5388 */);
+    CGS_ASSERT_AT(luIndex < muNumNeighbours,
+        "luIndex < muNumNeighbours",
+            CGS_ARTIST_BRNTRAFFICHULL_FILE, 248 /* ARTIST 0x821F53B0 */);
     return &mpaNeighbourData[luIndex];
 }
 
@@ -183,17 +183,17 @@ inline const Neighbour* Hull::GetNeighbours() const
 
 inline const StaticTrafficVehicle* Hull::GetStaticVehicle(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < muNumStaticTraffic,
-        CGS_ASSERT_MESSAGE_AT("luIndex < muNumStaticTraffic",
-            CGS_ARTIST_BRNTRAFFICHULL_FILE, 297 /* ARTIST 0x82705CC0 */));
+    CGS_ASSERT_AT(luIndex < muNumStaticTraffic,
+        "luIndex < muNumStaticTraffic",
+            CGS_ARTIST_BRNTRAFFICHULL_FILE, 297 /* ARTIST 0x82705CC0 */);
     return &mpaStaticTrafficVehicles[luIndex];
 }
 
 inline const StopLine* Hull::GetStopLine(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < muNumStoplines,
-        CGS_ASSERT_MESSAGE_AT("luIndex < muNumStoplines",
-            CGS_ARTIST_BRNTRAFFICHULL_FILE, 280 /* ARTIST 0x82705C50 */));
+    CGS_ASSERT_AT(luIndex < muNumStoplines,
+        "luIndex < muNumStoplines",
+            CGS_ARTIST_BRNTRAFFICHULL_FILE, 280 /* ARTIST 0x82705C50 */);
     return &mpaStopLines[luIndex];
 }
 

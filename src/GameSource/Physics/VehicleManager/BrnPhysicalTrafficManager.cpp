@@ -70,19 +70,19 @@ bool KB_DO_NOT_FAIL_IF_RIGID_BODY_NOT_FOUND = false;
 // ---------------------------------------------------------------------------------------
 PhysicalTrafficVehicle* PhysicalTrafficManager::GetTrafficVehicle(s32 liVehicle)
 {
-    CGS_ASSERT(liVehicle >= 0,
-        CGS_ASSERT_MESSAGE_AT("liVehicle >= 0", KAC_ARTIST_ASSERT_FILE, 740 /* ARTIST 0x825B48AC */));
-    CGS_ASSERT(liVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-        CGS_ASSERT_MESSAGE_AT("liVehicle < ku8TotalMaxNumPhysicalTraffic", KAC_ARTIST_ASSERT_FILE, 741 /* ARTIST 0x825B48D0 */));
+    CGS_ASSERT_AT(liVehicle >= 0,
+        "liVehicle >= 0", KAC_ARTIST_ASSERT_FILE, 740 /* ARTIST 0x825B48AC */);
+    CGS_ASSERT_AT(liVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+        "liVehicle < ku8TotalMaxNumPhysicalTraffic", KAC_ARTIST_ASSERT_FILE, 741 /* ARTIST 0x825B48D0 */);
     return &mpaTrafficVehicles[liVehicle];
 }
 
 const PhysicalTrafficVehicle* PhysicalTrafficManager::GetTrafficVehicle(s32 liVehicle) const
 {
-    CGS_ASSERT(liVehicle >= 0,
-        CGS_ASSERT_MESSAGE_AT("liVehicle >= 0", KAC_ARTIST_ASSERT_FILE, 729 /* ARTIST 0x825B482C */));
-    CGS_ASSERT(liVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-        CGS_ASSERT_MESSAGE_AT("liVehicle < ku8TotalMaxNumPhysicalTraffic", KAC_ARTIST_ASSERT_FILE, 730 /* ARTIST 0x825B4850 */));
+    CGS_ASSERT_AT(liVehicle >= 0,
+        "liVehicle >= 0", KAC_ARTIST_ASSERT_FILE, 729 /* ARTIST 0x825B482C */);
+    CGS_ASSERT_AT(liVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+        "liVehicle < ku8TotalMaxNumPhysicalTraffic", KAC_ARTIST_ASSERT_FILE, 730 /* ARTIST 0x825B4850 */);
     return &mpaTrafficVehicles[liVehicle];
 }
 
@@ -95,11 +95,11 @@ const PhysicalTrafficVehicle* PhysicalTrafficManager::GetTrafficVehicle(s32 liVe
 // ---------------------------------------------------------------------------------------
 PhysicalTrafficVehicle::EArticulatedVehicleType PhysicalTrafficVehicle::GetArticulatedVehicleType() const
 {
-    CGS_ASSERT(meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE
+    CGS_ASSERT_AT(meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE
                    && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT",
-            CGS_ARTIST_FILE, 506 /* ARTIST 0x825B3388 */));
+        "meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT",
+            CGS_ARTIST_FILE, 506 /* ARTIST 0x825B3388 */);
+
     return meArticulatedVehicleType;
 }
 
@@ -197,18 +197,18 @@ void PhysicalTrafficManager::AllocateInternalBuffers(CgsModule::IOBufferStack* l
                                                       CgsModule::IOBufferStack* lpOutputBufferStack)
 {
     // The original body is a header inline: its asserts name BrnPhysicalTrafficManager.h:849..856.
-    CGS_ASSERT(lpInputBufferStack != 0, CGS_ASSERT_MESSAGE_AT("lpInputBufferStack != NULL",
-        KAC_ARTIST_ASSERT_FILE, 849 /* ARTIST 0x82615988 */));
-    CGS_ASSERT(lpOutputBufferStack != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBufferStack != NULL",
-        KAC_ARTIST_ASSERT_FILE, 850 /* ARTIST 0x826159AC */));
-    CGS_ASSERT(mpArticulatedJointCreateBuffer == 0, CGS_ASSERT_MESSAGE_AT("mpArticulatedJointCreateBuffer == NULL",
-        KAC_ARTIST_ASSERT_FILE, 851 /* ARTIST 0x826159DC */));
+    CGS_ASSERT_AT(lpInputBufferStack != 0, "lpInputBufferStack != NULL",
+        KAC_ARTIST_ASSERT_FILE, 849 /* ARTIST 0x82615988 */);
+    CGS_ASSERT_AT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL",
+        KAC_ARTIST_ASSERT_FILE, 850 /* ARTIST 0x826159AC */);
+    CGS_ASSERT_AT(mpArticulatedJointCreateBuffer == 0, "mpArticulatedJointCreateBuffer == NULL",
+        KAC_ARTIST_ASSERT_FILE, 851 /* ARTIST 0x826159DC */);
 
     lpInputBufferStack->CreateIOBuffer<ArticulatedJointCreateBuffer>(
         &mpArticulatedJointCreateBuffer, "ArticulatedJointBuffer");
 
-    CGS_ASSERT(mpArticulatedJointCreateBuffer != 0, CGS_ASSERT_MESSAGE_AT("mpArticulatedJointCreateBuffer != NULL",
-        KAC_ARTIST_ASSERT_FILE, 856 /* ARTIST 0x82615A18 */));
+    CGS_ASSERT_AT(mpArticulatedJointCreateBuffer != 0, "mpArticulatedJointCreateBuffer != NULL",
+        KAC_ARTIST_ASSERT_FILE, 856 /* ARTIST 0x82615A18 */);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -222,12 +222,12 @@ void PhysicalTrafficManager::AllocateInternalBuffers(CgsModule::IOBufferStack* l
 void PhysicalTrafficManager::BridgeArticulatedJointRequestsToSim(
         VehicleOutputRequestInterface* lpOutputRequestInterface)
 {
-    CGS_ASSERT(lpOutputRequestInterface != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpOutputRequestInterface != NULL", KAC_ARTIST_ASSERT_FILE, 880 /* ARTIST 0x82615B3C */));
-    CGS_ASSERT(mpArticulatedJointCreateBuffer != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpArticulatedJointCreateBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 881 /* ARTIST 0x82615B6C */));
+    CGS_ASSERT_AT(lpOutputRequestInterface != 0,
+        "lpOutputRequestInterface != NULL", KAC_ARTIST_ASSERT_FILE, 880 /* ARTIST 0x82615B3C */);
+
+    CGS_ASSERT_AT(mpArticulatedJointCreateBuffer != 0,
+        "mpArticulatedJointCreateBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 881 /* ARTIST 0x82615B6C */);
+
 
     mArticulatedJointPool.SendCreateRemoveJointEvents(lpOutputRequestInterface,
                                                       mpArticulatedJointCreateBuffer);
@@ -552,9 +552,9 @@ void PhysicalTrafficManager::ProcessAddAirRamEvent(const CreateAirRamEvent* lpEv
 bool PhysicalTrafficVehicle::IsSimple() const
 {
     const EPhysicalTrafficType leType = static_cast<EPhysicalTrafficType>(mu8PhysicalType);
-    CGS_ASSERT(leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
-        CGS_ASSERT_MESSAGE_AT("leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT",
-            CGS_ARTIST_FILE, 382 /* ARTIST 0x825B33DC */));
+    CGS_ASSERT_AT(leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
+        "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT",
+            CGS_ARTIST_FILE, 382 /* ARTIST 0x825B33DC */);
     return leType == E_PHYSICAL_TRAFFIC_TYPE_SIMPLE;
 }
 
@@ -586,7 +586,7 @@ bool PhysicalTrafficVehicle::HasNonBrokenJoint() const
         // fires the assert at BrnPhysicalTrafficVehicle.h:628. The streamed value is approximated by
         // the static prefix (same convention as the other StrStream asserts in this TU); the branch
         // is only reachable for an out-of-range state, so the fire is unconditional here.
-        CGS_ASSERT(false, "Invalid joint state: ");
+        CGS_FAIL("Invalid joint state: ");
     }
 
     return meArticulatedJointState == E_ARTICULATE_JOINT_ATTACHED;
@@ -597,10 +597,10 @@ bool PhysicalTrafficVehicle::HasNonBrokenJoint() const
 //   '!HasBeenChecked()'; store the owner byte.
 void PhysicalTrafficVehicle::SetCheckOwner(EActiveRaceCarIndex leCheckOwner)
 {
-    CGS_ASSERT(!HasBeenChecked(),
-        CGS_ASSERT_MESSAGE_AT(
-            "!HasBeenChecked()",
-            CGS_ARTIST_FILE, 458 /* ARTIST 0x825C01E8 */));
+    CGS_ASSERT_AT(!HasBeenChecked(),
+        "!HasBeenChecked()",
+            CGS_ARTIST_FILE, 458 /* ARTIST 0x825C01E8 */);
+
     miCheckOwner = static_cast<s8>(leCheckOwner);
 }
 
@@ -717,7 +717,7 @@ bool PhysicalTrafficVehicle::PreparePhysical(const CreatePhysicalTrafficEvent* l
         reinterpret_cast<VehiclePhysics*>(mpVehicleBody)->SetCrashing();
         break;
     default:                         // 3+ (SLAMMED, ...) -- not a valid PHYSICAL prepare state
-        CGS_ASSERT_AT(false, "Invalid physical traffic type", KAC_BRNPHYSICALTRAFFICVEHICLE_CPP, 212);
+        CGS_FAIL_AT("Invalid physical traffic type", KAC_BRNPHYSICALTRAFFICVEHICLE_CPP, 212);
         break;
     }
     return true;
@@ -1050,11 +1050,11 @@ bool PhysicalTrafficManager::ValidateTrafficContact(
 bool PhysicalTrafficManager::PrepareTriangleCache(
     CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update)
 {
-    CGS_ASSERT(lpSceneInputBuffer_Update != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpSceneInputBuffer_Update != NULL",
+    CGS_ASSERT_AT(lpSceneInputBuffer_Update != NULL,
+        "lpSceneInputBuffer_Update != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Physics/VehicleManager/BrnPhysicalTrafficManager.cpp", 244 /* ARTIST 0x825EE5C8 */));   // :244
+            "../Physics/VehicleManager/BrnPhysicalTrafficManager.cpp", 244 /* ARTIST 0x825EE5C8 */);   // :244
+
 
     CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdate =
         lpSceneInputBuffer_Update->GetInSceneUpdateInterface();

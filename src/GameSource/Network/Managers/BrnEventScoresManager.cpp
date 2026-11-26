@@ -120,10 +120,10 @@ namespace BrnNetwork
         mpNetworkModule    = lpNetworkModule;
         mpServerInterface  = lpServerInterface;
 
-        CGS_ASSERT( mpNetworkModule != 0,
-            CGS_ASSERT_MESSAGE_AT("mpNetworkModule", __FILE__, 67 /* ARTIST 0x82556AF4 */));
-        CGS_ASSERT( mpServerInterface != 0,
-            CGS_ASSERT_MESSAGE_AT("mpServerInterface", __FILE__, 68 /* ARTIST 0x82556B1C */));
+        CGS_ASSERT_AT( mpNetworkModule != 0,
+            "mpNetworkModule", __FILE__, 67 /* ARTIST 0x82556AF4 */);
+        CGS_ASSERT_AT( mpServerInterface != 0,
+            "mpServerInterface", __FILE__, 68 /* ARTIST 0x82556B1C */);
 
         maPendingUploads.Clear();          // stw 0 -> +0x310 (live count word)
         miUploadCount = 0;                 // stw 0 -> +0x320
@@ -191,7 +191,7 @@ namespace BrnNetwork
         }
 
         // Any other game mode means no scoreboard was set up for this event.
-        CGS_ASSERT( false, "Trying to upload scores for event with no scoreboard set up\n" );
+        CGS_FAIL( "Trying to upload scores for event with no scoreboard set up\n" );
         return -1;
     }
 
@@ -228,8 +228,8 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------------------
     void EventScoresManager::ProcessAfterSimulation( const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput )
     {
-        CGS_ASSERT( lpInput != 0,
-            CGS_ASSERT_MESSAGE_AT("lpInput", __FILE__, 287 /* ARTIST 0x8256545C */));
+        CGS_ASSERT_AT( lpInput != 0,
+            "lpInput", __FILE__, 287 /* ARTIST 0x8256545C */);
         ProcessNetworkEvents( lpInput->GetNetworkEventQueue() );
     }
 
@@ -326,7 +326,7 @@ namespace BrnNetwork
                 }
                 else
                 {
-                    CGS_ASSERT( false, "Trying to upload scores for event with no scoreboard set up\n" );
+                    CGS_FAIL( "Trying to upload scores for event with no scoreboard set up\n" );
                 }
                 return;
             }

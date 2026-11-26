@@ -68,11 +68,11 @@ void VehicleTracker::Update(
     EActiveRaceCarIndex lePlayerCarIndex,
     bool lbForceNextWorldCrashToBeFastTopDown)
 {
-    CGS_ASSERT(lpGameState != NULL, CGS_ASSERT_MESSAGE_AT("lpGameState != NULL", CGS_ARTIST_FILE, 60));
-    CGS_ASSERT(lpInput != NULL, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 61));
-    CGS_ASSERT(miVehicleIndex != -1, CGS_ASSERT_MESSAGE_AT("miVehicleIndex != -1", CGS_ARTIST_FILE, 63));
-    CGS_ASSERT(lpInput->GetUsedRaceCars()->IsBitSet(static_cast<u32>(miVehicleIndex)),
-               CGS_ASSERT_MESSAGE_AT("lpInput->GetUsedRaceCars()->IsBitSet(miVehicleIndex)", CGS_ARTIST_FILE, 64));
+    CGS_ASSERT_AT(lpGameState != NULL, "lpGameState != NULL", CGS_ARTIST_FILE, 60);
+    CGS_ASSERT_AT(lpInput != NULL, "lpInput != NULL", CGS_ARTIST_FILE, 61);
+    CGS_ASSERT_AT(miVehicleIndex != -1, "miVehicleIndex != -1", CGS_ARTIST_FILE, 63);
+    CGS_ASSERT_AT(lpInput->GetUsedRaceCars()->IsBitSet(static_cast<u32>(miVehicleIndex)),
+               "lpInput->GetUsedRaceCars()->IsBitSet(miVehicleIndex)", CGS_ARTIST_FILE, 64);
 
     // -- RE-FITTED TO THE REAL InputBuffer (2026-08-29, crash-camera wave). These three reads
     // used to go through the declaration-only slice this file used to carry in its header

@@ -250,8 +250,8 @@ namespace BrnGui
     // @ 0x82425EC8
     void CrashNavPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("lpGuiCache", __FILE__, 250 /* ARTIST 0x82425EF0 */));   // cpp:250
+        CGS_ASSERT_AT(lpGuiCache != 0,
+            "lpGuiCache", __FILE__, 250 /* ARTIST 0x82425EF0 */);   // cpp:250
 
         mFilterToggles.AppendExpectedAptComponent(leFlow, lpGuiCache, true);   // `li r6, 1`
         mEventPanel.AppendExpectedAptComponents(leFlow, lpGuiCache);
@@ -263,9 +263,9 @@ namespace BrnGui
     // @ 0x82440378 -- the one-shot component set-up, run once the GuiCache has arrived.
     void CrashNavPanel::SetupComponent()
     {
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 270 /* ARTIST 0x824403B0 */));                                  // cpp:270
-        CGS_ASSERT(mePrepareStage == E_PREPARESTAGE_CONSTRUCTED,
-                   CGS_ASSERT_MESSAGE_AT("mePrepareStage == E_PREPARESTAGE_CONSTRUCTED", CGS_ARTIST_FILE, 271 /* ARTIST 0x824403D8 */));                 // cpp:271
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 270 /* ARTIST 0x824403B0 */);                                  // cpp:270
+        CGS_ASSERT_AT(mePrepareStage == E_PREPARESTAGE_CONSTRUCTED,
+                   "mePrepareStage == E_PREPARESTAGE_CONSTRUCTED", CGS_ARTIST_FILE, 271 /* ARTIST 0x824403D8 */);                 // cpp:271
 
         // Row 0: the four top-level filters. Row 2: the empty in-event row, disabled
         // straight away (it is only switched on further down, in the in-event branch).
@@ -360,8 +360,8 @@ namespace BrnGui
     // @ 0x82440258 -- re-apply the saved triple over a freshly-built top-level row.
     void CrashNavPanel::RestoreSettings()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 190 /* ARTIST 0x8244027C */));   // cpp:190
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache", __FILE__, 190 /* ARTIST 0x8244027C */);   // cpp:190
 
         // The live road rule decides which of the two score types the panel comes back on:
         // rules 1/2 map to score type 0, rules 3/4 to score type 1. Any other value leaves
@@ -436,7 +436,7 @@ namespace BrnGui
             default:
                 // Console: StrStream << "Unhandled panel type " << lePanelType << ".\n"
                 // (BrnCrashNavPanel.cpp:173).
-                CGS_ASSERT(false, "Unhandled panel type");
+                CGS_FAIL("Unhandled panel type");
                 break;
             }
         }
@@ -472,7 +472,7 @@ namespace BrnGui
             case E_PANEL_COUNT:      break;   // nothing was showing yet
             default:
                 // Console: "Unhandled next panel type " << leNextPanel << ".\n" (cpp:430).
-                CGS_ASSERT(false, "Unhandled next panel type");
+                CGS_FAIL("Unhandled next panel type");
                 break;
             }
         }
@@ -536,7 +536,7 @@ namespace BrnGui
         default:
             // Console: "Unhandled next panel type " << leNextPanel << ".\n" (cpp:481).
             // NOTE the console still commits the store on this arm (`goto LABEL_23`).
-            CGS_ASSERT(false, "Unhandled next panel type");
+            CGS_FAIL("Unhandled next panel type");
             meVisiblePanel = leNextPanel;
             break;
         }
@@ -555,9 +555,9 @@ namespace BrnGui
     void CrashNavPanel::SetEventPanelData(u32 luEventId, const ChallengedEventScore* lpScores,
                                           bool lbShowPanel)
     {
-        CGS_ASSERT(mePanelType == E_PANEL_EVENT,
-            CGS_ASSERT_MESSAGE_AT(
-                "E_PANEL_EVENT == mePanelType", __FILE__, 637 /* ARTIST 0x8243A8A8 */));   // cpp:637
+        CGS_ASSERT_AT(mePanelType == E_PANEL_EVENT,
+            "E_PANEL_EVENT == mePanelType", __FILE__, 637 /* ARTIST 0x8243A8A8 */);   // cpp:637
+
 
         ChangeVisiblePanelState(E_PANEL_EVENT, RivalMapPanel::E_RIVAL_TYPE_COUNT);
         mEventPanel.SetEventData(luEventId, lpScores, mpGuiCache, lbShowPanel);
@@ -750,8 +750,8 @@ namespace BrnGui
     // @ 0x82418828
     void CrashNavPanel::HandleAptEvents(const CgsGui::GuiEventAptTriggerPayload* lpAptEvent)
     {
-        CGS_ASSERT(lpAptEvent != 0,
-            CGS_ASSERT_MESSAGE_AT("lpAptEvent", __FILE__, 807 /* ARTIST 0x82418854 */));   // cpp:807
+        CGS_ASSERT_AT(lpAptEvent != 0,
+            "lpAptEvent", __FILE__, 807 /* ARTIST 0x82418854 */);   // cpp:807
 
         if (lpAptEvent->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
         {
@@ -901,7 +901,7 @@ namespace BrnGui
         default:
             // Console: "No filters set up for panel view of type" << type << "\n" (cpp:1030).
             // NOTE the console still runs the common tail on this arm.
-            CGS_ASSERT(false, "No filters set up for panel view of type");
+            CGS_FAIL("No filters set up for panel view of type");
             break;
         }
 
@@ -932,7 +932,7 @@ namespace BrnGui
 
         default:
             // Console: "No filters set up for panel of type " << mePanelType << "\n" (cpp:1086).
-            CGS_ASSERT(false, "No filters set up for panel of type ");
+            CGS_FAIL("No filters set up for panel of type ");
             break;
         }
     }
@@ -959,7 +959,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT_AT(false, "lpcLabel", CGS_ARTIST_FILE, 1136);   // cpp:1136
+            CGS_FAIL_AT("lpcLabel", CGS_ARTIST_FILE, 1136);   // cpp:1136
             break;
         }
 
@@ -1006,7 +1006,7 @@ namespace BrnGui
     // @ 0x824185C8
     s32 CrashNavPanel::GetPanelActiveRoadRuleType() const
     {
-        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN, CGS_ASSERT_STREAM_MESSAGE_AT("Cannot get active road rules type if not showing road rules", CGS_ARTIST_BRNCRASHNAVPANEL_FILE, 349));
+        CGS_ASSERT_STREAM_AT(mePanelType == E_PANEL_ROADSIGN, "Cannot get active road rules type if not showing road rules", CGS_ARTIST_BRNCRASHNAVPANEL_FILE, 349);
    // @0x824185C8 (beq on +0x90==2)
 
         // Inlined RoadPanel::GetCurrentRule() -- a bare `lwz` at mRoadPanel +0xD9C.
@@ -1016,7 +1016,7 @@ namespace BrnGui
     // @ 0x82418668
     s32 CrashNavPanel::GetRoadPanelScoreMode() const
     {
-        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN, CGS_ASSERT_STREAM_MESSAGE_AT("Cannot get active road rules scoring mode if not showing road rules", CGS_ARTIST_BRNCRASHNAVPANEL_FILE, 366));
+        CGS_ASSERT_STREAM_AT(mePanelType == E_PANEL_ROADSIGN, "Cannot get active road rules scoring mode if not showing road rules", CGS_ARTIST_BRNCRASHNAVPANEL_FILE, 366);
    // @0x82418668 (beq on +0x90==2)
 
         // Inlined RoadPanel::GetScoringMode() -- a bare `lwz` at mRoadPanel +0xDA0.

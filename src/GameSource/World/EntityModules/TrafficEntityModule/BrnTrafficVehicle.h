@@ -394,10 +394,10 @@ public:
     // Its asserts carry the original header's lines h:1091/h:1092 (li r5,0x443/0x444).
     s8 GetPhysicalPartsIndex() const
     {
-        CGS_ASSERT(IsPhysical(), CGS_ASSERT_MESSAGE_AT("IsPhysical()",
-            CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1091));
-        CGS_ASSERT(miPhysicalPartsIndex >= 0, CGS_ASSERT_MESSAGE_AT("miPhysicalPartsIndex >= 0",
-            CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1092));
+        CGS_ASSERT_AT(IsPhysical(), "IsPhysical()",
+            CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1091);
+        CGS_ASSERT_AT(miPhysicalPartsIndex >= 0, "miPhysicalPartsIndex >= 0",
+            CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1092);
         return miPhysicalPartsIndex;
     }
 
@@ -449,8 +449,8 @@ private:
 inline Vehicle::Species GetVehicleSpecies(u32 luIndex)
 {
     // BrnTrafficVehicle.h:578 -- the pool-wide bound (TrafficEntityModule::KU_MAX_TOTAL_TRAFFIC).
-    CGS_ASSERT(luIndex < 0x258u, CGS_ASSERT_MESSAGE_AT("luIndex < KU_MAX_TOTAL_TRAFFIC",
-        CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 578));
+    CGS_ASSERT_AT(luIndex < 0x258u, "luIndex < KU_MAX_TOTAL_TRAFFIC",
+        CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 578);
 
     if (luIndex < 0x190u)        // < 400
         return Vehicle::E_SPECIES_STANDARD;
@@ -462,19 +462,19 @@ inline Vehicle::Species GetVehicleSpecies(u32 luIndex)
 // ARTIST reuses these checked effect predicates in the traffic replay snapshot.
 inline bool Vehicle::IsAlarmOn() const
 {
-    CGS_ASSERT(IsAlive(), CGS_ASSERT_MESSAGE_AT("IsAlive()", CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1722));
+    CGS_ASSERT_AT(IsAlive(), "IsAlive()", CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1722);
     return ((mxEffectState >> 4) & 1) != 0;
 }
 
 inline bool Vehicle::IsRightIndicatorOn() const
 {
-    CGS_ASSERT(IsAlive(), CGS_ASSERT_MESSAGE_AT("IsAlive()", CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1736));
+    CGS_ASSERT_AT(IsAlive(), "IsAlive()", CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1736);
     return ((mxEffectState >> 2) & 1) != 0;
 }
 
 inline bool Vehicle::IsLeftIndicatorOn() const
 {
-    CGS_ASSERT(IsAlive(), CGS_ASSERT_MESSAGE_AT("IsAlive()", CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1729));
+    CGS_ASSERT_AT(IsAlive(), "IsAlive()", CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1729);
     return ((mxEffectState >> 1) & 1) != 0;
 }
 

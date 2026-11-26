@@ -55,10 +55,10 @@ namespace BrnNetwork
             mu16TrafficHash           = lu16TrafficHash;
             mu16Update10HzFrame       = lu16Update10HzFrame;
             CgsNetwork::Message::PrepareForSend(14, lu16FrameCount);
-            CGS_ASSERT(!IsReliable(),
-                CGS_ASSERT_MESSAGE_AT(
-                    "!IsReliable()",
-                    "..\\..\\..\\GameSource\\Network/Messages/BrnTrafficHashMessage.cpp", 100 /* ARTIST 0x8257DF20 */));
+            CGS_ASSERT_AT(!IsReliable(),
+                "!IsReliable()",
+                    "..\\..\\..\\GameSource\\Network/Messages/BrnTrafficHashMessage.cpp", 100 /* ARTIST 0x8257DF20 */);
+
         }
     }
 

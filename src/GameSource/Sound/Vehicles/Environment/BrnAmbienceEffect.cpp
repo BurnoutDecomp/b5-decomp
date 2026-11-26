@@ -113,7 +113,7 @@ void AmbienceEffect::AttachController(CgsSound::Logic::EffectBase* apController)
         mpAmbienceControl = static_cast<AmbienceControl*>(apController);
         break;
     default:
-        CGS_ASSERT_AT(false, "Unexpected control.", BRN_AMBIENCEEFFECT_CPP_FILE, 448);
+        CGS_FAIL_AT("Unexpected control.", BRN_AMBIENCEEFFECT_CPP_FILE, 448);
         break;
     }
 }

@@ -93,10 +93,10 @@ void FreeburnChallengeManager::Update()
 // @ 0x8240EC30 — guard meInternalState != OFF, return mpCurrentChallenge.
 const BrnResource::ChallengeListEntry* FreeburnChallengeManager::GetCurrentChallenge() const
 {
-    CGS_ASSERT( meInternalState != E_INTERNAL_STATE_OFF,
-        CGS_ASSERT_MESSAGE_AT(
-            "meInternalState != E_INTERNAL_STATE_OFF",
-            "..\\..\\..\\GameSource\\Gui/BrnGuiFreeburnChallengeManager.h", 235 /* ARTIST 0x8240EC58 */));
+    CGS_ASSERT_AT( meInternalState != E_INTERNAL_STATE_OFF,
+        "meInternalState != E_INTERNAL_STATE_OFF",
+            "..\\..\\..\\GameSource\\Gui/BrnGuiFreeburnChallengeManager.h", 235 /* ARTIST 0x8240EC58 */);
+
     return mpCurrentChallenge;
 }
 
@@ -104,16 +104,16 @@ const BrnResource::ChallengeListEntry* FreeburnChallengeManager::GetCurrentChall
 // miCurrentAction < mpCurrentChallenge->GetNumActions(); then return the action.
 const BrnResource::ChallengeListEntryAction* FreeburnChallengeManager::GetCurrentAction() const
 {
-    CGS_ASSERT( meInternalState != E_INTERNAL_STATE_OFF,
-        CGS_ASSERT_MESSAGE_AT(
-            "meInternalState != E_INTERNAL_STATE_OFF",
-            KAC_ARTIST_ASSERT_FILE, 251 /* ARTIST 0x8240ECBC */));
-    CGS_ASSERT( mpCurrentChallenge,
-        CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", KAC_ARTIST_ASSERT_FILE, 252 /* ARTIST 0x8240ECE4 */));
-    CGS_ASSERT( miCurrentAction < mpCurrentChallenge->GetNumActions(),
-        CGS_ASSERT_MESSAGE_AT(
-            "miCurrentAction < mpCurrentChallenge->GetNumActions()",
-            KAC_ARTIST_ASSERT_FILE, 253 /* ARTIST 0x8240ED14 */));
+    CGS_ASSERT_AT( meInternalState != E_INTERNAL_STATE_OFF,
+        "meInternalState != E_INTERNAL_STATE_OFF",
+            KAC_ARTIST_ASSERT_FILE, 251 /* ARTIST 0x8240ECBC */);
+
+    CGS_ASSERT_AT( mpCurrentChallenge,
+        "mpCurrentChallenge", KAC_ARTIST_ASSERT_FILE, 252 /* ARTIST 0x8240ECE4 */);
+    CGS_ASSERT_AT( miCurrentAction < mpCurrentChallenge->GetNumActions(),
+        "miCurrentAction < mpCurrentChallenge->GetNumActions()",
+            KAC_ARTIST_ASSERT_FILE, 253 /* ARTIST 0x8240ED14 */);
+
     return mpCurrentChallenge->GetAction( miCurrentAction );
 }
 
@@ -139,26 +139,26 @@ FreeburnChallengeManager::GetCurrentSuccessForARCI( EActiveRaceCarIndex leARCI )
 // maafIndividualTargetContributions[miCurrentTargetIndex][leARCI].
 f32 FreeburnChallengeManager::GetCurrentContributionForARCI( EActiveRaceCarIndex leARCI ) const
 {
-    CGS_ASSERT( meInternalState != E_INTERNAL_STATE_OFF,
-        CGS_ASSERT_MESSAGE_AT(
-            "meInternalState != E_INTERNAL_STATE_OFF",
-            KAC_ARTIST_ASSERT_FILE, 291 /* ARTIST 0x8240EE80 */));
-    CGS_ASSERT( miCurrentTargetIndex < miTargetsCount,
-        CGS_ASSERT_MESSAGE_AT(
-            "miCurrentTargetIndex < miTargetsCount",
-            KAC_ARTIST_ASSERT_FILE, 292 /* ARTIST 0x8240EEAC */));
-    CGS_ASSERT( miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
-        CGS_ASSERT_MESSAGE_AT(
-            "miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE",
-            KAC_ARTIST_ASSERT_FILE, 293 /* ARTIST 0x8240EED4 */));
-    CGS_ASSERT( leARCI >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leARCI >= E_ACTIVE_RACE_CAR_INDEX_0",
-            KAC_ARTIST_ASSERT_FILE, 294 /* ARTIST 0x8240EEF8 */));
-    CGS_ASSERT( leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-            KAC_ARTIST_ASSERT_FILE, 295 /* ARTIST 0x8240EF1C */));
+    CGS_ASSERT_AT( meInternalState != E_INTERNAL_STATE_OFF,
+        "meInternalState != E_INTERNAL_STATE_OFF",
+            KAC_ARTIST_ASSERT_FILE, 291 /* ARTIST 0x8240EE80 */);
+
+    CGS_ASSERT_AT( miCurrentTargetIndex < miTargetsCount,
+        "miCurrentTargetIndex < miTargetsCount",
+            KAC_ARTIST_ASSERT_FILE, 292 /* ARTIST 0x8240EEAC */);
+
+    CGS_ASSERT_AT( miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
+        "miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE",
+            KAC_ARTIST_ASSERT_FILE, 293 /* ARTIST 0x8240EED4 */);
+
+    CGS_ASSERT_AT( leARCI >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leARCI >= E_ACTIVE_RACE_CAR_INDEX_0",
+            KAC_ARTIST_ASSERT_FILE, 294 /* ARTIST 0x8240EEF8 */);
+
+    CGS_ASSERT_AT( leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 295 /* ARTIST 0x8240EF1C */);
+
     return maafIndividualTargetContributions[ miCurrentTargetIndex ][ leARCI ];
 }
 
@@ -405,10 +405,10 @@ void FreeburnChallengeManager::StartNotActiveChallenge( const GuiChallengeNotAct
 // is non-gating, the store always happens.
 void FreeburnChallengeManager::FinishChallenge()
 {
-    CGS_ASSERT( meInternalState != E_INTERNAL_STATE_OFF,
-        CGS_ASSERT_MESSAGE_AT(
-            "meInternalState != E_INTERNAL_STATE_OFF",
-            "..\\..\\..\\GameSource\\Gui/BrnGuiFreeburnChallengeManager.cpp", 358 /* ARTIST 0x824F40D8 */));
+    CGS_ASSERT_AT( meInternalState != E_INTERNAL_STATE_OFF,
+        "meInternalState != E_INTERNAL_STATE_OFF",
+            "..\\..\\..\\GameSource\\Gui/BrnGuiFreeburnChallengeManager.cpp", 358 /* ARTIST 0x824F40D8 */);
+
     meInternalState = E_INTERNAL_STATE_OFF;
 }
 

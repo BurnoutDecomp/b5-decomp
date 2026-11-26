@@ -130,7 +130,7 @@ namespace CgsContainers
         }
 
         // DecFIGS CgsIndexedHashTable.h:281. ARTIST returns the value inside the node.
-        __declspec(noinline) const TValue* Get(TKey lKey) const
+        const TValue* Get(TKey lKey) const
         {
             CGS_ASSERT_AT(mbInitialised, "IndexedHashTable accessed when uninitialised",
                           "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedHashTable.h", 283);
@@ -151,7 +151,7 @@ namespace CgsContainers
             Node* lpNode = GetInternal(lKey, &lpBin);
             if (lpNode == NULL)
             {
-                CGS_ASSERT_AT(false, "Node not found",
+                CGS_FAIL_AT("Node not found",
                               "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedHashTable.h", 352);
                 return;
             }
@@ -160,7 +160,7 @@ namespace CgsContainers
 
     private:
         // ARTIST 828C5958, 828C59F0 and 828C5B88 scan the selected bucket to its end.
-        __declspec(noinline) Node* GetInternal(TKey lKey, Bin** lppBin)
+        Node* GetInternal(TKey lKey, Bin** lppBin)
         {
             Bin& lrBin = maBins[static_cast<u32>(KeyBits(lKey) % BINS)];
             if (lppBin != 0)

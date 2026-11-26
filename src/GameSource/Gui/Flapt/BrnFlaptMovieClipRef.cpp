@@ -100,9 +100,9 @@ TextFieldRef MovieClipRef::FindChildTextField(const char* lpcName) const
 bool MovieClipRef::TryFindChildComponentRecursively(const char* lpcName,
                                                     MovieClipRef* lpOutMovieClipRef) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, CGS_ASSERT_MESSAGE_AT("mpMovieClipInst", CGS_ARTIST_FLAPT_REF_FILE, 115 /* ARTIST 0x8246C9A8 */));
-    CGS_ASSERT(lpOutMovieClipRef != 0, CGS_ASSERT_MESSAGE_AT("lpOutMovieClipRef", CGS_ARTIST_FLAPT_REF_FILE, 116 /* ARTIST 0x8246C9CC */));
-    CGS_ASSERT(lpcName != 0, CGS_ASSERT_MESSAGE_AT("lpcName", CGS_ARTIST_FLAPT_REF_FILE, 117 /* ARTIST 0x8246C9F0 */));
+    CGS_ASSERT_AT(mpMovieClipInst != 0, "mpMovieClipInst", CGS_ARTIST_FLAPT_REF_FILE, 115 /* ARTIST 0x8246C9A8 */);
+    CGS_ASSERT_AT(lpOutMovieClipRef != 0, "lpOutMovieClipRef", CGS_ARTIST_FLAPT_REF_FILE, 116 /* ARTIST 0x8246C9CC */);
+    CGS_ASSERT_AT(lpcName != 0, "lpcName", CGS_ARTIST_FLAPT_REF_FILE, 117 /* ARTIST 0x8246C9F0 */);
 
     u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName),
                                                        std::strlen(lpcName));
@@ -126,8 +126,8 @@ MovieClipRef MovieClipRef::GetParent() const
 // instance.
 void MovieClipRef::GotoAndPlayLabel(u32 luLabelHash, const char* lpcDEBUGName) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0,
-        CGS_ASSERT_MESSAGE_AT("mpMovieClipInst", __FILE__, 149 /* ARTIST 0x8246F3B4 */));
+    CGS_ASSERT_AT(mpMovieClipInst != 0,
+        "mpMovieClipInst", __FILE__, 149 /* ARTIST 0x8246F3B4 */);
 
     mpMovieClipInst->GotoAndPlayLabel(luLabelHash, lpcDEBUGName);
 }
@@ -152,8 +152,8 @@ void MovieClipRef::GotoAndPlayLabel(const char* lpcLabel) const
 // (which receives both the hash and the original string).
 void MovieClipRef::GotoAndStopLabel(const char* lpcLabel) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, CGS_ASSERT_MESSAGE_AT("mpMovieClipInst", CGS_ARTIST_FLAPT_REF_FILE, 182 /* ARTIST 0x8246F4D4 */));
-    CGS_ASSERT(lpcLabel != 0, CGS_ASSERT_MESSAGE_AT("lpcLabel", CGS_ARTIST_FLAPT_REF_FILE, 183 /* ARTIST 0x8246F4F8 */));
+    CGS_ASSERT_AT(mpMovieClipInst != 0, "mpMovieClipInst", CGS_ARTIST_FLAPT_REF_FILE, 182 /* ARTIST 0x8246F4D4 */);
+    CGS_ASSERT_AT(lpcLabel != 0, "lpcLabel", CGS_ARTIST_FLAPT_REF_FILE, 183 /* ARTIST 0x8246F4F8 */);
 
     u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcLabel),
                                                        std::strlen(lpcLabel));
@@ -167,10 +167,10 @@ void MovieClipRef::GotoAndStopLabel(const char* lpcLabel) const
 // type out of the Ref's declaration home; bridge it to the typed signature here.
 void MovieClipRef::SetFrameTriggerCallback(void* lpCallback, void* lpUserData) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0,
-        CGS_ASSERT_MESSAGE_AT("mpMovieClipInst", __FILE__, 229 /* ARTIST 0x8246CAEC */));
-    CGS_ASSERT(lpCallback != 0,
-        CGS_ASSERT_MESSAGE_AT("lpCallback", __FILE__, 230 /* ARTIST 0x8246CB10 */));
+    CGS_ASSERT_AT(mpMovieClipInst != 0,
+        "mpMovieClipInst", __FILE__, 229 /* ARTIST 0x8246CAEC */);
+    CGS_ASSERT_AT(lpCallback != 0,
+        "lpCallback", __FILE__, 230 /* ARTIST 0x8246CB10 */);
 
     mpMovieClipInst->SetFrameTriggerCallback(
         reinterpret_cast<MovieClipInstance::FrameTriggerCallback>(lpCallback),

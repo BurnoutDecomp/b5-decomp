@@ -3654,14 +3654,14 @@ void PropManager::ProcessRemovePartInstanceEvents(
         // 0x82627868 -- SIGNED compare. Both asserts carry the SAME message and the same baked
         // file; only the line differs (735 then 737). NON-GATING: the console falls straight
         // through into the call, so nothing is skipped when they fire.
-        CGS_ASSERT( liPartIndex != KI_PROP_INDEX_NOT_FOUND,
-            CGS_ASSERT_MESSAGE_AT( "liPartIndex != KI_PROP_INDEX_NOT_FOUND",
+        CGS_ASSERT_AT( liPartIndex != KI_PROP_INDEX_NOT_FOUND,
+             "liPartIndex != KI_PROP_INDEX_NOT_FOUND",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../Physics/PropManager/BrnPropManager.cpp", 735 /* ARTIST 0x82627874 */ ) );
-        CGS_ASSERT( liPartIndex != KI_PROP_INDEX_NOT_FOUND,
-            CGS_ASSERT_MESSAGE_AT( "liPartIndex != KI_PROP_INDEX_NOT_FOUND",
+                "../Physics/PropManager/BrnPropManager.cpp", 735 /* ARTIST 0x82627874 */  );
+        CGS_ASSERT_AT( liPartIndex != KI_PROP_INDEX_NOT_FOUND,
+             "liPartIndex != KI_PROP_INDEX_NOT_FOUND",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../Physics/PropManager/BrnPropManager.cpp", 737 /* ARTIST 0x8262788C */ ) );
+                "../Physics/PropManager/BrnPropManager.cpp", 737 /* ARTIST 0x8262788C */  );
 
         RemovePart( lEntityId,
                     static_cast<u32>( liPartIndex ),

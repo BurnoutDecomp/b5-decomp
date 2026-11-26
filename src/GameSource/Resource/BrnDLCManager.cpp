@@ -350,12 +350,12 @@ namespace BrnResource
     // mask: mauPackMask[liPack]. The asm indexes *(this + 4*(lPack+2)), i.e. mauPackMask at +0x08.
     u32 DLCFeatureAvailability::GetPackMask(s32 liPack) const
     {
-        CGS_ASSERT(liPack >= E_DLC_DATA_PACK_START,
-            CGS_ASSERT_MESSAGE_AT(
-                "lPack >= E_DLC_DATA_PACK_START", KAC_ARTIST_ASSERT_FILE, 351 /* ARTIST 0x82661654 */));
-        CGS_ASSERT(liPack < E_DLC_DATA_PACK_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "lPack < E_DLC_DATA_PACK_COUNT", KAC_ARTIST_ASSERT_FILE, 352 /* ARTIST 0x82661678 */));
+        CGS_ASSERT_AT(liPack >= E_DLC_DATA_PACK_START,
+            "lPack >= E_DLC_DATA_PACK_START", KAC_ARTIST_ASSERT_FILE, 351 /* ARTIST 0x82661654 */);
+
+        CGS_ASSERT_AT(liPack < E_DLC_DATA_PACK_COUNT,
+            "lPack < E_DLC_DATA_PACK_COUNT", KAC_ARTIST_ASSERT_FILE, 352 /* ARTIST 0x82661678 */);
+
 
         return mauPackMask[liPack];
     }
@@ -365,8 +365,8 @@ namespace BrnResource
     // clearing any real (non-zero-mask) pack zeroes the whole availability mask. Reproduced faithfully.
     void DLCFeatureAvailability::SetPackAvailabilityState(s32 liPack, bool lbAvailable)
     {
-        CGS_ASSERT(liPack >= E_DLC_DATA_PACK_START, CGS_ASSERT_MESSAGE_AT("lPack >= E_DLC_DATA_PACK_START", CGS_ARTIST_FILE, 362));
-        CGS_ASSERT(liPack < E_DLC_DATA_PACK_COUNT,  CGS_ASSERT_MESSAGE_AT("lPack < E_DLC_DATA_PACK_COUNT", CGS_ARTIST_FILE, 363));
+        CGS_ASSERT_AT(liPack >= E_DLC_DATA_PACK_START, "lPack >= E_DLC_DATA_PACK_START", CGS_ARTIST_FILE, 362);
+        CGS_ASSERT_AT(liPack < E_DLC_DATA_PACK_COUNT,  "lPack < E_DLC_DATA_PACK_COUNT", CGS_ARTIST_FILE, 363);
 
         const u32 luMask = GetPackMask(liPack);
         if (lbAvailable)

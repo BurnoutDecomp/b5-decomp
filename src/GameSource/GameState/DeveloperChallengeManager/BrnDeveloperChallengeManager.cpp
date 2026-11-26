@@ -93,8 +93,8 @@ void DeveloperChallengeManager::SetChallengeCompleted(s32 liChallengeIndex)
     // Profile/local bit-set are the observable effects.
     CGS_ASSERT(liChallengeIndex >= 0,                       "Out of range developer challnge");
     CGS_ASSERT(liChallengeIndex < E_DEV_CHALLENGE_COUNT,    "Out of range developer challnge");
-    CGS_ASSERT(mpProgressionManager != 0,             CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 685));
-    CGS_ASSERT(mpProgressionManager->GetProfile() != 0, CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 686));
+    CGS_ASSERT_AT(mpProgressionManager != 0,             "mpProgressionManager", CGS_ARTIST_FILE, 685);
+    CGS_ASSERT_AT(mpProgressionManager->GetProfile() != 0, "mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 686);
 
     // Persist the completion on the player's Profile, then record it locally in the bit set.
     mpProgressionManager->GetProfile()->SetDeveloperChallengeComplete(liChallengeIndex);
@@ -107,8 +107,8 @@ void DeveloperChallengeManager::SetChallengeCompleted(s32 liChallengeIndex)
 // ----------------------------------------------------------------------------
 bool DeveloperChallengeManager::CheckCarID(CgsID lCarId, CgsID lTargetCarId)
 {
-    CGS_ASSERT(mpGameStateModule != 0,                CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 710));
-    CGS_ASSERT(mpGameStateModule->GetVehicleList() != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule->GetVehicleList()", CGS_ARTIST_FILE, 711));
+    CGS_ASSERT_AT(mpGameStateModule != 0,                "mpGameStateModule", CGS_ARTIST_FILE, 710);
+    CGS_ASSERT_AT(mpGameStateModule->GetVehicleList() != 0, "mpGameStateModule->GetVehicleList()", CGS_ARTIST_FILE, 711);
 
     CgsID lCurrentId = lCarId;
     if (lCurrentId == 0)
@@ -129,7 +129,7 @@ bool DeveloperChallengeManager::CheckCarID(CgsID lCarId, CgsID lTargetCarId)
         // assert path as GetVehicleData()==null (no early-return-false before the assert).
         const BrnResource::VehicleListEntry* lpVehicleListEntry =
             (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
-        CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_FILE, 726));
+        CGS_ASSERT_AT(lpVehicleListEntry != 0, "lpVehicleListEntry", CGS_ARTIST_FILE, 726);
 
         // Walk up to the parent car (0 == no parent -> chain ends).
         lCurrentId = lpVehicleListEntry->GetParentId();
@@ -147,8 +147,8 @@ void DeveloperChallengeManager::OnFlatSpin(f32 lfFlatSpinAngle)
 {
     if (lfFlatSpinAngle > KF_DEV_CHALLENGE_FLAT_SPIN_MIN_ANGLE)
     {
-        CGS_ASSERT(mpProgressionManager != 0,               CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 664));
-        CGS_ASSERT(mpProgressionManager->GetProfile() != 0, CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 665));
+        CGS_ASSERT_AT(mpProgressionManager != 0,               "mpProgressionManager", CGS_ARTIST_FILE, 664);
+        CGS_ASSERT_AT(mpProgressionManager->GetProfile() != 0, "mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 665);
         if (!mpProgressionManager->GetProfile()->IsDeveloperChallengeComplete(E_DEV_CHALLENGE_FLAT_SPIN))
         {
             SetChallengeCompleted(E_DEV_CHALLENGE_FLAT_SPIN);
@@ -164,8 +164,8 @@ void DeveloperChallengeManager::OnStuntRunComboPerformed(const f32* lpComboScore
     // `fcmpu ; blt` skips only on an ordered less-than: an unordered score still runs the arm.
     if (!(*lpComboScore < KF_DEV_CHALLENGE_STUNT_COMBO_MIN))
     {
-        CGS_ASSERT(mpProgressionManager != 0,               CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 664));
-        CGS_ASSERT(mpProgressionManager->GetProfile() != 0, CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 665));
+        CGS_ASSERT_AT(mpProgressionManager != 0,               "mpProgressionManager", CGS_ARTIST_FILE, 664);
+        CGS_ASSERT_AT(mpProgressionManager->GetProfile() != 0, "mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 665);
         if (!mpProgressionManager->GetProfile()->IsDeveloperChallengeComplete(E_DEV_CHALLENGE_STUNT_COMBO))
         {
             SetChallengeCompleted(E_DEV_CHALLENGE_STUNT_COMBO);
@@ -186,8 +186,8 @@ void DeveloperChallengeManager::OnStuntOffenceComplete(const u8* lpStuntOffence)
     const u32 luFlags = *reinterpret_cast<const u32*>(lpStuntOffence);          // FLAG: StuntOffence flags @+0
     if ((luFlags & 0x40u) == 0x40u)
     {
-        CGS_ASSERT(mpProgressionManager != 0,               CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 664));
-        CGS_ASSERT(mpProgressionManager->GetProfile() != 0, CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 665));
+        CGS_ASSERT_AT(mpProgressionManager != 0,               "mpProgressionManager", CGS_ARTIST_FILE, 664);
+        CGS_ASSERT_AT(mpProgressionManager->GetProfile() != 0, "mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 665);
 
         const f32 lfScore = *reinterpret_cast<const f32*>(lpStuntOffence + 104); // FLAG: StuntOffence score @+104
         if (!mpProgressionManager->GetProfile()->IsDeveloperChallengeComplete(E_DEV_CHALLENGE_STUNT_OFFENCE)
@@ -206,7 +206,7 @@ void DeveloperChallengeManager::OnTakedownChain(s32 liChainLength)
     if (liChainLength >= KI_DEV_CHALLENGE_TAKEDOWN_CHAIN_MIN)
     {
         CGS_ASSERT(mpProgressionManager != 0,               "mpProgressionManager");
-        CGS_ASSERT(mpProgressionManager->GetProfile() != 0, CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 665));
+        CGS_ASSERT_AT(mpProgressionManager->GetProfile() != 0, "mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 665);
 
         BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
         if (!lpProfile->IsDeveloperChallengeComplete(E_DEV_CHALLENGE_TAKEDOWN_CHAIN))
@@ -216,7 +216,7 @@ void DeveloperChallengeManager::OnTakedownChain(s32 liChainLength)
 
         // Car-specific variant: the chain happened in a car descended from "PUSRI01".
         CGS_ASSERT(mpProgressionManager != 0,                      "mpProgressionManager");
-        CGS_ASSERT(mpProgressionManager->GetCurrentCarData() != 0, CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetCurrentCarData()", CGS_ARTIST_FILE, 545));
+        CGS_ASSERT_AT(mpProgressionManager->GetCurrentCarData() != 0, "mpProgressionManager->GetCurrentCarData()", CGS_ARTIST_FILE, 545);
 
         const CgsID lCurrentCarId = mpProgressionManager->GetCurrentCarData()->GetId();
         const CgsID lTargetCarId  = CgsIDCompress("PUSRI01");
@@ -277,7 +277,7 @@ void DeveloperChallengeManager::OnSetRoadRule(BrnStreetData::ScoreType leScoreTy
     }
     else
     {
-        CGS_ASSERT(false, "dodgy road rule type ");
+        CGS_FAIL("dodgy road rule type ");
     }
 }
 
@@ -293,13 +293,13 @@ void DeveloperChallengeManager::OnCollectStunt(u32 luStuntType, CgsID lBillboard
     }
     if (luStuntType > 2u)
     {
-        CGS_ASSERT(false, "dodgy stunt type");
+        CGS_FAIL("dodgy stunt type");
         return;
     }
 
     // luStuntType == 2 (billboard).
-    CGS_ASSERT(mpProgressionManager != 0,               CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 664));
-    CGS_ASSERT(mpProgressionManager->GetProfile() != 0, CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 665));
+    CGS_ASSERT_AT(mpProgressionManager != 0,               "mpProgressionManager", CGS_ARTIST_FILE, 664);
+    CGS_ASSERT_AT(mpProgressionManager->GetProfile() != 0, "mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 665);
     if (mpProgressionManager->GetProfile()->IsDeveloperChallengeComplete(E_DEV_CHALLENGE_BILLBOARD_BURST))
     {
         return;
@@ -436,7 +436,7 @@ void DeveloperChallengeManager::OnEventWin(s32 liGameModeType)
 {
     if (liGameModeType == 3)
     {
-        CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 335));
+        CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 335);
         const ::EActiveRaceCarIndex lePlayerRaceCarIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
         CGS_ASSERT((lePlayerRaceCarIndex > ::E_ACTIVE_RACE_CAR_INDEX_INVALID)
                    && (lePlayerRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT),
@@ -466,7 +466,7 @@ void DeveloperChallengeManager::OnEventWin(s32 liGameModeType)
             // POINTER, which is what the assert text names.
             const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
                 lpActiveCarInterface = mpGameStateModule->GetLastActiveRaceCarInterface();
-            CGS_ASSERT(lpActiveCarInterface != 0, CGS_ASSERT_MESSAGE_AT("lpActiveCarInterface", CGS_ARTIST_FILE, 346));
+            CGS_ASSERT_AT(lpActiveCarInterface != 0, "lpActiveCarInterface", CGS_ARTIST_FILE, 346);
 
             // Car-specific stunt-win: the active car descends from "PUSCV01".
             const CgsID lActiveCarId = mpGameStateModule->GetActivePlayerCarId();
@@ -517,7 +517,7 @@ void DeveloperChallengeManager::OnEventWin(s32 liGameModeType)
         const bool lbOnline = mpGameStateModule->IsOnlineGameMode();
         StuntModeScoring* lpStuntScorer = lbOnline ? mpScoringSystem->GetOnlineStuntScorer()
                                                    : mpScoringSystem->GetStuntScorer();
-        CGS_ASSERT(lpStuntScorer != 0, CGS_ASSERT_MESSAGE_AT("lpStuntModeScorer", CGS_ARTIST_FILE, 371));
+        CGS_ASSERT_AT(lpStuntScorer != 0, "lpStuntModeScorer", CGS_ARTIST_FILE, 371);
 
         // `lwz r31, 0x10(r24)` @0x8238DBA8 -- the scorer's running score at +16 == miCurrentScore,
         // which GetCurrentScore() already returns by name. (The second word this function reads,
@@ -576,9 +576,9 @@ void DeveloperChallengeManager::OnEventWin(s32 liGameModeType)
 void DeveloperChallengeManager::PreWorldUpdate(const GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
                                                GameStateModuleIO::OutputBuffer*         lpOutput)
 {
-    CGS_ASSERT(lpPreWorldInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPreWorldInputBuffer", CGS_ARTIST_FILE, 155));
-    CGS_ASSERT(lpPreWorldInputBuffer->GetTimerStatusInterface() != 0,
-               CGS_ASSERT_MESSAGE_AT("lpPreWorldInputBuffer->GetTimerStatusInterface()", CGS_ARTIST_FILE, 156));
+    CGS_ASSERT_AT(lpPreWorldInputBuffer != 0, "lpPreWorldInputBuffer", CGS_ARTIST_FILE, 155);
+    CGS_ASSERT_AT(lpPreWorldInputBuffer->GetTimerStatusInterface() != 0,
+               "lpPreWorldInputBuffer->GetTimerStatusInterface()", CGS_ARTIST_FILE, 156);
 
     // Current race time = (s32 whole) + (f32 fraction) of the sim timer status's time (the int at
     // TimerStatusInterface+0x28 and the f32 at +0x2C: the sim block at +0x18, its mTime at +0x10).
@@ -590,7 +590,7 @@ void DeveloperChallengeManager::PreWorldUpdate(const GameStateModuleIO::PreWorld
     // The X360 guards the publish + age-out behind the developer-challenges-enabled debug flag
     // (byte_82FFA7F1, a .bss byte whose init-time writer is not recovered -- a zero in the image is
     // not evidence it is zero at runtime); with the flag on it always runs.
-    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 162));
+    CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 162);
 
     // 0x8238D798..0x8238D7D0: `ldx r10, (0x13 << 3) == +0x98, this` over the set's single u64 field;
     // NON-ZERO == "challenges completed since the last publish" -> post. (The earlier recon tested the
@@ -606,7 +606,7 @@ void DeveloperChallengeManager::PreWorldUpdate(const GameStateModuleIO::PreWorld
     // bridge forwards the same eight-byte bitset to its developer-challenge notification.
     if (maCompletedChallenges.GetFirstBitSet() != CgsContainers::FastBitArray<15>::KI_INVALID_BIT_INDEX)
     {
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 169));
+        CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 169);
 
         // GameStateModuleIO::GameActionQueue is the real VariableEventQueue<13312,16> typedef now
         // and GetGameActionQueue() is bodied + mounted (BrnGameStateModuleIO.cpp); the former

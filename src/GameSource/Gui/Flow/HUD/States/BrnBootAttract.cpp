@@ -56,7 +56,7 @@ namespace BrnGui
              liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             if (liEventId != 14)
-                CGS_ASSERT_AT(false, "Unexpected event in IntroHudState::Update", CGS_ARTIST_FILE, 91);
+                CGS_FAIL_AT("Unexpected event in IntroHudState::Update", CGS_ARTIST_FILE, 91);
         }
         mpInGuiEventQueue->Clear();
     }

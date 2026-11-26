@@ -117,10 +117,10 @@ u32 Pvs::GetHullIndexForIndices(s32 liX, s32 liZ) const
 // &mpaHullPvs[luIndex] (20-byte stride == sizeof(Set<uint16_t,8u>)).
 const CgsContainers::Set<u16, 8>& Pvs::GetHullPvs(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < muNumCells,
-        CGS_ASSERT_MESSAGE_AT(
-            "luIndex < muNumCells",
-            "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficPvs.h", 204 /* ARTIST 0x82705FE0 */));
+    CGS_ASSERT_AT(luIndex < muNumCells,
+        "luIndex < muNumCells",
+            "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficPvs.h", 204 /* ARTIST 0x82705FE0 */);
+
 
     return mpaHullPvs[luIndex];
 }

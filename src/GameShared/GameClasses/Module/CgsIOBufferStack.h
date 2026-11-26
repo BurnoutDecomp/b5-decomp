@@ -73,8 +73,8 @@ namespace CgsModule
         template <typename T>
         bool CreateIOBuffer(T** lpOutBuffer, const char* lpcDebugName)
         {
-            CGS_ASSERT(lpOutBuffer, CGS_ASSERT_STREAM_MESSAGE_AT(
-                "Must pass in pointer to pointer to buffer\n", detail::KAC_IO_STACK_FILE, 139));
+            CGS_ASSERT_STREAM_AT(lpOutBuffer,
+                "Must pass in pointer to pointer to buffer\n", detail::KAC_IO_STACK_FILE, 139);
 
             // ARTIST 0x8285A27C stores the allocation before calling Construct.
             T* lpBuffer = static_cast<T*>(Alloc(sizeof(T), lpcDebugName));
@@ -103,8 +103,8 @@ namespace CgsModule
         template <typename T>
         bool DestroyIOBuffer(T** lpInOutBuffer)
         {
-            CGS_ASSERT(lpInOutBuffer && *lpInOutBuffer, CGS_ASSERT_STREAM_MESSAGE_AT(
-                "Must pass in pointer to pointer to buffer\n", detail::KAC_IO_STACK_FILE, 180));
+            CGS_ASSERT_STREAM_AT(lpInOutBuffer && *lpInOutBuffer,
+                "Must pass in pointer to pointer to buffer\n", detail::KAC_IO_STACK_FILE, 180);
 
             (*lpInOutBuffer)->Destruct();
             // ARTIST 0x8285A3B8 normalizes the low byte of the Free result.

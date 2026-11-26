@@ -88,9 +88,9 @@ namespace BrnNetwork
 
         // Every sub-state must have a handler (X360 fires this assert once per slot).
         for (s32 liIndex = 0; liIndex < E_SUBSTATE_COUNT; ++liIndex)
-            CGS_ASSERT(maUpdateFunctions[liIndex] != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(maUpdateFunctions[liIndex] != 0,
                 "No update function supplied for this substate",
-                __FILE__, 72 /* ARTIST 0x8257115C */));
+                __FILE__, 72 /* ARTIST 0x8257115C */);
 
         mpNetworkManager       = lpNetworkManager;
         meSubState             = E_SUBSTATE_NONE;
@@ -127,9 +127,9 @@ namespace BrnNetwork
 
     void LaunchManager::Start()
     {
-        CGS_ASSERT(meSubState == E_SUBSTATE_NONE, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(meSubState == E_SUBSTATE_NONE,
             "Already managing pre-launch!",
-            __FILE__, 580 /* ARTIST 0x82544244 */));
+            __FILE__, 580 /* ARTIST 0x82544244 */);
 
         meSubState             = E_SUBSTATE_RUNNING;
         miNumPlayersSetPlaying = 0;
@@ -171,10 +171,10 @@ namespace BrnNetwork
 
     LaunchManager::EStatus LaunchManager::Update()
     {
-        CGS_ASSERT(maUpdateFunctions[meSubState] != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "No update function supplied for the current substate",
-                __FILE__, 144 /* ARTIST 0x82543ED8 */));
+        CGS_ASSERT_AT(maUpdateFunctions[meSubState] != 0,
+            "No update function supplied for the current substate",
+                __FILE__, 144 /* ARTIST 0x82543ED8 */);
+
 
         return (this->*maUpdateFunctions[meSubState])();
     }
@@ -208,9 +208,9 @@ namespace BrnNetwork
         if (leStatus < BrnServerInterface::E_STATUS_COUNT)   // E_STATUS_IDLE
             return true;
 
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+        CGS_FAIL_AT(
             "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in LaunchManager::ServerInterfaceIdle",
-            __FILE__, 662 /* ARTIST 0x825443BC */));
+            __FILE__, 662 /* ARTIST 0x825443BC */);
         return false;
     }
 
@@ -373,9 +373,9 @@ namespace BrnNetwork
     {
         CgsNetwork::ServerInterfaceGames* lpGames =
             mpNetworkManager->GetServerInterface()->GetGameComponent();
-        CGS_ASSERT(lpGames != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpGames != 0,
             "lpGames",
-            __FILE__, 364 /* ARTIST 0x82566740 */));
+            __FILE__, 364 /* ARTIST 0x82566740 */);
 
         DebugLog("[LAUNCH MGR]: ");
         DebugLog("Updating unlock from error\n");
@@ -477,12 +477,12 @@ namespace BrnNetwork
                 return E_STATUS_LAUNCHING;
             }
 
-            CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(mpNetworkManager != 0,
                 "mpNetworkManager",
-                __FILE__, 537 /* ARTIST 0x82558C68 */));
-            CGS_ASSERT(mpNetworkManager->GetTimerStatus() != 0, CGS_ASSERT_MESSAGE_AT(
+                __FILE__, 537 /* ARTIST 0x82558C68 */);
+            CGS_ASSERT_AT(mpNetworkManager->GetTimerStatus() != 0,
                 "mpNetworkManager->GetTimerStatus()",
-                __FILE__, 538 /* ARTIST 0x82558C9C */));
+                __FILE__, 538 /* ARTIST 0x82558C9C */);
 
             // Start the post-suspend settle window.
             const CgsSystem::Time lWaitDuration(KF_LAUNCH_WAIT_TIME);
@@ -497,12 +497,12 @@ namespace BrnNetwork
 
     LaunchManager::EStatus LaunchManager::UpdateWaiting()
     {
-        CGS_ASSERT(mpNetworkManager != 0,
-            CGS_ASSERT_MESSAGE_AT("mpNetworkManager", __FILE__, 484 /* ARTIST 0x825440C4 */));
-        CGS_ASSERT(mpNetworkManager->GetTimerStatus() != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpNetworkManager->GetTimerStatus()",
-                __FILE__, 485 /* ARTIST 0x825440F8 */));
+        CGS_ASSERT_AT(mpNetworkManager != 0,
+            "mpNetworkManager", __FILE__, 484 /* ARTIST 0x825440C4 */);
+        CGS_ASSERT_AT(mpNetworkManager->GetTimerStatus() != 0,
+            "mpNetworkManager->GetTimerStatus()",
+                __FILE__, 485 /* ARTIST 0x825440F8 */);
+
 
         const CgsSystem::Time lNow =
             mpNetworkManager->GetTimerStatus()->GetTime();

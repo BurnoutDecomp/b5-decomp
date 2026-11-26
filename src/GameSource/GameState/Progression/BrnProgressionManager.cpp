@@ -232,8 +232,8 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
                                   const BrnTrigger::TriggerData* lpTriggerData,
                                   BrnGameState::AchievementManagerBase* lpAchievementManager)
 {
-    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 249));            // X360 BrnProgressionManager.cpp:249
-    CGS_ASSERT(lpReceiverQueue != 0, CGS_ASSERT_MESSAGE_AT("lpReceiverQueue", CGS_ARTIST_FILE, 250));  // X360 :250
+    CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 249);            // X360 BrnProgressionManager.cpp:249
+    CGS_ASSERT_AT(lpReceiverQueue != 0, "lpReceiverQueue", CGS_ARTIST_FILE, 250);  // X360 :250
 
     // ✅ [progression wave: lifecycle, 2026-09-06] THE PROFILE BOOT SEAM IS RETIRED, ITS OWN
     // DELETE-WHEN PAID. The seam that stood here (landed 2026-08-24, deform-land wave) called
@@ -255,11 +255,11 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
         return false;
     }
 
-    CGS_ASSERT(lpTriggerData != 0, CGS_ASSERT_MESSAGE_AT("lpTriggerData", CGS_ARTIST_FILE, 261));
+    CGS_ASSERT_AT(lpTriggerData != 0, "lpTriggerData", CGS_ARTIST_FILE, 261);
     mpTriggerData     = lpTriggerData;           // X360 +0x20924 (a5)
     mpModeManager = lpModeManager;               // X360 +0x2093C (a3) -- the MODE manager; see the header
 
-    CGS_ASSERT(lpAchievementManager != 0, CGS_ASSERT_MESSAGE_AT("lpAchievementManager", CGS_ARTIST_FILE, 265));
+    CGS_ASSERT_AT(lpAchievementManager != 0, "lpAchievementManager", CGS_ARTIST_FILE, 265);
     mpAchievementManager = lpAchievementManager; // X360 +0x20938 (a6)
 
     ComputeLandmarkAISectionIndices();
@@ -510,7 +510,7 @@ s32 ProgressionManager::GetEvent(s32 liGameType)
         case 4: return 5;
         case 5: return 4;
         default:
-            CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("I dont know what this game type is! Maybe its new mode and needs adding this switch statement?\n", CGS_ARTIST_FILE, 906));
+            CGS_FAIL_STREAM_AT("I dont know what this game type is! Maybe its new mode and needs adding this switch statement?\n", CGS_ARTIST_FILE, 906);
 
             return -1;
     }
@@ -537,7 +537,7 @@ s32 ProgressionManager::GetOnlin(u32 luGameType) const
         return 13;
     }
 
-    CGS_ASSERT(false,
+    CGS_FAIL(
         "I dont know what this game type is! Maybe its new mode and needs adding this switch statement?\n");
     return -1;
 }
@@ -575,10 +575,10 @@ bool ProgressionManager::IsCarUnlocked(CgsID lCarId) const
 // ------------------------------------------------------------------------------------
 void ProgressionManager::RepairUnlockedVehicle(CgsID lCarId)
 {
-    CGS_ASSERT(lCarId != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lCarId != kCGSID_NULL",
-            "..\\..\\..\\GameSource\\GameState/Progression/BrnProgressionManager.h", 1415 /* ARTIST 0x8236365C */));
+    CGS_ASSERT_AT(lCarId != 0,
+        "lCarId != kCGSID_NULL",
+            "..\\..\\..\\GameSource\\GameState/Progression/BrnProgressionManager.h", 1415 /* ARTIST 0x8236365C */);
+
     mProfile.RepairUnlockedVehicle(lCarId);
 }
 
@@ -1089,7 +1089,7 @@ s32 ProgressionManager::GetStuntRunScoreTarget(const BrnGameState::GameModeParam
                                                const BrnGameState::StartGameModeParams* lpStartGameModeParams) const
 {
     const RaceEventData* lpStuntRunEventData = lpStartGameModeParams->GetEventData();
-    CGS_ASSERT(lpStuntRunEventData != NULL, CGS_ASSERT_MESSAGE_AT("lpStuntRunEventData != NULL", CGS_ARTIST_FILE, 3891));
+    CGS_ASSERT_AT(lpStuntRunEventData != NULL, "lpStuntRunEventData != NULL", CGS_ARTIST_FILE, 3891);
 
     // `lwz r11,0x14 / addi r11,r11,-1 / extsb r25` -- narrowed to a signed byte, like every other
     // rank count in this file.
@@ -1176,11 +1176,11 @@ s32 ProgressionManager::GetStuntRunScoreTarget(const BrnGameState::GameModeParam
 // ============================================================================================
 s8 ProgressionManager::GetProgressionRankForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const
 {
-    CGS_ASSERT(leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_RACE ||
+    CGS_ASSERT_AT(leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_RACE ||
                leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE    ||
                leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK ||
                leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN,
-               CGS_ASSERT_MESSAGE_AT("This game mode doesn't have separate difficulty scaling", CGS_ARTIST_FILE, 3779));
+               "This game mode doesn't have separate difficulty scaling", CGS_ARTIST_FILE, 3779);
 
     // Profile::GetNumRankWinsForGameMode owns the range assert the console fires here.
     const s32 liRankWins = mProfile.GetNumRankWinsForGameMode(leGameModeType);
@@ -1200,8 +1200,8 @@ s8 ProgressionManager::GetProgressionRankForGameMode(BrnGameState::GameStateModu
     }
     --liProgressionRank;
 
-    CGS_ASSERT(liProgressionRank >= 0 && liProgressionRank < liNumRanks,
-               CGS_ASSERT_MESSAGE_AT("liProgressionRank >= 0 && liProgressionRank < liNumRanks", CGS_ARTIST_FILE, 3802));
+    CGS_ASSERT_AT(liProgressionRank >= 0 && liProgressionRank < liNumRanks,
+               "liProgressionRank >= 0 && liProgressionRank < liNumRanks", CGS_ARTIST_FILE, 3802);
 
     return static_cast<s8>(liProgressionRank);
 }
@@ -3069,7 +3069,7 @@ u32 ProgressionManager::GetTotalWinsForNextRank()
 {
     // `cmplwi r11, 0x80 / blt` -- an UNSIGNED compare of the raw byte against 0x80, i.e. "the
     // signed byte is not negative".
-    CGS_ASSERT(mi8ProgressionRank >= 0, CGS_ASSERT_MESSAGE_AT("mi8CurrentProgressionRank >= 0", CGS_ARTIST_FILE, 4156));   // cpp:4156
+    CGS_ASSERT_AT(mi8ProgressionRank >= 0, "mi8CurrentProgressionRank >= 0", CGS_ARTIST_FILE, 4156);   // cpp:4156
 
     const ProgressionData* lpProgressionData = GetProgressionData();
     if (lpProgressionData == 0)
@@ -3077,12 +3077,12 @@ u32 ProgressionManager::GetTotalWinsForNextRank()
     }
 
     const s32 liRank = static_cast<s32>(mi8ProgressionRank);
-    CGS_ASSERT(static_cast<u32>(liRank) < lpProgressionData->GetProgressionRankCount(),
-               CGS_ASSERT_MESSAGE_AT("luIndex < muProgressionRankCount", "..\\..\\..\\SharedClasses\\Progression/BrnProgressionData.h", 330));                         // BrnProgressionData.h:330
+    CGS_ASSERT_AT(static_cast<u32>(liRank) < lpProgressionData->GetProgressionRankCount(),
+               "luIndex < muProgressionRankCount", "..\\..\\..\\SharedClasses\\Progression/BrnProgressionData.h", 330);                         // BrnProgressionData.h:330
 
     const ProgressionRankData* lpProgressionRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liRank));
-    CGS_ASSERT(lpProgressionRank != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionRank", CGS_ARTIST_FILE, 4159));                // cpp:4159
+    CGS_ASSERT_AT(lpProgressionRank != 0, "lpProgressionRank", CGS_ARTIST_FILE, 4159);                // cpp:4159
     if (lpProgressionRank == 0)
     {
         return 0;
@@ -5286,7 +5286,7 @@ void ProgressionManager::DefeatRivalAndUnlockCar(s32 liRivalIndex, EUnlockSequen
             lpSavedRival = mProfile.AddRival(lRivalId, lCarId);
         }
     }
-    CGS_ASSERT(lpSavedRival != 0, CGS_ASSERT_MESSAGE_AT("lpSavedRival", CGS_ARTIST_FILE, 2465));   // BrnProgressionManager.cpp:2465
+    CGS_ASSERT_AT(lpSavedRival != 0, "lpSavedRival", CGS_ARTIST_FILE, 2465);   // BrnProgressionManager.cpp:2465
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
     {
@@ -5360,10 +5360,10 @@ void ProgressionManager::OnPursuitWon(CgsID lRivalId, BrnGameState::GameStateMod
     {
         return;
     }
-    CGS_ASSERT(lpRival != 0, CGS_ASSERT_MESSAGE_AT("lpRival != NULL", CGS_ARTIST_FILE, 2410));   // :2410
+    CGS_ASSERT_AT(lpRival != 0, "lpRival != NULL", CGS_ARTIST_FILE, 2410);   // :2410
 
     RivalData* lpSavedRival = mProfile.FindRival(lRivalId);
-    CGS_ASSERT(lpSavedRival != 0, CGS_ASSERT_MESSAGE_AT("lpSavedRival", CGS_ARTIST_FILE, 2413));   // :2413
+    CGS_ASSERT_AT(lpSavedRival != 0, "lpSavedRival", CGS_ARTIST_FILE, 2413);   // :2413
 
     DefeatRivalAndUnlockCar(liRivalIndex, E_UNLOCK_SEQUENCE_TYPE_DEFAULT);
 
@@ -5488,7 +5488,7 @@ CgsID ProgressionManager::UnlockRivals(BrnGameState::GameStateModuleIO::GameActi
     for (s32 liIndex = 0; liIndex < lpProgressionData->GetRivalCount(); ++liIndex)
     {
         const Rival* lpRival = lpProgressionData->GetRival(liIndex);   // carries the :468 assert
-        CGS_ASSERT(lpRival != 0, CGS_ASSERT_MESSAGE_AT("lpRival", CGS_ARTIST_FILE, 1096));                          // :1096
+        CGS_ASSERT_AT(lpRival != 0, "lpRival", CGS_ARTIST_FILE, 1096);                          // :1096
         if (lpRival == 0)
         {
             continue;   // [GUARD] the console reads through it regardless
@@ -6154,40 +6154,40 @@ void ProgressionManager::OnTrophyUnlock(s32 liTrophyType)
             switch (liTrophyType)
             {
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_MEDELS:
-                    CGS_ASSERT(false, "We need a number of medals for this\n");                  // :2174
+                    CGS_FAIL("We need a number of medals for this\n");                  // :2174
                     break;
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_CRASH_ROADRULES:
-                    CGS_ASSERT(false, "We need a number of Road rules for this\n");              // :2175
+                    CGS_FAIL("We need a number of Road rules for this\n");              // :2175
                     break;
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_ROADRULES:
-                    CGS_ASSERT(false, "We need a number of Road rules for this\n");              // :2176
+                    CGS_FAIL("We need a number of Road rules for this\n");              // :2176
                     break;
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_TIME_ROADRULES:
-                    CGS_ASSERT(false, "We need a number of Road rules for this\n");              // :2177
+                    CGS_FAIL("We need a number of Road rules for this\n");              // :2177
                     break;
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_NORMALTAKEDOWNS:
-                    CGS_ASSERT(false, "We need a number that is not 0\n");                       // :2178
+                    CGS_FAIL("We need a number that is not 0\n");                       // :2178
                     break;
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_SIGNATURETAKEDOWNS:
-                    CGS_ASSERT(false, "We need a number that is not 0\n");                       // :2179
+                    CGS_FAIL("We need a number that is not 0\n");                       // :2179
                     break;
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_JUMPS:
-                    CGS_ASSERT(false, "We need a number that is not 0\n");                       // :2180
+                    CGS_FAIL("We need a number that is not 0\n");                       // :2180
                     break;
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_SMASHES:
-                    CGS_ASSERT(false, "We need a number that is not 0\n");                       // :2181
+                    CGS_FAIL("We need a number that is not 0\n");                       // :2181
                     break;
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_STUNTS:
-                    CGS_ASSERT(false, "We need a number that is not 0\n");                       // :2184
+                    CGS_FAIL("We need a number that is not 0\n");                       // :2184
                     break;
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_ONLINE_VERTICLE_TAKEDOWNS:
-                    CGS_ASSERT(false, "We need a number that is not 0\n");                       // :2185
+                    CGS_FAIL("We need a number that is not 0\n");                       // :2185
                     break;
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_PERCENTAGE_PARALLELPARK_ONLINE:
-                    CGS_ASSERT(false, "We need a number that is not 0\n");                       // :2186
+                    CGS_FAIL("We need a number that is not 0\n");                       // :2186
                     break;
                 case TrophyUnlockData::E_UNLOCKTYPE_NUM_OF_EACH_ONLINE_EVENT_COMPLETE:
-                    CGS_ASSERT(false, "We need a number that is not 0\n");                       // :2187
+                    CGS_FAIL("We need a number that is not 0\n");                       // :2187
                     break;
                 default:
                     // Types 1..21 (and 34) reach here with no assert: they carry no number by
@@ -6287,7 +6287,7 @@ void ProgressionManager::OnTrophyUnlock(s32 liTrophyType)
                 default:
                     // Includes E_UNLOCKTYPE_NUM_SIGNATURETAKEDOWNS (27), which the jump table
                     // routes to the default arm -- it has no tally in this build.
-                    CGS_ASSERT(false, "Unknown trophy unlock");                                  // :2270
+                    CGS_FAIL("Unknown trophy unlock");                                  // :2270
                     break;
             }
         }

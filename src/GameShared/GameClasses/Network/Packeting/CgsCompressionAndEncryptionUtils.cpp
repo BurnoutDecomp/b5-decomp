@@ -78,12 +78,12 @@ void CompressionAndEncryptionUtils::ResetBandwidthUsed(const CgsSystem::TimerSta
 // Copy the current period into the history ring and advance the ring cursor.
 void CompressionAndEncryptionUtils::UpdateBandwidthHistory()
 {
-    CGS_ASSERT(miHistoricalIndex >= 0, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(miHistoricalIndex >= 0,
         "miHistoricalIndex >= 0",
-        CGS_ARTIST_FILE, 668 /* ARTIST 0x8286FEC8 */));
-    CGS_ASSERT(miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY, CGS_ASSERT_MESSAGE_AT(
+        CGS_ARTIST_FILE, 668 /* ARTIST 0x8286FEC8 */);
+    CGS_ASSERT_AT(miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY,
         "miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY",
-        CGS_ARTIST_FILE, 669 /* ARTIST 0x8286FEF0 */));
+        CGS_ARTIST_FILE, 669 /* ARTIST 0x8286FEF0 */);
 
     XMemCpy(maaaaiHistoricalBitsTransmitted[miHistoricalIndex], maaaiBitsTransmitted,
            sizeof(maaaiBitsTransmitted));
@@ -244,7 +244,7 @@ bool CompressionAndEncryptionUtils::Pack(NetworkPlayerID liPlayerID,
             }
         }
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "---- Done ----\n";
-        CGS_ASSERT(false, "Too many messages to send! Please see TTY output for more details");
+        CGS_FAIL("Too many messages to send! Please see TTY output for more details");
     }
 
     *lpiBufferUsed = 0;
@@ -479,7 +479,7 @@ void CompressionAndEncryptionUtils::UnPack(NetworkPlayerID liPlayerID,
         if (liMessageToUnPackInto == liNumMessagesInArray)
         {
             // The console streams the type between these two literals.
-            CGS_ASSERT(false, "Failed to find msg of type  to unpack into - we're going to lose this message\n");
+            CGS_FAIL("Failed to find msg of type  to unpack into - we're going to lose this message\n");
             return;
         }
 
@@ -515,21 +515,21 @@ void CompressionAndEncryptionUtils::UnPack(NetworkPlayerID liPlayerID,
 NetworkPlayerID CompressionAndEncryptionUtils::ExtractSendingPlayerID(u8* lpacBufferToUnPackFrom,
                                                                       s32 liBufferSize)
 {
-    CGS_ASSERT(static_cast<u32>(liBufferSize) >= sizeof(PackedPacketHeader),
-        CGS_ASSERT_MESSAGE_AT(
-            "(uint32_t)liBufferSize >= sizeof(PackedPacketHeader)",
-            __FILE__, 581 /* ARTIST 0x8286FD64 */));
-    CGS_ASSERT(lpacBufferToUnPackFrom,
-        CGS_ASSERT_MESSAGE_AT("lpacBufferToUnPackFrom", __FILE__, 582 /* ARTIST 0x8286FD88 */));
+    CGS_ASSERT_AT(static_cast<u32>(liBufferSize) >= sizeof(PackedPacketHeader),
+        "(uint32_t)liBufferSize >= sizeof(PackedPacketHeader)",
+            __FILE__, 581 /* ARTIST 0x8286FD64 */);
+
+    CGS_ASSERT_AT(lpacBufferToUnPackFrom,
+        "lpacBufferToUnPackFrom", __FILE__, 582 /* ARTIST 0x8286FD88 */);
 
     const PackedPacketHeader* lpHeader =
         reinterpret_cast<const PackedPacketHeader*>(lpacBufferToUnPackFrom);
     if ((lpHeader->mx8Flags & KX8_FLAGS_RELIABLE) == KX8_FLAGS_RELIABLE)
     {
-        CGS_ASSERT(static_cast<u32>(liBufferSize) > sizeof(ReliablePackedPacketHeader),
-            CGS_ASSERT_MESSAGE_AT(
-                "(uint32_t)liBufferSize > sizeof(ReliablePackedPacketHeader)",
-                __FILE__, 590 /* ARTIST 0x8286FDBC */));
+        CGS_ASSERT_AT(static_cast<u32>(liBufferSize) > sizeof(ReliablePackedPacketHeader),
+            "(uint32_t)liBufferSize > sizeof(ReliablePackedPacketHeader)",
+                __FILE__, 590 /* ARTIST 0x8286FDBC */);
+
         const ReliablePackedPacketHeader* lpReliableHeader =
             reinterpret_cast<const ReliablePackedPacketHeader*>(lpacBufferToUnPackFrom);
         return lpReliableHeader->mSendingPlayerID;

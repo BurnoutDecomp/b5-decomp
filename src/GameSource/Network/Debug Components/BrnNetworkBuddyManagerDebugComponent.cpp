@@ -358,33 +358,33 @@ namespace BrnNetwork
     void BuddyManagerDebugComponent::ForceServerFriendsOverwrite(void* lpData)
     {
         BuddyManagerDebugComponent* lpBuddyDebug = static_cast<BuddyManagerDebugComponent*>(lpData);
-        CGS_ASSERT(lpBuddyDebug,
-            CGS_ASSERT_MESSAGE_AT("lpBuddyDebug", __FILE__, 530 /* ARTIST 0x82591BA0 */));
+        CGS_ASSERT_AT(lpBuddyDebug,
+            "lpBuddyDebug", __FILE__, 530 /* ARTIST 0x82591BA0 */);
 
         BuddyManagerBase* lpBuddyManager = lpBuddyDebug->mpBuddyManager;
-        CGS_ASSERT(lpBuddyManager,
-            CGS_ASSERT_MESSAGE_AT("lpBuddyManager", __FILE__, 533 /* ARTIST 0x82591BC8 */));
-        CGS_ASSERT(lpBuddyManager->mpServerInterface->GetCustomCommandsComponent(),
-            CGS_ASSERT_MESSAGE_AT(
-                "lpBuddyManager->mpServerInterface->GetCustomCommandsComponent()",
-                __FILE__, 535 /* ARTIST 0x82591BF4 */));
+        CGS_ASSERT_AT(lpBuddyManager,
+            "lpBuddyManager", __FILE__, 533 /* ARTIST 0x82591BC8 */);
+        CGS_ASSERT_AT(lpBuddyManager->mpServerInterface->GetCustomCommandsComponent(),
+            "lpBuddyManager->mpServerInterface->GetCustomCommandsComponent()",
+                __FILE__, 535 /* ARTIST 0x82591BF4 */);
+
 
         ServerInterfaceCustomCommands* lpCustomCommandsComponent = static_cast<ServerInterfaceCustomCommands*>(
             lpBuddyManager->mpServerInterface->GetCustomCommandsComponent());
-        CGS_ASSERT(lpCustomCommandsComponent,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpCustomCommandsComponent",
-                __FILE__, 537 /* ARTIST 0x82591C20 */));
+        CGS_ASSERT_AT(lpCustomCommandsComponent,
+            "lpCustomCommandsComponent",
+                __FILE__, 537 /* ARTIST 0x82591C20 */);
+
 
         lpBuddyManager->miNumBuddiesAtUpload = 0;
         for (s32 liBuddyIndex = 0; liBuddyIndex < lpBuddyManager->GetNumBuddies(); ++liBuddyIndex)
         {
             const bool lbGotName = lpBuddyManager->GetBuddyName(
                 liBuddyIndex, &lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload]);
-            CGS_ASSERT(lbGotName,
-                CGS_ASSERT_MESSAGE_AT(
-                    "lpBuddyManager->GetBuddyName( liBuddyIndex, &lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload] )",
-                    __FILE__, 543 /* ARTIST 0x82591C90 */));
+            CGS_ASSERT_AT(lbGotName,
+                "lpBuddyManager->GetBuddyName( liBuddyIndex, &lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload] )",
+                    __FILE__, 543 /* ARTIST 0x82591C90 */);
+
 
             if (lpBuddyManager->IsFullBuddy(&lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload]))
             {

@@ -69,10 +69,10 @@ bool ScrapeInfo::operator==( const ScrapeInfo& lInfo ) const
 // ---------------------------------------------------------------------------
 void ScrapeInfo::UpdateHistory( const ScrapeInfo& lInfo )
 {
-    CGS_ASSERT( *this == lInfo,
-        CGS_ASSERT_MESSAGE_AT(
-            "*this == lInfo",
-            "..\\..\\..\\GameSource\\Sound/Collision/BrnCollisionDataStructures.h", 146 /* ARTIST 0x826822FC */));
+    CGS_ASSERT_AT( *this == lInfo,
+        "*this == lInfo",
+            "..\\..\\..\\GameSource\\Sound/Collision/BrnCollisionDataStructures.h", 146 /* ARTIST 0x826822FC */);
+
 
     mfIntensity = lInfo.mfIntensity;
     mfTimeStamp = lInfo.mfTimeStamp;

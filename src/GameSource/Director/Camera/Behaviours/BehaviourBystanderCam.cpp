@@ -147,10 +147,10 @@ void BehaviourBystanderCam::Construct()
 bool BehaviourBystanderCam::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
     SetPrepared();
-    CGS_ASSERT(mbSetup,
-        CGS_ASSERT_MESSAGE_AT(
-            "mbSetup",
-            CGS_ARTIST_FILE, 256 /* ARTIST 0x821F9AF8 */));   // cpp:256
+    CGS_ASSERT_AT(mbSetup,
+        "mbSetup",
+            CGS_ARTIST_FILE, 256 /* ARTIST 0x821F9AF8 */);   // cpp:256
+
     return true;
 }
 
@@ -188,7 +188,7 @@ bool BehaviourBystanderCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
 {
     using namespace rw::math::vpu;
 
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 272));   // cpp:272
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters != NULL", CGS_ARTIST_FILE, 272);   // cpp:272
 
     if (!mTarget.IsValid(*lrInfo.GetWorld()))
     {
@@ -311,7 +311,7 @@ void BehaviourBystanderCam::SetupTweaker(Utils::Tweaker& lrTweaker)
 {
     lrTweaker.Construct();
 
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters", CGS_ARTIST_FILE, 416));   // cpp:416
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters", CGS_ARTIST_FILE, 416);   // cpp:416
 
     Parameters* lpParams = const_cast<Parameters*>(mpParameters);
     lrTweaker.AddMapping("Rig X", &lpParams->mfTargetSpaceX, KF_TWEAK_TRANSLATION_SPEED_X,

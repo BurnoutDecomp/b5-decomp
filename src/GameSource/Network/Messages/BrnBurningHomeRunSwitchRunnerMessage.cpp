@@ -74,9 +74,9 @@ namespace BrnNetwork
     // flag is set, then clears it. Returns whether anything was retrieved.
     bool BurningHomeRunSwitchRunnerMessage::Retrieve(NetworkPlayerID* lpNewRunnerID)
     {
-        CGS_ASSERT(lpNewRunnerID != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpNewRunnerID != 0,
             "lpNewRunnerID",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnBurningHomeRunSwitchRunnerMessage.cpp", 98 /* ARTIST 0x8257F2E4 */));
+            "..\\..\\..\\GameSource\\Network/Messages/BrnBurningHomeRunSwitchRunnerMessage.cpp", 98 /* ARTIST 0x8257F2E4 */);
 
         // ARTIST 0x8257F2F8 branches to a trailing `return false` (0x8257F318): the copy-out is the body
         // of the valid test.

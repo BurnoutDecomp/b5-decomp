@@ -437,7 +437,7 @@ namespace BrnDirector
             // li r5 0x127), tick the state (vtable +8), take its camera (arb +0x3920 == the
             // state's +0x10 Camera), and drop back to NORMAL on the frame it has released
             // itself (ArbStateCrashNav::Release zeroes meState; the same `lwz 0x4188 ; cmpwi 0`).
-            CGS_ASSERT(mArbStateCrashNav.IsActive(), CGS_ASSERT_MESSAGE_AT("mArbStateCrashNav.IsActive()", "..\\..\\..\\GameSource\\Director/Arbitrator/BrnDirectorArbitrator.cpp", 295));
+            CGS_ASSERT_AT(mArbStateCrashNav.IsActive(), "mArbStateCrashNav.IsActive()", "..\\..\\..\\GameSource\\Director/Arbitrator/BrnDirectorArbitrator.cpp", 295);
             mArbStateCrashNav.Update(lrSharedInfo);
             lrCameraInOut = mArbStateCrashNav.GetCamera();
             if (!mArbStateCrashNav.IsActive())

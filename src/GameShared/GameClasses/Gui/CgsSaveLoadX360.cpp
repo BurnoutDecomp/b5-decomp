@@ -35,7 +35,7 @@ namespace CgsGui
     // X360 0x8284BD88.
     s32 XenonFileInputStream::GetSize() const
     {
-        CGS_ASSERT(mhFile != INVALID_HANDLE_VALUE, CGS_ASSERT_STREAM_MESSAGE_AT("File open failed!", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsSaveLoadX360.h", 596));
+        CGS_ASSERT_STREAM_AT(mhFile != INVALID_HANDLE_VALUE, "File open failed!", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsSaveLoadX360.h", 596);
         return miSize;
     }
 
@@ -47,7 +47,7 @@ namespace CgsGui
         DWORD luBytesRead = static_cast<DWORD>(luBytesToRead);
         if (!::ReadFile(mhFile, lpBuffer, static_cast<DWORD>(luBytesToRead), &luBytesRead, 0))
         {
-            CGS_ASSERT(false, "File read failed!");
+            CGS_FAIL("File read failed!");
         }
 
         return static_cast<s32>(luBytesRead);
@@ -245,30 +245,30 @@ namespace CgsGui
     // X360 0x8284C7D8. Realmc save-ready callback -- never expected on X360.
     s32 SaveLoadSystem::SaveReady()
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT("SaveReady called.\n", KAC_ARTIST_ASSERT_FILE, 917 /* ARTIST 0x8284C7EC */));
+        CGS_FAIL_AT(
+            "SaveReady called.\n", KAC_ARTIST_ASSERT_FILE, 917 /* ARTIST 0x8284C7EC */);
         return 0;
     }
 
     // X360 0x8284CB80. Realmc find-entry callback -- never expected on X360.
     void SaveLoadSystem::FoundEntry(const void*)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT("FoundEntry called", KAC_ARTIST_ASSERT_FILE, 1252 /* ARTIST 0x8284CB94 */));
+        CGS_FAIL_AT(
+            "FoundEntry called", KAC_ARTIST_ASSERT_FILE, 1252 /* ARTIST 0x8284CB94 */);
     }
 
     // X360 0x8284CBC0. Realmc find-entries-done callback -- never expected on X360.
     void SaveLoadSystem::FindEntriesDone(u32, u32)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "FindEntriesDone called", KAC_ARTIST_ASSERT_FILE, 1274 /* ARTIST 0x8284CBD4 */));
+        CGS_FAIL_AT(
+            "FindEntriesDone called", KAC_ARTIST_ASSERT_FILE, 1274 /* ARTIST 0x8284CBD4 */);
+
     }
 
     // X360 0x8284C648. Realmc delete result callback -- streamed assert stub.
     void SaveLoadSystem::DeleteDone()
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("DeleteDone: not implemented.", CGS_ARTIST_FILE, 775));
+        CGS_FAIL_STREAM_AT("DeleteDone: not implemented.", CGS_ARTIST_FILE, 775);
     }
 }
 
@@ -338,10 +338,10 @@ namespace CgsGui
     // failed assert (no clamp) -- reproduced faithfully.
     const char* SaveLoadSystem::LocaleGetStrCallback(u32 luStringID)
     {
-        CGS_ASSERT(luStringID < (sizeof(maRealmemcardStringIDs) / sizeof(maRealmemcardStringIDs[0])),
-            CGS_ASSERT_MESSAGE_AT(
-                "liStringID < M_ARRAY_SIZE(maRealmemcardStringIDs)",
-                CGS_ARTIST_FILE, 309 /* ARTIST 0x8284C1D4 */));
+        CGS_ASSERT_AT(luStringID < (sizeof(maRealmemcardStringIDs) / sizeof(maRealmemcardStringIDs[0])),
+            "liStringID < M_ARRAY_SIZE(maRealmemcardStringIDs)",
+                CGS_ARTIST_FILE, 309 /* ARTIST 0x8284C1D4 */);
+
         return maRealmemcardStringIDs[luStringID];
     }
 }
@@ -505,7 +505,7 @@ namespace CgsGui
         {
             if (luResult >= 3)                               // cmplwi r4,3; blt -> prompt lane
             {
-                CGS_ASSERT_AT(false, "Should not get here", CGS_ARTIST_FILE, 558);    // CgsSaveLoadX360.cpp:558
+                CGS_FAIL_AT("Should not get here", CGS_ARTIST_FILE, 558);    // CgsSaveLoadX360.cpp:558
                 return;
             }
 

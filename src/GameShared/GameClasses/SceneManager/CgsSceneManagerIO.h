@@ -350,8 +350,8 @@ namespace SceneManagerIO
         // WorldModule::EntityModulePostSceneUpdate reads the results through it.
         const OutSmSceneQueryResultsQueue* GetResultsQueue() const           // :624
         {
-            CGS_ASSERT(IsBufferLockedForReading(),
-                       CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", KAC_SCENE_OUTPUT_ARTIST_FILE1, 624));
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+                       "Not locked for reading\n", KAC_SCENE_OUTPUT_ARTIST_FILE1, 624);
             return &mResultsQueue;
         }
 
@@ -362,8 +362,8 @@ namespace SceneManagerIO
         // BridgeScenePotentialContactsToPhysics @0x827ABD80 all call exactly this function.
         const OutPotentialContactQueue* GetPotentialContactQueue() const     // :625
         {
-            CGS_ASSERT(IsBufferLockedForReading(),
-                       CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", KAC_SCENE_OUTPUT_ARTIST_FILE1, 625));
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+                       "Not locked for reading\n", KAC_SCENE_OUTPUT_ARTIST_FILE1, 625);
             return &mPotentialContactQueue;
         }
 
@@ -384,8 +384,8 @@ namespace SceneManagerIO
         // BridgeScenePotentialContactsToPhysics @0x827ABD80 (the traffic overlap feed).
         const OutOverlapPairsQueue* GetOverlapPairsQueue() const             // :627
         {
-            CGS_ASSERT(IsBufferLockedForReading(),
-                       CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", KAC_SCENE_OUTPUT_ARTIST_FILE1, 627));
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+                       "Not locked for reading\n", KAC_SCENE_OUTPUT_ARTIST_FILE1, 627);
             return &mOverlapPairsQueue;
         }
 
@@ -396,8 +396,8 @@ namespace SceneManagerIO
         // coarse-result batch through it.
         OutSmSceneQueryResultsQueue* GetResultsQueue()                       // :631
         {
-            CGS_ASSERT(IsBufferLockedForWriting(),
-                       CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", KAC_SCENE_OUTPUT_ARTIST_FILE2, 631));
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+                       "Not locked for writing\n", KAC_SCENE_OUTPUT_ARTIST_FILE2, 631);
             return &mResultsQueue;
         }
 
@@ -407,8 +407,8 @@ namespace SceneManagerIO
         // culler Contact into a PotentialContact. Round 3/4 writes through this.
         OutPotentialContactQueue* GetPotentialContactQueue()                 // :632
         {
-            CGS_ASSERT(IsBufferLockedForWriting(),
-                       CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", KAC_SCENE_OUTPUT_ARTIST_FILE2, 632));
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+                       "Not locked for writing\n", KAC_SCENE_OUTPUT_ARTIST_FILE2, 632);
             return &mPotentialContactQueue;
         }
 
@@ -416,8 +416,8 @@ namespace SceneManagerIO
         // is SceneManagerModule::BridgeOverlapGenerationToOutputBuffer @0x828BA6A0.
         OutOverlapPairsQueue* GetOverlapPairsQueue()                         // :633
         {
-            CGS_ASSERT(IsBufferLockedForWriting(),
-                       CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", KAC_SCENE_OUTPUT_ARTIST_FILE2, 633));
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+                       "Not locked for writing\n", KAC_SCENE_OUTPUT_ARTIST_FILE2, 633);
             return &mOverlapPairsQueue;
         }
 
@@ -444,14 +444,14 @@ namespace SceneManagerIO
         // / BridgeSceneModuleToOutput @0x827A5700) hold a READ lock.
         const TriangleCacheInterface* GetTriangleCacheInterface() const
         {
-            CGS_ASSERT(IsBufferLockedForReading(),
-                       CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", KAC_SCENE_OUTPUT_ARTIST_FILE1, 628));
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+                       "Not locked for reading\n", KAC_SCENE_OUTPUT_ARTIST_FILE1, 628);
             return &mTriangleCacheInterface;
         }
         TriangleCacheInterface* GetTriangleCacheInterface()
         {
-            CGS_ASSERT(IsBufferLockedForWriting(),
-                       CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", KAC_SCENE_OUTPUT_ARTIST_FILE2, 634));
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+                       "Not locked for writing\n", KAC_SCENE_OUTPUT_ARTIST_FILE2, 634);
             return &mTriangleCacheInterface;
         }
 

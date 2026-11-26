@@ -117,10 +117,10 @@ void RouteMapModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
                             const RouteMapModuleIO::InputBuffer* lpInputBuffer,
                             RouteMapModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpInputBufferStack  != 0, CGS_ASSERT_MESSAGE_AT("lpInputBufferStack != NULL", __FILE__, 97));    // :97
-    CGS_ASSERT(lpOutputBufferStack != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBufferStack != NULL", __FILE__, 98));   // :98
-    CGS_ASSERT(lpInputBuffer       != 0, CGS_ASSERT_MESSAGE_AT("lpInputBuffer != NULL", __FILE__, 99));         // :99
-    CGS_ASSERT(lpOutputBuffer      != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer != NULL", __FILE__, 100));        // :100
+    CGS_ASSERT_AT(lpInputBufferStack  != 0, "lpInputBufferStack != NULL", __FILE__, 97);    // :97
+    CGS_ASSERT_AT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL", __FILE__, 98);   // :98
+    CGS_ASSERT_AT(lpInputBuffer       != 0, "lpInputBuffer != NULL", __FILE__, 99);         // :99
+    CGS_ASSERT_AT(lpOutputBuffer      != 0, "lpOutputBuffer != NULL", __FILE__, 100);        // :100
     (void)lpInputBufferStack;
     (void)lpOutputBufferStack;
 
@@ -186,8 +186,8 @@ void RouteMapModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
 void RouteMapModule::ProcessRaceRoute(const RouteMapModuleIO::RaceRouteRequest* lpRouteRequest,
                                       RouteMapModuleIO::RouteResponseQueue* lpRouteResponseQueue)
 {
-    CGS_ASSERT(mAStar.IsInProgress() || (lpRouteRequest != 0),
-               CGS_ASSERT_MESSAGE_AT("mAStar.IsInProgress() || (lpRouteRequest != NULL )", __FILE__, 173));   // :173
+    CGS_ASSERT_AT(mAStar.IsInProgress() || (lpRouteRequest != 0),
+               "mAStar.IsInProgress() || (lpRouteRequest != NULL )", __FILE__, 173);   // :173
 
     if (!mAStar.IsInProgress())
     {

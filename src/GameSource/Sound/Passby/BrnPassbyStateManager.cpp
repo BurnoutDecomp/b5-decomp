@@ -170,9 +170,9 @@ PassbyStateManager::Passby::Passby(
 {
     // ARTIST 0x82683330: the assert names BrnPassbyStateManager.h:94 (the original
     // constructor is the header's inline one, emitted out of line).
-    CGS_ASSERT( leType < AttribSys::Enums::ePassbyTypes::MaxPassbyTypes,
-        CGS_ASSERT_MESSAGE_AT("leType < AttribSys::Enums::ePassbyTypes::MaxPassbyTypes",
-            "..\\..\\..\\GameSource\\Sound/Passby/BrnPassbyStateManager.h", 94) );
+    CGS_ASSERT_AT( leType < AttribSys::Enums::ePassbyTypes::MaxPassbyTypes,
+        "leType < AttribSys::Enums::ePassbyTypes::MaxPassbyTypes",
+            "..\\..\\..\\GameSource\\Sound/Passby/BrnPassbyStateManager.h", 94 );
 }
 
 // =============================================================================

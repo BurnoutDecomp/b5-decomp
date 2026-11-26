@@ -43,10 +43,10 @@ namespace BrnNetwork
 
         // Full: evict the oldest (smallest-timestamp) record whose player is no
         // longer in the game.
-        CGS_ASSERT(miCacheSize > 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miCacheSize > 0",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsResults.cpp", 237 /* ARTIST 0x82552D44 */));
+        CGS_ASSERT_AT(miCacheSize > 0,
+            "miCacheSize > 0",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsResults.cpp", 237 /* ARTIST 0x82552D44 */);
+
 
         Time lSmallestTime  = maPlayerStatsCache[0].GetTimeStamp();
         s32  liSmallestIndex = 0;
@@ -86,19 +86,19 @@ namespace BrnNetwork
     {
         miCacheSize = 0;
 
-        CGS_ASSERT(mpNetworkManager,
-            CGS_ASSERT_MESSAGE_AT("mpNetworkManager", __FILE__, 77 /* ARTIST 0x82552C5C */));
-        CGS_ASSERT(mpNetworkManager->GetServerInterface(),
-            CGS_ASSERT_MESSAGE_AT(
-                "mpNetworkManager->GetServerInterface()",
-                __FILE__, 78 /* ARTIST 0x82552C84 */));
+        CGS_ASSERT_AT(mpNetworkManager,
+            "mpNetworkManager", __FILE__, 77 /* ARTIST 0x82552C5C */);
+        CGS_ASSERT_AT(mpNetworkManager->GetServerInterface(),
+            "mpNetworkManager->GetServerInterface()",
+                __FILE__, 78 /* ARTIST 0x82552C84 */);
 
-        CGS_ASSERT(
+
+        CGS_ASSERT_AT(
             mStatsDebugComponent.Prepare(mpNetworkManager->GetServerInterface(),
                                          mpNetworkManager->GetStatsManager()),
-            CGS_ASSERT_MESSAGE_AT(
-                "mStatsDebugComponent.Prepare( mpNetworkManager->GetServerInterface(), mpNetworkManager->GetStatsManager() )",
-                __FILE__, 80 /* ARTIST 0x82552CC4 */));
+            "mStatsDebugComponent.Prepare( mpNetworkManager->GetServerInterface(), mpNetworkManager->GetStatsManager() )",
+                __FILE__, 80 /* ARTIST 0x82552CC4 */);
+
 
         return true;
     }
@@ -164,10 +164,10 @@ namespace BrnNetwork
     NetworkPlayerStats*
     NetworkPlayerStatsResults::InsertPlayerStats(const NetworkPlayerStats& lNewStats)
     {
-        CGS_ASSERT(lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED,
-            CGS_ASSERT_MESSAGE_AT(
-                "lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED",
-                __FILE__, 295 /* ARTIST 0x82552E40 */));
+        CGS_ASSERT_AT(lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED,
+            "lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED",
+                __FILE__, 295 /* ARTIST 0x82552E40 */);
+
 
         NetworkPlayerStats* lpPlaceToInsert = 0;
         if (lNewStats.GetPlayerID() != CgsNetwork::K_INVALID_PLAYER_ID)
@@ -188,10 +188,10 @@ namespace BrnNetwork
             mStatsDebugComponent.RemoveStats(lpPlaceToInsert);
         }
 
-        CGS_ASSERT(lpPlaceToInsert != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpPlaceToInsert != NULL",
-                __FILE__, 324 /* ARTIST 0x82552EB8 */));
+        CGS_ASSERT_AT(lpPlaceToInsert != 0,
+            "lpPlaceToInsert != NULL",
+                __FILE__, 324 /* ARTIST 0x82552EB8 */);
+
         *lpPlaceToInsert = lNewStats;
         mStatsDebugComponent.AddStats(lpPlaceToInsert);
         return lpPlaceToInsert;

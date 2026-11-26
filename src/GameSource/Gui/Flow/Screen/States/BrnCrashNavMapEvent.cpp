@@ -222,10 +222,10 @@ namespace BrnGui
     // =================================================================================
     void CrashNavMapEvent::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
-        CGS_ASSERT(lpFsm != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpFsm",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMapEvent.cpp", 61 /* ARTIST 0x824B7538 */));                                   // cpp:61
+        CGS_ASSERT_AT(lpFsm != 0,
+            "lpFsm",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMapEvent.cpp", 61 /* ARTIST 0x824B7538 */);                                   // cpp:61
+
 
         CrashNavMap::Construct(liId, lpFsm);
     }

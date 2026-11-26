@@ -50,7 +50,7 @@ namespace BrnAI
     // AIDebugComponent state-table draws.
     f32 Aggressiveness::GetAggressionLevel() const
     {
-        CGS_ASSERT(mbAggressionLevelSet, CGS_ASSERT_STREAM_MESSAGE_AT("Aggression levels need to be set up\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIAggressiveness.cpp", 86));
+        CGS_ASSERT_STREAM_AT(mbAggressionLevelSet, "Aggression levels need to be set up\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIAggressiveness.cpp", 86);
         return mfAggressionLevel;
     }
 }

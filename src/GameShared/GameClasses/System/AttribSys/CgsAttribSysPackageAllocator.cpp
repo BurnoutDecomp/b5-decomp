@@ -28,12 +28,12 @@ void AttribSysPackageAllocator::Construct(EAttribSysUserPackage leUserPackage)
 // +0x0C=0, +0x04=1, +0x10=0; returns 1.)
 bool AttribSysPackageAllocator::Prepare(CgsMemory::HeapMalloc* lpHeapAllocator, s32 liAlignment)
 {
-    CGS_ASSERT(mbHasAllocator == false,
-        CGS_ASSERT_MESSAGE_AT("mbHasAllocator == false", __FILE__, 214 /* ARTIST 0x828041E4 */));
-    CGS_ASSERT(lpHeapAllocator != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpHeapAllocator != NULL", __FILE__, 215 /* ARTIST 0x82804208 */));
-    CGS_ASSERT(GetUserPackageName(),
-        CGS_ASSERT_MESSAGE_AT("GetUserPackageName()", __FILE__, 216 /* ARTIST 0x82804234 */));
+    CGS_ASSERT_AT(mbHasAllocator == false,
+        "mbHasAllocator == false", __FILE__, 214 /* ARTIST 0x828041E4 */);
+    CGS_ASSERT_AT(lpHeapAllocator != NULL,
+        "lpHeapAllocator != NULL", __FILE__, 215 /* ARTIST 0x82804208 */);
+    CGS_ASSERT_AT(GetUserPackageName(),
+        "GetUserPackageName()", __FILE__, 216 /* ARTIST 0x82804234 */);
 
     mpHeapAllocator = lpHeapAllocator;
     miAlignment     = liAlignment;
@@ -94,8 +94,8 @@ void AttribSysPackageAllocator::Free(void* lpBlock, size_t /*lnSize*/)
 // block size itself, so this path just checks the allocator and returns the block.
 void AttribSysPackageAllocator::Free(void* lpBlock)
 {
-    CGS_ASSERT(mbHasAllocator,
-        CGS_ASSERT_MESSAGE_AT("mbHasAllocator", __FILE__, 324 /* ARTIST 0x828020F8 */));
+    CGS_ASSERT_AT(mbHasAllocator,
+        "mbHasAllocator", __FILE__, 324 /* ARTIST 0x828020F8 */);
 
     mpHeapAllocator->Free(lpBlock);
 }
@@ -140,8 +140,8 @@ const char* AttribSysPackageAllocator::GetUserPackageName()
         break;
     }
 
-    CGS_ASSERT(false,
-        CGS_ASSERT_MESSAGE_AT("Unknown package.\n", __FILE__, 450 /* ARTIST 0x821F022C */));
+    CGS_FAIL_AT(
+        "Unknown package.\n", __FILE__, 450 /* ARTIST 0x821F022C */);
     return NULL;
 }
 }

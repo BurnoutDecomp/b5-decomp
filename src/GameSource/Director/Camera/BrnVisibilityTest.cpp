@@ -32,8 +32,8 @@ namespace Camera
 // ----------------------------------------------------------------------------
 f32 VisibilityTest::GetOffscreenTime() const
 {
-    CGS_ASSERT(mbTestLookingAt,
-        CGS_ASSERT_MESSAGE_AT("mbTestLookingAt", CGS_ARTIST_FILE, 248 /* ARTIST 0x821F3740 */));   // lbz 0xB0; assert set
+    CGS_ASSERT_AT(mbTestLookingAt,
+        "mbTestLookingAt", CGS_ARTIST_FILE, 248 /* ARTIST 0x821F3740 */);   // lbz 0xB0; assert set
     return mfOffscreenTime;                           // lfs f1, 0xA4(this)
 }
 
@@ -47,8 +47,8 @@ f32 VisibilityTest::GetOffscreenTime() const
 // ----------------------------------------------------------------------------
 bool VisibilityTest::IsOnScreen() const
 {
-    CGS_ASSERT(mbTestLookingAt,
-        CGS_ASSERT_MESSAGE_AT("mbTestLookingAt", CGS_ARTIST_FILE, 269 /* ARTIST 0x821F3798 */));   // lbz 0xB0; assert set
+    CGS_ASSERT_AT(mbTestLookingAt,
+        "mbTestLookingAt", CGS_ARTIST_FILE, 269 /* ARTIST 0x821F3798 */);   // lbz 0xB0; assert set
     return mbIsOnScreen;                              // lbz r3, 0xB2(this)
 }
 

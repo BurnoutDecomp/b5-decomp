@@ -97,20 +97,20 @@ void AchievementManagerBase::Construct(BrnProgression::ProgressionManager* lpPro
                                        ScoringSystem* lpScoringSystem,
                                        GameStateModule* lpGameStateModule)
 {
-    CGS_ASSERT(lpProgressionManager,
-        CGS_ASSERT_MESSAGE_AT("lpProgressionManager", CGS_ARTIST_FILE, 64 /* ARTIST 0x8235A980 */));
+    CGS_ASSERT_AT(lpProgressionManager,
+        "lpProgressionManager", CGS_ARTIST_FILE, 64 /* ARTIST 0x8235A980 */);
     mpProgressionManager = lpProgressionManager;
 
-    CGS_ASSERT(lpStreetManager,
-        CGS_ASSERT_MESSAGE_AT("lpStreetManager", CGS_ARTIST_FILE, 67 /* ARTIST 0x8235A9A8 */));
+    CGS_ASSERT_AT(lpStreetManager,
+        "lpStreetManager", CGS_ARTIST_FILE, 67 /* ARTIST 0x8235A9A8 */);
     mpStreetManager = lpStreetManager;
 
-    CGS_ASSERT(lpScoringSystem,
-        CGS_ASSERT_MESSAGE_AT("lpScoringSystem", CGS_ARTIST_FILE, 70 /* ARTIST 0x8235A9D0 */));
+    CGS_ASSERT_AT(lpScoringSystem,
+        "lpScoringSystem", CGS_ARTIST_FILE, 70 /* ARTIST 0x8235A9D0 */);
     mpScoringSystem = lpScoringSystem;
 
-    CGS_ASSERT(lpGameStateModule,
-        CGS_ASSERT_MESSAGE_AT("lpGameStateModule", CGS_ARTIST_FILE, 73 /* ARTIST 0x8235A9F8 */));
+    CGS_ASSERT_AT(lpGameStateModule,
+        "lpGameStateModule", CGS_ARTIST_FILE, 73 /* ARTIST 0x8235A9F8 */);
     mpGameStateModule = lpGameStateModule;
 }
 
@@ -149,7 +149,7 @@ void AchievementManagerBase::OnSetRoadRule(BrnStreetData::ScoreType leScoreType,
     }
     else
     {
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("dodgy road rule type!", CGS_ARTIST_FILE, 252));
+        CGS_FAIL_AT("dodgy road rule type!", CGS_ARTIST_FILE, 252);
     }
 }
 
@@ -165,11 +165,11 @@ void AchievementManagerBase::OnSetRoadRule(BrnStreetData::ScoreType leScoreType,
 // ----------------------------------------------------------------------------
 void AchievementManagerBase::OnTakedown()
 {
-    CGS_ASSERT(mpProgressionManager, CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 186));
+    CGS_ASSERT_AT(mpProgressionManager, "mpProgressionManager", CGS_ARTIST_FILE, 186);
     // The X360 takes the address of the embedded Profile (mpProgressionManager + 0x170)
     // and asserts it non-null ("lpProfile"). With a non-null mpProgressionManager that
     // interior address is always non-null; the assert is preserved for parity below.
-    CGS_ASSERT(mpProgressionManager != 0, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 188));
+    CGS_ASSERT_AT(mpProgressionManager != 0, "lpProfile", CGS_ARTIST_FILE, 188);
 
     if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_GET_500_TAKEDOWNS)
         && mpProgressionManager->GetProfileTotalTakedowns() >= KI_GET_500_TAKEDOWNS)
@@ -224,8 +224,8 @@ void AchievementManagerBase::OnEventWin(GameStateModuleIO::EGameModeType leGameM
         // X360 case 7: millionaires-club -- player score >= 1,000,000 (online or offline block).
         if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_MILLIONAIRES_CLUB))
         {
-            CGS_ASSERT(mpScoringSystem, CGS_ASSERT_MESSAGE_AT("mpScoringSystem", CGS_ARTIST_FILE, 356));
-            CGS_ASSERT(mpGameStateModule, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 357));
+            CGS_ASSERT_AT(mpScoringSystem, "mpScoringSystem", CGS_ARTIST_FILE, 356);
+            CGS_ASSERT_AT(mpGameStateModule, "mpGameStateModule", CGS_ARTIST_FILE, 357);
 
             const bool lbOnline = mpGameStateModule->IsOnlineGameMode();
             if (mpScoringSystem->GetPlayerScore(lbOnline) >= KI_MILLIONAIRE_SCORE)
@@ -248,7 +248,7 @@ void AchievementManagerBase::OnEventWin(GameStateModuleIO::EGameModeType leGameM
         break;
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(" invalid game mode type ", CGS_ARTIST_FILE, 390));
+        CGS_FAIL_AT(" invalid game mode type ", CGS_ARTIST_FILE, 390);
         break;
     }
 }
@@ -260,8 +260,8 @@ void AchievementManagerBase::OnEventWin(GameStateModuleIO::EGameModeType leGameM
 // ----------------------------------------------------------------------------
 void AchievementManagerBase::OnLicenseUpgrade(u8 luNewLicenseRank)
 {
-    CGS_ASSERT(luNewLicenseRank > 0 && luNewLicenseRank <= 6,
-               CGS_ASSERT_MESSAGE_AT("liNewLicenseRank > 0 && liNewLicenseRank <= 6", CGS_ARTIST_FILE, 408));
+    CGS_ASSERT_AT(luNewLicenseRank > 0 && luNewLicenseRank <= 6,
+               "liNewLicenseRank > 0 && liNewLicenseRank <= 6", CGS_ARTIST_FILE, 408);
 
     const EAchievement leAchievement = KAE_LICENSE_ACHIEVEMENTS[luNewLicenseRank - 1];
     if (!IsAchievementEarnt(leAchievement))
@@ -305,7 +305,7 @@ void AchievementManagerBase::OnCollectStunt(StuntElementType leStuntType)
         break;
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("dodgy stunt type!", CGS_ARTIST_FILE, 535));
+        CGS_FAIL_AT("dodgy stunt type!", CGS_ARTIST_FILE, 535);
         break;
     }
 }
@@ -339,7 +339,7 @@ void AchievementManagerBase::OnCollectAllStunts(StuntElementType leStuntType)
     }
     else if (leStuntType >= E_STUNT_ELEMENT_TYPE_COUNT)
     {
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("dodgy stunt type!", CGS_ARTIST_FILE, 585));
+        CGS_FAIL_AT("dodgy stunt type!", CGS_ARTIST_FILE, 585);
     }
     else // E_STUNT_ELEMENT_TYPE_BILLBOARD
     {

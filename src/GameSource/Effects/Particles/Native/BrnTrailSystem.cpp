@@ -159,10 +159,10 @@ namespace Native
 
     void EmitterArray::AddEntry(TrailEmitter* lpEmitter)
     {
-        CGS_ASSERT(mnCurrentSize < KN_TRAIL_EMITTER_POOL_SIZE,
-            CGS_ASSERT_MESSAGE_AT(
-                "mnCurrentSize < knTrailEmitterPoolSize",
-                K_TRAIL_SYSTEM_ASSERT_FILE, 134 /* ARTIST 0x82277D80 */));
+        CGS_ASSERT_AT(mnCurrentSize < KN_TRAIL_EMITTER_POOL_SIZE,
+            "mnCurrentSize < knTrailEmitterPoolSize",
+                K_TRAIL_SYSTEM_ASSERT_FILE, 134 /* ARTIST 0x82277D80 */);
+
 
         mapEmitters[mnCurrentSize] = lpEmitter;
         ++mnCurrentSize;
@@ -353,8 +353,8 @@ namespace Native
 
         TrailEmitter* lpTrailEmitter = mFreeEmitters.Peek();
         mFreeEmitters.Pop();
-        CGS_ASSERT(lpTrailEmitter != 0,
-                   CGS_ASSERT_MESSAGE_AT("lpTrailEmitter != NULL", __FILE__, 222 /* ARTIST 0x8228BFE0; DWARF fn at cpp:208 */));
+        CGS_ASSERT_AT(lpTrailEmitter != 0,
+                   "lpTrailEmitter != NULL", __FILE__, 222 /* ARTIST 0x8228BFE0; DWARF fn at cpp:208 */);
 
         lpTrailEmitter->mrTimeLastSegmentAdded = -1.0f;
         lpTrailEmitter->mx8Flags               = 0;

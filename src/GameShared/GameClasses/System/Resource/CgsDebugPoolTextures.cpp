@@ -19,15 +19,15 @@
 // original d:\p4\b5_main\... source path); CGSDPT_FIRE_ASSERT preserves them rather than substituting
 // __FILE__/__LINE__, matching the project's "keep the original assert coordinates" precedent.
 #define CGSDPT_FIRE_ASSERT(condition, msg, file, line)            \
-    do                                                            \
-    {                                                             \
-        if (!(condition))                                         \
-        {                                                         \
-            CgsDev::Assert::BeginAssert();                        \
-            CgsDev::Assert::FireAssert((msg), CGS_ASSERT_LOCATION(file, line));    \
-            CgsDev::Assert::EndAssert();                          \
-        }                                                         \
-    } while (0)
+    CGS_ASSERT_AT(condition, msg, file, line)
+// D12: the shared if-form CGS_ASSERT_AT (the statement form LegacySrc shows). This macro used
+// to expand its own do { if ... } while (0): the XDK treats a call inside the do/while as a
+// loop site and inlines differently there.
+
+
+
+
+
 
 namespace
 {

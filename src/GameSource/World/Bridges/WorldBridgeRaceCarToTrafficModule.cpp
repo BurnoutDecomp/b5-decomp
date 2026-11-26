@@ -27,10 +27,10 @@ void BridgeRaceCarModuleToTrafficModule_PreScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpTrafficInputBuffer_PreScene != 0, CGS_ASSERT_MESSAGE_AT("lpTrafficInputBuffer_PreScene", __FILE__, 33));       // :33
-    CGS_ASSERT(lpTrafficInputBuffer_PostScene != 0, CGS_ASSERT_MESSAGE_AT("lpTrafficInputBuffer_PostScene", __FILE__, 34));     // :34
-    CGS_ASSERT(lpTrafficInputBuffer_PostPhysics != 0, CGS_ASSERT_MESSAGE_AT("lpTrafficInputBuffer_PostPhysics", __FILE__, 35)); // :35
-    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarOutputBuffer_PreScene", __FILE__, 36));     // :36
+    CGS_ASSERT_AT(lpTrafficInputBuffer_PreScene != 0, "lpTrafficInputBuffer_PreScene", __FILE__, 33);       // :33
+    CGS_ASSERT_AT(lpTrafficInputBuffer_PostScene != 0, "lpTrafficInputBuffer_PostScene", __FILE__, 34);     // :34
+    CGS_ASSERT_AT(lpTrafficInputBuffer_PostPhysics != 0, "lpTrafficInputBuffer_PostPhysics", __FILE__, 35); // :35
+    CGS_ASSERT_AT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene", __FILE__, 36);     // :36
 
     // 0x827A5194..0x827A51CC: the same const getter (@0x8279D500) feeds all three setters.
     lpTrafficInputBuffer_PreScene->SetActiveRaceCarOutputInterface(

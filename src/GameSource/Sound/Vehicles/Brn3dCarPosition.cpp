@@ -89,7 +89,7 @@ void Car3DControl::AttachController(CgsSound::Logic::EffectBase* apController)
         mpPhysicsControl = static_cast<Engines::PhysicsControl*>(apController);
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+        CGS_FAIL_STREAM_AT("Cound't attach controller " << apController->GetId(),
                              BRN_3DCARPOSITION_CPP_FILE, 224);
         break;
     }

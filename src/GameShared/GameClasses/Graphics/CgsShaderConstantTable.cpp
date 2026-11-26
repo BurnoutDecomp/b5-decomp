@@ -86,13 +86,13 @@ void ShaderConstantTable::FastNonOverlappedVectorMemcpy(Vector4* lpDest,
 // the 4th memcpy arg is the per-element entry count read from maConstants[luIndex] offset 3.)
 void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math::vpu::Vector4* lpaValues)
 {
-    CGS_ASSERT(luIndex < mu8NumUsedConstants,
-        CGS_ASSERT_MESSAGE_AT(
-            "luIndex < mu8NumUsedConstants", KAC_ARTIST_ASSERT_FILE, 474 /* ARTIST 0x822B348C */));
+    CGS_ASSERT_AT(luIndex < mu8NumUsedConstants,
+        "luIndex < mu8NumUsedConstants", KAC_ARTIST_ASSERT_FILE, 474 /* ARTIST 0x822B348C */);
+
 
     Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
-    CGS_ASSERT(lpDest,
-        CGS_ASSERT_MESSAGE_AT("lpDest", KAC_ARTIST_ASSERT_FILE, 478 /* ARTIST 0x822B34C0 */));
+    CGS_ASSERT_AT(lpDest,
+        "lpDest", KAC_ARTIST_ASSERT_FILE, 478 /* ARTIST 0x822B34C0 */);
 
     FastNonOverlappedVectorMemcpy(lpDest, lpaValues, maConstants[luIndex].GetNumEntries());
 }
@@ -255,18 +255,18 @@ void ShaderConstantTable::AddShaderConstant(u32 luIndex, const char* lpcName, u8
 // (CgsShaderConstants.h:396 / :400 / :401 assert sites.)
 void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Vector4 lValue)
 {
-    CGS_ASSERT(luIndex < mu8NumUsedConstants,
-        CGS_ASSERT_MESSAGE_AT(
-            "luIndex < mu8NumUsedConstants",
-            KAC_ARTIST_ASSERT_FILE, 396 /* ARTIST 0x822B3324 */));
+    CGS_ASSERT_AT(luIndex < mu8NumUsedConstants,
+        "luIndex < mu8NumUsedConstants",
+            KAC_ARTIST_ASSERT_FILE, 396 /* ARTIST 0x822B3324 */);
+
 
     Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
-    CGS_ASSERT(lpDest,
-        CGS_ASSERT_MESSAGE_AT("lpDest", KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x822B3358 */));
-    CGS_ASSERT(maConstants[luIndex].GetSizeInBytes() == 16u,
-        CGS_ASSERT_MESSAGE_AT(
-            "sizeof(lData) == maConstants[luIndex].GetSizeInBytes()",
-            KAC_ARTIST_ASSERT_FILE, 401 /* ARTIST 0x822B3390 */));
+    CGS_ASSERT_AT(lpDest,
+        "lpDest", KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x822B3358 */);
+    CGS_ASSERT_AT(maConstants[luIndex].GetSizeInBytes() == 16u,
+        "sizeof(lData) == maConstants[luIndex].GetSizeInBytes()",
+            KAC_ARTIST_ASSERT_FILE, 401 /* ARTIST 0x822B3390 */);
+
 
     *lpDest = lValue;
 }

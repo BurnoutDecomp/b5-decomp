@@ -393,12 +393,12 @@ bool AIVehicleStateManager::PrepareAIEngineLoading()
 // ---------------------------------------------------------------------------
 void AIVehicleStateManager::ResourcesAreReady()
 {
-    CGS_ASSERT( meAIEngineLoadingState == E_AI_ENGINE_LOADING_WAITING_FOR_LOAD_ATTRIB
+    CGS_ASSERT_AT( meAIEngineLoadingState == E_AI_ENGINE_LOADING_WAITING_FOR_LOAD_ATTRIB
                 || meAIEngineLoadingState == E_AI_ENGINE_LOADING_WAITING_LOADING_ENGINE_COMPONENTS,
-        CGS_ASSERT_MESSAGE_AT(
-            "E_AI_ENGINE_LOADING_WAITING_FOR_LOAD_ATTRIB == meAIEngineLoadingState || E_AI_ENGINE_LOADING_WAITING_LOADING_ENGINE_COMPONENTS == meAIEngineLoadingState",
+        "E_AI_ENGINE_LOADING_WAITING_FOR_LOAD_ATTRIB == meAIEngineLoadingState || E_AI_ENGINE_LOADING_WAITING_LOADING_ENGINE_COMPONENTS == meAIEngineLoadingState",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Sound/Vehicles/BrnAIVehicleStateManager.cpp", 354 /* ARTIST 0x82684068 */));
+            "../Sound/Vehicles/BrnAIVehicleStateManager.cpp", 354 /* ARTIST 0x82684068 */);
+
 
     if ( meAIEngineLoadingState == E_AI_ENGINE_LOADING_WAITING_FOR_LOAD_ATTRIB )
     {
@@ -651,19 +651,19 @@ CgsSound::Logic::State* AIVehicleStateManager::GetFreeState( void* apvAttachment
 // ---------------------------------------------------------------------------
 const CgsSound::Logic::Content* AIVehicleStateManager::GetLoopModelContent( s32 liAIEngineIndex, u32 lLoopIndex )
 {
-    CGS_ASSERT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
-        CGS_ASSERT_MESSAGE_AT(
-            "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES",
-            KAC_ARTIST_ASSERT_FILE, 150 /* ARTIST 0x826987E0 */));
-    CGS_ASSERT( lLoopIndex < static_cast<u32>( KI_MAX_LOOPS ),
-        CGS_ASSERT_MESSAGE_AT(
-            "lLoopIndex < BrnSound::Vehicles::Engines::DualGinsuEffect::KI_MAX_LOOPS",
-            KAC_ARTIST_ASSERT_FILE, 151 /* ARTIST 0x82698804 */));
+    CGS_ASSERT_AT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
+        "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES",
+            KAC_ARTIST_ASSERT_FILE, 150 /* ARTIST 0x826987E0 */);
+
+    CGS_ASSERT_AT( lLoopIndex < static_cast<u32>( KI_MAX_LOOPS ),
+        "lLoopIndex < BrnSound::Vehicles::Engines::DualGinsuEffect::KI_MAX_LOOPS",
+            KAC_ARTIST_ASSERT_FILE, 151 /* ARTIST 0x82698804 */);
+
     const CgsSound::Logic::Content* lpContent = &maLoopContentSpecs[liAIEngineIndex][lLoopIndex];
-    CGS_ASSERT( lpContent->IsLoaded(),
-        CGS_ASSERT_MESSAGE_AT(
-            "maLoopContentSpecs[liAIEngineIndex][lLoopIndex].IsLoaded()",
-            KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x82698858 */));
+    CGS_ASSERT_AT( lpContent->IsLoaded(),
+        "maLoopContentSpecs[liAIEngineIndex][lLoopIndex].IsLoaded()",
+            KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x82698858 */);
+
     return lpContent;
 }
 
@@ -680,15 +680,15 @@ const CgsSound::Logic::Content* AIVehicleStateManager::GetAccelGinsuContent( s32
 
 const CgsSound::Logic::Content* AIVehicleStateManager::GetDecelGinsuContent( s32 liAIEngineIndex )
 {
-    CGS_ASSERT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
-        CGS_ASSERT_MESSAGE_AT(
-            "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES",
-            KAC_ARTIST_ASSERT_FILE, 188 /* ARTIST 0x82698944 */));
+    CGS_ASSERT_AT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
+        "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES",
+            KAC_ARTIST_ASSERT_FILE, 188 /* ARTIST 0x82698944 */);
+
     const CgsSound::Logic::Content* lpContent = &maGinsuDecelContentSpecs[liAIEngineIndex];
-    CGS_ASSERT( lpContent->IsLoaded(),
-        CGS_ASSERT_MESSAGE_AT(
-            "maGinsuDecelContentSpecs[liAIEngineIndex].IsLoaded()",
-            KAC_ARTIST_ASSERT_FILE, 189 /* ARTIST 0x82698988 */));
+    CGS_ASSERT_AT( lpContent->IsLoaded(),
+        "maGinsuDecelContentSpecs[liAIEngineIndex].IsLoaded()",
+            KAC_ARTIST_ASSERT_FILE, 189 /* ARTIST 0x82698988 */);
+
     return lpContent;
 }
 

@@ -953,8 +953,8 @@ RaceCarEntityModule::SubmitCoronasForRaceCar(
     ActiveRaceCar::RenderParams* lpRenderParams,
     bool lbIsPlayerCar ) const
 {
-    CGS_ASSERT(lpCoronaSubmissionInterface != 0, CGS_ASSERT_MESSAGE_AT("lpCoronaSubmissionInterface != NULL", __FILE__, 3905));  // :3905
-    CGS_ASSERT(lpRenderParams != 0, CGS_ASSERT_MESSAGE_AT("lpRenderParams != NULL", __FILE__, 3906));                            // :3906
+    CGS_ASSERT_AT(lpCoronaSubmissionInterface != 0, "lpCoronaSubmissionInterface != NULL", __FILE__, 3905);  // :3905
+    CGS_ASSERT_AT(lpRenderParams != 0, "lpRenderParams != NULL", __FILE__, 3906);                            // :3906
 
     // The four light-state bytes, in the console's own load order
     // (@0x822D1684/0x822D1688/0x822D1690/0x822D1698).

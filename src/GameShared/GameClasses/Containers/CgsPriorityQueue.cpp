@@ -19,7 +19,7 @@ void BasePriorityQueue::Construct(u32 luMaxEntries, u32 luNumberToCheck,
 // X360 0x82815160. Append a priority entry; returns the pre-seeded entry-index for the slot.
 u32 BasePriorityQueue::AddEntry(s32 liPriority)
 {
-    CGS_ASSERT(muNumEntries != muMaxEntries, CGS_ASSERT_STREAM_MESSAGE_AT("Out of space in queue\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\CgsPriorityQueue.cpp", 40));
+    CGS_ASSERT_STREAM_AT(muNumEntries != muMaxEntries, "Out of space in queue\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\CgsPriorityQueue.cpp", 40);
 
     u32 luIndex = mpuEntryIndices[muNumEntries];
     mpiEntryPriorities[muNumEntries] = liPriority;
@@ -112,7 +112,7 @@ void BasePriorityQueue::Clear()
 // check is against the live-entry count (muNumEntries), not capacity. CgsPriorityQueue.h:220.
 u32 BasePriorityQueue::GetEntryIndex(s32 liIndex) const
 {
-    CGS_ASSERT(liIndex < static_cast<s32>(muNumEntries), CGS_ASSERT_STREAM_MESSAGE_AT("Index out of range\n", CGS_ARTIST_FILE, 220));
+    CGS_ASSERT_STREAM_AT(liIndex < static_cast<s32>(muNumEntries), "Index out of range\n", CGS_ARTIST_FILE, 220);
     return mpuEntryIndices[liIndex];
 }
 
@@ -120,7 +120,7 @@ u32 BasePriorityQueue::GetEntryIndex(s32 liIndex) const
 // live-count bounds check as GetEntryIndex. CgsPriorityQueue.h:236.
 s32 BasePriorityQueue::GetEntryPriority(s32 liIndex) const
 {
-    CGS_ASSERT(liIndex < static_cast<s32>(muNumEntries), CGS_ASSERT_STREAM_MESSAGE_AT("Index out of range\n", CGS_ARTIST_FILE, 236));
+    CGS_ASSERT_STREAM_AT(liIndex < static_cast<s32>(muNumEntries), "Index out of range\n", CGS_ARTIST_FILE, 236);
     return mpiEntryPriorities[liIndex];
 }
 }

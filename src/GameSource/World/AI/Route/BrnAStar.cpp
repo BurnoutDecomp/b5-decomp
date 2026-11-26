@@ -107,13 +107,13 @@ const f32 AStar::KF_ZERO_EPSILON = 1.1920929e-07f;
 // __FILE__/__LINE__ by CGS_ASSERT. Called by ExtractBestOpenNode and FindNode.
 AStarNode* AStarNodePool::GetNode(u16 luNodeIndex)
 {
-    CGS_ASSERT(luNodeIndex < KU_MAX_NODES,
-        CGS_ASSERT_MESSAGE_AT("luIndex < KU_MAX_NODES", __FILE__, 483 /* ARTIST 0x8276555C */));
-    CGS_ASSERT(luNodeIndex % KU_MAX_PARTITION_NODES
+    CGS_ASSERT_AT(luNodeIndex < KU_MAX_NODES,
+        "luIndex < KU_MAX_NODES", __FILE__, 483 /* ARTIST 0x8276555C */);
+    CGS_ASSERT_AT(luNodeIndex % KU_MAX_PARTITION_NODES
                    < mauNodeCount[luNodeIndex / KU_MAX_PARTITION_NODES],
-        CGS_ASSERT_MESSAGE_AT(
-            "luIndex % KU_MAX_PARTITION_NODES < mauNodeCount[luIndex / KU_MAX_PARTITION_NODES]",
-            __FILE__, 484 /* ARTIST 0x827655A0 */));
+        "luIndex % KU_MAX_PARTITION_NODES < mauNodeCount[luIndex / KU_MAX_PARTITION_NODES]",
+            __FILE__, 484 /* ARTIST 0x827655A0 */);
+
     return &maNodes[luNodeIndex];
 }
 

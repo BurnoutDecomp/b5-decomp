@@ -40,7 +40,7 @@ namespace ReplayIO
     // body returns the Append result (int/bool).
     void OutputBuffer_PostSim::AppendGameEventQueue(const GameEventQueue* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 176));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 176);
         mGameEventQueue.Append(*lpSourceQueue);
     }
 
@@ -49,7 +49,7 @@ namespace ReplayIO
     // is an ICF-shared +4 read accessor.
     const OutputBuffer_PostSim::GameEventQueue* OutputBuffer_PostSim::GetGameEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 175));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 175);
         return &mGameEventQueue;
     }
 
@@ -88,35 +88,35 @@ namespace ReplayIO
     // X360 0x823BB080: read-lock; returns &mStatusInterface (this+4).
     const StatusInterface* OutputBuffer_PreSim::GetStatusInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 103));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 103);
         return &mStatusInterface;
     }
 
     // X360 0x8264E1D0: write-lock; returns &mStatusInterface (this+4).
     StatusInterface* OutputBuffer_PreSim::GetStatusInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 104));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 104);
         return &mStatusInterface;
     }
 
     // X360 0x823BB128: read-lock; ICF-shared accessor called by DoUpdate at 0x823F1F3C.
     const OutputBuffer_PreSim::GameDataRequestInterface* OutputBuffer_PreSim::GetGameDataRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 107));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 107);
         return &mGameDataRequestInterface;
     }
 
     // X360 0x8264E278: write-lock; returns &mGameDataRequestInterface (this+0x61C).
     OutputBuffer_PreSim::GameDataRequestInterface* OutputBuffer_PreSim::GetGameDataRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 108));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 108);
         return &mGameDataRequestInterface;
     }
 
     // X360 0x823BB1D0: read-lock; returns &mGuiEventQueue (this+0xA2C).
     const OutputBuffer_PreSim::GuiEventQueue* OutputBuffer_PreSim::GetGuiEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 110));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 110);
         return &mGuiEventQueue;
     }
 
@@ -146,14 +146,14 @@ namespace ReplayIO
     // mGameActionQueue (VariableEventQueue<13312,16>::Append<13312,16>).
     void InputBuffer_PreSim::AppendGameActionQueue(const GameActionQueue* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 72));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 72);
         mGameActionQueue.Append(*lpSourceQueue);
     }
 
     // X360 0x8264E128: read-lock; returns &mTimerStatusInterface (this+0x3414).
     const CgsSystem::TimerStatusInterface* InputBuffer_PreSim::GetTimerStatusInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 74));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 74);
         return &mTimerStatusInterface;
     }
 
@@ -163,7 +163,7 @@ namespace ReplayIO
     // memcpy of the whole 48-byte interface is the byte-faithful equivalent.
     void InputBuffer_PreSim::SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpSource)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 75));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 75);
         memcpy(&mTimerStatusInterface, lpSource, sizeof(CgsSystem::TimerStatusInterface));
     }
 
@@ -193,7 +193,7 @@ namespace ReplayIO
     // X360 0x823BB278: write-lock; returns &mRequestInterface (this+4).
     RequestInterface* InputBuffer_PostSim::GetRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 142));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 142);
         return &mRequestInterface;
     }
 
@@ -210,21 +210,21 @@ namespace ReplayIO
     // merge behaviour, not the residual return register).
     void InputBuffer_PostSim::AppendRequestInterface(const RequestInterface* lpSource)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 143));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 143);
         mRequestInterface.Append(lpSource);
     }
 
     // X360 0x8264E3C8: read-lock; returns &mGuiEventQueue (this+0x30).
     const InputBuffer_PostSim::GuiEventQueue* InputBuffer_PostSim::GetGuiEvent() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 145));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 145);
         return &mGuiEventQueue;
     }
 
     // X360 0x823BB3D0: write-lock; returns &mGuiEventQueue (this+0x30).
     InputBuffer_PostSim::GuiEventQueue* InputBuffer_PostSim::GetGuiEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 146));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 146);
         return &mGuiEventQueue;
     }
 }

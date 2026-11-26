@@ -280,8 +280,8 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                    "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");   // :316
         const EGlobalRaceCarIndex lePlayerGlobalIndex =
             lpWorldOutputBuffer->GetPlayerGlobalRaceCarIndex();
-        CGS_ASSERT(lePlayerGlobalIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("lePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 319));   // :319
+        CGS_ASSERT_AT(lePlayerGlobalIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
+                   "lePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 319);   // :319
 
         BrnGui::GuiPlayerRaceCarIdEvent lIdEvent;
         lIdEvent.mePlayerActiveRaceCarIndex = static_cast<s32>(lePlayerIndex);
@@ -459,7 +459,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
 
         const RCEntityGlobalRaceCarOutputInterface* lpGlobalInterface =
             lpWorldOutputBuffer->GetRaceCarGlobalOutputInterface();
-        CGS_ASSERT(lpGlobalInterface != 0, CGS_ASSERT_MESSAGE_AT("lpGlobalRaceCarOutput", CGS_ARTIST_FILE, 410));            // :410
+        CGS_ASSERT_AT(lpGlobalInterface != 0, "lpGlobalRaceCarOutput", CGS_ARTIST_FILE, 410);            // :410
 
         if (lpGlobalInterface != 0)
         {
@@ -834,8 +834,8 @@ void BrnGameModule::BridgeWorldTrafficAndPropDataToGui(
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput)
 {
-    CGS_ASSERT(lpGuiInput != 0, CGS_ASSERT_MESSAGE_AT("lpGuiInput", CGS_ARTIST_FILE, 126));         // cpp:126 (`li r5, 0x7E` @0x823E5590)
-    CGS_ASSERT(lpWorldOutput != 0, CGS_ASSERT_MESSAGE_AT("lpWorldOutput", CGS_ARTIST_FILE, 127));   // cpp:127 (`li r5, 0x7F` @0x823E55B4)
+    CGS_ASSERT_AT(lpGuiInput != 0, "lpGuiInput", CGS_ARTIST_FILE, 126);         // cpp:126 (`li r5, 0x7E` @0x823E5590)
+    CGS_ASSERT_AT(lpWorldOutput != 0, "lpWorldOutput", CGS_ARTIST_FILE, 127);   // cpp:127 (`li r5, 0x7F` @0x823E55B4)
 
     const CgsModule::Event* lpEvent     = 0;   // DWARF :129
     s32                     liEventSize = 0;   // DWARF :130

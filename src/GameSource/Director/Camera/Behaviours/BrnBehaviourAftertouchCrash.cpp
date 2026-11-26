@@ -425,10 +425,10 @@ bool BehaviourAftertouchCrash::Prepare(const BehaviourSharedPrepareReleaseInfo& 
 {
     SetNotPrepared();                                       // stb 0, +0x08
 
-    CGS_ASSERT(mpParameters != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpParameters != NULL",
-            CGS_ARTIST_FILE, 140 /* ARTIST 0x821FA8A0 */));
+    CGS_ASSERT_AT(mpParameters != 0,
+        "mpParameters != NULL",
+            CGS_ARTIST_FILE, 140 /* ARTIST 0x821FA8A0 */);
+
 
     mfBlendFactor = mpParameters->mfMinimumBlendFactor;     // +0x48 -> +0x38C
     mfHeight      = mpParameters->mfFastHeight;             // +0x38 -> +0x384
@@ -478,7 +478,7 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     static f32 sfDeadzone       = 0.2f;
     static f32 sfAdjustmentRate = 1.0f;
 
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 163));                       // .cpp:163
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters != NULL", CGS_ARTIST_FILE, 163);                       // .cpp:163
 
     const Parameters&                        lrParameters = *mpParameters;
     const BrnPhysics::Vehicle::RaceCarState& lrCarState   = lrSharedInfo.mPlayerInfo.mRaceCarState;

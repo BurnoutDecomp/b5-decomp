@@ -209,9 +209,9 @@ void HUDMessageLogic::Prepare()
 // `a1` is the object itself because mActionQueue is its first member; here it is named.
 void HUDMessageLogic::PreWorldUpdate(GameStateModuleIO::GameActionQueue* lpOutputGameActionQueue)
 {
-    CGS_ASSERT(lpOutputGameActionQueue != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpOutputGameActionQueue != NULL", CGS_ARTIST_FILE, 116 /* ARTIST 0x82389274 */));
+    CGS_ASSERT_AT(lpOutputGameActionQueue != NULL,
+        "lpOutputGameActionQueue != NULL", CGS_ARTIST_FILE, 116 /* ARTIST 0x82389274 */);
+
 
     lpOutputGameActionQueue->Append(mActionQueue);
     mActionQueue.Clear();
@@ -233,8 +233,8 @@ void HUDMessageLogic::PostWorldUpdate(
     EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
     bool lbIsGameModeInProgress)
 {
-    CGS_ASSERT(lpActiveRaceCarInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface != NULL", CGS_ARTIST_FILE, 144));
-    CGS_ASSERT(lpScoringSystem != NULL, CGS_ASSERT_MESSAGE_AT("lpScoringSystem != NULL", CGS_ARTIST_FILE, 145));
+    CGS_ASSERT_AT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL", CGS_ARTIST_FILE, 144);
+    CGS_ASSERT_AT(lpScoringSystem != NULL, "lpScoringSystem != NULL", CGS_ARTIST_FILE, 145);
 
     if (meCurrentGameModeType != leGameModeType)
     {
@@ -469,10 +469,10 @@ void HUDMessageLogic::GenerateFinisherMessage(
         return;
     }
 
-    CGS_ASSERT(meFinishedRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               CGS_ASSERT_MESSAGE_AT("meFinishedRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 621));      // .cpp:621
-    CGS_ASSERT(meFinishedRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("meFinishedRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 622));   // .cpp:622
+    CGS_ASSERT_AT(meFinishedRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "meFinishedRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 621);      // .cpp:621
+    CGS_ASSERT_AT(meFinishedRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "meFinishedRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 622);   // .cpp:622
 
     if (lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() != meFinishedRaceCarIndex)
     {
@@ -513,7 +513,7 @@ void HUDMessageLogic::GenerateRivalCheckpointMessage(
     meCheckpointTriggeringRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
 
     const EActiveRaceCarIndex lePlayerCarIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
-    CGS_ASSERT(leRaceCarIndex != lePlayerCarIndex, CGS_ASSERT_MESSAGE_AT("leRaceCarIndex != lePlayerCarIndex", CGS_ARTIST_FILE, 707));   // .cpp:707
+    CGS_ASSERT_AT(leRaceCarIndex != lePlayerCarIndex, "leRaceCarIndex != lePlayerCarIndex", CGS_ARTIST_FILE, 707);   // .cpp:707
 
     const f32 lfRaceCarDistToFinish = lpScoringSystem->GetRaceCarDistanceToFinish(leRaceCarIndex);
     const f32 lfPlayerDistToFinish  = lpScoringSystem->GetRaceCarDistanceToFinish(lePlayerCarIndex);
@@ -547,7 +547,7 @@ void HUDMessageLogic::GenerateFirstOrLastMessage(
     ScoringSystem* lpScoringSystem, f32 lfTimeStep, EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
     const StuntModeScoring::ActiveRaceCarOutputInterface* lpLastActiveRaceCarInterface)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, CGS_ASSERT_MESSAGE_AT("lpScoringSystem != NULL", CGS_ARTIST_FILE, 1612));   // .cpp:1612
+    CGS_ASSERT_AT(lpScoringSystem != NULL, "lpScoringSystem != NULL", CGS_ARTIST_FILE, 1612);   // .cpp:1612
 
     if (!lpScoringSystem->HasAnyCarFinished())
     {
@@ -723,7 +723,7 @@ void HUDMessageLogic::DetectOnlineCrashes(
         if (leCrashedCarIndex != lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex())
         {
             const s32 liAllocatedIndex = mBufferedCrashingCars.AllocateObject();
-            CGS_ASSERT(liAllocatedIndex >= 0, CGS_ASSERT_MESSAGE_AT("liAllocatedIndex >= 0", CGS_ARTIST_FILE, 804));   // BrnHUDMessageLogic.cpp:804
+            CGS_ASSERT_AT(liAllocatedIndex >= 0, "liAllocatedIndex >= 0", CGS_ARTIST_FILE, 804);   // BrnHUDMessageLogic.cpp:804
 
             // `bge` @0x823945EC: the failure arm branches past the stores to the loop tail
             // (`b 0x82394694` @0x82394608), so a full pool drops the crash.
@@ -836,7 +836,7 @@ void HUDMessageLogic::GenerateStuntMessage(ScoringSystem* lpScoringSystem)
     StuntModeScoring* lpStuntModeScoring = lbOnlineStuntFamily
                                              ? lpScoringSystem->GetOnlineStuntScorer()   // ss+0x2620
                                              : lpScoringSystem->GetStuntScorer();        // ss+0x350
-    CGS_ASSERT(lpStuntModeScoring != NULL, CGS_ASSERT_MESSAGE_AT("lpStuntModeScoring", CGS_ARTIST_FILE, 1228));
+    CGS_ASSERT_AT(lpStuntModeScoring != NULL, "lpStuntModeScoring", CGS_ARTIST_FILE, 1228);
 
     ComboPerformedMessage lComboMessage;
     if (lpStuntModeScoring->WasComboRecentlyPerformed(&lComboMessage.miComboScore,
@@ -946,7 +946,7 @@ void HUDMessageLogic::GenerateOnlineStuntRunEliminationMessages(
     {
         // Report the individual eliminated rival.
         const CarData* lpCarData = lpScoringSystem->GetCarData(meEliminationRaceCarIndex);
-        CGS_ASSERT(lpCarData != NULL, CGS_ASSERT_MESSAGE_AT("lpCarData != NULL", CGS_ARTIST_FILE, 1026));
+        CGS_ASSERT_AT(lpCarData != NULL, "lpCarData != NULL", CGS_ARTIST_FILE, 1026);
 
         lMessage.mNetworkPlayerID = lpCarData->GetNetworkPlayerID();
         lMessage.miTeam = 0;
@@ -1100,8 +1100,8 @@ void HUDMessageLogic::GenerateOnlineStuntRunScoreMessages(ScoringSystem* lpScori
     if (miScoreSampleThisFrame >= KI_SCORE_MILESTONE && miScoreSampleLastFrame < KI_SCORE_MILESTONE)
     {
         const CarData* lpCarData = lpScoringSystem->GetCarData(leWatchedCar);
-        CGS_ASSERT(lpCarData != NULL,
-            CGS_ASSERT_MESSAGE_AT("lpCarData != NULL", CGS_ARTIST_FILE, 1120 /* ARTIST 0x82394D18 */));
+        CGS_ASSERT_AT(lpCarData != NULL,
+            "lpCarData != NULL", CGS_ARTIST_FILE, 1120 /* ARTIST 0x82394D18 */);
 
         StuntRunScoreMessage lMessage;
         lMessage.mNetworkPlayerID = lpCarData->GetNetworkPlayerID();
@@ -1120,7 +1120,7 @@ void HUDMessageLogic::GenerateOnlineBlueTeamEscapingMessage(
     f32 lfDelta,
     EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, CGS_ASSERT_MESSAGE_AT("lpScoringSystem != NULL", CGS_ARTIST_FILE, 1340));
+    CGS_ASSERT_AT(lpScoringSystem != NULL, "lpScoringSystem != NULL", CGS_ARTIST_FILE, 1340);
 
     if (lpScoringSystem->GetNumberOfActiveCars() > 0)
     {
@@ -1159,8 +1159,8 @@ void HUDMessageLogic::GenerateOnlineBlueTeamEscapingMessage(
                 ++liActiveRaceCarIndex;
                 if (liActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_COUNT)
                 {
-                    CGS_ASSERT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                               CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39));
+                    CGS_ASSERT_AT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                               "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39);
                 }
             }
 
@@ -1192,7 +1192,7 @@ void HUDMessageLogic::GenerateOnlineBlueTeamAreBehindYouMessage(
     f32 lfDelta,
     EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, CGS_ASSERT_MESSAGE_AT("lpScoringSystem != NULL", CGS_ARTIST_FILE, 1428));
+    CGS_ASSERT_AT(lpScoringSystem != NULL, "lpScoringSystem != NULL", CGS_ARTIST_FILE, 1428);
 
     if (lpScoringSystem->GetNumberOfActiveCars() > 0)
     {
@@ -1229,8 +1229,8 @@ void HUDMessageLogic::GenerateOnlineBlueTeamAreBehindYouMessage(
                 ++liActiveRaceCarIndex;
                 if (liActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_COUNT)
                 {
-                    CGS_ASSERT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                               CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39));
+                    CGS_ASSERT_AT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                               "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39);
                 }
             }
 
@@ -1265,7 +1265,7 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
     EActiveRaceCarIndex,
     bool lbIsGameModeInProgress)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, CGS_ASSERT_MESSAGE_AT("lpScoringSystem != NULL", CGS_ARTIST_FILE, 1517));
+    CGS_ASSERT_AT(lpScoringSystem != NULL, "lpScoringSystem != NULL", CGS_ARTIST_FILE, 1517);
 
     s32 liBestRacePosition = KI_NO_LEADER_RACE_POSITION;
     EActiveRaceCarIndex leLeadingTeamCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
@@ -1277,9 +1277,9 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
         {
             const EActiveRaceCarIndex leCandidateIndex =
                 static_cast<EActiveRaceCarIndex>(liActiveRaceCarIndex);
-            CGS_ASSERT((leCandidateIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+            CGS_ASSERT_AT((leCandidateIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                        (leCandidateIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                       CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 2027));
+                       "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 2027);
 
             const CarData* lpCandidateCarData = lpScoringSystem->GetCarData(leCandidateIndex);
             s32 liCandidateRacePosition = 8;
@@ -1307,8 +1307,8 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
             ++liActiveRaceCarIndex;
             if (liActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_COUNT)
             {
-                CGS_ASSERT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                           CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39));
+                CGS_ASSERT_AT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                           "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39);
             }
         }
 
@@ -1354,7 +1354,7 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
 void HUDMessageLogic::GenerateBurningHomeRunCheckpointMessage(ModeManager* lpModeManager,
                                                               ScoringSystem* lpScoringSystem)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, CGS_ASSERT_MESSAGE_AT("lpScoringSystem", CGS_ARTIST_FILE, 1189));
+    CGS_ASSERT_AT(lpScoringSystem != NULL, "lpScoringSystem", CGS_ARTIST_FILE, 1189);
 
     const EActiveRaceCarIndex leRaceCarIndex = meCheckpointTriggeringRaceCarIndex;
     if (leRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
@@ -1420,10 +1420,10 @@ void HUDMessageLogic::GenerateOnlineTeamChangeMessages(
     const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
     EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
 {
-    CGS_ASSERT(lpVehicleOutputInterface, CGS_ASSERT_MESSAGE_AT("lpVehicleOutputInterface", CGS_ARTIST_FILE, 1297));
-    CGS_ASSERT((lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+    CGS_ASSERT_AT(lpVehicleOutputInterface, "lpVehicleOutputInterface", CGS_ARTIST_FILE, 1297);
+    CGS_ASSERT_AT((lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                (lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-               CGS_ASSERT_MESSAGE_AT("( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )", CGS_ARTIST_FILE, 1298));
+               "( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )", CGS_ARTIST_FILE, 1298);
 
     BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingRaceCars;
     lCrashingRaceCars.SetFromVehicleOutputInterface(lpVehicleOutputInterface);
@@ -1450,10 +1450,10 @@ void HUDMessageLogic::GenerateOnlineTeamChangeMessages(
 // a calling-convention artifact, dropped for this void method.)
 void HUDMessageLogic::OnlineTeamChange(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_BRNHUDMESSAGELOGIC_FILE, 465));
-    CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_BRNHUDMESSAGELOGIC_FILE, 466));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_BRNHUDMESSAGELOGIC_FILE, 465);
+    CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_BRNHUDMESSAGELOGIC_FILE, 466);
 
 
     mTeamChangedBits.SetBit(static_cast<u32>(leActiveRaceCarIndex));

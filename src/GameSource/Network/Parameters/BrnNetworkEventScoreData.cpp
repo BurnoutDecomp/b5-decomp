@@ -44,7 +44,7 @@ namespace BrnNetwork
                            "liScoreboardIndex < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS", CGS_ARTIST_FILE, 90 );
             break;
         default:
-            CGS_ASSERT_STREAM_AT( false, "Trying to upload score data for game mode without a leaderboard: "
+            CGS_FAIL_STREAM_AT( "Trying to upload score data for game mode without a leaderboard: "
                                          << liGameMode << "\n", CGS_ARTIST_FILE, 96 );
             break;
         }

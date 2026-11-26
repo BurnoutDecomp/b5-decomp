@@ -253,10 +253,10 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
         return;
     }
 
-    CGS_ASSERT(lpInputBufferStack  != 0, CGS_ASSERT_MESSAGE_AT("lpInputBufferStack != NULL", __FILE__, 611));    // X360 :611
-    CGS_ASSERT(lpOutputBufferStack != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBufferStack != NULL", __FILE__, 612));   // X360 :612
-    CGS_ASSERT(lpInputBuffer       != 0, CGS_ASSERT_MESSAGE_AT("lpInputBuffer != NULL", __FILE__, 613));         // X360 :613
-    CGS_ASSERT(lpOutputBuffer      != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer != NULL", __FILE__, 614));        // X360 :614
+    CGS_ASSERT_AT(lpInputBufferStack  != 0, "lpInputBufferStack != NULL", __FILE__, 611);    // X360 :611
+    CGS_ASSERT_AT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL", __FILE__, 612);   // X360 :612
+    CGS_ASSERT_AT(lpInputBuffer       != 0, "lpInputBuffer != NULL", __FILE__, 613);         // X360 :613
+    CGS_ASSERT_AT(lpOutputBuffer      != 0, "lpOutputBuffer != NULL", __FILE__, 614);        // X360 :614
 
     (void)lpInputBufferStack;    // used only by the parked "Route" IO-buffer pair
     (void)lpOutputBufferStack;
@@ -427,10 +427,10 @@ void AIModule::PausedUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
                              AIModuleIO::OutputBuffer* lpOutputBuffer,
                              BrnUpdateSet lUpdateSet )
 {
-    CGS_ASSERT(lpInputBufferStack  != 0, CGS_ASSERT_MESSAGE_AT("lpInputBufferStack != NULL", __FILE__, 767));    // X360 :767 (0x2FF)
-    CGS_ASSERT(lpOutputBufferStack != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBufferStack != NULL", __FILE__, 768));   // X360 :768 (0x300)
-    CGS_ASSERT(lpInputBuffer       != 0, CGS_ASSERT_MESSAGE_AT("lpInputBuffer != NULL", __FILE__, 769));         // X360 :769 (0x301)
-    CGS_ASSERT(lpOutputBuffer      != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer != NULL", __FILE__, 770));        // X360 :770 (0x302)
+    CGS_ASSERT_AT(lpInputBufferStack  != 0, "lpInputBufferStack != NULL", __FILE__, 767);    // X360 :767 (0x2FF)
+    CGS_ASSERT_AT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL", __FILE__, 768);   // X360 :768 (0x300)
+    CGS_ASSERT_AT(lpInputBuffer       != 0, "lpInputBuffer != NULL", __FILE__, 769);         // X360 :769 (0x301)
+    CGS_ASSERT_AT(lpOutputBuffer      != 0, "lpOutputBuffer != NULL", __FILE__, 770);        // X360 :770 (0x302)
 
 
     CgsModule::IOHelper<RouteMapModuleIO::InputBuffer> lRouteIn(lpInputBufferStack, "Route");   // 0x8279A2B4

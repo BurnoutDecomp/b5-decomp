@@ -155,8 +155,8 @@ MusicEffect::EaTraxData::EaTraxData()
 // leaves mRemainingSongs alone, and clears mbPendingChange last (0x826975AC).
 bool MusicEffect::EaTraxData::Prepare(Module::SoundLogicModule* apLogicModule)
 {
-    CGS_ASSERT(apLogicModule != 0, CGS_ASSERT_MESSAGE_AT("lpLogicModule",
-        "..\\..\\..\\GameSource\\Sound/Global/BrnMusicEffect.h", 720 /* ARTIST 0x82697564 */));
+    CGS_ASSERT_AT(apLogicModule != 0, "lpLogicModule",
+        "..\\..\\..\\GameSource\\Sound/Global/BrnMusicEffect.h", 720 /* ARTIST 0x82697564 */);
     mEnabledSongs.UnSetAll();
     mEnabledSongsNoGameMode.UnSetAll();
     miPreviewSong = -1;
@@ -305,7 +305,7 @@ bool MusicEffect::JumpHpf::Prepare(f32 afTargetFrequency, f32 afTime)
     case E_JUMPHPFSTATE_OPEN:
         break;
     default:
-        CGS_ASSERT(false, "Unhandled state ");
+        CGS_FAIL("Unhandled state ");
         break;
     }
     return true;
@@ -337,7 +337,7 @@ bool MusicEffect::JumpHpf::Release(f32 afTime)
         meState         = E_JUMPHPFSTATE_CLOSING;
         break;
     default:
-        CGS_ASSERT(false, "Unhandled state ");
+        CGS_FAIL("Unhandled state ");
         break;
     }
     return true;
@@ -377,7 +377,7 @@ void MusicEffect::JumpHpf::Update(f32 afDeltaTime)
         break;
     }
     default:
-        CGS_ASSERT(false, "Unhandled state ");
+        CGS_FAIL("Unhandled state ");
         break;
     }
 }
@@ -440,7 +440,7 @@ void MusicEffect::AttachController(CgsSound::Logic::EffectBase* apController)
         mpMixerControl = static_cast<MixerControl*>(apController);
         break;
     default:
-        CGS_ASSERT_AT(false, "Unexpected control.", BRN_MUSICEFFECT_CPP_FILE, 483);
+        CGS_FAIL_AT("Unexpected control.", BRN_MUSICEFFECT_CPP_FILE, 483);
         break;
     }
 }
@@ -711,7 +711,7 @@ u32 MusicEffect::GetEventStartContentSpec(const void* apGameModeInterface)
     case 7:  lpcName = "StuntStart";       break;
     case 8:  lpcName = "marked_man";       break;
     case 10:
-        CGS_ASSERT(false, "online race is a special case");
+        CGS_FAIL("online race is a special case");
         lpcName = "RaceStartOnline";
         break;
     default: break;
@@ -1018,7 +1018,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
         break;
 
     default:
-        CGS_ASSERT(false, "UpdateParams : Unexpected type");
+        CGS_FAIL("UpdateParams : Unexpected type");
         break;
     }
 
@@ -1311,13 +1311,13 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
         }
         else
         {
-            CGS_ASSERT(false, "Unhandled junkyard ambience type");
+            CGS_FAIL("Unhandled junkyard ambience type");
         }
         break;
     }
 
     default:
-        CGS_ASSERT(false, "Notify : Unexpected event ");
+        CGS_FAIL("Notify : Unexpected event ");
         break;
     }
 }

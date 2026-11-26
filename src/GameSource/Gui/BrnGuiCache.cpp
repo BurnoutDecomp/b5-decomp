@@ -571,7 +571,7 @@ namespace BrnGui
         case E_STATE_UNLOAD_REQUESTED:
         case E_STATE_UNLOADING:
         case E_STATE_UNLOAD_CANCELLED:
-            CGS_ASSERT(false, "GuiCache: bad state transition");
+            CGS_FAIL("GuiCache: bad state transition");
             break;
 
         case E_STATE_LOADING:
@@ -597,12 +597,12 @@ namespace BrnGui
         }
 
         case E_STATE_LOADED:
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "GuiCache: StateInterface::Request() called directly on a resource already in the GuiCache");
             break;
 
         default:
-            CGS_ASSERT(false, "StateLoadingHelper::OnLoadNotification: unknown state");
+            CGS_FAIL("StateLoadingHelper::OnLoadNotification: unknown state");
             break;
         }
     }
@@ -633,11 +633,11 @@ namespace BrnGui
         case E_STATE_LOADING:
         case E_STATE_LOAD_CANCELLED:
         case E_STATE_UNLOAD_REQUESTED:
-            CGS_ASSERT(false, "GuiCache: bad state transition");
+            CGS_FAIL("GuiCache: bad state transition");
             break;
 
         case E_STATE_LOADED:
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "GuiCache: StateInterface::UnloadResource() called directly on a resource already in the GuiCache");
             break;
 
@@ -658,7 +658,7 @@ namespace BrnGui
         }
 
         default:
-            CGS_ASSERT(false, "StateLoadingHelper::OnUnloadNotification: unknown state");
+            CGS_FAIL("StateLoadingHelper::OnUnloadNotification: unknown state");
             break;
         }
     }
@@ -714,7 +714,7 @@ namespace BrnGui
         default:
             // cpp:258 -- streamed "StateLoadingHelper::EnsureResourceIsLoaded: unknown
             // state! Resource <name> is in state <state>"; folded static.
-            CGS_ASSERT(false, "StateLoadingHelper::EnsureResourceIsLoaded: unknown state! Resource ");
+            CGS_FAIL("StateLoadingHelper::EnsureResourceIsLoaded: unknown state! Resource ");
             break;
         }
 
@@ -806,7 +806,7 @@ namespace BrnGui
         default:
             // cpp:429 -- streamed "StateLoadingHelper::UnloadResource: unknown state!
             // Resource <name> is in state <state>"; folded static.
-            CGS_ASSERT(false, "StateLoadingHelper::UnloadResource: unknown state! Resource ");
+            CGS_FAIL("StateLoadingHelper::UnloadResource: unknown state! Resource ");
             break;
         }
 
@@ -1202,7 +1202,7 @@ namespace BrnGui
             if (lpStart->muJunctionId == luJunctionID)
                 return lpStart;
         }
-        CGS_ASSERT(false, "Unable to find event start with junction id");
+        CGS_FAIL("Unable to find event start with junction id");
         return 0;
     }
 
@@ -2812,10 +2812,10 @@ namespace BrnGui
     // @ 0x8240F0B0 -- mTimeInfo.mfTimeNow (member at +4); guards the uninitialised sentinel.
     f32 GuiCache::GetTime() const
     {
-        CGS_ASSERT(mfTimeNow != -FLT_MAX,
-            CGS_ASSERT_MESSAGE_AT(
-                "mfTimeNow!=-FLT_MAX",
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiEventTypeDefs.h", 250 /* ARTIST 0x8240F0E0 */));
+        CGS_ASSERT_AT(mfTimeNow != -FLT_MAX,
+            "mfTimeNow!=-FLT_MAX",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiEventTypeDefs.h", 250 /* ARTIST 0x8240F0E0 */);
+
         return mfTimeNow;
     }
 
@@ -2943,13 +2943,13 @@ namespace BrnGui
     // and the passthrough is a plain forward.
     const BrnResource::ChallengeList* GuiCache::GetFreeburnChallengeList() const
     {
-        CGS_ASSERT(mpWorldDataController != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpWorldDataController", KAC_ARTIST_ASSERT_FILE, 2133 /* ARTIST 0x8240F04C */));
+        CGS_ASSERT_AT(mpWorldDataController != 0,
+            "mpWorldDataController", KAC_ARTIST_ASSERT_FILE, 2133 /* ARTIST 0x8240F04C */);
+
         const BrnResource::ChallengeList* lpChallengeList =
             mpWorldDataController->GetFreeburnChallengeList();
-        CGS_ASSERT(lpChallengeList != 0,
-            CGS_ASSERT_MESSAGE_AT("lpChallengeList", KAC_ARTIST_ASSERT_FILE, 2136 /* ARTIST 0x8240F07C */));
+        CGS_ASSERT_AT(lpChallengeList != 0,
+            "lpChallengeList", KAC_ARTIST_ASSERT_FILE, 2136 /* ARTIST 0x8240F07C */);
         return lpChallengeList;
     }
 
@@ -3025,7 +3025,7 @@ namespace BrnGui
                 case 7: return 7;
                 case 8: return 8;
                 default:
-                    CGS_ASSERT(false, "Team index out of range: ");
+                    CGS_FAIL("Team index out of range: ");
                     return 11;
                 }
             }
@@ -3041,7 +3041,7 @@ namespace BrnGui
             case 6: return 7;
             case 7: return 8;
             default:
-                CGS_ASSERT(false, "Colour index out of range: ");
+                CGS_FAIL("Colour index out of range: ");
                 return 0;
             }
         }
@@ -3194,7 +3194,7 @@ namespace BrnGui
     // mpMapIconManager @0x4060). Asserts the incoming pointer is non-null.
     void GuiCache::SetMapIconManager(MapIconManager* lpMapIconManager)
     {
-        CGS_ASSERT(lpMapIconManager != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid map icon manager", CGS_ARTIST_BRNGUICACHE_FILE, 2102));
+        CGS_ASSERT_STREAM_AT(lpMapIconManager != 0, "Invalid map icon manager", CGS_ARTIST_BRNGUICACHE_FILE, 2102);
         mpMapIconManager = lpMapIconManager;
     }
 
@@ -3289,7 +3289,7 @@ namespace BrnGui
         {
             if (++liReelIndex >= 6)
             {
-                CGS_ASSERT(false, "Didn't find the reel thats requested");
+                CGS_FAIL("Didn't find the reel thats requested");
                 break;
             }
         }
@@ -3300,14 +3300,14 @@ namespace BrnGui
     // (maReplayARCRendered @0x143E0). Range-asserts the ARCI.
     bool GuiCache::IsReplayARCRendered(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "leARCI >= E_ACTIVE_RACE_CAR_INDEX_0",
-                KAC_ARTIST_ASSERT_SOURCE, 4443 /* ARTIST 0x824EEDD4 */));
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                KAC_ARTIST_ASSERT_SOURCE, 4444 /* ARTIST 0x824EEDF8 */));
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "leARCI >= E_ACTIVE_RACE_CAR_INDEX_0",
+                KAC_ARTIST_ASSERT_SOURCE, 4443 /* ARTIST 0x824EEDD4 */);
+
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                KAC_ARTIST_ASSERT_SOURCE, 4444 /* ARTIST 0x824EEDF8 */);
+
         return maReplayARCRendered[leActiveRaceCarIndex];
     }
 
@@ -3376,7 +3376,7 @@ const SatNavEventDisplayInfo* GuiCache::GetPresetEventDisplayInfo(u32 luEventId)
         if (maEventStarts[liIndex].muLightTriggerId == luEventId)
             return &maEventStarts[liIndex];
     }
-    CGS_ASSERT(false, "Unable to find event start with light trigger id: ");   // BrnGuiCache.cpp:3772 (non-gating)
+    CGS_FAIL("Unable to find event start with light trigger id: ");   // BrnGuiCache.cpp:3772 (non-gating)
     return 0;
 }
 
@@ -3432,7 +3432,7 @@ const SatNavEventDisplayInfo* GuiCache::GetProfileEventDisplayInfo(u32 luEventId
         if (maEventStarts[liIndex].muEventInstanceId == luEventId)
             return &maEventStarts[liIndex];
     }
-    CGS_ASSERT(false, "Unable to find event start with event id: ");   // BrnGuiCache.cpp (non-gating)
+    CGS_FAIL("Unable to find event start with event id: ");   // BrnGuiCache.cpp (non-gating)
     return 0;
 }
 
@@ -3835,11 +3835,11 @@ namespace BrnGui
     void GuiCache::HandleSetActiveLandmarksEvent(
         const GuiEventSetActiveLandmarks* lpActiveLandmarksEvent)
     {
-        CGS_ASSERT(lpActiveLandmarksEvent->muNumLandmarks
+        CGS_ASSERT_AT(lpActiveLandmarksEvent->muNumLandmarks
                        <= GuiEventSetActiveLandmarks::KU_MAX_LANDMARKS_IN_GAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpActiveLandmarksEvent->muNumLandmarks <= static_cast<uint32_t>( KI_MAX_LANDMARKS_IN_GAME )",
-                KAC_ARTIST_ASSERT_SOURCE, 4067 /* ARTIST 0x824EE800 */));                           // cpp:4067
+            "lpActiveLandmarksEvent->muNumLandmarks <= static_cast<uint32_t>( KI_MAX_LANDMARKS_IN_GAME )",
+                KAC_ARTIST_ASSERT_SOURCE, 4067 /* ARTIST 0x824EE800 */);                           // cpp:4067
+
 
         for (u32 luIndex = 0; luIndex < lpActiveLandmarksEvent->muNumLandmarks; ++luIndex)
         {
@@ -4429,9 +4429,9 @@ namespace BrnGui
 BrnGameState::LandmarkIndex GuiCache::GetEventFinishLandmark() const
 {
     const u8 luCount = GetCheckpointsInEvent();
-    CGS_ASSERT(luCount > 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lu8NumCheckpointsInEvent > 0", KAC_ARTIST_ASSERT_FILE, 4108 /* ARTIST 0x824EC640 */));
+    CGS_ASSERT_AT(luCount > 0,
+        "lu8NumCheckpointsInEvent > 0", KAC_ARTIST_ASSERT_FILE, 4108 /* ARTIST 0x824EC640 */);
+
     return BrnGameState::LandmarkIndex(maCheckpointLandmarks[luCount - 1]);
 }
 }
@@ -4596,9 +4596,9 @@ namespace BrnGui
     const BrnTraffic::BrnTrafficIO::VehicleScoreData* GuiCache::GetScoringTrafficData(u32 luIndex) const
     {
         // Header-inline on the console: the assert carries BrnGuiCache.h line 4020 (li r5 @0x82450778).
-        CGS_ASSERT(luIndex < mTrafficCarInfo.mScoreTargets.GetLength(),
-                   CGS_ASSERT_MESSAGE_AT("liIndex >= 0 && liIndex < mTrafficCarInfo.mScoreTargets.GetLength()",
-                                             KAC_ARTIST_ASSERT_FILE, 4020 /* ARTIST 0x82450778 */));
+        CGS_ASSERT_AT(luIndex < mTrafficCarInfo.mScoreTargets.GetLength(),
+                   "liIndex >= 0 && liIndex < mTrafficCarInfo.mScoreTargets.GetLength()",
+                                             KAC_ARTIST_ASSERT_FILE, 4020 /* ARTIST 0x82450778 */);
         return &mTrafficCarInfo.mScoreTargets.GetItem(luIndex);
     }
 }
@@ -4859,11 +4859,11 @@ namespace BrnGui
     // ReplayCredits::OnEnter reads both the name (+0x00) and the count (+0x18) off it.
     const ReplayPlayerActive* GuiCache::GetSortedReplayPlayerActive(u32 luIndex) const
     {
-        CGS_ASSERT(mbReplayHasBeenSorted == true,
-            CGS_ASSERT_MESSAGE_AT(
-                "mbReplayHasBeenSorted == true", __FILE__, 4516 /* ARTIST 0x824EEFD8 */));
-        CGS_ASSERT(luIndex < 16,
-            CGS_ASSERT_MESSAGE_AT("luIndex < 16", __FILE__, 4517 /* ARTIST 0x824EEFFC */));
+        CGS_ASSERT_AT(mbReplayHasBeenSorted == true,
+            "mbReplayHasBeenSorted == true", __FILE__, 4516 /* ARTIST 0x824EEFD8 */);
+
+        CGS_ASSERT_AT(luIndex < 16,
+            "luIndex < 16", __FILE__, 4517 /* ARTIST 0x824EEFFC */);
         return &maReplayPlayersActive[luIndex];
     }
 }
@@ -4912,10 +4912,10 @@ namespace BrnGui
     // entries of maReplayPlayersActive (@0x141E0) by _SortReplayPlayersActiveByCount.
     void GuiCache::SortReplayPlayersActive()
     {
-        CGS_ASSERT(!mbReplayHasBeenSorted,
-            CGS_ASSERT_MESSAGE_AT(
-                "mbReplayHasBeenSorted == false",
-                CGS_ARTIST_BRNGUICACHE_FILE_RELATIVE, 4501 /* ARTIST 0x824F8C8C */));
+        CGS_ASSERT_AT(!mbReplayHasBeenSorted,
+            "mbReplayHasBeenSorted == false",
+                CGS_ARTIST_BRNGUICACHE_FILE_RELATIVE, 4501 /* ARTIST 0x824F8C8C */);
+
         mbReplayHasBeenSorted = true;
         qsort(maReplayPlayersActive, 16, 32, _SortReplayPlayersActiveByCount);
     }

@@ -58,9 +58,9 @@ namespace CgsGui
             mePrepareStage = E_PREPARE_DONE;
             return true;
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "Unknown prepare stage", __FILE__, 145 /* ARTIST 0x828478F8 */));
+            CGS_FAIL_AT(
+                "Unknown prepare stage", __FILE__, 145 /* ARTIST 0x828478F8 */);
+
             return false;
         }
     }
@@ -121,7 +121,7 @@ namespace CgsGui
             mePrepareStage = E_PREPARE_START;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Unknown release stage", CGS_ARTIST_FILE_CPP, 210);
+            CGS_FAIL_AT("Unknown release stage", CGS_ARTIST_FILE_CPP, 210);
             return false;
         }
     }
@@ -252,9 +252,9 @@ namespace CgsGui
         const ModelIO::InputBuffer* lpInput)
     {
         const ModelIO::InputBuffer::GuiEventInputQueue* lpInputEventQueue = lpInput->GetEventQueue();
-        CGS_ASSERT(lpInputEventQueue != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpInputEventQueue != NULL", __FILE__, 415 /* ARTIST 0x8285E0D4 */));
+        CGS_ASSERT_AT(lpInputEventQueue != 0,
+            "lpInputEventQueue != NULL", __FILE__, 415 /* ARTIST 0x8285E0D4 */);
+
         if (lpInputEventQueue->CgsModule::VariableEventQueue<32768, 16>::GetLength() > 0)
             lpInterpreterInput->AddGuiEvents(*lpInputEventQueue);
     }

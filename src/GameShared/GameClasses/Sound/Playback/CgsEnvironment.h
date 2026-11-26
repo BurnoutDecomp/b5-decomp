@@ -138,9 +138,9 @@ namespace Playback
         // (CgsObject.cpp) links it while the rest of this TU stays gate-only.
         rw::IResourceAllocator* GetAllocator()    // @0x82680EF8
         {
-            CGS_ASSERT(mpAllocator, CGS_ASSERT_MESSAGE_AT("mpAllocator",
+            CGS_ASSERT_AT(mpAllocator, "mpAllocator",
                 "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsEnvironment.h",
-                677 /* ARTIST 0x82680F20 */));
+                677 /* ARTIST 0x82680F20 */);
             return mpAllocator;
         }
         Registry*               GetRegistry();    // @0x82680EA0

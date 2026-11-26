@@ -31,7 +31,7 @@ namespace Io
 //   addi r3, this, 4 -> return &mAttribSysRequestInterface
 const RootOutputBuffer::AttribSysRequestInterface* LogicOutputBuffer::GetAttribSysRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 120));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 120);
     return reinterpret_cast<const RootOutputBuffer::AttribSysRequestInterface*>(&mAttribSysRequestInterfaceStorage);
 }
 
@@ -41,7 +41,7 @@ const RootOutputBuffer::AttribSysRequestInterface* LogicOutputBuffer::GetAttribS
 //   addi r3, this, 4 -> return &mAttribSysRequestInterface
 RootOutputBuffer::AttribSysRequestInterface* LogicOutputBuffer::GetAttribSysRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 135));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 135);
     return reinterpret_cast<RootOutputBuffer::AttribSysRequestInterface*>(&mAttribSysRequestInterfaceStorage);
 }
 
@@ -51,14 +51,14 @@ RootOutputBuffer::AttribSysRequestInterface* LogicOutputBuffer::GetAttribSysRequ
 // sibling lock discipline. Bodied 2026-08-25, faithful-audio-engine phase C1.
 const RootOutputBuffer::SoundResourceRequestInterface* LogicOutputBuffer::GetResourceRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 113));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 113);
     return reinterpret_cast<const RootOutputBuffer::SoundResourceRequestInterface*>(&mResourceRequestInterfaceStorage);
 }
 RootOutputBuffer::SoundResourceRequestInterface* LogicOutputBuffer::GetResourceRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
         "Not locked for writing\n",
-        CGS_ARTIST_FILE, 128));
+        CGS_ARTIST_FILE, 128);
     return reinterpret_cast<RootOutputBuffer::SoundResourceRequestInterface*>(&mResourceRequestInterfaceStorage);
 }
 
@@ -67,7 +67,7 @@ RootOutputBuffer::SoundResourceRequestInterface* LogicOutputBuffer::GetResourceR
 // the identified 11-slot BrnReplays::ReplayIO::RequestInterface).
 const RootOutputBuffer::ReplayRequestInterface* LogicOutputBuffer::GetReplayRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 79));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 79);
     return &mReplayRequestInterface;
 }
 RootOutputBuffer::ReplayRequestInterface* LogicOutputBuffer::GetReplayRequestInterface()

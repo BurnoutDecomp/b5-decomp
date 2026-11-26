@@ -108,9 +108,9 @@ namespace BrnNetwork
                                                       const bool* lpaAccumulationsThisFrame,
                                                       const f32* lpaActionScores)
     {
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             "lu16FrameCount != KU16_INVALID_FRAME",
-            CGS_ARTIST_FILE, 158 /* ARTIST 0x8257CB70 */));
+            CGS_ARTIST_FILE, 158 /* ARTIST 0x8257CB70 */);
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
         {
@@ -128,18 +128,18 @@ namespace BrnNetwork
                                                 bool* lpaAccumulationsThisFrame,
                                                 f32* lpaActionScores)
     {
-        CGS_ASSERT(lpaSuccessfulActions, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpaSuccessfulActions,
             "lpaSuccessfulActions",
-            CGS_ARTIST_FILE, 189 /* ARTIST 0x8257FBDC */));
-        CGS_ASSERT(lpaAccumulationsThisFrame, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 189 /* ARTIST 0x8257FBDC */);
+        CGS_ASSERT_AT(lpaAccumulationsThisFrame,
             "lpaAccumulationsThisFrame",
-            CGS_ARTIST_FILE, 190 /* ARTIST 0x8257FC00 */));
-        CGS_ASSERT(lpaActionScores, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 190 /* ARTIST 0x8257FC00 */);
+        CGS_ASSERT_AT(lpaActionScores,
             "lpaActionScores",
-            CGS_ARTIST_FILE, 191 /* ARTIST 0x8257FC24 */));
-        CGS_ASSERT(lpiFramesSinceStart, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 191 /* ARTIST 0x8257FC24 */);
+        CGS_ASSERT_AT(lpiFramesSinceStart,
             "lpiFramesSinceStart",
-            CGS_ARTIST_FILE, 192 /* ARTIST 0x8257FC48 */));
+            CGS_ARTIST_FILE, 192 /* ARTIST 0x8257FC48 */);
 
         // ARTIST 0x8257FC5C branches to a trailing `return false` (0x8257FCB0): the copy-out is the body
         // of the valid test.

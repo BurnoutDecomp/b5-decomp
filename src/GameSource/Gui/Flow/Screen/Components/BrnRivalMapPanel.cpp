@@ -148,10 +148,10 @@ namespace BrnGui
     // @ 0x82417738 -------------------------------------------------------------------
     void RivalMapPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpGuiCache",
-                CGS_ARTIST_FILE, 91 /* ARTIST 0x82417760 */));   // cpp:91
+        CGS_ASSERT_AT(lpGuiCache != 0,
+            "lpGuiCache",
+                CGS_ARTIST_FILE, 91 /* ARTIST 0x82417760 */);   // cpp:91
+
 
         lpGuiCache->AppendExpectedAptComponent(leFlow, GetNameHash());            // lwz +0x84
 
@@ -383,8 +383,8 @@ namespace BrnGui
     // @ 0x82417900 -------------------------------------------------------------------
     void RivalMapPanel::TransitionIn(ERivalType leRivalType)
     {
-        CGS_ASSERT(static_cast<s32>(leRivalType) >= 0 && leRivalType < E_RIVAL_TYPE_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("(0 <= leRivalType) && (E_RIVAL_TYPE_COUNT > leRivalType)", CGS_ARTIST_FILE, 325 /* ARTIST 0x82417944 */));   // cpp:325
+        CGS_ASSERT_AT(static_cast<s32>(leRivalType) >= 0 && leRivalType < E_RIVAL_TYPE_COUNT,
+                   "(0 <= leRivalType) && (E_RIVAL_TYPE_COUNT > leRivalType)", CGS_ARTIST_FILE, 325 /* ARTIST 0x82417944 */);   // cpp:325
 
         // Already showing this exact rival type -> nothing to animate.
         if (mbActive && static_cast<s32>(leRivalType) == meCurrentRivalType)   // cmpw r30(type), r11
@@ -421,10 +421,10 @@ namespace BrnGui
     // @ 0x824176C0 -------------------------------------------------------------------
     void RivalMapPanel::StorePlayerInfo(const void* lpStatsResponseEvent)
     {
-        CGS_ASSERT(lpStatsResponseEvent != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "NULL != lpStatsResponseEvent",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnRivalMapPanel.h", 153 /* ARTIST 0x824176EC */));   // @0x824176E4
+        CGS_ASSERT_AT(lpStatsResponseEvent != 0,
+            "NULL != lpStatsResponseEvent",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnRivalMapPanel.h", 153 /* ARTIST 0x824176EC */);   // @0x824176E4
+
 
         std::memcpy(maStatsResponse, lpStatsResponseEvent, KI_STATS_RESPONSE_SIZE); // @0x82417710
         mbHasPlayerInfo = true;                                                      // @0x82417718 (stb 1)

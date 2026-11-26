@@ -87,7 +87,7 @@ namespace BrnGui
     // @ 0x8240FC98 -- bounds-check, set the queried flag, return the slot.
     Selectable* SelectableGroup::GetSelectable(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex < miSelectableCount, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid index passed to SelectableGroup::GetSelectable()", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 248));
+        CGS_ASSERT_STREAM_AT(liIndex >= 0 && liIndex < miSelectableCount, "Invalid index passed to SelectableGroup::GetSelectable()", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 248);
 
         SetDirty();
         return maSelectables[liIndex];
@@ -96,18 +96,18 @@ namespace BrnGui
     // ARTIST 0x8240FD60 checks both bounds and leaves the group's flags alone.
     const Selectable* SelectableGroup::GetHighlighted() const
     {
-        CGS_ASSERT(miHighlightedIndex >= 0 && miHighlightedIndex < KI_MAX_SELECTABLES,
-            CGS_ASSERT_STREAM_MESSAGE_AT("No highlighted index to get",
-                                         "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 298));
+        CGS_ASSERT_STREAM_AT(miHighlightedIndex >= 0 && miHighlightedIndex < KI_MAX_SELECTABLES,
+            "No highlighted index to get",
+                                         "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 298);
         return maSelectables[miHighlightedIndex];
     }
 
     // ARTIST 0x824E21B8 validates the same cursor before marking the group dirty.
     Selectable* SelectableGroup::GetHighlighted()
     {
-        CGS_ASSERT(miHighlightedIndex >= 0 && miHighlightedIndex < KI_MAX_SELECTABLES,
-            CGS_ASSERT_STREAM_MESSAGE_AT("No highlighted index to get",
-                                         "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 281));
+        CGS_ASSERT_STREAM_AT(miHighlightedIndex >= 0 && miHighlightedIndex < KI_MAX_SELECTABLES,
+            "No highlighted index to get",
+                                         "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 281);
         SetDirty();
         return maSelectables[miHighlightedIndex];
     }
@@ -172,7 +172,7 @@ namespace BrnGui
     {
         if (miHighlightedIndex == -1)
         {
-            CGS_ASSERT(false, "ERROR : No option highlighted to select the next");
+            CGS_FAIL("ERROR : No option highlighted to select the next");
             return false;
         }
 
@@ -212,7 +212,7 @@ namespace BrnGui
     {
         if (miHighlightedIndex == -1)
         {
-            CGS_ASSERT(false, "No option highlighted to select the previous");
+            CGS_FAIL("No option highlighted to select the previous");
             return false;
         }
 
@@ -285,7 +285,7 @@ namespace BrnGui
                 // Neither moving is the console's "last item" tripwire (cpp:246, non-gating).
                 if (lpSelectable->IsHighlighted() && !HighlightNext(false) && !HighlightPrevious(false))
                 {
-                    CGS_ASSERT_STREAM_AT(false, "Disabling the last item available", CGS_ARTIST_FILE, 246);
+                    CGS_FAIL_STREAM_AT("Disabling the last item available", CGS_ARTIST_FILE, 246);
                 }
                 lpSelectable->SetActive(false);
                 SetDirty();
@@ -320,10 +320,10 @@ namespace BrnGui
     void SelectableGroup::SetSelectableId(s32 liIndex, u64 luId)
     {
         Selectable* lpSel = GetSelectable(liIndex);
-        CGS_ASSERT(lpSel != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpSelectable",
-                CGS_ARTIST_FILE, 112 /* ARTIST 0x824E3208 */));
+        CGS_ASSERT_AT(lpSel != 0,
+            "lpSelectable",
+                CGS_ARTIST_FILE, 112 /* ARTIST 0x824E3208 */);
+
         lpSel->SetId(luId);
         lpSel->SetDirty();
     }
@@ -336,7 +336,7 @@ namespace BrnGui
         for (s32 liIndex = 0; liIndex < miSelectableCount; ++liIndex)
         {
             Selectable* lpSelectable = GetSelectable(liIndex);
-            CGS_ASSERT(lpSelectable != 0, CGS_ASSERT_MESSAGE_AT("lpSelectable", CGS_ARTIST_FILE, 133 /* ARTIST 0x824E32AC */));
+            CGS_ASSERT_AT(lpSelectable != 0, "lpSelectable", CGS_ARTIST_FILE, 133 /* ARTIST 0x824E32AC */);
             lpSelectable->SetId((lpIdArray != NULL) ? lpIdArray[liIndex] : static_cast<u64>(liIndex));
             lpSelectable->SetDirty();
         }

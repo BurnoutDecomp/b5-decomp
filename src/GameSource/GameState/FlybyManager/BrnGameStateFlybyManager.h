@@ -68,8 +68,8 @@ public:
     // OnlineFlybyManager use bakes its assert at h:247 (e.g. CalculateDisconnectRating 0x823642A8).
     ScoringSystem* GetScoringSystem()
     {
-        CGS_ASSERT(mpScoringSystem, CGS_ASSERT_MESSAGE_AT("mpScoringSystem",
-                   "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\flybymanager\\BrnGameStateFlybyManager.h", 247));
+        CGS_ASSERT_AT(mpScoringSystem, "mpScoringSystem",
+                   "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\flybymanager\\BrnGameStateFlybyManager.h", 247);
         return mpScoringSystem;
     }
 

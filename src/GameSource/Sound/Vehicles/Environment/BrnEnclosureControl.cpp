@@ -68,7 +68,7 @@ void EnclosureControl::AttachController(CgsSound::Logic::EffectBase* apControlle
         mpPhysicsControl = static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
         break;
     default:
-        CGS_ASSERT_AT(false, "Unexpected control.", BRN_ENCLOSURECONTROL_CPP_FILE, 171);
+        CGS_FAIL_AT("Unexpected control.", BRN_ENCLOSURECONTROL_CPP_FILE, 171);
         break;
     }
 }

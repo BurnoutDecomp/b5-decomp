@@ -42,26 +42,26 @@ void DepthOfField::SetParams(f32 lfFocusStartDistanceMeters,
                              f32 lfFocusEndDistanceMeters,
                              f32 lfBlurriness)
 {
-    CGS_ASSERT(lfBlurriness >= 0.0f,
-        CGS_ASSERT_MESSAGE_AT("lfBlurriness >= 0.0f", CGS_ARTIST_FILE, 123 /* ARTIST 0x821F1B1C */));
-    CGS_ASSERT(lfBlurriness <= 1.0f,
-        CGS_ASSERT_MESSAGE_AT("lfBlurriness <= 1.0f", CGS_ARTIST_FILE, 124 /* ARTIST 0x821F1B48 */));
-    CGS_ASSERT(lfFocusStartDistanceMeters >= 0.0f,
-        CGS_ASSERT_MESSAGE_AT(
-            "lfFocusStartDistanceMeters >= 0.0f",
-            CGS_ARTIST_FILE, 125 /* ARTIST 0x821F1B6C */));
-    CGS_ASSERT(lfPerfectFocusStartDistanceMeters >= lfFocusStartDistanceMeters,
-        CGS_ASSERT_MESSAGE_AT(
-            "lfPerfectFocusStartDistanceMeters >= lfFocusStartDistanceMeters",
-            CGS_ARTIST_FILE, 126 /* ARTIST 0x821F1B90 */));
-    CGS_ASSERT(lfPerfectFocusEndDistanceMeters >= lfPerfectFocusStartDistanceMeters,
-        CGS_ASSERT_MESSAGE_AT(
-            "lfPerfectFocusEndDistanceMeters >= lfPerfectFocusStartDistanceMeters",
-            CGS_ARTIST_FILE, 127 /* ARTIST 0x821F1BB4 */));
-    CGS_ASSERT(lfFocusEndDistanceMeters >= lfPerfectFocusEndDistanceMeters,
-        CGS_ASSERT_MESSAGE_AT(
-            "lfFocusEndDistanceMeters >= lfPerfectFocusEndDistanceMeters",
-            CGS_ARTIST_FILE, 128 /* ARTIST 0x821F1BD8 */));
+    CGS_ASSERT_AT(lfBlurriness >= 0.0f,
+        "lfBlurriness >= 0.0f", CGS_ARTIST_FILE, 123 /* ARTIST 0x821F1B1C */);
+    CGS_ASSERT_AT(lfBlurriness <= 1.0f,
+        "lfBlurriness <= 1.0f", CGS_ARTIST_FILE, 124 /* ARTIST 0x821F1B48 */);
+    CGS_ASSERT_AT(lfFocusStartDistanceMeters >= 0.0f,
+        "lfFocusStartDistanceMeters >= 0.0f",
+            CGS_ARTIST_FILE, 125 /* ARTIST 0x821F1B6C */);
+
+    CGS_ASSERT_AT(lfPerfectFocusStartDistanceMeters >= lfFocusStartDistanceMeters,
+        "lfPerfectFocusStartDistanceMeters >= lfFocusStartDistanceMeters",
+            CGS_ARTIST_FILE, 126 /* ARTIST 0x821F1B90 */);
+
+    CGS_ASSERT_AT(lfPerfectFocusEndDistanceMeters >= lfPerfectFocusStartDistanceMeters,
+        "lfPerfectFocusEndDistanceMeters >= lfPerfectFocusStartDistanceMeters",
+            CGS_ARTIST_FILE, 127 /* ARTIST 0x821F1BB4 */);
+
+    CGS_ASSERT_AT(lfFocusEndDistanceMeters >= lfPerfectFocusEndDistanceMeters,
+        "lfFocusEndDistanceMeters >= lfPerfectFocusEndDistanceMeters",
+            CGS_ARTIST_FILE, 128 /* ARTIST 0x821F1BD8 */);
+
 
     mfBlurriness                      = lfBlurriness;                      // stfs f30, 0x10
     mfFocusStartDistanceMeters        = lfFocusStartDistanceMeters;        // stfs f29, 0x00

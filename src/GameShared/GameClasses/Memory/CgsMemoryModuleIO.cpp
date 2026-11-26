@@ -32,33 +32,33 @@ namespace MemoryIO
     // X360 0x82869248 (const): assert read-locked (status bit 4), then hand back the queue.
     const InputBuffer::MemoryRequestQueue* InputBuffer::GetMemoryRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 753));
+            CGS_ARTIST_FILE, 753);
         return &mMemoryRequestQueue;
     }
 
     // X360 0x828E1040 (non-const): assert write-locked (status bit 3), then hand back the queue.
     InputBuffer::MemoryRequestQueue* InputBuffer::GetMemoryRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_CGSMEMORYMODULEIO_FILE, 754));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_CGSMEMORYMODULEIO_FILE, 754);
         return &mMemoryRequestQueue;
     }
 
     // OutputBuffer accessors -- mirror of InputBuffer (the response queue lives at this+4).
     const OutputBuffer::MemoryResponseQueue* OutputBuffer::GetMemoryResponseQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_CGSMEMORYMODULEIO_FILE, 785));
+            CGS_ARTIST_CGSMEMORYMODULEIO_FILE, 785);
         return &mMemoryResponseQueue;
     }
 
     OutputBuffer::MemoryResponseQueue* OutputBuffer::GetMemoryResponseQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            CGS_ARTIST_FILE, 786));
+            CGS_ARTIST_FILE, 786);
         return &mMemoryResponseQueue;
     }
 

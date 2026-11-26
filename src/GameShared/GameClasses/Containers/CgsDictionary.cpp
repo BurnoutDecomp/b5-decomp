@@ -83,10 +83,10 @@ void DictionaryBase::FixDown()
     for ( s32 lnEntry = 0; lnEntry < miNumEntries; ++lnEntry )
     {
         DictEntry* lpEntry = &mpaIndex[ lnEntry ];
-        CGS_ASSERT(reinterpret_cast<intptr_t>(lpEntry->mpData) > reinterpret_cast<intptr_t>(lpBase),
-            CGS_ASSERT_MESSAGE_AT("(int32_t)lpEntry->mpData > (int32_t)this",
+        CGS_ASSERT_AT(reinterpret_cast<intptr_t>(lpEntry->mpData) > reinterpret_cast<intptr_t>(lpBase),
+            "(int32_t)lpEntry->mpData > (int32_t)this",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\CgsDictionary.cpp",
-                91 /* ARTIST 0x82815894 */));
+                91 /* ARTIST 0x82815894 */);
         lpEntry->mpData = reinterpret_cast<char*>(
             static_cast<uintptr_t>(reinterpret_cast<u8*>(lpEntry->mpData) - lpBase));
     }

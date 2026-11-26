@@ -311,12 +311,12 @@ namespace Vehicle
             VehicleOutputRequestInterface* lpOutputInterface,
             Deformation::DeformationInputInterface* lpDeformationInterface)
     {
-        CGS_ASSERT(lpRemoveTrafficQueue != 0,
-            CGS_ASSERT_MESSAGE_AT("lpRemoveTrafficQueue != NULL", KAC_ARTIST_ASSERT_CPP_FILE, 600 /* ARTIST 0x8262D0F4 */));
-        CGS_ASSERT(lpOutputInterface != 0,
-            CGS_ASSERT_MESSAGE_AT("lpOutputInterface != NULL", KAC_ARTIST_ASSERT_CPP_FILE, 601 /* ARTIST 0x8262D118 */));
-        CGS_ASSERT(lpDeformationInterface != 0,
-            CGS_ASSERT_MESSAGE_AT("lpDeformationInterface != NULL", KAC_ARTIST_ASSERT_CPP_FILE, 602 /* ARTIST 0x8262D13C */));
+        CGS_ASSERT_AT(lpRemoveTrafficQueue != 0,
+            "lpRemoveTrafficQueue != NULL", KAC_ARTIST_ASSERT_CPP_FILE, 600 /* ARTIST 0x8262D0F4 */);
+        CGS_ASSERT_AT(lpOutputInterface != 0,
+            "lpOutputInterface != NULL", KAC_ARTIST_ASSERT_CPP_FILE, 601 /* ARTIST 0x8262D118 */);
+        CGS_ASSERT_AT(lpDeformationInterface != 0,
+            "lpDeformationInterface != NULL", KAC_ARTIST_ASSERT_CPP_FILE, 602 /* ARTIST 0x8262D13C */);
 
         for (s32 liEvent = 0; liEvent < lpRemoveTrafficQueue->GetLength(); ++liEvent)
         {
@@ -376,10 +376,10 @@ namespace Vehicle
             VehicleOutputRequestInterface* lpOutputRequestInterface,
             Deformation::DeformationInputInterface* lpDeformationInterface)
     {
-        CGS_ASSERT(liIndexToRecycle >= 0 && liIndexToRecycle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-            CGS_ASSERT_MESSAGE_AT(
-                "liIndexToRecycle >= 0 && liIndexToRecycle < static_cast<int32_t>( ku8TotalMaxNumPhysicalTraffic )",
-                KAC_ARTIST_ASSERT_CPP_FILE, 3426 /* ARTIST 0x8262DA50 */));
+        CGS_ASSERT_AT(liIndexToRecycle >= 0 && liIndexToRecycle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+            "liIndexToRecycle >= 0 && liIndexToRecycle < static_cast<int32_t>( ku8TotalMaxNumPhysicalTraffic )",
+                KAC_ARTIST_ASSERT_CPP_FILE, 3426 /* ARTIST 0x8262DA50 */);
+
 
         // BrnPhysicalTrafficManager.cpp:3429/3437/3440 (DWARF): lpTrafficVehicle, liJointIndex,
         // liOtherHalfIndex. The joint index is read before GetArticulatedVehicleType is called
@@ -392,11 +392,11 @@ namespace Vehicle
                 liJointIndex, lpTrafficVehicle->GetArticulatedVehicleType());
             SendTrafficVehicleRecycledEvents(liOtherHalfIndex, lpManagerOutputInterface,
                                              lpOutputRequestInterface, lpDeformationInterface);
-            CGS_ASSERT(mu8GlobalToPhysicalEntityIndexMap[
+            CGS_ASSERT_AT(mu8GlobalToPhysicalEntityIndexMap[
                            (maTrafficEntityIDs[liOtherHalfIndex].muValue >> 10) & 0x3FFFu] != KU8_INVALID_MAP,
-                CGS_ASSERT_MESSAGE_AT(
-                    "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liOtherHalfIndex].GetEntityIndex()] != KU8_INVALID_MAP",
-                    KAC_ARTIST_ASSERT_CPP_FILE, 3455 /* ARTIST 0x8262DB1C */));
+                "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liOtherHalfIndex].GetEntityIndex()] != KU8_INVALID_MAP",
+                    KAC_ARTIST_ASSERT_CPP_FILE, 3455 /* ARTIST 0x8262DB1C */);
+
             mu8GlobalToPhysicalEntityIndexMap[
                 (maTrafficEntityIDs[liOtherHalfIndex].muValue >> 10) & 0x3FFFu] = KU8_INVALID_MAP;
         }
@@ -406,11 +406,11 @@ namespace Vehicle
 
         // Re-read AFTER RemoveTrafficVehicle, so this is 0xFFFFFFFF >> 10 & 0x3FFF == 16383 every
         // time (see banner). The original reads the map at that index.
-        CGS_ASSERT(mu8GlobalToPhysicalEntityIndexMap[
+        CGS_ASSERT_AT(mu8GlobalToPhysicalEntityIndexMap[
                        (maTrafficEntityIDs[liIndexToRecycle].muValue >> 10) & 0x3FFFu] != KU8_INVALID_MAP,
-            CGS_ASSERT_MESSAGE_AT(
-                "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liIndexToRecycle].GetEntityIndex()] != KU8_INVALID_MAP",
-                KAC_ARTIST_ASSERT_CPP_FILE, 3466 /* ARTIST 0x8262DBA4 */));
+            "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liIndexToRecycle].GetEntityIndex()] != KU8_INVALID_MAP",
+                KAC_ARTIST_ASSERT_CPP_FILE, 3466 /* ARTIST 0x8262DBA4 */);
+
 
         // THE DEFECT ABOVE, VERBATIM: the console indexes the map WITH THE MAP, not with the
         // entity index the assert on the line above just read.

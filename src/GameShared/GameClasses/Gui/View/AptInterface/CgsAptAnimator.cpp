@@ -78,7 +78,7 @@ namespace CgsGui
     // X360 0x82850280.
     void Animator::Destruct()
     {
-        CGS_ASSERT(mpObjectController != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Must have valid ObjectController first", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAnimator.cpp", 98));
+        CGS_ASSERT_STREAM_AT(mpObjectController != 0, "Must have valid ObjectController first", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAnimator.cpp", 98);
 
         mpObjectController->UnRegister();
         mpObjectController = 0;
@@ -134,7 +134,7 @@ namespace CgsGui
                 lLocalData.mfEndValue   += lfCurrentValue;
                 break;
             default:
-                CGS_ASSERT(false, "Unhandled animation type");
+                CGS_FAIL("Unhandled animation type");
                 break;
         }
 

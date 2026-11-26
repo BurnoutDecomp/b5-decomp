@@ -81,7 +81,7 @@ const PotentialContact* PotentialContactOrderer::GetContact(s32 liIndex)
         }
     }
 
-    CGS_ASSERT(false, "Couldn't find contact at specified index\n");
+    CGS_FAIL("Couldn't find contact at specified index\n");
     return 0;
 }
 

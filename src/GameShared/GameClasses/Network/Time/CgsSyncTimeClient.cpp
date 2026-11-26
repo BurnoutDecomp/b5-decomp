@@ -39,12 +39,12 @@ namespace CgsNetwork
     void
     SyncTimeClient::Construct(PlayerManager* lpPlayerManager, SyncTimeMessageManager* lpMessageManager)
     {
-        CGS_ASSERT(lpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpPlayerManager != 0,
             "lpPlayerManager",
-            CGS_ARTIST_FILE, 70 /* ARTIST 0x8287D1FC */));
-        CGS_ASSERT(lpMessageManager != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 70 /* ARTIST 0x8287D1FC */);
+        CGS_ASSERT_AT(lpMessageManager != 0,
             "lpMessageManager",
-            CGS_ARTIST_FILE, 71 /* ARTIST 0x8287D220 */));
+            CGS_ARTIST_FILE, 71 /* ARTIST 0x8287D220 */);
 
         // ARTIST 0x8287D22C stores the player manager (+4) before the message manager (+0).
         mpPlayerManager          = lpPlayerManager;     // +4
@@ -122,12 +122,12 @@ namespace CgsNetwork
     bool
     SyncTimeClient::TimeIsSynchronised(CgsSystem::Time lTimeDiffTolerance, s32 liMinNumPacketsRecvd) const
     {
-        CGS_ASSERT(lTimeDiffTolerance.GetFloatVal() > 0.0f, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lTimeDiffTolerance.GetFloatVal() > 0.0f,
             "lTimeDiffTolerance.GetFloatVal() > 0.0f",
-            __FILE__, 329 /* ARTIST 0x8287D2A8 */));
-        CGS_ASSERT(liMinNumPacketsRecvd >= 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 329 /* ARTIST 0x8287D2A8 */);
+        CGS_ASSERT_AT(liMinNumPacketsRecvd >= 0,
             "liMinNumPacketsRecvd >= 0",
-            __FILE__, 330 /* ARTIST 0x8287D2CC */));
+            __FILE__, 330 /* ARTIST 0x8287D2CC */);
 
         if (miNumTimePackets < liMinNumPacketsRecvd)
         {

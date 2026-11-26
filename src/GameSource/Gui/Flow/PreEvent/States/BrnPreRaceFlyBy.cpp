@@ -367,7 +367,7 @@ namespace BrnGui
         char lacSatNavIconName[64];
         s32  i;
 
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", "..\..\..\GameSource\Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.cpp", 750 /* ARTIST li r5,0x2EE */));
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", "..\..\..\GameSource\Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.cpp", 750 /* ARTIST li r5,0x2EE */);
 
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mEventName.GetName());
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mModeType.GetName());
@@ -970,7 +970,7 @@ namespace BrnGui
                 default:
                     // cpp:927 -- the message names Update because this drain is inlined
                     // into it on the console. Non-fatal.
-                    CGS_ASSERT_AT(false, "Unexpected event in PreRaceFlyByState::Update", CGS_ARTIST_FILE, 927);
+                    CGS_FAIL_AT("Unexpected event in PreRaceFlyByState::Update", CGS_ARTIST_FILE, 927);
                     break;
             }
 
@@ -1059,7 +1059,7 @@ namespace BrnGui
                 // the screen when we are in state " << meCurrentState << "\n"; lowered to
                 // the static text per project policy, the streamed value being the switch
                 // scrutinee itself.
-                CGS_ASSERT(false,
+                CGS_FAIL(
                            "Not expecting to receive a trans complete from the screen when we are in state \n");
                 break;
         }
@@ -1138,7 +1138,7 @@ namespace BrnGui
                 // mode to E_MODE_OFFLINE_RACE for the rest of the body. The switch bound
                 // is the UNSIGNED `cmplwi cr6, r29, 8` / `bgt` at 0x824D624C, and the
                 // jumptable sends cases 1, 4 and 6 here as well.
-                CGS_ASSERT(false, "Unknown game mode ()\n");
+                CGS_FAIL("Unknown game mode ()\n");
                 liGameMode = GSM::E_MODE_OFFLINE_RACE;
                 break;
         }
@@ -1271,7 +1271,7 @@ void PreRaceFlyByState::SetEventIconResource()
                 case 0x88109: mLargeIconResource.muId = 111; break;  // "DestE"
                 default:
                     // cpp:1723. Non-fatal: the console falls through to the north icon.
-                    CGS_ASSERT(false, "Invalid destination ID (skippable) - ");
+                    CGS_FAIL("Invalid destination ID (skippable) - ");
                     mLargeIconResource.muId = 105;                   // "DestN"
                     break;
             }
@@ -1292,7 +1292,7 @@ void PreRaceFlyByState::SetEventIconResource()
 
         default:
             // cpp:1751. Non-fatal, same north-icon fallback.
-            CGS_ASSERT(false, "Invalid game mode (skippable) - ");
+            CGS_FAIL("Invalid game mode (skippable) - ");
             mLargeIconResource.muId = 105;                           // "DestN"
             break;
     }

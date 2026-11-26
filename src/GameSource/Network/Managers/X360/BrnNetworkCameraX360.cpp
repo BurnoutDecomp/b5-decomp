@@ -105,9 +105,9 @@ namespace BrnNetwork
         mRequestTimer.SetFloatVal(0.0f);
         miRequestedPlayerID = KI_INVALID_PLAYER_ID;
 
-        CGS_ASSERT(lpTextureCompressor, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpTextureCompressor,
             "lpTextureCompressor",
-            __FILE__, 87 /* ARTIST 0x8258B4EC */));
+            __FILE__, 87 /* ARTIST 0x8258B4EC */);
         mpTextureCompressor = lpTextureCompressor;
 
         miUserSetting   = 1;

@@ -54,8 +54,8 @@ namespace BrnWorld
     void PropEntityID::SetPartIndex(u32 luPartIndex)
     {
         AssertIsProp();
-        CGS_ASSERT(luPartIndex < (1u << KU_NUM_BITS_FOR_PART_NUM),
-                   CGS_ASSERT_MESSAGE_AT("luPartIndex < (1U << KU_NUM_BITS_FOR_PART_NUM)", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityId.h", 167));
+        CGS_ASSERT_AT(luPartIndex < (1u << KU_NUM_BITS_FOR_PART_NUM),
+                   "luPartIndex < (1U << KU_NUM_BITS_FOR_PART_NUM)", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityId.h", 167);
         mEntityId.muValue = (mEntityId.muValue & ~KU_PART_INDEX_MASK)
                           | (luPartIndex << KU_PART_INDEX_BASE);
     }

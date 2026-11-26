@@ -311,7 +311,7 @@ namespace CgsSceneManager
                     if (lrRemoveQueue.GetEvent(liEarlier).miCacheSlot == liCacheSlot)
                     {
                         lbRemovedAlready = true;
-                        CGS_ASSERT(false, "Trying to remove triangle cache slot twice");
+                        CGS_FAIL("Trying to remove triangle cache slot twice");
                     }
                 }
 
@@ -327,7 +327,7 @@ namespace CgsSceneManager
                     if (lrAddQueue.GetEvent(liAdd).miCacheSlot == liCacheSlot)
                     {
                         lbAddedThisFrame = true;
-                        CGS_ASSERT(false,
+                        CGS_FAIL(
                                    "Trying to add and remove triangle cache slot in same frame");
                     }
                 }
@@ -343,7 +343,7 @@ namespace CgsSceneManager
                 // assert reads them. See divergence (a).
                 (void)lbAddedThisFrame;
                 (void)lbRemovedAlready;
-                CGS_ASSERT(false, "Trying to remove unused triangle cache slot");
+                CGS_FAIL("Trying to remove unused triangle cache slot");
             }
 
             CacheSlot& lrSlot = mpaCachedObjectSlots[liCacheSlot];

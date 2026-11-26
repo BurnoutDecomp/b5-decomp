@@ -70,11 +70,11 @@ void ProfileUpgradeResourceType::FixDown(void* lpResource, const rw::Resource& /
 void ProfileUpgradeResourceType::GetImportPointer(const void* /*lpResource*/, u32 /*luIndex*/,
                                                   u32* /*lpuOffset*/, const void** /*lppValue*/) const
 {
-    CGS_ASSERT(false,
-        CGS_ASSERT_MESSAGE_AT(
-            "NOT IMPLEMENTED YET",
+    CGS_FAIL_AT(
+        "NOT IMPLEMENTED YET",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../../SharedClasses/Progression/BrnProfileUpgradeResourceType.cpp", 90 /* ARTIST 0x82676BBC */));
+            "../../SharedClasses/Progression/BrnProfileUpgradeResourceType.cpp", 90 /* ARTIST 0x82676BBC */);
+
 }
 
 }

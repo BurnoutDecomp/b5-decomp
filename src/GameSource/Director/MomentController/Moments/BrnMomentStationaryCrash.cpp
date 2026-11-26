@@ -144,8 +144,8 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager&
                 ? lpResourceManager->GetAfterCrash()      // rm +1448
                 : lpResourceManager->GetAfterCrashSafe();   // rm +1464
 
-            CGS_ASSERT(lrShotGroup.Num_ShotList() > 0,
-                       CGS_ASSERT_MESSAGE_AT("lpShotGroup->Num_ShotList() > 0", CGS_ARTIST_FILE, 110));   //  (non-gating)
+            CGS_ASSERT_AT(lrShotGroup.Num_ShotList() > 0,
+                       "lpShotGroup->Num_ShotList() > 0", CGS_ARTIST_FILE, 110);   //  (non-gating)
 
             // The group's first ShotList block (the console build builds a stack
             // Gen::iceanim over it; the 24-byte null-element fallback is the
@@ -157,7 +157,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager&
             ICE::ICETakeData* lpTakeData =
                 lrSharedInfo.mpDirectorResourceManager
                     ->GetKeyAnimFromGuid(IceAnimShotData_GetAnimGuid(lpShotData));
-            CGS_ASSERT(lpTakeData != 0, CGS_ASSERT_MESSAGE_AT("lpTakeData != NULL", CGS_ARTIST_FILE, 114));   //  (non-gating)
+            CGS_ASSERT_AT(lpTakeData != 0, "lpTakeData != NULL", CGS_ARTIST_FILE, 114);   //  (non-gating)
 
             if (ICETakeData_GetDuration(lpTakeData) - 0.1f
                 < lrSharedInfo.mpGameState->mfCrashTimeRemaining)
@@ -224,7 +224,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager&
         break;
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", CGS_ARTIST_FILE, 183));   //  (non-gating)
+        CGS_FAIL_AT("unhandled case in switch", CGS_ARTIST_FILE, 183);   //  (non-gating)
         break;
     }
 }

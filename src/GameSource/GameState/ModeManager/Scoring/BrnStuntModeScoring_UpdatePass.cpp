@@ -141,7 +141,7 @@ namespace BrnGameState
     // and UpdateScores' player-active gate is faithful (its body is bodied below).
     void StuntModeScoring::Update(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta)
     {
-        CGS_ASSERT(mbStuntModeActive, CGS_ASSERT_MESSAGE_AT("mbStuntModeActive", CGS_ARTIST_FILE, 184));
+        CGS_ASSERT_AT(mbStuntModeActive, "mbStuntModeActive", CGS_ARTIST_FILE, 184);
 
         // Clear the per-category "scored this frame" flag for every stunt category (asm: 18 wide).
         for (s32 liType = 0; liType < 18; ++liType)
@@ -250,15 +250,15 @@ namespace BrnGameState
         // E_STUNT_TYPE_COUNT == 15, but the original build's count (and mStuntTypeInfo[18] /
         // maStuntTypeScoreCount[18]) is 18 -- the asm indexes up to type 17. FLAG: the committed
         // E_STUNT_TYPE_COUNT (15) disagrees with the asm's 18-wide range; the literal 18 is faithful.
-        CGS_ASSERT(leStuntType > E_STUNT_TYPE_INVALID && static_cast<s32>(leStuntType) < 18,
-                   CGS_ASSERT_MESSAGE_AT("leStuntType > E_STUNT_TYPE_INVALID && leStuntType < E_STUNT_TYPE_COUNT", CGS_ARTIST_FILE, 1047));
+        CGS_ASSERT_AT(leStuntType > E_STUNT_TYPE_INVALID && static_cast<s32>(leStuntType) < 18,
+                   "leStuntType > E_STUNT_TYPE_INVALID && leStuntType < E_STUNT_TYPE_COUNT", CGS_ARTIST_FILE, 1047);
 
         if (!mbStuntInProgress)
         {
-            CGS_ASSERT(HasAnyPendingScore() && mfPendingScoreTimer <= KF_ZERO,
-                       CGS_ASSERT_MESSAGE_AT("mbStuntInProgress || (HasAnyPendingScore() && mfPendingScoreTimer<=0.0f)", CGS_ARTIST_FILE, 1048));
+            CGS_ASSERT_AT(HasAnyPendingScore() && mfPendingScoreTimer <= KF_ZERO,
+                       "mbStuntInProgress || (HasAnyPendingScore() && mfPendingScoreTimer<=0.0f)", CGS_ARTIST_FILE, 1048);
         }
-        CGS_ASSERT(mbComboInProgress, CGS_ASSERT_MESSAGE_AT("mbComboInProgress", CGS_ARTIST_FILE, 1049));
+        CGS_ASSERT_AT(mbComboInProgress, "mbComboInProgress", CGS_ARTIST_FILE, 1049);
 
         const s32 liType = static_cast<s32>(leStuntType);
 
@@ -272,8 +272,8 @@ namespace BrnGameState
             const f32 lfRaw = KF_ONE - (mStuntTypeInfo[liType].mfTimeActive * lfRate);
             const f32 lfScoreScale =
                 ((lfRaw - KF_SCORE_FALLOFF_FLOOR) >= KF_ZERO) ? lfRaw : KF_SCORE_FALLOFF_FLOOR;
-            CGS_ASSERT(lfScoreScale >= KF_ZERO && lfScoreScale <= KF_ONE,
-                       CGS_ASSERT_MESSAGE_AT("lfScoreScale >= 0.0f && lfScoreScale <= 1.0f", CGS_ARTIST_FILE, 1058));
+            CGS_ASSERT_AT(lfScoreScale >= KF_ZERO && lfScoreScale <= KF_ONE,
+                       "lfScoreScale >= 0.0f && lfScoreScale <= 1.0f", CGS_ARTIST_FILE, 1058);
             lfScore = lfScoreScale * lfScore;
         }
 
@@ -331,7 +331,7 @@ namespace BrnGameState
     // being reconstructed).
     void StuntModeScoring::UpdateBufferedScore(f32 lfDelta)
     {
-        CGS_ASSERT(!mbRecentStunt, CGS_ASSERT_MESSAGE_AT("!mbRecentStunt", CGS_ARTIST_FILE, 373));
+        CGS_ASSERT_AT(!mbRecentStunt, "!mbRecentStunt", CGS_ARTIST_FILE, 373);
 
         if (HasAnyPendingScore())
         {
@@ -358,7 +358,7 @@ namespace BrnGameState
                     mRecentStunt.muStuntTypes        = muStuntTypesInProgress;
                     mRecentStunt.muAwesomeStuntTypes = muAwesomeStuntTypesInProgress;
 
-                    CGS_ASSERT(mRecentStunt.muStuntTypes != 0, CGS_ASSERT_MESSAGE_AT("mRecentStunt.muStuntTypes != 0", CGS_ARTIST_FILE, 395));
+                    CGS_ASSERT_AT(mRecentStunt.muStuntTypes != 0, "mRecentStunt.muStuntTypes != 0", CGS_ARTIST_FILE, 395);
 
                     // The reverse-takeoff bonus multiplier is applied to spin/roll banking when the
                     // REVERSE_TAKEOFF bit (bit 14) of muStuntTypesInProgress is set.
@@ -383,7 +383,7 @@ namespace BrnGameState
                                     lfSpinDegrees * KF_FLAT_SPIN_DEGREES_PER_SPIN + KF_SPIN_COUNT_ROUNDING_BIAS;
                                 mRecentStunt.muFlatSpins =
                                     static_cast<u16>(static_cast<s32>(lfSpins));
-                                CGS_ASSERT(mRecentStunt.muFlatSpins >= 1, CGS_ASSERT_MESSAGE_AT("mRecentStunt.muFlatSpins >= 1", CGS_ARTIST_FILE, 408));
+                                CGS_ASSERT_AT(mRecentStunt.muFlatSpins >= 1, "mRecentStunt.muFlatSpins >= 1", CGS_ARTIST_FILE, 408);
                             }
                         }
 
@@ -401,7 +401,7 @@ namespace BrnGameState
                                     lfRollDegrees * KF_BARREL_ROLL_DEGREES_PER_ROLL + KF_SPIN_COUNT_ROUNDING_BIAS;
                                 mRecentStunt.muBarrelRolls =
                                     static_cast<u16>(static_cast<s32>(lfRolls));
-                                CGS_ASSERT(mRecentStunt.muBarrelRolls >= 1, CGS_ASSERT_MESSAGE_AT("mRecentStunt.muBarrelRolls >= 1", CGS_ARTIST_FILE, 420));
+                                CGS_ASSERT_AT(mRecentStunt.muBarrelRolls >= 1, "mRecentStunt.muBarrelRolls >= 1", CGS_ARTIST_FILE, 420);
                             }
                         }
 
@@ -419,7 +419,7 @@ namespace BrnGameState
                         // Arm the stunt-info HUD event when there are any awesome stunt types.
                         mbStuntInfoEventPending = (mRecentStunt.muAwesomeStuntTypes != 0);
 
-                        CGS_ASSERT(mbComboInProgress, CGS_ASSERT_MESSAGE_AT("mbComboInProgress", CGS_ARTIST_FILE, 1049));
+                        CGS_ASSERT_AT(mbComboInProgress, "mbComboInProgress", CGS_ARTIST_FILE, 1049);
 
                         if (mbRecentStunt)
                         {
@@ -533,11 +533,11 @@ namespace BrnGameState
             lEvent.miFlatSpins         = static_cast<s16>(mRecentStunt.muFlatSpins);
             lEvent.miBarrelRolls       = static_cast<s16>(mRecentStunt.muBarrelRolls);
 
-            CGS_ASSERT(lpOutputActionQueue != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "lpOutputActionQueue",
+            CGS_ASSERT_AT(lpOutputActionQueue != 0,
+                "lpOutputActionQueue",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                    "../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 163 /* ARTIST 0x82344748 */));
+                    "../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 163 /* ARTIST 0x82344748 */);
+
 
             // X360: AddEvent(queue, &payload, /*type*/21, /*size*/8).
             lpOutputActionQueue->AddEvent(

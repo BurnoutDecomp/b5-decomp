@@ -331,22 +331,22 @@ namespace BrnWorld
         miCollisionStreamingPM = CgsDev::PerfMonCpu::AddMonitor(
             "      Collision streaming",
             KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
-        CGS_ASSERT(miCollisionStreamingPM >= 0, CGS_ASSERT_MESSAGE_AT("miCollisionStreamingPM >= 0", __FILE__, 206));
+        CGS_ASSERT_AT(miCollisionStreamingPM >= 0, "miCollisionStreamingPM >= 0", __FILE__, 206);
 
         miLoadingPM = CgsDev::PerfMonCpu::AddMonitor(
             "      Zone loading",
             KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
-        CGS_ASSERT(miLoadingPM >= 0, CGS_ASSERT_MESSAGE_AT("miLoadingPM >= 0", __FILE__, 208));
+        CGS_ASSERT_AT(miLoadingPM >= 0, "miLoadingPM >= 0", __FILE__, 208);
 
         miUnloadingPM = CgsDev::PerfMonCpu::AddMonitor(
             "      Zone unloading",
             KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
-        CGS_ASSERT(miUnloadingPM >= 0, CGS_ASSERT_MESSAGE_AT("miUnloadingPM >= 0", __FILE__, 210));
+        CGS_ASSERT_AT(miUnloadingPM >= 0, "miUnloadingPM >= 0", __FILE__, 210);
 
         miSerialisePM = CgsDev::PerfMonCpu::AddMonitor(
             "      Serialising",
             KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
-        CGS_ASSERT(miSerialisePM >= 0, CGS_ASSERT_MESSAGE_AT("miSerialisePM >= 0", __FILE__, 212));
+        CGS_ASSERT_AT(miSerialisePM >= 0, "miSerialisePM >= 0", __FILE__, 212);
     }
 
     // ========================================================================
@@ -357,12 +357,12 @@ namespace BrnWorld
         miProcessContactsPM = CgsDev::PerfMonCpu::AddMonitor(
             "      Process contacts",
             KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
-        CGS_ASSERT(miProcessContactsPM >= 0, CGS_ASSERT_MESSAGE_AT("miProcessContactsPM >= 0", __FILE__, 228));
+        CGS_ASSERT_AT(miProcessContactsPM >= 0, "miProcessContactsPM >= 0", __FILE__, 228);
 
         miUpdatePropsPM = CgsDev::PerfMonCpu::AddMonitor(
             "      Update props",
             KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
-        CGS_ASSERT(miUpdatePropsPM >= 0, CGS_ASSERT_MESSAGE_AT("miUpdatePropsPM >= 0", __FILE__, 230));
+        CGS_ASSERT_AT(miUpdatePropsPM >= 0, "miUpdatePropsPM >= 0", __FILE__, 230);
     }
 
     // ========================================================================
@@ -464,7 +464,7 @@ namespace BrnWorld
             return true;
 
         default:
-            CGS_ASSERT_AT(false, "Invalid Stage\n", CGS_ARTIST_UNITY_BRNPROPENTITYMODULE_CPP_FILE, 365);
+            CGS_FAIL_AT("Invalid Stage\n", CGS_ARTIST_UNITY_BRNPROPENTITYMODULE_CPP_FILE, 365);
             return false;
         }
     }
@@ -604,7 +604,7 @@ namespace BrnWorld
 
             default:
             {
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", __FILE__, 415));
+                CGS_FAIL_AT("Invalid Stage\n", __FILE__, 415);
             }
         }
         return false;
@@ -848,7 +848,7 @@ namespace BrnWorld
             // X360: CgsDev::Assert::FireAssert("Shouldn't get here",
             //   "d:\p4\b5_main\burnout\main\code\gamesource\unity\../World/EntityModules/
             //    PropEntityModule/BrnPropEntityModule.cpp", 1861)
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Shouldn't get here", __FILE__, 1861));
+            CGS_FAIL_AT("Shouldn't get here", __FILE__, 1861);
             return false;
         }
     }
@@ -908,7 +908,7 @@ namespace BrnWorld
 
         default:
             // X360: FireAssert("Shouldn't get here", <same path>, 1908)
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Shouldn't get here", __FILE__, 1908));
+            CGS_FAIL_AT("Shouldn't get here", __FILE__, 1908);
             return false;
         }
     }
@@ -1575,7 +1575,7 @@ namespace BrnWorld
         // 0x822EF578. The write-locked prop-manager input interface this whole body feeds.
         BrnPhysics::Props::PropInputInterface* lpPropManagerInterface =
             lpOutput->GetPropInputInterface();
-        CGS_ASSERT(lpPropManagerInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpPropManagerInterface", __FILE__, 1565));            // :1565
+        CGS_ASSERT_AT(lpPropManagerInterface != NULL, "lpPropManagerInterface", __FILE__, 1565);            // :1565
 
         // 0x822EF5AC. ⚠️ THIS ASSERT IS *NOT* CanChangeState -- corrected 2026-08-18.
         // Round 1 routed it through the member because the committed inline happened to be
@@ -1587,13 +1587,13 @@ namespace BrnWorld
         // This assert's own fold is exactly two terms -- `cmpw r29,r25 ; blt ;
         // cmpwi r29,5 ; beq` -- and the full rodata message at 0x8201DFAC is literally the
         // expression spelled below. So it is spelled inline, verbatim.
-        CGS_ASSERT((leOldState < leNewState) || (leOldState == E_MOVED),
-                   CGS_ASSERT_MESSAGE_AT("leOldState < leNewState || (leOldState == E_MOVED)", __FILE__, 1567));                // :1567
+        CGS_ASSERT_AT((leOldState < leNewState) || (leOldState == E_MOVED),
+                   "leOldState < leNewState || (leOldState == E_MOVED)", __FILE__, 1567);                // :1567
 
         // 0x822EF5D8. See the NaN-polarity note in this file's banner: `vcmpgtfp.` is the
         // ordered compare, so plain `>` is the faithful (and NaN-correct) spelling.
-        CGS_ASSERT(lpProp->GetWorldTransform().Pos().GetY().GetFloat() > BrnPhysics::Props::KVF_PROP_FLOOR,
-                   CGS_ASSERT_MESSAGE_AT("lpProp->GetWorldTransform().Pos().Y() > BrnPhysics::Props::KVF_PROP_FLOOR", __FILE__, 1569)); // :1569
+        CGS_ASSERT_AT(lpProp->GetWorldTransform().Pos().GetY().GetFloat() > BrnPhysics::Props::KVF_PROP_FLOOR,
+                   "lpProp->GetWorldTransform().Pos().Y() > BrnPhysics::Props::KVF_PROP_FLOOR", __FILE__, 1569); // :1569
 
         // 0x822EF628 / 0x822EF664 -- the legality pair. Each is a chain of `cmpwi/beq` over
         // exactly the enumerators its message names, in the asm's own order.
@@ -1619,7 +1619,7 @@ namespace BrnWorld
         // ResourcePtr's GetMemoryResource. The type id is `lhz 0x44(prop)` == muTypeId.
         const BrnPhysics::Props::PropTypeData* lpPropTypeData =
             mpPropPhysicsDataHeader.GetMemoryResource()->GetType(lpProp->muTypeId);
-        CGS_ASSERT(lpPropTypeData != NULL, CGS_ASSERT_MESSAGE_AT("lpPropTypeData", __FILE__, 1590));                            // :1590
+        CGS_ASSERT_AT(lpPropTypeData != NULL, "lpPropTypeData", __FILE__, 1590);                            // :1590
 
         if (leOldState == E_STATIC || leOldState == E_LEANING)
         {
@@ -4326,7 +4326,7 @@ namespace BrnWorld
                     {
                         // leRespawnType >= E_RESPAWN_TYPE_COUNT. asm 0x822FABE0: the assert
                         // then branches STRAIGHT to loc_822FAD60, skipping the record.
-                        CGS_ASSERT( false, "Shouldn't get here" );              // :2021 (0x7E5)
+                        CGS_FAIL( "Shouldn't get here" );              // :2021 (0x7E5)
                         lbRecord = false;
                     }
 

@@ -135,7 +135,7 @@ namespace BrnGui
                 // The X360 streamed "...in state <meComponentState>\n" into the assert
                 // buffer via StrStream; per the house style it folds into a plain
                 // CGS_ASSERT failure message.
-                CGS_ASSERT(false,
+                CGS_FAIL(
                            "Should not be received a trans complete in state ");
                 break;
         }
@@ -145,10 +145,10 @@ namespace BrnGui
     // and forward to the component's transition-complete handler.
     void BrnShowtimeMessageComponent::TransitionCompleteCallback(void* lpUserData, u16 /*luFrame*/)
     {
-        CGS_ASSERT(lpUserData != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpUserData",
-                "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnShowtimeMessageComponent.cpp", 190 /* ARTIST 0x8241665C */));
+        CGS_ASSERT_AT(lpUserData != 0,
+            "lpUserData",
+                "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnShowtimeMessageComponent.cpp", 190 /* ARTIST 0x8241665C */);
+
 
         static_cast<BrnShowtimeMessageComponent*>(lpUserData)->HandleTransitionComplete();
     }

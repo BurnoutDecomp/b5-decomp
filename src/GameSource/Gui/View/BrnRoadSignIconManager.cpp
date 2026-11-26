@@ -49,8 +49,8 @@ namespace
     void RoadSignIcon::Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface,
                                  const char* lpacParentName, bool lbCommunicateWithApt)
     {
-        CGS_ASSERT(lacName != 0, CGS_ASSERT_MESSAGE_AT("lacName", __FILE__, 73 /* ARTIST 0x824F51B4 */));                     // assert line 73
-        CGS_ASSERT(lpStateInterface != 0, CGS_ASSERT_MESSAGE_AT("lpStateInterface", __FILE__, 74 /* ARTIST 0x824F51D8 */));   // assert line 74
+        CGS_ASSERT_AT(lacName != 0, "lacName", __FILE__, 73 /* ARTIST 0x824F51B4 */);                     // assert line 73
+        CGS_ASSERT_AT(lpStateInterface != 0, "lpStateInterface", __FILE__, 74 /* ARTIST 0x824F51D8 */);   // assert line 74
 
         CgsGui::GuiComponent::Construct(lacName, lpStateInterface, lpacParentName);
 
@@ -111,8 +111,8 @@ namespace
 
     void RoadSignIcon::DisplayRoad(const char* lpcRoadName, bool lbShowPost)
     {
-        CGS_ASSERT(lpcRoadName != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpcRoadName", __FILE__, 224 /* ARTIST 0x824FB120 */));
-        CGS_ASSERT('\0' != lpcRoadName[0], CGS_ASSERT_MESSAGE_AT("'\\0' != lpcRoadName[0]", __FILE__, 225 /* ARTIST 0x824FB148 */));
+        CGS_ASSERT_AT(lpcRoadName != 0, "NULL != lpcRoadName", __FILE__, 224 /* ARTIST 0x824FB120 */);
+        CGS_ASSERT_AT('\0' != lpcRoadName[0], "'\\0' != lpcRoadName[0]", __FILE__, 225 /* ARTIST 0x824FB148 */);
 
         if (mbCommunicateWithApt == true)
         {
@@ -380,15 +380,15 @@ namespace
     // console.
     void RoadSignIconManager::SetRoadRuleBatchData(const GuiEventRoadRuleBatchDataResponse* lpRoadRules)
     {
-        CGS_ASSERT(lpRoadRules != 0,
-            CGS_ASSERT_MESSAGE_AT("lpRoadRules", __FILE__, 677 /* ARTIST 0x824F5844 */));   // assert line 677
+        CGS_ASSERT_AT(lpRoadRules != 0,
+            "lpRoadRules", __FILE__, 677 /* ARTIST 0x824F5844 */);   // assert line 677
 
         for (s32 liRoadRuleIndex = 0; liRoadRuleIndex < lpRoadRules->miRoadCount; ++liRoadRuleIndex)
         {
-            CGS_ASSERT(lpRoadRules->maRoadIds[liRoadRuleIndex] != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "lpRoadRules->maRoadIds[ liRoadRuleIndex ] != kCGSID_NULL",
-                    __FILE__, 683 /* ARTIST 0x824F5894 */));   // assert line 683
+            CGS_ASSERT_AT(lpRoadRules->maRoadIds[liRoadRuleIndex] != 0,
+                "lpRoadRules->maRoadIds[ liRoadRuleIndex ] != kCGSID_NULL",
+                    __FILE__, 683 /* ARTIST 0x824F5894 */);   // assert line 683
+
 
             char lacRoadNameString[32];
             CgsCore::SPrintf(lacRoadNameString, 31, "%llu",

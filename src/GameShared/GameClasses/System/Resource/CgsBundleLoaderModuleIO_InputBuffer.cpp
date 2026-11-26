@@ -33,8 +33,8 @@ namespace BundleLoaderIO
 
     const InputBuffer_Update::LoadBundleRequestQueue* InputBuffer_Update::GetLoadBundleRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for reading\n", CGS_ARTIST_FILE, 78));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+            "Not locked for reading\n", CGS_ARTIST_FILE, 78);
         return &mLoadBundleRequestQueue;
     }
 
@@ -48,8 +48,8 @@ namespace BundleLoaderIO
     // CgsResource::BundleLoaderModule::ProcessBundleLoadRequests.
     const InputBuffer_Update::UnloadBundleRequestQueue* InputBuffer_Update::GetUnloadBundleRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for reading\n", CGS_ARTIST_FILE, 81));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+            "Not locked for reading\n", CGS_ARTIST_FILE, 81);
         return &mUnloadBundleRequestQueue;
     }
 }

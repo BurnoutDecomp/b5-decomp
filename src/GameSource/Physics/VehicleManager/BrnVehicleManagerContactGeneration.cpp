@@ -369,7 +369,7 @@ namespace Vehicle
             {
                 if (mDetachedPartPrimPairBuilder.GetNumTests() >= KU16_MAX_PAIR_TESTS)
                 {
-                    CGS_ASSERT(false, "Too many part Vs. Car contact tests\n");                  // :281
+                    CGS_FAIL("Too many part Vs. Car contact tests\n");                  // :281
                     continue;
                 }
 
@@ -400,7 +400,7 @@ namespace Vehicle
             {
                 if (mDetachedWheelPrimPairBuilder.GetNumTests() >= KU16_MAX_PAIR_TESTS)
                 {
-                    CGS_ASSERT(false, "Too many wheel Vs. Car contact tests\n");                 // :325
+                    CGS_FAIL("Too many wheel Vs. Car contact tests\n");                 // :325
                     continue;
                 }
 

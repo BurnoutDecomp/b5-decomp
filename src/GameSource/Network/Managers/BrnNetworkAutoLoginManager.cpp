@@ -57,12 +57,12 @@ namespace BrnNetwork
         mpNetworkModule   = lpNetworkModule;
         mpServerInterface = lpServerInterface;
 
-        CGS_ASSERT(mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkModule != 0,
             "mpNetworkModule",
-            CGS_ARTIST_FILE, 61 /* ARTIST 0x8255E18C */));
-        CGS_ASSERT(mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 61 /* ARTIST 0x8255E18C */);
+        CGS_ASSERT_AT(mpServerInterface != 0,
             "mpServerInterface",
-            CGS_ARTIST_FILE, 62 /* ARTIST 0x8255E1B4 */));
+            CGS_ARTIST_FILE, 62 /* ARTIST 0x8255E1B4 */);
 
         mTimer.SetFloatVal(0.0f);
         mProcessesComplete.Construct();  // ARTIST 0x8255E1CC/1D0 clears the bit array twice.
@@ -112,19 +112,19 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpServerInterface->GetDownloadableConfigComponent() != 0,
             "mpServerInterface->GetDownloadableConfigComponent()",
-            __FILE__, 345 /* ARTIST 0x82556D08 */));
+            __FILE__, 345 /* ARTIST 0x82556D08 */);
 
         mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesDownloads());
         mProcessesComplete.UnSetAll();
 
-        CGS_ASSERT(mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkModule != 0,
             "mpNetworkModule",
-            __FILE__, 353 /* ARTIST 0x82556D4C */));
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 353 /* ARTIST 0x82556D4C */);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
             "mpNetworkModule->GetNetworkManager()",
-            __FILE__, 354 /* ARTIST 0x82556D78 */));
+            __FILE__, 354 /* ARTIST 0x82556D78 */);
 
         mpNetworkModule->GetNetworkManager()->OnAutoLogin();
 
@@ -166,24 +166,24 @@ namespace BrnNetwork
         // Count the frame time down off the wait timer.
         mTimer -= lfFrameDelta;
 
-        CGS_ASSERT(mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkModule != 0,
             "mpNetworkModule",
-            __FILE__, 209 /* ARTIST 0x8257627C */));
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 209 /* ARTIST 0x8257627C */);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
             "mpNetworkModule->GetNetworkManager()",
-            __FILE__, 210 /* ARTIST 0x825762A8 */));
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetStateManager() != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 210 /* ARTIST 0x825762A8 */);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetStateManager() != 0,
             "mpNetworkModule->GetNetworkManager()->GetStateManager()",
-            __FILE__, 211 /* ARTIST 0x825762DC */));
+            __FILE__, 211 /* ARTIST 0x825762DC */);
 
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
 
         if (!(mTimer.GetFloatVal() > 0.0f)
             && lpNetworkManager->GetStateManager()->IsIdle())
         {
-            CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(mpServerInterface->GetDownloadableConfigComponent() != 0,
                 "mpServerInterface->GetDownloadableConfigComponent()",
-                __FILE__, 221 /* ARTIST 0x82576354 */));
+                __FILE__, 221 /* ARTIST 0x82576354 */);
 
             mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesDownloads());
             meState = E_AUTO_LOGIN_STATE_CONNECTING;
@@ -208,21 +208,21 @@ namespace BrnNetwork
     void
     AutoLoginManager::UpdateConnecting()
     {
-        CGS_ASSERT(mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkModule != 0,
             "mpNetworkModule",
-            __FILE__, 258 /* ARTIST 0x8254B6C8 */));
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 258 /* ARTIST 0x8254B6C8 */);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
             "mpNetworkModule->GetNetworkManager()",
-            __FILE__, 259 /* ARTIST 0x8254B6F4 */));
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetLoginManager() != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 259 /* ARTIST 0x8254B6F4 */);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetLoginManager() != 0,
             "mpNetworkModule->GetNetworkManager()->GetLoginManager()",
-            __FILE__, 260 /* ARTIST 0x8254B720 */));
-        CGS_ASSERT(mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 260 /* ARTIST 0x8254B720 */);
+        CGS_ASSERT_AT(mpServerInterface != 0,
             "mpServerInterface",
-            __FILE__, 261 /* ARTIST 0x8254B748 */));
-        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 261 /* ARTIST 0x8254B748 */);
+        CGS_ASSERT_AT(mpServerInterface->GetConnectionComponent() != 0,
             "mpServerInterface->GetConnectionComponent()",
-            __FILE__, 262 /* ARTIST 0x8254B774 */));
+            __FILE__, 262 /* ARTIST 0x8254B774 */);
 
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
 
@@ -246,7 +246,7 @@ namespace BrnNetwork
             // Over budget. The console first walks the four processes and, for each one whose bit
             // is still clear, writes "Autologin process: <n> failed to complete within 120 secs"
             // to the network dev-log stream (no home in this tree; not reproduced), then asserts.
-            CGS_ASSERT(false, "Autologin remained connected for longer than expected\n");
+            CGS_FAIL("Autologin remained connected for longer than expected\n");
         }
 
         // Wait until every auto-login process has reported complete: while any process bit is

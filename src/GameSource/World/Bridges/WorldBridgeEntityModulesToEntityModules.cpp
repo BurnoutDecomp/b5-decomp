@@ -52,8 +52,8 @@ void BridgeTrafficToRaceCar_PrePhysics(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpRaceCarInputBuffer_PrePhysics != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarInputBuffer_PrePhysics", __FILE__, 72));   // :72
-    CGS_ASSERT(lpTrafficOutputBuffer_PostScene != 0, CGS_ASSERT_MESSAGE_AT("lpTrafficOutputBuffer_PostScene", __FILE__, 73));   // :73
+    CGS_ASSERT_AT(lpRaceCarInputBuffer_PrePhysics != 0, "lpRaceCarInputBuffer_PrePhysics", __FILE__, 72);   // :72
+    CGS_ASSERT_AT(lpTrafficOutputBuffer_PostScene != 0, "lpTrafficOutputBuffer_PostScene", __FILE__, 73);   // :73
 
     lpRaceCarInputBuffer_PrePhysics->SetTrafficToRaceCarInterface_PostScene(
         reinterpret_cast<const BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics::TrafficToRaceCarInterface_PostScene*>(
@@ -74,8 +74,8 @@ void BridgeTrafficToTrigger_PreScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpTriggerInputBuffer_PreScene != 0, CGS_ASSERT_MESSAGE_AT("lpTriggerInputBuffer_PreScene", __FILE__, 50));       // :50
-    CGS_ASSERT(lpTrafficOutputBuffer_PreScene != 0, CGS_ASSERT_MESSAGE_AT("lpTrafficOutputBuffer_PreScene", __FILE__, 51));     // :51
+    CGS_ASSERT_AT(lpTriggerInputBuffer_PreScene != 0, "lpTriggerInputBuffer_PreScene", __FILE__, 50);       // :50
+    CGS_ASSERT_AT(lpTrafficOutputBuffer_PreScene != 0, "lpTrafficOutputBuffer_PreScene", __FILE__, 51);     // :51
 
     // FLAG cross-home casts: both IO buffers expose their trigger-management member as opaque
     // storage; both ARE the trigger module's TriggerManagementInputInterface (whose Append

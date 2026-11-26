@@ -207,7 +207,7 @@ void MovieClipInstance::FindChildMovieClip(u32 luNameHash,
     }
 
     (void)lpcName;
-    CGS_ASSERT(false, "Unable to find child movieclip");
+    CGS_FAIL("Unable to find child movieclip");
 }
 
 void MovieClipInstance::FindChildMovieClipOnFrame(u32 luNameHash,
@@ -235,7 +235,7 @@ void MovieClipInstance::FindChildMovieClipOnFrame(u32 luNameHash,
     }
 
     (void)lpcName;
-    CGS_ASSERT(false, "Unable to find child movieclip on frame");
+    CGS_FAIL("Unable to find child movieclip on frame");
 }
 
 void MovieClipInstance::FindChildTextField(u32 luNameHash,
@@ -265,7 +265,7 @@ void MovieClipInstance::FindChildTextField(u32 luNameHash,
     }
 
     (void)lpcName;
-    CGS_ASSERT(false, "Unable to find child textfield");
+    CGS_FAIL("Unable to find child textfield");
 }
 
 bool MovieClipInstance::TryFindChildComponentRecursively(
@@ -364,14 +364,14 @@ void MovieClipInstance::ResetTimeline()
 void MovieClipInstance::GotoAndPlayLabel(u32 luLabelHash,
                                          const char* lpcDEBUGName)
 {
-    CGS_ASSERT(mpMovieClip != 0,
-        CGS_ASSERT_MESSAGE_AT("mpMovieClip", __FILE__, 1299 /* ARTIST 0x8246F25C */));
+    CGS_ASSERT_AT(mpMovieClip != 0,
+        "mpMovieClip", __FILE__, 1299 /* ARTIST 0x8246F25C */);
     const u32 luFrame = static_cast<u32>(
         mpMovieClip->FindLabelledFrameIndex(luLabelHash, lpcDEBUGName));
-    CGS_ASSERT(luFrame < mpMovieClip->muNumFramesInTimeline,
-        CGS_ASSERT_MESSAGE_AT(
-            "luFrame < mpMovieClip->muNumFramesInTimeline",
-            __FILE__, 1303 /* ARTIST 0x8246F29C */));
+    CGS_ASSERT_AT(luFrame < mpMovieClip->muNumFramesInTimeline,
+        "luFrame < mpMovieClip->muNumFramesInTimeline",
+            __FILE__, 1303 /* ARTIST 0x8246F29C */);
+
     muLastKeyFrameApplied = static_cast<u16>(-1);
     mxFlags = static_cast<u8>(mxFlags & 0xFEu);
     GotoFrame(luFrame);
@@ -380,14 +380,14 @@ void MovieClipInstance::GotoAndPlayLabel(u32 luLabelHash,
 void MovieClipInstance::GotoAndStopLabel(u32 luLabelHash,
                                          const char* lpcLabel)
 {
-    CGS_ASSERT(mpMovieClip != 0,
-        CGS_ASSERT_MESSAGE_AT("mpMovieClip", __FILE__, 1330 /* ARTIST 0x8246F30C */));
+    CGS_ASSERT_AT(mpMovieClip != 0,
+        "mpMovieClip", __FILE__, 1330 /* ARTIST 0x8246F30C */);
     const u32 luFrame = static_cast<u32>(
         mpMovieClip->FindLabelledFrameIndex(luLabelHash, lpcLabel));
-    CGS_ASSERT(luFrame < mpMovieClip->muNumFramesInTimeline,
-        CGS_ASSERT_MESSAGE_AT(
-            "luFrame < mpMovieClip->muNumFramesInTimeline",
-            __FILE__, 1334 /* ARTIST 0x8246F34C */));
+    CGS_ASSERT_AT(luFrame < mpMovieClip->muNumFramesInTimeline,
+        "luFrame < mpMovieClip->muNumFramesInTimeline",
+            __FILE__, 1334 /* ARTIST 0x8246F34C */);
+
     muLastKeyFrameApplied = static_cast<u16>(-1);
     mxFlags = static_cast<u8>(mxFlags | 1u);
     GotoFrame(luFrame);
@@ -414,24 +414,24 @@ void MovieClipInstance::SetSoundTriggerHandler(SoundTriggerCallback lpCallback,
 
 const TriggerParameters* MovieClipInstance::GetTriggerParameters() const
 {
-    CGS_ASSERT(mpMovieClip != 0,
-        CGS_ASSERT_MESSAGE_AT("NULL != mpMovieClip", __FILE__, 1358 /* ARTIST 0x8246C644 */));
-    CGS_ASSERT(mpMovieClip->mpFile != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "NULL != mpMovieClip->mpFile",
-            __FILE__, 1359 /* ARTIST 0x8246C670 */));
-    CGS_ASSERT(muParameterIndex != 0xFFFFu,
-        CGS_ASSERT_MESSAGE_AT(
-            "0xFFFF != muParameterIndex",
-            __FILE__, 1360 /* ARTIST 0x8246C698 */));
-    CGS_ASSERT(muParameterIndex < mpMovieClip->mpFile->muNumTriggerParameters,
-        CGS_ASSERT_MESSAGE_AT(
-            "muParameterIndex < mpMovieClip->mpFile->muNumTriggerParameters",
-            __FILE__, 1361 /* ARTIST 0x8246C6CC */));
-    CGS_ASSERT(mpMovieClip->mpFile->mpaTriggerParameters != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "NULL != mpMovieClip->mpFile->mpaTriggerParameters",
-            __FILE__, 1362 /* ARTIST 0x8246C6FC */));
+    CGS_ASSERT_AT(mpMovieClip != 0,
+        "NULL != mpMovieClip", __FILE__, 1358 /* ARTIST 0x8246C644 */);
+    CGS_ASSERT_AT(mpMovieClip->mpFile != 0,
+        "NULL != mpMovieClip->mpFile",
+            __FILE__, 1359 /* ARTIST 0x8246C670 */);
+
+    CGS_ASSERT_AT(muParameterIndex != 0xFFFFu,
+        "0xFFFF != muParameterIndex",
+            __FILE__, 1360 /* ARTIST 0x8246C698 */);
+
+    CGS_ASSERT_AT(muParameterIndex < mpMovieClip->mpFile->muNumTriggerParameters,
+        "muParameterIndex < mpMovieClip->mpFile->muNumTriggerParameters",
+            __FILE__, 1361 /* ARTIST 0x8246C6CC */);
+
+    CGS_ASSERT_AT(mpMovieClip->mpFile->mpaTriggerParameters != 0,
+        "NULL != mpMovieClip->mpFile->mpaTriggerParameters",
+            __FILE__, 1362 /* ARTIST 0x8246C6FC */);
+
     return &mpMovieClip->mpFile->mpaTriggerParameters[muParameterIndex];
 }
 
@@ -512,7 +512,7 @@ __declspec(noinline) void MovieClipInstance::ProcessFScriptCommand(
         break;
 
     default:
-        CGS_ASSERT(false, "Got invalid keyframe command");
+        CGS_FAIL("Got invalid keyframe command");
         break;
     }
 }
@@ -574,7 +574,7 @@ void MovieClipInstance::FireTrigger(s32 leTriggerType, u16 luArg) const
         break;
 
     default:
-        CGS_ASSERT(false, "Invalid trigger type for FLApt");
+        CGS_FAIL("Invalid trigger type for FLApt");
         break;
     }
 }

@@ -144,10 +144,10 @@ namespace BrnGui
     // ================================================================================
     void OnlineRivals::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpGuiCache",
-                CGS_ARTIST_FILE, 180 /* ARTIST 0x824A0618 */));
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache",
+                CGS_ARTIST_FILE, 180 /* ARTIST 0x824A0618 */);
+
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
@@ -174,7 +174,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineRivals::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineRivals::HandleControllerInput", CGS_ARTIST_FILE, 217));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineRivals::HandleControllerInput", CGS_ARTIST_FILE, 217);
 
         if (meSubState == E_SUBSTATE_SELECTING_PARAMS)
         {
@@ -187,7 +187,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineRivals::HandleControllerInputSelectParams(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineRivals::HandleControllerInputSelectParams", CGS_ARTIST_FILE, 247));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineRivals::HandleControllerInputSelectParams", CGS_ARTIST_FILE, 247);
 
 
         const ControllerButtonPayload* lpInput =
@@ -205,7 +205,7 @@ namespace BrnGui
     {
         const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
 
-        CGS_ASSERT(lpPayload->mpCache != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid cache in HandleGuiCacheEvent::Update", CGS_ARTIST_FILE, 291));
+        CGS_ASSERT_STREAM_AT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update", CGS_ARTIST_FILE, 291);
 
         if (mpGuiCache == 0)
         {

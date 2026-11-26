@@ -121,9 +121,9 @@ namespace CgsResource
 
     void ClusteredMeshResourceType::GetImportPointer(const void*, uint32_t, uint32_t*, const void**) const
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "ClusteredMeshs have no import pointers",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsClusteredMeshResourceType.cpp", 513 /* ARTIST 0x828A77BC */));
+        CGS_FAIL_AT(
+            "ClusteredMeshs have no import pointers",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsClusteredMeshResourceType.cpp", 513 /* ARTIST 0x828A77BC */);
+
     }
 }

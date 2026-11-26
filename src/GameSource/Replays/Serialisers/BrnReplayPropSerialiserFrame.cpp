@@ -160,7 +160,7 @@ namespace BrnReplays
             }
         }
 
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Zone not loaded", CGS_ARTIST_FILE, 952));
+        CGS_FAIL_AT("Zone not loaded", CGS_ARTIST_FILE, 952);
     }
 
     // ---- SetPropAddedToScene @0x822BBC28 (94 insns) --------------------------------------
@@ -181,7 +181,7 @@ namespace BrnReplays
     void PropSerialiserFrame::SetPropAddedToScene(s32 liZoneId, u32 luPropIndex, s32 liAddedToScene)
     {
         PropLoadedZoneRecord* lpZone = GetZone(liZoneId);
-        CGS_ASSERT(lpZone != 0, CGS_ASSERT_MESSAGE_AT("lpZone != NULL", CGS_ARTIST_FILE, 1026));
+        CGS_ASSERT_AT(lpZone != 0, "lpZone != NULL", CGS_ARTIST_FILE, 1026);
 
         // ARTIST takes the bit array's address once, before the branch (0x822BBC70 addi r27,r31,8),
         // and both arms work through it.

@@ -19,10 +19,10 @@ namespace CgsResource
     // accessed BY NAME. (The asm's baked assert file/line are dropped per project convention.)
     ID ResourceHandle::GetResourceId() const
     {
-        CGS_ASSERT(mpSourceEntry != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpSourceEntry != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceHandle.cpp", 54 /* ARTIST 0x828D8468 */));
+        CGS_ASSERT_AT(mpSourceEntry != 0,
+            "mpSourceEntry != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceHandle.cpp", 54 /* ARTIST 0x828D8468 */);
+
         return mpSourceEntry->mID;
     }
 

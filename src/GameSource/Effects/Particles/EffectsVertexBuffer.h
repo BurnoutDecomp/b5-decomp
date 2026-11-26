@@ -119,10 +119,10 @@ inline void EffectsVertexBuffer::Construct(void* lpBuffer, u32 luBufferSize)
 
 inline void EffectsVertexBuffer::Destruct()
 {
-    CGS_ASSERT(mxFlags == 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "mxFlags == 0",
-            CGS_ARTIST_EFFECTS_VERTEX_FILE, 78));
+    CGS_ASSERT_AT(mxFlags == 0,
+        "mxFlags == 0",
+            CGS_ARTIST_EFFECTS_VERTEX_FILE, 78);
+
     mpLockedBufferBaseAddress    = 0;
     mpLockedBufferTopAddress     = 0;
     mpLockedBufferCurrentAddress = 0;
@@ -130,10 +130,10 @@ inline void EffectsVertexBuffer::Destruct()
 
 inline void EffectsVertexBuffer::UnLock()
 {
-    CGS_ASSERT((mxFlags & KX_FLAG_LOCKED) != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "( mxFlags & KX_FLAG_LOCKED ) != 0",
-            CGS_ARTIST_EFFECTS_VERTEX_FILE, 122));
+    CGS_ASSERT_AT((mxFlags & KX_FLAG_LOCKED) != 0,
+        "( mxFlags & KX_FLAG_LOCKED ) != 0",
+            CGS_ARTIST_EFFECTS_VERTEX_FILE, 122);
+
     mxFlags = static_cast<u8>(mxFlags & ~KX_FLAG_LOCKED);
     mpLockedBufferCurrentAddress = 0;
 }

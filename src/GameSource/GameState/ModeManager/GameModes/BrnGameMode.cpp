@@ -335,8 +335,8 @@ void GameMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
 
     if (meCurrentState != -1)
     {
-        CGS_ASSERT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_FILE, 159));
+        CGS_ASSERT_AT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT,
+                   "meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_FILE, 159);
 
         maGameModeStates[meCurrentState]->Update();
     }
@@ -546,13 +546,13 @@ f32 GameMode::GetOutroTimeout() const
 // ===========================================================================
 void GameMode::SetCurrentState(s32 liState)
 {
-    CGS_ASSERT(liState >= 0 && liState < KI_GMS_COUNT, CGS_ASSERT_MESSAGE_AT("leState >=0 && leState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_BRNGAMEMODE_FILE, 483));
+    CGS_ASSERT_AT(liState >= 0 && liState < KI_GMS_COUNT, "leState >=0 && leState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_BRNGAMEMODE_FILE, 483);
 
     if (meCurrentState != liState)
     {
         if (meCurrentState != -1)
         {
-            CGS_ASSERT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT, CGS_ASSERT_MESSAGE_AT("meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_BRNGAMEMODE_FILE, 489));
+            CGS_ASSERT_AT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT, "meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_BRNGAMEMODE_FILE, 489);
 
             maGameModeStates[meCurrentState]->OnLeave();
         }
@@ -594,8 +594,8 @@ s32 GameMode::CalculateMaxPlayerWrecks(const StartGameModeParams* lpStartGameMod
     // embedded block; reproduced as the tripwire it is.
     const BrnResource::VehicleListEntry* lpPlayerCarVehicleListEntry =
         lpStartGameModeParams->GetPlayerVehicleGamePlayData();
-    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, CGS_ASSERT_MESSAGE_AT("lpPlayerCarVehicleListEntry != NULL", CGS_ARTIST_FILE, 414));   // cpp:414
-    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, CGS_ASSERT_MESSAGE_AT("lpPlayerCarVehicleListEntryGamePlayData != NULL", CGS_ARTIST_FILE, 417)); // cpp:417
+    CGS_ASSERT_AT(lpPlayerCarVehicleListEntry != NULL, "lpPlayerCarVehicleListEntry != NULL", CGS_ARTIST_FILE, 414);   // cpp:414
+    CGS_ASSERT_AT(lpPlayerCarVehicleListEntry != NULL, "lpPlayerCarVehicleListEntryGamePlayData != NULL", CGS_ARTIST_FILE, 417); // cpp:417
     if (lpPlayerCarVehicleListEntry == NULL)
     {
         return KI_NUM_WEAKEST_CAR_CRASHES;   // [PC GUARD] assert-is-not-a-guard; console would deref NULL
@@ -625,7 +625,7 @@ bool GameMode::HasCountdownDisplayChanged(s32* lpiNewCountdownDisplay)
 {
     if (mbCountdownDisplayChanged)
     {
-        CGS_ASSERT(lpiNewCountdownDisplay != 0, CGS_ASSERT_MESSAGE_AT("lpiNewCountdownDisplay != NULL", CGS_ARTIST_BRNGAMEMODE_FILE, 449));
+        CGS_ASSERT_AT(lpiNewCountdownDisplay != 0, "lpiNewCountdownDisplay != NULL", CGS_ARTIST_BRNGAMEMODE_FILE, 449);
 
         *lpiNewCountdownDisplay = miCountdownDisplay;
         mbCountdownDisplayChanged = false;

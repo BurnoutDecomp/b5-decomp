@@ -102,9 +102,14 @@ void Content::Destruct()
 
 bool Content::IsLoaded() const
 {
-    return mContentHandle.GetObject() != 0 &&
-           mContentHandle.GetObject()->GetContentState() ==
-               CgsSound::Playback::E_CONTENT_STATE_LOADED;
+    // DWARF CgsContent.h:233 `bool lbResult`; ARTIST 0x82692BB8 reads the state through the const
+    // Handle::operator-> and its "mpObject" assert (CgsHandle.h:296).
+    bool lbResult = false;
+    if (IsCreated())
+    {
+        lbResult = mContentHandle->GetContentState() == CgsSound::Playback::E_CONTENT_STATE_LOADED;
+    }
+    return lbResult;
 }
 
 } // namespace Logic

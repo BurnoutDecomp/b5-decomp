@@ -114,8 +114,8 @@ namespace CgsSceneManager
     template <u32 KU_MaxResults>
     s32 CoarseQueryResultBuffer<KU_MaxResults>::GetNumResultsAttempted() const
     {
-        CGS_ASSERT(mbInABatch,
-                   CGS_ASSERT_MESSAGE_AT("GetNumResultsAttempted called outside of a BeginResultsBatch/EndResultsBatch pair", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 348));
+        CGS_ASSERT_AT(mbInABatch,
+                   "GetNumResultsAttempted called outside of a BeginResultsBatch/EndResultsBatch pair", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 348);
         return miNumResultsAttemptedThisBatch;
     }
 
@@ -129,11 +129,11 @@ namespace CgsSceneManager
     template <u32 KU_MaxResults>
     u16* CoarseQueryResultBuffer<KU_MaxResults>::GetResultsBatch()
     {
-        CGS_ASSERT(mbInABatch,
-            CGS_ASSERT_MESSAGE_AT(
-                "GetResultsBatch called outside of a BeginResultsBatch/EndResultsBatch pair",
+        CGS_ASSERT_AT(mbInABatch,
+            "GetResultsBatch called outside of a BeginResultsBatch/EndResultsBatch pair",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
-                "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 200 /* ARTIST 0x828AD910 */));
+                "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 200 /* ARTIST 0x828AD910 */);
+
 
         return &mau16Buffer[miCurrentResultsStartPosition];
     }
@@ -165,10 +165,10 @@ namespace CgsSceneManager
     template <u32 KU_MaxResults>
     void CoarseQueryResultBuffer<KU_MaxResults>::EndResultsBatch()
     {
-        CGS_ASSERT(mbInABatch,
-            CGS_ASSERT_MESSAGE_AT("EndResultsBatch called without a matching call to BeginResultsBatch",
+        CGS_ASSERT_AT(mbInABatch,
+            "EndResultsBatch called without a matching call to BeginResultsBatch",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
-                "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 246 /* ARTIST 0x828ADA44 */));
+                "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 246 /* ARTIST 0x828ADA44 */);
 
         const u16 lu16Count = static_cast<u16>(miNumResultsAttemptedThisBatch & 0xFFFF);
         mbInABatch = false;
@@ -200,9 +200,9 @@ namespace CgsSceneManager
     template <u32 KU_MaxResults>
     bool CoarseQueryResultBuffer<KU_MaxResults>::PushResults(const u16* lpResults, u32 luNumResults)
     {
-        CGS_ASSERT(mbInABatch,
-                   CGS_ASSERT_MESSAGE_AT("PushResults called outside of a BeginResultsBatch/EndResultsBatch pair",
-                                         CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 300));
+        CGS_ASSERT_AT(mbInABatch,
+                   "PushResults called outside of a BeginResultsBatch/EndResultsBatch pair",
+                                         CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 300);
 
         miNumResultsAttemptedThisBatch += luNumResults;
         if (miTotalBufferSize + luNumResults <= KU_MaxResults)
@@ -219,11 +219,11 @@ namespace CgsSceneManager
     template <u32 KU_MaxResults>
     s32 CoarseQueryResultBuffer<KU_MaxResults>::GetNumResultsWritten() const
     {
-        CGS_ASSERT(mbInABatch,
-            CGS_ASSERT_MESSAGE_AT(
-                "GetNumResultsWritten called outside of a BeginResultsBatch/EndResultsBatch pair",
+        CGS_ASSERT_AT(mbInABatch,
+            "GetNumResultsWritten called outside of a BeginResultsBatch/EndResultsBatch pair",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
-                "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 328 /* ARTIST 0x828ADC90 */));
+                "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 328 /* ARTIST 0x828ADC90 */);
+
 
         return miTotalBufferSize - miCurrentResultsStartPosition;
     }
@@ -233,16 +233,16 @@ namespace CgsSceneManager
     const u16* CoarseQueryResultBuffer<KU_MaxResults>::GetBatchByOffset(
         u32 luOffset, u32* lpNextBatchOffsetOut, u32* lpNumResultsOut) const
     {
-        CGS_ASSERT(lpNextBatchOffsetOut, CGS_ASSERT_MESSAGE_AT("lpNextBatchOffsetOut", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 409));
-        CGS_ASSERT(lpNumResultsOut, CGS_ASSERT_MESSAGE_AT("lpNumResultsOut", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 410));
+        CGS_ASSERT_AT(lpNextBatchOffsetOut, "lpNextBatchOffsetOut", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 409);
+        CGS_ASSERT_AT(lpNumResultsOut, "lpNumResultsOut", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 410);
 
         const u16* lpHeader = &mau16Buffer[luOffset];
         const u32  luNumResults = *lpHeader & 0x7FFF;
 
         // The batch header word must have its high (batch-start) bit set. Reproduced store-for-store
         // from the X360 (the check ORs in 0x8000, so it is effectively a non-empty-buffer guard).
-        CGS_ASSERT(miTotalBufferSize > 0 || (*lpHeader | 0x8000),
-                   CGS_ASSERT_MESSAGE_AT("Bad offset requested. Element is not a batch start offset", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 418));
+        CGS_ASSERT_AT(miTotalBufferSize > 0 || (*lpHeader | 0x8000),
+                   "Bad offset requested. Element is not a batch start offset", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 418);
 
         if (luOffset >= static_cast<u32>(miTotalBufferSize))
             return 0;

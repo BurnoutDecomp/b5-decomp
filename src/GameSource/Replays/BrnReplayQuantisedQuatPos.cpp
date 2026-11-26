@@ -86,7 +86,7 @@ namespace QuantisedQuatPos
         if (lfPosX != lfClampPosX || lfPosY != lfClampPosY || lfPosZ != lfClampPosZ)
         {
             PrintQuatPos(lpContext, lpQuatPos);
-            CGS_ASSERT(false, "Bad QuatPos\n");
+            CGS_FAIL("Bad QuatPos\n");
         }
 
         const float lfQx = lpQuatPos[0];
@@ -102,7 +102,7 @@ namespace QuantisedQuatPos
         if (lfQx != lfClampQx || lfQy != lfClampQy || lfQz != lfClampQz || lfQw != lfClampQw)
         {
             PrintQuatPos(lpContext, lpQuatPos);
-            CGS_ASSERT(false, "Bad QuatPos\n");
+            CGS_FAIL("Bad QuatPos\n");
         }
     }
 

@@ -61,8 +61,8 @@ namespace Deformation
                                                   const CgsGeometric::SweptSphere** lppSpheresOut)
     {
         const s32 liIndex = FindModelIndexByEntityID(lEntityId);
-        CGS_ASSERT(liIndex != -1,
-            CGS_ASSERT_MESSAGE_AT("liIndex != -1", KAC_ARTIST_ASSERT_FILE, 530 /* ARTIST 0x825C22FC */));
+        CGS_ASSERT_AT(liIndex != -1,
+            "liIndex != -1", KAC_ARTIST_ASSERT_FILE, 530 /* ARTIST 0x825C22FC */);
         return mpaModels[liIndex].GetSweptSpheres(lppSpheresOut);
     }
 
@@ -74,8 +74,8 @@ namespace Deformation
     bool DeformationManager::IsUsingSweptSpheres(EntityId lEntityId)
     {
         const s32 liIndex = FindModelIndexByEntityID(lEntityId);
-        CGS_ASSERT(liIndex != -1,
-            CGS_ASSERT_MESSAGE_AT("liIndex != -1", KAC_ARTIST_ASSERT_FILE, 540 /* ARTIST 0x825C2368 */));
+        CGS_ASSERT_AT(liIndex != -1,
+            "liIndex != -1", KAC_ARTIST_ASSERT_FILE, 540 /* ARTIST 0x825C2368 */);
         return mpaModels[liIndex].IsUsingSweptSpheres();
     }
 }

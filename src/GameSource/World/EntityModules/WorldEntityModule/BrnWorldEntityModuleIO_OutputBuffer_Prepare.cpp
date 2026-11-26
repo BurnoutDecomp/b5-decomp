@@ -32,7 +32,7 @@ namespace WorldEntityIO
     ResourceRequestInterface*
     OutputBuffer_Prepare::GetResourceRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 73));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 73);
         return &mResourceRequestInterface;
     }
 
@@ -43,7 +43,7 @@ namespace WorldEntityIO
     const ResourceRequestInterface*
     OutputBuffer_Prepare::GetResourceRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 72));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 72);
         return &mResourceRequestInterface;
     }
 
@@ -64,9 +64,9 @@ namespace WorldEntityIO
     SceneInputInterface*
     OutputBuffer_Prepare::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            CGS_ARTIST_FILE, 76));
+            CGS_ARTIST_FILE, 76);
         return &mSceneInputInterface;
     }
 

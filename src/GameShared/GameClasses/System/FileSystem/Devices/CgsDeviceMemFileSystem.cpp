@@ -157,14 +157,14 @@ namespace CgsFileSystem
         {
 
 
-            CGS_ASSERT_STREAM(false, "Can not open mem files for write\n");
+            CGS_FAIL_STREAM("Can not open mem files for write\n");
             return 0;
         }
         if (luFlags & 2)
         {
 
 
-            CGS_ASSERT_STREAM(false, "Can not open mem files for create\n");
+            CGS_FAIL_STREAM("Can not open mem files for create\n");
             return 0;
         }
         char lacName[256];
@@ -294,7 +294,7 @@ namespace CgsFileSystem
     {
 
 
-        CGS_ASSERT_STREAM_AT(false, "Mem device does not support writes\n", CGS_ARTIST_FILE, 303);
+        CGS_FAIL_STREAM_AT("Mem device does not support writes\n", CGS_ARTIST_FILE, 303);
         return 0;
     }
 
@@ -344,7 +344,7 @@ namespace CgsFileSystem
 
 
 
-            CGS_ASSERT_STREAM(false, "Invalid 'whence' value\n");
+            CGS_FAIL_STREAM("Invalid 'whence' value\n");
             break;
         }
         return lp->muPosition;
@@ -379,7 +379,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::Resize(void*, u64)
     {
-        CGS_ASSERT_STREAM_AT(false, "Mem device does not support resizes\n", CGS_ARTIST_FILE, 388);
+        CGS_FAIL_STREAM_AT("Mem device does not support resizes\n", CGS_ARTIST_FILE, 388);
         return false;
     }
 
@@ -393,7 +393,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::Delete(const char*)
     {
-        CGS_ASSERT_STREAM_AT(false, "Mem device does not support deletes\n", CGS_ARTIST_FILE, 402);
+        CGS_FAIL_STREAM_AT("Mem device does not support deletes\n", CGS_ARTIST_FILE, 402);
         return false;
     }
 
@@ -407,7 +407,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::Move(const char*, const char*)
     {
-        CGS_ASSERT_STREAM_AT(false, "Mem device does not support moves\n", CGS_ARTIST_FILE, 416);
+        CGS_FAIL_STREAM_AT("Mem device does not support moves\n", CGS_ARTIST_FILE, 416);
         return false;
     }
 
@@ -421,7 +421,7 @@ namespace CgsFileSystem
 
     void* DeviceMemFileSystem::FindBegin(const char*, FindData*)
     {
-        CGS_ASSERT_STREAM_AT(false, "Mem device does not support searches\n", CGS_ARTIST_FILE, 430);
+        CGS_FAIL_STREAM_AT("Mem device does not support searches\n", CGS_ARTIST_FILE, 430);
         return 0;
     }
 
@@ -434,7 +434,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::FindNext(void*, FindData*)
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Mem device does not support searches\n", CGS_ARTIST_FILE, 443));
+        CGS_FAIL_STREAM_AT("Mem device does not support searches\n", CGS_ARTIST_FILE, 443);
         return false;
     }
 
@@ -447,7 +447,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::DirectoryCreate(const char*)
     {
-        CGS_ASSERT_STREAM_AT(false, "Mem device does not support directory creation\n", CGS_ARTIST_FILE, 456);
+        CGS_FAIL_STREAM_AT("Mem device does not support directory creation\n", CGS_ARTIST_FILE, 456);
         return false;
     }
 
@@ -460,7 +460,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::DirectoryRemove(const char*)
     {
-        CGS_ASSERT_STREAM_AT(false, "Mem device does not support directory removal\n", CGS_ARTIST_FILE, 469);
+        CGS_FAIL_STREAM_AT("Mem device does not support directory removal\n", CGS_ARTIST_FILE, 469);
         return false;
     }
 
@@ -473,7 +473,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::FindEnd(void*)
     {
-        CGS_ASSERT_STREAM_AT(false, "Mem device does not support searches\n", CGS_ARTIST_FILE, 482);
+        CGS_FAIL_STREAM_AT("Mem device does not support searches\n", CGS_ARTIST_FILE, 482);
         return false;
     }
 

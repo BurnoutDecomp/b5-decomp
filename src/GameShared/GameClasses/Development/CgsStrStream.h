@@ -38,9 +38,26 @@ namespace CgsDev
         }
 
         // Formatting overloads (render then forward to the sink).
-        StrStreamBase& operator<<(s32 liValue);
-        StrStreamBase& operator<<(u32 luValue);
-        StrStreamBase& PrintUnsignedInteger(u32 luValue)
+        // DWARF CgsStrStream.h:534 / :559: both are defined in the header. ARTIST holds out-of-line
+        // copies (s32 0x821F0E50, u32 0x821F0EC8) that most sites call, and inlines them inside loops
+        // (e.g. OutputQueueContents 0x82230CC8: a call before its loop, four inline copies in it): the
+        // XDK's own decision for a plain inline member under the original if-form asserts (D12).
+        StrStreamBase& operator<<(s32 liValue)
+        {
+            switch (mePrintMode)
+            {
+            case E_PRINTMODE_DECIMAL:
+                AppendFormat(gpcSignedFormat, liValue);
+                break;
+            case E_PRINTMODE_HEX:
+            case E_PRINTMODE_HEXONCE:
+                AppendFormat(gpcHexFormat, static_cast<u32>(liValue));
+                mePrintMode = mePrintMode == E_PRINTMODE_HEXONCE ? E_PRINTMODE_DECIMAL : mePrintMode;
+                break;
+            }
+            return *this;
+        }
+        StrStreamBase& operator<<(u32 luValue)
         {
             switch (mePrintMode)
             {
@@ -74,22 +91,6 @@ namespace CgsDev
         }
         StrStreamBase& operator<<(bool lbValue);   // streams "true" / "false" through the sink
 
-        // ARTIST inlines signed formatting in the event-queue histogram.
-        StrStreamBase& PrintSignedInteger(s32 liValue)
-        {
-            switch (mePrintMode)
-            {
-            case E_PRINTMODE_DECIMAL:
-                AppendFormat(gpcSignedFormat, liValue);
-                break;
-            case E_PRINTMODE_HEX:
-            case E_PRINTMODE_HEXONCE:
-                AppendFormat(gpcHexFormat, static_cast<u32>(liValue));
-                mePrintMode = mePrintMode == E_PRINTMODE_HEXONCE ? E_PRINTMODE_DECIMAL : mePrintMode;
-                break;
-            }
-            return *this;
-        }
 
         // ARTIST's queue diagnostics set the stream mode inline.
         StrStreamBase& SetPrintMode(PrintMode leMode)

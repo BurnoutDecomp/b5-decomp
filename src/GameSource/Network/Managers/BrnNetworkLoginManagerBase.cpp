@@ -105,15 +105,15 @@ namespace BrnNetwork
     // X360 0x82543808
     void LoginManagerBase::Construct(BrnNetworkModule* lpNetworkModule)
     {
-        CGS_ASSERT(lpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpNetworkModule != 0,
             "lpNetworkModule",
-            __FILE__, 60 /* ARTIST 0x82543840 */));
+            __FILE__, 60 /* ARTIST 0x82543840 */);
         mpNetworkModule = lpNetworkModule;
 
         mpNetworkManager = lpNetworkModule->GetNetworkManager();
-        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkManager != 0,
             "mpNetworkManager",
-            __FILE__, 65 /* ARTIST 0x82543874 */));
+            __FILE__, 65 /* ARTIST 0x82543874 */);
 
         meSignInState        = E_SIGN_IN_STATE_COUNT;
         meSubState           = E_SUBSTATE_COUNT;
@@ -180,10 +180,10 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "Invalid login sub state",
-                    __FILE__, 237 /* ARTIST 0x8256CE04 */));
+            CGS_FAIL_AT(
+                "Invalid login sub state",
+                    __FILE__, 237 /* ARTIST 0x8256CE04 */);
+
             return false;
         }
     }
@@ -332,10 +332,10 @@ namespace BrnNetwork
     // X360 0x82543BB8
     void LoginManagerBase::AnswerSignIn(bool lbSuccess)
     {
-        CGS_ASSERT(meSignInState == E_SIGN_IN_STATE_SIGNING_IN,
-            CGS_ASSERT_MESSAGE_AT(
-                "meSignInState == E_SIGN_IN_STATE_SIGNING_IN",
-                __FILE__, 958 /* ARTIST 0x82543BE8 */));
+        CGS_ASSERT_AT(meSignInState == E_SIGN_IN_STATE_SIGNING_IN,
+            "meSignInState == E_SIGN_IN_STATE_SIGNING_IN",
+                __FILE__, 958 /* ARTIST 0x82543BE8 */);
+
         // X360: meSignInState = !lbSuccess + 1 -- success -> SUCCESS(1), failure -> FAILED(2).
         meSignInState = lbSuccess ? E_SIGN_IN_STATE_SUCCESS : E_SIGN_IN_STATE_FAILED;
     }
@@ -407,9 +407,9 @@ namespace BrnNetwork
     // X360 0x8254FEC8
     void LoginManagerBase::PrepareConnectTelemetry()
     {
-        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkManager != 0,
             "NULL != mpNetworkManager",
-            __FILE__, 1116 /* ARTIST 0x8254FEFC */));
+            __FILE__, 1116 /* ARTIST 0x8254FEFC */);
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         BrnServerInterfaceDownloadableConfig* lpConfig = lpServerInterface->GetDownloadableConfigComponent();
@@ -433,9 +433,9 @@ namespace BrnNetwork
     // X360 0x82543D88
     void LoginManagerBase::PrepareLoadSettings()
     {
-        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkManager != 0,
             "mpNetworkManager",
-            __FILE__, 1156 /* ARTIST 0x82543DC0 */));
+            __FILE__, 1156 /* ARTIST 0x82543DC0 */);
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         if (lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO) == BrnServerInterface::E_STATUS_IDLE)
@@ -448,9 +448,9 @@ namespace BrnNetwork
     // X360 0x82543E08
     void LoginManagerBase::PreparePingRegions()
     {
-        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkManager != 0,
             "mpNetworkManager",
-            __FILE__, 1176 /* ARTIST 0x82543E40 */));
+            __FILE__, 1176 /* ARTIST 0x82543E40 */);
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         if (lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_PING_REGIONS) == BrnServerInterface::E_STATUS_IDLE)
@@ -537,9 +537,9 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "Invalid server interface status!",
-                __FILE__, 362 /* ARTIST 0x8254F988 */));
+                __FILE__, 362 /* ARTIST 0x8254F988 */);
         }
     }
 
@@ -564,9 +564,9 @@ namespace BrnNetwork
         switch (lpConnection->GetLoginStatus())
         {
         case CgsNetwork::ServerInterfaceConnection::E_LOGIN_STATUS_LOGIN:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "Probably shouldn't get here but just in case try logging in again",
-                __FILE__, 389 /* ARTIST 0x8254FAE4 */));
+                __FILE__, 389 /* ARTIST 0x8254FAE4 */);
             LogInToServer();
             break;
 
@@ -614,9 +614,9 @@ namespace BrnNetwork
             return;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "Unexpected Login status",
-                __FILE__, 469 /* ARTIST 0x8254FC34 */));
+                __FILE__, 469 /* ARTIST 0x8254FC34 */);
             break;
         }
     }
@@ -678,14 +678,14 @@ namespace BrnNetwork
         ESubState leNextSubState;
         if (luStatus == 1)
         {
-            CGS_ASSERT(false, "Error getting configuration data");
+            CGS_FAIL("Error getting configuration data");
             leNextSubState = E_SUBSTATE_WAITING_SELECTION;
         }
         else
         {
             if (luStatus >= 3)
             {
-                CGS_ASSERT(false, "Invalid server interface status!");
+                CGS_FAIL("Invalid server interface status!");
                 return;
             }
             if (meSubState == E_SUBSTATE_WAITING_FOR_PLAYER_ID)
@@ -708,9 +708,9 @@ namespace BrnNetwork
         // Prepared twice, the second time under the assert: ARTIST 0x82561A34/0x82561A3C and the
         // PS3 build both call PlayerInfoData::Prepare twice.
         lPlayerInfo.Prepare();
-        CGS_ASSERT(lPlayerInfo.Prepare(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lPlayerInfo.Prepare(),
             "lPlayerInfo.Prepare()",
-            __FILE__, 644 /* ARTIST 0x82561A64 */));
+            __FILE__, 644 /* ARTIST 0x82561A64 */);
 
         mpNetworkManager->GetServerInterface()->GetPlayerInfoComponent()->GetLocalPlayerInfo(&lPlayerInfo);
         if (lPlayerInfo.GetID() != -1)
@@ -731,7 +731,7 @@ namespace BrnNetwork
 
         if (luStatus == 1)
         {
-            CGS_ASSERT(false, "Error getting configuration data");
+            CGS_FAIL("Error getting configuration data");
             meSubState = E_SUBSTATE_WAITING_SELECTION;
         }
         else if (luStatus < 3)
@@ -740,7 +740,7 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT(false, "Invalid server interface status!");
+            CGS_FAIL("Invalid server interface status!");
         }
     }
 
@@ -756,12 +756,12 @@ namespace BrnNetwork
 
         if (luStatus == 1)
         {
-            CGS_ASSERT(false, "Error loading settings");
+            CGS_FAIL("Error loading settings");
             lpServerInterface->ClearLastError(CgsNetwork::E_COMPONENTS_PLAYER_INFO);
         }
         else if (luStatus >= 3)
         {
-            CGS_ASSERT(false, "Invalid server interface status!");
+            CGS_FAIL("Invalid server interface status!");
             return;
         }
 
@@ -780,12 +780,12 @@ namespace BrnNetwork
 
         if (luStatus == 1)
         {
-            CGS_ASSERT(false, "Error pinging regions");
+            CGS_FAIL("Error pinging regions");
             lpServerInterface->ClearLastError(CgsNetwork::E_COMPONENTS_PING_REGIONS);
         }
         else if (luStatus >= 3)
         {
-            CGS_ASSERT(false, "Invalid server interface status!");
+            CGS_FAIL("Invalid server interface status!");
             return;
         }
 

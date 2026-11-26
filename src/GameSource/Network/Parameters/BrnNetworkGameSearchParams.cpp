@@ -98,9 +98,9 @@ namespace BrnNetwork
                                        u32 luRequiredSlots, CgsNetwork::EFirewallSettings leFirewallSettings,
                                        BrnNetworkManager* lpNetworkManager, u32 luField29C)
     {
-        CGS_ASSERT(lpNetworkManager, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpNetworkManager,
             "lpNetworkManager",
-            __FILE__, 58 /* ARTIST 0x82593778 */));
+            __FILE__, 58 /* ARTIST 0x82593778 */);
 
         if (!CgsNetwork::ServerInterfaceGameSearchParams::Prepare())
         {
@@ -325,7 +325,7 @@ namespace BrnNetwork
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid opponent type");
+            CGS_FAIL("Invalid opponent type");
             break;
         }
     }

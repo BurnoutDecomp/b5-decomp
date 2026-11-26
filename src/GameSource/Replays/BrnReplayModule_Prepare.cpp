@@ -46,7 +46,7 @@ namespace BrnReplays
         }
         else if (luStage >= 3)
         {
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", CGS_ARTIST_FILE, 218));
+            CGS_FAIL_AT("Invalid Stage\n", CGS_ARTIST_FILE, 218);
             return false;
         }
 
@@ -120,7 +120,7 @@ namespace BrnReplays
 
             if (mapSerialisers[liId] && mapSerialisers[liId]->GetBuffer())
             {
-                CGS_ASSERT(false, "Don't currently support runtime de-allocation of serialisers - see "
+                CGS_FAIL("Don't currently support runtime de-allocation of serialisers - see "
                            "Chris if you REALLY need this\n");
                 mapSerialisers[liId]->SetBuffer(0);
             }

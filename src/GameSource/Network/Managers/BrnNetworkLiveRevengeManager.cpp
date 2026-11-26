@@ -53,14 +53,14 @@ namespace BrnNetwork
 
         mTakedownEventQueue.Construct();
 
-        CGS_ASSERT(lpNetworkModule, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpNetworkModule,
             "lpNetworkModule",
-            __FILE__, 67 /* ARTIST 0x8255FB10 */));
+            __FILE__, 67 /* ARTIST 0x8255FB10 */);
         mpNetworkModule  = lpNetworkModule;
         mpNetworkManager = lpNetworkModule->GetNetworkManager();
-        CGS_ASSERT(mpNetworkManager, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkManager,
             "mpNetworkManager",
-            __FILE__, 70 /* ARTIST 0x8255FB44 */));
+            __FILE__, 70 /* ARTIST 0x8255FB44 */);
 
         miNumberOfTopRivals = 0;
         ClearTopRivals();
@@ -73,21 +73,21 @@ namespace BrnNetwork
 
     bool LiveRevengeManager::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc)
     {
-        CGS_ASSERT(lpHeapMalloc, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpHeapMalloc,
             "lpHeapMalloc",
-            CGS_ARTIST_FILE, 100 /* ARTIST 0x8255A8F0 */));
+            CGS_ARTIST_FILE, 100 /* ARTIST 0x8255A8F0 */);
         mpAllocator = lpHeapMalloc;
 
-        CGS_ASSERT(lpHeapMalloc->GetAllocator()->ValidateHeap( EA::Allocator::GeneralAllocator::kHeapValidationLevelFull), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpHeapMalloc->GetAllocator()->ValidateHeap( EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
             "lpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
-            CGS_ARTIST_FILE, 102 /* ARTIST 0x8255A930 */));
+            CGS_ARTIST_FILE, 102 /* ARTIST 0x8255A930 */);
         mpLiveRevengeProfile = static_cast<LiveRevengeProfile*>(lpHeapMalloc->Malloc(sizeof(LiveRevengeProfile), 4));
-        CGS_ASSERT(lpHeapMalloc->GetAllocator()->ValidateHeap( EA::Allocator::GeneralAllocator::kHeapValidationLevelFull), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpHeapMalloc->GetAllocator()->ValidateHeap( EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
             "lpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
-            CGS_ARTIST_FILE, 104 /* ARTIST 0x8255A978 */));
-        CGS_ASSERT(mpLiveRevengeProfile, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 104 /* ARTIST 0x8255A978 */);
+        CGS_ASSERT_AT(mpLiveRevengeProfile,
             "mpLiveRevengeProfile",
-            CGS_ARTIST_FILE, 105 /* ARTIST 0x8255A9A0 */));
+            CGS_ARTIST_FILE, 105 /* ARTIST 0x8255A9A0 */);
 
         mpLiveRevengeProfile->Clear();
         ResetRevengeTableMappings();
@@ -104,10 +104,10 @@ namespace BrnNetwork
 
     bool LiveRevengeManager::Release()
     {
-        CGS_ASSERT(mpLiveRevengeProfile,
-            CGS_ASSERT_MESSAGE_AT("mpLiveRevengeProfile", __FILE__, 140 /* ARTIST 0x8255AA54 */));
-        CGS_ASSERT(mpAllocator,
-            CGS_ASSERT_MESSAGE_AT("mpAllocator", __FILE__, 141 /* ARTIST 0x8255AA7C */));
+        CGS_ASSERT_AT(mpLiveRevengeProfile,
+            "mpLiveRevengeProfile", __FILE__, 140 /* ARTIST 0x8255AA54 */);
+        CGS_ASSERT_AT(mpAllocator,
+            "mpAllocator", __FILE__, 141 /* ARTIST 0x8255AA7C */);
 
         mpLiveRevengeProfile->Clear();
         mpAllocator->Free(mpLiveRevengeProfile);
@@ -217,8 +217,8 @@ namespace BrnNetwork
 
     void LiveRevengeManager::ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInputBuffer)
     {
-        CGS_ASSERT(lpInputBuffer,
-            CGS_ASSERT_MESSAGE_AT("lpInputBuffer", __FILE__, 294 /* ARTIST 0x82568C3C */));
+        CGS_ASSERT_AT(lpInputBuffer,
+            "lpInputBuffer", __FILE__, 294 /* ARTIST 0x82568C3C */);
         mTakedownEventQueue.Append(*lpInputBuffer->GetTakedownEventInputQueue());
         ProcessGameDirtyTrickInterface();
     }
@@ -284,9 +284,9 @@ namespace BrnNetwork
     {
         const BrnNetworkModuleIO::GameStateToNetworkInterface::DirtyTrickQueue* lpDirtyTrickEventQueue =
             mpNetworkModule->GetGameStateToNetworkInterface()->GetDirtyTrickQueue();
-        CGS_ASSERT(lpDirtyTrickEventQueue,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpDirtyTrickEventQueue", __FILE__, 318 /* ARTIST 0x82562FAC */));
+        CGS_ASSERT_AT(lpDirtyTrickEventQueue,
+            "lpDirtyTrickEventQueue", __FILE__, 318 /* ARTIST 0x82562FAC */);
+
 
         for (s32 liIndex = 0; liIndex < lpDirtyTrickEventQueue->GetLength(); ++liIndex)
         {
@@ -336,9 +336,9 @@ namespace BrnNetwork
             if (lpEntry)
             {
                 LiveRevengeProfile* lpProfile = GetProfile();
-                CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT(
+                CGS_ASSERT_AT(lpProfile,
                     "lpProfile",
-                    __FILE__, 375 /* ARTIST 0x8255AC10 */));
+                    __FILE__, 375 /* ARTIST 0x8255AC10 */);
                 lpProfile->maRelationshipTable[static_cast<u32>(lpEntry->miRevengeTableIndex)].OnRoundFinish();
             }
         }
@@ -354,15 +354,15 @@ namespace BrnNetwork
     // did not finish) is a local win, one who finished ahead is a rival win.
     void LiveRevengeManager::HandleRoundResults(const BrnGameState::GameStateModuleIO::OnlineRoundResults* lpResults)
     {
-        CGS_ASSERT(lpResults, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpResults,
             "lpResults",
-            __FILE__, 1704 /* ARTIST 0x8255B678 */));
-        CGS_ASSERT(mpNetworkManager, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 1704 /* ARTIST 0x8255B678 */);
+        CGS_ASSERT_AT(mpNetworkManager,
             "mpNetworkManager",
-            __FILE__, 1707 /* ARTIST 0x8255B6A0 */));
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager(), CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 1707 /* ARTIST 0x8255B6A0 */);
+        CGS_ASSERT_AT(mpNetworkManager->GetPlayerManager(),
             "mpNetworkManager->GetPlayerManager()",
-            __FILE__, 1708 /* ARTIST 0x8255B6C8 */));
+            __FILE__, 1708 /* ARTIST 0x8255B6C8 */);
 
         NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         if (!mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalPlayerID))
@@ -381,9 +381,9 @@ namespace BrnNetwork
 
             const s32 liRivalPosition = lpResults->GetPosition(lRivalPlayerID);
             LiveRevengeRelationship* lpLiveRevengeRelationship = GetNonConstRevengeRelationship(lRivalPlayerID);
-            CGS_ASSERT(lpLiveRevengeRelationship, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lpLiveRevengeRelationship,
                 "lpLiveRevengeRelationship",
-                __FILE__, 1728 /* ARTIST 0x8255B75C */));
+                __FILE__, 1728 /* ARTIST 0x8255B75C */);
 
             if (liLocalPlayersPosition == BrnGameState::GameStateModuleIO::OnlineRoundResults::KI_POSITION_DISCONNECTED)
             {
@@ -415,20 +415,20 @@ namespace BrnNetwork
         {
             PlayerMenuData* lpPlayerMenuData =
                 static_cast<PlayerMenuData*>(mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lPlayerID));
-            CGS_ASSERT(lpPlayerMenuData, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lpPlayerMenuData,
                 "lpPlayerMenuData",
-                __FILE__, 1789 /* ARTIST 0x8255B87C */));
+                __FILE__, 1789 /* ARTIST 0x8255B87C */);
             if (!lpPlayerMenuData || lpPlayerMenuData->mMarkedManID == CgsNetwork::K_INVALID_PLAYER_ID)
             {
                 continue;
             }
 
-            CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
                 "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                __FILE__, 1801 /* ARTIST 0x8255B8B0 */));
-            CGS_ASSERT(lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+                __FILE__, 1801 /* ARTIST 0x8255B8B0 */);
+            CGS_ASSERT_AT(lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
                 "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                __FILE__, 1802 /* ARTIST 0x8255B8D0 */));
+                __FILE__, 1802 /* ARTIST 0x8255B8D0 */);
 
             if (lPlayerID == lLocalPlayerID)
             {
@@ -440,17 +440,17 @@ namespace BrnNetwork
                 }
                 else
                 {
-                    CGS_ASSERT(mpNetworkManager->GetPlayerManager()->GetPlayerByID(lpPlayerMenuData->mMarkedManID) == 0, CGS_ASSERT_MESSAGE_AT(
+                    CGS_ASSERT_AT(mpNetworkManager->GetPlayerManager()->GetPlayerByID(lpPlayerMenuData->mMarkedManID) == 0,
                         "mpNetworkManager->GetPlayerManager()->GetPlayerByID( lpPlayerMenuData->mMarkedManID ) == NULL",
-                        __FILE__, 1817 /* ARTIST 0x8255B934 */));
+                        __FILE__, 1817 /* ARTIST 0x8255B934 */);
                 }
             }
             else if (lpPlayerMenuData->mMarkedManID == lLocalPlayerID)
             {
                 LiveRevengeRelationship* lpRelationship = GetNonConstRevengeRelationship(lPlayerID);
-                CGS_ASSERT(lpRelationship, CGS_ASSERT_MESSAGE_AT(
+                CGS_ASSERT_AT(lpRelationship,
                     "lpRelationship",
-                    __FILE__, 1824 /* ARTIST 0x8255B970 */));
+                    __FILE__, 1824 /* ARTIST 0x8255B970 */);
                 if (lpRelationship)
                 {
                     lpRelationship->AddMarkByRival();
@@ -470,15 +470,15 @@ namespace BrnNetwork
     // the debug menu and register the per-player sync message pair.
     void LiveRevengeManager::AddPlayer(NetworkPlayerID lNetworkPlayerID)
     {
-        CGS_ASSERT(mpNetworkManager, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkManager,
             "mpNetworkManager",
-            __FILE__, 410 /* ARTIST 0x8256DACC */));
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager(), CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 410 /* ARTIST 0x8256DACC */);
+        CGS_ASSERT_AT(mpNetworkManager->GetPlayerManager(),
             "mpNetworkManager->GetPlayerManager()",
-            __FILE__, 411 /* ARTIST 0x8256DAF4 */));
-        CGS_ASSERT(IsTableValid(), CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 411 /* ARTIST 0x8256DAF4 */);
+        CGS_ASSERT_AT(IsTableValid(),
             "IsTableValid()",
-            __FILE__, 412 /* ARTIST 0x8256DB28 */));
+            __FILE__, 412 /* ARTIST 0x8256DB28 */);
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer =
             mpNetworkManager->GetPlayerManager()->GetPlayerByID(lNetworkPlayerID);
@@ -486,16 +486,16 @@ namespace BrnNetwork
         {
             // The reference constant is the global KI_MAX_PLAYERS (8 network players), which
             // has no home in this tree yet; the active race-car count has the same value.
-            CGS_ASSERT(NetworkPlayerIDToActiveRaceCarIndex(lNetworkPlayerID) < E_ACTIVE_RACE_CAR_INDEX_COUNT, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(NetworkPlayerIDToActiveRaceCarIndex(lNetworkPlayerID) < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                 "NetworkPlayerIDToActiveRaceCarIndex(lNetworkPlayerID) < KI_MAX_PLAYERS",
-                __FILE__, 426 /* ARTIST 0x8256DB74 */));
+                __FILE__, 426 /* ARTIST 0x8256DB74 */);
 
             CgsNetwork::PlayerName lPlayerName;
             lPlayerName.Construct(lpNetworkPlayer->GetName());
             // PlayerName::IsEmpty (inline): the first name character is the terminator.
-            CGS_ASSERT(lPlayerName.GetPlayerName()[0] != '\0', CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lPlayerName.GetPlayerName()[0] != '\0',
                 "!lPlayerName.IsEmpty()",
-                __FILE__, 430 /* ARTIST 0x8256DBA8 */));
+                __FILE__, 430 /* ARTIST 0x8256DBA8 */);
 
             s32 liPlayerIndexInTable = FindPlayerInTableByName(lPlayerName.GetPlayerName());
             if (liPlayerIndexInTable == -1)
@@ -503,14 +503,14 @@ namespace BrnNetwork
                 LiveRevengeRelationship::UniquePlayerID lUniquePlayerID;
                 GetUniqueIDByName(&lPlayerName, &lUniquePlayerID);
                 // UniquePlayerID::IsValid (inline): a non-empty name and a non-zero XUID.
-                CGS_ASSERT(lUniquePlayerID.GetPlayerName()[0] != '\0' && lUniquePlayerID.mqXuid != 0, CGS_ASSERT_MESSAGE_AT(
+                CGS_ASSERT_AT(lUniquePlayerID.GetPlayerName()[0] != '\0' && lUniquePlayerID.mqXuid != 0,
                     "lUniquePlayerID.IsValid()",
-                    __FILE__, 442 /* ARTIST 0x8256DC18 */));
+                    __FILE__, 442 /* ARTIST 0x8256DC18 */);
 
                 liPlayerIndexInTable = AddNewTableEntry(&lUniquePlayerID);
-                CGS_ASSERT(liPlayerIndexInTable != -1, CGS_ASSERT_MESSAGE_AT(
+                CGS_ASSERT_AT(liPlayerIndexInTable != -1,
                     "liPlayerIndexInTable != -1",
-                    __FILE__, 454 /* ARTIST 0x8256DC4C */));
+                    __FILE__, 454 /* ARTIST 0x8256DC4C */);
             }
 
             AddMappingEntry(lNetworkPlayerID, liPlayerIndexInTable);
@@ -525,9 +525,9 @@ namespace BrnNetwork
                                                  this);
         }
 
-        CGS_ASSERT(IsTableValid(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(IsTableValid(),
             "IsTableValid()",
-            __FILE__, 479 /* ARTIST 0x8256DCF8 */));
+            __FILE__, 479 /* ARTIST 0x8256DCF8 */);
     }
 
     void LiveRevengeManager::RemovePlayer(NetworkPlayerID lPlayerID)
@@ -547,20 +547,20 @@ namespace BrnNetwork
     {
         CgsNetwork::NetworkPlayer* lpNetworkPlayer =
             mpNetworkManager->GetPlayerManager()->GetPlayerByID(lNetworkPlayerID);
-        CGS_ASSERT(lpNetworkPlayer, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpNetworkPlayer,
             "lpNetworkPlayer",
-            __FILE__, 1420 /* ARTIST 0x825602A8 */));
+            __FILE__, 1420 /* ARTIST 0x825602A8 */);
 
         LiveRevengeSyncMessage* lpLiveRevengeSyncMessage = static_cast<LiveRevengeSyncMessage*>(
             lpNetworkPlayer->GetRegisteredSendMessage(KI_LIVE_REVENGE_SYNC_MESSAGE_TYPE));
-        CGS_ASSERT(lpLiveRevengeSyncMessage, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpLiveRevengeSyncMessage,
             "lpLiveRevengeSyncMessage",
-            __FILE__, 1422 /* ARTIST 0x825602DC */));
+            __FILE__, 1422 /* ARTIST 0x825602DC */);
 
         const LiveRevengeRelationship* lpRevengeRelationship = GetRevengeRelationship(lNetworkPlayerID);
-        CGS_ASSERT(lpRevengeRelationship, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpRevengeRelationship,
             "lpRevengeRelationship",
-            __FILE__, 1425 /* ARTIST 0x82560310 */));
+            __FILE__, 1425 /* ARTIST 0x82560310 */);
 
         lpLiveRevengeSyncMessage->PrepareForSend(lpRevengeRelationship,
                                                  mpNetworkManager->GetTimeManager()->GetCurrentFrameNumber());
@@ -792,9 +792,9 @@ namespace BrnNetwork
 
     EActiveRaceCarIndex LiveRevengeManager::NetworkPlayerIDToActiveRaceCarIndex(NetworkPlayerID lNetworkPlayerID)
     {
-        CGS_ASSERT(mpNetworkManager, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkManager,
             "mpNetworkManager",
-            CGS_ARTIST_FILE, 1111 /* ARTIST 0x825477B8 */));
+            CGS_ARTIST_FILE, 1111 /* ARTIST 0x825477B8 */);
         return mpNetworkModule->GetActiveRaceCarIndex(lNetworkPlayerID);
     }
 
@@ -820,12 +820,12 @@ namespace BrnNetwork
                                                            BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer)
     {
         const s32 liNumberOfRivals = GetNumberOfRivals();
-        CGS_ASSERT(mpNetworkManager, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkManager,
             "mpNetworkManager",
-            __FILE__, 731 /* ARTIST 0x82563088 */));
-        CGS_ASSERT(lpOutputBuffer, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 731 /* ARTIST 0x82563088 */);
+        CGS_ASSERT_AT(lpOutputBuffer,
             "lpOutputBuffer",
-            __FILE__, 732 /* ARTIST 0x825630AC */));
+            __FILE__, 732 /* ARTIST 0x825630AC */);
 
         if (mpNetworkManager->GetPlayerManager()->IsLocalPlayer(mpNetworkModule->GetNetworkPlayerID(leAggressorActiveRaceCarIndex)))
         {
@@ -868,37 +868,37 @@ namespace BrnNetwork
                                                 EActiveRaceCarIndex leVictimActiveRaceCarIndex,
                                                 EDirtyTrickStatus leDirtyTrickStatus)
     {
-        CGS_ASSERT(leVictimActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(leVictimActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
             "leVictimActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-            __FILE__, 812 /* ARTIST 0x8255FC78 */));
-        CGS_ASSERT(leVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 812 /* ARTIST 0x8255FC78 */);
+        CGS_ASSERT_AT(leVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
             "leVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-            __FILE__, 813 /* ARTIST 0x8255FC9C */));
-        CGS_ASSERT(leAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 813 /* ARTIST 0x8255FC9C */);
+        CGS_ASSERT_AT(leAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
             "leAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-            __FILE__, 815 /* ARTIST 0x8255FCC0 */));
-        CGS_ASSERT(leAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 815 /* ARTIST 0x8255FCC0 */);
+        CGS_ASSERT_AT(leAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
             "leAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-            __FILE__, 816 /* ARTIST 0x8255FCE4 */));
+            __FILE__, 816 /* ARTIST 0x8255FCE4 */);
 
         NetworkPlayerID lLocalPlayerNetworkID = CgsNetwork::K_INVALID_PLAYER_ID;
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalPlayerNetworkID), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalPlayerNetworkID),
             "mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID( &lLocalPlayerNetworkID )",
-            __FILE__, 820 /* ARTIST 0x8255FD34 */));
+            __FILE__, 820 /* ARTIST 0x8255FD34 */);
 
         const bool lbLocalPlayerWasPaybackVictim =
             mpNetworkModule->GetActiveRaceCarIndex(lLocalPlayerNetworkID) == leVictimActiveRaceCarIndex;
         const NetworkPlayerID lRivalPlayerID = lbLocalPlayerWasPaybackVictim
             ? mpNetworkModule->GetNetworkPlayerID(leAggressorActiveRaceCarIndex)
             : mpNetworkModule->GetNetworkPlayerID(leVictimActiveRaceCarIndex);
-        CGS_ASSERT(lRivalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lRivalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
             "lRivalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            __FILE__, 833 /* ARTIST 0x8255FD9C */));
+            __FILE__, 833 /* ARTIST 0x8255FD9C */);
 
         LiveRevengeRelationship* lpRelationship = GetNonConstRevengeRelationship(lRivalPlayerID);
-        CGS_ASSERT(lpRelationship, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpRelationship,
             "lpRelationship",
-            __FILE__, 837 /* ARTIST 0x8255FDD0 */));
+            __FILE__, 837 /* ARTIST 0x8255FDD0 */);
 
         // The status enumerators are E_DIRTY_TRICK_STATUS_INITIALISED (2) and
         // E_DIRTY_TRICK_STATUS_CRASHED (4); the enum's home names only its zero value so far.
@@ -936,8 +936,8 @@ namespace BrnNetwork
     // Header inline on the console (see the class declaration).
     void LiveRevengeManager::HandlePaybackInitialisedEvent(const BrnNetworkModuleIO::NetworkInPaybackIntialised* lpPaybackEvent)
     {
-        CGS_ASSERT(lpPaybackEvent,
-            CGS_ASSERT_MESSAGE_AT("lpPaybackEvent", KAC_ARTIST_ASSERT_HEADER, 581 /* ARTIST 0x8256195C */));
+        CGS_ASSERT_AT(lpPaybackEvent,
+            "lpPaybackEvent", KAC_ARTIST_ASSERT_HEADER, 581 /* ARTIST 0x8256195C */);
         UpdatePaybacksData(lpPaybackEvent->mePaybackAggressorIndex, lpPaybackEvent->mePaybackVictimIndex,
                            static_cast<EDirtyTrickStatus>(2));   // E_DIRTY_TRICK_STATUS_INITIALISED
     }
@@ -945,8 +945,8 @@ namespace BrnNetwork
     // Header inline on the console (see the class declaration).
     void LiveRevengeManager::HandlePaybackSucceededEvent(const BrnNetworkModuleIO::NetworkInPaybackSucceeded* lpPaybackEvent)
     {
-        CGS_ASSERT(lpPaybackEvent,
-            CGS_ASSERT_MESSAGE_AT("lpPaybackEvent", KAC_ARTIST_ASSERT_HEADER, 595 /* ARTIST 0x825619CC */));
+        CGS_ASSERT_AT(lpPaybackEvent,
+            "lpPaybackEvent", KAC_ARTIST_ASSERT_HEADER, 595 /* ARTIST 0x825619CC */);
         UpdatePaybacksData(lpPaybackEvent->mePaybackAggressorIndex, lpPaybackEvent->mePaybackVictimIndex,
                            static_cast<EDirtyTrickStatus>(4));   // E_DIRTY_TRICK_STATUS_CRASHED
     }
@@ -1008,22 +1008,22 @@ namespace BrnNetwork
                                                          EActiveRaceCarIndex leAggressorActiveRaceCarIndex,
                                                          EActiveRaceCarIndex leVictimActiveRaceCarIndex)
     {
-        CGS_ASSERT(lpOutputBuffer, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpOutputBuffer,
             "lpOutputBuffer",
-            __FILE__, 1003 /* ARTIST 0x82560060 */));
+            __FILE__, 1003 /* ARTIST 0x82560060 */);
 
         NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalPlayerID);
         const EActiveRaceCarIndex leLocalActiveRaceCarIndex = mpNetworkModule->GetActiveRaceCarIndex(lLocalPlayerID);
-        CGS_ASSERT(leVictimActiveRaceCarIndex == leLocalActiveRaceCarIndex, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(leVictimActiveRaceCarIndex == leLocalActiveRaceCarIndex,
             "leVictimActiveRaceCarIndex == leLocalActiveRaceCarIndex",
-            __FILE__, 1012 /* ARTIST 0x825600A8 */));
-        CGS_ASSERT(leAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 1012 /* ARTIST 0x825600A8 */);
+        CGS_ASSERT_AT(leAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
             "leAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-            __FILE__, 1015 /* ARTIST 0x825600CC */));
-        CGS_ASSERT(leAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 1015 /* ARTIST 0x825600CC */);
+        CGS_ASSERT_AT(leAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
             "leAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-            __FILE__, 1016 /* ARTIST 0x825600F0 */));
+            __FILE__, 1016 /* ARTIST 0x825600F0 */);
 
         const LiveRevengeRelationship* lpRelationship =
             GetRevengeRelationship(mpNetworkModule->GetNetworkPlayerID(leAggressorActiveRaceCarIndex));
@@ -1049,9 +1049,9 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT(lpRelationship->IsCurrentRelationshipEqual(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lpRelationship->IsCurrentRelationshipEqual(),
                 "lpRelationship->IsCurrentRelationshipEqual()",
-                __FILE__, 1057 /* ARTIST 0x82560188 */));
+                __FILE__, 1057 /* ARTIST 0x82560188 */);
             leLiveRevengeStatus = NetworkToGuiLiveRevengeUpdate::E_LIVEREVENGESTATUS_SETTLED;
             mpNetworkManager->CaptureTelemetryEvent(E_TELEMETRY_RIVAL_REMOVED, GetNumberOfRivals());
         }
@@ -1209,9 +1209,9 @@ namespace BrnNetwork
     {
         PlayerParams lPlayerParams;
 
-        CGS_ASSERT(mpNetworkManager, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkManager,
             "mpNetworkManager",
-            __FILE__, 1443 /* ARTIST 0x82568F38 */));
+            __FILE__, 1443 /* ARTIST 0x82568F38 */);
         lPlayerParams.Prepare();
         mpNetworkManager->GetServerInterface()->GetGameComponent()->GetPlayerParametersByPlayerName(
             lpPlayerName->GetPlayerName(), &lPlayerParams);
@@ -1227,15 +1227,15 @@ namespace BrnNetwork
     {
         LiveRevengeRelationship lRemoteRelationship;
 
-        CGS_ASSERT(lpMessage,
-            CGS_ASSERT_MESSAGE_AT("lpMessage", __FILE__, 1364 /* ARTIST 0x8255B2A8 */));
-        CGS_ASSERT(lpMessage->Retrieve(&lRemoteRelationship),
-            CGS_ASSERT_MESSAGE_AT(
-                "lpMessage->Retrieve(&lRemoteRelationship)", __FILE__, 1366 /* ARTIST 0x8255B2DC */));
+        CGS_ASSERT_AT(lpMessage,
+            "lpMessage", __FILE__, 1364 /* ARTIST 0x8255B2A8 */);
+        CGS_ASSERT_AT(lpMessage->Retrieve(&lRemoteRelationship),
+            "lpMessage->Retrieve(&lRemoteRelationship)", __FILE__, 1366 /* ARTIST 0x8255B2DC */);
+
 
         LiveRevengeRelationship* lpLocalRelationship = GetNonConstRevengeRelationship(lRemotePlayerID);
-        CGS_ASSERT(lpLocalRelationship,
-            CGS_ASSERT_MESSAGE_AT("lpLocalRelationship", __FILE__, 1369 /* ARTIST 0x8255B310 */));
+        CGS_ASSERT_AT(lpLocalRelationship,
+            "lpLocalRelationship", __FILE__, 1369 /* ARTIST 0x8255B310 */);
 
         lpLocalRelationship->Merge(&lRemoteRelationship);
         AutoSaveLiveRevengeProfile();
@@ -1246,10 +1246,10 @@ namespace BrnNetwork
     {
         LiveRevengeManager*     lpManager            = static_cast<LiveRevengeManager*>(lpData);
         LiveRevengeSyncMessage* lpLiveRevengeMessage = static_cast<LiveRevengeSyncMessage*>(lpMessage);
-        CGS_ASSERT(lpManager,
-            CGS_ASSERT_MESSAGE_AT("lpManager", __FILE__, 1343 /* ARTIST 0x82560210 */));
-        CGS_ASSERT(lpMessage,
-            CGS_ASSERT_MESSAGE_AT("lpMessage", __FILE__, 1344 /* ARTIST 0x82560234 */));
+        CGS_ASSERT_AT(lpManager,
+            "lpManager", __FILE__, 1343 /* ARTIST 0x82560210 */);
+        CGS_ASSERT_AT(lpMessage,
+            "lpMessage", __FILE__, 1344 /* ARTIST 0x82560234 */);
 
         lpManager->SyncMessageArrivedCallback(lpLiveRevengeMessage, lSendingPlayerID);
     }

@@ -147,13 +147,13 @@ namespace BrnDirector
     // (0x821F5740) and ActualDebugRender the const one (0x821F5798) out of line.
     inline Moment& MomentController::MomentHandle::GetMoment()
     {
-        CGS_ASSERT(mbIsAllocated, CGS_ASSERT_MESSAGE_AT("mbIsAllocated", CGS_ARTIST_BRNMOMENTCONTROLLER_FILE, 141));
+        CGS_ASSERT_AT(mbIsAllocated, "mbIsAllocated", CGS_ARTIST_BRNMOMENTCONTROLLER_FILE, 141);
         return *static_cast<Moment*>(mMomentPoolHandle.Get());
     }
 
     inline const Moment& MomentController::MomentHandle::GetMoment() const
     {
-        CGS_ASSERT(mbIsAllocated, CGS_ASSERT_MESSAGE_AT("mbIsAllocated", CGS_ARTIST_BRNMOMENTCONTROLLER_FILE, 150));
+        CGS_ASSERT_AT(mbIsAllocated, "mbIsAllocated", CGS_ARTIST_BRNMOMENTCONTROLLER_FILE, 150);
         return *static_cast<const Moment*>(mMomentPoolHandle.Get());
     }
 

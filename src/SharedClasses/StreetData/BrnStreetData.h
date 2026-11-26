@@ -253,23 +253,23 @@ namespace BrnStreetData
     inline const Road*
     StreetData::GetRoad( RoadIndex liIndex ) const
     {
-        CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0,
-                    CGS_ASSERT_MESSAGE_AT( "liIndex < miRoadCount && liIndex >= 0", CGS_ARTIST_BRNSTREETDATA_FILE, 621 ) );
+        CGS_ASSERT_AT( liIndex < miRoadCount && liIndex >= 0,
+                     "liIndex < miRoadCount && liIndex >= 0", CGS_ARTIST_BRNSTREETDATA_FILE, 621  );
         return &mpaRoads[ liIndex ];
     }
 
     inline const Street*
     StreetData::GetStreet( SpanIndex liIndex )
     {
-        CGS_ASSERT( IsStreet( liIndex ), CGS_ASSERT_MESSAGE_AT( "IsStreet( liIndex )", CGS_ARTIST_BRNSTREETDATA_FILE, 651 ) );
+        CGS_ASSERT_AT( IsStreet( liIndex ),  "IsStreet( liIndex )", CGS_ARTIST_BRNSTREETDATA_FILE, 651  );
         return &mpaStreets[ liIndex ];
     }
 
     inline const ChallengeParScoresEntry*
     StreetData::GetChallengeParScore( ChallengeIndex liIndex ) const
     {
-        CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0,
-                    CGS_ASSERT_MESSAGE_AT( "liIndex < miRoadCount && liIndex >= 0", CGS_ARTIST_BRNSTREETDATA_FILE, 718 ) );
+        CGS_ASSERT_AT( liIndex < miRoadCount && liIndex >= 0,
+                     "liIndex < miRoadCount && liIndex >= 0", CGS_ARTIST_BRNSTREETDATA_FILE, 718  );
         return &mpaChallengeParScores[ liIndex ];
     }
 

@@ -55,10 +55,10 @@ namespace CgsGui
     // then unconditionally clear it (stb 0, 0x20(r31) runs regardless of the branch taken).
     void State::PreUpdate()
     {
-        CGS_ASSERT(!mbStateChangePending,
-            CGS_ASSERT_MESSAGE_AT(
-                "mbStateChangePending == false",
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiState.cpp", 104 /* ARTIST 0x828486C8 */));
+        CGS_ASSERT_AT(!mbStateChangePending,
+            "mbStateChangePending == false",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiState.cpp", 104 /* ARTIST 0x828486C8 */);
+
         mbStateChangePending = false;
     }
 
@@ -96,7 +96,7 @@ namespace CgsGui
     // X360 0x82846838. Validate the interface pointer, then store it (this+0x1C).
     void State::SetStateInterface(StateInterface* lpStateInterface)
     {
-        CGS_ASSERT(lpStateInterface != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid state interface sent to State::SetStateInterface", "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiState.h", 140));
+        CGS_ASSERT_STREAM_AT(lpStateInterface != 0, "Invalid state interface sent to State::SetStateInterface", "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiState.h", 140);
 
         mpStateInterface = lpStateInterface;
     }

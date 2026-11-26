@@ -330,7 +330,7 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         meReleaseStage = E_RELEASESTAGE_START;
         return true;
     default:
-        CGS_ASSERT(false, "Invalid Prepare Stage");
+        CGS_FAIL("Invalid Prepare Stage");
         return false;
     }
 }
@@ -408,7 +408,7 @@ bool Module::Release()
         mePrepareStage = E_PREPARESTAGE_START;
         return true;
     default:
-        CGS_ASSERT(false, "Invalid Release Stage");
+        CGS_FAIL("Invalid Release Stage");
         return false;
     }
 }
@@ -551,7 +551,7 @@ void Module::AddRegistry(Registry& arRegistry, u32 au32RegistryId)
         break;
     }
     default:
-        CGS_ASSERT(false, "");
+        CGS_FAIL("");
         break;
     }
 }
@@ -565,12 +565,12 @@ void Module::AddRegistry(Registry& arRegistry, u32 au32RegistryId)
 // ---------------------------------------------------------------------------
 void Module::AttachVoice(Handle<Voice> lhVoice, Handle<Content> lhContent, u32 lu32SlotName)
 {
-    CGS_ASSERT(lhVoice, CGS_ASSERT_MESSAGE_AT("lhVoice", CGS_ARTIST_PLAYBACK_MODULE_CPP, 1128));
-    CGS_ASSERT(lhContent, CGS_ASSERT_MESSAGE_AT("lhContent", CGS_ARTIST_PLAYBACK_MODULE_CPP, 1129));
+    CGS_ASSERT_AT(lhVoice, "lhVoice", CGS_ARTIST_PLAYBACK_MODULE_CPP, 1128);
+    CGS_ASSERT_AT(lhContent, "lhContent", CGS_ARTIST_PLAYBACK_MODULE_CPP, 1129);
 
     const Name lSlotName(static_cast<uintptr_t>(lu32SlotName));
     const bool lbAttached = lhVoice->Attach(lSlotName, lhContent);
-    CGS_ASSERT(lbAttached, CGS_ASSERT_MESSAGE_AT("lhVoice->Attach(lSlotName, lhContent)", CGS_ARTIST_PLAYBACK_MODULE_CPP, 1130));
+    CGS_ASSERT_AT(lbAttached, "lhVoice->Attach(lSlotName, lhContent)", CGS_ARTIST_PLAYBACK_MODULE_CPP, 1130);
 
     if (Voice* lpVoice = lhVoice.GetObject())
         lpVoice->Release();
@@ -660,7 +660,7 @@ void Module::CreateVoice(Handle<Voice>* lphVoiceOut, u32 lu32SlotName,
 
     if (!lpFactory || !lpSpec)
     {
-        CGS_ASSERT(false, "E_COMMAND_VOICE_CREATE failed: VoiceSpec");
+        CGS_FAIL("E_COMMAND_VOICE_CREATE failed: VoiceSpec");
         lphVoiceOut->SetObject(0);
         if (lpFactory)
             lpFactory->Release();
@@ -673,7 +673,7 @@ void Module::CreateVoice(Handle<Voice>* lphVoiceOut, u32 lu32SlotName,
     {
         if (lhNewVoice.GetObject())
             lhNewVoice.GetObject()->Release();
-        CGS_ASSERT(false, "E_COMMAND_VOICE_CREATE failed: VoiceSpec");
+        CGS_FAIL("E_COMMAND_VOICE_CREATE failed: VoiceSpec");
         lphVoiceOut->SetObject(0);
         if (lpFactory)
             lpFactory->Release();
@@ -746,7 +746,7 @@ Content** Module::CreateContent(Content** lppContentOut, u32 lu32Ident,
 
     if (!lpFactory || !lpContentSpec)
     {
-        CGS_ASSERT(false, "E_COMMAND_CONTENT_CREATE failed with content spec ");
+        CGS_FAIL("E_COMMAND_CONTENT_CREATE failed with content spec ");
         *lppContentOut = 0;
         if (lpFactory)
             lpFactory->Release();
@@ -759,7 +759,7 @@ Content** Module::CreateContent(Content** lppContentOut, u32 lu32Ident,
     {
         if (lhContent.GetObject())
             lhContent.GetObject()->Release();
-        CGS_ASSERT(false, "E_COMMAND_CONTENT_CREATE failed with content spec ");
+        CGS_FAIL("E_COMMAND_CONTENT_CREATE failed with content spec ");
         *lppContentOut = 0;
         if (lpFactory)
             lpFactory->Release();
@@ -938,7 +938,7 @@ void Module::ProcessResourceReceiverQueue()
             default:
                 // The console streams the message then fires; kept as a static
                 // string (the typo is the X360's own).
-                CGS_ASSERT(false, "Unanticiapated Resource Response. Eek.\n");
+                CGS_FAIL("Unanticiapated Resource Response. Eek.\n");
                 break;
             }
 
@@ -1008,9 +1008,9 @@ void Module::UpdateStreamBuffers(Io::OutputBuffer::FreedBuffersArray& arFreedBuf
 s32 Module::FindStreamBuffer(const CgsFileSystem::ReadStream* lpReadStream)
 {
     // ARTIST assertion at 0x82689D0C.
-    CGS_ASSERT(lpReadStream != 0, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpReadStream != 0,
         "0 != lpReadStream",
-        "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Module/CgsSoundPlaybackModule.cpp", 1426));
+        "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Module/CgsSoundPlaybackModule.cpp", 1426);
 
     for (s32 li = 0; li < static_cast<s32>(SKU_NUMBER_OF_STREAM_BUFFERS); ++li)
     {
@@ -1080,7 +1080,7 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
     }
     if (liIndex < 0)
     {
-        CGS_ASSERT(false, "We've run out of Audio Stream Buffers.");
+        CGS_FAIL("We've run out of Audio Stream Buffers.");
         mStreamMutex.Unlock();
         return 0;
     }
@@ -1113,7 +1113,7 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
     if (!mDeferredResourceRequestQueue.AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest), 16, sizeof(lRequest)))
     {
-        CGS_ASSERT(false, "mDeferredResourceRequestQueue.OpenReadStream( lRequest )");
+        CGS_FAIL("mDeferredResourceRequestQueue.OpenReadStream( lRequest )");
     }
 
     // Release the transient voice reference (the console's inline refcount
@@ -1146,7 +1146,7 @@ void Module::DoCloseStream(const CgsFileSystem::ReadStream* lpReadStream)
         if (!mDeferredResourceRequestQueue.AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lRequest), 18, sizeof(lRequest)))
         {
-            CGS_ASSERT(false, "mDeferredResourceRequestQueue.CloseReadStream( lRequest )");
+            CGS_FAIL("mDeferredResourceRequestQueue.CloseReadStream( lRequest )");
         }
 
         lrBuffer.SetStatus(StreamBuffer::E_WAITING_FOR_CLOSE);
@@ -1175,10 +1175,10 @@ Module::EPrepareStage operator++(Module::EPrepareStage& leEnumIndex, int)
     const Module::EPrepareStage leOldEnumIndex = leEnumIndex;
     leEnumIndex = static_cast<Module::EPrepareStage>(static_cast<s32>(leEnumIndex) + 1);
 
-    CGS_ASSERT(leEnumIndex <= Module::E_PREPARESTAGE_DONE,
-        CGS_ASSERT_MESSAGE_AT(
-            "leEnumIndex <= Module::E_PREPARESTAGE_DONE",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Module/CgsSoundPlaybackModule.h", 500 /* ARTIST 0x82681C9C */));
+    CGS_ASSERT_AT(leEnumIndex <= Module::E_PREPARESTAGE_DONE,
+        "leEnumIndex <= Module::E_PREPARESTAGE_DONE",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Module/CgsSoundPlaybackModule.h", 500 /* ARTIST 0x82681C9C */);
+
 
     return leOldEnumIndex;
 }

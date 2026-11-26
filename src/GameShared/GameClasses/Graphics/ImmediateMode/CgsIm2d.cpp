@@ -145,9 +145,9 @@ void Im2d::PushMask(renderengine::TextureState* lpMaskTextureState,
                     const Basic2dColouredTexturedVertex* lpaMaskVertices)
 {
     // ARTIST 0x827F07EC loads the original inline assertion location.
-    CGS_ASSERT(mu32NumMasks < KU_IM2D_MAX_MASK_COUNT, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(mu32NumMasks < KU_IM2D_MAX_MASK_COUNT,
         "mu32NumMasks < V_IM2D_MAX_MASK_COUNT",
-        "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm2d.h", 502));
+        "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm2d.h", 502);
 
     if (mu32NumMasks == 0
         && ImRenderer<Basic2dColouredTexturedVertex>::SetProgram(static_cast<s8>(mi8CurrentProgram + 1)))

@@ -79,7 +79,7 @@ namespace BrnReplays
     s32 PropEntitySerialiser::Read(PropSerialiserStaticLayout* lpStaticLayout)
     {
         Lock();
-        CGS_ASSERT(lpStaticLayout != 0, CGS_ASSERT_MESSAGE_AT("lpStaticLayout", CGS_ARTIST_BRNREPLAYPROPENTITYSERIALISER_FILE, 68));
+        CGS_ASSERT_AT(lpStaticLayout != 0, "lpStaticLayout", CGS_ARTIST_BRNREPLAYPROPENTITYSERIALISER_FILE, 68);
 
         // Only progress while actually playing back (mode == E_MODE_PLAYING). The asm
         // walks the playing family {4,5,6} then strips the prepare/stall/restore modes,
@@ -107,7 +107,7 @@ namespace BrnReplays
     s32 PropEntitySerialiser::Write(PropSerialiserStaticLayout* lpStaticLayout)
     {
         Lock();
-        CGS_ASSERT(lpStaticLayout != 0, CGS_ASSERT_MESSAGE_AT("lpStaticLayout", CGS_ARTIST_BRNREPLAYPROPENTITYSERIALISER_FILE, 100));
+        CGS_ASSERT_AT(lpStaticLayout != 0, "lpStaticLayout", CGS_ARTIST_BRNREPLAYPROPENTITYSERIALISER_FILE, 100);
 
         // Only progress while recording (mode in the recording family {1,2,3}).
         if (meMode == E_MODE_RECORDING_PREPARING ||
@@ -175,12 +175,12 @@ namespace BrnReplays
 
     PropLoadedZoneRecord* PropEntitySerialiser::AddLoadedZone(s32 liZoneId)
     {
-        CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
+        CGS_ASSERT_AT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   CGS_ASSERT_MESSAGE_AT("!IsPlaying()", CGS_ARTIST_FILE, 619));
+                   "!IsPlaying()", CGS_ARTIST_FILE, 619);
 
-        CGS_ASSERT(mbPreviousFrameInitialized, CGS_ASSERT_MESSAGE_AT("mbPreviousFrameInitialized", CGS_ARTIST_FILE, 620));
+        CGS_ASSERT_AT(mbPreviousFrameInitialized, "mbPreviousFrameInitialized", CGS_ARTIST_FILE, 620);
 
         PropSerialiserFrame* lpFrame = &GetStaticLayout()->mLiveFrame;
         PropLoadedZoneRecord* lpRecord = lpFrame->AllocateLoadedZoneRecord();
@@ -194,10 +194,10 @@ namespace BrnReplays
 
     void PropEntitySerialiser::RemoveLoadedZone(s32 liZoneId)
     {
-        CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
+        CGS_ASSERT_AT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   CGS_ASSERT_MESSAGE_AT("!IsPlaying()", CGS_ARTIST_FILE, 632));
+                   "!IsPlaying()", CGS_ARTIST_FILE, 632);
 
         if (!HasStaticLayout()) { return; }
         GetStaticLayout()->mLiveFrame.RemoveLoadedZone(liZoneId);
@@ -205,10 +205,10 @@ namespace BrnReplays
 
     void PropEntitySerialiser::RemoveAllLoadedZones()
     {
-        CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
+        CGS_ASSERT_AT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   CGS_ASSERT_MESSAGE_AT("!IsPlaying()", CGS_ARTIST_FILE, 733));
+                   "!IsPlaying()", CGS_ARTIST_FILE, 733);
 
         if (!HasStaticLayout()) { return; }
         // asm: `stb 0,0x4008(staticBase)` -- the live frame's loaded-zone COUNT (frame +0x5E8).
@@ -218,10 +218,10 @@ namespace BrnReplays
 
     void PropEntitySerialiser::SetPropAddedToScene(s32 liArg2, u32 luArg3, s32 liArg4)
     {
-        CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
+        CGS_ASSERT_AT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   CGS_ASSERT_MESSAGE_AT("!IsPlaying()", CGS_ARTIST_FILE, 689));
+                   "!IsPlaying()", CGS_ARTIST_FILE, 689);
 
         if (!HasStaticLayout()) { return; }
         GetStaticLayout()->mLiveFrame.SetPropAddedToScene(liArg2, luArg3, liArg4);

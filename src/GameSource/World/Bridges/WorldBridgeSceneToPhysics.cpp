@@ -74,8 +74,8 @@ namespace WorldModule
         BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,
         const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneModuleOutputBuffer)
     {
-        CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleInputBuffer != NULL", __FILE__, 40));  // :40
-        CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpSceneModuleOutputBuffer != NULL", __FILE__, 41));   // :41
+        CGS_ASSERT_AT(lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer != NULL", __FILE__, 40);  // :40
+        CGS_ASSERT_AT(lpSceneModuleOutputBuffer != 0, "lpSceneModuleOutputBuffer != NULL", __FILE__, 41);   // :41
 
         const CgsSceneManager::SceneManagerIO::OutputBuffer::SceneQueryResultsQueue* lpQueryResults =
             lpSceneModuleOutputBuffer->GetSceneQueryResultsQueue();
@@ -121,7 +121,7 @@ namespace WorldModule
             }
 
             default:
-                CGS_ASSERT(false, "Unrecognised event type\n");   // :92
+                CGS_FAIL("Unrecognised event type\n");   // :92
                 break;
             }
         }
@@ -189,8 +189,8 @@ namespace WorldModule
         BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,
         const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneModuleOutputBuffer)
     {
-        CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleInputBuffer != NULL", __FILE__, 117));  // :117
-        CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpSceneModuleOutputBuffer != NULL", __FILE__, 118));   // :118
+        CGS_ASSERT_AT(lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer != NULL", __FILE__, 117);  // :117
+        CGS_ASSERT_AT(lpSceneModuleOutputBuffer != 0, "lpSceneModuleOutputBuffer != NULL", __FILE__, 118);   // :118
 
         // ---- leg 1: the culler's potential contacts ------------------------------------
         // Source getter first, destination getter second -- both are lock tripwires, so the

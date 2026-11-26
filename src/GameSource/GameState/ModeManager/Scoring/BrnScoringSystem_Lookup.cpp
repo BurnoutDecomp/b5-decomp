@@ -125,7 +125,7 @@ GameStateModuleIO::EPlayerScoringIndex ScoringSystem::GetPlayerScoringIndex(EAct
         }
     }
 
-    CGS_ASSERT(false, "RaceCarIndex not found in scoring system");
+    CGS_FAIL("RaceCarIndex not found in scoring system");
     return static_cast<GameStateModuleIO::EPlayerScoringIndex>(0);
 }
 
@@ -143,7 +143,7 @@ GameStateModuleIO::EPlayerScoringIndex ScoringSystem::GetPlayerScoringIndex(BrnN
         }
     }
 
-    CGS_ASSERT(false, "NetworkPlayerID not found in scoring system");
+    CGS_FAIL("NetworkPlayerID not found in scoring system");
     return static_cast<GameStateModuleIO::EPlayerScoringIndex>(0);
 }
 
@@ -151,12 +151,12 @@ GameStateModuleIO::EPlayerScoringIndex ScoringSystem::GetPlayerScoringIndex(BrnN
 // COUNT sentinel.
 bool ScoringSystem::IsPlayerInScoringSystem(GameStateModuleIO::EPlayerScoringIndex leIndex) const
 {
-    CGS_ASSERT(leIndex >= GameStateModuleIO::E_PLAYER_SCORING_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lePlayerScoringIndex >= GsmIO::E_PLAYER_SCORING_INDEX_0", CGS_ARTIST_FILE, 2924 /* ARTIST 0x8231DFF4 */));
-    CGS_ASSERT(leIndex < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "lePlayerScoringIndex < GsmIO::E_PLAYER_SCORING_INDEX_COUNT", CGS_ARTIST_FILE, 2925 /* ARTIST 0x8231E018 */));
+    CGS_ASSERT_AT(leIndex >= GameStateModuleIO::E_PLAYER_SCORING_INDEX_0,
+        "lePlayerScoringIndex >= GsmIO::E_PLAYER_SCORING_INDEX_0", CGS_ARTIST_FILE, 2924 /* ARTIST 0x8231DFF4 */);
+
+    CGS_ASSERT_AT(leIndex < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT,
+        "lePlayerScoringIndex < GsmIO::E_PLAYER_SCORING_INDEX_COUNT", CGS_ARTIST_FILE, 2925 /* ARTIST 0x8231E018 */);
+
 
     return maCarData[leIndex].GetActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_COUNT;
 }
@@ -230,11 +230,11 @@ bool ScoringSystem::AreAllRaceCarsSetup() const
 EActiveRaceCarIndex ScoringSystem::GetNextTeamMember(EActiveRaceCarIndex leRaceCarIndex,
                                                      GameStateModuleIO::EPlayerTeam leTeam) const
 {
-    CGS_ASSERT((leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) || (leRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID),
-               CGS_ASSERT_MESSAGE_AT("( leLastActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 ) || ( leLastActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2454));
-    CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CGS_ASSERT_MESSAGE_AT("leLastActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2455));
-    CGS_ASSERT(leTeam >= GameStateModuleIO::E_PLAYER_TEAM_NONE, CGS_ASSERT_MESSAGE_AT("leTeam >= GsmIO::E_PLAYER_TEAM_START", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2457));
-    CGS_ASSERT(leTeam < GameStateModuleIO::E_PLAYER_TEAM_COUNT, CGS_ASSERT_MESSAGE_AT("leTeam < GsmIO::E_PLAYER_TEAM_COUNT", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2458));
+    CGS_ASSERT_AT((leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) || (leRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID),
+               "( leLastActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 ) || ( leLastActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2454);
+    CGS_ASSERT_AT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leLastActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2455);
+    CGS_ASSERT_AT(leTeam >= GameStateModuleIO::E_PLAYER_TEAM_NONE, "leTeam >= GsmIO::E_PLAYER_TEAM_START", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2457);
+    CGS_ASSERT_AT(leTeam < GameStateModuleIO::E_PLAYER_TEAM_COUNT, "leTeam < GsmIO::E_PLAYER_TEAM_COUNT", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2458);
 
     s32 liStart = (leRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID) ? 0 : (leRaceCarIndex + 1);
 
@@ -311,7 +311,7 @@ void ScoringSystem::AddPlayerBurnoutSkillz(BrnNetwork::NetworkPlayerID lID, BrnN
         }
     }
 
-    CGS_ASSERT(false, "Could not find room in burnout skillz");
+    CGS_FAIL("Could not find room in burnout skillz");
 }
 
 // X360 0x82311198. Clear every skillz record and free every parallel id slot (-1).
@@ -359,15 +359,15 @@ void ScoringSystem::SetBurnoutSkillzData(BrnNetwork::NetworkPlayerID lID, const 
 // X360 0x823112A8. Forward to the current online-mode scorer's per-car finishing position.
 s32 ScoringSystem::GetOnlineFinishPosition(EActiveRaceCarIndex leRaceCarIndex)
 {
-    CGS_ASSERT(mpCurrentOnlineModeScoring != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpCurrentOnlineModeScoring", CGS_ARTIST_FILE, 3526 /* ARTIST 0x823112D8 */));
-    CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 3527 /* ARTIST 0x823112FC */));
-    CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 3528 /* ARTIST 0x82311320 */));
+    CGS_ASSERT_AT(mpCurrentOnlineModeScoring != NULL,
+        "mpCurrentOnlineModeScoring", CGS_ARTIST_FILE, 3526 /* ARTIST 0x823112D8 */);
+
+    CGS_ASSERT_AT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 3527 /* ARTIST 0x823112FC */);
+
+    CGS_ASSERT_AT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 3528 /* ARTIST 0x82311320 */);
+
 
     return mpCurrentOnlineModeScoring->GetPlayerPosition(leRaceCarIndex);
 }
@@ -456,7 +456,7 @@ void ScoringSystem::SaveNetworkRoundData(BrnNetwork::NetworkPlayerID lID, CgsSys
                 break;
 
             default:
-                CGS_ASSERT(false, "No results for this game mode");
+                CGS_FAIL("No results for this game mode");
                 break;
         }
     }

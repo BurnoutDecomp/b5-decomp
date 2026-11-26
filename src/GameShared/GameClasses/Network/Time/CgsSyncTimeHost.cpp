@@ -28,12 +28,12 @@ namespace CgsNetwork
     // message manager at +0x0 and the player manager at +0x4 (`*this = a3; this[1] = a2`).
     void SyncTimeHost::Construct(PlayerManager* lpPlayerManager, SyncTimeMessageManager* lpMessageManager)
     {
-        CGS_ASSERT(lpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpPlayerManager != 0,
             "lpPlayerManager",
-            CGS_ARTIST_FILE, 49 /* ARTIST 0x8287D3BC */));
-        CGS_ASSERT(lpMessageManager != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 49 /* ARTIST 0x8287D3BC */);
+        CGS_ASSERT_AT(lpMessageManager != 0,
             "lpMessageManager",
-            CGS_ARTIST_FILE, 50 /* ARTIST 0x8287D3E0 */));
+            CGS_ARTIST_FILE, 50 /* ARTIST 0x8287D3E0 */);
 
         // ARTIST 0x8287D3E8 stores the player manager (+4) before the message manager (+0).
         mpPlayerManager          = lpPlayerManager;
@@ -51,9 +51,9 @@ namespace CgsNetwork
     // slots are keyed by the client id.
     bool SyncTimeHost::Prepare()
     {
-        CGS_ASSERT(mpSyncTimeMessageManager != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpSyncTimeMessageManager", __FILE__, 70 /* ARTIST 0x8288B0A0 */));
+        CGS_ASSERT_AT(mpSyncTimeMessageManager != 0,
+            "mpSyncTimeMessageManager", __FILE__, 70 /* ARTIST 0x8288B0A0 */);
+
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_HOST);
         return true;
@@ -63,9 +63,9 @@ namespace CgsNetwork
     // Leave the session: park the shared message manager back in the idle mode.
     bool SyncTimeHost::Release()
     {
-        CGS_ASSERT(mpSyncTimeMessageManager != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpSyncTimeMessageManager", __FILE__, 137 /* ARTIST 0x8288B108 */));
+        CGS_ASSERT_AT(mpSyncTimeMessageManager != 0,
+            "mpSyncTimeMessageManager", __FILE__, 137 /* ARTIST 0x8288B108 */);
+
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_NONE);
         return true;
@@ -80,12 +80,12 @@ namespace CgsNetwork
     // reversed back into the named calls the DWARF source hints record.
     void SyncTimeHost::Update(u16 lu16FrameNumber, CgsSystem::Time& lTime)
     {
-        CGS_ASSERT(mpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpPlayerManager != 0,
             "mpPlayerManager",
-            __FILE__, 95 /* ARTIST 0x82892954 */));
-        CGS_ASSERT(mpSyncTimeMessageManager != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 95 /* ARTIST 0x82892954 */);
+        CGS_ASSERT_AT(mpSyncTimeMessageManager != 0,
             "mpSyncTimeMessageManager",
-            __FILE__, 96 /* ARTIST 0x8289297C */));
+            __FILE__, 96 /* ARTIST 0x8289297C */);
 
         NetworkPlayerID lLocalPlayerID;
         mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
@@ -99,17 +99,17 @@ namespace CgsNetwork
             CgsSystem::Time lMessageClientTime;
             CgsSystem::Time lMessageHostTime;
 
-            CGS_ASSERT(lpMessage != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lpMessage != 0,
                 "lpMessage",
-                __FILE__, 108 /* ARTIST 0x82892A20 */));
+                __FILE__, 108 /* ARTIST 0x82892A20 */);
 
             const bool lbRetrieved = lpMessage->Retrieve(&lMessageClientPlayerID,
                                                          &lMessageClientTime,
                                                          &lMessageHostPlayerID,
                                                          &lMessageHostTime);
-            CGS_ASSERT(lbRetrieved, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lbRetrieved,
                 "lpMessage->Retrieve( &lMessageClientPlayerID, &lMessageClientTime, " "&lMessageHostPlayerID, &lMessageHostTime )",
-                __FILE__, 109 /* ARTIST 0x82892A5C */));
+                __FILE__, 109 /* ARTIST 0x82892A5C */);
 
             if (lMessageHostPlayerID == lLocalPlayerID)
             {

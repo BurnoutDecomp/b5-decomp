@@ -67,10 +67,10 @@ namespace CgsResource
 
     void KdTreeResourceType::GetImportPointer(const void*, uint32_t, uint32_t*, const void**) const
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "KdTrees have no import pointers",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsKdTreeResourceType.cpp", 420 /* ARTIST 0x828A7774 */));
+        CGS_FAIL_AT(
+            "KdTrees have no import pointers",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsKdTreeResourceType.cpp", 420 /* ARTIST 0x828A7774 */);
+
     }
 
     ResourceDescriptor KdTreeResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const

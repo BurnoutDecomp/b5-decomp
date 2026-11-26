@@ -82,7 +82,7 @@ namespace CgsResource
             return E_UPDATE_BUSY;               // li r3, 2
         }
 
-        CGS_ASSERT(false, "Deallocate state is invalid\n");   // :169
+        CGS_FAIL("Deallocate state is invalid\n");   // :169
         return E_UPDATE_INVALID;                // li r3, 1
     }
 }

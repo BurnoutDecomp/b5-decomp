@@ -63,9 +63,9 @@ namespace CgsGraphics
         // GetMaterial @ 0x827E6720: bounds-checked technique-table accessor.
         MaterialTechnique* GetMaterial(u32 luIndex) const
         {
-            CGS_ASSERT(luIndex < mu8NumMaterials,
-                CGS_ASSERT_MESSAGE_AT("Material technique index out of range.",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\CgsMaterialAssembly.h", 174));
+            CGS_ASSERT_AT(luIndex < mu8NumMaterials,
+                "Material technique index out of range.",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\CgsMaterialAssembly.h", 174);
             return mappMaterials[luIndex];
         }
 

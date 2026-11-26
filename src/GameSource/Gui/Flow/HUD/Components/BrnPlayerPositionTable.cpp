@@ -383,8 +383,8 @@ namespace BrnGui
     {
         CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miPlayerPosTableUpdate);
 
-        CGS_ASSERT(lpDistanceEvent != NULL, CGS_ASSERT_MESSAGE_AT("lpDistanceEvent", CGS_ARTIST_FILE, 281 /* ARTIST 0x824412A4 */));
-        CGS_ASSERT(mpCache != NULL, CGS_ASSERT_MESSAGE_AT("mpCache != NULL", CGS_ARTIST_FILE, 283 /* ARTIST 0x824412CC */));
+        CGS_ASSERT_AT(lpDistanceEvent != NULL, "lpDistanceEvent", CGS_ARTIST_FILE, 281 /* ARTIST 0x824412A4 */);
+        CGS_ASSERT_AT(mpCache != NULL, "mpCache != NULL", CGS_ARTIST_FILE, 283 /* ARTIST 0x824412CC */);
 
         if (IsOnlineFreeBurnLobby(mpCache->GetGameMode()))
             ProcessOnlineFreeburnTable();
@@ -567,7 +567,7 @@ namespace BrnGui
                 lrData.mePlayerType = E_PLAYERTYPES_FREEBURN_CHALLENGE_COMPLETE;
                 break;
             default:
-                CGS_ASSERT(false, "Invalid type of challenge success : ");
+                CGS_FAIL("Invalid type of challenge success : ");
                 lrData.mePlayerType = E_PLAYERTYPES_BASIC;
                 break;
             }
@@ -651,7 +651,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Unhandled game mode : ");
+            CGS_FAIL("Unhandled game mode : ");
             lrfValue = 0.0f;
             break;
         }
@@ -693,7 +693,7 @@ namespace BrnGui
                 lpfnCompare = FunctionSortHighToLow;
             break;
         default:
-            CGS_ASSERT(false, "Unhandled game mode : ");
+            CGS_FAIL("Unhandled game mode : ");
             lpfnCompare = FunctionSortHighToLow;
             break;
         }

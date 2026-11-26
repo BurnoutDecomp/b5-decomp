@@ -142,7 +142,7 @@ void BehaviourGameplayExternal::Parameters::Serialise(TSerialiser& lrSerialiser)
         break;
 
     default:
-        CGS_ASSERT(false,
+        CGS_FAIL(
                    "BehaviourGameplayExternal::Parameters : code/data version mismatch, have you got the latest data?");
         break;
     }

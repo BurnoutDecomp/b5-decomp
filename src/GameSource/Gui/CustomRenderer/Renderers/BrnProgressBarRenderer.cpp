@@ -84,7 +84,7 @@ bool ProgressBarRenderer::Prepare(void* /*lpEventQueueSmall*/, void* lpResourceA
     }
     else if (mePrepareStage != E_PREPARESTAGE_DONE)
     {
-        CGS_ASSERT(false, " unknown prepare stage in ProgressBarRenderer ");
+        CGS_FAIL(" unknown prepare stage in ProgressBarRenderer ");
         return false;
     }
 
@@ -102,7 +102,7 @@ bool ProgressBarRenderer::Release()
     }
     else if (meReleaseStage != E_RELEASESTAGE_DONE)
     {
-        CGS_ASSERT(false, " unknown release stage in ProgressBarRenderer ");
+        CGS_FAIL(" unknown release stage in ProgressBarRenderer ");
         return false;
     }
 

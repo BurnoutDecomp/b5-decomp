@@ -25,9 +25,9 @@ namespace PoolIO
     // X360 0x828E1A00: write-lock; return this + 4.
     InputBuffer::PoolInputQueue* InputBuffer::GetPoolInputQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModuleIO.h", 234));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModuleIO.h", 234);
         return &mPoolInputQueue;
     }
 }

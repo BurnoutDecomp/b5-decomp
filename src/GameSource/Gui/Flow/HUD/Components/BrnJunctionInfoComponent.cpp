@@ -183,10 +183,10 @@ namespace BrnGui
     void JunctionInfoComponent::HandleJunctionChange(const GuiEventJunctionInfo* lpEvent,
                                                      CgsID lCurrentCarId)
     {
-        CGS_ASSERT(lpEvent != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpEvent",
-                CGS_ARTIST_FILE, 152 /* ARTIST 0x824400E0 */));
+        CGS_ASSERT_AT(lpEvent != 0,
+            "lpEvent",
+                CGS_ARTIST_FILE, 152 /* ARTIST 0x824400E0 */);
+
 
         mJunctionInfo = *lpEvent;
         mJunctionInfo.mi8Difficulty = 0;
@@ -296,10 +296,10 @@ namespace BrnGui
     // Refresh is just the argument assert.
     void JunctionInfoComponent::Refresh(const char* lpComponentName)
     {
-        CGS_ASSERT(lpComponentName != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpComponentName != NULL",
-                CGS_ARTIST_FILE, 289 /* ARTIST 0x82414D74 */));
+        CGS_ASSERT_AT(lpComponentName != NULL,
+            "lpComponentName != NULL",
+                CGS_ARTIST_FILE, 289 /* ARTIST 0x82414D74 */);
+
     }
 
     // @0x82423F40 -- play the named animation on the panel's own apt clip (base mAptRef)
@@ -325,10 +325,10 @@ namespace BrnGui
         case 2:
             return "Bronze";
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "Unhandled medal index in JunctionInfoComponent::GetMedalFrameNameFromMedal\n",
-                    CGS_ARTIST_FILE, 362 /* ARTIST 0x82414E34 */));
+            CGS_FAIL_AT(
+                "Unhandled medal index in JunctionInfoComponent::GetMedalFrameNameFromMedal\n",
+                    CGS_ARTIST_FILE, 362 /* ARTIST 0x82414E34 */);
+
             return 0;
         }
     }

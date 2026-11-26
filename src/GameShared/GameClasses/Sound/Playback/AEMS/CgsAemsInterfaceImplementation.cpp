@@ -455,10 +455,10 @@ namespace Playback
 
     void AemsRWSamplePlayer::Pause()
     {
-        CGS_ASSERT(mPauseState == PAUSESTATE_UNPAUSED,
-            CGS_ASSERT_MESSAGE_AT("mPauseState == PAUSESTATE_UNPAUSED",
+        CGS_ASSERT_AT(mPauseState == PAUSESTATE_UNPAUSED,
+            "mPauseState == PAUSESTATE_UNPAUSED",
                 CGS_ARTIST_FILE,
-                355 /* ARTIST 0x8268A99C */));
+                355 /* ARTIST 0x8268A99C */);
         rw::audio::core::PlugIn::SetAttribute(mpGain, 0, 0.0f);
         if (mpSendWet)
             rw::audio::core::PlugIn::SetAttribute(mpSendWet, 0, 0.0f);
@@ -470,10 +470,10 @@ namespace Playback
     {
         // ARTIST 0x8268AA30 tests UNPAUSED here too (`cmpwi 0`, message 0x820AD98C): the
         // original asserts the same condition as Pause, kept as the console has it.
-        CGS_ASSERT(mPauseState == PAUSESTATE_UNPAUSED,
-            CGS_ASSERT_MESSAGE_AT("mPauseState == PAUSESTATE_UNPAUSED",
+        CGS_ASSERT_AT(mPauseState == PAUSESTATE_UNPAUSED,
+            "mPauseState == PAUSESTATE_UNPAUSED",
                 CGS_ARTIST_FILE,
-                371 /* ARTIST 0x8268AA40 */));
+                371 /* ARTIST 0x8268AA40 */);
         rw::audio::core::PlugIn::SetAttribute(mpGain, 0, mDryLevel * mVol);
         if (mpSendWet)
             rw::audio::core::PlugIn::SetAttribute(mpSendWet, 0, mWetLevel * mVol);
@@ -498,7 +498,7 @@ namespace Playback
                     mpSendWet, 0, mWetLevel * mVol);
             break;
         case Snd9::IAemsSamplePlayer::PLAYER_INPUT_AZIMUTH:
-            CGS_ASSERT(false, "Azimuth uses SetAzimuth");
+            CGS_FAIL("Azimuth uses SetAzimuth");
             break;
         case Snd9::IAemsSamplePlayer::PLAYER_INPUT_FXWET0:
             mWetLevel = static_cast<f32>(aiValue) * 0.000030518509f;

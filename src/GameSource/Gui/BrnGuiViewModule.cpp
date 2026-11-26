@@ -66,10 +66,10 @@ void ViewModule::Construct(BrnGui::GuiModule* lpGuiModule, const char* lpcName, 
     // through to the base; the X360 reuses the same name/int/colour/int args).
     CgsGui::ViewModule::Construct(lpcName, liArg2, lfArg3, lpColour, liArg5);
 
-    CGS_ASSERT(lpGuiModule != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpGuiModule",
-            "..\\..\\..\\GameSource\\Gui/BrnGuiViewModule.cpp", 61 /* ARTIST 0x824F13F8 */));
+    CGS_ASSERT_AT(lpGuiModule != 0,
+        "lpGuiModule",
+            "..\\..\\..\\GameSource\\Gui/BrnGuiViewModule.cpp", 61 /* ARTIST 0x824F13F8 */);
+
     mpGuiModule = lpGuiModule;
 
     // Build the FlaptManager from the base module's owned sub-objects (the ImRendererSet,
@@ -110,7 +110,7 @@ bool ViewModule::Prepare(CgsMemory::HeapMalloc* lpHeap, rw::IResourceAllocator* 
         meBrnReleaseStage = E_BRNRELEASESTAGE_START;
         return true;
     default:
-        CGS_ASSERT(false, "Get bad prepare stage in BrnGui::ViewModule::Prepare");
+        CGS_FAIL("Get bad prepare stage in BrnGui::ViewModule::Prepare");
         return false;
     }
 }
@@ -139,7 +139,7 @@ bool ViewModule::Release()
         meBrnPrepareStage = E_BRNPREPARESTAGE_START;
         return true;
     default:
-        CGS_ASSERT(false, "Get bad release stage in BrnGui::ViewModule::Release");
+        CGS_FAIL("Get bad release stage in BrnGui::ViewModule::Release");
         return false;
     }
 }

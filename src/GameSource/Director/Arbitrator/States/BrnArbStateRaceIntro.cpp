@@ -149,8 +149,8 @@ namespace BrnDirector
                     mpRaceStartShotGroup = &mShotGroup;
                 }
 
-                CGS_ASSERT(mpRaceStartShotGroup->Num_ShotList() > 0,
-                           CGS_ASSERT_MESSAGE_AT("mpRaceStartShotGroup->Num_ShotList()>0", CGS_ARTIST_FILE, 84));
+                CGS_ASSERT_AT(mpRaceStartShotGroup->Num_ShotList() > 0,
+                           "mpRaceStartShotGroup->Num_ShotList()>0", CGS_ARTIST_FILE, 84);
 
                 // ---- allocate + configure the ICE-anim behaviour --------------------------
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
@@ -277,7 +277,7 @@ namespace BrnDirector
             if (mRaceIntroBehaviourHandle.Get()->HasFinishedOrFailed())
             {
                 const bool lbReleased = mRaceIntroBehaviourHandle.Release();
-                CGS_ASSERT(lbReleased, CGS_ASSERT_MESSAGE_AT("mRaceIntroBehaviourHandle.Release()", CGS_ARTIST_FILE, 192));
+                CGS_ASSERT_AT(lbReleased, "mRaceIntroBehaviourHandle.Release()", CGS_ARTIST_FILE, 192);
 
                 ArbUtils::ChangeToState<EState>(
                     this, lrSharedInfo, ArbitratorStateContainer::E_STATE_ROAMING,
@@ -298,7 +298,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 213));
+            CGS_FAIL_AT("unhandled state", CGS_ARTIST_FILE, 213);
             break;
         }
 

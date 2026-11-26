@@ -43,10 +43,10 @@ namespace BrnNetwork
 
     void ShowtimeUpdateMessage::PrepareForSend(u16 lu16FrameCount, s32 liShowtimeScore)
     {
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16FrameCount != KU16_INVALID_FRAME",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnShowtimeUpdateMessage.cpp", 124 /* ARTIST 0x8257F864 */));
+        CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
+            "lu16FrameCount != KU16_INVALID_FRAME",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnShowtimeUpdateMessage.cpp", 124 /* ARTIST 0x8257F864 */);
+
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
         {

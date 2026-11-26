@@ -95,7 +95,7 @@ namespace BrnGui
                 default:
                     // cpp:208 -- the X360 streams the offending kind after the text;
                     // folded static per convention.
-                    CGS_ASSERT(false, "Invalid state requesting an overlay : ");
+                    CGS_FAIL("Invalid state requesting an overlay : ");
                     break;
                 }
             }

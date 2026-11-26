@@ -155,7 +155,7 @@ namespace BrnGui
 
         default:
             // Streamed in place, as ARTIST builds it (cpp:138).
-            CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+            CGS_FAIL_STREAM_AT("Invalid internal state : " << meInternalState << "\n",
                                  CGS_ARTIST_FILE, 138);
             break;
         }
@@ -170,7 +170,7 @@ namespace BrnGui
     // ================================================================================
     void OnlinePreEvent::UpdateGetCache()
     {
-        CGS_ASSERT(0 == mpGuiCache, CGS_ASSERT_MESSAGE_AT("NULL == mpGuiCache", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 188));
+        CGS_ASSERT_AT(0 == mpGuiCache, "NULL == mpGuiCache", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 188);
 
 
 
@@ -184,14 +184,14 @@ namespace BrnGui
             {
                 const GuiEventCachePayload* lpCacheEvent =
                     static_cast<const GuiEventCachePayload*>(lpEvent);
-                CGS_ASSERT(0 != lpCacheEvent->mpCachePointer,
-                    CGS_ASSERT_MESSAGE_AT("NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 198));
+                CGS_ASSERT_AT(0 != lpCacheEvent->mpCachePointer,
+                    "NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 198);
                 mpGuiCache = lpCacheEvent->mpCachePointer;
                 break;
             }
         }
 
-        CGS_ASSERT(0 != mpGuiCache, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 207));
+        CGS_ASSERT_AT(0 != mpGuiCache, "NULL != mpGuiCache", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 207);
     }
 
     // ================================================================================

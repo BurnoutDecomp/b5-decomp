@@ -126,7 +126,7 @@ bool FlaptManager::Prepare(CgsMemory::LinearMalloc* lpLinear)
         return true;
 
     default:
-        CGS_ASSERT(false, "Got bad prepare stage in FlaptManager::Prepare");
+        CGS_FAIL("Got bad prepare stage in FlaptManager::Prepare");
         return false;
     }
 }
@@ -145,7 +145,7 @@ bool FlaptManager::Release()
         return true;
 
     default:
-        CGS_ASSERT(false, "Got bad release stage in FlaptManager::Release");
+        CGS_FAIL("Got bad release stage in FlaptManager::Release");
         return false;
     }
 }

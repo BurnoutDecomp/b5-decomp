@@ -191,7 +191,7 @@ u32 CollisionDebugComponent::GetPolyColour(CollisionTag lCollisionTag,
     case E_DRAWMODE_DRIVABLE:
         return lCollisionTag.IsDrivable() ? 0x20006400u : 0x20000064u;
     default:
-        CGS_ASSERT_AT(false, "\nInvalid collision draw mode", CGS_ARTIST_UNITY_BRNCOLLISIONDEBUGCOMPONENT_CPP_FILE, 437);
+        CGS_FAIL_AT("\nInvalid collision draw mode", CGS_ARTIST_UNITY_BRNCOLLISIONDEBUGCOMPONENT_CPP_FILE, 437);
         return 0;
     }
 }
@@ -261,7 +261,7 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
     }
     else
     {
-        CGS_ASSERT(false,
+        CGS_FAIL(
                    "Trying to render a polygon that isn't a triangle or quad");
     }
 

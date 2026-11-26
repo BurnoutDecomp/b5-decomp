@@ -23,10 +23,10 @@ namespace CgsMemory
     // so the heap is fixed to the supplied buffer and never grows via the OS.
     void HeapMalloc::Construct(void* lpBuffer, s32 lnBufferSize)
     {
-        CGS_ASSERT(lpBuffer,
-            CGS_ASSERT_MESSAGE_AT("lpBuffer", CGS_ARTIST_HEAP_MALLOC_FILE, 52 /* ARTIST 0x828666B0 */));           // CgsHeapMalloc.cpp:52
-        CGS_ASSERT(lnBufferSize > 0,
-            CGS_ASSERT_MESSAGE_AT("lnBufferSize>0", CGS_ARTIST_HEAP_MALLOC_FILE, 53 /* ARTIST 0x828666D4 */)); // CgsHeapMalloc.cpp:53
+        CGS_ASSERT_AT(lpBuffer,
+            "lpBuffer", CGS_ARTIST_HEAP_MALLOC_FILE, 52 /* ARTIST 0x828666B0 */);           // CgsHeapMalloc.cpp:52
+        CGS_ASSERT_AT(lnBufferSize > 0,
+            "lnBufferSize>0", CGS_ARTIST_HEAP_MALLOC_FILE, 53 /* ARTIST 0x828666D4 */); // CgsHeapMalloc.cpp:53
 
         mpBuffer     = lpBuffer;
         mnBufferSize = lnBufferSize;

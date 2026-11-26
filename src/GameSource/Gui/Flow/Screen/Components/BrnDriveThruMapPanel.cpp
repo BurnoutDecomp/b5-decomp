@@ -70,10 +70,10 @@ namespace BrnGui
     // @0x82417560 -----------------------------------------------------------------------
     void DriveThruMapPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnDriveThruMapPanel.cpp", 88 /* ARTIST 0x82417588 */));   // X360 line 88
+        CGS_ASSERT_AT(lpGuiCache != 0,
+            "lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnDriveThruMapPanel.cpp", 88 /* ARTIST 0x82417588 */);   // X360 line 88
+
 
         // Register the panel's own apt component, then each of the two text fields, by name
         // hash (X360 reads each component's hashed-name word and forwards it).

@@ -24,8 +24,8 @@ void SpatialPartition::AddEntity(u16 lu16Id, u32 lxTypeFlags, Vector3 lPosition,
 
     if (lpNewEntity == 0)
     {
-        CGS_ASSERT(lpNewEntity != 0,
-                   CGS_ASSERT_MESSAGE_AT("lpNewEntity != NULL", KAC_ARTIST_ASSERT_FILE, 461));
+        CGS_ASSERT_AT(lpNewEntity != 0,
+                   "lpNewEntity != NULL", KAC_ARTIST_ASSERT_FILE, 461);
     }
     else
     {
@@ -76,8 +76,8 @@ u16 SpatialPartition::CalcEntityIndex(const SpatialPartitionEntityLink& lrEntity
                                  reinterpret_cast<uintptr_t>(maEntityLinks);
     const u32 luIndex = static_cast<u32>(luDistance / sizeof(SpatialPartitionEntityLink));
 
-    CGS_ASSERT(luIndex < static_cast<u32>(KI_MAX_NUM_ENTITIES),
-               CGS_ASSERT_MESSAGE_AT("luIndex < (uint32_t)KI_MAX_NUM_ENTITIES", KAC_ARTIST_ASSERT_FILE, 417));
+    CGS_ASSERT_AT(luIndex < static_cast<u32>(KI_MAX_NUM_ENTITIES),
+               "luIndex < (uint32_t)KI_MAX_NUM_ENTITIES", KAC_ARTIST_ASSERT_FILE, 417);
 
     return static_cast<u16>(luIndex);
 }
@@ -87,18 +87,18 @@ u16 SpatialPartition::CalcEntityIndex(const SpatialPartitionEntityLink& lrEntity
 // the byte base of the sphere pool. Bounds-asserts against KI_MAX_NUM_ENTITIES first.
 CgsGeometric::Sphere& SpatialPartition::GetEntityBoundingSphere(u16 lu16Index)
 {
-    CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES,
-        CGS_ASSERT_MESSAGE_AT(
-            "lu16Index < KI_MAX_NUM_ENTITIES", KAC_ARTIST_ASSERT_FILE, 392 /* ARTIST 0x828A9F94 */));
+    CGS_ASSERT_AT(lu16Index < KI_MAX_NUM_ENTITIES,
+        "lu16Index < KI_MAX_NUM_ENTITIES", KAC_ARTIST_ASSERT_FILE, 392 /* ARTIST 0x828A9F94 */);
+
     return maEntityBoundingSpheres[lu16Index];
 }
 
 // 0x828A9FD0 -- GetEntityBoundingSphereConst: const twin of GetEntityBoundingSphere.
 const CgsGeometric::Sphere& SpatialPartition::GetEntityBoundingSphereConst(u16 lu16Index) const
 {
-    CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES,
-        CGS_ASSERT_MESSAGE_AT(
-            "lu16Index < KI_MAX_NUM_ENTITIES", KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x828A9FFC */));
+    CGS_ASSERT_AT(lu16Index < KI_MAX_NUM_ENTITIES,
+        "lu16Index < KI_MAX_NUM_ENTITIES", KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x828A9FFC */);
+
     return maEntityBoundingSpheres[lu16Index];
 }
 

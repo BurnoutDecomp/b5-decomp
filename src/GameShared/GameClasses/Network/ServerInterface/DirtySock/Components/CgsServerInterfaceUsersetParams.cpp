@@ -79,7 +79,7 @@ namespace CgsNetwork
         const char* const lpcSource =
             "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\"
             "CgsServerInterfaceUsersetParams.cpp";
-        CGS_ASSERT(lpcRecord != 0, CGS_ASSERT_MESSAGE_AT("lpcString", lpcSource, 84));
+        CGS_ASSERT_AT(lpcRecord != 0, "lpcString", lpcSource, 84);
 
         if (macName[0])
         {
@@ -96,8 +96,8 @@ namespace CgsNetwork
         // Serialize the custom structure through its const accessor when it has data and a size.
         if (GetData() && GetDataSize())
         {
-            CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
-                CGS_ASSERT_MESSAGE_AT("strlen( GetPattern()) < (size_t) GetPatternLength()", lpcSource, 102));
+            CGS_ASSERT_AT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
+                "strlen( GetPattern()) < (size_t) GetPatternLength()", lpcSource, 102);
 
             TagFieldSetStructure(lpcRecord, liRecLen, "PARAMS",
                                  GetData(), static_cast<s32>(GetDataSize()), GetPattern());

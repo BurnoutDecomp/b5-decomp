@@ -185,7 +185,7 @@ BehaviourRig::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
     SetNotPrepared();
 
-    CGS_ASSERT(mAttachedToRef.IsValid(), CGS_ASSERT_MESSAGE_AT("mAttachedToRef.HasBeenSet()", CGS_ARTIST_FILE, 115));     // :115
+    CGS_ASSERT_AT(mAttachedToRef.IsValid(), "mAttachedToRef.HasBeenSet()", CGS_ARTIST_FILE, 115);     // :115
     CGS_ASSERT(mpParameters != NULL, "mpParameters != NULL");                // :116
 
     mAccelSpring.Prepare(0.0f, 0.0f,
@@ -216,7 +216,7 @@ BehaviourRig::SetupTweaker(Utils::Tweaker& lrTweaker)
 {
     lrTweaker.Construct();
 
-    CGS_ASSERT(mpParameters != NULL, CGS_ASSERT_MESSAGE_AT("mpParameters", CGS_ARTIST_FILE, 372));                        // :372
+    CGS_ASSERT_AT(mpParameters != NULL, "mpParameters", CGS_ARTIST_FILE, 372);                        // :372
 
     Parameters& lrParameters = const_cast<Parameters&>(*mpParameters);
     lrTweaker.AddMapping("DOF Blur Near", &lrParameters.mfDOFNear, KF_TWEAK_DOF_SCALE,
@@ -301,7 +301,7 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
     using namespace rw::math::vpu;
 
-    CGS_ASSERT(mpParameters != NULL, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 136));                // :136
+    CGS_ASSERT_AT(mpParameters != NULL, "mpParameters != NULL", CGS_ARTIST_FILE, 136);                // :136
 
     if (!HasFailed())
     {

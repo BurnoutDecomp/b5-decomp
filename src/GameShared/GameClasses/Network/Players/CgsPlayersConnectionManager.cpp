@@ -74,12 +74,12 @@ EConnectionStatus PlayersConnectionManager::GetConnectionStatus(NetworkPlayerID 
 bool PlayersConnectionManager::HavePlayersFailedToConnect(NetworkPlayerID lPlayerID1,
                                                           NetworkPlayerID lPlayerID2) const
 {
-    CGS_ASSERT(lPlayerID1 != K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lPlayerID1 != K_INVALID_PLAYER_ID,
         "lPlayerID1 != K_INVALID_PLAYER_ID",
-        __FILE__, 732 /* ARTIST 0x82884B4C */));
-    CGS_ASSERT(lPlayerID2 != K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+        __FILE__, 732 /* ARTIST 0x82884B4C */);
+    CGS_ASSERT_AT(lPlayerID2 != K_INVALID_PLAYER_ID,
         "lPlayerID2 != K_INVALID_PLAYER_ID",
-        __FILE__, 733 /* ARTIST 0x82884B70 */));
+        __FILE__, 733 /* ARTIST 0x82884B70 */);
 
     NetworkPlayerID lLocalPlayerID;
     mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
@@ -103,9 +103,9 @@ bool PlayersConnectionManager::HavePlayersFailedToConnect(NetworkPlayerID lPlaye
     else
     {
         const ConnectionDataEntry* lpPlayer1Entry = GetEntry(lPlayerID1);
-        CGS_ASSERT(lpPlayer1Entry, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpPlayer1Entry,
             "lpPlayer1Entry",
-            __FILE__, 758 /* ARTIST 0x82884C0C */));
+            __FILE__, 758 /* ARTIST 0x82884C0C */);
         for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
         {
             const PlayerConnectionData& lData = lpPlayer1Entry->maLastFinaliseStateRecvd[liIndex];
@@ -135,9 +135,9 @@ bool PlayersConnectionManager::HavePlayersFailedToConnect(NetworkPlayerID lPlaye
     }
 
     const ConnectionDataEntry* lpPlayer2Entry = GetEntry(lPlayerID2);
-    CGS_ASSERT(lpPlayer2Entry, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpPlayer2Entry,
         "lpPlayer2Entry",
-        __FILE__, 795 /* ARTIST 0x82884CD4 */));
+        __FILE__, 795 /* ARTIST 0x82884CD4 */);
     for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
     {
         const PlayerConnectionData& lData = lpPlayer2Entry->maLastFinaliseStateRecvd[liIndex];
@@ -439,10 +439,10 @@ void PlayersConnectionManager::SendTestConnectionMessage(ConnectionDataEntry* lp
                                                          const CgsSystem::TimerStatus* lpTimerStatus,
                                                          u16 lu16CurrentFrame)
 {
-    CGS_ASSERT(lpEntry->mPlayerConnectionData.meConnectionStatus == E_CHECKING_CONNECTION,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpEntry->mPlayerConnectionData.meConnectionStatus == E_CHECKING_CONNECTION",
-            __FILE__, 693 /* ARTIST 0x82884ACC */));
+    CGS_ASSERT_AT(lpEntry->mPlayerConnectionData.meConnectionStatus == E_CHECKING_CONNECTION,
+        "lpEntry->mPlayerConnectionData.meConnectionStatus == E_CHECKING_CONNECTION",
+            __FILE__, 693 /* ARTIST 0x82884ACC */);
+
 
     lpEntry->mbTestConnectionPacketNacked = false;
     lpEntry->mTestConnectionMessageSend.PrepareForSend(lu16CurrentFrame);
@@ -570,14 +570,14 @@ void PlayersConnectionManager::ConnectionStatusMessageArrivedCallback(ReliableMe
                                                                       NetworkPlayerID lSendingPlayerID,
                                                                       void* lpUserData)
 {
-    CGS_ASSERT(lpMessage,
-        CGS_ASSERT_MESSAGE_AT("lpMessage", __FILE__, 1305 /* ARTIST 0x82884E00 */));
-    CGS_ASSERT(lSendingPlayerID != K_INVALID_PLAYER_ID,
-        CGS_ASSERT_MESSAGE_AT(
-            "lSendingPlayerID != K_INVALID_PLAYER_ID",
-            __FILE__, 1306 /* ARTIST 0x82884E24 */));
-    CGS_ASSERT(lpUserData,
-        CGS_ASSERT_MESSAGE_AT("lpUserData", __FILE__, 1307 /* ARTIST 0x82884E48 */));
+    CGS_ASSERT_AT(lpMessage,
+        "lpMessage", __FILE__, 1305 /* ARTIST 0x82884E00 */);
+    CGS_ASSERT_AT(lSendingPlayerID != K_INVALID_PLAYER_ID,
+        "lSendingPlayerID != K_INVALID_PLAYER_ID",
+            __FILE__, 1306 /* ARTIST 0x82884E24 */);
+
+    CGS_ASSERT_AT(lpUserData,
+        "lpUserData", __FILE__, 1307 /* ARTIST 0x82884E48 */);
 
     PlayersConnectionManager* lpConnMgr = static_cast<PlayersConnectionManager*>(lpUserData);
     ConnectionDataEntry*      lpEntry   = lpConnMgr->GetEntry(lSendingPlayerID);
@@ -665,9 +665,9 @@ void PlayersConnectionManager::ConnApiStatusChangeCallback(DirtySock::ConnApiRef
     PlayersConnectionManager* lpSelf = static_cast<PlayersConnectionManager*>(lpUserData);
 
     const DirtySock::ConnApiClientListT* lpClientList = ConnApiGetClientList(lpConnApi);
-    CGS_ASSERT(lpClientList, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpClientList,
         "lpClientList",
-        __FILE__, 1509 /* ARTIST 0x82874CAC */));
+        __FILE__, 1509 /* ARTIST 0x82874CAC */);
 
     const bool lbDisconnected = (lpCbInfo->eNewStatus == DirtySock::CONNAPI_STATUS_DISC) ||
                                 (lpCbInfo->eNewStatus == DirtySock::CONNAPI_STATUS_DEST);
@@ -733,9 +733,9 @@ const char* PlayersConnectionManager::GetPlayerName(NetworkPlayerID lPlayerID) c
     // in static storage so the name outlives the call.
     static DefaultPlayerInfoData sLocalPlayerInfo;
 
-    CGS_ASSERT(mpServerInterface, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(mpServerInterface,
         "mpServerInterface",
-        __FILE__, 836 /* ARTIST 0x8289057C */));
+        __FILE__, 836 /* ARTIST 0x8289057C */);
     static_cast<ServerInterfacePlayerInfo*>(mpServerInterface->GetComponent(E_COMPONENTS_PLAYER_INFO))
         ->GetLocalPlayerInfo(&sLocalPlayerInfo);
     if (sLocalPlayerInfo.GetID() == lPlayerID)
@@ -743,9 +743,9 @@ const char* PlayersConnectionManager::GetPlayerName(NetworkPlayerID lPlayerID) c
         return sLocalPlayerInfo.GetName();
     }
 
-    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+    CGS_FAIL_AT(
         "Could not find name of player",
-        __FILE__, 844 /* ARTIST 0x828905E8 */));
+        __FILE__, 844 /* ARTIST 0x828905E8 */);
     return 0;
 }
 
@@ -886,7 +886,7 @@ void PlayersConnectionManager::UpdatePlayerList(const DirtySock::ConnApiClientLi
                     break;
 
                 default:
-                    CGS_ASSERT(false, "Unknown connapi status");
+                    CGS_FAIL("Unknown connapi status");
                     break;
             }
         }

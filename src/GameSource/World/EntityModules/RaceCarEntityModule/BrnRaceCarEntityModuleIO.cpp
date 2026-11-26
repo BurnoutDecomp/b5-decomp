@@ -27,7 +27,7 @@ namespace RaceCarEntityModuleIO
 const OutputBuffer_Prepare::ResourceRequestInterface*
 OutputBuffer_Prepare::GetResourceRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 126));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 126);
     return &mResourceRequestInterface;
 }
 
@@ -35,7 +35,7 @@ OutputBuffer_Prepare::GetResourceRequestInterface() const
 OutputBuffer_Prepare::ResourceRequestInterface*
 OutputBuffer_Prepare::GetResourceRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 127));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 127);
     return &mResourceRequestInterface;
 }
 
@@ -81,7 +81,7 @@ InputBuffer_PreScene::Construct()
 InputBuffer_PreScene::GameActionQueue*
 InputBuffer_PreScene::GetGameActionQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 164));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 164);
     return &mGameActionQueue;
 }
 
@@ -90,7 +90,7 @@ InputBuffer_PreScene::GetGameActionQueue()
 const InputBuffer_PreScene::GameActionQueue*
 InputBuffer_PreScene::GetGameActionQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 163));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 163);
     return &mGameActionQueue;
 }
 
@@ -113,7 +113,7 @@ InputBuffer_PreScene::GetAudioCarLoadedDataQueue() const
 InputBuffer_PreScene::AudioCarLoadedDataQueue*
 InputBuffer_PreScene::GetAudioCarLoadedDataQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 176));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 176);
     return &mAudioCarLoadedDataQueue;
 }
 
@@ -134,7 +134,7 @@ OutputBuffer_PreScene::GetAudioCarLoadedDataQueue()
 const RaceCarEntityModuleIO::AudioCarLoadedDataQueue*
 OutputBuffer_PreScene::GetAudioCarLoadedDataQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 307));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 307);
     return &mAudioCarLoadedDataQueue;
 }
 
@@ -142,7 +142,7 @@ OutputBuffer_PreScene::GetAudioCarLoadedDataQueue() const
 OutputBuffer_PreScene::VehicleInputInterface*
 OutputBuffer_PreScene::GetVehicleInputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 283));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 283);
     return &mVehicleInputInterface;
 }
 
@@ -150,7 +150,7 @@ OutputBuffer_PreScene::GetVehicleInputInterface()
 OutputBuffer_PreScene::SceneInputInterface*
 OutputBuffer_PreScene::GetSceneInputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 286));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 286);
     return &mSceneInputInterface;
 }
 
@@ -183,7 +183,7 @@ OutputBuffer_PreScene::GetSceneInputInterface() const
 const OutputBuffer_PreScene::RaceCarAIInterface*
 OutputBuffer_PreScene::GetRaceCarAIInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 300));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 300);
     return &mRaceCarAIInterface;
 }
 
@@ -261,7 +261,7 @@ OutputBuffer_PostPhysics::GetResourceRequestInterface() const
 const InputBuffer_PostScene::TrafficToRaceCarInterface_PreScene*
 InputBuffer_PostScene::GetTrafficToRaceCarInterface_PreScene() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 355));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 355);
     return &mTrafficToRaceCarInterface_PreScene;
 }
 
@@ -358,7 +358,7 @@ OutputBuffer_PostScene::GetSceneFineLineTestQueue()
 OutputBuffer_PostScene::AIModuleRequestInterface*
 OutputBuffer_PostScene::GetAIModuleRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 389));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 389);
     return &mAIModuleRequestInterface;
 }
 
@@ -386,7 +386,7 @@ OutputBuffer_PostScene::GetRaceCarToTrafficInterface() const
 RaceCarToTrafficInterface*
 OutputBuffer_PostScene::GetRaceCarToTrafficInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 392));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 392);
     return &mRaceCarToTrafficInterface;
 }
 
@@ -453,7 +453,7 @@ InputBuffer_PrePhysics::GetTrafficToRaceCarInterface_PostScene() const
 OutputBuffer_PreScene::VehicleInputInterface*
 OutputBuffer_PrePhysics::GetVehicleInputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 480));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 480);
     return &mVehicleInputInterface;
 }
 
@@ -500,7 +500,7 @@ OutputBuffer_PrePhysics::GetVehicleInputInterface() const
 const OutputBuffer_PrePhysics::VehicleDriverInputInterface*
 OutputBuffer_PrePhysics::GetVehicleDriverInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 482));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 482);
     return &mVehicleDriverInterface;
 }
 
@@ -508,7 +508,7 @@ OutputBuffer_PrePhysics::GetVehicleDriverInterface() const
 const OutputBuffer_PrePhysics::VehicleEffectsInputInterface*
 OutputBuffer_PrePhysics::GetVehicleEffectsInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 485));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 485);
     return &mVehicleEffectsInterface;
 }
 
@@ -516,7 +516,7 @@ OutputBuffer_PrePhysics::GetVehicleEffectsInterface() const
 const OutputBuffer_PrePhysics::GameEventQueue*
 OutputBuffer_PrePhysics::GetGameEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 491));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 491);
     return &mGameEventQueue;
 }
 
@@ -535,7 +535,7 @@ OutputBuffer_PrePhysics::GetGameEventQueue() const
 OutputBuffer_PrePhysics::VehicleDriverInputInterface*
 OutputBuffer_PrePhysics::GetVehicleDriverInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 483));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 483);
     return &mVehicleDriverInterface;
 }
 
@@ -548,7 +548,7 @@ OutputBuffer_PrePhysics::GetVehicleDriverInterface()
 BrnPhysics::Vehicle::VehicleEffectsInputInterface*
 OutputBuffer_PrePhysics::GetVehicleEffectsInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 486));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 486);
     return &mVehicleEffectsInterface;
 }
 
@@ -560,7 +560,7 @@ OutputBuffer_PrePhysics::GetVehicleEffectsInterface()
 RCEntityPlayerResetInterface*
 OutputBuffer_PrePhysics::GetPlayerResetInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 489));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 489);
     return &mPlayerResetInterface;
 }
 
@@ -578,7 +578,7 @@ OutputBuffer_PrePhysics::GetPlayerResetInterface()
 OutputBuffer_PrePhysics::GameEventQueue*
 OutputBuffer_PrePhysics::GetGameEventQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 492));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 492);
     return &mGameEventQueue;
 }
 
@@ -590,7 +590,7 @@ OutputBuffer_PrePhysics::GetGameEventQueue()
 OutputBuffer_PreScene::SceneInputInterface*
 InputBuffer_PostPhysics::GetSceneInputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 529));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 529);
     return &mSceneInputInterface;
 }
 
@@ -606,7 +606,7 @@ InputBuffer_PostPhysics::GetSceneInputInterface()
 const InputBuffer_PostPhysics::VehicleOutputInterface*
 InputBuffer_PostPhysics::GetVehicleOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 522));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 522);
     return &mVehicleOutputInterface;
 }
 
@@ -614,7 +614,7 @@ InputBuffer_PostPhysics::GetVehicleOutputInterface() const
 const InputBuffer_PostPhysics::VehicleManagerOutputInterface*
 InputBuffer_PostPhysics::GetVehicleManagerOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 525));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 525);
     return &mVehicleManagerOutputInterface;
 }
 
@@ -623,7 +623,7 @@ InputBuffer_PostPhysics::GetVehicleManagerOutputInterface() const
 const InputBuffer_PostPhysics::DeformationOutputInterfaceForEntityModules*
 InputBuffer_PostPhysics::GetDeformationOutputInterfaceForEntityModules() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 531));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 531);
     return &mDeformationOutputInterfaceForEntityModules;
 }
 
@@ -631,7 +631,7 @@ InputBuffer_PostPhysics::GetDeformationOutputInterfaceForEntityModules() const
 const InputBuffer_PostPhysics::DeformationOutputInterface*
 InputBuffer_PostPhysics::GetDeformationOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 534));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 534);
     return &mDeformationOutputInterface;
 }
 
@@ -640,7 +640,7 @@ InputBuffer_PostPhysics::GetDeformationOutputInterface() const
 const InputBuffer_PostPhysics::ContactSpyInterface*
 InputBuffer_PostPhysics::GetContactSpyInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 537));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 537);
     return &mContactSpyInterface;
 }
 
@@ -648,7 +648,7 @@ InputBuffer_PostPhysics::GetContactSpyInterface() const
 const InputBuffer_PostPhysics::AIRaceCarInterface*
 InputBuffer_PostPhysics::GetAIRaceCarInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 540));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 540);
     return &mAIRaceCarInterface;
 }
 
@@ -658,7 +658,7 @@ InputBuffer_PostPhysics::GetAIRaceCarInterface() const
 OutputBuffer_PreScene::SceneInputInterface*
 OutputBuffer_PostPhysics::GetSceneInputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 486));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 486);
     return &mSceneInputInterface;
 }
 
@@ -713,7 +713,7 @@ OutputBuffer_PostPhysics::GetDirectorVehicleInputInterface() const
 const RaceCarEntityModuleIO::GameEventQueue*
 OutputBuffer_PostPhysics::GetGameEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 491));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 491);
     return &mGameEventQueue;
 }
 
@@ -739,14 +739,14 @@ OutputBuffer_PostPhysics::GetDirectorVehicleInputInterface()
 const RCEntityActiveRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetActiveRaceCarOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 581));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 581);
     return &mActiveRaceCarOutputInterface;
 }
 
 RCEntityActiveRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetActiveRaceCarOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 582));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 582);
     return &mActiveRaceCarOutputInterface;
 }
 
@@ -755,14 +755,14 @@ OutputBuffer_PostPhysics::GetActiveRaceCarOutputInterface()
 const RCEntityGlobalRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetGlobalRaceCarOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 584));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 584);
     return &mGlobalRaceCarOutputInterface;
 }
 
 RCEntityGlobalRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetGlobalRaceCarOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 585));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 585);
     return &mGlobalRaceCarOutputInterface;
 }
 
@@ -770,7 +770,7 @@ OutputBuffer_PostPhysics::GetGlobalRaceCarOutputInterface()
 const RCEntityActiveRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetReplayActiveRaceCarOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 578));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 578);
     return &mReplayActiveRaceCarOutputInterface;
 }
 
@@ -779,7 +779,7 @@ OutputBuffer_PostPhysics::GetReplayActiveRaceCarOutputInterface() const
 RCEntityActiveRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetReplayActiveRaceCarOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 579));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 579);
     return &mReplayActiveRaceCarOutputInterface;
 }
 
@@ -787,7 +787,7 @@ OutputBuffer_PostPhysics::GetReplayActiveRaceCarOutputInterface()
 RCEntityGlobalRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetReplayGlobalRaceCarOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 600));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 600);
     return &mReplayGlobalRaceCarOutputInterface;
 }
 
@@ -795,7 +795,7 @@ OutputBuffer_PostPhysics::GetReplayGlobalRaceCarOutputInterface()
 const OutputBuffer_PreScene::VehicleInputInterface*
 OutputBuffer_PostPhysics::GetVehicleInputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 596));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 596);
     return &mVehicleInputInterface;
 }
 
@@ -804,7 +804,7 @@ OutputBuffer_PostPhysics::GetVehicleInputInterface() const
 OutputBuffer_PreScene::VehicleInputInterface*
 OutputBuffer_PostPhysics::GetVehicleInputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 597));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 597);
     return &mVehicleInputInterface;
 }
 
@@ -814,7 +814,7 @@ OutputBuffer_PostPhysics::GetVehicleInputInterface()
 const BrnDirector::Camera::Camera*
 InputBuffer_GenerateDispatchLists::GetCameraInput() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 636));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 636);
     return &mCameraInput;
 }
 
@@ -862,7 +862,7 @@ InputBuffer_GenerateDispatchLists::GetCoronaSubmissionInterface() const
 const TimerStatusInterface*
 InputBuffer_PreScene::GetTimerStatusInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 154));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 154);
     return &mTimerStatusInterface;
 }
 
@@ -871,7 +871,7 @@ InputBuffer_PreScene::GetTimerStatusInterface() const
 const BrnDirector::Camera::Camera*
 InputBuffer_PreScene::GetCameraInput() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 157));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 157);
     return &mCameraInput;
 }
 
@@ -880,7 +880,7 @@ InputBuffer_PreScene::GetCameraInput() const
 BrnNetwork::EPaybackType
 InputBuffer_PreScene::GetActivePaybackType() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 166));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 166);
     return meActivePaybackType;
 }
 
@@ -889,7 +889,7 @@ InputBuffer_PreScene::GetActivePaybackType() const
 EActiveRaceCarIndex
 InputBuffer_PreScene::GetActivePaybackAggressor() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 169));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 169);
     return meActivePaybackAggressor;
 }
 
@@ -915,7 +915,7 @@ InputBuffer_PreScene::GetPlayerVehicleControls() const
 void
 InputBuffer_PreScene::SetPlayerVehicleControls(const BrnWorld::PlayerVehicleControls* pControls)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 161));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 161);
     mPlayerVehicleControls = *pControls;
 }
 
@@ -925,7 +925,7 @@ InputBuffer_PreScene::SetPlayerVehicleControls(const BrnWorld::PlayerVehicleCont
 void
 InputBuffer_PreScene::SetReplayStatusInterface(const InputBuffer_PreScene::ReplayStatusInterface* pStatus)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 174));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 174);
     mReplayStatusInterface = *pStatus;
 }
 
@@ -943,7 +943,7 @@ InputBuffer_PreScene::SetReplayStatusInterface(const InputBuffer_PreScene::Repla
 void
 InputBuffer_PreScene::SetTimerStatusInterface(const TimerStatusInterface* lpTimerStatusInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 155));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 155);
     mTimerStatusInterface = *lpTimerStatusInterface;
 }
 
@@ -955,7 +955,7 @@ InputBuffer_PreScene::SetTimerStatusInterface(const TimerStatusInterface* lpTime
 void
 InputBuffer_PreScene::SetCameraInput(const BrnDirector::Camera::Camera* lpCameraInput)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 158));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 158);
     mCameraInput = *lpCameraInput;
 }
 
@@ -965,7 +965,7 @@ InputBuffer_PreScene::SetCameraInput(const BrnDirector::Camera::Camera* lpCamera
 void
 InputBuffer_PreScene::SetActivePaybackType(BrnNetwork::EPaybackType lePaybackType)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 167));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 167);
     meActivePaybackType = lePaybackType;
 }
 
@@ -975,7 +975,7 @@ InputBuffer_PreScene::SetActivePaybackType(BrnNetwork::EPaybackType lePaybackTyp
 void
 InputBuffer_PreScene::SetActivePaybackAggressor(EActiveRaceCarIndex leAggressor)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 170));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 170);
     meActivePaybackAggressor = leAggressor;
 }
 
@@ -1030,7 +1030,7 @@ InputBuffer_PostScene::Construct()
 void
 InputBuffer_PostScene::SetCrashInterface(const CrashInterface* lpCrashInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 353));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 353);
 
     typedef CgsModule::EventQueue<BrnWorld::CrashIO::RaceCarCrashCompleteEvent, 10>
         RaceCarCrashCompleteEventQueue;
@@ -1065,7 +1065,7 @@ void
 InputBuffer_PostScene::SetTrafficToRaceCarInterface_PreScene(
         const TrafficToRaceCarInterface_PreScene* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 356));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 356);
     std::memcpy(&mTrafficToRaceCarInterface_PreScene, lpInterface,
                 sizeof(mTrafficToRaceCarInterface_PreScene));   // X360: 0x220 (544) bytes
 }
@@ -1076,7 +1076,7 @@ InputBuffer_PostScene::SetTrafficToRaceCarInterface_PreScene(
 bool
 InputBuffer_PrePhysics::GetControllerActive() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 442));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 442);
     return mbControllerActive;
 }
 
@@ -1084,7 +1084,7 @@ InputBuffer_PrePhysics::GetControllerActive() const
 bool
 InputBuffer_PrePhysics::GetInHardStopCamera() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 445));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 445);
     return mbInHardStopCamera;
 }
 
@@ -1094,7 +1094,7 @@ InputBuffer_PrePhysics::GetInHardStopCamera() const
 void
 InputBuffer_PrePhysics::SetAIModuleResultInterface(const AIModuleResultInterface* lpAIModuleResultInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 428));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 428);
     mAIModuleResultInterface.GetResetOnTrackResultQueue()->Clear();
     mAIModuleResultInterface.GetResetOnTrackResultQueue()->Append(
         *lpAIModuleResultInterface->GetResetOnTrackResultQueue());
@@ -1108,7 +1108,7 @@ InputBuffer_PrePhysics::SetAIModuleResultInterface(const AIModuleResultInterface
 void
 InputBuffer_PrePhysics::SetPotentialContactQueue(const PotentialContactQueue* lpPotentialContactQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 422));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 422);
     mPotentialContactQueue = *lpPotentialContactQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194)
 }
 
@@ -1118,7 +1118,7 @@ InputBuffer_PrePhysics::SetPotentialContactQueue(const PotentialContactQueue* lp
 void
 InputBuffer_PrePhysics::SetTrafficToRaceCarInterface_PostScene(const TrafficToRaceCarInterface_PostScene* lpTrafficToRaceCarInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 440));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 440);
     mTrafficToRaceCarInterface_PostScene = *lpTrafficToRaceCarInterface;
 }
 
@@ -1141,7 +1141,7 @@ InputBuffer_PrePhysics::SetTrafficToRaceCarInterface_PostScene(const TrafficToRa
 void
 InputBuffer_PrePhysics::SetTakedownEventQueue(const TakedownEventQueue* lpTakedownEventQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 431));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 431);
     mTakedownEventQueue = *lpTakedownEventQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194)
 }
 
@@ -1167,7 +1167,7 @@ InputBuffer_PrePhysics::GetTakedownEventQueue() const
 void
 InputBuffer_PrePhysics::SetScoringInterface(const ScoringInterface* lpScoringInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 434));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 434);
     XMemCpy(&mScoringInterface, lpScoringInterface, sizeof(mScoringInterface));   // ARTIST 0x8279DCEC (0xAB0 bytes)
 }
 
@@ -1178,7 +1178,7 @@ InputBuffer_PrePhysics::SetScoringInterface(const ScoringInterface* lpScoringInt
 void
 InputBuffer_PrePhysics::SetOnlineScoringInterface(const OnlineScoringInterface* lpOnlineScoringInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 437));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 437);
     std::memcpy(&mOnlineScoringInterface, lpOnlineScoringInterface,
                 sizeof(mOnlineScoringInterface));   // X360: 0xA4 (164) bytes
 }
@@ -1188,7 +1188,7 @@ InputBuffer_PrePhysics::SetOnlineScoringInterface(const OnlineScoringInterface* 
 void
 InputBuffer_PrePhysics::SetControllerActive(bool lbControllerActive)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 443));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 443);
     mbControllerActive = lbControllerActive;
 }
 
@@ -1198,7 +1198,7 @@ InputBuffer_PrePhysics::SetControllerActive(bool lbControllerActive)
 void
 InputBuffer_PrePhysics::SetInHardStopCamera(bool lbInHardStopCamera)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 446));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 446);
     mbInHardStopCamera = lbInHardStopCamera;
 }
 
@@ -1209,7 +1209,7 @@ InputBuffer_PrePhysics::SetInHardStopCamera(bool lbInHardStopCamera)
 void
 InputBuffer_PostPhysics::SetContactSpyInterface(const ContactSpyInterface* lpContactSpyInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 538));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 538);
     mContactSpyInterface = *lpContactSpyInterface;
 }
 
@@ -1218,7 +1218,7 @@ InputBuffer_PostPhysics::SetContactSpyInterface(const ContactSpyInterface* lpCon
 void
 InputBuffer_PostPhysics::SetDeformationOutputInterface(const DeformationOutputInterface* lpDeformationOutputInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 535));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 535);
     mDeformationOutputInterface = *lpDeformationOutputInterface;
 }
 
@@ -1227,7 +1227,7 @@ InputBuffer_PostPhysics::SetDeformationOutputInterface(const DeformationOutputIn
 void
 InputBuffer_PostPhysics::SetVehicleManagerOutputInterface(const VehicleManagerOutputInterface* lpVehicleManagerOutputInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 526));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 526);
     mVehicleManagerOutputInterface = *lpVehicleManagerOutputInterface;
 }
 
@@ -1236,7 +1236,7 @@ InputBuffer_PostPhysics::SetVehicleManagerOutputInterface(const VehicleManagerOu
 void
 InputBuffer_PostPhysics::SetVehicleOutputInterface(const VehicleOutputInterface* lpVehicleOutputInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 523));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 523);
     mVehicleOutputInterface = *lpVehicleOutputInterface;
 }
 
@@ -1290,9 +1290,9 @@ InputBuffer_PostPhysics::SetDeformationOutputInterfaceForEntityModules(
         const DeformationOutputInterfaceForEntityModules* lpDeformationOutputInterfaceForEntityModules)
 {
     // ARTIST 0x827A99B0 (export hole): streamed write-lock assert at header line 532.
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
         "Not locked for writing\n",
-        CGS_ARTIST_FILE, 532));
+        CGS_ARTIST_FILE, 532);
     mDeformationOutputInterfaceForEntityModules = *lpDeformationOutputInterfaceForEntityModules;
 }
 
@@ -1303,7 +1303,7 @@ InputBuffer_PostPhysics::SetDeformationOutputInterfaceForEntityModules(
 CgsGraphics::DispatchFrame*
 InputBuffer_GenerateDispatchLists::GetDispatchFrame() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 642));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 642);
     return mpDispatchFrame;
 }
 
@@ -1312,7 +1312,7 @@ InputBuffer_GenerateDispatchLists::GetDispatchFrame() const
 BrnWorld::ShadowMap*
 InputBuffer_GenerateDispatchLists::GetShadowMap() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 651));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 651);
     return mpShadowMap;
 }
 
@@ -1322,7 +1322,7 @@ void
 InputBuffer_GenerateDispatchLists::SetBlobbyShadowBuffer(
         BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBlobbyShadowBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 646));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 646);
     mpBlobbyShadowBuffer = lpBlobbyShadowBuffer;
 }
 
@@ -1331,7 +1331,7 @@ InputBuffer_GenerateDispatchLists::SetBlobbyShadowBuffer(
 void
 InputBuffer_GenerateDispatchLists::SetCameraInput(const BrnDirector::Camera::Camera* lpCameraInput)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 637));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 637);
     mCameraInput = *lpCameraInput;
 }
 
@@ -1341,7 +1341,7 @@ void
 InputBuffer_GenerateDispatchLists::SetCoronaSubmissionInterface(
         BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 649));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 649);
     mpCoronaSubmissionInterface = lpCoronaSubmissionInterface;
 }
 
@@ -1350,7 +1350,7 @@ InputBuffer_GenerateDispatchLists::SetCoronaSubmissionInterface(
 void
 InputBuffer_GenerateDispatchLists::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 643));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 643);
     mpDispatchFrame = lpDispatchFrame;
 }
 
@@ -1367,7 +1367,7 @@ InputBuffer_GenerateDispatchLists::SetDispatchFrame(CgsGraphics::DispatchFrame* 
 void
 InputBuffer_GenerateDispatchLists::SetShadowMap(BrnWorld::ShadowMap* lpShadowMap)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 652));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 652);
     mpShadowMap = lpShadowMap;
 }
 

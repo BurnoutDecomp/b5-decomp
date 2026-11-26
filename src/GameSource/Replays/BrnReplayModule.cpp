@@ -458,7 +458,7 @@ namespace BrnReplays
             UpdateRestoring_PostSim(lpInputBuffer, lpOutputBuffer, lUpdateSet);
             break;
         default:
-            CGS_ASSERT(false, "Invalid update state for replay module\n");
+            CGS_FAIL("Invalid update state for replay module\n");
             break;
         }
 

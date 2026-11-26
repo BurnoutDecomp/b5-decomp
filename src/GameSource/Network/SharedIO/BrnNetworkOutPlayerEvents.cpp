@@ -33,30 +33,30 @@ namespace BrnNetworkModuleIO
     // X360 0x825810E0. Store the player id at +0x10, guarding against the invalid-id sentinel.
     void NetworkOutPlayerAddedEvent::SetNetworkPlayerID(NetworkPlayerID lNetworkPlayerID)
     {
-        CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
-            CGS_ASSERT_MESSAGE_AT(
-                "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                __FILE__, 1447 /* ARTIST 0x8258110C */));
+        CGS_ASSERT_AT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                __FILE__, 1447 /* ARTIST 0x8258110C */);
+
         mNetworkPlayerID = lNetworkPlayerID;
     }
 
     // X360 0x82581140. Store the player id at +0, guarding against the invalid-id sentinel.
     void NetworkOutPlayerFinalisedEvent::SetNetworkPlayerID(NetworkPlayerID lNetworkPlayerID)
     {
-        CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
-            CGS_ASSERT_MESSAGE_AT(
-                "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                __FILE__, 1554 /* ARTIST 0x8258116C */));
+        CGS_ASSERT_AT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                __FILE__, 1554 /* ARTIST 0x8258116C */);
+
         mNetworkPlayerID = lNetworkPlayerID;
     }
 
     // X360 0x825811A0. Store the player id at +0, guarding against the invalid-id sentinel.
     void NetworkOutPlayerRemovedEvent::SetNetworkPlayerID(NetworkPlayerID lNetworkPlayerID)
     {
-        CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
-            CGS_ASSERT_MESSAGE_AT(
-                "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                __FILE__, 1568 /* ARTIST 0x825811CC */));
+        CGS_ASSERT_AT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                __FILE__, 1568 /* ARTIST 0x825811CC */);
+
         mNetworkPlayerID = lNetworkPlayerID;
     }
 
@@ -69,10 +69,10 @@ namespace BrnNetworkModuleIO
                                                    EActiveRaceCarIndex leActiveRaceCarIndex,
                                                    EDisconnectStatus leDisconnectStatus)
     {
-        CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
-            CGS_ASSERT_MESSAGE_AT(
-                "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                __FILE__, 1416 /* ARTIST 0x825810B4 */));
+        CGS_ASSERT_AT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                __FILE__, 1416 /* ARTIST 0x825810B4 */);
+
         mNetworkPlayerID     = lNetworkPlayerID;
         meDisconnectStatus   = leDisconnectStatus;
         meActiveRaceCarIndex = leActiveRaceCarIndex;

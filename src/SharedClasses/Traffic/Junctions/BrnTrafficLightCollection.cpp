@@ -120,11 +120,11 @@ namespace BrnTraffic
     // -- CalcInstanceTransform @ 0x82753910 ---------------------------------------
     Matrix44Affine TrafficLightCollection::CalcInstanceTransform(u32 luInstance) const
     {
-        CGS_ASSERT(luInstance < muNumTrafficLights,
-            CGS_ASSERT_MESSAGE_AT(
-                "luInstance < muNumTrafficLights", KAC_ARTIST_ASSERT_FILE, 248 /* ARTIST 0x82753944 */));
-        CGS_ASSERT(mpaPosAndYRotations,
-            CGS_ASSERT_MESSAGE_AT("mpaPosAndYRotations", KAC_ARTIST_ASSERT_FILE, 249 /* ARTIST 0x8275396C */));
+        CGS_ASSERT_AT(luInstance < muNumTrafficLights,
+            "luInstance < muNumTrafficLights", KAC_ARTIST_ASSERT_FILE, 248 /* ARTIST 0x82753944 */);
+
+        CGS_ASSERT_AT(mpaPosAndYRotations,
+            "mpaPosAndYRotations", KAC_ARTIST_ASSERT_FILE, 249 /* ARTIST 0x8275396C */);
 
         return ExpandPosPlusYRotToTransform(mpaPosAndYRotations[luInstance]);
     }
@@ -183,9 +183,9 @@ namespace BrnTraffic
     // -- GetCoronaPosition @ 0x82753820 -------------------------------------------
     Vector3 TrafficLightCollection::GetCoronaPosition(u32 luCorona) const
     {
-        CGS_ASSERT(luCorona < muNumCoronas, CGS_ASSERT_MESSAGE_AT("luCorona < muNumCoronas", KAC_ARTIST_ASSERT_FILE, 230));
-        CGS_ASSERT(rw::math::vpu::IsValid(mpaCoronaPositions[luCorona]),
-            CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( mpaCoronaPositions[luCorona] )", KAC_ARTIST_ASSERT_FILE, 231));
+        CGS_ASSERT_AT(luCorona < muNumCoronas, "luCorona < muNumCoronas", KAC_ARTIST_ASSERT_FILE, 230);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(mpaCoronaPositions[luCorona]),
+            "RwMath::IsValid( mpaCoronaPositions[luCorona] )", KAC_ARTIST_ASSERT_FILE, 231);
 
         return mpaCoronaPositions[luCorona];
     }
@@ -220,21 +220,21 @@ namespace BrnTraffic
     s32 TrafficLightCollection::GetInstanceIndexForInstanceID(u32 luInstanceID) const
     {
         const u32 luHash = luInstanceID & KU_INSTANCE_ID_HASH_MASK;
-        CGS_ASSERT((luHash + 1) < KU_INSTANCE_ID_HASH_TABLE_SIZE,
-            CGS_ASSERT_MESSAGE_AT(
-                "(luHash + 1) < KU_INSTANCE_ID_HASH_TABLE_SIZE",
-                KAC_ARTIST_ASSERT_FILE, 288 /* ARTIST 0x8274F5C4 */));
+        CGS_ASSERT_AT((luHash + 1) < KU_INSTANCE_ID_HASH_TABLE_SIZE,
+            "(luHash + 1) < KU_INSTANCE_ID_HASH_TABLE_SIZE",
+                KAC_ARTIST_ASSERT_FILE, 288 /* ARTIST 0x8274F5C4 */);
+
 
         const u32 luBeginIndex = mauInstanceHashOffsets[luHash];
         const u32 luEndIndex   = mauInstanceHashOffsets[luHash + 1];
-        CGS_ASSERT(luEndIndex >= luBeginIndex,
-            CGS_ASSERT_MESSAGE_AT(
-                "luEndIndex >= luBeginIndex",
-                KAC_ARTIST_ASSERT_FILE, 294 /* ARTIST 0x8274F600 */));
-        CGS_ASSERT(luEndIndex <= muNumTrafficLights,
-            CGS_ASSERT_MESSAGE_AT(
-                "luEndIndex <= muNumTrafficLights",
-                KAC_ARTIST_ASSERT_FILE, 295 /* ARTIST 0x8274F628 */));
+        CGS_ASSERT_AT(luEndIndex >= luBeginIndex,
+            "luEndIndex >= luBeginIndex",
+                KAC_ARTIST_ASSERT_FILE, 294 /* ARTIST 0x8274F600 */);
+
+        CGS_ASSERT_AT(luEndIndex <= muNumTrafficLights,
+            "luEndIndex <= muNumTrafficLights",
+                KAC_ARTIST_ASSERT_FILE, 295 /* ARTIST 0x8274F628 */);
+
 
         for (u32 luIndex = luBeginIndex; luIndex < luEndIndex; ++luIndex)
         {
@@ -250,9 +250,9 @@ namespace BrnTraffic
     // -- GetInstanceType @ 0x8274F438 ---------------------------------------------
     u32 TrafficLightCollection::GetInstanceType(u32 luInstance) const
     {
-        CGS_ASSERT(luInstance < muNumTrafficLights,
-            CGS_ASSERT_MESSAGE_AT(
-                "luInstance < muNumTrafficLights", KAC_ARTIST_ASSERT_FILE, 208 /* ARTIST 0x8274F468 */));
+        CGS_ASSERT_AT(luInstance < muNumTrafficLights,
+            "luInstance < muNumTrafficLights", KAC_ARTIST_ASSERT_FILE, 208 /* ARTIST 0x8274F468 */);
+
 
         return mpauInstanceTypes[luInstance];
     }
@@ -260,9 +260,9 @@ namespace BrnTraffic
     // -- GetTrafficLightType @ 0x8274F4A0 -----------------------------------------
     const TrafficLightType* TrafficLightCollection::GetTrafficLightType(u32 luType) const
     {
-        CGS_ASSERT(luType < muNumTrafficLightTypes,
-            CGS_ASSERT_MESSAGE_AT(
-                "luType < muNumTrafficLightTypes", KAC_ARTIST_ASSERT_FILE, 215 /* ARTIST 0x8274F4D0 */));
+        CGS_ASSERT_AT(luType < muNumTrafficLightTypes,
+            "luType < muNumTrafficLightTypes", KAC_ARTIST_ASSERT_FILE, 215 /* ARTIST 0x8274F4D0 */);
+
 
         return &mpaTrafficLightTypes[luType];
     }

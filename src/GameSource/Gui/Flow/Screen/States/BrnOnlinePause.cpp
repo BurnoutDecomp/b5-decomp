@@ -273,7 +273,7 @@ namespace BrnGui
                 default:
                     // The console streams "Unexpected event received : " << id << " in "
                     // << file << " at line " << line.
-                    CGS_ASSERT(false, "Unexpected event received : ");
+                    CGS_FAIL("Unexpected event received : ");
                     break;
             }
         }
@@ -363,7 +363,7 @@ namespace BrnGui
                         break;
 
                     default:
-                        CGS_ASSERT_AT(false, "Invalid pause option selected", CGS_ARTIST_FILE, 317);
+                        CGS_FAIL_AT("Invalid pause option selected", CGS_ARTIST_FILE, 317);
                         break;
                 }
                 break;

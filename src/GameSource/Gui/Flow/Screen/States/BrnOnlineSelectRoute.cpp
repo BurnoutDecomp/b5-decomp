@@ -170,7 +170,7 @@ namespace
             if (lpPreset->GetEventId() == luEventId)
                 return lpPreset;
         }
-        CGS_ASSERT(false, "Unable to find preset event with event id");
+        CGS_FAIL("Unable to find preset event with event id");
         return 0;
     }
 
@@ -492,7 +492,7 @@ namespace
 
     void OnlineSelectRoute::HandleInGameFailedEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineSelectRoute::HandleInGameEvent", CGS_ARTIST_FILE, 1384));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineSelectRoute::HandleInGameEvent", CGS_ARTIST_FILE, 1384);
 
         SendStateEvent("GO_BACK");
     }
@@ -530,7 +530,7 @@ namespace
 
     void OnlineSelectRoute::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineSelectRoute::HandleControllerInput", CGS_ARTIST_FILE, 517));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineSelectRoute::HandleControllerInput", CGS_ARTIST_FILE, 517);
 
 
         switch (meSubState)
@@ -575,7 +575,7 @@ namespace
             const u64 luHighlightedId = mMenuOptions.GetHighlightedId();
             if (luHighlightedId >= E_MAIN_MENU_OPTION_COUNT)
             {
-                CGS_ASSERT(false, "Unknown menu option\n");
+                CGS_FAIL("Unknown menu option\n");
                 PostAudio(mpStateInterface, "Accept");
                 break;
             }
@@ -844,7 +844,7 @@ namespace
             mSelectRoutes.Show();
 
         meSubState = E_SUBSTATE_SELECTING_CHECKPOINT;
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 1830 /* ARTIST 0x824931F8 */));
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1830 /* ARTIST 0x824931F8 */);
         mMenuOptions.Clear();
         mCursor.SetActive();
         mbEditingNewCheckpoint = false;
@@ -881,7 +881,7 @@ namespace
     void OnlineSelectRoute::ShowPresetEvents()
     {
         meSubState = E_SUBSTATE_SELECTING_PRESET_EVENT;
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 1872 /* ARTIST 0x82493344 */));
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1872 /* ARTIST 0x82493344 */);
 
         mpIconManager->SetUseEventIcons(
             GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_ONLINE_EVENT_PRESETS,
@@ -962,7 +962,7 @@ namespace
         }
         else
         {
-            CGS_ASSERT(false, "Invalid select round value");
+            CGS_FAIL("Invalid select round value");
         }
 
         mSelectRoutes.SetCurrentRound(liNextRound);
@@ -1066,7 +1066,7 @@ namespace
                 break;
 
             default:
-                CGS_ASSERT(false, "Unhandled menu item type");
+                CGS_FAIL("Unhandled menu item type");
                 break;
             }
 
@@ -1086,7 +1086,7 @@ namespace
         }
         else
         {
-            CGS_ASSERT(false, "Setting helpbar when not in a valid state");
+            CGS_FAIL("Setting helpbar when not in a valid state");
         }
 
         mHelpBar.Clear();

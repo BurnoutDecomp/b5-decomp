@@ -37,10 +37,10 @@ namespace BrnGui
 
     void BrnBaseFlow::SetInEventQueue(InputBuffer::GuiEventQueue* lpInEventQueue)
     {
-        CGS_ASSERT(lpInEventQueue != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpInEventQueue",
-                "..\\..\\..\\GameSource\\Gui/Flow/BrnBaseFlow.h", 162 /* ARTIST 0x827E28D4 */));
+        CGS_ASSERT_AT(lpInEventQueue != 0,
+            "lpInEventQueue",
+                "..\\..\\..\\GameSource\\Gui/Flow/BrnBaseFlow.h", 162 /* ARTIST 0x827E28D4 */);
+
         mStateMachine.SetInEventQueue(lpInEventQueue);
     }
 

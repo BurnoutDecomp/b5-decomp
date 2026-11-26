@@ -18,11 +18,11 @@ namespace BrnWorld
 void
 WorldEntityModule::BridgePVSToOutput_Prepare( WorldEntityIO::OutputBuffer_Prepare* lpOutputBuffer )
 {
-    CGS_ASSERT( lpOutputBuffer,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpOutputBuffer",
+    CGS_ASSERT_AT( lpOutputBuffer,
+        "lpOutputBuffer",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../World/EntityModules/WorldEntityModule/Bridges/WorldEntityBridgePVSToOutput.cpp", 38 /* ARTIST 0x822F9EF4 */));
+            "../World/EntityModules/WorldEntityModule/Bridges/WorldEntityBridgePVSToOutput.cpp", 38 /* ARTIST 0x822F9EF4 */);
+
 
     lpOutputBuffer->GetResourceRequestInterface()->Append(
         *mPVSModule.GetGameDataRequestInt() );

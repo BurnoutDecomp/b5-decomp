@@ -97,7 +97,7 @@ static void MomentPlayerStunt_StageTakeReference(const MomentSharedInfo& lrShare
     // (One assert on the allocation path, one on the take swap -- both non-gating.)
     if (lpIceTake == 0)
     {
-        CGS_ASSERT(false, "lpIceTake != NULL");
+        CGS_FAIL("lpIceTake != NULL");
         (void)liTakeAssertLine;
     }
 
@@ -251,7 +251,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager& lrB
         break;
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerStunt.cpp", 275));   //  (non-gating)
+        CGS_FAIL_AT("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerStunt.cpp", 275);   //  (non-gating)
         return;
     }
 

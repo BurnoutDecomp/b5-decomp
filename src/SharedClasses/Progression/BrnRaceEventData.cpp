@@ -25,10 +25,10 @@ void EventRacerPersonality::Construct()
 // &mpaCheckpoints[liCheckpointIndex] (X360: `return 40 * index + *(this + 0x18)`).
 const CheckpointData* RaceEventData::GetCheckpointData(s32 liCheckpointIndex) const
 {
-    CGS_ASSERT(liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount,
-        CGS_ASSERT_MESSAGE_AT(
-            "liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount",
-            "..\\..\\..\\SharedClasses\\Progression/BrnRaceEventData.h", 953 /* ARTIST 0x8230F840 */));
+    CGS_ASSERT_AT(liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount,
+        "liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount",
+            "..\\..\\..\\SharedClasses\\Progression/BrnRaceEventData.h", 953 /* ARTIST 0x8230F840 */);
+
     // CheckpointData is a complete 40-byte type (static_assert in the header), so the console's
     // `40 * index + base` is plain element indexing once the SERIALISED 32-bit table slot has
     // been turned into a host address (see the slot banner in BrnRaceEventData.h).

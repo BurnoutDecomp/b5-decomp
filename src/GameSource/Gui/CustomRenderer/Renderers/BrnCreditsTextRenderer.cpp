@@ -144,7 +144,7 @@ void CreditsTextRenderer::RecalculateParagraphs()
             }
             else
             {
-                CGS_ASSERT(false, "Invalid type of credits to render : ");
+                CGS_FAIL("Invalid type of credits to render : ");
                 lpcTitleFmtSel  = lpcTitleFmt;
                 lpcDetailFmtSel = lpcDetailFmt;
             }

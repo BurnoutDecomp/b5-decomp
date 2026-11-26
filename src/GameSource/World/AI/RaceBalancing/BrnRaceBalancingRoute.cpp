@@ -91,17 +91,17 @@ f32 RaceBalancingRoute::ComputeRaceCompletionRatio(f32 lfDistanceToNextCheckpoin
 // of range; their messages are taken verbatim from the X360 FireAssert calls.
 f32 RaceBalancingRoute::GetTime(GraphType leGraphType, s32 liTimeIndex) const
 {
-    CGS_ASSERT(mbValid,
-        CGS_ASSERT_MESSAGE_AT("mbValid", __FILE__, 203 /* ARTIST 0x82765924 */));
-    CGS_ASSERT(liTimeIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liTimeIndex >= 0", __FILE__, 204 /* ARTIST 0x82765948 */));
-    CGS_ASSERT(liTimeIndex < miTimeCount,
-        CGS_ASSERT_MESSAGE_AT("liTimeIndex < miTimeCount", __FILE__, 205 /* ARTIST 0x82765970 */));
-    CGS_ASSERT(leGraphType >= 0,
-        CGS_ASSERT_MESSAGE_AT("leGraphType >= 0", __FILE__, 206 /* ARTIST 0x82765994 */));
-    CGS_ASSERT(leGraphType < E_GRAPH_TYPE_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leGraphType < E_GRAPH_TYPE_COUNT", __FILE__, 207 /* ARTIST 0x827659B8 */));
+    CGS_ASSERT_AT(mbValid,
+        "mbValid", __FILE__, 203 /* ARTIST 0x82765924 */);
+    CGS_ASSERT_AT(liTimeIndex >= 0,
+        "liTimeIndex >= 0", __FILE__, 204 /* ARTIST 0x82765948 */);
+    CGS_ASSERT_AT(liTimeIndex < miTimeCount,
+        "liTimeIndex < miTimeCount", __FILE__, 205 /* ARTIST 0x82765970 */);
+    CGS_ASSERT_AT(leGraphType >= 0,
+        "leGraphType >= 0", __FILE__, 206 /* ARTIST 0x82765994 */);
+    CGS_ASSERT_AT(leGraphType < E_GRAPH_TYPE_COUNT,
+        "leGraphType < E_GRAPH_TYPE_COUNT", __FILE__, 207 /* ARTIST 0x827659B8 */);
+
 
     return mafTimes[leGraphType][liTimeIndex]
            + static_cast<f32>(miTakenDownCount) * mfTakenDownTimePenalty;

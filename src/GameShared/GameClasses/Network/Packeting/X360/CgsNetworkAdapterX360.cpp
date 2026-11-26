@@ -95,7 +95,7 @@ NetworkAdapterBase::ENetworkStatus NetworkAdapterX360::Prepare(NetworkAdapterPre
     else if (mePrepareState != E_FULLY_PREPARED)
     {
         // state >= 3 (asm cmplwi 3 / bge): unexpected -> assert + report ready, no re-arm.
-        CGS_ASSERT(false, "CgsNetwork::NetworkAdapterX360::Prepare: Unknown prepare state");
+        CGS_FAIL("CgsNetwork::NetworkAdapterX360::Prepare: Unknown prepare state");
         return E_NET_STATUS_READY;
     }
 
@@ -157,9 +157,9 @@ void NetworkAdapterX360::StartupNetworking()
             break;
 
         case E_SERVER_TYPE_COUNT:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "Unknown server type",
-                __FILE__, 315 /* ARTIST 0x8287F6A8 */));
+                __FILE__, 315 /* ARTIST 0x8287F6A8 */);
             lpcEnvironment = KPC_ENVIRONMENT_SECURE;
             lpcFlags       = "";
             break;
@@ -202,9 +202,9 @@ void NetworkAdapterX360::Update()
         const s32 liUserIndex = lpNetworkManager->GetLocalUserControllerPort();
         if (liUserIndex > -1 && XUserGetSigninState(liUserIndex) == eXUserSigninState_SignedInToLive)
         {
-            CGS_ASSERT(mpEnvironment != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(mpEnvironment != 0,
                 "Environment to use not set up\n",
-                CGS_ARTIST_FILE, 168 /* ARTIST 0x8288BF4C */));
+                CGS_ARTIST_FILE, 168 /* ARTIST 0x8288BF4C */);
 
             const s32 liConnectResult = NetConnConnect(0, static_cast<const char*>(mpEnvironment));
             mbConnecting = (liConnectResult == 1);
@@ -227,12 +227,12 @@ void NetworkAdapterX360::Update()
             mbDuplicateLogin = (liStatus == KI_NETCONN_STATUS_DUPLICATE_LOGIN);
             NetConnDisconnect();
 
-            CGS_ASSERT(mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(mpServerInterface != 0,
                 "mpServerInterface",
-                CGS_ARTIST_FILE, 192 /* ARTIST 0x8288C000 */));
-            CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CGS_ASSERT_MESSAGE_AT(
+                CGS_ARTIST_FILE, 192 /* ARTIST 0x8288C000 */);
+            CGS_ASSERT_AT(mpServerInterface->GetConnectionComponent() != 0,
                 "mpServerInterface->GetConnectionComponent()",
-                CGS_ARTIST_FILE, 193 /* ARTIST 0x8288C02C */));
+                CGS_ARTIST_FILE, 193 /* ARTIST 0x8288C02C */);
 
             // mpServerInterface->GetConnectionComponent()->GetServerInterface()->GetLobbyAPIRef()
             // (asm walks +0x04 -> +0x10 -> +0x78): the connection component's owning DirtySock

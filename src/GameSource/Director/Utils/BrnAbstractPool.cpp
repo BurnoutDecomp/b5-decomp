@@ -20,15 +20,15 @@ namespace BrnDirector
 bool AbstractPoolVoidHandle::Prepare(IAbstractPoolFreeObject* lpFreeObjectInterface,
                                      void* lpObject, s32 liIndex, s32 liSize)
 {
-    CGS_ASSERT( lpObject != 0,
-        CGS_ASSERT_MESSAGE_AT("lpObject != NULL", CGS_ARTIST_FILE, 33 /* ARTIST 0x821F76F8 */));
-    CGS_ASSERT( lpFreeObjectInterface != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpFreeObjectInterface != NULL", CGS_ARTIST_FILE, 34 /* ARTIST 0x821F771C */));
-    CGS_ASSERT( liIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liIndex >= 0", CGS_ARTIST_FILE, 35 /* ARTIST 0x821F7740 */));
-    CGS_ASSERT( liSize >= 0,
-        CGS_ASSERT_MESSAGE_AT("liSize >= 0", CGS_ARTIST_FILE, 36 /* ARTIST 0x821F7764 */));
+    CGS_ASSERT_AT( lpObject != 0,
+        "lpObject != NULL", CGS_ARTIST_FILE, 33 /* ARTIST 0x821F76F8 */);
+    CGS_ASSERT_AT( lpFreeObjectInterface != 0,
+        "lpFreeObjectInterface != NULL", CGS_ARTIST_FILE, 34 /* ARTIST 0x821F771C */);
+
+    CGS_ASSERT_AT( liIndex >= 0,
+        "liIndex >= 0", CGS_ARTIST_FILE, 35 /* ARTIST 0x821F7740 */);
+    CGS_ASSERT_AT( liSize >= 0,
+        "liSize >= 0", CGS_ARTIST_FILE, 36 /* ARTIST 0x821F7764 */);
 
     mpObject              = lpObject;
     mpFreeObjectInterface = lpFreeObjectInterface;

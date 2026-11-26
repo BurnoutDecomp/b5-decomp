@@ -111,11 +111,11 @@ void StuntModeScoring::Construct(AchievementManager* lpAchievementManager)
 //   *(v2+45) = 1  -> mbInitialDriftOngoing (0x2D)
 void StuntModeScoring::Activate(s32 liTargetScore)
 {
-    CGS_ASSERT(miCurrentScore == 0, CGS_ASSERT_MESSAGE_AT("miCurrentScore == 0", CGS_ARTIST_FILE, 655));
-    CGS_ASSERT(RwMathFPU_IsZero(mfComboScore), CGS_ASSERT_MESSAGE_AT("RwMathFPU::IsZero(mfComboScore)", CGS_ARTIST_FILE, 656));
-    CGS_ASSERT(miComboMultiplier == 1, CGS_ASSERT_MESSAGE_AT("miComboMultiplier == 1", CGS_ARTIST_FILE, 657));
-    CGS_ASSERT(!mbTimeLimitExpired, CGS_ASSERT_MESSAGE_AT("!mbTimeLimitExpired", CGS_ARTIST_FILE, 658));
-    CGS_ASSERT(!mbPlayerCarCrashing, CGS_ASSERT_MESSAGE_AT("!mbPlayerCarCrashing", CGS_ARTIST_FILE, 659));
+    CGS_ASSERT_AT(miCurrentScore == 0, "miCurrentScore == 0", CGS_ARTIST_FILE, 655);
+    CGS_ASSERT_AT(RwMathFPU_IsZero(mfComboScore), "RwMathFPU::IsZero(mfComboScore)", CGS_ARTIST_FILE, 656);
+    CGS_ASSERT_AT(miComboMultiplier == 1, "miComboMultiplier == 1", CGS_ARTIST_FILE, 657);
+    CGS_ASSERT_AT(!mbTimeLimitExpired, "!mbTimeLimitExpired", CGS_ARTIST_FILE, 658);
+    CGS_ASSERT_AT(!mbPlayerCarCrashing, "!mbPlayerCarCrashing", CGS_ARTIST_FILE, 659);
 
     miTargetScore         = liTargetScore;   // X360 stw a2, 0x14
     mbStuntModeActive     = true;            // X360 stb 1, 0x28

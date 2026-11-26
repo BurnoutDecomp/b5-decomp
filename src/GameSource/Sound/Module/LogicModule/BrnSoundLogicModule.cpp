@@ -383,7 +383,7 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
         lbPrepared = true;
         break;
     default:
-        CGS_ASSERT(false, "Invalid Stage\n");
+        CGS_FAIL("Invalid Stage\n");
         break;
     }
 
@@ -410,7 +410,7 @@ bool SoundLogicModule::Release()
         meBrnPrepareStage = E_PREPSTAGE_PERFMON;
         return true;
     default:
-        CGS_ASSERT_AT(false, "Invalid Stage\n", CGS_ARTIST_FILE, 450);   // li r5,0x1C2
+        CGS_FAIL_AT("Invalid Stage\n", CGS_ARTIST_FILE, 450);   // li r5,0x1C2
         return false;
     }
 }
@@ -1490,11 +1490,11 @@ void SoundLogicModule::CreateStateManagers()
         {
             // The X360 asserts this returns true (it always does); AddStateManager itself
             // fires the real registration asserts.
-            CGS_ASSERT(lEnvironment.AddStateManager(mapStateManagers[i]),
-                CGS_ASSERT_MESSAGE_AT(
-                    "lEnvironment.AddStateManager( mapStateManagers[ i ] )",
+            CGS_ASSERT_AT(lEnvironment.AddStateManager(mapStateManagers[i]),
+                "lEnvironment.AddStateManager( mapStateManagers[ i ] )",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                    "../Sound/Module/LogicModule/BrnSoundLogicModule.cpp", 753 /* ARTIST 0x826AFF5C */));
+                    "../Sound/Module/LogicModule/BrnSoundLogicModule.cpp", 753 /* ARTIST 0x826AFF5C */);
+
         }
     }
 }
@@ -1558,11 +1558,11 @@ bool SoundLogicModule::PrepareStateManagersOnBoot(s32 liSkipBitfield)
 // (@0x826E0C10 -- the two memcpy spans + the car-data Clear+Append), unlock.
 void SoundLogicModule::PreUpdate(Io::LogicPreUpdateOutputBuffer* apLogicPreUpdateOutput)
 {
-    CGS_ASSERT(apLogicPreUpdateOutput != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpLogicPreUpdateOutput",
+    CGS_ASSERT_AT(apLogicPreUpdateOutput != 0,
+        "lpLogicPreUpdateOutput",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Sound/Module/LogicModule/BrnSoundLogicModule.cpp", 495 /* ARTIST 0x826E1F3C */));
+            "../Sound/Module/LogicModule/BrnSoundLogicModule.cpp", 495 /* ARTIST 0x826E1F3C */);
+
     apLogicPreUpdateOutput->LockForWrite();
     apLogicPreUpdateOutput->SetPreUpdateOutput(mPreUpdateOutput);
     apLogicPreUpdateOutput->UnlockForWrite();

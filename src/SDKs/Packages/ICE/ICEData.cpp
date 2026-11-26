@@ -912,7 +912,7 @@ void ICEElementDescription::Prepare()
 
         case eICE_INT:
         {
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "Hopefully we'll never see this, because eICE_INT is not to be trusted - JonE");
             s32 liMin = 1 << (miDataBits - 1);
             CGS_ASSERT(mMax.GetSignedInt() <= ~liMin, "mMax.GetSignedInt() <= ~lfMin");
@@ -1349,9 +1349,9 @@ ICETakeData& ICETakeData::operator=(const ICETakeData& lrOther)
     const u32 luSize = lrOther.ComputeActualSize() - 52;
     rw::core::stdc::MemCopy(&mElementCounts[0], &lrOther.mElementCounts[0], luSize);
 
-    CGS_ASSERT(luSize < (2 * 1024),
-        CGS_ASSERT_MESSAGE_AT("luSize < (2*1024)",
-            "..\\..\\..\\SDKs\\Packages\\ICE\\ICEData.cpp", 1013 /* ARTIST 0x82532BC0 */));
+    CGS_ASSERT_AT(luSize < (2 * 1024),
+        "luSize < (2*1024)",
+            "..\\..\\..\\SDKs\\Packages\\ICE\\ICEData.cpp", 1013 /* ARTIST 0x82532BC0 */);
     return *this;
 }
 
@@ -2616,7 +2616,7 @@ void ICETakeData::SaveData(ICEFileHandler* lpHandler, s32 liTakeNumber)
                         // the assert stream and fires it.)
                         // FLAG: the CgsDev::Assert::StrStreamBase machinery is out of
                         // scope here; modeled as a single CGS_ASSERT carrying the message.
-                        CGS_ASSERT(false, "Could not find token value");
+                        CGS_FAIL("Could not find token value");
                     }
                     else
                     {

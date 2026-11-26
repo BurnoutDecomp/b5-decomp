@@ -50,10 +50,10 @@ namespace BrnStreetData
     // X360 SetScore @ 0x8230EC78: maScores[leScoreType] = liScore, guarded by the bounds assert.
     void ScoreList::SetScore( ScoreType leScoreType, int32_t liScore )
     {
-        CGS_ASSERT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT",
-                KAC_ARTIST_ASSERT_HEADER, 601 /* ARTIST 0x8230ECA8 */));
+        CGS_ASSERT_AT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
+            "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT",
+                KAC_ARTIST_ASSERT_HEADER, 601 /* ARTIST 0x8230ECA8 */);
+
         maScores[ leScoreType ] = liScore;
     }
 
@@ -118,10 +118,10 @@ namespace BrnStreetData
     // the inlined assert path and is dropped (source return is void).
     void ChallengePlayerScoreEntry::SetCarID( ScoreType leScoreType, ::CgsID lCarID )
     {
-        CGS_ASSERT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT",
-                KAC_ARTIST_ASSERT_HEADER, 490 /* ARTIST 0x8230EC48 */));
+        CGS_ASSERT_AT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
+            "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT",
+                KAC_ARTIST_ASSERT_HEADER, 490 /* ARTIST 0x8230EC48 */);
+
         maCarIDs[ leScoreType ] = lCarID;
     }
 
@@ -145,8 +145,8 @@ namespace BrnStreetData
 
     void ChallengePlayerScoreEntry::Copy(const ChallengePlayerScoreEntry* lpSource)
     {
-        CGS_ASSERT(lpSource != 0,
-            CGS_ASSERT_MESSAGE_AT("lpPlayerScoreEntry", KAC_ARTIST_ASSERT_SOURCE, 144 /* ARTIST 0x82676694 */));
+        CGS_ASSERT_AT(lpSource != 0,
+            "lpPlayerScoreEntry", KAC_ARTIST_ASSERT_SOURCE, 144 /* ARTIST 0x82676694 */);
         ChallengeData::Copy(lpSource);
         maCarIDs[0] = lpSource->maCarIDs[0];
         maCarIDs[1] = lpSource->maCarIDs[1];
@@ -156,8 +156,8 @@ namespace BrnStreetData
     // StreetManager keystone promotion); only its method bodies live here.
     void ChallengeParScoresEntry::Copy(const ChallengeParScoresEntry* lpSource)
     {
-        CGS_ASSERT(lpSource != 0,
-            CGS_ASSERT_MESSAGE_AT("lpData", KAC_ARTIST_ASSERT_SOURCE, 166 /* ARTIST 0x8267672C */));
+        CGS_ASSERT_AT(lpSource != 0,
+            "lpData", KAC_ARTIST_ASSERT_SOURCE, 166 /* ARTIST 0x8267672C */);
         ChallengeData::Copy(lpSource);
         mRivals[0] = lpSource->mRivals[0];
         mRivals[1] = lpSource->mRivals[1];
@@ -175,10 +175,10 @@ namespace BrnStreetData
                                             int32_t*  lpiScore,
                                             ::CgsID*  lpRivalId ) const
     {
-        CGS_ASSERT( lpiScore,
-            CGS_ASSERT_MESSAGE_AT("lpiScore != NULL", KAC_ARTIST_ASSERT_FILE, 204 /* ARTIST 0x8231C814 */));
-        CGS_ASSERT( lpRivalId,
-            CGS_ASSERT_MESSAGE_AT("lpRivalId != NULL", KAC_ARTIST_ASSERT_FILE, 205 /* ARTIST 0x8231C838 */));
+        CGS_ASSERT_AT( lpiScore,
+            "lpiScore != NULL", KAC_ARTIST_ASSERT_FILE, 204 /* ARTIST 0x8231C814 */);
+        CGS_ASSERT_AT( lpRivalId,
+            "lpRivalId != NULL", KAC_ARTIST_ASSERT_FILE, 205 /* ARTIST 0x8231C838 */);
 
         *lpiScore  = ChallengeData::GetScore( leScoreType );
         *lpRivalId = mRivals[ leScoreType ];

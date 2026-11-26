@@ -53,10 +53,10 @@ void ChallengeHighScoreEntry::Construct()
 //
 void ChallengeHighScoreEntry::Copy(const ChallengeHighScoreEntry* lpData)
 {
-    CGS_ASSERT(lpData != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpData",
-            CGS_ARTIST_FILE, 221 /* ARTIST 0x823176FC */));
+    CGS_ASSERT_AT(lpData != NULL,
+        "lpData",
+            CGS_ARTIST_FILE, 221 /* ARTIST 0x823176FC */);
+
 
     ChallengeData::Copy(lpData);
 
@@ -78,7 +78,7 @@ bool ChallengeHighScoreEntry::IsWholeChallengeOwnedBySamePlayer()
                           maPlayerNames[liScoreType + 1].macName) == 0)
     {
         ++liScoreType;
-        CGS_ASSERT(liScoreType <= E_SCORE_TYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_SCORE_TYPE_COUNT", CGS_ARTIST_BRNCHALLENGEDATA_FILE, 56));
+        CGS_ASSERT_AT(liScoreType <= E_SCORE_TYPE_COUNT, "leEnumIndex <= E_SCORE_TYPE_COUNT", CGS_ARTIST_BRNCHALLENGEDATA_FILE, 56);
 
         if (liScoreType >= 1)
         {
@@ -123,7 +123,7 @@ void ChallengeHighScoreEntry::Construct(ChallengeData* lpData)
 bool ChallengeHighScoreEntry::UpdateEntry(const ChallengeHighScoreEntry* lpEntry,
                                           CgsContainers::FastBitArray<2>* lpUpdateScoresBitArray)
 {
-    CGS_ASSERT(lpEntry != NULL, CGS_ASSERT_MESSAGE_AT("lpEntry", CGS_ARTIST_FILE, 105));
+    CGS_ASSERT_AT(lpEntry != NULL, "lpEntry", CGS_ARTIST_FILE, 105);
 
     if (lpUpdateScoresBitArray)
     {
@@ -163,7 +163,7 @@ bool ChallengeHighScoreEntry::UpdateEntry(const ChallengeHighScoreEntry* lpEntry
             }
         }
 
-        CGS_ASSERT(liScoreType + 1 <= E_SCORE_TYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_SCORE_TYPE_COUNT", CGS_ARTIST_BRNCHALLENGEDATA_FILE, 56));
+        CGS_ASSERT_AT(liScoreType + 1 <= E_SCORE_TYPE_COUNT, "leEnumIndex <= E_SCORE_TYPE_COUNT", CGS_ARTIST_BRNCHALLENGEDATA_FILE, 56);
     }
 
     return lbUpdated;

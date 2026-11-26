@@ -38,9 +38,9 @@ void TextFieldRef::Construct(void* lpTextFieldInstance,
                                       void* lpParentMovie,
                                       void* lpTransform)
 {
-    CGS_ASSERT(lpTextFieldInstance != 0, CGS_ASSERT_MESSAGE_AT("lpTextFieldInst", CGS_ARTIST_FILE, 210 /* ARTIST 0x8246B030 */));
-    CGS_ASSERT(lpParentMovie != 0, CGS_ASSERT_MESSAGE_AT("lpParentMovie", CGS_ARTIST_FILE, 211 /* ARTIST 0x8246B054 */));
-    CGS_ASSERT(lpTransform != 0, CGS_ASSERT_MESSAGE_AT("lpTransform", CGS_ARTIST_FILE, 212 /* ARTIST 0x8246B078 */));
+    CGS_ASSERT_AT(lpTextFieldInstance != 0, "lpTextFieldInst", CGS_ARTIST_FILE, 210 /* ARTIST 0x8246B030 */);
+    CGS_ASSERT_AT(lpParentMovie != 0, "lpParentMovie", CGS_ARTIST_FILE, 211 /* ARTIST 0x8246B054 */);
+    CGS_ASSERT_AT(lpTransform != 0, "lpTransform", CGS_ARTIST_FILE, 212 /* ARTIST 0x8246B078 */);
 
     mpTextFieldInst = lpTextFieldInstance;
     mpParentMovie       = lpParentMovie;
@@ -55,10 +55,10 @@ void TextFieldRef::Construct(void* lpTextFieldInstance,
 // instance's own persistent buffer).
 void TextFieldRef::SetText(const char* lpacNewText, bool lbAlreadyLocalised)
 {
-    CGS_ASSERT(lpacNewText != 0,
-        CGS_ASSERT_MESSAGE_AT("lpacNewText", __FILE__, 76 /* ARTIST 0x8246CC84 */));
-    CGS_ASSERT(mpTextFieldInst != 0,
-        CGS_ASSERT_MESSAGE_AT("mpTextFieldInst", __FILE__, 77 /* ARTIST 0x8246CCAC */));
+    CGS_ASSERT_AT(lpacNewText != 0,
+        "lpacNewText", __FILE__, 76 /* ARTIST 0x8246CC84 */);
+    CGS_ASSERT_AT(mpTextFieldInst != 0,
+        "mpTextFieldInst", __FILE__, 77 /* ARTIST 0x8246CCAC */);
 
     static_cast<TextFieldInstance*>(mpTextFieldInst)->ChangeText(
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpacNewText), lbAlreadyLocalised);
@@ -80,8 +80,8 @@ void TextFieldRef::SetAutoSize(bool lbAutoSize)
 // the link found it the moment JunctionInfoComponent::SetEventNameText mounted.
 void TextFieldRef::ClearText()
 {
-    CGS_ASSERT(mpTextFieldInst != 0,
-        CGS_ASSERT_MESSAGE_AT("mpTextFieldInst", __FILE__, 61 /* ARTIST 0x8246CC00 */));
+    CGS_ASSERT_AT(mpTextFieldInst != 0,
+        "mpTextFieldInst", __FILE__, 61 /* ARTIST 0x8246CC00 */);
     static_cast<TextFieldInstance*>(mpTextFieldInst)->ChangeText(
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(""), false);
 }
@@ -226,9 +226,9 @@ bool TextFieldRef::SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
 // (already localised), return 1 unconditionally.
 bool TextFieldRef::SetLocalisedText(f32 lfValue, s32 liFormatType)
 {
-    CGS_ASSERT(liFormatType < 21,
-        CGS_ASSERT_STREAM_MESSAGE_AT("Invalid Localisation Format supplied to TextField::SetLocalisedText",
-            "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldRef.cpp", 114));
+    CGS_ASSERT_STREAM_AT(liFormatType < 21,
+        "Invalid Localisation Format supplied to TextField::SetLocalisedText",
+            "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldRef.cpp", 114);
 
     char lacBuffer[64];
     GetLanguageManager()->FormatText(
@@ -245,9 +245,9 @@ bool TextFieldRef::SetLocalisedText(f32 lfValue, s32 liFormatType)
 // as the float form over the s32 formatter (cpp:137 assert).
 bool TextFieldRef::SetLocalisedText(s32 liValue, s32 liFormatType)
 {
-    CGS_ASSERT(liFormatType < 21,
-        CGS_ASSERT_STREAM_MESSAGE_AT("Invalid Localisation Format supplied to TextField::SetLocalisedText",
-            "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldRef.cpp", 137));
+    CGS_ASSERT_STREAM_AT(liFormatType < 21,
+        "Invalid Localisation Format supplied to TextField::SetLocalisedText",
+            "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldRef.cpp", 137);
 
     char lacBuffer[64];
     GetLanguageManager()->FormatText(
@@ -295,8 +295,8 @@ void TextFieldRef::SetColour(Vector4 lv4Colour)
 // re-spelled -- no conversion happens on the console either.
 const char* TextFieldRef::GetText() const
 {
-    CGS_ASSERT(mpTextFieldInst != 0,
-        CGS_ASSERT_MESSAGE_AT("mpTextFieldInst", __FILE__, 408 /* ARTIST 0x8246E0E8 */));   // cpp:408 (non-gating)
+    CGS_ASSERT_AT(mpTextFieldInst != 0,
+        "mpTextFieldInst", __FILE__, 408 /* ARTIST 0x8246E0E8 */);   // cpp:408 (non-gating)
 
     return reinterpret_cast<const char*>(
         static_cast<const TextFieldInstance*>(mpTextFieldInst)->GetAptString().GetText());

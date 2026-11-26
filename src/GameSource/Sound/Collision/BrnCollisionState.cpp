@@ -61,9 +61,9 @@ void CollisionState::Attach(void* apvAttachment)
 {
     // ARTIST 0x826D343C: the assert is a tripwire only -- the copy and the base attach
     // follow unconditionally (no early return).
-    CGS_ASSERT(apvAttachment != 0, CGS_ASSERT_MESSAGE_AT("lpvAttachment",
+    CGS_ASSERT_AT(apvAttachment != 0, "lpvAttachment",
         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-        "../Sound/Collision/BrnCollisionState.cpp", 50 /* ARTIST 0x826D344C */));
+        "../Sound/Collision/BrnCollisionState.cpp", 50 /* ARTIST 0x826D344C */);
 
     mOutputCollision = *static_cast<const OutputCollision*>(apvAttachment);
     CgsSound::Logic::State::Attach(apvAttachment);

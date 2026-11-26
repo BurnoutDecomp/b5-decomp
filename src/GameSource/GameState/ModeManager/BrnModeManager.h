@@ -202,8 +202,8 @@ public:
     bool operator>(const GridPositionAndScoreData& lRhs) const
     {
         const char* const lpcAssertFile = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp"; // ARTIST 0x82022AD8
-        CGS_ASSERT(lpCarData != 0, CGS_ASSERT_MESSAGE_AT("lpCarData", lpcAssertFile, 150));
-        CGS_ASSERT(lRhs.lpCarData != 0, CGS_ASSERT_MESSAGE_AT("lRhs.lpCarData", lpcAssertFile, 151));
+        CGS_ASSERT_AT(lpCarData != 0, "lpCarData", lpcAssertFile, 150);
+        CGS_ASSERT_AT(lRhs.lpCarData != 0, "lRhs.lpCarData", lpcAssertFile, 151);
         return lpCarData->GetCumulativePoints() > lRhs.lpCarData->GetCumulativePoints();
     }
 };

@@ -348,7 +348,7 @@ namespace CgsResource
             break;
         }
         case AllocatePoolModuleState::E_RESULT_ERROR:
-            CGS_ASSERT(false, "Allocation state returned error during load - out of memory loading bundle!\n");   // :551
+            CGS_FAIL("Allocation state returned error during load - out of memory loading bundle!\n");   // :551
             break;
         case AllocatePoolModuleState::E_RESULT_PEND:
             break;
@@ -376,7 +376,7 @@ namespace CgsResource
             break;
         }
         default:
-            CGS_ASSERT(false, "Allocation state returned invalid result code \n");   // :589
+            CGS_FAIL("Allocation state returned invalid result code \n");   // :589
             break;
         }
     }
@@ -402,7 +402,7 @@ namespace CgsResource
             mProcessState = E_UPDATESTATE_IDLE;   // X360 *(a1+105264) = 0
             break;
         case 1:
-            CGS_ASSERT(false, "Deallocation state returned error during load\n");   // :622
+            CGS_FAIL("Deallocation state returned error during load\n");   // :622
             break;
         case 2:
             break;
@@ -419,7 +419,7 @@ namespace CgsResource
             break;
         }
         default:
-            CGS_ASSERT(false, "DeAllocation state returned invalid result code\n");   // :643
+            CGS_FAIL("DeAllocation state returned invalid result code\n");   // :643
             break;
         }
     }
@@ -442,7 +442,7 @@ namespace CgsResource
             mProcessState = E_UPDATESTATE_ALLOCATING_LIST;   // X360 a1[26316] = 1
             break;
         case IntelliFragPoolModuleState::E_RESULT_ERROR:
-            CGS_ASSERT(false, "Error during intellifrag\n");   // :676
+            CGS_FAIL("Error during intellifrag\n");   // :676
             break;
         case IntelliFragPoolModuleState::E_RESULT_PEND:
             break;
@@ -472,7 +472,7 @@ namespace CgsResource
             break;
         }
         default:
-            CGS_ASSERT(false, "Intellifrag state returned invalid result code\n");   // :714
+            CGS_FAIL("Intellifrag state returned invalid result code\n");   // :714
             break;
         }
     }
@@ -486,15 +486,15 @@ namespace CgsResource
             mProcessState = E_UPDATESTATE_ALLOCATING_LIST;
             break;
         case EmergencyFragPoolModuleState::E_RESULT_ERROR:
-            CGS_ASSERT(false, "Error during intellifrag\n");
+            CGS_FAIL("Error during intellifrag\n");
             break;
         case EmergencyFragPoolModuleState::E_RESULT_PEND:
             break;
         case EmergencyFragPoolModuleState::E_RESULT_EMERGENCY:
-            CGS_ASSERT(false, "Emergency defragment failed - time to commit suicide :(\n");
+            CGS_FAIL("Emergency defragment failed - time to commit suicide :(\n");
             break;
         default:
-            CGS_ASSERT(false, "Emergency defragment state returned invalid result code\n");
+            CGS_FAIL("Emergency defragment state returned invalid result code\n");
             break;
         }
     }
@@ -531,13 +531,13 @@ namespace CgsResource
             break;
         }
         case LiveUpdatePoolModuleState::E_RESULT_ERROR:
-            CGS_ASSERT(false, "Live update state returned error during load - out of memory loading bundle!\n");   // :772
+            CGS_FAIL("Live update state returned error during load - out of memory loading bundle!\n");   // :772
             break;
         case LiveUpdatePoolModuleState::E_RESULT_BUSY:
         case LiveUpdatePoolModuleState::E_RESULT_BUSY2:
             break;
         default:
-            CGS_ASSERT(false, "Live update state returned invalid result code\n");   // :791
+            CGS_FAIL("Live update state returned invalid result code\n");   // :791
             break;
         }
     }

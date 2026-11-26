@@ -247,7 +247,7 @@ void VaultArray::UnregisterVault(AttribSysIO::UnregisterVaultRequest* lpUnregist
         }
     }
 
-    CGS_ASSERT(false, "Tried to unregister a vault that wasn't loaded into a slot");  // .cpp:225
+    CGS_FAIL("Tried to unregister a vault that wasn't loaded into a slot");  // .cpp:225
 }
 
 // StreamedVaultAllocator::GetFreeSlot @ 0x82808638 -- claim the first free streamed-vault

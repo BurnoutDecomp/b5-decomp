@@ -133,10 +133,10 @@ namespace Native
         const u32 luConsoleSize = luNumParticles * static_cast<u32>(sizeof(CB4Particle));
         mpaParticles = static_cast<CB4Particle*>(
             lpHeapMalloc->Malloc(static_cast<s32>(luConsoleSize), KI_PARTICLE_ALIGNMENT));
-        CGS_ASSERT(mpaParticles != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpaParticles",
-                K_SIMPLE_PARTICLE_ASSERT_FILE, 293 /* ARTIST 0x8227ADA4 */));   // BrnSimpleParticleRenderer.cpp:293
+        CGS_ASSERT_AT(mpaParticles != 0,
+            "mpaParticles",
+                K_SIMPLE_PARTICLE_ASSERT_FILE, 293 /* ARTIST 0x8227ADA4 */);   // BrnSimpleParticleRenderer.cpp:293
+
         return luConsoleSize;
     }
 
@@ -164,9 +164,9 @@ namespace Native
     void BrnSimpleParticleArray::Construct(CgsMemory::HeapMalloc* lpHeapMalloc,
                                            ENativeParticleType leParticleType)
     {
-        CGS_ASSERT(lpHeapMalloc != 0, CGS_ASSERT_MESSAGE_AT("lpHeapMalloc != NULL", K_SIMPLE_PARTICLE_ASSERT_FILE, 930));   // :930
-        CGS_ASSERT((leParticleType >= 0) && (leParticleType < eParticleArray_Max),
-                   CGS_ASSERT_MESSAGE_AT("( leParticleType >= 0 ) && ( leParticleType < AttribSys::Enums::NativeParticleType::eParticleArray_Max )", K_SIMPLE_PARTICLE_ASSERT_FILE, 931)); // :931
+        CGS_ASSERT_AT(lpHeapMalloc != 0, "lpHeapMalloc != NULL", K_SIMPLE_PARTICLE_ASSERT_FILE, 930);   // :930
+        CGS_ASSERT_AT((leParticleType >= 0) && (leParticleType < eParticleArray_Max),
+                   "( leParticleType >= 0 ) && ( leParticleType < AttribSys::Enums::NativeParticleType::eParticleArray_Max )", K_SIMPLE_PARTICLE_ASSERT_FILE, 931); // :931
 
         CgsResource::SafeResourceHandle<renderengine::Texture>& lrTexture = maTextures[leParticleType];
         mpStandardParams = &maStandardParams[leParticleType];
@@ -185,8 +185,8 @@ namespace Native
                 break;
             }
         }
-        CGS_ASSERT(luLoop < eParticleArray_Max,
-                   CGS_ASSERT_MESSAGE_AT("Cannot find Particle Bank Size for enum type.  Have they changed ?", K_SIMPLE_PARTICLE_ASSERT_FILE, 954));   // :954
+        CGS_ASSERT_AT(luLoop < eParticleArray_Max,
+                   "Cannot find Particle Bank Size for enum type.  Have they changed ?", K_SIMPLE_PARTICLE_ASSERT_FILE, 954);   // :954
 
         Initialize();
     }
@@ -291,7 +291,7 @@ namespace Native
                                                f32 lrAlpha)
     {
         CB4ParticleBank* const lpBank = lbIsCrash ? &mBankCrash : &mBankRegular;
-        CGS_ASSERT(lpBank->mpaParticles != 0, CGS_ASSERT_MESSAGE_AT("lpBank->mpaParticles != NULL", __FILE__, 1077));   // :1077
+        CGS_ASSERT_AT(lpBank->mpaParticles != 0, "lpBank->mpaParticles != NULL", __FILE__, 1077);   // :1077
 
         CB4Particle* const lpParticle = &lpBank->mpaParticles[lpBank->muNextParticle];
 

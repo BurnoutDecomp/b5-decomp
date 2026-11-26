@@ -240,7 +240,7 @@ namespace BrnGui
             return true;
 
         default:
-            CGS_ASSERT(false, " unknown prepare stage in NetworkPlayerImageRenderer component ");
+            CGS_FAIL(" unknown prepare stage in NetworkPlayerImageRenderer component ");
             return false;
         }
 
@@ -294,7 +294,7 @@ namespace BrnGui
             return true;
 
         default:
-            CGS_ASSERT(false, " unknown release stage in SatNavRender component ");
+            CGS_FAIL(" unknown release stage in SatNavRender component ");
             return false;
         }
     }
@@ -545,13 +545,13 @@ namespace BrnGui
     // Fetch the baked default texture from the GuiCache into mpDefaultTexture.
     void NetworkPlayerImageRenderer::PrepareDefaultTexture()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", __FILE__, 758 /* ARTIST 0x824461D4 */));
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "NULL != mpGuiCache", __FILE__, 758 /* ARTIST 0x824461D4 */);
         mpDefaultTexture = const_cast<renderengine::Texture2D*>(
             static_cast<const renderengine::Texture2D*>(
                 mpGuiCache->GetLoadedResource(KU_DEFAULT_TEXTURE_RESOURCE_ID)));
-        CGS_ASSERT(mpDefaultTexture != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "NULL != mpDefaultTexture", __FILE__, 763 /* ARTIST 0x82446208 */));
+        CGS_ASSERT_AT(mpDefaultTexture != 0,
+            "NULL != mpDefaultTexture", __FILE__, 763 /* ARTIST 0x82446208 */);
+
     }
 }

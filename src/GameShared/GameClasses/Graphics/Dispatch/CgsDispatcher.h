@@ -147,9 +147,9 @@ public:
     u32 GetCount() const { return muCount; }
     DispatchCommand* GetCommandFromIndex_Sorted(u32 luIndex) const
     {
-        CGS_ASSERT(luIndex < muCount,
-            CGS_ASSERT_MESSAGE_AT("luIndex < muTotalKeyCount",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsDispatcher.h", 622));
+        CGS_ASSERT_AT(luIndex < muCount,
+            "luIndex < muTotalKeyCount",
+                "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsDispatcher.h", 622);
         return m_pBinBase + (static_cast<u32>(mpaSortedKeyArray[luIndex].mu64Whole & SortKey::KU_MASK_OFFSET));
     }
 

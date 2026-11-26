@@ -61,8 +61,8 @@ namespace CgsSceneManager
         // ARTIST 0x828AA458: bounds-check an existing registry index and return its slot.
         static DrawCollisionPolyCallbackData& GetDrawCollisionPolyCallback(s32 liIndex)
         {
-            CGS_ASSERT(liIndex < siNumDrawPolyCallbacks,
-                       CGS_ASSERT_MESSAGE_AT("liIndex < siNumDrawPolyCallbacks", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\trianglecollision\\CgsTriangleCollisionDebugComponent.h", 352));
+            CGS_ASSERT_AT(liIndex < siNumDrawPolyCallbacks,
+                       "liIndex < siNumDrawPolyCallbacks", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\trianglecollision\\CgsTriangleCollisionDebugComponent.h", 352);
             return saDrawPolyCallbacks[liIndex];
         }
 

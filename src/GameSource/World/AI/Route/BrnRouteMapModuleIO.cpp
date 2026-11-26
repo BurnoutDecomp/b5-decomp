@@ -32,7 +32,7 @@ namespace RouteMapModuleIO
     // Caller RouteMapModule::Update. Faithfully tests the WRITE bit (do not "fix" to read).
     u8* OutputBuffer::GetRouteResponseQueueForWrite()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/Route/BrnRouteMapModuleIO.h", 617));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/Route/BrnRouteMapModuleIO.h", 617);
         return reinterpret_cast<u8*>(&mRouteResponseQueue);
     }
 }

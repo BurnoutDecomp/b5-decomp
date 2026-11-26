@@ -84,7 +84,7 @@ namespace BrnTraffic
 
             default:
                 // Baked at BrnTrafficGraphicsStubResourceType.cpp:175.
-                CGS_ASSERT(false, "Tried to access out-of-range import on TrafficGraphicsStub resource");
+                CGS_FAIL("Tried to access out-of-range import on TrafficGraphicsStub resource");
                 break;
         }
     }

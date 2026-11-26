@@ -143,18 +143,18 @@ namespace CrashIO
         // bound (GenerateSlamRecoveryEvents 0x82720908 `clrlwi r31,r31,16`).
         void RemoveSlammedTraffic(u16 luVehicleIndex)
         {
-            CGS_ASSERT(luVehicleIndex < 600u,
-                       CGS_ASSERT_MESSAGE_AT("luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
-                                                 BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 294));
+            CGS_ASSERT_AT(luVehicleIndex < 600u,
+                       "luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                                                 BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 294);
             RemoveSlammedTrafficEvent lEvent;
             lEvent.muVehicleId = luVehicleIndex;
             mRemoveSlammedTrafficEventQueue.AddEvent(lEvent);
         }
         void RemoveCrashedTraffic(u16 luVehicleIndex)
         {
-            CGS_ASSERT(luVehicleIndex < 600u,
-                       CGS_ASSERT_MESSAGE_AT("luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
-                                                 BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 314));   // 0x8272079C
+            CGS_ASSERT_AT(luVehicleIndex < 600u,
+                       "luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                                                 BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 314);   // 0x8272079C
             RemoveCrashedTrafficEvent lEvent;
             lEvent.muVehicleId = luVehicleIndex;
             mRemoveCrashedTrafficEventQueue.AddEvent(lEvent);
@@ -203,9 +203,9 @@ namespace CrashIO
         // TrafficEntityModule::HandleCrashingNetworkTraffic drains post-scene.
         void StartNetworkTrafficVehicleCrashing(u32 luVehicleId)
         {
-            CGS_ASSERT(luVehicleId < 600u,
-                       CGS_ASSERT_MESSAGE_AT("luVehicleId < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
-                                                 BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 365));
+            CGS_ASSERT_AT(luVehicleId < 600u,
+                       "luVehicleId < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                                                 BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 365);
             NetworkTrafficCrashingEvent lEvent;
             lEvent.muVehicleId = static_cast<u16>(luVehicleId);
             mStartCrashingNetworkTrafficQueue.AddEvent(lEvent);

@@ -28,37 +28,37 @@ namespace CgsFileSystem
 
     int Device::Open(const char* /*lpcPath*/, u32 /*luMode*/, Handle::DeviceHandle* /*lppOutHandle*/)
     {
-        CGS_ASSERT(false, "Not implemented\n");
+        CGS_FAIL("Not implemented\n");
         return -2;
     }
 
     int Device::Close(Handle::DeviceHandle /*lpHandle*/)
     {
-        CGS_ASSERT(false, "Not implemented\n");
+        CGS_FAIL("Not implemented\n");
         return -2;
     }
 
     int Device::Read(Handle::DeviceHandle /*lpHandle*/, void* /*lpBuffer*/, u32 /*luSize*/, u32* /*lpuOutResult*/)
     {
-        CGS_ASSERT(false, "Not implemented\n");
+        CGS_FAIL("Not implemented\n");
         return -2;
     }
 
     int Device::Write(Handle::DeviceHandle /*lpHandle*/, const void* /*lpBuffer*/, u32 /*luSize*/, u32* /*lpuOutResult*/)
     {
-        CGS_ASSERT(false, "Not implemented\n");
+        CGS_FAIL("Not implemented\n");
         return -2;
     }
 
     int Device::Seek(Handle::DeviceHandle /*lpHandle*/, u64 /*lu64Offset*/, u64* /*lpu64OutPosition*/)
     {
-        CGS_ASSERT(false, "Not implemented\n");
+        CGS_FAIL("Not implemented\n");
         return -2;
     }
 
     int Device::GetFileSize(Handle::DeviceHandle /*lpHandle*/, u64* /*lpu64OutSize*/)   // @0x828DDE50 (default)
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Not implemented\n", CGS_ARTIST_FILE, 91));
+        CGS_FAIL_STREAM_AT("Not implemented\n", CGS_ARTIST_FILE, 91);
         return -2;
     }
 
@@ -66,20 +66,20 @@ namespace CgsFileSystem
     int Device::OpenDirectory(const char* /*lpcPath*/, void* /*lpEntryBuffer*/, u32 /*luMaxEntries*/,
                               u32* /*lpuOutCount*/, Handle::DeviceHandle* /*lppOutHandle*/)  // @0x828DDEE0
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Not implemented\n", CGS_ARTIST_FILE, 103));
+        CGS_FAIL_STREAM_AT("Not implemented\n", CGS_ARTIST_FILE, 103);
         return -2;
     }
 
     int Device::CloseDirectory(Handle::DeviceHandle /*lpHandle*/)   // @0x828DDF70
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Not implemented\n", CGS_ARTIST_FILE, 111));
+        CGS_FAIL_STREAM_AT("Not implemented\n", CGS_ARTIST_FILE, 111);
         return -2;
     }
 
     int Device::ReadDirectory(Handle::DeviceHandle /*lpHandle*/, void* /*lpEntryBuffer*/,
                               u32 /*luMaxEntries*/, u32* /*lpuOutCount*/)  // @0x828DE000
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Not implemented\n", CGS_ARTIST_FILE, 122));
+        CGS_FAIL_STREAM_AT("Not implemented\n", CGS_ARTIST_FILE, 122);
         return -2;
     }
 

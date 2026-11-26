@@ -366,7 +366,7 @@ namespace BrnGui
             default:
                 // The console streams the event id and its file/line (line 403) after this
                 // text; lowered to the static text.
-                CGS_ASSERT(false, "Unexpected event received : ");
+                CGS_FAIL("Unexpected event received : ");
                 break;
             }
         }
@@ -706,10 +706,10 @@ namespace BrnGui
         for (s32 li = 0; li < CgsGui::E_LOGIN_QUESTION_COUNT; ++li)
         {
             // cpp:220. Non-fatal in the X360 build -- the loop keeps walking the table.
-            CGS_ASSERT(maShowControlsFunc[li] != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "No show control function supplied for this login question",
-                    CGS_ARTIST_FILE, 220 /* ARTIST 0x824C17F0 */));
+            CGS_ASSERT_AT(maShowControlsFunc[li] != 0,
+                "No show control function supplied for this login question",
+                    CGS_ARTIST_FILE, 220 /* ARTIST 0x824C17F0 */);
+
         }
     }
 
@@ -1358,7 +1358,7 @@ namespace BrnGui
                     // straight on into `li r11, 0` at @0x824DD6A8).
                     if (meSignInType != E_SIGN_IN_TYPE_FULL)
                     {
-                        CGS_ASSERT_AT(false, "Unknown sign in type", CGS_ARTIST_FILE, 794);
+                        CGS_FAIL_AT("Unknown sign in type", CGS_ARTIST_FILE, 794);
                     }
                     liConnectType = KI_CONNECT_TYPE_FULL;
                 }
@@ -1396,7 +1396,7 @@ namespace BrnGui
         // cpp:451 -- the streamed-message form of the assert in the X360 image. The test
         // is on the CACHE the event carries, not on the event pointer, and it is
         // non-fatal: the adoption below runs either way.
-        CGS_ASSERT(lpPayload->mpCache != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid cache in HandleGuiCacheEvent::Update", CGS_ARTIST_FILE, 451));
+        CGS_ASSERT_STREAM_AT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update", CGS_ARTIST_FILE, 451);
 
         // Only the first cache offered is taken; a screen that already has one ignores
         // the event entirely (@0x824BC4C8 branches straight to the epilogue).

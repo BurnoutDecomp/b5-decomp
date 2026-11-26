@@ -71,7 +71,7 @@ namespace CgsGui
         }
         if (leMaskOperation != AptMaskRenderOperation_Add)
         {
-            CGS_ASSERT(false, "Unknown mask operation in AptCallbackRender::DrawRenderingUnit");
+            CGS_FAIL("Unknown mask operation in AptCallbackRender::DrawRenderingUnit");
             CgsDev::PerfMonCpu::StopMonitor(AptRenderHandler::miCgsAptDrawRenderingUnit);
             return;
         }

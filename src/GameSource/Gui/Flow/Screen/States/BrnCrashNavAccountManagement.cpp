@@ -324,7 +324,7 @@ namespace BrnGui
 
         default:
             // Streamed in place (ARTIST 0x824E0168..0x824E0200, cpp:211).
-            CGS_ASSERT_STREAM_AT(false, "Invalid internal state (" << meState << ") \n",
+            CGS_FAIL_STREAM_AT("Invalid internal state (" << meState << ") \n",
                                  CGS_ARTIST_FILE, 211);
             break;
         }
@@ -728,7 +728,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT_AT(false, "lpcLabel", CGS_ARTIST_FILE, 941);   // cpp:941
+            CGS_FAIL_AT("lpcLabel", CGS_ARTIST_FILE, 941);   // cpp:941
             break;
         }
 

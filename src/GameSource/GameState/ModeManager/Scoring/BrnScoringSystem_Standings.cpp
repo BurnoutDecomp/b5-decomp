@@ -62,9 +62,9 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     s32 ScoringSystem::GetRaceCarStandingsPosition(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                    (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2321));
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2321);
 
         const CarData* lpCar = GetCarData(leRaceCarIndex);
         if (!lpCar)
@@ -92,9 +92,9 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     GameStateModuleIO::EPlayerTeam ScoringSystem::GetPlayerTeam(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                    (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 1549));
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 1549);
 
         const CarData* lpCarData = GetCarData(leRaceCarIndex);   // DWARF cpp:1541
         if (lpCarData == 0)
@@ -112,7 +112,7 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     void ScoringSystem::SetPlayerDisconnected(BrnNetwork::NetworkPlayerID lID)
     {
-        CGS_ASSERT(lID != -1, CGS_ASSERT_MESSAGE_AT("lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 1872));
+        CGS_ASSERT_AT(lID != -1, "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 1872);
 
         for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
         {
@@ -142,7 +142,7 @@ namespace BrnGameState
             }
         }
 
-        CGS_ASSERT(false, "BrnGameState::ScoringSystem::GetPlayerDisconnected could not find network id");
+        CGS_FAIL("BrnGameState::ScoringSystem::GetPlayerDisconnected could not find network id");
         return true;
     }
 
@@ -233,12 +233,12 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     void ScoringSystem::SetPlayerEliminated(EActiveRaceCarIndex leRaceCarIndex, EActiveRaceCarIndex leEliminator)
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                    (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   CGS_ASSERT_MESSAGE_AT("(leRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 1838));
-        CGS_ASSERT((leEliminator > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                   "(leRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 1838);
+        CGS_ASSERT_AT((leEliminator > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                    (leEliminator < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   CGS_ASSERT_MESSAGE_AT("(leEliminatorIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leEliminatorIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 1839));
+                   "(leEliminatorIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leEliminatorIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 1839);
 
         CarData* lpEliminatedCar = GetCarData(leRaceCarIndex);
         if (lpEliminatedCar)
@@ -287,12 +287,12 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     void ScoringSystem::SetPlayerTeam(EActiveRaceCarIndex leRaceCarIndex, GameStateModuleIO::EPlayerTeam leTeam)
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                    (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 1573));
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 1573);
 
         CarData* lpCar = GetCarData(leRaceCarIndex);
-        CGS_ASSERT(lpCar != 0, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 1576));
+        CGS_ASSERT_AT(lpCar != 0, "lpCarData", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 1576);
         if (lpCar)
         {
             if (lpCar->GetTeam() != leTeam)
@@ -311,9 +311,9 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     CgsSystem::Time ScoringSystem::GetTimeSpentInFirstPlace(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                    (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 2606));
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 2606);
 
         const CarData* lpCar = GetCarData(leRaceCarIndex);
         if (lpCar == NULL)   // the missing record first (ARTIST `bne` past it)
@@ -330,9 +330,9 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     CgsSystem::Time ScoringSystem::GetTimeSpentInLastPlace(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                    (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 2628));
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 2628);
 
         const CarData* lpCar = GetCarData(leRaceCarIndex);
         if (lpCar == NULL)   // the missing record first (ARTIST `bne` past it)
@@ -349,9 +349,9 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     CgsSystem::Time ScoringSystem::GetTimeSpentBoosting(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                    (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 2662));
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 2662);
 
         const CarData* lpCar = GetCarData(leRaceCarIndex);
         if (lpCar == NULL)   // the missing record first (ARTIST `bne` past it)
@@ -422,10 +422,10 @@ namespace BrnGameState
                 liTeamScore += lpCar->GetScoreData()->GetOnlineStuntScore();
             }
 
-            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                CGS_ASSERT_MESSAGE_AT(
-                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                    CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39 /* ARTIST 0x823206B4 */));
+            CGS_ASSERT_AT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                    CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39 /* ARTIST 0x823206B4 */);
+
         }
 
         return liTeamScore;
@@ -456,10 +456,10 @@ namespace BrnGameState
                 }
             }
 
-            CGS_ASSERT(liTeam + 1 <= KI_MAX_PLAYER_TEAMS,
-                CGS_ASSERT_MESSAGE_AT(
-                    "leEnumIndex <= E_PLAYER_TEAM_COUNT",
-                    "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedEnums.h", 112 /* ARTIST 0x82320744 */));
+            CGS_ASSERT_AT(liTeam + 1 <= KI_MAX_PLAYER_TEAMS,
+                "leEnumIndex <= E_PLAYER_TEAM_COUNT",
+                    "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedEnums.h", 112 /* ARTIST 0x82320744 */);
+
         }
 
         return liLeadingTeam;
@@ -484,10 +484,10 @@ namespace BrnGameState
                 ++liCount;
             }
 
-            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                CGS_ASSERT_MESSAGE_AT(
-                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                    CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39 /* ARTIST 0x82320438 */));
+            CGS_ASSERT_AT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                    CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39 /* ARTIST 0x82320438 */);
+
         }
 
         return liCount;
@@ -510,11 +510,11 @@ namespace BrnGameState
                 return lpCar->GetNetworkPlayerID();
             }
 
-            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39));
+            CGS_ASSERT_AT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39);
         }
 
-        CGS_ASSERT(false, "No players in team");
+        CGS_FAIL("No players in team");
         return -1;
     }
 
@@ -537,10 +537,10 @@ namespace BrnGameState
                 return false;
             }
 
-            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                CGS_ASSERT_MESSAGE_AT(
-                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                    CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39 /* ARTIST 0x8232061C */));
+            CGS_ASSERT_AT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                    CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39 /* ARTIST 0x8232061C */);
+
         }
 
         return true;
@@ -564,10 +564,10 @@ namespace BrnGameState
                 return false;
             }
 
-            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                CGS_ASSERT_MESSAGE_AT(
-                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                    CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39 /* ARTIST 0x823207D4 */));
+            CGS_ASSERT_AT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                    CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39 /* ARTIST 0x823207D4 */);
+
         }
 
         return true;

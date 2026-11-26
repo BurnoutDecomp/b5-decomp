@@ -393,7 +393,7 @@ void KeyAnimShakeController::Update(f32 lfTimeStep, Camera::Camera* lpCamera)
     }
     else
     {
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unsupported ShakeType found in ShakeGroup", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimShakeController.cpp", 151));   // .cpp:151
+        CGS_FAIL_AT("Unsupported ShakeType found in ShakeGroup", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimShakeController.cpp", 151);   // .cpp:151
     }
 
     mu8ActiveShake = static_cast<u8>(luShakeType);

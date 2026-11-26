@@ -126,7 +126,7 @@ void PostWorldInputBuffer::PostMappingRequest(const ActionMapping* lpMapping, s3
 // Caller: CgsInput::InputModule::PostWorldUpdate (copies the two spring words into its module state).
 const CgsInput::Device::WheelFFSpring* PostWorldInputBuffer::GetWheelFFSpring() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 1122));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 1122);
     return &mWheelFFSpring;
 }
 
@@ -135,7 +135,7 @@ const CgsInput::Device::WheelFFSpring* PostWorldInputBuffer::GetWheelFFSpring() 
 // WheelFFSpring sub-record). The X360 body copies the two source words verbatim into this+632/+636.
 void PostWorldInputBuffer::SetWheelFFSpring(const CgsInput::Device::WheelFFSpring& lSpring)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 1137));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 1137);
     mWheelFFSpring = lSpring;
 }
 
@@ -192,9 +192,9 @@ const OutputBuffer::UnBindResultQueue* OutputBuffer::GetUnbindResultQueue() cons
 // X360 0x823B1188 (ledger "Outpu") - read-lock accessor for the pad-disconnected queue (this+220).
 const OutputBuffer::PadDisconnectedQueue* OutputBuffer::GetPadDisconnectedQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
         "Not locked for reading\n",
-        CGS_ARTIST_FILE, 1185));
+        CGS_ARTIST_FILE, 1185);
     return &mPadDisconnectedQueue;
 }
 
@@ -401,7 +401,7 @@ PreWorldInputBuffer::GetStopRumbleEffectEventQueue() const
 // "GetTimerStatusInt"; it returns the TimerStatusInterface pointer at this+868.)
 const CgsSystem::TimerStatusInterface* PreWorldInputBuffer::GetTimerStatusInt() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 969));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 969);
     return &mTimerStatusInterface;
 }
 

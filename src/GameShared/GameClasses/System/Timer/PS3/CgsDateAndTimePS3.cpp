@@ -92,10 +92,10 @@ namespace CgsSystem
 
     void DateAndTime::SetYear(s32 liYear)   // 0x828D6C08
     {
-        CGS_ASSERT(liYear >= 0,
-            CGS_ASSERT_MESSAGE_AT("liYear >= 0", __FILE__, 282 /* ARTIST 0x828D6C34 */));
-        CGS_ASSERT(liYear < 5000,
-            CGS_ASSERT_MESSAGE_AT("liYear < 5000", __FILE__, 283 /* ARTIST 0x828D6C58 */));
+        CGS_ASSERT_AT(liYear >= 0,
+            "liYear >= 0", __FILE__, 282 /* ARTIST 0x828D6C34 */);
+        CGS_ASSERT_AT(liYear < 5000,
+            "liYear < 5000", __FILE__, 283 /* ARTIST 0x828D6C58 */);
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wYear = static_cast<WORD>(liYear);
@@ -104,10 +104,10 @@ namespace CgsSystem
 
     void DateAndTime::SetMonth(s32 liMonth) // 0x828D6C98
     {
-        CGS_ASSERT(liMonth >= 0,
-            CGS_ASSERT_MESSAGE_AT("liMonth >= 0", __FILE__, 301 /* ARTIST 0x828D6CC4 */));
-        CGS_ASSERT(liMonth <= 12,
-            CGS_ASSERT_MESSAGE_AT("liMonth <= 12", __FILE__, 302 /* ARTIST 0x828D6CE8 */));
+        CGS_ASSERT_AT(liMonth >= 0,
+            "liMonth >= 0", __FILE__, 301 /* ARTIST 0x828D6CC4 */);
+        CGS_ASSERT_AT(liMonth <= 12,
+            "liMonth <= 12", __FILE__, 302 /* ARTIST 0x828D6CE8 */);
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wMonth = static_cast<WORD>(liMonth);
@@ -116,10 +116,10 @@ namespace CgsSystem
 
     void DateAndTime::SetDay(s32 liDay)     // 0x828D6D28
     {
-        CGS_ASSERT(liDay >= 0,
-            CGS_ASSERT_MESSAGE_AT("liDay >= 0", __FILE__, 320 /* ARTIST 0x828D6D54 */));
-        CGS_ASSERT(liDay <= 31,
-            CGS_ASSERT_MESSAGE_AT("liDay <= 31", __FILE__, 321 /* ARTIST 0x828D6D78 */));
+        CGS_ASSERT_AT(liDay >= 0,
+            "liDay >= 0", __FILE__, 320 /* ARTIST 0x828D6D54 */);
+        CGS_ASSERT_AT(liDay <= 31,
+            "liDay <= 31", __FILE__, 321 /* ARTIST 0x828D6D78 */);
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wDay = static_cast<WORD>(liDay);
@@ -128,10 +128,10 @@ namespace CgsSystem
 
     void DateAndTime::SetHour(s32 liHour)   // 0x828D6DB8
     {
-        CGS_ASSERT(liHour >= 0,
-            CGS_ASSERT_MESSAGE_AT("liHour >= 0", __FILE__, 339 /* ARTIST 0x828D6DE4 */));
-        CGS_ASSERT(liHour < 24,
-            CGS_ASSERT_MESSAGE_AT("liHour < 24", __FILE__, 340 /* ARTIST 0x828D6E08 */));
+        CGS_ASSERT_AT(liHour >= 0,
+            "liHour >= 0", __FILE__, 339 /* ARTIST 0x828D6DE4 */);
+        CGS_ASSERT_AT(liHour < 24,
+            "liHour < 24", __FILE__, 340 /* ARTIST 0x828D6E08 */);
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wHour = static_cast<WORD>(liHour);
@@ -140,10 +140,10 @@ namespace CgsSystem
 
     void DateAndTime::SetMinute(s32 liMinute) // 0x828D6E48
     {
-        CGS_ASSERT(liMinute >= 0,
-            CGS_ASSERT_MESSAGE_AT("liMinute >= 0", __FILE__, 359 /* ARTIST 0x828D6E74 */));
-        CGS_ASSERT(liMinute < 60,
-            CGS_ASSERT_MESSAGE_AT("liMinute < 60", __FILE__, 360 /* ARTIST 0x828D6E98 */));
+        CGS_ASSERT_AT(liMinute >= 0,
+            "liMinute >= 0", __FILE__, 359 /* ARTIST 0x828D6E74 */);
+        CGS_ASSERT_AT(liMinute < 60,
+            "liMinute < 60", __FILE__, 360 /* ARTIST 0x828D6E98 */);
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wMinute = static_cast<WORD>(liMinute);
@@ -152,10 +152,10 @@ namespace CgsSystem
 
     void DateAndTime::SetSecond(s32 liSecond) // 0x828D6ED8
     {
-        CGS_ASSERT(liSecond >= 0,
-            CGS_ASSERT_MESSAGE_AT("liSecond >= 0", __FILE__, 379 /* ARTIST 0x828D6F04 */));
-        CGS_ASSERT(liSecond < 60,
-            CGS_ASSERT_MESSAGE_AT("liSecond < 60", __FILE__, 380 /* ARTIST 0x828D6F28 */));
+        CGS_ASSERT_AT(liSecond >= 0,
+            "liSecond >= 0", __FILE__, 379 /* ARTIST 0x828D6F04 */);
+        CGS_ASSERT_AT(liSecond < 60,
+            "liSecond < 60", __FILE__, 380 /* ARTIST 0x828D6F28 */);
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wSecond = static_cast<WORD>(liSecond);

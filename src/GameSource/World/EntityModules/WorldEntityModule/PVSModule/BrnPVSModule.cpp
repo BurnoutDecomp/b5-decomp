@@ -246,7 +246,7 @@ namespace
 
             default:
             {
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", __FILE__, 257));
+                CGS_FAIL_AT("Invalid Stage\n", __FILE__, 257);
             }
         }
         return false;

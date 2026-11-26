@@ -543,7 +543,7 @@ int CollisionStateManager::PlayCollision(OutputCollision* lpCollision)
         GetRandomSampleID<Attrib::Gen::propscrashbin>(*lpCollision);
         break;
     default:
-        CGS_ASSERT(false, "lCollision.mePipeline < InputCollision::E_MAX_PIPELINES");
+        CGS_FAIL("lCollision.mePipeline < InputCollision::E_MAX_PIPELINES");
         return 0;
     }
 
@@ -2586,7 +2586,7 @@ bool CollisionStateManager::ProcessCollision(
             lrOutput, mPropsCrashBinList);
         break;
     default:
-        CGS_ASSERT(false, "lrInput.mePipeline < InputCollision::E_MAX_PIPELINES");
+        CGS_FAIL("lrInput.mePipeline < InputCollision::E_MAX_PIPELINES");
         return false;
     }
     return true;

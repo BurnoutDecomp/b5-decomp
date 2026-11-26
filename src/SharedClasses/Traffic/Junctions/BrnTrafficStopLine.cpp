@@ -21,8 +21,8 @@ namespace BrnTraffic
 
 u16 StopLine::ConvertToFixed(f32 lfFloat)
 {
-    CGS_ASSERT(lfFloat < 256.0f, CGS_ASSERT_MESSAGE_AT("lfFloat < 256.0f",
-        "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\Junctions/BrnTrafficStopLine.h", 117));
+    CGS_ASSERT_AT(lfFloat < 256.0f, "lfFloat < 256.0f",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\Junctions/BrnTrafficStopLine.h", 117);
 
     return static_cast<u16>(lfFloat * 256.0f);
 }

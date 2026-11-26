@@ -38,9 +38,9 @@ void ServerInterfacePlayerParamsBase::SerialiseFromPlayer(const LobbyApiPlayerT*
 
     // Bounds-check the serialisation pattern, then parse the custom structure blob
     // (held at LobbyApiPlayerT + 0x68) into the structure-interface data buffer.
-    CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()), CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
         "strlen( GetPattern() ) < (size_t) GetPatternLength()",
-        __FILE__, 88 /* ARTIST 0x8287A0A8 */));
+        __FILE__, 88 /* ARTIST 0x8287A0A8 */);
 
     // The mutable GetData() is vtable slot +0x14 (MSVC lays the two overloads out in
     // reverse declaration order), ARTIST 0x8287A0F8; arguments evaluated right to left.
@@ -49,9 +49,9 @@ void ServerInterfacePlayerParamsBase::SerialiseFromPlayer(const LobbyApiPlayerT*
 
 void ServerInterfacePlayerParamsBase::SerialiseToString(char* lpcRecord, s32 liRecLen) const
 {
-    CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()), CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
         "strlen( GetPattern() ) < (size_t) GetPatternLength()",
-        __FILE__, 108 /* ARTIST 0x8287A19C */));
+        __FILE__, 108 /* ARTIST 0x8287A19C */);
 
     const char* lpcPattern = GetPattern();
     const u32   luDataSize = GetDataSize();

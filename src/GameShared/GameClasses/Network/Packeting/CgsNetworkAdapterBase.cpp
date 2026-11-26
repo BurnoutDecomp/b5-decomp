@@ -71,30 +71,30 @@ void NetworkAdapterBase::Construct()
 // one-packet receive buffer.
 NetworkAdapterBase::ENetworkStatus NetworkAdapterBase::Prepare(NetworkAdapterPrepareParams* lpPrepareParams)
 {
-    CGS_ASSERT(lpPrepareParams, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpPrepareParams,
         "lpPrepareParams",
-        CGS_ARTIST_FILE, 84 /* ARTIST 0x82870F10 */));
+        CGS_ARTIST_FILE, 84 /* ARTIST 0x82870F10 */);
 
     meServerType      = static_cast<EServerType>(lpPrepareParams->meServerType);
     mpNetworkManager  = lpPrepareParams->mpNetworkManager;
     mpServerInterface = lpPrepareParams->mpServerInterface;
     mbDuplicateLogin  = false;
     mpHeapMalloc      = static_cast<CgsMemory::HeapMalloc*>(lpPrepareParams->mpHeapMalloc);
-    CGS_ASSERT(mpHeapMalloc, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(mpHeapMalloc,
         "mpHeapMalloc",
-        CGS_ARTIST_FILE, 92 /* ARTIST 0x82870F5C */));
+        CGS_ARTIST_FILE, 92 /* ARTIST 0x82870F5C */);
 
     mpRecvBuffer = static_cast<u8*>(mpHeapMalloc->Malloc(static_cast<s32>(sizeof(NetGamePacketT)), 4));
 
-    CGS_ASSERT(mpNetworkManager, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(mpNetworkManager,
         "mpNetworkManager",
-        CGS_ARTIST_FILE, 96 /* ARTIST 0x82870F98 */));
-    CGS_ASSERT(mpServerInterface, CGS_ASSERT_MESSAGE_AT(
+        CGS_ARTIST_FILE, 96 /* ARTIST 0x82870F98 */);
+    CGS_ASSERT_AT(mpServerInterface,
         "mpServerInterface",
-        CGS_ARTIST_FILE, 97 /* ARTIST 0x82870FC0 */));
-    CGS_ASSERT(mpRecvBuffer, CGS_ASSERT_MESSAGE_AT(
+        CGS_ARTIST_FILE, 97 /* ARTIST 0x82870FC0 */);
+    CGS_ASSERT_AT(mpRecvBuffer,
         "mpRecvBuffer",
-        CGS_ARTIST_FILE, 98 /* ARTIST 0x82870FE8 */));
+        CGS_ARTIST_FILE, 98 /* ARTIST 0x82870FE8 */);
     return E_NET_STATUS_READY;
 }
 
@@ -107,9 +107,9 @@ bool NetworkAdapterBase::Release()
 
     if (mpRecvBuffer != 0)
     {
-        CGS_ASSERT(mpHeapMalloc, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpHeapMalloc,
             "mpHeapMalloc",
-            CGS_ARTIST_FILE, 135 /* ARTIST 0x8287105C */));
+            CGS_ARTIST_FILE, 135 /* ARTIST 0x8287105C */);
         mpHeapMalloc->Free(mpRecvBuffer);
         mpRecvBuffer = 0;
     }
@@ -123,14 +123,14 @@ bool NetworkAdapterBase::Release()
 // message-sent hook sees the data; on failure the peer's address is logged.
 bool NetworkAdapterBase::SendTo(void* lpData, s32 liLength, ConnectionData lConnectionData)
 {
-    CGS_ASSERT(lConnectionData.IsValid(), CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lConnectionData.IsValid(),
         "lConnectionData.IsValid()",
-        __FILE__, 206 /* ARTIST 0x828710EC */));
+        __FILE__, 206 /* ARTIST 0x828710EC */);
 
     NetGamePacketT lPacket;
-    CGS_ASSERT((liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) ), CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT((liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) ),
         "(liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) )",
-        __FILE__, 208 /* ARTIST 0x82871110 */));
+        __FILE__, 208 /* ARTIST 0x82871110 */);
 
     std::memset(&lPacket, 0, sizeof(lPacket));
     lPacket.head.len  = static_cast<u16>(liLength);
@@ -164,10 +164,10 @@ s32 NetworkAdapterBase::ReceiveFrom(void** lppData, ConnectionData lConnectionDa
     s32 liLength = 0;
     NetGamePacketT* lpPacket = reinterpret_cast<NetGamePacketT*>(mpRecvBuffer);
 
-    CGS_ASSERT(lppData,
-        CGS_ASSERT_MESSAGE_AT("lppData", __FILE__, 262 /* ARTIST 0x8287122C */));
-    CGS_ASSERT(mpRecvBuffer,
-        CGS_ASSERT_MESSAGE_AT("mpRecvBuffer", __FILE__, 263 /* ARTIST 0x82871254 */));
+    CGS_ASSERT_AT(lppData,
+        "lppData", __FILE__, 262 /* ARTIST 0x8287122C */);
+    CGS_ASSERT_AT(mpRecvBuffer,
+        "mpRecvBuffer", __FILE__, 263 /* ARTIST 0x82871254 */);
 
     if (lConnectionData.mpNetGameLink == 0)
     {

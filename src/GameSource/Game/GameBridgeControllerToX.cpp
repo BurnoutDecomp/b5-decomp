@@ -488,10 +488,10 @@ namespace BrnGame
         BrnGameState::GameStateModuleIO::ControllerToGameStateInterface::UnBindResultQueue* const
             lpGameStateInputUnbindResultQueue =
                 lpGameStateInput->GetControllerToGameStateInterface()->GetUnBindResultsQueue();
-        CGS_ASSERT(lpInputBindResultQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInputBindResultQueue", CGS_ARTIST_FILE, 797));
-        CGS_ASSERT(lpInputUnbindResultQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInputUnbindResultQueue", CGS_ARTIST_FILE, 798));
-        CGS_ASSERT(lpGameStateInputBindResultQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateInputBindResultQueue", CGS_ARTIST_FILE, 799));
-        CGS_ASSERT(lpGameStateInputUnbindResultQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateInputUnbindResultQueue", CGS_ARTIST_FILE, 800));
+        CGS_ASSERT_AT(lpInputBindResultQueue != 0, "lpInputBindResultQueue", CGS_ARTIST_FILE, 797);
+        CGS_ASSERT_AT(lpInputUnbindResultQueue != 0, "lpInputUnbindResultQueue", CGS_ARTIST_FILE, 798);
+        CGS_ASSERT_AT(lpGameStateInputBindResultQueue != 0, "lpGameStateInputBindResultQueue", CGS_ARTIST_FILE, 799);
+        CGS_ASSERT_AT(lpGameStateInputUnbindResultQueue != 0, "lpGameStateInputUnbindResultQueue", CGS_ARTIST_FILE, 800);
         lpGameStateInputBindResultQueue->Append(*lpInputBindResultQueue);
         lpGameStateInputUnbindResultQueue->Append(*lpInputUnbindResultQueue);
 

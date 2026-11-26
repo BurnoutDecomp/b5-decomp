@@ -97,9 +97,9 @@ namespace BrnNetwork
     // Run the current sub-state's handler.
     void MatchMakingManager::Update()
     {
-        CGS_ASSERT(maUpdateFunctions[meSubState] != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "No update function supplied for the current substate", __FILE__, 322 /* ARTIST 0x8254461C */));
+        CGS_ASSERT_AT(maUpdateFunctions[meSubState] != 0,
+            "No update function supplied for the current substate", __FILE__, 322 /* ARTIST 0x8254461C */);
+
         (this->*maUpdateFunctions[meSubState])();
     }
 
@@ -121,9 +121,9 @@ namespace BrnNetwork
 
         for (s32 liIndex = 0; liIndex < E_SUBSTATE_COUNT; ++liIndex)
         {
-            CGS_ASSERT(maUpdateFunctions[liIndex] != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "No update function supplied for this substate", __FILE__, 99 /* ARTIST 0x82558D84 */));
+            CGS_ASSERT_AT(maUpdateFunctions[liIndex] != 0,
+                "No update function supplied for this substate", __FILE__, 99 /* ARTIST 0x82558D84 */);
+
         }
     }
 
@@ -165,12 +165,12 @@ namespace BrnNetwork
 
         for (s32 liActionIndex = 0; liActionIndex < E_ACTION_COUNT; ++liActionIndex)
         {
-            CGS_ASSERT(maActionFunctions[liActionIndex] != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(maActionFunctions[liActionIndex] != 0,
                 "No function supplied for this action",
-                CGS_ARTIST_FILE, 152 /* ARTIST 0x82571338 */));
-            CGS_ASSERT(maeComponentToUse[liActionIndex] != CgsNetwork::E_COMPONENTS_COUNT, CGS_ASSERT_MESSAGE_AT(
+                CGS_ARTIST_FILE, 152 /* ARTIST 0x82571338 */);
+            CGS_ASSERT_AT(maeComponentToUse[liActionIndex] != CgsNetwork::E_COMPONENTS_COUNT,
                 "No component to use supplied for this action",
-                CGS_ARTIST_FILE, 153 /* ARTIST 0x8257135C */));
+                CGS_ARTIST_FILE, 153 /* ARTIST 0x8257135C */);
         }
 
         for (s32 liProcessIndex = 0; liProcessIndex < E_PROCESS_COUNT; ++liProcessIndex)
@@ -196,9 +196,9 @@ namespace BrnNetwork
 
         for (s32 liProcessIndex = 0; liProcessIndex < E_PROCESS_COUNT; ++liProcessIndex)
         {
-            CGS_ASSERT(maProcessActions[liProcessIndex].maeAction[0] != E_ACTION_COUNT, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(maProcessActions[liProcessIndex].maeAction[0] != E_ACTION_COUNT,
                 "No actions supplied for this process",
-                CGS_ARTIST_FILE, 200 /* ARTIST 0x825713FC */));
+                CGS_ARTIST_FILE, 200 /* ARTIST 0x825713FC */);
         }
     }
 
@@ -279,8 +279,8 @@ namespace BrnNetwork
     // start a new process.
     void MatchMakingManager::ProcessComplete(bool lbSuccess)
     {
-        CGS_ASSERT(mCallback != 0,
-            CGS_ASSERT_MESSAGE_AT("mCallback", __FILE__, 442 /* ARTIST 0x825447B8 */));
+        CGS_ASSERT_AT(mCallback != 0,
+            "mCallback", __FILE__, 442 /* ARTIST 0x825447B8 */);
 
         Callback lCallback          = mCallback;
         void*    lpCallbackUserData = mpCallbackUserData;
@@ -369,9 +369,9 @@ namespace BrnNetwork
         }
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in MatchMakingManager::ServerInterfaceIdle",
-                CGS_ARTIST_FILE, 739 /* ARTIST 0x82544990 */));
+                CGS_ARTIST_FILE, 739 /* ARTIST 0x82544990 */);
             break;
         }
 
@@ -528,9 +528,9 @@ namespace BrnNetwork
             mpNetworkManager->GetServerInterface()->GetUsersetsComponent());
         if (lpUsersets->IsLocalPlayerInUserset() && lpUsersets->IsLocalPlayerHost())
         {
-            CGS_ASSERT(lpUsersets->IsLocalPlayerHost(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lpUsersets->IsLocalPlayerHost(),
                 "mpNetworkManager->GetServerInterface()->GetUsersetsComponent()->IsLocalPlayerHost()",
-                __FILE__, 1042 /* ARTIST 0x8255EBF4 */));
+                __FILE__, 1042 /* ARTIST 0x8255EBF4 */);
 
             UsersetParams lParams;
             lParams.Prepare();

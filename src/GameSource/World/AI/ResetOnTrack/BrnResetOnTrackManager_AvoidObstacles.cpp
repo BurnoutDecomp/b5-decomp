@@ -156,7 +156,7 @@ bool ResetOnTrackManager::TestRecentResets(Vector3 lTestPosition)
 bool ResetOnTrackManager::TestSectionHNG(const AISection* lpAISection,
                                           Vector2 lStartPos, Vector2 lEndPos)
 {
-    CGS_ASSERT(lpAISection != 0, CGS_ASSERT_MESSAGE_AT("lpAISection != NULL", __FILE__, 2254));   // :2254
+    CGS_ASSERT_AT(lpAISection != 0, "lpAISection != NULL", __FILE__, 2254);   // :2254
     CgsDev::PerfMonCpu::StartMonitor(muTestLineHNGPM);
     bool lbHitHNG = LineTestSectionHNG(lpAISection, lStartPos, lEndPos);
 
@@ -225,8 +225,8 @@ bool ResetOnTrackManager::TestCarHNG(const AISection* lpAISection,
                                      const NearbyVehicles* lpaNearbyVehicles,
                                      Vector2 lPosition, Vector2 lDirection, f32 lfSpeed)
 {
-    CGS_ASSERT(lpAISection != 0, CGS_ASSERT_MESSAGE_AT("lpAISection != NULL", __FILE__, 2215));   // :2215
-    CGS_ASSERT(BrnMath::IsNormal(lDirection), CGS_ASSERT_MESSAGE_AT("BrnMath::IsNormal( lDirection )", __FILE__, 2216));   // :2216
+    CGS_ASSERT_AT(lpAISection != 0, "lpAISection != NULL", __FILE__, 2215);   // :2215
+    CGS_ASSERT_AT(BrnMath::IsNormal(lDirection), "BrnMath::IsNormal( lDirection )", __FILE__, 2216);   // :2216
 
     const f32 KF_CAR_HNG_LOOK_AHEAD   = 6.0f;   // flt_820C4250
     const f32 KF_CAR_HNG_MIDDLE       = 4.5f;   // flt_820C4844
@@ -311,7 +311,7 @@ bool ResetOnTrackManager::TestCarHNG(const AISection* lpAISection,
 bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* lpRequest,
                                           ResetOnTrackCoords* lpResetData)
 {
-    CGS_ASSERT(lpRequest != 0, CGS_ASSERT_MESSAGE_AT("lpRequest != NULL", __FILE__, 549));   // :549
+    CGS_ASSERT_AT(lpRequest != 0, "lpRequest != NULL", __FILE__, 549);   // :549
     if (lpRequest == 0 || lpResetData == 0)
     {
         return false;

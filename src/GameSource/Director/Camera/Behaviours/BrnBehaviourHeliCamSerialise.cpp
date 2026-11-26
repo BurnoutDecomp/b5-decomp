@@ -46,7 +46,7 @@ void BehaviourHeliCam::Parameters::Serialise(TSerialiser& lrSerialiser)
 
     default:
         // The console streams the code version and the data version after this text.
-        CGS_ASSERT(false, "BehaviourHeliCam::Parameters : code/data version mismatch, code is version: ");
+        CGS_FAIL("BehaviourHeliCam::Parameters : code/data version mismatch, code is version: ");
         return;
     }
 

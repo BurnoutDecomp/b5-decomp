@@ -252,7 +252,7 @@ namespace BrnGui
                 // X360 streams "Unhandled cell type : " << leDataType << "\n" into the assert
                 // buffer; folded here to a static message (the value/newline drop matches the
                 // file/line drop the CGS_ASSERT convention already applies).
-                CGS_ASSERT(false, "Unhandled cell type : ");
+                CGS_FAIL("Unhandled cell type : ");
                 break;
         }
     }

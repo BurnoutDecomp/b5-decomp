@@ -30,7 +30,7 @@ bool DebugGameTalkInterface::Prepare()
     if (miStage > 1)
     {
         // Stage is neither 0 (unprepared) nor 1 (prepared): a misuse.
-        CGS_ASSERT(false, "Invalid stage\n");
+        CGS_FAIL("Invalid stage\n");
         return false;
     }
 

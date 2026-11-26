@@ -120,7 +120,7 @@ void CollisionControl::AttachController(CgsSound::Logic::EffectBase* apControlle
         mpCollision3DControl = static_cast<Collision3DControl*>(apController);
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+        CGS_FAIL_STREAM_AT("Cound't attach controller " << apController->GetId(),
                              BRN_COLLISIONCONTROL_CPP_FILE, 162);
         break;
     }

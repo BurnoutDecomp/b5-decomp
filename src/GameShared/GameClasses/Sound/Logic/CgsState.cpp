@@ -36,19 +36,19 @@ static ClassTypeInfo<State>* gapStateTypeInfo[State::KU_SIZEOF_CLASS_ARRAY] = { 
 template<>
 void ClassTypeInfo<State>::AddToClassTypeInfoArray()
 {
-    u16 luIndex = 0;
-    do
+    // DWARF CgsEffectBase.h:353 `uint16_t lCnt`, scanned by a for loop; the assert (:363) follows
+    // it. ARTIST inlines the streamed literal after the loop (D12, asserts lane).
+    u16 lCnt;
+    for (lCnt = 0; lCnt < State::KU_SIZEOF_CLASS_ARRAY; ++lCnt)
     {
-        if (!gapStateTypeInfo[luIndex])
+        if (!gapStateTypeInfo[lCnt])
         {
-            gapStateTypeInfo[luIndex] = this;
+            gapStateTypeInfo[lCnt] = this;
             return;
         }
-        ++luIndex;
     }
-    while (luIndex < State::KU_SIZEOF_CLASS_ARRAY);
 
-    CGS_ASSERT_STREAM_AT(luIndex < sizeof(gapStateTypeInfo),
+    CGS_ASSERT_STREAM_AT(lCnt < sizeof(gapStateTypeInfo),
         "Too Many Class registations. Increase KU_SIZEOF_CLASS_ARRAY",
         "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEffectBase.h",
         363 /* ARTIST 0x8268DFB8 */);
@@ -266,11 +266,11 @@ bool State::Prepare(s32 liSfxFlags, StateManager* apStateManager)
 
 void State::Attach(void* apvAttachment)
 {
-    CGS_ASSERT(meUpdateState.GetCurrent() == E_UPDATE_UNATTACHED ||
+    CGS_ASSERT_AT(meUpdateState.GetCurrent() == E_UPDATE_UNATTACHED ||
                meUpdateState.GetCurrent() == E_UPDATE_DETATCHING,
-        CGS_ASSERT_MESSAGE_AT(
-            "meUpdateState == E_UPDATE_UNATTACHED || meUpdateState == E_UPDATE_DETATCHING",
-            KAC_ARTIST_ASSERT_FILE, 798 /* ARTIST 0x826C4BC0 */));
+        "meUpdateState == E_UPDATE_UNATTACHED || meUpdateState == E_UPDATE_DETATCHING",
+            KAC_ARTIST_ASSERT_FILE, 798 /* ARTIST 0x826C4BC0 */);
+
     mpvAttachment = apvAttachment;
     mbIsAttached = true;
     mpCurrentEffect = 0;
@@ -280,9 +280,9 @@ void State::Attach(void* apvAttachment)
 
 bool State::AttachEffect()
 {
-    CGS_ASSERT(mePrepareState == E_PREPARE_STATE_DONE,
-        CGS_ASSERT_MESSAGE_AT("E_PREPARE_STATE_DONE == mePrepareState",
-            KAC_ARTIST_ASSERT_FILE, 833 /* ARTIST 0x8268D654 */));
+    CGS_ASSERT_AT(mePrepareState == E_PREPARE_STATE_DONE,
+        "E_PREPARE_STATE_DONE == mePrepareState",
+            KAC_ARTIST_ASSERT_FILE, 833 /* ARTIST 0x8268D654 */);
     // No null test of mpCurrentEffect: ARTIST (0x8268D668) and the PS3 build read its
     // attach state straight away. WAITING_FOR_DATA (jump-table slot 1 -> 0x8268D708) returns
     // false; NONE falls into PREPARING once SetupLoadData has run; an invalid state asserts
@@ -292,13 +292,13 @@ bool State::AttachEffect()
     case EffectBase::E_ATTACH_STATE_NONE:
         mpCurrentEffect->OnAttach();
         mpCurrentEffect->SetupLoadData();
-        CGS_ASSERT(mpCurrentEffect->GetAttachState() ==
+        CGS_ASSERT_AT(mpCurrentEffect->GetAttachState() ==
                        EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA ||
                    mpCurrentEffect->GetAttachState() ==
                        EffectBase::E_ATTACH_STATE_PREPARING,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA ||mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_PREPARING",
-                KAC_ARTIST_ASSERT_FILE, 841 /* ARTIST 0x8268D6E4 */));
+            "mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA ||mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_PREPARING",
+                KAC_ARTIST_ASSERT_FILE, 841 /* ARTIST 0x8268D6E4 */);
+
         if (mpCurrentEffect->GetAttachState() ==
             EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA)
             return false;
@@ -316,8 +316,8 @@ bool State::AttachEffect()
     case EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA:
         return false;
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid State",
-            KAC_ARTIST_ASSERT_FILE, 865 /* ARTIST 0x8268D764 */));
+        CGS_FAIL_AT("Invalid State",
+            KAC_ARTIST_ASSERT_FILE, 865 /* ARTIST 0x8268D764 */);
         break;
     }
     return true;

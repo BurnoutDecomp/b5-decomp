@@ -75,10 +75,10 @@ namespace Vehicle
     // (stvx128) into mTargetAssistPositions[count]; the ID into mTargetAssistIDs[count].
     void VehicleDriverInputInterface::AddTargetAssist(Vector3 lTargetAssistPosition, EntityId lTargetAssistID)
     {
-        CGS_ASSERT(miTargetAssistCount < KI_MAX_TARGET_ASSIST_CARS,
-            CGS_ASSERT_MESSAGE_AT(
-                "miTargetAssistCount < BrnTraffic::KI_MAX_STOMPED_CARS",
-                KAC_ARTIST_ASSERT_FILE, 231 /* ARTIST 0x822A03D4 */));
+        CGS_ASSERT_AT(miTargetAssistCount < KI_MAX_TARGET_ASSIST_CARS,
+            "miTargetAssistCount < BrnTraffic::KI_MAX_STOMPED_CARS",
+                KAC_ARTIST_ASSERT_FILE, 231 /* ARTIST 0x822A03D4 */);
+
 
         mTargetAssistPositions[miTargetAssistCount] = lTargetAssistPosition;
         mTargetAssistIDs[miTargetAssistCount]       = lTargetAssistID;
@@ -98,10 +98,10 @@ namespace Vehicle
 
         if (miTargetAssistCount > 0)
         {
-            CGS_ASSERT(miTargetAssistCount <= KI_MAX_TARGET_ASSIST_CARS,
-                CGS_ASSERT_MESSAGE_AT(
-                    "miTargetAssistCount <= BrnTraffic::KI_MAX_STOMPED_CARS",
-                    KAC_ARTIST_ASSERT_FILE, 260 /* ARTIST 0x823A7B80 */));
+            CGS_ASSERT_AT(miTargetAssistCount <= KI_MAX_TARGET_ASSIST_CARS,
+                "miTargetAssistCount <= BrnTraffic::KI_MAX_STOMPED_CARS",
+                    KAC_ARTIST_ASSERT_FILE, 260 /* ARTIST 0x823A7B80 */);
+
 
             memcpy(lpOutTargetAssistPositions, mTargetAssistPositions,
                    sizeof(Vector3) * miTargetAssistCount);
@@ -127,10 +127,10 @@ namespace Vehicle
     {
         mDriverUpdateQueue.Append(*lpInterfaceToAppend->GetUpdateDriverQueue());
 
-        CGS_ASSERT(miTargetAssistCount == 0 || lpInterfaceToAppend->GetTargetAssistCount() == 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miTargetAssistCount==0 || lpInterfaceToAppend->GetTargetAssistCount()==0",
-                KAC_ARTIST_ASSERT_FILE, 164 /* ARTIST 0x823DB67C */));
+        CGS_ASSERT_AT(miTargetAssistCount == 0 || lpInterfaceToAppend->GetTargetAssistCount() == 0,
+            "miTargetAssistCount==0 || lpInterfaceToAppend->GetTargetAssistCount()==0",
+                KAC_ARTIST_ASSERT_FILE, 164 /* ARTIST 0x823DB67C */);
+
 
         if (miTargetAssistCount == 0)
         {
@@ -180,12 +180,12 @@ namespace Vehicle
     // words from `this`). Range-guards the index, then returns the float.
     f32 VehicleDriverInputInterface::GetBaseDeformationAmount(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 286 /* ARTIST 0x825B35B4 */));
-        CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 287 /* ARTIST 0x825B35D8 */));
+        CGS_ASSERT_AT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 286 /* ARTIST 0x825B35B4 */);
+
+        CGS_ASSERT_AT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 287 /* ARTIST 0x825B35D8 */);
+
 
         return maBaseDeformationAmounts[leRaceCarIndex];
     }
@@ -196,12 +196,12 @@ namespace Vehicle
     // from `this`). Range-guards the index, then returns the s32.
     s32 VehicleDriverInputInterface::Ge(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 305 /* ARTIST 0x825B362C */));
-        CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 306 /* ARTIST 0x825B3650 */));
+        CGS_ASSERT_AT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 305 /* ARTIST 0x825B362C */);
+
+        CGS_ASSERT_AT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 306 /* ARTIST 0x825B3650 */);
+
 
         return maBaseDeformationFrames[leRaceCarIndex];
     }

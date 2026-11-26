@@ -26,9 +26,9 @@ static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\SharedClasses\\Trigger
 const BrnTrigger::TriggerRegion*
 BrnTrigger::TriggerData::GetRegion( int liRegionIndex ) const
 {
-    CGS_ASSERT( liRegionIndex < miRegionCount,
-        CGS_ASSERT_MESSAGE_AT(
-            "liRegionIndex < miRegionCount", KAC_ARTIST_ASSERT_FILE, 624 /* ARTIST 0x8230E4C0 */));
+    CGS_ASSERT_AT( liRegionIndex < miRegionCount,
+        "liRegionIndex < miRegionCount", KAC_ARTIST_ASSERT_FILE, 624 /* ARTIST 0x8230E4C0 */);
+
     return mppRegions[liRegionIndex];
 }
 
@@ -37,16 +37,16 @@ BrnTrigger::TriggerData::GetRegion( int liRegionIndex ) const
 const BrnTrigger::Landmark*
 BrnTrigger::TriggerData::GetLandmarkFromRegionIndex( int liRegionIndex ) const
 {
-    CGS_ASSERT( liRegionIndex < miRegionCount,
-        CGS_ASSERT_MESSAGE_AT(
-            "liRegionIndex < miRegionCount",
-            KAC_ARTIST_ASSERT_FILE, 624 /* ARTIST 0x8231B678 */));
+    CGS_ASSERT_AT( liRegionIndex < miRegionCount,
+        "liRegionIndex < miRegionCount",
+            KAC_ARTIST_ASSERT_FILE, 624 /* ARTIST 0x8231B678 */);
+
 
     const TriggerRegion* lpTriggerRegion = mppRegions[liRegionIndex];
-    CGS_ASSERT( lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK",
-            KAC_ARTIST_ASSERT_FILE, 615 /* ARTIST 0x8231B6AC */));
+    CGS_ASSERT_AT( lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK,
+        "lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK",
+            KAC_ARTIST_ASSERT_FILE, 615 /* ARTIST 0x8231B6AC */);
+
 
     return static_cast<const Landmark*>( lpTriggerRegion );
 }
@@ -55,9 +55,9 @@ BrnTrigger::TriggerData::GetLandmarkFromRegionIndex( int liRegionIndex ) const
 const BrnTrigger::Killzone*
 BrnTrigger::TriggerData::GetKillzone( int liKillzoneIndex ) const
 {
-    CGS_ASSERT( liKillzoneIndex < miKillzoneCount,
-        CGS_ASSERT_MESSAGE_AT(
-            "liKillzoneIndex < miKillzoneCount", KAC_ARTIST_ASSERT_FILE, 533 /* ARTIST 0x82354850 */));
+    CGS_ASSERT_AT( liKillzoneIndex < miKillzoneCount,
+        "liKillzoneIndex < miKillzoneCount", KAC_ARTIST_ASSERT_FILE, 533 /* ARTIST 0x82354850 */);
+
     return &mpKillzones[liKillzoneIndex];
 }
 

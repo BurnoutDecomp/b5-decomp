@@ -116,10 +116,10 @@ f32 EffectBase::GetRWACMixerOutputValue(int aiSlot, int aiPreset)
 // ---------------------------------------------------------------------------
 void EffectBase::SetDMixIOPtr(Nicotine::DMixIO* apDmixIO)
 {
-    CGS_ASSERT(apDmixIO != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpDmixIO",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEffectBase.h", 916 /* ARTIST 0x82680904 */));
+    CGS_ASSERT_AT(apDmixIO != 0,
+        "lpDmixIO",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEffectBase.h", 916 /* ARTIST 0x82680904 */);
+
     mpDynamicMixIo = apDmixIO; // stw r31,0x30(this)
 }
 
@@ -132,19 +132,19 @@ void EffectBase::SetDMixIOPtr(Nicotine::DMixIO* apDmixIO)
 template<>
 void ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray()
 {
-    u16 luIndex = 0;
-    do
+    // DWARF CgsEffectBase.h:353 `uint16_t lCnt`, scanned by a for loop; the assert (:363) follows
+    // it. ARTIST inlines the streamed literal after the loop (D12, asserts lane).
+    u16 lCnt;
+    for (lCnt = 0; lCnt < EffectControl::KU_SIZEOF_CLASS_ARRAY; ++lCnt)
     {
-        if (!gapEffectControlTypeInfo[luIndex])
+        if (!gapEffectControlTypeInfo[lCnt])
         {
-            gapEffectControlTypeInfo[luIndex] = this;
+            gapEffectControlTypeInfo[lCnt] = this;
             return;
         }
-        ++luIndex;
     }
-    while (luIndex < EffectControl::KU_SIZEOF_CLASS_ARRAY);
 
-    CGS_ASSERT_STREAM_AT(luIndex < sizeof(gapEffectControlTypeInfo),
+    CGS_ASSERT_STREAM_AT(lCnt < sizeof(gapEffectControlTypeInfo),
         "Too Many Class registations. Increase KU_SIZEOF_CLASS_ARRAY",
         "..\..\..\GameShared\GameClasses\Sound/Logic/CgsEffectBase.h", 363);
 }
@@ -169,9 +169,9 @@ const char* EffectControl::GetTypeName() const
 // ---------------------------------------------------------------------------
 void EffectBase::SetMixerInputValue(int aiSlot, int aiValue)
 {
-    CGS_ASSERT(aiSlot >= 0 && aiSlot < KI_MAX_SFX_CTLS,
-        CGS_ASSERT_MESSAGE_AT("lSlotIndex >= 0 && lSlotIndex < 32",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEffectBase.h", 812));
+    CGS_ASSERT_AT(aiSlot >= 0 && aiSlot < KI_MAX_SFX_CTLS,
+        "lSlotIndex >= 0 && lSlotIndex < 32",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEffectBase.h", 812);
     if (mpDynamicMixIo)
     {
         const s32 liClamped = CgsNumeric::Min(CgsNumeric::Max(aiValue, 0), 0x7fff);
@@ -193,19 +193,19 @@ ClassTypeInfo<EffectControl>* EffectControl::GetRegisteredTypeInfo(u32 auIndex)
 template<>
 void ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray()
 {
-    u16 luIndex = 0;
-    do
+    // DWARF CgsEffectBase.h:353 `uint16_t lCnt`, scanned by a for loop; the assert (:363) follows
+    // it. ARTIST inlines the streamed literal after the loop (D12, asserts lane).
+    u16 lCnt;
+    for (lCnt = 0; lCnt < EffectObject::KU_SIZEOF_CLASS_ARRAY; ++lCnt)
     {
-        if (!gapEffectObjectTypeInfo[luIndex])
+        if (!gapEffectObjectTypeInfo[lCnt])
         {
-            gapEffectObjectTypeInfo[luIndex] = this;
+            gapEffectObjectTypeInfo[lCnt] = this;
             return;
         }
-        ++luIndex;
     }
-    while (luIndex < EffectObject::KU_SIZEOF_CLASS_ARRAY);
 
-    CGS_ASSERT_STREAM_AT(luIndex < sizeof(gapEffectObjectTypeInfo),
+    CGS_ASSERT_STREAM_AT(lCnt < sizeof(gapEffectObjectTypeInfo),
         "Too Many Class registations. Increase KU_SIZEOF_CLASS_ARRAY",
         "..\..\..\GameShared\GameClasses\Sound/Logic/CgsEffectBase.h", 363);
 }

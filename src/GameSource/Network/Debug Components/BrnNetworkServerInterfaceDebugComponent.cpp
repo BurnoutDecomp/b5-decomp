@@ -88,7 +88,7 @@ namespace BrnNetwork
             case 6: return "Disconnected";
             default: break;
             }
-            CGS_ASSERT(false, "Unknown connapi status");
+            CGS_FAIL("Unknown connapi status");
             return 0;
         }
     }
@@ -111,9 +111,9 @@ namespace BrnNetwork
     // bodies); it is a no-op and carries no observable effect, so it is dropped.
     void ServerInterfaceDebugComponent::Construct(BrnServerInterfaceBase* lpServerInterfaceBase)
     {
-        CGS_ASSERT(lpServerInterfaceBase != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpServerInterfaceBase != 0,
             "lpServerInterfaceBase",
-            __FILE__, 86 /* ARTIST 0x8258573C */));
+            __FILE__, 86 /* ARTIST 0x8258573C */);
 
         mpServerInterfaceBase       = lpServerInterfaceBase;
         miConnectionType            = CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_GAME_ONLY; // 3
@@ -168,10 +168,10 @@ namespace BrnNetwork
     // user-data is the component (registered via RegisterFunction(&Disconnect, this, "Disconnect")).
     void ServerInterfaceDebugComponent::Disconnect(void* lpData)
     {
-        CGS_ASSERT(lpData != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpServerInterfaceDebugComponent",
-                __FILE__, 235 /* ARTIST 0x825857CC */));
+        CGS_ASSERT_AT(lpData != 0,
+            "lpServerInterfaceDebugComponent",
+                __FILE__, 235 /* ARTIST 0x825857CC */);
+
         static_cast<ServerInterfaceDebugComponent*>(lpData)->mbDisconnectNextUpdate = true;
     }
 
@@ -222,8 +222,8 @@ namespace BrnNetwork
         if (mbApplyServerTypeNextUpdate)
         {
             mbApplyServerTypeNextUpdate = false;
-            CGS_ASSERT(mpNetworkManager != 0,
-                CGS_ASSERT_MESSAGE_AT("mpNetworkManager", __FILE__, 190 /* ARTIST 0x8258ACCC */));
+            CGS_ASSERT_AT(mpNetworkManager != 0,
+                "mpNetworkManager", __FILE__, 190 /* ARTIST 0x8258ACCC */);
             mpNetworkManager->GetNetworkServers()->SetServerType(static_cast<CgsNetwork::EServerType>(miServerType));
         }
     }
@@ -367,10 +367,10 @@ namespace BrnNetwork
     // component is non-null, then unconditionally sets the deferred-apply flag.
     void ServerInterfaceDebugComponent::ServerTypeSelectCallback(void* /*lpData*/, void* lpUserData)
     {
-        CGS_ASSERT(lpUserData != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpServerInterfaceDebugComponent",
-                __FILE__, 541 /* ARTIST 0x82585824 */));
+        CGS_ASSERT_AT(lpUserData != 0,
+            "lpServerInterfaceDebugComponent",
+                __FILE__, 541 /* ARTIST 0x82585824 */);
+
         static_cast<ServerInterfaceDebugComponent*>(lpUserData)->mbApplyServerTypeNextUpdate = true;
     }
 }

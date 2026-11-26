@@ -43,7 +43,7 @@ namespace CgsLanguage
     // E_LANGUAGE_ENGLISH_US slot.
     void Sku::Construct(CgsGui::GuiModule* lpGuiModule)
     {
-        CGS_ASSERT(lpGuiModule != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid gui module pointer", "..\\..\\..\\GameShared\\GameClasses\\Language/CgsSku.cpp", 158));
+        CGS_ASSERT_STREAM_AT(lpGuiModule != 0, "Invalid gui module pointer", "..\\..\\..\\GameShared\\GameClasses\\Language/CgsSku.cpp", 158);
 
         mpGuiModule     = lpGuiModule;        // +0x10  stw r26, 0x10(r27)
         mbLoaded        = false;              // +0x14  stb r29(0), 0x14(r27)

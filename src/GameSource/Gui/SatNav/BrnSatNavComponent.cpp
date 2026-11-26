@@ -332,7 +332,7 @@ void SatNavComponent::UpdateFreeRoaming()
     }
 
     default:
-        CGS_ASSERT(false, "Invalid roaming state : ");   // :444 (non-gating)
+        CGS_FAIL("Invalid roaming state : ");   // :444 (non-gating)
         break;
     }
 
@@ -579,10 +579,10 @@ void SatNavComponent::SetViewParamsFromPlayerCar(const GuiPlayerInfo* lpPlayerIn
 // real GuiCache now the full class exists).
 void SatNavComponent::SetCachePointer(GuiCache* lpGuiCache)
 {
-    CGS_ASSERT(lpGuiCache != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpCache",
-            "..\\..\\..\\GameSource\\Gui/SatNav/BrnSatNav.h", 342 /* ARTIST 0x82473664 */));   // BrnSatNav.h:342 (non-gating)
+    CGS_ASSERT_AT(lpGuiCache != 0,
+        "lpCache",
+            "..\\..\\..\\GameSource\\Gui/SatNav/BrnSatNav.h", 342 /* ARTIST 0x82473664 */);   // BrnSatNav.h:342 (non-gating)
+
     mpGuiCache = lpGuiCache;
 }
 

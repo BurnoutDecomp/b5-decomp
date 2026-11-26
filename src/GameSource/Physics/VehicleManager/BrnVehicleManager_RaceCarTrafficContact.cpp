@@ -826,17 +826,17 @@ void VehicleManager::HandleCrashPredictionForRaceCarAndTrafficVehicle(
     VehicleManagerOutputInterface* lpManagerOutputInterface,
     BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface)
 {
-    CGS_ASSERT(lpContactPairAverager != 0,
-        CGS_ASSERT_MESSAGE_AT("lpContactPairAverager", KAC_ARTIST_ASSERT_FILE, 9523 /* ARTIST 0x82640AF4 */));
-    CGS_ASSERT(lpVehicleOutputInterface != 0,
-        CGS_ASSERT_MESSAGE_AT("lpVehicleOutputInterface", KAC_ARTIST_ASSERT_FILE, 9524 /* ARTIST 0x82640B18 */));
-    CGS_ASSERT(lpManagerOutputInterface != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpVehicleManagerOutputInterface", KAC_ARTIST_ASSERT_FILE, 9525 /* ARTIST 0x82640B3C */));
-    CGS_ASSERT(lpRequestOutputInterface != 0,
-        CGS_ASSERT_MESSAGE_AT("lpRequestOutputInterface", KAC_ARTIST_ASSERT_FILE, 9526 /* ARTIST 0x82640B60 */));
-    CGS_ASSERT(lpDeformationInterface != 0,
-        CGS_ASSERT_MESSAGE_AT("lpDeformationInterface", KAC_ARTIST_ASSERT_FILE, 9527 /* ARTIST 0x82640B84 */));
+    CGS_ASSERT_AT(lpContactPairAverager != 0,
+        "lpContactPairAverager", KAC_ARTIST_ASSERT_FILE, 9523 /* ARTIST 0x82640AF4 */);
+    CGS_ASSERT_AT(lpVehicleOutputInterface != 0,
+        "lpVehicleOutputInterface", KAC_ARTIST_ASSERT_FILE, 9524 /* ARTIST 0x82640B18 */);
+    CGS_ASSERT_AT(lpManagerOutputInterface != 0,
+        "lpVehicleManagerOutputInterface", KAC_ARTIST_ASSERT_FILE, 9525 /* ARTIST 0x82640B3C */);
+
+    CGS_ASSERT_AT(lpRequestOutputInterface != 0,
+        "lpRequestOutputInterface", KAC_ARTIST_ASSERT_FILE, 9526 /* ARTIST 0x82640B60 */);
+    CGS_ASSERT_AT(lpDeformationInterface != 0,
+        "lpDeformationInterface", KAC_ARTIST_ASSERT_FILE, 9527 /* ARTIST 0x82640B84 */);
 
     for (u32 luPair = 0; luPair < lpContactPairAverager->muContactPairCount; ++luPair)
     {

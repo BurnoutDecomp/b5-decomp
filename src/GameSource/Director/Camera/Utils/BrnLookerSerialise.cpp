@@ -63,7 +63,7 @@ void Looker::Parameters::Serialise(TSerialiser& lrSerialiser)
 
     default:
         // The console streams the code version and the data version after this text.
-        CGS_ASSERT(false, "Looker::Parameters : code/data version mismatch, code is version: ");
+        CGS_FAIL("Looker::Parameters : code/data version mismatch, code is version: ");
         break;
     }
 }

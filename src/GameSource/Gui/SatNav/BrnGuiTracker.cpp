@@ -491,12 +491,12 @@ const BrnGameState::LandmarkIndex* GuiTracker::GetActivelyTrackedLandmarks()
         s32 liActiveTrackedCount = 0;
         for (s32 liIndex = miCurrentlyTrackedIndex; liIndex < miTrackerCount; ++liIndex)
         {
-            CGS_ASSERT((liIndex >= 0) && (liIndex < KI_TRACKER_STACK_SIZE),
-                       CGS_ASSERT_MESSAGE_AT("(liIndex >= 0) && (liIndex < KI_TRACKER_STACK_SIZE)",
-                                                 CGS_ARTIST_FILE, 347));
-            CGS_ASSERT((liActiveTrackedCount >= 0) && (liActiveTrackedCount < KI_TRACKER_STACK_SIZE),
-                       CGS_ASSERT_MESSAGE_AT("(liActiveTrackedCount >= 0) && (liActiveTrackedCount < KI_TRACKER_STACK_SIZE)",
-                                                 CGS_ARTIST_FILE, 348));
+            CGS_ASSERT_AT((liIndex >= 0) && (liIndex < KI_TRACKER_STACK_SIZE),
+                       "(liIndex >= 0) && (liIndex < KI_TRACKER_STACK_SIZE)",
+                                                 CGS_ARTIST_FILE, 347);
+            CGS_ASSERT_AT((liActiveTrackedCount >= 0) && (liActiveTrackedCount < KI_TRACKER_STACK_SIZE),
+                       "(liActiveTrackedCount >= 0) && (liActiveTrackedCount < KI_TRACKER_STACK_SIZE)",
+                                                 CGS_ARTIST_FILE, 348);
             maActivelyTrackedLandmarks[liActiveTrackedCount++] =
                 BrnGameState::LandmarkIndex(maTrackerRecords[liIndex].mTargetLandmarkIndex);
         }
@@ -609,7 +609,7 @@ namespace BrnGui
             default:
                 // The console streams the icon type after the text into the assert buffer;
                 // the static head is passed through (the house convention for streamed asserts).
-                CGS_ASSERT(false, "Route request mechanism can't deal with items of type ");
+                CGS_FAIL("Route request mechanism can't deal with items of type ");
                 break;
         }
     }

@@ -181,11 +181,11 @@ void TrafficLaneTruck::PickSplitToTake(const BrnTraffic::Section& lrSection,
                                        BrnTraffic::Directions lePreferredDirection,
                                        u8* lpOutSection, u16* lpOutHull, u8* lpOutDirection)
 {
-    CGS_ASSERT(lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT,
-               CGS_ASSERT_MESSAGE_AT("lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT", CGS_ARTIST_FILE, 161));
-    CGS_ASSERT(lpOutSection != 0, CGS_ASSERT_MESSAGE_AT("lpOutSection", CGS_ARTIST_FILE, 162));
-    CGS_ASSERT(lpOutHull != 0, CGS_ASSERT_MESSAGE_AT("lpOutHull", CGS_ARTIST_FILE, 163));
-    CGS_ASSERT(lpOutDirection != 0, CGS_ASSERT_MESSAGE_AT("lpOutDirection", CGS_ARTIST_FILE, 164));
+    CGS_ASSERT_AT(lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT,
+               "lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT", CGS_ARTIST_FILE, 161);
+    CGS_ASSERT_AT(lpOutSection != 0, "lpOutSection", CGS_ARTIST_FILE, 162);
+    CGS_ASSERT_AT(lpOutHull != 0, "lpOutHull", CGS_ARTIST_FILE, 163);
+    CGS_ASSERT_AT(lpOutDirection != 0, "lpOutDirection", CGS_ARTIST_FILE, 164);
 
     u32 luDirection = static_cast<u32>(lePreferredDirection);
     if (lrSection.mauForwardSections[luDirection] == 0xFF)
@@ -222,11 +222,11 @@ void TrafficLaneTruck::PickSplitToTakeBackwards(const BrnTraffic::Section& lrSec
                                                 u8* lpOutSection, u16* lpOutHull,
                                                 u8* lpOutDirection)
 {
-    CGS_ASSERT(lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT,
-               CGS_ASSERT_MESSAGE_AT("lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT", CGS_ARTIST_FILE, 207));
-    CGS_ASSERT(lpOutSection != 0, CGS_ASSERT_MESSAGE_AT("lpOutSection", CGS_ARTIST_FILE, 208));
-    CGS_ASSERT(lpOutHull != 0, CGS_ASSERT_MESSAGE_AT("lpOutHull", CGS_ARTIST_FILE, 209));
-    CGS_ASSERT(lpOutDirection != 0, CGS_ASSERT_MESSAGE_AT("lpOutDirection", CGS_ARTIST_FILE, 210));
+    CGS_ASSERT_AT(lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT,
+               "lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT", CGS_ARTIST_FILE, 207);
+    CGS_ASSERT_AT(lpOutSection != 0, "lpOutSection", CGS_ARTIST_FILE, 208);
+    CGS_ASSERT_AT(lpOutHull != 0, "lpOutHull", CGS_ARTIST_FILE, 209);
+    CGS_ASSERT_AT(lpOutDirection != 0, "lpOutDirection", CGS_ARTIST_FILE, 210);
 
     u32 luDirection = static_cast<u32>(lePreferredDirection);
     if (lrSection.mauBackwardSections[luDirection] == 0xFF)
@@ -354,7 +354,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneForwards(
         BrnDirector::WorldMap::LanePosition* lpPositionInOut,
         rw::math::vpu::Matrix44Affine* lpTransformOut)
 {
-    CGS_ASSERT(lpPositionInOut->mbValid, CGS_ASSERT_MESSAGE_AT("lpPositionInOut->mbValid", CGS_ARTIST_FILE, 275));
+    CGS_ASSERT_AT(lpPositionInOut->mbValid, "lpPositionInOut->mbValid", CGS_ARTIST_FILE, 275);
 
     const BrnTraffic::Hull*    lpHull    = lrWorldMap.GetTrafficHullData(lpPositionInOut->muHullIndex);
     const BrnTraffic::Section* lpSection = lpHull->GetSection(lpPositionInOut->muSection);
@@ -366,7 +366,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneForwards(
                                     - lpaCumulativeLengths[luCurrentRung];
     u32        luNumSegments        = lpSection->GetNumSegments();
 
-    CGS_ASSERT(lfDistToMove >= KF_ZERO, CGS_ASSERT_MESSAGE_AT("lfDistToMove >= 0.0f", CGS_ARTIST_FILE, 286));
+    CGS_ASSERT_AT(lfDistToMove >= KF_ZERO, "lfDistToMove >= 0.0f", CGS_ARTIST_FILE, 286);
 
     for (;;)
     {
@@ -482,7 +482,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneBackwards(
         BrnDirector::WorldMap::LanePosition* lpPositionInOut,
         rw::math::vpu::Matrix44Affine* lpTransformOut)
 {
-    CGS_ASSERT(lpPositionInOut->mbValid, CGS_ASSERT_MESSAGE_AT("lpPositionInOut->mbValid", CGS_ARTIST_FILE, 394));
+    CGS_ASSERT_AT(lpPositionInOut->mbValid, "lpPositionInOut->mbValid", CGS_ARTIST_FILE, 394);
 
     const BrnTraffic::Hull*    lpHull    = lrWorldMap.GetTrafficHullData(lpPositionInOut->muHullIndex);
     const BrnTraffic::Section* lpSection = lpHull->GetSection(lpPositionInOut->muSection);
@@ -493,7 +493,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneBackwards(
     f32        lfSegmentLength      = lpaCumulativeLengths[luCurrentRung + 1]
                                     - lpaCumulativeLengths[luCurrentRung];
 
-    CGS_ASSERT(lfDistToMove >= KF_ZERO, CGS_ASSERT_MESSAGE_AT("lfDistToMove >= 0.0f", CGS_ARTIST_FILE, 405));
+    CGS_ASSERT_AT(lfDistToMove >= KF_ZERO, "lfDistToMove >= 0.0f", CGS_ARTIST_FILE, 405);
 
     for (;;)
     {
@@ -601,7 +601,7 @@ void TrafficLaneTruck::MoveAlongTrafficLane(BrnTraffic::Directions lePreferredDi
                                             BrnDirector::WorldMap::LanePosition* lpPositionInOut,
                                             rw::math::vpu::Matrix44Affine* lpTransformOut)
 {
-    CGS_ASSERT(lpPositionInOut->mbValid, CGS_ASSERT_MESSAGE_AT("lpPositionInOut->mbValid", CGS_ARTIST_FILE, 517));
+    CGS_ASSERT_AT(lpPositionInOut->mbValid, "lpPositionInOut->mbValid", CGS_ARTIST_FILE, 517);
 
     // ARTIST 0x8222BCB4 takes the forwards path only for an ordered >= comparison.
     if (!(lfDistToMove >= KF_ZERO))
@@ -658,7 +658,7 @@ void TrafficLaneTruck::MoveAlongTrafficLane(BrnTraffic::Directions lePreferredDi
 void TrafficLaneTruck::Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTimestep,
                               void* /*lpRandom*/)
 {
-    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 95));
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_FILE, 95);
 
     if (!mLanePosition.mbValid)
         return;
@@ -708,7 +708,7 @@ void TrafficLaneTruck::Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTim
                                                     mfTransformBlendAmount * 0.5f);
     }
 
-    CGS_ASSERT(rw::math::vpu::IsValid(mLocalAngularVelocity), CGS_ASSERT_MESSAGE_AT("IsValid(mLocalAngularVelocity)", CGS_ARTIST_FILE, 139));
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(mLocalAngularVelocity), "IsValid(mLocalAngularVelocity)", CGS_ARTIST_FILE, 139);
 
     mTransform    = lNewTransform;
     mLanePosition = lLanePositionA;
@@ -721,8 +721,8 @@ void TrafficLaneTruck::Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTim
 // ----------------------------------------------------------------------------
 rw::math::vpu::Matrix44Affine TrafficLaneTruck::GetTransform() const
 {
-    CGS_ASSERT(mbPrepared,
-        CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_BRNBEHAVIOURROADRUNNER_FILE, 63 /* ARTIST 0x821F5408 */));
+    CGS_ASSERT_AT(mbPrepared,
+        "mbPrepared", CGS_ARTIST_BRNBEHAVIOURROADRUNNER_FILE, 63 /* ARTIST 0x821F5408 */);
     return mTransform;                                 // 4x lvx128 (this+0x20) -> 4x stvx128 (sret)
 }
 
@@ -731,8 +731,8 @@ rw::math::vpu::Matrix44Affine TrafficLaneTruck::GetTransform() const
 // ----------------------------------------------------------------------------
 rw::math::vpu::Vector3 TrafficLaneTruck::GetLocalAngularVelocity() const
 {
-    CGS_ASSERT(mbPrepared,
-        CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_BRNBEHAVIOURROADRUNNER_FILE, 73 /* ARTIST 0x821F54A0 */));
+    CGS_ASSERT_AT(mbPrepared,
+        "mbPrepared", CGS_ARTIST_BRNBEHAVIOURROADRUNNER_FILE, 73 /* ARTIST 0x821F54A0 */);
     return mLocalAngularVelocity;                      // lvx128 (this+0x60) -> stvx128 (sret)
 }
 
@@ -741,8 +741,8 @@ rw::math::vpu::Vector3 TrafficLaneTruck::GetLocalAngularVelocity() const
 // ----------------------------------------------------------------------------
 rw::math::vpu::Vector3 TrafficLaneTruck::GetLinearVelocity() const
 {
-    CGS_ASSERT(mbPrepared,
-        CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_BRNBEHAVIOURROADRUNNER_FILE, 76 /* ARTIST 0x821F5510 */));
+    CGS_ASSERT_AT(mbPrepared,
+        "mbPrepared", CGS_ARTIST_BRNBEHAVIOURROADRUNNER_FILE, 76 /* ARTIST 0x821F5510 */);
     return mLinearVelocity;                            // lvx128 (this+0x70) -> stvx128 (sret)
 }
 
@@ -1167,9 +1167,9 @@ void BehaviourRoadRunner::SetParameters(const Behaviour::Parameters* lpParameter
 // one store; this setter does not touch the prepared flag or the debug name.
 void BehaviourRoadRunner::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourRoadRunner, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpParameters->GetType() == eBehaviourRoadRunner,
                "lpParameters->GetType() == eBehaviourRoadRunner",
-               CGS_ARTIST_BRNBEHAVIOURROADRUNNER_FILE, 314));
+               CGS_ARTIST_BRNBEHAVIOURROADRUNNER_FILE, 314);
     mpParameters = lpParameters;
 }
 

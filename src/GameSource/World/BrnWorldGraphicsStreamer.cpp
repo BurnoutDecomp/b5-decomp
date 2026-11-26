@@ -125,11 +125,11 @@ void
 WorldGraphicsStreamer::OnLoadComplete( const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent,
                                        s32 liListIndex )
 {
-    CGS_ASSERT( mpWorldEntityModule,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpWorldEntityModule",
+    CGS_ASSERT_AT( mpWorldEntityModule,
+        "mpWorldEntityModule",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../World/BrnWorldGraphicsStreamer.cpp", 129 /* ARTIST 0x827BE5F4 */));
+            "../World/BrnWorldGraphicsStreamer.cpp", 129 /* ARTIST 0x827BE5F4 */);
+
 
     maInstanceLists[ liListIndex ] = static_cast<const BrnResource::GameDataIO::GetWorldUnitGraphicsResponse*>(lpEvent)->GetWorldUnitGraphicsHandle();
 

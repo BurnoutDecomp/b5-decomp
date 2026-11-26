@@ -51,7 +51,7 @@ namespace PropEntityIO
     // Called by BrnWorld::PropEntityModule::ProcessContacts. (class:BrnWorld::PropEntityIO TU; no \n.)
     const InputBuffer_PostPhysics::ContactSpyInterface* InputBuffer_PostPhysics::GetContactSpyInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 576));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 576);
         return &mContactSpyInterface;
     }
 
@@ -61,7 +61,7 @@ namespace PropEntityIO
     // The rodata assert string carries a trailing newline (VERBATIM).
     InputBuffer_PostPhysics::ContactSpyInterface* InputBuffer_PostPhysics::GetContactSpyInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 579));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 579);
         return &mContactSpyInterface;
     }
 
@@ -70,7 +70,7 @@ namespace PropEntityIO
     // The rodata assert string carries a trailing newline (VERBATIM).
     void InputBuffer_PostPhysics::AppendUpdatedPropQueue(const UpdatePropEventQueue* lpQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 580));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 580);
         mUpdatedPropQueue.Append(*lpQueue);
     }
 
@@ -80,7 +80,7 @@ namespace PropEntityIO
     // Rodata carries a trailing newline (VERBATIM, per LegacySrc reference source).
     const InputBuffer_PostPhysics::UpdatePropEventQueue* InputBuffer_PostPhysics::GetUpdatedPropQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 577));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 577);
         return &mUpdatedPropQueue;
     }
 }

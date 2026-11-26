@@ -130,10 +130,10 @@ void ServerInterfaceConnection::Destruct()
 
 bool ServerInterfaceConnection::Prepare(ServerInterfaceDirtySock* lpServerInterface)
 {
-    CGS_ASSERT(miConnectCallback == -1,
-        CGS_ASSERT_MESSAGE_AT(
-            "miConnectCallback == -1",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceConnection.cpp", 192 /* ARTIST 0x82886330 */));
+    CGS_ASSERT_AT(miConnectCallback == -1,
+        "miConnectCallback == -1",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceConnection.cpp", 192 /* ARTIST 0x82886330 */);
+
 
     mpServerInterface = lpServerInterface;
     meCurrentAction   = E_ACTION_COUNT;
@@ -348,9 +348,9 @@ EServerInterfaceError ServerInterfaceConnection::ConvertError(s32 liError, EActi
 {
     const DSErrorToServerInterfaceError* lpMappingTable = KA_CONNECTION_DS_ERROR_TABLE_LOOKUP[leAction].mpMappingTable;
     const s32 liNumMappings = KA_CONNECTION_DS_ERROR_TABLE_LOOKUP[leAction].miNumMappings;
-    CGS_ASSERT(lpMappingTable, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpMappingTable,
         "lpMappingTable",
-        "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceConnection.cpp", 421 /* ARTIST 0x82876B80 */));
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceConnection.cpp", 421 /* ARTIST 0x82876B80 */);
     return ServerInterfaceComponent::ConvertError(liError, lpMappingTable, liNumMappings);
 }
 

@@ -149,7 +149,7 @@ void CollisionEffect::AttachController(CgsSound::Logic::EffectBase* apController
         mpCollisionControl = static_cast<CollisionControl*>(apController);
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+        CGS_FAIL_STREAM_AT("Cound't attach controller " << apController->GetId(),
                              BRN_COLLISIONEFFECT_CPP_FILE, 193);
         break;
     }
@@ -227,7 +227,7 @@ void CollisionEffect::GetSizeSpecificSettings(const OutputCollision& arCollision
         arSettings.mfPitch = arBin.Pitch().mV.x;
         break;
     default:
-        CGS_ASSERT(false, "Bad Size");
+        CGS_FAIL("Bad Size");
         break;
     }
 }
@@ -402,7 +402,7 @@ bool CollisionEffect::Attach()
         InitWork<Attrib::Gen::propscrashbin>(lpState, lrCollision);
         break;
     default:
-        CGS_ASSERT(false, "Bad pipeline");
+        CGS_FAIL("Bad pipeline");
         InitWork<Attrib::Gen::crashbin>(lpState, lrCollision);
         break;
     }

@@ -345,9 +345,9 @@ private:
 // ----------------------------------------------------------------------------
 inline void BehaviourRotateAboutVehicle::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == 18u, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpParameters->GetType() == 18u,
                "lpParameters->GetType() == eBehaviourRotateAboutVehicle",
-               "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h", 150));
+               "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h", 150);
 
     mpParameters = lpParameters;
 }

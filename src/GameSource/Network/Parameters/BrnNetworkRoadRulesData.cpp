@@ -58,18 +58,18 @@ void RoadRulesUploadData::Construct(u64 lu64RoadRulesID)
 // Append one {record-index, score, car-id} row; returns true once the batch is full.
 bool RoadRulesUploadData::SetScoreData(s32 liRecordIndex, s32 liQuantisedScore, CgsID lCarID)
 {
-    CGS_ASSERT(liRecordIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liRecordIndex >= 0", KAC_ARTIST_ASSERT_SOURCE, 61 /* ARTIST 0x82584964 */));
-    CGS_ASSERT(liRecordIndex < BrnGameState::KI_MAX_CHALLENGES * BrnStreetData::E_SCORE_TYPE_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "liRecordIndex < BrnGameState::KI_MAX_CHALLENGES * BrnStreetData::E_SCORE_TYPE_COUNT",
-            KAC_ARTIST_ASSERT_SOURCE, 62 /* ARTIST 0x82584988 */));
-    CGS_ASSERT(miNumScores >= 0,
-        CGS_ASSERT_MESSAGE_AT("miNumScores >= 0", KAC_ARTIST_ASSERT_SOURCE, 63 /* ARTIST 0x825849B0 */));
-    CGS_ASSERT(miNumScores < KI_MAX_UPLOAD_DATA,
-        CGS_ASSERT_MESSAGE_AT(
-            "miNumScores < KI_MAX_UPLOAD_DATA",
-            KAC_ARTIST_ASSERT_SOURCE, 64 /* ARTIST 0x825849D8 */));
+    CGS_ASSERT_AT(liRecordIndex >= 0,
+        "liRecordIndex >= 0", KAC_ARTIST_ASSERT_SOURCE, 61 /* ARTIST 0x82584964 */);
+    CGS_ASSERT_AT(liRecordIndex < BrnGameState::KI_MAX_CHALLENGES * BrnStreetData::E_SCORE_TYPE_COUNT,
+        "liRecordIndex < BrnGameState::KI_MAX_CHALLENGES * BrnStreetData::E_SCORE_TYPE_COUNT",
+            KAC_ARTIST_ASSERT_SOURCE, 62 /* ARTIST 0x82584988 */);
+
+    CGS_ASSERT_AT(miNumScores >= 0,
+        "miNumScores >= 0", KAC_ARTIST_ASSERT_SOURCE, 63 /* ARTIST 0x825849B0 */);
+    CGS_ASSERT_AT(miNumScores < KI_MAX_UPLOAD_DATA,
+        "miNumScores < KI_MAX_UPLOAD_DATA",
+            KAC_ARTIST_ASSERT_SOURCE, 64 /* ARTIST 0x825849D8 */);
+
 
     maiRecordIndices[miNumScores]  = liRecordIndex;
     maiQuantisedScore[miNumScores] = liQuantisedScore;
@@ -122,14 +122,14 @@ void RoadRulesDownloadData::SetDownloadedRoadRulesData(char* lpName, s32 liScore
 void RoadRulesLocalPlayerDownloadedScores::GetRoadRulesDataForDownloadIndex(s32 liDownloadIndex,
                                                                             s32* lpScoreType, s32* lpScore)
 {
-    CGS_ASSERT(liDownloadIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liDownloadIndex >= 0", __FILE__, 481 /* ARTIST 0x825418E4 */));
-    CGS_ASSERT(liDownloadIndex < KI_MAX_DOWNLOAD_DATA,
-        CGS_ASSERT_MESSAGE_AT(
-            "liDownloadIndex < KI_MAX_DOWNLOAD_DATA", __FILE__, 482 /* ARTIST 0x82541908 */));
-    CGS_ASSERT(liDownloadIndex < miNumScores,
-        CGS_ASSERT_MESSAGE_AT(
-            "liDownloadIndex < miNumScores", __FILE__, 483 /* ARTIST 0x82541930 */));
+    CGS_ASSERT_AT(liDownloadIndex >= 0,
+        "liDownloadIndex >= 0", __FILE__, 481 /* ARTIST 0x825418E4 */);
+    CGS_ASSERT_AT(liDownloadIndex < KI_MAX_DOWNLOAD_DATA,
+        "liDownloadIndex < KI_MAX_DOWNLOAD_DATA", __FILE__, 482 /* ARTIST 0x82541908 */);
+
+    CGS_ASSERT_AT(liDownloadIndex < miNumScores,
+        "liDownloadIndex < miNumScores", __FILE__, 483 /* ARTIST 0x82541930 */);
+
 
     // *lpScoreType = maiScoreTypes[index] (the +0xA0 array == v5[index+40]);
     // *lpScore     = maiScores[index]     (the +0x00 array == v5[index]).
@@ -140,9 +140,9 @@ void RoadRulesLocalPlayerDownloadedScores::GetRoadRulesDataForDownloadIndex(s32 
 // X360 0x82580978.
 void RoadRulesLocalPlayerDownloadedScores::SetDownloadedRoadRulesData(s32 liScoreType, s32 liScore)
 {
-    CGS_ASSERT(miNumScores < KI_MAX_DOWNLOAD_DATA,
-        CGS_ASSERT_MESSAGE_AT(
-            "miNumScores < KI_MAX_DOWNLOAD_DATA", __FILE__, 503 /* ARTIST 0x825809A4 */));
+    CGS_ASSERT_AT(miNumScores < KI_MAX_DOWNLOAD_DATA,
+        "miNumScores < KI_MAX_DOWNLOAD_DATA", __FILE__, 503 /* ARTIST 0x825809A4 */);
+
 
     // v3[v3[82]+40] = a2 -> maiScoreTypes[miNumScores] = liScoreType;
     // v3[v3[82]++]  = a3 -> maiScores[miNumScores]     = liScore; then bump the count.

@@ -61,7 +61,7 @@ namespace BrnReplays
     // =====================================================================================
     s32 GPUDiskWriteStream::AllocateGlobalBlock()
     {
-        CGS_ASSERT(miGlobalBlocksFree > 0, CGS_ASSERT_MESSAGE_AT("miGlobalBlocksFree > 0", CGS_ARTIST_BRNREPLAYGPUDISKWRITESTREAM_FILE, 252));
+        CGS_ASSERT_AT(miGlobalBlocksFree > 0, "miGlobalBlocksFree > 0", CGS_ARTIST_BRNREPLAYGPUDISKWRITESTREAM_FILE, 252);
         --miGlobalBlocksFree;
         ++miGlobalBlocksUsed;
         return maGlobalBlockFreeList[miGlobalBlocksFree];
@@ -72,7 +72,7 @@ namespace BrnReplays
     // =====================================================================================
     void GPUDiskWriteStream::FreeGlobalBlock(s32 liGlobalBlock)
     {
-        CGS_ASSERT(miGlobalBlocksUsed > 0, CGS_ASSERT_MESSAGE_AT("miGlobalBlocksUsed > 0", CGS_ARTIST_BRNREPLAYGPUDISKWRITESTREAM_FILE, 270));
+        CGS_ASSERT_AT(miGlobalBlocksUsed > 0, "miGlobalBlocksUsed > 0", CGS_ARTIST_BRNREPLAYGPUDISKWRITESTREAM_FILE, 270);
         maGlobalBlockFreeList[miGlobalBlocksFree] = liGlobalBlock;
         ++miGlobalBlocksFree;
         --miGlobalBlocksUsed;
@@ -113,8 +113,8 @@ namespace BrnReplays
             GlobalBlock& lGlobal       = maGlobalBlocks[liGlobalBlock];
             LocalBlock&  lLocalBlock   = maPrimaryBlocks[miPrimaryWriteIndex];
 
-            CGS_ASSERT(lLocalBlock.miGlobalBlockIndex == KI_INVALID_BLOCK,
-                       CGS_ASSERT_MESSAGE_AT("lLocalBlock.miGlobalBlockIndex == -1", CGS_ARTIST_FILE, 235));
+            CGS_ASSERT_AT(lLocalBlock.miGlobalBlockIndex == KI_INVALID_BLOCK,
+                       "lLocalBlock.miGlobalBlockIndex == -1", CGS_ARTIST_FILE, 235);
 
             lGlobal.miOffset            = liOffset;
             lGlobal.miStatus            = KI_STATUS_PRIMARY;
@@ -184,7 +184,7 @@ namespace BrnReplays
             return 0;
 
         LocalBlock& lLocalBlock = maTertiaryBlocks[miWriteSubmitIndex];
-        CGS_ASSERT(lLocalBlock.miGlobalBlockIndex >= 0, CGS_ASSERT_MESSAGE_AT("lLocalBlock.miGlobalBlockIndex >= 0", CGS_ARTIST_FILE, 597));
+        CGS_ASSERT_AT(lLocalBlock.miGlobalBlockIndex >= 0, "lLocalBlock.miGlobalBlockIndex >= 0", CGS_ARTIST_FILE, 597);
 
         GlobalBlock& lGlobal = maGlobalBlocks[lLocalBlock.miGlobalBlockIndex];
         CGS_ASSERT(miState == KI_STATE_OPEN, "Attempting to service a none-open stream");
@@ -301,16 +301,16 @@ namespace BrnReplays
                         break;
 
                     LocalBlock& lSecondary = maSecondaryBlocks[miTertiaryReadIndex];
-                    CGS_ASSERT(lSecondary.miGlobalBlockIndex >= 0,
-                               CGS_ASSERT_MESSAGE_AT("lSecondary.miGlobalBlockIndex >= 0", CGS_ARTIST_FILE, 381));
+                    CGS_ASSERT_AT(lSecondary.miGlobalBlockIndex >= 0,
+                               "lSecondary.miGlobalBlockIndex >= 0", CGS_ARTIST_FILE, 381);
 
                     GlobalBlock& lGlobal = maGlobalBlocks[lSecondary.miGlobalBlockIndex];
                     if (lGlobal.miStatus != KI_STATUS_SEC_DONE)
                         break;
 
                     LocalBlock& lTertiary = maTertiaryBlocks[miTertiaryWriteIndex];
-                    CGS_ASSERT(lTertiary.miGlobalBlockIndex == KI_INVALID_BLOCK,
-                               CGS_ASSERT_MESSAGE_AT("lTertiary.miGlobalBlockIndex == -1", CGS_ARTIST_FILE, 392));
+                    CGS_ASSERT_AT(lTertiary.miGlobalBlockIndex == KI_INVALID_BLOCK,
+                               "lTertiary.miGlobalBlockIndex == -1", CGS_ARTIST_FILE, 392);
 
                     CgsMemory::RelocateOp& lOp = lpOps[mRelocatorParams.miNumOps];
                     lOp.mpSource      = mpSecondaryData + lSecondary.miOffset;
@@ -437,16 +437,16 @@ namespace BrnReplays
         if (liResult == -2)
         {
             miState = KI_STATE_FAILED;
-            CGS_ASSERT(false, "Read failed on stream");
+            CGS_FAIL("Read failed on stream");
         }
         else if (liResult == -1)
         {
             miState = KI_STATE_FAILED;
-            CGS_ASSERT(false, "Read cancelled on stream");
+            CGS_FAIL("Read cancelled on stream");
         }
         else if (liResult != 0)
         {
-            CGS_ASSERT(false, "Unhandled response");
+            CGS_FAIL("Unhandled response");
         }
         else
         {
@@ -486,17 +486,17 @@ namespace BrnReplays
 
         if (liResult == -2)
         {
-            CGS_ASSERT(false, "Close failed on stream");
+            CGS_FAIL("Close failed on stream");
             miState = KI_STATE_FAILED;
         }
         else if (liResult == -1)
         {
-            CGS_ASSERT(false, "Close cancelled on stream");
+            CGS_FAIL("Close cancelled on stream");
             miState = KI_STATE_CANCELLED;
         }
         else if (liResult != 0)
         {
-            CGS_ASSERT(false, "Unhandled response");
+            CGS_FAIL("Unhandled response");
         }
         else
         {

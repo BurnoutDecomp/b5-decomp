@@ -39,7 +39,7 @@ namespace BrnWorld
     void TriggerEntityModuleDebugComponent::Construct(TriggerEntityModule* lpTriggerEntityModule)
     {
         CgsDev::DebugComponent::Construct();   // ARTIST 0x822A8F84 (folded at 0x8284CB38)
-        CGS_ASSERT(lpTriggerEntityModule != 0, CGS_ASSERT_MESSAGE_AT("lpTriggerEntityModule != NULL", __FILE__, 53));
+        CGS_ASSERT_AT(lpTriggerEntityModule != 0, "lpTriggerEntityModule != NULL", __FILE__, 53);
         mpTriggerEntityModule = lpTriggerEntityModule;
 
         mbRenderTriggers      = true;
@@ -148,7 +148,7 @@ namespace BrnWorld
                 case E_TRIGGERTYPE_COUNT:
                 default:
                 {
-                    CGS_ASSERT(false, "Invalid trigger type!");
+                    CGS_FAIL("Invalid trigger type!");
                 }
                 break;
             }

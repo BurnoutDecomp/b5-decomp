@@ -249,7 +249,7 @@ namespace CgsResource
                 }
                 else
                 {
-                    CGS_ASSERT(false, "Tyring to postfixup a constant not present in the programbuffer");
+                    CGS_FAIL("Tyring to postfixup a constant not present in the programbuffer");
                 }
             }
         }

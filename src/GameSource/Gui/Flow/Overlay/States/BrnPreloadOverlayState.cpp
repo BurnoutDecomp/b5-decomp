@@ -116,7 +116,7 @@ void PreloadOverlayState::Update()
     default:
         // cpp:141 -- the X360 streams "Invalid State : " + meInternalState + " !";
         // folded static per convention.
-        CGS_ASSERT(false, "Invalid State : ");
+        CGS_FAIL("Invalid State : ");
         break;
     }
 

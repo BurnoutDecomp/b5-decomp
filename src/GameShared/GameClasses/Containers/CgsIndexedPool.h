@@ -70,7 +70,7 @@ public:
     // msNumAllocated = 0, msNumFree = msCapacity. X360 loops over the capacity (`lhz
     // 0xC`) filling the s16 free-index array, then stores 0 at +0x08 and the capacity
     // at +0x0A. The fastcall "return result" is a register artifact; Clear is void.
-    __declspec(noinline) void Clear()
+    void Clear()
     {
         for (IndexType lsIndex = 0; lsIndex < msCapacity; ++lsIndex)
         {

@@ -100,7 +100,7 @@ void CrashStreamEffect::AttachController(CgsSound::Logic::EffectBase* apControll
         mpPhysicsControl = static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
         break;
     default:
-        CGS_ASSERT_AT(false, "Unexpected control.", BRN_CRASHSTREAMEFFECT_CPP_FILE, 114);
+        CGS_FAIL_AT("Unexpected control.", BRN_CRASHSTREAMEFFECT_CPP_FILE, 114);
         break;
     }
 }

@@ -665,8 +665,8 @@ void PlaceOnTrackManager::GetValuesForCarSelect(
         Vector3* const lResetNormal,
         Vector3* const lResetDirection )
 {
-    CGS_ASSERT(lpBestIntersection != 0, CGS_ASSERT_MESSAGE_AT("lpBestIntersection", __FILE__, 361));   // :361
-    CGS_ASSERT(lpActiveRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCar", __FILE__, 362));      // :362
+    CGS_ASSERT_AT(lpBestIntersection != 0, "lpBestIntersection", __FILE__, 361);   // :361
+    CGS_ASSERT_AT(lpActiveRaceCar != 0, "lpActiveRaceCar", __FILE__, 362);      // :362
     if( lpActiveRaceCar == 0 )
     {
         return;

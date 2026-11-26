@@ -67,9 +67,9 @@ namespace CgsNetwork
     TimeManager::Prepare()
     {
         // Original dev-logged "CgsNetwork::TimeManager::Prepare called".
-        CGS_ASSERT(miPlayersAdded == 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(miPlayersAdded == 0,
             "miPlayersAdded == 0",
-            __FILE__, 73 /* ARTIST 0x82899030 */));
+            __FILE__, 73 /* ARTIST 0x82899030 */);
 
         meSyncTimePrepareStatus = E_SYNC_TIME_PREPARE_STATUS_NONE;
         mbWeAreSyncingTime      = false;
@@ -111,7 +111,7 @@ namespace CgsNetwork
             break;
 
         default:
-            CGS_ASSERT(false, "SyncTimeManager invalid status in CgsNetwork::TimeManager::Update");
+            CGS_FAIL("SyncTimeManager invalid status in CgsNetwork::TimeManager::Update");
             break;
         }
     }
@@ -154,7 +154,7 @@ namespace CgsNetwork
             break;
 
         default:
-            CGS_ASSERT(false, "Can't prepare state in CgsNetwork::TimeManager::PrepareSyncTimeManagers");
+            CGS_FAIL("Can't prepare state in CgsNetwork::TimeManager::PrepareSyncTimeManagers");
             break;
         }
     }
@@ -168,9 +168,9 @@ namespace CgsNetwork
         ReleaseSyncTimeManagers();
         PrepareSyncTimeManagers(lbIAmHost, mpPlayerManager->GetHostPlayerID());
 
-        CGS_ASSERT(mpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpPlayerManager != 0,
             "mpPlayerManager",
-            __FILE__, 259 /* ARTIST 0x82892E70 */));
+            __FILE__, 259 /* ARTIST 0x82892E70 */);
 
         NetworkPlayer* lpPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
         if (lpPlayer != 0)
@@ -179,9 +179,9 @@ namespace CgsNetwork
         }
 
         ++miPlayersAdded;
-        CGS_ASSERT(miPlayersAdded <= KI_MAX_PLAYERS, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(miPlayersAdded <= KI_MAX_PLAYERS,
             "miPlayersAdded <= KI_MAX_PLAYERS",
-            __FILE__, 268 /* ARTIST 0x82892EFC */));
+            __FILE__, 268 /* ARTIST 0x82892EFC */);
     }
 
     // ---- RemovePlayer @0x82892F10 ---------------------------------------------------
@@ -190,12 +190,12 @@ namespace CgsNetwork
     void
     TimeManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpPlayerManager != 0,
             "mpPlayerManager",
-            __FILE__, 287 /* ARTIST 0x82892F4C */));
-        CGS_ASSERT(miPlayersAdded > 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 287 /* ARTIST 0x82892F4C */);
+        CGS_ASSERT_AT(miPlayersAdded > 0,
             "miPlayersAdded > 0",
-            __FILE__, 288 /* ARTIST 0x82892F74 */));
+            __FILE__, 288 /* ARTIST 0x82892F74 */);
 
         --miPlayersAdded;
         ReleaseSyncTimeManagers();
@@ -230,9 +230,9 @@ namespace CgsNetwork
             --lu16Result;   // borrow into the 0xFFFF-wide window
         }
 
-        CGS_ASSERT(lu16Result != KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lu16Result != KU16_INVALID_FRAME,
             "lu16Result != KU16_INVALID_FRAME",
-            __FILE__, 410 /* ARTIST 0x8288B354 */));
+            __FILE__, 410 /* ARTIST 0x8288B354 */);
         return lu16Result;
     }
 
@@ -372,7 +372,7 @@ namespace CgsNetwork
 
         default:
             // The original streams the function name after this prefix.
-            CGS_ASSERT(false, "SyncTimeManager not prepared in ");
+            CGS_FAIL("SyncTimeManager not prepared in ");
             return false;
         }
     }
@@ -383,9 +383,9 @@ namespace CgsNetwork
     void
     TimeManager::OnHostMigration(NetworkPlayerID /*lOldHostID*/, NetworkPlayerID lNewHostID, bool lbIAmHost)
     {
-        CGS_ASSERT(miPlayersAdded > 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(miPlayersAdded > 0,
             "miPlayersAdded > 0",
-            __FILE__, 230 /* ARTIST 0x82892DF0 */));
+            __FILE__, 230 /* ARTIST 0x82892DF0 */);
 
         ReleaseSyncTimeManagers();
         PrepareSyncTimeManagers(lbIAmHost, lNewHostID);
@@ -405,12 +405,12 @@ namespace CgsNetwork
         }
         else if (leStartFrame == E_START_FRAME_PAST)
         {
-            CGS_ASSERT(lpStartTime, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lpStartTime,
                 "lpStartTime",
-                __FILE__, 363 /* ARTIST 0x8289316C */));
-            CGS_ASSERT(lfTimeStep > 0.0f, CGS_ASSERT_MESSAGE_AT(
+                __FILE__, 363 /* ARTIST 0x8289316C */);
+            CGS_ASSERT_AT(lfTimeStep > 0.0f,
                 "lfTimeStep > 0.0f",
-                __FILE__, 364 /* ARTIST 0x82893198 */));
+                __FILE__, 364 /* ARTIST 0x82893198 */);
 
             const CgsSystem::Time lElapsedTime    = mNetworkTime - *lpStartTime;
             const u32             luElapsedFrames = static_cast<u32>(static_cast<s64>(lElapsedTime.GetFloatVal() / lfTimeStep));
@@ -420,9 +420,9 @@ namespace CgsNetwork
         }
         else
         {
-            CGS_ASSERT(leStartFrame == E_START_FRAME_INVALID, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(leStartFrame == E_START_FRAME_INVALID,
                 "leStartFrame == E_START_FRAME_INVALID",
-                __FILE__, 381 /* ARTIST 0x828932C0 */));
+                __FILE__, 381 /* ARTIST 0x828932C0 */);
 
             mu16StartFrame        = KU16_INVALID_FRAME;
             miStartFrameWrapCount = 0;

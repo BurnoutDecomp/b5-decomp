@@ -38,10 +38,10 @@ namespace BrnNetwork
         {
             mLiveRevengeRelationship = *lpLiveRevengeRelationship;
             ReliableMessage::PrepareForSend(KI_LIVE_REVENGE_SYNC_MESSAGE_TYPE, lu16Frame);
-            CGS_ASSERT(IsReliable(),
-                CGS_ASSERT_MESSAGE_AT(
-                    "IsReliable()",
-                    "..\\..\\..\\GameSource\\Network/Messages/BrnLiveRevengeSyncMessage.cpp", 97 /* ARTIST 0x8257B3E0 */));
+            CGS_ASSERT_AT(IsReliable(),
+                "IsReliable()",
+                    "..\\..\\..\\GameSource\\Network/Messages/BrnLiveRevengeSyncMessage.cpp", 97 /* ARTIST 0x8257B3E0 */);
+
         }
     }
 

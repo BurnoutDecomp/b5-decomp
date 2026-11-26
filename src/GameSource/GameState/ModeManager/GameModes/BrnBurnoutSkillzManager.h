@@ -128,13 +128,13 @@ public:
     // Inline setters (inlined into ModeManager::Construct after the lobby mode's own assert).
     void SetStreetManager(StreetManager* lpStreetManager)
     {
-        CGS_ASSERT(lpStreetManager, CGS_ASSERT_MESSAGE_AT("lpStreetManager", CGS_ARTIST_BRNBURNOUTSKILLZMANAGER_FILE, 265));
+        CGS_ASSERT_AT(lpStreetManager, "lpStreetManager", CGS_ARTIST_BRNBURNOUTSKILLZMANAGER_FILE, 265);
         mpStreetManager = lpStreetManager;
     }
 
     void SetMugshotManager(MugshotManager* lpMugshotManager)
     {
-        CGS_ASSERT(lpMugshotManager, CGS_ASSERT_MESSAGE_AT("lpMugshotManager", CGS_ARTIST_BRNBURNOUTSKILLZMANAGER_FILE, 280));
+        CGS_ASSERT_AT(lpMugshotManager, "lpMugshotManager", CGS_ARTIST_BRNBURNOUTSKILLZMANAGER_FILE, 280);
         mpMugshotManager = lpMugshotManager;
     }
 

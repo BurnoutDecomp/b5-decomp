@@ -369,9 +369,9 @@ unsigned int Attrib::HashMap::FindIndex(u64 luKey) const
 u64 Attrib::HashMap::GetKeyAtIndex(u32 luIndex) const
 {
     const bool lbValid = luIndex < muCapacity && mpBuckets[luIndex].IsOccupied();
-    CGS_ASSERT(lbValid, CGS_ASSERT_MESSAGE_AT("Attrib::HashMap invalid index used.",
+    CGS_ASSERT_AT(lbValid, "Attrib::HashMap invalid index used.",
         CGS_ARTIST_FILE,
-        418 /* ARTIST 0x828026C0 */));
+        418 /* ARTIST 0x828026C0 */);
     return mpBuckets[luIndex].Key();
 }
 
@@ -433,9 +433,9 @@ bool Attrib::HashMap::Release() const
     }
 
     const bool lbReleased = (lu16Refs == 1);
-    CGS_ASSERT(lu16Refs != 0, CGS_ASSERT_MESSAGE_AT("Too many releases of object!\n",
+    CGS_ASSERT_AT(lu16Refs != 0, "Too many releases of object!\n",
         CGS_ARTIST_FILE,
-        623 /* ARTIST 0x82802768 */));
+        623 /* ARTIST 0x82802768 */);
     muRefCount = 0;
     return lbReleased;
 }
@@ -469,11 +469,11 @@ bool Attrib::HashMap::Release() const
 void* Attrib::HashMap::Remove(Node* lpNode, void* lpBase, const Collection* lpCollection, bool lbRestore)
 {
     // The node must be a valid slot inside this table's bucket array.
-    CGS_ASSERT(lpNode->IsOccupied()
+    CGS_ASSERT_AT(lpNode->IsOccupied()
                    && lpNode >= mpBuckets
                    && lpNode < mpBuckets + muCapacity,
-        CGS_ASSERT_MESSAGE_AT("Attrib::HashMap removing node which is not valid node in table.",
-            CGS_ARTIST_FILE, 449 /* ARTIST 0x82807AD0 */));
+        "Attrib::HashMap removing node which is not valid node in table.",
+            CGS_ARTIST_FILE, 449 /* ARTIST 0x82807AD0 */);
 
     // The node's stored key (0 when the occupied bit is clear) drives the home-index rehash.
     const u64 lu64Key   = lpNode->Key();

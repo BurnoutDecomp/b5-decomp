@@ -90,12 +90,12 @@ bool SpatialPartitionManager::Prepare(SpatialPartitionConstructParams* lpConstru
                 meSpatialPartitionType = lpConstructParams->meType;
                 if (meSpatialPartitionType == E_SPATIAL_PARTITION_TYPE_SPHERE_TREE)
                 {
-                    CGS_ASSERT(false,
+                    CGS_FAIL(
                         "Sphere tree is not currently supported - needs updating to suit new scene stuff\n");
                 }
                 else if (meSpatialPartitionType != E_SPATIAL_PARTITION_TYPE_LOOSE_OCTREE)
                 {
-                    CGS_ASSERT(false, "Scene graph type is unsupported");
+                    CGS_FAIL("Scene graph type is unsupported");
                 }
                 else
                 {
@@ -133,7 +133,7 @@ bool SpatialPartitionManager::Prepare(SpatialPartitionConstructParams* lpConstru
             return false;
 
         default:
-            CGS_ASSERT(false, "Unrecognised release state");
+            CGS_FAIL("Unrecognised release state");
             return false;
     }
 }
@@ -179,7 +179,7 @@ bool SpatialPartitionManager::Release()
             return true;
 
         default:
-            CGS_ASSERT(false, "Unrecognised release state");
+            CGS_FAIL("Unrecognised release state");
             return false;
     }
 }
@@ -245,7 +245,7 @@ void SpatialPartitionManager::ProcessUpdateQueue(const SpatialPartitionIO::Input
                 break;
             }
             default:
-                CGS_ASSERT(false, "Unrecognised event in update queue");
+                CGS_FAIL("Unrecognised event in update queue");
                 break;
         }
         liId = lpInputBuffer->GetSpatialPartitionUpdateQueue()->GetNextEvent(lpEvent, &lpEvent, &liSize);

@@ -92,7 +92,7 @@ namespace BrnGui
                 break;
 
             default:
-                CGS_ASSERT(false, "Unhandled event");
+                CGS_FAIL("Unhandled event");
                 break;
             }
         }
@@ -101,10 +101,10 @@ namespace BrnGui
     void PostTitleScreenLoad::GetResourcesToLoad(const CgsGui::sResourceTuple** /*lppResourceTuples*/,
                                                  u32* /*lpuNumberOfResources*/) const
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "Should not get here",
-                "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnPostTitleScreenLoad.h", 63 /* ARTIST 0x825080C4 */));
+        CGS_FAIL_AT(
+            "Should not get here",
+                "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnPostTitleScreenLoad.h", 63 /* ARTIST 0x825080C4 */);
+
     }
 
     namespace
@@ -203,7 +203,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid state");
+            CGS_FAIL("Invalid state");
             break;
         }
 

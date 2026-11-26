@@ -124,10 +124,10 @@ namespace BrnGui
             mePrepareStage = E_PREPARE_START;
             // Prepare the EventObserver base (its StateInterface) with the access pointers
             // and a null resource allocator (X360 passes 0 for the allocator).
-            CGS_ASSERT(CgsGui::EventObserver::Prepare(lpGuiAccessPointers, 0),
-                CGS_ASSERT_MESSAGE_AT(
-                    "CgsGui::EventObserver::Prepare(lpGuiAccessPointers)",
-                    CGS_ARTIST_FILE, 140 /* ARTIST 0x824F37DC */));
+            CGS_ASSERT_AT(CgsGui::EventObserver::Prepare(lpGuiAccessPointers, 0),
+                "CgsGui::EventObserver::Prepare(lpGuiAccessPointers)",
+                    CGS_ARTIST_FILE, 140 /* ARTIST 0x824F37DC */);
+
             // fall through
 
         case E_PREPARE_REGISTERFOREVENTS:

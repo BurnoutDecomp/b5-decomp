@@ -92,7 +92,7 @@ void ScriptedFsm::SetState(CgsID lStateId)
 
     char lacId[KI_CGSID_STRING_LEN];
     CgsIDUnCompress(lStateId, lacId);
-    CGS_ASSERT_STREAM_AT(false, "Could not find state with id: " << lacId, CGS_ARTIST_FILE, 385);
+    CGS_FAIL_STREAM_AT("Could not find state with id: " << lacId, CGS_ARTIST_FILE, 385);
 }
 
 // @ 0x828368A8 -- Lua indices name authored graph nodes, not C++ state-table slots.

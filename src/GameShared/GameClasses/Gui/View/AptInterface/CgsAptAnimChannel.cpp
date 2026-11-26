@@ -70,7 +70,7 @@ namespace CgsGui
 
         if (leInterpolator != AnimChannelData::E_INTERPOLATE_LINEAR)
         {
-            CGS_ASSERT_AT(false, "Invalid interpolator specified", CGS_ARTIST_FILE, 157);
+            CGS_FAIL_AT("Invalid interpolator specified", CGS_ARTIST_FILE, 157);
         }
         else
         {
@@ -91,7 +91,7 @@ namespace CgsGui
         }
 
         mpCurrentInterpolator = GetInterpolator(lAnimData.meInterpolator);
-        CGS_ASSERT(mpCurrentInterpolator != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid interpolator", CGS_ARTIST_FILE, 64));
+        CGS_ASSERT_STREAM_AT(mpCurrentInterpolator != 0, "Invalid interpolator", CGS_ARTIST_FILE, 64);
 
         mpCurrentInterpolator->SetInterpolator(lAnimData.mStartTime, lAnimData.mEndTime,
                                                lAnimData.mfStartValue, lAnimData.mfEndValue);
@@ -102,7 +102,7 @@ namespace CgsGui
     // once lTime passes the interpolator's end lambda the binding is dropped.
     void AnimChannel::Update(AnimChannelData::Time lTime)
     {
-        CGS_ASSERT(lTime >= 0.0f, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid time specified", CGS_ARTIST_FILE, 86));
+        CGS_ASSERT_STREAM_AT(lTime >= 0.0f, "Invalid time specified", CGS_ARTIST_FILE, 86);
 
         if (mpCurrentInterpolator && mbActive)
         {

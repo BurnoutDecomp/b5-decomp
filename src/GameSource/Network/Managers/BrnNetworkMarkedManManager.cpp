@@ -39,10 +39,10 @@ namespace BrnNetwork
     // BrnNetwork::MarkedManManager::Construct  @ 0x825539F0
     void MarkedManManager::Construct(BrnNetworkManager* lpNetworkManager)
     {
-        CGS_ASSERT(lpNetworkManager != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpNetworkManager",
-                CGS_ARTIST_FILE, 44 /* ARTIST 0x82553A14 */));
+        CGS_ASSERT_AT(lpNetworkManager != 0,
+            "lpNetworkManager",
+                CGS_ARTIST_FILE, 44 /* ARTIST 0x82553A14 */);
+
 
         mpNetworkManager = lpNetworkManager;
 
@@ -207,9 +207,9 @@ namespace BrnNetwork
         NetworkPlayerID lLocalNetworkPlayerID = KI_INVALID_PLAYER_ID;
         const bool lbHasLocalPlayer =
             mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalNetworkPlayerID);
-        CGS_ASSERT(lbHasLocalPlayer, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lbHasLocalPlayer,
             "mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID( &lLocalNetworkPlayerID )",
-            __FILE__, 282 /* ARTIST 0x82548D84 */));
+            __FILE__, 282 /* ARTIST 0x82548D84 */);
 
         BrnNetwork::PlayerMenuData* lpLocalMenuData = static_cast<BrnNetwork::PlayerMenuData*>(
             mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lLocalNetworkPlayerID));
@@ -283,14 +283,14 @@ namespace BrnNetwork
         BrnNetwork::PlayerMenuData* lpMenuData = static_cast<BrnNetwork::PlayerMenuData*>(
             lpMarkedManManager->mpNetworkManager->GetPlayerManager()->GetMenuDataByID(
                 lSendingPlayerID));
-        CGS_ASSERT(lpMenuData != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpMenuData != 0,
             "lpMenuData",
-            CGS_ARTIST_FILE, 337 /* ARTIST 0x82548E50 */));
+            CGS_ARTIST_FILE, 337 /* ARTIST 0x82548E50 */);
 
         MarkedManMessage* lpMarkedManMessage = static_cast<MarkedManMessage*>(lpMessage);
-        CGS_ASSERT(lpMarkedManMessage != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpMarkedManMessage != 0,
             "lpMarkedManMessage",
-            CGS_ARTIST_FILE, 339 /* ARTIST 0x82548E74 */));
+            CGS_ARTIST_FILE, 339 /* ARTIST 0x82548E74 */);
 
         // DWARF (cpp:330/331) gives both locals no initialiser; ARTIST stores none (0x82548E7C).
         NetworkPlayerID lMarkedManPlayerID;

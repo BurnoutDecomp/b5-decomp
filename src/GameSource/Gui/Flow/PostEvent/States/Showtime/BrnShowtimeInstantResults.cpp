@@ -313,7 +313,7 @@ namespace BrnGui
         switch (meCurrentState)
         {
         case E_RESULTS_STATE_INVALID:
-            CGS_ASSERT(false, "Invalid state");                        // cpp:281
+            CGS_FAIL("Invalid state");                        // cpp:281
             break;
 
         case E_RESULTS_STATE_UNLOADED:
@@ -379,8 +379,8 @@ namespace BrnGui
     // ---------------------------------------------------------------------------------------
     void ShowtimeInstantResultsState::AppendExpectedComponents()
     {
-        CGS_ASSERT(mpGuiCache,
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 305 /* ARTIST 0x824B49BC */));                          // cpp:305
+        CGS_ASSERT_AT(mpGuiCache,
+            "mpGuiCache", __FILE__, 305 /* ARTIST 0x824B49BC */);                          // cpp:305
 
         for (s32 liHelpItem = 0; liHelpItem < KI_HELPITEMS; ++liHelpItem)
         {
@@ -413,13 +413,13 @@ namespace BrnGui
                               ButtonIconComponent::E_PADBUTTON_INVISIBLE,
                               ButtonIconComponent::E_PADBUTTON_INVISIBLE);
 
-        CGS_ASSERT(mResults.meFinishedGameModeType
+        CGS_ASSERT_AT(mResults.meFinishedGameModeType
                        == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME
                    || mResults.meFinishedGameModeType
                        == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME,
-            CGS_ASSERT_MESSAGE_AT(
-                "mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME || mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME",
-                __FILE__, 527 /* ARTIST 0x824B4B78 */));   // cpp:527
+            "mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME || mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME",
+                __FILE__, 527 /* ARTIST 0x824B4B78 */);   // cpp:527
+
 
         mResultsIcon.SetState("scoring");
         SetMultiplierText();
@@ -519,7 +519,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT_STREAM_AT(false, "Invalid substate (" << meActiveSubState << ")",
+            CGS_FAIL_STREAM_AT("Invalid substate (" << meActiveSubState << ")",
                                  CGS_ARTIST_FILE, 627);                // cpp:627
             break;
         }
@@ -578,7 +578,7 @@ namespace BrnGui
             // The console streams the offending value into the message buffer. The literal is
             // the console's own, copy-and-paste artefact and all ("car unlock" on the showtime
             // screen) -- transcribed, not corrected.
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "Should not be updating car unlock when substate is in state ");  // cpp:717
             break;
         }
@@ -691,7 +691,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid totalling substate - ");          // cpp:870
+            CGS_FAIL("Invalid totalling substate - ");          // cpp:870
             break;
         }
 
@@ -946,10 +946,10 @@ namespace BrnGui
     void ShowtimeInstantResultsState::HandleAptTriggers(
         const CgsGui::GuiEventAptTriggerPayload* lpEvent)
     {
-        CGS_ASSERT(lpEvent,
-                   CGS_ASSERT_MESSAGE_AT("lpEvent",
+        CGS_ASSERT_AT(lpEvent,
+                   "lpEvent",
                        "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.cpp",
-                       484 /* ARTIST 0x824B4A84 */));
+                       484 /* ARTIST 0x824B4A84 */);
 
         if (lpEvent->meEventType != CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
             return;

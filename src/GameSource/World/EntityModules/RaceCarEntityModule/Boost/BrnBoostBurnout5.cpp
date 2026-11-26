@@ -255,7 +255,7 @@ BoostBurnout5::BlueModeRequestBoost()
     // 0x15D). Reported, then execution continues into the body below -- the
     // console streams the literal into CgsDev::Assert::gpcMessageBuffer and calls
     // FireAssert with the buffer; there is no early-out on either path.
-    CGS_ASSERT(meBoostMode == E_BOOSTMODE_B2_BLUE, CGS_ASSERT_STREAM_MESSAGE_AT("Incorrect Boost Mode when using a Blue-Mode-specific function", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.cpp", 349));
+    CGS_ASSERT_STREAM_AT(meBoostMode == E_BOOSTMODE_B2_BLUE, "Incorrect Boost Mode when using a Blue-Mode-specific function", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.cpp", 349);
 
 
     if (mbLeaveBlueDueToCrash)
@@ -433,11 +433,11 @@ BoostBurnout5::GetIsChainNotifyPending(u32* lpOutNumChained)
 {
     // BrnBoostBurnout5.cpp:869 on the console (the assert's line immediate is
     // 0x365); reported, then execution continues into the store below.
-    CGS_ASSERT(lpOutNumChained != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpOutNumChained",
+    CGS_ASSERT_AT(lpOutNumChained != 0,
+        "lpOutNumChained",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.cpp", 869 /* ARTIST 0x822A70EC */));
+            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.cpp", 869 /* ARTIST 0x822A70EC */);
+
 
     if (miChainSize <= 0)
     {
@@ -1725,11 +1725,11 @@ BoostBurnout5::UpdateStuntBoost(const BrnGameState::GameStateModuleIO::Completed
     // BrnBoostBurnout5.cpp:830 on the console (the assert's line immediate is
     // 0x33E @0x822A6FC4); reported, then execution continues into the
     // dereferences below.
-    CGS_ASSERT(lpCompletedStuntAction != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpCompletedStuntAction != NULL",
+    CGS_ASSERT_AT(lpCompletedStuntAction != 0,
+        "lpCompletedStuntAction != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.cpp", 830 /* ARTIST 0x822A6FC4 */));
+            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.cpp", 830 /* ARTIST 0x822A6FC4 */);
+
 
     if (lpCompletedStuntAction->muStuntActionComplete & 0x1u)        // barrel roll(s)
     {

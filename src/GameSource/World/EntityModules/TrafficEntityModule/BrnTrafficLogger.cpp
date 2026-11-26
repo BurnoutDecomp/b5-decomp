@@ -144,7 +144,7 @@ namespace BrnTraffic
 
                 default:
                     // The console appends the plan type (%d) to this message.
-                    CGS_ASSERT(false, "Invalid param plan in log: ");
+                    CGS_FAIL("Invalid param plan in log: ");
                     break;
                 }
             }

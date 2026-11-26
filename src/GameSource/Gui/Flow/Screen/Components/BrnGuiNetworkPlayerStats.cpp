@@ -97,7 +97,7 @@ namespace BrnGui
         }
         else
         {
-            CGS_ASSERT_AT(false, "Invalid state", CGS_ARTIST_FILE, 174);
+            CGS_FAIL_AT("Invalid state", CGS_ARTIST_FILE, 174);
         }
     }
 

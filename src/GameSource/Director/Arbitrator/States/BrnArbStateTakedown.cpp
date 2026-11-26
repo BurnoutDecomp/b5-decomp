@@ -530,7 +530,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 544));
+            CGS_FAIL_AT("unhandled state", CGS_ARTIST_FILE, 544);
             break;
         }
 
@@ -574,7 +574,7 @@ namespace BrnDirector
                 lpIceAnim->ClearBaseFirstFrameGate();
             }
 
-            CGS_ASSERT(mIceCam.IsAllocated(), CGS_ASSERT_MESSAGE_AT("mbIsAllocated", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 517));
+            CGS_ASSERT_AT(mIceCam.IsAllocated(), "mbIsAllocated", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 517);
             return mIceCam.IsBehaviourPrepared();
         }
 
@@ -622,7 +622,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 667));
+            CGS_FAIL_AT("unhandled state", CGS_ARTIST_FILE, 667);
             break;
         }
 
@@ -813,7 +813,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 191));
+            CGS_FAIL_AT("unhandled state", CGS_ARTIST_FILE, 191);
             break;
         }
 
@@ -1006,7 +1006,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 388));
+            CGS_FAIL_AT("unhandled state", CGS_ARTIST_FILE, 388);
             break;
         }
 
@@ -1087,8 +1087,8 @@ namespace BrnDirector
 
             mLooseAttachment.Get()->SetParameters(&mLooseAttachmentParameters);
 
-            CGS_ASSERT(lrSharedInfo.mpGameState->mbTakedownActive,
-                       CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpGameState->mbTakedownActive", CGS_ARTIST_FILE, 747));
+            CGS_ASSERT_AT(lrSharedInfo.mpGameState->mbTakedownActive,
+                       "lSharedInfo.mpGameState->mbTakedownActive", CGS_ARTIST_FILE, 747);
 
             // The rig hangs off the PLAYER's car and looks at the VICTIM's.
             mLooseAttachment.Get()->AttachTo(
@@ -1334,7 +1334,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 953));
+            CGS_FAIL_AT("unhandled state", CGS_ARTIST_FILE, 953);
             break;
         }
 
@@ -1373,14 +1373,14 @@ namespace BrnDirector
 
             if (lrGameState.mbIsShutdown || mbAlwaysUseShutdownCam)
             {
-                CGS_ASSERT(lrSharedInfo.mpDirectorResourceManager != 0,
-                           CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpDirectorResourceManager", CGS_ARTIST_FILE, 1051));
+                CGS_ASSERT_AT(lrSharedInfo.mpDirectorResourceManager != 0,
+                           "lSharedInfo.mpDirectorResourceManager", CGS_ARTIST_FILE, 1051);
 
                 const Attrib::Gen::shotgroup& lrTakedown =
                     lrSharedInfo.mpDirectorResourceManager->GetTakedown();
 
-                CGS_ASSERT(lrTakedown.Num_ShotList() > 0,
-                           CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpDirectorResourceManager->GetTakedown().Num_ShotList() > 0", CGS_ARTIST_FILE, 1052));
+                CGS_ASSERT_AT(lrTakedown.Num_ShotList() > 0,
+                           "lSharedInfo.mpDirectorResourceManager->GetTakedown().Num_ShotList() > 0", CGS_ARTIST_FILE, 1052);
 
                 // A rolling shot index: advance, then wrap on the group's shot count (the
                 // console's own twllei-guarded modulo, so a zero count traps rather than divides).
@@ -1623,7 +1623,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 1339));
+            CGS_FAIL_AT("unhandled state", CGS_ARTIST_FILE, 1339);
             break;
         }
 

@@ -47,7 +47,7 @@ namespace BrnReplays
         {
             CGS_ASSERT(GetStaticBufferSize() >= KI_STATIC_LAYOUT_SIZE,
                        "Static buffer size is too small\n");                 // :107 (non-gating)
-            CGS_ASSERT(GetStaticBuffer() != 0, CGS_ASSERT_MESSAGE_AT("GetStaticBuffer()", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorSerialiser.h", 108));         // :108 (non-gating)
+            CGS_ASSERT_AT(GetStaticBuffer() != 0, "GetStaticBuffer()", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorSerialiser.h", 108);         // :108 (non-gating)
             return static_cast<BrnDirector::Camera::Camera*>(GetStaticBuffer());
         }
 

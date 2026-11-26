@@ -92,9 +92,9 @@ bool TriangleCollisionManager::Prepare(CgsMemory::LinearMalloc* lpAllocator, s32
 void TriangleCollisionManager::ProcessAddPolySoupListEvents(
     const InAddPolySoupListQueue& lAddPolySoupListQueue)
 {
-    CGS_ASSERT(mpaPolySoupListHandles != 0,
-        CGS_ASSERT_MESSAGE_AT("mpaPolySoupListHandles != NULL",
-            KAC_ARTIST_FILE, 171 /* ARTIST 0x828B3190 */));
+    CGS_ASSERT_AT(mpaPolySoupListHandles != 0,
+        "mpaPolySoupListHandles != NULL",
+            KAC_ARTIST_FILE, 171 /* ARTIST 0x828B3190 */);
 
     bool lbNeedToRebuild = false;
     for (s32 liEventIndex = 0; liEventIndex < lAddPolySoupListQueue.GetLength(); ++liEventIndex)
@@ -102,13 +102,13 @@ void TriangleCollisionManager::ProcessAddPolySoupListEvents(
         const CgsSceneManager::TriangleCollisionManagerIO::InEventAddPolySoupList& lEvent =
             lAddPolySoupListQueue.GetEvent(liEventIndex);
 
-        CGS_ASSERT(miNumSoupListsAdded < miMaxNumSoupLists,
-            CGS_ASSERT_MESSAGE_AT("miNumSoupListsAdded < miMaxNumSoupLists",
-                KAC_ARTIST_FILE, 182 /* ARTIST 0x828B31FC */));
-        CGS_ASSERT(mpaPolySoupListHandles[miNumSoupListsAdded] == CgsResource::NULLResourceHandle,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpaPolySoupListHandles[miNumSoupListsAdded] == CgsResource::NULLResourceHandle",
-                KAC_ARTIST_FILE, 183 /* ARTIST 0x828B3258 */));
+        CGS_ASSERT_AT(miNumSoupListsAdded < miMaxNumSoupLists,
+            "miNumSoupListsAdded < miMaxNumSoupLists",
+                KAC_ARTIST_FILE, 182 /* ARTIST 0x828B31FC */);
+        CGS_ASSERT_AT(mpaPolySoupListHandles[miNumSoupListsAdded] == CgsResource::NULLResourceHandle,
+            "mpaPolySoupListHandles[miNumSoupListsAdded] == CgsResource::NULLResourceHandle",
+                KAC_ARTIST_FILE, 183 /* ARTIST 0x828B3258 */);
+
 
         mpaPolySoupListHandles[miNumSoupListsAdded] = lEvent.mPolySoupListHandle;
 
@@ -121,10 +121,10 @@ void TriangleCollisionManager::ProcessAddPolySoupListEvents(
         ++miNumSoupListsAdded;
         lbNeedToRebuild = lbNeedToRebuild || lEvent.mbRebuildSpacialPartitioning;
 
-        CGS_ASSERT(miNumSoupListsAdded == mPolySoupListSpacialMap.GetNumPolySoupLists(),
-            CGS_ASSERT_MESSAGE_AT(
-                "miNumSoupListsAdded == mPolySoupListSpacialMap.GetNumPolySoupLists()",
-                KAC_ARTIST_FILE, 198 /* ARTIST 0x828B32E8 */));
+        CGS_ASSERT_AT(miNumSoupListsAdded == mPolySoupListSpacialMap.GetNumPolySoupLists(),
+            "miNumSoupListsAdded == mPolySoupListSpacialMap.GetNumPolySoupLists()",
+                KAC_ARTIST_FILE, 198 /* ARTIST 0x828B32E8 */);
+
     }
 
     if (lbNeedToRebuild)

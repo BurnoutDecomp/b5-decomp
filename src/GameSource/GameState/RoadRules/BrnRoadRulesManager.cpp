@@ -27,14 +27,14 @@ CgsID BrnGameState::RoadRulesManager::GetCurrentRoadID() const
     }
 
     // *(this+20): asserted present (baked "mpStreetManager").
-    CGS_ASSERT( mpStreetManager, CGS_ASSERT_MESSAGE_AT("mpStreetManager", CGS_ARTIST_FILE, 1324) );
+    CGS_ASSERT_AT( mpStreetManager, "mpStreetManager", CGS_ARTIST_FILE, 1324 );
 
     // ResourcePtr<StreetData>::operator-> wrapped by StreetManager::GetStreetData().
     const BrnStreetData::StreetData* lpStreetData = mpStreetManager->GetStreetData();
     const BrnStreetData::Road*       lpRoad       = lpStreetData->GetRoad( miLastRoadIndex );
 
     // baked "lpRoad".
-    CGS_ASSERT( lpRoad, CGS_ASSERT_MESSAGE_AT("lpRoad", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\RoadRules/BrnRoadRulesManager.h", 396) );
+    CGS_ASSERT_AT( lpRoad, "lpRoad", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\RoadRules/BrnRoadRulesManager.h", 396 );
 
     // X360 reads *(Road+16) == Road::mId; the inlined Road::GetId().
     return lpRoad->GetId();
@@ -129,7 +129,7 @@ void RoadRulesManager::OnEnterRoad(GameStateModuleIO::GameActionQueue* queue, Br
         action.maParRivalIds[i] = mpStreetManager->GetParRivalId(road, static_cast<BrnStreetData::ScoreType>(i));
     queue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&action),
                     GameStateModuleIO::E_ACTION_ROAD_RULES_ENTER_ROAD, sizeof(action));   // console size 0xA8
-    CGS_ASSERT(mpModeManager != 0, CGS_ASSERT_MESSAGE_AT("mpModeManager", CGS_ARTIST_FILE, 983));
+    CGS_ASSERT_AT(mpModeManager != 0, "mpModeManager", CGS_ARTIST_FILE, 983);
     if (GameMode* mode = mpModeManager->GetCurrentGameMode())
         mode->OnEnterRoad(road);
 }
@@ -274,7 +274,7 @@ namespace BrnGameState
 
                 mfTimeScoreTimeout = static_cast<f32>(liParScore) * (1.0f / KF_SECONDS_TO_MILLISECONDS)
                                    * KF_TIME_RULE_TIMEOUT_PROPORTION;
-                CGS_ASSERT(mfTimeScoreTimeout > 0.0f, CGS_ASSERT_MESSAGE_AT("mfTimeScoreTimeout > 0.0f", CGS_ARTIST_FILE, 1072));
+                CGS_ASSERT_AT(mfTimeScoreTimeout > 0.0f, "mfTimeScoreTimeout > 0.0f", CGS_ARTIST_FILE, 1072);
 
                 liBestScore = KI_DEFAULT_ONLINE_TIME;
                 if (lUserScoreData.ContainsData(BrnStreetData::E_SCORE_TYPE_TIME))
@@ -331,7 +331,7 @@ namespace BrnGameState
             }
 
             default:
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown road rule type", CGS_ARTIST_FILE, 1140));
+                CGS_FAIL_AT("Unknown road rule type", CGS_ARTIST_FILE, 1140);
                 break;
         }
 
@@ -420,7 +420,7 @@ namespace BrnGameState
     {
         GameStateModuleIO::RoadRulesEndRuleAction lEndRuleAction;
 
-        CGS_ASSERT(lpOutputBuffer, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", CGS_ARTIST_FILE, 1182));
+        CGS_ASSERT_AT(lpOutputBuffer, "lpOutputBuffer", CGS_ARTIST_FILE, 1182);
         GameStateModuleIO::GameActionQueue* lpGameActionQueue = lpOutputBuffer->GetGameActionQueue();
 
         switch (leScoreType)
@@ -442,7 +442,7 @@ namespace BrnGameState
                 break;
 
             default:
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown road rule type", CGS_ARTIST_FILE, 1217));
+                CGS_FAIL_AT("Unknown road rule type", CGS_ARTIST_FILE, 1217);
                 break;
         }
 
@@ -474,7 +474,7 @@ namespace BrnGameState
         BrnStreetData::ChallengePlayerScoreEntry lChallengeData;
         const BrnStreetData::RoadIndex           liRoadIndex = maiChallengeRoadIndex[leScoreType];
 
-        CGS_ASSERT(IsValidRoad(liRoadIndex), CGS_ASSERT_MESSAGE_AT("IsValidRoad( liRoadIndex )", CGS_ARTIST_FILE, 1296));
+        CGS_ASSERT_AT(IsValidRoad(liRoadIndex), "IsValidRoad( liRoadIndex )", CGS_ARTIST_FILE, 1296);
 
         lChallengeData.Construct();
 
@@ -490,11 +490,11 @@ namespace BrnGameState
                 break;
 
             default:
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown road rule type", CGS_ARTIST_FILE, 1318));
+                CGS_FAIL_AT("Unknown road rule type", CGS_ARTIST_FILE, 1318);
                 break;
         }
 
-        CGS_ASSERT(mpStreetManager, CGS_ASSERT_MESSAGE_AT("mpStreetManager", CGS_ARTIST_FILE, 1324));
+        CGS_ASSERT_AT(mpStreetManager, "mpStreetManager", CGS_ARTIST_FILE, 1324);
         mpStreetManager->ProcessNewRoadScore(lpOutputBuffer, lChallengeData, leScoreType, liRoadIndex, mbIsOnlineMode);
 
         mpModeManager->ProcessNewRoadScore(lpOutputBuffer, lChallengeData, leScoreType,
@@ -693,7 +693,7 @@ void RoadRulesManager::UpdateActiveRoadRule(GameStateModuleIO::OutputBuffer*    
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("How did it end up here?", CGS_ARTIST_FILE, 474));
+            CGS_FAIL_AT("How did it end up here?", CGS_ARTIST_FILE, 474);
             break;
     }
 
@@ -738,7 +738,7 @@ void RoadRulesManager::Update(const GameStateModuleIO::ControllerInput*         
     (void)lbInAir;
     (void)lbPlayerIsCrashing;
 
-    CGS_ASSERT(lpOutputBuffer, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", CGS_ARTIST_FILE, 204));
+    CGS_ASSERT_AT(lpOutputBuffer, "lpOutputBuffer", CGS_ARTIST_FILE, 204);
     GameStateModuleIO::GameActionQueue* lpGameActionQueue = lpOutputBuffer->GetGameActionQueue();
 
     // Showtime is over: score the crash rule.
@@ -885,7 +885,7 @@ void RoadRulesManager::OnRoadLimit(CgsID lRoadLimitId, bool lbEntryDirection,
 {
     CgsID lOtherRoadLimitId = 0;
 
-    CGS_ASSERT(lpOutputBuffer, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", CGS_ARTIST_FILE, 799));
+    CGS_ASSERT_AT(lpOutputBuffer, "lpOutputBuffer", CGS_ARTIST_FILE, 799);
     GameStateModuleIO::GameActionQueue* lpGameActionQueue = lpOutputBuffer->GetGameActionQueue();
 
     // The road count is re-read through the street-data resource on every test, as the console does.
@@ -965,11 +965,11 @@ void RoadRulesManager::OnRoadLimit(CgsID lRoadLimitId, bool lbEntryDirection,
 // on the road the player is on.
 void RoadRulesManager::OnShowtimeStart(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", CGS_ARTIST_FILE, 886));
+    CGS_ASSERT_AT(lpOutputBuffer, "lpOutputBuffer", CGS_ARTIST_FILE, 886);
     GameStateModuleIO::GameActionQueue* lpGameActionQueue = lpOutputBuffer->GetGameActionQueue();
 
-    CGS_ASSERT(!IsValidRoad(maiChallengeRoadIndex[BrnStreetData::E_SCORE_TYPE_CRASH]),
-               CGS_ASSERT_MESSAGE_AT("!IsValidRoad( maiChallengeRoadIndex[BrnStreetData::E_SCORE_TYPE_CRASH] )", CGS_ARTIST_FILE, 890));
+    CGS_ASSERT_AT(!IsValidRoad(maiChallengeRoadIndex[BrnStreetData::E_SCORE_TYPE_CRASH]),
+               "!IsValidRoad( maiChallengeRoadIndex[BrnStreetData::E_SCORE_TYPE_CRASH] )", CGS_ARTIST_FILE, 890);
 
     if (IsTimeRuleActive())
     {
@@ -1017,7 +1017,7 @@ void RoadRulesManager::SetRoadRulesMode(GameStateModuleIO::OutputBuffer* lpOutpu
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("How did it end up here?", CGS_ARTIST_FILE, 606));
+            CGS_FAIL_AT("How did it end up here?", CGS_ARTIST_FILE, 606);
             break;
         }
     }

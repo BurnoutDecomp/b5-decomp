@@ -127,14 +127,14 @@ namespace CgsSceneManager
     bool SceneSweeper::Prepare(u8* lpaVolumeInstanceCullingGroup,
                                rw::BitTable::Storage* lpCullingTable)
     {
-        CGS_ASSERT(lpaVolumeInstanceCullingGroup != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpaVolumeInstanceCullingGroup != NULL",
-                KAC_ARTIST_ASSERT_FILE, 115 /* ARTIST 0x828C2030 */));           // CgsSceneSweeper.cpp:115
-        CGS_ASSERT(lpCullingTable != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpCullingTable != NULL",
-                KAC_ARTIST_ASSERT_FILE, 116 /* ARTIST 0x828C2054 */));  // CgsSceneSweeper.cpp:116
+        CGS_ASSERT_AT(lpaVolumeInstanceCullingGroup != NULL,
+            "lpaVolumeInstanceCullingGroup != NULL",
+                KAC_ARTIST_ASSERT_FILE, 115 /* ARTIST 0x828C2030 */);           // CgsSceneSweeper.cpp:115
+
+        CGS_ASSERT_AT(lpCullingTable != NULL,
+            "lpCullingTable != NULL",
+                KAC_ARTIST_ASSERT_FILE, 116 /* ARTIST 0x828C2054 */);  // CgsSceneSweeper.cpp:116
+
 
         mpaVolumeInstanceCullingGroup = lpaVolumeInstanceCullingGroup;  // stwx r29,r31,0xDC4A8
         mpCullingTable                = lpCullingTable;                 // stwx r28,r31,0xDC4AC

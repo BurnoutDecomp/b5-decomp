@@ -288,11 +288,11 @@ void GameStateToGuiInterface::AddOvertakeEvent(u8 lu8NewPosition, ::EActiveRaceC
 void GameStateToGuiInterface::AppendRaceCarCrashes(
     const CgsModule::EventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent, 8>* lpRaceCarCrashEventQueue)
 {
-    CGS_ASSERT(lpRaceCarCrashEventQueue != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpRaceCarCrashEventQueue",
+    CGS_ASSERT_AT(lpRaceCarCrashEventQueue != 0,
+        "lpRaceCarCrashEventQueue",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp", 247 /* ARTIST 0x823799AC */));   // line 247
+            "../GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp", 247 /* ARTIST 0x823799AC */);   // line 247
+
     mRaceCarCrashEventQueue.Append(*lpRaceCarCrashEventQueue);                // this + 0x1E0
 }
 

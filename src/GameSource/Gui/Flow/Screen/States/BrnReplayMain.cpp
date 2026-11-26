@@ -143,7 +143,7 @@ void ReplayMain::Update()
         // de-inlined StrStream/FireAssert machinery collapses to one CGS_ASSERT with the verbatim
         // rodata prefix (id + trailing \n dropped).
         // Streamed in place, as ARTIST builds it (cpp:126).
-        CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meState << "\n",
+        CGS_FAIL_STREAM_AT("Invalid internal state : " << meState << "\n",
                              CGS_ARTIST_FILE, 126);
         break;
     }

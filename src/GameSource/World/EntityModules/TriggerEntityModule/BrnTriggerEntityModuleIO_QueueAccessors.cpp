@@ -20,7 +20,7 @@ namespace TriggerEntityModuleIO
     // ARTIST li r5,0x76 (DWARF BrnTriggerEntityModuleIO.h:118).
     const TriggerQueryQueue* InputBuffer_PostScene::GetQueryInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 118));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 118);
         return &mQueryInputInterface;
     }
 
@@ -30,7 +30,7 @@ namespace TriggerEntityModuleIO
     // ARTIST li r5,0x77 (DWARF BrnTriggerEntityModuleIO.h:119).
     TriggerQueryQueue* InputBuffer_PostScene::GetQueryInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 119));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 119);
         return &mQueryInputInterface;
     }
 
@@ -38,7 +38,7 @@ namespace TriggerEntityModuleIO
     // &mSceneResultQueue (this + 4). Read by ProcessSceneQueryResults.
     const SceneResultQueue* InputBuffer_PrePhysics::GetSceneResultQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 172));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 172);
         return &mSceneResultQueue;
     }
 
@@ -46,7 +46,7 @@ namespace TriggerEntityModuleIO
     // returns &mOutputInterface (this + 4). Read by BridgeEntityModulesToOutput_PrePhysics.
     const TriggerEntityModuleOutputInterface* OutputBuffer_PrePhysics::GetOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 198));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 198);
         return &mOutputInterface;
     }
 
@@ -54,7 +54,7 @@ namespace TriggerEntityModuleIO
     // guarded, returns &mOutputInterface (this + 4). Filled by ProcessLineTestFineResult.
     TriggerEntityModuleOutputInterface* OutputBuffer_PrePhysics::GetOutputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 199));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 199);
         return &mOutputInterface;
     }
 
@@ -65,7 +65,7 @@ namespace TriggerEntityModuleIO
     const InputBuffer_PreScene::InputInterface*
     InputBuffer_PreScene::GetInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 64));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 64);
         return &mInputInterface;
     }
 }

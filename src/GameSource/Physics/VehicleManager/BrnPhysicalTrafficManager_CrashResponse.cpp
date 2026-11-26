@@ -137,11 +137,11 @@ void PhysicalTrafficManager::PhysicallyCrashTrafficCar(
     u16 lu16TrafficCarIndex,
     BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface)
 {
-    CGS_ASSERT(lpDeformationInterface != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpDeformationInterface",
-        KAC_PHYSICAL_TRAFFIC_MANAGER_FILE, 2404 /* ARTIST 0x825CAC3C */));
-    CGS_ASSERT(lu16TrafficCarIndex < 20u, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpDeformationInterface != 0, "NULL != lpDeformationInterface",
+        KAC_PHYSICAL_TRAFFIC_MANAGER_FILE, 2404 /* ARTIST 0x825CAC3C */);
+    CGS_ASSERT_AT(lu16TrafficCarIndex < 20u,
         "lu16TrafficCarIndex < ku8TotalMaxNumPhysicalTraffic",
-        KAC_PHYSICAL_TRAFFIC_MANAGER_FILE, 2405 /* ARTIST 0x825CAC64 */));
+        KAC_PHYSICAL_TRAFFIC_MANAGER_FILE, 2405 /* ARTIST 0x825CAC64 */);
     (void)lpDeformationInterface;
 
     if (GetTrafficVehicle(static_cast<s32>(lu16TrafficCarIndex))->mePhysicalTrafficState

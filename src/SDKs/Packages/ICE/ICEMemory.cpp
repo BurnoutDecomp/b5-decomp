@@ -79,7 +79,7 @@ void* ICEMemory::GetMemory(u32 luSize)
     {
         // Diagnostics: report the (base) ICE heap's live allocations, then assert.
         CgsMemory::HeapMalloc::PrintAllocations();
-        CGS_ASSERT(false, "\nICE out of memory\n");   // ICEMemory.cpp:94
+        CGS_FAIL("\nICE out of memory\n");   // ICEMemory.cpp:94
     }
     return lpMemory;
 }

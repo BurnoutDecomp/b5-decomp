@@ -93,11 +93,11 @@ namespace CgsNetwork
     // starts cleared (SetGameServerGame drives it later). Returns true (asm li r3,1).
     bool VersionDisplay::Prepare(const char* lpcVersion, u32 luField_04, EServerType leServerType)
     {
-        CGS_ASSERT(
+        CGS_ASSERT_AT(
             (leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT),
-            CGS_ASSERT_MESSAGE_AT(
-                "(leServerType>=E_SERVER_TYPE_LOCAL) && (leServerType<E_SERVER_TYPE_COUNT)",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\CgsNetworkVersionDisplay.cpp", 104 /* ARTIST 0x8286FA24 */));
+            "(leServerType>=E_SERVER_TYPE_LOCAL) && (leServerType<E_SERVER_TYPE_COUNT)",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\CgsNetworkVersionDisplay.cpp", 104 /* ARTIST 0x8286FA24 */);
+
 
         mpcVersion       = lpcVersion;
         muField_04       = luField_04;

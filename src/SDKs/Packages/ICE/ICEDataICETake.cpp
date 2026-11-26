@@ -128,10 +128,10 @@ namespace ICE
     // ------------------------------------------------------------------------
     void ICETake::MarkChannelFromSubTake(s32 liChannel)
     {
-        CGS_ASSERT(liChannel < 32,
-            CGS_ASSERT_MESSAGE_AT("liChannel<32",
+        CGS_ASSERT_AT(liChannel < 32,
+            "liChannel<32",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\sdks\\packages\\ice\\ICEData.hpp",
-                336 /* ARTIST 0x8252ADB4 */));
+                336 /* ARTIST 0x8252ADB4 */);
         mxSubTakeChannels |= (1 << liChannel);
     }
 

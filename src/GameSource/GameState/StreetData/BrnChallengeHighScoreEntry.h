@@ -44,7 +44,7 @@ namespace BrnStreetData
         CgsNetwork::PlayerName*  lpPlayerName ) const
     {
         CGS_ASSERT( lpiScore, "lpiScore != NULL" );
-        CGS_ASSERT( lpPlayerName, CGS_ASSERT_MESSAGE_AT("lpPlayerName != NULL", CGS_ARTIST_BRNCHALLENGEHIGHSCOREENTRY_FILE, 134) );
+        CGS_ASSERT_AT( lpPlayerName, "lpPlayerName != NULL", CGS_ARTIST_BRNCHALLENGEHIGHSCOREENTRY_FILE, 134 );
         *lpiScore = ChallengeData::GetScore( leScoreType );
         *lpPlayerName = maPlayerNames[ leScoreType ];
     }
@@ -68,8 +68,8 @@ namespace BrnStreetData
         int32_t                       liScore,
         const CgsNetwork::PlayerName* lpPlayerName )
     {
-        CGS_ASSERT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
-                    CGS_ASSERT_MESSAGE_AT("leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT", CGS_ARTIST_BRNCHALLENGEHIGHSCOREENTRY_FILE, 155) );
+        CGS_ASSERT_AT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
+                    "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT", CGS_ARTIST_BRNCHALLENGEHIGHSCOREENTRY_FILE, 155 );
 
         // ARTIST tests the maximum first (lwzx 0x820A7654 ; bgt at 0x8231C550), then the
         // minimum (0x820A764C ; blt at 0x8231C564).

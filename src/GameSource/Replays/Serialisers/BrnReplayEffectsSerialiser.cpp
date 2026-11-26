@@ -40,7 +40,7 @@ namespace BrnReplays
 
     EffectsSerialiserStaticLayout* EffectsSerialiser::GetStaticLayout()
     {
-        CGS_ASSERT(miStaticBufferSize >= EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE, CGS_ASSERT_STREAM_MESSAGE_AT("Static buffer size is too small\n", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 418));
+        CGS_ASSERT_STREAM_AT(miStaticBufferSize >= EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE, "Static buffer size is too small\n", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 418);
 
         return reinterpret_cast<EffectsSerialiserStaticLayout*>(mpStaticBuffer);
     }
@@ -50,7 +50,7 @@ namespace BrnReplays
     {
         BaseSerialiser::Lock();
         EffectsSerialiserStaticLayout* lpStatic = GetStaticLayout();
-        CGS_ASSERT(lpStatic != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.cpp", 69));
+        CGS_ASSERT_AT(lpStatic != 0, "lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.cpp", 69);
         // ARTIST 0x82650558..0x826505C8: the inlined stalled / preparing / restoring predicates,
         // then the recording / playing if-else chain.
         if (!IsStalled() && !IsPreparing() && !IsRestoring())

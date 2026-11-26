@@ -599,7 +599,7 @@ namespace CgsDev
                     break;
                 }
                 default:
-                    CGS_ASSERT(false, "unknown event");
+                    CGS_FAIL("unknown event");
                     break;
             }
 
@@ -833,7 +833,7 @@ namespace CgsDev
                 }
 
                 default:
-                    CGS_ASSERT(false, "unknown event");
+                    CGS_FAIL("unknown event");
                     break;
             }
 

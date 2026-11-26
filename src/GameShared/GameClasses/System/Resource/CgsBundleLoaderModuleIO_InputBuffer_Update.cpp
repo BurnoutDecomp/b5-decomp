@@ -28,16 +28,16 @@ namespace BundleLoaderIO
     // X360 0x828E1DF0: write-lock; return &mLoadBundleRequestQueue (this + 4).
     InputBuffer_Update::LoadBundleRequestQueue* InputBuffer_Update::GetLoadBundleRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for writing\n", CGS_ARTIST_FILE, 79));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+            "Not locked for writing\n", CGS_ARTIST_FILE, 79);
         return &mLoadBundleRequestQueue;
     }
 
     // X360 0x828E1F40: write-lock; return &mUnloadBundleRequestQueue (this + 0x9410).
     InputBuffer_Update::UnloadBundleRequestQueue* InputBuffer_Update::GetUnloadBundleRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for writing\n", CGS_ARTIST_FILE, 82));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+            "Not locked for writing\n", CGS_ARTIST_FILE, 82);
         return &mUnloadBundleRequestQueue;
     }
 }

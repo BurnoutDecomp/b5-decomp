@@ -28,12 +28,12 @@ namespace CgsNetwork
     // staged state machines and register the per-sub-manager CPU monitors.
     void NetworkManager::Construct(NetworkManagerConstructParams* lpConstructParams)
     {
-        CGS_ASSERT(lpConstructParams, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpConstructParams,
             "lpConstructParams",
-            CGS_ARTIST_FILE, 47 /* ARTIST 0x8289B37C */));
-        CGS_ASSERT(lpConstructParams->GetPlayerManagerConstructParams(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 47 /* ARTIST 0x8289B37C */);
+        CGS_ASSERT_AT(lpConstructParams->GetPlayerManagerConstructParams(),
             "lpConstructParams->GetPlayerManagerConstructParams()",
-            CGS_ARTIST_FILE, 48 /* ARTIST 0x8289B3A4 */));
+            CGS_ARTIST_FILE, 48 /* ARTIST 0x8289B3A4 */);
 
         // FLAG: the adapter's declared parameter is not a console argument (the call passes
         // none); 0 is inert until that declaration drops it.
@@ -121,9 +121,9 @@ namespace CgsNetwork
             lPrepareParams.mpConnectionFinalisedUserData    = lpPrepareParams->mPlayerManager.mpConnectionFinalisedUserData;
             lPrepareParams.mpNetworkHeapAllocator           = lpPrepareParams->mPlayerManager.mpNetworkHeapAllocator;
 
-            CGS_ASSERT(lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
                 "lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ",
-                __FILE__, 184 /* ARTIST 0x8289C9B8 */));
+                __FILE__, 184 /* ARTIST 0x8289C9B8 */);
 
             if (!mPlayerManager.Prepare(&lPrepareParams))
             {
@@ -155,9 +155,9 @@ namespace CgsNetwork
             return E_MANAGER_STATUS_READY;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "unknown prepare stage",
-                __FILE__, 228 /* ARTIST 0x8289CA6C */));
+                __FILE__, 228 /* ARTIST 0x8289CA6C */);
             return E_MANAGER_STATUS_BUSY;
         }
     }
@@ -219,10 +219,10 @@ namespace CgsNetwork
             return true;
 
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "unknown release stage",
-                    CGS_ARTIST_FILE, 323 /* ARTIST 0x8289B638 */));
+            CGS_FAIL_AT(
+                "unknown release stage",
+                    CGS_ARTIST_FILE, 323 /* ARTIST 0x8289B638 */);
+
             return false;
         }
     }

@@ -74,12 +74,12 @@ namespace BrnNetwork
 
     bool MarkedManMessage::Retrieve(NetworkPlayerID* lpMarkedMan, bool* lpbFinalAnswer)
     {
-        CGS_ASSERT(lpMarkedMan != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpMarkedMan != 0,
             "lpMarkedMan",
-            CGS_ARTIST_FILE, 109 /* ARTIST 0x8257E96C */));
-        CGS_ASSERT(lpbFinalAnswer != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 109 /* ARTIST 0x8257E96C */);
+        CGS_ASSERT_AT(lpbFinalAnswer != 0,
             "lpbIsFinalSelection",
-            CGS_ARTIST_FILE, 110 /* ARTIST 0x8257E990 */));
+            CGS_ARTIST_FILE, 110 /* ARTIST 0x8257E990 */);
 
         // ARTIST 0x8257E9A4 branches to a trailing `return false` (0x8257E9F8): the copy-out is the body
         // of the valid test.
@@ -88,9 +88,9 @@ namespace BrnNetwork
             *lpMarkedMan    = mMarkedMan;
             *lpbFinalAnswer = mbFinalAnswer;
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                CGS_ARTIST_FILE, 121 /* ARTIST 0x8257E9E4 */));
+                CGS_ARTIST_FILE, 121 /* ARTIST 0x8257E9E4 */);
             return true;
         }
         return false;

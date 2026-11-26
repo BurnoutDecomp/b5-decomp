@@ -38,9 +38,9 @@ __forceinline s32 Max(s32 li0, s32 li1)
     const s64 liLowDiff = static_cast<s32>(liDiff);
     const s32 liResult = static_cast<s32>(liWide0 - (liMask & liLowDiff));
 
-    CGS_ASSERT(liResult == ((li0 > li1) ? li0 : li1),
-               CGS_ASSERT_MESSAGE_AT("liResult == rw::core::stdc::Max( li0, li1 )",
-                   "..\\..\\..\\GameShared\\GameClasses\\Numeric/CgsBranchlessOperations.h", 50));
+    CGS_ASSERT_AT(liResult == ((li0 > li1) ? li0 : li1),
+               "liResult == rw::core::stdc::Max( li0, li1 )",
+                   "..\\..\\..\\GameShared\\GameClasses\\Numeric/CgsBranchlessOperations.h", 50);
 
     return liResult;
 }
@@ -56,9 +56,9 @@ __forceinline s32 Min(s32 li0, s32 li1)
     const s64 liLowDiff = static_cast<s32>(liDiff);
     const s32 liResult = static_cast<s32>(liWide1 + (liMask & liLowDiff));
 
-    CGS_ASSERT(liResult == ((li0 < li1) ? li0 : li1),
-               CGS_ASSERT_MESSAGE_AT("liResult == rw::core::stdc::Min( li0, li1 )",
-                   "..\\..\\..\\GameShared\\GameClasses\\Numeric/CgsBranchlessOperations.h", 62));
+    CGS_ASSERT_AT(liResult == ((li0 < li1) ? li0 : li1),
+               "liResult == rw::core::stdc::Min( li0, li1 )",
+                   "..\\..\\..\\GameShared\\GameClasses\\Numeric/CgsBranchlessOperations.h", 62);
 
     return liResult;
 }

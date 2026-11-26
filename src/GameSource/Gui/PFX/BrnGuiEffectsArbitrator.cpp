@@ -381,8 +381,8 @@ namespace BrnGui
     // ------------------------------------------------------------------------------------
     void EffectsArbitrator::StopHook(const PFXHook* lpHook)
     {
-        CGS_ASSERT(lpHook != 0, CGS_ASSERT_MESSAGE_AT("lpHook != NULL", CGS_ARTIST_FILE, 702 /* ARTIST 0x824FB3D0 */));                                  // :702
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache != NULL", CGS_ARTIST_FILE, 703 /* ARTIST 0x824FB3F8 */));                          // :703
+        CGS_ASSERT_AT(lpHook != 0, "lpHook != NULL", CGS_ARTIST_FILE, 702 /* ARTIST 0x824FB3D0 */);                                  // :702
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache != NULL", CGS_ARTIST_FILE, 703 /* ARTIST 0x824FB3F8 */);                          // :703
         if (mpCurrent->IsActive() && mpCurrent->GetHook() == lpHook)
         {
             mpCurrent->StartFadeOut(0.0f);
@@ -635,10 +635,10 @@ namespace BrnGui
     // ------------------------------------------------------------------------------------
     ColourCubeInfo* EffectsArbitrator::LookupColourCube(u64 luResourceId)
     {
-        CGS_ASSERT(muColourCubeCount <= KU_MAX_NUM_COLOURCUBES,
-            CGS_ASSERT_MESSAGE_AT(
-                "muColourCubeCount <= KU_MAX_NUM_COLOURCUBES",
-                CGS_ARTIST_FILE, 1214 /* ARTIST 0x824F5BC8 */));   // :1214
+        CGS_ASSERT_AT(muColourCubeCount <= KU_MAX_NUM_COLOURCUBES,
+            "muColourCubeCount <= KU_MAX_NUM_COLOURCUBES",
+                CGS_ARTIST_FILE, 1214 /* ARTIST 0x824F5BC8 */);   // :1214
+
         for (u32 luCube = 0; luCube < muColourCubeCount; ++luCube)
         {
             if (maColourCubes[luCube].muResourceId == luResourceId)

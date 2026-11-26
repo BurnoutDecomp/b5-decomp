@@ -49,9 +49,9 @@ namespace CrashIO
     const CgsSystem::TimerStatusInterface*
     InputBuffer_PreScene::GetTimerStatusInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 75));
+            CGS_ARTIST_FILE, 75);
         return &mTimerStatusInterface;
     }
 
@@ -60,9 +60,9 @@ namespace CrashIO
     const NetworkInputInterface*
     InputBuffer_PreScene::GetNetworkInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 78));
+            CGS_ARTIST_FILE, 78);
         return &mNetworkInputInterface;
     }
 
@@ -72,9 +72,9 @@ namespace CrashIO
     const InputBuffer_PreScene::VehicleDriverInterface*
     InputBuffer_PreScene::GetVehicleDriverInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 81));
+            CGS_ARTIST_FILE, 81);
         return &mVehicleDriverInterface;
     }
 
@@ -86,9 +86,9 @@ namespace CrashIO
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
     InputBuffer_PreScene::GetActiveRaceCarInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 84));
+            CGS_ARTIST_FILE, 84);
         return &mActiveRaceCarInterface;
     }
 
@@ -98,7 +98,7 @@ namespace CrashIO
     // stores). Caller WorldModule::BridgeInputToCrashModule.
     void InputBuffer_PreScene::SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 76));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 76);
         mTimerStatusInterface = *lpInterface;
     }
 
@@ -107,7 +107,7 @@ namespace CrashIO
     // Caller WorldModule::BridgeInputToCrashModule.
     void InputBuffer_PreScene::SetNetworkInputInterface(const NetworkInputInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 79));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 79);
         mNetworkInputInterface = *lpInterface;
     }
 
@@ -120,7 +120,7 @@ namespace CrashIO
     // Caller WorldModule::BridgeInputToCrashModule (0x827ADF4C).
     void InputBuffer_PreScene::SetVehicleDriverInterface(const VehicleDriverInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 82));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 82);
         mVehicleDriverInterface = *lpInterface;
     }
 
@@ -131,7 +131,7 @@ namespace CrashIO
     void InputBuffer_PreScene::SetActiveRaceCarInterface(
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 85));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 85);
         // [crash exit 2026-08-25] was `memcpy(&member, lpInterface, sizeof(member))` over a
         // 10480-byte console-sized blob. The member is the real type now, so the copy is the
         // interface's own operator= -- which is what the X360 inlines here (the same field-by-field
@@ -143,7 +143,7 @@ namespace CrashIO
     // into mGameActionQueue (X360 this+0x7A70). Caller WorldModule::BridgeInputToCrashModule.
     void InputBuffer_PreScene::SetGameActionQueue(const GameActionQueue* lpQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 88));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 88);
         // The whole queue is assigned: VariableEventQueue declares no operator= (DWARF), and ARTIST
         // copies its 0x3410 bytes with the implicit assignment's memcpy (0x827A23C4..0x827A23D0).
         mGameActionQueue = *lpQueue;
@@ -152,9 +152,9 @@ namespace CrashIO
     // 0x827BB528 (DWARF :87, export name truncated) -- read-lock tripwire; returns +0x7A70.
     const InputBuffer_PreScene::GameActionQueue* InputBuffer_PreScene::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 87));
+            CGS_ARTIST_FILE, 87);
         return &mGameActionQueue;
     }
 
@@ -207,9 +207,9 @@ namespace CrashIO
     const TrafficInputInterface*
     InputBuffer_PostPhysics::GetTrafficInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 168));
+            CGS_ARTIST_FILE, 168);
         return &mTrafficInputInterface;
     }
 
@@ -218,9 +218,9 @@ namespace CrashIO
     const InputBuffer_PostPhysics::VehicleOutputInterface*
     InputBuffer_PostPhysics::GetVehicleOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 171));
+            CGS_ARTIST_FILE, 171);
         return &mVehicleOutputInterface;
     }
 
@@ -230,9 +230,9 @@ namespace CrashIO
     const InputBuffer_PostPhysics::VehicleManagerOutputInterface*
     InputBuffer_PostPhysics::GetVehicleManagerOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 174));
+            CGS_ARTIST_FILE, 174);
         return &mVehicleManagerOutputInterface;
     }
 
@@ -240,7 +240,7 @@ namespace CrashIO
     // (X360 this+0x8) via TrafficInputInterface::operator= (per-queue copy + bit-mask copy).
     void InputBuffer_PostPhysics::SetTrafficInputInterface(const TrafficInputInterface* lpTrafficInputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 169));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 169);
         mTrafficInputInterface = *lpTrafficInputInterface;
     }
 
@@ -248,7 +248,7 @@ namespace CrashIO
     // (X360 this+0xDA0) via VehicleOutputInterface::operator=.
     void InputBuffer_PostPhysics::SetVehicleOutputInterface(const VehicleOutputInterface* lpVehicleOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 172));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 172);
         mVehicleOutputInterface = *lpVehicleOutputInterface;
     }
 
@@ -256,7 +256,7 @@ namespace CrashIO
     // (X360 this+0x79B0) via VehicleManagerOutputInterface::operator=.
     void InputBuffer_PostPhysics::SetVehicleManagerOutputInterface(const VehicleManagerOutputInterface* lpVehicleManagerOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 175));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 175);
         mVehicleManagerOutputInterface = *lpVehicleManagerOutputInterface;
     }
 

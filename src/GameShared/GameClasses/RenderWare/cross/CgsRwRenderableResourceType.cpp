@@ -110,9 +110,9 @@ namespace CgsResource
     {
         (void)lpResource;
         (void)lrResource;
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "Don't call this function at runtime", KAC_ARTIST_ASSERT_FILE, 445 /* ARTIST 0x828A7D74 */));
+        CGS_FAIL_AT(
+            "Don't call this function at runtime", KAC_ARTIST_ASSERT_FILE, 445 /* ARTIST 0x828A7D74 */);
+
     }
 
     void RwRenderableResourceType::GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const
@@ -121,9 +121,9 @@ namespace CgsResource
         (void)luIndex;
         (void)lpuOffset;
         (void)lppValue;
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "Should not be called at runtime", KAC_ARTIST_ASSERT_FILE, 1005 /* ARTIST 0x828A7DB4 */));
+        CGS_FAIL_AT(
+            "Should not be called at runtime", KAC_ARTIST_ASSERT_FILE, 1005 /* ARTIST 0x828A7DB4 */);
+
     }
 
     bool RwRenderableResourceType::DebugValidate(const void* lpResource) const
@@ -149,7 +149,7 @@ namespace CgsResource
                 // mu8NumMaterials technique count (natural x64 home @+0x0C; by NAME).
                 if (lpAssembly->mu8NumMaterials == 0)                        // lbz 8(v4)
                 {
-                    CGS_ASSERT(false, "Mesh material assembly is empty");                 // line 1273
+                    CGS_FAIL("Mesh material assembly is empty");                 // line 1273
                     return false;                                                         // result = 0
                 }
                 // X360 assembly[0] = the technique-table pointer (mappMaterials); its first
@@ -158,7 +158,7 @@ namespace CgsResource
                 {
                     // X360 breaks out of the loop here, then fires the NULL-material
                     // assert; flattened to the in-loop assert + return (same result).
-                    CGS_ASSERT(false, "Material assembly contains a NULL material");      // line 1278
+                    CGS_FAIL("Material assembly contains a NULL material");      // line 1278
                     return false;                                                         // result = 0
                 }
             }

@@ -65,9 +65,9 @@ namespace CgsResource
         }
         else
         {
-            CGS_ASSERT(lpData->miShaderType == 1,
-                CGS_ASSERT_MESSAGE_AT("lpProgramBuffer->m_type == renderengine::ProgramBuffer::TYPE_PIXEL",
-                    KAC_ARTIST_SHADER_RESOURCE, 291));
+            CGS_ASSERT_AT(lpData->miShaderType == 1,
+                "lpProgramBuffer->m_type == renderengine::ProgramBuffer::TYPE_PIXEL",
+                    KAC_ARTIST_SHADER_RESOURCE, 291);
             void* lpPhysical = XPhysicalAlloc(lpData->muPhysicalSize, MAXULONG_PTR, D3DSHADER_ALIGNMENT,
                 PAGE_READWRITE | PAGE_WRITECOMBINE);
             std::memcpy(lpPhysical, lpData->mpPhysicalPart.Get(), lpData->muPhysicalSize);
@@ -115,9 +115,9 @@ namespace CgsResource
         }
         else
         {
-            CGS_ASSERT(lpData->miShaderType == 1,
-                CGS_ASSERT_MESSAGE_AT("lpProgramBuffer->m_type == renderengine::ProgramBuffer::TYPE_PIXEL",
-                    KAC_ARTIST_SHADER_RESOURCE, 374));
+            CGS_ASSERT_AT(lpData->miShaderType == 1,
+                "lpProgramBuffer->m_type == renderengine::ProgramBuffer::TYPE_PIXEL",
+                    KAC_ARTIST_SHADER_RESOURCE, 374);
             XGRegisterPixelShader(reinterpret_cast<D3DPixelShader*>(lpData + 1), lpData->mpPhysicalPart.Get());
         }
     }

@@ -76,10 +76,10 @@ namespace Deformation
 	// =============================================================================================
 	s32 DeformableObject::GetSweptSpheres(const CgsGeometric::SweptSphere** lppSpheresOut)
 	{
-		CGS_ASSERT(mbDoSweptSphereTests,
-		    CGS_ASSERT_MESSAGE_AT(
-		        "mbDoSweptSphereTests",
-		        "..\\..\\..\\GameSource\\Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h", 446 /* ARTIST 0x825B4260 */));   // BrnDeformableObject.h:446 (non-gating)
+		CGS_ASSERT_AT(mbDoSweptSphereTests,
+		    "mbDoSweptSphereTests",
+		        "..\\..\\..\\GameSource\\Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h", 446 /* ARTIST 0x825B4260 */);   // BrnDeformableObject.h:446 (non-gating)
+
 
 		*lppSpheresOut = maSweptSpheres;   // *a2 = a1 + 384
 		return static_cast<s32>(SpecNumSensors(mpDeformationSpec)) + KI_MAX_NUM_WHEEL_POINTS_PER_DEFORMABLE_OBJECT;

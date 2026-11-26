@@ -72,7 +72,7 @@ namespace BrnTrafficIO
     // WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene.
     void InputBuffer_PostScene::SetRaceCarToTrafficInterface(const RaceCarToTrafficInterface* lpRaceCarToTrafficInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_REL, 239));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE_REL, 239);
         mRaceCarToTrafficInterface = *lpRaceCarToTrafficInterface;
     }
 
@@ -80,7 +80,7 @@ namespace BrnTrafficIO
     // Consumers: TrafficEntityModule::HandleCrashingNetworkTraffic / CleanUpCrashedVehicles.
     const InputBuffer_PostScene::CrashTrafficOutputInterface* InputBuffer_PostScene::GetCrashTrafficOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 232));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 232);
         return &mCrashTrafficOutputInterface;
     }
 
@@ -96,7 +96,7 @@ namespace BrnTrafficIO
     // Consumer: TrafficEntityModule::PostSceneUpdate.
     const InputBuffer_PostScene::RaceCarToTrafficInterface* InputBuffer_PostScene::GetRaceCarToTrafficInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 238));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 238);
         return &mRaceCarToTrafficInterface;
     }
 
@@ -104,7 +104,7 @@ namespace BrnTrafficIO
     // Consumers: TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults / HandleExternalResponses.
     const InputBuffer_PostPhysics::VehicleOutputInterface* InputBuffer_PostPhysics::GetVehicleOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 350));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 350);
         return &mVehicleOutputInterface;
     }
 
@@ -112,7 +112,7 @@ namespace BrnTrafficIO
     // Consumers: TrafficEntityModule::HandleExternalResponses / HandleResetRaceCarEvents / PostPhysicsUpdate.
     const InputBuffer_PostPhysics::VehicleManagerOutputInterface* InputBuffer_PostPhysics::GetVehicleManagerOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 356));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 356);
         return &mVehicleManagerOutputInterface;
     }
 
@@ -120,7 +120,7 @@ namespace BrnTrafficIO
     // Consumer: TrafficEntityModule::HandleExternalRequests.
     const InputBuffer_PostPhysics::GameActionQueueStorage* InputBuffer_PostPhysics::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 359));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 359);
         return &mGameActionQueue;
     }
 
@@ -128,7 +128,7 @@ namespace BrnTrafficIO
     // Producers: WorldModule::BridgeActionsToTrafficModule / UpdateForBootUpVideo.
     InputBuffer_PostPhysics::GameActionQueueStorage* InputBuffer_PostPhysics::GetGameActionQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 360));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 360);
         return &mGameActionQueue;
     }
 

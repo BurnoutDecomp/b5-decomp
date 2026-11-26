@@ -15,9 +15,9 @@ namespace CgsNetwork
     void TestConnectionMessage::PrepareForSend(u16 lu16Frame)
     {
         ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Preparing TestConnectionMessage\n";
-        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lu16Frame != KU16_INVALID_FRAME,
             "lu16Frame != KU16_INVALID_FRAME",
-            CGS_ARTIST_FILE, 69 /* ARTIST 0x82882380 */));
+            CGS_ARTIST_FILE, 69 /* ARTIST 0x82882380 */);
         ReliableMessage::PrepareForSend(4, lu16Frame);
     }
 

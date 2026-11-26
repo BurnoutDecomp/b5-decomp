@@ -137,10 +137,10 @@ namespace
         // declaration -- that IS the asm's -1-sentinel do-while at 0x8236B594.
         StartGameModeParams lStartGameModeParams;
 
-        CGS_ASSERT(lpInput  != 0, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 5579));    // :5579
-        CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", CGS_ARTIST_FILE, 5580));   // :5580
-        CGS_ASSERT(!IsOnlineGameMode() || mModeManager.IsOnlineFreeBurnLobby(),
-                   CGS_ASSERT_MESSAGE_AT("!IsOnlineGameMode() || mModeManager.IsOnlineFreeBurnLobby()", CGS_ARTIST_FILE, 5582));   // :5582
+        CGS_ASSERT_AT(lpInput  != 0, "lpInput != NULL", CGS_ARTIST_FILE, 5579);    // :5579
+        CGS_ASSERT_AT(lpOutput != 0, "lpOutput != NULL", CGS_ARTIST_FILE, 5580);   // :5580
+        CGS_ASSERT_AT(!IsOnlineGameMode() || mModeManager.IsOnlineFreeBurnLobby(),
+                   "!IsOnlineGameMode() || mModeManager.IsOnlineFreeBurnLobby()", CGS_ARTIST_FILE, 5582);   // :5582
 
         (void)lpInput;   // asserted above and then never read -- see the banner
 
@@ -381,7 +381,7 @@ namespace
     // =============================================================================================
     f32 GameStateModule::GetShowtimeIntroSteering() const
     {
-        CGS_ASSERT(IsInShowtimeIntro(), CGS_ASSERT_MESSAGE_AT("IsInShowtimeIntro()", CGS_ARTIST_FILE, 5050));   // :5050
+        CGS_ASSERT_AT(IsInShowtimeIntro(), "IsInShowtimeIntro()", CGS_ARTIST_FILE, 5050);   // :5050
         return mfShowtimeIntroSteering;
     }
 
@@ -484,16 +484,16 @@ namespace
                 break;
             }
 
-            CGS_ASSERT(muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX,
-                       CGS_ASSERT_MESSAGE_AT("muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX", CGS_ARTIST_FILE, 1611));   // :1611 (li r5, 0x64B)
+            CGS_ASSERT_AT(muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX,
+                       "muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX", CGS_ARTIST_FILE, 1611);   // :1611 (li r5, 0x64B)
             muShowtimeRequestedTrafficIndex = K_INVALID_VEHICLE_INDEX;
         }
 
         // ---- 3. the next pending victim (0x82381088..0x82381128) ------------------------------
         // The inlined IsEmpty's constructed-check (CgsStack.h:177, li r5, 0xB1) is the console's
         // own; this tree's Stack::IsEmpty() carries no assert, so it is spelled at the call site.
-        CGS_ASSERT(mShowtimePendingTrafficIndexStack.GetLength() != CgsContainers::KI_STACK_UNCONSTRUCTED,
-                   CGS_ASSERT_MESSAGE_AT("Stack used before Construct/Clear was called", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsStack.h", 177));                   // CgsStack.h:177
+        CGS_ASSERT_AT(mShowtimePendingTrafficIndexStack.GetLength() != CgsContainers::KI_STACK_UNCONSTRUCTED,
+                   "Stack used before Construct/Clear was called", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsStack.h", 177);                   // CgsStack.h:177
         if (!mShowtimePendingTrafficIndexStack.IsEmpty())
         {
             --miShowtimePendingFrameDelay;

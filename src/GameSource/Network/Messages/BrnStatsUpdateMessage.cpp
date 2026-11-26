@@ -92,10 +92,10 @@ namespace BrnNetwork
         miNumberOfTakedowns    = liNumberOfTakedowns;
 
         // Inlined Message::PrepareForSend frame-stamp.
-        CGS_ASSERT(lu16Frame != CgsNetwork::KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16Frame != KU16_INVALID_FRAME",
-                "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h", 594 /* ARTIST 0x8257FEB8 */));
+        CGS_ASSERT_AT(lu16Frame != CgsNetwork::KU16_INVALID_FRAME,
+            "lu16Frame != KU16_INVALID_FRAME",
+                "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h", 594 /* ARTIST 0x8257FEB8 */);
+
         mu16Frame = lu16Frame;
         mi8Type   = KI8_STATS_UPDATE_MESSAGE_TYPE;
         mx8Flags  = static_cast<u8>(mx8Flags | CgsNetwork::KX8_FLAGS_VALID);
@@ -106,15 +106,15 @@ namespace BrnNetwork
                                       s32* lpiNumberOfAchievements,
                                       s32* lpiNumberOfTakedowns)
     {
-        CGS_ASSERT(lpiNumberOfChallenges,
-            CGS_ASSERT_MESSAGE_AT("lpiNumberOfChallenges", __FILE__, 101 /* ARTIST 0x8257FF38 */));
-        CGS_ASSERT(lpiNumberOfRivals,
-            CGS_ASSERT_MESSAGE_AT("lpiNumberOfRivals", __FILE__, 102 /* ARTIST 0x8257FF5C */));
-        CGS_ASSERT(lpiNumberOfAchievements,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpiNumberOfAchievements", __FILE__, 103 /* ARTIST 0x8257FF80 */));
-        CGS_ASSERT(lpiNumberOfTakedowns,
-            CGS_ASSERT_MESSAGE_AT("lpiNumberOfTakedowns", __FILE__, 104 /* ARTIST 0x8257FFA4 */));
+        CGS_ASSERT_AT(lpiNumberOfChallenges,
+            "lpiNumberOfChallenges", __FILE__, 101 /* ARTIST 0x8257FF38 */);
+        CGS_ASSERT_AT(lpiNumberOfRivals,
+            "lpiNumberOfRivals", __FILE__, 102 /* ARTIST 0x8257FF5C */);
+        CGS_ASSERT_AT(lpiNumberOfAchievements,
+            "lpiNumberOfAchievements", __FILE__, 103 /* ARTIST 0x8257FF80 */);
+
+        CGS_ASSERT_AT(lpiNumberOfTakedowns,
+            "lpiNumberOfTakedowns", __FILE__, 104 /* ARTIST 0x8257FFA4 */);
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {

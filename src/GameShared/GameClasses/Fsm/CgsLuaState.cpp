@@ -40,8 +40,8 @@ void LuaState::Construct()
 // @ 0x82835D60 -- the Lua allocator. lua_Alloc contract: nsize==0 frees, else (re)allocates.
 void* LuaState::LuaAllocator(void* lpData, void* lpPointer, usize /*luOldSize*/, usize luNewSize)
 {
-    CGS_ASSERT(lpData != 0,
-        CGS_ASSERT_MESSAGE_AT("lpData != NULL", KAC_ARTIST_ASSERT_FILE, 412 /* ARTIST 0x82835D88 */));
+    CGS_ASSERT_AT(lpData != 0,
+        "lpData != NULL", KAC_ARTIST_ASSERT_FILE, 412 /* ARTIST 0x82835D88 */);
     CgsMemory::HeapMalloc* lpHeap = static_cast<CgsMemory::HeapMalloc*>(lpData);
     if (luNewSize == 0)
     {
@@ -56,7 +56,7 @@ bool LuaState::Prepare(CgsResource::LuaCodeResource* lpLuaCodeResource, CgsMemor
 {
     mpHeapMalloc = lpHeapMalloc;
     mpLuaState   = lua_newstate(reinterpret_cast<lua_Alloc>(&LuaState::LuaAllocator), lpHeapMalloc);
-    CGS_ASSERT(mpLuaState != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Failed to allocate LUA state, out of memory", KAC_ARTIST_ASSERT_FILE, 85));
+    CGS_ASSERT_STREAM_AT(mpLuaState != 0, "Failed to allocate LUA state, out of memory", KAC_ARTIST_ASSERT_FILE, 85);
 
     // Load the script chunk and run it (defining the FSM's Lua globals).
     luaL_loadbuffer(mpLuaState, lpLuaCodeResource->GetSource(),
@@ -83,8 +83,8 @@ bool LuaState::IsLuaResourceValid() const
 // @ 0x82835DD0 -- uncompress the CgsID to its printable form, drop the space padding, push it.
 void LuaState::LuaPushId(CgsID lId)
 {
-    CGS_ASSERT(mpLuaState != 0,
-        CGS_ASSERT_MESSAGE_AT("mpLuaState", KAC_ARTIST_ASSERT_FILE, 438 /* ARTIST 0x82835E00 */));
+    CGS_ASSERT_AT(mpLuaState != 0,
+        "mpLuaState", KAC_ARTIST_ASSERT_FILE, 438 /* ARTIST 0x82835E00 */);
     char lacId[KI_CGSID_STRING_LEN];
     CgsIDUnCompress(lId, lacId);
     for (int li = 0; li < KI_CGSID_STRING_LEN; ++li)
@@ -104,7 +104,7 @@ CgsID LuaState::GetCurrentState()
     if (lua_isstring(mpLuaState, -1))
         lResult = CgsIDCompress(lua_tolstring(mpLuaState, -1, 0));
     else
-        CGS_ASSERT_STREAM_AT(false, "Could not find state ID: " << lResult << " in Lua",
+        CGS_FAIL_STREAM_AT("Could not find state ID: " << lResult << " in Lua",
                              KAC_ARTIST_ASSERT_FILE, 386);
     lua_settop(mpLuaState, 0);
     return lResult;
@@ -132,7 +132,7 @@ int LuaState::GetInt(const char* lpcFunctionName, CgsID lVariableId)
     if (lua_isnumber(mpLuaState, -1))
         liResult = static_cast<int>(lua_tonumber(mpLuaState, -1));
     else
-        CGS_ASSERT_STREAM_AT(false, "Could not find int variable in Lua: " << lVariableId,
+        CGS_FAIL_STREAM_AT("Could not find int variable in Lua: " << lVariableId,
                              KAC_ARTIST_ASSERT_FILE, 187);
     lua_settop(mpLuaState, 0);
     return liResult;
@@ -154,7 +154,7 @@ const char* LuaState::GetString(const char* lpcFunctionName, CgsID lVariableId, 
     }
     else
     {
-        CGS_ASSERT_STREAM_AT(false, "Could not find string variable in Lua: " << lVariableId,
+        CGS_FAIL_STREAM_AT("Could not find string variable in Lua: " << lVariableId,
                              KAC_ARTIST_ASSERT_FILE, 232);
     }
     lua_settop(mpLuaState, 0);

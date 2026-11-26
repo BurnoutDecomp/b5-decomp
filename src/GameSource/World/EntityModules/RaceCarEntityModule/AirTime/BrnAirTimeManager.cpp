@@ -123,7 +123,7 @@ void AirTimeManager::Update(const BrnPhysics::Vehicle::RaceCarState* lpRaceCarSt
             break;
 
         default:
-            CGS_ASSERT(false, "Air time manager in unknown state!");
+            CGS_FAIL("Air time manager in unknown state!");
             break;
     }
 }

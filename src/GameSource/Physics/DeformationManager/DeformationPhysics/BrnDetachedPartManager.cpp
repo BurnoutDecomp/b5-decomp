@@ -220,10 +220,10 @@ namespace Deformation
         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
         BrnPhysics::PhysicsModuleIO::OutputBuffer* lpPhysicsModuleOutputBuffer)
     {
-        CGS_ASSERT(mPartPool.IsPartIndexUsed(liPoolIndex), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mPartPool.IsPartIndexUsed(liPoolIndex),
             "IsPartIndexUsed( liPoolIndex )",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.cpp",
-            207));
+            207);
         return mPartPool.GetPart(static_cast<s16>(liPoolIndex))->TestJointForBreaking(
             lpSimInput, lpPhysicsModuleOutputBuffer);
     }

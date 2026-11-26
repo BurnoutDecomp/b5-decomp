@@ -206,7 +206,7 @@ void BrnGameModule::TranslateShowtimeActionToGuiEvent(
     // path -- reproduced as written, no invented early-out.
     case E_ACTION_SHOWTIME_UPDATE:
     {
-        CGS_ASSERT(lpAction != 0, CGS_ASSERT_MESSAGE_AT("lpShowtimeUpdateAction", CGS_ARTIST_FILE, 3976));     // :3976 (li r5, 0xF88)
+        CGS_ASSERT_AT(lpAction != 0, "lpShowtimeUpdateAction", CGS_ARTIST_FILE, 3976);     // :3976 (li r5, 0xF88)
         (void)KPC_ASSERT_FILE;
 
         const ShowtimeUpdateAction* const lpUpdateAction =
@@ -227,7 +227,7 @@ void BrnGameModule::TranslateShowtimeActionToGuiEvent(
     // `stb r11, ev+0x0C`. On a little-endian host the HIBYTE spelling would write ev+0x0F.
     case E_ACTION_SHOWTIME_MODE_SWITCH:
     {
-        CGS_ASSERT(lpAction != 0, CGS_ASSERT_MESSAGE_AT("lpShowtimeModeSwitchAction", CGS_ARTIST_FILE, 3992)); // :3992 (li r5, 0xF98)
+        CGS_ASSERT_AT(lpAction != 0, "lpShowtimeModeSwitchAction", CGS_ARTIST_FILE, 3992); // :3992 (li r5, 0xF98)
 
         const ShowtimeModeSwitchAction* const lpSwitchAction =
             reinterpret_cast<const ShowtimeModeSwitchAction*>(lpAction);
@@ -268,7 +268,7 @@ void BrnGameModule::TranslateShowtimeActionToGuiEvent(
     // the biased jump table means anything outside 127..144 never reaches this function at all
     // (the caller's switch selects the arm), so this really is the 129-138 hole.
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown Showtime action.", CGS_ARTIST_FILE, 4075));            // :4075 (li r5, 0xFEB)
+        CGS_FAIL_AT("Unknown Showtime action.", CGS_ARTIST_FILE, 4075);            // :4075 (li r5, 0xFEB)
         break;
     }
 }

@@ -249,7 +249,7 @@ namespace BrnGameState
             leRegionType = BrnTrigger::GenericRegion::E_TYPE_OVERDRIVE_BOOST;
             break;
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown stunt type.", CGS_ARTIST_FILE, 245));
+            CGS_FAIL_AT("Unknown stunt type.", CGS_ARTIST_FILE, 245);
             return;
         }
 

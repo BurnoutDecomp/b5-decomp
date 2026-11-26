@@ -74,7 +74,7 @@ public:
     // The sample i frames back ( [0] newest .. [N-1] oldest ). Asserts the index is live.
     const T& operator[](int liIndex) const
     {
-        CGS_ASSERT(liIndex < miSize, CGS_ASSERT_MESSAGE_AT("liIndex < miSize", CGS_ARTIST_BRNDIRECTORDATAJOURNAL_FILE, 209));
+        CGS_ASSERT_AT(liIndex < miSize, "liIndex < miSize", CGS_ARTIST_BRNDIRECTORDATAJOURNAL_FILE, 209);
         return maEntries[(miWriteIndex + liIndex) % N];
     }
 
@@ -90,9 +90,9 @@ public:
     // the parameterless GetPrevious() above; no layout/sizeof change.
     const T& GetPrevious(int liIndex) const
     {
-        CGS_ASSERT(liIndex >= 0, CGS_ASSERT_MESSAGE_AT("lIndex >= 0", CGS_ARTIST_BRNDIRECTORDATAJOURNAL_FILE, 114));
+        CGS_ASSERT_AT(liIndex >= 0, "lIndex >= 0", CGS_ARTIST_BRNDIRECTORDATAJOURNAL_FILE, 114);
         CGS_ASSERT(miSize > 0, "miSize > 0");
-        CGS_ASSERT(liIndex < miSize - 1, CGS_ASSERT_MESSAGE_AT("lIndex < miSize-1", CGS_ARTIST_BRNDIRECTORDATAJOURNAL_FILE, 116));
+        CGS_ASSERT_AT(liIndex < miSize - 1, "lIndex < miSize-1", CGS_ARTIST_BRNDIRECTORDATAJOURNAL_FILE, 116);
         return (*this)[liIndex + 1];
     }
 

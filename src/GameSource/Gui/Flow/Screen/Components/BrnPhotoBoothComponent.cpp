@@ -199,10 +199,10 @@ namespace BrnGui
     // load/unload through (asserts non-NULL). stw r31,0x404(this) => mpGuiCache.
     void PhotoBoothComponent::SetCachePointer(GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "NULL != lpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnPhotoBoothComponent.h", 262 /* ARTIST 0x824B34BC */));
+        CGS_ASSERT_AT(lpGuiCache != 0,
+            "NULL != lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnPhotoBoothComponent.h", 262 /* ARTIST 0x824B34BC */);
+
         mpGuiCache = lpGuiCache;
     }
 
@@ -210,12 +210,12 @@ namespace BrnGui
     // latch the result in mbResourceLoaded, and return it.
     bool PhotoBoothComponent::EnsureResourcesAreLoaded()
     {
-        CGS_ASSERT(mPhotoResourceToLoad.muId != KU_GUI_RESOURCEID_NUM,
-            CGS_ASSERT_MESSAGE_AT(
-                "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId",
-                __FILE__, 341 /* ARTIST 0x824B3520 */));
-        CGS_ASSERT(mpGuiCache,
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 342 /* ARTIST 0x824B3548 */));
+        CGS_ASSERT_AT(mPhotoResourceToLoad.muId != KU_GUI_RESOURCEID_NUM,
+            "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId",
+                __FILE__, 341 /* ARTIST 0x824B3520 */);
+
+        CGS_ASSERT_AT(mpGuiCache,
+            "mpGuiCache", __FILE__, 342 /* ARTIST 0x824B3548 */);
 
         mbResourceLoaded = mpGuiCache->EnsureResourceIsLoaded(mPhotoResourceToLoad);
         return mbResourceLoaded;
@@ -226,12 +226,12 @@ namespace BrnGui
     // mpGuiCache, zeroes mbResourceLoaded, then makes the (tail) call in that order.
     bool PhotoBoothComponent::EnsureResourcesAreUnloaded()
     {
-        CGS_ASSERT(mPhotoResourceToLoad.muId != KU_GUI_RESOURCEID_NUM,
-            CGS_ASSERT_MESSAGE_AT(
-                "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId",
-                __FILE__, 361 /* ARTIST 0x824B35A8 */));
-        CGS_ASSERT(mpGuiCache,
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 362 /* ARTIST 0x824B35D0 */));
+        CGS_ASSERT_AT(mPhotoResourceToLoad.muId != KU_GUI_RESOURCEID_NUM,
+            "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId",
+                __FILE__, 361 /* ARTIST 0x824B35A8 */);
+
+        CGS_ASSERT_AT(mpGuiCache,
+            "mpGuiCache", __FILE__, 362 /* ARTIST 0x824B35D0 */);
 
         GuiCache* lpGuiCache = mpGuiCache;
         mbResourceLoaded = false;
@@ -700,12 +700,12 @@ namespace BrnGui
     // waits for them to finish initialising before reporting the flow ready.
     void PhotoBoothComponent::AppendExpectedAptComponents(GuiFlow leFlow)
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_ARTIST_ASSERT_SOURCE, 135 /* ARTIST 0x8241ACE0 */));
-        CGS_ASSERT((E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow),
-            CGS_ASSERT_MESSAGE_AT(
-                "(E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow)",
-                KAC_ARTIST_ASSERT_SOURCE, 137 /* ARTIST 0x8241AD0C */));
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "NULL != mpGuiCache", KAC_ARTIST_ASSERT_SOURCE, 135 /* ARTIST 0x8241ACE0 */);
+        CGS_ASSERT_AT((E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow),
+            "(E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow)",
+                KAC_ARTIST_ASSERT_SOURCE, 137 /* ARTIST 0x8241AD0C */);
+
 
         mpGuiCache->AppendExpectedAptComponent(leFlow, GetName());
         mpGuiCache->AppendExpectedAptComponent(leFlow, mHelpItemLeft.GetName());

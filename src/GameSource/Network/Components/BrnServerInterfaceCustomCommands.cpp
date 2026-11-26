@@ -148,8 +148,8 @@ bool ServerInterfaceCustomCommands::Prepare(CgsNetwork::ServerInterfaceDirtySock
     if (!CgsNetwork::ServerInterfaceCustomCommands::Prepare())
         return false;
 
-    CGS_ASSERT(lpServerInterface != 0,
-        CGS_ASSERT_MESSAGE_AT("lpServerInterface", __FILE__, 209 /* ARTIST 0x825837B4 */));
+    CGS_ASSERT_AT(lpServerInterface != 0,
+        "lpServerInterface", __FILE__, 209 /* ARTIST 0x825837B4 */);
 
     mpServerInterface    = lpServerInterface;  // a1[4]
     mpCallback           = 0;            // a1[9]
@@ -206,16 +206,16 @@ void ServerInterfaceCustomCommands::Update()
 void ServerInterfaceCustomCommands::SendCustomCommand(EAction leNewAction,
                                                       const char* lpcMessageData)
 {
-    CGS_ASSERT(leNewAction != E_ACTION_COUNT, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(leNewAction != E_ACTION_COUNT,
         "meNewAction != E_ACTION_COUNT",
-        __FILE__, 571 /* ARTIST 0x8258F064 */));
+        __FILE__, 571 /* ARTIST 0x8258F064 */);
 
     meCurrentAction = leNewAction;                       // a1[8] = leNewAction
     StartActionCore(KPC_ACTION_NAMES[leNewAction]);      // (*(vtable+12))(this, off_82F29F30[a2])
 
-    CGS_ASSERT(lpcMessageData != 0, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpcMessageData != 0,
         "lpcMessageData",
-        __FILE__, 578 /* ARTIST 0x8258F0B0 */));
+        __FILE__, 578 /* ARTIST 0x8258F0B0 */);
 
     LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),         // *(a1[4]+120)
                       KI_ACTIONS_TO_MESSAGE_CODES[meCurrentAction], // dword_820872A4[a1[8]]
@@ -238,16 +238,16 @@ void ServerInterfaceCustomCommands::GetEloOfLocalPlayer(s32* lpiRaceElo, s32* lp
                                                         s32* lpiRoadRageElo,
                                                         CustomCommandCallback lCallback, void* lpData)
 {
-    CGS_ASSERT(lpiRaceElo != 0,
-        CGS_ASSERT_MESSAGE_AT("lpRaceElo", __FILE__, 601 /* ARTIST 0x8258F12C */));            // a2, cpp:601
-    CGS_ASSERT(lpiRoadRageElo != 0,
-        CGS_ASSERT_MESSAGE_AT("lpRoadRageElo", __FILE__, 602 /* ARTIST 0x8258F150 */));    // a4, cpp:602
-    CGS_ASSERT(lpiBurningHomeRunElo != 0,
-        CGS_ASSERT_MESSAGE_AT("lpBurningHomeRunElo", __FILE__, 603 /* ARTIST 0x8258F174 */)); // a3, cpp:603
-    CGS_ASSERT(lCallback != 0,
-        CGS_ASSERT_MESSAGE_AT("lCallback", __FILE__, 604 /* ARTIST 0x8258F198 */));            // a5, cpp:604
-    CGS_ASSERT(lpData != 0,
-        CGS_ASSERT_MESSAGE_AT("lpData", __FILE__, 605 /* ARTIST 0x8258F1BC */));                  // a6, cpp:605
+    CGS_ASSERT_AT(lpiRaceElo != 0,
+        "lpRaceElo", __FILE__, 601 /* ARTIST 0x8258F12C */);            // a2, cpp:601
+    CGS_ASSERT_AT(lpiRoadRageElo != 0,
+        "lpRoadRageElo", __FILE__, 602 /* ARTIST 0x8258F150 */);    // a4, cpp:602
+    CGS_ASSERT_AT(lpiBurningHomeRunElo != 0,
+        "lpBurningHomeRunElo", __FILE__, 603 /* ARTIST 0x8258F174 */); // a3, cpp:603
+    CGS_ASSERT_AT(lCallback != 0,
+        "lCallback", __FILE__, 604 /* ARTIST 0x8258F198 */);            // a5, cpp:604
+    CGS_ASSERT_AT(lpData != 0,
+        "lpData", __FILE__, 605 /* ARTIST 0x8258F1BC */);                  // a6, cpp:605
 
     mpCallbackData       = lpData;                 // a1[10] -- stw r25, 0x28
     mpCallback           = lCallback;              // a1[9]  -- stw r26, 0x24
@@ -720,7 +720,7 @@ int ServerInterfaceCustomCommands::ConvertError(int liMessageKind, int liMessage
     if (liMessageCode == KI_CODE_NOT_RECOGNISED)
     {
         // The X360 streams "Server doesn't recongise: <code>\n" into the assert buffer.
-        CGS_ASSERT(false, "Server doesn't recongise");
+        CGS_FAIL("Server doesn't recongise");
         return 140;
     }
     if (liMessageCode == KI_CODE_TIMEOUT)
@@ -739,7 +739,7 @@ int ServerInterfaceCustomCommands::ConvertError(int liMessageKind, int liMessage
     }
 
     // Not in the table: the X360 streams "Unhandled custom command message type: <kind>/<code>".
-    CGS_ASSERT(false, "Unhandled custom command message type");
+    CGS_FAIL("Unhandled custom command message type");
     return 1;
 }
 
@@ -782,7 +782,7 @@ int ServerInterfaceCustomCommands::ConvertEventScoreUploadError(int liMessageKin
     // "Unhandled custom command message type: <kind>/<code>\n" + FireAssert(...:1224). Collapsed
     // to one CGS_ASSERT (the streamed kind/code are cosmetic diagnostics; string verbatim from
     // rodata, trailing ': ' preserved).
-    CGS_ASSERT(false, "Unhandled custom command message type: ");
+    CGS_FAIL("Unhandled custom command message type: ");
     return 1;
 }
 
@@ -795,8 +795,8 @@ void ServerInterfaceCustomCommands::UploadEventScoreData(EventScoreUploadData* l
     mpCallbackData = lpData;     // a1[10] -- stw r6, 0x28
     mpCallback     = lCallback;  // a1[9]  -- stw r5, 0x24
 
-    CGS_ASSERT(lpEventScoreUploadData != 0, CGS_ASSERT_MESSAGE_AT("lpEventScoreUploadData",
-        __FILE__, 1071 /* ARTIST 0x82590604 */));
+    CGS_ASSERT_AT(lpEventScoreUploadData != 0, "lpEventScoreUploadData",
+        __FILE__, 1071 /* ARTIST 0x82590604 */);
 
     lpEventScoreUploadData->SerialiseToString(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH);
 

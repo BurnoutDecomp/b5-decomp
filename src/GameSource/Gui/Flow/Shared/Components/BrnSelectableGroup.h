@@ -97,9 +97,9 @@ namespace BrnGui
         // @ 0x8241EA28 -- assert a row is highlighted, return its id.
         u64 GetHighlightedId() const
         {
-            CGS_ASSERT(GetHighlighted() != 0,
-                CGS_ASSERT_MESSAGE_AT("GetHighlighted()",
-                                      "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 218));
+            CGS_ASSERT_AT(GetHighlighted() != 0,
+                "GetHighlighted()",
+                                      "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 218);
             return GetHighlighted()->GetId();
         }
         // The highlight cursor itself (-1 == none). DWARF BrnSelectableGroup.h:203 declares it;

@@ -160,20 +160,20 @@ void BehaviourFailsafe::Construct()
 // ----------------------------------------------------------------------------
 bool BehaviourFailsafe::Prepare(const BehaviourSharedPrepareReleaseInfo& lSharedInfo)
 {
-    CGS_ASSERT(lSharedInfo.mpDirectorResourceManager != 0, CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpDirectorResourceManager", CGS_ARTIST_FILE, 73));   // :73
+    CGS_ASSERT_AT(lSharedInfo.mpDirectorResourceManager != 0, "lSharedInfo.mpDirectorResourceManager", CGS_ARTIST_FILE, 73);   // :73
     const DirectorResourceManager& lrResources = *lSharedInfo.GetDirectorResourceManager();
 
-    CGS_ASSERT(lrResources.GetFailsafe().Num_ShotList() > 0,
-               CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpDirectorResourceManager->GetFailsafe().Num_ShotList() > 0", CGS_ARTIST_FILE, 74));              // :74
+    CGS_ASSERT_AT(lrResources.GetFailsafe().Num_ShotList() > 0,
+               "lSharedInfo.mpDirectorResourceManager->GetFailsafe().Num_ShotList() > 0", CGS_ARTIST_FILE, 74);              // :74
     const Attrib::Gen::iceanim lShot(lrResources.GetFailsafe().ShotList(0), 0);
 
     const bool lbControllerPrepared = mKeyAnimController.Prepare(lrResources, lShot.GetAnimGuid());
-    CGS_ASSERT(lbControllerPrepared,
-               CGS_ASSERT_MESSAGE_AT("mKeyAnimController.Prepare(*lSharedInfo.mpDirectorResourceManager, lShot.Guid())", CGS_ARTIST_FILE, 76));     // :76
+    CGS_ASSERT_AT(lbControllerPrepared,
+               "mKeyAnimController.Prepare(*lSharedInfo.mpDirectorResourceManager, lShot.Guid())", CGS_ARTIST_FILE, 76);     // :76
     (void)lbControllerPrepared;
 
     const ICE::ICETakeData* lpTakeData = lrResources.GetKeyAnimFromGuid(lShot.GetAnimGuid());
-    CGS_ASSERT(lpTakeData != 0, CGS_ASSERT_MESSAGE_AT("lpTakeData != NULL", CGS_ARTIST_FILE, 80));                                                 // :80
+    CGS_ASSERT_AT(lpTakeData != 0, "lpTakeData != NULL", CGS_ARTIST_FILE, 80);                                                 // :80
     SetDebugParametersName(lpTakeData->GetName());
 
     mOrientationLag.SetParameters(&mOrientationLagParams);
@@ -199,7 +199,7 @@ bool BehaviourFailsafe::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSh
 {
     static f32 sfRotationRate = 10.0f;   // degrees per second
 
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 102));                                             // :102
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters != NULL", CGS_ARTIST_FILE, 102);                                             // :102
 
     lrCamera.GetState().SetFlag(CameraState::E_FLAG_VALID, true);
 

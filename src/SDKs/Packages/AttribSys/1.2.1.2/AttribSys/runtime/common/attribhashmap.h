@@ -118,10 +118,10 @@ namespace Attrib
         // FAKEMATCH: Inlining keeps the shared guard in the ARTIST callers.
         __forceinline void AddRef() const
         {
-            CGS_ASSERT(muRefCount < 0xFFFF,
-                CGS_ASSERT_MESSAGE_AT("Exceeded collection refcount maximum!\n",
+            CGS_ASSERT_AT(muRefCount < 0xFFFF,
+                "Exceeded collection refcount maximum!\n",
                     "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/common/attribhashmap.h",
-                    622 /* ARTIST 0x82802908 */));
+                    622 /* ARTIST 0x82802908 */);
             ++muRefCount;
         }
         // ~ClassPrivate's teardown pair (@0x8280F4D8): zero the live count up

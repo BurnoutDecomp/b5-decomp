@@ -25,9 +25,9 @@ namespace CgsModule
     {
         // ARTIST 0x8286E120 validates the requested alignment and the buffer address.
 
-        CGS_ASSERT(luAlignment >= 16, CGS_ASSERT_MESSAGE_AT("luAlignment >= 16", KAC_ARTIST_IO_BUFFER_STACK_FILE, 83));
-        CGS_ASSERT((reinterpret_cast<intptr_t>(lpMemory) & 0xf) == 0, CGS_ASSERT_MESSAGE_AT(
-            "0 == (reinterpret_cast<intptr_t>(lpData) & 0xf )", KAC_ARTIST_IO_BUFFER_STACK_FILE, 84));
+        CGS_ASSERT_AT(luAlignment >= 16, "luAlignment >= 16", KAC_ARTIST_IO_BUFFER_STACK_FILE, 83);
+        CGS_ASSERT_AT((reinterpret_cast<intptr_t>(lpMemory) & 0xf) == 0,
+            "0 == (reinterpret_cast<intptr_t>(lpData) & 0xf )", KAC_ARTIST_IO_BUFFER_STACK_FILE, 84);
 
         mpData = static_cast<u8*>(lpMemory);
         muSize = luSize;
@@ -59,7 +59,7 @@ namespace CgsModule
         const u32 luNewAllocated = muAllocated + luAlignedSize;
         if (luNewAllocated > muSize)
         {
-            CGS_ASSERT_STREAM_AT(false, "Error allocating " << luAlignedSize << " bytes\n",
+            CGS_FAIL_STREAM_AT("Error allocating " << luAlignedSize << " bytes\n",
                                  KAC_ARTIST_IO_BUFFER_STACK_FILE, 171);
             return NULL;
         }
@@ -104,7 +104,7 @@ namespace CgsModule
         if (luDataOffset + luSize != muAllocated)
         {
             DebugPrintStack();
-            CGS_ASSERT_STREAM_AT(false, "Attempt to free data that is not on or at top of stack\n",
+            CGS_FAIL_STREAM_AT("Attempt to free data that is not on or at top of stack\n",
                                  KAC_ARTIST_IO_BUFFER_STACK_FILE, 255);
             return false;
         }

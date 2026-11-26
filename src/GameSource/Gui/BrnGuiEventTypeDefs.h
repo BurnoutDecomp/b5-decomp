@@ -1126,9 +1126,9 @@ public:
     // body, assert included.
     void Construct(const char* lpcOverlayName)
     {
-        CGS_ASSERT(lpcOverlayName != 0,
-                   CGS_ASSERT_STREAM_MESSAGE_AT("Invalid Overlay Id",
-                       "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7608));
+        CGS_ASSERT_STREAM_AT(lpcOverlayName != 0,
+                   "Invalid Overlay Id",
+                       "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7608);
         mOverlayId = CgsIDCompress(lpcOverlayName);
     }
 };

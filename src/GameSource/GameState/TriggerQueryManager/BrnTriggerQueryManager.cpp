@@ -232,8 +232,8 @@ void TriggerQueryManager::UpdateTriggers(
     // branch is the next instruction. Re-read off the export this pass). When the player is inactive UpdateTriggers does
     // nothing further but set mbTriggersUpdated=true -- it does NOT rebuild even on the first
     // un-updated frame.
-    CGS_ASSERT(lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 967));
+    CGS_ASSERT_AT(lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 967);
 
     const bool lbPlayerCarActive = lpActiveRaceCarInterface->IsPlayerCarActive();
     if (lbPlayerCarActive)
@@ -472,8 +472,8 @@ void TriggerQueryManager::PreWorldUpdate(
     {
         const u16 luRegionIndex = maLastPlayerTriggers.GetItem(luTrigger);
 
-        CGS_ASSERT(static_cast<s32>(luRegionIndex) < lpTriggerData->GetRegionCount(),
-                   CGS_ASSERT_MESSAGE_AT("liRegionIndex < miRegionCount", "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h", 624));   // BrnTriggerData.h:624
+        CGS_ASSERT_AT(static_cast<s32>(luRegionIndex) < lpTriggerData->GetRegionCount(),
+                   "liRegionIndex < miRegionCount", "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h", 624);   // BrnTriggerData.h:624
 
         const BrnTrigger::TriggerRegion* lpRegion = lpTriggerData->GetRegion(luRegionIndex);
 
@@ -555,7 +555,7 @@ bool TriggerQueryManager::AddLandmarkIndexForGameMode(LandmarkIndex lLandmarkInd
 // X360 0x82355D78.
 LightTriggerId TriggerQueryManager::GetPlayerCurrentTrafficLightId() const
 {
-    CGS_ASSERT(IsPlayerInTrafficLightRegion(), CGS_ASSERT_MESSAGE_AT("IsPlayerInTrafficLightRegion()", CGS_ARTIST_BRNTRIGGERQUERYMANAGER_FILE, 318));
+    CGS_ASSERT_AT(IsPlayerInTrafficLightRegion(), "IsPlayerInTrafficLightRegion()", CGS_ARTIST_BRNTRIGGERQUERYMANAGER_FILE, 318);
     return mPlayerCurrentTrafficLightId;
 }
 
@@ -641,8 +641,8 @@ void PackedIndex::SetGlobalRaceCarIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex
     CGS_ASSERT((leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT) &&
                (leGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID),
                "Bad Global Race Car Index Set : ");
-    CGS_ASSERT((static_cast<s32>(leGlobalRaceCarIndex) & 0xff) == static_cast<s32>(leGlobalRaceCarIndex),
-               CGS_ASSERT_MESSAGE_AT("(leGlobalRaceCarIndex & 0xff) == leGlobalRaceCarIndex", CGS_ARTIST_BRNTRIGGERQUERYMANAGER_FILE, 434));
+    CGS_ASSERT_AT((static_cast<s32>(leGlobalRaceCarIndex) & 0xff) == static_cast<s32>(leGlobalRaceCarIndex),
+               "(leGlobalRaceCarIndex & 0xff) == leGlobalRaceCarIndex", CGS_ARTIST_BRNTRIGGERQUERYMANAGER_FILE, 434);
 
     // X360: stw (a2 & 0xff) @ this+0 (meGlobalRaceCarIndex).
     meGlobalRaceCarIndex = static_cast<EGlobalRaceCarIndex>(static_cast<s32>(leGlobalRaceCarIndex) & 0xff);
@@ -661,8 +661,8 @@ void PackedIndex::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex
     CGS_ASSERT((leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) &&
                (leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID),
                "Bad Active Race Car Index Set : ");
-    CGS_ASSERT((static_cast<s32>(leActiveRaceCarIndex) & 0xff) == static_cast<s32>(leActiveRaceCarIndex),
-               CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex & 0xff) == leActiveRaceCarIndex", CGS_ARTIST_BRNTRIGGERQUERYMANAGER_FILE, 443));
+    CGS_ASSERT_AT((static_cast<s32>(leActiveRaceCarIndex) & 0xff) == static_cast<s32>(leActiveRaceCarIndex),
+               "(leActiveRaceCarIndex & 0xff) == leActiveRaceCarIndex", CGS_ARTIST_BRNTRIGGERQUERYMANAGER_FILE, 443);
 
     // X360: stw (a2 & 0xff) @ this+4 (meActiveRaceCarIndex).
     meActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leActiveRaceCarIndex) & 0xff);
@@ -676,10 +676,10 @@ void TriggerQueryManager::SubmitTriggerQueries(
     GameStateModuleIO::OutputBuffer* lpOutput,
     const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
 {
-    CGS_ASSERT(lpOutput != NULL, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", CGS_ARTIST_FILE, 795));
-    CGS_ASSERT(lpActiveRaceCarInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface != NULL", CGS_ARTIST_FILE, 796));
+    CGS_ASSERT_AT(lpOutput != NULL, "lpOutput != NULL", CGS_ARTIST_FILE, 795);
+    CGS_ASSERT_AT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL", CGS_ARTIST_FILE, 796);
     GameStateModuleIO::TriggerQueryInputInterface* lpTriggerInterface = lpOutput->GetTriggerQueryInputInterface();
-    CGS_ASSERT(lpTriggerInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpTriggerInterface != NULL", CGS_ARTIST_FILE, 800));
+    CGS_ASSERT_AT(lpTriggerInterface != NULL, "lpTriggerInterface != NULL", CGS_ARTIST_FILE, 800);
     for (s32 liCar = static_cast<s32>(lpActiveRaceCarInterface->maCarsInTheRace.GetLength()); liCar > 0; )
     {
         const BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData& lrCar = lpActiveRaceCarInterface->maCarsInTheRace[--liCar];
@@ -826,13 +826,13 @@ void TriggerQueryManager::PostWorldUpdate(
     using GameStateModuleIO::SoundTriggerAction;
     using BrnWorld::TriggerEntityModuleIO::OutLineTestResultEvent;
     CgsDev::PerfMonCpu::StartMonitor(gsiPostWorldUpdatePM);
-    CGS_ASSERT(lpInput != NULL, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 408));
+    CGS_ASSERT_AT(lpInput != NULL, "lpInput != NULL", CGS_ARTIST_FILE, 408);
     const BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface* lpTriggerResults = lpInput->GetTriggerEntityOutputInterface();
-    CGS_ASSERT(lpTriggerResults != NULL, CGS_ASSERT_MESSAGE_AT("lpTriggerResults != NULL", CGS_ARTIST_FILE, 412));
+    CGS_ASSERT_AT(lpTriggerResults != NULL, "lpTriggerResults != NULL", CGS_ARTIST_FILE, 412);
     const BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface* lpTriggerResultQueue = lpTriggerResults;
-    CGS_ASSERT(lpTriggerResultQueue != NULL, CGS_ASSERT_MESSAGE_AT("lpTriggerResultQueue != NULL", CGS_ARTIST_FILE, 416));
+    CGS_ASSERT_AT(lpTriggerResultQueue != NULL, "lpTriggerResultQueue != NULL", CGS_ARTIST_FILE, 416);
     const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface = lpInput->GetActiveRaceCarOutputInterface();
-    CGS_ASSERT(lpActiveRaceCarInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface != NULL", CGS_ARTIST_FILE, 419));
+    CGS_ASSERT_AT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL", CGS_ARTIST_FILE, 419);
     // 82386CD8..CEC: these are results for this frame, including an empty one.
     lpModeManager->ClearModeStartRegion();
     mbPlayerInTrafficLightRegion = false;

@@ -141,7 +141,7 @@ void DualGinsuExhaustEffect::AttachController(
         mpHybridControl = static_cast<HybridExhaustControl*>(apController);
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+        CGS_FAIL_STREAM_AT("Cound't attach controller " << apController->GetId(),
                              BRN_DUALGINSUEFFECT_CPP_FILE, 1306);
         break;
     }
@@ -186,9 +186,9 @@ bool DualGinsuExhaustEffect::Attach()
         return true;
     default:
         // ARTIST 0x826F27A0: BrnDualGinsuEffect.cpp line 1375 in the original.
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unhandled state",
+        CGS_FAIL_AT("Unhandled state",
             CGS_ARTIST_FILE,
-            1375));
+            1375);
         return false;
     }
 }
@@ -211,9 +211,9 @@ bool DualGinsuExhaustEffect::Detach()
         return true;
     default:
         // ARTIST 0x826F2804: this effect lives in BrnDualGinsuEffect.cpp in the original (line 1421).
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unhandled state",
+        CGS_FAIL_AT("Unhandled state",
             CGS_ARTIST_FILE,
-            1421));
+            1421);
         return false;
     }
 }

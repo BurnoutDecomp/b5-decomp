@@ -21,7 +21,7 @@ namespace AIModuleIO
     // Faithfully tests the WRITE bit (do not "fix" to read).
     OutputBuffer::RouteResponseQueue* OutputBuffer::GetRouteMapResponseQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 430));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 430);
         return &mRouteResponseQueue;
     }
 }

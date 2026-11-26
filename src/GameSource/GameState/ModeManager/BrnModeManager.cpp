@@ -44,7 +44,7 @@ namespace BrnGameState
 // previous-state mirror; a finished mode still exits while simulation is paused.
 void ModeManager::PausedUpdate(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 1019));
+    CGS_ASSERT_AT(lpOutputBuffer != 0, "lpOutput", CGS_ARTIST_FILE, 1019);
     GameStateModuleIO::GameModeOutputInterface* const lpModeOutput =
         lpOutputBuffer->GetGameModeOutputInterface();
     lpModeOutput->miCurrentGameModeType = meCurrentGameModeType;
@@ -108,14 +108,14 @@ bool ModeManager::IsInPostEvent() const
 // X360 0x82329890. The car's next-expected checkpoint (clamped to u8 by the X360).
 s32 ModeManager::GetNextLandmarkIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
-            CGS_ARTIST_FILE, 5483 /* ARTIST 0x823298BC */));
-    CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
-            CGS_ARTIST_FILE, 5484 /* ARTIST 0x823298E0 */));
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= 0,
+        "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
+            CGS_ARTIST_FILE, 5483 /* ARTIST 0x823298BC */);
+
+    CGS_ASSERT_AT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
+        "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
+            CGS_ARTIST_FILE, 5484 /* ARTIST 0x823298E0 */);
+
 
     const s32 liNext = maCarCheckpointData[leGlobalRaceCarIndex].GetNextCheckpointIndex();
     return static_cast<u8>(liNext);   // X360 clrlwi r3,r3,24 (low byte -- the LandmarkIndex)
@@ -124,9 +124,9 @@ s32 ModeManager::GetNextLandmarkIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex) 
 // X360 0x8231E960. Popcount of the car's "remaining" bit set.
 u32 ModeManager::CountCheckpointsRemaining(EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= 0, CGS_ASSERT_MESSAGE_AT("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5549));
-    CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5550));
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= 0, "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5549);
+    CGS_ASSERT_AT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
+               "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5550);
 
     // The X360 inlines a SWAR popcount over the car's remaining bit mask. The semantically-equivalent
     // named operation: gather every still-remaining checkpoint index; the count IS that population.
@@ -139,20 +139,20 @@ u32 ModeManager::CountCheckpointsRemaining(EGlobalRaceCarIndex leGlobalRaceCarIn
 // X360 0x8231E800. Mark a checkpoint as reached by the given car.
 void ModeManager::MarkCarHittingCheckpoint(u32 luCheckpointIndex, EGlobalRaceCarIndex leGlobalRaceCarIndex)
 {
-    CGS_ASSERT(static_cast<s32>(luCheckpointIndex) >= 0,
-        CGS_ASSERT_MESSAGE_AT("liCheckpointIndex >= 0", CGS_ARTIST_FILE, 5514 /* ARTIST 0x8231E830 */));
-    CGS_ASSERT(luCheckpointIndex < muNumLandmarks,
-        CGS_ASSERT_MESSAGE_AT(
-            "static_cast<uint32_t>( liCheckpointIndex ) < muNumLandmarks",
-            CGS_ARTIST_FILE, 5515 /* ARTIST 0x8231E860 */));
-    CGS_ASSERT(leGlobalRaceCarIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
-            CGS_ARTIST_FILE, 5517 /* ARTIST 0x8231E884 */));
-    CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
-            CGS_ARTIST_FILE, 5518 /* ARTIST 0x8231E8A8 */));
+    CGS_ASSERT_AT(static_cast<s32>(luCheckpointIndex) >= 0,
+        "liCheckpointIndex >= 0", CGS_ARTIST_FILE, 5514 /* ARTIST 0x8231E830 */);
+    CGS_ASSERT_AT(luCheckpointIndex < muNumLandmarks,
+        "static_cast<uint32_t>( liCheckpointIndex ) < muNumLandmarks",
+            CGS_ARTIST_FILE, 5515 /* ARTIST 0x8231E860 */);
+
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= 0,
+        "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
+            CGS_ARTIST_FILE, 5517 /* ARTIST 0x8231E884 */);
+
+    CGS_ASSERT_AT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
+        "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
+            CGS_ARTIST_FILE, 5518 /* ARTIST 0x8231E8A8 */);
+
 
     maCarCheckpointData[leGlobalRaceCarIndex].MarkCheckpointAsHit(static_cast<s32>(luCheckpointIndex));
 }
@@ -160,14 +160,14 @@ void ModeManager::MarkCarHittingCheckpoint(u32 luCheckpointIndex, EGlobalRaceCar
 // X360 0x8231E8D8. Re-arm the car's checkpoint tracker for the next lap.
 void ModeManager::ResetCheckpointDataForNextLap(EGlobalRaceCarIndex leGlobalRaceCarIndex)
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
-            CGS_ARTIST_FILE, 5533 /* ARTIST 0x8231E904 */));
-    CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
-            CGS_ARTIST_FILE, 5534 /* ARTIST 0x8231E928 */));
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= 0,
+        "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
+            CGS_ARTIST_FILE, 5533 /* ARTIST 0x8231E904 */);
+
+    CGS_ASSERT_AT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
+        "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
+            CGS_ARTIST_FILE, 5534 /* ARTIST 0x8231E928 */);
+
 
     maCarCheckpointData[leGlobalRaceCarIndex].SetupCheckpoints(static_cast<s32>(muNumLandmarks));
 }
@@ -175,9 +175,9 @@ void ModeManager::ResetCheckpointDataForNextLap(EGlobalRaceCarIndex leGlobalRace
 // X360 0x82329910. Process a landmark trigger for the given car.
 bool ModeManager::HasRaceCarHitValidCheckpoint(s16 luLandmarkId, EGlobalRaceCarIndex leGlobalRaceCarIndex)
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= 0, CGS_ASSERT_MESSAGE_AT("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5631));
-    CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5632));
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= 0, "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5631);
+    CGS_ASSERT_AT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
+               "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5632);
 
     // Find the mode-local checkpoint index whose landmark-region id matches the triggered landmark.
     u32 luCheckpoint = 0;
@@ -199,15 +199,15 @@ bool ModeManager::HasRaceCarHitValidCheckpoint(s16 luLandmarkId, EGlobalRaceCarI
     // interface (`*(4*(global+525)+interface)`), de-inlined here to the GlobalToActiveRaceCarIndex()
     // helper, which is bodied at BrnModeManager_Accessors.cpp.
     const EActiveRaceCarIndex leActiveRaceCarIndex = GlobalToActiveRaceCarIndex(leGlobalRaceCarIndex);
-    CGS_ASSERT(leActiveRaceCarIndex >= 0, CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5650));
-    CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5651));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= 0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5650);
+    CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5651);
 
     // For the online burning-home-run mode, the car must be in the "running" scoring state.
     if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN)
     {
-        CGS_ASSERT((leActiveRaceCarIndex > -1) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1549));
+        CGS_ASSERT_AT((leActiveRaceCarIndex > -1) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1549);
         CarData* lpCarData = mScoringSystem.GetCarData(leActiveRaceCarIndex);
         // 0x82329910 checks the current team (+0x13C) for the blue runner.
         if ((lpCarData == 0) || (lpCarData->GetTeam() != GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM))
@@ -274,7 +274,7 @@ bool ModeManager::HasPlayerWon()
 void ModeManager::SetupStuntChallenge()
 {
     StuntModeScoringOnline* lpStuntModeScoring = mScoringSystem.GetOnlineStuntScorer();
-    CGS_ASSERT(lpStuntModeScoring != 0, CGS_ASSERT_MESSAGE_AT("lpStuntModeScoring", CGS_ARTIST_FILE, 5584));
+    CGS_ASSERT_AT(lpStuntModeScoring != 0, "lpStuntModeScoring", CGS_ARTIST_FILE, 5584);
     // The reset is the virtual at vtable +0x10 (0x8231EB44..0x8231EB54 `lwz r11,0(r31) ; lwz r11,0x10(r11)
     // ; bctrl`). The object at ss+0x2620 carries the StuntModeScoringOnline vtable 0x820CF9EC (ScoringSystem
     // ctor 0x827E0998), whose +0x10 entry is StuntModeScoringOnline::ClearData 0x82321968.
@@ -289,7 +289,7 @@ void ModeManager::SetupStuntChallenge()
 void ModeManager::EndStuntChallenge()
 {
     StuntModeScoringOnline* lpStuntModeScoring = mScoringSystem.GetOnlineStuntScorer();
-    CGS_ASSERT(lpStuntModeScoring != 0, CGS_ASSERT_MESSAGE_AT("lpStuntModeScoring", CGS_ARTIST_FILE, 5609));
+    CGS_ASSERT_AT(lpStuntModeScoring != 0, "lpStuntModeScoring", CGS_ARTIST_FILE, 5609);
     // The same vtable +0x10 reset as SetupStuntChallenge (0x8231212C..0x8231213C) ==
     // StuntModeScoringOnline::ClearData 0x82321968.
     lpStuntModeScoring->ClearData();
@@ -315,10 +315,10 @@ void ModeManager::OnProfileLoaded()
 void ModeManager::SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liScore)
 {
     CarData* lpCarData = mScoringSystem.GetCarData(lNetworkPlayerID);
-    CGS_ASSERT(lpCarData != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpCarData != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/BrnModeManager.h", 1778 /* ARTIST 0x82363578 */));
+    CGS_ASSERT_AT(lpCarData != 0,
+        "lpCarData != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/BrnModeManager.h", 1778 /* ARTIST 0x82363578 */);
+
 
     // Snapshot the prior online stunt score (CarData+0xD4 == CarScoreData::miOnlineStuntScore) and the
     // car's active-race-car index (CarData+0x144 == meRaceCarIndex) into the network-stunt cache.
@@ -339,7 +339,7 @@ void ModeManager::SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lNetworkPlaye
 // X360 0x82327388. Returns the checkpoint's world position via the mode's checkpoint TriggerData.
 Vector3 ModeManager::GetCheckpointPosition(u32 luCheckpointId) const
 {
-    CGS_ASSERT(luCheckpointId < muNumLandmarks, CGS_ASSERT_MESSAGE_AT("luCheckpointIndex < muNumLandmarks", CGS_ARTIST_FILE_BRNMODEMANAGER, 1748));
+    CGS_ASSERT_AT(luCheckpointId < muNumLandmarks, "luCheckpointIndex < muNumLandmarks", CGS_ARTIST_FILE_BRNMODEMANAGER, 1748);
 
     // The X360 loads the region-table index for this checkpoint, then resolves the owning landmark
     // through the trigger data and reads its box-region position.
@@ -396,8 +396,8 @@ void ModeManager::FillInRaceDistanceInterface(GameStateModuleIO::RaceCarRaceDist
 
     // X360 assert (BrnGameStateSharedIO.h:1421); BrnWorld::KI_MAX_ACTIVE_RACE_CARS == the active-car
     // count == E_ACTIVE_RACE_CAR_INDEX_COUNT (8) in this codebase. Message kept verbatim.
-    CGS_ASSERT(mScoringSystem.GetNumberOfActiveCars() <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("liNumActiveRaceCars <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 1421));
+    CGS_ASSERT_AT(mScoringSystem.GetNumberOfActiveCars() <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "liNumActiveRaceCars <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 1421);
 
     lpRaceDistanceInterface->SetNumActiveRaceCars(mScoringSystem.GetNumberOfActiveCars());   // X360 *(out+0x24) = *(this+0x5C98)
     lpRaceDistanceInterface->SetTotalRaceDistance(mScoringSystem.GetTotalRaceDistance());   // X360 *(out+0x20) = *(this+0x6A94)
@@ -469,7 +469,7 @@ void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOu
         // (online stunt scorer end-of-mode finalise -- see FLAG)
     }
 
-    CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 3208));
+    CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 3208);
     const EActiveRaceCarIndex lePlayer = mpGameStateModule->GetPlayerActiveRaceCarIndex();
 
     lAction.meFinishedGameModeType = meCurrentGameModeType;
@@ -540,7 +540,7 @@ void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOu
 // X360 0x82329B68. Refresh the cumulative results and latch the final-standings flag.
 void ModeManager::TellGuiToShowOnlineFinalStandings()
 {
-    CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 5747));
+    CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 5747);
 
     const bool lbOnline = (mpCurrentGameMode != 0) ? mpCurrentGameMode->IsOnline() : false;
 
@@ -657,7 +657,7 @@ void ModeManager::RaceCarFinishes(EGlobalRaceCarIndex leGlobalRaceCarIndex,
 // ARTIST 0x82311A68.
 void ModeManager::PlayerTriggersLandmark(LandmarkIndex lLandmarkIndex)
 {
-    CGS_ASSERT(lLandmarkIndex != K_INVALID_LANDMARK, CGS_ASSERT_MESSAGE_AT("lLandmarkIndex != K_INVALID_LANDMARK", CGS_ARTIST_FILE, 2660));
+    CGS_ASSERT_AT(lLandmarkIndex != K_INVALID_LANDMARK, "lLandmarkIndex != K_INVALID_LANDMARK", CGS_ARTIST_FILE, 2660);
     mPlayerCurrentLandmark = lLandmarkIndex;
     if (!mpCurrentGameMode && mbModeStartFromRegionEnabled &&
         mpGameStateModule->GetProgressionManager()->LandmarkHasAvailableRaces(lLandmarkIndex))
@@ -958,7 +958,7 @@ const BrnTrigger::TriggerData* ModeManager::GetCheckpointTriggerData() const
 const BrnTraffic::TrafficData* ModeManager::GetTrafficData() const
 {
     const BrnTraffic::TrafficData* lpTrafficData = mpTriggerQueryManager->GetTrafficData();
-    CGS_ASSERT(lpTrafficData != 0, CGS_ASSERT_MESSAGE_AT("lpTrafficData", CGS_ARTIST_FILE_BRNMODEMANAGER, 1631));
+    CGS_ASSERT_AT(lpTrafficData != 0, "lpTrafficData", CGS_ARTIST_FILE_BRNMODEMANAGER, 1631);
     return lpTrafficData;
 }
 
@@ -1198,7 +1198,7 @@ s32 ModeManager::GetOnlineCurrentRound() const
 u32 ModeManager::GetRoadRageTakedownTarget()
 {
     const BrnProgression::ProgressionData* lpProgressionData = mpProgressionManager->GetProgressionData();
-    CGS_ASSERT(lpProgressionData != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionData != NULL", CGS_ARTIST_FILE, 1315));   // BrnModeManager.cpp:1315
+    CGS_ASSERT_AT(lpProgressionData != 0, "lpProgressionData != NULL", CGS_ARTIST_FILE, 1315);   // BrnModeManager.cpp:1315
 
     // The console re-fetches the resource pointer for the count read and inlines
     // ProgressionData::GetProgressionRankData (whose own bound assert is baked at
@@ -1206,7 +1206,7 @@ u32 ModeManager::GetRoadRageTakedownTarget()
     const s32 liLastRank = static_cast<s8>(lpProgressionData->GetProgressionRankCount() - 1);
     const BrnProgression::ProgressionRankData* lpProgressionRankDataLastRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liLastRank));
-    CGS_ASSERT(lpProgressionRankDataLastRank != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionRankDataLastRank", CGS_ARTIST_FILE, 1320));   // :1320
+    CGS_ASSERT_AT(lpProgressionRankDataLastRank != 0, "lpProgressionRankDataLastRank", CGS_ARTIST_FILE, 1320);   // :1320
 
     const s32 liThisRankForGameMode = static_cast<s8>(
         mpProgressionManager->GetProgressionRankForGameMode(GameStateModuleIO::E_MODE_ROAD_RAGE));
@@ -1220,11 +1220,11 @@ u32 ModeManager::GetRoadRageTakedownTarget()
 
     const BrnProgression::ProgressionRankData* lpProgressionRankDataThisRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liThisRankForGameMode));
-    CGS_ASSERT(lpProgressionRankDataThisRank != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionRankDataThisRank", CGS_ARTIST_FILE, 1331));   // :1331
+    CGS_ASSERT_AT(lpProgressionRankDataThisRank != 0, "lpProgressionRankDataThisRank", CGS_ARTIST_FILE, 1331);   // :1331
     const s32 liNextRankForGameMode = static_cast<s8>(liThisRankForGameMode + 1);
     const BrnProgression::ProgressionRankData* lpProgressionRankDataNextRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liNextRankForGameMode));
-    CGS_ASSERT(lpProgressionRankDataNextRank != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionRankDataNextRank", CGS_ARTIST_FILE, 1335));   // :1335
+    CGS_ASSERT_AT(lpProgressionRankDataNextRank != 0, "lpProgressionRankDataNextRank", CGS_ARTIST_FILE, 1335);   // :1335
 
     if (CgsDev::Message::gxMessageFilterFlags & 1)
     {
@@ -1454,7 +1454,7 @@ void ModeManager::SetUpCheckPointsForGameMode(const StartGameModeParams* lpStart
     }
 
     const BrnTrigger::TriggerData* lpTriggerData = GetTriggerData();
-    CGS_ASSERT(lpTriggerData != 0, CGS_ASSERT_MESSAGE_AT("lpTriggerData != NULL", CGS_ARTIST_FILE, 4912));   // BrnModeManager.cpp:4912
+    CGS_ASSERT_AT(lpTriggerData != 0, "lpTriggerData != NULL", CGS_ARTIST_FILE, 4912);   // BrnModeManager.cpp:4912
 
     const BrnProgression::RaceEventData* lpRaceEventData = lpStartGameModeParams->GetEventData();
     const s32 liCheckPointCount = lpRaceEventData->GetCheckpointCount();
@@ -1569,12 +1569,12 @@ void ModeManager::SetupPathfinding(const StartGameModeParams* lpStartGameModePar
         lpGameModeParams->SetAStarDistanceFunction(2);
         break;
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknow A* type", CGS_ARTIST_FILE, 5006));
+        CGS_FAIL_AT("Unknow A* type", CGS_ARTIST_FILE, 5006);
         break;
     }
 
-    CGS_ASSERT(lpRaceEventData->GetCheckpointCount() == lpGameModeParams->GetCheckpointCount(),
-               CGS_ASSERT_MESSAGE_AT("lpRaceEventData->GetCheckpointCount() == lpGameModeParams->GetCheckpointCount()", CGS_ARTIST_FILE, 5012)); // :5012
+    CGS_ASSERT_AT(lpRaceEventData->GetCheckpointCount() == lpGameModeParams->GetCheckpointCount(),
+               "lpRaceEventData->GetCheckpointCount() == lpGameModeParams->GetCheckpointCount()", CGS_ARTIST_FILE, 5012); // :5012
 
     // The console re-reads *(lpRaceEventData + 0x1C) on every pass of BOTH loops (0x8232932C
     // and 0x82329318) rather than caching it -- kept, it is the loop's real bound.
@@ -1654,7 +1654,7 @@ void ModeManager::SetupOpponentData(const StartGameModeParams* lpStartGameModePa
 
     // Console fires this assert BEFORE the event-data test (both operands are already loaded).
     // The missing space in "lpProgressionData!= NULL" is the console's own spelling -- verbatim.
-    CGS_ASSERT(lpProgressionData != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionData!= NULL", CGS_ARTIST_FILE, 5045));   // BrnModeManager.cpp:5045
+    CGS_ASSERT_AT(lpProgressionData != 0, "lpProgressionData!= NULL", CGS_ARTIST_FILE, 5045);   // BrnModeManager.cpp:5045
 
     if (lpEventData == 0)
     {
@@ -1671,7 +1671,7 @@ void ModeManager::SetupOpponentData(const StartGameModeParams* lpStartGameModePa
 
     const BrnProgression::CarOpponentSet* lpOpponentSet =
         lpProgressionData->FindCarOpponentSet(lOriginalCarId, liPlayerRank);
-    CGS_ASSERT(lpOpponentSet != 0, CGS_ASSERT_MESSAGE_AT("lpOpponentSet != NULL", CGS_ARTIST_FILE, 5057));            // BrnModeManager.cpp:5057
+    CGS_ASSERT_AT(lpOpponentSet != 0, "lpOpponentSet != NULL", CGS_ARTIST_FILE, 5057);            // BrnModeManager.cpp:5057
 
     for (s32 liIndex = 0; liIndex < liStartGridCount; ++liIndex)
     {
@@ -1696,8 +1696,8 @@ void ModeManager::SetupOpponentData(const StartGameModeParams* lpStartGameModePa
             const s32 liOpponentCount    = lpOpponentSet->GetOpponentCount();
             const s32 liCarOpponentIndex = static_cast<s32>(
                 lpStartGridSlot->GetOpponentIndex() % static_cast<u32>(liOpponentCount));
-            CGS_ASSERT(liCarOpponentIndex >= 0 && liCarOpponentIndex < liOpponentCount,
-                       CGS_ASSERT_MESSAGE_AT("liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\progression\\BrnOpponentData.h", 224));
+            CGS_ASSERT_AT(liCarOpponentIndex >= 0 && liCarOpponentIndex < liOpponentCount,
+                       "liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\progression\\BrnOpponentData.h", 224);
                                                                               // BrnOpponentData.h:224
             const BrnProgression::CarOpponent* lpCarOpponent =
                 lpOpponentSet->GetCarOpponent(liCarOpponentIndex);
@@ -1986,9 +1986,9 @@ static const s32 KI_TRAINING_TYPE_AFTER_ONLINE_RACE = 62;
 f32 ModeManager::GetCountdownTimeForMode() const
 {
     // Console: `if (meCurrentGameModeType <= -1 || >= 0x12) { assert }`.
-    CGS_ASSERT((meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE) &&
+    CGS_ASSERT_AT((meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE) &&
                (static_cast<s32>(meCurrentGameModeType) < KI_GAME_MODE_SLOTS),
-               CGS_ASSERT_MESSAGE_AT("(meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE) && (meCurrentGameModeType < GameStateModuleIO::E_MODE_COUNT)", CGS_ARTIST_FILE, 2401));
+               "(meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE) && (meCurrentGameModeType < GameStateModuleIO::E_MODE_COUNT)", CGS_ARTIST_FILE, 2401);
     // (BrnModeManager.cpp:2401 -- the assert's own line; note it names E_MODE_COUNT while the asm
     //  compares against 18, which is exactly the 17-vs-18 split the header's KI_GAME_MODE_SLOTS
     //  banner resolves.)
@@ -2109,7 +2109,7 @@ s32 ModeManager::GetPlayersFinishPosition()
         // jumptable default, cases 2,5,7,10 == mode 1,4,6,9 (FACE_OFF, PURSUIT and the two
         // authored-NULL slots ELIMINATOR / TRAFFIC_ATTACK).
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown or unsupported game mode type", CGS_ARTIST_FILE, 3645));   // BrnModeManager.cpp:3645
+            CGS_FAIL_AT("Unknown or unsupported game mode type", CGS_ARTIST_FILE, 3645);   // BrnModeManager.cpp:3645
             return 0;
     }
 }
@@ -2121,7 +2121,7 @@ s32 ModeManager::GetPlayersFinishPosition()
 // override is armed (in which case the console swallows the broadcast entirely).
 void ModeManager::SendFinishedModeAction(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
-    CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 3258));   // BrnModeManager.cpp:3258
+    CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 3258);   // BrnModeManager.cpp:3258
 
     // The console calls GetPlayerActiveRaceCarIndex here and leaves the answer in r3 (it becomes
     // the suppressed path's return value; this method is void in the DWARF signature). The call
@@ -2196,10 +2196,10 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
                 liFinishPosition = static_cast<s32>(mScoringSystem.GetCarRacePosition(lePlayerRaceCarIndex));
             }
 
-            CGS_ASSERT(liFinishPosition != 0, CGS_ASSERT_MESSAGE_AT("luFinishPosition > 0", CGS_ARTIST_FILE, 1437));                     // :1437
+            CGS_ASSERT_AT(liFinishPosition != 0, "luFinishPosition > 0", CGS_ARTIST_FILE, 1437);                     // :1437
             liFinishType = liFinishPosition - 1;
-            CGS_ASSERT(liFinishType >= KI_FINISH_TYPE_1ST, CGS_ASSERT_MESSAGE_AT("leFinishType >= BrnGui::E_FINISH_TYPE_1ST", CGS_ARTIST_FILE, 1439)); // :1439
-            CGS_ASSERT(liFinishType <= KI_FINISH_TYPE_8TH, CGS_ASSERT_MESSAGE_AT("leFinishType <= BrnGui::E_FINISH_TYPE_8TH", CGS_ARTIST_FILE, 1440)); // :1440
+            CGS_ASSERT_AT(liFinishType >= KI_FINISH_TYPE_1ST, "leFinishType >= BrnGui::E_FINISH_TYPE_1ST", CGS_ARTIST_FILE, 1439); // :1439
+            CGS_ASSERT_AT(liFinishType <= KI_FINISH_TYPE_8TH, "leFinishType <= BrnGui::E_FINISH_TYPE_8TH", CGS_ARTIST_FILE, 1440); // :1440
 
             // Only a 1st place counts as a successful attempt (`cntlzw` + `extrwi 1,26` == "== 0").
             lbAttemptSucceeded = (liFinishType == KI_FINISH_TYPE_1ST);
@@ -2344,7 +2344,7 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
             {
                 // The console builds this message through a CgsDev::StrStream into
                 // Assert::gpcMessageBuffer; the text (trailing newline included) is verbatim.
-                CGS_ASSERT(false, "Finished online road rage when not on a team\n");   // :1564
+                CGS_FAIL("Finished online road rage when not on a team\n");   // :1564
                 liFinishType = KI_FINISH_TYPE_FAILED;
             }
             break;
@@ -2397,7 +2397,7 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
         // ---- jumptable default, cases 1,4,6,9 -----------------------------------------------
         default:
             liFinishType = KI_FINISH_TYPE_UNKNOWN;                        // console sets 0xB FIRST
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown or unsupported game mode type", CGS_ARTIST_FILE, 1646));   // :1646
+            CGS_FAIL_AT("Unknown or unsupported game mode type", CGS_ARTIST_FILE, 1646);   // :1646
             break;
     }
 
@@ -2481,7 +2481,7 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
     SendModeResults(lpOutputBuffer->GetGameActionQueue());        // BrnModeManager.cpp:347
     SendFinishedModeAction(lpOutputBuffer->GetGameActionQueue()); // this file
 
-    CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 1670));   // :1670
+    CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 1670);   // :1670
 
     // ✅ LANDED 2026-09-10 (was: PARKED CALL, conductor decision #6). Console: `GameStateModule::
     // OnModeFinish(mpGameStateModule, lpOutputBuffer)` @0x82390EE0 -- the module-level end-of-mode
@@ -2505,19 +2505,19 @@ void ModeManager::ShowModeResults(
     // read after the prologue). Kept in the signature because the DWARF and the caller pass it.
     (void)lpGlobalRaceCarOutput;
 
-    CGS_ASSERT(lpGameActionQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameActionQueue != NULL", CGS_ARTIST_FILE, 3297));   // :3297
+    CGS_ASSERT_AT(lpGameActionQueue != 0, "lpGameActionQueue != NULL", CGS_ARTIST_FILE, 3297);   // :3297
 
     const ::EActiveRaceCarIndex lePlayerRaceCarIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
-    CGS_ASSERT(lePlayerRaceCarIndex >= 0,
-               CGS_ASSERT_MESSAGE_AT("leLocalPlayerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 3302));            // :3302
-    CGS_ASSERT(lePlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leLocalPlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 3303));         // :3303
+    CGS_ASSERT_AT(lePlayerRaceCarIndex >= 0,
+               "leLocalPlayerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 3302);            // :3302
+    CGS_ASSERT_AT(lePlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leLocalPlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 3303);         // :3303
 
     // Console: `r24 = this + 0x8380` (== &mCurrentGameModeParams) and `addic.` sets the flag the
     // assert tests -- i.e. GetCurrentGameModeParams() != NULL, which for an embedded member is
     // always true. Kept as the console's own diagnostic.
     GameModeParams* lpGameModeParams = &mCurrentGameModeParams;
-    CGS_ASSERT(lpGameModeParams != 0, CGS_ASSERT_MESSAGE_AT("GetCurrentGameModeParams()", CGS_ARTIST_FILE, 3304));           // :3304
+    CGS_ASSERT_AT(lpGameModeParams != 0, "GetCurrentGameModeParams()", CGS_ARTIST_FILE, 3304);           // :3304
 
     // ------------------------------------------------------------------------------------------
     // The 232-byte results record.
@@ -2629,7 +2629,7 @@ void ModeManager::ShowModeResults(
 
         const BrnProgression::ProgressionData* lpProgressionData =
             mpProgressionManager->GetProgressionData();
-        CGS_ASSERT(lpProgressionData != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionData", CGS_ARTIST_FILE, 3341));   // :3341
+        CGS_ASSERT_AT(lpProgressionData != 0, "lpProgressionData", CGS_ARTIST_FILE, 3341);   // :3341
 
         // The console walks the event-junction table inline: count at ProgressionData+0x1C, base at
         // +0x18, 16-byte stride, entry+0x00 == the id, entry+0x04 == the offline event pointer.
@@ -2650,7 +2650,7 @@ void ModeManager::ShowModeResults(
                 }
             }
         }
-        CGS_ASSERT(lpEventData != 0, CGS_ASSERT_MESSAGE_AT("lpEventData", CGS_ARTIST_FILE, 3343));   // :3343
+        CGS_ASSERT_AT(lpEventData != 0, "lpEventData", CGS_ARTIST_FILE, 3343);   // :3343
 
         // record+0xDA == !HasEventBeenWonPreviously(eventId) -- i.e. "this is a first win".
         lAction.mu8FieldDA =
@@ -2701,7 +2701,7 @@ void ModeManager::ShowModeResults(
         lAction.mfField0C = ((lfFinishTime - mfModeTimeLimit) >= 0.0f) ? mfModeTimeLimit : lfFinishTime;
     }
 
-    CGS_ASSERT(lpGameModeParams != 0, CGS_ASSERT_MESSAGE_AT("lpGameModeParams", CGS_ARTIST_FILE, 3388));   // :3388
+    CGS_ASSERT_AT(lpGameModeParams != 0, "lpGameModeParams", CGS_ARTIST_FILE, 3388);   // :3388
 
     // ---- THE PROGRESSION PAYOFF -----------------------------------------------------------------
     // Console gate: `if (!record[+0xE1] || meCurrentGameModeType == 3)` -- i.e. run the progression
@@ -2747,7 +2747,7 @@ void ModeManager::ShowModeResults(
                             ? static_cast<s32>(lAction.mfField0C * KF_SECONDS_TO_MILLISECONDS)
                             : lAction.miField08;
 
-                    CGS_ASSERT(lpGameActionQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameActionQueue", CGS_ARTIST_FILE, 3439));   // :3439
+                    CGS_ASSERT_AT(lpGameActionQueue != 0, "lpGameActionQueue", CGS_ARTIST_FILE, 3439);   // :3439
 
                     // The 16-byte payload the console builds on the stack before the AddEvent.
                     // FLAG: no homed record type for action 18 (see E_ACTION_EVENT_SCORE_TO_UPLOAD);
@@ -2762,14 +2762,14 @@ void ModeManager::ShowModeResults(
                         reinterpret_cast<const CgsModule::Event*>(lacEventScoreToUpload),
                         GameStateModuleIO::E_ACTION_EVENT_SCORE_TO_UPLOAD, 16);
 
-                    CGS_ASSERT(mpProgressionManager != 0, CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 3443));   // :3443
+                    CGS_ASSERT_AT(mpProgressionManager != 0, "mpProgressionManager", CGS_ARTIST_FILE, 3443);   // :3443
                     mpProgressionManager->GetProfile()->SetEventScoreToUpload(lEventId, liScoreToUpload,
                                                                              leGameModeType);
                 }
 
-                CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 3449));            // :3449
-                CGS_ASSERT(mpGameStateModule->GetDeveloperChallengeManager() != 0,
-                           CGS_ASSERT_MESSAGE_AT("mpGameStateModule->GetDeveloperChallengeManager()", CGS_ARTIST_FILE, 3450));          // :3450
+                CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 3449);            // :3449
+                CGS_ASSERT_AT(mpGameStateModule->GetDeveloperChallengeManager() != 0,
+                           "mpGameStateModule->GetDeveloperChallengeManager()", CGS_ARTIST_FILE, 3450);          // :3450
                 mpGameStateModule->GetDeveloperChallengeManager()->OnEventEnd(
                     static_cast<s32>(meCurrentGameModeType),
                     (lAction.miFinishPosition == 1));
@@ -3092,7 +3092,7 @@ const BrnTraffic::LightTriggerStartData* ModeManager::GetStartDataForTrafficLigh
 // ============================================================================
 void ModeManager::SetStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCount, bool lbPushForwards) const
 {
-    CGS_ASSERT(lpGameModeParams != 0, CGS_ASSERT_MESSAGE_AT("lpGameModeParams != NULL", CGS_ARTIST_FILE, 4147));   // BrnModeManager.cpp:4147
+    CGS_ASSERT_AT(lpGameModeParams != 0, "lpGameModeParams != NULL", CGS_ARTIST_FILE, 4147);   // BrnModeManager.cpp:4147
 
     // X360 @0x82328674 `lwz r11, 0x40(r30)`. +0x40 == 64 == GameModeParams::mTrafficLightTriggerId
     // on the console layout (miNumRivals/miNumNetworkPlayers 0..1, mfProgressionRankAsRatio +4,
@@ -3103,11 +3103,11 @@ void ModeManager::SetStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCou
     if (IsLightTriggerIdValid(lTriggerId))
     {
         const BrnTraffic::LightTriggerStartData* lpStartData = GetStartDataForTrafficLight(lTriggerId);
-        CGS_ASSERT(lpStartData != 0, CGS_ASSERT_MESSAGE_AT("lpStartData != NULL", CGS_ARTIST_FILE, 4155));   // :4155
+        CGS_ASSERT_AT(lpStartData != 0, "lpStartData != NULL", CGS_ARTIST_FILE, 4155);   // :4155
 
         // X360 @0x823286D8 `lbz r11, 0x190(r29)` -- an UNSIGNED byte compare against liCarCount.
-        CGS_ASSERT(lpStartData->GetNumStartPositions() >= static_cast<u32>(liCarCount),
-                   CGS_ASSERT_MESSAGE_AT("lpStartData->GetNumStartPositions() >= static_cast<uint32_t>( liCarCount )", CGS_ARTIST_FILE, 4156));   // :4156
+        CGS_ASSERT_AT(lpStartData->GetNumStartPositions() >= static_cast<u32>(liCarCount),
+                   "lpStartData->GetNumStartPositions() >= static_cast<uint32_t>( liCarCount )", CGS_ARTIST_FILE, 4156);   // :4156
 
         for (s32 liIndex = 0; liIndex < liCarCount; ++liIndex)
         {
@@ -3165,7 +3165,7 @@ void ModeManager::SetStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCou
 // ============================================================================
 void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
-    CGS_ASSERT(lpGameActionQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameActionQueue != NULL", CGS_ARTIST_FILE, 3069));   // :3069
+    CGS_ASSERT_AT(lpGameActionQueue != 0, "lpGameActionQueue != NULL", CGS_ARTIST_FILE, 3069);   // :3069
 
     // ---- action 44, size 4: "the player is no longer in a mode-start region" ----------------
     // X360 @0x82343058..0x8234307C: the half-word at +0 from this unit's K_INVALID_LANDMARK
@@ -3187,8 +3187,8 @@ void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActio
     {
         mpCurrentGameMode->SendEvent(E_GME_NEXT);
     }
-    CGS_ASSERT(mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_INTRO,
-               CGS_ASSERT_MESSAGE_AT("mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_INTRO", CGS_ARTIST_FILE, 3089));   // :3089
+    CGS_ASSERT_AT(mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_INTRO,
+               "mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_INTRO", CGS_ARTIST_FILE, 3089);   // :3089
 
     // ---- the online-event fork ----------------------------------------------------------------
     // X360 @0x823430D4..0x8234326C. GameStateModule::IsOnlineGameMode() is called once (0x823430D8);
@@ -3214,8 +3214,8 @@ void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActio
                 // the active-index one, folded because it is a header inline.
                 if (mScoringSystem.GetPlayerDisconnected(leRaceCarIndex))
                 {
-                    CGS_ASSERT(mScoringSystem.GetCarData(leRaceCarIndex) != 0,
-                               CGS_ASSERT_MESSAGE_AT("mScoringSystem.GetCarData(leRaceCarIndex)", CGS_ARTIST_FILE, 3101));   // :3101
+                    CGS_ASSERT_AT(mScoringSystem.GetCarData(leRaceCarIndex) != 0,
+                               "mScoringSystem.GetCarData(leRaceCarIndex)", CGS_ARTIST_FILE, 3101);   // :3101
 
                     // ARTIST 0x8234317C..0x82343190: GetCarData is called again for the test and a
                     // third time for the player id (DWARF lists no car-data local).
@@ -3309,7 +3309,7 @@ void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActio
 // ============================================================================
 void ModeManager::StopModeIntro(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
-    CGS_ASSERT(lpGameActionQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameActionQueue != NULL", CGS_ARTIST_FILE, 3958));   // :3958
+    CGS_ASSERT_AT(lpGameActionQueue != 0, "lpGameActionQueue != NULL", CGS_ARTIST_FILE, 3958);   // :3958
 
     // [x] header_request R2 (LANDED -- see the STATUS stamp at the top of this file): GameStateModuleIO::StopModeIntroAction (id 30, 8 bytes; DWARF
     // BrnGameActions.h:1191-1194).
@@ -3337,7 +3337,7 @@ void ModeManager::StopModeIntro(GameStateModuleIO::GameActionQueue* lpGameAction
 // ============================================================================
 void ModeManager::StartPlayingMode(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
-    CGS_ASSERT(lpGameActionQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameActionQueue != NULL", CGS_ARTIST_FILE, 3167));   // :3167
+    CGS_ASSERT_AT(lpGameActionQueue != 0, "lpGameActionQueue != NULL", CGS_ARTIST_FILE, 3167);   // :3167
 
     // [x] header_request R3 (LANDED -- see the STATUS stamp at the top of this file): GameStateModuleIO::StartPlayingModeAction (id 34 -- already in the
     // enum -- 16 bytes; DWARF BrnGameActions.h:1330-1333).
@@ -3394,8 +3394,8 @@ void ModeManager::FinishOfflineModeIntro()
     // `lwz 0xD98` + null-test (== IsInGameMode()) and then the
     // `mode ? mode->mbIsOnline(+0xAC) : 0` ladder (== IsOnlineGameMode(), the COMMITTED body at
     // BrnModeManager.cpp:37). De-inlined to both accessors.
-    CGS_ASSERT(IsInGameMode(), CGS_ASSERT_MESSAGE_AT("IsInGameMode()", CGS_ARTIST_FILE, 2521));             // :2521
-    CGS_ASSERT(!IsOnlineGameMode(), CGS_ASSERT_MESSAGE_AT("!IsOnlineGameMode()", CGS_ARTIST_FILE, 2522));   // :2522
+    CGS_ASSERT_AT(IsInGameMode(), "IsInGameMode()", CGS_ARTIST_FILE, 2521);             // :2521
+    CGS_ASSERT_AT(!IsOnlineGameMode(), "!IsOnlineGameMode()", CGS_ARTIST_FILE, 2522);   // :2522
 
     mpCurrentGameMode->SendEvent(E_GME_NEXT);
 }
@@ -3539,7 +3539,7 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     mModeManagerDebugComponent.Register();
 
     ScoringSystem* lpScoringSystem = GetScoringSystem();
-    CGS_ASSERT(lpScoringSystem != 0, CGS_ASSERT_MESSAGE_AT("lpScoringSystem", CGS_ARTIST_BRNSCORINGSYSTEMDEBUGCOMPONENT_FILE, 99));
+    CGS_ASSERT_AT(lpScoringSystem != 0, "lpScoringSystem", CGS_ARTIST_BRNSCORINGSYSTEMDEBUGCOMPONENT_FILE, 99);
     mScoringSystemDebugComponent.Construct(lpScoringSystem);
     mScoringSystemDebugComponent.Register();
 
@@ -3570,15 +3570,15 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     mChallengeManager.Construct(lpGameStateModule, this, lpProgressionManager,
                                 lpRoadRulesManager, lpTriggerQueryManager);
 
-    CGS_ASSERT(lpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateModule", CGS_ARTIST_FILE, 202));      // BrnModeManager.cpp:202
+    CGS_ASSERT_AT(lpGameStateModule != 0, "lpGameStateModule", CGS_ARTIST_FILE, 202);      // BrnModeManager.cpp:202
     mpGameStateModule = lpGameStateModule;                              // +27992
 
-    CGS_ASSERT(lpProgressionManager != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionManager", CGS_ARTIST_FILE, 205));// BrnModeManager.cpp:205
+    CGS_ASSERT_AT(lpProgressionManager != 0, "lpProgressionManager", CGS_ARTIST_FILE, 205);// BrnModeManager.cpp:205
     mpProgressionManager = lpProgressionManager;                        // +27996
 
     mpTriggerQueryManager = lpTriggerQueryManager;                      // +28000 (no assert on console)
 
-    CGS_ASSERT(lpNetworkRoundManager != 0, CGS_ASSERT_MESSAGE_AT("lpNetworkRoundManager", CGS_ARTIST_FILE, 210)); // BrnModeManager.cpp:210
+    CGS_ASSERT_AT(lpNetworkRoundManager != 0, "lpNetworkRoundManager", CGS_ARTIST_FILE, 210); // BrnModeManager.cpp:210
     mpNetworkRoundManager = lpNetworkRoundManager;                      // +28004
 
     // ------------------------------------------------------------------------
@@ -3927,15 +3927,15 @@ void ModeManager::SetOnlineRaceCars(GameModeParams* lpGameModeParams,
     // The console folds GetProgressionManager() into a fixed offset off mpGameStateModule and tests
     // the folded address against null, i.e. this is a plain "the module has a progression manager"
     // guard; the answer is never used.
-    CGS_ASSERT(mpGameStateModule->GetProgressionManager() != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpGameStateModule->GetProgressionManager()",
-            KAC_ARTIST_ASSERT_FILE, 4334 /* ARTIST 0x82311ED0 */));
+    CGS_ASSERT_AT(mpGameStateModule->GetProgressionManager() != 0,
+        "mpGameStateModule->GetProgressionManager()",
+            KAC_ARTIST_ASSERT_FILE, 4334 /* ARTIST 0x82311ED0 */);
 
-    CGS_ASSERT(lpStartNetworkGameEvent->miNumRaceCars > 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpStartNetworkGameEvent->miNumRaceCars > 0",
-            KAC_ARTIST_ASSERT_FILE, 4336 /* ARTIST 0x82311EF8 */));
+
+    CGS_ASSERT_AT(lpStartNetworkGameEvent->miNumRaceCars > 0,
+        "lpStartNetworkGameEvent->miNumRaceCars > 0",
+            KAC_ARTIST_ASSERT_FILE, 4336 /* ARTIST 0x82311EF8 */);
+
 
     // The RIVAL count, not the car count: the local player is not one of the network players the
     // roster loops over. Stored as a byte.
@@ -3944,17 +3944,17 @@ void ModeManager::SetOnlineRaceCars(GameModeParams* lpGameModeParams,
 
     lpGameModeParams->mLocalNetworkPlayerID = lpStartNetworkGameEvent->mLocalNetworkPlayerID;
 
-    CGS_ASSERT(mpCurrentGameMode != 0,
-        CGS_ASSERT_MESSAGE_AT("mpCurrentGameMode", KAC_ARTIST_ASSERT_FILE, 4342 /* ARTIST 0x82311F34 */));
-    CGS_ASSERT(mpCurrentGameMode->IsOnline(),
-        CGS_ASSERT_MESSAGE_AT(
-            "mpCurrentGameMode->IsOnline()",
-            KAC_ARTIST_ASSERT_FILE, 4343 /* ARTIST 0x82311F60 */));
+    CGS_ASSERT_AT(mpCurrentGameMode != 0,
+        "mpCurrentGameMode", KAC_ARTIST_ASSERT_FILE, 4342 /* ARTIST 0x82311F34 */);
+    CGS_ASSERT_AT(mpCurrentGameMode->IsOnline(),
+        "mpCurrentGameMode->IsOnline()",
+            KAC_ARTIST_ASSERT_FILE, 4343 /* ARTIST 0x82311F60 */);
+
 
     const OnlineGameMode* lpCurrentOnlineGameMode =
         static_cast<const OnlineGameMode*>(mpCurrentGameMode);
-    CGS_ASSERT(lpCurrentOnlineGameMode != 0,
-        CGS_ASSERT_MESSAGE_AT("lpCurrentOnlineGameMode", KAC_ARTIST_ASSERT_FILE, 4345 /* ARTIST 0x82311F88 */));
+    CGS_ASSERT_AT(lpCurrentOnlineGameMode != 0,
+        "lpCurrentOnlineGameMode", KAC_ARTIST_ASSERT_FILE, 4345 /* ARTIST 0x82311F88 */);
 
     for (s32 liRaceCar = 0; liRaceCar < GameStateModuleIO::KI_MAX_RACE_CARS; ++liRaceCar)
     {
@@ -4286,8 +4286,8 @@ void ModeManager::HandleLoadingScreenLoaded(GameStateModuleIO::GameActionQueue* 
         return;
     }
 
-    CGS_ASSERT(lpGameActionQueue != NULL, CGS_ASSERT_MESSAGE_AT("lpActionQueue", CGS_ARTIST_FILE, 1381));
-    CGS_ASSERT(mpNetworkRoundManager != NULL, CGS_ASSERT_MESSAGE_AT("mpNetworkRoundManager", CGS_ARTIST_FILE, 1382));
+    CGS_ASSERT_AT(lpGameActionQueue != NULL, "lpActionQueue", CGS_ARTIST_FILE, 1381);
+    CGS_ASSERT_AT(mpNetworkRoundManager != NULL, "mpNetworkRoundManager", CGS_ARTIST_FILE, 1382);
 
     // X360 @0x8234B954..0x8234B964: `lwz r10, 0x12C(r11)` / `lwz r11, 0x128(r11)` / `subf r11,r11,r10`
     // / `addi r6, r11, -1` -- miTotalRounds(+300) minus miRoundsRemaining(+296) minus one == the
@@ -4345,12 +4345,12 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     // 0x8234B1B4 and 0x8234B1D4 -- two Begin/Fire/End sequences sharing r30). Reproduced verbatim.
     CGS_ASSERT(lpGameModeParams != NULL, "lpGameModeParams != NULL");
     CGS_ASSERT(lpGameModeParams != NULL, "lpGameModeParams != NULL");
-    CGS_ASSERT(lpStartGameModeParams != NULL, CGS_ASSERT_MESSAGE_AT("lpStartGameModeParams != NULL", CGS_ARTIST_FILE, 1164));
+    CGS_ASSERT_AT(lpStartGameModeParams != NULL, "lpStartGameModeParams != NULL", CGS_ARTIST_FILE, 1164);
     CGS_ASSERT(lpTriggerData != NULL, "lpTriggerData != NULL");
-    CGS_ASSERT(!mpCurrentGameMode->IsOnline()
+    CGS_ASSERT_AT(!mpCurrentGameMode->IsOnline()
                    || (liCurrentRound >= 0
                        && static_cast<u32>(liCurrentRound) < KU_MAX_ONLINE_ROUNDS_IN_MODE),
-               CGS_ASSERT_MESSAGE_AT("!mpCurrentGameMode->IsOnline() || (liCurrentRound >= 0 && uint32_t(liCurrentRound) < GameStateModuleIO::KU_MAX_ONLINE_ROUNDS_IN_MODE)", CGS_ARTIST_FILE, 1166));
+               "!mpCurrentGameMode->IsOnline() || (liCurrentRound >= 0 && uint32_t(liCurrentRound) < GameStateModuleIO::KU_MAX_ONLINE_ROUNDS_IN_MODE)", CGS_ARTIST_FILE, 1166);
 
     const bool lbRoadRage = (meCurrentGameModeType == GameStateModuleIO::E_MODE_ROAD_RAGE);
 
@@ -4446,7 +4446,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         const s32 liTakedownTarget = static_cast<s32>(GetRoadRageTakedownTarget());
 
         const BrnProgression::ProgressionData* lpProgressionData = mpProgressionManager->GetProgressionData();
-        CGS_ASSERT(lpProgressionData != NULL, CGS_ASSERT_MESSAGE_AT("lpProgressionData != NULL", CGS_ARTIST_FILE, 1236));
+        CGS_ASSERT_AT(lpProgressionData != NULL, "lpProgressionData != NULL", CGS_ARTIST_FILE, 1236);
 
         // --------------------------------------------------------------------------------------
         // [X] FRONTIER -- THE ROAD-RAGE PROGRESSION SEED IS PARKED. Console (asm 0x8234B544..
@@ -4504,7 +4504,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
             lpProgressionData->GetProgressionRankData(static_cast<u32>(
                 mpProgressionManager->GetProgressionRankForGameMode(
                     GameStateModuleIO::E_MODE_ROAD_RAGE)));                           // 0x8234B544..0x8234B55C
-        CGS_ASSERT(lpProgressionRankDataRank != NULL, CGS_ASSERT_MESSAGE_AT("lpProgressionRankDataRank", CGS_ARTIST_FILE, 1241));  // :1241
+        CGS_ASSERT_AT(lpProgressionRankDataRank != NULL, "lpProgressionRankDataRank", CGS_ARTIST_FILE, 1241);  // :1241
 
         // ss+0x4B40..0x4B57 -- the inlined RoadRageModeScoring::Prepare (0x8234B588..0x8234B5C4).
         mScoringSystem.GetRoadRageScoring()->Prepare(
@@ -4519,7 +4519,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         mScoringSystem.mauiMedalScores[1] = static_cast<u32>(liTakedownTarget - 1);
         mScoringSystem.mauiMedalScores[2] = static_cast<u32>(liTakedownTarget - 2);
 
-        CGS_ASSERT(muNumLandmarks == 0, CGS_ASSERT_MESSAGE_AT("muNumLandmarks == 0", CGS_ARTIST_FILE, 1245));
+        CGS_ASSERT_AT(muNumLandmarks == 0, "muNumLandmarks == 0", CGS_ARTIST_FILE, 1245);
         return;
     }
 
@@ -4615,9 +4615,9 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
                                  s32                                 liCurrentRound,
                                  StartGameModeParams*                lpStartGameModeParams)
 {
-    CGS_ASSERT(lpGameModeParams != NULL, CGS_ASSERT_MESSAGE_AT("lpGameModeParams != NULL", CGS_ARTIST_FILE, 2919));
-    CGS_ASSERT(lpGameActionQueue != NULL, CGS_ASSERT_MESSAGE_AT("lpGameActionQueue != NULL", CGS_ARTIST_FILE, 2920));
-    CGS_ASSERT(lpStartGameModeParams != NULL, CGS_ASSERT_MESSAGE_AT("lpStartGameModeParams != NULL", CGS_ARTIST_FILE, 2921));
+    CGS_ASSERT_AT(lpGameModeParams != NULL, "lpGameModeParams != NULL", CGS_ARTIST_FILE, 2919);
+    CGS_ASSERT_AT(lpGameActionQueue != NULL, "lpGameActionQueue != NULL", CGS_ARTIST_FILE, 2920);
+    CGS_ASSERT_AT(lpStartGameModeParams != NULL, "lpStartGameModeParams != NULL", CGS_ARTIST_FILE, 2921);
 
     mbRivalShutDown        = false;   // +0x94FA  (Construct does NOT zero this one)
     mbHasCrashedOut = false;   // +0x94FE
@@ -4735,7 +4735,7 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
             // sub_8231DD88 RESOLVED: the maCarData[8] search on GetNetworkPlayerID (base ss+20224,
             // stride 344, id at car+328) == ScoringSystem::GetCarData(NetworkPlayerID).
             CarData* lpCarData = mScoringSystem.GetCarData(lNetworkPlayerID);
-            CGS_ASSERT(lpCarData != NULL, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE, 150));
+            CGS_ASSERT_AT(lpCarData != NULL, "lpCarData", CGS_ARTIST_FILE, 150);
 
             // `*(car + 341) = *(nrm + 216 + i)`. SOURCE: mStartNetworkGameEvent.mabPlayerHasFever[i]
             // (the event's mafPlayerData[8] ends at +216 and BrnGameEvents.h pins
@@ -5122,14 +5122,14 @@ void ModeManager::StartGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
 
     // asm 0x8234FD74..0x8234FDAC: the store happens FIRST, then the range assert reads it back.
     meCurrentGameModeType = lpStartGameModeParams->GetGameModeType();
-    CGS_ASSERT(meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE &&
+    CGS_ASSERT_AT(meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE &&
                    static_cast<s32>(meCurrentGameModeType) < KI_GAME_MODE_SLOTS,
-               CGS_ASSERT_MESSAGE_AT("( meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE ) && ( meCurrentGameModeType < GameStateModuleIO::E_MODE_COUNT )", CGS_ARTIST_FILE, 1073));
+               "( meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE ) && ( meCurrentGameModeType < GameStateModuleIO::E_MODE_COUNT )", CGS_ARTIST_FILE, 1073);
 
     // hazards H3: slots 6 (E_MODE_ELIMINATOR) and 9 (E_MODE_TRAFFIC_ATTACK) are AUTHORED NULLS.
     // Dispatching into them is a null call and THIS is the assert the console fires. Keep it.
     mpCurrentGameMode = mapGameModes[meCurrentGameModeType];
-    CGS_ASSERT(mpCurrentGameMode != NULL, CGS_ASSERT_MESSAGE_AT("mpCurrentGameMode", CGS_ARTIST_FILE, 1075));
+    CGS_ASSERT_AT(mpCurrentGameMode != NULL, "mpCurrentGameMode", CGS_ARTIST_FILE, 1075);
 
     // asm 0x8234FDE4..0x8234FDF4. The console's argument is
     // OutputBuffer::GetTriggerManagementInputInterface() (0x8231D758, write-locked, returns
@@ -5335,8 +5335,8 @@ void ModeManager::ExitCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuffe
          meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME) &&
         mbAbortedDuringIntro)   // `lbzx r11, r29, 0x94FC` -- see the FLAG below
     {
-        CGS_ASSERT(lpOutputBuffer != NULL, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 1744));
-        CGS_ASSERT(lpOutputBuffer->GetGameActionQueue() != NULL, CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 1745));
+        CGS_ASSERT_AT(lpOutputBuffer != NULL, "lpOutput", CGS_ARTIST_FILE, 1744);
+        CGS_ASSERT_AT(lpOutputBuffer->GetGameActionQueue() != NULL, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 1745);
 
         GameStateModuleIO::StopModeIntroAction lStopModeIntro;
         lStopModeIntro.meGameMode = meCurrentGameModeType;
@@ -5417,7 +5417,7 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
                                        bool                                lbTimedOut,
                                        GameStateModuleIO::EGameModeType    leNextGameModeType)
 {
-    CGS_ASSERT(mpNetworkRoundManager != NULL, CGS_ASSERT_MESSAGE_AT("mpNetworkRoundManager", CGS_ARTIST_FILE, 3695));   // BrnModeManager.cpp:3695
+    CGS_ASSERT_AT(mpNetworkRoundManager != NULL, "mpNetworkRoundManager", CGS_ARTIST_FILE, 3695);   // BrnModeManager.cpp:3695
 
     // ---- the 24-byte action-39 summary (StopModeAction, BrnGameActions.h:1114) --------------
     // Field identities below are new this wave: BrnGameActions.h currently marks +0x08 / +0x10 /
@@ -5581,8 +5581,8 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
                             : mScoringSystem.GetOnlineFinishPosition(leCar);
                         lRoundResults.SetPosition(lPlayerID, liPosition);
                     }
-                    CGS_ASSERT(liCar + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                               CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
+                    CGS_ASSERT_AT(liCar + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                               "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39);
                 }
                 lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRoundResults),
                     GameStateModuleIO::E_ACTION_ONLINE_ROUND_RESULT, static_cast<s32>(sizeof(lRoundResults)));
@@ -6480,7 +6480,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     (void)lpPlayerStatusInterface;
     (void)lbIsOnline;
 
-    CGS_ASSERT(mpCurrentGameMode != 0, CGS_ASSERT_MESSAGE_AT("mpCurrentGameMode != NULL", CGS_ARTIST_FILE, 1814));   // BrnModeManager.cpp:1814
+    CGS_ASSERT_AT(mpCurrentGameMode != 0, "mpCurrentGameMode != NULL", CGS_ARTIST_FILE, 1814);   // BrnModeManager.cpp:1814
 
     // ---- (1) the delayed showtime mode-switch broadcast (hazards H6 latch 3) -------------------
     // PrepareForMode sets this to 30 for modes 2 / 16 only; it must reach EXACTLY 0 to fire once.
@@ -6567,7 +6567,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     //   r24 = *(r27+16), f29 = *(r27+20)  == TimerStatus::GetTime()
     // IDA renders the null check as `if (a1 == -28088)`; it is the inlined assert of the accessor.
     const CgsSystem::TimerStatus* lpSimTimerStatus = mTimerStatusInterface.GetSimTimerStatus();
-    CGS_ASSERT(lpSimTimerStatus != 0, CGS_ASSERT_MESSAGE_AT("lpSimTimerStatus", CGS_ARTIST_FILE, 1839));   // BrnModeManager.cpp:1839
+    CGS_ASSERT_AT(lpSimTimerStatus != 0, "lpSimTimerStatus", CGS_ARTIST_FILE, 1839);   // BrnModeManager.cpp:1839
 
     const f32 lfTimeStepSeconds = lpSimTimerStatus->GetCurrentTimeStep();
 
@@ -6781,8 +6781,8 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
             // The first assert is a null test on an EMBEDDED member, i.e. vacuously true on the
             // host -- recorded here rather than written as a tautological CGS_ASSERT, exactly as the
             // BURNING_ROUTE arm above does with its own :1977 twin.
-            CGS_ASSERT(mCurrentGameModeParams.GetOnlineTimeLimit() > 0.0f,
-                       CGS_ASSERT_MESSAGE_AT("lpGameModeParams->GetOnlineTimeLimit() > 0.0f", CGS_ARTIST_FILE, 2010));             // :2010
+            CGS_ASSERT_AT(mCurrentGameModeParams.GetOnlineTimeLimit() > 0.0f,
+                       "lpGameModeParams->GetOnlineTimeLimit() > 0.0f", CGS_ARTIST_FILE, 2010);             // :2010
             mScoringSystem.SetTimeLimitSeconds(mCurrentGameModeParams.GetOnlineTimeLimit());
             break;
 
@@ -6884,7 +6884,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
             }
             else if (mScoringSystem.HasModeTimeExpired(lCurrentTime))
             {
-                CGS_ASSERT(!mbIsInTimeUpOutro, CGS_ASSERT_MESSAGE_AT("!mbIsInTimeUpOutro", CGS_ARTIST_FILE, 2135));   // BrnModeManager.cpp:2135
+                CGS_ASSERT_AT(!mbIsInTimeUpOutro, "!mbIsInTimeUpOutro", CGS_ARTIST_FILE, 2135);   // BrnModeManager.cpp:2135
 
                 mbIsInTimeUpOutro  = true;
                 mfTimeUpStateTimer = KF_TIME_UP_OUTRO_SECONDS;
@@ -7018,7 +7018,7 @@ void ModeManager::CheckCountdownDisplay(GameStateModuleIO::GameActionQueue* lpGa
 {
     // The console inlines IsInGameMode() as `if (!mpCurrentGameMode)`; the assert string names the
     // predicate, so it is de-inlined back into the real call.
-    CGS_ASSERT(IsInGameMode(), CGS_ASSERT_MESSAGE_AT("IsInGameMode()", CGS_ARTIST_FILE, 2449));   // BrnModeManager.cpp:2449
+    CGS_ASSERT_AT(IsInGameMode(), "IsInGameMode()", CGS_ARTIST_FILE, 2449);   // BrnModeManager.cpp:2449
 
     s32 liNewCountdownDisplay;
     if (mpCurrentGameMode->HasCountdownDisplayChanged(&liNewCountdownDisplay))
@@ -7047,8 +7047,8 @@ void ModeManager::UpdateCheckpointDistanceRequests(GameStateModuleIO::GameAction
         return;
     }
 
-    CGS_ASSERT(muNextDistanceRequestCheckpoint < (muNumLandmarks - 1),
-               CGS_ASSERT_MESSAGE_AT("muNextDistanceRequestCheckpoint < muNumLandmarks - 1", CGS_ARTIST_FILE, 2288));   // BrnModeManager.cpp:2288
+    CGS_ASSERT_AT(muNextDistanceRequestCheckpoint < (muNumLandmarks - 1),
+               "muNextDistanceRequestCheckpoint < muNumLandmarks - 1", CGS_ARTIST_FILE, 2288);   // BrnModeManager.cpp:2288
 
     const u32 luCheckpoint = muNextDistanceRequestCheckpoint;
 
@@ -7065,8 +7065,8 @@ void ModeManager::UpdateCheckpointDistanceRequests(GameStateModuleIO::GameAction
     const BrnTrigger::Landmark* lpDestinationLandmark =
         GetCheckpointTriggerData()->GetLandmarkFromRegionIndex(liDestinationRegionIndex);
 
-    CGS_ASSERT(lpCurrentLandmark != 0, CGS_ASSERT_MESSAGE_AT("lpCurrentLandmark", CGS_ARTIST_FILE, 2297));           // BrnModeManager.cpp:2297
-    CGS_ASSERT(lpDestinationLandmark != 0, CGS_ASSERT_MESSAGE_AT("lpDestinationLandmark", CGS_ARTIST_FILE, 2298));   // BrnModeManager.cpp:2298
+    CGS_ASSERT_AT(lpCurrentLandmark != 0, "lpCurrentLandmark", CGS_ARTIST_FILE, 2297);           // BrnModeManager.cpp:2297
+    CGS_ASSERT_AT(lpDestinationLandmark != 0, "lpDestinationLandmark", CGS_ARTIST_FILE, 2298);   // BrnModeManager.cpp:2298
 
     GameStateModuleIO::LandmarkRouteRequestEvent lRouteRequest;
     std::memset(&lRouteRequest, 0, sizeof(lRouteRequest));   // +0x28..+0x2F / +0x46.. are never stored (stack residue)
@@ -7133,9 +7133,9 @@ void ModeManager::UpdateCheckpointDistanceRequests(GameStateModuleIO::GameAction
 //                           mbIsCalculatingCheckpointDistances (+0x8C0D) = 0, mbNeedToSendNextRequest = 0
 void ModeManager::HandleCheckpointDistanceResponse(const GameStateModuleIO::ModeManagerRouteInfoEvent* lpRouteInfoEvent)
 {
-    CGS_ASSERT(muNumLandmarks > 1, CGS_ASSERT_MESSAGE_AT("muNumLandmarks > 1", CGS_ARTIST_FILE, 2331));                                          // BrnModeManager.cpp:2331
-    CGS_ASSERT(muNextDistanceRequestCheckpoint < muNumLandmarks,
-               CGS_ASSERT_MESSAGE_AT("muNextDistanceRequestCheckpoint < muNumLandmarks", CGS_ARTIST_FILE, 2332));                                // BrnModeManager.cpp:2332
+    CGS_ASSERT_AT(muNumLandmarks > 1, "muNumLandmarks > 1", CGS_ARTIST_FILE, 2331);                                          // BrnModeManager.cpp:2331
+    CGS_ASSERT_AT(muNextDistanceRequestCheckpoint < muNumLandmarks,
+               "muNextDistanceRequestCheckpoint < muNumLandmarks", CGS_ARTIST_FILE, 2332);                                // BrnModeManager.cpp:2332
 
     if (lpRouteInfoEvent->miEventId == static_cast<s32>(muNextDistanceRequestCheckpoint))
     {
@@ -7164,7 +7164,7 @@ void ModeManager::HandleCheckpointDistanceResponse(const GameStateModuleIO::Mode
 // FinishCurrentMode for the next update.
 void ModeManager::PlayerFinishedMode(const GameStateModuleIO::PlayerFinishedModeEvent* lpEvent)
 {
-    CGS_ASSERT(lpEvent != 0, CGS_ASSERT_MESSAGE_AT("lpPlayerFinishedModeEvent", CGS_ARTIST_FILE, 2875));   // BrnModeManager.cpp:2875
+    CGS_ASSERT_AT(lpEvent != 0, "lpPlayerFinishedModeEvent", CGS_ARTIST_FILE, 2875);   // BrnModeManager.cpp:2875
 
     // [x] H4 SETTLED (closure round 2026-08-26) -- THIS BODY IS THE WRITER THAT DECIDED IT.
     // The console sets 0x94FD from the event's mbTimedOut and 0x94FE from its mbCarDestroyed, and
@@ -7189,7 +7189,7 @@ void ModeManager::PlayerFinishedMode(const GameStateModuleIO::PlayerFinishedMode
         // + 24 + 16 / +20) straight into the RegisterFinishForCar argument.
         const CgsSystem::Time lFinishTime = mTimerStatusInterface.GetSimTimerStatus()->GetTime();
 
-        CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 5700));   // BrnModeManager.cpp:5700
+        CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 5700);   // BrnModeManager.cpp:5700
         const EActiveRaceCarIndex lePlayerActiveRaceCarIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
 
         mScoringSystem.RegisterFinishForCar(true, lePlayerActiveRaceCarIndex, lFinishTime);
@@ -7234,15 +7234,15 @@ void ModeManager::HandleOnlineTeamModes(const GameStateModuleIO::PreWorldInputBu
         return;
     }
 
-    CGS_ASSERT(lpInput != NULL, CGS_ASSERT_MESSAGE_AT("lpInput", CGS_ARTIST_FILE, 4383));     // BrnModeManager.cpp:4383
-    CGS_ASSERT(lpOutput != NULL, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 4384));   // BrnModeManager.cpp:4384
+    CGS_ASSERT_AT(lpInput != NULL, "lpInput", CGS_ARTIST_FILE, 4383);     // BrnModeManager.cpp:4383
+    CGS_ASSERT_AT(lpOutput != NULL, "lpOutput", CGS_ARTIST_FILE, 4384);   // BrnModeManager.cpp:4384
 
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpPlayerStatusInterface =
         lpInput->GetPlayerStatusInterface();
     GameStateModuleIO::GameActionQueue* lpActionQueue = lpOutput->GetGameActionQueue();
 
-    CGS_ASSERT(lpPlayerStatusInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpPlayerStatusInterface", CGS_ARTIST_FILE, 4388));   // BrnModeManager.cpp:4388
-    CGS_ASSERT(lpActionQueue != NULL, CGS_ASSERT_MESSAGE_AT("lpActionQueue", CGS_ARTIST_FILE, 4389));                       // BrnModeManager.cpp:4389
+    CGS_ASSERT_AT(lpPlayerStatusInterface != NULL, "lpPlayerStatusInterface", CGS_ARTIST_FILE, 4388);   // BrnModeManager.cpp:4388
+    CGS_ASSERT_AT(lpActionQueue != NULL, "lpActionQueue", CGS_ARTIST_FILE, 4389);                       // BrnModeManager.cpp:4389
 
     HandleOnlineTeamTakedowns(lpPlayerStatusInterface, lpTakedownQueue, lpActionQueue);
 
@@ -7279,7 +7279,7 @@ void ModeManager::HandleOnlineTeamTakedowns(const BrnNetwork::BrnNetworkModuleIO
                                             GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     ScoringSystem* lpScoringSystem = GetScoringSystem();                 // addi r24, r22, 0xDB0
-    CGS_ASSERT(lpScoringSystem != NULL, CGS_ASSERT_MESSAGE_AT("lpScoringSystem != NULL", CGS_ARTIST_FILE, 4434));      // BrnModeManager.cpp:4434
+    CGS_ASSERT_AT(lpScoringSystem != NULL, "lpScoringSystem != NULL", CGS_ARTIST_FILE, 4434);      // BrnModeManager.cpp:4434
     const ScoringSystem& lrScoringSystem = *lpScoringSystem;             // the const GetCarData twin (0x8231DCD0)
 
     s32 liNumBlueTeamPlayersLeft = 0;                                    // r23
@@ -7362,7 +7362,7 @@ void ModeManager::HandleOnlineTeamTakedowns(const BrnNetwork::BrnNetworkModuleIO
 void ModeManager::HandleOnlineTeamCheckForModeFinished()
 {
     ScoringSystem* lpScoringSystem = GetScoringSystem();                 // addi r30, r24, 0xDB0
-    CGS_ASSERT(lpScoringSystem != NULL, CGS_ASSERT_MESSAGE_AT("lpScoringSystem != NULL", CGS_ARTIST_FILE, 4557));      // BrnModeManager.cpp:4557
+    CGS_ASSERT_AT(lpScoringSystem != NULL, "lpScoringSystem != NULL", CGS_ARTIST_FILE, 4557);      // BrnModeManager.cpp:4557
     const ScoringSystem& lrScoringSystem = *lpScoringSystem;
 
     const s32 liNumActiveCars = static_cast<s32>(lpScoringSystem->GetNumberOfActiveCars());
@@ -7405,7 +7405,7 @@ void ModeManager::HandleOnlineTeamCheckForModeFinished()
 void ModeManager::HandleOnlineBurningHomeRunCheckForModeFinished()
 {
     ScoringSystem* lpScoringSystem = GetScoringSystem();                 // addi r27, r28, 0xDB0
-    CGS_ASSERT(lpScoringSystem != NULL, CGS_ASSERT_MESSAGE_AT("lpScoringSystem != NULL", CGS_ARTIST_FILE, 4616));      // BrnModeManager.cpp:4616
+    CGS_ASSERT_AT(lpScoringSystem != NULL, "lpScoringSystem != NULL", CGS_ARTIST_FILE, 4616);      // BrnModeManager.cpp:4616
 
     const s32 liNumActiveCars = static_cast<s32>(lpScoringSystem->GetNumberOfActiveCars());
     if (liNumActiveCars <= 0)
@@ -8028,8 +8028,8 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         lpPreWorldInputBuffer->GetPlayerStatusInterface();
     const GameStateModuleIO::NetworkToGameStateInterface* lpNetworkInput =
         lpPreWorldInputBuffer->GetNetworkToGameStateInterface();
-    CGS_ASSERT(lpActiveRaceCarOutput != NULL, CGS_ASSERT_MESSAGE_AT("lpActiveCarInterface", CGS_ARTIST_BRNSCORINGSYSTEMDEBUGCOMPONENT_FILE, 135));
-    CGS_ASSERT(lpPlayerStatusInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpPlayerStatusInterface", CGS_ARTIST_FILE, 4388));
+    CGS_ASSERT_AT(lpActiveRaceCarOutput != NULL, "lpActiveCarInterface", CGS_ARTIST_BRNSCORINGSYSTEMDEBUGCOMPONENT_FILE, 135);
+    CGS_ASSERT_AT(lpPlayerStatusInterface != NULL, "lpPlayerStatusInterface", CGS_ARTIST_FILE, 4388);
     CGS_ASSERT(lpNetworkInput != NULL, "lpNetworkToGameStateInterface");
     mScoringSystemDebugComponent.DebugRenderChainableStunts(
         lpActiveRaceCarOutput,
@@ -8067,8 +8067,8 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
 {
     CgsDev::PerfMonCpu::StartMonitor(miPostWorldUpdatePM);
 
-    CGS_ASSERT(lpPostWorldInputBuffer != NULL, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 769));
-    CGS_ASSERT(lpTakedownQueue != NULL, CGS_ASSERT_MESSAGE_AT("lpTakedownQueue != NULL", CGS_ARTIST_FILE, 770));
+    CGS_ASSERT_AT(lpPostWorldInputBuffer != NULL, "lpInput != NULL", CGS_ARTIST_FILE, 769);
+    CGS_ASSERT_AT(lpTakedownQueue != NULL, "lpTakedownQueue != NULL", CGS_ARTIST_FILE, 770);
 
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput =
         lpPostWorldInputBuffer->GetActiveRaceCarOutputInterface();
@@ -8205,7 +8205,7 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
         else if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ROAD_RAGE)
         {
             // The whole console arm is one assert -- BrnRoadRageModeScoring.cpp:91, verbatim.
-            CGS_ASSERT(lpActiveRaceCarOutput != NULL, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnRoadRageModeScoring.cpp", 91));
+            CGS_ASSERT_AT(lpActiveRaceCarOutput != NULL, "lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnRoadRageModeScoring.cpp", 91);
         }
         else if (meCurrentGameModeType == GameStateModuleIO::E_MODE_STUNT_ATTACK &&
                  IsGameModeInProgress(mpCurrentGameMode))
@@ -8249,8 +8249,8 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
             // The by-index skillz lookup walks the scoring table index -> network id first.
             OnlineFreeBurnLobbyMode* lpFreeburnLobbyMode =
                 static_cast<OnlineFreeBurnLobbyMode*>(mpCurrentGameMode);
-            CGS_ASSERT(lpFreeburnLobbyMode != NULL, CGS_ASSERT_MESSAGE_AT("lpFreeburnLobbyMode", CGS_ARTIST_FILE, 887));
-            CGS_ASSERT(mpGameStateModule != NULL, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 5700));
+            CGS_ASSERT_AT(lpFreeburnLobbyMode != NULL, "lpFreeburnLobbyMode", CGS_ARTIST_FILE, 887);
+            CGS_ASSERT_AT(mpGameStateModule != NULL, "mpGameStateModule", CGS_ARTIST_FILE, 5700);
 
             const ::EActiveRaceCarIndex leLocalPlayerIndex =
                 mpGameStateModule->GetPlayerActiveRaceCarIndex();
@@ -8409,7 +8409,7 @@ void ModeManager::FinishedMapPan()
 // move between the two instant-intro lobby modes.
 void ModeManager::MarkedManLoaded(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
-    CGS_ASSERT(lpGameActionQueue != NULL, CGS_ASSERT_MESSAGE_AT("lpGameActionQueue != NULL", CGS_ARTIST_FILE, 3981));
+    CGS_ASSERT_AT(lpGameActionQueue != NULL, "lpGameActionQueue != NULL", CGS_ARTIST_FILE, 3981);
 
     GameStateModuleIO::MarkedManLoadedAction lMarkedManLoadedAction;
     lMarkedManLoadedAction.meGameMode                = meCurrentGameModeType;
@@ -8429,10 +8429,10 @@ void ModeManager::RemoteRaceCarHitsCheckpoint(BrnNetwork::NetworkPlayerID lNetwo
     }
 
     const ::EActiveRaceCarIndex leRemotePlayersRaceCarIndex = mpGameStateModule->GetActiveRaceCarIndex(lNetworkPlayerID);
-    CGS_ASSERT(leRemotePlayersRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
-               CGS_ASSERT_MESSAGE_AT("leRemotePlayersRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 2545));
-    CGS_ASSERT(leRemotePlayersRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leRemotePlayersRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 2546));
+    CGS_ASSERT_AT(leRemotePlayersRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
+               "leRemotePlayersRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 2545);
+    CGS_ASSERT_AT(leRemotePlayersRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leRemotePlayersRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 2546);
 
     if (!(liCheckpointIndex < static_cast<s32>(muNumLandmarks)))
     {
@@ -8458,10 +8458,10 @@ void ModeManager::RemoteRaceCarHitsCheckpoint(BrnNetwork::NetworkPlayerID lNetwo
 void ModeManager::HandleBurningHomeRunRunnerSwitch(const GameStateModuleIO::BurningHomeRunSwitchRunnerEvent* lpEvent,
                                                    GameStateModuleIO::OutputBuffer*                         lpOutputBuffer)
 {
-    CGS_ASSERT(lpEvent, CGS_ASSERT_MESSAGE_AT("lpEvent", CGS_ARTIST_FILE, 5165));
-    CGS_ASSERT(lpOutputBuffer, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", CGS_ARTIST_FILE, 5166));
-    CGS_ASSERT(meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN,
-               CGS_ASSERT_MESSAGE_AT("meCurrentGameModeType == GsmIO::E_MODE_ONLINE_BURNING_HOME_RUN", CGS_ARTIST_FILE, 5169));
+    CGS_ASSERT_AT(lpEvent, "lpEvent", CGS_ARTIST_FILE, 5165);
+    CGS_ASSERT_AT(lpOutputBuffer, "lpOutputBuffer", CGS_ARTIST_FILE, 5166);
+    CGS_ASSERT_AT(meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN,
+               "meCurrentGameModeType == GsmIO::E_MODE_ONLINE_BURNING_HOME_RUN", CGS_ARTIST_FILE, 5169);
 
     // The post-increment carries the in-loop range assert.
     ::EActiveRaceCarIndex leOldRunnerActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
@@ -8479,14 +8479,14 @@ void ModeManager::HandleBurningHomeRunRunnerSwitch(const GameStateModuleIO::Burn
     const ::EActiveRaceCarIndex leNewActiveRunnerRaceCarIndex =
         mpGameStateModule->GetActiveRaceCarIndex(lpEvent->mNewRunnerPlayerID);
 
-    CGS_ASSERT(leOldRunnerActiveRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
-               CGS_ASSERT_MESSAGE_AT("leOldRunnerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5176));
-    CGS_ASSERT(leOldRunnerActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leOldRunnerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5177));
-    CGS_ASSERT(leNewActiveRunnerRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
-               CGS_ASSERT_MESSAGE_AT("leNewActiveRunnerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5179));
-    CGS_ASSERT(leNewActiveRunnerRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leNewActiveRunnerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5180));
+    CGS_ASSERT_AT(leOldRunnerActiveRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
+               "leOldRunnerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5176);
+    CGS_ASSERT_AT(leOldRunnerActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leOldRunnerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5177);
+    CGS_ASSERT_AT(leNewActiveRunnerRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
+               "leNewActiveRunnerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5179);
+    CGS_ASSERT_AT(leNewActiveRunnerRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leNewActiveRunnerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5180);
 
     CGS_ASSERT(mScoringSystem.GetNextTeamMember(leOldRunnerActiveRaceCarIndex, GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM) ==
                    ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
@@ -8505,14 +8505,14 @@ void ModeManager::HandleBurningHomeRunRunnerSwitch(const GameStateModuleIO::Burn
     const ::EGlobalRaceCarIndex leNewRunnerGlobalRaceCarIndex =
         mpGameStateModule->GetLastGlobalRaceCarInterface()->GetGlobalRaceCarIndex(leNewActiveRunnerRaceCarIndex);
 
-    CGS_ASSERT(leOldRunnerGlobalRaceCarIndex >= ::E_GLOBAL_RACE_CAR_INDEX_0,
-               CGS_ASSERT_MESSAGE_AT("leOldRunnerGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5199));
-    CGS_ASSERT(leOldRunnerGlobalRaceCarIndex < ::E_GLOBAL_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leOldRunnerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5200));
-    CGS_ASSERT(leNewRunnerGlobalRaceCarIndex >= ::E_GLOBAL_RACE_CAR_INDEX_0,
-               CGS_ASSERT_MESSAGE_AT("leNewRunnerGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5202));
-    CGS_ASSERT(leNewRunnerGlobalRaceCarIndex < ::E_GLOBAL_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leNewRunnerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5203));
+    CGS_ASSERT_AT(leOldRunnerGlobalRaceCarIndex >= ::E_GLOBAL_RACE_CAR_INDEX_0,
+               "leOldRunnerGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5199);
+    CGS_ASSERT_AT(leOldRunnerGlobalRaceCarIndex < ::E_GLOBAL_RACE_CAR_INDEX_COUNT,
+               "leOldRunnerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5200);
+    CGS_ASSERT_AT(leNewRunnerGlobalRaceCarIndex >= ::E_GLOBAL_RACE_CAR_INDEX_0,
+               "leNewRunnerGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5202);
+    CGS_ASSERT_AT(leNewRunnerGlobalRaceCarIndex < ::E_GLOBAL_RACE_CAR_INDEX_COUNT,
+               "leNewRunnerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5203);
 
     maCarCheckpointData[leNewRunnerGlobalRaceCarIndex].SetupCheckpoints(static_cast<s32>(muNumLandmarks));
     maCarCheckpointData[leOldRunnerGlobalRaceCarIndex].SetupCheckpoints(static_cast<s32>(muNumLandmarks));
@@ -8636,11 +8636,11 @@ void ModeManager::SetPlayerDisconnected(
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput,
         GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    CGS_ASSERT(lpActionQueue != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpActionQueue", CGS_ARTIST_FILE, 5273 /* ARTIST 0x8234CD64 */));
-    CGS_ASSERT(lPlayerID != -1,
-        CGS_ASSERT_MESSAGE_AT(
-            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 5274 /* ARTIST 0x8234CD88 */));
+    CGS_ASSERT_AT(lpActionQueue != NULL,
+        "lpActionQueue", CGS_ARTIST_FILE, 5273 /* ARTIST 0x8234CD64 */);
+    CGS_ASSERT_AT(lPlayerID != -1,
+        "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 5274 /* ARTIST 0x8234CD88 */);
+
 
     CarData* lpCarData = mScoringSystem.GetCarData(lPlayerID);
     if (lpCarData != NULL && !lpCarData->GetScoreData()->GetDisconnected())
@@ -8690,7 +8690,7 @@ void ModeManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* lpOutputB
     if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
         meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
     {
-        CGS_ASSERT(mpGameStateModule != NULL, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 5324));
+        CGS_ASSERT_AT(mpGameStateModule != NULL, "mpGameStateModule", CGS_ARTIST_FILE, 5324);
 
         if (meCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
             meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)

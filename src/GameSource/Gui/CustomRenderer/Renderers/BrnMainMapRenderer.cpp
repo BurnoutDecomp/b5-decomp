@@ -286,7 +286,7 @@ bool MainMapRenderer::Prepare(CgsGui::GuiEventQueueSmall* lpEventQueue,
     default:
         // The console streams " unknown prepare stage in MainMapRenderer " through
         // StrStream/gpcMessageBuffer; lowered to the static message (console line 130).
-        CGS_ASSERT(false, " unknown prepare stage in MainMapRenderer ");
+        CGS_FAIL(" unknown prepare stage in MainMapRenderer ");
         return false;
     }
 
@@ -331,7 +331,7 @@ bool MainMapRenderer::Release()
 
     default:
         // Console line 210, streamed through StrStream.
-        CGS_ASSERT(false, " unknown release stage in MainMapRenderer ");
+        CGS_FAIL(" unknown release stage in MainMapRenderer ");
         return false;
     }
 
@@ -480,7 +480,7 @@ void MainMapRenderer::UpdateAlphaForFadeState()
         break;
 
     default:
-        CGS_ASSERT(false, "Unhandled fade state in MainMapRenderer::GetAlphaForFadeState");
+        CGS_FAIL("Unhandled fade state in MainMapRenderer::GetAlphaForFadeState");
         mu8Alpha = KU8_MAX_ALPHA;   // the assert arm falls into the FADESTATE_NONE store
         break;
     }
@@ -748,7 +748,7 @@ void MainMapRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     {
         // Console line 492, streamed as "Unhandled map type <n> in
         // MainMapRenderer::RenderComponent()"; the arm still falls onto the background mask.
-        CGS_ASSERT(false, "Unhandled map type in MainMapRenderer::RenderComponent()");
+        CGS_FAIL("Unhandled map type in MainMapRenderer::RenderComponent()");
     }
 
     // The mask covers the whole published view rect at the mask texture's full UV range

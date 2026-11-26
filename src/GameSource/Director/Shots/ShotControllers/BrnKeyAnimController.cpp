@@ -144,7 +144,7 @@ bool KeyAnimController::Prepare(const DirectorResourceManager& lrResourceManager
     // DirectorResourceManager::GetKeyAnimFromGuid @0x821F69A8, called by name here.
     ICE::ICETakeData* lpTakeData = lrResourceManager.GetKeyAnimFromGuid(liAnimGuid);
 
-    CGS_ASSERT(lpTakeData != 0, CGS_ASSERT_MESSAGE_AT("lpTakeData != NULL", CGS_ARTIST_FILE, 68));                       // cpp:68
+    CGS_ASSERT_AT(lpTakeData != 0, "lpTakeData != NULL", CGS_ARTIST_FILE, 68);                       // cpp:68
 
     // [DIAG BRN_ICE_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. Which take guid the shot
     // reference decoded to, and what the ICE list handed back for it. Remove with the
@@ -198,7 +198,7 @@ bool KeyAnimController::Prepare(const DirectorResourceManager& lrResourceManager
 // ============================================================================
 void KeyAnimController::Update(const ShotContext& lrContext, Camera::Camera* lpCamera)
 {
-    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 226));                                     // cpp:226
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_FILE, 226);                                     // cpp:226
 
     if (!mbPaused)
     {
@@ -531,10 +531,10 @@ void KeyAnimController::UpdateFocus(const ICE::ICETake& lrTake, Camera::Camera* 
 // ============================================================================
 void KeyAnimController::SetParametricTime0To1(f32 lfParametricTime0To1)
 {
-    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 333));                                                // cpp:333
-    CGS_ASSERT(lfParametricTime0To1 >= 0.0f && lfParametricTime0To1 <= 1.0f,
-               CGS_ASSERT_MESSAGE_AT("lfParametricTime0To1 >= 0.0f && lfParametricTime0To1 <= 1.0f", CGS_ARTIST_FILE, 334));          // cpp:334
-    CGS_ASSERT(GetLength() > 0.0f, CGS_ASSERT_MESSAGE_AT("GetLength() > 0.0f", CGS_ARTIST_FILE, 335));                                // cpp:335
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_FILE, 333);                                                // cpp:333
+    CGS_ASSERT_AT(lfParametricTime0To1 >= 0.0f && lfParametricTime0To1 <= 1.0f,
+               "lfParametricTime0To1 >= 0.0f && lfParametricTime0To1 <= 1.0f", CGS_ARTIST_FILE, 334);          // cpp:334
+    CGS_ASSERT_AT(GetLength() > 0.0f, "GetLength() > 0.0f", CGS_ARTIST_FILE, 335);                                // cpp:335
 
     mfPlaybackTimer = mbReversed ? ((1.0f - lfParametricTime0To1) * GetLength())
                                  : (GetLength() * lfParametricTime0To1);
@@ -545,7 +545,7 @@ void KeyAnimController::SetParametricTime0To1(f32 lfParametricTime0To1)
 // ============================================================================
 f32 KeyAnimController::GetParametricTime0To1() const
 {
-    CGS_ASSERT(GetLength() > 0.0f, CGS_ASSERT_MESSAGE_AT("GetLength() > 0.0f", CGS_ARTIST_FILE, 361));                                // cpp:361
+    CGS_ASSERT_AT(GetLength() > 0.0f, "GetLength() > 0.0f", CGS_ARTIST_FILE, 361);                                // cpp:361
 
     const f32 lfPlayed = mfPlaybackTimer / GetLength();
     const f32 lfParametricTime0To1 = mbReversed ? (1.0f - lfPlayed) : lfPlayed;
@@ -558,8 +558,8 @@ f32 KeyAnimController::GetParametricTime0To1() const
 // ============================================================================
 ICE::eICESpace KeyAnimController::GetEyeSpace() const
 {
-    CGS_ASSERT(mbPrepared,
-        CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 107 /* ARTIST 0x821F4160 */));
+    CGS_ASSERT_AT(mbPrepared,
+        "mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 107 /* ARTIST 0x821F4160 */);
     return mEyeSpace;
 }
 
@@ -568,8 +568,8 @@ ICE::eICESpace KeyAnimController::GetEyeSpace() const
 // ============================================================================
 ICE::eICESpace KeyAnimController::GetLookSpace() const
 {
-    CGS_ASSERT(mbPrepared,
-        CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 110 /* ARTIST 0x821F41B8 */));
+    CGS_ASSERT_AT(mbPrepared,
+        "mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 110 /* ARTIST 0x821F41B8 */);
     return mLookSpace;
 }
 
@@ -580,8 +580,8 @@ ICE::eICESpace KeyAnimController::GetLookSpace() const
 // ============================================================================
 rw::math::vpu::Vector3 KeyAnimController::GetLookPos() const
 {
-    CGS_ASSERT(mbPrepared,
-        CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 113 /* ARTIST 0x821F4218 */));
+    CGS_ASSERT_AT(mbPrepared,
+        "mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 113 /* ARTIST 0x821F4218 */);
     return mLookPos;
 }
 
@@ -590,7 +590,7 @@ rw::math::vpu::Vector3 KeyAnimController::GetLookPos() const
 // ============================================================================
 bool KeyAnimController::HasFinished() const
 {
-    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 157));
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 157);
 
     if (mbReversed)
         return mfPlaybackTimer <= 0.0f;

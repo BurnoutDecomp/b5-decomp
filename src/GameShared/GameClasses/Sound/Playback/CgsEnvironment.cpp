@@ -48,15 +48,15 @@ namespace Playback
 
 Environment::eAudioMode Environment::GetAudioMode() const
 {
-    CGS_ASSERT(mpDacPlugin != 0,
-        CGS_ASSERT_MESSAGE_AT("mpDacPlugin", KAC_ARTIST_ASSERT_FILE, 528 /* ARTIST 0x82689BFC */));
+    CGS_ASSERT_AT(mpDacPlugin != 0,
+        "mpDacPlugin", KAC_ARTIST_ASSERT_FILE, 528 /* ARTIST 0x82689BFC */);
 
     XAUDIOSPEAKERCONFIG lXAudioSpeakerConfig;
     const HRESULT lhr = XAudioGetSpeakerConfig(&lXAudioSpeakerConfig);
-    CGS_ASSERT(lhr == S_OK,
-        CGS_ASSERT_MESSAGE_AT(
-            "XAudioGetSpeakerConfig( &lXAudioSpeakerConfig ) == S_OK",
-            KAC_ARTIST_ASSERT_FILE, 533 /* ARTIST 0x82689C28 */));
+    CGS_ASSERT_AT(lhr == S_OK,
+        "XAudioGetSpeakerConfig( &lXAudioSpeakerConfig ) == S_OK",
+            KAC_ARTIST_ASSERT_FILE, 533 /* ARTIST 0x82689C28 */);
+
 
     return (lXAudioSpeakerConfig & XAUDIOSPEAKERCONFIG_DIGITAL_MASK)
             == XAUDIOSPEAKERCONFIG_DIGITAL_DOLBYDIGITAL
@@ -172,10 +172,10 @@ u32 Environment::AddContent(Environment& arEnvironment, Content* apContent)
 // @ 0x82680EA0. Return the owned entity registry (asserted present).
 Registry* Environment::GetRegistry()
 {
-    CGS_ASSERT(mpRegistry,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpRegistry",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsEnvironment.h", 661 /* ARTIST 0x82680EC8 */));
+    CGS_ASSERT_AT(mpRegistry,
+        "mpRegistry",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsEnvironment.h", 661 /* ARTIST 0x82680EC8 */);
+
     return mpRegistry;
 }
 
@@ -333,9 +333,9 @@ Environment::~Environment()
 // vtable-index dispatch is retired.)
 void Environment::operator delete(void* lpMemory, rw::IResourceAllocator* lpAllocator)
 {
-    CGS_ASSERT(lpAllocator, CGS_ASSERT_MESSAGE_AT("lpAllocator",
+    CGS_ASSERT_AT(lpAllocator, "lpAllocator",
         "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsEnvironment.h",
-        497 /* ARTIST 0x826BFD90 */));
+        497 /* ARTIST 0x826BFD90 */);
     lpAllocator->FreeMemoryResource(lpMemory);
 }
 

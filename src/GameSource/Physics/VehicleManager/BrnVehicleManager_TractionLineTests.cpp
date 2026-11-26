@@ -105,27 +105,27 @@ namespace
             CgsModule::IOBufferStack* lpInputBufferStack,
             CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen)
     {
-        CGS_ASSERT(lpInputBufferStack != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpInputBufferStack != NULL",
-                KAC_ARTIST_ASSERT_FILE, 1949 /* ARTIST 0x825B50C4 */));        // :1949
-        CGS_ASSERT(lpTractionContactGen != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpTractionContactGen != NULL",
-                KAC_ARTIST_ASSERT_FILE, 1950 /* ARTIST 0x825B50E8 */));    // :1950
-        CGS_ASSERT(mpTractionLineStreamProducer == 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpTractionLineStreamProducer == NULL",
-                KAC_ARTIST_ASSERT_FILE, 1951 /* ARTIST 0x825B5118 */));                             // :1951
+        CGS_ASSERT_AT(lpInputBufferStack != 0,
+            "lpInputBufferStack != NULL",
+                KAC_ARTIST_ASSERT_FILE, 1949 /* ARTIST 0x825B50C4 */);        // :1949
+
+        CGS_ASSERT_AT(lpTractionContactGen != 0,
+            "lpTractionContactGen != NULL",
+                KAC_ARTIST_ASSERT_FILE, 1950 /* ARTIST 0x825B50E8 */);    // :1950
+
+        CGS_ASSERT_AT(mpTractionLineStreamProducer == 0,
+            "mpTractionLineStreamProducer == NULL",
+                KAC_ARTIST_ASSERT_FILE, 1951 /* ARTIST 0x825B5118 */);                             // :1951
+
 
         mpTractionLineStreamProducer =
             lpTractionContactGen->CreateLineWithTriangleListStream(
                 KI_MAX_TRACTION_LINE_STREAM_COMMANDS);
 
-        CGS_ASSERT(mpTractionLineStreamProducer != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpTractionLineStreamProducer != NULL",
-                KAC_ARTIST_ASSERT_FILE, 1961 /* ARTIST 0x825B514C */));                             // :1961
+        CGS_ASSERT_AT(mpTractionLineStreamProducer != 0,
+            "mpTractionLineStreamProducer != NULL",
+                KAC_ARTIST_ASSERT_FILE, 1961 /* ARTIST 0x825B514C */);                             // :1961
+
     }
 
     // =============================================================================================
@@ -167,14 +167,14 @@ namespace
     void VehicleManager::DoVehicleTractionLineDecallocations(
             CgsModule::IOBufferStack* lpInputBufferStack)
     {
-        CGS_ASSERT(lpInputBufferStack != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpInputBufferStack != NULL",
-                KAC_ARTIST_ASSERT_FILE, 2296 /* ARTIST 0x825B5298 */));        // :2296
-        CGS_ASSERT(mpTractionLineStreamProducer != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpTractionLineStreamProducer != NULL",
-                KAC_ARTIST_ASSERT_FILE, 2297 /* ARTIST 0x825B52C8 */));                             // :2297
+        CGS_ASSERT_AT(lpInputBufferStack != 0,
+            "lpInputBufferStack != NULL",
+                KAC_ARTIST_ASSERT_FILE, 2296 /* ARTIST 0x825B5298 */);        // :2296
+
+        CGS_ASSERT_AT(mpTractionLineStreamProducer != 0,
+            "mpTractionLineStreamProducer != NULL",
+                KAC_ARTIST_ASSERT_FILE, 2297 /* ARTIST 0x825B52C8 */);                             // :2297
+
 
         mpTractionLineStreamProducer = 0;
     }

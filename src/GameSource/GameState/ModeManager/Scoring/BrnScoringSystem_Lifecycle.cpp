@@ -197,7 +197,7 @@ GameStateModuleIO::EPlayerScoringIndex ScoringSystem::AddPlayer()
         }
     }
 
-    CGS_ASSERT(false, "No more free slots for a player!");
+    CGS_FAIL("No more free slots for a player!");
     return GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT;
 }
 
@@ -429,7 +429,7 @@ void ScoringSystem::WriteDataToOutput(GameStateModuleIO::ScoringOutputInterface*
     // ---- online half: drive the current online sub-scorer ----
     if (lbOnline)
     {
-        CGS_ASSERT(mpCurrentOnlineModeScoring != NULL, CGS_ASSERT_MESSAGE_AT("mpCurrentOnlineModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1318));
+        CGS_ASSERT_AT(mpCurrentOnlineModeScoring != NULL, "mpCurrentOnlineModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1318);
         mpCurrentOnlineModeScoring->Update(this, static_cast<s32>(muCarsInCurrentMode));
         mpCurrentOnlineModeScoring->WriteDataToOutput(lpOnlineOutput);
     }

@@ -185,11 +185,11 @@ BoostBurnout2::GetIsChainNotifyPending(u32* lpOutNumChained)
 {
     // BrnBoostBurnout2.cpp:811 on the console (the assert's line immediate is
     // 0x32B); reported, then execution continues into the store below.
-    CGS_ASSERT(lpOutNumChained != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpOutNumChained",
+    CGS_ASSERT_AT(lpOutNumChained != 0,
+        "lpOutNumChained",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout2.cpp", 811 /* ARTIST 0x822A65CC */));
+            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout2.cpp", 811 /* ARTIST 0x822A65CC */);
+
 
     if (miChainSize <= 0)
     {
@@ -1673,11 +1673,11 @@ BoostBurnout2::Prepare()
 void
 BoostBurnout2::UpdateStuntBoost(const BrnGameState::GameStateModuleIO::CompletedStuntAction* lpCompletedStuntAction)
 {
-    CGS_ASSERT(lpCompletedStuntAction != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpCompletedStuntAction != NULL",
+    CGS_ASSERT_AT(lpCompletedStuntAction != NULL,
+        "lpCompletedStuntAction != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout2.cpp", 772 /* ARTIST 0x822A64A4 */));
+            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout2.cpp", 772 /* ARTIST 0x822A64A4 */);
+
 
     if (lpCompletedStuntAction->muStuntActionComplete & BrnPhysics::E_STUNT_ACTION_COMPLETE_BARREL_ROLL)
     {

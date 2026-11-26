@@ -33,7 +33,7 @@ const ParameterSchema* FeatureSchema::GetParameterSchema(u32 au32Index) const
 
     if ((reinterpret_cast<uintptr_t>(lpSchema) & 1) != 0)   // clrlwi ; bne
     {
-        CGS_ASSERT(false,
+        CGS_FAIL(
                    "This Data Structure is not resolved. (Name  found in a pointer context.)");
     }
 
@@ -48,7 +48,7 @@ const SlotSchema* FeatureSchema::GetSlotSchema(u32 au32Index) const
 
     if ((reinterpret_cast<uintptr_t>(lpSchema) & 1) != 0)        // clrlwi ; bne
     {
-        CGS_ASSERT(false,
+        CGS_FAIL(
                    "This Data Structure is not resolved. (Name  found in a pointer context.)");
     }
 
@@ -60,10 +60,10 @@ const SlotSchema* FeatureSchema::GetSlotSchema(u32 au32Index) const
 // (5 + mu32ParameterSchemaCount + i) == mapSchema[mu32ParameterSchemaCount + i].
 const SlotSchema* const* FeatureSchema::GetSlotSchemaAddress(u32 au32Index) const
 {
-    CGS_ASSERT(au32Index < mu32SlotSchemaCount,
-        CGS_ASSERT_MESSAGE_AT(
-            "lu32I < mu32SlotSchemaCount",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsDataStructures.h", 1066 /* ARTIST 0x82680A60 */));
+    CGS_ASSERT_AT(au32Index < mu32SlotSchemaCount,
+        "lu32I < mu32SlotSchemaCount",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsDataStructures.h", 1066 /* ARTIST 0x82680A60 */);
+
 
     return reinterpret_cast<const SlotSchema* const*>(
                &mapSchema[mu32ParameterSchemaCount + au32Index]);

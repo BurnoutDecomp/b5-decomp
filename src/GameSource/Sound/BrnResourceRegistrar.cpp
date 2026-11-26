@@ -322,7 +322,7 @@ namespace Logic
             mState = 9;
             return false;
         default:
-            CGS_ASSERT(false, "ResourceRegistrar::QueuedResource::Prepare() - Bad State");
+            CGS_FAIL("ResourceRegistrar::QueuedResource::Prepare() - Bad State");
             return false;
         }
     }
@@ -382,7 +382,7 @@ namespace Logic
             mState = 0;
             return true;
         default:
-            CGS_ASSERT(false, "Bad State in release machine");
+            CGS_FAIL("Bad State in release machine");
             return false;
         }
     }
@@ -453,7 +453,7 @@ namespace Logic
         }
         if (miPad12C == 2)
             return true;
-        CGS_ASSERT(false, "Bad State.");
+        CGS_FAIL("Bad State.");
         return false;
     }
 
@@ -914,11 +914,11 @@ namespace Logic
                                        const char* lpcResourceName,
                                        ResourceRegistrar::EType leType)
     {
-        CGS_ASSERT(lpcBundleName,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpFilename",
+        CGS_ASSERT_AT(lpcBundleName,
+            "lpFilename",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../Sound/BrnResourceRegistrar.cpp", 1086 /* ARTIST 0x826E2374 */));
+                "../Sound/BrnResourceRegistrar.cpp", 1086 /* ARTIST 0x826E2374 */);
+
         ResourceRegistrar::QueuedResource lRequest(
             lpcResourceName, lpcBundleName, this, 6, leType);
         GetResourceRegistrar().AddRequest(lRequest);

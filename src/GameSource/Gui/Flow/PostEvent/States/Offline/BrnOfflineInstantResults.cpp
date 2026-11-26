@@ -282,8 +282,8 @@ namespace BrnGui
     // the state machine falls through to E_ACTIVE_SUBSTATE_EVENT_DONE.
     InstantResultsState::EResultsActiveSubStates InstantResultsState::GetNextSubstate()
     {
-        CGS_ASSERT(meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h", 603 /* ARTIST 0x824B3858 */));
+        CGS_ASSERT_AT(meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT,
+                   "meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h", 603 /* ARTIST 0x824B3858 */);
 
         for (s32 liNext = meActiveSubState + 1; liNext < E_ACTIVE_SUBSTATE_EVENT_COUNT; ++liNext)
         {
@@ -537,7 +537,7 @@ namespace BrnGui
         switch (meCurrentState)
         {
         case E_RESULTS_STATE_INVALID:
-            CGS_ASSERT(false, "Invalid state");            // cpp:622
+            CGS_FAIL("Invalid state");            // cpp:622
             break;
 
         case E_RESULTS_STATE_UNLOADED:
@@ -720,10 +720,10 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::AppendExpectedScreenComponents()
     {
-        CGS_ASSERT(mpGuiCache,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpGuiCache",
-                CGS_ARTIST_FILE, 774 /* ARTIST 0x824B3CD4 */));     // cpp:774
+        CGS_ASSERT_AT(mpGuiCache,
+            "mpGuiCache",
+                CGS_ARTIST_FILE, 774 /* ARTIST 0x824B3CD4 */);     // cpp:774
+
 
         const GuiFlow leFlow = static_cast<GuiFlow>(0);
 
@@ -751,10 +751,10 @@ namespace BrnGui
     // AppendAllExpectedComponents  @0x824BB458  (cpp:753, 31 instructions)
     void InstantResultsState::AppendAllExpectedComponents()
     {
-        CGS_ASSERT(mpGuiCache,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpGuiCache",
-                CGS_ARTIST_FILE, 755 /* ARTIST 0x824BB480 */));     // cpp:755
+        CGS_ASSERT_AT(mpGuiCache,
+            "mpGuiCache",
+                CGS_ARTIST_FILE, 755 /* ARTIST 0x824BB480 */);     // cpp:755
+
 
         AppendExpectedScreenComponents();
 
@@ -858,7 +858,7 @@ namespace BrnGui
         case E_ACTIVE_SUBSTATE_EVENT_LEAVING:               UpdateLeaving();            break;
         case E_ACTIVE_SUBSTATE_EVENT_DONE:                  TriggerExitResults();       break;
         default:
-            CGS_ASSERT_STREAM_AT(false, "Invalid substate (" << meActiveSubState << ")",
+            CGS_FAIL_STREAM_AT("Invalid substate (" << meActiveSubState << ")",
                                  CGS_ARTIST_FILE, 1706);                         // cpp:1706
             break;
         }
@@ -1382,7 +1382,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT_AT(false, "Invalid substate for taking new photo", CGS_ARTIST_FILE, 2053);                // cpp:2053
+            CGS_FAIL_AT("Invalid substate for taking new photo", CGS_ARTIST_FILE, 2053);                // cpp:2053
             break;
         }
     }
@@ -2453,7 +2453,7 @@ namespace BrnGui
             meSubStateState = E_SUBSTATE_SET_UP_COMPONENTS;
             break;
         default:
-            CGS_ASSERT_AT(false, "Invalid substate when upgrading license", CGS_ARTIST_FILE, 2857);
+            CGS_FAIL_AT("Invalid substate when upgrading license", CGS_ARTIST_FILE, 2857);
             break;
         }
     }

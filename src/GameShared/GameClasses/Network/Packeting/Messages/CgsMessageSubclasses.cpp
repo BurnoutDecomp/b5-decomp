@@ -65,12 +65,12 @@ namespace CgsNetwork
     // mx8Flags |= VALID                    (ori r11,r11,1 / stb @+0x19)
     void ReliableMessage::PrepareForSend(s32 leType, u16 lu16Frame)
     {
-        CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", __FILE__, 940 /* ARTIST 0x82882138 */));
+        CGS_ASSERT_AT((mx8Flags & KX8_FLAGS_VALID) == 0,
+            "!IsMessageValid()", __FILE__, 940 /* ARTIST 0x82882138 */);
         mx8Flags |= KX8_FLAGS_RELIABLE;
-        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16Frame != KU16_INVALID_FRAME", __FILE__, 594 /* ARTIST 0x8288216C */));
+        CGS_ASSERT_AT(lu16Frame != KU16_INVALID_FRAME,
+            "lu16Frame != KU16_INVALID_FRAME", __FILE__, 594 /* ARTIST 0x8288216C */);
+
         SetType(static_cast<::EMessageType>(leType));
         mu16Frame = lu16Frame;
         mx8Flags |= KX8_FLAGS_VALID;

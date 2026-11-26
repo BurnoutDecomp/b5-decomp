@@ -572,10 +572,10 @@ namespace BrnGui
     // it is kept for the DWARF signature.)
     void InGame::PauseGame(bool /*lbUserInstigated*/, bool lbOpenDriverDetails)
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpGuiCache",
-                CGS_ARTIST_FILE, 1038 /* ARTIST 0x824DF018 */));   // cpp:1038
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache",
+                CGS_ARTIST_FILE, 1038 /* ARTIST 0x824DF018 */);   // cpp:1038
+
 
         if (!PauseAllowed())
             return;
@@ -657,7 +657,7 @@ namespace BrnGui
     // news) are always allowed; the join options need the multiplayer privilege.
     bool InGame::CheckPrivileges(EMainMenuOptions leMainMenuOption)
     {
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 1253 /* ARTIST 0x824B8F34 */));   // cpp:1253
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1253 /* ARTIST 0x824B8F34 */);   // cpp:1253
 
         const bool lbMultiplayerAllowed = mpGuiCache->IsMultiplayerAllowed();
         switch (leMainMenuOption)
@@ -680,7 +680,7 @@ namespace BrnGui
             return true;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid menu option", CGS_ARTIST_FILE, 1289 /* ARTIST 0x824B8FB8 */));   // cpp:1289
+            CGS_FAIL_AT("Invalid menu option", CGS_ARTIST_FILE, 1289 /* ARTIST 0x824B8FB8 */);   // cpp:1289
             return false;
         }
     }
@@ -989,7 +989,7 @@ namespace BrnGui
                 break;
 
             default:
-                CGS_ASSERT(false, "Unexpected event in InGame::Update");   // cpp:624
+                CGS_FAIL("Unexpected event in InGame::Update");   // cpp:624
                 break;
             }
         }

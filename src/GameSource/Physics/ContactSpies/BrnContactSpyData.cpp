@@ -106,14 +106,14 @@ bool ContactSpyData::IsEmpty() const
 
     if (lbIsEmpty)
     {
-        CGS_ASSERT(mRaceCarContactRunList.GetLength() == 0, CGS_ASSERT_MESSAGE_AT(
-                   "mRaceCarContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 247));
-        CGS_ASSERT(mTrafficContactRunList.GetLength() == 0, CGS_ASSERT_MESSAGE_AT(
-                   "mTrafficContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 248));
-        CGS_ASSERT(mPhysicalCarPartContactRunList.GetLength() == 0, CGS_ASSERT_MESSAGE_AT(
-                   "mPhysicalCarPartContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 249));
-        CGS_ASSERT(mPropContactRunList.GetLength() == 0, CGS_ASSERT_MESSAGE_AT(
-                   "mPropContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 250));
+        CGS_ASSERT_AT(mRaceCarContactRunList.GetLength() == 0,
+                   "mRaceCarContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 247);
+        CGS_ASSERT_AT(mTrafficContactRunList.GetLength() == 0,
+                   "mTrafficContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 248);
+        CGS_ASSERT_AT(mPhysicalCarPartContactRunList.GetLength() == 0,
+                   "mPhysicalCarPartContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 249);
+        CGS_ASSERT_AT(mPropContactRunList.GetLength() == 0,
+                   "mPropContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 250);
     }
 
     return lbIsEmpty;

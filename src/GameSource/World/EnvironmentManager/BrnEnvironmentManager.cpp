@@ -177,9 +177,9 @@ bool EnvironmentManager::UpdateFromTool(bool lbPause)
 // @ 0x827B0E50. Commit the pending season swap once the stream-in has finished.
 void EnvironmentManager::DiscardCurrSeason()
 {
-    CGS_ASSERT(meStreamInStage == E_STREAMIN_DONE,
-        CGS_ASSERT_MESSAGE_AT(
-            "meStreamInStage == E_STREAMIN_DONE", KAC_ARTIST_ASSERT_FILE, 1287 /* ARTIST 0x827B0E78 */));
+    CGS_ASSERT_AT(meStreamInStage == E_STREAMIN_DONE,
+        "meStreamInStage == E_STREAMIN_DONE", KAC_ARTIST_ASSERT_FILE, 1287 /* ARTIST 0x827B0E78 */);
+
 
     // Rewind the stream-OUT stage machine to START and point it at the season that is
     // being discarded. (0x444/0x448 were previously mis-named muCurrSeasonRef /
@@ -926,8 +926,8 @@ void EnvironmentManager::EnableJunkyardLightingSetup()
 // and drop both overrides.
 void EnvironmentManager::DisableJunkyardLightingSetup()
 {
-    CGS_ASSERT(mbJunkyardLightingSetup,
-        CGS_ASSERT_MESSAGE_AT("mbJunkyardLightingSetup", KAC_ARTIST_ASSERT_FILE, 1855 /* ARTIST 0x827B1110 */));
+    CGS_ASSERT_AT(mbJunkyardLightingSetup,
+        "mbJunkyardLightingSetup", KAC_ARTIST_ASSERT_FILE, 1855 /* ARTIST 0x827B1110 */);
 
     SetTimeOfDay_Seconds(mfTimeBeforeEnteringJunkyard);
     mfTimeOfDayUpperBound       = KF_DEF_TIME_OF_DAY_UPPER_BOUND;
@@ -1327,7 +1327,7 @@ bool EnvironmentManager::SetupBlend( BlendFrame& lrBlendFrame, f32 lfTimeStep,
 
         if ( luRetries++ >= 2u )
         {
-            CGS_ASSERT_AT( false, "Incorrect time keys fed to the environment manager" , KAC_ARTIST_ASSERT_FILE, 1455);
+            CGS_FAIL_AT( "Incorrect time keys fed to the environment manager" , KAC_ARTIST_ASSERT_FILE, 1455);
         }
     }
 }

@@ -89,10 +89,10 @@ BehaviourInterpolate::GetCollisionPolicy()
 f32
 BehaviourInterpolate::GetParametricTime() const
 {
-    CGS_ASSERT(mfDuration != 0.0f,
-        CGS_ASSERT_MESSAGE_AT(
-            "mfDuration != 0.0f",
-            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 158 /* ARTIST 0x8220662C */));
+    CGS_ASSERT_AT(mfDuration != 0.0f,
+        "mfDuration != 0.0f",
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 158 /* ARTIST 0x8220662C */);
+
 
     f32 lfRatio = mfRunningTime / mfDuration;
 
@@ -210,12 +210,12 @@ BehaviourInterpolate::Construct()
 bool
 BehaviourInterpolate::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
 {
-    CGS_ASSERT(mbSetup,
-        CGS_ASSERT_MESSAGE_AT("mbSetup", CGS_ARTIST_FILE, 78 /* ARTIST 0x82252A40 */));                                                   // :78
-    CGS_ASSERT(lrInfo.mpInterpolateLockInterface != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lSharedInfo.mpInterpolateLockInterface != NULL",
-            CGS_ARTIST_FILE, 79 /* ARTIST 0x82252A68 */));                     // :79
+    CGS_ASSERT_AT(mbSetup,
+        "mbSetup", CGS_ARTIST_FILE, 78 /* ARTIST 0x82252A40 */);                                                   // :78
+    CGS_ASSERT_AT(lrInfo.mpInterpolateLockInterface != 0,
+        "lSharedInfo.mpInterpolateLockInterface != NULL",
+            CGS_ARTIST_FILE, 79 /* ARTIST 0x82252A68 */);                     // :79
+
 
     mFromCamera.Prepare(*lrInfo.mpInterpolateLockInterface);
     mToCamera.Prepare(*lrInfo.mpInterpolateLockInterface);
@@ -245,9 +245,9 @@ BehaviourInterpolate::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
 bool
 BehaviourInterpolate::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters", CGS_ARTIST_FILE, 101));                                    // :101
-    CGS_ASSERT(mbSetup, CGS_ASSERT_MESSAGE_AT("mbSetup", CGS_ARTIST_FILE, 102));                                                   // :102
-    CGS_ASSERT(lrInfo.mpBehaviourManager != 0, CGS_ASSERT_MESSAGE_AT("lrSharedInfo.mpBehaviourManager", CGS_ARTIST_FILE, 103));    // :103
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters", CGS_ARTIST_FILE, 101);                                    // :101
+    CGS_ASSERT_AT(mbSetup, "mbSetup", CGS_ARTIST_FILE, 102);                                                   // :102
+    CGS_ASSERT_AT(lrInfo.mpBehaviourManager != 0, "lrSharedInfo.mpBehaviourManager", CGS_ARTIST_FILE, 103);    // :103
 
     const Camera lFrom(mFromCamera.GetCamera(lrInfo.mpBehaviourManager));
     const Camera lTo(mToCamera.GetCamera(lrInfo.mpBehaviourManager));
@@ -305,14 +305,14 @@ BehaviourInterpolate::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo
 bool
 BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters", CGS_ARTIST_FILE, 137));                                    // :137
-    CGS_ASSERT(mbSetup, CGS_ASSERT_MESSAGE_AT("mbSetup", CGS_ARTIST_FILE, 138));                                                   // :138
-    CGS_ASSERT(lrInfo.mpBehaviourManager != 0, CGS_ASSERT_MESSAGE_AT("lrSharedInfo.mpBehaviourManager", CGS_ARTIST_FILE, 139));    // :139
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters", CGS_ARTIST_FILE, 137);                                    // :137
+    CGS_ASSERT_AT(mbSetup, "mbSetup", CGS_ARTIST_FILE, 138);                                                   // :138
+    CGS_ASSERT_AT(lrInfo.mpBehaviourManager != 0, "lrSharedInfo.mpBehaviourManager", CGS_ARTIST_FILE, 139);    // :139
 
     const Camera lFrom(mFromCamera.GetCamera(lrInfo.mpBehaviourManager));
     const Camera lTo(mToCamera.GetCamera(lrInfo.mpBehaviourManager));
 
-    CGS_ASSERT(!IsZero(mfDuration), CGS_ASSERT_MESSAGE_AT("!rw::math::fpu::IsZero(mfDuration)", CGS_ARTIST_FILE, 145));            // :145
+    CGS_ASSERT_AT(!IsZero(mfDuration), "!rw::math::fpu::IsZero(mfDuration)", CGS_ARTIST_FILE, 145);            // :145
 
     f32 lfParametricTime = mfRunningTime / mfDuration;
     if (lfParametricTime >= KF_ONE)
@@ -371,10 +371,10 @@ BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourShare
 void
 BehaviourInterpolate::Release(const BehaviourSharedPrepareReleaseInfo& lrInfo)
 {
-    CGS_ASSERT(lrInfo.mpInterpolateLockInterface != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lSharedInfo.mpInterpolateLockInterface != NULL",
-            CGS_ARTIST_FILE, 207 /* ARTIST 0x82252CE8 */));                     // :207 (0xCF)
+    CGS_ASSERT_AT(lrInfo.mpInterpolateLockInterface != 0,
+        "lSharedInfo.mpInterpolateLockInterface != NULL",
+            CGS_ARTIST_FILE, 207 /* ARTIST 0x82252CE8 */);                     // :207 (0xCF)
+
 
     mFromCamera.Release(*lrInfo.mpInterpolateLockInterface);
     mToCamera.Release(*lrInfo.mpInterpolateLockInterface);

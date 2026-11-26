@@ -18,14 +18,14 @@ namespace BrnTrafficIO
     // X360 0x827A9F50 (:347): write-lock; VehicleOutputInterface::operator= on this+0x10.
     void InputBuffer_PostPhysics::SetVehicleOutputInterface(const VehicleOutputInterface* lpVehicleOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 351));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 351);
         mVehicleOutputInterface = *lpVehicleOutputInterface;
     }
 
     // X360 0x827AA000 (:353): write-lock; VehicleManagerOutputInterface::operator= on this+0xEC30.
     void InputBuffer_PostPhysics::SetVehicleManagerOutputInterface(const VehicleManagerOutputInterface* lpVehicleManagerOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 357));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 357);
         mVehicleManagerOutputInterface = *lpVehicleManagerOutputInterface;
     }
 
@@ -33,14 +33,14 @@ namespace BrnTrafficIO
     // into RCEntityActiveRaceCarOutputInterface::operator=.
     void InputBuffer_PostPhysics::SetActiveRaceCarOutputInterface(const ActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 363));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 363);
         mActiveRaceCarOutputInterface = *lpActiveRaceCarOutputInterface;
     }
 
     // X360 0x827AA0B8 (:362): write-lock; DeformationOutputInterfaceForEntityModules::operator= on this+0x151B0.
     void InputBuffer_PostPhysics::SetDeformationOutputInterfaceForEntityModules(const DeformationOutputInterfaceForEntityModules* lpDeformationOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 366));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 366);
         mDeformationOutputInterfaceForEntityModules = *lpDeformationOutputInterface;
     }
 
@@ -48,7 +48,7 @@ namespace BrnTrafficIO
     // (this+0x19EF0). ContactSpyInterface is a 4-byte type, so the store is the whole memberwise copy.
     void InputBuffer_PostPhysics::SetContactSpyInterface(const ContactSpyInterface* lpContactSpyInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 370));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 370);
         mContactSpyInterface = *lpContactSpyInterface;
     }
 }

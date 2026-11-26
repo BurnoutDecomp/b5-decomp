@@ -17,12 +17,12 @@ void CgsSceneManager::SceneManagerIO::SceneQueryInterface::LineTestNearest(
     static const char KAC_ARTIST_FILE[] =
         "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h";
 
-    CGS_ASSERT(leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY,
-               CGS_ASSERT_MESSAGE_AT("leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY",
-                                     KAC_ARTIST_FILE, 1020));
-    CGS_ASSERT(mpFineLineTestNearestQueue,
-               CGS_ASSERT_MESSAGE_AT("mpFineLineTestNearestQueue",
-                                     KAC_ARTIST_FILE, 1021));
+    CGS_ASSERT_AT(leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY,
+               "leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY",
+                                     KAC_ARTIST_FILE, 1020);
+    CGS_ASSERT_AT(mpFineLineTestNearestQueue,
+               "mpFineLineTestNearestQueue",
+                                     KAC_ARTIST_FILE, 1021);
 
     InEventLineTestNearest lEvent;
     lEvent.mQueryId = lQueryId;

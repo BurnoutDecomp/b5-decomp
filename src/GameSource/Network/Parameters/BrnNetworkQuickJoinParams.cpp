@@ -44,15 +44,15 @@ namespace BrnNetwork
 
     void QuickJoinParams::SetMatchmakingParameter(EBrnQuickJoinParameters leParameter, s32 liValue)
     {
-        CGS_ASSERT(static_cast<s32>(leParameter) >= 0 && leParameter < E_QUICKJOIN_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "(int32_t)leParameter >= 0 && leParameter < E_QUICKJOIN_COUNT",
-                __FILE__, 74 /* ARTIST 0x82584210 */));
+        CGS_ASSERT_AT(static_cast<s32>(leParameter) >= 0 && leParameter < E_QUICKJOIN_COUNT,
+            "(int32_t)leParameter >= 0 && leParameter < E_QUICKJOIN_COUNT",
+                __FILE__, 74 /* ARTIST 0x82584210 */);
+
 
         maiQuickJoinParams[leParameter] = liValue;
         ++miNumParameters;
-        CGS_ASSERT(miNumParameters <= CgsNetwork::KI_MAX_QUICK_JOIN_PARAMS,
-            CGS_ASSERT_MESSAGE_AT("miNumParameters <= 16", __FILE__, 80 /* ARTIST 0x8258424C */));
+        CGS_ASSERT_AT(miNumParameters <= CgsNetwork::KI_MAX_QUICK_JOIN_PARAMS,
+            "miNumParameters <= 16", __FILE__, 80 /* ARTIST 0x8258424C */);
     }
 
     void QuickJoinParams::SetMatchmakingParameter(EBrnQuickJoinParameters leParameter, bool lbValue)

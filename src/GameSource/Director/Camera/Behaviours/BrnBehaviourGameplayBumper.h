@@ -268,8 +268,8 @@ private:
 inline void
 BehaviourGameplayBumper::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourGameplayBumper,
-               CGS_ASSERT_MESSAGE_AT("lpParameters->GetType() == eBehaviourGameplayBumper", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h", 152));
+    CGS_ASSERT_AT(lpParameters->GetType() == eBehaviourGameplayBumper,
+               "lpParameters->GetType() == eBehaviourGameplayBumper", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h", 152);
     SetDebugParametersName(lpParameters->GetDebugName());         // stw r11, 0x10(this)
     mpParameters = lpParameters;                                  // stw r4,  0x828(this)
 }

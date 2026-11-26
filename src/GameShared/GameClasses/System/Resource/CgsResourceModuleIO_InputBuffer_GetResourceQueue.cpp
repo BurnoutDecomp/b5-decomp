@@ -24,9 +24,9 @@ namespace CgsResource
         // Write-lock gate ((mxStatusFlags >> 3) & 1), then return the embedded request queue.
         ResourceRequestQueue<16384>* InputBuffer::GetResourceQueue()
         {
-            CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
                 "Not locked for writing\n",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModuleIO.h", 81));   // CgsResourceModuleIO.h:81
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModuleIO.h", 81);   // CgsResourceModuleIO.h:81
             return &mResourceQueue;
         }
     }

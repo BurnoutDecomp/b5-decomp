@@ -177,7 +177,7 @@ Moment::Parameters* MomentParameterBank::GetParameters(EMomentParamID leMomentPa
         case E_PARAM_TUMBLING_SIDE_CRASH_ONLY:
             return &mParamsTumblingSideCrashOnly;
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled parameter type", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentParameterBank.cpp", 195));
+            CGS_FAIL_AT("unhandled parameter type", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentParameterBank.cpp", 195);
             return 0;
     }
 }

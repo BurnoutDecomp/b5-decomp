@@ -212,7 +212,7 @@ void PauseScreen::Update()
                 break;
 
             default:
-                CGS_ASSERT(false, "Invalid internal state in BrnPauseScreen::Update()");   // cpp:177
+                CGS_FAIL("Invalid internal state in BrnPauseScreen::Update()");   // cpp:177
                 break;
             }
         }
@@ -285,7 +285,7 @@ void PauseScreen::HandleControllerInput(const CgsModule::Event* lpEvent)
         }
         else
         {
-            CGS_ASSERT(false, "Invalid pause option selected");
+            CGS_FAIL("Invalid pause option selected");
         }
         break;
     }

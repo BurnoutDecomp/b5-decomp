@@ -38,12 +38,12 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::CaptureTelemetryEvent(ETelemetryHook leHook, s32 liData)
     {
-        CGS_ASSERT(GetServerInterface(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(GetServerInterface(),
             "GetServerInterface()",
-            __FILE__, 3138 /* ARTIST 0x82582230 */));
-        CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(), CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 3138 /* ARTIST 0x82582230 */);
+        CGS_ASSERT_AT(GetServerInterface()->GetTelemetryComponent(),
             "GetServerInterface()->GetTelemetryComponent()",
-            __FILE__, 3139 /* ARTIST 0x82582258 */));
+            __FILE__, 3139 /* ARTIST 0x82582258 */);
 
         char lacData[CgsNetwork::KI_MAX_TELEMETRY_DATA_SIZE];
         CgsCore::SPrintf(lacData, sizeof(lacData), "%i", liData);
@@ -298,9 +298,9 @@ namespace BrnNetwork
             {
                 return false;
             }
-            CGS_ASSERT(lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY,
                 "lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY",
-                CGS_ARTIST_FILE, 430 /* ARTIST 0x8259ADE8 */));
+                CGS_ARTIST_FILE, 430 /* ARTIST 0x8259ADE8 */);
 
             GetPlayerManager()->RegisterEventCallback(PlayerManagerEventCallback, this);
         }
@@ -466,9 +466,9 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "unknown prepare stage",
-                CGS_ARTIST_FILE, 811 /* ARTIST 0x8259B318 */));
+                CGS_ARTIST_FILE, 811 /* ARTIST 0x8259B318 */);
             return false;
         }
     }
@@ -636,9 +636,9 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "unknown release stage",
-                CGS_ARTIST_FILE, 1210 /* ARTIST 0x8258E230 */));
+                CGS_ARTIST_FILE, 1210 /* ARTIST 0x8258E230 */);
             return false;
         }
     }
@@ -935,19 +935,19 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::ProcessHLUpdateFlags(BrnUpdateSet luUpdateSet)
     {
-        CGS_ASSERT(GetPlayerManager(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(GetPlayerManager(),
             "GetPlayerManager()",
-            __FILE__, 3260 /* ARTIST 0x82596900 */));
+            __FILE__, 3260 /* ARTIST 0x82596900 */);
 
         mbDiskReadErrorThisFrame = (luUpdateSet & 0x200) != 0;
         if (mbDiskReadErrorThisFrame)
         {
-            CGS_ASSERT(GetServerInterface(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(GetServerInterface(),
                 "GetServerInterface()",
-                __FILE__, 3267 /* ARTIST 0x82596940 */));
-            CGS_ASSERT(GetServerInterface()->GetConnectionComponent(), CGS_ASSERT_MESSAGE_AT(
+                __FILE__, 3267 /* ARTIST 0x82596940 */);
+            CGS_ASSERT_AT(GetServerInterface()->GetConnectionComponent(),
                 "GetServerInterface()->GetConnectionComponent()",
-                __FILE__, 3268 /* ARTIST 0x82596968 */));
+                __FILE__, 3268 /* ARTIST 0x82596968 */);
 
             mbNotifyGameOfDisconnectAfterDiskError = true;
             GetBuddyManager()->RevokeAllInvites();
@@ -984,24 +984,24 @@ namespace BrnNetwork
     void BrnNetworkManager::SyncTimeClientReadyCallback(NetworkPlayerID lClientReadyID, void* lpUserData)
     {
         BrnNetworkManager* lpNetworkManager = static_cast<BrnNetworkManager*>(lpUserData);
-        CGS_ASSERT(lpNetworkManager,
-            CGS_ASSERT_MESSAGE_AT("lpNetworkManager", __FILE__, 2276 /* ARTIST 0x82581BD4 */));
-        CGS_ASSERT(lpNetworkManager->GetServerInterface(),
-            CGS_ASSERT_MESSAGE_AT(
-                "lpNetworkManager->GetServerInterface()",
-                __FILE__, 2281 /* ARTIST 0x82581BF8 */));
-        CGS_ASSERT(lpNetworkManager->GetServerInterface()->GetGameComponent(),
-            CGS_ASSERT_MESSAGE_AT(
-                "lpNetworkManager->GetServerInterface()->GetGameComponent()",
-                __FILE__, 2282 /* ARTIST 0x82581C20 */));
+        CGS_ASSERT_AT(lpNetworkManager,
+            "lpNetworkManager", __FILE__, 2276 /* ARTIST 0x82581BD4 */);
+        CGS_ASSERT_AT(lpNetworkManager->GetServerInterface(),
+            "lpNetworkManager->GetServerInterface()",
+                __FILE__, 2281 /* ARTIST 0x82581BF8 */);
+
+        CGS_ASSERT_AT(lpNetworkManager->GetServerInterface()->GetGameComponent(),
+            "lpNetworkManager->GetServerInterface()->GetGameComponent()",
+                __FILE__, 2282 /* ARTIST 0x82581C20 */);
+
 
         if (lpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame() &&
             !lpNetworkManager->GetServerInterface()->GetGameComponent()->IsGameStarted())
         {
-            CGS_ASSERT(lpNetworkManager->mpNetworkModule,
-                CGS_ASSERT_MESSAGE_AT(
-                    "lpNetworkManager->mpNetworkModule",
-                    __FILE__, 2286 /* ARTIST 0x82581C78 */));
+            CGS_ASSERT_AT(lpNetworkManager->mpNetworkModule,
+                "lpNetworkManager->mpNetworkModule",
+                    __FILE__, 2286 /* ARTIST 0x82581C78 */);
+
             lpNetworkManager->GetTrafficManager()->RestartNetworkTraffic(lClientReadyID);
         }
     }
@@ -1118,19 +1118,19 @@ namespace BrnNetwork
 
     void BrnNetworkManager::CaptureTelemetryEvent(ETelemetryHook leHook, const char* lpcData)
     {
-        CGS_ASSERT(GetServerInterface(),
-            CGS_ASSERT_MESSAGE_AT("GetServerInterface()", __FILE__, 3121 /* ARTIST 0x825821A8 */));
-        CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(),
-            CGS_ASSERT_MESSAGE_AT(
-                "GetServerInterface()->GetTelemetryComponent()", __FILE__, 3122 /* ARTIST 0x825821D0 */));
+        CGS_ASSERT_AT(GetServerInterface(),
+            "GetServerInterface()", __FILE__, 3121 /* ARTIST 0x825821A8 */);
+        CGS_ASSERT_AT(GetServerInterface()->GetTelemetryComponent(),
+            "GetServerInterface()->GetTelemetryComponent()", __FILE__, 3122 /* ARTIST 0x825821D0 */);
+
         GetServerInterface()->GetTelemetryComponent()->CaptureEvent(leHook, lpcData);
     }
 
     EActiveRaceCarIndex BrnNetworkManager::GetActiveRaceCarIndex(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpNetworkModule, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkModule,
             "mpNetworkModule",
-            CGS_ARTIST_FILE, 3311 /* ARTIST 0x825822E4 */));
+            CGS_ARTIST_FILE, 3311 /* ARTIST 0x825822E4 */);
         return mpNetworkModule->GetActiveRaceCarIndex(lPlayerID);
     }
 
@@ -1199,27 +1199,27 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::DxtDecodeCallback(void* lpPixels, void* lpUserData)
     {
-        CGS_ASSERT(lpPixels, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpPixels,
             "lpPixels",
-            CGS_ARTIST_FILE, 3236 /* ARTIST 0x82593D10 */));
-        CGS_ASSERT(lpUserData, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 3236 /* ARTIST 0x82593D10 */);
+        CGS_ASSERT_AT(lpUserData,
             "lpUserData",
-            CGS_ARTIST_FILE, 3237 /* ARTIST 0x82593D34 */));
+            CGS_ARTIST_FILE, 3237 /* ARTIST 0x82593D34 */);
         BrnNetworkManager* lpNetworkManager = static_cast<BrnNetworkManager*>(lpUserData);
-        CGS_ASSERT(lpNetworkManager, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpNetworkManager,
             "lpNetworkManager",
-            CGS_ARTIST_FILE, 3240 /* ARTIST 0x82593D50 */));
+            CGS_ARTIST_FILE, 3240 /* ARTIST 0x82593D50 */);
 
         BrnNetworkModuleIO::NetworkOutImageDxtDecodedEvent lNetworkOutImageDxtDecodedEvent;
         lNetworkOutImageDxtDecodedEvent.mpDecodedPixels = lpPixels;
         lNetworkOutImageDxtDecodedEvent.mPlayerName     = lpNetworkManager->mExportPlayerName;
 
-        CGS_ASSERT(lpNetworkManager->mpNetworkModule, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpNetworkManager->mpNetworkModule,
             "lpNetworkManager->mpNetworkModule",
-            CGS_ARTIST_FILE, 3245 /* ARTIST 0x82593D98 */));
-        CGS_ASSERT(lpNetworkManager->mpNetworkModule->GetNetworkEventQueue(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 3245 /* ARTIST 0x82593D98 */);
+        CGS_ASSERT_AT(lpNetworkManager->mpNetworkModule->GetNetworkEventQueue(),
             "lpNetworkManager->mpNetworkModule->GetNetworkEventQueue()",
-            CGS_ARTIST_FILE, 3246 /* ARTIST 0x82593DC4 */));
+            CGS_ARTIST_FILE, 3246 /* ARTIST 0x82593DC4 */);
         lpNetworkManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkOutImageDxtDecodedEvent);
     }
 
@@ -1230,12 +1230,12 @@ namespace BrnNetwork
     void BrnNetworkManager::ProcessNetworkTextureDecodeEvent(
             const BrnNetworkModuleIO::NetworkInDxtDecodeImageEvent* lpDxtDecodeRequestEvent)
     {
-        CGS_ASSERT(lpDxtDecodeRequestEvent, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpDxtDecodeRequestEvent,
             "lpDxtDecodeRequestEvent",
-            __FILE__, 3208 /* ARTIST 0x82596828 */));
-        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat(), CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 3208 /* ARTIST 0x82596828 */);
+        CGS_ASSERT_AT(renderengine::PIXELFORMAT_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat(),
             "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat()",
-            __FILE__, 3209 /* ARTIST 0x8259685C */));
+            __FILE__, 3209 /* ARTIST 0x8259685C */);
 
         mExportPlayerName = lpDxtDecodeRequestEvent->mPlayerName;
 
@@ -1326,9 +1326,9 @@ namespace BrnNetwork
         case E_LOGIN_EVENT_PROCEED:
             return;
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "Invalid login event",
-                __FILE__, 1556 /* ARTIST 0x825959D8 */));
+                __FILE__, 1556 /* ARTIST 0x825959D8 */);
             return;
         }
 

@@ -48,21 +48,21 @@ namespace PhysicsSimulationIO
     // X360 0x825BD0A8. Read-lock guarded; returns the post-step time-step-used scalar (this+4).
     f32 OutputBuffer::GetTimeStepUsed() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", KAC_PHYSICS_SIMULATION_IO_RELATIVE_FILE, 1317));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_PHYSICS_SIMULATION_IO_RELATIVE_FILE, 1317);
         return mfTimeStepUsed;
     }
 
     // X360 0x8289F088. Write-lock guarded setter for muMaxIterationsUsed (this+8).
     void OutputBuffer::SetMaxIterationsUsed(u32 luMaxIterationsUsed)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1333));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1333);
         muMaxIterationsUsed = luMaxIterationsUsed;
     }
 
     // X360 0x8289EFD8. Write-lock guarded setter for mfTimeStepUsed (this+4).
     void OutputBuffer::SetTimeStepUsed(f32 fTimeStepUsed)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1303));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1303);
         mfTimeStepUsed = fTimeStepUsed;
     }
 
@@ -73,7 +73,7 @@ namespace PhysicsSimulationIO
     // / DeformationSensor::OutputContactSpy / AddContactSpiesToOutputQueue.
     OutputBuffer::OutContactSpyQueue* OutputBuffer::GetContactSpyQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1394));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1394);
         return &mContactSpyQueue;
     }
 
@@ -85,7 +85,7 @@ namespace PhysicsSimulationIO
     // spy queue out of the CONST sim-module output buffer.
     const OutputBuffer::OutContactSpyQueue* OutputBuffer::GetContactSpyQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1366));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1366);
         return &mContactSpyQueue;
     }
 
@@ -95,7 +95,7 @@ namespace PhysicsSimulationIO
     // open with `bl sub_8289F130`.
     OutputBuffer::OutUpdateRigidBodyQueue* OutputBuffer::GetUpdateRigidBodyQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1387));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1387);
         return &mUpdateRigidBodyQueue;
     }
 
@@ -109,7 +109,7 @@ namespace PhysicsSimulationIO
     // UpdatePostPhysics. Those sites were calling the write-locked overload and asserting.
     const OutputBuffer::OutUpdateRigidBodyQueue* OutputBuffer::GetUpdateRigidBodyQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1359));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1359);
         return &mUpdateRigidBodyQueue;
     }
 
@@ -118,7 +118,7 @@ namespace PhysicsSimulationIO
     // Sole in-scope caller: AddJointSpiesToOutputQueue @0x828A5900.
     OutputBuffer::OutJointSpyQueue* OutputBuffer::GetJointSpyQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1401));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1401);
         return &mJointSpyQueue;
     }
 
@@ -127,7 +127,7 @@ namespace PhysicsSimulationIO
     // output buffer read-locked.
     const OutputBuffer::OutJointSpyQueue* OutputBuffer::GetJointSpyQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", KAC_PHYSICS_SIMULATION_IO_RELATIVE_FILE, 1373));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_PHYSICS_SIMULATION_IO_RELATIVE_FILE, 1373);
         return &mJointSpyQueue;
     }
 
@@ -139,7 +139,7 @@ namespace PhysicsSimulationIO
     // console +131144 == this queue's miLength, confirming the base.)
     OutputBuffer::OutDriveSpyQueue* OutputBuffer::GetDriveSpyQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1408));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1408);
         return &mDriveSpyQueue;
     }
 

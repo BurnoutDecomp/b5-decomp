@@ -276,10 +276,10 @@ namespace BrnGui
     // ================================================================================
     void OnlineNews::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpGuiCache",
-                CGS_ARTIST_FILE, 287 /* ARTIST 0x824AA448 */));
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache",
+                CGS_ARTIST_FILE, 287 /* ARTIST 0x824AA448 */);
+
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
@@ -308,7 +308,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineNews::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineNews::HandleControllerInput", CGS_ARTIST_FILE, 328));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineNews::HandleControllerInput", CGS_ARTIST_FILE, 328);
 
         if (meSubState == E_SUBSTATE_SELECTING_PARAMS)
         {
@@ -354,7 +354,7 @@ namespace BrnGui
     {
         const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
 
-        CGS_ASSERT(lpPayload->mpCache != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid cache in OnlineNews::HandleGuiCacheEvent", CGS_ARTIST_FILE, 443));
+        CGS_ASSERT_STREAM_AT(lpPayload->mpCache != 0, "Invalid cache in OnlineNews::HandleGuiCacheEvent", CGS_ARTIST_FILE, 443);
 
         if (mpGuiCache == 0)
         {
@@ -405,7 +405,7 @@ namespace BrnGui
     void OnlineNews::HandleControllerAxis(const CgsModule::Event* lpEvent)
     {
         // The console's text names SelectRoutes (the same pooled string).
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in SelectRoutes::HandleControllerAxis", CGS_ARTIST_FILE, 409));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event in SelectRoutes::HandleControllerAxis", CGS_ARTIST_FILE, 409);
 
         if (meSubState < E_SUBSTATE_SELECTING_PARAMS)
         {

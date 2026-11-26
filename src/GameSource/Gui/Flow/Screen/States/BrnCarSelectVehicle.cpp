@@ -172,7 +172,7 @@ namespace BrnGui
     {
         // cpp:119 -- the X360 streams this message through StrStream; the call site passes
         // a plain string, so CGS_ASSERT forwards it directly.
-        CGS_ASSERT(lpFsm != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectVehicle.cpp", 119));
+        CGS_ASSERT_STREAM_AT(lpFsm != 0, "Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectVehicle.cpp", 119);
 
         CarSelectMain::Construct(liId, lpFsm);
 
@@ -339,8 +339,8 @@ namespace BrnGui
 
         if (mbFirstFrame)
         {
-            CGS_ASSERT(mpGuiCache != 0,
-                       CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 319));
+            CGS_ASSERT_AT(mpGuiCache != 0,
+                       "mpGuiCache", CGS_ARTIST_FILE, 319);
 
             const BrnGameState::GameStateModuleIO::ECarSelectType leCarSelectType =
                 mpGuiCache->GetCurrentCarSelectType();

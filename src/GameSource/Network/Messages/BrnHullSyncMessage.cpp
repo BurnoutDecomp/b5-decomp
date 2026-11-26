@@ -28,10 +28,10 @@ namespace BrnNetwork
     void HullSyncMessage::PrepareForSend(u16 lu16FrameCount,
                                          BufferedHullsToActivate* laBufferedHullActivates)
     {
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-            CGS_ASSERT_MESSAGE_AT("!ReliableMessage::IsMessageValid()", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 71));
-        CGS_ASSERT(laBufferedHullActivates->GetLength() > 0,
-            CGS_ASSERT_MESSAGE_AT("laBufferedHullActivates->GetLength() > 0", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 74));
+        CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
+            "!ReliableMessage::IsMessageValid()", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 71);
+        CGS_ASSERT_AT(laBufferedHullActivates->GetLength() > 0,
+            "laBufferedHullActivates->GetLength() > 0", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 74);
 
         mBufferedHullActivates = *laBufferedHullActivates;      // 48-byte memcpy in
         CgsNetwork::ReliableMessage::PrepareForSend(13, lu16FrameCount);
@@ -104,13 +104,13 @@ namespace BrnNetwork
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {
             *laBufferedHullActivates = mBufferedHullActivates;      // 48-byte memcpy out
-            CGS_ASSERT(mBufferedHullActivates.GetLength() > 0,
-                CGS_ASSERT_MESSAGE_AT("maBufferedHullActivates.GetLength() > 0", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 134));
+            CGS_ASSERT_AT(mBufferedHullActivates.GetLength() > 0,
+                "maBufferedHullActivates.GetLength() > 0", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 134);
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
             mBufferedHullActivates.Clear();                          // live-count -> 0 (+0x54)
-            CGS_ASSERT(mBufferedHullActivates.GetLength() == 0,
-                CGS_ASSERT_MESSAGE_AT("maBufferedHullActivates.GetLength() == 0", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 140));
+            CGS_ASSERT_AT(mBufferedHullActivates.GetLength() == 0,
+                "maBufferedHullActivates.GetLength() == 0", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 140);
             return true;
         }
         return false;

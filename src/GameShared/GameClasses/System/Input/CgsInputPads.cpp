@@ -30,11 +30,11 @@ namespace CgsInput
 
     DeviceX360Pad* InputPads::GetDebugGamePad(s32 liPortIndex)
     {
-        CGS_ASSERT(liPortIndex >= 0,
-            CGS_ASSERT_MESSAGE_AT("liPortIndex >= 0", __FILE__, 251 /* ARTIST 0x823A5F64 */));                          // h:251
-        CGS_ASSERT(liPortIndex < (s32)KU_NUMBER_OF_PADS,
-            CGS_ASSERT_MESSAGE_AT(
-                "liPortIndex < (int32_t)KU_NUMBER_OF_PADS", __FILE__, 252 /* ARTIST 0x823A5F88 */)); // h:252
+        CGS_ASSERT_AT(liPortIndex >= 0,
+            "liPortIndex >= 0", __FILE__, 251 /* ARTIST 0x823A5F64 */);                          // h:251
+        CGS_ASSERT_AT(liPortIndex < (s32)KU_NUMBER_OF_PADS,
+            "liPortIndex < (int32_t)KU_NUMBER_OF_PADS", __FILE__, 252 /* ARTIST 0x823A5F88 */); // h:252
+
         return &maPads[liPortIndex];
     }
 
@@ -507,14 +507,14 @@ namespace CgsInput
         // (0x821F0EC8, the index through 0x821F0E50).
         if (liPlayer < 0 || liPlayer >= static_cast<s32>(KU_NUMBER_OF_PADS))
         {
-            CGS_ASSERT_STREAM_AT(false,
+            CGS_FAIL_STREAM_AT(
                 "Player out of bounds. 0 <= " << liPlayer << " < " << KU_NUMBER_OF_PADS << "\n",
                 CGS_ARTIST_FILE, 432);
             return E_BINDRESULTINVALIDPLAYER;
         }
         if (liPort < 0 || liPort >= static_cast<s32>(KU_NUMBER_OF_PADS))
         {
-            CGS_ASSERT_STREAM_AT(false,
+            CGS_FAIL_STREAM_AT(
                 "Port out of bounds. 0 <= " << liPort << " < " << KU_NUMBER_OF_PADS << "\n",
                 CGS_ARTIST_FILE, 437);
             return E_BINDRESULTINVALIDPORT;
@@ -526,12 +526,12 @@ namespace CgsInput
             {
                 return E_BINDRESULTOK;
             }
-            CGS_ASSERT_AT(false, "Player is already bound to another port. Unbind first", CGS_ARTIST_FILE, 448);
+            CGS_FAIL_AT("Player is already bound to another port. Unbind first", CGS_ARTIST_FILE, 448);
             return E_BINDRESULTPLAYERALREADYBOUND;
         }
         if (maiPortToPlayer[liPort] != -1)
         {
-            CGS_ASSERT_AT(false, "Port is already bound. Unbind first", CGS_ARTIST_FILE, 453);
+            CGS_FAIL_AT("Port is already bound. Unbind first", CGS_ARTIST_FILE, 453);
             return E_BINDRESULTPORTALREADYBOUND;
         }
 
@@ -555,7 +555,7 @@ namespace CgsInput
         // so it goes in as the u32 constant.
         if (liPlayer < 0 || liPlayer >= static_cast<s32>(KU_NUMBER_OF_PADS))
         {
-            CGS_ASSERT_STREAM_AT(false,
+            CGS_FAIL_STREAM_AT(
                 "Player out of bounds. 0 <= " << liPlayer << " < " << KU_NUMBER_OF_PADS << "\n",
                 CGS_ARTIST_FILE, 479);
             return E_UNBINDRESULTINVALIDPLAYER;
@@ -563,7 +563,7 @@ namespace CgsInput
 
         if (!maPlayers[liPlayer].mbBound)
         {
-            CGS_ASSERT_AT(false, "Player is already unbound", CGS_ARTIST_FILE, 484);
+            CGS_FAIL_AT("Player is already unbound", CGS_ARTIST_FILE, 484);
             return E_UNBINDRESULTPLAYERNOTBOUND;
         }
 

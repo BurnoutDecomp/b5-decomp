@@ -38,7 +38,7 @@ const f32 KF_MAX_CAR_SELECT_DURATION = 30.0f;
 void OnlineCarSelectManager::Construct(GameStateModule* lpGameStateModule,
                                        BrnProgression::ProgressionManager* lpProgressionManager)
 {
-    CGS_ASSERT(lpGameStateModule, CGS_ASSERT_MESSAGE_AT("lpGameStateModule", CGS_ARTIST_BRNONLINECARSELECTMANAGER_FILE, 252));
+    CGS_ASSERT_AT(lpGameStateModule, "lpGameStateModule", CGS_ARTIST_BRNONLINECARSELECTMANAGER_FILE, 252);
 
     meInternalState = E_INTERNAL_STATE_NONE;
     mpGameStateModule = lpGameStateModule;
@@ -65,7 +65,7 @@ void OnlineCarSelectManager::Construct(GameStateModule* lpGameStateModule,
 // directly as the CGS_ASSERT message.
 void OnlineCarSelectManager::EnterModification(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    CGS_ASSERT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, CGS_ASSERT_STREAM_MESSAGE_AT("OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.", CGS_ARTIST_BRNONLINECARSELECTMANAGER_FILE, 340));
+    CGS_ASSERT_STREAM_AT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, "OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.", CGS_ARTIST_BRNONLINECARSELECTMANAGER_FILE, 340);
 
     StartCarModificationState(lpActionQueue);
 }
@@ -76,7 +76,7 @@ void OnlineCarSelectManager::EnterModification(GameStateModuleIO::GameActionQueu
 // elided it), so it is left unnamed-but-present.
 void OnlineCarSelectManager::EnterWaitForHost(GameStateModuleIO::GameActionQueue* /*lpActionQueue*/)
 {
-    CGS_ASSERT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, CGS_ASSERT_STREAM_MESSAGE_AT("OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.", CGS_ARTIST_BRNONLINECARSELECTMANAGER_FILE, 354));
+    CGS_ASSERT_STREAM_AT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, "OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.", CGS_ARTIST_BRNONLINECARSELECTMANAGER_FILE, 354);
 
     meInternalState = E_INTERNAL_STATE_WAIT_FOR_HOST_TO_CHOOSE;
 }
@@ -177,19 +177,19 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
     if (luCurrentVehicleIndex == lCars.KU_INVALID)
     {
         const BrnResource::VehicleListEntry* lpCurrentVehicleData = mpVehicleList->GetVehicleData(mStartCarId);
-        CGS_ASSERT(lpCurrentVehicleData != 0, CGS_ASSERT_MESSAGE_AT("lpCurrentVehicleData != NULL", CGS_ARTIST_FILE, 210));
+        CGS_ASSERT_AT(lpCurrentVehicleData != 0, "lpCurrentVehicleData != NULL", CGS_ARTIST_FILE, 210);
 
         if (lpCurrentVehicleData->IsLiveryColour())
         {
-            CGS_ASSERT(lpCurrentVehicleData->GetParentId() != 0,
-                       CGS_ASSERT_MESSAGE_AT("lpCurrentVehicleData->GetParentId() != kCGSID_NULL", CGS_ARTIST_FILE, 214));
+            CGS_ASSERT_AT(lpCurrentVehicleData->GetParentId() != 0,
+                       "lpCurrentVehicleData->GetParentId() != kCGSID_NULL", CGS_ARTIST_FILE, 214);
             luCurrentVehicleIndex = lCars.FindFirstInstanceOf(lpCurrentVehicleData->GetParentId());
         }
 
         if (luCurrentVehicleIndex == lCars.KU_INVALID)
         {
             const BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-            CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 225));
+            CGS_ASSERT_AT(lpProfile, "lpProfile", CGS_ARTIST_FILE, 225);
 
             for (u32 luCar = 0; luCar < lCars.GetLength(); ++luCar)
             {
@@ -198,7 +198,7 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
                 if (lpVehicleData->GetUnlockRank() == miVehicleClassLimit)
                 {
                     mStartCarId = lpProfile->GetChosenLiveryIdForBaseCar(lCars[luCar]);
-                    CGS_ASSERT(mpGameStateModule, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 234));
+                    CGS_ASSERT_AT(mpGameStateModule, "mpGameStateModule", CGS_ARTIST_FILE, 234);
                     mpGameStateModule->OnSpecialEventPlayerCarChange(mStartCarId, 0, lpActionQueue, false);
                     break;
                 }
@@ -228,7 +228,7 @@ void OnlineCarSelectManager::StartCarModificationState(GameStateModuleIO::GameAc
     {
         mDesiredCarId = mStartCarId;
     }
-    CGS_ASSERT(mDesiredCarId != 0, CGS_ASSERT_MESSAGE_AT("mDesiredCarId != kCGSID_NULL", CGS_ARTIST_FILE, 325));
+    CGS_ASSERT_AT(mDesiredCarId != 0, "mDesiredCarId != kCGSID_NULL", CGS_ARTIST_FILE, 325);
 
     GameStateModuleIO::CarSelectModificationScreen lModScreenAction;
     lModScreenAction.meCarSelectType = GameStateModuleIO::E_CAR_SELECT_TYPE_ONLINE_EVENT_START;
@@ -352,7 +352,7 @@ void OnlineCarSelectManager::RequestChangeCar(GameStateModuleIO::GameActionQueue
         *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "RequestChangeCar\n" << "\n";
     }
 
-    CGS_ASSERT(lCardId != 0, CGS_ASSERT_MESSAGE_AT("lCardId != kCGSID_NULL", CGS_ARTIST_FILE, 439));
+    CGS_ASSERT_AT(lCardId != 0, "lCardId != kCGSID_NULL", CGS_ARTIST_FILE, 439);
 
     if (meStateOfChangingCars == E_CAR_CHANGE_BUSY)
     {
@@ -365,7 +365,7 @@ void OnlineCarSelectManager::RequestChangeCar(GameStateModuleIO::GameActionQueue
     }
 
     const BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-    CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 451));
+    CGS_ASSERT_AT(lpProfile, "lpProfile", CGS_ARTIST_FILE, 451);
 
     if (meInternalState == E_INTERNAL_STATE_CAR_MODIFICATION)
     {
@@ -379,7 +379,7 @@ void OnlineCarSelectManager::RequestChangeCar(GameStateModuleIO::GameActionQueue
         {
             const BrnResource::VehicleListEntry* lpVehicleListEntry =
                 mpVehicleList->GetVehicleFromId(lBaseCarID);
-            CGS_ASSERT(lpVehicleListEntry, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_FILE, 470));
+            CGS_ASSERT_AT(lpVehicleListEntry, "lpVehicleListEntry", CGS_ARTIST_FILE, 470);
             if (lpVehicleListEntry->IsLiveryColour())
             {
                 lBaseCarID = lpVehicleListEntry->GetParentId();
@@ -450,7 +450,7 @@ void OnlineCarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQ
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCarSelectOnlineAction),
                             KI_ACTION_CAR_SELECTION_CHANGED_ONLINE, sizeof(lCarSelectOnlineAction));
 
-    CGS_ASSERT(mpGameStateModule, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 540));
+    CGS_ASSERT_AT(mpGameStateModule, "mpGameStateModule", CGS_ARTIST_FILE, 540);
     mpGameStateModule->OnSpecialEventPlayerCarChange(mDesiredCarId, 0, lpActionQueue, false);
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -518,7 +518,7 @@ void OnlineCarSelectManager::StartCarSelectState(GameStateModuleIO::GameActionQu
         *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "StartCarSelectState\n" << "\n";
     }
 
-    CGS_ASSERT(!(meInternalState == E_INTERNAL_STATE_COUNT || meInternalState == E_INTERNAL_STATE_WAIT_FOR_ONLINE), CGS_ASSERT_STREAM_MESSAGE_AT("OnlineCarSelectManager: Invalid state on entering car select state.", CGS_ARTIST_FILE, 264));
+    CGS_ASSERT_STREAM_AT(!(meInternalState == E_INTERNAL_STATE_COUNT || meInternalState == E_INTERNAL_STATE_WAIT_FOR_ONLINE), "OnlineCarSelectManager: Invalid state on entering car select state.", CGS_ARTIST_FILE, 264);
 
 
     if (meInternalState == E_INTERNAL_STATE_CAR_SELECT || meInternalState == E_INTERNAL_STATE_WAIT_FOR_HOST_TO_CHOOSE)
@@ -627,9 +627,9 @@ const BrnProgression::CarData* OnlineCarSelectManager::GetProfileCarData(CgsID& 
         *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "GetProfileCarData\n" << "\n";
     }
 
-    CGS_ASSERT(mpProgressionManager, CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 676));
+    CGS_ASSERT_AT(mpProgressionManager, "mpProgressionManager", CGS_ARTIST_FILE, 676);
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-    CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 682));
+    CGS_ASSERT_AT(lpProfile, "lpProfile", CGS_ARTIST_FILE, 682);
 
     const s32 liCarCount = lpProfile->GetCarCount();
     for (s32 liCar = 0; liCar < liCarCount; ++liCar)
@@ -648,10 +648,10 @@ const BrnProgression::CarData* OnlineCarSelectManager::GetProfileCarData(CgsID& 
 void OnlineCarSelectManager::SaveChosenLiveryForCar(CgsID lCarId)
 {
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-    CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 771));
+    CGS_ASSERT_AT(lpProfile, "lpProfile", CGS_ARTIST_FILE, 771);
 
     const BrnResource::VehicleListEntry* lpVehicleListEntry = mpVehicleList->GetVehicleData(lCarId);
-    CGS_ASSERT(lpVehicleListEntry, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_FILE, 774));
+    CGS_ASSERT_AT(lpVehicleListEntry, "lpVehicleListEntry", CGS_ARTIST_FILE, 774);
 
     if (lpVehicleListEntry->IsLiveryColour())
     {

@@ -189,15 +189,15 @@ namespace BrnNetwork
     // sub-machine off from its start state.
     void NetworkInviteManager::DownloadPlayersGameIDFromServer(const PlayerName* lpPlayerName)
     {
-        CGS_ASSERT(meGetGameIDState == E_GET_ID_STATE_IDLE,
-            CGS_ASSERT_MESSAGE_AT(
-                "meGetGameIDState == E_GET_ID_STATE_IDLE", __FILE__, 423 /* ARTIST 0x82548AD8 */));
-        CGS_ASSERT(lpPlayerName != 0,
-            CGS_ASSERT_MESSAGE_AT("lpPlayerName", __FILE__, 425 /* ARTIST 0x82548AFC */));
+        CGS_ASSERT_AT(meGetGameIDState == E_GET_ID_STATE_IDLE,
+            "meGetGameIDState == E_GET_ID_STATE_IDLE", __FILE__, 423 /* ARTIST 0x82548AD8 */);
+
+        CGS_ASSERT_AT(lpPlayerName != 0,
+            "lpPlayerName", __FILE__, 425 /* ARTIST 0x82548AFC */);
         // X360 checks the first name byte is non-zero (the inlined PlayerName::IsEmpty()).
-        CGS_ASSERT(lpPlayerName->macName[0] != '\0',
-            CGS_ASSERT_MESSAGE_AT(
-                "!lpPlayerName->IsEmpty()", __FILE__, 426 /* ARTIST 0x82548B24 */));
+        CGS_ASSERT_AT(lpPlayerName->macName[0] != '\0',
+            "!lpPlayerName->IsEmpty()", __FILE__, 426 /* ARTIST 0x82548B24 */);
+
 
         std::memcpy(&mPlayerNameToGetGameID, lpPlayerName, sizeof(PlayerName)); // memcpy(a1 + 416, a2, 16)
         meGetGameIDState = E_GET_ID_STATE_START;       // *(a1 + 432) = 0
@@ -297,15 +297,15 @@ namespace BrnNetwork
 
         if (meGetGameIDState == E_GET_ID_STATE_START)
         {
-            CGS_ASSERT(mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(mpNetworkModule != 0,
                 "mpNetworkModule",
-                __FILE__, 250 /* ARTIST 0x8254895C */));
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CGS_ASSERT_MESSAGE_AT(
+                __FILE__, 250 /* ARTIST 0x8254895C */);
+            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
                 "mpNetworkModule->GetNetworkManager()",
-                __FILE__, 251 /* ARTIST 0x82548984 */));
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0, CGS_ASSERT_MESSAGE_AT(
+                __FILE__, 251 /* ARTIST 0x82548984 */);
+            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0,
                 "mpNetworkModule->GetNetworkManager()->GetServerInterface()",
-                __FILE__, 252 /* ARTIST 0x825489AC */));
+                __FILE__, 252 /* ARTIST 0x825489AC */);
 
             BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
             if (lpNetworkManager->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO)
@@ -330,15 +330,15 @@ namespace BrnNetwork
             // reports idle.
             meGetGameIDState = E_GET_ID_STATE_WAITING_FOR_PLAYER_INFO; // *(v1 + 432) = 1
 
-            CGS_ASSERT(mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(mpNetworkModule != 0,
                 "mpNetworkModule",
-                __FILE__, 268 /* ARTIST 0x82548A0C */));
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CGS_ASSERT_MESSAGE_AT(
+                __FILE__, 268 /* ARTIST 0x82548A0C */);
+            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
                 "mpNetworkModule->GetNetworkManager()",
-                __FILE__, 269 /* ARTIST 0x82548A34 */));
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0, CGS_ASSERT_MESSAGE_AT(
+                __FILE__, 269 /* ARTIST 0x82548A34 */);
+            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0,
                 "mpNetworkModule->GetNetworkManager()->GetServerInterface()",
-                __FILE__, 270 /* ARTIST 0x82548A5C */));
+                __FILE__, 270 /* ARTIST 0x82548A5C */);
 
             BrnNetworkManager* lpWaitManager = mpNetworkModule->GetNetworkManager();
             if (lpWaitManager->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO)

@@ -198,10 +198,10 @@ namespace BrnStreetData
     {
         ScoreType leOld = leEnumIndex;
         leEnumIndex = static_cast<ScoreType>( leEnumIndex + 1 );
-        CGS_ASSERT( leEnumIndex <= E_SCORE_TYPE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leEnumIndex <= E_SCORE_TYPE_COUNT",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h", 56 /* ARTIST 0x8230EBE4 */));
+        CGS_ASSERT_AT( leEnumIndex <= E_SCORE_TYPE_COUNT,
+            "leEnumIndex <= E_SCORE_TYPE_COUNT",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h", 56 /* ARTIST 0x8230EBE4 */);
+
         return leOld;
     }
 }

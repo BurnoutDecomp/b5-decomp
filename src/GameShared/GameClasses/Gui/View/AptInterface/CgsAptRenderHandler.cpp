@@ -115,7 +115,7 @@ namespace CgsGui
     // -------------------------------------------------------------------------
     void AptRenderHandler::SetWhiteTexture(renderengine::Texture* lpWhiteTexture)
     {
-        CGS_ASSERT(lpWhiteTexture != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid texture pointer sent to AptRenderHandler::SetWhiteTexture", CGS_ARTIST_FILE, 314));
+        CGS_ASSERT_STREAM_AT(lpWhiteTexture != 0, "Invalid texture pointer sent to AptRenderHandler::SetWhiteTexture", CGS_ARTIST_FILE, 314);
 
         mpWhiteTexture = lpWhiteTexture;
     }
@@ -128,10 +128,10 @@ namespace CgsGui
     // -------------------------------------------------------------------------
     AptIm2dRenderBuffer* AptRenderHandler::GetIm2dRendererType() const
     {
-        CGS_ASSERT(mpImRenderers != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpImRenderers",
-                CGS_ARTIST_FILE, 424 /* ARTIST 0x828467AC */));
+        CGS_ASSERT_AT(mpImRenderers != 0,
+            "mpImRenderers",
+                CGS_ARTIST_FILE, 424 /* ARTIST 0x828467AC */);
+
         return mpImRenderers->mpIm2dRenderBuffer;
     }
 

@@ -127,8 +127,8 @@ void RichPresenceManagerX360::SetContext(u32 luUserIndex, u32 luContextId, u32 l
 // vtable +0x00: the presence mode.
 void RichPresenceManagerX360::SetRichPresenceState(ERichPresenceStates leNewState)
 {
-    CGS_ASSERT(leNewState >= 0, CGS_ASSERT_MESSAGE_AT("leNewState >= 0", CGS_ARTIST_FILE, 205));
-    CGS_ASSERT(leNewState < E_PRESENCE_STATE_COUNT, CGS_ASSERT_MESSAGE_AT("leNewState < E_PRESENCE_STATE_COUNT", CGS_ARTIST_FILE, 206));
+    CGS_ASSERT_AT(leNewState >= 0, "leNewState >= 0", CGS_ARTIST_FILE, 205);
+    CGS_ASSERT_AT(leNewState < E_PRESENCE_STATE_COUNT, "leNewState < E_PRESENCE_STATE_COUNT", CGS_ARTIST_FILE, 206);
 
     SetContext(static_cast<u32>(GetUserID()), KU_CONTEXT_PRESENCE, KAU_PRESENCE_STATE_CONTEXT_VALUES[leNewState]);
 }
@@ -148,9 +148,9 @@ void RichPresenceManagerX360::SetTotalRounds(s32 liTotalRounds)
 // vtable +0x0C: the finish position, 1-based.
 void RichPresenceManagerX360::SetCurrentPosition(s32 liFinishPosition)
 {
-    CGS_ASSERT(liFinishPosition >= 0, CGS_ASSERT_MESSAGE_AT("liFinishPosition >= 0", CGS_ARTIST_FILE, 224));
-    CGS_ASSERT(liFinishPosition <= KI_NUM_FINISH_POSITIONS,
-               CGS_ASSERT_MESSAGE_AT("liFinishPosition <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 225));
+    CGS_ASSERT_AT(liFinishPosition >= 0, "liFinishPosition >= 0", CGS_ARTIST_FILE, 224);
+    CGS_ASSERT_AT(liFinishPosition <= KI_NUM_FINISH_POSITIONS,
+               "liFinishPosition <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 225);
 
     SetContext(static_cast<u32>(GetUserID()), KU_CONTEXT_FINISH_POSITION,
                KAU_FINISH_POSITION_CONTEXT_VALUES[liFinishPosition - 1]);
@@ -187,7 +187,7 @@ void RichPresenceManagerX360::SetRankedStatus(EGameRankedType leRanked)
             break;
 
         default:
-            CGS_ASSERT_STREAM_AT(false, "Unexpected ranked game status", CGS_ARTIST_FILE, 314);
+            CGS_FAIL_STREAM_AT("Unexpected ranked game status", CGS_ARTIST_FILE, 314);
             break;
     }
 }
@@ -195,8 +195,8 @@ void RichPresenceManagerX360::SetRankedStatus(EGameRankedType leRanked)
 // vtable +0x18: the district.
 void RichPresenceManagerX360::SetDistrict(BrnWorld::EDistrict leDistrict)
 {
-    CGS_ASSERT(leDistrict >= 0, CGS_ASSERT_MESSAGE_AT("leDistrict >= 0", CGS_ARTIST_FILE, 332));
-    CGS_ASSERT(leDistrict < BrnWorld::E_DISTRICT_VALID_COUNT, CGS_ASSERT_MESSAGE_AT("leDistrict < BrnWorld::E_DISTRICT_VALID_COUNT", CGS_ARTIST_FILE, 333));
+    CGS_ASSERT_AT(leDistrict >= 0, "leDistrict >= 0", CGS_ARTIST_FILE, 332);
+    CGS_ASSERT_AT(leDistrict < BrnWorld::E_DISTRICT_VALID_COUNT, "leDistrict < BrnWorld::E_DISTRICT_VALID_COUNT", CGS_ARTIST_FILE, 333);
 
     SetContext(static_cast<u32>(GetUserID()), KU_CONTEXT_DISTRICT, KAU_DISTRICT_CONTEXT_VALUES[leDistrict]);
 }

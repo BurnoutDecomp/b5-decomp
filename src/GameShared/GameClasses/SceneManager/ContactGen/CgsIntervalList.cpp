@@ -34,12 +34,12 @@ namespace CgsSceneManager
                                ObjectToIntervalMap* lpaObjectToIntervalMapMem,
                                u32 luMaxNumIntervals)
     {
-        CGS_ASSERT(lpaIntervalsMem != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpaIntervalsMem != NULL", KAC_ARTIST_ASSERT_FILE, 94 /* ARTIST 0x828B468C */));
-        CGS_ASSERT(lpaObjectToIntervalMapMem != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpaObjectToIntervalMapMem != NULL", KAC_ARTIST_ASSERT_FILE, 95 /* ARTIST 0x828B46B0 */));
+        CGS_ASSERT_AT(lpaIntervalsMem != NULL,
+            "lpaIntervalsMem != NULL", KAC_ARTIST_ASSERT_FILE, 94 /* ARTIST 0x828B468C */);
+
+        CGS_ASSERT_AT(lpaObjectToIntervalMapMem != NULL,
+            "lpaObjectToIntervalMapMem != NULL", KAC_ARTIST_ASSERT_FILE, 95 /* ARTIST 0x828B46B0 */);
+
 
         mpaIntervals           = lpaIntervalsMem;
         mpaObjectToIntervalMap = lpaObjectToIntervalMapMem;
@@ -162,18 +162,18 @@ namespace CgsSceneManager
                                                    Interval* lpMinIntervalOut,
                                                    Interval* lpMaxIntervalOut)
     {
-        CGS_ASSERT(lpMinIntervalOut != NULL, CGS_ASSERT_MESSAGE_AT("lpMinIntervalOut != NULL", KAC_ARTIST_ASSERT_FILE, 318));
-        CGS_ASSERT(lpMaxIntervalOut != NULL, CGS_ASSERT_MESSAGE_AT("lpMaxIntervalOut != NULL", KAC_ARTIST_ASSERT_FILE, 319));
+        CGS_ASSERT_AT(lpMinIntervalOut != NULL, "lpMinIntervalOut != NULL", KAC_ARTIST_ASSERT_FILE, 318);
+        CGS_ASSERT_AT(lpMaxIntervalOut != NULL, "lpMaxIntervalOut != NULL", KAC_ARTIST_ASSERT_FILE, 319);
 
         u16 luRemoveInterval = mpaObjectToIntervalMap[luObjectIndex].GetIntervalIndex(KI_MIN_INDEX);
-        CGS_ASSERT(mpaIntervals[luRemoveInterval].mu16ObjectIndex == luObjectIndex,
-                   CGS_ASSERT_MESSAGE_AT("mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex", KAC_ARTIST_ASSERT_FILE, 323));
+        CGS_ASSERT_AT(mpaIntervals[luRemoveInterval].mu16ObjectIndex == luObjectIndex,
+                   "mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex", KAC_ARTIST_ASSERT_FILE, 323);
         *lpMinIntervalOut = mpaIntervals[luRemoveInterval];
         RemoveInterval(luRemoveInterval);
 
         luRemoveInterval = mpaObjectToIntervalMap[luObjectIndex].GetIntervalIndex(KI_MAX_INDEX);
-        CGS_ASSERT(mpaIntervals[luRemoveInterval].mu16ObjectIndex == luObjectIndex,
-                   CGS_ASSERT_MESSAGE_AT("mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex", KAC_ARTIST_ASSERT_FILE, 331));
+        CGS_ASSERT_AT(mpaIntervals[luRemoveInterval].mu16ObjectIndex == luObjectIndex,
+                   "mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex", KAC_ARTIST_ASSERT_FILE, 331);
         *lpMaxIntervalOut = mpaIntervals[luRemoveInterval];
         RemoveInterval(luRemoveInterval);
 

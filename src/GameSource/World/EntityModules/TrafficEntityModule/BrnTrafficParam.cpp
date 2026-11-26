@@ -206,8 +206,8 @@ void Param::SetParamAlong(f32 lfParamAlong)
 bool Param::IsQueueing() const
 {
     // Header-inline in the original: ARTIST bakes BrnTrafficParam.h:520 into the assert (li r5,0x208).
-    CGS_ASSERT(IsAlive(), CGS_ASSERT_MESSAGE_AT("IsAlive()",
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficParam.h", 520));
+    CGS_ASSERT_AT(IsAlive(), "IsAlive()",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficParam.h", 520);
 
     // miBehaviour is sign-extended (extsb) before the tests; the retail behaviour enum
     // (renumbered from the LegacySrc reference) selects 6/2/4 as the "not queueing" cases, tested
@@ -229,10 +229,10 @@ bool Param::IsQueueing() const
 // 0x82706AC8 — append (segment, hull) to the history ring unless it duplicates the last.
 void Param::PushHistory(u32 luSegmentIndex, u32 luHullIndex)
 {
-    CGS_ASSERT(muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER,
-        CGS_ASSERT_MESSAGE_AT(
-            "muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER",
-            KAC_ARTIST_ASSERT_FILE, 740 /* ARTIST 0x82706AF4 */));
+    CGS_ASSERT_AT(muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER,
+        "muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER",
+            KAC_ARTIST_ASSERT_FILE, 740 /* ARTIST 0x82706AF4 */);
+
 
     const u32 luLastEntry =
         (muNextHistoryToWrite + KU_PARAM_NUM_SEGMENTS_TO_REMEMBER - 1) % KU_PARAM_NUM_SEGMENTS_TO_REMEMBER;
@@ -250,18 +250,18 @@ void Param::PushHistory(u32 luSegmentIndex, u32 luHullIndex)
 // 0x8274FA08 — read the history entry luHistoryIndex steps back from the write cursor.
 void Param::GetHistoryEntry(u32 luHistoryIndex, u32* lpOutSegmentIndex, u32* lpOutHullIndex) const
 {
-    CGS_ASSERT(luHistoryIndex < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER,
-        CGS_ASSERT_MESSAGE_AT(
-            "luHistoryIndex < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER",
-            KAC_ARTIST_ASSERT_FILE, 768 /* ARTIST 0x8274FA3C */));
-    CGS_ASSERT(muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER,
-        CGS_ASSERT_MESSAGE_AT(
-            "muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER",
-            KAC_ARTIST_ASSERT_FILE, 769 /* ARTIST 0x8274FA64 */));
-    CGS_ASSERT(lpOutSegmentIndex != 0,
-        CGS_ASSERT_MESSAGE_AT("lpOutSegmentIndex", KAC_ARTIST_ASSERT_FILE, 770 /* ARTIST 0x8274FA88 */));
-    CGS_ASSERT(lpOutHullIndex != 0,
-        CGS_ASSERT_MESSAGE_AT("lpOutHullIndex", KAC_ARTIST_ASSERT_FILE, 771 /* ARTIST 0x8274FAAC */));
+    CGS_ASSERT_AT(luHistoryIndex < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER,
+        "luHistoryIndex < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER",
+            KAC_ARTIST_ASSERT_FILE, 768 /* ARTIST 0x8274FA3C */);
+
+    CGS_ASSERT_AT(muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER,
+        "muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER",
+            KAC_ARTIST_ASSERT_FILE, 769 /* ARTIST 0x8274FA64 */);
+
+    CGS_ASSERT_AT(lpOutSegmentIndex != 0,
+        "lpOutSegmentIndex", KAC_ARTIST_ASSERT_FILE, 770 /* ARTIST 0x8274FA88 */);
+    CGS_ASSERT_AT(lpOutHullIndex != 0,
+        "lpOutHullIndex", KAC_ARTIST_ASSERT_FILE, 771 /* ARTIST 0x8274FAAC */);
 
     const u32 luIndexToRead =
         (muNextHistoryToWrite + (2 * KU_PARAM_NUM_SEGMENTS_TO_REMEMBER) - 1 - luHistoryIndex) %
@@ -274,8 +274,8 @@ void Param::GetHistoryEntry(u32 luHistoryIndex, u32* lpOutSegmentIndex, u32* lpO
 // 0x82713C68 — flag that this param changed section this frame.
 void Param::SetChangedSection()
 {
-    CGS_ASSERT(IsAlive(),
-        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 893 /* ARTIST 0x82713C94 */));
+    CGS_ASSERT_AT(IsAlive(),
+        "IsAlive()", KAC_ARTIST_ASSERT_FILE, 893 /* ARTIST 0x82713C94 */);
 
     mxEffectAndHistoryState |= E_HISTORY_CHANGED_SECTION;
 }
@@ -283,8 +283,8 @@ void Param::SetChangedSection()
 // 0x827134C0 — request removal (still alive at this point).
 void Param::SetShouldBeRemoved()
 {
-    CGS_ASSERT(IsAlive(),
-        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 813 /* ARTIST 0x827134EC */));
+    CGS_ASSERT_AT(IsAlive(),
+        "IsAlive()", KAC_ARTIST_ASSERT_FILE, 813 /* ARTIST 0x827134EC */);
 
     mxFlags |= E_FLAG_SHOULD_BE_REMOVED;
 }
@@ -306,14 +306,14 @@ void Param::SetInPurgatory(bool lbInPurgatory)
 {
     if (lbInPurgatory)
     {
-        CGS_ASSERT(!IsInPurgatory(),
-            CGS_ASSERT_MESSAGE_AT("!IsInPurgatory()", KAC_ARTIST_ASSERT_FILE, 925 /* ARTIST 0x82713D08 */));
+        CGS_ASSERT_AT(!IsInPurgatory(),
+            "!IsInPurgatory()", KAC_ARTIST_ASSERT_FILE, 925 /* ARTIST 0x82713D08 */);
         mxFlags = static_cast<u8>(mxFlags | E_FLAG_IN_PURGATORY);
     }
     else
     {
-        CGS_ASSERT(IsInPurgatory(),
-            CGS_ASSERT_MESSAGE_AT("IsInPurgatory()", KAC_ARTIST_ASSERT_FILE, 930 /* ARTIST 0x82713D3C */));
+        CGS_ASSERT_AT(IsInPurgatory(),
+            "IsInPurgatory()", KAC_ARTIST_ASSERT_FILE, 930 /* ARTIST 0x82713D3C */);
         mxFlags = static_cast<u8>(mxFlags & ~E_FLAG_IN_PURGATORY);
     }
 }
@@ -403,8 +403,8 @@ bool Param::ShouldBeIndicatingRight() const
 // speed). The X360 IsValid guard checks only the X/Y/Z lanes, then returns the vector.
 Vector3 ParamTransform::GetLerpedPos() const
 {
-    CGS_ASSERT(rw::math::vpu::IsValid(mLerpedPosAndSpeed.GetVector3()),
-        CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( mLerpedPosAndSpeed.GetVector3() )", KAC_ARTIST_ASSERT_FILE, 568));
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(mLerpedPosAndSpeed.GetVector3()),
+        "RwMath::IsValid( mLerpedPosAndSpeed.GetVector3() )", KAC_ARTIST_ASSERT_FILE, 568);
 
     return mLerpedPosAndSpeed.GetVector3();
 }
@@ -412,7 +412,7 @@ Vector3 ParamTransform::GetLerpedPos() const
 // 0x827126A0 -- the vehicle's right axis (mRight @0x20), guarded by an IsValid NaN check.
 Vector3 ParamTransform::GetRight() const
 {
-    CGS_ASSERT(rw::math::vpu::IsValid(mRight), CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( mRight )", KAC_ARTIST_ASSERT_FILE, 584));
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(mRight), "RwMath::IsValid( mRight )", KAC_ARTIST_ASSERT_FILE, 584);
 
     return mRight;
 }
@@ -515,8 +515,8 @@ Vector3 ParamTransform::GetDeterministicPos() const
 // Replaces the FLAGged inline stub that used to live in BrnTrafficParam.h.
 Vector3 ParamTransform::GetDirection() const
 {
-    CGS_ASSERT(rw::math::vpu::IsValid(mDirAndAccel.GetVector3()),
-        CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( mDirAndAccel.GetVector3() )", KAC_ARTIST_ASSERT_FILE, 576));
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(mDirAndAccel.GetVector3()),
+        "RwMath::IsValid( mDirAndAccel.GetVector3() )", KAC_ARTIST_ASSERT_FILE, 576);
 
     return mDirAndAccel.GetVector3();
 }

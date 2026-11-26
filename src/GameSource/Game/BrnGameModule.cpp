@@ -3062,12 +3062,12 @@ namespace BrnGame
     void BrnGameModule::PrepareInitialInputMapping(
         CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput)
     {
-        CGS_ASSERT(lpPostWorldInput != 0,
-            CGS_ASSERT_MESSAGE_AT("lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 238 /* ARTIST 0x823BCF6C */));
+        CGS_ASSERT_AT(lpPostWorldInput != 0,
+            "lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 238 /* ARTIST 0x823BCF6C */);
         lpPostWorldInput->LockForWrite();
         lpPostWorldInput->PostMappingRequest(KA_CONSOLE_DEFAULT_GAME_INPUT_MAPPING, -1);
-        CGS_ASSERT(lpPostWorldInput != 0,
-            CGS_ASSERT_MESSAGE_AT("lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 248 /* ARTIST 0x823BCFA8 */));
+        CGS_ASSERT_AT(lpPostWorldInput != 0,
+            "lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 248 /* ARTIST 0x823BCFA8 */);
         lpPostWorldInput->UnlockForWrite();
     }
 
@@ -3076,12 +3076,12 @@ namespace BrnGame
         s32 liPort,
         CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput)
     {
-        CGS_ASSERT(lpPostWorldInput != 0,
-            CGS_ASSERT_MESSAGE_AT("lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 238 /* ARTIST 0x823BD3C0 */));
+        CGS_ASSERT_AT(lpPostWorldInput != 0,
+            "lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 238 /* ARTIST 0x823BD3C0 */);
         lpPostWorldInput->LockForWrite();
         lpPostWorldInput->PostBindRequest(0, liPort);
-        CGS_ASSERT(lpPostWorldInput != 0,
-            CGS_ASSERT_MESSAGE_AT("lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 248 /* ARTIST 0x823BD3F8 */));
+        CGS_ASSERT_AT(lpPostWorldInput != 0,
+            "lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 248 /* ARTIST 0x823BD3F8 */);
         lpPostWorldInput->UnlockForWrite();
     }
 
@@ -3142,14 +3142,14 @@ namespace BrnGame
         if (lpInputModuleOutput->GetBindResultQueue()->GetLength() != 0 &&
             miInputModuleState != 3)
         {
-            CGS_ASSERT(false,
+            CGS_FAIL(
                 "lpInputModuleOutput->GetBindResultQueue()->GetLength() == 0 || "
                 "meInputBindState == E_INPUTBINDSTATE_BIND_REQUESTED");
         }
         if (lpInputModuleOutput->GetUnbindResultQueue()->GetLength() != 0 &&
             miInputModuleState != 6)
         {
-            CGS_ASSERT(false,
+            CGS_FAIL(
                 "lpInputModuleOutput->GetUnbindResultQueue()->GetLength() == 0 || "
                 "meInputBindState == E_INPUTBINDSTATE_UNBIND_REQUESTED");
         }
@@ -3178,10 +3178,10 @@ namespace BrnGame
         if (lrResult.miPlayer != 0)
             return;
 
-        CGS_ASSERT(miInputModuleState == 3,
-                   CGS_ASSERT_MESSAGE_AT("meInputBindState == E_INPUTBINDSTATE_BIND_REQUESTED", CGS_ARTIST_FILE, 3393));
-        CGS_ASSERT(lrResult.meResultCode == CgsInput::E_BINDRESULTOK,
-                   CGS_ASSERT_MESSAGE_AT("CgsInput::E_BINDRESULTOK == lResult.GetResultCode()", CGS_ARTIST_FILE, 3394));
+        CGS_ASSERT_AT(miInputModuleState == 3,
+                   "meInputBindState == E_INPUTBINDSTATE_BIND_REQUESTED", CGS_ARTIST_FILE, 3393);
+        CGS_ASSERT_AT(lrResult.meResultCode == CgsInput::E_BINDRESULTOK,
+                   "CgsInput::E_BINDRESULTOK == lResult.GetResultCode()", CGS_ARTIST_FILE, 3394);
 
         miPlayer0ControllerPort = lrResult.miPort;
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -3200,14 +3200,14 @@ namespace BrnGame
         if (lrResult.miPlayer != 0)
             return;
 
-        CGS_ASSERT(miInputModuleState == 6,
-            CGS_ASSERT_MESSAGE_AT(
-                "meInputBindState == E_INPUTBINDSTATE_UNBIND_REQUESTED",
-                CGS_ARTIST_FILE, 3421 /* ARTIST 0x823A8D94 */));
-        CGS_ASSERT(lrResult.meResultCode == CgsInput::E_UNBINDRESULTOK,
-            CGS_ASSERT_MESSAGE_AT(
-                "CgsInput::E_UNBINDRESULTOK == lResult.GetResultCode()",
-                CGS_ARTIST_FILE, 3422 /* ARTIST 0x823A8DBC */));
+        CGS_ASSERT_AT(miInputModuleState == 6,
+            "meInputBindState == E_INPUTBINDSTATE_UNBIND_REQUESTED",
+                CGS_ARTIST_FILE, 3421 /* ARTIST 0x823A8D94 */);
+
+        CGS_ASSERT_AT(lrResult.meResultCode == CgsInput::E_UNBINDRESULTOK,
+            "CgsInput::E_UNBINDRESULTOK == lResult.GetResultCode()",
+                CGS_ARTIST_FILE, 3422 /* ARTIST 0x823A8DBC */);
+
 
         miPlayer0ControllerPort = CgsInput::KU_NUMBER_OF_PADS;
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -3370,18 +3370,18 @@ namespace BrnGame
         const CgsGui::ModelIO::OutputBuffer* lpGuiModuleModelOutputBuffer,
         const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutputBuffer)
     {
-        CGS_ASSERT(lpGameStateModuleOutputBuffer != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpGameStateModuleOutputBuffer != NULL",
-                CGS_ARTIST_FILE, 3450 /* ARTIST 0x823DCB7C */));
-        CGS_ASSERT(lpInputModuleOutputBuffer != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpInputModuleOutputBuffer != NULL",
-                CGS_ARTIST_FILE, 3451 /* ARTIST 0x823DCBA0 */));
-        CGS_ASSERT(lpGuiModuleModelOutputBuffer != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpGuiModuleModelOutputBuffer != NULL",
-                CGS_ARTIST_FILE, 3452 /* ARTIST 0x823DCBC4 */));
+        CGS_ASSERT_AT(lpGameStateModuleOutputBuffer != 0,
+            "lpGameStateModuleOutputBuffer != NULL",
+                CGS_ARTIST_FILE, 3450 /* ARTIST 0x823DCB7C */);
+
+        CGS_ASSERT_AT(lpInputModuleOutputBuffer != 0,
+            "lpInputModuleOutputBuffer != NULL",
+                CGS_ARTIST_FILE, 3451 /* ARTIST 0x823DCBA0 */);
+
+        CGS_ASSERT_AT(lpGuiModuleModelOutputBuffer != 0,
+            "lpGuiModuleModelOutputBuffer != NULL",
+                CGS_ARTIST_FILE, 3452 /* ARTIST 0x823DCBC4 */);
+
 
         BrnUpdateSet leUpdateSet = ConstructUpdateSetFromFsm();
 
@@ -3402,10 +3402,10 @@ namespace BrnGame
             leUpdateSet |= 0x4;
         lpInputModuleOutputBuffer->UnlockForRead();
 
-        CGS_ASSERT(lpNetworkModuleOutputBuffer != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpNetworkModuleOutputBuffer != NULL",
-                CGS_ARTIST_FILE, 3491 /* ARTIST 0x823DCC60 */));
+        CGS_ASSERT_AT(lpNetworkModuleOutputBuffer != 0,
+            "lpNetworkModuleOutputBuffer != NULL",
+                CGS_ARTIST_FILE, 3491 /* ARTIST 0x823DCC60 */);
+
         lpNetworkModuleOutputBuffer->LockForRead();
         if (IsEventInGuiQueue(44, lpNetworkModuleOutputBuffer->GetGuiEventQueue()))
             leUpdateSet |= 0x2;
@@ -3694,7 +3694,7 @@ namespace BrnGame
                 default:
                     // The console leaves the telemetry record unconstructed on this arm.
                     leCrasherIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
-                    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown crash type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToX.cpp", 437));
+                    CGS_FAIL_AT("Unknown crash type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToX.cpp", 437);
                     break;
             }
 
@@ -3871,18 +3871,18 @@ namespace BrnGame
     void BrnGameModule::BridgeNetworkToGameState(BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGameStateInput,
                                                  const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput)
     {
-        CGS_ASSERT(lpGameStateInput, CGS_ASSERT_MESSAGE_AT("lpGameStateInput", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 223));
-        CGS_ASSERT(lpNetworkOutput, CGS_ASSERT_MESSAGE_AT("lpNetworkOutput", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 224));
+        CGS_ASSERT_AT(lpGameStateInput, "lpGameStateInput", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 223);
+        CGS_ASSERT_AT(lpNetworkOutput, "lpNetworkOutput", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 224);
 
-        CGS_ASSERT(lpNetworkOutput->GetGameEventQueue(), CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetGameEventQueue()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 230));
+        CGS_ASSERT_AT(lpNetworkOutput->GetGameEventQueue(), "lpNetworkOutput->GetGameEventQueue()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 230);
         lpGameStateInput->GetGameEventQueue()->Append(*lpNetworkOutput->GetGameEventQueue());
 
-        CGS_ASSERT(lpNetworkOutput->GetTakedownEventOutputQueue(), CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetTakedownEventOutputQueue()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 233));
+        CGS_ASSERT_AT(lpNetworkOutput->GetTakedownEventOutputQueue(), "lpNetworkOutput->GetTakedownEventOutputQueue()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 233);
         lpGameStateInput->GetTakedownEventInputQueue()->Append(*lpNetworkOutput->GetTakedownEventOutputQueue());
 
-        CGS_ASSERT(lpNetworkOutput->GetNetworkToGameStateInterface(), CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetNetworkToGameStateInterface()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 236));
-        CGS_ASSERT(lpNetworkOutput->GetInGamePlayerStatusInterface(), CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetInGamePlayerStatusInterface()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 237));
-        CGS_ASSERT(lpNetworkOutput->GetPlayerResultsInterface(), CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetPlayerResultsInterface()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 238));
+        CGS_ASSERT_AT(lpNetworkOutput->GetNetworkToGameStateInterface(), "lpNetworkOutput->GetNetworkToGameStateInterface()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 236);
+        CGS_ASSERT_AT(lpNetworkOutput->GetInGamePlayerStatusInterface(), "lpNetworkOutput->GetInGamePlayerStatusInterface()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 237);
+        CGS_ASSERT_AT(lpNetworkOutput->GetPlayerResultsInterface(), "lpNetworkOutput->GetPlayerResultsInterface()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 238);
 
         lpGameStateInput->AppendGetNetworkToGameStateInterface(lpNetworkOutput->GetNetworkToGameStateInterface());
         lpGameStateInput->SetPlayerStatusInterface(lpNetworkOutput->GetInGamePlayerStatusInterface());
@@ -3923,7 +3923,7 @@ namespace BrnGame
         namespace GsIO  = BrnGameState::GameStateModuleIO;
 
         const NetIO::NetworkEventQueue* lpNetworkEventQueue = lpNetworkOutput->GetNetworkEventQueue();
-        CGS_ASSERT(lpNetworkEventQueue, CGS_ASSERT_MESSAGE_AT("lpNetworkEventQueue", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 349));
+        CGS_ASSERT_AT(lpNetworkEventQueue, "lpNetworkEventQueue", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 349);
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
@@ -3937,7 +3937,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutPlayerChangedCarColourEvent* lpPlayerChangedCarColourEvent =
                         reinterpret_cast<const NetIO::NetworkOutPlayerChangedCarColourEvent*>(lpEvent);
-                    CGS_ASSERT(lpPlayerChangedCarColourEvent, CGS_ASSERT_MESSAGE_AT("lpPlayerChangedCarColourEvent", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 394));
+                    CGS_ASSERT_AT(lpPlayerChangedCarColourEvent, "lpPlayerChangedCarColourEvent", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 394);
                     const EActiveRaceCarIndex leActiveRaceCarIndex = lpPlayerChangedCarColourEvent->GetActiveRaceCarIndex();
                     if (static_cast<u32>(leActiveRaceCarIndex) <= 7u)
                     {
@@ -3984,7 +3984,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutRestartTrafficEvent* lpRestartTrafficEvent =
                         reinterpret_cast<const NetIO::NetworkOutRestartTrafficEvent*>(lpEvent);
-                    CGS_ASSERT(lpRestartTrafficEvent, CGS_ASSERT_MESSAGE_AT("lpRestartTrafficEvent", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 365));
+                    CGS_ASSERT_AT(lpRestartTrafficEvent, "lpRestartTrafficEvent", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 365);
                     GsIO::RestartTrafficAction lRestartTrafficAction;
                     std::memcpy(lRestartTrafficAction.mau16ActveHulls, lpRestartTrafficEvent->mau16ActveHulls,
                                 sizeof(lRestartTrafficAction.mau16ActveHulls));
@@ -3997,7 +3997,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutPlayerCarSelectStatus* lpPlayerCarSelectStatus =
                         reinterpret_cast<const NetIO::NetworkOutPlayerCarSelectStatus*>(lpEvent);
-                    CGS_ASSERT(lpPlayerCarSelectStatus, CGS_ASSERT_MESSAGE_AT("lpPlayerCarSelectStatus", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 429));
+                    CGS_ASSERT_AT(lpPlayerCarSelectStatus, "lpPlayerCarSelectStatus", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 429);
                     lpWorldInput->SetCarSelectStatus(lpPlayerCarSelectStatus->meActiveRaceCarIndex,
                                                      lpPlayerCarSelectStatus->mbInCarSelect);
                     break;

@@ -106,7 +106,7 @@ namespace PropEntityIO
     // Called by WorldModule::BridgePropToOutput_PreScene.
     const OutputBuffer_PreScene::ResourceRequestInterfaceStorage* OutputBuffer_PreScene::GetResourceRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 647));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 647);
         return &mResourceRequestInterface;
     }
 
@@ -114,7 +114,7 @@ namespace PropEntityIO
     // Called by WorldModule::BridgePropToOutput_PreScene.
     const OutputBuffer_PreScene::VisibleOverheadSignArrayStorage* OutputBuffer_PreScene::GetVisibleOverheadSignArray() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 650));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 650);
         return &mVisibleOverheadSignArray;
     }
 
@@ -122,28 +122,28 @@ namespace PropEntityIO
     // Called by BrnWorld::PropEntityModule::PreSceneUpdate.
     OutputBuffer_PreScene::VisibleOverheadSignArrayStorage* OutputBuffer_PreScene::GetVisibleOverheadSignArray()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 651));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 651);
         return &mVisibleOverheadSignArray;
     }
 
     // X360 0x822B9888: write-lock; return this + 4.
     OutputBuffer_PreScene::ResourceRequestInterfaceStorage* OutputBuffer_PreScene::GetResourceRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 648));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 648);
         return &mResourceRequestInterface;
     }
 
     // X360 0x827A1970: read-lock; return this + 819824.
     const OutputBuffer_PreScene::PropInputInterfaceStorage* OutputBuffer_PreScene::GetPropInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 642));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 642);
         return &mPropInputInterface;
     }
 
     // X360 0x822B97E0: write-lock; return this + 819824.
     OutputBuffer_PreScene::PropInputInterfaceStorage* OutputBuffer_PreScene::GetPropInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 645));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 645);
         return &mPropInputInterface;
     }
 
@@ -153,7 +153,7 @@ namespace PropEntityIO
     // scene merge) -- see the header note.
     const OutputBuffer_PreScene::SceneInputInterfaceStorage* OutputBuffer_PreScene::GetSceneInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 641));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 641);
         return &mSceneInputInterface;
     }
 
@@ -162,7 +162,7 @@ namespace PropEntityIO
     // `return a1 + 1056`.
     OutputBuffer_PreScene::SceneInputInterfaceStorage* OutputBuffer_PreScene::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 644));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 644);
         return &mSceneInputInterface;
     }
 }

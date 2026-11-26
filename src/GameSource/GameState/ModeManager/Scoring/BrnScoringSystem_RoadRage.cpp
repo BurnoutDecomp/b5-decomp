@@ -65,7 +65,7 @@ void ScoringSystem::OnRoadRagePlayerCrashed(GameStateModuleIO::OutputBuffer* lpO
     if (CgsDev::Log::gpDebugPrint != 0)
     {
     }
-    CGS_ASSERT(miMaximumPlayerCrashedNumber != 0, CGS_ASSERT_MESSAGE_AT("miMaximumPlayerCrashedNumber != 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2550));   // BrnScoringSystem.cpp:2550
+    CGS_ASSERT_AT(miMaximumPlayerCrashedNumber != 0, "miMaximumPlayerCrashedNumber != 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2550);   // BrnScoringSystem.cpp:2550
 
     ++miCurrentPlayerCrashedNumber;
 

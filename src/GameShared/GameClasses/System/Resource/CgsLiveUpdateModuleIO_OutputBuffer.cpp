@@ -50,7 +50,7 @@ namespace LiveUpdateIO
     // write-locked handle LiveUpdateModule::Update obtains to AddEvent its LoadBundleRequest.
     OutputBuffer::OutputQueue* OutputBuffer::Get()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 113));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 113);
         return &mOutputQueue;
     }
 
@@ -58,7 +58,7 @@ namespace LiveUpdateIO
     // const accessor to the live-update in-progress status byte. DWARF CgsLiveUpdateModuleIO.h:108.
     const u8* OutputBuffer::GetSt() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 108));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 108);
         return &mStatus;
     }
 
@@ -67,7 +67,7 @@ namespace LiveUpdateIO
     // whether a live-update is still in flight. DWARF CgsLiveUpdateModuleIO.h:109.
     void OutputBuffer::SetStatus(const u8* lpStatus)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 109));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 109);
         mStatus = *lpStatus;   // lbz r11,0(a2) ; stb r11,0x214(this)
     }
 }

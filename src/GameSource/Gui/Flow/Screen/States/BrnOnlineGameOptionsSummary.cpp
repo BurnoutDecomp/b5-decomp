@@ -315,7 +315,7 @@ namespace BrnGui
             default:
                 // The console's streamed "Unexpected event received : <id> in <file> at
                 // line 215" assert.
-                CGS_ASSERT(false, "Unexpected event received : ");
+                CGS_FAIL("Unexpected event received : ");
                 break;
             }
         }
@@ -339,7 +339,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptionsSummary::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 286 /* ARTIST 0x824A8938 */));
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", KAC_ARTIST_ASSERT_FILE, 286 /* ARTIST 0x824A8938 */);
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
@@ -371,7 +371,7 @@ namespace BrnGui
     {
         const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
 
-        CGS_ASSERT(lpPayload->mpCache != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid cache in HandleGuiCacheEvent::Update", KAC_ARTIST_ASSERT_FILE, 688));
+        CGS_ASSERT_STREAM_AT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update", KAC_ARTIST_ASSERT_FILE, 688);
 
         if (mpGuiCache == 0)
         {
@@ -390,7 +390,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptionsSummary::SetupHelpBar(bool /*lbUnused*/)
     {
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 714 /* ARTIST 0x82485F2C */));
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", KAC_ARTIST_ASSERT_FILE, 714 /* ARTIST 0x82485F2C */);
 
         const ButtonIconComponent::EPadButton laeButtons[KI_MAX_HELP_BAR_ITEMS] =
         {
@@ -668,7 +668,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptionsSummary::HandleOverlayComplete(const CgsModule::Event* lpOverlayCompleteEvent)
     {
-        CGS_ASSERT(lpOverlayCompleteEvent != 0, CGS_ASSERT_MESSAGE_AT("lpOverlayCompleteEvent", KAC_ARTIST_ASSERT_FILE, 1104 /* ARTIST 0x8249DBA4 */));
+        CGS_ASSERT_AT(lpOverlayCompleteEvent != 0, "lpOverlayCompleteEvent", KAC_ARTIST_ASSERT_FILE, 1104 /* ARTIST 0x8249DBA4 */);
 
         const OverlayCompletePayload* lpOverlayComplete =
             static_cast<const OverlayCompletePayload*>(lpOverlayCompleteEvent);

@@ -371,7 +371,7 @@ void GameStateModule::ProcessGameEvents_Group1(s32 liEventType, const CgsModule:
         }
         else
         {
-            CGS_ASSERT(false, "Should be either in the junkyard or an online event car select\n");
+            CGS_FAIL("Should be either in the junkyard or an online event car select\n");
         }
         break;
     }
@@ -638,7 +638,7 @@ void GameStateModule::ProcessGameEvents_Group1(s32 liEventType, const CgsModule:
                 mCarSelectManager.ExitJunkyard(lpActionQueue);
                 break;
             default:
-                CGS_ASSERT(false, "Unhandled enumeration");
+                CGS_FAIL("Unhandled enumeration");
                 break;
             }
         }
@@ -673,13 +673,13 @@ void GameStateModule::ProcessGameEvents_Group1(s32 liEventType, const CgsModule:
                 mOnlineCarSelectManager.ExitOnlineCarSelect(lpActionQueue);
                 break;
             default:
-                CGS_ASSERT(false, "Unhandled enumeration");
+                CGS_FAIL("Unhandled enumeration");
                 break;
             }
         }
         else
         {
-            CGS_ASSERT(false, "Invalid Car Select Type\n");
+            CGS_FAIL("Invalid Car Select Type\n");
         }
         break;
     }
@@ -2238,7 +2238,7 @@ void GameStateModule::ProcessGameEvents_Group4(s32                              
             break;
 
         default:
-            CGS_ASSERT(false, "Unknown road rule");
+            CGS_FAIL("Unknown road rule");
             break;
         }
         break;

@@ -29,10 +29,10 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult CheckpointTriggeredMessage::PackOrUnpack()
     {
-        CGS_ASSERT(miCheckpointIndex != -1,
-            CGS_ASSERT_MESSAGE_AT(
-                "miCheckpointIndex != -1",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnCheckpointTriggeredMessage.cpp", 91 /* ARTIST 0x8257CE78 */));
+        CGS_ASSERT_AT(miCheckpointIndex != -1,
+            "miCheckpointIndex != -1",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnCheckpointTriggeredMessage.cpp", 91 /* ARTIST 0x8257CE78 */);
+
 
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
         return CgsNetwork::Message::PackOrUnpack(&miCheckpointIndex, 0, 16) | lxBase;
@@ -40,18 +40,18 @@ namespace BrnNetwork
 
     void CheckpointTriggeredMessage::PrepareForSend(u16 lu16FrameCount, s32 liCheckpointIndex)
     {
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16FrameCount != KU16_INVALID_FRAME",
-                __FILE__, 141 /* ARTIST 0x8257CF0C */));
-        CGS_ASSERT(liCheckpointIndex != -1,
-            CGS_ASSERT_MESSAGE_AT(
-                "liCheckpointIndex != -1",
-                __FILE__, 142 /* ARTIST 0x8257CF30 */));
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                __FILE__, 145 /* ARTIST 0x8257CF5C */));
+        CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
+            "lu16FrameCount != KU16_INVALID_FRAME",
+                __FILE__, 141 /* ARTIST 0x8257CF0C */);
+
+        CGS_ASSERT_AT(liCheckpointIndex != -1,
+            "liCheckpointIndex != -1",
+                __FILE__, 142 /* ARTIST 0x8257CF30 */);
+
+        CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
+            "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                __FILE__, 145 /* ARTIST 0x8257CF5C */);
+
 
         miCheckpointIndex = liCheckpointIndex;   // stw r28,0x28(this)
         CgsNetwork::ReliableMessage::PrepareForSend(KI_CHECKPOINT_TRIGGERED_MESSAGE_TYPE, lu16FrameCount);

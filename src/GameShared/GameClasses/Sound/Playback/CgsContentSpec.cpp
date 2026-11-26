@@ -26,7 +26,7 @@ namespace Playback
 // @ 0x826927C8. Return the resolved ContentType this spec points at.
 const ContentType& ContentSpec::GetContentType() const
 {
-    CGS_ASSERT(mpContentType, CGS_ASSERT_MESSAGE_AT("mpContentType", CGS_ARTIST_FILE, 1824));
+    CGS_ASSERT_AT(mpContentType, "mpContentType", CGS_ARTIST_FILE, 1824);
     CGS_ASSERT_STREAM_AT((reinterpret_cast<uintptr_t>(mpContentType) & 1) == 0,
         "This Data Structure is not resolved. (Name "
             << Name(reinterpret_cast<uintptr_t>(mpContentType)) << " found in a pointer context.)",
@@ -42,10 +42,10 @@ const ContentType& ContentSpec::GetContentType() const
 // skipped zone steps lpNext past its separator before shortening luLen (0x8269295C..0x82692970).
 bool ContentSpec::GetPathZone(u32 lu32Zone, char* lpPathOut, size_t luMaxLen) const
 {
-    CGS_ASSERT(lpPathOut, CGS_ASSERT_MESSAGE_AT("lpPathOut", CGS_ARTIST_FILE, 1883));
+    CGS_ASSERT_AT(lpPathOut, "lpPathOut", CGS_ARTIST_FILE, 1883);
 
     const char* lpFullPath = GetPath();
-    CGS_ASSERT(lpFullPath, CGS_ASSERT_MESSAGE_AT("lpFullPath", CGS_ARTIST_FILE, 1886));
+    CGS_ASSERT_AT(lpFullPath, "lpFullPath", CGS_ARTIST_FILE, 1886);
 
     size_t luLen = mu16PathLength;
     const char* lpNext;

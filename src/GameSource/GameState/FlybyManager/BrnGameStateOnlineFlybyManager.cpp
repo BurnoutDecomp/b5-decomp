@@ -223,7 +223,7 @@ const CombinedStringID KA_NO_RIVALRY_MESSAGES[OnlineFlybyManager::E_NO_RIVALRY_C
 // ---------------------------------------------------------------------------
 s32 OnlineFlybyManager::CalculateNumberOfCarsInFlyby()
 {
-    CGS_ASSERT(GetScoringSystem(), CGS_ASSERT_MESSAGE_AT("GetScoringSystem()", CGS_ARTIST_FILE, 468));
+    CGS_ASSERT_AT(GetScoringSystem(), "GetScoringSystem()", CGS_ARTIST_FILE, 468);
 
     s32 liNumRivals = GetScoringSystem()->GetNumberOfNetworkPlayersStillConnected() - 1;
 
@@ -244,10 +244,10 @@ s32 OnlineFlybyManager::CalculateNumberOfCarsInFlyby()
 // ---------------------------------------------------------------------------
 const CgsNetwork::PlayerName* OnlineFlybyManager::GetRivalName(BrnNetwork::NetworkPlayerID lPlayerID)
 {
-    CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CGS_ASSERT_MESSAGE_AT(
-            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            KAC_ARTIST_ASSERT_FILE, 715 /* ARTIST 0x82358224 */));
+    CGS_ASSERT_AT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+        "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            KAC_ARTIST_ASSERT_FILE, 715 /* ARTIST 0x82358224 */);
+
 
     return &mPlayerInputInterface.GetPlayerStatusDataByPlayerID(lPlayerID)->mPlayerName;
 }
@@ -284,8 +284,8 @@ void OnlineFlybyManager::CalculatePointsLeaderRating(FlybyManager::RivalRating* 
 {
     const BrnNetwork::NetworkPlayerID lPointsLeader = GetScoringSystem()->GetPointsLeader();
 
-    CGS_ASSERT(lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-               CGS_ASSERT_MESSAGE_AT("lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 696));
+    CGS_ASSERT_AT(lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+               "lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 696);
 
     if (lpRating->mPlayerID == lPointsLeader)
         lpRating->miRivalWeighting += KI_WEIGHTING_POINTS_LEADER;
@@ -345,7 +345,7 @@ void OnlineFlybyManager::CalculateNewOrOngoingRivalryRating(FlybyManager::RivalR
     lNow.SetLocal(false); // ARTIST 0x823580B4 sets UTC before Update.
     lNow.Update();
 
-    CGS_ASSERT(lpRelationship->Validate(), CGS_ASSERT_MESSAGE_AT("lpRelationship->Validate()", CGS_ARTIST_FILE, 557));
+    CGS_ASSERT_AT(lpRelationship->Validate(), "lpRelationship->Validate()", CGS_ARTIST_FILE, 557);
 
     const s32 liSecondsSinceActivity =
         lNow.GetDifferenceInSeconds(lpRelationship->GetLastChangedTime());
@@ -361,7 +361,7 @@ void OnlineFlybyManager::CalculateNewOrOngoingRivalryRating(FlybyManager::RivalR
 // ---------------------------------------------------------------------------
 void OnlineFlybyManager::CalculateRivalryRating(FlybyManager::RivalRating* lpRating)
 {
-    CGS_ASSERT(lpRating, CGS_ASSERT_MESSAGE_AT("lpRating", CGS_ARTIST_FILE, 583));
+    CGS_ASSERT_AT(lpRating, "lpRating", CGS_ARTIST_FILE, 583);
 
     CalculateDisconnectRating(lpRating);
 
@@ -371,12 +371,12 @@ void OnlineFlybyManager::CalculateRivalryRating(FlybyManager::RivalRating* lpRat
         CalculateMarkedManRivalryRating(lpRating);
         CalculateTeamRating(lpRating);
 
-        CGS_ASSERT(lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-                   CGS_ASSERT_MESSAGE_AT("lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 604));
+        CGS_ASSERT_AT(lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+                   "lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 604);
 
         const BrnNetwork::LiveRevengeRelationship* lpRelationship =
             GetLiveRevengeRelationship(lpRating->mPlayerID);
-        CGS_ASSERT(lpRelationship, CGS_ASSERT_MESSAGE_AT("lpRelationship", CGS_ARTIST_FILE, 607));
+        CGS_ASSERT_AT(lpRelationship, "lpRelationship", CGS_ARTIST_FILE, 607);
 
         const s32 liTotalTakedowns = lpRelationship->GetTotalTakedowns();
         lpRating->mbHasValidRelationship = (liTotalTakedowns > 0);
@@ -391,7 +391,7 @@ void OnlineFlybyManager::CalculateRivalryRating(FlybyManager::RivalRating* lpRat
             lpRating->miRivalWeighting += static_cast<s32>(mRandom.RandomUInt() & 7);
         }
 
-        CGS_ASSERT(lpRating->miRivalWeighting >= 0, CGS_ASSERT_MESSAGE_AT("lpRating->miRivalWeighting >= 0", CGS_ARTIST_FILE, 628));
+        CGS_ASSERT_AT(lpRating->miRivalWeighting >= 0, "lpRating->miRivalWeighting >= 0", CGS_ARTIST_FILE, 628);
     }
 }
 
@@ -403,8 +403,8 @@ void OnlineFlybyManager::CalculateRivalryRating(FlybyManager::RivalRating* lpRat
 s32 OnlineFlybyManager::GetOngoingStat(FlybyManager::RivalRating* lpRating,
                                        EOngoingRivalryCompare leStatType, EMessageStyle leStyle)
 {
-    CGS_ASSERT(lpRating,
-        CGS_ASSERT_MESSAGE_AT("lpRating", KAC_ARTIST_ASSERT_FILE, 983 /* ARTIST 0x823582D4 */));
+    CGS_ASSERT_AT(lpRating,
+        "lpRating", KAC_ARTIST_ASSERT_FILE, 983 /* ARTIST 0x823582D4 */);
 
     const BrnNetwork::LiveRevengeRelationship* lpRelationship =
         GetLiveRevengeRelationship(lpRating->mPlayerID);
@@ -413,8 +413,8 @@ s32 OnlineFlybyManager::GetOngoingStat(FlybyManager::RivalRating* lpRating,
         (leStyle != E_MESSAGE_STYLE_POSITIVE) ? &lpRelationship->GetOverallStats()->mRivalStats
                                               : &lpRelationship->GetOverallStats()->mPlayerStats;
 
-    CGS_ASSERT(lpCommonRelationship,
-        CGS_ASSERT_MESSAGE_AT("lpCommonRelationship", KAC_ARTIST_ASSERT_FILE, 996 /* ARTIST 0x82358344 */));
+    CGS_ASSERT_AT(lpCommonRelationship,
+        "lpCommonRelationship", KAC_ARTIST_ASSERT_FILE, 996 /* ARTIST 0x82358344 */);
 
     switch (leStatType)
     {
@@ -431,8 +431,8 @@ s32 OnlineFlybyManager::GetOngoingStat(FlybyManager::RivalRating* lpRating,
     case E_ONGOING_RIVALRY_PAYBACKS_ESCAPED:
         return lpCommonRelationship->miPaybacksDealt - lpCommonRelationship->miPaybacksScored;
     default:
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT("Unknow stat type", KAC_ARTIST_ASSERT_FILE, 1041 /* ARTIST 0x823583F4 */));
+        CGS_FAIL_AT(
+            "Unknow stat type", KAC_ARTIST_ASSERT_FILE, 1041 /* ARTIST 0x823583F4 */);
         return 0;
     }
 }
@@ -446,11 +446,11 @@ s32 OnlineFlybyManager::GetOngoingStat(FlybyManager::RivalRating* lpRating,
 s32 OnlineFlybyManager::GetNewRivalryStat(FlybyManager::RivalRating* lpRating,
                                           ENewRivalryCompare leStatType, EMessageStyle leStyle)
 {
-    CGS_ASSERT(lpRating, CGS_ASSERT_MESSAGE_AT("lpRating", CGS_ARTIST_FILE, 1069));
+    CGS_ASSERT_AT(lpRating, "lpRating", CGS_ARTIST_FILE, 1069);
 
     const BrnNetwork::LiveRevengeRelationship* lpRelationship =
         GetLiveRevengeRelationship(lpRating->mPlayerID);
-    CGS_ASSERT(lpRelationship, CGS_ASSERT_MESSAGE_AT("lpRelationship", CGS_ARTIST_FILE, 1073));
+    CGS_ASSERT_AT(lpRelationship, "lpRelationship", CGS_ARTIST_FILE, 1073);
 
     const bool lbRivalSide = (leStyle != E_MESSAGE_STYLE_POSITIVE);
     const BrnNetwork::CommonRelationshipStats* lpSideStats =
@@ -469,7 +469,7 @@ s32 OnlineFlybyManager::GetNewRivalryStat(FlybyManager::RivalRating* lpRating,
     case E_NEW_RIVALRY_LONGEST_STREAK:
         return lpSideStats->miLongestStreak;
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknow stat type", CGS_ARTIST_FILE, 1130));
+        CGS_FAIL_AT("Unknow stat type", CGS_ARTIST_FILE, 1130);
         return 0;
     }
 }
@@ -499,8 +499,8 @@ s32 OnlineFlybyManager::GetNoRivalryStat(FlybyManager::RivalRating* lpRating,
     case E_NO_RIVALRY_WINS:
         return GetPlayerStats(lPlayerID)->GetStatAsInt(BrnNetwork::NetworkPlayerStats::E_STATS_VALUE_WINS);
     default:
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT("Unknown stat type", KAC_ARTIST_ASSERT_FILE, 1198 /* ARTIST 0x823646B0 */));
+        CGS_FAIL_AT(
+            "Unknown stat type", KAC_ARTIST_ASSERT_FILE, 1198 /* ARTIST 0x823646B0 */);
         return 0;
     }
 }
@@ -531,7 +531,7 @@ s32 OnlineFlybyManager::CountAvailableOngoingRivalryMessages(EOngoingRivalryComp
         ++liCount;
         if (liCount >= KI_MAX_MESSAGES)
         {
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "Something has gone wrong, you probably haven't null terminated a table entry!");
             return 0;
         }
@@ -552,7 +552,7 @@ s32 OnlineFlybyManager::CountAvailableNewRivalryMessages(ENewRivalryCompare leSt
         ++liCount;
         if (liCount >= KI_MAX_MESSAGES)
         {
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "Something has gone wrong, you probably haven't null terminated a table entry!");
             return 0;
         }
@@ -591,7 +591,7 @@ void OnlineFlybyManager::CalculateOnlineRivals()
     {
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerStatusData =
             mPlayerInputInterface.GetPlayerStatusData(liPlayer);
-        CGS_ASSERT(lpPlayerStatusData, CGS_ASSERT_MESSAGE_AT("lpPlayerStatusData", CGS_ARTIST_FILE, 359));
+        CGS_ASSERT_AT(lpPlayerStatusData, "lpPlayerStatusData", CGS_ARTIST_FILE, 359);
 
         const BrnNetwork::NetworkPlayerID lThisId = lpPlayerStatusData->mNetworkPlayerID;
 
@@ -663,9 +663,9 @@ void OnlineFlybyManager::CalculateOnlineRivals()
             lpFlybyData->AddMessage("PRERACE_POINTS_LEADER", NULL);
             // The X360 then re-validates the car count and tags the just-added car as the
             // style 2; bounds asserts preserved verbatim.
-            CGS_ASSERT(lpFlybyData->miNumberOfCars > 0, CGS_ASSERT_MESSAGE_AT("miNumberOfCars > 0", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 305));
-            CGS_ASSERT(lpFlybyData->miNumberOfCars <= 3,
-                       CGS_ASSERT_MESSAGE_AT("miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 306));
+            CGS_ASSERT_AT(lpFlybyData->miNumberOfCars > 0, "miNumberOfCars > 0", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 305);
+            CGS_ASSERT_AT(lpFlybyData->miNumberOfCars <= 3,
+                       "miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 306);
             lpFlybyData->mRivalsToShow[lpFlybyData->miNumberOfCars - 1].meMessageStyle =
                 static_cast<GameStateModuleIO::FlybyRivalData::EMessageStyle>(2);
         }
@@ -700,9 +700,9 @@ void OnlineFlybyManager::CalculateOnlineRivals()
 // ---------------------------------------------------------------------------
 void OnlineFlybyManager::AddNoRivalryFlybyMessage(FlybyManager::RivalRating* lpRating)
 {
-    CGS_ASSERT(lpRating, CGS_ASSERT_MESSAGE_AT("lpRating", CGS_ARTIST_FILE, 736));
-    CGS_ASSERT(lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-               CGS_ASSERT_MESSAGE_AT("lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 737));
+    CGS_ASSERT_AT(lpRating, "lpRating", CGS_ARTIST_FILE, 736);
+    CGS_ASSERT_AT(lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+               "lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 737);
 
     CgsContainers::FastBitArray<E_NO_RIVALRY_COUNT> lNotZeroMessage;
     lNotZeroMessage.Construct();
@@ -718,9 +718,9 @@ void OnlineFlybyManager::AddNoRivalryFlybyMessage(FlybyManager::RivalRating* lpR
     {
         GameStateModuleIO::FlybyData* lpFlybyData = GetFlybyData();
         lpFlybyData->AddMessage("PRERACE_NO_RIVALRY_RANK_NONE", NULL);
-        CGS_ASSERT(lpFlybyData->miNumberOfCars > 0, CGS_ASSERT_MESSAGE_AT("miNumberOfCars > 0", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 305));
-        CGS_ASSERT(lpFlybyData->miNumberOfCars <= 3,
-                   CGS_ASSERT_MESSAGE_AT("miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 306));
+        CGS_ASSERT_AT(lpFlybyData->miNumberOfCars > 0, "miNumberOfCars > 0", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 305);
+        CGS_ASSERT_AT(lpFlybyData->miNumberOfCars <= 3,
+                   "miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 306);
         lpFlybyData->mRivalsToShow[lpFlybyData->miNumberOfCars - 1].meMessageStyle =
             GameStateModuleIO::FlybyRivalData::E_MESSAGE_STYLE_NEUTRAL;
         return;
@@ -784,7 +784,7 @@ void OnlineFlybyManager::AddNewRivalryMessage(FlybyManager::RivalRating* lpRatin
 {
     const BrnNetwork::LiveRevengeRelationship* lpRelationship =
         GetLiveRevengeRelationship(lpRating->mPlayerID);
-    CGS_ASSERT(lpRelationship, CGS_ASSERT_MESSAGE_AT("lpRelationship", CGS_ARTIST_FILE, 841));
+    CGS_ASSERT_AT(lpRelationship, "lpRelationship", CGS_ARTIST_FILE, 841);
 
     ENewRivalryCompare leStatType = E_NEW_RIVALRY_START;
     if (lpRelationship->IsCurrentRelationshipEqual())
@@ -800,7 +800,7 @@ void OnlineFlybyManager::AddNewRivalryMessage(FlybyManager::RivalRating* lpRatin
             }
         }
 
-        CGS_ASSERT(laAvaiableMessageIndex.GetLength() > 0, CGS_ASSERT_MESSAGE_AT("laAvaiableMessageIndex.GetLength() > 0", CGS_ARTIST_FILE, 869));
+        CGS_ASSERT_AT(laAvaiableMessageIndex.GetLength() > 0, "laAvaiableMessageIndex.GetLength() > 0", CGS_ARTIST_FILE, 869);
         leStatType = laAvaiableMessageIndex[static_cast<u32>(
             mRandom.RandomInt(0, static_cast<s32>(laAvaiableMessageIndex.GetLength()) - 1))];
     }

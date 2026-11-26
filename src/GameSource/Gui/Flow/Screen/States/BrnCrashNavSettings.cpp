@@ -227,7 +227,7 @@ namespace BrnGui
     // it returns nothing, so a stale close cannot be read twice.
     char* CrashNavProductCodeKeyboardListener::FillString()
     {
-        CGS_ASSERT(mbKeyboardClosed, CGS_ASSERT_MESSAGE_AT("mbKeyboardClosed", CGS_ARTIST_FILE, 1202 /* ARTIST 0x824B7A60 */));   // cpp:1202
+        CGS_ASSERT_AT(mbKeyboardClosed, "mbKeyboardClosed", CGS_ARTIST_FILE, 1202 /* ARTIST 0x824B7A60 */);   // cpp:1202
 
         mbKeyboardClosed = false;                           // `stb r11(0), 0x18`
 
@@ -308,8 +308,8 @@ namespace BrnGui
     // inventing behaviour the binary does not have.
     void CrashNavSettings::HandleTriggers(const CgsModule::Event* lpAptTrigger)
     {
-        CGS_ASSERT(lpAptTrigger != 0,
-            CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in CrashNavMapMain::HandleTriggers", CGS_ARTIST_FILE, 940)); // cpp:940
+        CGS_ASSERT_STREAM_AT(lpAptTrigger != 0,
+            "Invalid event in CrashNavMapMain::HandleTriggers", CGS_ARTIST_FILE, 940); // cpp:940
     }
 
     // ---- ShowMenu @0x824BCDF8 ------------------------------------------------------

@@ -65,10 +65,10 @@ bool ReliableMessageManager::Release()
 
     if (mpReliableMessageBuffer)
     {
-        CGS_ASSERT(mpHeapAllocator,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpHeapAllocator",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsReliableMessageManager.cpp", 160 /* ARTIST 0x82890A50 */));
+        CGS_ASSERT_AT(mpHeapAllocator,
+            "mpHeapAllocator",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsReliableMessageManager.cpp", 160 /* ARTIST 0x82890A50 */);
+
         mpHeapAllocator->Free(mpReliableMessageBuffer);
         mpReliableMessageBuffer = 0;
     }
@@ -300,7 +300,7 @@ void ReliableMessageManager::AddBufferedReliableMessage(NetworkPlayerID lPlayerI
 
     if (lpFreeSlot == 0)
     {
-        CGS_ASSERT(false, "Failed to find a reliable message buffer to use");
+        CGS_FAIL("Failed to find a reliable message buffer to use");
         return;
     }
 
@@ -444,9 +444,9 @@ void ReliableMessageManager::UpdateReliableMessagesReceived()
             continue;
         }
 
-        CGS_ASSERT(lData.miValidCountdown == 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lData.miValidCountdown == 0,
             "maReliableMessagesRcvdData[i].miValidCountdown == 0",
-            __FILE__, 721 /* ARTIST 0x82875250 */));
+            __FILE__, 721 /* ARTIST 0x82875250 */);
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Removing reliable message received data for message type "
                                    << lData.miType << " from player " << lData.mPlayerID
                                    << " with frame " << static_cast<s32>(lData.mu16FrameSent)
@@ -465,12 +465,12 @@ void ReliableMessageManager::FakeNackMessage(Message* lpMessage, NetworkPlayerID
                                              NetworkPlayerID lRecvingPlayerID, bool lbAck)
 {
     SignalMessage lNackMessage;
-    CGS_ASSERT(lSendingPlayerID != K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lSendingPlayerID != K_INVALID_PLAYER_ID,
         "lSendingPlayerID != K_INVALID_PLAYER_ID",
-        __FILE__, 568 /* ARTIST 0x82890AF8 */));
-    CGS_ASSERT(lRecvingPlayerID != K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+        __FILE__, 568 /* ARTIST 0x82890AF8 */);
+    CGS_ASSERT_AT(lRecvingPlayerID != K_INVALID_PLAYER_ID,
         "lRecvingPlayerID != K_INVALID_PLAYER_ID",
-        __FILE__, 569 /* ARTIST 0x82890B1C */));
+        __FILE__, 569 /* ARTIST 0x82890B1C */);
 
     lNackMessage.Construct();
     lNackMessage.PrepareNack(lpMessage, lSendingPlayerID, lRecvingPlayerID);

@@ -475,14 +475,14 @@ namespace BrnGameState
     {
         if ( mbOutputRoadRulesScoresToNetwork )
         {
-            CGS_ASSERT( lpOutput != NULL, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 111) );
-            CGS_ASSERT( lpOutput->GetGameActionQueue(), CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 112) );
-            CGS_ASSERT( mpStreetManager->GetProgressionManager(),
-                        CGS_ASSERT_MESSAGE_AT("mpStreetManager->mpProgressionManager", CGS_ARTIST_FILE, 113) );
+            CGS_ASSERT_AT( lpOutput != NULL, "lpOutput", CGS_ARTIST_FILE, 111 );
+            CGS_ASSERT_AT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 112 );
+            CGS_ASSERT_AT( mpStreetManager->GetProgressionManager(),
+                        "mpStreetManager->mpProgressionManager", CGS_ARTIST_FILE, 113 );
             // The X360 spells this null-check `addic. r11,pm,0x170` -- the folded
             // `&pm->mProfile != NULL` of the embedded-by-value profile.
-            CGS_ASSERT( mpStreetManager->GetProgressionManager()->GetProfile(),
-                        CGS_ASSERT_MESSAGE_AT("mpStreetManager->mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 114) );
+            CGS_ASSERT_AT( mpStreetManager->GetProgressionManager()->GetProfile(),
+                        "mpStreetManager->mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 114 );
 
             BrnProgression::Profile* lpProfile = mpStreetManager->GetProgressionManager()->GetProfile();
 

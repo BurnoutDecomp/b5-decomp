@@ -97,10 +97,10 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
 template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
-    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
-        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 526));
-    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
-        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 527));
+    CGS_ASSERT_AT(mapVertexProgramBuffer[li8Program] != 0,
+        "mapVertexProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 526);
+    CGS_ASSERT_AT(mapPixelProgramBuffer[li8Program] != 0,
+        "mapPixelProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 527);
     if (shadow::Device::SetVertexProgram(
         reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[li8Program])))
     {
@@ -134,8 +134,8 @@ void ImRenderer<V>::BeginRendering()
 template <typename V>
 void ImRenderer<V>::EndRendering()
 {
-    CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this),
-        CGS_ASSERT_MESSAGE_AT("mgpActiveRenderer == this", KAC_IM_RENDERER_ASSERT_FILE, 645));
+    CGS_ASSERT_AT(mgpActiveRenderer == static_cast<ImRendererBase*>(this),
+        "mgpActiveRenderer == this", KAC_IM_RENDERER_ASSERT_FILE, 645);
     mgpActiveRenderer = 0;
 }
 

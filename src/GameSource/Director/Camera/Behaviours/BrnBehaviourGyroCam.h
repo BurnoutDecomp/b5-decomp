@@ -335,8 +335,8 @@ BehaviourGyroCam::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 
     // DecFIGS homes Prepare in BrnBehaviourGyroCam.cpp; ARTIST fires this at its line 205
     // (`li r5, 0xCD` @0x821FA168).
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL",
-        "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.cpp", 205));
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters != NULL",
+        "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.cpp", 205);
 
     mfBlendFactor = mpParameters->mfMinimumBlendFactor;      // +0xB8 -> +0x62C
     mfHeight      = mpParameters->mfFastHeight;              // +0xA8 -> +0x620
@@ -364,8 +364,8 @@ BehaviourGyroCam::GetName() const
 inline void
 BehaviourGyroCam::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourGyroCam,
-               CGS_ASSERT_MESSAGE_AT("lpParameters->GetType() == eBehaviourGyroCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.h", 240));
+    CGS_ASSERT_AT(lpParameters->GetType() == eBehaviourGyroCam,
+               "lpParameters->GetType() == eBehaviourGyroCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.h", 240);
     SetDebugParametersName(lpParameters->GetDebugName());
     mpParameters = lpParameters;                 // stw r31, 0x14(this)
 }
@@ -389,9 +389,9 @@ BehaviourGyroCam::AttachToRaceCar(s32 meRaceCarIndex)
     mAttachedTo.meType         = BrnDirector::VehicleRef::E_RACE_CAR;   // stw r11(=1), 0x510(this)
     mAttachedTo.muRef          = 0;                                     // stw r10(=0), 0x518(this)
     // The inlined VehicleRef setter's assert (BrnVehicleRef.h:222, `li r5, 0xDE` @0x821F410C).
-    CGS_ASSERT(meRaceCarIndex < KU_MAX_NUM_RACE_CARS, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(meRaceCarIndex < KU_MAX_NUM_RACE_CARS,
                "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
-               "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 222));
+               "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 222);
 }
 
 // ----------------------------------------------------------------------------

@@ -15,9 +15,9 @@ void BurningRouteMode::Start(const StartGameModeParams* lpStartGameModeParams,
                              GameModeParams* lpGameModeParams, ScoringSystem*)
 {
     const BrnProgression::RaceEventData* lpEventData = lpStartGameModeParams->GetEventData();
-    CGS_ASSERT(lpEventData, CGS_ASSERT_MESSAGE_AT("lpEventData", CGS_ARTIST_FILE, 67));
+    CGS_ASSERT_AT(lpEventData, "lpEventData", CGS_ARTIST_FILE, 67);
     const BrnProgression::ProgressionRankData* lpRank = lpStartGameModeParams->GetProgressionRankData();
-    CGS_ASSERT(lpRank, CGS_ASSERT_MESSAGE_AT("lpProgressionRankData", CGS_ARTIST_FILE, 70));
+    CGS_ASSERT_AT(lpRank, "lpProgressionRankData", CGS_ARTIST_FILE, 70);
     lpGameModeParams->Construct(lpStartGameModeParams->GetGameModeType());
     lpGameModeParams->muJunctionID = lpStartGameModeParams->GetJunctionID();
     lpGameModeParams->miNumNetworkPlayers = 0;
@@ -48,10 +48,10 @@ void BurningRouteMode::Start(const StartGameModeParams* lpStartGameModeParams,
     lpGameModeParams->SetStartMechanism(lpStartGameModeParams->GetStartMechanism());
     lpGameModeParams->SetTrafficLightTriggerId(lpStartGameModeParams->GetTrafficLightTriggerId());
     mpModeManager->SetStartingGrid(lpGameModeParams, lpGameModeParams->GetNumRivals() + 1, false);
-    CGS_ASSERT(mpModeManager, CGS_ASSERT_MESSAGE_AT("mpModeManager", CGS_ARTIST_FILE, 106));
-    CGS_ASSERT(mpModeManager->GetProgressionManager(), CGS_ASSERT_MESSAGE_AT("mpModeManager->GetProgressionManager()", CGS_ARTIST_FILE, 107));
+    CGS_ASSERT_AT(mpModeManager, "mpModeManager", CGS_ARTIST_FILE, 106);
+    CGS_ASSERT_AT(mpModeManager->GetProgressionManager(), "mpModeManager->GetProgressionManager()", CGS_ARTIST_FILE, 107);
     BrnProgression::Profile* lpProfile = mpModeManager->GetProgressionManager()->GetProfile();
-    CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("mpModeManager->GetProgressionManager()->GetProfile()", CGS_ARTIST_FILE, 108));
+    CGS_ASSERT_AT(lpProfile, "mpModeManager->GetProgressionManager()->GetProfile()", CGS_ARTIST_FILE, 108);
     const GameStateModuleIO::TargetEventScore* lpTarget = lpProfile->GetTargetEvent(lpGameModeParams->muJunctionID);
     const f32 lfTime = lpTarget ? static_cast<f32>(lpTarget->miScore) * 0.001f : lpEventData->GetTimeLimitSlow();
     lpGameModeParams->mfNeedForGold = lfTime;
@@ -67,10 +67,10 @@ void BurningRouteMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
     bool lbPaused, const ScoringSystem* lpScoringSystem)
 {
-    CGS_ASSERT(lpOutput, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", CGS_ARTIST_FILE, 143));
-    CGS_ASSERT(lpInput, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 144));
+    CGS_ASSERT_AT(lpOutput, "lpOutput != NULL", CGS_ARTIST_FILE, 143);
+    CGS_ASSERT_AT(lpInput, "lpInput != NULL", CGS_ARTIST_FILE, 144);
     GameMode::PreWorldUpdate(lpOutput, lpInput, lpGlobalRaceCars, lpActiveRaceCars, lbPaused, lpScoringSystem);
-    CGS_ASSERT(lpGlobalRaceCars, CGS_ASSERT_MESSAGE_AT("lpGlobalCarInterface != NULL", CGS_ARTIST_FILE, 155));
+    CGS_ASSERT_AT(lpGlobalRaceCars, "lpGlobalCarInterface != NULL", CGS_ARTIST_FILE, 155);
     mePlayerActiveIndex = lpGlobalRaceCars->GetActiveRaceCarIndex(lpGlobalRaceCars->GetPlayerGlobalRaceCarIndex());
 }
 

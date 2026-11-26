@@ -18,7 +18,7 @@ void StatsRequestEvent::Construct(const char* lpcName, s32 liPlayerID)
 {
     // Non-gating tripwire (cpp:47; the X360 streams the message, folded static):
     // the source name must fit the 16-byte key buffer.
-    CGS_ASSERT(std::strlen(lpcName) < sizeof(macName), CGS_ASSERT_STREAM_MESSAGE_AT("Memory trample, name bigger than buffer", "..\\..\\..\\GameSource\\Network/Managers/BrnStatsRequestEvent.cpp", 47));
+    CGS_ASSERT_STREAM_AT(std::strlen(lpcName) < sizeof(macName), "Memory trample, name bigger than buffer", "..\\..\\..\\GameSource\\Network/Managers/BrnStatsRequestEvent.cpp", 47);
 
 
     std::strncpy(macName, lpcName, sizeof(macName));

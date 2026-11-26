@@ -144,7 +144,7 @@ namespace CgsResource
     // entry; == false requires refcount > 0.
     s32 Pool::FindResourceIndex(ID lID, bool lbCheckRefCount, u16 luStatusMask)
     {
-        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 805));
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 805);
         const s32 liIndex = mHashTable.FindEntry(lID);
         if (liIndex >= 0
             && (lbCheckRefCount || mpiResourceRefCounts[liIndex] > 0)
@@ -158,7 +158,7 @@ namespace CgsResource
     // 0x828F5D58 - FindResourceIndex, then return the Entry* (and the index via lpiOutIndex).
     Entry* Pool::FindResource(ID lID, bool lbCheckRefCount, u16 luStatusMask, s32* lpiOutIndex)
     {
-        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 770));
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 770);
         s32 liIndex = FindResourceIndex(lID, lbCheckRefCount, luStatusMask);
         if (liIndex >= 0)
         {
@@ -173,7 +173,7 @@ namespace CgsResource
     // resource was found in via lppOutPool.
     Entry* Pool::FindResourceWithDependencies(ID lID, Pool** lppOutPool, bool lbCheckRefCount, u16 luStatusMask, s32* lpiOutIndex)
     {
-        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_FILE, 848));   // :848
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_FILE, 848);   // :848
 
         Entry* lpEntry = FindResource(lID, lbCheckRefCount, luStatusMask, lpiOutIndex);
         if (lpEntry != 0)
@@ -229,8 +229,8 @@ namespace CgsResource
     // 0x828D8A18 - Entry* by index (bounds-checked), gated on refcount + status as above.
     Entry* Pool::GetResource(s32 liIndex, bool lbCheckRefCount, u16 luStatusMask)
     {
-        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 737));
-        CGS_ASSERT(liIndex >= 0 && liIndex < muMaxResources, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid id\n", CGS_ARTIST_POOL_FILE, 738));
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 737);
+        CGS_ASSERT_STREAM_AT(liIndex >= 0 && liIndex < muMaxResources, "Invalid id\n", CGS_ARTIST_POOL_FILE, 738);
         if ((lbCheckRefCount || mpiResourceRefCounts[liIndex] > 0)
             && (mpx8ResourceStatuses[liIndex] & luStatusMask) != 0)
         {
@@ -311,7 +311,7 @@ namespace CgsResource
             mePrepareStage = E_PREPARESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Should never get here!\n", CGS_ARTIST_POOL_FILE, 173);
+            CGS_FAIL_AT("Should never get here!\n", CGS_ARTIST_POOL_FILE, 173);
             return false;
         }
     }
@@ -329,7 +329,7 @@ namespace CgsResource
             meReleaseStage = E_RELEASESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Should never get here!\n", CGS_ARTIST_POOL_FILE, 210);
+            CGS_FAIL_AT("Should never get here!\n", CGS_ARTIST_POOL_FILE, 210);
             return false;
         }
     }
@@ -374,7 +374,7 @@ namespace CgsResource
     // then mark the pool valid.
     bool Pool::Validate()
     {
-        CGS_ASSERT(!mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not invalid\n", CGS_ARTIST_FILE, 456));
+        CGS_ASSERT_STREAM_AT(!mbIsValid, "Pool is not invalid\n", CGS_ARTIST_FILE, 456);
 
         InitManagementData();
         for (s32 liHeap = 0; liHeap < 3; ++liHeap)
@@ -440,7 +440,7 @@ namespace CgsResource
     // allocation fails, else CREATERESULT_OK with *lppOutEntry set.
     Pool::ECreateResult Pool::CreateEntryInSlot(const NewResource* lpNewResource, Entry** lppOutEntry, s32 liSlot, bool lbAllocateMemory)
     {
-        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1045));
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1045);
 
         Entry* lpEntry = &mpResourceEntries[liSlot];
         lpEntry->mID = lpNewResource->mID;
@@ -483,7 +483,7 @@ namespace CgsResource
     // pool is full; otherwise decrements the free count and hands back the entry + index.
     bool Pool::AllocateResourceEntry(Entry** lppOutEntry, s32* lpiOutIndex)
     {
-        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 522));
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 522);
         if (muNumFreeResources == 0)
             return false;
 
@@ -494,7 +494,7 @@ namespace CgsResource
             if (mpx8ResourceStatuses[luSlot] == 0)
                 break;
         }
-        CGS_ASSERT(luSlot != luMaxResources, CGS_ASSERT_STREAM_MESSAGE_AT("No room for more resources\n", CGS_ARTIST_POOL_FILE, 538));
+        CGS_ASSERT_STREAM_AT(luSlot != luMaxResources, "No room for more resources\n", CGS_ARTIST_POOL_FILE, 538);
 
         --muNumFreeResources;
         *lppOutEntry = &mpResourceEntries[luSlot];
@@ -506,7 +506,7 @@ namespace CgsResource
     // The original resource deletion monitor measures clearing the slot status.
     void Pool::FreeResourceEntry(s16 liIndex)
     {
-        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 662));
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 662);
         if (_miPoolDeleteResourcePerfMon > -1)
             CgsDev::PerfMonCpu::StartMonitor(_miPoolDeleteResourcePerfMon);
         mpx8ResourceStatuses[liIndex] = 0;
@@ -521,7 +521,7 @@ namespace CgsResource
     // through the existing resource pointer and its aliases.
     void Pool::FreeMemoryForResource(Entry* lpEntry)
     {
-        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 687));
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 687);
         SmallResource lResource = lpEntry->mPtr.mResourceMemory;
         for (s32 liMemType = 0; liMemType < E_MEMTYPE_NUMTYPES; ++liMemType)
         {
@@ -645,9 +645,9 @@ namespace CgsResource
             {
                 CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint;
                 lrStream << "Heap [";
-                lrStream.PrintUnsignedInteger(luMemType);
+                lrStream << luMemType;
                 lrStream << "] overhead: ";
-                lrStream.PrintUnsignedInteger(luHeapNodeOverhead);
+                lrStream << luHeapNodeOverhead;
                 lrStream << "\n";
             }
             luTotalOverhead += luHeapNodeOverhead;
@@ -655,7 +655,7 @@ namespace CgsResource
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
         {
-            (*CgsDev::Log::gpDebugPrint << "    Total: ").PrintUnsignedInteger(luTotalOverhead) << "\n";
+            *CgsDev::Log::gpDebugPrint << "    Total: " << luTotalOverhead << "\n";
         }
 
         return luTotalOverhead;
@@ -903,7 +903,7 @@ namespace CgsResource
                         char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                         CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
                         lMessage << "Failed to validate resource " << lpEntry->mID << "\n";
-                        CGS_ASSERT(false, lacMessage);
+                        CGS_FAIL(lacMessage);
                     }
                 }
             }
@@ -1065,7 +1065,7 @@ namespace CgsResource
     // allocations and must not be allocated again. No-room takes precedence over defrag.
     Pool::ECreateResult Pool::ExecuteBatchAllocations(AllocListSet* lpSet, bool lbRetryFailedOnly)
     {
-        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1110));
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1110);
         bool lbNoRoom = false;
         bool lbNeedDefrag = false;
         for (s32 t = 0; t < 3; ++t)
@@ -1098,7 +1098,7 @@ namespace CgsResource
     Pool::ECreateResult Pool::MergeBatchAllocations(AllocListSet* lpSet,
         const BundleV2::ResourceEntry* lpEntries, SmallResource* lpResources)
     {
-        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1241));
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1241);
         for (u32 luMemType = 1; luMemType < KI_NUM_TYPES; ++luMemType)
         {
             const u32 luAllocCount = lpSet->manAllocRequestCounts[luMemType];
@@ -1146,7 +1146,7 @@ namespace CgsResource
     // result array and its request count) goes straight to the heap, always freeing on failure.
     EBatchAllocResult Pool::ExecuteBatchAllocation(AllocListSet* lpAllocListSet, s32 liMemType)
     {
-        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1216));
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1216);
         return maHeaps[liMemType].ExecuteBatchAllocation(lpAllocListSet->mapAllocRequests[liMemType],
                                                         lpAllocListSet->mapAllocResults[liMemType],
                                                         lpAllocListSet->manAllocRequestCounts[liMemType],
@@ -1254,7 +1254,7 @@ namespace CgsResource
             else if (mpCurrentScratchPool != 0)
                 UpdateDefrag();
             else
-                CGS_ASSERT_STREAM_AT(false, "Invalid defragmentation mode - don't have a relocator (for emergency frag) or scratch pool (for silent frag)\n",
+                CGS_FAIL_STREAM_AT("Invalid defragmentation mode - don't have a relocator (for emergency frag) or scratch pool (for silent frag)\n",
                                      CGS_ARTIST_POOL_FILE, 1556);
         }
     }
@@ -1348,7 +1348,7 @@ namespace CgsResource
                 char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                 CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
                 lMessage << "Defragmentation failiure for scratch entry " << lu << "\n";
-                CGS_ASSERT(false, lacMessage);
+                CGS_FAIL(lacMessage);
             }
         }
         return true;
@@ -1364,7 +1364,7 @@ namespace CgsResource
                 char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                 CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
                 lMessage << "Defragmentation failure for scratch entry " << lu << "\n";
-                CGS_ASSERT(false, lacMessage);
+                CGS_FAIL(lacMessage);
             }
         }
         return true;
@@ -1502,7 +1502,7 @@ namespace CgsResource
                 *CgsDev::Log::gpDebugPrint << "End defragmenting on defrag frame " << siDefragDebugFrame << "\n";
             return;
         default:
-            CGS_ASSERT(false, "Invalid defrag stage\n");
+            CGS_FAIL("Invalid defrag stage\n");
             break;
         }
         ++siDefragDebugFrame;

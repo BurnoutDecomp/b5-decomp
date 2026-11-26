@@ -898,7 +898,7 @@ bool EffectsModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllo
         mePrepareStage = E_PREPARESTAGE_DONE;
         return true;
     default:
-        CGS_ASSERT(false, "Invalid Stage\n");   // EffectsModule.cpp:556
+        CGS_FAIL("Invalid Stage\n");   // EffectsModule.cpp:556
         return false;
     }
 }
@@ -1124,7 +1124,7 @@ bool EffectsModule::Release()
 
         default:
         {
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", __FILE__, 816));
+            CGS_FAIL_AT("Invalid Stage\n", __FILE__, 816);
         }
     }
     return false;
@@ -1444,7 +1444,7 @@ void EffectsModule::ProcessActiveRaceCars(const EffectsModuleParams& lrParams,
                                           bool lbBumperCam)
 {
     // ARTIST bakes EffectsModule.cpp:3252 (li r5,0xCB4 at 0x8229EB68).
-    CGS_ASSERT(lpActiveRaceCars != 0, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface != NULL", __FILE__, 3252));
+    CGS_ASSERT_AT(lpActiveRaceCars != 0, "lpActiveRaceCarInterface != NULL", __FILE__, 3252);
     EActiveRaceCarIndex lePlayer = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     if (lpActiveRaceCars->IsPlayerCarActive())
         lePlayer = lpActiveRaceCars->GetPlayerActiveRaceCarIndex();
@@ -3653,7 +3653,7 @@ void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, 
         else
         {
             lfParticleSizeMin = lfParticleSizeMax = lfEmissionRate = lfEmissionThreshold = 0.0f;
-            CGS_ASSERT(false, "Unknown Debris Type in HandleCrashingTrail !");
+            CGS_FAIL("Unknown Debris Type in HandleCrashingTrail !");
         }
 
         f32& lrAccumulator = mafCrashingTrailAccumulators[luCar][lnDebrisTypeLoop];
@@ -3786,16 +3786,16 @@ void EffectsModule::HandleShowtimeTrafficBounce(
     CGS_ASSERT((lpJustBouncedAction != 0)
                || (lpJustBouncedAction == 0 && IsReplayPlayback(mEffectsSerialiser.GetMode())),
                "( NULL != lpJustBouncedAction ) || ( NULL == lpJustBouncedAction && mReplayEffectsSerialiser.IsPlaying() )");
-    CGS_ASSERT(lpEffectsInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpEffectsInputBuffer", __FILE__, 2860));                   // :2860
+    CGS_ASSERT_AT(lpEffectsInputBuffer != 0, "NULL != lpEffectsInputBuffer", __FILE__, 2860);                   // :2860
 
     const CgsSystem::TimerStatus* const lpTimerStatus =
         lpEffectsInputBuffer->GetTimerStatusInterface()->GetSimTimerStatus();                  // `addi r31, r11, 0x18`
     const BrnDirector::Camera::Camera* const lpCamera = lpEffectsInputBuffer->GetCameraInput();
     const RCEntityActiveRaceCarOutputInterface* const lpActiveRaceCarInterface =
         lpEffectsInputBuffer->GetActiveRaceCarInterface();
-    CGS_ASSERT(lpTimerStatus != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpTimerStatus", __FILE__, 2867));                                    // :2867
-    CGS_ASSERT(lpCamera != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpCamera", __FILE__, 2868));                                              // :2868
-    CGS_ASSERT(lpActiveRaceCarInterface != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpActiveRaceCarInterface", __FILE__, 2869));              // :2869
+    CGS_ASSERT_AT(lpTimerStatus != 0, "NULL != lpTimerStatus", __FILE__, 2867);                                    // :2867
+    CGS_ASSERT_AT(lpCamera != 0, "NULL != lpCamera", __FILE__, 2868);                                              // :2868
+    CGS_ASSERT_AT(lpActiveRaceCarInterface != 0, "NULL != lpActiveRaceCarInterface", __FILE__, 2869);              // :2869
 
     // (f32)seconds + fraction (`fcfid ; frsp ; fadds` 0x8229296C..0x8229297C).
     const f32 lfCurrentTime = lpTimerStatus->GetTime().GetFloatVal();
@@ -3815,8 +3815,8 @@ void EffectsModule::HandleShowtimeTrafficBounce(
         return;
     }
 
-    CGS_ASSERT(lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing(),
-               CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing()", __FILE__, 2896));   // :2896
+    CGS_ASSERT_AT(lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing(),
+               "lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing()", __FILE__, 2896);   // :2896
     const EActiveRaceCarIndex lePlayerCarIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();       // :2696
     const RaceCarState* const lpRaceCarState   = lpActiveRaceCarInterface->GetRaceCarState(lePlayerCarIndex);   // :2697
     const Vector3& lrVelocity = lpRaceCarState->mLinearVelocity;                                                // +0x330
@@ -4013,13 +4013,13 @@ void EffectsModule::JunkyardVfxStart(Vector3 cameraPosition)
         const f32 x = JunkyardVfxStringToFloat(value);
         if (!JunkyardVfxReadLine("y", value, sizeof(value), &cursor))
         {
-            CGS_ASSERT(false, "Missing parameter 'y'.");
+            CGS_FAIL("Missing parameter 'y'.");
             return;
         }
         const f32 y = JunkyardVfxStringToFloat(value);
         if (!JunkyardVfxReadLine("z", value, sizeof(value), &cursor))
         {
-            CGS_ASSERT(false, "Missing parameter 'z'.");
+            CGS_FAIL("Missing parameter 'z'.");
             return;
         }
         const f32 z = JunkyardVfxStringToFloat(value);
@@ -4030,7 +4030,7 @@ void EffectsModule::JunkyardVfxStart(Vector3 cameraPosition)
             angle = __vmulfp(mRandom.RandomVecFloat().mV, VecFloat(6.28318548f).mV);
         if (!JunkyardVfxReadLine("name", value, sizeof(value), &cursor))
         {
-            CGS_ASSERT(false, "Missing parameter 'name'.");
+            CGS_FAIL("Missing parameter 'name'.");
             return;
         }
         const Vector3 position(x, y, z);
@@ -4041,7 +4041,7 @@ void EffectsModule::JunkyardVfxStart(Vector3 cameraPosition)
             continue;
         if (count == KU_MAX_JUNKYARD_VFX)
         {
-            CGS_ASSERT(false, "Too many effects in junkyard. Ask Tom or Tad to increase KU_MAX_JUNKYARD_VFX.");
+            CGS_FAIL("Too many effects in junkyard. Ask Tom or Tad to increase KU_MAX_JUNKYARD_VFX.");
             return;
         }
         const u32 handle = mParticleModule.StartLionEffect(BrnParticle::ParticleDescription::HashString(value), value, 0);

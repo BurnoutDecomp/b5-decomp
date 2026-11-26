@@ -10,11 +10,11 @@
 //        mxFlags |= KX_FLAG_LOCKED; return this.
 EffectsVertexBufferLocked& EffectsVertexBuffer::Lock()
 {
-    CGS_ASSERT((mxFlags & KX_FLAG_LOCKED) == 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "( mxFlags & KX_FLAG_LOCKED ) == 0",
+    CGS_ASSERT_AT((mxFlags & KX_FLAG_LOCKED) == 0,
+        "( mxFlags & KX_FLAG_LOCKED ) == 0",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Effects/Particles/EffectsVertexBuffer.cpp", 98 /* ARTIST 0x8227990C */));
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 98 /* ARTIST 0x8227990C */);
+
 
     mpLockedBufferCurrentAddress = mpLockedBufferBaseAddress;
     mxFlags |= KX_FLAG_LOCKED;
@@ -35,19 +35,19 @@ void EffectsVertexBufferLocked::BeginBatch(
         EffectsVertexBufferBatch&    lOutBatch,
         u32                          luVertexStride)
 {
-    CGS_ASSERT((mxFlags & (KX_FLAG_LOCKED | KX_FLAG_IN_BATCH)) == KX_FLAG_LOCKED,
-        CGS_ASSERT_MESSAGE_AT(
-            "( mxFlags & ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH ) ) == KX_FLAG_LOCKED",
+    CGS_ASSERT_AT((mxFlags & (KX_FLAG_LOCKED | KX_FLAG_IN_BATCH)) == KX_FLAG_LOCKED,
+        "( mxFlags & ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH ) ) == KX_FLAG_LOCKED",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Effects/Particles/EffectsVertexBuffer.cpp", 149));
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 149);
+
 
     // Bytes already consumed within the locked region (current - base).
     const u32 luCurrentOffset =
         static_cast<u32>(mpLockedBufferCurrentAddress - mpLockedBufferBaseAddress);
-    CGS_ASSERT((luCurrentOffset & 15) == 0, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT((luCurrentOffset & 15) == 0,
             "( luCurrentOffset & 15 ) == 0",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Effects/Particles/EffectsVertexBuffer.cpp", 153));
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 153);
 
     // Round the current offset up to a whole number of vertices (ceil divide).
     // twllei on X360 traps if luVertexStride == 0.
@@ -77,16 +77,16 @@ void EffectsVertexBufferLocked::EndBatch(
         EffectsVertexBufferBatch&    lInOutBatch,
         u32                          luVertexStride)
 {
-    CGS_ASSERT((mxFlags & (KX_FLAG_LOCKED | KX_FLAG_IN_BATCH)) == (KX_FLAG_LOCKED | KX_FLAG_IN_BATCH),
-        CGS_ASSERT_MESSAGE_AT(
-            "( mxFlags & ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH ) ) == ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH )",
+    CGS_ASSERT_AT((mxFlags & (KX_FLAG_LOCKED | KX_FLAG_IN_BATCH)) == (KX_FLAG_LOCKED | KX_FLAG_IN_BATCH),
+        "( mxFlags & ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH ) ) == ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH )",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Effects/Particles/EffectsVertexBuffer.cpp", 205));
-    CGS_ASSERT(luVertexStride == lInOutVertexIterator.GetStride(),
-        CGS_ASSERT_MESSAGE_AT(
-            "luVertexStride == lInOutVertexIterator.GetStride()",
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 205);
+
+    CGS_ASSERT_AT(luVertexStride == lInOutVertexIterator.GetStride(),
+        "luVertexStride == lInOutVertexIterator.GetStride()",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Effects/Particles/EffectsVertexBuffer.cpp", 206));
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 206);
+
 
     // twllei on X360 traps if luVertexStride == 0.
     mxFlags &= static_cast<u8>(~KX_FLAG_IN_BATCH);
@@ -97,11 +97,11 @@ void EffectsVertexBufferLocked::EndBatch(
         static_cast<u32>(lpIteratorCurrentAddress - lpIteratorBaseAddress) + 4;
 
     const u32 luVerticesWritten = luBytesWritten / luVertexStride;
-    CGS_ASSERT((luVerticesWritten * luVertexStride) == luBytesWritten,
-        CGS_ASSERT_MESSAGE_AT(
-            "( luVerticesWritten * luVertexStride ) == luBytesWritten",
+    CGS_ASSERT_AT((luVerticesWritten * luVertexStride) == luBytesWritten,
+        "( luVerticesWritten * luVertexStride ) == luBytesWritten",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Effects/Particles/EffectsVertexBuffer.cpp", 215));
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 215);
+
 
     lInOutBatch.muVertexCount += luVerticesWritten;
     lInOutVertexIterator.SetCurrentAddress(reinterpret_cast<u8*>(-4));

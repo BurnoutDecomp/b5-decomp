@@ -86,8 +86,8 @@ const CgsSystem::Time ScoringSystem::GetTimeLimit() const
 // medal run nor an eliminator round).
 void ScoringSystem::SetTimeLimitSeconds(f32 lfSeconds)
 {
-    CGS_ASSERT(IsTimerActive(),
-        CGS_ASSERT_MESSAGE_AT("IsTimerActive()", CGS_ARTIST_FILE, 1406 /* ARTIST 0x82310868 */));
+    CGS_ASSERT_AT(IsTimerActive(),
+        "IsTimerActive()", CGS_ARTIST_FILE, 1406 /* ARTIST 0x82310868 */);
 
     mbMedalMode            = false;
     mbEliminationMode      = false;
@@ -102,11 +102,11 @@ void ScoringSystem::SetTimeLimitSeconds(f32 lfSeconds)
 // clear elimination mode, and set the deadline to start + gold.
 void ScoringSystem::SetMedalModeTimer(f32 lfGold, f32 lfSilver, f32 lfBronze)
 {
-    CGS_ASSERT(IsTimerActive(),
-        CGS_ASSERT_MESSAGE_AT("IsTimerActive()", CGS_ARTIST_FILE, 1428 /* ARTIST 0x8231092C */));
-    CGS_ASSERT(lfGold > 0.0f,
-        CGS_ASSERT_MESSAGE_AT(
-            "lfGoldTimeLimitSeconds > 0.0f", CGS_ARTIST_FILE, 1430 /* ARTIST 0x82310958 */));
+    CGS_ASSERT_AT(IsTimerActive(),
+        "IsTimerActive()", CGS_ARTIST_FILE, 1428 /* ARTIST 0x8231092C */);
+    CGS_ASSERT_AT(lfGold > 0.0f,
+        "lfGoldTimeLimitSeconds > 0.0f", CGS_ARTIST_FILE, 1430 /* ARTIST 0x82310958 */);
+
 
     mafMedalTimes[0] = lfGold;
     mafMedalTimes[1] = lfSilver;
@@ -127,8 +127,8 @@ void ScoringSystem::SetMedalModeTimer(f32 lfGold, f32 lfSilver, f32 lfBronze)
 // distance, rounded UP to the next whole 30-second block: deadline = start + roundedSeconds.
 void ScoringSystem::SetTimeLimitPerKm(f32 lfSecondsPerKm)
 {
-    CGS_ASSERT(IsTimerActive(), CGS_ASSERT_MESSAGE_AT("IsTimerActive()", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2035));
-    CGS_ASSERT(0.0f != mfTotalRaceDistance, CGS_ASSERT_MESSAGE_AT("0.0f != mfTotalRaceDistance", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2036));
+    CGS_ASSERT_AT(IsTimerActive(), "IsTimerActive()", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2035);
+    CGS_ASSERT_AT(0.0f != mfTotalRaceDistance, "0.0f != mfTotalRaceDistance", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2036);
 
     // distance(m) -> km (* 0.001) -> seconds (* allowance), truncated to whole seconds.
     const s32 liRawSeconds = static_cast<s32>((mfTotalRaceDistance * 0.001f) * lfSecondsPerKm);
@@ -145,7 +145,7 @@ void ScoringSystem::SetTimeLimitPerKm(f32 lfSecondsPerKm)
 void ScoringSystem::IncreaseTimeLimit(f32 lfSeconds)
 {
     bool lbTimeLimitActive = IsTimeLimitActive();
-    CGS_ASSERT(lbTimeLimitActive, CGS_ASSERT_MESSAGE_AT("IsTimeLimitActive()", CGS_ARTIST_FILE, 1532));
+    CGS_ASSERT_AT(lbTimeLimitActive, "IsTimeLimitActive()", CGS_ARTIST_FILE, 1532);
 
     mEndTime += CgsSystem::Time(lfSeconds);
 }
@@ -203,7 +203,7 @@ const CgsSystem::Time ScoringSystem::GetElapsedTime(const CgsSystem::Time& lTime
 // in mTimeRemaining and returns it by value.
 const CgsSystem::Time ScoringSystem::GetModeTimeRemaining(const CgsSystem::Time& lTime)
 {
-    CGS_ASSERT(IsTimeLimitActive(), CGS_ASSERT_MESSAGE_AT("IsTimeLimitActive()", CGS_ARTIST_FILE, 1600));
+    CGS_ASSERT_AT(IsTimeLimitActive(), "IsTimeLimitActive()", CGS_ARTIST_FILE, 1600);
 
     mTimeRemaining = mEndTime - lTime;
     return mTimeRemaining;
@@ -321,11 +321,11 @@ void ScoringSystem::ReducePlayerDurability()
 // as Time(0.0) is the comparison zero used to detect a car with no finish time recorded yet.
 void ScoringSystem::StopModeTimer(const CgsSystem::Time& lTime, EActiveRaceCarIndex leRaceCarIndex, bool lbForce)
 {
-    CGS_ASSERT((leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-               CGS_ASSERT_MESSAGE_AT("(leLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 876));
+    CGS_ASSERT_AT((leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+               "(leLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 876);
 
     CarData* lpCarData = GetCarData(leRaceCarIndex);
-    CGS_ASSERT(lpCarData != NULL, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 885));
+    CGS_ASSERT_AT(lpCarData != NULL, "lpCarData", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 885);
 
     // Elapsed mode time = now - mode-start. Cached in the system's mTotalTime slot (X360 a1+0x10).
     mTotalTime = lTime - mStartTime;
@@ -366,7 +366,7 @@ void ScoringSystem::StopModeTimer(const CgsSystem::Time& lTime, EActiveRaceCarIn
         BrnNetwork::NetworkRounder::RoundDistanceToNetworkAccuracy(&lfRoundedDistance);
         lpScoreData->SetDistanceToFinish(lfRoundedDistance);
 
-        CGS_ASSERT(mpCurrentOnlineModeScoring != NULL, CGS_ASSERT_MESSAGE_AT("mpCurrentOnlineModeScoring", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 923));
+        CGS_ASSERT_AT(mpCurrentOnlineModeScoring != NULL, "mpCurrentOnlineModeScoring", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 923);
         // X360 dispatches BaseOnlineModeScoring vtable slot 6 (== UpdatePlayerPoints) on the current
         // online scorer, passing this scoring system + the active-car count (ss+0x4EE8).
         mpCurrentOnlineModeScoring->UpdatePlayerPoints(this, static_cast<s32>(muCarsInCurrentMode));
@@ -384,7 +384,7 @@ void ScoringSystem::StopModeTimer(const CgsSystem::Time& lTime, EActiveRaceCarIn
             {
                 lpScoreData->SetFinishTime(mTotalTime);
             }
-            CGS_ASSERT(liEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT, CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
+            CGS_ASSERT_AT(liEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT, "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39);
         }
     }
 

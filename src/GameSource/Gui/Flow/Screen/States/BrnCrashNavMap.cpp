@@ -1088,10 +1088,10 @@ namespace BrnGui
 
         // cpp:537 -- non-fatal on the X360; the manager is dereferenced either way,
         // exactly as the console does.
-        CGS_ASSERT(mpIconManager != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpIconManager",
-                CGS_ARTIST_FILE, 537 /* ARTIST 0x824B6820 */));
+        CGS_ASSERT_AT(mpIconManager != 0,
+            "mpIconManager",
+                CGS_ARTIST_FILE, 537 /* ARTIST 0x824B6820 */);
+
 
         if ((CgsDev::Message::gxMessageFilterFlags & KX_MESSAGE_FILTER_BIT) != 0)
         {
@@ -1240,10 +1240,10 @@ namespace BrnGui
     void CrashNavMap::SetupComponents()
     {
         // cpp:556 -- non-fatal on the X360 (the manager is dereferenced regardless).
-        CGS_ASSERT(mpIconManager != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpIconManager",
-                CGS_ARTIST_FILE, 556 /* ARTIST 0x824D8C68 */));
+        CGS_ASSERT_AT(mpIconManager != 0,
+            "mpIconManager",
+                CGS_ARTIST_FILE, 556 /* ARTIST 0x824D8C68 */);
+
 
         mpIconManager->SetupComponent();
         mCrashNavPanel.SetupComponent();

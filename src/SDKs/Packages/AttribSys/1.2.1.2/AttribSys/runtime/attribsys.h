@@ -98,9 +98,9 @@ namespace Attrib
             Database* lpDatabase = sThis;
             if (!lpDatabase)
             {
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Attribute database not initialized.",
+                CGS_FAIL_AT("Attribute database not initialized.",
                     "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/attribsys.h",
-                    649 /* ARTIST 0x828021C8 */));
+                    649 /* ARTIST 0x828021C8 */);
                 lpDatabase = sThis;
             }
             return lpDatabase;

@@ -145,8 +145,8 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
                                  GameStateModule* lpGameStateModule,
                                  BrnProgression::ProgressionManager* lpProgressionManager)
 {
-    CGS_ASSERT(lpTriggerQueryManager, CGS_ASSERT_MESSAGE_AT("lpTriggerQueryManager", CGS_ARTIST_FILE, 319));
-    CGS_ASSERT(lpGameStateModule, CGS_ASSERT_MESSAGE_AT("lpGameStateModule", CGS_ARTIST_FILE, 320));
+    CGS_ASSERT_AT(lpTriggerQueryManager, "lpTriggerQueryManager", CGS_ARTIST_FILE, 319);
+    CGS_ASSERT_AT(lpGameStateModule, "lpGameStateModule", CGS_ARTIST_FILE, 320);
 
     mpGameStateModule = lpGameStateModule;
     mpTriggerQueryManager = lpTriggerQueryManager;

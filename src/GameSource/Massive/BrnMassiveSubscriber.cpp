@@ -75,10 +75,10 @@ int BrnMassiveSubscriber::MediaDownloadComplete(const void* lpData, int liDataSi
 {
     const u32 luPayloadSize = static_cast<u32>(liDataSize - KI_MASSIVE_HEADER_SIZE);
 
-    CGS_ASSERT(mpTextureData != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "Invalid Pointer for Texture Data to be replaced by Massive",
-            "..\\..\\..\\GameSource\\Massive/BrnMassiveSubscriber.cpp", 205 /* ARTIST 0x823AB88C */));
+    CGS_ASSERT_AT(mpTextureData != 0,
+        "Invalid Pointer for Texture Data to be replaced by Massive",
+            "..\\..\\..\\GameSource\\Massive/BrnMassiveSubscriber.cpp", 205 /* ARTIST 0x823AB88C */);
+
 
     if (lpData == 0)
     {

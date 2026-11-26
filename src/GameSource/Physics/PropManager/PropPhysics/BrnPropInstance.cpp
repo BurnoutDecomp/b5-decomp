@@ -33,8 +33,8 @@ namespace Props
     // the SDK's RwMath::IsValid) then stores it into mAngularVelocity (+0x50).
     void PropInstance::SetAngularVelocity(Vector3 lAngularVelocity)
     {
-        CGS_ASSERT(rw::math::vpu::IsValid(lAngularVelocity),
-            CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( lAngularVelocity )", CGS_ARTIST_FILE, 251));
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lAngularVelocity),
+            "RwMath::IsValid( lAngularVelocity )", CGS_ARTIST_FILE, 251);
         mAngularVelocity = lAngularVelocity;
     }
 
@@ -65,10 +65,10 @@ namespace Props
     // joint index. The X360 reads the u8 field at +0x6C and returns it zero-extended.
     int32_t PropInstance::GetJointIndex() const
     {
-        CGS_ASSERT(IsJointed(),
-            CGS_ASSERT_MESSAGE_AT(
-                "IsJointed()",
-                CGS_ARTIST_FILE, 326 /* ARTIST 0x825B96D8 */));
+        CGS_ASSERT_AT(IsJointed(),
+            "IsJointed()",
+                CGS_ARTIST_FILE, 326 /* ARTIST 0x825B96D8 */);
+
         return mu8JointIndex;
     }
 }

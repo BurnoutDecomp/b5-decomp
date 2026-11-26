@@ -185,9 +185,9 @@ namespace BrnTraffic
         // at 0x8275DCF0 / 0x8275DDAC / 0x8275DF14), then this + 8 * luInstance.
         const TrafficLightRuntimeState* GetLightState(u32 luInstance) const
         {
-            CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES,
-                CGS_ASSERT_MESSAGE_AT("luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES",
-                    KAC_TRAFFIC_LIGHT_MANAGER_H_FILE, 217 /* ARTIST li r5,0xD9 at 0x8275DF20 */));
+            CGS_ASSERT_AT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES,
+                "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES",
+                    KAC_TRAFFIC_LIGHT_MANAGER_H_FILE, 217 /* ARTIST li r5,0xD9 at 0x8275DF20 */);
             return &maLightStates[luInstance];
         }
     };

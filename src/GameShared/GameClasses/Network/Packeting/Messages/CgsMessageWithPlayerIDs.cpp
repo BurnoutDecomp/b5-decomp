@@ -23,9 +23,9 @@ MessageWithPlayerIDs::NetworkPlayerID MessageWithPlayerIDs::GetSendingPlayerID()
             << mSendingPlayerID << ", the message is of type "
             << static_cast<s32>(leMessageType) << "\n";
     }
-    CGS_ASSERT(mSendingPlayerID >= 0, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(mSendingPlayerID >= 0,
         "mSendingPlayerID >= 0",
-        "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessageWithPlayerIDs.h", 147));
+        "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessageWithPlayerIDs.h", 147);
     return mSendingPlayerID;
 }
 

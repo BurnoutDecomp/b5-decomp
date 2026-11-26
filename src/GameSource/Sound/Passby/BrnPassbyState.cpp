@@ -94,11 +94,11 @@ static const f32 KF_TIMEOUT_TIMER = 5.0f;
 // ---------------------------------------------------------------------------
 void PassbyState::Attach(void* apvAttachment)
 {
-    CGS_ASSERT(apvAttachment != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpvAttachment",
+    CGS_ASSERT_AT(apvAttachment != 0,
+        "lpvAttachment",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Sound/Passby/BrnPassbyState.cpp", 75 /* ARTIST 0x826D4AC4 */));
+            "../Sound/Passby/BrnPassbyState.cpp", 75 /* ARTIST 0x826D4AC4 */);
+
     mPassbyData = *static_cast<const PassbyStateManager::Passby*>(apvAttachment);
     mfTimeOutTimer = 0.0f;
     CgsSound::Logic::State::Attach(apvAttachment);

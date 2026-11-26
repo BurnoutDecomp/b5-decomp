@@ -96,7 +96,7 @@ void NorthIndicatorComponent::SetEventType(BrnGameState::GameStateModuleIO::EGam
             break;
 
         default:
-            CGS_ASSERT(false, "Unknown enum value passed to NorthIndicatorComponent::SetEventType\n");
+            CGS_FAIL("Unknown enum value passed to NorthIndicatorComponent::SetEventType\n");
             liStyle = E_STYLE_RACE;
             break;
     }

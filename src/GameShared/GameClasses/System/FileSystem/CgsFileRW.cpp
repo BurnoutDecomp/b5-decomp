@@ -325,13 +325,13 @@ namespace CgsFileSystem
 
 
 
-                CGS_ASSERT_STREAM(false, "Failed to open file '" << mpcFileName << "'");
+                CGS_FAIL_STREAM("Failed to open file '" << mpcFileName << "'");
                 break;
 
             default:
 
 
-                CGS_ASSERT_STREAM(false, "Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
+                CGS_FAIL_STREAM("Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
                 break;
             case -1:
                 mpHandle    = 0;
@@ -391,7 +391,7 @@ namespace CgsFileSystem
 
 
 
-                CGS_ASSERT_STREAM(false, "Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
+                CGS_FAIL_STREAM("Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
                 break;
         }
 
@@ -440,7 +440,7 @@ namespace CgsFileSystem
 
 
 
-                CGS_ASSERT_STREAM(false, "Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
+                CGS_FAIL_STREAM("Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
                 break;
         }
 
@@ -495,7 +495,7 @@ namespace CgsFileSystem
 
 
 
-                CGS_ASSERT_STREAM(false, "Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
+                CGS_FAIL_STREAM("Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
                 break;
         }
 

@@ -176,7 +176,7 @@ namespace Deformation
     // the 80-byte stride are not copied, matching the asm which only touches +0..+70).
     LocatorPointSpec LocatorPointSpecList::CreateLo(u32 luTag) const
     {
-        CGS_ASSERT(luTag < muNumLocators, CGS_ASSERT_MESSAGE_AT("luTag < muNumLocators", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.cpp", 481));   // BrnStreamedDeformationSpec.cpp:481
+        CGS_ASSERT_AT(luTag < muNumLocators, "luTag < muNumLocators", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.cpp", 481);   // BrnStreamedDeformationSpec.cpp:481
 
         const LocatorPointSpec& lSrc = mpaLocatorPoints[luTag];
 
@@ -192,8 +192,8 @@ namespace Deformation
     // (BrnStreamedDeformationSpec.h:94, non-gating tripwire), then loads meTagPointType (element +64).
     ETagPointType LocatorPointSpecList::GetLocatorTy(u32 luTag) const
     {
-        CGS_ASSERT(luTag < muNumLocators,
-            CGS_ASSERT_MESSAGE_AT("luTag < muNumLocators", KAC_ARTIST_ASSERT_FILE, 94 /* ARTIST 0x82704960 */));   // BrnStreamedDeformationSpec.h:94
+        CGS_ASSERT_AT(luTag < muNumLocators,
+            "luTag < muNumLocators", KAC_ARTIST_ASSERT_FILE, 94 /* ARTIST 0x82704960 */);   // BrnStreamedDeformationSpec.h:94
         return mpaLocatorPoints[luTag].meTagPointType;
     }
 
@@ -202,8 +202,8 @@ namespace Deformation
     // added offset). Bounds-asserts luTag < muNumLocators (BrnStreamedDeformationSpec.h:98).
     const Matrix44Affine* LocatorPointSpecList::GetLocatorXf(u32 luTag) const
     {
-        CGS_ASSERT(luTag < muNumLocators,
-            CGS_ASSERT_MESSAGE_AT("luTag < muNumLocators", KAC_ARTIST_ASSERT_FILE, 98 /* ARTIST 0x825B3210 */));   // BrnStreamedDeformationSpec.h:98
+        CGS_ASSERT_AT(luTag < muNumLocators,
+            "luTag < muNumLocators", KAC_ARTIST_ASSERT_FILE, 98 /* ARTIST 0x825B3210 */);   // BrnStreamedDeformationSpec.h:98
         return &mpaLocatorPoints[luTag].mLocatorMatrix;
     }
 

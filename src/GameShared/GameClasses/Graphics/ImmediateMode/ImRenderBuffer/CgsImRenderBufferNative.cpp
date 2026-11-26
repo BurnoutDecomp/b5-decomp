@@ -37,14 +37,14 @@ bool ImRenderBuffer<V>::Prepare(u32 luCommandBufferSizeBytes, u32 luVertexBuffer
     maBuffers[1].mpu8VertexBuffer = static_cast<u8*>(
         lpAllocator->AllocateMemoryResource(luVertexBufferSizeBytes + 128, 128, NULL));
 
-    CGS_ASSERT(maBuffers[0].mpu8CommandBuffer,
-        CGS_ASSERT_MESSAGE_AT("maBuffers[0].mpu8CommandBuffer", kFile, 511));
-    CGS_ASSERT(maBuffers[0].mpu8VertexBuffer,
-        CGS_ASSERT_MESSAGE_AT("maBuffers[0].mpu8VertexBuffer", kFile, 512));
-    CGS_ASSERT(maBuffers[1].mpu8CommandBuffer,
-        CGS_ASSERT_MESSAGE_AT("maBuffers[1].mpu8CommandBuffer", kFile, 513));
-    CGS_ASSERT(maBuffers[1].mpu8VertexBuffer,
-        CGS_ASSERT_MESSAGE_AT("maBuffers[1].mpu8VertexBuffer", kFile, 514));
+    CGS_ASSERT_AT(maBuffers[0].mpu8CommandBuffer,
+        "maBuffers[0].mpu8CommandBuffer", kFile, 511);
+    CGS_ASSERT_AT(maBuffers[0].mpu8VertexBuffer,
+        "maBuffers[0].mpu8VertexBuffer", kFile, 512);
+    CGS_ASSERT_AT(maBuffers[1].mpu8CommandBuffer,
+        "maBuffers[1].mpu8CommandBuffer", kFile, 513);
+    CGS_ASSERT_AT(maBuffers[1].mpu8VertexBuffer,
+        "maBuffers[1].mpu8VertexBuffer", kFile, 514);
 
     miWriteBufferIndex = 0;
     mpWriteBuffer = &maBuffers[miWriteBufferIndex];
@@ -73,8 +73,8 @@ void* ImRenderBuffer<V>::AllocateCommand(s32 liCommandType, u32 luCommandSize)
 {
     if (liCommandType != IM_CMD_BEGIN_RENDERING && liCommandType != IM_CMD_END_RENDERING)
     {
-        CGS_ASSERT(mbInRenderBlock,
-            CGS_ASSERT_MESSAGE_AT("Command called outside of a BeginRendering/EndRendering block", kFile, 1216));
+        CGS_ASSERT_AT(mbInRenderBlock,
+            "Command called outside of a BeginRendering/EndRendering block", kFile, 1216);
     }
 
     __dcbz128(static_cast<s32>(mpWriteBuffer->muCommandBufferWritePos + 128),
@@ -96,23 +96,23 @@ void* ImRenderBuffer<V>::AllocateCommand(s32 liCommandType, u32 luCommandSize)
     }
 
     SetBufferFullRewindToLastEndRender();
-    CGS_ASSERT(mbFailGracefully,
-        CGS_ASSERT_MESSAGE_AT("ImRenderBuffer command buffer is full", kFile, 1254));
+    CGS_ASSERT_AT(mbFailGracefully,
+        "ImRenderBuffer command buffer is full", kFile, 1254);
     return NULL;
 }
 
 template<class V> void ImRenderBuffer<V>::BeginRendering()
 {
-    CGS_ASSERT(mbInRenderBlock == false,
-        CGS_ASSERT_MESSAGE_AT("BeginRendering called inside a BeginRendering/EndRendering block", kFile, 619));
+    CGS_ASSERT_AT(mbInRenderBlock == false,
+        "BeginRendering called inside a BeginRendering/EndRendering block", kFile, 619);
     mbInRenderBlock = true;
     AllocateCommand(IM_CMD_BEGIN_RENDERING, 16);
 }
 
 template<class V> void ImRenderBuffer<V>::EndRendering()
 {
-    CGS_ASSERT(mbInRenderBlock == true,
-        CGS_ASSERT_MESSAGE_AT("EndRendering called without a matching call to BeginRendering", kFile, 658));
+    CGS_ASSERT_AT(mbInRenderBlock == true,
+        "EndRendering called without a matching call to BeginRendering", kFile, 658);
     mbInRenderBlock = false;
     AllocateCommand(IM_CMD_END_RENDERING, 16);
 }

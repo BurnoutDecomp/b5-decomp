@@ -222,12 +222,12 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     bool VehicleManager::HasRaceCarHadRecentImpact(s32 liActiveRaceCarIndex)
     {
-        CGS_ASSERT(liActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_HEADER, 1840 /* ARTIST 0x825B4EE4 */));
-        CGS_ASSERT(liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_HEADER, 1841 /* ARTIST 0x825B4F08 */));
+        CGS_ASSERT_AT(liActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_HEADER, 1840 /* ARTIST 0x825B4EE4 */);
+
+        CGS_ASSERT_AT(liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_HEADER, 1841 /* ARTIST 0x825B4F08 */);
+
 
         return mafNoImpactTimeSeconds[liActiveRaceCarIndex] > 0.0f;
     }
@@ -266,10 +266,10 @@ namespace Vehicle
     void VehicleManager::SetPlayerActiveRaceCarIndex(EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
     {
         const s32 liIndex = static_cast<s32>(lePlayerActiveRaceCarIndex);
-        CGS_ASSERT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT && liIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID,
-            CGS_ASSERT_MESSAGE_AT(
-                "( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )",
-                CGS_ARTIST_FILE, 1667 /* ARTIST 0x8259C05C */));
+        CGS_ASSERT_AT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT && liIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID,
+            "( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )",
+                CGS_ARTIST_FILE, 1667 /* ARTIST 0x8259C05C */);
+
 
         mePlayerActiveRaceCarIndex = lePlayerActiveRaceCarIndex;   // asm: stwx @ +172204
     }
@@ -283,10 +283,10 @@ namespace Vehicle
     // range test is signed (cmpwi 0 / cmpwi 3 at 0x8259C0B4..0x8259C0BC).
     void VehicleManager::SetShowtimeBehaviour(BrnGameState::EShowtimeBehaviour leShowtimeBehaviour)
     {
-        CGS_ASSERT(leShowtimeBehaviour >= 0 && leShowtimeBehaviour < BrnGameState::E_SHOWTIME_MODE_COUNT,
-                   CGS_ASSERT_MESSAGE_AT(
-                       "leShowtimeBehaviour >= 0 && leShowtimeBehaviour < BrnGameState::E_SHOWTIME_MODE_COUNT",
-                       CGS_ARTIST_FILE, 1691));
+        CGS_ASSERT_AT(leShowtimeBehaviour >= 0 && leShowtimeBehaviour < BrnGameState::E_SHOWTIME_MODE_COUNT,
+                   "leShowtimeBehaviour >= 0 && leShowtimeBehaviour < BrnGameState::E_SHOWTIME_MODE_COUNT",
+                       CGS_ARTIST_FILE, 1691);
+
 
         meShowtimeBehaviour = leShowtimeBehaviour;   // asm: stwx @ +172456
     }
@@ -494,13 +494,13 @@ namespace Vehicle
     void VehicleManager::OnPrepareGameMode(
             const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPrepareModeAction)
     {
-        CGS_ASSERT(lpPrepareModeAction != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpPrepareModeAction != NULL", KAC_ARTIST_ASSERT_FILE, 10009 /* ARTIST 0x825B579C */));
-        CGS_ASSERT(lpPrepareModeAction->GetGameModeParams() != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpPrepareModeAction->GetGameModeParams() != NULL", KAC_ARTIST_ASSERT_FILE,
-                10010 /* ARTIST 0x825B57C0 */));
+        CGS_ASSERT_AT(lpPrepareModeAction != NULL,
+            "lpPrepareModeAction != NULL", KAC_ARTIST_ASSERT_FILE, 10009 /* ARTIST 0x825B579C */);
+
+        CGS_ASSERT_AT(lpPrepareModeAction->GetGameModeParams() != NULL,
+            "lpPrepareModeAction->GetGameModeParams() != NULL", KAC_ARTIST_ASSERT_FILE,
+                10010 /* ARTIST 0x825B57C0 */);
+
 
         const BrnGameState::GameStateModuleIO::EGameModeType leGameModeType =
             lpPrepareModeAction->GetGameModeParams()->GetGameModeType();                   // lwz 0x178
@@ -530,9 +530,9 @@ namespace Vehicle
     void VehicleManager::OnStartGameMode(
             const BrnGameState::GameStateModuleIO::StartPlayingModeAction* lpStartModeAction)
     {
-        CGS_ASSERT(lpStartModeAction != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpStartModeAction != NULL", KAC_ARTIST_ASSERT_FILE, 10038 /* ARTIST 0x825B5864 */));                // :10038
+        CGS_ASSERT_AT(lpStartModeAction != NULL,
+            "lpStartModeAction != NULL", KAC_ARTIST_ASSERT_FILE, 10038 /* ARTIST 0x825B5864 */);                // :10038
+
 
         const BrnGameState::GameStateModuleIO::EGameModeType leGameModeType =
             lpStartModeAction->meGameMode;                                                 // lwz 0(r31)
@@ -564,9 +564,9 @@ namespace Vehicle
     void VehicleManager::OnJunkYardDriveThru(
             const BrnGameState::GameStateModuleIO::DriveThruJunkYardAction* lpJunkYardAction)
     {
-        CGS_ASSERT(lpJunkYardAction != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpJunkYardAction != NULL", KAC_ARTIST_ASSERT_FILE, 10066 /* ARTIST 0x825EB07C */));                  // :10066
+        CGS_ASSERT_AT(lpJunkYardAction != NULL,
+            "lpJunkYardAction != NULL", KAC_ARTIST_ASSERT_FILE, 10066 /* ARTIST 0x825EB07C */);                  // :10066
+
 
         if (lpJunkYardAction->mbIsInJunkYard)                                              // lbz 0(r31)
         {

@@ -86,7 +86,7 @@ bool FineIntersectionTestModule::Prepare(EntityManager* lpEntityManager, VolumeM
     {
         if (mePrepareStage >= 3)
         {
-            CGS_ASSERT(false, "Unrecognised release state");
+            CGS_FAIL("Unrecognised release state");
             return false;
         }
         // mePrepareStage == E_FINE_INTERSECTION_PREPARE_DONE: restart the handshake.
@@ -141,7 +141,7 @@ bool FineIntersectionTestModule::Release()
     }
     else if (meReleaseStage >= 3)
     {
-        CGS_ASSERT(false, "Unrecognised release state");
+        CGS_FAIL("Unrecognised release state");
         return false;
     }
 

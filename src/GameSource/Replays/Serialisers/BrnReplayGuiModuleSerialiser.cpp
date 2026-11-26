@@ -13,7 +13,7 @@ namespace BrnReplays
 
     GuiModuleStaticLayout* GuiModuleSerialiser::GetStaticLayout()
     {
-        CGS_ASSERT(GetStaticBufferSize() >= 992, CGS_ASSERT_STREAM_MESSAGE_AT("Static buffer size is too small\n", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayGuiModuleSerialiser.h", 155));
+        CGS_ASSERT_STREAM_AT(GetStaticBufferSize() >= 992, "Static buffer size is too small\n", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayGuiModuleSerialiser.h", 155);
         return reinterpret_cast<GuiModuleStaticLayout*>(GetStaticBuffer());
     }
 
@@ -27,7 +27,7 @@ namespace BrnReplays
         if (IsPlaying() && !IsStalled() && !IsPreparing() && !IsRestoring())
         {
             GuiModuleStaticLayout* lpStaticLayout = GetStaticLayout();
-            CGS_ASSERT(lpStaticLayout != 0, CGS_ASSERT_MESSAGE_AT("lpStaticLayout", CGS_ARTIST_FILE, 199));
+            CGS_ASSERT_AT(lpStaticLayout != 0, "lpStaticLayout", CGS_ARTIST_FILE, 199);
             BaseSerialiser::Read(lpStaticLayout, 992);
         }
 
@@ -51,7 +51,7 @@ namespace BrnReplays
 
             // The X360 fetches the layout a second time after the reset branch.
             GuiModuleStaticLayout* lpStaticLayout = GetStaticLayout();
-            CGS_ASSERT(lpStaticLayout != 0, CGS_ASSERT_MESSAGE_AT("lpStaticLayout", CGS_ARTIST_FILE, 166));
+            CGS_ASSERT_AT(lpStaticLayout != 0, "lpStaticLayout", CGS_ARTIST_FILE, 166);
             BaseSerialiser::Write(lpStaticLayout, 992);
         }
 

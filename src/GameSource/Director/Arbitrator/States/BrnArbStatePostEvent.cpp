@@ -193,7 +193,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid number of shots in group");
+            CGS_FAIL("Invalid number of shots in group");
             luShotIndex = 0u;
             break;
         }
@@ -225,8 +225,8 @@ namespace BrnDirector
                     lrSharedInfo.mpGameState->meEventType,
                     static_cast<s64>(lrSharedInfo.mpGameState->mFinishLineID));
 
-            CGS_ASSERT(lEventCompleteShotGroup.Num_ShotList() > 0,
-                       CGS_ASSERT_MESSAGE_AT("lEventCompleteShotGroup.Num_ShotList()>0", CGS_ARTIST_FILE, 54));
+            CGS_ASSERT_AT(lEventCompleteShotGroup.Num_ShotList() > 0,
+                       "lEventCompleteShotGroup.Num_ShotList()>0", CGS_ARTIST_FILE, 54);
 
             Camera::BehaviourIceAnim::ShotReference& lAppropriateShot =
                 PickAppropriateShot(lEventCompleteShotGroup, lrSharedInfo);
@@ -347,7 +347,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 160));
+            CGS_FAIL_AT("unhandled state", CGS_ARTIST_FILE, 160);
             break;
         }
     }

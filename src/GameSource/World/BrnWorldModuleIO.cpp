@@ -157,10 +157,10 @@ void UpdateInputBuffer::Construct()
 // X360 0x823A8340 (:203) -- store colour index + mark valid.
 void UpdateInputBuffer::SetRaceCarColourIndex(EActiveRaceCarIndex leActiveRaceCarIndex, u16 lu16ColourIndex)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_WORLD_MODULE_IO_H_FILE, 677 /* ARTIST 0x823A8370 */));
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_WORLD_MODULE_IO_H_FILE, 678 /* ARTIST 0x823A8394 */));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_WORLD_MODULE_IO_H_FILE, 677 /* ARTIST 0x823A8370 */);
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_WORLD_MODULE_IO_H_FILE, 678 /* ARTIST 0x823A8394 */);
     mau16RaceCarColourIndex[leActiveRaceCarIndex]    = lu16ColourIndex;
     mabRaceCarColourIndexValid[leActiveRaceCarIndex] = true;
 }
@@ -168,10 +168,10 @@ void UpdateInputBuffer::SetRaceCarColourIndex(EActiveRaceCarIndex leActiveRaceCa
 // X360 0x823A83C8 (:216) -- store paint-finish index + mark valid.
 void UpdateInputBuffer::SetRaceCarPaintFinishIndex(EActiveRaceCarIndex leActiveRaceCarIndex, u16 lu16PaintIndex)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_WORLD_MODULE_IO_H_FILE, 733 /* ARTIST 0x823A83F8 */));
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_WORLD_MODULE_IO_H_FILE, 734 /* ARTIST 0x823A841C */));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_WORLD_MODULE_IO_H_FILE, 733 /* ARTIST 0x823A83F8 */);
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_WORLD_MODULE_IO_H_FILE, 734 /* ARTIST 0x823A841C */);
     mau16RaceCarPaintFinishIndex[leActiveRaceCarIndex]    = lu16PaintIndex;
     mabRaceCarPaintFinishIndexValid[leActiveRaceCarIndex] = true;
 }
@@ -179,18 +179,18 @@ void UpdateInputBuffer::SetRaceCarPaintFinishIndex(EActiveRaceCarIndex leActiveR
 // X360 0x823A8450 (:228) -- flag lost-contact for this active race car.
 void UpdateInputBuffer::SetLostContact(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
-    CGS_ASSERT((leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) && (leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID),
-        CGS_ASSERT_MESSAGE_AT("( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )",
-            KAC_WORLD_MODULE_IO_H_FILE, 782 /* ARTIST 0x823A8484 */));
+    CGS_ASSERT_AT((leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) && (leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID),
+        "( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )",
+            KAC_WORLD_MODULE_IO_H_FILE, 782 /* ARTIST 0x823A8484 */);
     mabLostContactThisFrame[leActiveRaceCarIndex] = true;
 }
 
 // X360 0x823A84C0 (:236) -- flag regained-contact for this active race car.
 void UpdateInputBuffer::SetRegainedContact(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
-    CGS_ASSERT((leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) && (leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID),
-        CGS_ASSERT_MESSAGE_AT("( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )",
-            KAC_WORLD_MODULE_IO_H_FILE, 800 /* ARTIST 0x823A84F4 */));
+    CGS_ASSERT_AT((leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) && (leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID),
+        "( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )",
+            KAC_WORLD_MODULE_IO_H_FILE, 800 /* ARTIST 0x823A84F4 */);
     mabRegainedContactThisFrame[leActiveRaceCarIndex] = true;
 }
 
@@ -200,10 +200,10 @@ void UpdateInputBuffer::SetRegainedContact(EActiveRaceCarIndex leActiveRaceCarIn
 // CGS_ASSERTs to match.
 void UpdateInputBuffer::SetCarSelectStatus(EActiveRaceCarIndex leActiveRaceCarIndex, bool lbStatus)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_WORLD_MODULE_IO_H_FILE, 818 /* ARTIST 0x823A856C */));
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_WORLD_MODULE_IO_H_FILE, 819 /* ARTIST 0x823A8590 */));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_WORLD_MODULE_IO_H_FILE, 818 /* ARTIST 0x823A856C */);
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_WORLD_MODULE_IO_H_FILE, 819 /* ARTIST 0x823A8590 */);
     mabCarSelectStatus[leActiveRaceCarIndex]      = lbStatus;
     mabCarSelectStatusValid[leActiveRaceCarIndex] = true;
 }
@@ -223,14 +223,14 @@ const VehicleInputInterface* UpdateInputBuffer::GetVehicleInputInterface() const
 // to the retired slice's memcpy stand-in.
 void UpdateInputBuffer::AppendVehicleInputInterface(const VehicleInputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 260));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 260);
     mVehicleInputInterface.Append(*lpInterface);
 }
 
 // X360 0x827A3660 (:262 R, GetVehicl) -- const vehicle-driver-input accessor (+142272).
 const VehicleDriverInputInterface* UpdateInputBuffer::GetVehicleDriverInputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 262));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 262);
     return &mVehicleDriverInputInterface;
 }
 
@@ -243,7 +243,7 @@ const VehicleDriverInputInterface* UpdateInputBuffer::GetVehicleDriverInputInter
 // half of the call never ran. Test: run_fxfollowups_world_driver_append.py.
 void UpdateInputBuffer::AppendVehicleDriverInputInterface(const VehicleDriverInputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 263));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 263);
     mVehicleDriverInputInterface.Append(lpInterface);
 }
 
@@ -252,7 +252,7 @@ void UpdateInputBuffer::AppendVehicleDriverInputInterface(const VehicleDriverInp
 // X360 0x823B4738 (:266 W, GetG) -- mutable game-action queue accessor (+147572).
 GameActionQueue* UpdateInputBuffer::GetGameActionQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 266));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 266);
     return &mGameActionQueue;
 }
 
@@ -262,7 +262,7 @@ GameActionQueue* UpdateInputBuffer::GetGameActionQueue()
 // null/self guard. Call the committed bulk Append by name instead of re-walking events one by one.
 void UpdateInputBuffer::AppendGameActionQueue(const GameActionQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 267));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 267);
     mGameActionQueue.Append(*lpQueue);
 }
 
@@ -275,14 +275,14 @@ void UpdateInputBuffer::AppendGameActionQueue(const GameActionQueue* lpQueue)
 // WorldModule::BridgeInputToPhysicsModule @0x827AB830.
 const TimerStatusInterface* UpdateInputBuffer::GetTimerStatusInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 269));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 269);
     return &mTimerStatusInterface;
 }
 
 // X360 0x823B47E0 (:270 W) -- copy the source timer-status block into +160900..+160948.
 void UpdateInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 270));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 270);
     mTimerStatusInterface = *lpInterface;   // store-for-store (12-word block)
 }
 
@@ -294,7 +294,7 @@ void UpdateInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lpIn
 // Append merge -- called by name.
 void UpdateInputBuffer::AppendTakedownEventQueue(const TakedownEventQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 273));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 273);
     mTakedownEventQueue.Append(*lpQueue);
 }
 
@@ -308,7 +308,7 @@ void UpdateInputBuffer::AppendTakedownEventQueue(const TakedownEventQueue* lpQue
 // TriggerManagementInputInterface::Append. Sole producer: BridgeGameStateToWorld @0x823E1890.
 void UpdateInputBuffer::AppendTriggerManagementInputInterface(const TriggerManagementInputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 276));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 276);
     mTriggerManagementInputInterface.Append(*lpInterface);
 }
 
@@ -320,7 +320,7 @@ void UpdateInputBuffer::AppendTriggerManagementInputInterface(const TriggerManag
 // committed bulk Append by name instead of re-walking events one by one.
 void UpdateInputBuffer::AppendTriggerQueryInputInterface(const TriggerQueryInputInterface* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 279));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 279);
     mTriggerQueryInputInterface.Append(*lpQueue);
 }
 
@@ -329,7 +329,7 @@ void UpdateInputBuffer::AppendTriggerQueryInputInterface(const TriggerQueryInput
 // X360 0x827A3AF8 (:284 R, Get) -- const traffic-network accessor (+301644).
 const TrafficNetworkInputInterface* UpdateInputBuffer::GetTrafficNetworkInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 284));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 284);
     return &mTrafficNetworkInterface;
 }
 
@@ -338,7 +338,7 @@ const TrafficNetworkInputInterface* UpdateInputBuffer::GetTrafficNetworkInterfac
 // the whole interface (the traffic pre-scene buffer's SetTrafficNetworkInputInterface does the same).
 void UpdateInputBuffer::SetTrafficNetworkInterface(const TrafficNetworkInputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 285));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 285);
     // The interface's implicit copy assignment (DWARF lists TrafficNetworkInputInterface::operator=
     // inlined here): the queue's EventQueue::operator= (Clear + Append, CgsEventQueue.h:194),
     // then mbDiverged (ARTIST 0x823C8E54..0x823C8E60).
@@ -348,7 +348,7 @@ void UpdateInputBuffer::SetTrafficNetworkInterface(const TrafficNetworkInputInte
 // X360 0x827A3BA0 (:287 R, GetCrashNetworkIn) -- const crash-network accessor (+301760).
 const CrashNetworkInputInterface* UpdateInputBuffer::GetCrashNetworkInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 287));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 287);
     return &mCrashNetworkInterface;
 }
 
@@ -357,7 +357,7 @@ const CrashNetworkInputInterface* UpdateInputBuffer::GetCrashNetworkInterface() 
 // clear+merge per race-car crashing-traffic queue), the committed type's own operator=.
 void UpdateInputBuffer::SetCrashNetworkInterface(const CrashNetworkInputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 288));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 288);
     mCrashNetworkInterface = *lpInterface;
 }
 
@@ -366,14 +366,14 @@ void UpdateInputBuffer::SetCrashNetworkInterface(const CrashNetworkInputInterfac
 // X360 0x827BBE48 (:290 R, GetDebugContro) -- const debug-controller accessor (+317324).
 const DebugController* UpdateInputBuffer::GetDebugController() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 290));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 290);
     return &mDebugController;
 }
 
 // X360 0x823B49B0 (:291 W) -- mutable debug-controller accessor (+317324).
 DebugController* UpdateInputBuffer::GetDebugController()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 291));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 291);
     return &mDebugController;
 }
 
@@ -382,7 +382,7 @@ DebugController* UpdateInputBuffer::GetDebugController()
 // X360 0x823B4A58 (:295 W) -- copy the source race-distance block into the member.
 void UpdateInputBuffer::SetRaceCarRaceDistanceInterface(const RaceCarRaceDistanceInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 295));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 295);
     mRaceCarRaceDistanceInterface = *lpInterface;   // store-for-store (10-word block)
 }
 
@@ -391,14 +391,14 @@ void UpdateInputBuffer::SetRaceCarRaceDistanceInterface(const RaceCarRaceDistanc
 // X360 0x827A3CF0 (:297 R, Ge) -- const scoring accessor (+317536).
 const ScoringInterface* UpdateInputBuffer::GetScoringInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 297));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 297);
     return &mScoringInterface;
 }
 
 // X360 0x823B4B28 (:298 W) -- copy the source scoring block (2736 bytes) into +317536.
 void UpdateInputBuffer::SetScoringInterface(const ScoringInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 298));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 298);
     // ARTIST copies through the XDK's XMemCpy (bl 0x82926BA0 at 0x823B4BD4), not the CRT memcpy.
     XMemCpy(&mScoringInterface, lpInterface, sizeof(ScoringInterface));
 }
@@ -406,7 +406,7 @@ void UpdateInputBuffer::SetScoringInterface(const ScoringInterface* lpInterface)
 // X360 0x823B4BE0 (:301 W) -- copy the source online-scoring block (164 bytes) into +322384.
 void UpdateInputBuffer::SetOnlineScoringInterface(const OnlineScoringInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 301));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 301);
     std::memcpy(&mOnlineScoringInterface, lpInterface, sizeof(OnlineScoringInterface));
 }
 
@@ -415,14 +415,14 @@ void UpdateInputBuffer::SetOnlineScoringInterface(const OnlineScoringInterface* 
 // X360 0x827A3E40 (:303 R) -- const controller-active read (+320272).
 bool UpdateInputBuffer::GetControllerActive() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 303));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 303);
     return mbControllerActive;
 }
 
 // X360 0x823B4C98 (:304 W) -- set controller-active (+320272).
 void UpdateInputBuffer::SetControllerActive(bool lbActive)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 304));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 304);
     mbControllerActive = lbActive;
 }
 
@@ -431,14 +431,14 @@ void UpdateInputBuffer::SetControllerActive(bool lbActive)
 // X360 0x823B4D48 (:307 W, GetWorldEntityRequestI) -- mutable request accessor (+320273).
 WorldEntityRequestInterface* UpdateInputBuffer::GetWorldEntityRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 307));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 307);
     return &mWorldEntityRequestInterface;
 }
 
 // X360 0x827A3EF0 (:308 R, GetWorldEntityRe) -- const request accessor (+320273).
 const WorldEntityRequestInterface* UpdateInputBuffer::GetWorldEntityRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 308));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 308);
     return &mWorldEntityRequestInterface;
 }
 
@@ -447,7 +447,7 @@ const WorldEntityRequestInterface* UpdateInputBuffer::GetWorldEntityRequestInter
 // X360 0x827A3F98 (:310 R, GetReplayStatusInter) -- const replay-status accessor (+320276).
 const ReplayStatusInterface* UpdateInputBuffer::GetReplayStatusInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 310));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 310);
     return &mReplayStatusInterface;
 }
 
@@ -457,7 +457,7 @@ const ReplayStatusInterface* UpdateInputBuffer::GetReplayStatusInterface() const
 // type's own operator=.
 void UpdateInputBuffer::SetReplayStatusInterface(const ReplayStatusInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 311));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 311);
     mReplayStatusInterface = *lpInterface;
 }
 
@@ -466,7 +466,7 @@ void UpdateInputBuffer::SetReplayStatusInterface(const ReplayStatusInterface* lp
 // X360 0x823B48F8 (:282 W) -- copy the source player-vehicle-controls (60 bytes) into +317264.
 void UpdateInputBuffer::SetPlayerVehicleControls(const PlayerVehicleControls* lpControls)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 282));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 282);
     std::memcpy(&mPlayerVehicleControls, lpControls, sizeof(PlayerVehicleControls));
 }
 
@@ -474,7 +474,7 @@ void UpdateInputBuffer::SetPlayerVehicleControls(const PlayerVehicleControls* lp
 // world spine. Homed here beside its writer.
 const PlayerVehicleControls* UpdateInputBuffer::GetPlayerVehicleControls() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 281));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 281);
     return &mPlayerVehicleControls;
 }
 
@@ -483,14 +483,14 @@ const PlayerVehicleControls* UpdateInputBuffer::GetPlayerVehicleControls() const
 // X360 0x823B4F50 (:317 W) -- set the active payback type.
 void UpdateInputBuffer::SetActivePaybackType(BrnNetwork::EPaybackType lePaybackType)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 317));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 317);
     meActivePaybackType = lePaybackType;
 }
 
 // X360 0x823B5000 (:319 W) -- set the active payback aggressor.
 void UpdateInputBuffer::SetActivePaybackAggressor(EActiveRaceCarIndex leAggressor)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 320));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 320);
     meActivePaybackAggressor = leAggressor;
 }
 
@@ -499,7 +499,7 @@ void UpdateInputBuffer::SetActivePaybackAggressor(EActiveRaceCarIndex leAggresso
 // X360 0x827A3708 (:265 R, IDA "UpdateInputBuffer") -- const game-action queue accessor (+147572).
 const GameActionQueue* UpdateInputBuffer::GetGameActionQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 265));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 265);
     return &mGameActionQueue;
 }
 
@@ -509,7 +509,7 @@ const GameActionQueue* UpdateInputBuffer::GetGameActionQueue() const
 const UpdateInputBuffer::AudioCarLoadedDataQueue*
 UpdateInputBuffer::GetAudioCarDataLoadedQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 313));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 313);
     return &mAudioCarDataLoadedQueue;
 }
 
@@ -518,28 +518,28 @@ UpdateInputBuffer::GetAudioCarDataLoadedQueue() const
 UpdateInputBuffer::AudioCarLoadedDataQueue*
 UpdateInputBuffer::GetAudioCarDataLoadedQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 314));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 314);
     return &mAudioCarDataLoadedQueue;
 }
 
 // X360 0x827A3858 (:272 R, IDA "UpdateInputBuffer_") -- const takedown-event queue accessor (+160952).
 const TakedownEventQueue* UpdateInputBuffer::GetTakedownEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 272));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 272);
     return &mTakedownEventQueue;
 }
 
 // X360 0x827A3900 (:276 R, IDA "UpdateInputB") -- const trigger-management-input accessor (+161288).
 const TriggerManagementInputInterface* UpdateInputBuffer::GetTriggerManagementInputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 275));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 275);
     return &mTriggerManagementInputInterface;
 }
 
 // X360 0x827A3C48 (:294 R, IDA "UpdateInputBuff") -- const race-car race-distance accessor (+317496).
 const RaceCarRaceDistanceInterface* UpdateInputBuffer::GetRaceCarRaceDistanceInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 294));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 294);
     return &mRaceCarRaceDistanceInterface;
 }
 
@@ -555,7 +555,7 @@ const RaceCarRaceDistanceInterface* UpdateInputBuffer::GetRaceCarRaceDistanceInt
 // (the slot UpdateInputBuffer::Construct seeds to the literal 3).
 BrnNetwork::EPaybackType UpdateInputBuffer::GetActivePaybackType() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 316));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 316);
     return meActivePaybackType;
 }
 
@@ -566,7 +566,7 @@ BrnNetwork::EPaybackType UpdateInputBuffer::GetActivePaybackType() const
 // own baked line is 319 -- the X360 header is one line further on for this decl.)
 EActiveRaceCarIndex UpdateInputBuffer::GetActivePaybackAggressor() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 319));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 319);
     return meActivePaybackAggressor;
 }
 
@@ -577,7 +577,7 @@ EActiveRaceCarIndex UpdateInputBuffer::GetActivePaybackAggressor() const
 // AppendTriggerQueryInputInterface @0x823C8CF0 merges into).
 const TriggerQueryInputInterface* UpdateInputBuffer::GetTriggerQueryInputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 278));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 278);
     return &mTriggerQueryInputInterface;
 }
 
@@ -605,7 +605,7 @@ const OnlineScoringInterface* UpdateInputBuffer::GetOnlineScoringInterface() con
 // (Host LLP64 offset differs from X360 +322240; parity is by named member.)
 const UpdateInputBuffer::RaceRouteRequestQueue* UpdateInputBuffer::GetRaceRouteRequestQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 255));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 255);
     return &mRaceRouteRequestQueue;
 }
 

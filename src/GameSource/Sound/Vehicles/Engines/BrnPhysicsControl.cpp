@@ -322,7 +322,7 @@ s32 PhysicsControl::GetController(s32 aiSlot)
     case 2:
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Cound't get effect controller " << aiSlot,
+        CGS_FAIL_STREAM_AT("Cound't get effect controller " << aiSlot,
                              BRN_PHYSICSCONTROL_CPP_FILE, 408);
         break;
     }
@@ -341,7 +341,7 @@ void PhysicsControl::AttachController(CgsSound::Logic::EffectBase* apController)
         mp3dCarControl = static_cast<BrnSound::Vehicles::Car3DControl*>(apController);
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+        CGS_FAIL_STREAM_AT("Cound't attach controller " << apController->GetId(),
                              BRN_PHYSICSCONTROL_CPP_FILE, 446);
         break;
     }
@@ -1080,10 +1080,10 @@ const char* PhysicsControl::GetEngineComponentName(
 {
     const BrnSound::Vehicles::VehicleState* lpVehicleState =
         static_cast<const BrnSound::Vehicles::VehicleState*>(GetStateBase());
-    CGS_ASSERT(lpVehicleState != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpVehicleState",
-            "..\\..\\..\\GameSource\\Sound/Vehicles/Engines/BrnPhysicsControl.h", 435 /* ARTIST 0x82682CD4 */));
+    CGS_ASSERT_AT(lpVehicleState != 0,
+        "lpVehicleState",
+            "..\\..\\..\\GameSource\\Sound/Vehicles/Engines/BrnPhysicsControl.h", 435 /* ARTIST 0x82682CD4 */);
+
     return lpVehicleState->GetEngineComponentName(aeComponentType);
 }
 

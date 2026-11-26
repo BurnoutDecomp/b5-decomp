@@ -175,7 +175,7 @@ void ScrapeEffect::AttachController(CgsSound::Logic::EffectBase* apController)
         mpCollision3DControl = static_cast<Collision3DControl*>(apController);
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+        CGS_FAIL_STREAM_AT("Cound't attach controller " << apController->GetId(),
                              BRN_SCRAPEEFFECT_CPP_FILE, 139);
         break;
     }

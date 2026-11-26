@@ -88,8 +88,8 @@ namespace BrnNetwork
         // interface's own events stay in front), then take its frame counter.
         void NetworkToGameStateInterface::Append(const NetworkToGameStateInterface* lpCopyFrom)
         {
-            CGS_ASSERT(lpCopyFrom != 0,
-                CGS_ASSERT_MESSAGE_AT("lpCopyFrom", __FILE__, 621 /* ARTIST 0x823C94DC */));
+            CGS_ASSERT_AT(lpCopyFrom != 0,
+                "lpCopyFrom", __FILE__, 621 /* ARTIST 0x823C94DC */);
 
             mDirtyTrickEventQueue.Append(lpCopyFrom->mDirtyTrickEventQueue);
             mRoadRulesReceivedQueue.Append(lpCopyFrom->mRoadRulesReceivedQueue);
@@ -164,9 +164,9 @@ namespace BrnNetwork
         {
             if (lNetworkPlayerID == -1)
             {
-                CGS_ASSERT(lNetworkPlayerID != -1,
-                           CGS_ASSERT_MESSAGE_AT("lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                                                 __FILE__, 495 /* ARTIST 0x825421BC */));
+                CGS_ASSERT_AT(lNetworkPlayerID != -1,
+                           "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                                                 __FILE__, 495 /* ARTIST 0x825421BC */);
             }
 
             for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
@@ -188,17 +188,17 @@ namespace BrnNetwork
         {
             if (leActiveRaceCarIndex < 0)
             {
-                CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-                        __FILE__, 520 /* ARTIST 0x82542254 */));
+                CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                        __FILE__, 520 /* ARTIST 0x82542254 */);
+
             }
             if (leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
             {
-                CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                        __FILE__, 521 /* ARTIST 0x82542278 */));
+                CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                    "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                        __FILE__, 521 /* ARTIST 0x82542278 */);
+
             }
 
             for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
@@ -219,17 +219,17 @@ namespace BrnNetwork
         {
             if (leActiveRaceCarIndex < 0)
             {
-                CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-                        __FILE__, 588 /* ARTIST 0x825422FC */));
+                CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                        __FILE__, 588 /* ARTIST 0x825422FC */);
+
             }
             if (leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
             {
-                CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                        __FILE__, 589 /* ARTIST 0x82542320 */));
+                CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                    "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                        __FILE__, 589 /* ARTIST 0x82542320 */);
+
             }
 
             return mabPlayersInFreeburnChallenge[leActiveRaceCarIndex];

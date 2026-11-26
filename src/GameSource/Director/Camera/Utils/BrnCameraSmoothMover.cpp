@@ -82,13 +82,13 @@ void SmoothMover::Update(f32 lfTimestep, f32 lfForceAppliedMinusOneToOne,
 // cpp:80 -- the whole X360 body is the assert (cpp:82; inlined into Update @0x82223854).
 void SmoothMover::UpdateNoLimitsWithCentering(f32, f32, const Parameters&)
 {
-    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Not implemented yet", CGS_ARTIST_FILE, 82));
+    CGS_FAIL_AT("Not implemented yet", CGS_ARTIST_FILE, 82);
 }
 
 // cpp:91 -- the whole X360 body is the assert (cpp:93; inlined into Update @0x82223860).
 void SmoothMover::UpdateNoLimitsNoCentering(f32, f32, const Parameters&)
 {
-    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Not implemented yet", CGS_ARTIST_FILE, 93));
+    CGS_FAIL_AT("Not implemented yet", CGS_ARTIST_FILE, 93);
 }
 
 // @ 0x8220D820
@@ -140,13 +140,13 @@ void SmoothMover::UpdateWithLimitsNoCentering(f32 lfTimestep, f32 lfForceApplied
     mfCurrentValue  = fpu::Clamp(mfCurrentValue + lfNewSpeed * lfTimestep,
                                  lParameters.mfMinValue, lParameters.mfMaxValue);
 
-    CGS_ASSERT(mfCurrentSpeed < KF_SANITY_LIMIT,  CGS_ASSERT_MESSAGE_AT("mfCurrentSpeed < 10000.0f", CGS_ARTIST_FILE, 187));
+    CGS_ASSERT_AT(mfCurrentSpeed < KF_SANITY_LIMIT,  "mfCurrentSpeed < 10000.0f", CGS_ARTIST_FILE, 187);
     // cpp:188 -- the X360 streams value/speed/params/force into the message; folded static.
-    CGS_ASSERT(mfCurrentValue < KF_SANITY_LIMIT,  CGS_ASSERT_MESSAGE_AT("mfCurrentValue < 10000.0f", CGS_ARTIST_FILE, 136));
-    CGS_ASSERT(mfCurrentSpeed > -KF_SANITY_LIMIT, CGS_ASSERT_MESSAGE_AT("mfCurrentSpeed > -10000.0f", CGS_ARTIST_FILE, 189));
-    CGS_ASSERT(mfCurrentValue > -KF_SANITY_LIMIT, CGS_ASSERT_MESSAGE_AT("mfCurrentValue > -10000.0f", CGS_ARTIST_FILE, 190));
-    CGS_ASSERT(fpu::IsValid(mfCurrentSpeed), CGS_ASSERT_MESSAGE_AT("RwMathFPU::IsValid(mfCurrentSpeed)", CGS_ARTIST_FILE, 192));
-    CGS_ASSERT(fpu::IsValid(mfCurrentValue), CGS_ASSERT_MESSAGE_AT("RwMathFPU::IsValid(mfCurrentValue)", CGS_ARTIST_FILE, 193));
+    CGS_ASSERT_AT(mfCurrentValue < KF_SANITY_LIMIT,  "mfCurrentValue < 10000.0f", CGS_ARTIST_FILE, 136);
+    CGS_ASSERT_AT(mfCurrentSpeed > -KF_SANITY_LIMIT, "mfCurrentSpeed > -10000.0f", CGS_ARTIST_FILE, 189);
+    CGS_ASSERT_AT(mfCurrentValue > -KF_SANITY_LIMIT, "mfCurrentValue > -10000.0f", CGS_ARTIST_FILE, 190);
+    CGS_ASSERT_AT(fpu::IsValid(mfCurrentSpeed), "RwMathFPU::IsValid(mfCurrentSpeed)", CGS_ARTIST_FILE, 192);
+    CGS_ASSERT_AT(fpu::IsValid(mfCurrentValue), "RwMathFPU::IsValid(mfCurrentValue)", CGS_ARTIST_FILE, 193);
 }
 
 // @ 0x8220D608
@@ -187,12 +187,12 @@ void SmoothMover::UpdateWithLimitsWithCentering(f32 lfTimestep, f32 lfForceAppli
                                     lParameters.mfMinValue, lParameters.mfMaxValue);
     }
 
-    CGS_ASSERT(mfCurrentSpeed < KF_SANITY_LIMIT,  CGS_ASSERT_MESSAGE_AT("mfCurrentSpeed < 10000.0f", CGS_ARTIST_FILE, 135));
-    CGS_ASSERT(mfCurrentValue < KF_SANITY_LIMIT,  CGS_ASSERT_MESSAGE_AT("mfCurrentValue < 10000.0f", CGS_ARTIST_FILE, 136));
-    CGS_ASSERT(mfCurrentSpeed > -KF_SANITY_LIMIT, CGS_ASSERT_MESSAGE_AT("mfCurrentSpeed > -10000.0f", CGS_ARTIST_FILE, 137));
-    CGS_ASSERT(mfCurrentValue > -KF_SANITY_LIMIT, CGS_ASSERT_MESSAGE_AT("mfCurrentValue > -10000.0f", CGS_ARTIST_FILE, 138));
-    CGS_ASSERT(fpu::IsValid(mfCurrentSpeed), CGS_ASSERT_MESSAGE_AT("RwMathFPU::IsValid(mfCurrentSpeed)", CGS_ARTIST_FILE, 140));
-    CGS_ASSERT(fpu::IsValid(mfCurrentValue), CGS_ASSERT_MESSAGE_AT("RwMathFPU::IsValid(mfCurrentValue)", CGS_ARTIST_FILE, 141));
+    CGS_ASSERT_AT(mfCurrentSpeed < KF_SANITY_LIMIT,  "mfCurrentSpeed < 10000.0f", CGS_ARTIST_FILE, 135);
+    CGS_ASSERT_AT(mfCurrentValue < KF_SANITY_LIMIT,  "mfCurrentValue < 10000.0f", CGS_ARTIST_FILE, 136);
+    CGS_ASSERT_AT(mfCurrentSpeed > -KF_SANITY_LIMIT, "mfCurrentSpeed > -10000.0f", CGS_ARTIST_FILE, 137);
+    CGS_ASSERT_AT(mfCurrentValue > -KF_SANITY_LIMIT, "mfCurrentValue > -10000.0f", CGS_ARTIST_FILE, 138);
+    CGS_ASSERT_AT(fpu::IsValid(mfCurrentSpeed), "RwMathFPU::IsValid(mfCurrentSpeed)", CGS_ARTIST_FILE, 140);
+    CGS_ASSERT_AT(fpu::IsValid(mfCurrentValue), "RwMathFPU::IsValid(mfCurrentValue)", CGS_ARTIST_FILE, 141);
 }
 }
 }

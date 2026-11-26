@@ -34,7 +34,7 @@ namespace Props
                 return E_RESPAWN;                                          // 0
         }
 
-        CGS_ASSERT(false, "Shouldnt get here\n");                          // BrnPhysicsPropZoneData.h:460
+        CGS_FAIL("Shouldnt get here\n");                          // BrnPhysicsPropZoneData.h:460
         return E_RESPAWN_TYPE_COUNT;                                       // 3
     }
 

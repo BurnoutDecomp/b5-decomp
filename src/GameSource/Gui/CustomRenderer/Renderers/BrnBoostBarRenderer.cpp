@@ -524,21 +524,21 @@ CgsID BoostBarRenderer::GetID() const
 // the type-indexed colour by value.
 Vector3 BoostBarRenderer::GetInnerBoostBarColour()
 {
-    CGS_ASSERT(meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT &&
+    CGS_ASSERT_AT(meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT &&
                meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE,
-        CGS_ASSERT_MESSAGE_AT(
-            "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )",
-            __FILE__, 641 /* ARTIST 0x824EC788 */));
+        "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )",
+            __FILE__, 641 /* ARTIST 0x824EC788 */);
+
     return mav3BoostInnerColours[meCurrentBoostType];
 }
 
 Vector3 BoostBarRenderer::GetOuterBoostBarColour()
 {
-    CGS_ASSERT(meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT &&
+    CGS_ASSERT_AT(meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT &&
                meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE,
-        CGS_ASSERT_MESSAGE_AT(
-            "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )",
-            __FILE__, 658 /* ARTIST 0x824EC808 */));
+        "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )",
+            __FILE__, 658 /* ARTIST 0x824EC808 */);
+
     return mav3BoostOuterColours[meCurrentBoostType];
 }
 

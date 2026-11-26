@@ -69,8 +69,8 @@ namespace BrnGame
         BrnWorldIO::UpdateInputBuffer* lpWorldInput,
         const BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer)
     {
-        CGS_ASSERT(lpWorldInput != 0, CGS_ASSERT_MESSAGE_AT("lpWorldInput", CGS_ARTIST_FILE, 83));
-        CGS_ASSERT(lpSoundOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpSoundOutputBuffer", CGS_ARTIST_FILE, 84));
+        CGS_ASSERT_AT(lpWorldInput != 0, "lpWorldInput", CGS_ARTIST_FILE, 83);
+        CGS_ASSERT_AT(lpSoundOutputBuffer != 0, "lpSoundOutputBuffer", CGS_ARTIST_FILE, 84);
 
         lpWorldInput->GetAudioCarDataLoadedQueue()->Append(
             lpSoundOutputBuffer->GetPreUpdateOutput().GetCarDataLoadedQueue());

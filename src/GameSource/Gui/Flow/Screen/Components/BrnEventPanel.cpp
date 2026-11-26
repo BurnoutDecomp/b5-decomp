@@ -199,10 +199,10 @@ namespace BrnGui
 // @ 0x82417B40 -----------------------------------------------------------------------
     void EventPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEventPanel.cpp", 134 /* ARTIST 0x82417B68 */));   // cpp:134
+        CGS_ASSERT_AT(lpGuiCache != 0,
+            "lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEventPanel.cpp", 134 /* ARTIST 0x82417B68 */);   // cpp:134
+
 
         lpGuiCache->AppendExpectedAptComponent(leFlow, GetNameHash());     // lwz +0x84
 
@@ -391,7 +391,7 @@ namespace BrnGui
             // X360 streamed "Invalid mode type in panel (" + mode + ") for event with id " + id
             // + "\n" into the assert message buffer; collapsed to one CGS_ASSERT keeping the
             // leading rodata literal (the tree-wide convention for the streamed asserts).
-            CGS_ASSERT(false, "Invalid mode type in panel (");   // cpp:373
+            CGS_FAIL("Invalid mode type in panel (");   // cpp:373
             break;
         }
 
@@ -543,7 +543,7 @@ namespace BrnGui
 
         default:
             // X360 streamed "Unknown type of event currently selected: Type " + mode + "\n".
-            CGS_ASSERT(false, "Unknown type of event currently selected: Type ");   // cpp:612
+            CGS_FAIL("Unknown type of event currently selected: Type ");   // cpp:612
             break;
         }
     }
@@ -573,7 +573,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Unknown type of event currently selected: Type ");   // cpp:658
+            CGS_FAIL("Unknown type of event currently selected: Type ");   // cpp:658
             break;
         }
 
@@ -605,7 +605,7 @@ namespace BrnGui
                 break;
 
             default:
-                CGS_ASSERT(false, "Unknown type of event currently selected: Type ");
+                CGS_FAIL("Unknown type of event currently selected: Type ");
                 break;
             }
         }
@@ -629,8 +629,8 @@ namespace BrnGui
 // @ 0x82417A10 -----------------------------------------------------------------------
     void EventPanel::SetPlayerRank(s32 iRank)
     {
-        CGS_ASSERT(iRank >= 0,
-            CGS_ASSERT_MESSAGE_AT("0<=liCurrentRank", __FILE__, 258 /* ARTIST 0x82417A3C */));   // @0x82417A4C  h:258
+        CGS_ASSERT_AT(iRank >= 0,
+            "0<=liCurrentRank", __FILE__, 258 /* ARTIST 0x82417A3C */);   // @0x82417A4C  h:258
 
         miPlayerRank = iRank;   // +0x8B4
     }
@@ -639,17 +639,17 @@ namespace BrnGui
     void EventPanel::SetModeRanks(s32 iRaceRank, s32 iRoadRageRank,
                                   s32 iStuntAttackRank, s32 iMarkedManRank)
     {
-        CGS_ASSERT(iRaceRank >= 0,
-            CGS_ASSERT_MESSAGE_AT("0<=liCurrentRaceRank", __FILE__, 279 /* ARTIST 0x82417AA8 */));        // @0x82417AB4  h:279
-        CGS_ASSERT(iRoadRageRank >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "0<=liCurrentRoadRageRank", __FILE__, 280 /* ARTIST 0x82417ACC */));    // @0x82417AD8  h:280
-        CGS_ASSERT(iStuntAttackRank >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "0<=liCurrentStuntAttackRank", __FILE__, 281 /* ARTIST 0x82417AF0 */)); // @0x82417AFC  h:281
-        CGS_ASSERT(iMarkedManRank >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "0<=liCurrentMarkedManRank", __FILE__, 282 /* ARTIST 0x82417B14 */));   // @0x82417B20  h:282
+        CGS_ASSERT_AT(iRaceRank >= 0,
+            "0<=liCurrentRaceRank", __FILE__, 279 /* ARTIST 0x82417AA8 */);        // @0x82417AB4  h:279
+        CGS_ASSERT_AT(iRoadRageRank >= 0,
+            "0<=liCurrentRoadRageRank", __FILE__, 280 /* ARTIST 0x82417ACC */);    // @0x82417AD8  h:280
+
+        CGS_ASSERT_AT(iStuntAttackRank >= 0,
+            "0<=liCurrentStuntAttackRank", __FILE__, 281 /* ARTIST 0x82417AF0 */); // @0x82417AFC  h:281
+
+        CGS_ASSERT_AT(iMarkedManRank >= 0,
+            "0<=liCurrentMarkedManRank", __FILE__, 282 /* ARTIST 0x82417B14 */);   // @0x82417B20  h:282
+
 
         miCurrentRaceRank        = iRaceRank;        // +0x8B8
         miCurrentRoadRageRank    = iRoadRageRank;    // +0x8BC
@@ -676,7 +676,7 @@ namespace BrnGui
             default:
                 // X360 streamed "Unknown event type " + (int)eLocalType + "\n" into the assert
                 // message buffer; collapse to one CGS_ASSERT keeping only the rodata literal.
-                CGS_ASSERT(false, "Unknown event type ");
+                CGS_FAIL("Unknown event type ");
                 return RaceEventData::E_MODE_COUNT;   // r27 = 6
         }
     }

@@ -115,36 +115,36 @@ bool OptionsDataProfile::ValidateProfile()
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetTraxAvailableInFreeBurn(const EATraxArrayType* lpTraxAvailable)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 305 /* ARTIST 0x824F0010 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 305 /* ARTIST 0x824F0010 */);
     mTraxAvailableInFreeBurn = *lpTraxAvailable;
 }
 
 OptionsDataProfile::EATraxArrayType* OptionsDataProfile::GetTraxAvailableInFreeBurn()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 321 /* ARTIST 0x824F0080 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 321 /* ARTIST 0x824F0080 */);
     return &mTraxAvailableInFreeBurn;
 }
 
 void OptionsDataProfile::SetTraxAvailableInEvents(const EATraxArrayType* lpTraxAvailable)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 338 /* ARTIST 0x824F00E0 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 338 /* ARTIST 0x824F00E0 */);
     mTraxAvailableInEvents = *lpTraxAvailable;
 }
 
 OptionsDataProfile::EATraxArrayType* OptionsDataProfile::GetTraxAvailableInEvents()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 354 /* ARTIST 0x824F0150 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 354 /* ARTIST 0x824F0150 */);
     return &mTraxAvailableInEvents;
 }
 
 void OptionsDataProfile::SetTraxRemaining(const EATraxArrayType* lpTraxRemaining)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 371 /* ARTIST 0x824F01B0 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 371 /* ARTIST 0x824F01B0 */);
     mTraxFullyPlayed = *lpTraxRemaining;
 }
 
@@ -169,15 +169,15 @@ void OptionsDataProfile::SetLastPlayedSongIndex(s32 liIndex)
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetTraxPlayOrderMode(GuiEventAudioTraxPlayOrder::ETraxPlayOrderMode lePlayOrderMode)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 404 /* ARTIST 0x824F0228 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 404 /* ARTIST 0x824F0228 */);
     meTraxPlayOrderMode = lePlayOrderMode;
 }
 
 GuiEventAudioTraxPlayOrder::ETraxPlayOrderMode OptionsDataProfile::GetTraxPlayOrderMode()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 418 /* ARTIST 0x824F0288 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 418 /* ARTIST 0x824F0288 */);
     return meTraxPlayOrderMode;
 }
 
@@ -186,15 +186,15 @@ GuiEventAudioTraxPlayOrder::ETraxPlayOrderMode OptionsDataProfile::GetTraxPlayOr
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetCameraFeed(BrnNetwork::BrnNetworkModuleIO::ECameraUserOptions leCameraFeedSetting)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 434 /* ARTIST 0x824F02E8 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 434 /* ARTIST 0x824F02E8 */);
     meCameraFeedSetting = leCameraFeedSetting;
 }
 
 BrnNetwork::BrnNetworkModuleIO::ECameraUserOptions OptionsDataProfile::GetCameraFeed()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 450 /* ARTIST 0x824F0348 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 450 /* ARTIST 0x824F0348 */);
     return meCameraFeedSetting;
 }
 
@@ -203,15 +203,15 @@ BrnNetwork::BrnNetworkModuleIO::ECameraUserOptions OptionsDataProfile::GetCamera
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetDefaultGameCamera(bool lbDefaultGameCamera)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 466 /* ARTIST 0x824F03A8 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 466 /* ARTIST 0x824F03A8 */);
     mbDefaultGameCamera = lbDefaultGameCamera ? 1 : 0;
 }
 
 bool OptionsDataProfile::GetDefaultGameCamera()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 482 /* ARTIST 0x824F0418 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 482 /* ARTIST 0x824F0418 */);
     return mbDefaultGameCamera == 1;
 }
 
@@ -220,15 +220,15 @@ bool OptionsDataProfile::GetDefaultGameCamera()
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetVoipVolume(s32 liVolume)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 627 /* ARTIST 0x824F0788 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 627 /* ARTIST 0x824F0788 */);
     miVoipVolume = liVolume;
 }
 
 s32 OptionsDataProfile::GetVoipVolume()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 640 /* ARTIST 0x824F07E8 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 640 /* ARTIST 0x824F07E8 */);
     return miVoipVolume;
 }
 
@@ -237,15 +237,15 @@ s32 OptionsDataProfile::GetVoipVolume()
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetMusicVolume(s32 liVolume)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 653 /* ARTIST 0x824F0848 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 653 /* ARTIST 0x824F0848 */);
     mMusicVolume = liVolume;
 }
 
 s32 OptionsDataProfile::GetMusicVolume()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 666 /* ARTIST 0x824F08A8 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 666 /* ARTIST 0x824F08A8 */);
     return mMusicVolume;
 }
 
@@ -254,15 +254,15 @@ s32 OptionsDataProfile::GetMusicVolume()
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetSFXVolume(s32 liVolume)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 679 /* ARTIST 0x824F0908 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 679 /* ARTIST 0x824F0908 */);
     mSFXVolume = liVolume;
 }
 
 s32 OptionsDataProfile::GetSFXVolume()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 692 /* ARTIST 0x824F0968 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 692 /* ARTIST 0x824F0968 */);
     return mSFXVolume;
 }
 
@@ -271,27 +271,27 @@ s32 OptionsDataProfile::GetSFXVolume()
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetBrightness(s32 liNewBrightnessSetting)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 710 /* ARTIST 0x824F09C8 */));
-    CGS_ASSERT(liNewBrightnessSetting >= KI_MIN_BRIGHTNESS,
-        CGS_ASSERT_MESSAGE_AT(
-            "lNewBrightnessSetting >= KI_MIN_BRIGHTNESS", __FILE__, 712 /* ARTIST 0x824F09EC */));
-    CGS_ASSERT(liNewBrightnessSetting <= KI_MAX_BRIGHTNESS,
-        CGS_ASSERT_MESSAGE_AT(
-            "lNewBrightnessSetting <= KI_MAX_BRIGHTNESS", __FILE__, 713 /* ARTIST 0x824F0A10 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 710 /* ARTIST 0x824F09C8 */);
+    CGS_ASSERT_AT(liNewBrightnessSetting >= KI_MIN_BRIGHTNESS,
+        "lNewBrightnessSetting >= KI_MIN_BRIGHTNESS", __FILE__, 712 /* ARTIST 0x824F09EC */);
+
+    CGS_ASSERT_AT(liNewBrightnessSetting <= KI_MAX_BRIGHTNESS,
+        "lNewBrightnessSetting <= KI_MAX_BRIGHTNESS", __FILE__, 713 /* ARTIST 0x824F0A10 */);
+
     mBrightness = liNewBrightnessSetting;
 }
 
 s32 OptionsDataProfile::GetBrightness() const
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 731 /* ARTIST 0x824F0A64 */));
-    CGS_ASSERT(mBrightness >= KI_MIN_BRIGHTNESS,
-        CGS_ASSERT_MESSAGE_AT(
-            "mBrightness >= KI_MIN_BRIGHTNESS", __FILE__, 733 /* ARTIST 0x824F0A8C */));
-    CGS_ASSERT(mBrightness <= KI_MAX_BRIGHTNESS,
-        CGS_ASSERT_MESSAGE_AT(
-            "mBrightness <= KI_MAX_BRIGHTNESS", __FILE__, 734 /* ARTIST 0x824F0AB4 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 731 /* ARTIST 0x824F0A64 */);
+    CGS_ASSERT_AT(mBrightness >= KI_MIN_BRIGHTNESS,
+        "mBrightness >= KI_MIN_BRIGHTNESS", __FILE__, 733 /* ARTIST 0x824F0A8C */);
+
+    CGS_ASSERT_AT(mBrightness <= KI_MAX_BRIGHTNESS,
+        "mBrightness <= KI_MAX_BRIGHTNESS", __FILE__, 734 /* ARTIST 0x824F0AB4 */);
+
     return mBrightness;
 }
 
@@ -300,27 +300,27 @@ s32 OptionsDataProfile::GetBrightness() const
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetContrast(s32 liNewContrastSetting)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 753 /* ARTIST 0x824F0B18 */));
-    CGS_ASSERT(liNewContrastSetting >= KI_MIN_CONTRAST,
-        CGS_ASSERT_MESSAGE_AT(
-            "lNewContrastSetting >= KI_MIN_CONTRAST", __FILE__, 755 /* ARTIST 0x824F0B3C */));
-    CGS_ASSERT(liNewContrastSetting <= KI_MAX_CONTRAST,
-        CGS_ASSERT_MESSAGE_AT(
-            "lNewContrastSetting <= KI_MAX_CONTRAST", __FILE__, 756 /* ARTIST 0x824F0B60 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 753 /* ARTIST 0x824F0B18 */);
+    CGS_ASSERT_AT(liNewContrastSetting >= KI_MIN_CONTRAST,
+        "lNewContrastSetting >= KI_MIN_CONTRAST", __FILE__, 755 /* ARTIST 0x824F0B3C */);
+
+    CGS_ASSERT_AT(liNewContrastSetting <= KI_MAX_CONTRAST,
+        "lNewContrastSetting <= KI_MAX_CONTRAST", __FILE__, 756 /* ARTIST 0x824F0B60 */);
+
     mContrast = liNewContrastSetting;
 }
 
 s32 OptionsDataProfile::GetContrast() const
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 774 /* ARTIST 0x824F0BB4 */));
-    CGS_ASSERT(mContrast >= KI_MIN_CONTRAST,
-        CGS_ASSERT_MESSAGE_AT(
-            "mContrast >= KI_MIN_CONTRAST", __FILE__, 776 /* ARTIST 0x824F0BDC */));
-    CGS_ASSERT(mContrast <= KI_MAX_CONTRAST,
-        CGS_ASSERT_MESSAGE_AT(
-            "mContrast <= KI_MAX_CONTRAST", __FILE__, 777 /* ARTIST 0x824F0C04 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 774 /* ARTIST 0x824F0BB4 */);
+    CGS_ASSERT_AT(mContrast >= KI_MIN_CONTRAST,
+        "mContrast >= KI_MIN_CONTRAST", __FILE__, 776 /* ARTIST 0x824F0BDC */);
+
+    CGS_ASSERT_AT(mContrast <= KI_MAX_CONTRAST,
+        "mContrast <= KI_MAX_CONTRAST", __FILE__, 777 /* ARTIST 0x824F0C04 */);
+
     return mContrast;
 }
 
@@ -329,29 +329,29 @@ s32 OptionsDataProfile::GetContrast() const
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetSixAxisShowtime(bool lbSixAxisShowtime)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 500 /* ARTIST 0x824F0488 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 500 /* ARTIST 0x824F0488 */);
     mbSixAxisShowtime = lbSixAxisShowtime;
 }
 
 bool OptionsDataProfile::GetSixAxisShowtime()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 516 /* ARTIST 0x824F04E8 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 516 /* ARTIST 0x824F04E8 */);
     return mbSixAxisShowtime;
 }
 
 void OptionsDataProfile::SetSixAxisSteering(bool lbSixAxisSteering)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 532 /* ARTIST 0x824F0548 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 532 /* ARTIST 0x824F0548 */);
     mbSixAxisSteering = lbSixAxisSteering;
 }
 
 bool OptionsDataProfile::GetSixAxisSteering()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 548 /* ARTIST 0x824F05A8 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 548 /* ARTIST 0x824F05A8 */);
     return mbSixAxisSteering;
 }
 
@@ -360,15 +360,15 @@ bool OptionsDataProfile::GetSixAxisSteering()
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetForceFeedback(bool lbForceFeedback)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 564 /* ARTIST 0x824F0608 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 564 /* ARTIST 0x824F0608 */);
     mbForceFeedback = lbForceFeedback;
 }
 
 bool OptionsDataProfile::GetForceFeedback()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 580 /* ARTIST 0x824F0668 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 580 /* ARTIST 0x824F0668 */);
     return mbForceFeedback;
 }
 
@@ -377,15 +377,15 @@ bool OptionsDataProfile::GetForceFeedback()
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::SetTips(bool lbTips)
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 598 /* ARTIST 0x824F06C8 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 598 /* ARTIST 0x824F06C8 */);
     mbTips = lbTips;
 }
 
 bool OptionsDataProfile::GetTips()
 {
-    CGS_ASSERT(false == mbIsLocked,
-        CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 614 /* ARTIST 0x824F0728 */));
+    CGS_ASSERT_AT(false == mbIsLocked,
+        "false == mbIsLocked", __FILE__, 614 /* ARTIST 0x824F0728 */);
     return mbTips;
 }
 
@@ -445,10 +445,10 @@ void OptionsDataProfile::SetCreatedOnlineGameOptions(s32 liIndex, GuiCache* lpCa
 void OptionsDataProfile::AddReceivedOnlineGameOptions(GuiCache* lpCache,
                                                       const GuiEventNetworkGameParams* lpParams)
 {
-    CGS_ASSERT(lpCache,
-        CGS_ASSERT_MESSAGE_AT("lpGuiCache", KAC_ARTIST_ASSERT_HEADER, 693 /* ARTIST 0x824826C0 */));
-    CGS_ASSERT(lpParams,
-        CGS_ASSERT_MESSAGE_AT("lpOptions", KAC_ARTIST_ASSERT_HEADER, 694 /* ARTIST 0x824826E4 */));
+    CGS_ASSERT_AT(lpCache,
+        "lpGuiCache", KAC_ARTIST_ASSERT_HEADER, 693 /* ARTIST 0x824826C0 */);
+    CGS_ASSERT_AT(lpParams,
+        "lpOptions", KAC_ARTIST_ASSERT_HEADER, 694 /* ARTIST 0x824826E4 */);
 
     memmove(&maReceivedOnlineGameOptions[1], &maReceivedOnlineGameOptions[0],
             sizeof(OnlineSaveRoute) * (KI_MAX_RECEIVED_ONLINE_GAME_OPTIONS - 1));
@@ -500,10 +500,10 @@ void OptionsDataProfile::_AssertLayout()
 void OptionsDataProfile::OnlineSaveRoute::OnlineSaveRouteEvent::Construct(
     s32 liEventID, u32 luJunctionID, CgsID* lpaLandmarks, s32 liNumLandmarks)
 {
-    CGS_ASSERT(liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE,
-        CGS_ASSERT_MESSAGE_AT(
-            "liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE",
-            KAC_ARTIST_ASSERT_HEADER, 798 /* ARTIST 0x824EBD48 */));
+    CGS_ASSERT_AT(liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE,
+        "liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE",
+            KAC_ARTIST_ASSERT_HEADER, 798 /* ARTIST 0x824EBD48 */);
+
 
     miEventID      = liEventID;      // +0x88
     mJunctionId    = luJunctionID;   // +0x80
@@ -677,7 +677,7 @@ void OptionsDataProfile::NotifyOtherModulesLoadComplete(GuiEventQueueSmall* lpQu
         lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(laiVolumes), 463, 8);
     }
 
-    CGS_ASSERT(false == mbIsLocked, CGS_ASSERT_MESSAGE_AT("false == mbIsLocked", __FILE__, 640 /* ARTIST 0x82511174 */));   // cpp:640
+    CGS_ASSERT_AT(false == mbIsLocked, "false == mbIsLocked", __FILE__, 640 /* ARTIST 0x82511174 */);   // cpp:640
 
     // The scalar settings, one event each (X360 wire sizes).
     {

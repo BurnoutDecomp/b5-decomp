@@ -260,7 +260,7 @@ namespace CgsGui
             lfAlignNudge = -0.5f;
             break;
         default:
-            CGS_ASSERT_AT(false, "Unsupported alignment in CgsAptString::Prepare", CGS_ARTIST_FILE, 286);
+            CGS_FAIL_AT("Unsupported alignment in CgsAptString::Prepare", CGS_ARTIST_FILE, 286);
             break;
         }
 

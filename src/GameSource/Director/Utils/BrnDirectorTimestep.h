@@ -81,9 +81,9 @@ private:
 inline f32
 Timestep::Get(EType leType) const
 {
-    CGS_ASSERT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT,
         "leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT",
-        CGS_ARTIST_BRNDIRECTORTIMESTEP_FILE, 78 /* ARTIST 0x821F2908 */));
+        CGS_ARTIST_BRNDIRECTORTIMESTEP_FILE, 78 /* ARTIST 0x821F2908 */);
     return mafTimestep[leType];
 }
 
@@ -92,9 +92,9 @@ Timestep::Get(EType leType) const
 inline VecFloat
 Timestep::GetVecFloat(EType leType) const
 {
-    CGS_ASSERT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT,
         "leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT",
-        CGS_ARTIST_BRNDIRECTORTIMESTEP_FILE, 88 /* ARTIST 0x821F2978 */));
+        CGS_ARTIST_BRNDIRECTORTIMESTEP_FILE, 88 /* ARTIST 0x821F2978 */);
     return maVecFloatTimestep[leType];
 }
 

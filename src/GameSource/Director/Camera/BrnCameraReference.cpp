@@ -45,14 +45,14 @@ void CameraReference::Construct()
 // stores the wrapper/type BEFORE the null tripwire fires -- order preserved.
 void CameraReference::Setup(const BrnDirector::ICEWrapper* lpIceWrapper)
 {
-    CGS_ASSERT(meType == E_TYPE_INVALID,
-        CGS_ASSERT_MESSAGE_AT("meType == E_TYPE_INVALID", CGS_ARTIST_FILE, 95 /* ARTIST 0x821F8538 */));   // :95
+    CGS_ASSERT_AT(meType == E_TYPE_INVALID,
+        "meType == E_TYPE_INVALID", CGS_ARTIST_FILE, 95 /* ARTIST 0x821F8538 */);   // :95
 
     mpIceWrapper = lpIceWrapper;
     meType       = E_TYPE_ICE;
 
-    CGS_ASSERT(mpIceWrapper != 0,
-        CGS_ASSERT_MESSAGE_AT("mpIceWrapper != NULL", CGS_ARTIST_FILE, 99 /* ARTIST 0x821F8568 */));              // :99
+    CGS_ASSERT_AT(mpIceWrapper != 0,
+        "mpIceWrapper != NULL", CGS_ARTIST_FILE, 99 /* ARTIST 0x821F8568 */);              // :99
 }
 
 // ----------------------------------------------------------------------------
@@ -105,7 +105,7 @@ void CameraReference::Setup(Camera lCamera)
 // @ 0x8223EA80 -- cpp:172. Refresh mCamera from the referenced source and return it.
 const Camera& CameraReference::GetCamera(const BehaviourManager* lpBehaviourController)
 {
-    CGS_ASSERT(IsValid(), CGS_ASSERT_MESSAGE_AT("IsValid()", CGS_ARTIST_FILE, 174));   // :174 (non-gating)
+    CGS_ASSERT_AT(IsValid(), "IsValid()", CGS_ARTIST_FILE, 174);   // :174 (non-gating)
 
     switch (meType)
     {
@@ -113,7 +113,7 @@ const Camera& CameraReference::GetCamera(const BehaviourManager* lpBehaviourCont
         break;   // mCamera already holds the cached camera
 
     case E_TYPE_BEHAVIOUR:
-        CGS_ASSERT(mbBehaviourLocked, CGS_ASSERT_MESSAGE_AT("mbBehaviourLocked", CGS_ARTIST_FILE, 187));   // :187
+        CGS_ASSERT_AT(mbBehaviourLocked, "mbBehaviourLocked", CGS_ARTIST_FILE, 187);   // :187
         // X360: helper-pool slot lookup (manager+0xFAB0 pool, de-inlined
         // operator[]) + the slot's embedded camera at +0x10 == the committed
         // GetCameraFromBehaviour contract.
@@ -122,7 +122,7 @@ const Camera& CameraReference::GetCamera(const BehaviourManager* lpBehaviourCont
 
     case E_TYPE_ICE:
     {
-        CGS_ASSERT(mpIceWrapper != 0, CGS_ASSERT_MESSAGE_AT("mpIceWrapper != NULL", CGS_ARTIST_FILE, 194));   // :194
+        CGS_ASSERT_AT(mpIceWrapper != 0, "mpIceWrapper != NULL", CGS_ARTIST_FILE, 194);   // :194
         // ⭐ SETTLED 2026-08-01. The X360 forms &wrapper->mICECamera.mCamera (+0x11D70,
         // `lis 1 / ori 0x1D70 / add.`) and null-checks the ADDRESS, so GetCamera()
         // returns a POINTER -- now confirmed by the DecFIGS DWARF
@@ -131,13 +131,13 @@ const Camera& CameraReference::GetCamera(const BehaviourManager* lpBehaviourCont
         // BrnDirectorICEWrapper.h). The const_cast that used to sit here only existed
         // to work around the old reference-returning, non-const declaration.
         const Camera* lpIceCamera = mpIceWrapper->GetCamera();
-        CGS_ASSERT(lpIceCamera != 0, CGS_ASSERT_MESSAGE_AT("mpIceWrapper->GetCamera() != NULL", CGS_ARTIST_FILE, 195));   // :195
+        CGS_ASSERT_AT(lpIceCamera != 0, "mpIceWrapper->GetCamera() != NULL", CGS_ARTIST_FILE, 195);   // :195
         mCamera = *lpIceCamera;
         break;
     }
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("this case shouldn't be reachable", CGS_ARTIST_FILE, 202));   // :202
+        CGS_FAIL_AT("this case shouldn't be reachable", CGS_ARTIST_FILE, 202);   // :202
         break;
     }
 
@@ -147,11 +147,11 @@ const Camera& CameraReference::GetCamera(const BehaviourManager* lpBehaviourCont
 // @ 0x822523F0 -- cpp:110. Lock the referenced behaviour for interpolation.
 void CameraReference::Prepare(const BehaviourControllerLockInterface& lLockInterface)
 {
-    CGS_ASSERT(IsValid(), CGS_ASSERT_MESSAGE_AT("IsValid()", CGS_ARTIST_FILE, 112));   // :112 (non-gating)
+    CGS_ASSERT_AT(IsValid(), "IsValid()", CGS_ARTIST_FILE, 112);   // :112 (non-gating)
 
     if (meType == E_TYPE_BEHAVIOUR)
     {
-        CGS_ASSERT(mbBehaviourLocked == false, CGS_ASSERT_MESSAGE_AT("mbBehaviourLocked == false", CGS_ARTIST_FILE, 116));   // :116
+        CGS_ASSERT_AT(mbBehaviourLocked == false, "mbBehaviourLocked == false", CGS_ARTIST_FILE, 116);   // :116
         lLockInterface.LockBehaviourForInterpolation(mBehaviourHelperIndex);
         mbBehaviourLocked = true;
     }
@@ -160,7 +160,7 @@ void CameraReference::Prepare(const BehaviourControllerLockInterface& lLockInter
 // @ 0x822524A8 -- cpp:155. Unlock (if locked) and invalidate the reference.
 void CameraReference::Release(const BehaviourControllerLockInterface& lLockInterface)
 {
-    CGS_ASSERT(IsValid(), CGS_ASSERT_MESSAGE_AT("IsValid()", CGS_ARTIST_FILE, 157));   // :157 (non-gating)
+    CGS_ASSERT_AT(IsValid(), "IsValid()", CGS_ARTIST_FILE, 157);   // :157 (non-gating)
 
     if (meType == E_TYPE_BEHAVIOUR && mbBehaviourLocked)
     {

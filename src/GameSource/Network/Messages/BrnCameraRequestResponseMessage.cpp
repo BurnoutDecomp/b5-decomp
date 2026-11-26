@@ -47,9 +47,9 @@ namespace BrnNetwork
 
     bool CameraRequestResponseMessage::Retrieve(EResponse* lpeCameraRequestResponse)
     {
-        CGS_ASSERT(lpeCameraRequestResponse, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpeCameraRequestResponse,
             "lpeCameraRequestResponse",
-            CGS_ARTIST_FILE, 103 /* ARTIST 0x8257E700 */));
+            CGS_ARTIST_FILE, 103 /* ARTIST 0x8257E700 */);
 
         // ARTIST 0x8257E714 branches to a trailing `return false` (0x8257E760): the copy-out is the body
         // of the valid test.
@@ -58,9 +58,9 @@ namespace BrnNetwork
             *lpeCameraRequestResponse = meCameraRequestResponse;
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
 
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                CGS_ARTIST_FILE, 113 /* ARTIST 0x8257E74C */));
+                CGS_ARTIST_FILE, 113 /* ARTIST 0x8257E74C */);
             return true;
         }
         return false;

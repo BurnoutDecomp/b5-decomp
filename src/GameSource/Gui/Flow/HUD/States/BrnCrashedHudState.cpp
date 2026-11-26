@@ -82,7 +82,7 @@ u32       CrashedHudState::muNumResourcesToLoad = 4;
     // observable effect is the store into mauExpectedComponentIds[count] + count++.
     void CrashedHudState::SetExpectedComponent(const char* lpacComponentName)
     {
-        CGS_ASSERT(muNumExpectedComponents < KU_MAX_INIT_COMPONENTS_NUM, CGS_ASSERT_STREAM_MESSAGE_AT("No space for new expected component", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnCrashedHudState.h", 291));
+        CGS_ASSERT_STREAM_AT(muNumExpectedComponents < KU_MAX_INIT_COMPONENTS_NUM, "No space for new expected component", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnCrashedHudState.h", 291);
 
 
         // X360: inline strlen (char* walk to the NUL) then CalculateHash(name, len).
@@ -193,7 +193,7 @@ void CrashedHudState::Update()
         meInternalState = E_CRASHINTERNALSTATE_IDLE;
         break;
     default:
-        CGS_ASSERT(false, "Should never call update in the following state");
+        CGS_FAIL("Should never call update in the following state");
         break;
     }
     UpdatePermenant();

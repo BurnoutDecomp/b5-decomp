@@ -140,10 +140,10 @@ bool RaceCarAudioStreamer::IsVehicleAssetLoaded( CgsID lAssetId, s32 liActiveRac
     (void)lAssetId;
     (void)lbIsPlayer;
 
-    CGS_ASSERT( liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS",
-            KAC_ARTIST_ASSERT_FILE, 843 /* ARTIST 0x822A5904 */));
+    CGS_ASSERT_AT( liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
+        "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS",
+            KAC_ARTIST_ASSERT_FILE, 843 /* ARTIST 0x822A5904 */);
+
 
     return maEntries[liActiveRaceCar].meState
                == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADEDANDATTACHED;
@@ -186,33 +186,33 @@ void RaceCarAudioStreamer::OnUnloadComplete( const BrnResource::GameDataIO::Unlo
 {
     const s32 liActiveRaceCar = static_cast<s32>( GetUserId( liListIndex ) );
 
-    CGS_ASSERT( liActiveRaceCar >= 0,
-        CGS_ASSERT_MESSAGE_AT("liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 392 /* ARTIST 0x822A5604 */));
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS",
-            KAC_ARTIST_ASSERT_FILE, 393 /* ARTIST 0x822A5628 */));
+    CGS_ASSERT_AT( liActiveRaceCar >= 0,
+        "liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 392 /* ARTIST 0x822A5604 */);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
+        "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS",
+            KAC_ARTIST_ASSERT_FILE, 393 /* ARTIST 0x822A5628 */);
+
 
     RaceCarStreamingSound& lEntry = maEntries[liActiveRaceCar];
 
-    CGS_ASSERT( lpEvent != 0,
-        CGS_ASSERT_MESSAGE_AT("lpEvent", KAC_ARTIST_ASSERT_FILE, 397 /* ARTIST 0x822A5660 */));
-    CGS_ASSERT( lEntry.mLoadedBundleId != 0,
-        CGS_ASSERT_MESSAGE_AT("lpEntry->mLoadedBundleId", KAC_ARTIST_ASSERT_FILE, 398 /* ARTIST 0x822A5688 */));
-    CGS_ASSERT( lEntry.mbLoadedIsPlayer,
-        CGS_ASSERT_MESSAGE_AT("lpEntry->mbLoadedIsPlayer", KAC_ARTIST_ASSERT_FILE, 399 /* ARTIST 0x822A56B0 */));
-    CGS_ASSERT( lEntry.mLoadedBundleId == lpEvent->GetGameDataId(),
-        CGS_ASSERT_MESSAGE_AT(
-            "lpEntry->mLoadedBundleId == lpEvent->GetGameDataId()",
-            KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x822A56DC */));
+    CGS_ASSERT_AT( lpEvent != 0,
+        "lpEvent", KAC_ARTIST_ASSERT_FILE, 397 /* ARTIST 0x822A5660 */);
+    CGS_ASSERT_AT( lEntry.mLoadedBundleId != 0,
+        "lpEntry->mLoadedBundleId", KAC_ARTIST_ASSERT_FILE, 398 /* ARTIST 0x822A5688 */);
+    CGS_ASSERT_AT( lEntry.mbLoadedIsPlayer,
+        "lpEntry->mbLoadedIsPlayer", KAC_ARTIST_ASSERT_FILE, 399 /* ARTIST 0x822A56B0 */);
+    CGS_ASSERT_AT( lEntry.mLoadedBundleId == lpEvent->GetGameDataId(),
+        "lpEntry->mLoadedBundleId == lpEvent->GetGameDataId()",
+            KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x822A56DC */);
+
 
     lEntry.mLoadedBundleId  = 0;
     lEntry.mbLoadedIsPlayer = false;
 
-    CGS_ASSERT( lEntry.meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_UNLOADINGBUNDLES,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_UNLOADINGBUNDLES",
-            KAC_ARTIST_ASSERT_FILE, 405 /* ARTIST 0x822A5710 */));
+    CGS_ASSERT_AT( lEntry.meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_UNLOADINGBUNDLES,
+        "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_UNLOADINGBUNDLES",
+            KAC_ARTIST_ASSERT_FILE, 405 /* ARTIST 0x822A5710 */);
+
 
     lEntry.meState = RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_IDLE;
 }
@@ -360,7 +360,7 @@ void RaceCarAudioStreamer::Update( const RaceCarEntityModuleIO::InputBuffer_PreS
         }
         else
         {
-            CGS_ASSERT( false, "We shouldn't be in this state at this time" );
+            CGS_FAIL( "We shouldn't be in this state at this time" );
         }
     }
 
@@ -460,7 +460,7 @@ void RaceCarAudioStreamer::Update( const RaceCarEntityModuleIO::InputBuffer_PreS
             break;
 
         default:
-            CGS_ASSERT( false, "Bad state" );
+            CGS_FAIL( "Bad state" );
             break;
         }
 
@@ -732,10 +732,10 @@ void RaceCarStreamer::AppendGameDataRequests(
 {
     // ARTIST bakes BrnRaceCarStreamer.cpp:378 (li r5,0x17A at 0x82302064) and appends with no
     // null guard after the assert (the early return that stood here was a PC-side addition).
-    CGS_ASSERT( lpInterface != 0,
-        CGS_ASSERT_MESSAGE_AT( "lpInterface",
+    CGS_ASSERT_AT( lpInterface != 0,
+         "lpInterface",
             CGS_ARTIST_FILE,
-            378 ) );
+            378  );
 
     lpInterface->Append( *mAttributeStreamer.GetGameDataRequestInterface() );
     lpInterface->Append( *mPhysicsStreamer.GetGameDataRequestInterface() );

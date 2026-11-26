@@ -174,7 +174,7 @@ bool DirectorModule::Release()
         return true;
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", CGS_ARTIST_FILE, 200));
+        CGS_FAIL_AT("Invalid Stage\n", CGS_ARTIST_FILE, 200);
         return false;
     }
 }
@@ -269,10 +269,10 @@ bool DirectorModule::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
         return true;
 
     default:
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Stage\n",
-                CGS_ARTIST_FILE, 140 /* ARTIST 0x82271408 */));
+        CGS_FAIL_AT(
+            "Invalid Stage\n",
+                CGS_ARTIST_FILE, 140 /* ARTIST 0x82271408 */);
+
         break;
     }
 
@@ -363,7 +363,7 @@ void DirectorModule::ProcessSceneQueryResults(
             break;
         }
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unhandled result type", CGS_ARTIST_FILE, 537));                           // .cpp:537
+            CGS_FAIL_AT("Unhandled result type", CGS_ARTIST_FILE, 537);                           // .cpp:537
             break;
         }
     }

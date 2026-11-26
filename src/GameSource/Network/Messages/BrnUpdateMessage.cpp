@@ -107,9 +107,9 @@ namespace BrnNetwork
                                                        lPositionMin);
 
         CgsNetwork::Message::PrepareForSend(KI_UPDATE_MESSAGE_TYPE, mUpdateData.mu16SentFrame);
-        CGS_ASSERT(!IsReliable(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(!IsReliable(),
             "!IsReliable()",
-            __FILE__, 151 /* ARTIST 0x8257D96C */));
+            __FILE__, 151 /* ARTIST 0x8257D96C */);
     }
 
     UpdateData& UpdateData::operator=(const UpdateData& lOther)
@@ -208,8 +208,8 @@ namespace BrnNetwork
     // (the embedded payload at +0x20, i.e. `this + 0x20`).
     const UpdateData* UpdateMessage::GetUpdateData()
     {
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
-            CGS_ASSERT_MESSAGE_AT("IsMessageValid()", __FILE__, 131 /* ARTIST 0x82580BCC */));
+        CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
+            "IsMessageValid()", __FILE__, 131 /* ARTIST 0x82580BCC */);
         return &mUpdateData;
     }
 
@@ -218,8 +218,8 @@ namespace BrnNetwork
     // Asserts valid, then returns the payload's mu16FramesSinceStart (lhz +0x22 == mUpdateData+2).
     u16 UpdateMessage::GetU16FramesSinceStart()
     {
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
-            CGS_ASSERT_MESSAGE_AT("IsMessageValid()", __FILE__, 138 /* ARTIST 0x82580C2C */));
+        CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
+            "IsMessageValid()", __FILE__, 138 /* ARTIST 0x82580C2C */);
         return mUpdateData.mu16FramesSinceStart;
     }
 

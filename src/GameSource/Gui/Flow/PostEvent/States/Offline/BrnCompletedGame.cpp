@@ -192,7 +192,7 @@ CompletedGame::CompletedGame()
 // presentation ladders overwrite it before the first EnsureResourceIsLoaded.
 void CompletedGame::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
 {
-    CGS_ASSERT(lpFsm != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnCompletedGame.cpp", 82));   // cpp:82
+    CGS_ASSERT_STREAM_AT(lpFsm != 0, "Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnCompletedGame.cpp", 82);   // cpp:82
 
     CgsGui::State::Construct(liId, lpFsm);
 

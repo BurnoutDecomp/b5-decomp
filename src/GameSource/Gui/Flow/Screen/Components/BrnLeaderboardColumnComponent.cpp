@@ -65,10 +65,10 @@ namespace BrnGui
     // @ 0x824195E8
     void LeaderboardColumnComponent::SetCell(const char* lpcCellText)
     {
-        CGS_ASSERT(miCellCount < KI_MAX_CELLS,
-            CGS_ASSERT_MESSAGE_AT(
-                "miCellCount < KI_MAX_CELLS",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLeaderboardColumnComponent.cpp", 113 /* ARTIST 0x8241961C */));
+        CGS_ASSERT_AT(miCellCount < KI_MAX_CELLS,
+            "miCellCount < KI_MAX_CELLS",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLeaderboardColumnComponent.cpp", 113 /* ARTIST 0x8241961C */);
+
 
         AddOutputAptViewState(KAPC_CELL_STRINGS[miCellCount], lpcCellText, false);
         ++miCellCount;

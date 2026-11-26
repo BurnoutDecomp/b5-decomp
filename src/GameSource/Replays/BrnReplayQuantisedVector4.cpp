@@ -44,10 +44,10 @@ namespace BrnReplays
         maBitCounts[3] = luBitsW;
 
         // Per-lane range sanity: lMin[i] < lMax[i] (X360: vcmpgtfp lMax[i] > lMin[i]).
-        CGS_ASSERT(static_cast<float>(lrMin.GetX()) < static_cast<float>(lrMax.GetX()), CGS_ASSERT_MESSAGE_AT("lMin[0] < lMax[0]", CGS_ARTIST_FILE, 132));
-        CGS_ASSERT(static_cast<float>(lrMin.GetY()) < static_cast<float>(lrMax.GetY()), CGS_ASSERT_MESSAGE_AT("lMin[1] < lMax[1]", CGS_ARTIST_FILE, 133));
-        CGS_ASSERT(static_cast<float>(lrMin.GetZ()) < static_cast<float>(lrMax.GetZ()), CGS_ASSERT_MESSAGE_AT("lMin[2] < lMax[2]", CGS_ARTIST_FILE, 134));
-        CGS_ASSERT(static_cast<float>(lrMin.GetW()) < static_cast<float>(lrMax.GetW()), CGS_ASSERT_MESSAGE_AT("lMin[3] < lMax[3]", CGS_ARTIST_FILE, 135));
+        CGS_ASSERT_AT(static_cast<float>(lrMin.GetX()) < static_cast<float>(lrMax.GetX()), "lMin[0] < lMax[0]", CGS_ARTIST_FILE, 132);
+        CGS_ASSERT_AT(static_cast<float>(lrMin.GetY()) < static_cast<float>(lrMax.GetY()), "lMin[1] < lMax[1]", CGS_ARTIST_FILE, 133);
+        CGS_ASSERT_AT(static_cast<float>(lrMin.GetZ()) < static_cast<float>(lrMax.GetZ()), "lMin[2] < lMax[2]", CGS_ARTIST_FILE, 134);
+        CGS_ASSERT_AT(static_cast<float>(lrMin.GetW()) < static_cast<float>(lrMax.GetW()), "lMin[3] < lMax[3]", CGS_ARTIST_FILE, 135);
 
         // +16 / +32: stvx128 v127(lMin)/v126(lMax)
         mMin = lrMin;
@@ -90,7 +90,7 @@ namespace BrnReplays
         if (!lbInRange)
         {
             QuantisedVector4::PrintVector4(lrValue);
-            CGS_ASSERT(lbInRange, CGS_ASSERT_MESSAGE_AT("Unable to quantise vec4", CGS_ARTIST_FILE, 220));
+            CGS_ASSERT_AT(lbInRange, "Unable to quantise vec4", CGS_ARTIST_FILE, 220);
         }
 
         // Total packed length: sum the per-lane bit counts, round up to whole bytes,
@@ -167,7 +167,7 @@ namespace BrnReplays
         if (!lbInRange)
         {
             QuantisedVector4::PrintVector4(lValue);
-            CGS_ASSERT(lbInRange, CGS_ASSERT_MESSAGE_AT("Unable to quantise vec4", CGS_ARTIST_FILE, 220));
+            CGS_ASSERT_AT(lbInRange, "Unable to quantise vec4", CGS_ARTIST_FILE, 220);
         }
 
         *static_cast<Vector4*>(lpDest) = lValue;

@@ -106,7 +106,7 @@ void ReplayClipsOnline::Update()
 
     default:
         // Streamed in place, as ARTIST builds it (cpp:141).
-        CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+        CGS_FAIL_STREAM_AT("Invalid internal state : " << meInternalState << "\n",
                              CGS_ARTIST_FILE, 141);
         break;
     }
@@ -217,9 +217,9 @@ bool ReplayClipsOnline::HandleControllerInputPressed(const CgsModule::Event* lpE
         lSetMode.miMode = 0;
         mpStateInterface->OutputGuiEvent(lSetMode);
 
-        CGS_ASSERT(mpGuiCache->IsReplayInfoVisible(),
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache->IsReplayInfoVisible()",
-                                  KAC_REPLAY_CLIPS_FILE, 344));
+        CGS_ASSERT_AT(mpGuiCache->IsReplayInfoVisible(),
+            "mpGuiCache->IsReplayInfoVisible()",
+                                  KAC_REPLAY_CLIPS_FILE, 344);
         mpStateInterface->PlayAptMovie("", KI_INFO_MOVIE_LEVEL);
         mpGuiCache->mbReplayInfoVisible = false;
         mpGuiCache->UnloadResources(maInfoResourcesToLoad, 1);

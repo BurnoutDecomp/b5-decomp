@@ -138,7 +138,7 @@ void TrafficJob::Execute(JobParams* lpData)
 
     if (lpData->meProcess != E_JOBPROCESS_UPDATE_VEHICLES)
     {
-        CGS_ASSERT(false, "Invalid job process\n");
+        CGS_FAIL("Invalid job process\n");
         return;
     }
 

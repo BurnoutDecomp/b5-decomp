@@ -210,36 +210,36 @@ u16 RCEntityActiveRaceCarOutputInterface::GetRaceCarAISection(EActiveRaceCarInde
 // X360 0x82310050 -- GetRivalId (maRivalIds[idx], CgsID stride 8).
 CgsID RCEntityActiveRaceCarOutputInterface::GetRivalId(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 824 /* ARTIST 0x8231007C */));
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 825 /* ARTIST 0x823100A0 */));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 824 /* ARTIST 0x8231007C */);
+
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 825 /* ARTIST 0x823100A0 */);
+
     return maRivalIds[leActiveRaceCarIndex];
 }
 
 // X360 0x823A7BC8 -- HasCrashedIntoWater (mbHasCrashedIntoWater[idx], byte stride 1).
 bool RCEntityActiveRaceCarOutputInterface::HasCrashedIntoWater(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 1325 /* ARTIST 0x823A7BF4 */));
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 1326 /* ARTIST 0x823A7C18 */));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 1325 /* ARTIST 0x823A7BF4 */);
+
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 1326 /* ARTIST 0x823A7C18 */);
+
     return mbHasCrashedIntoWater[leActiveRaceCarIndex];
 }
 
 // X360 0x82310140 -- IsRaceCarNetwork: bit 3 of the per-car flags word (maxRaceCarFlags[idx]).
 bool RCEntityActiveRaceCarOutputInterface::IsRaceCarNetwork(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 898 /* ARTIST 0x8231016C */));
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 899 /* ARTIST 0x82310190 */));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 898 /* ARTIST 0x8231016C */);
+
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 899 /* ARTIST 0x82310190 */);
+
     return ((maxRaceCarFlags[leActiveRaceCarIndex] >> 3) & 1) != 0;
 }
 
@@ -271,12 +271,12 @@ bool RCEntityActiveRaceCarOutputInterface::IsCarInShowtime(EActiveRaceCarIndex l
 // X360 0x82705690 -- IsRaceCarRival: bit 2 of the per-car flags word (maxRaceCarFlags[idx]).
 bool RCEntityActiveRaceCarOutputInterface::IsRaceCarRival(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 876 /* ARTIST 0x827056BC */));
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 877 /* ARTIST 0x827056E0 */));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 876 /* ARTIST 0x827056BC */);
+
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 877 /* ARTIST 0x827056E0 */);
+
     return ((maxRaceCarFlags[leActiveRaceCarIndex] >> 2) & 1) != 0;
 }
 
@@ -301,14 +301,14 @@ bool RCEntityActiveRaceCarOutputInterface::IsRaceCarPlayer(EActiveRaceCarIndex l
 void RCEntityActiveRaceCarOutputInterface::SetBoostOutputInfoN(EActiveRaceCarIndex leActiveRaceCarIndex,
                                                                const BoostOutputInfo& lrBoostOutputInfo)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-            BRN_RCEMOI_H_ASSERT_FILE, 1141 /* ARTIST 0x822A1108 */));
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-            BRN_RCEMOI_H_ASSERT_FILE, 1142 /* ARTIST 0x822A112C */));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+            BRN_RCEMOI_H_ASSERT_FILE, 1141 /* ARTIST 0x822A1108 */);
+
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+            BRN_RCEMOI_H_ASSERT_FILE, 1142 /* ARTIST 0x822A112C */);
+
     maBoostOutputInfo[leActiveRaceCarIndex] = lrBoostOutputInfo;
 }
 
@@ -317,12 +317,12 @@ void RCEntityActiveRaceCarOutputInterface::SetBoostOutputInfoN(EActiveRaceCarInd
 void RCEntityActiveRaceCarOutputInterface::SetPlayerActiveRaceCarData(EActiveRaceCarIndex leActiveRaceCarIndex,
                                                                      EActiveRaceCarEngineState leEngineState)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 1206 /* ARTIST 0x822A11B0 */));
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 1207 /* ARTIST 0x822A11D4 */));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 1206 /* ARTIST 0x822A11B0 */);
+
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 1207 /* ARTIST 0x822A11D4 */);
+
     mePlayerActiveRaceCarIndex = leActiveRaceCarIndex;   // @+0x2858
     mePlayerEngineState        = leEngineState;          // @+0x285C
     mbIsPlayerCarActive        = true;                   // @+0x2860 (stb 1)
@@ -550,12 +550,12 @@ bool RCEntityActiveRaceCarOutputInterface::IsCarDisconnected(EActiveRaceCarIndex
 const RCEntityActiveRaceCarOutputInterface::RaceCarState*
 RCEntityActiveRaceCarOutputInterface::GetRaceCarState(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 790));
-    CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 791));
-    CGS_ASSERT(IsRaceCarActive(leActiveRaceCarIndex),
-        CGS_ASSERT_MESSAGE_AT("IsRaceCarActive( leActiveRaceCarIndex )", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 792));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 790);
+    CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 791);
+    CGS_ASSERT_AT(IsRaceCarActive(leActiveRaceCarIndex),
+        "IsRaceCarActive( leActiveRaceCarIndex )", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 792);
     return &maRaceCarStates[leActiveRaceCarIndex];
 }
 
@@ -597,7 +597,7 @@ RCEntityActiveRaceCarOutputInterface::GetRaceCarState(EActiveRaceCarIndex leActi
 Vector3 RCEntityActiveRaceCarOutputInterface::GetPlayerPosition() const
 {
     // The h:967 bound assert is the inlined IsPlayerCarActive()'s own.
-    CGS_ASSERT(IsPlayerCarActive(), CGS_ASSERT_MESSAGE_AT("IsPlayerCarActive()", BRN_RCEMOI_H_ASSERT_FILE, 1273));
+    CGS_ASSERT_AT(IsPlayerCarActive(), "IsPlayerCarActive()", BRN_RCEMOI_H_ASSERT_FILE, 1273);
     return maRaceCarStates[mePlayerActiveRaceCarIndex].mTransform.Pos();
 }
 
@@ -682,7 +682,7 @@ const RCEntityActiveRaceCarOutputInterface::RaceCarState*
 RCEntityActiveRaceCarOutputInterface::GetPlayerRaceCarState() const
 {
     // The h:967 bound assert is the inlined IsPlayerCarActive()'s own.
-    CGS_ASSERT(IsPlayerCarActive(), CGS_ASSERT_MESSAGE_AT("IsPlayerCarActive()", BRN_RCEMOI_H_ASSERT_FILE, 1266));
+    CGS_ASSERT_AT(IsPlayerCarActive(), "IsPlayerCarActive()", BRN_RCEMOI_H_ASSERT_FILE, 1266);
     return &maRaceCarStates[mePlayerActiveRaceCarIndex];
 }
 
@@ -698,7 +698,7 @@ RCEntityActiveRaceCarOutputInterface::GetPlayerRaceCarState() const
 Vector3 RCEntityActiveRaceCarOutputInterface::GetPlayerDirection() const
 {
     // The h:967 bound assert is the inlined IsPlayerCarActive()'s own.
-    CGS_ASSERT(IsPlayerCarActive(), CGS_ASSERT_MESSAGE_AT("IsPlayerCarActive()", BRN_RCEMOI_H_ASSERT_FILE, 1280));
+    CGS_ASSERT_AT(IsPlayerCarActive(), "IsPlayerCarActive()", BRN_RCEMOI_H_ASSERT_FILE, 1280);
     return maRaceCarStates[mePlayerActiveRaceCarIndex].mTransform.At();
 }
 
@@ -713,7 +713,7 @@ Vector3 RCEntityActiveRaceCarOutputInterface::GetPlayerDirection() const
 Vector3 RCEntityActiveRaceCarOutputInterface::GetPlayerLinearVelocity() const
 {
     // The h:967 bound assert is the inlined IsPlayerCarActive()'s own.
-    CGS_ASSERT(IsPlayerCarActive(), CGS_ASSERT_MESSAGE_AT("IsPlayerCarActive()", BRN_RCEMOI_H_ASSERT_FILE, 1287));
+    CGS_ASSERT_AT(IsPlayerCarActive(), "IsPlayerCarActive()", BRN_RCEMOI_H_ASSERT_FILE, 1287);
     return maRaceCarStates[mePlayerActiveRaceCarIndex].mLinearVelocity;
 }
 

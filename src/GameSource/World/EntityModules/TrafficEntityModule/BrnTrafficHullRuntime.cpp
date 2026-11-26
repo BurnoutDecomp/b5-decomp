@@ -50,10 +50,10 @@ void HullRuntime::Construct()
 // bakes are 70 (lpHull) and 71 (mbPrepared == false).
 void HullRuntime::Prepare(const Hull* lpHull, u16 luHull)
 {
-    CGS_ASSERT(lpHull != 0,
-        CGS_ASSERT_MESSAGE_AT("lpHull", KAC_ARTIST_ASSERT_FILE, 71 /* ARTIST 0x82751468 */));
-    CGS_ASSERT(mbPrepared == false,
-        CGS_ASSERT_MESSAGE_AT("mbPrepared == false", KAC_ARTIST_ASSERT_FILE, 72 /* ARTIST 0x82751490 */));
+    CGS_ASSERT_AT(lpHull != 0,
+        "lpHull", KAC_ARTIST_ASSERT_FILE, 71 /* ARTIST 0x82751468 */);
+    CGS_ASSERT_AT(mbPrepared == false,
+        "mbPrepared == false", KAC_ARTIST_ASSERT_FILE, 72 /* ARTIST 0x82751490 */);
 
     for (u32 luStopline = 0; luStopline < lpHull->muNumStoplines; ++luStopline)
     {
@@ -81,8 +81,8 @@ void HullRuntime::Prepare(const Hull* lpHull, u16 luHull)
 // @ 0x82751578
 void HullRuntime::Release()
 {
-    CGS_ASSERT(mbPrepared == true,
-        CGS_ASSERT_MESSAGE_AT("mbPrepared == true", KAC_ARTIST_ASSERT_FILE, 110 /* ARTIST 0x827515A0 */));
+    CGS_ASSERT_AT(mbPrepared == true,
+        "mbPrepared == true", KAC_ARTIST_ASSERT_FILE, 110 /* ARTIST 0x827515A0 */);
     mbPrepared = false;
 }
 

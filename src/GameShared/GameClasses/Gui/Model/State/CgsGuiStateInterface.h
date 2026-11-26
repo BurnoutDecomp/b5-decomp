@@ -252,7 +252,7 @@ namespace CgsGui
     // h:476, streamed assert h:478. Standalone ARTIST copy 0x82846F90.
     inline void StateInterface::SetEventObserver(CgsGui::EventObserver* lpObserver)
     {
-        CGS_ASSERT(lpObserver != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event observer pointer in StateInterface::SetEventObserver", CGS_GUI_STATE_INTERFACE_H_FILE, 478));
+        CGS_ASSERT_STREAM_AT(lpObserver != 0, "Invalid event observer pointer in StateInterface::SetEventObserver", CGS_GUI_STATE_INTERFACE_H_FILE, 478);
 
         mpObserver = lpObserver;
     }

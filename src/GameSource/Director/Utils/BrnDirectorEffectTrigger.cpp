@@ -59,7 +59,7 @@ namespace BrnDirector
     // Non-gating guard, then the staged blend.
     f32 BackgroundEffectRequest::GetBackgroundStartRequestBlendAmount() const
     {
-        CGS_ASSERT(HasBackgroundStartRequest(), CGS_ASSERT_MESSAGE_AT("HasBackgroundStartRequest()", CGS_ARTIST_FILE, 249));   // non-gating
+        CGS_ASSERT_AT(HasBackgroundStartRequest(), "HasBackgroundStartRequest()", CGS_ARTIST_FILE, 249);   // non-gating
         return mfBlendAmount;
     }
 
@@ -70,9 +70,9 @@ namespace BrnDirector
     // an applied request stays pending and re-applies each frame.
     void BackgroundEffectRequest::RegisterAndUpdateRequest(EffectInterface* lpEffectInterface)
     {
-        CGS_ASSERT(lpEffectInterface != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpEffectInterface != NULL", CGS_ARTIST_FILE, 361 /* ARTIST 0x82232EB8 */));
+        CGS_ASSERT_AT(lpEffectInterface != 0,
+            "lpEffectInterface != NULL", CGS_ARTIST_FILE, 361 /* ARTIST 0x82232EB8 */);
+
 
         if (mbStartRequested)
         {
@@ -104,8 +104,8 @@ namespace BrnDirector
 // The tripwire (non-gating), then the blend.
 f32 EffectInterface::GetCurrentEffectBlendAmount() const
 {
-    CGS_ASSERT(mbHasCurrentEffectName,
-        CGS_ASSERT_MESSAGE_AT("HasCurrentEffectName()", CGS_ARTIST_FILE, 115 /* ARTIST 0x821F1840 */));   // non-gating
+    CGS_ASSERT_AT(mbHasCurrentEffectName,
+        "HasCurrentEffectName()", CGS_ARTIST_FILE, 115 /* ARTIST 0x821F1840 */);   // non-gating
     return mfCurrentEffectBlendAmount;
 }
 

@@ -202,7 +202,7 @@ const Matrix44Affine CameraSpaceHandler::GetTransformToWorld(eICESpace leSpace) 
         break;
 
     default:
-        CGS_ASSERT(false, "Unknown Camera Space");
+        CGS_FAIL("Unknown Camera Space");
         lMatrix.SetIdentity();
         break;
     }

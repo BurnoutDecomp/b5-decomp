@@ -225,10 +225,10 @@ void CullingGroupManager::CreateCullingTable(rw::IResourceAllocator* lpSceneAllo
 // ===========================================================================
 void SceneManagerModule::CreateCullingTable(rw::IResourceAllocator* lpSceneAllocator)
 {
-    CGS_ASSERT(lpSceneAllocator != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpSceneAllocator != NULL",
-            KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1362 /* ARTIST 0x828BACBC */));
+    CGS_ASSERT_AT(lpSceneAllocator != NULL,
+        "lpSceneAllocator != NULL",
+            KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1362 /* ARTIST 0x828BACBC */);
+
     mCullingGroupManager.CreateCullingTable(lpSceneAllocator);
 }
 
@@ -450,7 +450,7 @@ bool SceneManagerModule::Prepare(SpatialPartitionConstructParams* lpConstructPar
         meReleaseStage = E_SCENEMANAGER_RELEASE_START;
         return true;
     default:
-        CGS_ASSERT_AT(false, "Unrecognised release state", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 302);
+        CGS_FAIL_AT("Unrecognised release state", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 302);
         return false;
     }
 }
@@ -494,7 +494,7 @@ bool SceneManagerModule::Release()
         mePrepareStage = E_SCENEMANAGER_PREPARE_START;
         return true;
     default:
-        CGS_ASSERT_AT(false, "Unrecognised release state", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 427);
+        CGS_FAIL_AT("Unrecognised release state", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 427);
         return false;
     }
 }
@@ -571,7 +571,7 @@ void SceneManagerModule::ProcessSetVolumeInstanceCullingGroupEvent(
     }
     else
     {
-        CGS_ASSERT_AT(false, "Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1094);
+        CGS_FAIL_AT("Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1094);
     }
 }
 
@@ -910,7 +910,7 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
                                          lrEvent.mfField18);
             if (lpNewEntity == NULL)
             {
-                CGS_ASSERT(false, "lpNewEntity != NULL");
+                CGS_FAIL("lpNewEntity != NULL");
                 continue;
             }
             lpPartition->AddEntityToGraph(lu16Index);
@@ -1635,7 +1635,7 @@ void SceneManagerModule::ProcessAddForCollisionEvent(
         mEntityManager.GetVolumeInstanceIndexByID(lrEvent.mVolumeInstanceId);
     if (liVolumeInstanceIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_ASSERT(false, "Volume instance not found for volume instance id ");             // :977
+        CGS_FAIL("Volume instance not found for volume instance id ");             // :977
         return;
     }
 
@@ -1710,7 +1710,7 @@ void SceneManagerModule::ProcessAddVolumeInstanceForCachingEvent(
         mEntityManager.GetVolumeInstanceIndexByID(lrEvent.mVolumeInstanceId);
     if (liVolumeInstanceIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_ASSERT(false, "Volume instance not found for volume instance id ");
+        CGS_FAIL("Volume instance not found for volume instance id ");
         return;
     }
 
@@ -1779,7 +1779,7 @@ void SceneManagerModule::ProcessRemoveForCollisionEvent(
     }
     else
     {
-        CGS_ASSERT_AT(false, "Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1060);
+        CGS_FAIL_AT("Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1060);
     }
 }
 
@@ -2107,7 +2107,7 @@ void SceneManagerModule::UpdateCollisionBody(s32 liVolumeInstanceIndex,
     }
     else
     {
-        CGS_ASSERT_AT(false, "Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1255);
+        CGS_FAIL_AT("Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1255);
     }
 }
 
@@ -2148,7 +2148,7 @@ void SceneManagerModule::ProcessSetPaddingEvent(const SceneManagerIO::InEventSet
     }
     else
     {
-        CGS_ASSERT_AT(false, "Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1129);
+        CGS_FAIL_AT("Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1129);
     }
 }
 
@@ -2194,7 +2194,7 @@ void SceneManagerModule::ProcessForceNoPaddingEvent(const SceneManagerIO::InEven
     }
     else
     {
-        CGS_ASSERT_AT(false, "Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1203);
+        CGS_FAIL_AT("Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1203);
     }
 }
 
@@ -2313,7 +2313,7 @@ void SceneManagerModule::ProcessClearEntityPaddingEvent(const SceneManagerIO::In
         }
         else
         {
-            CGS_ASSERT(false, "Volume instance not found");
+            CGS_FAIL("Volume instance not found");
         }
 
         // EntityManager::GetNextEntityVolumeInstance(lpVolInst, &liVolumeInstIndex),
@@ -2606,10 +2606,10 @@ namespace CgsSceneManager
                                                   SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
                                                   SceneManagerIO::OutputBuffer* lpSceneOutputBuffer)
     {
-        CGS_ASSERT(lpInputBufferStack != NULL, CGS_ASSERT_MESSAGE_AT("lpInputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 847));
-        CGS_ASSERT(lpOutputBufferStack != NULL, CGS_ASSERT_MESSAGE_AT("lpOutputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 848));
-        CGS_ASSERT(lpSceneInputBuffer != NULL, CGS_ASSERT_MESSAGE_AT("lpSceneInputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 849));
-        CGS_ASSERT(lpSceneOutputBuffer != NULL, CGS_ASSERT_MESSAGE_AT("lpSceneOutputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 850));
+        CGS_ASSERT_AT(lpInputBufferStack != NULL, "lpInputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 847);
+        CGS_ASSERT_AT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 848);
+        CGS_ASSERT_AT(lpSceneInputBuffer != NULL, "lpSceneInputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 849);
+        CGS_ASSERT_AT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 850);
 
         SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer = 0;
         lpOutputBufferStack->CreateIOBuffer(&lpSpatialPartitionOutputBuffer, "SpacialPartition");
@@ -3425,7 +3425,7 @@ namespace CgsSceneManager
                 *CgsDev::Log::gpDebugPrint << "Triangle collision sphere test requested\n";
             }
 
-            CGS_ASSERT(false, "Triangle sphere tests not supported yet");
+            CGS_FAIL("Triangle sphere tests not supported yet");
         }
     }
 

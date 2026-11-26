@@ -208,7 +208,7 @@ namespace BrnGui
         if (meCurrentState != E_ONLINE_INSTANT_RESULTS_STANDINGSUPDATE)
         {
             // The console streams the sub-state after the text.
-            CGS_ASSERT(false, "Ticker not set up for current substate : ");
+            CGS_FAIL("Ticker not set up for current substate : ");
             return;
         }
 
@@ -549,7 +549,7 @@ namespace BrnGui
         for (s32 liPlayer = 0; liPlayer < mOnlinePostEvent.miNumPlayersInEvent; ++liPlayer)
             if (static_cast<s32>(mOnlinePostEvent.maRecords[liPlayer].miResultsTablePosition) == liTablePosition)
                 return liPlayer;
-        CGS_ASSERT(false, "Could not find results for table position");
+        CGS_FAIL("Could not find results for table position");
         return 0;
     }
 
@@ -601,7 +601,7 @@ namespace BrnGui
         case 12: case 14: case 17:
             mResultColumnHeading.SetText("$ONLINE_RESULTS_STUNT_RUN_RESULT_COLUMN_TITLE"); break;
         case 13: mResultColumnHeading.SetText("$ONLINE_RESULTS_BHR_RESULT_COLUMN_TITLE"); break;
-        default: CGS_ASSERT(false, "Invalid online game mode of:"); break;
+        default: CGS_FAIL("Invalid online game mode of:"); break;
         }
     }
 
@@ -871,7 +871,7 @@ namespace BrnGui
                 break;
             }
             default:
-                CGS_ASSERT(false, "Unexpected event in OnlineInstantResultsState::Update");
+                CGS_FAIL("Unexpected event in OnlineInstantResultsState::Update");
                 break;
             }
             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
@@ -1251,7 +1251,7 @@ namespace BrnGui
     {
         if (!IsStuntRunResultsMode(meCurrentGameMode))
         {
-            CGS_ASSERT(false, "Invalid game mode in call to UpdateStuntRunColoursAndScores");
+            CGS_FAIL("Invalid game mode in call to UpdateStuntRunColoursAndScores");
             return;
         }
         const s32 liScoreCurrent = mpGuiCache->GetCurrentScoreInEvent();

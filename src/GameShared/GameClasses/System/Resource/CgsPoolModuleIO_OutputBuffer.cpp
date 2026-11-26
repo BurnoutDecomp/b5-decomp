@@ -51,9 +51,9 @@ namespace PoolIO
     // X360 0x828E1AA8: read-lock; return this + 4.
     const OutputBuffer::PoolOutputQueue* OutputBuffer::GetPoolOutputQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 262));
+            CGS_ARTIST_FILE, 262);
         return &mPoolOutputQueue;
     }
 
@@ -67,18 +67,18 @@ namespace PoolIO
     // X360 0x828E1BF8: write-lock; return this + 4.
     OutputBuffer::PoolOutputQueue* OutputBuffer::GetPoolOutputQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            CGS_ARTIST_FILE, 264));
+            CGS_ARTIST_FILE, 264);
         return &mPoolOutputQueue;
     }
 
     // X360 0x828E1CA0: write-lock; return this + 8212.
     OutputBuffer::PoolResourceRequestQueueStorage* OutputBuffer::GetPoolResourceRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            CGS_ARTIST_FILE, 265));
+            CGS_ARTIST_FILE, 265);
         return &mPoolResourceRequestQueue;
     }
 }

@@ -196,9 +196,9 @@ namespace BrnNetwork
         lxResult |= CgsNetwork::Message::PackOrUnpack(&mu16NumberOfBytesOfPhotoData, 0, KI_PHOTO_SEGMENT_SIZE);
         lxResult |= CgsNetwork::Message::PackOrUnpack(&mBeatenRoadID);
 
-        CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE,
             "mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE",
-            CGS_ARTIST_FILE, 259 /* ARTIST 0x8257C208 */));
+            CGS_ARTIST_FILE, 259 /* ARTIST 0x8257C208 */);
 
         lxResult |= CgsNetwork::Message::PackOrUnpackBuffer(reinterpret_cast<char*>(macPhotoBuffer),
                                                    mu16NumberOfBytesOfPhotoData);
@@ -212,27 +212,27 @@ namespace BrnNetwork
                                 u16* lpu16TotalPacketCount, u16* lpu16NumberOfBytes,
                                 void* lpvPhotoData)
     {
-        CGS_ASSERT(lpSenderPlayerID, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpSenderPlayerID,
             "lpImageSenderPlayerID",
-            CGS_ARTIST_FILE, 173 /* ARTIST 0x8257F0C8 */));
-        CGS_ASSERT(lpReceiverPlayerID, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 173 /* ARTIST 0x8257F0C8 */);
+        CGS_ASSERT_AT(lpReceiverPlayerID,
             "lpImageReceiverPlayerID",
-            CGS_ARTIST_FILE, 174 /* ARTIST 0x8257F0EC */));
-        CGS_ASSERT(lpu16PacketNumber, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 174 /* ARTIST 0x8257F0EC */);
+        CGS_ASSERT_AT(lpu16PacketNumber,
             "lpu16PhotoPacketNumber",
-            CGS_ARTIST_FILE, 175 /* ARTIST 0x8257F110 */));
-        CGS_ASSERT(lpu16TotalPacketCount, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 175 /* ARTIST 0x8257F110 */);
+        CGS_ASSERT_AT(lpu16TotalPacketCount,
             "lpu16TotalPhotoPacketCount",
-            CGS_ARTIST_FILE, 176 /* ARTIST 0x8257F134 */));
-        CGS_ASSERT(lpu16NumberOfBytes, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 176 /* ARTIST 0x8257F134 */);
+        CGS_ASSERT_AT(lpu16NumberOfBytes,
             "lpu16NumberOfBytesOfPhotoData",
-            CGS_ARTIST_FILE, 177 /* ARTIST 0x8257F158 */));
-        CGS_ASSERT(lpvPhotoData, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 177 /* ARTIST 0x8257F158 */);
+        CGS_ASSERT_AT(lpvPhotoData,
             "lpPhotoData",
-            CGS_ARTIST_FILE, 178 /* ARTIST 0x8257F180 */));
-        CGS_ASSERT(lpBeatenRoadID, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 178 /* ARTIST 0x8257F180 */);
+        CGS_ASSERT_AT(lpBeatenRoadID,
             "lpBeatenRoadID",
-            CGS_ARTIST_FILE, 179 /* ARTIST 0x8257F1A4 */));
+            CGS_ARTIST_FILE, 179 /* ARTIST 0x8257F1A4 */);
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {
@@ -244,16 +244,16 @@ namespace BrnNetwork
             *lpu16TotalPacketCount = mu16TotalPhotoPacketCount;
             *lpu16NumberOfBytes  = mu16NumberOfBytesOfPhotoData;
 
-            CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE,
                 "mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE",
-                CGS_ARTIST_FILE, 193 /* ARTIST 0x8257F214 */));
+                CGS_ARTIST_FILE, 193 /* ARTIST 0x8257F214 */);
 
             XMemCpy(lpvPhotoData, macPhotoBuffer, mu16NumberOfBytesOfPhotoData);
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                CGS_ARTIST_FILE, 200 /* ARTIST 0x8257F258 */));
+                CGS_ARTIST_FILE, 200 /* ARTIST 0x8257F258 */);
             return true;
         }
 

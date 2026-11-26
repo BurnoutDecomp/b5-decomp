@@ -80,8 +80,8 @@ OnlineTeamSelection::OnlineTeamSelection()
 
 void OnlineTeamSelection::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
 {
-    CGS_ASSERT(lpFsm != 0,
-        CGS_ASSERT_MESSAGE_AT("lpFsm", __FILE__, 90 /* ARTIST 0x82487850 */));
+    CGS_ASSERT_AT(lpFsm != 0,
+        "lpFsm", __FILE__, 90 /* ARTIST 0x82487850 */);
     CgsGui::State::Construct(liId, lpFsm);
 }
 
@@ -159,7 +159,7 @@ void OnlineTeamSelection::Update()
         }
 
         default:
-            CGS_ASSERT(false, "Unexpected event received : ");
+            CGS_FAIL("Unexpected event received : ");
             break;
         }
     }
@@ -173,7 +173,7 @@ void OnlineTeamSelection::Update()
 void OnlineTeamSelection::HandleGuiCacheEvent(const CgsModule::Event* lpEvent)
 {
     const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
-    CGS_ASSERT(lpPayload->mpCache != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid cache in HandleGuiCacheEvent::Update", CGS_ARTIST_FILE, 248));
+    CGS_ASSERT_STREAM_AT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update", CGS_ARTIST_FILE, 248);
 
     if (mpGuiCache == 0)
     {
@@ -184,8 +184,8 @@ void OnlineTeamSelection::HandleGuiCacheEvent(const CgsModule::Event* lpEvent)
 
 void OnlineTeamSelection::CheckForCompletedLoads()
 {
-    CGS_ASSERT(mpGuiCache != 0,
-        CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 273 /* ARTIST 0x824A1B08 */));
+    CGS_ASSERT_AT(mpGuiCache != 0,
+        "mpGuiCache", __FILE__, 273 /* ARTIST 0x824A1B08 */);
 
     switch (meSubState)
     {
@@ -204,8 +204,8 @@ void OnlineTeamSelection::CheckForCompletedLoads()
         {
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
             meSubState = E_SUBSTATE_MAIN;
-            CGS_ASSERT(mpGuiCache != 0,
-                CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 305 /* ARTIST 0x824A1B70 */));
+            CGS_ASSERT_AT(mpGuiCache != 0,
+                "mpGuiCache", __FILE__, 305 /* ARTIST 0x824A1B70 */);
             mSelectedPlayerID           = -1;
             mbHighlightOnSelectedPlayer = false;
         }
@@ -218,8 +218,8 @@ void OnlineTeamSelection::CheckForCompletedLoads()
 
 void OnlineTeamSelection::SetExpectedLobbyComponents()
 {
-    CGS_ASSERT(mpGuiCache != 0,
-        CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 538 /* ARTIST 0x824879E8 */));
+    CGS_ASSERT_AT(mpGuiCache != 0,
+        "mpGuiCache", __FILE__, 538 /* ARTIST 0x824879E8 */);
     mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
     mPlayerNameComponent.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache);
 }
@@ -280,7 +280,7 @@ void OnlineTeamSelection::ShowPlayerList(s32 liSelectedPlayerID)
 
 void OnlineTeamSelection::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
 {
-    CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineTeamSelection::HandleControllerInputPressed", CGS_ARTIST_FILE, 333));
+    CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineTeamSelection::HandleControllerInputPressed", CGS_ARTIST_FILE, 333);
 
     if (meSubState == E_SUBSTATE_MAIN)
         HandleControllerInputMainSubState(lpEvent);

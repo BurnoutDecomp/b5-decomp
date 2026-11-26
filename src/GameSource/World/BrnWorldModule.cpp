@@ -309,7 +309,7 @@ static void ScaleIrradiance( Matrix44& lrIrradiance, f32 lfScale )
 
             default:
             {
-                CGS_ASSERT(false, "Unknown meDistrictMapLoadStage");
+                CGS_FAIL("Unknown meDistrictMapLoadStage");
                 lpOutput->UnlockForWrite();
                 return false;
             }
@@ -560,7 +560,7 @@ WorldModule::UpdatePhysicsNetworkCatchup(
 {
     CGS_ASSERT( lpInputBufferStack != 0, "lpInputBufferStack != NULL" );   // X360 cpp:2305
     CGS_ASSERT( lpOutputBufferStack != 0, "lpOutputBufferStack != NULL" ); // X360 cpp:2306
-    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleOutputBuffer != NULL", __FILE__, 2307)); // :2307
+    CGS_ASSERT_AT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL", __FILE__, 2307); // :2307
 
     // X360: PhysicsModule::UpdateNetworkCatchup(this + 1561376, a4, a6) -- the
     // physics INPUT buffer and the frame update set (the output buffer is only
@@ -4769,7 +4769,7 @@ void BridgeTriggerModuleToSceneModule_PostScene(
         else
         {
             // Non-gating on the console: it fires and then falls into the next step.
-            CGS_ASSERT(false, "Invalid event type.");
+            CGS_FAIL("Invalid event type.");
         }
 
         liType = lpTriggerQueries->GetNextEvent(lpEvent, &lpEvent, &liSize);
@@ -4902,8 +4902,8 @@ void BridgeRaceCarModuleToSceneModule_PostScene(
 {
     (void)lpWorldModule;   // the world-module context: copied out of its register and never read
 
-    CGS_ASSERT(lpSceneQueryInput != 0, CGS_ASSERT_MESSAGE_AT("lpSceneModuleInputBuffer != NULL", __FILE__, 123));                    // :123
-    CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarOutputBuffer_PostScene != NULL", __FILE__, 124)); // :124
+    CGS_ASSERT_AT(lpSceneQueryInput != 0, "lpSceneModuleInputBuffer != NULL", __FILE__, 123);                    // :123
+    CGS_ASSERT_AT(lpRaceCarOutputBuffer_PostScene != 0, "lpRaceCarOutputBuffer_PostScene != NULL", __FILE__, 124); // :124
 
     const CgsModule::VariableEventQueue<16384, 16>& lrCoarseSource =
         *lpRaceCarOutputBuffer_PostScene->GetSceneCoarseQueryQueue();
@@ -4928,7 +4928,7 @@ void BridgeTrafficModuleToSceneModule_PostScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneQueryInput != 0, CGS_ASSERT_MESSAGE_AT("lpSceneModuleInputBuffer != NULL", __FILE__, 144));   // :144
+    CGS_ASSERT_AT(lpSceneQueryInput != 0, "lpSceneModuleInputBuffer != NULL", __FILE__, 144);   // :144
 
     const CgsModule::VariableEventQueue<16384, 16>& lrCoarseSource =
         *lpTrafficOutputBuffer_PostScene->GetSceneCoarseQueryQueue();
@@ -4965,7 +4965,7 @@ void BridgeSceneQueryResultsToTrafficModule_PrePhysics(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneQueryOutput != 0, CGS_ASSERT_MESSAGE_AT("lpSceneModuleOutputBuffer != NULL", __FILE__, 119));   // :119
+    CGS_ASSERT_AT(lpSceneQueryOutput != 0, "lpSceneModuleOutputBuffer != NULL", __FILE__, 119);   // :119
 
     lpTrafficInputBuffer_PostPhysics->GetSceneResultQueue()->Append(
         *lpSceneQueryOutput->GetSceneQueryResultsQueue());
@@ -5004,8 +5004,8 @@ void BridgeTrafficCarEntityInfoToOutput_PrePhysics(
 {
     (void)lpWorldModule;   // read only for the perf-monitor handle, which is not modelled
 
-    CGS_ASSERT(lpOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", __FILE__, 355));                              // :355
-    CGS_ASSERT(lpTrafficOutput_PrePhysics != 0, CGS_ASSERT_MESSAGE_AT("lpTrafficOutput_PrePhysics", __FILE__, 356));      // :356
+    CGS_ASSERT_AT(lpOutputBuffer != 0, "lpOutputBuffer", __FILE__, 355);                              // :355
+    CGS_ASSERT_AT(lpTrafficOutput_PrePhysics != 0, "lpTrafficOutput_PrePhysics", __FILE__, 356);      // :356
 
     if (!lpTrafficOutput_PrePhysics->GetPlayingShowtime())
         return;
@@ -5055,14 +5055,14 @@ void BridgeRaceCarModuleToTrafficModule_PostScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpTrafficInputBuffer_PostScene != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpTrafficInputBuffer_PostScene",
-            KAC_ARTIST_ASSERT_FILE, 61 /* ARTIST 0x827AD854 */));   // :61
-    CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpRaceCarOutputBuffer_PostScene",
-            KAC_ARTIST_ASSERT_FILE, 62 /* ARTIST 0x827AD878 */)); // :62
+    CGS_ASSERT_AT(lpTrafficInputBuffer_PostScene != 0,
+        "lpTrafficInputBuffer_PostScene",
+            KAC_ARTIST_ASSERT_FILE, 61 /* ARTIST 0x827AD854 */);   // :61
+
+    CGS_ASSERT_AT(lpRaceCarOutputBuffer_PostScene != 0,
+        "lpRaceCarOutputBuffer_PostScene",
+            KAC_ARTIST_ASSERT_FILE, 62 /* ARTIST 0x827AD878 */); // :62
+
 
     // Source getter (read-lock) first, destination setter (write-lock) second -- the
     // console's order, and both are lock tripwires.

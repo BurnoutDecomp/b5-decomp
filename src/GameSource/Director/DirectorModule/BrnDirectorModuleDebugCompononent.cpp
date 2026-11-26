@@ -37,7 +37,7 @@ void DebugComponent::Construct(DirectorModule* lpDirectorModule)
 {
     CgsDev::DebugComponent::Construct();   // ARTIST 0x821F6FF4 (folded at 0x8284CB38)
 
-    CGS_ASSERT(lpDirectorModule != 0, CGS_ASSERT_MESSAGE_AT("lpCameraModule != NULL", CGS_ARTIST_FILE, 57));
+    CGS_ASSERT_AT(lpDirectorModule != 0, "lpCameraModule != NULL", CGS_ARTIST_FILE, 57);
 
     mpDirectorModule          = lpDirectorModule;
     mbShowCameraPos           = false;
@@ -311,7 +311,7 @@ void DebugComponent::StartEditor(void* lpUserData)
     ICEWrapper&     lrICEWrapper = lpThis->mpDirectorModule->GetMainDirector().GetICEWrapper();
 
     ICE::ICETakeData* lpTakeData = lrICEWrapper.GetAuthor().CreateNewTake("New Take", -1);
-    CGS_ASSERT(lpTakeData, CGS_ASSERT_MESSAGE_AT("lpTakeData", CGS_ARTIST_FILE, 503));
+    CGS_ASSERT_AT(lpTakeData, "lpTakeData", CGS_ARTIST_FILE, 503);
     lrICEWrapper.EditorOn(lpTakeData);
 }
 

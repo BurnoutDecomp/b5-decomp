@@ -333,13 +333,13 @@ namespace CgsFileSystem
             if (maReadStreams[luIter].GetStatus() != StreamDeviceDiskRead::E_STATUS_CLOSED)
             {
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-                    (*CgsDev::Log::gpDebugPrint << "Closing stream ").PrintUnsignedInteger(luIter) << "\n";
+                    *CgsDev::Log::gpDebugPrint << "Closing stream " << luIter << "\n";
                 maReadStreams[luIter].Close();
                 lbAllFilesClosed = false;
             }
             else if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
-                (*CgsDev::Log::gpDebugPrint << "Stream ").PrintUnsignedInteger(luIter) << " already closed\n";
+                *CgsDev::Log::gpDebugPrint << "Stream " << luIter << " already closed\n";
             }
         }
 
@@ -355,7 +355,7 @@ namespace CgsFileSystem
         for (u32 luIter = 0; luIter < KU_MAXNOOFFILES; ++luIter)
         {
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-                (*CgsDev::Log::gpDebugPrint << "Releasing file ").PrintUnsignedInteger(luIter) << "\n";
+                *CgsDev::Log::gpDebugPrint << "Releasing file " << luIter << "\n";
             maFiles[luIter].Release();
         }
 
@@ -576,7 +576,7 @@ namespace CgsFileSystem
 
         if (itter == KU_MAXNOOFFILES)
         {
-            CGS_ASSERT_AT(false, "No more files available to open.\n",
+            CGS_FAIL_AT("No more files available to open.\n",
                 CGS_FILE_SYSTEM_ARTIST_SOURCE, 455);
             return -1;
         }

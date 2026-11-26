@@ -34,8 +34,8 @@ void PositionFinder::Construct()
 void PositionFinder::FindPosition(Vector3 lTarget, Vector3 lDisplacement)
 {
     // Non-gating tripwire (cpp:75).
-    CGS_ASSERT(mbConstructed,
-        CGS_ASSERT_MESSAGE_AT("mbConstructed", CGS_ARTIST_FILE, 75 /* ARTIST 0x821F8EA8 */));
+    CGS_ASSERT_AT(mbConstructed,
+        "mbConstructed", CGS_ARTIST_FILE, 75 /* ARTIST 0x821F8EA8 */);
 
     mTarget          = lTarget;
     mDisplacement    = lDisplacement;
@@ -47,8 +47,8 @@ void PositionFinder::FindPosition(Vector3 lTarget, Vector3 lDisplacement)
 void PositionFinder::Update(const BehaviourSharedInfo& lrSharedInfo)
 {
     // Non-gating tripwire (cpp:90).
-    CGS_ASSERT(mbConstructed,
-        CGS_ASSERT_MESSAGE_AT("mbConstructed", CGS_ARTIST_FILE, 90 /* ARTIST 0x8223FD08 */));
+    CGS_ASSERT_AT(mbConstructed,
+        "mbConstructed", CGS_ARTIST_FILE, 90 /* ARTIST 0x8223FD08 */);
 
     if (mbIsInitialised && !mbFoundPosition)
     {

@@ -42,13 +42,13 @@ namespace CgsGraphics
     //     -> mppRenderables[index]  (rotlwi by 2 == *4 byte stride of a 32-bit pointer table)
     const Renderable* Model::GetRenderable(State leState) const
     {
-        CGS_ASSERT(leState < mu8NumStates,
-            CGS_ASSERT_MESSAGE_AT(
-                "leState < mu8NumStates", KAC_ARTIST_ASSERT_FILE, 309 /* ARTIST 0x822A0AF8 */));
+        CGS_ASSERT_AT(leState < mu8NumStates,
+            "leState < mu8NumStates", KAC_ARTIST_ASSERT_FILE, 309 /* ARTIST 0x822A0AF8 */);
+
 
         const u32 luIndex = mpu8StateRenderableIndices[static_cast<u32>(leState)];
-        CGS_ASSERT(!(luIndex == 255u || luIndex >= mu8NumRenderables),
-            CGS_ASSERT_MESSAGE_AT("State does not exist", KAC_ARTIST_ASSERT_FILE, 310 /* ARTIST 0x822A0B30 */));
+        CGS_ASSERT_AT(!(luIndex == 255u || luIndex >= mu8NumRenderables),
+            "State does not exist", KAC_ARTIST_ASSERT_FILE, 310 /* ARTIST 0x822A0B30 */);
 
         return mppRenderables[static_cast<u32>(mpu8StateRenderableIndices[static_cast<u32>(leState)])];
     }
@@ -82,8 +82,8 @@ namespace CgsGraphics
     //     -> mpfLodDistances[luLodIndex]  (single-precision load; returned in f1)
     f32 Model::GetLodDistance(u32 luLodIndex) const
     {
-        CGS_ASSERT(luLodIndex < mu8NumStates,
-            CGS_ASSERT_MESSAGE_AT("Invalid LOD index", KAC_ARTIST_ASSERT_FILE, 367 /* ARTIST 0x822A0C30 */));
+        CGS_ASSERT_AT(luLodIndex < mu8NumStates,
+            "Invalid LOD index", KAC_ARTIST_ASSERT_FILE, 367 /* ARTIST 0x822A0C30 */);
 
         return mpfLodDistances[luLodIndex];
     }
@@ -356,8 +356,8 @@ namespace ModelInstanceCollector
     // =========================================================================
     void EndInstanceCollection()
     {
-        CGS_ASSERT(sbIsDuringInstanceCollection,
-            CGS_ASSERT_MESSAGE_AT("sbIsDuringInstanceCollection", KAC_ARTIST_ASSERT_CPP, 708));
+        CGS_ASSERT_AT(sbIsDuringInstanceCollection,
+            "sbIsDuringInstanceCollection", KAC_ARTIST_ASSERT_CPP, 708);
 
         FlushInstanceCollection();
         sbIsDuringInstanceCollection = false;

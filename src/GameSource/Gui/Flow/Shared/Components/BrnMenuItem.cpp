@@ -47,7 +47,7 @@ void MenuItem::Clear()
 // pseudocode's `| 0x100000000` is wrong).
 void MenuItem::Set(const char* lpacText, s32 liId)
 {
-    CGS_ASSERT(lpacText != 0, CGS_ASSERT_STREAM_MESSAGE_AT("invalid text specified", CGS_ARTIST_FILE, 101));   // :101 (streamed on the X360; folded static)
+    CGS_ASSERT_STREAM_AT(lpacText != 0, "invalid text specified", CGS_ARTIST_FILE, 101);   // :101 (streamed on the X360; folded static)
 
     CgsCore::SPrintf(macItemText, KU_MAX_NAME_LENGTH, "%s", lpacText);
     SetDirty();
@@ -59,7 +59,7 @@ void MenuItem::Set(const char* lpacText, s32 liId)
 // bit; the update-text latch re-pushes just the label next Update.
 void MenuItem::SetText(const char* lpacText)
 {
-    CGS_ASSERT(lpacText != 0, CGS_ASSERT_STREAM_MESSAGE_AT("invalid text specified", CGS_ARTIST_FILE, 119));   // :119
+    CGS_ASSERT_STREAM_AT(lpacText != 0, "invalid text specified", CGS_ARTIST_FILE, 119);   // :119
 
     CgsCore::SPrintf(macItemText, KU_MAX_NAME_LENGTH, "%s", lpacText);
     mbUpdateText = true;

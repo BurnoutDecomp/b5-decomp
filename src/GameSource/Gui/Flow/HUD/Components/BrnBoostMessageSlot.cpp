@@ -105,7 +105,7 @@ void BoostMessageSlot::Prepare(const char* lpacName, const BrnFlapt::FileRef& lr
 void BoostMessageSlot::SetMessage(const char* lpcText, s32 liMessageId, f32 lfTimeToLive,
                                   s32 leBoostType, s32 liBoostAmount)
 {
-    CGS_ASSERT(!mbInTransition && !mbInUse, CGS_ASSERT_STREAM_MESSAGE_AT("Slot must be available and not in transition", CGS_ARTIST_FILE, 152));
+    CGS_ASSERT_STREAM_AT(!mbInTransition && !mbInUse, "Slot must be available and not in transition", CGS_ARTIST_FILE, 152);
    // :152 (streamed; folded, non-gating)
 
     mfTimeToLive = lfTimeToLive;   // stfs f31, 0x40
@@ -125,7 +125,7 @@ void BoostMessageSlot::SetMessage(const char* lpcText, s32 liMessageId, f32 lfTi
 // ===================================================================================
 void BoostMessageSlot::SetMessageText(const char* lpcText, s32 liBoostAmount)
 {
-    CGS_ASSERT(mbInUse, CGS_ASSERT_STREAM_MESSAGE_AT("Setting text on an expired object is nonsensical", CGS_ARTIST_FILE, 177));   // :177 (streamed; folded, non-gating)
+    CGS_ASSERT_STREAM_AT(mbInUse, "Setting text on an expired object is nonsensical", CGS_ARTIST_FILE, 177);   // :177 (streamed; folded, non-gating)
 
     mMessageItem.SetText(lpcText, liBoostAmount);   // @0x82411ED8
 }
@@ -160,9 +160,9 @@ void BoostMessageSlot::Refresh(f32 lfTimeToLive, bool lbPlayRefreshAnim)
 // ===================================================================================
 void BoostMessageSlot::ShuffleUp()
 {
-    CGS_ASSERT(!mbInTransition, CGS_ASSERT_STREAM_MESSAGE_AT("Cannot shuffle when already shuffling", CGS_ARTIST_FILE, 283));               // :283
-    CGS_ASSERT(miSlotPosition < KI_MAX_SLOT_POSITION, CGS_ASSERT_STREAM_MESSAGE_AT("Shuffling beyond our bounds", CGS_ARTIST_FILE, 284));   // :284
-    CGS_ASSERT(mbInUse, CGS_ASSERT_STREAM_MESSAGE_AT("Cannot shuffle when not in use", CGS_ARTIST_FILE, 285));                              // :285
+    CGS_ASSERT_STREAM_AT(!mbInTransition, "Cannot shuffle when already shuffling", CGS_ARTIST_FILE, 283);               // :283
+    CGS_ASSERT_STREAM_AT(miSlotPosition < KI_MAX_SLOT_POSITION, "Shuffling beyond our bounds", CGS_ARTIST_FILE, 284);   // :284
+    CGS_ASSERT_STREAM_AT(mbInUse, "Cannot shuffle when not in use", CGS_ARTIST_FILE, 285);                              // :285
 
     char lacLabel[KI_SHUFFLE_LABEL_LENGTH];
     CgsCore::SPrintf(lacLabel, KI_SHUFFLE_LABEL_LENGTH, "%d-%d", miSlotPosition, miSlotPosition + 1);
@@ -181,9 +181,9 @@ void BoostMessageSlot::ShuffleUp()
 // ===================================================================================
 void BoostMessageSlot::ShuffleDown()
 {
-    CGS_ASSERT(!mbInTransition, CGS_ASSERT_STREAM_MESSAGE_AT("Cannot shuffle when already shuffling", CGS_ARTIST_FILE, 313));   // :313
-    CGS_ASSERT(miSlotPosition > 0, CGS_ASSERT_STREAM_MESSAGE_AT("Shuffling below the baseline", CGS_ARTIST_FILE, 314));         // :314
-    CGS_ASSERT(mbInUse, CGS_ASSERT_STREAM_MESSAGE_AT("Cannot shuffle when not in use", CGS_ARTIST_FILE, 315));                  // :315
+    CGS_ASSERT_STREAM_AT(!mbInTransition, "Cannot shuffle when already shuffling", CGS_ARTIST_FILE, 313);   // :313
+    CGS_ASSERT_STREAM_AT(miSlotPosition > 0, "Shuffling below the baseline", CGS_ARTIST_FILE, 314);         // :314
+    CGS_ASSERT_STREAM_AT(mbInUse, "Cannot shuffle when not in use", CGS_ARTIST_FILE, 315);                  // :315
 
     char lacLabel[KI_SHUFFLE_LABEL_LENGTH];
     CgsCore::SPrintf(lacLabel, KI_SHUFFLE_LABEL_LENGTH, "%d-%d", miSlotPosition, miSlotPosition - 1);
@@ -201,7 +201,7 @@ void BoostMessageSlot::ShuffleDown()
 // ===================================================================================
 void BoostMessageSlot::ResetSlotPosition()
 {
-    CGS_ASSERT(!mbInTransition, CGS_ASSERT_STREAM_MESSAGE_AT("Please wait for all transitions to complete before changing slot position", CGS_ARTIST_FILE, 343));
+    CGS_ASSERT_STREAM_AT(!mbInTransition, "Please wait for all transitions to complete before changing slot position", CGS_ARTIST_FILE, 343);
    // :343 (streamed; folded)
 
     mAptRef.GotoAndStopLabel("Position0");   // @0x82412330

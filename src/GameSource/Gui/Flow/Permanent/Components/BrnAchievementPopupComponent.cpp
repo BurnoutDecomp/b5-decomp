@@ -115,7 +115,7 @@ namespace BrnGui
     void AchievementPopupComponent::DisplayNewAchievementNotification(
             const AchievementsBitArray* lpAchievementsToShow)
     {
-        CGS_ASSERT(lpAchievementsToShow != 0, CGS_ASSERT_MESSAGE_AT("lpAchievementsToShow", "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnAchievementPopupComponent.cpp", 223 /* ARTIST 0x8242C374 */));
+        CGS_ASSERT_AT(lpAchievementsToShow != 0, "lpAchievementsToShow", "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnAchievementPopupComponent.cpp", 223 /* ARTIST 0x8242C374 */);
 
         mAchievementsToShow.ORArrays(&mAchievementsToShow, lpAchievementsToShow);
     }

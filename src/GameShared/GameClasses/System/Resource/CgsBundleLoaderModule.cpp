@@ -380,7 +380,7 @@ void BundleLoaderModule::ProcessReceiverQueue(
 
 
 
-            CGS_ASSERT_STREAM(false, "Unexpected event received\n");
+            CGS_FAIL_STREAM("Unexpected event received\n");
         }
         const CgsModule::Event* lpNext = 0;
         liTag = mReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
@@ -554,7 +554,7 @@ void BundleLoaderModule::ProcessPoolResponses(BundleLoaderIO::OutputBuffer*)
 
 
 
-                    CGS_ASSERT_STREAM(false, "Could not store loaded bundle info - out of bundles. Should have caught this during load\n");
+                    CGS_FAIL_STREAM("Could not store loaded bundle info - out of bundles. Should have caught this during load\n");
                 ++miNumLoadedBundles;
             }
         }
@@ -952,7 +952,7 @@ void BundleLoaderModule::UpdateStream(BundleLoaderIO::OutputBuffer* lpOutput) //
 
 
 
-        CGS_ASSERT_AT(false, "Should never happen.", CGS_ARTIST_BUNDLE_LOADER_FILE, 949);
+        CGS_FAIL_AT("Should never happen.", CGS_ARTIST_BUNDLE_LOADER_FILE, 949);
         break;
     default:
         break;
@@ -1758,7 +1758,7 @@ bool BundleLoaderModule::CheckForUnloads(BundleLoaderIO::OutputBuffer* lpOutput)
 
 
 
-            CGS_ASSERT_STREAM(false, "Could not find bundle in pool to unload\n");
+            CGS_FAIL_STREAM("Could not find bundle in pool to unload\n");
             continue;
         }
         LoadedBundleData& lrLoaded = mpLoadedBundles[liSlot];

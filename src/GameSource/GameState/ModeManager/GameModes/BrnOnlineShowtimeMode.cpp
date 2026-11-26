@@ -79,11 +79,11 @@ void OnlineShowtimeMode::SendEvent(EGameModeEvent leEvent)
         case KI_GMS_QUIT:
             break;
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "Should not be in this state in Showtime mode!",
+            CGS_FAIL_AT(
+                "Should not be in this state in Showtime mode!",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                    "../GameState/ModeManager/GameModes/BrnOnlineShowtimeMode.cpp", 161 /* ARTIST 0x82331438 */));
+                    "../GameState/ModeManager/GameModes/BrnOnlineShowtimeMode.cpp", 161 /* ARTIST 0x82331438 */);
+
             break;
     }
 }

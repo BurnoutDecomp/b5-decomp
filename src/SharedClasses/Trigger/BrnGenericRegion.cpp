@@ -50,10 +50,10 @@ const char* GenericRegion::KAPC_GENERIC_REGION_TYPE_STRINGS[GenericRegion::E_TYP
 const char*
 GenericRegion::GetTypeName() const
 {
-    CGS_ASSERT( meType < E_TYPE_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "meType < E_TYPE_COUNT",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\trigger\\BrnGenericRegion.h", 231 /* ARTIST 0x82354788 */));
+    CGS_ASSERT_AT( meType < E_TYPE_COUNT,
+        "meType < E_TYPE_COUNT",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\trigger\\BrnGenericRegion.h", 231 /* ARTIST 0x82354788 */);
+
     return KAPC_GENERIC_REGION_TYPE_STRINGS[meType];
 }
 

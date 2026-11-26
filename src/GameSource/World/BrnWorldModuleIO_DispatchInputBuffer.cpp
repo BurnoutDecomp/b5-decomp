@@ -62,14 +62,14 @@ void DispatchInputBuffer::Construct()
 // X360 0x827A4EB0 (:383 R) -- read-lock handle to the graphics dispatch frame (this+0x04).
 CgsGraphics::DispatchFrame* DispatchInputBuffer::GetDispatchFrame() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 857));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 857);
     return mpDispatchFrame;
 }
 
 // X360 0x823B6B30 -- write-lock store of the graphics dispatch frame (this+0x04).
 void DispatchInputBuffer::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 850));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 850);
     mpDispatchFrame = lpDispatchFrame;
 }
 
@@ -78,7 +78,7 @@ void DispatchInputBuffer::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatc
 // X360 0x827A4248 (:385 R) -- read-lock handle to the embedded director camera (this+0x10).
 const BrnDirector::Camera::Camera* DispatchInputBuffer::GetCameraInput() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 385));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 385);
     return &mCameraInput;
 }
 
@@ -86,7 +86,7 @@ const BrnDirector::Camera::Camera* DispatchInputBuffer::GetCameraInput() const
 // (this+0x10, BrnDirector::Camera::Camera::operator=).
 void DispatchInputBuffer::SetCameraInput(const BrnDirector::Camera::Camera* lpCamera)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 386));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 386);
     mCameraInput = *lpCamera;
 }
 
@@ -95,14 +95,14 @@ void DispatchInputBuffer::SetCameraInput(const BrnDirector::Camera::Camera* lpCa
 // X360 0x827BBEF0 -- read-lock handle to the shader-constants frame (this+0x170).
 BrnShaderConstantsFrame* DispatchInputBuffer::GetShaderConstantsFrame() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 388));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 388);
     return mpShaderConstantsFrame;
 }
 
 // X360 0x823B50B0 -- write-lock store of the shader-constants frame (this+0x170).
 void DispatchInputBuffer::SetShaderConstantsFrame(BrnShaderConstantsFrame* lpFrame)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 389));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 389);
     mpShaderConstantsFrame = lpFrame;
 }
 
@@ -114,8 +114,8 @@ void DispatchInputBuffer::SetShaderConstantsFrame(BrnShaderConstantsFrame* lpFra
 BrnEffectsFrame* DispatchInputBuffer::GetEffectsFrame(u8 luSlot) const
 {
     // h:864 / h:865 (FireAssert at 0x827BCD10 / 0x827BCD94).
-    CGS_ASSERT(luSlot < 4, CGS_ASSERT_MESSAGE_AT("Invalid slot for Fx Layer", CGS_ARTIST_FILE, 864));
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 865));
+    CGS_ASSERT_AT(luSlot < 4, "Invalid slot for Fx Layer", CGS_ARTIST_FILE, 864);
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 865);
     return mapEffectsFrames[luSlot];
 }
 
@@ -125,8 +125,8 @@ BrnEffectsFrame* DispatchInputBuffer::GetEffectsFrame(u8 luSlot) const
 void DispatchInputBuffer::SetEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame)
 {
     // h:872 / h:873 (FireAssert at 0x823B6C14 / 0x823B6C98).
-    CGS_ASSERT(luSlot < 4, CGS_ASSERT_MESSAGE_AT("Invalid slot for Fx Layer", CGS_ARTIST_FILE, 872));
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 873));
+    CGS_ASSERT_AT(luSlot < 4, "Invalid slot for Fx Layer", CGS_ARTIST_FILE, 872);
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 873);
     mapEffectsFrames[luSlot] = lpFrame;
 }
 
@@ -135,14 +135,14 @@ void DispatchInputBuffer::SetEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame)
 // X360 0x827A42F0 (:398 R) -- read-lock handle to the blobby-shadow submission buffer (this+0x184).
 BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* DispatchInputBuffer::GetBlobbyShadowBuffer() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 398));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 398);
     return mpBlobbyShadowBuffer;
 }
 
 // X360 0x823B5158 -- write-lock store of the blobby-shadow buffer (this+0x184).
 void DispatchInputBuffer::SetBlobbyShadowBuffer(BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 399));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 399);
     mpBlobbyShadowBuffer = lpBuffer;
 }
 
@@ -151,14 +151,14 @@ void DispatchInputBuffer::SetBlobbyShadowBuffer(BrnBlobbyShadowManager::BrnBlobb
 // X360 0x827A4398 (:401 R) -- read-lock handle to the corona-submission interface (this+0x188).
 BrnCoronaManager::BrnSubmissionInterface* DispatchInputBuffer::GetCoronaSubmissionInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 401));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 401);
     return mpCoronaSubmissionInterface;
 }
 
 // X360 0x823B5200 -- write-lock store of the corona submission interface (this+0x188).
 void DispatchInputBuffer::SetCoronaSubmissionInterface(BrnCoronaManager::BrnSubmissionInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 402));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 402);
     mpCoronaSubmissionInterface = lpInterface;
 }
 
@@ -167,28 +167,28 @@ void DispatchInputBuffer::SetCoronaSubmissionInterface(BrnCoronaManager::BrnSubm
 // X360 0x827BBF98 -- read-lock read of the game-time scalar (this+0x18C).
 f32 DispatchInputBuffer::GetGameTime() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 405));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 405);
     return mfGameTime;
 }
 
 // X360 0x823B52A8 -- write-lock store of the game-time scalar (this+0x18C).
 void DispatchInputBuffer::SetGameTime(f32 lfGameTime)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 406));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 406);
     mfGameTime = lfGameTime;
 }
 
 // X360 0x827BC040 -- read-lock read of the sim-time scalar (this+0x190).
 f32 DispatchInputBuffer::GetSimTime() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 407));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 407);
     return mfSimTime;
 }
 
 // X360 0x823B5358 -- write-lock store of the simulation-time scalar (this+0x190).
 void DispatchInputBuffer::SetSimTime(f32 lfSimTime)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 408));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 408);
     mfSimTime = lfSimTime;
 }
 
@@ -197,14 +197,14 @@ void DispatchInputBuffer::SetSimTime(f32 lfSimTime)
 // X360 0x827BC0E8 (:411 R) -- read-lock handle to the dispatch-thread input buffer (this+0x194).
 BrnGame::DispatchThreadInputBuffer* DispatchInputBuffer::GetDispatchThreadInputBuffer() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 411));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 411);
     return mpDispatchThreadInputBuffer;
 }
 
 // X360 0x823B5408 -- write-lock store of the dispatch-thread input buffer handle (this+0x194).
 void DispatchInputBuffer::SetDispatchThreadInputBuffer(BrnGame::DispatchThreadInputBuffer* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 412));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 412);
     mpDispatchThreadInputBuffer = lpBuffer;
 }
 
@@ -215,7 +215,7 @@ void DispatchInputBuffer::SetDispatchThreadInputBuffer(BrnGame::DispatchThreadIn
 // RenderSwitches struct, reproduced here as struct assignment.
 void DispatchInputBuffer::SetRenderSwitches(const RendererIO::RenderSwitches& lrSwitches)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 882));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 882);
     mRenderSwitches = lrSwitches;
 }
 

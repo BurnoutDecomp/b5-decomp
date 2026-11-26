@@ -129,7 +129,7 @@ bool MomentController::MomentHandle::Release()
 {
     if (mbIsAllocated)
     {
-        CGS_ASSERT(GetMoment().Release(), CGS_ASSERT_MESSAGE_AT("GetMoment().Release()", CGS_ARTIST_FILE, 281));   //  (non-gating)
+        CGS_ASSERT_AT(GetMoment().Release(), "GetMoment().Release()", CGS_ARTIST_FILE, 281);   //  (non-gating)
         mMomentPoolHandle.Release();
         mbIsAllocated = false;
     }
@@ -183,10 +183,10 @@ bool MomentController::MomentHandle::Prepare(AbstractPoolVoidHandle lVoidHandle,
 
     static_cast<Moment*>(const_cast<void*>(mMomentPoolHandle.Get()))->Construct();
 
-    CGS_ASSERT(GetMoment().Prepare(lrBehaviourManager),
-        CGS_ASSERT_MESSAGE_AT(
-            "GetMoment().Prepare(lBehaviourManager)",
-            CGS_ARTIST_FILE, 242 /* ARTIST 0x821F7358 */));
+    CGS_ASSERT_AT(GetMoment().Prepare(lrBehaviourManager),
+        "GetMoment().Prepare(lBehaviourManager)",
+            CGS_ARTIST_FILE, 242 /* ARTIST 0x821F7358 */);
+
     return true;
 }
 
@@ -219,7 +219,7 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
                                  MomentHandle& lrMomentHandleInOut,
                                  Camera::BehaviourManager& lrBehaviourManager)
 {
-    CGS_ASSERT(lrMomentHandleInOut.Release(), CGS_ASSERT_MESSAGE_AT("lrMomentHandleInOut.Release()", CGS_ARTIST_FILE, 121));
+    CGS_ASSERT_AT(lrMomentHandleInOut.Release(), "lrMomentHandleInOut.Release()", CGS_ARTIST_FILE, 121);
 
     AbstractPoolVoidHandle lVoidHandle;
     switch (leMomentType)
@@ -264,14 +264,14 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
             // DO NOT "FIX" THE UNINITIALISED lVoidHandle ON THIS ARM -- the console has it too
             // (MSVC C4701 under /w14701 is a TRUE report of UB in the shipped binary): the default arm
             // writes nothing to the handle's stack slot and falls into the single shared Prepare.
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unhandled moment type", CGS_ARTIST_FILE, 202));
+            CGS_FAIL_AT("Unhandled moment type", CGS_ARTIST_FILE, 202);
             break;
     }
 
     lrMomentHandleInOut.Prepare(lVoidHandle, *this, lrBehaviourManager);
 
-    CGS_ASSERT(lrMomentHandleInOut.GetMoment().GetType() == leMomentType,
-               CGS_ASSERT_MESSAGE_AT("lrMomentHandleInOut.GetMoment().GetType() == leMomentType", CGS_ARTIST_FILE, 211));
+    CGS_ASSERT_AT(lrMomentHandleInOut.GetMoment().GetType() == leMomentType,
+               "lrMomentHandleInOut.GetMoment().GetType() == leMomentType", CGS_ARTIST_FILE, 211);
 
     Moment::Parameters* lpParameters = mMomentParameterBank.GetParameters(leMomentParamID);
 

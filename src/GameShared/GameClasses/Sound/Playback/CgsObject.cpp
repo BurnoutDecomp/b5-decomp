@@ -28,10 +28,10 @@ namespace Playback
 // the owning sound Environment.
 void Object::Release()
 {
-    CGS_ASSERT(mu32RefCount > 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "mu32RefCount > 0",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.h", 117 /* ARTIST 0x82680960 */));
+    CGS_ASSERT_AT(mu32RefCount > 0,
+        "mu32RefCount > 0",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.h", 117 /* ARTIST 0x82680960 */);
+
     --mu32RefCount;
     if (mu32RefCount == 0)
         DoDispose();

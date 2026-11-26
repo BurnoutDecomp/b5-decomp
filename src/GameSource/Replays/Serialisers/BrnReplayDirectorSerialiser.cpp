@@ -24,8 +24,8 @@ void DirectorSerialiser::Read()
     BaseSerialiser::Lock();
 
     BrnDirector::Camera::Camera* lpStatic = GetStaticLayout();
-    CGS_ASSERT(lpStatic != 0,
-        CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_FILE, 38 /* ARTIST 0x82650378 */));   // :38 (non-gating)
+    CGS_ASSERT_AT(lpStatic != 0,
+        "lpStatic", CGS_ARTIST_FILE, 38 /* ARTIST 0x82650378 */);   // :38 (non-gating)
 
     const EMode leMode = GetMode();
     bool lbSkip = (leMode == E_MODE_RECORDING_STALLED || leMode == E_MODE_PLAYING_STALLED);
@@ -54,8 +54,8 @@ void DirectorSerialiser::Write()
     BaseSerialiser::Lock();
 
     BrnDirector::Camera::Camera* lpStatic = GetStaticLayout();
-    CGS_ASSERT(lpStatic != 0,
-        CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_FILE, 69 /* ARTIST 0x82650470 */));   // :69 (non-gating)
+    CGS_ASSERT_AT(lpStatic != 0,
+        "lpStatic", CGS_ARTIST_FILE, 69 /* ARTIST 0x82650470 */);   // :69 (non-gating)
 
     if (!mbStaticCameraConstructed)
     {

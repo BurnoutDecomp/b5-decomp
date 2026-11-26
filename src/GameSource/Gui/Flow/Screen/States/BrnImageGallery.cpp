@@ -367,7 +367,7 @@ namespace BrnGui
             default:
                 // The console streams "Invalid internal state : " << meInternalState.
                 // Streamed in place, as ARTIST builds it (cpp:270).
-                CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+                CGS_FAIL_STREAM_AT("Invalid internal state : " << meInternalState << "\n",
                                      CGS_ARTIST_FILE, 270);
                 break;
         }
@@ -564,10 +564,10 @@ namespace BrnGui
         {
             SetExpectedComponent(maCategorySelectable[liCategory].GetName());
         }
-        CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
-            CGS_ASSERT_MESSAGE_AT(
-                "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM",
-                CGS_ARTIST_FILE, 1057 /* ARTIST 0x8248476C */));
+        CGS_ASSERT_AT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
+            "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM",
+                CGS_ARTIST_FILE, 1057 /* ARTIST 0x8248476C */);
+
         mpGuiCache->SetExpectedAptComponentList(E_GUIFLOW_SCREEN, mauExpectedComponentIds,
                                                 muNumExpectedComponents);
     }
@@ -582,10 +582,10 @@ namespace BrnGui
         }
         muNumExpectedComponents = 0;
 
-        CGS_ASSERT(mpGuiCache,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnImageGallery.h", 310 /* ARTIST 0x82482D08 */));
+        CGS_ASSERT_AT(mpGuiCache,
+            "mpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnImageGallery.h", 310 /* ARTIST 0x82482D08 */);
+
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
     }
 
@@ -802,7 +802,7 @@ namespace BrnGui
         if (liSlot < 0 || liSlot >= 3)
         {
             // The console streams "Invalid slot index passed through from online : " << slot.
-            CGS_ASSERT(false, "Invalid slot index passed through from online : ");
+            CGS_FAIL("Invalid slot index passed through from online : ");
             return;
         }
 
@@ -993,7 +993,7 @@ namespace BrnGui
             case E_GUI_IMAGE_CATEGORIES_RULEBREAKER:  return GameStateModuleIO::E_IMAGE_GALLERY_TYPE_ROAD_RULE_MUGSHOT;
             case E_GUI_IMAGE_CATEGORIES_PHOTO_FINISH: return GameStateModuleIO::E_IMAGE_GALLERY_TYPE_VICTORY_MUGSHOT;
             default:
-                CGS_ASSERT(false, "Invalid image category in Image Gallery : ");
+                CGS_FAIL("Invalid image category in Image Gallery : ");
                 return GameStateModuleIO::E_IMAGE_GALLERY_TYPE_FREEBURN_MUGSHOT;
         }
     }
@@ -1071,7 +1071,7 @@ namespace BrnGui
                 break;
 
             default:
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("lpcLabel", CGS_ARTIST_FILE, 1525 /* ARTIST 0x824964D0 */));
+                CGS_FAIL_AT("lpcLabel", CGS_ARTIST_FILE, 1525 /* ARTIST 0x824964D0 */);
                 break;
         }
 

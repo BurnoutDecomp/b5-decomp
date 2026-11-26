@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"     // CgsMemory::HeapMalloc
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\X360/BrnSystemHWX360.cpp"
 #define CGS_ARTIST_SYSTEMHW_HEADER "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\game\\..\\X360\\BrnSystemHWX360.h"
-#include <cstring>   // strcpy, strlen, strrchr
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::StrCpy; <string.h> strrchr
 
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   BrnHW::operator++(System360HW::EPrepareStage&, int)  @ 0x823A8A18
@@ -56,13 +56,13 @@ namespace BrnHW
             _controlfp(KU_CONTROLFP_NEWVALUE_B, KU_CONTROLFP_MASK_B);
 
             const char* lpcCommandLine = GetCommandLineA() + 1;
-            // ARTIST 0x823AAE80..0x823AAFF8 inlines the string copy and its length assertion.
-            CGS_ASSERT_STREAM_AT(strlen(lpcCommandLine) < sizeof(macCommandLine),
-                "String " << lpcCommandLine << " is too long. Buffer size = "
-                    << sizeof(macCommandLine) << ", string length = " << strlen(lpcCommandLine) << "\n",
-                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+            // ARTIST 0x823AAE80..0x823AAFF8 is CgsCore::StrCpy inlined: its streamed length assertion
+            // (CgsStringUtils.h:65, the length measured before the message as at 0x823AAF1C) and the
+            // copy. The assertion written out here instead made the XDK call the StrStream
+            // constructor and the literal inserts that ARTIST inlines (D12, asserts lane), and the
+            // helper is what the baked file/line names.
 
-            strcpy(macCommandLine, lpcCommandLine);
+            CgsCore::StrCpy(macCommandLine, sizeof(macCommandLine), lpcCommandLine);
             *strrchr(macCommandLine, '"') = 0;
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
@@ -79,7 +79,7 @@ namespace BrnHW
             meReleaseStage = E_RELEASESTAGE_START;
             return true;
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("false", CGS_ARTIST_FILE, 119));
+            CGS_ASSERT_AT(false, "false", CGS_ARTIST_FILE, 119);
             return true;
         }
     }
@@ -91,10 +91,10 @@ namespace BrnHW
     {
         System360HW::EPrepareStage lePrevious = reStage;
         reStage = static_cast<System360HW::EPrepareStage>(reStage + 1);
-        CGS_ASSERT(reStage <= System360HW::E_PREPARESTAGE_DONE,
-            CGS_ASSERT_MESSAGE_AT(
-                "leEnumIndex <= System360HW::E_PREPARESTAGE_DONE",
-                CGS_ARTIST_SYSTEMHW_HEADER, 132 /* ARTIST 0x823A8A44 */));
+        CGS_ASSERT_AT(reStage <= System360HW::E_PREPARESTAGE_DONE,
+            "leEnumIndex <= System360HW::E_PREPARESTAGE_DONE",
+                CGS_ARTIST_SYSTEMHW_HEADER, 132 /* ARTIST 0x823A8A44 */);
+
         return lePrevious;
     }
 
@@ -112,7 +112,7 @@ namespace BrnHW
         case E_RELEASESTAGE_DONE:
             break;
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("false", CGS_ARTIST_FILE, 160));
+            CGS_ASSERT_AT(false, "false", CGS_ARTIST_FILE, 160);
             break;
         }
         return true;
@@ -123,10 +123,10 @@ namespace BrnHW
     {
         System360HW::EReleaseStage lePrevious = reStage;
         reStage = static_cast<System360HW::EReleaseStage>(reStage + 1);
-        CGS_ASSERT(reStage <= System360HW::E_RELEASESTAGE_DONE,
-            CGS_ASSERT_MESSAGE_AT(
-                "leEnumIndex <= System360HW::E_RELEASESTAGE_DONE",
-                CGS_ARTIST_SYSTEMHW_HEADER, 133));
+        CGS_ASSERT_AT(reStage <= System360HW::E_RELEASESTAGE_DONE,
+            "leEnumIndex <= System360HW::E_RELEASESTAGE_DONE",
+                CGS_ARTIST_SYSTEMHW_HEADER, 133);
+
         return lePrevious;
     }
 

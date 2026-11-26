@@ -65,12 +65,12 @@ void WorldModule::BridgeRaceCarModuleToWorldModule_PreScene(
     WorldEntityIO::InputBuffer_PreScene* lpWorldInputBuffer_PreScene,
     const RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene)
 {
-    CGS_ASSERT(lpWorldInputBuffer_PreScene != 0, CGS_ASSERT_MESSAGE_AT("lpWorldInputBuffer_PreScene", __FILE__, 94));           // :94
-    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarOutputBuffer_PreScene", __FILE__, 95));     // :95
+    CGS_ASSERT_AT(lpWorldInputBuffer_PreScene != 0, "lpWorldInputBuffer_PreScene", __FILE__, 94);           // :94
+    CGS_ASSERT_AT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene", __FILE__, 95);     // :95
 
     const RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRaceCarEntityOutputInterface =
         lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface();
-    CGS_ASSERT(lpRaceCarEntityOutputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarEntityOutputInterface", __FILE__, 100));     // :100
+    CGS_ASSERT_AT(lpRaceCarEntityOutputInterface != 0, "lpRaceCarEntityOutputInterface", __FILE__, 100);     // :100
 
     // The committed world-entity input buffer names the race-car interface by its real type
     // (InputBuffer_PreScene::ActiveRaceCarInterface ==

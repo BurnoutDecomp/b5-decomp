@@ -100,7 +100,7 @@ bool HudMessageController::GetMessage(const BrnGui::GuiHudMessage* lpInMessage,
 {
     if (!mbMessagesUsed)
     {
-        CGS_ASSERT(false, "Message bundle not loaded");   // cpp:60
+        CGS_FAIL("Message bundle not loaded");   // cpp:60
         return false;
     }
 
@@ -122,7 +122,7 @@ bool HudMessageController::GetMessage(const BrnGui::GuiHudMessage* lpInMessage,
         liIndex = GetIndexFromMessageHash(CgsIDCompress("TestDefault"));
         if (liIndex == -1)
         {
-            CGS_ASSERT(false, "Can't find default hud message to display");   // cpp:80
+            CGS_FAIL("Can't find default hud message to display");   // cpp:80
             return false;
         }
     }
@@ -189,7 +189,7 @@ s32 HudMessageController::GetIndexFromMessageHash(CgsID lId) const
 {
     if (!mbMessagesUsed)
     {
-        CGS_ASSERT(false, "Message bundle not loaded");   // cpp:148
+        CGS_FAIL("Message bundle not loaded");   // cpp:148
         return -1;
     }
 

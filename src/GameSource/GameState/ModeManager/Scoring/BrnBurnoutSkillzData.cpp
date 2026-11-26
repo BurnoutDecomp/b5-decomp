@@ -42,10 +42,10 @@ namespace BrnGameState
     {
         const BurnoutSkillzData::EBurnoutSkillType eOld = eSkill;
         eSkill = static_cast<BurnoutSkillzData::EBurnoutSkillType>(static_cast<int>(eSkill) + 1);
-        CGS_ASSERT(static_cast<int>(eSkill) <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leEnumIndex <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT",
-                CGS_ARTIST_FILE, 109 /* ARTIST 0x8230FC38 */));
+        CGS_ASSERT_AT(static_cast<int>(eSkill) <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT,
+            "leEnumIndex <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT",
+                CGS_ARTIST_FILE, 109 /* ARTIST 0x8230FC38 */);
+
         return eOld;
     }
 
@@ -81,8 +81,8 @@ namespace BrnGameState
     // DecFIGS declares float32_t. ARTIST 0x8230FD44 loads the result with lfs.
     f32 BurnoutSkillzData::GetSkillAccuracy(EBurnoutSkillType eSkill)
     {
-        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, CGS_ASSERT_MESSAGE_AT("leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_FILE, 161));
-        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, CGS_ASSERT_MESSAGE_AT("leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 162));
+        CGS_ASSERT_AT(eSkill >= E_BURNOUT_SKILL_START, "leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_FILE, 161);
+        CGS_ASSERT_AT(eSkill < E_BURNOUT_SKILL_COUNT, "leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 162);
 
         return 0.005f;
     }
@@ -96,12 +96,12 @@ namespace BrnGameState
     // the object base, so the load sits at +0x00 plus four bytes per skill.
     f32 BurnoutSkillzData::GetBurnoutSkill(EBurnoutSkillType eSkill) const
     {
-        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START,
-            CGS_ASSERT_MESSAGE_AT(
-                "leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_FILE, 135 /* ARTIST 0x8230FC8C */));
-        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 136 /* ARTIST 0x8230FCB0 */));
+        CGS_ASSERT_AT(eSkill >= E_BURNOUT_SKILL_START,
+            "leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_FILE, 135 /* ARTIST 0x8230FC8C */);
+
+        CGS_ASSERT_AT(eSkill < E_BURNOUT_SKILL_COUNT,
+            "leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 136 /* ARTIST 0x8230FCB0 */);
+
 
         return mafBurnoutSkilz[eSkill];
     }
@@ -125,8 +125,8 @@ namespace BrnGameState
     // three, confirming the home's (EBurnoutSkillType eSkill, f32 fVal) signature.
     void BurnoutSkillzData::SetBurnoutSkill(EBurnoutSkillType eSkill, f32 lfVal)
     {
-        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, CGS_ASSERT_MESSAGE_AT("leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_FILE, 147));
-        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, CGS_ASSERT_MESSAGE_AT("leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 148));
+        CGS_ASSERT_AT(eSkill >= E_BURNOUT_SKILL_START, "leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_FILE, 147);
+        CGS_ASSERT_AT(eSkill < E_BURNOUT_SKILL_COUNT, "leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 148);
 
         // ARTIST 0x8231CA18 rounds the incoming sample in its parameter slot.
         const f32 lfAccuracy = GetSkillAccuracy(eSkill);

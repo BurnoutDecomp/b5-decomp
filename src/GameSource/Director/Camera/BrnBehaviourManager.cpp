@@ -213,7 +213,7 @@ namespace Camera
     // ------------------------------------------------------------------------
     void BehaviourManager::CheckNoBehavioursAreAllocatedByState(ArbitratorState* lpArbitratorState)
     {
-        CGS_ASSERT(lpArbitratorState != 0, CGS_ASSERT_MESSAGE_AT("lpArbitratorState != NULL", CGS_ARTIST_FILE_BRNBEHAVIOURMANAGER, 484));
+        CGS_ASSERT_AT(lpArbitratorState != 0, "lpArbitratorState != NULL", CGS_ARTIST_FILE_BRNBEHAVIOURMANAGER, 484);
 
         const u32 luNumBehaviours = mBehaviourHelperIndexArray.GetLength();
         for (u32 luLoop = 0; luLoop < luNumBehaviours; ++luLoop)
@@ -275,8 +275,8 @@ namespace Camera
     {
         const BehaviourHelperIndex lBehaviourIndex(static_cast<s32>(luAllocationKey));
 
-        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex),
-                   CGS_ASSERT_MESSAGE_AT("mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)", CGS_ARTIST_FILE, 218));
+        CGS_ASSERT_AT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex),
+                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)", CGS_ARTIST_FILE, 218);
 
         return mBehaviourNeedsPreparingFlags.IsBitSet(luAllocationKey);
     }
@@ -306,14 +306,14 @@ namespace Camera
     {
         const BehaviourHelperIndex lBehaviourHelperIndex(static_cast<s32>(luAllocationKey));
 
-        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
-                   CGS_ASSERT_MESSAGE_AT("mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", CGS_ARTIST_FILE, 928));      // :928
-        CGS_ASSERT(mBehaviourRefCounts[lBehaviourHelperIndex] == 0,
-                   CGS_ASSERT_MESSAGE_AT("mBehaviourRefCounts[lBehaviourHelperIndex] == 0", CGS_ARTIST_FILE, 929));                    // :929
-        CGS_ASSERT(mBehaviourNeedsReleasingFlags.IsBitSet(lBehaviourHelperIndex) == false,
-                   CGS_ASSERT_MESSAGE_AT("mBehaviourNeedsReleasingFlags.IsBitSet(lBehaviourHelperIndex) == false", CGS_ARTIST_FILE, 930)); // :930
-        CGS_ASSERT(mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == false,
-                   CGS_ASSERT_MESSAGE_AT("mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == false", CGS_ARTIST_FILE, 931));   // :931
+        CGS_ASSERT_AT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
+                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", CGS_ARTIST_FILE, 928);      // :928
+        CGS_ASSERT_AT(mBehaviourRefCounts[lBehaviourHelperIndex] == 0,
+                   "mBehaviourRefCounts[lBehaviourHelperIndex] == 0", CGS_ARTIST_FILE, 929);                    // :929
+        CGS_ASSERT_AT(mBehaviourNeedsReleasingFlags.IsBitSet(lBehaviourHelperIndex) == false,
+                   "mBehaviourNeedsReleasingFlags.IsBitSet(lBehaviourHelperIndex) == false", CGS_ARTIST_FILE, 930); // :930
+        CGS_ASSERT_AT(mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == false,
+                   "mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == false", CGS_ARTIST_FILE, 931);   // :931
 
         mBehaviourUsedByHandleFlags.SetBit(lBehaviourHelperIndex);
     }
@@ -322,10 +322,10 @@ namespace Camera
     {
         const BehaviourHelperIndex lBehaviourHelperIndex(static_cast<s32>(luAllocationKey));
 
-        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
-                   CGS_ASSERT_MESSAGE_AT("mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", CGS_ARTIST_FILE, 942));      // :942
-        CGS_ASSERT(mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true,
-                   CGS_ASSERT_MESSAGE_AT("mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true", CGS_ARTIST_FILE, 943));    // :943
+        CGS_ASSERT_AT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
+                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", CGS_ARTIST_FILE, 942);      // :942
+        CGS_ASSERT_AT(mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true,
+                   "mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true", CGS_ARTIST_FILE, 943);    // :943
 
         mBehaviourUsedByHandleFlags.UnSetBit(lBehaviourHelperIndex);
 
@@ -381,7 +381,7 @@ namespace Camera
         if (mDebugBehaviourRefCountIndexLog[luTo].Contains(lFrom))
         {
             RefCountLogDump(lTo);
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "<locker> is trying to lock <locked> when it has already locked it"); // h:979
         }
 
@@ -389,7 +389,7 @@ namespace Camera
         if (mBehaviourRefCounts[luTo] >= mDebugBehaviourRefCountLimits[luTo])
         {
             RefCountLogDump(lTo);
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "<locker> is trying to lock <locked> and the set limit (N) has been reached"); // h:990
         }
 
@@ -420,14 +420,14 @@ namespace Camera
         if (!mDebugBehaviourRefCountIndexLog[luTo].Contains(lFrom))
         {
             RefCountLogDump(lTo);
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "<locker> is trying to unlock <locked> and it hasn't locked it");   // h:1047
         }
 
         if (mDebugBehaviourRefCountIndexLog[luTo].CountInstancesOf(lFrom) > 1)
         {
             RefCountLogDump(lTo);
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "<locker> is trying to unlock <locked> and somehow has it locked more than once"); // h:1057
         }
 
@@ -729,8 +729,8 @@ namespace Camera
             lLockInterface.SetBehaviourHelperIndex(lHelper);
 
             const bool lbPrepared = mBehaviourHelperPool[lHelper].GetBehaviour()->Prepare(lSharedInfo);
-            CGS_ASSERT(lbPrepared,
-                       CGS_ASSERT_MESSAGE_AT("mBehaviourHelperPool[lBehaviourHelperIndex].Get().Prepare(lSharedInfo)", CGS_ARTIST_FILE_BRNBEHAVIOURMANAGER, 162)); // .cpp:162
+            CGS_ASSERT_AT(lbPrepared,
+                       "mBehaviourHelperPool[lBehaviourHelperIndex].Get().Prepare(lSharedInfo)", CGS_ARTIST_FILE_BRNBEHAVIOURMANAGER, 162); // .cpp:162
             (void)lbPrepared;
 
             mBehaviourNeedsPreparingFlags.UnSetBit(static_cast<u32>(liHelper));

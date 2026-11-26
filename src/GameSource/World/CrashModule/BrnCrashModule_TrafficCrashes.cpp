@@ -92,7 +92,7 @@ namespace BrnWorld
         f32 time = -1.0f;
         if (leType == 0) time = 3.5f;
         else if (static_cast<u32>(leType) <= 2) time = 8.0f;
-        else CGS_ASSERT(false, "Bad crash traffic type");
+        else CGS_FAIL("Bad crash traffic type");
         CGS_ASSERT(static_cast<u32>(owner) < 8, "Ended up without a crash owner for traffic");
         // 827CDAFC..827CDB1C: remote ownership in an online mode starts unconfirmed.
         const bool network = mbIsOnlineGameMode && owner != meLocalActiveRaceCarIndex;
@@ -105,7 +105,7 @@ namespace BrnWorld
     void CrashModule::HandleNewCrashingTraffic(const CrashIO::InputBuffer_PostPhysics* lpInput)
     {
         // BrnCrashModule.cpp:1027 (li r5,0x403 at 0x827D0FA4).
-        CGS_ASSERT(lpInput, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 1027));
+        CGS_ASSERT_AT(lpInput, "lpInput != NULL", CGS_ARTIST_FILE, 1027);
         const CrashIO::TrafficInputInterface::AddCrashingTrafficEventQueue& events = lpInput->GetTrafficInputInterface()->GetAddCrashingTrafficEventQueue();
         for (s32 i = 0; i < events.GetLength(); ++i)
         {
@@ -166,12 +166,12 @@ namespace BrnWorld
     void CrashModule::HandleRecoveredSlammedTraffic(const CrashIO::InputBuffer_PostPhysics* lpInput)
     {
         // BrnCrashModule.cpp:1260 / :1270 (li r5,0x4EC at 0x827BF41C, li r5,0x4F6 at 0x827BF478).
-        CGS_ASSERT(lpInput, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 1260));
+        CGS_ASSERT_AT(lpInput, "lpInput != NULL", CGS_ARTIST_FILE, 1260);
         const CrashIO::TrafficInputInterface::RemoveSlammedTrafficEventQueue* events = lpInput->GetTrafficInputInterface()->GetRemoveSlammedTrafficEventQueue();
         for (s32 i = 0; i < events->GetLength(); ++i)
         {
             const u32 vehicle = events->GetEvent(i).muVehicleId;
-            CGS_ASSERT(vehicle < 600, CGS_ASSERT_MESSAGE_AT("luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_FILE, 1270));
+            CGS_ASSERT_AT(vehicle < 600, "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_FILE, 1270);
             maiSlammedTrafficOwners[vehicle] = -1;
         }
     }

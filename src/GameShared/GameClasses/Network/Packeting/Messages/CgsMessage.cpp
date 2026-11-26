@@ -211,7 +211,7 @@ namespace CgsNetwork
             *lpi8Field = static_cast<s8>(mBitstream.GetQuantisedInt(liMin, liMax));
             break;
         default:
-            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
+            CGS_FAIL_STREAM_AT("CgsNetwork::Message::PackOrUnpack"
                                          << " called without telling it which it is doing\n",
                                  CGS_ARTIST_FILE, 518);
             break;
@@ -237,7 +237,7 @@ namespace CgsNetwork
             *lpu8Field = static_cast<u8>(mBitstream.GetQuantisedInt(liMin, liMax));
             break;
         default:
-            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
+            CGS_FAIL_STREAM_AT("CgsNetwork::Message::PackOrUnpack"
                                          << " called without telling it which it is doing\n",
                                  CGS_ARTIST_FILE, 556);
             break;
@@ -263,7 +263,7 @@ namespace CgsNetwork
             *lps16Field = static_cast<s16>(mBitstream.GetQuantisedInt(liMin, liMax));
             break;
         default:
-            CGS_ASSERT_AT(false, "PackOrUnpack called without telling it which operation to do\n",
+            CGS_FAIL_AT("PackOrUnpack called without telling it which operation to do\n",
                           CGS_ARTIST_FILE, 595);
             break;
         }
@@ -287,7 +287,7 @@ namespace CgsNetwork
             *lpu16Field = static_cast<u16>(mBitstream.GetQuantisedInt(liMin, liMax));
             break;
         default:
-            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
+            CGS_FAIL_STREAM_AT("CgsNetwork::Message::PackOrUnpack"
                                          << " called without telling it which it is doing\n",
                                  CGS_ARTIST_FILE, 635);
             break;
@@ -313,7 +313,7 @@ namespace CgsNetwork
             *lpiField = static_cast<s32>(mBitstream.GetQuantisedInt(liMin, liMax));
             break;
         default:
-            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
+            CGS_FAIL_STREAM_AT("CgsNetwork::Message::PackOrUnpack"
                                          << " called without telling it which it is doing\n",
                                  CGS_ARTIST_FILE, 674);
             break;
@@ -345,7 +345,7 @@ namespace CgsNetwork
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
-        CGS_ASSERT(false,
+        CGS_FAIL(
                    "CgsNetwork::Message::PackOrUnpack called without telling "
                    "it which it is doing\n");
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -412,7 +412,7 @@ namespace CgsNetwork
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
-        CGS_ASSERT(false,
+        CGS_FAIL(
                    "CgsNetwork::Message::PackOrUnpack called without telling "
                    "it which it is doing\n");
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -435,7 +435,7 @@ namespace CgsNetwork
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
-        CGS_ASSERT(false,
+        CGS_FAIL(
                    "CgsNetwork::Message::PackOrUnpack called without telling "
                    "it which it is doing\n");
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -459,7 +459,7 @@ namespace CgsNetwork
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
-        CGS_ASSERT(false,
+        CGS_FAIL(
                    "CgsNetwork::Message::PackOrUnpack called without telling "
                    "it which it is doing\n");
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -517,7 +517,7 @@ namespace CgsNetwork
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
-        CGS_ASSERT(false,
+        CGS_FAIL(
                    "CgsNetwork::Message::PackOrUnpack called without telling "
                    "it which it is doing\n");
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -632,7 +632,7 @@ namespace CgsNetwork
         }
 
         default:
-            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
+            CGS_FAIL_STREAM_AT("CgsNetwork::Message::PackOrUnpack"
                                          << " called without telling it which it is doing\n",
                                  CGS_ARTIST_FILE, 1377);
             break;
@@ -657,7 +657,7 @@ namespace CgsNetwork
             mBitstream.GetRawData(lpcBuffer, liNumBytes);
             break;
         default:
-            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpackBuffer"
+            CGS_FAIL_STREAM_AT("CgsNetwork::Message::PackOrUnpackBuffer"
                                          << " called without telling it which it is doing\n",
                                  CGS_ARTIST_FILE, 1417);
             break;
@@ -685,8 +685,8 @@ namespace CgsNetwork
     // ---- PrepareAck @ 0x8286F488 ----------------------------------------------
     void Message::PrepareAck(::EMessageType leType, u16 lu16Frame, u8 lu8GameID)
     {
-        CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", CGS_ARTIST_HEADER, 888 /* ARTIST 0x8286F4BC */));
+        CGS_ASSERT_AT((mx8Flags & KX8_FLAGS_VALID) == 0,
+            "!IsMessageValid()", CGS_ARTIST_HEADER, 888 /* ARTIST 0x8286F4BC */);
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_ACK;
         SetType(leType);
@@ -697,8 +697,8 @@ namespace CgsNetwork
     // ---- PrepareNack @ 0x8286F508 ---------------------------------------------
     void Message::PrepareNack(::EMessageType leType, u16 lu16Frame, u8 lu8GameID)
     {
-        CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", CGS_ARTIST_HEADER, 915 /* ARTIST 0x8286F53C */));
+        CGS_ASSERT_AT((mx8Flags & KX8_FLAGS_VALID) == 0,
+            "!IsMessageValid()", CGS_ARTIST_HEADER, 915 /* ARTIST 0x8286F53C */);
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_NACK;
         SetType(leType);
@@ -823,9 +823,9 @@ namespace CgsNetwork
     {
         const XMVECTOR lvMinusOne = { -1.0f, -1.0f, -1.0f, 0.0f };
         const XMVECTOR lvPlusOne = { 1.0f, 1.0f, 1.0f, 0.0f };
-        CGS_ASSERT(lpfRollOut && lpfPitchOut && lpfYawOut, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpfRollOut && lpfPitchOut && lpfYawOut,
             "lpfRollOut && lpfPitchOut && lpfYawOut",
-            __FILE__, 828 /* ARTIST 0x82881680 */));
+            __FILE__, 828 /* ARTIST 0x82881680 */);
         const XMVECTOR lvZAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.zAxis, 0), lvMinusOne), lvPlusOne);
         const XMVECTOR lvXAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.xAxis, 0), lvMinusOne), lvPlusOne);
         const XMVECTOR lvYAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.yAxis, 0), lvMinusOne), lvPlusOne);
@@ -1231,7 +1231,7 @@ namespace CgsNetwork
         }
         else
         {
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "CgsNetwork::Message::PackOrUnpack called without telling "
                        "it which it is doing\n");
         }
@@ -1312,7 +1312,7 @@ namespace CgsNetwork
         }
         else
         {
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "CgsNetwork::Message::PackOrUnpack called without telling "
                        "it which it is doing\n");
         }

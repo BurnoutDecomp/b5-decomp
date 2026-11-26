@@ -73,9 +73,9 @@ void Race::AddLandmark(LandmarkIndex lIndex, u16 luAiSectionIndex)
 // loads the half-word at +0x30 (maLandmarkIndices[0]) and writes it through the return buffer.
 LandmarkIndex Race::GetStartLandmarkIndex() const
 {
-    CGS_ASSERT(muNumLandmarks >= 2,
-        CGS_ASSERT_MESSAGE_AT(
-            "Need at least two landmarks for a race", KAC_ARTIST_ASSERT_FILE, 144 /* ARTIST 0x82354620 */));
+    CGS_ASSERT_AT(muNumLandmarks >= 2,
+        "Need at least two landmarks for a race", KAC_ARTIST_ASSERT_FILE, 144 /* ARTIST 0x82354620 */);
+
     return maLandmarkIndices[0];
 }
 
@@ -84,9 +84,9 @@ LandmarkIndex Race::GetStartLandmarkIndex() const
 // (muNumLandmarks + 0x17) * 2 == 0x30 + (muNumLandmarks - 1)*2 == &maLandmarkIndices[num-1].
 LandmarkIndex Race::GetFinishLandmarkIndex() const
 {
-    CGS_ASSERT(muNumLandmarks >= 2,
-        CGS_ASSERT_MESSAGE_AT(
-            "Need at least two landmarks for a race", KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x824EA9B8 */));
+    CGS_ASSERT_AT(muNumLandmarks >= 2,
+        "Need at least two landmarks for a race", KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x824EA9B8 */);
+
     return maLandmarkIndices[muNumLandmarks - 1];
 }
 

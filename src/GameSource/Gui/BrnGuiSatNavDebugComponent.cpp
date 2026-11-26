@@ -219,8 +219,8 @@ namespace BrnGui
     // =============================================================================================
     void SatNavDebugComponent::SatNavStateCallback(void* /*lpValue*/, void* lpUserData)
     {
-        CGS_ASSERT(lpUserData != 0,
-            CGS_ASSERT_MESSAGE_AT("lpUserData", __FILE__, 247 /* ARTIST 0x8250D9EC */));   // BrnGuiSatNavDebugComponent.cpp:247
+        CGS_ASSERT_AT(lpUserData != 0,
+            "lpUserData", __FILE__, 247 /* ARTIST 0x8250D9EC */);   // BrnGuiSatNavDebugComponent.cpp:247
 
         SatNavDebugComponent* lpThis = static_cast<SatNavDebugComponent*>(lpUserData);
 
@@ -244,8 +244,8 @@ namespace BrnGui
     // =============================================================================================
     void SatNavDebugComponent::SatNavPositionCallback(void* /*lpValue*/, void* lpUserData)
     {
-        CGS_ASSERT( lpUserData != 0,
-            CGS_ASSERT_MESSAGE_AT("lpUserData", __FILE__, 281 /* ARTIST 0x8250DB64 */));   // BrnGuiSatNavDebugComponent.cpp:281
+        CGS_ASSERT_AT( lpUserData != 0,
+            "lpUserData", __FILE__, 281 /* ARTIST 0x8250DB64 */);   // BrnGuiSatNavDebugComponent.cpp:281
 
         static_cast<SatNavDebugComponent*>(lpUserData)->TriggerSatNavPositionUpdate();
     }

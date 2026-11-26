@@ -85,13 +85,13 @@ public:
     // Inlined into ModeManager::Construct, each firing its own assert ahead of the manager's.
     void SetStreetManager(StreetManager* lpStreetManager)
     {
-        CGS_ASSERT(lpStreetManager, CGS_ASSERT_MESSAGE_AT("lpStreetManager", CGS_ARTIST_BRNONLINEFREEBURNLOBBYMODE_FILE, 175));
+        CGS_ASSERT_AT(lpStreetManager, "lpStreetManager", CGS_ARTIST_BRNONLINEFREEBURNLOBBYMODE_FILE, 175);
         mBurnoutSkillzManager.SetStreetManager(lpStreetManager);
     }
 
     void SetMugshotManager(MugshotManager* lpMugshotManager)
     {
-        CGS_ASSERT(lpMugshotManager, CGS_ASSERT_MESSAGE_AT("lpMugshotManager", CGS_ARTIST_BRNONLINEFREEBURNLOBBYMODE_FILE, 190));
+        CGS_ASSERT_AT(lpMugshotManager, "lpMugshotManager", CGS_ARTIST_BRNONLINEFREEBURNLOBBYMODE_FILE, 190);
         mBurnoutSkillzManager.SetMugshotManager(lpMugshotManager);
     }
 

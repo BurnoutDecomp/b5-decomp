@@ -244,9 +244,9 @@ namespace BrnTraffic
     // meRunningState @ +0x308 == E_RUNNINGSTATE_PAUSED (1).
     bool TrafficEntityModule::IsPaused()
     {
-        CGS_ASSERT(meState == E_STATE_RUNNING,
-            CGS_ASSERT_MESSAGE_AT(
-                "meState == E_STATE_RUNNING", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2132 /* ARTIST 0x82707588 */));
+        CGS_ASSERT_AT(meState == E_STATE_RUNNING,
+            "meState == E_STATE_RUNNING", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2132 /* ARTIST 0x82707588 */);
+
         return meRunningState == E_RUNNINGSTATE_PAUSED;
     }
 
@@ -741,7 +741,7 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
         case E_STARTINGUPSTATE_WAITING_FOR_STREAMING:
             break;
         default:
-            CGS_ASSERT_AT( false, "Invalid starting up state" , KAC_ARTIST_ASSERT_SOURCE, 2669);   // baked line 0xA6D == 2669
+            CGS_FAIL_AT( "Invalid starting up state" , KAC_ARTIST_ASSERT_SOURCE, 2669);   // baked line 0xA6D == 2669
             break;
         }
         break;
@@ -834,14 +834,14 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
         case E_TEARINGDOWNSTATE_WAITING_TO_RESET:
             break;
         default:
-            CGS_ASSERT_AT( false, "Invalid tearing down state", KAC_ARTIST_ASSERT_SOURCE, 2698 );
+            CGS_FAIL_AT( "Invalid tearing down state", KAC_ARTIST_ASSERT_SOURCE, 2698 );
             break;
         }
         break;
 
     default:
         // 0x8274C700.
-        CGS_ASSERT_AT( false, "Invalid state in traffic system", KAC_ARTIST_ASSERT_SOURCE, 2707 );
+        CGS_FAIL_AT( "Invalid state in traffic system", KAC_ARTIST_ASSERT_SOURCE, 2707 );
         break;
     }
 
@@ -1360,7 +1360,7 @@ bool TrafficEntityModule::LoadData( BrnTrafficIO::OutputBuffer_Prepare* lpOutput
     default:
         // The console's own default arm. Stages 4/5 and 10/11 have no case label in the
         // shipped jump table either, so landing here really is a weird state.
-        CGS_ASSERT( false, "TrafficEntityModule::LoadData in a weird state" );  // baked line 1320
+        CGS_FAIL( "TrafficEntityModule::LoadData in a weird state" );  // baked line 1320
         return false;
     }
 }
@@ -1740,9 +1740,9 @@ namespace
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::EnterStartingUpState()
 {
-    CGS_ASSERT(meState == E_STATE_INVALID,
-        CGS_ASSERT_MESSAGE_AT(
-            "meState == E_STATE_INVALID", KAC_ARTIST_ASSERT_SOURCE, 1697 /* ARTIST 0x82708060 */));
+    CGS_ASSERT_AT(meState == E_STATE_INVALID,
+        "meState == E_STATE_INVALID", KAC_ARTIST_ASSERT_SOURCE, 1697 /* ARTIST 0x82708060 */);
+
 
     meState           = E_STATE_STARTING_UP;
     meStartingUpState = E_STARTINGUPSTATE_FIRST;
@@ -1766,10 +1766,10 @@ void TrafficEntityModule::EnterStartingUpState()
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::EnterRunningState()
 {
-    CGS_ASSERT(meState == E_STATE_STARTING_UP && meStartingUpState == E_STARTINGUPSTATE_LAST,
-        CGS_ASSERT_MESSAGE_AT(
-            "( meState == E_STATE_STARTING_UP ) && ( meStartingUpState == E_STARTINGUPSTATE_LAST )",
-            KAC_ARTIST_ASSERT_SOURCE, 1721 /* ARTIST 0x8270811C */));
+    CGS_ASSERT_AT(meState == E_STATE_STARTING_UP && meStartingUpState == E_STARTINGUPSTATE_LAST,
+        "( meState == E_STATE_STARTING_UP ) && ( meStartingUpState == E_STARTINGUPSTATE_LAST )",
+            KAC_ARTIST_ASSERT_SOURCE, 1721 /* ARTIST 0x8270811C */);
+
 
     const ERunningState leRunningStateToUse = meRunningStateToUseAfterStartup;
 
@@ -1789,9 +1789,9 @@ void TrafficEntityModule::EnterRunningState()
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::EnterTearingDownState()
 {
-    CGS_ASSERT(meState == E_STATE_RUNNING,
-        CGS_ASSERT_MESSAGE_AT(
-            "meState == E_STATE_RUNNING", KAC_ARTIST_ASSERT_SOURCE, 1746 /* ARTIST 0x82708190 */));
+    CGS_ASSERT_AT(meState == E_STATE_RUNNING,
+        "meState == E_STATE_RUNNING", KAC_ARTIST_ASSERT_SOURCE, 1746 /* ARTIST 0x82708190 */);
+
 
     meState            = E_STATE_TEARING_DOWN;
     meTearingDownState = E_TEARINGDOWNSTATE_WIPING;
@@ -1991,9 +1991,9 @@ void TrafficEntityModule::StaticVehicles_UpdatePurgatory()
         --lrInfo.muDecisionFramesLeft;
         if (lrInfo.muDecisionFramesLeft == 0)
         {
-            CGS_ASSERT(!maStaticTrafficParams[lrInfo.muIndex].IsAlive(),
-                       CGS_ASSERT_MESSAGE_AT("!maStaticTrafficParams[lInfo.muIndex].IsAlive()", __FILE__, 8790));
-            CGS_ASSERT(lrInfo.muIndex <= 0xFFu, CGS_ASSERT_MESSAGE_AT("lInfo.muIndex <= 0xff", __FILE__, 8791));
+            CGS_ASSERT_AT(!maStaticTrafficParams[lrInfo.muIndex].IsAlive(),
+                       "!maStaticTrafficParams[lInfo.muIndex].IsAlive()", __FILE__, 8790);
+            CGS_ASSERT_AT(lrInfo.muIndex <= 0xFFu, "lInfo.muIndex <= 0xff", __FILE__, 8791);
 
             const u8 luFreedSlot = static_cast<u8>(lrInfo.muIndex);
             mFreeStaticParamStack.Push(luFreedSlot);
@@ -2417,7 +2417,7 @@ u8 TrafficEntityModule::PickVehicleToSpawn(u32 luFlowTypeId)
         // The `mpauVehicleTypeIds[0]` fallback is the other path, the not-acceptable tail at
         // 0x827238CC. Returning it here would dereference a table the console avoids: LABEL_12
         // is reached exactly when muNumVehicleTypes == 0 and the array may be empty.
-        CGS_ASSERT(false, "Invalid flow type");
+        CGS_FAIL("Invalid flow type");
         return 0;
     }
 
@@ -3494,7 +3494,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid starting up state");   // baked .cpp line 2934
+            CGS_FAIL("Invalid starting up state");   // baked .cpp line 2934
             break;
         }
         break;
@@ -3713,7 +3713,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid tearing down state");   // baked .cpp line 3032
+            CGS_FAIL("Invalid tearing down state");   // baked .cpp line 3032
             break;
         }
 
@@ -3742,7 +3742,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     break;
 
     default:
-        CGS_ASSERT(false, "Invalid state in traffic system");   // baked .cpp line 3041
+        CGS_FAIL("Invalid state in traffic system");   // baked .cpp line 3041
         break;
     }
 
@@ -4965,7 +4965,7 @@ void TrafficEntityModule::Construct()
 void TrafficEntityModule::GenerateRemovedVehicleEvents(
     BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface)
 {
-    CGS_ASSERT(lpCrashInputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpCrashInputInterface", __FILE__, 5240));
+    CGS_ASSERT_AT(lpCrashInputInterface != 0, "lpCrashInputInterface", __FILE__, 5240);
 
     for (u32 luIndex = 0; luIndex < maRecentlyRemovedVehicles.GetLength(); ++luIndex)
     {
@@ -4990,7 +4990,7 @@ void TrafficEntityModule::GenerateRemovedVehicleEvents(
 void TrafficEntityModule::GenerateSlamRecoveryEvents(
     BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface)
 {
-    CGS_ASSERT(lpCrashInputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpCrashInputInterface", __FILE__, 5268));
+    CGS_ASSERT_AT(lpCrashInputInterface != 0, "lpCrashInputInterface", __FILE__, 5268);
 
     for (u32 luIndex = 0; luIndex < maRecentlyRecoveredSlammedTraffic.GetLength(); ++luIndex)
     {
@@ -5284,7 +5284,7 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid starting up state");
+            CGS_FAIL("Invalid starting up state");
             break;
         }
     }
@@ -5312,7 +5312,7 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     break;
 
     default:
-        CGS_ASSERT(false, "Invalid state in traffic system");
+        CGS_FAIL("Invalid state in traffic system");
         break;
     }
 
@@ -5691,7 +5691,7 @@ void TrafficEntityModule::UpdateStreaming( BrnTrafficIO::OutputBuffer_PostPhysic
         break;
 
     default:
-        CGS_ASSERT_AT( false, "Unhandled case in switch" , KAC_ARTIST_ASSERT_SOURCE, 8221);   // baked .cpp line 8221
+        CGS_FAIL_AT( "Unhandled case in switch" , KAC_ARTIST_ASSERT_SOURCE, 8221);   // baked .cpp line 8221
         break;
     }
 
@@ -5791,7 +5791,7 @@ bool TrafficEntityModule::IsVehiclesParamAZombie(u32 luVehicle)
     }
     else if (leSpecies != Vehicle::E_SPECIES_STANDARD)
     {
-        CGS_ASSERT(false, "Encountered traffic vehicle with unknown species");   // .cpp 4786
+        CGS_FAIL("Encountered traffic vehicle with unknown species");   // .cpp 4786
         return false;
     }
 
@@ -7132,18 +7132,18 @@ void TrafficEntityModule::SwapParamsInList(u32 luParam, u32 luNextParam)
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::RemoveParamFromList(u32 luParam)
 {
-    CGS_ASSERT(luParam < KU_MAX_STANDARD_TRAFFIC,
-        CGS_ASSERT_MESSAGE_AT(
-            "luParam < KU_MAX_STANDARD_TRAFFIC", KAC_ARTIST_ASSERT_SOURCE, 13002 /* ARTIST 0x8272636C */));
+    CGS_ASSERT_AT(luParam < KU_MAX_STANDARD_TRAFFIC,
+        "luParam < KU_MAX_STANDARD_TRAFFIC", KAC_ARTIST_ASSERT_SOURCE, 13002 /* ARTIST 0x8272636C */);
+
 
     ParamListNode* lpNode = &maParamListNodes[luParam];
 
     if (lpNode->muNextParam != static_cast<u16>(KU_INVALID_PARAM))
     {
         ParamListNode* lpNextNode = &maParamListNodes[lpNode->muNextParam];
-        CGS_ASSERT(lpNextNode->muPrevParam == luParam,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpNextNode->muPrevParam == luParam", KAC_ARTIST_ASSERT_SOURCE, 13009 /* ARTIST 0x827263B8 */));
+        CGS_ASSERT_AT(lpNextNode->muPrevParam == luParam,
+            "lpNextNode->muPrevParam == luParam", KAC_ARTIST_ASSERT_SOURCE, 13009 /* ARTIST 0x827263B8 */);
+
 
         lpNextNode->muPrevParam = lpNode->muPrevParam;
     }
@@ -7151,9 +7151,9 @@ void TrafficEntityModule::RemoveParamFromList(u32 luParam)
     if (lpNode->muPrevParam != static_cast<u16>(KU_INVALID_PARAM))
     {
         ParamListNode* lpPrevNode = &maParamListNodes[lpNode->muPrevParam];
-        CGS_ASSERT(lpPrevNode->muNextParam == luParam,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpPrevNode->muNextParam == luParam", KAC_ARTIST_ASSERT_SOURCE, 13017 /* ARTIST 0x827263FC */));
+        CGS_ASSERT_AT(lpPrevNode->muNextParam == luParam,
+            "lpPrevNode->muNextParam == luParam", KAC_ARTIST_ASSERT_SOURCE, 13017 /* ARTIST 0x827263FC */);
+
 
         lpPrevNode->muNextParam = lpNode->muNextParam;
     }
@@ -7871,8 +7871,8 @@ void TrafficEntityModule::UpdateParams_UpdateNeighbours(Param* lpParam,
                                                         const Section* lpSection,
                                                         const Hull* lpHull)
 {
-    CGS_ASSERT(lpParam != 0,
-        CGS_ASSERT_MESSAGE_AT("lpParam", KAC_ARTIST_ASSERT_SOURCE, 10336 /* ARTIST 0x82708AF0 */));
+    CGS_ASSERT_AT(lpParam != 0,
+        "lpParam", KAC_ARTIST_ASSERT_SOURCE, 10336 /* ARTIST 0x82708AF0 */);
 
     const u32 luRung = lpParam->muCurrentSegment;
 
@@ -8186,7 +8186,7 @@ void TrafficEntityModule::UpdateParams_UpdatePlan(u32 luParam, u32 luMaxLaneChan
         }
         else if (lpPlan->muType >= ParamPlan::E_TYPES_COUNT)
         {
-            CGS_ASSERT(false, "Unknown param plan type");
+            CGS_FAIL("Unknown param plan type");
         }
         else if (lpPlan->muType == ParamPlan::E_TYPE_NONE)
         {
@@ -8600,7 +8600,7 @@ f32 TrafficEntityModule::UpdateParams_CalcAcceleration(
         }
 
         default:
-            CGS_ASSERT(false, "Bad state in param behaviour");
+            CGS_FAIL("Bad state in param behaviour");
             break;
     }
 
@@ -9441,7 +9441,7 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
         break;
 
     default:
-        CGS_ASSERT(false, "Unknown param action");
+        CGS_FAIL("Unknown param action");
         break;
     }
 }
@@ -10949,7 +10949,7 @@ bool TrafficEntityModule::GetSympCrashingTargetPos(EntityId lTargetEntityId,
         return true;
     }
 
-    CGS_ASSERT(false, "Unknown type of symp. crash target. Entity id=");   // .cpp 16518
+    CGS_FAIL("Unknown type of symp. crash target. Entity id=");   // .cpp 16518
     lpOutPos->SetZero();
     return false;
 }
@@ -11589,15 +11589,15 @@ void TrafficEntityModule::SendPhysicalRequests(BrnTrafficIO::OutputBuffer_PrePhy
 void TrafficEntityModule::SendEmergencyCrashEvents(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
                                                    TotalTrafficBitArray* lpCreatedBodies)
 {
-    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", __FILE__, 5476));                 // .cpp:5476
-    CGS_ASSERT(lpCreatedBodies != 0, CGS_ASSERT_MESSAGE_AT("lpCreatedBodies", __FILE__, 5477));   // .cpp:5477
+    CGS_ASSERT_AT(lpOutput != 0, "lpOutput", __FILE__, 5476);                 // .cpp:5476
+    CGS_ASSERT_AT(lpCreatedBodies != 0, "lpCreatedBodies", __FILE__, 5477);   // .cpp:5477
 
     for (u32 luIndex = 0; luIndex < maEmergencyCrashingVehicles.GetLength(); ++luIndex)
     {
         const TrafficCrashInfo* lpInfo = &maEmergencyCrashingVehicles.GetItem(luIndex);
         const u32 luVehicle = EntityIndexOf(lpInfo->mVictimId);
-        CGS_ASSERT(lpInfo->mVictimId.muValue != lpInfo->mCauserId.muValue,
-                   CGS_ASSERT_MESSAGE_AT("lpInfo->mVictimId != lpInfo->mCauserId", __FILE__, 5485));   // .cpp:5485
+        CGS_ASSERT_AT(lpInfo->mVictimId.muValue != lpInfo->mCauserId.muValue,
+                   "lpInfo->mVictimId != lpInfo->mCauserId", __FILE__, 5485);   // .cpp:5485
 
         if (lpCreatedBodies->IsBitSet(luVehicle))
         {
@@ -11657,19 +11657,19 @@ void TrafficEntityModule::SendEmergencyCrashEvents(BrnTrafficIO::OutputBuffer_Pr
 void TrafficEntityModule::CreateBodiesForCrashingNetworkTraffic(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
                                                                 TotalTrafficBitArray* lpCreatedBodies)
 {
-    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", __FILE__, 5794));
-    CGS_ASSERT(lpCreatedBodies != 0, CGS_ASSERT_MESSAGE_AT("lpCreatedBodies", __FILE__, 5795));
-    CGS_ASSERT(IsPlayingOnlineGameMode() || maNewCrashedNetworkVehicles.GetLength() == 0,
-               CGS_ASSERT_MESSAGE_AT("IsPlayingOnlineGameMode() || maNewCrashedNetworkVehicles.GetLength() == 0",
-                                         __FILE__, 5796));
+    CGS_ASSERT_AT(lpOutput != 0, "lpOutput != NULL", __FILE__, 5794);
+    CGS_ASSERT_AT(lpCreatedBodies != 0, "lpCreatedBodies", __FILE__, 5795);
+    CGS_ASSERT_AT(IsPlayingOnlineGameMode() || maNewCrashedNetworkVehicles.GetLength() == 0,
+               "IsPlayingOnlineGameMode() || maNewCrashedNetworkVehicles.GetLength() == 0",
+                                         __FILE__, 5796);
 
     // The inlined EntityId::Set(race car, meLocalPlayerIndex, part 0): only the index bound
     // survives as an assert (CgsEntityId.h:116, li r5,0x74 at 0x8274B5B0); owner and part are
     // constants.
     const u32 luPlayerIndex = static_cast<u32>(meLocalPlayerIndex);
-    CGS_ASSERT(luPlayerIndex < (1u << KU_NUM_BITS_FOR_ENTITY_NUM),
-               CGS_ASSERT_MESSAGE_AT("luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)",
-                                         "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsEntityId.h", 116));
+    CGS_ASSERT_AT(luPlayerIndex < (1u << KU_NUM_BITS_FOR_ENTITY_NUM),
+               "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)",
+                                         "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsEntityId.h", 116);
     EntityId lPlayerId;
     lPlayerId.muValue = (luPlayerIndex << KU_RACE_CAR_PART_INDEX_SHIFT) | KU_RACE_CAR_OWNER_PACKED;
 
@@ -11812,15 +11812,15 @@ void TrafficEntityModule::MakeVehiclePhysical(
     CGS_ASSERT(lpMadePhysical != 0, "lpCreatedBodies");    // 0x82747260, .cpp:2523
 
     // 0x827472AC: MakeTrafficEntityId inlined (its CgsEntityId.h:116 bound assert is baked).
-    CGS_ASSERT(MakeTrafficEntityId(luVehicle).muValue != lTargetEntityId.muValue,
-               CGS_ASSERT_MESSAGE_AT("MakeTrafficEntityId( luVehicle ) != lCauserEntityId", __FILE__, 2524));   // .cpp:2524
+    CGS_ASSERT_AT(MakeTrafficEntityId(luVehicle).muValue != lTargetEntityId.muValue,
+               "MakeTrafficEntityId( luVehicle ) != lCauserEntityId", __FILE__, 2524);   // .cpp:2524
 
     // 0x82747308 / 0x8274735C: the SAME mxFlags byte read twice, once per assert, each with
     // its own inlined GetVehicle bound assert (BrnTrafficEntityModule.h:2459).
-    CGS_ASSERT(GetVehicle(luVehicle)->IsAlive(),
-               CGS_ASSERT_MESSAGE_AT("GetVehicle( luVehicle )->IsAlive()", __FILE__, 2525));                    // .cpp:2525
-    CGS_ASSERT(!GetVehicle(luVehicle)->IsPhysical(),
-               CGS_ASSERT_MESSAGE_AT("!GetVehicle( luVehicle )->IsPhysical()", __FILE__, 2526));                // .cpp:2526
+    CGS_ASSERT_AT(GetVehicle(luVehicle)->IsAlive(),
+               "GetVehicle( luVehicle )->IsAlive()", __FILE__, 2525);                    // .cpp:2525
+    CGS_ASSERT_AT(!GetVehicle(luVehicle)->IsPhysical(),
+               "!GetVehicle( luVehicle )->IsPhysical()", __FILE__, 2526);                // .cpp:2526
 
     // 0x8274738C: the export symbol `OutputBuffer_PrePhysics::G...` is truncated; it is
     // GetVehicleInputInterface (BrnTrafficEntityModuleIO.h:795).
@@ -12050,8 +12050,8 @@ void TrafficEntityModule::RecordTrafficVehicleIsPhysical(
 {
     Vehicle* lpVehicle = GetVehicle(luVehicle);   // 0x82720EF8 bound assert .h:2459
 
-    CGS_ASSERT(lEntityId.muValue != lTargetEntityId.muValue,
-               CGS_ASSERT_MESSAGE_AT("lVictimId != lCauserId", __FILE__, 6988));                                // .cpp:6988
+    CGS_ASSERT_AT(lEntityId.muValue != lTargetEntityId.muValue,
+               "lVictimId != lCauserId", __FILE__, 6988);                                // .cpp:6988
 
     // 0x82720F50..0x82720F6C: four explicit equality tests, not a range check.
     CGS_ASSERT_AT(leCrashType == BrnPhysics::Vehicle::eCrashTrafficType_Checked ||
@@ -12089,7 +12089,7 @@ void TrafficEntityModule::RecordTrafficVehicleIsPhysical(
             liPartsIndex = -1;
         }
 
-        CGS_ASSERT(liPartsIndex >= 0, CGS_ASSERT_MESSAGE_AT("liPartsIndex >= 0", __FILE__, 7025));                    // .cpp:7025
+        CGS_ASSERT_AT(liPartsIndex >= 0, "liPartsIndex >= 0", __FILE__, 7025);                    // .cpp:7025
 
         maTrafficPhysicsInfoListBits.SetBit(static_cast<u32>(liPartsIndex));   // 0x8272115C
 
@@ -12278,7 +12278,7 @@ void TrafficEntityModule::GenerateCrashedVehicleEvents(BrnTrafficIO::OutputBuffe
         }
         else
         {
-            CGS_ASSERT(false, "Vehicle has unsupported species");
+            CGS_FAIL("Vehicle has unsupported species");
         }
 
         if (!lbParamStillLive)                                                  // 0x82720498
@@ -12530,7 +12530,7 @@ namespace
 // -------------------------------------------------------------------------------------------
 void TrafficEntityModule::UpdateVehicleStuckTimers(void* lpPhysicsInfo, f32 lfReset, f32 lfThreshold)
 {
-    CGS_ASSERT(lpPhysicsInfo != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsInfo", __FILE__, 17412));        // .cpp:17412
+    CGS_ASSERT_AT(lpPhysicsInfo != 0, "lpPhysicsInfo", __FILE__, 17412);        // .cpp:17412
 
     TrafficPhysicsInfo* const lpInfo = static_cast<TrafficPhysicsInfo*>(lpPhysicsInfo);
 
@@ -12676,12 +12676,12 @@ bool TrafficEntityModule::TryClearupOffscreenTraffic(
 // -------------------------------------------------------------------------------------------
 void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput)
 {
-    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer != NULL", __FILE__, 15794));                       // .cpp:15794
+    CGS_ASSERT_AT(lpOutput != 0, "lpOutputBuffer != NULL", __FILE__, 15794);                       // .cpp:15794
 
     BrnPhysics::Vehicle::VehicleDriverInputInterface* const lpDriverInputInterface =
         lpOutput->GetVehicleDriverInterface();                                 // 0x82748EDC
 
-    CGS_ASSERT(lpDriverInputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpDriverInputInterface != NULL", __FILE__, 15801)); // .cpp:15801
+    CGS_ASSERT_AT(lpDriverInputInterface != 0, "lpDriverInputInterface != NULL", __FILE__, 15801); // .cpp:15801
 
     CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS> lPhysicalAliveVehicles;
     lPhysicalAliveVehicles.SetAnd(mVehicleSoaData.mAliveVehicles,
@@ -12867,7 +12867,7 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
             }
             else
             {
-                CGS_ASSERT(false, "Unknown manoeuvre");                          // 0x82749540
+                CGS_FAIL("Unknown manoeuvre");                          // 0x82749540
             }
 
             // GATE TrafficEntityModule::DEBUG_ValidateEmDriverControls @0x82708FF8 (204) --
@@ -13944,7 +13944,7 @@ void TrafficEntityModule::UpdateStuckReverseManoeuvre(u32 luVehicle,
     else
     {
         // The console streams the phase after the text (StrStream << GetCurrentManoeuvrePhase()).
-        CGS_ASSERT(false, "Invalid phase for E_MANOEUVRE_STUCK_REVERSE: ");               // .cpp 17053
+        CGS_FAIL("Invalid phase for E_MANOEUVRE_STUCK_REVERSE: ");               // .cpp 17053
     }
 }
 
@@ -14032,7 +14032,7 @@ void TrafficEntityModule::UpdateGiveUpManoeuvre(u32 luVehicle,
     else if (liPhase != 1)
     {
         // The console streams the phase after the text (StrStream << GetCurrentManoeuvrePhase()).
-        CGS_ASSERT(false, "Invalid phase for E_MANOEUVRE_GIVE_UP: ");                     // .cpp 16973
+        CGS_FAIL("Invalid phase for E_MANOEUVRE_GIVE_UP: ");                     // .cpp 16973
         return;
     }
 
@@ -14180,7 +14180,7 @@ void TrafficEntityModule::Update3PointTurnManoeuvre(u32 luVehicle,
     else if (liPhase != 1)
     {
         // The console streams the phase after the text (StrStream << GetCurrentManoeuvrePhase()).
-        CGS_ASSERT(false, "Invalid phase for E_MANOEUVRE_3_POINT_TURN: ");                 // .cpp 16888
+        CGS_FAIL("Invalid phase for E_MANOEUVRE_3_POINT_TURN: ");                 // .cpp 16888
         return;
     }
 
@@ -14543,7 +14543,7 @@ void TrafficEntityModule::HandleRecycledTraffic(
         }
 
         default:
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "A traffic vehicle was recycled with an invalid physical state"); // .cpp 3575
             break;
         }
@@ -14758,7 +14758,7 @@ namespace
 // -------------------------------------------------------------------------------------------------
 void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
 {
-    CGS_ASSERT(lpInput != 0, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", __FILE__, 6215));                                        // :6215
+    CGS_ASSERT_AT(lpInput != 0, "lpInput != NULL", __FILE__, 6215);                                        // :6215
     if (lpInput == 0)
     {
         return;
@@ -16642,7 +16642,7 @@ void TrafficEntityModule::RemoveVehicle(u32 luVehicle)
             // .cpp 4261. Streamed: "Traffic vehicle " << luVehicle
             // << " has unknown species " << GetVehicleSpecies(luVehicle).
             // 0x8272E48C `b __restgprlr_20` -- this arm RETURNS, unlike its ordinary twin.
-            CGS_ASSERT(false, "Traffic vehicle ");
+            CGS_FAIL("Traffic vehicle ");
             return;
         }
     }
@@ -16703,7 +16703,7 @@ void TrafficEntityModule::RemoveVehicle(u32 luVehicle)
     default:
         // .cpp 4322, the same streamed message as the divergent twin -- but this one FALLS
         // THROUGH to the shared tail (0x8272E80C `b loc_8272E9B0`).
-        CGS_ASSERT(false, "Traffic vehicle ");
+        CGS_FAIL("Traffic vehicle ");
         break;
     }
 
@@ -18501,7 +18501,7 @@ void TrafficEntityModule::PostSceneUpdate( CgsModule::IOBufferStack* /*lpInputBu
         case E_STARTINGUPSTATE_WAITING_FOR_STREAMING:
             break;
         default:
-            CGS_ASSERT_AT( false, "Invalid starting up state" , KAC_ARTIST_ASSERT_SOURCE, 2274);
+            CGS_FAIL_AT( "Invalid starting up state" , KAC_ARTIST_ASSERT_SOURCE, 2274);
             break;
         }
         break;
@@ -18536,13 +18536,13 @@ void TrafficEntityModule::PostSceneUpdate( CgsModule::IOBufferStack* /*lpInputBu
             CleanUpCrashedVehicles( lpInput );
             break;
         default:
-            CGS_ASSERT( false, "Invalid tearing down state" );
+            CGS_FAIL( "Invalid tearing down state" );
             break;
         }
         break;
 
     default:
-        CGS_ASSERT( false, "Invalid state in traffic system" );
+        CGS_FAIL( "Invalid state in traffic system" );
         break;
     }
 
@@ -19311,9 +19311,9 @@ void TrafficEntityModule::GenerateNearMissOutput( BrnTrafficIO::InputBuffer_PreS
 
         TrafficInterface* lpInterface = lpOutput->GetTrafficToRaceCarInterface_PreScene();
 
-        CGS_ASSERT( lpNearMissTrafficCollection != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpNearMissTrafficCollection != NULL", KAC_ARTIST_ASSERT_HEADER, 291 /* ARTIST 0x82715CFC */));
+        CGS_ASSERT_AT( lpNearMissTrafficCollection != 0,
+            "lpNearMissTrafficCollection != NULL", KAC_ARTIST_ASSERT_HEADER, 291 /* ARTIST 0x82715CFC */);
+
 
         std::memcpy( lpInterface->GetNearMissTrafficCollection(),
                      lpNearMissTrafficCollection,
@@ -19326,9 +19326,9 @@ void TrafficEntityModule::GenerateNearMissOutput( BrnTrafficIO::InputBuffer_PreS
 
         TrafficInterface* lpInterface = lpOutput->GetTrafficToRaceCarInterface_PreScene();
 
-        CGS_ASSERT( lpNearMissRaceCarCollection != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpNearMissRaceCarCollection != NULL", KAC_ARTIST_ASSERT_HEADER, 305 /* ARTIST 0x82715D40 */));
+        CGS_ASSERT_AT( lpNearMissRaceCarCollection != 0,
+            "lpNearMissRaceCarCollection != NULL", KAC_ARTIST_ASSERT_HEADER, 305 /* ARTIST 0x82715D40 */);
+
 
         std::memcpy( lpInterface->GetNearMissRaceCarCollection(),
                      lpNearMissRaceCarCollection,
@@ -19731,7 +19731,7 @@ void TrafficEntityModule::GenerateSympatheticCrasherOutput(const BrnTrafficIO::I
 // ---------------------------------------------------------------------------------------------
 void TrafficEntityModule::ManageTriggers(BrnTrafficIO::OutputBuffer_PreScene* lpOutput)
 {
-    CGS_ASSERT(lpOutput, CGS_ASSERT_MESSAGE_AT("lpOutput", __FILE__, 4703));   // .cpp:4703
+    CGS_ASSERT_AT(lpOutput, "lpOutput", __FILE__, 4703);   // .cpp:4703
 
     for (u32 luIndex = 0; luIndex < mHullsToRemoveTriggersFor.GetLength(); ++luIndex)
     {

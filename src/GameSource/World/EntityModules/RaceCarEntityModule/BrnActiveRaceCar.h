@@ -146,7 +146,7 @@ public:
     // (IsAttached itself stays a call), and emits the out-of-line copy 0x822B8480.
     RaceCar* GetGlobalRaceCar() const
     {
-        CGS_ASSERT(IsAttached(), CGS_ASSERT_MESSAGE_AT("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1089));
+        CGS_ASSERT_AT(IsAttached(), "IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1089);
         return mpRaceCar;
     }
 
@@ -327,7 +327,7 @@ public:
     // return mPhysicsState.mbCrashing.
     bool IsCrashing() const
     {
-        CGS_ASSERT(IsAttached(), CGS_ASSERT_MESSAGE_AT("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1418));
+        CGS_ASSERT_AT(IsAttached(), "IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1418);
         return mPhysicsState.mbCrashing;
     }
 
@@ -347,7 +347,7 @@ public:
     // liState == meRaceStartState.
     bool IsOnRaceStartState(s32 liState) const
     {
-        CGS_ASSERT(IsAttached(), CGS_ASSERT_MESSAGE_AT("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1355));
+        CGS_ASSERT_AT(IsAttached(), "IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1355);
         return meRaceStartState == liState;   // subf r11, state, liState @0x822A20B0
     }
 
@@ -943,12 +943,12 @@ public:
     // only the const overload; the mutable one serves this tree's writers.
     BrnPhysics::Vehicle::RaceCarState* GetPhysicsState()
     {
-        CGS_ASSERT(IsAttached(), CGS_ASSERT_MESSAGE_AT("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1096));
+        CGS_ASSERT_AT(IsAttached(), "IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1096);
         return &mPhysicsState;
     }
     const BrnPhysics::Vehicle::RaceCarState* GetPhysicsState() const
     {
-        CGS_ASSERT(IsAttached(), CGS_ASSERT_MESSAGE_AT("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1096));
+        CGS_ASSERT_AT(IsAttached(), "IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1096);
         return &mPhysicsState;
     }
 

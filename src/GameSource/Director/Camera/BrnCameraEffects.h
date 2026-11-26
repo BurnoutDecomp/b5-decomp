@@ -239,31 +239,31 @@ struct CameraEffects
     // @0x821F1910 (h:175) -- the start-hook blend amount.
     f32 GetStartHookNameBlendAmount() const
     {
-        CGS_ASSERT(mbHasStartHookNameString, CGS_ASSERT_MESSAGE_AT("mbHasStartHookNameString", CGS_ARTIST_BRNCAMERAEFFECTS_FILE, 175));   // :175 (non-gating)
+        CGS_ASSERT_AT(mbHasStartHookNameString, "mbHasStartHookNameString", CGS_ARTIST_BRNCAMERAEFFECTS_FILE, 175);   // :175 (non-gating)
         return mfStartHookNameBlendAmount;
     }
 
     // @0x821F1968 (h:178, const) / @0x821F1A18 (h:497, non-const).
     const HookNameStringWrapper& GetStartHookNameString() const
     {
-        CGS_ASSERT(mbHasStartHookNameString, CGS_ASSERT_MESSAGE_AT("mbHasStartHookNameString", CGS_ARTIST_BRNCAMERAEFFECTS_FILE, 178));   // :178 (non-gating)
+        CGS_ASSERT_AT(mbHasStartHookNameString, "mbHasStartHookNameString", CGS_ARTIST_BRNCAMERAEFFECTS_FILE, 178);   // :178 (non-gating)
         return mStartHookNameString;
     }
     HookNameStringWrapper& GetStartHookNameString()
     {
-        CGS_ASSERT(mbHasStartHookNameString, CGS_ASSERT_MESSAGE_AT("mbHasStartHookNameString", CGS_ARTIST_BRNCAMERAEFFECTS_FILE, 497));   // :497 (non-gating)
+        CGS_ASSERT_AT(mbHasStartHookNameString, "mbHasStartHookNameString", CGS_ARTIST_BRNCAMERAEFFECTS_FILE, 497);   // :497 (non-gating)
         return mStartHookNameString;
     }
 
     // @0x821F19C0 (h:194, const) / @0x821F1A70 (h:524, non-const).
     const HookNameStringWrapper& GetStopHookNameString() const
     {
-        CGS_ASSERT(mbHasStopHookNameString, CGS_ASSERT_MESSAGE_AT("mbHasStopHookNameString", CGS_ARTIST_BRNCAMERAEFFECTS_FILE, 194));     // :194 (non-gating)
+        CGS_ASSERT_AT(mbHasStopHookNameString, "mbHasStopHookNameString", CGS_ARTIST_BRNCAMERAEFFECTS_FILE, 194);     // :194 (non-gating)
         return mStopHookNameString;
     }
     HookNameStringWrapper& GetStopHookNameString()
     {
-        CGS_ASSERT(mbHasStopHookNameString, CGS_ASSERT_MESSAGE_AT("mbHasStopHookNameString", CGS_ARTIST_BRNCAMERAEFFECTS_FILE, 524));     // :524 (non-gating)
+        CGS_ASSERT_AT(mbHasStopHookNameString, "mbHasStopHookNameString", CGS_ARTIST_BRNCAMERAEFFECTS_FILE, 524);     // :524 (non-gating)
         return mStopHookNameString;
     }
     // The background request (DWARF: the request sub-object MainDirector::Update hands to

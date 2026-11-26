@@ -155,14 +155,14 @@ void PausedHudState::Update()
                 break;
             default:
                 // :128 -- the console streams the offending value after the text.
-                CGS_ASSERT(false, "Invalid state in event : ");
+                CGS_FAIL("Invalid state in event : ");
                 break;
             }
             continue;
         }
 
         // :137 -- kept VERBATIM, IntroHudState and all (the console's own copy-paste).
-        CGS_ASSERT(false, "Unexpected event in IntroHudState::Update");
+        CGS_FAIL("Unexpected event in IntroHudState::Update");
     }
 
     mpInGuiEventQueue->Clear();

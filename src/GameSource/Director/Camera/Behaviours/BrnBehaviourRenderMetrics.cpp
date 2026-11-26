@@ -284,10 +284,10 @@ bool BehaviourRenderMetrics::Update(Camera& lrCamera, const BehaviourSharedInfo&
 // ----------------------------------------------------------------------------
 void BehaviourRenderMetrics::SetParameters(const Behaviour::Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourRenderMetrics,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpParameters->GetType() == eBehaviourRenderMetrics",
-            CGS_ARTIST_FILE, 434 /* ARTIST 0x821FB2B8 */));
+    CGS_ASSERT_AT(lpParameters->GetType() == eBehaviourRenderMetrics,
+        "lpParameters->GetType() == eBehaviourRenderMetrics",
+            CGS_ARTIST_FILE, 434 /* ARTIST 0x821FB2B8 */);
+
     mpParameters = static_cast<const Parameters*>(lpParameters);
 }
 
@@ -358,8 +358,8 @@ void BehaviourRenderMetrics::GameTalkMessageReceiver(EA::GameTalk::GameTalkMessa
         else if (_stricmp(lpcKey, "SetIdleMetricsCamera") == 0)
         {
             const f32* lpfContent = static_cast<const f32*>(lpMessage->GetContent(liIndex));
-            CGS_ASSERT(lpMessage->GetSize(liIndex) >= (int)(6 * sizeof(f32)),
-                       CGS_ASSERT_MESSAGE_AT("lpMessage->GetSize(luIndex) >= (int)(6 * sizeof(float32_t))", CGS_ARTIST_FILE, 132));
+            CGS_ASSERT_AT(lpMessage->GetSize(liIndex) >= (int)(6 * sizeof(f32)),
+                       "lpMessage->GetSize(luIndex) >= (int)(6 * sizeof(float32_t))", CGS_ARTIST_FILE, 132);
 
             {
                 const Vector3 lAggregateValue(lpfContent[0], lpfContent[1], lpfContent[2]);

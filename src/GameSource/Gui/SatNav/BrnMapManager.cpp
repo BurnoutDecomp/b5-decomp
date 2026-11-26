@@ -272,13 +272,13 @@ namespace BrnGui
     // (GetTileState is evaluated as the asserted expression, matching the X360 unconditional call.)
     void MapManager::RemoveTileFromSet(SatNavTile* lpTile)
     {
-        CGS_ASSERT(lpTile != NULL,
-            CGS_ASSERT_MESSAGE_AT("lpTile != NULL", __FILE__, 979 /* ARTIST 0x8244884C */));
+        CGS_ASSERT_AT(lpTile != NULL,
+            "lpTile != NULL", __FILE__, 979 /* ARTIST 0x8244884C */);
 
-        CGS_ASSERT(GetTileState(lpTile->muID) == SatNavTile::E_STATE_LOADED,
-            CGS_ASSERT_MESSAGE_AT(
-                "GetTileState( lpTile->muID) == SatNavTile::E_STATE_LOADED",
-                __FILE__, 980 /* ARTIST 0x8244887C */));
+        CGS_ASSERT_AT(GetTileState(lpTile->muID) == SatNavTile::E_STATE_LOADED,
+            "GetTileState( lpTile->muID) == SatNavTile::E_STATE_LOADED",
+                __FILE__, 980 /* ARTIST 0x8244887C */);
+
     }
 
     namespace
@@ -319,9 +319,9 @@ namespace BrnGui
                         continue;
                     }
 
-                    CGS_ASSERT(lTile.mpTile != NULL, CGS_ASSERT_MESSAGE_AT(
+                    CGS_ASSERT_AT(lTile.mpTile != NULL,
                         "lTile.mpTile != NULL",
-                        "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapManager.cpp", 229));  // 0x8244F810
+                        "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapManager.cpp", 229);  // 0x8244F810
 
                     const SatNavTile::sRect& lWorldBB = lTile.mpTile->mBBWorld[0];
                     const float lfTileArea = MyAbs(

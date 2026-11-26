@@ -29,12 +29,12 @@ void CgsSceneManager::SceneManagerIO::SceneQueryInterface::LineTestFine(
     static const char KAC_ARTIST_FILE[] =
         "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h";
 
-    CGS_ASSERT(leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY,
-               CGS_ASSERT_MESSAGE_AT("leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY",
-                                     KAC_ARTIST_FILE, 995));
-    CGS_ASSERT(mpFineLineTestQueue,
-               CGS_ASSERT_MESSAGE_AT("mpFineLineTestQueue",
-                                     KAC_ARTIST_FILE, 996));
+    CGS_ASSERT_AT(leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY,
+               "leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY",
+                                     KAC_ARTIST_FILE, 995);
+    CGS_ASSERT_AT(mpFineLineTestQueue,
+               "mpFineLineTestQueue",
+                                     KAC_ARTIST_FILE, 996);
 
     InEventLineTestFine lEvent;
     lEvent.mQueryId = lQueryId;
@@ -63,11 +63,11 @@ void CgsSceneManager::SceneManagerIO::SceneQueryInterface::VolumeTestDeepest(
     static const char KAC_ARTIST_FILE[] =
         "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h";
 
-    CGS_ASSERT(leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY,
-               CGS_ASSERT_MESSAGE_AT("leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY",
-                                     KAC_ARTIST_FILE, 1094));
-    CGS_ASSERT(mpFineVolumeTestDeepestQueue,
-               CGS_ASSERT_MESSAGE_AT("mpFineVolumeTestDeepestQueue", KAC_ARTIST_FILE, 1095));
+    CGS_ASSERT_AT(leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY,
+               "leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY",
+                                     KAC_ARTIST_FILE, 1094);
+    CGS_ASSERT_AT(mpFineVolumeTestDeepestQueue,
+               "mpFineVolumeTestDeepestQueue", KAC_ARTIST_FILE, 1095);
 
     InEventVolumeTestDeepest lEvent;
     lEvent.mQueryId = lQueryId;
@@ -103,39 +103,39 @@ void CgsSceneManager::SceneManagerIO::SceneQueryInterface::Append(const SceneQue
     const char* const lpcAssertFile =
         "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h";
 
-    CGS_ASSERT(mpFineLineTestQueue || !lOther.mpFineLineTestQueue,
-        CGS_ASSERT_MESSAGE_AT("mpFineLineTestQueue || !lOther.mpFineLineTestQueue",
-            lpcAssertFile, 1138 /* ARTIST 0x823C5034 */));
+    CGS_ASSERT_AT(mpFineLineTestQueue || !lOther.mpFineLineTestQueue,
+        "mpFineLineTestQueue || !lOther.mpFineLineTestQueue",
+            lpcAssertFile, 1138 /* ARTIST 0x823C5034 */);
     if (lOther.mpFineLineTestQueue)
         mpFineLineTestQueue->Append(*lOther.mpFineLineTestQueue);
 
-    CGS_ASSERT(mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue,
-        CGS_ASSERT_MESSAGE_AT("mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue",
-            lpcAssertFile, 1144 /* ARTIST 0x823C507C */));
+    CGS_ASSERT_AT(mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue,
+        "mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue",
+            lpcAssertFile, 1144 /* ARTIST 0x823C507C */);
     if (lOther.mpFineVolumeTestQueue)
         mpFineVolumeTestQueue->Append(*lOther.mpFineVolumeTestQueue);
 
-    CGS_ASSERT(mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue,
-        CGS_ASSERT_MESSAGE_AT("mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue",
-            lpcAssertFile, 1150 /* ARTIST 0x823C50C4 */));
+    CGS_ASSERT_AT(mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue,
+        "mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue",
+            lpcAssertFile, 1150 /* ARTIST 0x823C50C4 */);
     if (lOther.mpFineLineTestFastDoubleSidedQueue)
         mpFineLineTestFastDoubleSidedQueue->Append(*lOther.mpFineLineTestFastDoubleSidedQueue);
 
-    CGS_ASSERT(mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue,
-        CGS_ASSERT_MESSAGE_AT("mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue",
-            lpcAssertFile, 1156 /* ARTIST 0x823C510C */));
+    CGS_ASSERT_AT(mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue,
+        "mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue",
+            lpcAssertFile, 1156 /* ARTIST 0x823C510C */);
     if (lOther.mpFineSphereTestFastQueue)
         mpFineSphereTestFastQueue->Append(*lOther.mpFineSphereTestFastQueue);
 
-    CGS_ASSERT(mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue,
-        CGS_ASSERT_MESSAGE_AT("mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue",
-            lpcAssertFile, 1162 /* ARTIST 0x823C5154 */));
+    CGS_ASSERT_AT(mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue,
+        "mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue",
+            lpcAssertFile, 1162 /* ARTIST 0x823C5154 */);
     if (lOther.mpFineLineTestNearestQueue)
         mpFineLineTestNearestQueue->Append(*lOther.mpFineLineTestNearestQueue);
 
-    CGS_ASSERT(mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue,
-        CGS_ASSERT_MESSAGE_AT("mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue",
-            lpcAssertFile, 1168 /* ARTIST 0x823C519C */));
+    CGS_ASSERT_AT(mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue,
+        "mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue",
+            lpcAssertFile, 1168 /* ARTIST 0x823C519C */);
     if (lOther.mpFineVolumeTestDeepestQueue)
         mpFineVolumeTestDeepestQueue->Append(*lOther.mpFineVolumeTestDeepestQueue);
 }

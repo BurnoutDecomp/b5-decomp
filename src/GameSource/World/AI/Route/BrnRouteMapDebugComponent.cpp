@@ -112,7 +112,7 @@ void RouteMapDebugComponent::Construct(RouteMapModule* lpRouteMapModule, AIModul
     // The X360 calls the base init first (BaseCollisionGenerator::Destruct is the de-virtualised
     // base two-phase reset that the inliner folded in); reproduce it as the base Construct.
     CgsDev::DebugComponent::Construct();   // ARTIST 0x82767E40 (folded at 0x8284CB38)
-    CGS_ASSERT(lpRouteMapModule != NULL, CGS_ASSERT_MESSAGE_AT("lpRouteMapModule != NULL", __FILE__, 88));
+    CGS_ASSERT_AT(lpRouteMapModule != NULL, "lpRouteMapModule != NULL", __FILE__, 88);
 
     mpRouteMapModule = lpRouteMapModule;     // +0x0C
     mpAIModule       = lpAIModule;            // +0x14
@@ -265,11 +265,11 @@ void RouteMapDebugComponent::Back100SectionsCallback(void* lpUserData)
 // ====================================================================================================
 void RouteMapDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay)
 {
-    CGS_ASSERT(mpRouteMapModule != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpRouteMapModule != NULL",
+    CGS_ASSERT_AT(mpRouteMapModule != NULL,
+        "mpRouteMapModule != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../World/AI/Route/BrnRouteMapDebugComponent.cpp", 160 /* ARTIST 0x8278C800 */));
+            "../World/AI/Route/BrnRouteMapDebugComponent.cpp", 160 /* ARTIST 0x8278C800 */);
+
 
     if (mbDrawPortals)
         DrawPortals(lpDisplay);

@@ -69,21 +69,21 @@ namespace CgsResource
         muMaxLinearHeapNodes        = lpParams->muMaxLinearHeapNodes;       // result[13] = a2[10]
         muMaxRelocateSources        = lpParams->muMaxRelocateSources;       // result[14] = a2[11]
 
-        CGS_ASSERT(mpPool,
-            CGS_ASSERT_MESSAGE_AT("mpPool", __FILE__, 87 /* ARTIST 0x828DA12C */));                    // :87
-        CGS_ASSERT(mpAllocListSet,
-            CGS_ASSERT_MESSAGE_AT("mpAllocListSet", __FILE__, 88 /* ARTIST 0x828DA154 */));            // :88
-        CGS_ASSERT(mpAddressedAllocRequests,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpAddressedAllocRequests", __FILE__, 89 /* ARTIST 0x828DA17C */));  // :89
-        CGS_ASSERT(mpRelocateRequests,
-            CGS_ASSERT_MESSAGE_AT("mpRelocateRequests", __FILE__, 90 /* ARTIST 0x828DA1A4 */));        // :90
-        CGS_ASSERT(mpDistributionEntries,
-            CGS_ASSERT_MESSAGE_AT("mpDistributionEntries", __FILE__, 91 /* ARTIST 0x828DA1CC */));     // :91
-        CGS_ASSERT(mpLinearHeapNodes,
-            CGS_ASSERT_MESSAGE_AT("mpLinearHeapNodes", __FILE__, 92 /* ARTIST 0x828DA1F4 */));         // :92
-        CGS_ASSERT(mpRelocateSources,
-            CGS_ASSERT_MESSAGE_AT("mpRelocateSources", __FILE__, 93 /* ARTIST 0x828DA21C */));         // :93
+        CGS_ASSERT_AT(mpPool,
+            "mpPool", __FILE__, 87 /* ARTIST 0x828DA12C */);                    // :87
+        CGS_ASSERT_AT(mpAllocListSet,
+            "mpAllocListSet", __FILE__, 88 /* ARTIST 0x828DA154 */);            // :88
+        CGS_ASSERT_AT(mpAddressedAllocRequests,
+            "mpAddressedAllocRequests", __FILE__, 89 /* ARTIST 0x828DA17C */);  // :89
+
+        CGS_ASSERT_AT(mpRelocateRequests,
+            "mpRelocateRequests", __FILE__, 90 /* ARTIST 0x828DA1A4 */);        // :90
+        CGS_ASSERT_AT(mpDistributionEntries,
+            "mpDistributionEntries", __FILE__, 91 /* ARTIST 0x828DA1CC */);     // :91
+        CGS_ASSERT_AT(mpLinearHeapNodes,
+            "mpLinearHeapNodes", __FILE__, 92 /* ARTIST 0x828DA1F4 */);         // :92
+        CGS_ASSERT_AT(mpRelocateSources,
+            "mpRelocateSources", __FILE__, 93 /* ARTIST 0x828DA21C */);         // :93
     }
 
     // -------- FindNextFreeNode @ 0x828DA248 --------

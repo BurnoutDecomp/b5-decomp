@@ -311,7 +311,7 @@ namespace CgsGui
             miState4 = 0;
             return true;
         default:
-            CGS_ASSERT_AT(false, "CgsGUI::AptAux::Prepare() Invalid State!", CGS_ARTIST_FILE, 247);
+            CGS_FAIL_AT("CgsGUI::AptAux::Prepare() Invalid State!", CGS_ARTIST_FILE, 247);
             return false;
         }
     }
@@ -336,7 +336,7 @@ namespace CgsGui
             miState0 = 0;
             return true;
         default:
-            CGS_ASSERT_AT(false, "CgsGUI::AptAux::Release() Invalid State!", CGS_ARTIST_FILE, 302);
+            CGS_FAIL_AT("CgsGUI::AptAux::Release() Invalid State!", CGS_ARTIST_FILE, 302);
             return false;
         }
     }
@@ -530,17 +530,17 @@ namespace CgsGui
     // X360 0x82849528 (CgsGui::AptCallbackDebug::AddSavedInput). Guarded not-yet-implemented.
     void AptCallbackDebug::AddSavedInput(AptSavedInputRecord* /*lpRecord*/, s32 /*liCount*/)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "AptCallbackDebug::AddSavedInput() has not been implemented but is being used, please implement before utilising.", __FILE__, 799 /* ARTIST 0x8284953C */));
+        CGS_FAIL_AT(
+            "AptCallbackDebug::AddSavedInput() has not been implemented but is being used, please implement before utilising.", __FILE__, 799 /* ARTIST 0x8284953C */);
+
     }
 
     // X360 0x82849568 (CgsGui::AptCallbackDebug::SetScreenGrabPending). Guarded not-yet-implemented.
     void AptCallbackDebug::SetScreenGrabPending(const char* /*lpacName*/)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "AptCallbackDebug::SetScreenGrabPending() has not been implemented but is being used, please implement before utilising.", __FILE__, 812 /* ARTIST 0x8284957C */));
+        CGS_FAIL_AT(
+            "AptCallbackDebug::SetScreenGrabPending() has not been implemented but is being used, please implement before utilising.", __FILE__, 812 /* ARTIST 0x8284957C */);
+
     }
 
     // X360 0x82849470 (CgsGui::AptCallbackDebug::Print, gAptFuncs pfnDebugPrint). Format the
@@ -554,9 +554,9 @@ namespace CgsGui
         va_start(lArgs, lpacFormat);
         const int liCopied = vsnprintf(lacBuffer, sizeof(lacBuffer), lpacFormat, lArgs);
         va_end(lArgs);
-        CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacBuffer)),
-            CGS_ASSERT_MESSAGE_AT("lNumBytesCopied<(int32_t)luBytes",
-                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96));
+        CGS_ASSERT_AT(liCopied < static_cast<int>(sizeof(lacBuffer)),
+            "lNumBytesCopied<(int32_t)luBytes",
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96);
         lacBuffer[sizeof(lacBuffer) - 1] = '\0';
 
         if (CgsDev::Message::gxMessageFilterFlags & 1)
@@ -569,18 +569,18 @@ namespace CgsGui
     // X360 0x828495E0 (CgsGui::AptCallbackFile::GetBytesTotal). Guarded not-yet-implemented.
     s32 AptCallbackFile::GetBytesTotal(const char* /*lpacFileName*/, AptGetBytesEnum /*leWhich*/)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "AptCallbackFile::GetBytesTotal() has not been implemented but is being used, please implement before utilising.", __FILE__, 921 /* ARTIST 0x828495F4 */));
+        CGS_FAIL_AT(
+            "AptCallbackFile::GetBytesTotal() has not been implemented but is being used, please implement before utilising.", __FILE__, 921 /* ARTIST 0x828495F4 */);
+
         return 0;
     }
 
     // X360 0x82849620 (CgsGui::AptCallbackFile::GetBytesLoaded). Guarded not-yet-implemented.
     s32 AptCallbackFile::GetBytesLoaded(const char* /*lpacFileName*/, AptGetBytesEnum /*leWhich*/)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "AptCallbackFile::GetBytesLoaded() has not been implemented but is being used, please implement before utilising.", __FILE__, 936 /* ARTIST 0x82849634 */));
+        CGS_FAIL_AT(
+            "AptCallbackFile::GetBytesLoaded() has not been implemented but is being used, please implement before utilising.", __FILE__, 936 /* ARTIST 0x82849634 */);
+
         return 0;
     }
 
@@ -601,10 +601,10 @@ namespace CgsGui
     // exists, then remove the unloading movieclip from the communicator component table.
     void AptCallbackFile::OnUnload(AptValue* lpValue)
     {
-        CGS_ASSERT(AptAuxPointer::mpAptAuxInst != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "AptAuxPointer::mpAptAuxInst",
-                __FILE__, 906 /* ARTIST 0x8285410C */));
+        CGS_ASSERT_AT(AptAuxPointer::mpAptAuxInst != 0,
+            "AptAuxPointer::mpAptAuxInst",
+                __FILE__, 906 /* ARTIST 0x8285410C */);
+
         AptCommunicator::RemoveExpiredAptComponent(lpValue);
     }
 
@@ -664,17 +664,17 @@ namespace CgsGui
     // X360 0x82849660 (CgsGui::AptCallbackVariable::SetExternVariable). Guarded not-yet-implemented.
     void AptCallbackVariable::SetExternVariable(const char* /*lpacName*/, const char* /*lpacValue*/)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "AptCallbackVariable::SetExternVariable() has not been implemented but is being used, please implement before utilising.", __FILE__, 951 /* ARTIST 0x82849674 */));
+        CGS_FAIL_AT(
+            "AptCallbackVariable::SetExternVariable() has not been implemented but is being used, please implement before utilising.", __FILE__, 951 /* ARTIST 0x82849674 */);
+
     }
 
     // X360 0x828496A0 (CgsGui::AptCallbackVariable::GetExternVariable). Guarded not-yet-implemented.
     AptValue* AptCallbackVariable::GetExternVariable(const char* /*lpacName*/)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "AptCallbackVariable::GetExternVariable() has not been implemented but is being used, please implement before utilising.", __FILE__, 964 /* ARTIST 0x828496B4 */));
+        CGS_FAIL_AT(
+            "AptCallbackVariable::GetExternVariable() has not been implemented but is being used, please implement before utilising.", __FILE__, 964 /* ARTIST 0x828496B4 */);
+
         return 0;
     }
 
@@ -684,50 +684,50 @@ namespace CgsGui
                                               const char* /*lpacVariables*/, const char* /*lpacMethod*/,
                                               s32 /*liFlags*/)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "SendVariables() has not been implemented but is being used, please implement before utilising.", __FILE__, 1114 /* ARTIST 0x828496F4 */));
+        CGS_FAIL_AT(
+            "SendVariables() has not been implemented but is being used, please implement before utilising.", __FILE__, 1114 /* ARTIST 0x828496F4 */);
+
     }
 
     // X360 0x82849720 (CgsGui::AptCallbackDeprecated::FsCommand). Guarded not-yet-implemented.
     void AptCallbackDeprecated::FsCommand(const char* /*lpacCommand*/, const char* /*lpacArgs*/)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "Command() has not been implemented but is being used, please implement before utilising.", __FILE__, 1128 /* ARTIST 0x82849734 */));
+        CGS_FAIL_AT(
+            "Command() has not been implemented but is being used, please implement before utilising.", __FILE__, 1128 /* ARTIST 0x82849734 */);
+
     }
 
     // CgsGui::AptCallbackDeprecated::LoadVariables (gAptFuncs pfnLoadVariables). Guarded not-yet-implemented.
     AptValue* AptCallbackDeprecated::LoadVariables(const char* /*lpacUrl*/)
     {
-        CGS_ASSERT(false, "LoadVariables() has not been implemented but is being used, please implement before utilising.");
+        CGS_FAIL("LoadVariables() has not been implemented but is being used, please implement before utilising.");
         return 0;
     }
 
     // X360 0x828497A0 (CgsGui::AptCallbackDeprecated::LoadVariablesNULL). Guarded not-yet-implemented.
     AptValue* AptCallbackDeprecated::LoadVariablesNULL()
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "LoadVariablesNULL() has not been implemented but is being used, please implement before utilising.", __FILE__, 1154 /* ARTIST 0x828497B4 */));
+        CGS_FAIL_AT(
+            "LoadVariablesNULL() has not been implemented but is being used, please implement before utilising.", __FILE__, 1154 /* ARTIST 0x828497B4 */);
+
         return 0;
     }
 
     // X360 0x828497E0 (CgsGui::AptCallbackDeprecated::PointHitTest). Guarded not-yet-implemented.
     s32 AptCallbackDeprecated::PointHitTest(f32 /*lfX*/, f32 /*lfY*/, AptAssetMoiveClip /*leClip*/)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "PointHitTest() has not been implemented but is being used, please implement before utilising.", __FILE__, 1204 /* ARTIST 0x828497F4 */));
+        CGS_FAIL_AT(
+            "PointHitTest() has not been implemented but is being used, please implement before utilising.", __FILE__, 1204 /* ARTIST 0x828497F4 */);
+
         return 0;
     }
 
     // X360 0x82849820 (CgsGui::AptCallbackDeprecated::GetRealTimeClock). Guarded not-yet-implemented.
     void AptCallbackDeprecated::GetRealTimeClock(AptSysClock* /*lpSysClock*/, bool /*lbUseUtc*/)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "GetRealTimeClock() has not been implemented but is being used, please implement before utilising.", __FILE__, 1224 /* ARTIST 0x82849834 */));
+        CGS_FAIL_AT(
+            "GetRealTimeClock() has not been implemented but is being used, please implement before utilising.", __FILE__, 1224 /* ARTIST 0x82849834 */);
+
     }
 
     // The language-manager accessor CgsAptString::Prepare (CgsAptString.cpp) reaches the manager

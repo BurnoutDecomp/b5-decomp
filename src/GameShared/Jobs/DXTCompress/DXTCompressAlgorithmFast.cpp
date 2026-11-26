@@ -955,7 +955,7 @@ void fdxt(u8* lpDst, const u8* lpSrc, s32 liSrcPitch, s32 liNumBlocks, u32 luFla
     }
     else
     {
-        CGS_ASSERT(false, " Unsupported image format passed to DXT compression job");
+        CGS_FAIL(" Unsupported image format passed to DXT compression job");
         liSrcAdvance = static_cast<s32>(luColour0);
     }
 

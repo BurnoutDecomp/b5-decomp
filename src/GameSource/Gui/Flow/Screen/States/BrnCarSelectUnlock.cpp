@@ -289,7 +289,7 @@ namespace BrnGui
             // into the assert message buffer and fires unconditionally; the macro carries
             // the fixed half of that text.
             // Streamed in place, as ARTIST builds it (cpp:162).
-            CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+            CGS_FAIL_STREAM_AT("Invalid internal state : " << meInternalState << "\n",
                                  CGS_ARTIST_FILE, 162);
             break;
         }
@@ -314,7 +314,7 @@ namespace BrnGui
     // pointer into mpGuiCache.
     void CarSelectUnlock::UpdateGetCache()
     {
-        CGS_ASSERT(mpGuiCache == NULL, CGS_ASSERT_MESSAGE_AT("NULL == mpGuiCache", CGS_ARTIST_FILE, 215 /* ARTIST 0x824C15E0 */));   // cpp:215
+        CGS_ASSERT_AT(mpGuiCache == NULL, "NULL == mpGuiCache", CGS_ARTIST_FILE, 215 /* ARTIST 0x824C15E0 */);   // cpp:215
 
         InGuiEventQueue* lpInQueue = reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue);
 
@@ -335,12 +335,12 @@ namespace BrnGui
             {
                 // The cache event carries the GuiCache pointer in its leading word.
                 GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
-                CGS_ASSERT(lpCache != NULL, CGS_ASSERT_MESSAGE_AT("NULL != lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 225 /* ARTIST 0x824C1650 */));   // cpp:225
+                CGS_ASSERT_AT(lpCache != NULL, "NULL != lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 225 /* ARTIST 0x824C1650 */);   // cpp:225
                 mpGuiCache = lpCache;
             }
         }
 
-        CGS_ASSERT(mpGuiCache != NULL, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", CGS_ARTIST_FILE, 234 /* ARTIST 0x824C1680 */));   // cpp:234
+        CGS_ASSERT_AT(mpGuiCache != NULL, "NULL != mpGuiCache", CGS_ARTIST_FILE, 234 /* ARTIST 0x824C1680 */);   // cpp:234
     }
 
     // ---- UpdateLoadResources @ 0x824D8268 -----------------------------------------

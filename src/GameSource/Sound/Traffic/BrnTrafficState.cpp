@@ -58,11 +58,11 @@ const char* TrafficState::GetTypeName() const
 // State base Attach.
 void TrafficState::Attach( void* lpvAttachment )
 {
-    CGS_ASSERT( lpvAttachment != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpvAttachment",
+    CGS_ASSERT_AT( lpvAttachment != 0,
+        "lpvAttachment",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Sound/Vehicles/Traffic/BrnTrafficState.cpp", 66 /* ARTIST 0x826CB29C */));
+            "../Sound/Vehicles/Traffic/BrnTrafficState.cpp", 66 /* ARTIST 0x826CB29C */);
+
     mpTrafficEntity = static_cast<const BrnTraffic::BrnTrafficIO::TrafficSoundEntity*>( lpvAttachment );
     State::Attach( lpvAttachment );
 }

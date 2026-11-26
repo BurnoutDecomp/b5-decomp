@@ -267,7 +267,7 @@ namespace BrnGameState
             mbWasInAirLastFrame = false;
         }
 
-        CGS_ASSERT(lePlayerIndex != -1, CGS_ASSERT_MESSAGE_AT("Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980));
+        CGS_ASSERT_AT(lePlayerIndex != -1, "Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980);
 
         // --- landing pass: rate accumulated spin / barrel-roll ---
         // GetCurrentInAirRotations -> a Vector3 of per-axis rotation; the X360 takes the
@@ -349,7 +349,7 @@ namespace BrnGameState
                                              const ActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
     {
         const RaceCarState* lpPlayerRC = lpActiveRaceCarInterface->GetPlayerRaceCarState();
-        CGS_ASSERT(lpPlayerRC != NULL, CGS_ASSERT_MESSAGE_AT("lpPlayerRC", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 896));
+        CGS_ASSERT_AT(lpPlayerRC != NULL, "lpPlayerRC", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 896);
 
         // The drift clock is RaceCarState::mfTimeDrifting (+0x400 of the state the getter returns),
         // the physics' own drifting timer -- NOT mfInProgressDriftTime (+0x428), the

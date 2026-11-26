@@ -74,7 +74,7 @@ void Im3dSkyDome::Construct(rw::IResourceAllocator* lpAllocator)
     }
     else
     {
-        CGS_ASSERT(false, "mapVertexProgramBuffer[ li8Program ] != NULL");
+        CGS_FAIL("mapVertexProgramBuffer[ li8Program ] != NULL");
     }
 
     renderengine::ProgramBufferData* const lpPixelProgram =
@@ -98,7 +98,7 @@ void Im3dSkyDome::Construct(rw::IResourceAllocator* lpAllocator)
     }
     else
     {
-        CGS_ASSERT(false, "mapPixelProgramBuffer[ li8Program ] != NULL");
+        CGS_FAIL("mapPixelProgramBuffer[ li8Program ] != NULL");
     }
 
     renderengine::TextureState::Parameters lSamplerParameters;

@@ -451,10 +451,10 @@ namespace
 // ---------------------------------------------------------------------------
 void EventInfoComponent::SetEventType(BrnGameState::GameStateModuleIO::EGameModeType leCurrentGameMode)
 {
-    CGS_ASSERT(leCurrentGameMode != BrnGameState::GameStateModuleIO::E_MODE_NONE,
-        CGS_ASSERT_MESSAGE_AT(
-            "GsmIO::E_MODE_NONE != leCurrentGameMode",
-            CGS_ARTIST_FILE, 501 /* ARTIST 0x8242FCA4 */));   // cpp:501 (non-gating)
+    CGS_ASSERT_AT(leCurrentGameMode != BrnGameState::GameStateModuleIO::E_MODE_NONE,
+        "GsmIO::E_MODE_NONE != leCurrentGameMode",
+            CGS_ARTIST_FILE, 501 /* ARTIST 0x8242FCA4 */);   // cpp:501 (non-gating)
+
 
     meCurrentEventType = leCurrentGameMode;                  // stw r30, 0x3D4(r31)
 
@@ -616,12 +616,12 @@ void EventInfoComponent::PrepareComponentsForGameMode()
                                           KAC_ADDSCORE_TEXTFIELD_NAME,
                                           KAC_TEXTBOX_NAME,
                                           &mAddScoreTextField);
-        CGS_ASSERT(lbFoundAddScore,
-                   CGS_ASSERT_MESSAGE_AT(
-                       "TryFindTextFieldFromMovieClip( mEventMovieClip, KAC_ADDSCORE_TEXTFIELD_NAME, "
+        CGS_ASSERT_AT(lbFoundAddScore,
+                   "TryFindTextFieldFromMovieClip( mEventMovieClip, KAC_ADDSCORE_TEXTFIELD_NAME, "
                        "KAC_TEXTBOX_NAME, &mAddScoreTextField )",
                        CGS_ARTIST_FILE,
-                       380));  // ARTIST 0x824293D0
+                       380);  // ARTIST 0x824293D0
+
 
         mAddScoreTextField.SetText(KAC_EMPTY_STRING, false);
 
@@ -632,12 +632,12 @@ void EventInfoComponent::PrepareComponentsForGameMode()
                                           KAC_BANKSCORE_TEXTFIELD_NAME,
                                           KAC_BANKSCORE_TEXTBOX_NAME,
                                           &mBankScoreTextField);
-        CGS_ASSERT(lbFoundBankScore,
-                   CGS_ASSERT_MESSAGE_AT(
-                       "TryFindTextFieldFromMovieClip( mEventMovieClip, KAC_BANKSCORE_TEXTFIELD_NAME, "
+        CGS_ASSERT_AT(lbFoundBankScore,
+                   "TryFindTextFieldFromMovieClip( mEventMovieClip, KAC_BANKSCORE_TEXTFIELD_NAME, "
                        "KAC_BANKSCORE_TEXTBOX_NAME, &mBankScoreTextField )",
                        CGS_ARTIST_FILE,
-                       383));  // ARTIST 0x82429428
+                       383);  // ARTIST 0x82429428
+
 
         mBankScoreTextField.SetText(KAC_EMPTY_STRING, false);
 
@@ -742,10 +742,10 @@ void EventInfoComponent::BankingTransitionCompleteCallback(void* lpUserData, u16
 {
     (void)luArg;
 
-    CGS_ASSERT(lpUserData != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpUserData",
-            CGS_ARTIST_FILE, 736 /* ARTIST 0x824214EC */));   // cpp:736 (non-gating)
+    CGS_ASSERT_AT(lpUserData != 0,
+        "lpUserData",
+            CGS_ARTIST_FILE, 736 /* ARTIST 0x824214EC */);   // cpp:736 (non-gating)
+
 
     EventInfoComponent* const lpThis = static_cast<EventInfoComponent*>(lpUserData);
 
@@ -966,7 +966,7 @@ namespace
 // ---------------------------------------------------------------------------
 void EventInfoComponent::Update(GuiCache* lpCache)
 {
-    CGS_ASSERT(lpCache != 0, CGS_ASSERT_MESSAGE_AT("lpCache", CGS_ARTIST_FILE, 759 /* ARTIST 0x8243546C */));   // BrnEventInfo.cpp:759 (non-gating)
+    CGS_ASSERT_AT(lpCache != 0, "lpCache", CGS_ARTIST_FILE, 759 /* ARTIST 0x8243546C */);   // BrnEventInfo.cpp:759 (non-gating)
 
     // `lwz r11, 0x3D4(r30)` then `lwzx r10, r31, 0x9E58` -- the cache's mode against the
     // latched one. GetGameMode() is the public accessor for the far member.

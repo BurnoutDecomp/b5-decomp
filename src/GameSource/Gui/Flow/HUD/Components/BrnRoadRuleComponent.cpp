@@ -903,7 +903,7 @@ void RoadRuleComponent::TransitionComplete(s32 liArg)
             mTargetCrashMC.GotoAndPlayLabel("nameToValue");
         break;
     default:
-        CGS_ASSERT(false, "Unexpected subcomponent identifier ( )");   // :1507 (non-gating)
+        CGS_FAIL("Unexpected subcomponent identifier ( )");   // :1507 (non-gating)
         break;
     }
 }
@@ -911,10 +911,10 @@ void RoadRuleComponent::TransitionComplete(s32 liArg)
 // @ 0x82441778 -- the trampoline Prepare installs on the component clip.
 void RoadRuleComponent::TransitionCompleteCallback(void* lpUserData, u16 lu16Label)
 {
-    CGS_ASSERT(lpUserData != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpUserData",
-            "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnRoadRuleComponent.cpp", 2231 /* ARTIST 0x824417A4 */));   // :2231 (non-gating)
+    CGS_ASSERT_AT(lpUserData != 0,
+        "lpUserData",
+            "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnRoadRuleComponent.cpp", 2231 /* ARTIST 0x824417A4 */);   // :2231 (non-gating)
+
     static_cast<RoadRuleComponent*>(lpUserData)->TransitionComplete(static_cast<s32>(lu16Label));
 }
 
@@ -1394,10 +1394,10 @@ void RoadRuleComponent::UpdateUpcomingRoadLeaders(GuiEventRoadRuleUpcomingRoads*
 // @ 0x82473520 -- BrnRoadRuleComponent.h:628. Adopt the GUI cache pointer.
 void RoadRuleComponent::SetCachePointer(GuiCache* lpGuiCache)
 {
-    CGS_ASSERT(0 != lpGuiCache,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpCache",
-            "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnRoadRuleComponent.h", 628 /* ARTIST 0x8247354C */));   // :628 (non-gating)
+    CGS_ASSERT_AT(0 != lpGuiCache,
+        "lpCache",
+            "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnRoadRuleComponent.h", 628 /* ARTIST 0x8247354C */);   // :628 (non-gating)
+
     mpGuiCache = lpGuiCache;
 }
 

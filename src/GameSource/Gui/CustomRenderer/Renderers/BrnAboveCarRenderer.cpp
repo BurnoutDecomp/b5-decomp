@@ -131,7 +131,7 @@ void AboveCarRenderer::UpdateCachedInfoForRival(EActiveRaceCarIndex leIndex)
         }
         else
         {
-            CGS_ASSERT(false, "Invalid rival position for active race car");
+            CGS_FAIL("Invalid rival position for active race car");
             lrInfo.mpPositionText = reinterpret_cast<const CgsResource::CgsUtf8*>("???");
         }
     }
@@ -206,7 +206,7 @@ bool AboveCarRenderer::Prepare(CgsGui::GuiEventQueueSmall*,
         mpHeapAllocator = lpHeapAllocator;
     else if (mePrepareStage != E_PREPARESTAGE_DONE)
     {
-        CGS_ASSERT(false, " unknown prepare stage in AboveCarRenderer ");
+        CGS_FAIL(" unknown prepare stage in AboveCarRenderer ");
         return false;
     }
     mePrepareStage = E_PREPARESTAGE_DONE;
@@ -223,7 +223,7 @@ bool AboveCarRenderer::Release()
     }
     else if (meReleaseStage != E_RELEASESTAGE_DONE)
     {
-        CGS_ASSERT(false, " unknown release stage in AboveCarRenderer ");
+        CGS_FAIL(" unknown release stage in AboveCarRenderer ");
         return false;
     }
     meReleaseStage = E_RELEASESTAGE_DONE;

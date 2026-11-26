@@ -111,7 +111,7 @@ namespace CgsMemory
                 if (!AllocateBlocks(lrRegion.muNumBlocks, 0, static_cast<u16>(lt), false,
                                     &luFirstBlock, &luLastBlock))
                 {
-                    CGS_ASSERT_STREAM_AT(false, "Failed to allocate blocks for root bank\n",
+                    CGS_FAIL_STREAM_AT("Failed to allocate blocks for root bank\n",
                         CGS_ARTIST_FILE, 1007);
 
                     return;
@@ -178,7 +178,7 @@ namespace CgsMemory
                 // Previously this only asserted and fell through to a divide-by-zero on luParentGranule.
                 if (lrParent.GetBlockSize(lt) == 0)
                 {
-                    CGS_ASSERT(false, "Parent has no free blocks of this type");
+                    CGS_FAIL("Parent has no free blocks of this type");
                     return 4;
                 }
                 const u32 luNewBlockSize  = luSize / luBlockCount;                          // bytes per new block
@@ -188,7 +188,7 @@ namespace CgsMemory
                 // size" then result=7; goto exit). Was previously a silent truncating divide.
                 if (luSize % luParentGranule != 0)
                 {
-                    CGS_ASSERT(false, "Bank size is not a multiple of parent block size");
+                    CGS_FAIL("Bank size is not a multiple of parent block size");
                     return 7;
                 }
                 lRequest.mau16Counts[lt]  = static_cast<u16>(luSize / luParentGranule);     // parent blocks needed
@@ -266,7 +266,7 @@ namespace CgsMemory
         case MemoryIO::E_EVENT_TYPE_CREATE_ALLOCATOR:            ProcessCreateAllocatorRequest(lpRequest, lpOutput);        break;
         case MemoryIO::E_EVENT_TYPE_DESTROY_ALLOCATOR:           ProcessDestroyAllocatorRequest(lpRequest, lpOutput);       break;
         default:
-            CGS_ASSERT_AT(false, "Unkown memory request type", CGS_ARTIST_FILE, 333);
+            CGS_FAIL_AT("Unkown memory request type", CGS_ARTIST_FILE, 333);
             break;
         }
     }
@@ -419,12 +419,12 @@ namespace CgsMemory
         MemoryIO::ResultCodes leResult;
         if (liParentId < 0 || liParentId >= static_cast<s32>(muMaxBanks))
         {
-            CGS_ASSERT(false, "Parent bank id out of range");
+            CGS_FAIL("Parent bank id out of range");
             leResult = MemoryIO::E_RESULT_BANK_OUT_OF_RANGE;
         }
         else if (GetBankIndexFromId(static_cast<u32>(liParentId)) == MemoryBank::KU_INVALID_BANK)
         {
-            CGS_ASSERT(false, "Parent bank does not exist");
+            CGS_FAIL("Parent bank does not exist");
             leResult = MemoryIO::E_RESULT_BANK_ID_NOT_FOUND;
         }
         else
@@ -464,7 +464,7 @@ namespace CgsMemory
                 }
                 else
                 {
-                    CGS_ASSERT(false, "Allocator not set");
+                    CGS_FAIL("Allocator not set");
                     leResult = MemoryIO::E_RESULT_ALLOCATOR_NOT_SET;
                 }
             }
@@ -496,7 +496,7 @@ namespace CgsMemory
         }
         else
         {
-            CGS_ASSERT(false, "Allocator not set");
+            CGS_FAIL("Allocator not set");
             leResult = MemoryIO::E_RESULT_ALLOCATOR_NOT_SET;
         }
 
@@ -532,12 +532,12 @@ namespace CgsMemory
         const u32 luParentIdx = GetBankIndexFromId(static_cast<u32>(liParentId));
         if (liParentId < 0 || liParentId >= static_cast<s32>(muMaxBanks))
         {
-            CGS_ASSERT(false, "Parent bank id out of range");
+            CGS_FAIL("Parent bank id out of range");
             leResult = MemoryIO::E_RESULT_BANK_OUT_OF_RANGE;
         }
         else if (luParentIdx == MemoryBank::KU_INVALID_BANK)
         {
-            CGS_ASSERT(false, "Parent bank does not exist");
+            CGS_FAIL("Parent bank does not exist");
             leResult = MemoryIO::E_RESULT_BANK_ID_NOT_FOUND;
         }
         else
@@ -552,13 +552,13 @@ namespace CgsMemory
                 {
                     if (luGranule == 0)   // parent bank has no blocks for this memory type (X360 traps here)
                     {
-                        CGS_ASSERT(false, "Parent bank has no blocks for the requested resource memory type");
+                        CGS_FAIL("Parent bank has no blocks for the requested resource memory type");
                         leResult = MemoryIO::E_RESULT_BLOCK_SIZES_DONT_MATCH;
                         break;
                     }
                     if (luGranule < luReqAlign)   // parent granule cannot satisfy the requested alignment
                     {
-                        CGS_ASSERT(false, "Parent bank granule too small for requested resource alignment");
+                        CGS_FAIL("Parent bank granule too small for requested resource alignment");
                         leResult = MemoryIO::E_RESULT_INVALID_ALIGNMENT;
                         break;
                     }
@@ -829,7 +829,7 @@ namespace CgsMemory
     {
         if (liBankId < 0 || liBankId >= static_cast<s32>(muMaxBanks))
         {
-            CGS_ASSERT(false, "Bank id out of range");
+            CGS_FAIL("Bank id out of range");
             return 1;
         }
         const u8    lu8Index  = GetBankIndexFromId(static_cast<u32>(liBankId));
@@ -837,17 +837,17 @@ namespace CgsMemory
         const u8    lu8Parent = lrBank.GetParent();
         if (lu8Parent == static_cast<u8>(MemoryBank::KU_INVALID_BANK))
         {
-            CGS_ASSERT(false, "Cannot destroy a bank with no parent (the root)");
+            CGS_FAIL("Cannot destroy a bank with no parent (the root)");
             return 8;
         }
 
         if (lbLeafMode)
         {
-            if (!lrBank.GetIsLeaf()) { CGS_ASSERT(false, "Bank is not a leaf bank"); return 12; }
+            if (!lrBank.GetIsLeaf()) { CGS_FAIL("Bank is not a leaf bank"); return 12; }
         }
         else
         {
-            if (lrBank.GetIsLeaf()) { CGS_ASSERT(false, "Bank is a leaf bank"); return 11; }
+            if (lrBank.GetIsLeaf()) { CGS_FAIL("Bank is a leaf bank"); return 11; }
 
             // non-leaf: it must hold no live allocations (its children must already be destroyed)
             for (s32 lt = 0; lt < MemoryBank::KI_NUM_TYPES; ++lt)
@@ -859,7 +859,7 @@ namespace CgsMemory
                 {
                     if (mpBlocks[luBlock].mxStatus.IsBitSet(1))
                     {
-                        CGS_ASSERT(false, "Can not destroy non-empty bank");
+                        CGS_FAIL("Can not destroy non-empty bank");
                         return 9;
                     }
                     luBlock = mpBlocks[luBlock].muNextBlock;

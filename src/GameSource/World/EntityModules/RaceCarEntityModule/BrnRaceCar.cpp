@@ -340,9 +340,9 @@ void RaceCar::UpdatePositioningData(const Matrix44Affine& lTransform, CgsWorld::
 void RaceCar::UpdateVelocity(Vector3 lVelocity)
 {
     // Header-inline in the original: ARTIST bakes BrnRaceCar.h:682/683 (0x822B3E48/0x822B3ECC).
-    CGS_ASSERT(IsInWorld(), CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 682));
-    CGS_ASSERT(rw::math::vpu::IsValid(lVelocity),
-               CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( lVelocity )", BRN_RACECAR_H_ASSERT_FILE, 683));
+    CGS_ASSERT_AT(IsInWorld(), "IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 682);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lVelocity),
+               "RwMath::IsValid( lVelocity )", BRN_RACECAR_H_ASSERT_FILE, 683);
 
     mVelocity = lVelocity;
 }
@@ -394,8 +394,8 @@ void RaceCar::SetActiveRaceCarIndex(EActiveRaceCarIndex leIndex)
 // ----------------------------------------------------------------------------
 ActiveRaceCar* RaceCar::GetActiveRaceCar()
 {
-    CGS_ASSERT(IsInWorld(),
-        CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 401 /* ARTIST 0x822B39E4 */));
+    CGS_ASSERT_AT(IsInWorld(),
+        "IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 401 /* ARTIST 0x822B39E4 */);
 
     return mpActiveRaceCar;
 }

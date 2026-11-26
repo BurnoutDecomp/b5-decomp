@@ -57,17 +57,17 @@ namespace Native
     // ------------------------------------------------------------------------
     void BrnDebrisArray::Construct(FXBucketManager* lpBucketManager, EDebrisArrayID leDebrisType)
     {
-        CGS_ASSERT( ( leDebrisType >= 0 ) && ( leDebrisType < eDebrisArray_Max ),
-            CGS_ASSERT_MESSAGE_AT(
-                "( leDebrisType >= 0 ) && ( leDebrisType < eDebrisArray_Max )",
-                __FILE__, 182 /* ARTIST 0x8227A408 */));
+        CGS_ASSERT_AT( ( leDebrisType >= 0 ) && ( leDebrisType < eDebrisArray_Max ),
+            "( leDebrisType >= 0 ) && ( leDebrisType < eDebrisArray_Max )",
+                __FILE__, 182 /* ARTIST 0x8227A408 */);
+
 
         mpParams = &_gaDebrisArrayParams[leDebrisType];
 
-        CGS_ASSERT( mpParams->mnNumParticles > 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpParams->mnNumParticles > 0",
-                __FILE__, 185 /* ARTIST 0x8227A44C */));
+        CGS_ASSERT_AT( mpParams->mnNumParticles > 0,
+            "mpParams->mnNumParticles > 0",
+                __FILE__, 185 /* ARTIST 0x8227A44C */);
+
 
         mpBucketManager = lpBucketManager;
         mpBuckets       = 0;

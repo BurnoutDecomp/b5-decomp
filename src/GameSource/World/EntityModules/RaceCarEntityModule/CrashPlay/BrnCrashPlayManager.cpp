@@ -298,9 +298,9 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
                                ActiveRaceCar*         lpPlayerActiveRaceCar,
                                PlayerVehicleControls* lpPlayerControls )
 {
-    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", __FILE__, 262));               // :262
-    CGS_ASSERT(lpPlayerActiveRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpPlayerActiveRaceCar", __FILE__, 263));  // :263
-    CGS_ASSERT(lpPlayerControls != 0, CGS_ASSERT_MESSAGE_AT("lpPlayerControls", __FILE__, 264));       // :264
+    CGS_ASSERT_AT(lpOutput != 0, "lpOutput", __FILE__, 262);               // :262
+    CGS_ASSERT_AT(lpPlayerActiveRaceCar != 0, "lpPlayerActiveRaceCar", __FILE__, 263);  // :263
+    CGS_ASSERT_AT(lpPlayerControls != 0, "lpPlayerControls", __FILE__, 264);       // :264
 
     // IsCrashing() carries the console's inlined IsAttached() assert (BrnActiveRaceCar.h:1418),
     // which is the assert ARTIST fires between these two byte tests.
@@ -314,22 +314,22 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
     mfTimeSinceLastTrafficStomp    += lfSimTimerTimeStep;
     mfTimeSinceLastHitOverheadSign += lfSimTimerTimeStep;
 
-    CGS_ASSERT(mPlayerCarVolumeInstanceID.IsValid(),
-               CGS_ASSERT_MESSAGE_AT("mPlayerCarVolumeInstanceID.IsValid()", __FILE__, 278));   // :278 (ARTIST 0x82306648..0x82306690)
+    CGS_ASSERT_AT(mPlayerCarVolumeInstanceID.IsValid(),
+               "mPlayerCarVolumeInstanceID.IsValid()", __FILE__, 278);   // :278 (ARTIST 0x82306648..0x82306690)
 
     // The camera basis, flattened into the ground plane. The console builds both by storing the
     // matrix row to the stack, zeroing its Y word in place, reloading it, and running the two-step
     // Newton-Raphson rsqrt that Normalize() de-optimises back to.
     Vector3 lCameraX = lCameraTransform.xAxis;
     lCameraX.SetY( 0.0f );
-    CGS_ASSERT( rw::math::vpu::MagnitudeSquared( lCameraX ) > 0.0f,
-                CGS_ASSERT_MESSAGE_AT("RwMath::MagnitudeSquared(lCameraX) > 0.0f", __FILE__, 290));                                 // :290
+    CGS_ASSERT_AT( rw::math::vpu::MagnitudeSquared( lCameraX ) > 0.0f,
+                "RwMath::MagnitudeSquared(lCameraX) > 0.0f", __FILE__, 290);                                 // :290
     lCameraX = rw::math::vpu::Normalize( lCameraX );
 
     Vector3 lCameraZ = lCameraTransform.zAxis;
     lCameraZ.SetY( 0.0f );
-    CGS_ASSERT( rw::math::vpu::MagnitudeSquared( lCameraZ ) > 0.0f,
-                CGS_ASSERT_MESSAGE_AT("RwMath::MagnitudeSquared(lCameraZ) > 0.0f", __FILE__, 298));                                 // :298
+    CGS_ASSERT_AT( rw::math::vpu::MagnitudeSquared( lCameraZ ) > 0.0f,
+                "RwMath::MagnitudeSquared(lCameraZ) > 0.0f", __FILE__, 298);                                 // :298
     lCameraZ = rw::math::vpu::Normalize( lCameraZ );
 
     UpdateMomentum( lfSimTimerTimeStep, lpPlayerActiveRaceCar, lpOutput );
@@ -804,7 +804,7 @@ void CrashPlayManager::OnBounce( const BrnGameState::GameStateModuleIO::JustBoun
     if( !lpBounceAction->mbOnCar )
     {
         ++miConsecutiveBouncesOnGround;
-        CGS_ASSERT(miConsecutiveBouncesOnGround > 0, CGS_ASSERT_MESSAGE_AT("miConsecutiveBouncesOnGround > 0", __FILE__, 814));   // X360 :814
+        CGS_ASSERT_AT(miConsecutiveBouncesOnGround > 0, "miConsecutiveBouncesOnGround > 0", __FILE__, 814);   // X360 :814
 
         if( !mbAboutToLoseBoost )
         {
@@ -843,7 +843,7 @@ void CrashPlayManager::OnEnterRoad(
         return;
     }
 
-    CGS_ASSERT(lpRRAction->mRoadId != 0, CGS_ASSERT_MESSAGE_AT("lpRRAction->mRoadId != 0", __FILE__, 744));   // X360 :744
+    CGS_ASSERT_AT(lpRRAction->mRoadId != 0, "lpRRAction->mRoadId != 0", __FILE__, 744);   // X360 :744
 
     if( lpRRAction->mRoadId != miLastStreetEntered )
     {
@@ -862,7 +862,7 @@ void CrashPlayManager::OnEnterJunction(
         return;
     }
 
-    CGS_ASSERT(lpJAction->muJunctionID != 0, CGS_ASSERT_MESSAGE_AT("lpJAction->muJunctionID != 0", __FILE__, 773));   // X360 :773
+    CGS_ASSERT_AT(lpJAction->muJunctionID != 0, "lpJAction->muJunctionID != 0", __FILE__, 773);   // X360 :773
 
     if( lpJAction->muJunctionID != muLastJunctionEnteredID )
     {
@@ -945,16 +945,16 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
 f32 CrashPlayManager::GetShowtimeTrafficDensityScale() const
 {
     static const char KAC_ARTIST_SOURCE_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/CrashPlay/BrnCrashPlayManager.cpp";
-    CGS_ASSERT( mfDifficultyLevel >= 0.0f && mfDifficultyLevel <= 1.0f,
-                CGS_ASSERT_MESSAGE_AT( "mfDifficultyLevel>=0 && mfDifficultyLevel<=1.0f", KAC_ARTIST_SOURCE_FILE, 973 ) );   // 0x822A80E0
+    CGS_ASSERT_AT( mfDifficultyLevel >= 0.0f && mfDifficultyLevel <= 1.0f,
+                 "mfDifficultyLevel>=0 && mfDifficultyLevel<=1.0f", KAC_ARTIST_SOURCE_FILE, 973  );   // 0x822A80E0
 
     // `fsubs f12, 1.0, difficulty` ; `fsubs f13, MAX (0x82CDB558), MIN (0x82CDB554)` ;
     // `fmadds f31, f13, f12, f0(MIN)` @0x822A8110 -- ONE rounding.
     // [FX-AIBUZZ 2026-09-24: was MIN + (MAX - MIN) * (1 - d), two roundings]
     const f32 lfScale = KF_MIN_TRAFFIC_DENSITY + (KF_MAX_TRAFFIC_DENSITY - KF_MIN_TRAFFIC_DENSITY) * (1.0f - mfDifficultyLevel);
 
-    CGS_ASSERT( lfScale >= 0.0f && lfScale <= 1.0f,
-                CGS_ASSERT_MESSAGE_AT( "lfScale >= 0.0f && lfScale <= 1.0f", KAC_ARTIST_SOURCE_FILE, 977 ) );   // 0x822A812C
+    CGS_ASSERT_AT( lfScale >= 0.0f && lfScale <= 1.0f,
+                 "lfScale >= 0.0f && lfScale <= 1.0f", KAC_ARTIST_SOURCE_FILE, 977  );   // 0x822A812C
 
     return lfScale;
 }

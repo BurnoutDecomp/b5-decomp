@@ -111,9 +111,9 @@ namespace Props
     // no early-out).
     PropPartGraphics* PropGraphicsList::GetPartGraphics(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < muNumberOfPropPartModels,
-            CGS_ASSERT_MESSAGE_AT(
-                "luIndex < muNumberOfPropPartModels", KAC_ARTIST_ASSERT_FILE, 314 /* ARTIST 0x826756F0 */));
+        CGS_ASSERT_AT(luIndex < muNumberOfPropPartModels,
+            "luIndex < muNumberOfPropPartModels", KAC_ARTIST_ASSERT_FILE, 314 /* ARTIST 0x826756F0 */);
+
         return &mpaPropPartGraphics[luIndex];
     }
 
@@ -121,9 +121,9 @@ namespace Props
     // return &mpaPropGraphics[luIndex] (X360 stride 12). Non-gating tripwire assert (no early-out).
     PropGraphics* PropGraphicsList::GetPropGraphics(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < muNumberOfPropModels,
-            CGS_ASSERT_MESSAGE_AT(
-                "luIndex < muNumberOfPropModels", KAC_ARTIST_ASSERT_FILE, 303 /* ARTIST 0x82675678 */));
+        CGS_ASSERT_AT(luIndex < muNumberOfPropModels,
+            "luIndex < muNumberOfPropModels", KAC_ARTIST_ASSERT_FILE, 303 /* ARTIST 0x82675678 */);
+
         return &mpaPropGraphics[luIndex];
     }
 

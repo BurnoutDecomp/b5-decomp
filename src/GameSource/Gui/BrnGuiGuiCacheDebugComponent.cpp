@@ -81,7 +81,7 @@ namespace BrnGui
     // ARTIST 0x824ED368; the original callback asserts, then toggles this+0x14.
     void GuiCacheDebugComponent::ShowGuiCacheStatusCallback(void* lpData)
     {
-        CGS_ASSERT(lpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("ShowGuiCacheStatusCallback: Invalid data in the callback", CGS_ARTIST_FILE, 433));
+        CGS_ASSERT_STREAM_AT(lpData != 0, "ShowGuiCacheStatusCallback: Invalid data in the callback", CGS_ARTIST_FILE, 433);
         GuiCacheDebugComponent* lpThis = static_cast<GuiCacheDebugComponent*>(lpData);
         lpThis->mbShowGuiCacheStatus = !lpThis->mbShowGuiCacheStatus;
     }
@@ -89,7 +89,7 @@ namespace BrnGui
     // ARTIST 0x824ED410; the original callback asserts, then toggles this+0x15.
     void GuiCacheDebugComponent::ShowAptComponentGuiCacheStatusCallback(void* lpData)
     {
-        CGS_ASSERT(lpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("ShowAptComponentGuiCacheStatusCallback: Invalid data in the callback", CGS_ARTIST_FILE, 446));
+        CGS_ASSERT_STREAM_AT(lpData != 0, "ShowAptComponentGuiCacheStatusCallback: Invalid data in the callback", CGS_ARTIST_FILE, 446);
 
         GuiCacheDebugComponent* lpThis = static_cast<GuiCacheDebugComponent*>(lpData);
         lpThis->mbShowAptComponentGuiCacheStatus = !lpThis->mbShowAptComponentGuiCacheStatus;

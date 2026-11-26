@@ -56,15 +56,15 @@ SetUpAllEventStartsInterface::AddEventStart(Vector3 lv3Position, s32 liEventInde
         if (lrExisting.GetEventIndex() == liEventIndex)
         {
             // Found: the event id must match the one already recorded.
-            CGS_ASSERT(liEventID == lrExisting.GetEventID(),
-                       CGS_ASSERT_MESSAGE_AT("luEventID == maEventStarts.GetItem( luEventIndex ).GetEventID()", CGS_ARTIST_FILE, 1723));
+            CGS_ASSERT_AT(liEventID == lrExisting.GetEventID(),
+                       "luEventID == maEventStarts.GetItem( luEventIndex ).GetEventID()", CGS_ARTIST_FILE, 1723);
             return &lrExisting;
         }
     }
 
     // Not found: assert room then build a fresh record from the caller's fields and append it.
-    CGS_ASSERT(maEventStarts.GetLength() < maEventStarts.GetSize(),
-               CGS_ASSERT_MESSAGE_AT("maEventStarts.GetLength() < maEventStarts.GetCapacity()", CGS_ARTIST_FILE, 1728));
+    CGS_ASSERT_AT(maEventStarts.GetLength() < maEventStarts.GetSize(),
+               "maEventStarts.GetLength() < maEventStarts.GetCapacity()", CGS_ARTIST_FILE, 1728);
 
     EventStart lEventStart;
     // The X360 stack-builds the record at var_90 in exactly this order: `stvx128 v127` (the

@@ -70,9 +70,9 @@ namespace BrnNetwork
                                                    s32 liActionIndex,
                                                    const FburnSuccessUpdatePayload* lpSuccessBitArray)
     {
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             "lu16FrameCount != KU16_INVALID_FRAME",
-            __FILE__, 129 /* ARTIST 0x8257FB0C */));
+            __FILE__, 129 /* ARTIST 0x8257FB0C */);
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
         {

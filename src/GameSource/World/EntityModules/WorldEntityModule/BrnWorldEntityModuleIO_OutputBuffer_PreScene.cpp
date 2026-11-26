@@ -36,7 +36,7 @@ namespace WorldEntityIO
     const SceneInputInterface*
     OutputBuffer_PreScene::GetSceneInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 120));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 120);
         return &mSceneInputInterface;
     }
 
@@ -44,7 +44,7 @@ namespace WorldEntityIO
     SceneInputInterface*
     OutputBuffer_PreScene::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 121));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 121);
         return &mSceneInputInterface;
     }
 
@@ -52,7 +52,7 @@ namespace WorldEntityIO
     // BrnWorld::WorldEntityModule::UpdateStream.
     OutputBuffer_PreScene::GameEventQueue* OutputBuffer_PreScene::GetGameEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 124));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 124);
         return &mGameEventQueue;
     }
 
@@ -68,9 +68,9 @@ namespace WorldEntityIO
     // forwards the sound world-load events into the world update output).
     const OutputBuffer_PreScene::SoundWorldLoadInterface* OutputBuffer_PreScene::GetSoundWorldLoadInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 135));
+            CGS_ARTIST_FILE, 135);
         return &mSoundWorldLoadInterface;
     }
 
@@ -80,7 +80,7 @@ namespace WorldEntityIO
     OutputBuffer_PreScene::PropGraphicsLoadedQueue*
     OutputBuffer_PreScene::GetPropGraphicsLoadedQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 127));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 127);
         return &mPropGraphicsLoadedQueue;
     }
 
@@ -90,7 +90,7 @@ namespace WorldEntityIO
     OutputBuffer_PreScene::PropGraphicsUnloadedQueue*
     OutputBuffer_PreScene::GetPropGraphicsUnloadedQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 133));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 133);
         return &mPropGraphicsUnloadedQueue;
     }
 
@@ -101,7 +101,7 @@ namespace WorldEntityIO
     OutputBuffer_PreScene::SoundWorldLoadInterface*
     OutputBuffer_PreScene::GetSoundWorldLoadInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 136));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 136);
         return &mSoundWorldLoadInterface;
     }
 
@@ -109,7 +109,7 @@ namespace WorldEntityIO
     OutputBuffer_PreScene::PropInstancesNeededForZoneQueue*
     OutputBuffer_PreScene::GetPropInstancesNeededForZoneQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 130));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 130);
         return &mPropInstancesNeededForZoneQueue;
     }
 
@@ -125,7 +125,7 @@ namespace WorldEntityIO
     const OutputBuffer_PreScene::PropInstancesNeededForZoneQueue*
     OutputBuffer_PreScene::GetPropInstancesNeededForZoneQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 129));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 129);
         return &mPropInstancesNeededForZoneQueue;
     }
 
@@ -133,7 +133,7 @@ namespace WorldEntityIO
     const OutputBuffer_PreScene::PropGraphicsLoadedQueue*
     OutputBuffer_PreScene::GetPropGraphicsLoadedQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 126));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 126);
         return &mPropGraphicsLoadedQueue;
     }
 
@@ -141,7 +141,7 @@ namespace WorldEntityIO
     const OutputBuffer_PreScene::PropGraphicsUnloadedQueue*
     OutputBuffer_PreScene::GetPropGraphicsUnloadedQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 132));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 132);
         return &mPropGraphicsUnloadedQueue;
     }
 

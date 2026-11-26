@@ -439,7 +439,7 @@ namespace BrnGui
     {
         const GuiEventNetworkGameParams* lpParams =
             mpGuiCache->GetOnlineGameModeOptions();
-        CGS_ASSERT(lpParams != 0, CGS_ASSERT_MESSAGE_AT("lpParams", CGS_ARTIST_FILE, 680 /* ARTIST 0x82485634 */));
+        CGS_ASSERT_AT(lpParams != 0, "lpParams", CGS_ARTIST_FILE, 680 /* ARTIST 0x82485634 */);
 
         const char* lpacChevronsState = 0;
 
@@ -475,7 +475,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::SetupPlayerList()
     {
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 737 /* ARTIST 0x82485754 */));
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 737 /* ARTIST 0x82485754 */);
 
         for (s32 liPlayer = 0; liPlayer < KI_MAX_PLAYERS; ++liPlayer)
         {
@@ -587,7 +587,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::HandlePlayerLobbyListEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineLoading::HandlePlayerLobbyListEvent", CGS_ARTIST_FILE, 543));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineLoading::HandlePlayerLobbyListEvent", CGS_ARTIST_FILE, 543);
 
         std::memcpy(&mLobbyPlayerInfoList, lpEvent, sizeof(mLobbyPlayerInfoList));
 
@@ -629,7 +629,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::HandleInviteFailed(const CgsModule::Event* lpInviteFailedEvent)
     {
-        CGS_ASSERT(lpInviteFailedEvent != 0, CGS_ASSERT_MESSAGE_AT("lpInviteFailedEvent", __FILE__, 604 /* ARTIST 0x8249B644 */));
+        CGS_ASSERT_AT(lpInviteFailedEvent != 0, "lpInviteFailedEvent", __FILE__, 604 /* ARTIST 0x8249B644 */);
 
         const InviteFailedPayload* lpInviteFailed =
             static_cast<const InviteFailedPayload*>(lpInviteFailedEvent);

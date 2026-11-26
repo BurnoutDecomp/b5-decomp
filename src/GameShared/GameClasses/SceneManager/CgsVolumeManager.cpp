@@ -244,12 +244,12 @@ void VolumeManager::ReplaceDynamicVolume(VolumeId lVolumeId, const VolRef::Volum
         }
         else
         {
-            CGS_ASSERT_AT(false, "Can't replace volume. Volume is not dynamic", KAC_VOLUME_MANAGER_ARTIST_FILE, 266);
+            CGS_FAIL_AT("Can't replace volume. Volume is not dynamic", KAC_VOLUME_MANAGER_ARTIST_FILE, 266);
         }
     }
     else
     {
-        CGS_ASSERT_AT(false, "Can't find volume", KAC_VOLUME_MANAGER_ARTIST_FILE, 271);
+        CGS_FAIL_AT("Can't find volume", KAC_VOLUME_MANAGER_ARTIST_FILE, 271);
     }
 }
 

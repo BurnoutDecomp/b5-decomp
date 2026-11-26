@@ -49,11 +49,11 @@ namespace CgsCollision
         const s32 liRequiredMemory = 96 * lu16NumPrimitives;
 
         u8* lpMemory = static_cast<u8*>(lpMalloc->Malloc(liRequiredMemory));
-        CGS_ASSERT(lpMemory != 0,
-            CGS_ASSERT_MESSAGE_AT("lpMemory", KAC_ARTIST_ASSERT_FILE, 111 /* ARTIST 0x82814394 */));
-        CGS_ASSERT(lpMalloc->GetAlignment() >= 16,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpMalloc->GetAlignment() >= 16", KAC_ARTIST_ASSERT_FILE, 112 /* ARTIST 0x828143BC */));
+        CGS_ASSERT_AT(lpMemory != 0,
+            "lpMemory", KAC_ARTIST_ASSERT_FILE, 111 /* ARTIST 0x82814394 */);
+        CGS_ASSERT_AT(lpMalloc->GetAlignment() >= 16,
+            "lpMalloc->GetAlignment() >= 16", KAC_ARTIST_ASSERT_FILE, 112 /* ARTIST 0x828143BC */);
+
 
         mpaDataStream   = lpMemory;
         mu16MaxDataSize = static_cast<u16>(liRequiredMemory);
@@ -74,12 +74,12 @@ namespace CgsCollision
     // -------------------------------------------------------------------------
     void* PrimitivePairListBuilder::AllocateMemory(s32 liBytes)
     {
-        CGS_ASSERT(mpaDataStream != NULL,
-            CGS_ASSERT_MESSAGE_AT("mpaDataStream != NULL", KAC_ARTIST_ASSERT_FILE, 755 /* ARTIST 0x828120C8 */));
-        CGS_ASSERT(static_cast<s32>(mu16UsedData) + liBytes <= static_cast<s32>(mu16MaxDataSize),
-            CGS_ASSERT_MESSAGE_AT(
-                "Trying to use too much memory",
-                KAC_ARTIST_ASSERT_FILE, 756 /* ARTIST 0x828120F8 */));
+        CGS_ASSERT_AT(mpaDataStream != NULL,
+            "mpaDataStream != NULL", KAC_ARTIST_ASSERT_FILE, 755 /* ARTIST 0x828120C8 */);
+        CGS_ASSERT_AT(static_cast<s32>(mu16UsedData) + liBytes <= static_cast<s32>(mu16MaxDataSize),
+            "Trying to use too much memory",
+                KAC_ARTIST_ASSERT_FILE, 756 /* ARTIST 0x828120F8 */);
+
 
         void* lpMemory = mpaDataStream + mu16UsedData;
         mu16UsedData = static_cast<u16>(mu16UsedData + liBytes);
@@ -374,7 +374,7 @@ namespace CgsCollision
         // -----------------------------------------------------------------------------
         case ::rw::collision::VOLUMETYPETRIANGLE:
         default:
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "Tried to add a RW volume that wasn't a box, capsule, sphere or "
                        "cylinder (only these are supported)");
             break;

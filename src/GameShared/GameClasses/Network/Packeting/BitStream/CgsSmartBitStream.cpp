@@ -12,12 +12,12 @@ namespace CgsNetwork
 {
     bool SmartBitStream::AddRawData(const char* lpcData, s32 liNumBytes)
     {
-        CGS_ASSERT(lpcData != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpcData != 0,
             "lpcData != NULL",
-            CGS_ARTIST_FILE, 47 /* ARTIST 0x82882F14 */));
-        CGS_ASSERT(liNumBytes >= 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 47 /* ARTIST 0x82882F14 */);
+        CGS_ASSERT_AT(liNumBytes >= 0,
             "liNumBytes >= 0",
-            CGS_ARTIST_FILE, 48 /* ARTIST 0x82882F38 */));
+            CGS_ARTIST_FILE, 48 /* ARTIST 0x82882F38 */);
 
         const char* lpcRemaining = lpcData;
 
@@ -63,12 +63,12 @@ namespace CgsNetwork
 
     void SmartBitStream::GetRawData(char* lpcBuffer, s32 liNumBytes)
     {
-        CGS_ASSERT(lpcBuffer != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpcBuffer != 0,
             "lpcBuffer != NULL",
-            CGS_ARTIST_FILE, 100 /* ARTIST 0x82883064 */));
-        CGS_ASSERT(liNumBytes >= 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 100 /* ARTIST 0x82883064 */);
+        CGS_ASSERT_AT(liNumBytes >= 0,
             "liNumBytes >= 0",
-            CGS_ARTIST_FILE, 101 /* ARTIST 0x82883088 */));
+            CGS_ARTIST_FILE, 101 /* ARTIST 0x82883088 */);
 
         char* lpcDst = lpcBuffer;
 

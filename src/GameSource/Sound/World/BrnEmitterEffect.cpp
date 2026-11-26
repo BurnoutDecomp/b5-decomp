@@ -100,7 +100,7 @@ void EmitterEffect::AttachController(CgsSound::Logic::EffectBase* apController)
         mp3dControl = static_cast<Emitter3dControl*>(apController);
         break;
     default:
-        CGS_ASSERT_AT(false, "Unexpected control.", BRN_EMITTEREFFECT_CPP_FILE, 138);
+        CGS_FAIL_AT("Unexpected control.", BRN_EMITTEREFFECT_CPP_FILE, 138);
         break;
     }
 }

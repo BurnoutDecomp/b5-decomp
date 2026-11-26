@@ -92,8 +92,8 @@ namespace BrnGui
     // @0x824E4BF8 -----------------------------------------------------------------------
     void TableRow::SetupRow(s32 liColumn, bool lbEnableShowingAnim)
     {
-        CGS_ASSERT(liColumn >= 0 && liColumn <= miNumColumns,
-            CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::SetupRow() too many columns!", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.cpp", 103)); // X360 line 103
+        CGS_ASSERT_STREAM_AT(liColumn >= 0 && liColumn <= miNumColumns,
+            "TableRow::SetupRow() too many columns!", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.cpp", 103); // X360 line 103
 
         // X360 @0x824E4C9C: slot 6 on the row's own vptr (TableRow::Clear), then slot 0 with
         // r4 = 1 (SelectableGroup::SetActive).
@@ -205,8 +205,8 @@ namespace BrnGui
     // stride 0xC, base row+0x238. Bounds-checked 0 <= liIndex < 16.
     TableCell* TableRow::GetSelectable(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex < KI_MAX_CELLS_PER_ROW,
-            CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::GetSelectable() invalid index specified", CGS_ARTIST_FILE, 395)); // X360 line 395
+        CGS_ASSERT_STREAM_AT(liIndex >= 0 && liIndex < KI_MAX_CELLS_PER_ROW,
+            "TableRow::GetSelectable() invalid index specified", CGS_ARTIST_FILE, 395); // X360 line 395
 
         return &maCells[liIndex];
     }
@@ -214,7 +214,7 @@ namespace BrnGui
     // @0x824E4468 -- attach the row's backing data set and dirty the component.
     void TableRow::SetData(TableRowDataSet* lpData)
     {
-        CGS_ASSERT(lpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::SetData() Invalid DataSet", CGS_ARTIST_FILE, 271)); // X360 line 271
+        CGS_ASSERT_STREAM_AT(lpData != 0, "TableRow::SetData() Invalid DataSet", CGS_ARTIST_FILE, 271); // X360 line 271
 
         mpData = lpData;
         SetDirty();
@@ -223,8 +223,8 @@ namespace BrnGui
     // @0x824890E8 -- set a cell's text directly in the backing data set and dirty the component.
     void TableRow::SetText(s32 liCell, const char* lpacText)
     {
-        CGS_ASSERT(mpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::SetText() Row data not set", CGS_ARTIST_FILE, 302)); // X360 line 302
-        CGS_ASSERT(lpacText != 0, CGS_ASSERT_STREAM_MESSAGE_AT("invalid text specified", CGS_ARTIST_FILE, 303));             // X360 line 303
+        CGS_ASSERT_STREAM_AT(mpData != 0, "TableRow::SetText() Row data not set", CGS_ARTIST_FILE, 302); // X360 line 302
+        CGS_ASSERT_STREAM_AT(lpacText != 0, "invalid text specified", CGS_ARTIST_FILE, 303);             // X360 line 303
 
         mpData->SetText(liCell, lpacText);
 
@@ -235,7 +235,7 @@ namespace BrnGui
     // value + "use colour" flag in the backing data set, then dirty the component.
     void TableRow::SetColourValue(s32 liColumn, s32 liColour)
     {
-        CGS_ASSERT(mpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::SetText() Row data not set", CGS_ARTIST_FILE, 320)); // X360 line 320 (shared string)
+        CGS_ASSERT_STREAM_AT(mpData != 0, "TableRow::SetText() Row data not set", CGS_ARTIST_FILE, 320); // X360 line 320 (shared string)
 
         maCells[liColumn].SetColourValue(static_cast<u32>(liColour));
         mpData->SetColourValue(liColumn, liColour);
@@ -269,8 +269,8 @@ namespace BrnGui
     // set (validated against the row's cells) and dirty the component.
     void TableRow::SetIconState(s32 liCell, u32 luState)
     {
-        CGS_ASSERT(mpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::SetText() Row data not set", CGS_ARTIST_FILE, 378)); // X360 line 378 (shared string)
-        CGS_ASSERT(GetSelectable(liCell) != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid selectable specified", CGS_ARTIST_FILE, 379)); // X360 line 379
+        CGS_ASSERT_STREAM_AT(mpData != 0, "TableRow::SetText() Row data not set", CGS_ARTIST_FILE, 378); // X360 line 378 (shared string)
+        CGS_ASSERT_STREAM_AT(GetSelectable(liCell) != 0, "Invalid selectable specified", CGS_ARTIST_FILE, 379); // X360 line 379
 
         mpData->SetInteger(liCell, static_cast<s32>(luState));
 
@@ -307,8 +307,8 @@ namespace BrnGui
     // &maCellData[liCell]).
     const char* TableRowDataSet::GetText(s32 liCell) const
     {
-        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
-            CGS_ASSERT_STREAM_MESSAGE_AT("TableRowDataSet::GetText() invalid index specified", CGS_ARTIST_FILE, 439)); // X360 line 439
+        CGS_ASSERT_STREAM_AT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+            "TableRowDataSet::GetText() invalid index specified", CGS_ARTIST_FILE, 439); // X360 line 439
 
         return maCellData[liCell].macText;
     }
@@ -316,8 +316,8 @@ namespace BrnGui
     // @0x824E45C8 -- read the cell value as an int (through the CellData union's leading word).
     s32 TableRowDataSet::GetInteger(s32 liCell) const
     {
-        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
-            CGS_ASSERT_STREAM_MESSAGE_AT("TableRowDataSet::GetInteger() invalid index specified", CGS_ARTIST_FILE, 453)); // X360 line 453
+        CGS_ASSERT_STREAM_AT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+            "TableRowDataSet::GetInteger() invalid index specified", CGS_ARTIST_FILE, 453); // X360 line 453
 
         return maCellData[liCell].miInt;
     }
@@ -326,8 +326,8 @@ namespace BrnGui
     // liCell*4). NB: the X360 asserts with the GetInteger() message text (shared string).
     s32 TableRowDataSet::GetColourValue(s32 liCell) const
     {
-        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
-            CGS_ASSERT_STREAM_MESSAGE_AT("TableRowDataSet::GetInteger() invalid index specified", CGS_ARTIST_FILE, 467)); // X360 line 467
+        CGS_ASSERT_STREAM_AT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+            "TableRowDataSet::GetInteger() invalid index specified", CGS_ARTIST_FILE, 467); // X360 line 467
 
         return maiCellInt[liCell];
     }
@@ -360,8 +360,8 @@ namespace BrnGui
     // @0x824834F0 -- store the cell value as an int (through the CellData union's leading word).
     void TableRowDataSet::SetInteger(s32 liCell, s32 liValue)
     {
-        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
-            CGS_ASSERT_STREAM_MESSAGE_AT("TableRowDataSet::SetInteger() invalid index specified", CGS_ARTIST_FILE, 513)); // X360 line 513
+        CGS_ASSERT_STREAM_AT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+            "TableRowDataSet::SetInteger() invalid index specified", CGS_ARTIST_FILE, 513); // X360 line 513
 
         maCellData[liCell].miInt = liValue;
     }
@@ -370,8 +370,8 @@ namespace BrnGui
     // (byte 0x400 + liCell*4).
     void TableRowDataSet::SetColourValue(s32 liCell, s32 liValue)
     {
-        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
-            CGS_ASSERT_STREAM_MESSAGE_AT("TableRowDataSet::SetColourValue() invalid index specified", CGS_ARTIST_FILE, 528)); // X360 line 528
+        CGS_ASSERT_STREAM_AT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+            "TableRowDataSet::SetColourValue() invalid index specified", CGS_ARTIST_FILE, 528); // X360 line 528
 
         maiCellInt[liCell] = liValue;
     }

@@ -47,11 +47,11 @@ void Environment::Destruct()
 bool Environment::AddStateManager(StateManager* apStateManager)
 {
     const char* const lpcAssertFile = "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.h";
-    CGS_ASSERT(apStateManager, CGS_ASSERT_MESSAGE_AT("lpStateManager", lpcAssertFile, 475));
-    CGS_ASSERT(apStateManager->GetStateType() < KI_MAX_NUMBER_OF_STATES,
-        CGS_ASSERT_MESSAGE_AT("lpStateManager->GetStateType() < KI_MAX_NUMBER_OF_STATES", lpcAssertFile, 476));
-    CGS_ASSERT(mapStateManagers[apStateManager->GetStateType()] == 0,
-        CGS_ASSERT_MESSAGE_AT("mapStateManagers[lpStateManager->GetStateType()] == NULL", lpcAssertFile, 477));
+    CGS_ASSERT_AT(apStateManager, "lpStateManager", lpcAssertFile, 475);
+    CGS_ASSERT_AT(apStateManager->GetStateType() < KI_MAX_NUMBER_OF_STATES,
+        "lpStateManager->GetStateType() < KI_MAX_NUMBER_OF_STATES", lpcAssertFile, 476);
+    CGS_ASSERT_AT(mapStateManagers[apStateManager->GetStateType()] == 0,
+        "mapStateManagers[lpStateManager->GetStateType()] == NULL", lpcAssertFile, 477);
 
     mapStateManagers[apStateManager->GetStateType()] = apStateManager;
     return true;
@@ -68,10 +68,10 @@ bool Environment::AddStateManager(StateManager* apStateManager)
 // ---------------------------------------------------------------------------
 StateManager* Environment::GetStateManager(s32 liStateManId) const
 {
-    CGS_ASSERT(liStateManId < KI_MAX_NUMBER_OF_STATES,
-        CGS_ASSERT_MESSAGE_AT(
-            "liStateManId < KI_MAX_NUMBER_OF_STATES",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.cpp", 481 /* ARTIST 0x8268D1EC */));
+    CGS_ASSERT_AT(liStateManId < KI_MAX_NUMBER_OF_STATES,
+        "liStateManId < KI_MAX_NUMBER_OF_STATES",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.cpp", 481 /* ARTIST 0x8268D1EC */);
+
 
     return mapStateManagers[liStateManId];
 }
@@ -197,7 +197,7 @@ static void NotifyStateAndEffects(State* apState,
         lpHead = apState->GetHeadEffectControl();
     else
     {
-        CGS_ASSERT(false, "Unknown sound effect type\n");
+        CGS_FAIL("Unknown sound effect type\n");
         return;
     }
 

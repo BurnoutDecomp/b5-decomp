@@ -326,30 +326,30 @@ namespace PhysicsSimulationIO
     template <s32 N>
     void InputBuffer::AppendAddRigidBodyQueue(const CgsModule::EventQueue<InAddRigidBody, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1113));
-        CGS_ASSERT(lpSourceQueue != 0,
-            CGS_ASSERT_MESSAGE_AT("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1114));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1113);
+        CGS_ASSERT_AT(lpSourceQueue != 0,
+            "lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1114);
         mAddRigidBodyQueue.Append(*lpSourceQueue);
     }
 
     template <s32 N>
     void InputBuffer::AppendAddJointQueue(const CgsModule::EventQueue<InAddJoint, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1184));
-        CGS_ASSERT(lpSourceQueue != 0,
-            CGS_ASSERT_MESSAGE_AT("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1185));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1184);
+        CGS_ASSERT_AT(lpSourceQueue != 0,
+            "lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1185);
         mAddJointQueue.Append(*lpSourceQueue);
     }
 
     template <s32 N>
     void InputBuffer::AppendChangeRigidBodyInertiaQueue(const CgsModule::EventQueue<InChangeRigidBodyInertia, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1143));
-        CGS_ASSERT(lpSourceQueue != 0,
-            CGS_ASSERT_MESSAGE_AT("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1144));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1143);
+        CGS_ASSERT_AT(lpSourceQueue != 0,
+            "lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1144);
         mChangeRigidBodyInertiaQueue.Append(*lpSourceQueue);
     }
 
@@ -362,30 +362,30 @@ namespace PhysicsSimulationIO
     template <s32 N>
     void InputBuffer::AppendRemoveJointQueue(const CgsModule::EventQueue<InRemoveJoint, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1194));
-        CGS_ASSERT(lpSourceQueue != 0,
-            CGS_ASSERT_MESSAGE_AT("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1195));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1194);
+        CGS_ASSERT_AT(lpSourceQueue != 0,
+            "lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1195);
         mRemoveJointQueue.Append(*lpSourceQueue);
     }
 
     template <s32 N>
     void InputBuffer::AppendRemoveRigidBodyQueue(const CgsModule::EventQueue<InRemoveRigidBody, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1163));
-        CGS_ASSERT(lpSourceQueue != 0,
-            CGS_ASSERT_MESSAGE_AT("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1164));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1163);
+        CGS_ASSERT_AT(lpSourceQueue != 0,
+            "lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1164);
         mRemoveRigidBodyQueue.Append(*lpSourceQueue);
     }
 
     template <s32 N>
     void InputBuffer::AppendUpdateExternalBodyQueue(const CgsModule::EventQueue<InUpdateExternalBody, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1284));
-        CGS_ASSERT(lpSourceQueue != 0,
-            CGS_ASSERT_MESSAGE_AT("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1285));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1284);
+        CGS_ASSERT_AT(lpSourceQueue != 0,
+            "lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1285);
         mUpdateExternalBodyQueue.Append(*lpSourceQueue);
     }
 

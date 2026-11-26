@@ -79,9 +79,9 @@ namespace CgsNetwork
     // Find the slot a given player id occupies, or -1 if the player is not registered.
     s32 SyncTimeMessageManager::GetPlayerMessageIndex(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(lPlayerID != KI_INVALID_PLAYER_ID,
-            CGS_ASSERT_MESSAGE_AT(
-                "lPlayerID != K_INVALID_PLAYER_ID", __FILE__, 246 /* ARTIST 0x8287D164 */));
+        CGS_ASSERT_AT(lPlayerID != KI_INVALID_PLAYER_ID,
+            "lPlayerID != K_INVALID_PLAYER_ID", __FILE__, 246 /* ARTIST 0x8287D164 */);
+
 
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_SYNC_PLAYERS; ++liPlayerIndex)
         {
@@ -108,7 +108,7 @@ namespace CgsNetwork
             }
         }
 
-        CGS_ASSERT(false, "Ran out of sync time messages to use");
+        CGS_FAIL("Ran out of sync time messages to use");
         return -1;
     }
 
@@ -184,7 +184,7 @@ namespace CgsNetwork
             lLookupPlayerID = lHostPlayerID;
             break;
         default:
-            CGS_ASSERT(false, "Sync time Message Manager in state none");
+            CGS_FAIL("Sync time Message Manager in state none");
             return;
         }
 
@@ -203,11 +203,11 @@ namespace CgsNetwork
     // state on every live slot so nothing stale is sent under the new role.
     void SyncTimeMessageManager::SwitchMode(EMessageMode leMessageMode)
     {
-        CGS_ASSERT(leMessageMode >= 0,
-            CGS_ASSERT_MESSAGE_AT("leMessageMode >= 0", __FILE__, 305 /* ARTIST 0x8288AC44 */));
-        CGS_ASSERT(leMessageMode <= E_MESSAGE_MODE_NONE,
-            CGS_ASSERT_MESSAGE_AT(
-                "leMessageMode <= E_MESSAGE_MODE_NONE", __FILE__, 306 /* ARTIST 0x8288AC68 */));
+        CGS_ASSERT_AT(leMessageMode >= 0,
+            "leMessageMode >= 0", __FILE__, 305 /* ARTIST 0x8288AC44 */);
+        CGS_ASSERT_AT(leMessageMode <= E_MESSAGE_MODE_NONE,
+            "leMessageMode <= E_MESSAGE_MODE_NONE", __FILE__, 306 /* ARTIST 0x8288AC68 */);
+
 
         meMessageMode = leMessageMode;
 

@@ -232,13 +232,13 @@ namespace BrnDirector
                     break;
 
                 default:
-                    CGS_ASSERT(false, "unhandled case");
+                    CGS_FAIL("unhandled case");
                     break;
                 }
             }
             else
             {
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("No ShotRef or Parameters!", CGS_ARTIST_FILE, 233));
+                CGS_FAIL_AT("No ShotRef or Parameters!", CGS_ARTIST_FILE, 233);
             }
 
             mfRunningTime = 0.0f;
@@ -248,7 +248,7 @@ namespace BrnDirector
 
         case E_STATE_GENERIC_UPDATE:
         {
-            CGS_ASSERT(mpCamera != 0, CGS_ASSERT_MESSAGE_AT("mpCamera", CGS_ARTIST_FILE, 244));
+            CGS_ASSERT_AT(mpCamera != 0, "mpCamera", CGS_ARTIST_FILE, 244);
 
             GetNonConstCamera() = *mpCamera;
             GetNonConstCamera().mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
@@ -277,7 +277,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 288));
+            CGS_FAIL_AT("unhandled state", CGS_ARTIST_FILE, 288);
             break;
         }
     }
@@ -407,10 +407,10 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void ArbStateTestbed::RegisterParameters()
     {
-        CGS_ASSERT(mpParameters,
-            CGS_ASSERT_MESSAGE_AT("mpParameters", CGS_ARTIST_FILE, 344 /* ARTIST 0x82263F34 */));
-        CGS_ASSERT(spDebugComponent,
-            CGS_ASSERT_MESSAGE_AT("spDebugComponent", CGS_ARTIST_FILE, 345 /* ARTIST 0x82263F60 */));
+        CGS_ASSERT_AT(mpParameters,
+            "mpParameters", CGS_ARTIST_FILE, 344 /* ARTIST 0x82263F34 */);
+        CGS_ASSERT_AT(spDebugComponent,
+            "spDebugComponent", CGS_ARTIST_FILE, 345 /* ARTIST 0x82263F60 */);
 
         Camera::DebugMenuSerialiser lSerialiser;
         lSerialiser.Construct(spDebugComponent, Camera::DebugMenuSerialiser::E_MODE_ADD_TO_MENU);
@@ -421,8 +421,8 @@ namespace BrnDirector
     {
         if (mpParameters != 0)
         {
-            CGS_ASSERT(spDebugComponent,
-                CGS_ASSERT_MESSAGE_AT("spDebugComponent", CGS_ARTIST_FILE, 362 /* ARTIST 0x82263FE4 */));
+            CGS_ASSERT_AT(spDebugComponent,
+                "spDebugComponent", CGS_ARTIST_FILE, 362 /* ARTIST 0x82263FE4 */);
 
             Camera::DebugMenuSerialiser lSerialiser;
             lSerialiser.Construct(spDebugComponent, Camera::DebugMenuSerialiser::E_MODE_REMOVE_FROM_MENU);
@@ -436,15 +436,15 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void ArbStateTestbed::Deactivate(void* /*lpUnused*/)
     {
-        CGS_ASSERT(spTestbed != NULL,
-            CGS_ASSERT_MESSAGE_AT("spTestbed != NULL", CGS_ARTIST_FILE, 318 /* ARTIST 0x821F6200 */));
+        CGS_ASSERT_AT(spTestbed != NULL,
+            "spTestbed != NULL", CGS_ARTIST_FILE, 318 /* ARTIST 0x821F6200 */);
         spTestbed->meState = E_STATE_RELEASING;
     }
 
     void ArbStateTestbed::GenericActivateCam(void* lpParameters)
     {
-        CGS_ASSERT(spTestbed != NULL,
-            CGS_ASSERT_MESSAGE_AT("spTestbed != NULL", CGS_ARTIST_FILE, 328 /* ARTIST 0x8226BD60 */));
+        CGS_ASSERT_AT(spTestbed != NULL,
+            "spTestbed != NULL", CGS_ARTIST_FILE, 328 /* ARTIST 0x8226BD60 */);
         spTestbed->UnregisterParameters();
         spTestbed->mpParameters = static_cast<Camera::Behaviour::Parameters*>(lpParameters);
         spTestbed->mpShotRef    = 0;
@@ -453,8 +453,8 @@ namespace BrnDirector
 
     void ArbStateTestbed::ActivateIceCam(void* lpShotRef)
     {
-        CGS_ASSERT(spTestbed != NULL,
-            CGS_ASSERT_MESSAGE_AT("spTestbed != NULL", CGS_ARTIST_FILE, 425 /* ARTIST 0x82264070 */));
+        CGS_ASSERT_AT(spTestbed != NULL,
+            "spTestbed != NULL", CGS_ARTIST_FILE, 425 /* ARTIST 0x82264070 */);
         spTestbed->UnregisterParameters();
         spTestbed->mpShotRef    = static_cast<Camera::Camera::ShotReference*>(lpShotRef);
         spTestbed->mpParameters = 0;

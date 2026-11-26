@@ -41,16 +41,16 @@ namespace BrnGame
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
     {
-        CGS_ASSERT(lpGuiInput != 0, CGS_ASSERT_MESSAGE_AT("lpGuiInput", CGS_ARTIST_FILE, 423));
-        CGS_ASSERT(lpGameStateOutput != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateOutput", CGS_ARTIST_FILE, 424));
+        CGS_ASSERT_AT(lpGuiInput != 0, "lpGuiInput", CGS_ARTIST_FILE, 423);
+        CGS_ASSERT_AT(lpGameStateOutput != 0, "lpGameStateOutput", CGS_ARTIST_FILE, 424);
         const BrnGameState::GameStateModuleIO::ScoringOutputInterface* lpScoringOutputInterface =
             lpGameStateOutput->GetScoringOutputInterface();
         const BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface* lpOnlScoringOutputInterface =
             lpGameStateOutput->GetOnlineScoringOutputInterface();
-        CGS_ASSERT(lpScoringOutputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpScoringOutputInterface", CGS_ARTIST_FILE, 431));
-        CGS_ASSERT(lpOnlScoringOutputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpOnlScoringOutputInterface", CGS_ARTIST_FILE, 432));
-        CGS_ASSERT(lpGuiInput->GetGuiEvents() != 0, CGS_ASSERT_MESSAGE_AT("lpGuiInput->GetGuiEvents()", CGS_ARTIST_FILE, 434));
-        CGS_ASSERT(lpGameStateOutput->GetGuiEventQueue() != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateOutput->GetGuiEventQueue()", CGS_ARTIST_FILE, 435));
+        CGS_ASSERT_AT(lpScoringOutputInterface != 0, "lpScoringOutputInterface", CGS_ARTIST_FILE, 431);
+        CGS_ASSERT_AT(lpOnlScoringOutputInterface != 0, "lpOnlScoringOutputInterface", CGS_ARTIST_FILE, 432);
+        CGS_ASSERT_AT(lpGuiInput->GetGuiEvents() != 0, "lpGuiInput->GetGuiEvents()", CGS_ARTIST_FILE, 434);
+        CGS_ASSERT_AT(lpGameStateOutput->GetGuiEventQueue() != 0, "lpGameStateOutput->GetGuiEventQueue()", CGS_ARTIST_FILE, 435);
 
         // 823EE9C4: the Append result is ignored. It neither clears nor retires its source.
         lpGuiInput->GetGuiEvents()->Append(*lpGameStateOutput->GetGuiEventQueue());
@@ -328,8 +328,8 @@ namespace BrnGame
         const CgsInput::InputIO::PostWorldInputBuffer::UnBindRequestQueue* lpUnbindQueue =
             lpGameStateOutput->GetGameStateToControllerInterface()->GetUnBindRequestQueue();
 
-        CGS_ASSERT(lpBindQueue   != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateInputBindRequestQueue", CGS_ARTIST_FILE, 5055));
-        CGS_ASSERT(lpUnbindQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateInputUnbindRequestQueue", CGS_ARTIST_FILE, 5056));
+        CGS_ASSERT_AT(lpBindQueue   != 0, "lpGameStateInputBindRequestQueue", CGS_ARTIST_FILE, 5055);
+        CGS_ASSERT_AT(lpUnbindQueue != 0, "lpGameStateInputUnbindRequestQueue", CGS_ARTIST_FILE, 5056);
 
         // Bind requests: element i carries {word0, word1} (asm ld 8 bytes then split r4/r5).
         const s32 liNumBind = lpBindQueue->GetLength();
@@ -1220,7 +1220,7 @@ namespace
                                          lpRival->mPlayerName.GetPlayerName());
                     break;
                 default:
-                    CGS_ASSERT(false,"Invalid message type in BrnGameModule::TranslateGameActionsToGuiEvents");
+                    CGS_FAIL("Invalid message type in BrnGameModule::TranslateGameActionsToGuiEvents");
                     break;
                 }
                 for (s32 liString = 0; liString < lpRival->miNumberOfMessages; ++liString)
@@ -2141,7 +2141,7 @@ void BridgeGameStateToGui_EventStatus(
     PushGuiEvent(lDistanceToCheckpoint, lpGuiInput); // 240 / 4
 
     const CgsSystem::TimerStatus* lpGameTimerStatus = lpTimerStatusInterface->GetGameTimerStatus();
-    CGS_ASSERT(lpGameTimerStatus != 0, CGS_ASSERT_MESSAGE_AT("mTimerStatusInterface.GetGameTimerStatus()", CGS_ARTIST_FILE, 481));
+    CGS_ASSERT_AT(lpGameTimerStatus != 0, "mTimerStatusInterface.GetGameTimerStatus()", CGS_ARTIST_FILE, 481);
     const EGameModeType leGameMode = lpScoringOutputInterface->meGameModeType;
     BrnGui::GuiEventCurrentStatus lCurrentStatus;
     const CgsSystem::Time lGameTime = lpGameTimerStatus->GetTime();
@@ -2163,8 +2163,8 @@ void BridgeGameStateToGui_EventStatus(
         lCurrentStatus.miNumRemainingCheckpoints = 0;
     else
     {
-        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunner, CGS_ASSERT_MESSAGE_AT("E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunnerActiveRaceCarIndex", CGS_ARTIST_FILE, 505));
-        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_0 <= leRunner, CGS_ASSERT_MESSAGE_AT("E_ACTIVE_RACE_CAR_INDEX_0 <= leRunnerActiveRaceCarIndex", CGS_ARTIST_FILE, 506));
+        CGS_ASSERT_AT(E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunner, "E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunnerActiveRaceCarIndex", CGS_ARTIST_FILE, 505);
+        CGS_ASSERT_AT(E_ACTIVE_RACE_CAR_INDEX_0 <= leRunner, "E_ACTIVE_RACE_CAR_INDEX_0 <= leRunnerActiveRaceCarIndex", CGS_ARTIST_FILE, 506);
         lCurrentStatus.miNumRemainingCheckpoints = lpScoringOutputInterface->maCarCheckpointData[leRunner]
             .GetAllRemainingCheckpointIndexes(lCurrentStatus.maiRemainingCheckpointIndexes);
     }
@@ -2636,7 +2636,7 @@ namespace
         }
 
         // The console streams the offending value into the message before firing.
-        CGS_ASSERT(false, "Invalid Stunt Enum");
+        CGS_FAIL("Invalid Stunt Enum");
         return BrnGui::E_STUNTTYPE_COUNT;       // 3 -- out of range on purpose (the analyzer
                                                 //      bound-asserts it downstream)
     }
@@ -2671,8 +2671,8 @@ namespace
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
     {
-        CGS_ASSERT(lpGuiInput != 0, CGS_ASSERT_MESSAGE_AT("lpGuiInput", CGS_ARTIST_FILE, 754));                   // :754
-        CGS_ASSERT(lpGameStateOutput != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateOutput", CGS_ARTIST_FILE, 755));     // :755
+        CGS_ASSERT_AT(lpGuiInput != 0, "lpGuiInput", CGS_ARTIST_FILE, 754);                   // :754
+        CGS_ASSERT_AT(lpGameStateOutput != 0, "lpGameStateOutput", CGS_ARTIST_FILE, 755);     // :755
         if (lpGuiInput == 0 || lpGameStateOutput == 0)
         {
             return;
@@ -5279,8 +5279,8 @@ namespace BrnGame
     {
         const int liType = static_cast<int>(leTrainingType);
 
-        CGS_ASSERT(liType >= 0 && liType < BrnProgression::E_TRAINING_TYPE_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT", CGS_ARTIST_FILE, 160));
+        CGS_ASSERT_AT(liType >= 0 && liType < BrnProgression::E_TRAINING_TYPE_COUNT,
+                   "leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT", CGS_ARTIST_FILE, 160);
 
         if (liType < 128)
         {
@@ -5296,7 +5296,7 @@ namespace BrnGame
         const int liIndex = liType - 128;
         if (liIndex >= 128)
         {
-            CGS_ASSERT(liIndex < 128, CGS_ASSERT_MESSAGE_AT("liIndex < ciNumGeneralTrainingStringIDs", CGS_ARTIST_FILE, 169));
+            CGS_ASSERT_AT(liIndex < 128, "liIndex < ciNumGeneralTrainingStringIDs", CGS_ARTIST_FILE, 169);
             return "ERROR - UNKNOWN TRAINING TYPE";
         }
         return KAC_GENERAL_TRAINING_TEXT[liIndex];
@@ -5367,8 +5367,8 @@ namespace BrnGame
 
         const GsmIO::GameActionQueue* lpInQueue  = lpGameStateOutput->GetGameActionQueue();
         GsmIO::GameActionQueue*       lpOutQueue = lpNetworkInput->GetGameActionQueue();
-        CGS_ASSERT(lpInQueue, CGS_ASSERT_MESSAGE_AT("lpInQueue", CGS_ARTIST_FILE, 4284));
-        CGS_ASSERT(lpOutQueue, CGS_ASSERT_MESSAGE_AT("lpOutQueue", CGS_ARTIST_FILE, 4285));
+        CGS_ASSERT_AT(lpInQueue, "lpInQueue", CGS_ARTIST_FILE, 4284);
+        CGS_ASSERT_AT(lpOutQueue, "lpOutQueue", CGS_ARTIST_FILE, 4285);
 
         const CgsModule::Event* lpAction = 0;
         s32 liActionSize = 0;
@@ -5551,7 +5551,7 @@ namespace BrnGame
                 {
                     const GsmIO::RaceCarReachedCheckpointAction* lpCheckpointAction =
                         reinterpret_cast<const GsmIO::RaceCarReachedCheckpointAction*>(lpAction);
-                    CGS_ASSERT(lpCheckpointAction, CGS_ASSERT_MESSAGE_AT("lpCheckpointAction", CGS_ARTIST_FILE, 4880));
+                    CGS_ASSERT_AT(lpCheckpointAction, "lpCheckpointAction", CGS_ARTIST_FILE, 4880);
 
                     if (lpCheckpointAction->mbIsLocalPlayer)
                     {
@@ -5566,7 +5566,7 @@ namespace BrnGame
                 {
                     const GsmIO::ShowtimeUpdateAction* lpShowtimeUpdateAction =
                         reinterpret_cast<const GsmIO::ShowtimeUpdateAction*>(lpAction);
-                    CGS_ASSERT(lpShowtimeUpdateAction, CGS_ASSERT_MESSAGE_AT("lpShowtimeUpdateAction", CGS_ARTIST_FILE, 3976));
+                    CGS_ASSERT_AT(lpShowtimeUpdateAction, "lpShowtimeUpdateAction", CGS_ARTIST_FILE, 3976);
 
                     NetIO::NetworkInShowtimeUpdateEvent lNetworkShowtimeUpdateEvent;
                     lNetworkShowtimeUpdateEvent.mPlayerID       = lpShowtimeUpdateAction->mNetworkPlayerID;
@@ -5580,7 +5580,7 @@ namespace BrnGame
                 {
                     const GsmIO::ShowtimeModeSwitchAction* lpShowtimeModeSwitchAction =
                         reinterpret_cast<const GsmIO::ShowtimeModeSwitchAction*>(lpAction);
-                    CGS_ASSERT(lpShowtimeModeSwitchAction, CGS_ASSERT_MESSAGE_AT("lpShowtimeModeSwitchAction", CGS_ARTIST_FILE, 3992));
+                    CGS_ASSERT_AT(lpShowtimeModeSwitchAction, "lpShowtimeModeSwitchAction", CGS_ARTIST_FILE, 3992);
 
                     NetIO::NetworkInShowtimeSwitchEvent lNetworkShowtimeModeSwitchEvent;
                     lNetworkShowtimeModeSwitchEvent.mPlayerID             = lpShowtimeModeSwitchAction->mNetworkPlayerID;
@@ -5890,7 +5890,7 @@ namespace BrnGame
                                 lTelemetryEvent.mEventData.Construct(BrnNetwork::E_TELEMETRY_ROAD_RULES_NEW_PB_CRASH);
                                 break;
                             default:
-                                CGS_ASSERT(false, "Telemetry can't report this unknown road rules type");
+                                CGS_FAIL("Telemetry can't report this unknown road rules type");
                                 break;
                         }
                         lTelemetryEvent.mEventData.AddParameter(static_cast<s32>(lpRoadRulesPersonalBestAction->mChallengeIndex));
@@ -5939,7 +5939,7 @@ namespace BrnGame
                 {
                     const GsmIO::ModeScoreLeaderboardAction* lpModeScoreLeaderboardAction =
                         reinterpret_cast<const GsmIO::ModeScoreLeaderboardAction*>(lpAction);
-                    CGS_ASSERT(lpModeScoreLeaderboardAction, CGS_ASSERT_MESSAGE_AT("lpModeScoreLeaderboardAction", CGS_ARTIST_FILE, 4939));
+                    CGS_ASSERT_AT(lpModeScoreLeaderboardAction, "lpModeScoreLeaderboardAction", CGS_ARTIST_FILE, 4939);
 
                     NetIO::NetworkInScoreLeaderboardEvent lScoreLeaderboardEvent;
                     lScoreLeaderboardEvent.mEventID       = lpModeScoreLeaderboardAction->mEventID;
@@ -5954,7 +5954,7 @@ namespace BrnGame
                 {
                     const GsmIO::NonUploadedModeScoresAction* lpNonUploadedModeScoresAction =
                         reinterpret_cast<const GsmIO::NonUploadedModeScoresAction*>(lpAction);
-                    CGS_ASSERT(lpNonUploadedModeScoresAction, CGS_ASSERT_MESSAGE_AT("lpNonUploadedModeScoresAction", CGS_ARTIST_FILE, 4959));
+                    CGS_ASSERT_AT(lpNonUploadedModeScoresAction, "lpNonUploadedModeScoresAction", CGS_ARTIST_FILE, 4959);
 
                     NetIO::NetworkInNonUploadedScoresEvent lNonUploadedScoresEvent;
                     lNonUploadedScoresEvent.mpNonUploadedScores = lpNonUploadedModeScoresAction->mpNonUploadedScores;
@@ -6117,8 +6117,8 @@ bool TranslateFreeRoamGameActionToGuiEvent(
     // GuiEventJumpStarted (id 216, size 8).
     case BrnGameState::GameStateModuleIO::E_ACTION_SHOW_JUMP_NAME:
     {
-        CGS_ASSERT(lpAction != 0,
-            CGS_ASSERT_MESSAGE_AT("lpJumpNameAction != NULL", CGS_ARTIST_FILE, 1813));
+        CGS_ASSERT_AT(lpAction != 0,
+            "lpJumpNameAction != NULL", CGS_ARTIST_FILE, 1813);
         const CgsID lJumpKey = *reinterpret_cast<const CgsID*>(lpAction);
 
         BrnGui::GuiEventJumpStarted lEvent;
@@ -6179,8 +6179,8 @@ bool TranslateFreeRoamGameActionToGuiEvent(
     // size 2). Every other region type is consumed with no post.
     case 109:
     {
-        CGS_ASSERT(lpAction != 0,
-            CGS_ASSERT_MESSAGE_AT("lpTriggerAction != NULL", CGS_ARTIST_FILE, 1931));
+        CGS_ASSERT_AT(lpAction != 0,
+            "lpTriggerAction != NULL", CGS_ARTIST_FILE, 1931);
         const PlayerTriggerActionMirror* lpTrigger =
             reinterpret_cast<const PlayerTriggerActionMirror*>(lpAction);
 
@@ -6269,8 +6269,8 @@ bool TranslateFreeRoamGameActionToGuiEvent(
     // GuiEventAllJunctionsDiscoveredOfType (id 313).
     case 203:
     {
-        CGS_ASSERT(lpAction != 0,
-            CGS_ASSERT_MESSAGE_AT("lpAllEventsDiscoveredOfTypeAction != NULL", CGS_ARTIST_FILE, 1719));
+        CGS_ASSERT_AT(lpAction != 0,
+            "lpAllEventsDiscoveredOfTypeAction != NULL", CGS_ARTIST_FILE, 1719);
         const s32 liGameModeType = *reinterpret_cast<const s32*>(lpAction);
 
         BrnGui::GuiEventAllJunctionsDiscoveredOfType lEvent;

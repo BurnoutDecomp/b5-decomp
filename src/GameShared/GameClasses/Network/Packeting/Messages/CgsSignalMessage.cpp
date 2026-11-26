@@ -49,12 +49,12 @@ namespace CgsNetwork
                                    NetworkPlayerID lSendingPlayerID,
                                    NetworkPlayerID lRecvingPlayerID)
     {
-        CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
-            "!IsMessageValid()", CGS_ARTIST_SIGNAL_MESSAGE, 98));
+        CGS_ASSERT_AT(!IsMessageValid(),
+            "!IsMessageValid()", CGS_ARTIST_SIGNAL_MESSAGE, 98);
         SetSendingPlayerID(lSendingPlayerID);
         SetRecvingPlayerID(lRecvingPlayerID);
-        CGS_ASSERT(lpMessage->GetU16Frame() != KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
-            "lpMessage->GetU16Frame() != KU16_INVALID_FRAME", CGS_ARTIST_SIGNAL_MESSAGE, 103));
+        CGS_ASSERT_AT(lpMessage->GetU16Frame() != KU16_INVALID_FRAME,
+            "lpMessage->GetU16Frame() != KU16_INVALID_FRAME", CGS_ARTIST_SIGNAL_MESSAGE, 103);
 
         Message::PrepareAck(lpMessage->GetType(), lpMessage->GetU16Frame(), lpMessage->GetGameID());
     }
@@ -64,12 +64,12 @@ namespace CgsNetwork
                                     NetworkPlayerID lSendingPlayerID,
                                     NetworkPlayerID lRecvingPlayerID)
     {
-        CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
-            "!IsMessageValid()", CGS_ARTIST_SIGNAL_MESSAGE, 126));
-        CGS_ASSERT(lSendingPlayerID != KI_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
-            "lSendingPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_SIGNAL_MESSAGE, 127));
-        CGS_ASSERT(lRecvingPlayerID != KI_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
-            "lRecvingPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_SIGNAL_MESSAGE, 128));
+        CGS_ASSERT_AT(!IsMessageValid(),
+            "!IsMessageValid()", CGS_ARTIST_SIGNAL_MESSAGE, 126);
+        CGS_ASSERT_AT(lSendingPlayerID != KI_INVALID_PLAYER_ID,
+            "lSendingPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_SIGNAL_MESSAGE, 127);
+        CGS_ASSERT_AT(lRecvingPlayerID != KI_INVALID_PLAYER_ID,
+            "lRecvingPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_SIGNAL_MESSAGE, 128);
         SetSendingPlayerID(lSendingPlayerID);
         SetRecvingPlayerID(lRecvingPlayerID);
 

@@ -763,7 +763,7 @@ namespace
         {
             // Unreachable by construction (the word only ever holds 0/4/8 in bits 2-3); the
             // console tests an uninitialised stack line here. Zero is the host's stand-in.
-            CGS_ASSERT(false, "Unknown state condition");                            // :3188
+            CGS_FAIL("Unknown state condition");                            // :3188
         }
 
         // ---- the test ----------------------------------------------------------------------------
@@ -801,7 +801,7 @@ namespace
         }
         else
         {
-            CGS_ASSERT(false, "Unknown plane");                                        // :3262
+            CGS_FAIL("Unknown plane");                                        // :3262
         }
 
         // wedged == BOTH planes occluded
@@ -824,7 +824,7 @@ namespace
                 // the cleared bits ARE knVehicleRoundRobinFrontPlaneToTest (0)
                 break;
             default:
-                CGS_ASSERT(false, "Unknown wheel");                                    // :3310
+                CGS_FAIL("Unknown wheel");                                    // :3310
                 break;
         }
     }

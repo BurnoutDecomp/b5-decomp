@@ -20,7 +20,7 @@ namespace CrashIO
     // ARTIST sub_827BBA68: bit3 write-lock assertion, return member at console+0x7A0.
     OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 211));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 211);
         return &mGameEventQueue;
     }
 
@@ -30,9 +30,9 @@ namespace CrashIO
         // Pinned from inside the member so offsetof can see the private member.
         CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mNetworkOutputInterface) == 0x10),
                       "mNetworkOutputInterface @0x10");
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            CGS_ARTIST_FILE, 208));
+            CGS_ARTIST_FILE, 208);
         return &mNetworkOutputInterface;
     }
 }

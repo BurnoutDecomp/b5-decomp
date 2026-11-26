@@ -61,11 +61,11 @@ namespace BrnParticle
     {
         // 128-byte-aligned block holding the whole bucket budget.
         mpData = static_cast<u8*>(lpHeapMalloc->Malloc(static_cast<s32>(luTotalSize), 128));
-        CGS_ASSERT(mpData != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpData != NULL",
+        CGS_ASSERT_AT(mpData != NULL,
+            "mpData != NULL",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../Effects/Particles/Native/FXBuckets.cpp", 76 /* ARTIST 0x8227B1B8 */));
+                "../Effects/Particles/Native/FXBuckets.cpp", 76 /* ARTIST 0x8227B1B8 */);
+
 
         FXBucketBase* lpCurrentBucket = reinterpret_cast<FXBucketBase*>(mpData); // r11 = first bucket
         const u32 luNumBuckets = luTotalSize >> 13; // totalSize / 8192

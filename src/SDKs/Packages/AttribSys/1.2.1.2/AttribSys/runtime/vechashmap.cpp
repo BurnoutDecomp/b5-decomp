@@ -166,9 +166,9 @@ namespace
     template<class Map, class Node>
     __forceinline u64 VecHashMapKeyAtIndex(const Map& lrMap, Node* const& lrpTable, u32 luIndex)
     {
-        CGS_ASSERT(lrMap.ValidIndex(luIndex),
-            CGS_ASSERT_MESSAGE_AT("GetKeyAtIndex passed invalid index.",
-                "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/vechashmap.h", 168));
+        CGS_ASSERT_AT(lrMap.ValidIndex(luIndex),
+            "GetKeyAtIndex passed invalid index.",
+                "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/vechashmap.h", 168);
         return lrpTable[luIndex].Key();
     }
 }
@@ -868,9 +868,9 @@ Collection* Class::GetCollectionWithDefault(u64 luKey) const
 // Returns true iff a live bucket was actually vacated.
 bool Class::RemoveCollection(Collection* lpCollection)
 {
-    CGS_ASSERT(lpCollection != NULL, CGS_ASSERT_MESSAGE_AT("Cannot remove NULL collection.",
+    CGS_ASSERT_AT(lpCollection != NULL, "Cannot remove NULL collection.",
         "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribclass.cpp",
-        136 /* ARTIST 0x8280AE04 */));
+        136 /* ARTIST 0x8280AE04 */);
 
     // FIXED (attrib teardown wave 2026-09-03): this used to read the key as
     // `*(u64*)((u8*)lpCollection + 0x10)` -- the CONSOLE offset. Attrib::Collection

@@ -116,9 +116,9 @@ namespace BrnWorld
 
     inline void PropEntityID::AssertIsProp() const
     {
-        CGS_ASSERT(static_cast<u8>(mEntityId.muValue >> KU_OWNER_BASE) == E_ENTITYTYPE_PROP,
-                   CGS_ASSERT_MESSAGE_AT("mEntityId.GetOwner() == E_ENTITYTYPE_PROP",
-                                             BRN_PROPENTITYID_H_ASSERT_FILE, 278));
+        CGS_ASSERT_AT(static_cast<u8>(mEntityId.muValue >> KU_OWNER_BASE) == E_ENTITYTYPE_PROP,
+                   "mEntityId.GetOwner() == E_ENTITYTYPE_PROP",
+                                             BRN_PROPENTITYID_H_ASSERT_FILE, 278);
     }
 
     // 0x822B7888: store the word, then the tripwire (the store precedes the check).

@@ -37,8 +37,8 @@ void PursuitMode::Start(const StartGameModeParams* lpStartGameModeParams,
     const BrnProgression::ProgressionRankData* lpProgressionRankData =
         lpStartGameModeParams->GetProgressionRankData();
 
-    CGS_ASSERT(lpProgressionRankData != NULL, CGS_ASSERT_MESSAGE_AT("lpProgressionRankData != NULL", CGS_ARTIST_FILE, 53));
-    CGS_ASSERT(lpGameModeParams != NULL, CGS_ASSERT_MESSAGE_AT("lpGameModeParams != NULL", CGS_ARTIST_FILE, 54));
+    CGS_ASSERT_AT(lpProgressionRankData != NULL, "lpProgressionRankData != NULL", CGS_ARTIST_FILE, 53);
+    CGS_ASSERT_AT(lpGameModeParams != NULL, "lpGameModeParams != NULL", CGS_ARTIST_FILE, 54);
 
     lpGameModeParams->Construct(GameStateModuleIO::E_MODE_PURSUIT);
 

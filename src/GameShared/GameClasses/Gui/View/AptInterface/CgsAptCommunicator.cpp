@@ -696,7 +696,7 @@ namespace CgsGui
                 *CgsDev::Log::gpDebugPrint << " : " << lpacValue << "\n";
             }
 
-            CGS_ASSERT(false, "Sending too many update messages to the AptCommunicator");
+            CGS_FAIL("Sending too many update messages to the AptCommunicator");
         }
     }
 

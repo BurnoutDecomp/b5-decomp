@@ -84,7 +84,7 @@ namespace CgsResource
         const uintptr_t luRaster = reinterpret_cast<uintptr_t>(lpState->mpRaster);
         if (luRaster == static_cast<uintptr_t>(renderengine::TextureState::KU_INVALID_TEXTURE))
         {
-            CGS_ASSERT(false, "Texture state has invalid texture value\n");
+            CGS_FAIL("Texture state has invalid texture value\n");
             return false;
         }
         return true;

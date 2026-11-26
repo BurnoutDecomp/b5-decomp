@@ -109,7 +109,7 @@ void Video::Update()
 
         default:
             // The console streams "Unhandled state " << meSubState << " in Video::Update".
-            CGS_ASSERT(false, "Unhandled state ");
+            CGS_FAIL("Unhandled state ");
             lpInQueue->Clear();
             return;
     }
@@ -140,7 +140,7 @@ void Video::Update()
         {
             // The console streams "Unexpected event received : " << id << " in " << file
             // << " at line " << line.
-            CGS_ASSERT(false, "Unexpected event received : ");
+            CGS_FAIL("Unexpected event received : ");
         }
     }
 

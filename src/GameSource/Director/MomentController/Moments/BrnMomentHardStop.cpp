@@ -210,7 +210,7 @@ void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
     DebugLog* lpDebugLog = lrSharedInfo.mpDebugLog;
     char lacLine[64];   // the console build's three 64-byte stack print buffers
 
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 92));   //  (non-gating)
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters != NULL", CGS_ARTIST_FILE, 92);   //  (non-gating)
 
     switch (GetState())
     {
@@ -256,7 +256,7 @@ void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
         case 2:  leShotGroup = ShotSelector::EGroup(1); break;
         case 3:  leShotGroup = ShotSelector::EGroup(2); break;
         default:
-            CGS_ASSERT(false, "Unhandled crash type");   //  (non-gating)
+            CGS_FAIL("Unhandled crash type");   //  (non-gating)
             leShotGroup = ShotSelector::EGroup(1);
             break;
         }
@@ -467,7 +467,7 @@ void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
     }
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", CGS_ARTIST_FILE, 384));   //  (non-gating)
+        CGS_FAIL_AT("unhandled case in switch", CGS_ARTIST_FILE, 384);   //  (non-gating)
         break;
     }
 

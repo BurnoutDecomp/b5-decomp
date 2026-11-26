@@ -37,10 +37,10 @@ namespace CgsDev
     //   return *this;
     DebugManager& DebugInterface::GetDebugManager()
     {
-        CGS_ASSERT(mpDebugManager,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpDebugManager",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Interface/CgsDebugInterface.h", 163 /* ARTIST 0x823A61D8 */));
+        CGS_ASSERT_AT(mpDebugManager,
+            "mpDebugManager",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Interface/CgsDebugInterface.h", 163 /* ARTIST 0x823A61D8 */);
+
         return *mpDebugManager;
     }
 

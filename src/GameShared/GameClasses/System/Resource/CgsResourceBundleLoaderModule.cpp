@@ -64,7 +64,7 @@ namespace CgsResource
             mePrepareStage = E_STAGE_DONE;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Invalid stage\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 195);
+            CGS_FAIL_AT("Invalid stage\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 195);
             return false;
         }
     }
@@ -89,7 +89,7 @@ namespace CgsResource
             meReleaseStage = E_STAGE_DONE;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Invalid stage\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 243);
+            CGS_FAIL_AT("Invalid stage\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 243);
             return false;
         }
     }

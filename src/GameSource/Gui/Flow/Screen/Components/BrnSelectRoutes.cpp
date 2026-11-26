@@ -46,16 +46,16 @@ namespace BrnGui
     BrnGameState::LandmarkIndex SelectRoutes::GetCheckpointLandmark(s32 liRoundNumber,
                                                                     s32 liCheckpointIndex) const
     {
-        CGS_ASSERT(liCheckpointIndex > 0,
-            CGS_ASSERT_MESSAGE_AT("liCheckpointIndex > 0", __FILE__, 288 /* ARTIST 0x824837EC */));
-        CGS_ASSERT(liCheckpointIndex < KI_MAX_CHECKPOINTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "liCheckpointIndex < KI_MAX_CHECKPOINTS",
-                __FILE__, 289 /* ARTIST 0x82483810 */));
-        CGS_ASSERT(liCheckpointIndex < maiNumCheckpoints[liRoundNumber],
-            CGS_ASSERT_MESSAGE_AT(
-                "liCheckpointIndex < maiNumCheckpoints[ liRoundNumber ]",
-                __FILE__, 290 /* ARTIST 0x82483840 */));
+        CGS_ASSERT_AT(liCheckpointIndex > 0,
+            "liCheckpointIndex > 0", __FILE__, 288 /* ARTIST 0x824837EC */);
+        CGS_ASSERT_AT(liCheckpointIndex < KI_MAX_CHECKPOINTS,
+            "liCheckpointIndex < KI_MAX_CHECKPOINTS",
+                __FILE__, 289 /* ARTIST 0x82483810 */);
+
+        CGS_ASSERT_AT(liCheckpointIndex < maiNumCheckpoints[liRoundNumber],
+            "liCheckpointIndex < maiNumCheckpoints[ liRoundNumber ]",
+                __FILE__, 290 /* ARTIST 0x82483840 */);
+
 
         return maCheckpointData[liCheckpointIndex].maLandmarkIndex[liRoundNumber];
     }
@@ -608,7 +608,7 @@ namespace BrnGui
                 char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                 CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
                 lMessage << "invalid menu item type of " << static_cast<s32>(leType) << "\n";
-                CGS_ASSERT(false, lMessage.GetBuffer());
+                CGS_FAIL(lMessage.GetBuffer());
                 break;
             }
             }
@@ -705,7 +705,7 @@ namespace BrnGui
             const u32 luStart = GenerateRandomStartPoint(miCurrentRound, leCounty);
             if ((luStart & 0xFFFF00u) == 0xFFFF00u || (luStart & 0xFFu) == 0xFFu)
             {
-                CGS_ASSERT(false, "Couldn't find startpoint for county");
+                CGS_FAIL("Couldn't find startpoint for county");
                 return false;
             }
             const SatNavEventDisplayInfo* lpStart = mpGuiCache->GetPresetEventDisplayInfo(luStart);
@@ -727,7 +727,7 @@ namespace BrnGui
                     : GenerateRandomLandmark(miCurrentRound, liCheckpointItem, leCounty);
             if (static_cast<s32>(lLandmark) == -1)
             {
-                CGS_ASSERT_AT(false, "Couldn't find landmark for county", CGS_ARTIST_FILE, 645);
+                CGS_FAIL_AT("Couldn't find landmark for county", CGS_ARTIST_FILE, 645);
                 return false;
             }
             GuiEventUpdateSatNav::SatNavIconInfo lInfo;
@@ -749,10 +749,10 @@ namespace BrnGui
     void SelectRoutes::SetStartLightTriggerID(s32 liRoundNumber, u32 luStartLightTriggerID)
     {
         const SatNavEventDisplayInfo* lpStart = mpGuiCache->GetPresetEventDisplayInfo(luStartLightTriggerID);
-        CGS_ASSERT(lpStart,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpEventStart",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnSelectRoutes.h", 360 /* ARTIST 0x824838B0 */));
+        CGS_ASSERT_AT(lpStart,
+            "lpEventStart",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnSelectRoutes.h", 360 /* ARTIST 0x824838B0 */);
+
         maCheckpointData[0].maeSelectedCounty[liRoundNumber] = static_cast<BrnWorld::ECounty>(lpStart->muCounty);
         maCheckpointData[0].maStartLightTriggerID[liRoundNumber] = luStartLightTriggerID;
         if (mpGuiCache->GetOnlineGameMode() == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)
@@ -771,7 +771,7 @@ namespace BrnGui
         const EMenuItemType leType = GetMenuItemType(GetCurrentlySelectedCheckpointIndex());
         if (leType == E_MENU_ITEM_TYPE_DONE || leType == E_MENU_ITEM_TYPE_ADD_CHECKPOINT)
         {
-            CGS_ASSERT(false, "Checkpoint not selected!\n");
+            CGS_FAIL("Checkpoint not selected!\n");
         }
         else
         {

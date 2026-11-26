@@ -696,11 +696,11 @@ bool TrafficInAir::Attach()
 
     BrnSound::Logic::Traffic::TrafficState* lpState =
         static_cast<BrnSound::Logic::Traffic::TrafficState*>(GetStateBase());
-    CGS_ASSERT(lpState != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpState",
+    CGS_ASSERT_AT(lpState != 0,
+        "lpState",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Sound/Vehicles/Wheels/BrnInAirEffect.cpp", 1123 /* ARTIST 0x826F48EC */));
+            "../Sound/Vehicles/Wheels/BrnInAirEffect.cpp", 1123 /* ARTIST 0x826F48EC */);
+
     mpTrafficEntity = lpState->GetTrafficEntity();
     return true;
 }

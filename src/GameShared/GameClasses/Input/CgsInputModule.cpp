@@ -167,7 +167,7 @@ bool InputModule::Prepare(rw::IResourceAllocator* lpAllocator)
             mePrepareStage = E_INPUTPREPARESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid Prepare State");
+            CGS_FAIL("Invalid Prepare State");
             return false;
     }
 }
@@ -205,7 +205,7 @@ bool InputModule::Release()
             meReleaseStage = E_INPUTRELEASESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid Prepare State");
+            CGS_FAIL("Invalid Prepare State");
             return false;
     }
 }

@@ -358,7 +358,7 @@ bool MomentSelector::PickBestInhibitedMoment(u32* lpuIndex, EPickBestInhibitedOp
         lbIgnoreConditionsMet = true;
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Unknown option: " << leOptions, CGS_ARTIST_FILE, 476);
+        CGS_FAIL_STREAM_AT("Unknown option: " << leOptions, CGS_ARTIST_FILE, 476);
         break;
     }
 
@@ -420,7 +420,7 @@ bool MomentSelector::PickWorstUninhibitedMoment(u32* lpuIndex, EPickWorstUninhib
         lbIgnoreConditionsMet = true;
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Unknown option: " << leOptions, CGS_ARTIST_FILE, 545);
+        CGS_FAIL_STREAM_AT("Unknown option: " << leOptions, CGS_ARTIST_FILE, 545);
         break;
     }
 
@@ -503,9 +503,9 @@ bool MomentSelector::Release()
 // handle, and a zero recency entry.
 bool MomentSelector::AddMoment(MomentDescription lMoment)
 {
-    CGS_ASSERT(!mbPrepared, CGS_ASSERT_MESSAGE_AT("!mbPrepared", CGS_ARTIST_FILE, 282));
-    CGS_ASSERT(mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity(),
-               CGS_ASSERT_MESSAGE_AT("mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity()", CGS_ARTIST_FILE, 283));
+    CGS_ASSERT_AT(!mbPrepared, "!mbPrepared", CGS_ARTIST_FILE, 282);
+    CGS_ASSERT_AT(mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity(),
+               "mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity()", CGS_ARTIST_FILE, 283);
 
     MomentController::MomentHandle lMomentHandle;
     lMomentHandle.Construct();                      // console: the single zero byte into the slot
@@ -566,10 +566,10 @@ bool MomentSelector::SelectBestMomentWithExclusion(CgsNumeric::Random& lRandom, 
             return SelectBestRandomMomentWithExclusion(lRandom, liExclusion);
 
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "unhandled type",
-                    CGS_ARTIST_FILE, 338 /* ARTIST 0x82250FEC */));
+            CGS_FAIL_AT(
+                "unhandled type",
+                    CGS_ARTIST_FILE, 338 /* ARTIST 0x82250FEC */);
+
             return false;
     }
 }

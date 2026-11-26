@@ -328,7 +328,7 @@ namespace BrnGui
     // ================================================================================
     void Intro::Construct(CgsID lId, CgsFsm::ScriptedFsm* lpFsm)
     {
-        CGS_ASSERT(lpFsm != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ScriptedFsm ptr", CGS_ARTIST_FILE, 111));   // cpp:111
+        CGS_ASSERT_STREAM_AT(lpFsm != 0, "Invalid ScriptedFsm ptr", CGS_ARTIST_FILE, 111);   // cpp:111
 
         CgsGui::State::Construct(lId, lpFsm);
 
@@ -432,10 +432,10 @@ namespace BrnGui
     // ================================================================================
     void Intro::AppendExpectedComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpGuiCache",
-                CGS_ARTIST_FILE, 595 /* ARTIST 0x824B90C8 */));   // cpp:595
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache",
+                CGS_ARTIST_FILE, 595 /* ARTIST 0x824B90C8 */);   // cpp:595
+
 
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mScreenAnim.GetName());
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mPhotoBoothComponent.GetName());
@@ -487,7 +487,7 @@ namespace BrnGui
             break;
 
         default:   // PLAYING_VIDEO(1) / WAITING_FOR_VIDEO(2) land here too -- see the file note.
-            CGS_ASSERT(false, "Unhandled introstate in Intro::SetupComponents()");   // cpp:685
+            CGS_FAIL("Unhandled introstate in Intro::SetupComponents()");   // cpp:685
             break;
         }
     }
@@ -751,7 +751,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Unhandled intro state in Intro::HandleControllerInput()");   // cpp:758
+            CGS_FAIL("Unhandled intro state in Intro::HandleControllerInput()");   // cpp:758
             break;
         }
     }
@@ -858,7 +858,7 @@ namespace BrnGui
             break;
 
         default:   // PLAYING_VIDEO(1) / WAITING_FOR_VIDEO(2) -- see the file note.
-            CGS_ASSERT(false, "Unhandled IntroState in Intro::Update()");   // cpp:330
+            CGS_FAIL("Unhandled IntroState in Intro::Update()");   // cpp:330
             break;
         }
 

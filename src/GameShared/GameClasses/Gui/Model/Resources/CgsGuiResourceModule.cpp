@@ -156,9 +156,9 @@ namespace CgsGui
                 return true;
 
             default:
-                CGS_ASSERT(false,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "Unknown prepare stage", __FILE__, 191 /* ARTIST 0x8284FD68 */));
+                CGS_FAIL_AT(
+                    "Unknown prepare stage", __FILE__, 191 /* ARTIST 0x8284FD68 */);
+
                 return false;
         }
     }
@@ -184,7 +184,7 @@ namespace CgsGui
                 return true;
 
             default:
-                CGS_ASSERT_AT(false, "Unknown release stage", CGS_ARTIST_FILE, 241);
+                CGS_FAIL_AT("Unknown release stage", CGS_ARTIST_FILE, 241);
                 return false;
         }
     }
@@ -302,7 +302,7 @@ namespace CgsGui
                 lrBundle.miBundleBank    = miGlobalTexturePoolId;
                 break;
             default:
-                CGS_ASSERT_AT(false, "Unexpected resource type in GuiResourceModule::AddBundleToQueue", CGS_ARTIST_FILE, 902);
+                CGS_FAIL_AT("Unexpected resource type in GuiResourceModule::AddBundleToQueue", CGS_ARTIST_FILE, 902);
                 break;
         }
 
@@ -335,9 +335,9 @@ namespace CgsGui
     // X360 0x82848468. Pops the tail record by value.
     GuiResourceModule::GuiBundleToLoad GuiResourceModule::PopFromBundleLoadQueue()
     {
-        CGS_ASSERT(miNumBundlesToLoad > 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNumBundlesToLoad > 0", __FILE__, 949 /* ARTIST 0x82848498 */));
+        CGS_ASSERT_AT(miNumBundlesToLoad > 0,
+            "miNumBundlesToLoad > 0", __FILE__, 949 /* ARTIST 0x82848498 */);
+
         --miNumBundlesToLoad;
         return maBundlesToLoad[miNumBundlesToLoad];
     }
@@ -452,9 +452,9 @@ namespace CgsGui
             GuiBundleToLoad& lrBundle = maBundlesPending[li];
             if (!lrBundle.mbLoaded && lrBundle.meLoadUnload == E_GUI_RESOURCEREQUEST_LOAD)
             {
-                CGS_ASSERT(lrBundle.mbParsed == false,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "lBundle.mbParsed == false", __FILE__, 283 /* ARTIST 0x8285F768 */));
+                CGS_ASSERT_AT(lrBundle.mbParsed == false,
+                    "lBundle.mbParsed == false", __FILE__, 283 /* ARTIST 0x8285F768 */);
+
                 LoadBundle(lrBundle, lpOutput);
             }
         }
@@ -700,7 +700,7 @@ namespace CgsGui
                 break;
 
             default:
-                CGS_ASSERT_AT(false, "Invalid state in GuiResourceModule::Update", CGS_ARTIST_FILE, 671);
+                CGS_FAIL_AT("Invalid state in GuiResourceModule::Update", CGS_ARTIST_FILE, 671);
                 break;
         }
 

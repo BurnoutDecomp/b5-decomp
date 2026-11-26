@@ -105,8 +105,8 @@ namespace BrnGameState
             if (lbPlayerCarActive)
             {
                 lePlayerActiveRaceCarIndex = lpActiveCarInterface->GetPlayerActiveRaceCarIndex();
-                CGS_ASSERT(lePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                           CGS_ASSERT_MESSAGE_AT("Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980));
+                CGS_ASSERT_AT(lePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                           "Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980);
                 const TakedownManager::RaceCarData* lpPlayerRaceCarData =
                     mpTakedownManager->GetRaceCarData(lePlayerActiveRaceCarIndex);
 

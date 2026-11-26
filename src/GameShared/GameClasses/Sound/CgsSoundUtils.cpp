@@ -316,8 +316,8 @@ static const char KAC_SOUND_UTILS_ASSERT_FILE[] =
 template <>
 s32 PathLine<2>::AddStage(f32 lfStart, f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve)
 {
-    CGS_ASSERT(mnNumStages != 2, CGS_ASSERT_MESSAGE_AT(
-        "mnNumStages != TNumPoints", KAC_SOUND_UTILS_ASSERT_FILE, 334));  // 0x82690B88
+    CGS_ASSERT_AT(mnNumStages != 2,
+        "mnNumStages != TNumPoints", KAC_SOUND_UTILS_ASSERT_FILE, 334);  // 0x82690B88
 
     // Length is supplied in milliseconds; store it in seconds and clamp to a floor
     // so Update never divides by (near) zero.
@@ -348,10 +348,10 @@ s32 PathLine<2>::AddStage(f32 lfStart, f32 lfFinish, f32 lfLength, Curve::ECurve
 template <>
 s32 PathLine<2>::AddLinkedStage(f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve)
 {
-    CGS_ASSERT(mnNumStages,
-        CGS_ASSERT_MESSAGE_AT(
-            "mnNumStages",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/CgsSoundUtils.cpp", 364 /* ARTIST 0x826A8518 */));
+    CGS_ASSERT_AT(mnNumStages,
+        "mnNumStages",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/CgsSoundUtils.cpp", 364 /* ARTIST 0x826A8518 */);
+
 
     // A linked stage always ramps from the previous stage's finish level, so the
     // start is seeded to 0.0f here and carried over at stage-advance time (Update).
@@ -477,8 +477,8 @@ template <u32 tuNumStages>
 s32 PathLine<tuNumStages>::AddStage(f32 lfStart, f32 lfFinish, f32 lfLength,
                                     Curve::ECurveType leCurve)
 {
-    CGS_ASSERT(mnNumStages != static_cast<s32>(tuNumStages), CGS_ASSERT_MESSAGE_AT(
-        "mnNumStages != TNumPoints", KAC_SOUND_UTILS_ASSERT_FILE, 334));  // 0x8268EF40
+    CGS_ASSERT_AT(mnNumStages != static_cast<s32>(tuNumStages),
+        "mnNumStages != TNumPoints", KAC_SOUND_UTILS_ASSERT_FILE, 334);  // 0x8268EF40
 
     maLength[mnNumStages] = lfLength * KF_STAGE_LENGTH_SCALE;
     if (maLength[mnNumStages] <= 0.0f)

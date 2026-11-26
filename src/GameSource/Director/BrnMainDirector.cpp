@@ -308,7 +308,7 @@ namespace BrnDirector
         // ⭐ REAL (was held back for host size): the camera-behaviour manager.
         mBehaviourManager.Construct();
 
-        CGS_ASSERT(lpResourceManager != 0, CGS_ASSERT_MESSAGE_AT("lpDirectorResourceManager != NULL", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 168));
+        CGS_ASSERT_AT(lpResourceManager != 0, "lpDirectorResourceManager != NULL", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 168);
         mBehaviourManager.SetDirectorResourceManager(lpResourceManager);
 
         // ⭐ REAL (2026-09-24, FX-DIRECTOR moment tick): the moment controller -- its pool's
@@ -482,7 +482,7 @@ namespace BrnDirector
             return true;
 
         default:
-            CGS_ASSERT(false, "Invalid Stage\n");
+            CGS_FAIL("Invalid Stage\n");
             return false;
         }
     }
@@ -521,10 +521,10 @@ namespace BrnDirector
             return true;
 
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "Invalid Stage\n",
-                    CGS_ARTIST_FILE, 297 /* ARTIST 0x82236F54 */));
+            CGS_FAIL_AT(
+                "Invalid Stage\n",
+                    CGS_ARTIST_FILE, 297 /* ARTIST 0x82236F54 */);
+
             return false;
         }
     }
@@ -1408,7 +1408,7 @@ namespace BrnDirector
         if (lpInput->GetPlayerTakenDown())
         {
             maGameState.mbPlayerWasTakenDown = true;                        // +0x1C3
-            CGS_ASSERT(lpInput->GetPlayerTakenDown(), CGS_ASSERT_MESSAGE_AT("mbPlayerTakenDown", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 232));
+            CGS_ASSERT_AT(lpInput->GetPlayerTakenDown(), "mbPlayerTakenDown", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 232);
             maGameState.mePlayerKillerIndex = lpInput->GetPlayerKillerCarIndex();  // +0x1C4
         }
 
@@ -3239,8 +3239,8 @@ namespace BrnDirector
         // seeds it to 0, so the assert is off in retail.
         if (!maGameState.mbCanUseSlomo)
         {
-            CGS_ASSERT(!(mbDebugAssertNoIllegalSlomo && lCamera.GetEffects().mfSimTimeScale != 1.0f),
-                       CGS_ASSERT_MESSAGE_AT("Trying to use slomo when not allowed", CGS_ARTIST_FILE, 711));
+            CGS_ASSERT_AT(!(mbDebugAssertNoIllegalSlomo && lCamera.GetEffects().mfSimTimeScale != 1.0f),
+                       "Trying to use slomo when not allowed", CGS_ARTIST_FILE, 711);
             lCamera.GetEffects().mfSimTimeScale = 1.0f;
         }
 

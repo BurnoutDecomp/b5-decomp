@@ -27,10 +27,10 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult StuntScoreUpdatedMessage::PackOrUnpack()
     {
-        CGS_ASSERT(miStuntScore != -1,
-            CGS_ASSERT_MESSAGE_AT(
-                "miStuntScore != -1",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnStuntScoreUpdatedMessage.cpp", 91 /* ARTIST 0x8257D108 */));
+        CGS_ASSERT_AT(miStuntScore != -1,
+            "miStuntScore != -1",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnStuntScoreUpdatedMessage.cpp", 91 /* ARTIST 0x8257D108 */);
+
 
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
         return CgsNetwork::Message::PackOrUnpack(&miStuntScore, 0, 0x7FFFFFFF) | lxBase;
@@ -38,16 +38,16 @@ namespace BrnNetwork
 
     void StuntScoreUpdatedMessage::PrepareForSend(u16 lu16FrameCount, s32 liStuntScore)
     {
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16FrameCount != KU16_INVALID_FRAME",
-                __FILE__, 141 /* ARTIST 0x8257D18C */));
-        CGS_ASSERT(liStuntScore != -1,
-            CGS_ASSERT_MESSAGE_AT("liStuntScore != -1", __FILE__, 142 /* ARTIST 0x8257D1B0 */));
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                __FILE__, 145 /* ARTIST 0x8257D1DC */));
+        CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
+            "lu16FrameCount != KU16_INVALID_FRAME",
+                __FILE__, 141 /* ARTIST 0x8257D18C */);
+
+        CGS_ASSERT_AT(liStuntScore != -1,
+            "liStuntScore != -1", __FILE__, 142 /* ARTIST 0x8257D1B0 */);
+        CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
+            "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                __FILE__, 145 /* ARTIST 0x8257D1DC */);
+
 
         miStuntScore = liStuntScore;   // stw r28, 0x28(this)
         CgsNetwork::ReliableMessage::PrepareForSend(KI_STUNT_SCORE_UPDATED_MESSAGE_TYPE, lu16FrameCount);

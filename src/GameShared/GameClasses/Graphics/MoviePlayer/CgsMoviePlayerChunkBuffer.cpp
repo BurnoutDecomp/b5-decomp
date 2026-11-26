@@ -38,8 +38,8 @@ namespace CgsGraphics
     // ARTIST 827EA0A0 validates the decoded size before returning the payload.
     void* ChunkBuffer::GetChunkData(u32 luIndex)
     {
-        CGS_ASSERT(GetChunkSize(luIndex) != 0,
-            CGS_ASSERT_STREAM_MESSAGE_AT("NULL Chunk", CGS_ARTIST_MOVIE_CHUNK_FILE, 493));
+        CGS_ASSERT_STREAM_AT(GetChunkSize(luIndex) != 0,
+            "NULL Chunk", CGS_ARTIST_MOVIE_CHUNK_FILE, 493);
         return mpcBuffer + mauChunkOffsets[luIndex] + sizeof(EacChunkDef);
     }
 
@@ -79,7 +79,7 @@ namespace CgsGraphics
     void* MoviePlayerCoreAllocator::Alloc(size_t /*nSize*/, const char* /*pName*/, unsigned int /*nFlags*/,
                                           unsigned int /*nAlignment*/, unsigned int /*nAlignmentOffset*/)
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid allocation\n", CGS_ARTIST_MOVIE_PLAYER_FILE, 137));
+        CGS_FAIL_STREAM_AT("Invalid allocation\n", CGS_ARTIST_MOVIE_PLAYER_FILE, 137);
         return 0;
     }
 

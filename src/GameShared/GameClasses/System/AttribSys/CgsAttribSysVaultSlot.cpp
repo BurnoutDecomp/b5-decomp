@@ -79,7 +79,7 @@ s32 VaultSlot::RegisterVault(const AttribSysIO::RegisterVaultRequest* lpRegister
 // @ 0x82802288 -- release one reference; the slot must currently be loaded.
 void VaultSlot::DecreaseRefCount()
 {
-    CGS_ASSERT(miRefCount > 0, CGS_ASSERT_STREAM_MESSAGE_AT("Trying to decrease the ref count on a vault that isn't loaded", CGS_ARTIST_FILE, 208));
+    CGS_ASSERT_STREAM_AT(miRefCount > 0, "Trying to decrease the ref count on a vault that isn't loaded", CGS_ARTIST_FILE, 208);
 
     --miRefCount;
 }
@@ -87,10 +87,10 @@ void VaultSlot::DecreaseRefCount()
 // @ 0x82802330 -- acquire one reference.
 void VaultSlot::IncreaseRefCount()
 {
-    CGS_ASSERT(miRefCount >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "miRefCount >= 0",
-            CGS_ARTIST_FILE, 222 /* ARTIST 0x82802358 */));
+    CGS_ASSERT_AT(miRefCount >= 0,
+        "miRefCount >= 0",
+            CGS_ARTIST_FILE, 222 /* ARTIST 0x82802358 */);
+
     ++miRefCount;
 }
 

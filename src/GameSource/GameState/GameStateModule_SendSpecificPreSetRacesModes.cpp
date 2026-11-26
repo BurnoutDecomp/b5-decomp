@@ -221,9 +221,9 @@ void GameStateModule::SendSpecificPreSetRacesModesAction(
     const BrnTraffic::TrafficData* const lpTrafficData  = mTriggerQueryManager.GetTrafficData();
     const BrnTrigger::TriggerData* const lpTriggerData  = mTriggerQueryManager.GetTriggerData();
 
-    CGS_ASSERT(lpProgressionData != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionData", CGS_ARTIST_FILE, 5992));   // :5992
-    CGS_ASSERT(lpTrafficData     != 0, CGS_ASSERT_MESSAGE_AT("lpTrafficData", CGS_ARTIST_FILE, 5993));       // :5993
-    CGS_ASSERT(lpTriggerData     != 0, CGS_ASSERT_MESSAGE_AT("lpTriggerData", CGS_ARTIST_FILE, 5994));       // :5994
+    CGS_ASSERT_AT(lpProgressionData != 0, "lpProgressionData", CGS_ARTIST_FILE, 5992);   // :5992
+    CGS_ASSERT_AT(lpTrafficData     != 0, "lpTrafficData", CGS_ARTIST_FILE, 5993);       // :5993
+    CGS_ASSERT_AT(lpTriggerData     != 0, "lpTriggerData", CGS_ARTIST_FILE, 5994);       // :5994
 
     if (lpOutput == 0 || lpProgressionData == 0 || lpTrafficData == 0 || lpTriggerData == 0)
     {
@@ -364,14 +364,14 @@ void GameStateModule::SendSpecificPreSetRacesModesAction(
 void GameStateModule::SendSetLandmarkRacesAction(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     const LandmarkIndex lCurrentLandmarkIndex = mModeManager.GetPlayerCurrentLandmark();
-    CGS_ASSERT(static_cast<s32>(lCurrentLandmarkIndex) != -1,
-               CGS_ASSERT_MESSAGE_AT("lCurrentLandmarkIndex != K_INVALID_LANDMARK", CGS_ARTIST_FILE, 5862));
-    CGS_ASSERT(static_cast<s32>(lCurrentLandmarkIndex) != -2,
-               CGS_ASSERT_MESSAGE_AT("lCurrentLandmarkIndex != K_MULTIPLE_LANDMARKS", CGS_ARTIST_FILE, 5863));
+    CGS_ASSERT_AT(static_cast<s32>(lCurrentLandmarkIndex) != -1,
+               "lCurrentLandmarkIndex != K_INVALID_LANDMARK", CGS_ARTIST_FILE, 5862);
+    CGS_ASSERT_AT(static_cast<s32>(lCurrentLandmarkIndex) != -2,
+               "lCurrentLandmarkIndex != K_MULTIPLE_LANDMARKS", CGS_ARTIST_FILE, 5863);
     GameStateModuleIO::SetLandmarkRacesAction lSlamAction;
     lSlamAction.muNumRaces = mProgressionManager.GetRacesAtLandmark(
         lSlamAction.maRaces, 6, lCurrentLandmarkIndex, true);
-    CGS_ASSERT(lSlamAction.muNumRaces > 0, CGS_ASSERT_MESSAGE_AT("lSlamAction.muNumRaces > 0", CGS_ARTIST_FILE, 5869));
+    CGS_ASSERT_AT(lSlamAction.muNumRaces > 0, "lSlamAction.muNumRaces > 0", CGS_ARTIST_FILE, 5869);
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSlamAction),
                            GameStateModuleIO::E_ACTION_SET_LANDMARK_RACES, sizeof(lSlamAction));
 }

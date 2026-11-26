@@ -56,8 +56,8 @@ void AttachmentTruck::Update(rw::math::vpu::Vector3 lPosition, rw::math::vpu::Ve
                              VecFloat lTimestep, const Parameters& lrParams)
 {
     using namespace rw::math::vpu;
-    CGS_ASSERT(std::fabs(lrParams.mfConvergenceTimeSecs) > 1.1920929e-7f,
-               CGS_ASSERT_MESSAGE_AT("!rw::math::fpu::IsZero(lParams.mfConvergenceTimeSecs)", CGS_ARTIST_FILE, 76));
+    CGS_ASSERT_AT(std::fabs(lrParams.mfConvergenceTimeSecs) > 1.1920929e-7f,
+               "!rw::math::fpu::IsZero(lParams.mfConvergenceTimeSecs)", CGS_ARTIST_FILE, 76);
     if (mbFirstFrame)
     {
         Set(VecFloat(0.0f), lVelocity, lPosition);
@@ -84,7 +84,7 @@ void AttachmentTruck::Update(rw::math::vpu::Vector3 lPosition, rw::math::vpu::Ve
 bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
     using namespace rw::math::vpu;
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 226));
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters != NULL", CGS_ARTIST_FILE, 226);
     if (!mAttachedTo.IsValid(*lrInfo.GetWorld()))
     {
         Fail(lrCamera, ValidityAccount::E_FAILED_INVALID_VEHICLE_REF);
@@ -114,8 +114,8 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
     mPositionLag.Update(mpParameters->mLagParams, dt, target);
     mVisibilityCollisionPolicy.SetTarget(vehicle.mRaceCarState.mTransform, vehicle.mAABB, CgsSceneManager::EntityId(vehicle.mRaceCarState.mEntityId.muValue));
     mVehicleAttachmentCollisionPolicy.SetVehicleRef(mAttachedTo);
-    CGS_ASSERT(std::fabs(mpParameters->mfHeightDistanceVelocityRange) > 1.1920929e-7f,
-               CGS_ASSERT_MESSAGE_AT("!rw::math::fpu::IsZero(mpParameters->mfHeightDistanceVelocityRange)", CGS_ARTIST_FILE, 289));
+    CGS_ASSERT_AT(std::fabs(mpParameters->mfHeightDistanceVelocityRange) > 1.1920929e-7f,
+               "!rw::math::fpu::IsZero(mpParameters->mfHeightDistanceVelocityRange)", CGS_ARTIST_FILE, 289);
     const f32 ratio = (std::min)(speed / mpParameters->mfHeightDistanceVelocityRange, 1.0f);
     if (!mbIsWorldSpaceVectorSet)
     {
@@ -155,7 +155,7 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
             mDesiredWorldSpaceNormalizedVectorFromCar, VecFloat(mfBlendFactor)));
     }
     CGS_ASSERT(!IsZero(mWorldSpaceNormalizedVectorFromCar), "!IsZero(mWorldSpaceNormalizedVectorFromCar)");
-    CGS_ASSERT(std::fabs(mfDistance) > 1.1920929e-7f, CGS_ASSERT_MESSAGE_AT("!rw::math::fpu::IsZero(mfDistance)", CGS_ARTIST_FILE, 400));
+    CGS_ASSERT_AT(std::fabs(mfDistance) > 1.1920929e-7f, "!rw::math::fpu::IsZero(mfDistance)", CGS_ARTIST_FILE, 400);
     const rw::math::vpu::Vector3 eye = target.Pos() + mWorldSpaceNormalizedVectorFromCar * mfDistance;
     if (IsPrepared()) mTransform.Pos() = eye;
     else { mTransform = Utils::CreateLookAt(eye, target.Pos()); lrCamera.mTransform = mTransform; }

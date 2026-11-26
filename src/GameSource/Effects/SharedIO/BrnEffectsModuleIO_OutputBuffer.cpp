@@ -34,21 +34,21 @@ void OutputBuffer::Construct()
 // X360 0x823BABF0 (:291): read-lock handle to the resource-request interface.
 const OutputBuffer::EffectsModuleResourceQueue* OutputBuffer::GetResourceRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 291));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 291);
     return &mResourceRequestInterface;
 }
 
 // X360 0x823BAC98 (:296): read-lock handle to the vault-request interface.
 const OutputBuffer::VaultRequestInterface* OutputBuffer::GetVaultRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 295));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 295);
     return &mVaultRequestInterface;
 }
 
 // X360 0x823BAD40 (:298): read-lock handle to the replay-request interface.
 const OutputBuffer::ReplayRequestInterface* OutputBuffer::GetReplayRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 298));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 298);
     return &mReplayRequestInterface;
 }
 
@@ -57,21 +57,21 @@ const OutputBuffer::ReplayRequestInterface* OutputBuffer::GetReplayRequestInterf
 // X360 0x8227E130 (:292).
 OutputBuffer::EffectsModuleResourceQueue* OutputBuffer::GetResourceRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 292));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 292);
     return &mResourceRequestInterface;
 }
 
 // X360 0x8227E1D8 (:295).
 OutputBuffer::VaultRequestInterface* OutputBuffer::GetVaultRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 296));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 296);
     return &mVaultRequestInterface;
 }
 
 // X360 0x8227E280 (:300).
 OutputBuffer::ReplayRequestInterface* OutputBuffer::GetReplayRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 300));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 300);
     return &mReplayRequestInterface;
 }
 
@@ -83,7 +83,7 @@ OutputBuffer::ReplayRequestInterface* OutputBuffer::GetReplayRequestInterface()
 // the particle module's PrepareOutputBuffer queue through here while the FX bundle loads.
 void OutputBuffer::SetResourceRequestInterface(const EffectsModuleResourceQueue* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 290));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 290);
     mResourceRequestInterface = *lpInterface;
 }
 

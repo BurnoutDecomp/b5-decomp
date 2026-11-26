@@ -106,7 +106,7 @@ namespace TestBed
             lpHeader = lpHeader->mpNext;
             if (mpFirstHeader == lpHeader)
             {
-                CGS_ASSERT_STREAM_AT(false,
+                CGS_FAIL_STREAM_AT(
                                      "Cycle in allocation list. Makes no bloody sense whatsoever, but there it is...\n",
                                      CGS_TESTBEDALLOCATOR_H_FILE, 287);
             }
@@ -135,7 +135,7 @@ namespace TestBed
             ++luCount;
             if (mpFirstHeader == lpHeader)
             {
-                CGS_ASSERT_STREAM_AT(false,
+                CGS_FAIL_STREAM_AT(
                                      "Cycle in allocation list. Makes no bloody sense whatsoever, but there it is...\n",
                                      CGS_TESTBEDALLOCATOR_H_FILE, 309);
             }
@@ -216,7 +216,7 @@ namespace TestBed
         }
 
         lrHistory.DumpAllPossibleDanglers(static_cast<u8*>(GetClientAddress()));
-        CGS_ASSERT(false, "Error");
+        CGS_FAIL("Error");
     }
 
     // -------------------------------------------------------------------------------------------

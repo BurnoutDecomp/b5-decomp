@@ -76,63 +76,63 @@ namespace RendererIO
 // X360 0x823B35A8: read-lock handle to the dispatch frame.
 CgsGraphics::DispatchFrame* OutputBuffer::GetDispatchFrame() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 397));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 397);
     return mpDispatchFrame;
 }
 
 // X360 0x823B36F8: read-lock handle to the immediate-mode 2D render buffer.
 CgsGraphics::Im2dRenderBuffer* OutputBuffer::GetIm2dRenderBuffer() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 478));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 478);
     return mpIm2dRenderBuffer;
 }
 
 // X360 0x823B37A0: read-lock handle to the immediate-mode 3D render buffer.
 CgsGraphics::Im3dRenderBuffer* OutputBuffer::GetIm3dRenderBuffer() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 494));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 494);
     return mpIm3dRenderBuffer;
 }
 
 // X360 0x823B3848: read-lock handle to the untextured immediate-mode 3D render buffer.
 CgsGraphics::Im3dRenderBufferUntex* OutputBuffer::GetIm3dRenderBufferUntex() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 501));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 501);
     return mpIm3dRenderBufferUntex;
 }
 
 // X360 0x823B3A40: read-lock handle to the debug immediate-mode 3D render buffer.
 CgsGraphics::Im3dRenderBuffer* OutputBuffer::GetIm3dDebugRenderBuffer() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 522));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 522);
     return mpIm3dDebugRenderBuffer;
 }
 
 // X360 0x823B3AE8: read-lock handle to the debug immediate-mode 2D render buffer.
 CgsGraphics::Im2dRenderBuffer* OutputBuffer::GetIm2dDebugRenderBuffer() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 529));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 529);
     return mpIm2dDebugRenderBuffer;
 }
 
 // X360 0x823B38F0: read-lock handle to the race-position immediate-mode 3D render buffer.
 CgsGraphics::Im3dRenderBuffer* OutputBuffer::GetIm3dRenderBufferRacePosition() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 508));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 508);
     return mpIm3dRenderBufferRacePosition;
 }
 
 // X360 0x823B3998: read-lock handle to the menus-and-HUD immediate-mode 3D render buffer.
 CgsGraphics::Im3dRenderBuffer* OutputBuffer::GetIm3dRenderBufferMenusAndHud() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 515));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 515);
     return mpIm3dRenderBufferMenusAndHud;
 }
 
 // X360 0x823B3B90: read-lock handle to the base effects frame.
 BrnEffectsFrame* OutputBuffer::GetBaseEffectsFrame() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 546));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 546);
     return mpBaseEffectsFrame;
 }
 
@@ -157,35 +157,35 @@ BrnEffectsFrame* OutputBuffer::GetFXEventsEffectsFrame(u8 luSlot) const
 // X360 0x823B3DE8: read-lock handle to the shader-constants frame.
 BrnShaderConstantsFrame* OutputBuffer::GetShaderConstantsFrame() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 596));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 596);
     return mpShaderConstantsFrame;
 }
 
 // X360 0x823B3E90: read-lock handle to the blobby-shadow buffer.
 BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* OutputBuffer::GetBlobbyShadowBuffer() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 612));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 612);
     return mpBlobbyShadowBuffer;
 }
 
 // X360 0x823B3F38: read-lock handle to the corona submission interface.
 BrnCoronaManager::BrnSubmissionInterface* OutputBuffer::GetCoronaSubmissionInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 628));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 628);
     return mpCoronaSubmissionInteface;
 }
 
 // X360 0x823B3650: read-lock handle to the embedded director camera (mutable address, this+80).
 const BrnDirector::Camera::Camera& OutputBuffer::GetBrnCamera() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 411));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 411);
     return mBrnCamera;
 }
 
 // X360 0x823B3FE0: read-lock handle to the embedded render switches (mutable address, this+432).
 RenderSwitches* OutputBuffer::GetRenderSwitches()
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 644));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 644);
     return &mRenderSwitches;
 }
 
@@ -199,7 +199,7 @@ ExternallyVisiblePerformanceMonitors* OutputBuffer::GetExternallyVisiblePerforma
 // X360 0x823B4088: read-lock handle to the reusable loading-screen allocator.
 CgsMemory::LinearMalloc* OutputBuffer::GetReusableLoadingScreenAllocator() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 669));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 669);
     return mpReusableLoadingScreenAllocator;
 }
 
@@ -208,63 +208,63 @@ CgsMemory::LinearMalloc* OutputBuffer::GetReusableLoadingScreenAllocator() const
 // X360 0x823FAE60: write-lock store of the dispatch frame.
 void OutputBuffer::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 390));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 390);
     mpDispatchFrame = lpDispatchFrame;
 }
 
 // X360 0x823FAF08: write-lock store of the immediate-mode 2D render buffer.
 void OutputBuffer::SetIm2dRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 419));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 419);
     mpIm2dRenderBuffer = lpBuffer;
 }
 
 // X360 0x823FAFB0: write-lock store of the immediate-mode 3D render buffer.
 void OutputBuffer::SetIm3dRenderBuffer(CgsGraphics::Im3dRenderBuffer* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 435));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 435);
     mpIm3dRenderBuffer = lpBuffer;
 }
 
 // X360 0x823FB058: write-lock store of the untextured immediate-mode 3D render buffer.
 void OutputBuffer::SetIm3dRenderBufferUntex(CgsGraphics::Im3dRenderBufferUntex* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 442));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 442);
     mpIm3dRenderBufferUntex = lpBuffer;
 }
 
 // X360 0x823FB250: write-lock store of the debug immediate-mode 3D render buffer.
 void OutputBuffer::SetIm3dDebugRenderBuffer(CgsGraphics::Im3dRenderBuffer* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 463));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 463);
     mpIm3dDebugRenderBuffer = lpBuffer;
 }
 
 // X360 0x823FB2F8: write-lock store of the debug immediate-mode 2D render buffer.
 void OutputBuffer::SetIm2dDebugRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 470));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 470);
     mpIm2dDebugRenderBuffer = lpBuffer;
 }
 
 // X360 0x823FB100: write-lock store of the race-position immediate-mode 3D render buffer.
 void OutputBuffer::SetIm3dRenderBufferRacePosition(CgsGraphics::Im3dRenderBuffer* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 449));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 449);
     mpIm3dRenderBufferRacePosition = lpBuffer;
 }
 
 // X360 0x823FB1A8: write-lock store of the menus-and-HUD immediate-mode 3D render buffer.
 void OutputBuffer::SetIm3dRenderBufferMenusAndHud(CgsGraphics::Im3dRenderBuffer* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 456));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 456);
     mpIm3dRenderBufferMenusAndHud = lpBuffer;
 }
 
 // X360 0x823FB3A0: write-lock store of the base effects frame.
 void OutputBuffer::SetBaseEffectsFrame(BrnEffectsFrame* lpFrame)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 539));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 539);
     mpBaseEffectsFrame = lpFrame;
 }
 
@@ -289,28 +289,28 @@ void OutputBuffer::SetFXEventsEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame)
 // X360 0x823FB608: write-lock store of the shader-constants frame.
 void OutputBuffer::SetShaderConstantsFrame(BrnShaderConstantsFrame* lpFrame)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 589));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 589);
     mpShaderConstantsFrame = lpFrame;
 }
 
 // X360 0x823FB6B0: write-lock store of the blobby-shadow buffer.
 void OutputBuffer::SetBlobbyShadowBuffer(BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 605));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 605);
     mpBlobbyShadowBuffer = lpBuffer;
 }
 
 // X360 0x823FB758: write-lock store of the corona submission interface.
 void OutputBuffer::SetCoronaSubmissionInterface(BrnCoronaManager::BrnSubmissionInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 621));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 621);
     mpCoronaSubmissionInteface = lpInterface;
 }
 
 // X360 0x82405980: write-lock copy into the embedded director camera (this+80, Camera::operator=).
 void OutputBuffer::SetBrnCamera(const BrnDirector::Camera::Camera& lrCamera)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 404));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 404);
     mBrnCamera = lrCamera;
 }
 
@@ -318,14 +318,14 @@ void OutputBuffer::SetBrnCamera(const BrnDirector::Camera::Camera& lrCamera)
 // loop to this+432 == assigning the whole RenderSwitches aggregate.
 void OutputBuffer::SetRenderSwitches(const RenderSwitches& lrSwitches)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 637));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 637);
     mRenderSwitches = lrSwitches;
 }
 
 // X360 0x823FB8C8: write-lock store of the reusable loading-screen allocator.
 void OutputBuffer::SetReusableLoadingScreenAllocator(CgsMemory::LinearMalloc* lpAllocator)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 676));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 676);
     mpReusableLoadingScreenAllocator = lpAllocator;
 }
 
@@ -336,7 +336,7 @@ void OutputBuffer::SetReusableLoadingScreenAllocator(CgsMemory::LinearMalloc* lp
 // X360 0x823C8610: write-lock copy into the embedded director camera (this+16, Camera::operator=).
 void InputBuffer::SetBrnCamera(const BrnDirector::Camera::Camera& lrCamera)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 375));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 375);
     mBrnCamera = lrCamera;
 }
 
@@ -344,7 +344,7 @@ void InputBuffer::SetBrnCamera(const BrnDirector::Camera::Camera& lrCamera)
 // the OutputBuffer's GetBrnCamera @0x823B3650: read-lock assert, then the embedded camera.
 const BrnDirector::Camera::Camera& InputBuffer::GetBrnCamera() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 382));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 382);
     return mBrnCamera;
 }
 

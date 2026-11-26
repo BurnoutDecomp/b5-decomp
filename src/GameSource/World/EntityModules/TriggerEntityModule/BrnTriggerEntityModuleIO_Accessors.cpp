@@ -54,7 +54,7 @@ namespace TriggerEntityModuleIO
     const OutputBuffer_PreScene::SceneInputInterface*
     OutputBuffer_PreScene::GetSceneInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 90));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 90);
         return &mSceneInputInterface;
     }
 
@@ -63,7 +63,7 @@ namespace TriggerEntityModuleIO
     OutputBuffer_PreScene::SceneInputInterface*
     OutputBuffer_PreScene::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 91));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 91);
         return &mSceneInputInterface;
     }
 
@@ -72,7 +72,7 @@ namespace TriggerEntityModuleIO
     InputBuffer_PreScene::InputInterface*
     InputBuffer_PreScene::GetInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 65));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 65);
         return &mInputInterface;
     }
 }

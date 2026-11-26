@@ -73,18 +73,18 @@ namespace EventInterpreterModuleIO
     // X360 0x8284E480: read-lock (bit 4) const handle to the out-event queue (this+4).
     const OutputBuffer::GuiEventQueue* OutputBuffer::GetOutEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 146));
+            CGS_ARTIST_FILE, 146);
         return &mGuiOutEvents;
     }
 
     // X360 0x8284E528: write-lock (bit 3) non-const handle to the out-event queue (this+4).
     OutputBuffer::GuiEventQueue* OutputBuffer::GetOutEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            CGS_ARTIST_FILE, 162));
+            CGS_ARTIST_FILE, 162);
         return &mGuiOutEvents;
     }
 
@@ -92,9 +92,9 @@ namespace EventInterpreterModuleIO
     // (this+0x4814 == 18452).
     const OutputBuffer::GuiEventQueueSmall* OutputBuffer::GetResourceEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 178));
+            CGS_ARTIST_FILE, 178);
         return &mGuiOutResource;
     }
 
@@ -109,9 +109,9 @@ namespace EventInterpreterModuleIO
     // (this+0x5824 == 22564).
     const OutputBuffer::GuiEventQueueLarge* OutputBuffer::GetViewEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 210));
+            CGS_ARTIST_FILE, 210);
         return &mGuiOutView;
     }
 
@@ -119,9 +119,9 @@ namespace EventInterpreterModuleIO
     // (this+0x5824 == 22564).
     OutputBuffer::GuiEventQueueLarge* OutputBuffer::GetViewEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            CGS_ARTIST_FILE, 226));
+            CGS_ARTIST_FILE, 226);
         return &mGuiOutView;
     }
 }

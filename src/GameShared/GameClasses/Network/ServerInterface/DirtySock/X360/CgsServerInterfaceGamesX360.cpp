@@ -284,18 +284,18 @@ namespace CgsNetwork
     // the ConnApi session.
     void ServerInterfaceGamesX360::EndGame(const ServerInterfaceEndGameDataBase* lpEndGameData)
     {
-        CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(IsLocalPlayerInGame(),
             "IsLocalPlayerInGame()",
-            __FILE__, 381 /* ARTIST 0x8288C5F8 */));
+            __FILE__, 381 /* ARTIST 0x8288C5F8 */);
 
         const ConnApiClientListT* lpClientList =
             ConnApiGetClientList(GetServerInterface()->GetConnAPIRef());
 
         if (lpClientList == 0)
         {
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "We have no clients when trying to update stats",
-                __FILE__, 390 /* ARTIST 0x8288C62C */));
+                __FILE__, 390 /* ARTIST 0x8288C62C */);
             ConnApiStop(GetServerInterface()->GetConnAPIRef());
             return;
         }
@@ -350,10 +350,10 @@ namespace CgsNetwork
     // flags ('sflg'), preserving the untouched bits.
     void ServerInterfaceGamesX360::SetSessionFlags(s32 liFlags)
     {
-        CGS_ASSERT(mpServerInterface->GetConnAPIRef() != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpServerInterface->GetConnAPIRef()",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\X360\\CgsServerInterfaceGamesX360.cpp", 471 /* ARTIST 0x8287F7E4 */));
+        CGS_ASSERT_AT(mpServerInterface->GetConnAPIRef() != 0,
+            "mpServerInterface->GetConnAPIRef()",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\X360\\CgsServerInterfaceGamesX360.cpp", 471 /* ARTIST 0x8287F7E4 */);
+
 
         s32 liStatus = ConnApiStatus(mpServerInterface->GetConnAPIRef(),
                                      KI_CONN_SESSION_FLAGS, 0, 0);
@@ -380,12 +380,12 @@ namespace CgsNetwork
     // play record and decode their 8-byte secure XUID into lpXUIDOut.
     bool ServerInterfaceGamesX360::GetPlayerXUIDByID(s32 liPlayerID, void* lpXUIDOut)
     {
-        CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(IsLocalPlayerInGame(),
             "Calling GetPlayerXUIDByIndex when not in a game",
-            __FILE__, 574 /* ARTIST 0x8288C8C4 */));
-        CGS_ASSERT(lpXUIDOut != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 574 /* ARTIST 0x8288C8C4 */);
+        CGS_ASSERT_AT(lpXUIDOut != 0,
             "No XUID pointer supplied to GetXUIDOfGamerInGame",
-            __FILE__, 575 /* ARTIST 0x8288C8E8 */));
+            __FILE__, 575 /* ARTIST 0x8288C8E8 */);
 
         DirtySock::LobbyApiPlayT* lpRecord = GetLastGameRecord();
         for (s32 i = 0; i < KI_MAX_GAME_PLAYERS; ++i)

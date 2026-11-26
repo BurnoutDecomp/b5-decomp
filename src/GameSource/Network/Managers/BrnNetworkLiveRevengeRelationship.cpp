@@ -30,22 +30,22 @@ namespace BrnNetwork
 
     bool LiveRevengeRelationship::Prepare(const UniquePlayerID* lpUniquePlayerID)
     {
-        CGS_ASSERT(lpUniquePlayerID, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpUniquePlayerID,
             "lpUniquePlayerID",
-            __FILE__, 63 /* ARTIST 0x82547A60 */));
+            __FILE__, 63 /* ARTIST 0x82547A60 */);
         // PlayerName::IsEmpty (inline): the first name character is the terminator.
-        CGS_ASSERT(lpUniquePlayerID->GetPlayerName()[0] != '\0', CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpUniquePlayerID->GetPlayerName()[0] != '\0',
             "!lpUniquePlayerID->GetPlayerName()->IsEmpty()",
-            __FILE__, 67 /* ARTIST 0x82547A88 */));
+            __FILE__, 67 /* ARTIST 0x82547A88 */);
 
         Clear();
         mLastTimeChanged.SetLocal(false);
         mLastTimeChanged.Update();
 
         // UniquePlayerID::IsValid (inline): a non-empty name and a non-zero XUID.
-        CGS_ASSERT(lpUniquePlayerID->GetPlayerName()[0] != '\0' && lpUniquePlayerID->mqXuid != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpUniquePlayerID->GetPlayerName()[0] != '\0' && lpUniquePlayerID->mqXuid != 0,
             "lpUniquePlayerID->IsValid()",
-            __FILE__, 74 /* ARTIST 0x82547B4C */));
+            __FILE__, 74 /* ARTIST 0x82547B4C */);
 
         mUniqueID = *lpUniquePlayerID;
         return true;

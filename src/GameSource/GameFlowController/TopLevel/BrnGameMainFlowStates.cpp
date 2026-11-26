@@ -151,10 +151,10 @@ namespace
 // call site (StartScreen::Update's 0x9A0649 pre-accept latch).
 void LoadingScriptedState::ResumeLoadingWorld()
 {
-    CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
-        CGS_ASSERT_MESSAGE_AT(
-            "meLoadingStateStage == E_LOADINGSTATESTAGE_START",
-            KAC_ARTIST_ASSERT_FILE, 209 /* ARTIST 0x823A85D4 */));   // X360 h:209
+    CGS_ASSERT_AT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
+        "meLoadingStateStage == E_LOADINGSTATESTAGE_START",
+            KAC_ARTIST_ASSERT_FILE, 209 /* ARTIST 0x823A85D4 */);   // X360 h:209
+
     gBrnScriptedLoadPaused = false;
 }
 
@@ -621,7 +621,7 @@ void LoadingScriptedState::Update()
             case 8:
                 break;
             default:
-                CGS_ASSERT(false, "Unhandled meLoadingStage");   // X360 BrnLoadingScriptedState.cpp:237
+                CGS_FAIL("Unhandled meLoadingStage");   // X360 BrnLoadingScriptedState.cpp:237
                 break;
             }
         }
@@ -1211,10 +1211,10 @@ void MainGameFlowStateCheckDiskSpace::OnEnter()
     // a vacuous check. The console reads the GLOBAL stage (dword_82FAE4B0), exactly as
     // ResumeLoadingWorld does.
     gBrnScriptedLoadPaused = false;
-    CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
-        CGS_ASSERT_MESSAGE_AT(
-            "meLoadingStateStage == E_LOADINGSTATESTAGE_START",
-            KAC_ARTIST_ASSERT_FILE, 195 /* ARTIST 0x823AAACC */));
+    CGS_ASSERT_AT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
+        "meLoadingStateStage == E_LOADINGSTATESTAGE_START",
+            KAC_ARTIST_ASSERT_FILE, 195 /* ARTIST 0x823AAACC */);
+
     gBrnScriptedLoadPaused = true;
 
     // @0x823AAB00 -- the pending-GUI-FSM-stage slot (gm+0x9A0644) is stamped 4 here; the

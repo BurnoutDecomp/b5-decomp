@@ -191,7 +191,7 @@ namespace BrnGui
 
         default:
             // Streamed in place, as ARTIST builds it (cpp:170).
-            CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+            CGS_FAIL_STREAM_AT("Invalid internal state : " << meInternalState << "\n",
                                  CGS_ARTIST_FILE, 170);
             break;
         }
@@ -206,7 +206,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineStats::UpdateGetCache()
     {
-        CGS_ASSERT(0 == mpGuiCache, CGS_ASSERT_MESSAGE_AT("NULL == mpGuiCache", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 270));
+        CGS_ASSERT_AT(0 == mpGuiCache, "NULL == mpGuiCache", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 270);
 
 
 
@@ -220,14 +220,14 @@ namespace BrnGui
             {
                 const GuiEventCachePayload* lpCacheEvent =
                     static_cast<const GuiEventCachePayload*>(lpEvent);
-                CGS_ASSERT(0 != lpCacheEvent->mpCachePointer,
-                    CGS_ASSERT_MESSAGE_AT("NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 280));
+                CGS_ASSERT_AT(0 != lpCacheEvent->mpCachePointer,
+                    "NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 280);
                 mpGuiCache = lpCacheEvent->mpCachePointer;
                 break;
             }
         }
 
-        CGS_ASSERT(0 != mpGuiCache, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 289));
+        CGS_ASSERT_AT(0 != mpGuiCache, "NULL != mpGuiCache", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 289);
     }
 
     // ================================================================================
@@ -315,10 +315,10 @@ namespace BrnGui
     // ================================================================================
     void OnlineStats::ClearExpectedComponent()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpGuiCache",
-                CGS_ARTIST_FILE, 229 /* ARTIST 0x824875B8 */));
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache",
+                CGS_ARTIST_FILE, 229 /* ARTIST 0x824875B8 */);
+
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -334,7 +334,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineStats::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineStats::HandleControllerInput", CGS_ARTIST_FILE, 442));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineStats::HandleControllerInput", CGS_ARTIST_FILE, 442);
 
         const ControllerButtonPayload* lpInput =
             static_cast<const ControllerButtonPayload*>(lpEvent);

@@ -95,8 +95,8 @@ namespace BrnGameState
                                                              char* lpcOutBuffer,
                                                              u32* lpuOutColour)
     {
-        CGS_ASSERT(mpScoringSystem != 0, CGS_ASSERT_MESSAGE_AT("mpScoringSystem", CGS_ARTIST_FILE, 267));
-        CGS_ASSERT(lpPlayerStatusInterface != 0, CGS_ASSERT_MESSAGE_AT("lpPlayerStatusInterface", CGS_ARTIST_FILE, 268));
+        CGS_ASSERT_AT(mpScoringSystem != 0, "mpScoringSystem", CGS_ARTIST_FILE, 267);
+        CGS_ASSERT_AT(lpPlayerStatusInterface != 0, "lpPlayerStatusInterface", CGS_ARTIST_FILE, 268);
 
         // Default: an empty cell drawn in the default (white) colour.
         *lpuOutColour = KU_CELL_DEFAULT_COLOUR;
@@ -161,7 +161,7 @@ namespace BrnGameState
 
         const BrnPhysics::Vehicle::RaceCarState* lpLocalPlayersCarState =
             lpActiveCarOutput->GetPlayerRaceCarState();
-        CGS_ASSERT(lpLocalPlayersCarState != 0, CGS_ASSERT_MESSAGE_AT("lpLocalPlayersCarState", CGS_ARTIST_FILE, 339));
+        CGS_ASSERT_AT(lpLocalPlayersCarState != 0, "lpLocalPlayersCarState", CGS_ARTIST_FILE, 339);
 
         if (!lpActiveCarOutput->IsRaceCarActive(leRaceCarIndex))
             return;
@@ -206,7 +206,7 @@ namespace BrnGameState
                                                                  s32 liMaxMultiplier,
                                                                  bool lbSimTimerAt50Hz)
     {
-        CGS_ASSERT(mpScoringSystem != 0, CGS_ASSERT_MESSAGE_AT("mpScoringSystem", CGS_ARTIST_FILE, 195));
+        CGS_ASSERT_AT(mpScoringSystem != 0, "mpScoringSystem", CGS_ARTIST_FILE, 195);
 
         // Only render when the toggle is on AND the mode has at least one car.
         if (!mbShowChainableStunts)

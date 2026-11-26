@@ -143,7 +143,7 @@ namespace CgsFileSystem
             return true;
         }
 
-        CGS_ASSERT_STREAM_AT(false,
+        CGS_FAIL_STREAM_AT(
             "A lockable operation queue should never fail to find an operation - something dodgy is going on\n",
             CGS_ARTIST_OPERATION_POOL_FILE, 210);
         muNextOperationNumber = 0;

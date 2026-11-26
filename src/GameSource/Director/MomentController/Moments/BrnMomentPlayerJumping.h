@@ -79,8 +79,8 @@ namespace BrnDirector
     template <typename TBehaviour, typename TParameters, u32 N>
     inline TBehaviour& BehaviourCollection<TBehaviour, TParameters, N>::GetBehaviour()
     {
-        CGS_ASSERT(mbAllocatedShots, CGS_ASSERT_MESSAGE_AT("mbAllocatedShots", CGS_ARTIST_JUMPING_HEADER, 89));
-        CGS_ASSERT(mbHasCurrentCamera, CGS_ASSERT_MESSAGE_AT("mbHasCurrentCamera", CGS_ARTIST_JUMPING_HEADER, 90));
+        CGS_ASSERT_AT(mbAllocatedShots, "mbAllocatedShots", CGS_ARTIST_JUMPING_HEADER, 89);
+        CGS_ASSERT_AT(mbHasCurrentCamera, "mbHasCurrentCamera", CGS_ARTIST_JUMPING_HEADER, 90);
         return *maShots[miCurrentCamera].mHandle.Get();
     }
 
@@ -90,8 +90,8 @@ namespace BrnDirector
     inline const Camera::Camera&
     BehaviourCollection<TBehaviour, TParameters, N>::GetCamera() const
     {
-        CGS_ASSERT(mbAllocatedShots, CGS_ASSERT_MESSAGE_AT("mbAllocatedShots", CGS_ARTIST_JUMPING_HEADER, 97));
-        CGS_ASSERT(mbHasCurrentCamera, CGS_ASSERT_MESSAGE_AT("mbHasCurrentCamera", CGS_ARTIST_JUMPING_HEADER, 98));
+        CGS_ASSERT_AT(mbAllocatedShots, "mbAllocatedShots", CGS_ARTIST_JUMPING_HEADER, 97);
+        CGS_ASSERT_AT(mbHasCurrentCamera, "mbHasCurrentCamera", CGS_ARTIST_JUMPING_HEADER, 98);
         return maShots[static_cast<u32>(miCurrentCamera)].mHandle.GetCamera();
     }
 

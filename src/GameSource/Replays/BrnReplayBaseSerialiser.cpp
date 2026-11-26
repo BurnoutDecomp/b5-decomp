@@ -30,7 +30,7 @@ namespace BrnReplays
     // raises mbLocked. Returns true (the X360 body always returns 1).
     bool BaseSerialiser::Lock()
     {
-        CGS_ASSERT(!mbLocked, CGS_ASSERT_STREAM_MESSAGE_AT("Already locked\n", CGS_ARTIST_BRNREPLAYBASESERIALISER_FILE, 342));
+        CGS_ASSERT_STREAM_AT(!mbLocked, "Already locked\n", CGS_ARTIST_BRNREPLAYBASESERIALISER_FILE, 342);
 
         mbLocked = true;
         return true;
@@ -41,7 +41,7 @@ namespace BrnReplays
     // clears mbLocked. Returns true (the X360 body always returns 1).
     bool BaseSerialiser::Unlock()
     {
-        CGS_ASSERT(mbLocked, CGS_ASSERT_STREAM_MESSAGE_AT("Not locked\n", CGS_ARTIST_BRNREPLAYBASESERIALISER_FILE, 350));
+        CGS_ASSERT_STREAM_AT(mbLocked, "Not locked\n", CGS_ARTIST_BRNREPLAYBASESERIALISER_FILE, 350);
 
         mbLocked = false;
         return true;
@@ -52,7 +52,7 @@ namespace BrnReplays
     // locked.
     void BaseSerialiser::SetMode(EMode leMode)
     {
-        CGS_ASSERT(mbLocked, CGS_ASSERT_STREAM_MESSAGE_AT("Can not change mode while not locked\n", CGS_ARTIST_BRNREPLAYBASESERIALISER_FILE, 364));
+        CGS_ASSERT_STREAM_AT(mbLocked, "Can not change mode while not locked\n", CGS_ARTIST_BRNREPLAYBASESERIALISER_FILE, 364);
 
         meMode = leMode;
     }
@@ -64,18 +64,18 @@ namespace BrnReplays
     // cursor. Returns the number of bytes read.
     s32 BaseSerialiser::Read(void* lpData, s32 liSize)
     {
-        CGS_ASSERT(meMode == E_MODE_PLAYING,
-            CGS_ASSERT_MESSAGE_AT("Not playing\n", CGS_ARTIST_FILE, 173 /* ARTIST 0x8264C1BC */));
-        CGS_ASSERT(mbLocked,
-            CGS_ASSERT_MESSAGE_AT("Not locked\n", CGS_ARTIST_FILE, 174 /* ARTIST 0x8264C1E4 */));
-        CGS_ASSERT(mpBuffer != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Buffer not allocated\n",
-                CGS_ARTIST_FILE, 175 /* ARTIST 0x8264C20C */));
-        CGS_ASSERT(miBufferUsed - miBufferRead >= liSize,
-            CGS_ASSERT_MESSAGE_AT(
-                "Not enough data in buffer\n",
-                CGS_ARTIST_FILE, 176 /* ARTIST 0x8264C23C */));
+        CGS_ASSERT_AT(meMode == E_MODE_PLAYING,
+            "Not playing\n", CGS_ARTIST_FILE, 173 /* ARTIST 0x8264C1BC */);
+        CGS_ASSERT_AT(mbLocked,
+            "Not locked\n", CGS_ARTIST_FILE, 174 /* ARTIST 0x8264C1E4 */);
+        CGS_ASSERT_AT(mpBuffer != 0,
+            "Buffer not allocated\n",
+                CGS_ARTIST_FILE, 175 /* ARTIST 0x8264C20C */);
+
+        CGS_ASSERT_AT(miBufferUsed - miBufferRead >= liSize,
+            "Not enough data in buffer\n",
+                CGS_ARTIST_FILE, 176 /* ARTIST 0x8264C23C */);
+
 
         std::memcpy(lpData,
                     static_cast<u8*>(mpBuffer) + miBufferRead,

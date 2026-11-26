@@ -110,7 +110,7 @@ namespace BrnPhysics
                     case 6: return "race car deformable part";
                     case 7: return "traffic deformable part";
                     default:
-                        CGS_ASSERT(false, "Invalid entity type");
+                        CGS_FAIL("Invalid entity type");
                         return 0;
                 }
             }

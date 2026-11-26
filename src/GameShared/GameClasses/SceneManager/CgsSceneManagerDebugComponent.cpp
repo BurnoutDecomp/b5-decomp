@@ -496,7 +496,7 @@ namespace CgsSceneManager
             break;
 
             default:
-                CGS_ASSERT(false, "Collision volume very confused about what type it is... corrupted?");
+                CGS_FAIL("Collision volume very confused about what type it is... corrupted?");
                 break;
         }
     }

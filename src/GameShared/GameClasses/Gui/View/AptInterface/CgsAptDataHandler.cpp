@@ -35,7 +35,7 @@ namespace CgsGui
 {
     bool AptDataHandler::Prepare(CgsMemory::HeapMalloc* lpAllocator)
     {
-        CGS_ASSERT(lpAllocator != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Passed in allocator to AptDataHandler::Prepare is null", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptDataHandler.cpp", 63));
+        CGS_ASSERT_STREAM_AT(lpAllocator != 0, "Passed in allocator to AptDataHandler::Prepare is null", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptDataHandler.cpp", 63);
 
         mpAllocator = lpAllocator;
         return true;

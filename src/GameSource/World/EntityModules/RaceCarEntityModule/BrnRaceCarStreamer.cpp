@@ -70,11 +70,11 @@ RaceCarStreamer::RaceCarStreamer()
 // @ 0x822A13C8. True iff every bit in leFlag is set in this car's load-flag byte.
 bool RaceCarStreamer::IsFlagSet( s32 liActiveRaceCar, ELoadFlags leFlag ) const
 {
-    CGS_ASSERT( liActiveRaceCar >= 0,
-        CGS_ASSERT_MESSAGE_AT("liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 348 /* ARTIST 0x822A13F8 */));
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_FILE, 349 /* ARTIST 0x822A141C */));
+    CGS_ASSERT_AT( liActiveRaceCar >= 0,
+        "liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 348 /* ARTIST 0x822A13F8 */);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
+        "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_FILE, 349 /* ARTIST 0x822A141C */);
+
 
     return ( maxLoadFlags[liActiveRaceCar] & leFlag ) == leFlag;
 }
@@ -90,11 +90,11 @@ u8 RaceCarStreamer::GetFlags( s32 liActiveRaceCar ) const
 // @ 0x822A1500. The car slot is active (its E_LOADFLAG_ACTIVE bit is set).
 bool RaceCarStreamer::IsRaceCarActive( s32 liActiveRaceCar ) const
 {
-    CGS_ASSERT( liActiveRaceCar >= 0,
-        CGS_ASSERT_MESSAGE_AT("liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x822A152C */));
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_FILE, 401 /* ARTIST 0x822A1550 */));
+    CGS_ASSERT_AT( liActiveRaceCar >= 0,
+        "liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x822A152C */);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
+        "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_FILE, 401 /* ARTIST 0x822A1550 */);
+
 
     return ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0;
 }
@@ -103,16 +103,16 @@ bool RaceCarStreamer::IsRaceCarActive( s32 liActiveRaceCar ) const
 // IsDesiredRaceCarLoadedForCarSelect in this TU). All resource bits present.
 bool RaceCarStreamer::IsRaceCarLoaded( s32 liActiveRaceCar ) const
 {
-    CGS_ASSERT( liActiveRaceCar >= 0,
-        CGS_ASSERT_MESSAGE_AT("liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 382 /* ARTIST 0x822A147C */));
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS",
-            KAC_ARTIST_ASSERT_FILE, 383 /* ARTIST 0x822A14A0 */));
-    CGS_ASSERT( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE",
-            KAC_ARTIST_ASSERT_FILE, 384 /* ARTIST 0x822A14D0 */));
+    CGS_ASSERT_AT( liActiveRaceCar >= 0,
+        "liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 382 /* ARTIST 0x822A147C */);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
+        "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS",
+            KAC_ARTIST_ASSERT_FILE, 383 /* ARTIST 0x822A14A0 */);
+
+    CGS_ASSERT_AT( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0,
+        "maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE",
+            KAC_ARTIST_ASSERT_FILE, 384 /* ARTIST 0x822A14D0 */);
+
 
     return ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ALLRESOURCES ) == E_LOADFLAG_ALLRESOURCES;
 }
@@ -122,11 +122,11 @@ bool RaceCarStreamer::IsRaceCarLoaded( s32 liActiveRaceCar ) const
 // re-compress only from char index 4 onward. Inactive slot -> 0.
 CgsID RaceCarStreamer::GetCarModelId( s32 liActiveRaceCar ) const
 {
-    CGS_ASSERT( liActiveRaceCar >= 0,
-        CGS_ASSERT_MESSAGE_AT("liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 443 /* ARTIST 0x822A15A4 */));
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_FILE, 444 /* ARTIST 0x822A15C8 */));
+    CGS_ASSERT_AT( liActiveRaceCar >= 0,
+        "liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 443 /* ARTIST 0x822A15A4 */);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
+        "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_FILE, 444 /* ARTIST 0x822A15C8 */);
+
 
     if( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) == 0 )
         return 0;
@@ -143,11 +143,11 @@ CgsID RaceCarStreamer::GetCarModelId( s32 liActiveRaceCar ) const
 // resources present).
 bool RaceCarStreamer::IsDesiredRaceCarLoadedForCarSelect( s32 liActiveRaceCar ) const
 {
-    CGS_ASSERT( liActiveRaceCar >= 0,
-        CGS_ASSERT_MESSAGE_AT("liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 417 /* ARTIST 0x822B7324 */));
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_FILE, 418 /* ARTIST 0x822B7348 */));
+    CGS_ASSERT_AT( liActiveRaceCar >= 0,
+        "liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 417 /* ARTIST 0x822B7324 */);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
+        "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_FILE, 418 /* ARTIST 0x822B7348 */);
+
 
     if( maDesiredCarIds[liActiveRaceCar] == 0 )
         return true;
@@ -328,12 +328,12 @@ void RaceCarStreamer::OnAudioUnloading( s32 liActiveRaceCar )
 // @ 0x822A1620. Record whether this car's audio "load data" arrived (mabAudioLoaded).
 void RaceCarStreamer::SetAudioLoadDataStatus( s32 liActiveRaceCar, bool lbStatus )
 {
-    CGS_ASSERT( liActiveRaceCar >= 0,
-        CGS_ASSERT_MESSAGE_AT("liActiveRaceCar >=0", KAC_ARTIST_ASSERT_FILE, 735 /* ARTIST 0x822A1650 */));
-    CGS_ASSERT( liActiveRaceCar < static_cast<s32>( sizeof( mabAudioLoaded ) / sizeof( mabAudioLoaded[0] ) ),
-        CGS_ASSERT_MESSAGE_AT(
-            "liActiveRaceCar < static_cast<int32_t>(sizeof(mabAudioLoaded)/sizeof(mabAudioLoaded[0]))",
-            KAC_ARTIST_ASSERT_FILE, 736 /* ARTIST 0x822A1674 */));
+    CGS_ASSERT_AT( liActiveRaceCar >= 0,
+        "liActiveRaceCar >=0", KAC_ARTIST_ASSERT_FILE, 735 /* ARTIST 0x822A1650 */);
+    CGS_ASSERT_AT( liActiveRaceCar < static_cast<s32>( sizeof( mabAudioLoaded ) / sizeof( mabAudioLoaded[0] ) ),
+        "liActiveRaceCar < static_cast<int32_t>(sizeof(mabAudioLoaded)/sizeof(mabAudioLoaded[0]))",
+            KAC_ARTIST_ASSERT_FILE, 736 /* ARTIST 0x822A1674 */);
+
 
     mabAudioLoaded[liActiveRaceCar] = lbStatus;
 }
@@ -482,7 +482,7 @@ void RaceCarStreamer::AddVehicleData( s32 liActiveRaceCar, CgsID lModelId, CgsID
         CgsDev::StrStream lStrStream( lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE );
         lStrStream << "Flags = " << static_cast<u32>( maxLoadFlags[liActiveRaceCar] )
                    << " Car index = " << liActiveRaceCar << "\n";
-        CGS_ASSERT_AT( false, lStrStream.GetBuffer() , KAC_ARTIST_ASSERT_SOURCE, 146);
+        CGS_FAIL_AT( lStrStream.GetBuffer() , KAC_ARTIST_ASSERT_SOURCE, 146);
     }
 
     mfTimeSinceLastLoad                  = 0.0f;
@@ -597,11 +597,11 @@ void RaceCarStreamer::AddVehicleData( s32 liActiveRaceCar, CgsID lModelId, CgsID
 // happens later in AddVehicleData / UpdateDesiredCars when the slot is re-evaluated.
 void RaceCarStreamer::RemoveVehicleData( s32 liActiveRaceCar )
 {
-    CGS_ASSERT( liActiveRaceCar >= 0,
-        CGS_ASSERT_MESSAGE_AT("liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_SOURCE, 274 /* ARTIST 0x822A5414 */));
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_SOURCE, 275 /* ARTIST 0x822A5438 */));
+    CGS_ASSERT_AT( liActiveRaceCar >= 0,
+        "liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_SOURCE, 274 /* ARTIST 0x822A5414 */);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
+        "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_SOURCE, 275 /* ARTIST 0x822A5438 */);
+
 
     maxLoadFlags[liActiveRaceCar] |= E_LOADFLAG_UNUSED;
 }
@@ -638,11 +638,11 @@ void RaceCarStreamer::SetRequiredVehicleData( s32 liActiveRaceCar, CgsID lModelI
 // otherwise stash (model, wheel, priority) for UpdateDesiredCars to action when budget allows.
 void RaceCarStreamer::SetDesiredVehicleData( s32 liSlotIndex, CgsID lModelId, CgsID lWheelId, s32 liPriority )
 {
-    CGS_ASSERT( liSlotIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liSlotIndex >= 0", KAC_ARTIST_ASSERT_SOURCE, 331 /* ARTIST 0x822A54A0 */));
-    CGS_ASSERT( liSlotIndex < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "liSlotIndex < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_SOURCE, 332 /* ARTIST 0x822A54C4 */));
+    CGS_ASSERT_AT( liSlotIndex >= 0,
+        "liSlotIndex >= 0", KAC_ARTIST_ASSERT_SOURCE, 331 /* ARTIST 0x822A54A0 */);
+    CGS_ASSERT_AT( liSlotIndex < KI_MAX_ACTIVE_RACE_CARS,
+        "liSlotIndex < KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_SOURCE, 332 /* ARTIST 0x822A54C4 */);
+
 
     if( GetCarModelId( liSlotIndex ) != lModelId )
     {

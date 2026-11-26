@@ -28,8 +28,8 @@ namespace BrnGui
     // profile getters, in the X360 call order (each getter self-asserts !mbIsLocked).
     void CrashNavOptionsData::SetFromProfile(OptionsDataProfile* lpProfile)
     {
-        CGS_ASSERT(lpProfile != 0,
-                   CGS_ASSERT_MESSAGE_AT("lpOptionsData", KAC_OPTIONS_ASSERT_FILE, 418));  // 0x82482A54
+        CGS_ASSERT_AT(lpProfile != 0,
+                   "lpOptionsData", KAC_OPTIONS_ASSERT_FILE, 418);  // 0x82482A54
 
         meCameraUserOption = static_cast<s32>(lpProfile->GetCameraFeed());
         meVoipVolume       = static_cast<EOptionsVoipVolumes>(lpProfile->GetVoipVolume());
@@ -47,8 +47,8 @@ namespace BrnGui
     // profile setters, in the X360 call order (DefaultGameCamera loaded before Tips).
     void CrashNavOptionsData::SetToProfile(OptionsDataProfile* lpProfile)
     {
-        CGS_ASSERT(lpProfile != 0,
-                   CGS_ASSERT_MESSAGE_AT("lpOptionsData", KAC_OPTIONS_ASSERT_FILE, 435));  // 0x82482B3C
+        CGS_ASSERT_AT(lpProfile != 0,
+                   "lpOptionsData", KAC_OPTIONS_ASSERT_FILE, 435);  // 0x82482B3C
 
         lpProfile->SetCameraFeed(
             static_cast<BrnNetwork::BrnNetworkModuleIO::ECameraUserOptions>(meCameraUserOption));
@@ -326,7 +326,7 @@ namespace BrnGui
 
         default:
             // Streamed in place (ARTIST 0x824E0C90..0x824E0D28).
-            CGS_ASSERT_STREAM_AT(false, "Invalid internal state (" << meState << ") \n",
+            CGS_FAIL_STREAM_AT("Invalid internal state (" << meState << ") \n",
                                  CGS_ARTIST_FILE, 241);   // cpp:241
             break;
         }
@@ -555,8 +555,8 @@ namespace BrnGui
     // carry no arm. Kept so the dispatcher's case is faithful rather than absent.
     void CrashNavOptions::HandleTriggers(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0,
-            CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in CrashNavOptions::HandleTriggers", CGS_ARTIST_FILE, 706)); // cpp:706
+        CGS_ASSERT_STREAM_AT(lpEvent != 0,
+            "Invalid event in CrashNavOptions::HandleTriggers", CGS_ARTIST_FILE, 706); // cpp:706
         (void)lpEvent;
     }
 
@@ -565,10 +565,10 @@ namespace BrnGui
     // discards: restore the live audio to the profile's values and leave.
     void CrashNavOptions::HandleOverlayCompleteEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpOverlayCompleteEvent",
-                CGS_ARTIST_FILE, 1017 /* ARTIST 0x824D961C */));   // cpp:1017
+        CGS_ASSERT_AT(lpEvent != 0,
+            "lpOverlayCompleteEvent",
+                CGS_ARTIST_FILE, 1017 /* ARTIST 0x824D961C */);   // cpp:1017
+
 
         const GuiOverlayCompletePayload* lpComplete =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpEvent);
@@ -636,7 +636,7 @@ namespace BrnGui
         }
 
         default:
-            CGS_ASSERT(false, "Unknown option ");   // cpp:837
+            CGS_FAIL("Unknown option ");   // cpp:837
             break;
         }
 
@@ -656,8 +656,8 @@ namespace BrnGui
     // this is the call that was missing.
     void CrashNavOptions::ApplyAndSaveSettings()
     {
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 867 /* ARTIST 0x824CDD38 */));             // cpp:867
-        CGS_ASSERT(mpStateInterface != 0, CGS_ASSERT_MESSAGE_AT("mpStateInterface", CGS_ARTIST_FILE, 868 /* ARTIST 0x824CDD60 */)); // cpp:868
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 867 /* ARTIST 0x824CDD38 */);             // cpp:867
+        CGS_ASSERT_AT(mpStateInterface != 0, "mpStateInterface", CGS_ARTIST_FILE, 868 /* ARTIST 0x824CDD60 */); // cpp:868
 
         mOptionsData.SetToProfile(mpGuiCache->GetMenuOptionsData());
         mOptionsData.OutputEvents(mpGuiCache->GetMenuOptionsData(), mpStateInterface);
@@ -670,7 +670,7 @@ namespace BrnGui
     // Publish the model's CURRENT (uncommitted) volumes so scrubbing is audible.
     void CrashNavOptions::UpdateSoundSettings()
     {
-        CGS_ASSERT(mpStateInterface != 0, CGS_ASSERT_MESSAGE_AT("mpStateInterface", CGS_ARTIST_FILE, 927 /* ARTIST 0x824CDF38 */));
+        CGS_ASSERT_AT(mpStateInterface != 0, "mpStateInterface", CGS_ARTIST_FILE, 927 /* ARTIST 0x824CDF38 */);
 
         GuiEventAudioSettings lAudioSettingsEvent;   // DWARF cpp:929
         lAudioSettingsEvent.miMusicVolume = static_cast<s32>(mOptionsData.GetMusicVolume());
@@ -695,8 +695,8 @@ namespace BrnGui
     // ---- RestoreVoipSettings @0x824CDE68 -------------------------------------------
     void CrashNavOptions::RestoreVoipSettings()
     {
-        CGS_ASSERT((mpStateInterface != 0) && (mpGuiCache != 0),
-                   CGS_ASSERT_MESSAGE_AT("( mpStateInterface ) && ( mpGuiCache )", CGS_ARTIST_FILE, 906 /* ARTIST 0x824CDEAC */));   // cpp:906
+        CGS_ASSERT_AT((mpStateInterface != 0) && (mpGuiCache != 0),
+                   "( mpStateInterface ) && ( mpGuiCache )", CGS_ARTIST_FILE, 906 /* ARTIST 0x824CDEAC */);   // cpp:906
 
         GuiEventCrashNavVoipVolume lEvent;
         lEvent.miVoipVolume =
@@ -754,7 +754,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT_AT(false, "lpcLabel", CGS_ARTIST_FILE, 999);   // cpp:999
+            CGS_FAIL_AT("lpcLabel", CGS_ARTIST_FILE, 999);   // cpp:999
             break;
         }
 

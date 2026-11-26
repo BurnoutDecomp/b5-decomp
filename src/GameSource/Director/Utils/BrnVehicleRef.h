@@ -61,7 +61,7 @@ namespace BrnDirector
         // as an early return so no assert is skipped that the console does not skip.
         const Camera::VehicleInfo* Get(const void* lpWorld) const
         {
-            CGS_ASSERT(mbSet, CGS_ASSERT_MESSAGE_AT("mbSet", CGS_ARTIST_BRNVEHICLEREF_FILE, 121));                                   // BrnVehicleRef.h:121
+            CGS_ASSERT_AT(mbSet, "mbSet", CGS_ARTIST_BRNVEHICLEREF_FILE, 121);                                   // BrnVehicleRef.h:121
 
             const AllVehicleData& lrWorld = *static_cast<const AllVehicleData*>(lpWorld);
 
@@ -77,15 +77,15 @@ namespace BrnDirector
                 return &lrWorld.GetRaceCar(lrWorld.GetNearestRaceCarIndexToPlayer(muRef));
 
             case E_TRAFFIC_VEHICLE:
-                CGS_ASSERT(false, "not implemented yet");                 // BrnVehicleRef.h:144
+                CGS_FAIL("not implemented yet");                 // BrnVehicleRef.h:144
                 break;
 
             default:
-                CGS_ASSERT(false, "unknown type");                        // BrnVehicleRef.h:150
+                CGS_FAIL("unknown type");                        // BrnVehicleRef.h:150
                 break;
             }
 
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("this shouldn't happen", CGS_ARTIST_BRNVEHICLEREF_FILE, 155));                   // BrnVehicleRef.h:155
+            CGS_FAIL_AT("this shouldn't happen", CGS_ARTIST_BRNVEHICLEREF_FILE, 155);                   // BrnVehicleRef.h:155
             return &lrWorld.GetPlayer();
         }
 
@@ -143,11 +143,11 @@ namespace BrnDirector
                 break;
 
             case E_TRAFFIC_VEHICLE:
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("not implemented yet", CGS_ARTIST_BRNVEHICLEREF_FILE, 301));    // non-gating
+                CGS_FAIL_AT("not implemented yet", CGS_ARTIST_BRNVEHICLEREF_FILE, 301);    // non-gating
                 return false;
 
             default:
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unknown type", CGS_ARTIST_BRNVEHICLEREF_FILE, 307));           // non-gating
+                CGS_FAIL_AT("unknown type", CGS_ARTIST_BRNVEHICLEREF_FILE, 307);           // non-gating
                 return false;
             }
 

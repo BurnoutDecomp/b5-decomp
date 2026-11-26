@@ -57,10 +57,10 @@ namespace BrnGui
                                              const BrnFlapt::FileRef& lFile,
                                              const char* lacParentName)
     {
-        CGS_ASSERT(lacName != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lacName",
-                CGS_ARTIST_FILE, 76 /* ARTIST 0x8241D08C */));
+        CGS_ASSERT_AT(lacName != 0,
+            "lacName",
+                CGS_ARTIST_FILE, 76 /* ARTIST 0x8241D08C */);
+
 
         BrnFlaptComponent::Prepare(lacName, lFile, lacParentName);
         mfCurrentProportion = KF_INVALID_PROPORTION;
@@ -75,7 +75,7 @@ namespace BrnGui
                                                      Vector2 lv2StartScale,
                                                      Vector2 lv2EndScale)
     {
-        CGS_ASSERT(mAptRef.mpMovieClipInst != 0, CGS_ASSERT_MESSAGE_AT("mMovieClipRef.IsValid()", CGS_ARTIST_FILE, 99 /* ARTIST 0x8241D124 */));
+        CGS_ASSERT_AT(mAptRef.mpMovieClipInst != 0, "mMovieClipRef.IsValid()", CGS_ARTIST_FILE, 99 /* ARTIST 0x8241D124 */);
 
         // Locate the named child under the base clip's parent and adopt it as the
         // controlled clip. DWARF cpp:102 local lParent, initialised from GetParent (ARTIST

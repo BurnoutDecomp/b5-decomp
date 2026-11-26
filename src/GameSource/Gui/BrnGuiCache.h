@@ -981,9 +981,9 @@ namespace BrnGui
         // ARTIST 0x824DFDFC and 0x824DCD04 preserve the original cache assertion location.
         BrnGameState::GameStateModuleIO::ECarSelectType GetCurrentCarSelectType() const
         {
-            CGS_ASSERT(meCarSelectType > BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_NONE,
-                CGS_ASSERT_MESSAGE_AT("meCarSelectType > GsmIO::E_CAR_SELECT_TYPE_NONE",
-                                      "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 4378));
+            CGS_ASSERT_AT(meCarSelectType > BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_NONE,
+                "meCarSelectType > GsmIO::E_CAR_SELECT_TYPE_NONE",
+                                      "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 4378);
             return meCarSelectType;
         }
         bool IsJunkyardCarUnlockPending() const          { return mbJunkyardCarUnlockPending; }  // +0x4B74 (19316)
@@ -2355,73 +2355,73 @@ namespace BrnGui
     // @ 0x8240F2C8
     inline f32 GuiCache::GetCurrentTimeInEvent() const
     {
-        CGS_ASSERT(0.0f <= mfEventTime,
-            CGS_ASSERT_MESSAGE_AT("0.0f <= mfEventTime", CGS_ARTIST_BRNGUICACHE_H_FILE, 2962 /* ARTIST 0x8240F2FC */));
+        CGS_ASSERT_AT(0.0f <= mfEventTime,
+            "0.0f <= mfEventTime", CGS_ARTIST_BRNGUICACHE_H_FILE, 2962 /* ARTIST 0x8240F2FC */);
         return mfEventTime;
     }
 
     // @ 0x8240F330
     inline f32 GuiCache::GetTargetTimeInEvent() const
     {
-        CGS_ASSERT(0.0f <= mfTargetTime,
-            CGS_ASSERT_MESSAGE_AT("0.0f <= mfTargetTime", CGS_ARTIST_BRNGUICACHE_H_FILE, 2979 /* ARTIST 0x8240F364 */));
+        CGS_ASSERT_AT(0.0f <= mfTargetTime,
+            "0.0f <= mfTargetTime", CGS_ARTIST_BRNGUICACHE_H_FILE, 2979 /* ARTIST 0x8240F364 */);
         return mfTargetTime;
     }
 
     // @ 0x8240F4B0 -- road-rage only.
     inline s32 GuiCache::GetCurrentTakedownsInEvent() const
     {
-        CGS_ASSERT(meGameModeType == 3,
-            CGS_ASSERT_MESSAGE_AT(
-                "BrnGameState::GsmIO::E_MODE_ROAD_RAGE == meGameModeType", CGS_ARTIST_BRNGUICACHE_H_FILE, 3047 /* ARTIST 0x8240F4EC */));
-        CGS_ASSERT(-1 < miTakedownsCurrent,
-            CGS_ASSERT_MESSAGE_AT(
-                "-1 < miTakedownsCurrent", CGS_ARTIST_BRNGUICACHE_H_FILE, 3048 /* ARTIST 0x8240F51C */));
+        CGS_ASSERT_AT(meGameModeType == 3,
+            "BrnGameState::GsmIO::E_MODE_ROAD_RAGE == meGameModeType", CGS_ARTIST_BRNGUICACHE_H_FILE, 3047 /* ARTIST 0x8240F4EC */);
+
+        CGS_ASSERT_AT(-1 < miTakedownsCurrent,
+            "-1 < miTakedownsCurrent", CGS_ARTIST_BRNGUICACHE_H_FILE, 3048 /* ARTIST 0x8240F51C */);
+
         return miTakedownsCurrent;
     }
 
     // @ 0x8240F550 -- road-rage only.
     inline s32 GuiCache::GetTargetTakedownsInEvent() const
     {
-        CGS_ASSERT(meGameModeType == 3,
-            CGS_ASSERT_MESSAGE_AT(
-                "BrnGameState::GsmIO::E_MODE_ROAD_RAGE == meGameModeType", CGS_ARTIST_BRNGUICACHE_H_FILE, 3065 /* ARTIST 0x8240F58C */));
-        CGS_ASSERT(-1 < miTakedownTarget,
-            CGS_ASSERT_MESSAGE_AT(
-                "-1 < miTakedownTarget", CGS_ARTIST_BRNGUICACHE_H_FILE, 3066 /* ARTIST 0x8240F5BC */));
+        CGS_ASSERT_AT(meGameModeType == 3,
+            "BrnGameState::GsmIO::E_MODE_ROAD_RAGE == meGameModeType", CGS_ARTIST_BRNGUICACHE_H_FILE, 3065 /* ARTIST 0x8240F58C */);
+
+        CGS_ASSERT_AT(-1 < miTakedownTarget,
+            "-1 < miTakedownTarget", CGS_ARTIST_BRNGUICACHE_H_FILE, 3066 /* ARTIST 0x8240F5BC */);
+
         return miTakedownTarget;
     }
 
     // @ 0x8240F5F0
     inline s32 GuiCache::GetCurrentScoreInEvent() const
     {
-        CGS_ASSERT(-1 < miScoreCurrent,
-            CGS_ASSERT_MESSAGE_AT("-1 < miScoreCurrent", CGS_ARTIST_BRNGUICACHE_H_FILE, 3083 /* ARTIST 0x8240F61C */));
+        CGS_ASSERT_AT(-1 < miScoreCurrent,
+            "-1 < miScoreCurrent", CGS_ARTIST_BRNGUICACHE_H_FILE, 3083 /* ARTIST 0x8240F61C */);
         return miScoreCurrent;
     }
 
     // @ 0x8240F650
     inline s32 GuiCache::GetTargetScoreInEvent() const
     {
-        CGS_ASSERT(-1 < miScoreTarget,
-            CGS_ASSERT_MESSAGE_AT("-1 < miScoreTarget", CGS_ARTIST_BRNGUICACHE_H_FILE, 3099 /* ARTIST 0x8240F67C */));
+        CGS_ASSERT_AT(-1 < miScoreTarget,
+            "-1 < miScoreTarget", CGS_ARTIST_BRNGUICACHE_H_FILE, 3099 /* ARTIST 0x8240F67C */);
         return miScoreTarget;
     }
 
     // @ 0x8240F6B0
     inline s32 GuiCache::GetCurrentComboInEvent() const
     {
-        CGS_ASSERT(-1 < miScoreCombo,
-            CGS_ASSERT_MESSAGE_AT("-1 < miScoreCombo", CGS_ARTIST_BRNGUICACHE_H_FILE, 3115 /* ARTIST 0x8240F6DC */));
+        CGS_ASSERT_AT(-1 < miScoreCombo,
+            "-1 < miScoreCombo", CGS_ARTIST_BRNGUICACHE_H_FILE, 3115 /* ARTIST 0x8240F6DC */);
         return miScoreCombo;
     }
 
     // @ 0x8240F710
     inline s32 GuiCache::GetMultiplierInEvent() const
     {
-        CGS_ASSERT(-1 < miComboMultiplier,
-            CGS_ASSERT_MESSAGE_AT(
-                "-1 < miComboMultiplier", CGS_ARTIST_BRNGUICACHE_H_FILE, 3130 /* ARTIST 0x8240F73C */));
+        CGS_ASSERT_AT(-1 < miComboMultiplier,
+            "-1 < miComboMultiplier", CGS_ARTIST_BRNGUICACHE_H_FILE, 3130 /* ARTIST 0x8240F73C */);
+
         return miComboMultiplier;
     }
 
@@ -2429,31 +2429,31 @@ namespace BrnGui
     // for kCGSID_NULL (id != 0).
     inline CgsID GuiCache::GetPursuitCarID() const
     {
-        CGS_ASSERT(meGameModeType == 4,
-            CGS_ASSERT_MESSAGE_AT(
-                "BrnGameState::GsmIO::E_MODE_PURSUIT == meGameModeType", CGS_ARTIST_BRNGUICACHE_H_FILE, 3319 /* ARTIST 0x8240F82C */));
-        CGS_ASSERT(mPursuedCarID != static_cast<CgsID>(0),
-            CGS_ASSERT_MESSAGE_AT(
-                "kCGSID_NULL != mPursuedCarID", CGS_ARTIST_BRNGUICACHE_H_FILE, 3320 /* ARTIST 0x8240F85C */));
+        CGS_ASSERT_AT(meGameModeType == 4,
+            "BrnGameState::GsmIO::E_MODE_PURSUIT == meGameModeType", CGS_ARTIST_BRNGUICACHE_H_FILE, 3319 /* ARTIST 0x8240F82C */);
+
+        CGS_ASSERT_AT(mPursuedCarID != static_cast<CgsID>(0),
+            "kCGSID_NULL != mPursuedCarID", CGS_ARTIST_BRNGUICACHE_H_FILE, 3320 /* ARTIST 0x8240F85C */);
+
         return mPursuedCarID;
     }
 
     // @ 0x824B3060
     inline CgsID GuiCache::GetShutdownCarID() const
     {
-        CGS_ASSERT(mShutdownCarID != static_cast<CgsID>(0),
-            CGS_ASSERT_MESSAGE_AT(
-                "kCGSID_NULL != mShutdownCarID", CGS_ARTIST_BRNGUICACHE_H_FILE, 3337 /* ARTIST 0x824B308C */));
+        CGS_ASSERT_AT(mShutdownCarID != static_cast<CgsID>(0),
+            "kCGSID_NULL != mShutdownCarID", CGS_ARTIST_BRNGUICACHE_H_FILE, 3337 /* ARTIST 0x824B308C */);
+
         return mShutdownCarID;
     }
 
     // @ 0x824B30C0 -- E_UNLOCKTYPE_NONE is 0.
     inline s32 GuiCache::GetTrophyCarUnlockType() const
     {
-        CGS_ASSERT(meTrophyCarUnlockType != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE != meTrophyCarUnlockType",
-                CGS_ARTIST_BRNGUICACHE_H_FILE, 3354 /* ARTIST 0x824B30EC */));
+        CGS_ASSERT_AT(meTrophyCarUnlockType != 0,
+            "BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE != meTrophyCarUnlockType",
+                CGS_ARTIST_BRNGUICACHE_H_FILE, 3354 /* ARTIST 0x824B30EC */);
+
         return meTrophyCarUnlockType;
     }
 
@@ -2461,8 +2461,8 @@ namespace BrnGui
     inline const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
         GuiCache::GetOnlinePlayerInfoByIndex(s32 liPlayerInfoIndex)
     {
-        CGS_ASSERT(liPlayerInfoIndex >= 0, CGS_ASSERT_MESSAGE_AT("liPlayerInfoIndex >= 0", CGS_ARTIST_BRNGUICACHE_H_FILE, 3645 /* ARTIST 0x8240F8C8 */));
-        CGS_ASSERT(liPlayerInfoIndex < 8, CGS_ASSERT_MESSAGE_AT("liPlayerInfoIndex < KI_MAX_PLAYERS", CGS_ARTIST_BRNGUICACHE_H_FILE, 3646 /* ARTIST 0x8240F8EC */));
+        CGS_ASSERT_AT(liPlayerInfoIndex >= 0, "liPlayerInfoIndex >= 0", CGS_ARTIST_BRNGUICACHE_H_FILE, 3645 /* ARTIST 0x8240F8C8 */);
+        CGS_ASSERT_AT(liPlayerInfoIndex < 8, "liPlayerInfoIndex < KI_MAX_PLAYERS", CGS_ARTIST_BRNGUICACHE_H_FILE, 3646 /* ARTIST 0x8240F8EC */);
 
         return &maPlayerInfo[liPlayerInfoIndex];
     }
@@ -2472,9 +2472,9 @@ namespace BrnGui
     inline const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
         GuiCache::GetOnlinePlayerInfo(BrnNetwork::NetworkPlayerID lPlayerID) const
     {
-        CGS_ASSERT(lPlayerID != -1,
-            CGS_ASSERT_MESSAGE_AT(
-                "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_BRNGUICACHE_H_FILE, 3597 /* ARTIST 0x82482764 */));
+        CGS_ASSERT_AT(lPlayerID != -1,
+            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_BRNGUICACHE_H_FILE, 3597 /* ARTIST 0x82482764 */);
+
 
         for (s32 liIndex = 0; liIndex < 8; ++liIndex)
         {
@@ -2489,14 +2489,14 @@ namespace BrnGui
     // @ 0x8240F988 -- maOnlinePlayerDisconnected @ +0xB84C (47180)
     inline bool GuiCache::GetOnlinePlayerDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-                CGS_ARTIST_BRNGUICACHE_H_FILE, 3684 /* ARTIST 0x8240F9B4 */));
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                CGS_ARTIST_BRNGUICACHE_H_FILE, 3685 /* ARTIST 0x8240F9D8 */));
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                CGS_ARTIST_BRNGUICACHE_H_FILE, 3684 /* ARTIST 0x8240F9B4 */);
+
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                CGS_ARTIST_BRNGUICACHE_H_FILE, 3685 /* ARTIST 0x8240F9D8 */);
+
 
         return maOnlinePlayerDisconnected[leActiveRaceCarIndex];
     }
@@ -2504,14 +2504,14 @@ namespace BrnGui
     // @ 0x8240FA08 -- maOnlinePlayerEliminated @ +0xB85C (47196)
     inline bool GuiCache::IsOnlinePlayerEliminated(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "leCurrentPlayer >= E_ACTIVE_RACE_CAR_INDEX_0",
-                CGS_ARTIST_BRNGUICACHE_H_FILE, 3724 /* ARTIST 0x8240FA34 */));
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leCurrentPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                CGS_ARTIST_BRNGUICACHE_H_FILE, 3725 /* ARTIST 0x8240FA58 */));
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "leCurrentPlayer >= E_ACTIVE_RACE_CAR_INDEX_0",
+                CGS_ARTIST_BRNGUICACHE_H_FILE, 3724 /* ARTIST 0x8240FA34 */);
+
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "leCurrentPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                CGS_ARTIST_BRNGUICACHE_H_FILE, 3725 /* ARTIST 0x8240FA58 */);
+
 
         return maOnlinePlayerEliminated[leActiveRaceCarIndex];
     }
@@ -2520,14 +2520,14 @@ namespace BrnGui
     // (>= 0, < 8), then returns maOnlinePlayerInCarSelect[idx] (@0xB854, stride 1).
     inline bool GuiCache::GetOnlinePlayerInCarSelect(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-                CGS_ARTIST_BRNGUICACHE_H_FILE, 3704 /* ARTIST 0x824436FC */));
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                CGS_ARTIST_BRNGUICACHE_H_FILE, 3705 /* ARTIST 0x82443720 */));
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                CGS_ARTIST_BRNGUICACHE_H_FILE, 3704 /* ARTIST 0x824436FC */);
+
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                CGS_ARTIST_BRNGUICACHE_H_FILE, 3705 /* ARTIST 0x82443720 */);
+
 
         return maOnlinePlayerInCarSelect[leActiveRaceCarIndex];
     }
@@ -2535,9 +2535,9 @@ namespace BrnGui
     // @ 0x82472D00
     inline const BrnResource::HudMessageController* GuiCache::GetHudMessageController() const
     {
-        CGS_ASSERT(mpHudMessageController != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpHudMessageController", CGS_ARTIST_BRNGUICACHE_H_FILE, 2418 /* ARTIST 0x82472D28 */));
+        CGS_ASSERT_AT(mpHudMessageController != 0,
+            "mpHudMessageController", CGS_ARTIST_BRNGUICACHE_H_FILE, 2418 /* ARTIST 0x82472D28 */);
+
         return mpHudMessageController;
     }
 
@@ -2549,18 +2549,18 @@ namespace BrnGui
         // Header-inline on the console: both asserts carry BrnGuiCache.h lines 4078/4080
         // (li r5 @0x82472E14 / @0x82472E44); the texts are the stringised conditions
         // (ARTIST 0x8204DAD8 / 0x8205B470).
-        CGS_ASSERT(
+        CGS_ASSERT_AT(
             (meGameModeType == 0) || (meGameModeType == 1) || (meGameModeType == 10)
                 || (meGameModeType == 6) || (meGameModeType == 8) || (meGameModeType == 5),
-            CGS_ASSERT_MESSAGE_AT(
-                "( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_FACE_OFF ) || "
+            "( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_FACE_OFF ) || "
                 "( meGameModeType == GsmIO::E_MODE_ONLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_ELIMINATOR ) || "
                 "( meGameModeType == GsmIO::E_MODE_MARKED_MAN ) || ( meGameModeType == GsmIO::E_MODE_BURNING_ROUTE )",
-                CGS_ARTIST_BRNGUICACHE_H_FILE, 4078 /* ARTIST 0x82472E14 */));
+                CGS_ARTIST_BRNGUICACHE_H_FILE, 4078 /* ARTIST 0x82472E14 */);
+
         // BrnWorld::E_DISTRICT_INVALID == 18 (asm immediate).
-        CGS_ASSERT(mEventDestinationDistrict != 18,
-                   CGS_ASSERT_MESSAGE_AT("mEventDestinationDistrict != BrnWorld::E_DISTRICT_INVALID",
-                                             CGS_ARTIST_BRNGUICACHE_H_FILE, 4080 /* ARTIST 0x82472E44 */));
+        CGS_ASSERT_AT(mEventDestinationDistrict != 18,
+                   "mEventDestinationDistrict != BrnWorld::E_DISTRICT_INVALID",
+                                             CGS_ARTIST_BRNGUICACHE_H_FILE, 4080 /* ARTIST 0x82472E44 */);
         return mEventDestinationDistrict;
     }
 
@@ -2569,11 +2569,11 @@ namespace BrnGui
     // @0x12F0C, count miNumMessages @0x135D8). X360: return 580 * liIndex + this + 77580.
     inline const PreEventInfo* GuiCache::GetPreEventInfo(s32 liIndex) const
     {
-        CGS_ASSERT(liIndex >= 0,
-            CGS_ASSERT_MESSAGE_AT("liIndex >= 0", CGS_ARTIST_BRNGUICACHE_H_FILE, 4589 /* ARTIST 0x82482804 */));
-        CGS_ASSERT(liIndex < mPreRaceData.miNumMessages,
-            CGS_ASSERT_MESSAGE_AT(
-                "liIndex < mPreRaceData.miNumMessages", CGS_ARTIST_BRNGUICACHE_H_FILE, 4590 /* ARTIST 0x82482834 */));
+        CGS_ASSERT_AT(liIndex >= 0,
+            "liIndex >= 0", CGS_ARTIST_BRNGUICACHE_H_FILE, 4589 /* ARTIST 0x82482804 */);
+        CGS_ASSERT_AT(liIndex < mPreRaceData.miNumMessages,
+            "liIndex < mPreRaceData.miNumMessages", CGS_ARTIST_BRNGUICACHE_H_FILE, 4590 /* ARTIST 0x82482834 */);
+
         return &mPreRaceData.mMessages[liIndex];
     }
 
@@ -2582,19 +2582,19 @@ namespace BrnGui
     // element idx of maPresetRaces (base 120*170 == 0x4FB0 == maPresetRacesStorage).
     inline const PresetRace* GuiCache::GetPresetRace(s32 liPresetRaceIndex) const
     {
-        CGS_ASSERT(liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces,
-            CGS_ASSERT_MESSAGE_AT(
-                "liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces",
-                CGS_ARTIST_BRNGUICACHE_H_FILE, 2211 /* ARTIST 0x824B3020 */));
+        CGS_ASSERT_AT(liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces,
+            "liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces",
+                CGS_ARTIST_BRNGUICACHE_H_FILE, 2211 /* ARTIST 0x824B3020 */);
+
         return &maPresetRaces[liPresetRaceIndex];
     }
 
     // @ 0x8240F110
     inline WorldDataController* GuiCache::GetWorldDataController() const
     {
-        CGS_ASSERT(mpWorldDataController != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpWorldDataController", CGS_ARTIST_BRNGUICACHE_H_FILE, 2324 /* ARTIST 0x8240F138 */));
+        CGS_ASSERT_AT(mpWorldDataController != 0,
+            "mpWorldDataController", CGS_ARTIST_BRNGUICACHE_H_FILE, 2324 /* ARTIST 0x8240F138 */);
+
         // The X360 stores the controller as a non-const pointer the GUI mutates through;
         // the cache member is declared const, so cast away for the (non-const) accessor.
         return const_cast<WorldDataController*>(mpWorldDataController);
@@ -2618,49 +2618,49 @@ namespace BrnGui
         }
         while (liNumberOfStuntsToDisplay < 1);
 
-        CGS_ASSERT(liIndex < liNumberOfStuntsToDisplay,
-            CGS_ASSERT_MESSAGE_AT(
-                "liIndex < GetNumberOfStuntsToDisplay()", CGS_ARTIST_BRNGUICACHE_H_FILE, 3224 /* ARTIST 0x8240F7C0 */));
+        CGS_ASSERT_AT(liIndex < liNumberOfStuntsToDisplay,
+            "liIndex < GetNumberOfStuntsToDisplay()", CGS_ARTIST_BRNGUICACHE_H_FILE, 3224 /* ARTIST 0x8240F7C0 */);
+
 
         return &maStuntToDisplay[liIndex];
     }
 
     inline s32 GuiCache::GetCheckpointReached() const
     {
-        CGS_ASSERT(0 <= miCheckpointReached,
-            CGS_ASSERT_MESSAGE_AT("0 <= miCheckpointReached", CGS_ARTIST_BRNGUICACHE_H_FILE, 2927 /* ARTIST 0x824EC494 */));
+        CGS_ASSERT_AT(0 <= miCheckpointReached,
+            "0 <= miCheckpointReached", CGS_ARTIST_BRNGUICACHE_H_FILE, 2927 /* ARTIST 0x824EC494 */);
         return miCheckpointReached;
     }
 
     inline s8 GuiCache::GetOpponentsInEvent() const
     {
-        CGS_ASSERT(-1 < miOpponentsInEvent,
-            CGS_ASSERT_MESSAGE_AT("-1 < miOpponentsInEvent", CGS_ARTIST_BRNGUICACHE_H_FILE, 3030 /* ARTIST 0x8240F490 */));
+        CGS_ASSERT_AT(-1 < miOpponentsInEvent,
+            "-1 < miOpponentsInEvent", CGS_ARTIST_BRNGUICACHE_H_FILE, 3030 /* ARTIST 0x8240F490 */);
         return miOpponentsInEvent;
     }
 
     inline const HudMessageDirector* GuiCache::GetHudMessageDirector() const
     {
-        CGS_ASSERT(mpHudMessageDirector != 0,
-            CGS_ASSERT_MESSAGE_AT("mpHudMessageDirector", CGS_ARTIST_BRNGUICACHE_H_FILE, 2446 /* ARTIST 0x82472D80 */));
+        CGS_ASSERT_AT(mpHudMessageDirector != 0,
+            "mpHudMessageDirector", CGS_ARTIST_BRNGUICACHE_H_FILE, 2446 /* ARTIST 0x82472D80 */);
         return mpHudMessageDirector;
     }
 
     inline const FreeburnChallengeManager* GuiCache::GetFreeburnChallengeManager() const
     {
-        CGS_ASSERT(mpChallengeManager != 0,
-            CGS_ASSERT_MESSAGE_AT("mpChallengeManager", CGS_ARTIST_BRNGUICACHE_H_FILE, 2390 /* ARTIST 0x8240F190 */));
+        CGS_ASSERT_AT(mpChallengeManager != 0,
+            "mpChallengeManager", CGS_ARTIST_BRNGUICACHE_H_FILE, 2390 /* ARTIST 0x8240F190 */);
         return mpChallengeManager;
     }
 
     inline s32 GuiCache::GetCurrentOnlinePlayerTeam(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT("lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-                                  CGS_ARTIST_BRNGUICACHE_H_FILE, 3664 /* ARTIST 0x8240F93C */));
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT("lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                                  CGS_ARTIST_BRNGUICACHE_H_FILE, 3665 /* ARTIST 0x8240F960 */));
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                                  CGS_ARTIST_BRNGUICACHE_H_FILE, 3664 /* ARTIST 0x8240F93C */);
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                                  CGS_ARTIST_BRNGUICACHE_H_FILE, 3665 /* ARTIST 0x8240F960 */);
         return maCurrentPlayerTeam[leActiveRaceCarIndex];
     }
 

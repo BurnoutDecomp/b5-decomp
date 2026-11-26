@@ -48,7 +48,7 @@ namespace WorldEntityIO
     ResourceRequestInterface*
     OutputBuffer_PostPhysics::GetResourceRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 246));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 246);
         return &mResourceRequestInterface;
     }
 
@@ -65,7 +65,7 @@ namespace WorldEntityIO
     const StatusInterface*
     OutputBuffer_PostPhysics::GetStatusInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 248));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 248);
         return &mStatusInterface;
     }
 
@@ -73,7 +73,7 @@ namespace WorldEntityIO
     StatusInterface*
     OutputBuffer_PostPhysics::GetStatusInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 249));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 249);
         return &mStatusInterface;
     }
 
@@ -82,7 +82,7 @@ namespace WorldEntityIO
     SceneInputInterface*
     OutputBuffer_PostPhysics::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 252));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 252);
         return &mSceneInputInterface;
     }
 

@@ -133,7 +133,7 @@ bool OverlapGenerationModule::Prepare(u8* lpaVolumeInstanceCullingGroup,
         return true;
 
     default:
-        CGS_ASSERT(false, "Unknown prepare state");
+        CGS_FAIL("Unknown prepare state");
         return false;
     }
 }
@@ -164,7 +164,7 @@ bool OverlapGenerationModule::Release()
         return true;
 
     default:
-        CGS_ASSERT(false, "Unrecognised release state\n");
+        CGS_FAIL("Unrecognised release state\n");
         return false;
     }
 }
@@ -221,8 +221,8 @@ void OverlapGenerationModule::Destruct()
 // ---------------------------------------------------------------------------------
 void OverlapGenerationModule::Update(const OverlapGenerationIO::InputBuffer* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpInputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 217 /* ARTIST 0x828CB8A4 */));
+    CGS_ASSERT_AT(lpInputBuffer != NULL,
+        "lpInputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 217 /* ARTIST 0x828CB8A4 */);
 
     lpInputBuffer->LockForRead();
 
@@ -436,8 +436,8 @@ void OverlapGenerationModule::ProcessForceNoPaddingQueue(const OverlapGeneration
 // ---------------------------------------------------------------------------------
 void OverlapGenerationModule::OutputCollidingPairs(OverlapGenerationIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 398 /* ARTIST 0x828C1F7C */));
+    CGS_ASSERT_AT(lpOutputBuffer != NULL,
+        "lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 398 /* ARTIST 0x828C1F7C */);
 
     const s32 liNumCollidingPairs = static_cast<s32>(mSweeper.GetNumCollidingPairs());
 

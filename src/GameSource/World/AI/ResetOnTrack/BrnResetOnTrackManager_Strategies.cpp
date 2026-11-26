@@ -669,7 +669,7 @@ bool ResetOnTrackManager::ConvertNodesToPositionAndDirection(const RouteNode* lp
         return false;
     }
 
-    CGS_ASSERT(lpPrevNode != lpNextNode, CGS_ASSERT_MESSAGE_AT("lpPrevNode != lpNextNode", __FILE__, 708));   // :708
+    CGS_ASSERT_AT(lpPrevNode != lpNextNode, "lpPrevNode != lpNextNode", __FILE__, 708);   // :708
 
     // `ld gxMessageFilterFlags ; clrldi 63 ; cmpldi ; beq` 0x82790380..0x82790390: bit 0 gates the line.
     // [FX-TAILS-A item 8 2026-09-24: printed whenever gpDebugPrint was set]
@@ -710,8 +710,8 @@ bool ResetOnTrackManager::ConvertNodesToPositionAndDirection(const RouteNode* lp
                              lNextPortalPosition.mV.y - lPrevPortalPosition.mV.y,
                              lNextPortalPosition.mV.z - lPrevPortalPosition.mV.z, 0.0f).mV);
 
-    CGS_ASSERT(!IsSimilar3D(lNextPortalPosition, lPrevPortalPosition),
-               CGS_ASSERT_MESSAGE_AT("!RwMath::IsSimilar( lNextPortalPosition, lPrevPortalPosition )", __FILE__, 758));   // :758
+    CGS_ASSERT_AT(!IsSimilar3D(lNextPortalPosition, lPrevPortalPosition),
+               "!RwMath::IsSimilar( lNextPortalPosition, lPrevPortalPosition )", __FILE__, 758);   // :758
 
     lpResetData->mDirection = Normalise3D(lDelta);
     return true;
@@ -790,8 +790,8 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
     const Vector3 lNextPortal(Vector4(lpEndPortal->GetPositionX(), lpEndPortal->GetPositionY(),
                                   lpEndPortal->GetPositionZ(), 0.0f).mV);
 
-    CGS_ASSERT(!IsSimilar3D(lNextPortal, lPrevPortal),
-               CGS_ASSERT_MESSAGE_AT("!RwMath::IsSimilar( lNextPortal, lPrevPortal )", __FILE__, 1199));   // :1199
+    CGS_ASSERT_AT(!IsSimilar3D(lNextPortal, lPrevPortal),
+               "!RwMath::IsSimilar( lNextPortal, lPrevPortal )", __FILE__, 1199);   // :1199
 
     lpResetData->mPosition  = lPrevPortal;
     const Vector3 lPortalDelta(Vector4(lNextPortal.mV.x - lPrevPortal.mV.x,

@@ -2534,27 +2534,27 @@ namespace Vehicle
         VehicleOutputInterface* lpVehicleOutputInterface,
         Deformation::DeformationInputInterface* lpDeformationInterface)
     {
-        CGS_ASSERT(lpInputBufferStack        != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpInputBufferStack != NULL", KAC_ARTIST_ASSERT_FILE, 1141 /* ARTIST 0x8264AB7C */));        // :1141
-        CGS_ASSERT(lpOutputBufferStack       != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpOutputBufferStack != NULL", KAC_ARTIST_ASSERT_FILE, 1142 /* ARTIST 0x8264ABA0 */));       // :1142
-        CGS_ASSERT(lpInputInterface          != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpInputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1143 /* ARTIST 0x8264ABC4 */));          // :1143
-        CGS_ASSERT(lpOutputInterface         != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1144 /* ARTIST 0x8264ABE8 */));         // :1144
-        CGS_ASSERT(lpManagerOutputInterface  != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpManagerOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1145 /* ARTIST 0x8264AC0C */));  // :1145
-        CGS_ASSERT(lpVehicleOutputInterface  != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpVehicleOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1146 /* ARTIST 0x8264AC30 */));  // :1146
-        CGS_ASSERT(lpDeformationInterface    != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpDeformationInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1147 /* ARTIST 0x8264AC54 */));    // :1147
+        CGS_ASSERT_AT(lpInputBufferStack        != 0,
+            "lpInputBufferStack != NULL", KAC_ARTIST_ASSERT_FILE, 1141 /* ARTIST 0x8264AB7C */);        // :1141
+
+        CGS_ASSERT_AT(lpOutputBufferStack       != 0,
+            "lpOutputBufferStack != NULL", KAC_ARTIST_ASSERT_FILE, 1142 /* ARTIST 0x8264ABA0 */);       // :1142
+
+        CGS_ASSERT_AT(lpInputInterface          != 0,
+            "lpInputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1143 /* ARTIST 0x8264ABC4 */);          // :1143
+
+        CGS_ASSERT_AT(lpOutputInterface         != 0,
+            "lpOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1144 /* ARTIST 0x8264ABE8 */);         // :1144
+
+        CGS_ASSERT_AT(lpManagerOutputInterface  != 0,
+            "lpManagerOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1145 /* ARTIST 0x8264AC0C */);  // :1145
+
+        CGS_ASSERT_AT(lpVehicleOutputInterface  != 0,
+            "lpVehicleOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1146 /* ARTIST 0x8264AC30 */);  // :1146
+
+        CGS_ASSERT_AT(lpDeformationInterface    != 0,
+            "lpDeformationInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1147 /* ARTIST 0x8264AC54 */);    // :1147
+
 
         RecordNetworkRaceCarsAddedForCollision(lpInputInterface);
 
@@ -3368,11 +3368,11 @@ namespace Vehicle
             }
             else
             {
-                CGS_ASSERT(false,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "Invalid Entity type in air ram UpdateVehicleEffects Effects",
+                CGS_FAIL_AT(
+                    "Invalid Entity type in air ram UpdateVehicleEffects Effects",
                         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                        "../Physics/VehicleManager/BrnVehicleManager.cpp", 3544 /* ARTIST 0x82629EF0 */));   // :3544
+                        "../Physics/VehicleManager/BrnVehicleManager.cpp", 3544 /* ARTIST 0x82629EF0 */);   // :3544
+
             }
         }
     }
@@ -3461,13 +3461,13 @@ namespace Vehicle
     {
         // ARTIST's assert lines (0x825EAC60 / 0x825EAC84 / 0x825EACB4) in the unity-built
         // BrnVehicleManager.cpp.
-        CGS_ASSERT(lpContact != 0, CGS_ASSERT_MESSAGE_AT("lpContact != NULL", CGS_ARTIST_FILE, 7727));
-        CGS_ASSERT(lpTriCacheInterface != 0,
-                   CGS_ASSERT_MESSAGE_AT("lpTriCacheInterface != NULL", CGS_ARTIST_FILE, 7728));
-        CGS_ASSERT(lpContact->muVolumeInstanceIdA.GetEntityIDOwner() == 2u,
-                   CGS_ASSERT_MESSAGE_AT(
-                       "lpContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE",
-                       CGS_ARTIST_FILE, 7730));
+        CGS_ASSERT_AT(lpContact != 0, "lpContact != NULL", CGS_ARTIST_FILE, 7727);
+        CGS_ASSERT_AT(lpTriCacheInterface != 0,
+                   "lpTriCacheInterface != NULL", CGS_ARTIST_FILE, 7728);
+        CGS_ASSERT_AT(lpContact->muVolumeInstanceIdA.GetEntityIDOwner() == 2u,
+                   "lpContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE",
+                       CGS_ARTIST_FILE, 7730);
+
 
         return mPhysicalTrafficManager.ValidateTrafficContact(lpContact, lpTriCacheInterface, lfTimeStep);
     }
@@ -3592,10 +3592,10 @@ namespace Vehicle
     bool VehicleManager::PrepareTriangleCache(
         CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update)
     {
-        CGS_ASSERT(lpSceneInputBuffer_Update != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpSceneInputBuffer_Update != NULL",
-                KAC_ARTIST_ASSERT_FILE, 891 /* ARTIST 0x82615BC4 */));  // :891
+        CGS_ASSERT_AT(lpSceneInputBuffer_Update != NULL,
+            "lpSceneInputBuffer_Update != NULL",
+                KAC_ARTIST_ASSERT_FILE, 891 /* ARTIST 0x82615BC4 */);  // :891
+
 
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdate =
             lpSceneInputBuffer_Update->GetInSceneUpdateInterface();
@@ -3709,22 +3709,22 @@ namespace Vehicle
     bool VehicleManager::Prepare(rw::IResourceAllocator* lpPhysicsAllocator,
                                  CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer)
     {
-        CGS_ASSERT(lpPhysicsAllocator != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpPhysicsAllocator != NULL",
-                KAC_ARTIST_ASSERT_FILE, 815 /* ARTIST 0x8263C6B8 */));                 // :815
-        CGS_ASSERT(lpSceneInputBuffer != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpSceneInputBuffer_Update != NULL",
-                KAC_ARTIST_ASSERT_FILE, 816 /* ARTIST 0x8263C6DC */));          // :816
+        CGS_ASSERT_AT(lpPhysicsAllocator != NULL,
+            "lpPhysicsAllocator != NULL",
+                KAC_ARTIST_ASSERT_FILE, 815 /* ARTIST 0x8263C6B8 */);                 // :815
+
+        CGS_ASSERT_AT(lpSceneInputBuffer != NULL,
+            "lpSceneInputBuffer_Update != NULL",
+                KAC_ARTIST_ASSERT_FILE, 816 /* ARTIST 0x8263C6DC */);          // :816
+
 
         switch (mePrepareStage)
         {
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "Invalid prepare stage\n",
-                    KAC_ARTIST_ASSERT_FILE, 867 /* ARTIST 0x8263C7A0 */));                                     // :867
+            CGS_FAIL_AT(
+                "Invalid prepare stage\n",
+                    KAC_ARTIST_ASSERT_FILE, 867 /* ARTIST 0x8263C7A0 */);                                     // :867
+
             return false;
 
         case 0:
@@ -4962,11 +4962,11 @@ namespace Vehicle
     // ------------------------------------------------------------------------------------
     bool VehicleManager::IsRaceCarCrashing(s32 liRaceCarIndex)
     {
-        CGS_ASSERT(liRaceCarIndex >= 0,
-            CGS_ASSERT_MESSAGE_AT("liRaceCarIndex >= 0", KAC_ARTIST_ASSERT_FILE, 8272 /* ARTIST 0x825B56BC */));                    // :8272
-        CGS_ASSERT(liRaceCarIndex < 8,
-            CGS_ASSERT_MESSAGE_AT(
-                "liRaceCarIndex < ku8MaxNumRaceCars", KAC_ARTIST_ASSERT_FILE, 8273 /* ARTIST 0x825B56E0 */));      // :8273
+        CGS_ASSERT_AT(liRaceCarIndex >= 0,
+            "liRaceCarIndex >= 0", KAC_ARTIST_ASSERT_FILE, 8272 /* ARTIST 0x825B56BC */);                    // :8272
+        CGS_ASSERT_AT(liRaceCarIndex < 8,
+            "liRaceCarIndex < ku8MaxNumRaceCars", KAC_ARTIST_ASSERT_FILE, 8273 /* ARTIST 0x825B56E0 */);      // :8273
+
         return maRaceCarVehicles[liRaceCarIndex].IsCrashing();                     // lbz 0xE50(rec)
     }
 
@@ -5137,12 +5137,12 @@ namespace Vehicle
             }
             else if (luRequestType == 3u)
             {
-                CGS_ASSERT(false,
+                CGS_FAIL(
                     "A physical traffic vehicle tried submitted an 'above ground' line test to the SceneManager");   // :2752
             }
             else
             {
-                CGS_ASSERT(false, "Received result for an unknown line test request");  // :2759
+                CGS_FAIL("Received result for an unknown line test request");  // :2759
             }
         }
     }

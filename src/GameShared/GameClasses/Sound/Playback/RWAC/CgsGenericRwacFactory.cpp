@@ -151,8 +151,8 @@ RwacLock::RwacLock(rw::audio::core::System* apSystem)
     if (mpSystem == 0)
     {
         mpSystem = rw::audio::core::System::GetInstance();
-        CGS_ASSERT(mpSystem, CGS_ASSERT_MESSAGE_AT("mpSystem",
-            CGS_RWAC_FACTORY_H_ASSERT_FILE, 59));
+        CGS_ASSERT_AT(mpSystem, "mpSystem",
+            CGS_RWAC_FACTORY_H_ASSERT_FILE, 59);
     }
 
     rw::audio::core::System::Lock(mpSystem);
@@ -357,7 +357,7 @@ GenericRwacVoiceConfig* GenericRwacFactory::SetupConfig(
         lpConfig->SetProcessingStage(255);
         break;
     default:
-        CGS_ASSERT(false, "Invalid Voice Type");
+        CGS_FAIL("Invalid Voice Type");
         break;
     }
 
@@ -540,7 +540,7 @@ bool GenericRwacFactory::DoCreateVoice(const VoiceSpec& akrSpec,
         break;
     }
     default:
-        CGS_ASSERT(false, "Invalid Voice Type");
+        CGS_FAIL("Invalid Voice Type");
         return false;
     }
 
@@ -638,7 +638,7 @@ void GenericRwacFactory::HandlePluginEvent(
         break;
     }
     default:
-        CGS_ASSERT(false, "Invalid Command");
+        CGS_FAIL("Invalid Command");
         break;
     }
 }
@@ -715,7 +715,7 @@ void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
                 reinterpret_cast<f32*>(lauWords[3]));
             break;
         default:
-            CGS_ASSERT(false, "Invalid Command");
+            CGS_FAIL("Invalid Command");
             break;
         }
     }
@@ -745,7 +745,7 @@ bool GenericRwacFactory::DoCreateContent(const ContentSpec& akrSpec,
     }
     else
     {
-        CGS_ASSERT(false, "Unknown content type");
+        CGS_FAIL("Unknown content type");
     }
 
     if (lpContent)

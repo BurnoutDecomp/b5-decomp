@@ -2998,7 +2998,7 @@ namespace Vehicle
                 // Console streams "Failed to find local physics ID of traffic vehicle with global
                 // entity ID: 0x%X" through gpcMessageBuffer; lowered to CGS_ASSERT with the static
                 // prefix per the standing rule (BrnPhysicalTrafficManager.h:1030).
-                CGS_ASSERT(false, "Failed to find local physics ID of traffic vehicle with global entity ID: ");
+                CGS_FAIL("Failed to find local physics ID of traffic vehicle with global entity ID: ");
                 return CgsSceneManager::K_INVALID_ENTITY_ID;           // dword_82F2A07C
             }
             // EntityId ctor bound check (CgsEntityId.h:116) -- dead for a u8 index, emitted on console.
@@ -3032,7 +3032,7 @@ namespace Vehicle
 
         // Console streams through gpcMessageBuffer; lowered per the standing rule
         // (BrnVehicleManager.h:2039).
-        CGS_ASSERT(false, "Attempting to get local physics ID of unsupported entity type");
+        CGS_FAIL("Attempting to get local physics ID of unsupported entity type");
         return CgsSceneManager::EntityId(0xFFFFFFFFu);
     }
 

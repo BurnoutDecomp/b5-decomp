@@ -113,7 +113,7 @@ void CrashedStuntHudState::Update()
         meInternalState = E_CRASHINTERNALSTATE_IDLE;
         break;
     default:
-        CGS_ASSERT(false, "Should never call update in the following state");
+        CGS_FAIL("Should never call update in the following state");
         break;
     }
     UpdatePermenant();
@@ -306,7 +306,7 @@ void CrashedStuntHudState::UpdateCrashRunningState()
         }
     }
     else if (meRunningState < E_CRASHRUNNINGSTATE_NONE || meRunningState >= E_CRASHRUNNINGSTATE_COUNT)
-        CGS_ASSERT(false, "Unhandled CrashRunning state in CrashedStuntHudState::UpdateCrashRunningState()");
+        CGS_FAIL("Unhandled CrashRunning state in CrashedStuntHudState::UpdateCrashRunningState()");
     struct TallyScore : CgsGui::GuiEvent<465>
     {
         s32 miScore; f32 mfTime;

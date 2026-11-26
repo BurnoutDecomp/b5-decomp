@@ -330,16 +330,16 @@ namespace BrnDirector
         {
             CGS_ASSERT(mpRaceCars != 0, "mpRaceCars != NULL");                                    // h:157
             CGS_ASSERT(static_cast<s32>(mePlayerRaceCarIndex) < 8, "mePlayerRaceCarIndex < 8");   // h:158
-            CGS_ASSERT(mUsedRaceCars.IsBitSet(static_cast<u32>(mePlayerRaceCarIndex)),
-                       CGS_ASSERT_MESSAGE_AT("mUsedRaceCars.IsBitSet(mePlayerRaceCarIndex)", CGS_ARTIST_BRNDIRECTORALLVEHICLEDATA_FILE, 159));                           // h:159
+            CGS_ASSERT_AT(mUsedRaceCars.IsBitSet(static_cast<u32>(mePlayerRaceCarIndex)),
+                       "mUsedRaceCars.IsBitSet(mePlayerRaceCarIndex)", CGS_ARTIST_BRNDIRECTORALLVEHICLEDATA_FILE, 159);                           // h:159
             return mpRaceCars[static_cast<s32>(mePlayerRaceCarIndex)];
         }
         const Camera::VehicleInfo& GetRaceCar(EActiveRaceCarIndex leIndex) const  // :61
         {
             CGS_ASSERT(mpRaceCars != 0, "mpRaceCars != NULL");                                    // h:170
             CGS_ASSERT(static_cast<s32>(leIndex) < 8, "leRaceCarIndex < 8");                      // h:171
-            CGS_ASSERT(mUsedRaceCars.IsBitSet(static_cast<u32>(leIndex)),
-                       CGS_ASSERT_MESSAGE_AT("mUsedRaceCars.IsBitSet(leRaceCarIndex)", CGS_ARTIST_BRNDIRECTORALLVEHICLEDATA_FILE, 172));                                 // h:172
+            CGS_ASSERT_AT(mUsedRaceCars.IsBitSet(static_cast<u32>(leIndex)),
+                       "mUsedRaceCars.IsBitSet(leRaceCarIndex)", CGS_ARTIST_BRNDIRECTORALLVEHICLEDATA_FILE, 172);                                 // h:172
             return mpRaceCars[static_cast<s32>(leIndex)];
         }
 
@@ -355,8 +355,8 @@ namespace BrnDirector
         // the asm are GetLength()'s own inlined tripwire, one per call -- not separate logic.
         EActiveRaceCarIndex GetNearestRaceCarIndexToPlayer(u32 luRank) const      // :82
         {
-            CGS_ASSERT(maNearestRaceCarsToPlayer.GetLength() > 0,
-                       CGS_ASSERT_MESSAGE_AT("maNearestRaceCarsToPlayer.GetLength() > 0", CGS_ARTIST_BRNDIRECTORALLVEHICLEDATA_FILE, 186));                              // h:186
+            CGS_ASSERT_AT(maNearestRaceCarsToPlayer.GetLength() > 0,
+                       "maNearestRaceCarsToPlayer.GetLength() > 0", CGS_ARTIST_BRNDIRECTORALLVEHICLEDATA_FILE, 186);                              // h:186
 
             if (luRank >= maNearestRaceCarsToPlayer.GetLength())
             {

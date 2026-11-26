@@ -35,18 +35,18 @@ namespace ModelIO
     // X360 0x8284F7F0: read-lock (bit 4) const handle to the GUI-event queue (this+4).
     const InputBuffer::GuiEventInputQueue* InputBuffer::GetEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            CGS_ARTIST_FILE, 122));
+            CGS_ARTIST_FILE, 122);
         return &mGuiEvents;
     }
 
     // X360 0x8284F898: write-lock (bit 3) handle to the GUI-event queue (this+4).
     InputBuffer::GuiEventInputQueue* InputBuffer::GetEventQueueNonConst()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            CGS_ARTIST_FILE, 139));
+            CGS_ARTIST_FILE, 139);
         return &mGuiEvents;
     }
 

@@ -34,7 +34,7 @@ namespace BrnNetwork
         case 13: return 5;
         case 15: return 6;
         default:
-            CGS_ASSERT(false, "Unknown game mode");
+            CGS_FAIL("Unknown game mode");
             return 0;
         }
     }
@@ -52,11 +52,11 @@ namespace BrnNetwork
         case 3:  return 5;
         case 4:  return 6;
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "Unknown game mode",
+            CGS_FAIL_AT(
+                "Unknown game mode",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                    "../Network/Parameters/BrnNetworkParameterData.cpp", 73 /* ARTIST 0x825874E8 */));
+                    "../Network/Parameters/BrnNetworkParameterData.cpp", 73 /* ARTIST 0x825874E8 */);
+
             return 0;
         }
     }

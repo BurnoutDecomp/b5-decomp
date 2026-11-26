@@ -155,7 +155,7 @@ namespace BrnTraffic
     void DebugComponent::Construct(TrafficEntityModule* lpModule)
     {
         CgsDev::DebugComponent::Construct();   // ARTIST 0x8274FC8C (folded at 0x8284CB38)
-        CGS_ASSERT(lpModule != 0, CGS_ASSERT_MESSAGE_AT("lpModule != NULL", __FILE__, 165));
+        CGS_ASSERT_AT(lpModule != 0, "lpModule != NULL", __FILE__, 165);
         mpModule = lpModule;                       // +0x0C
 
         mfRenderCullDistance = 200.0f;             // +0x10
@@ -303,8 +303,8 @@ namespace BrnTraffic
     // @0x82760AB0. Preserve the X360 HUD ordering and its module-owned perfmon gate.
     void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
     {
-        CGS_ASSERT(mpModule != 0,
-            CGS_ASSERT_MESSAGE_AT("mpModule != NULL", KPC_ARTIST_ASSERT_FILE, 495 /* ARTIST 0x82760AE0 */));
+        CGS_ASSERT_AT(mpModule != 0,
+            "mpModule != NULL", KPC_ARTIST_ASSERT_FILE, 495 /* ARTIST 0x82760AE0 */);
 
         if (mbDrawPlayerHullId)
             DrawPlayerCarHullId(lpDisplay);
@@ -533,8 +533,8 @@ namespace BrnTraffic
     void DebugComponent::FireAirRam(void* lpUserData)
     {
         DebugComponent* const lpComponent = static_cast<DebugComponent*>(lpUserData);
-        CGS_ASSERT(lpComponent != 0,
-            CGS_ASSERT_MESSAGE_AT("lpComponent", KPC_ARTIST_ASSERT_FILE, 2719 /* ARTIST 0x8275052C */));
+        CGS_ASSERT_AT(lpComponent != 0,
+            "lpComponent", KPC_ARTIST_ASSERT_FILE, 2719 /* ARTIST 0x8275052C */);
         lpComponent->mpModule->meDEBUGAirRamToFire = lpComponent->miAirRamTypeToFire;
     }
 
@@ -555,8 +555,8 @@ namespace BrnTraffic
     void DebugComponent::FireKillZone(void* lpUserData)
     {
         DebugComponent* const lpComponent = static_cast<DebugComponent*>(lpUserData);
-        CGS_ASSERT(lpComponent != 0, CGS_ASSERT_MESSAGE_AT(
-            "lpComponent", KPC_ARTIST_ASSERT_FILE, 2700 /* ARTIST 0x8275BB64 */));
+        CGS_ASSERT_AT(lpComponent != 0,
+            "lpComponent", KPC_ARTIST_ASSERT_FILE, 2700 /* ARTIST 0x8275BB64 */);
         const u64 luKillZoneId = lpComponent->mpModule->mpData->mpaKillZoneIds[
             lpComponent->muKillZoneToFire];
         lpComponent->mpModule->FireKillZone(luKillZoneId);
@@ -573,8 +573,8 @@ namespace BrnTraffic
     void DebugComponent::ReloadBehaviourData(void* lpUserData)
     {
         DebugComponent* const lpComponent = static_cast<DebugComponent*>(lpUserData);
-        CGS_ASSERT(lpComponent != 0,
-            CGS_ASSERT_MESSAGE_AT("lpComponent", KPC_ARTIST_ASSERT_FILE, 3593 /* ARTIST 0x827614FC */));
+        CGS_ASSERT_AT(lpComponent != 0,
+            "lpComponent", KPC_ARTIST_ASSERT_FILE, 3593 /* ARTIST 0x827614FC */);
         lpComponent->mpModule->mFuzzyBehaviours.ReloadBehaviours();
     }
 

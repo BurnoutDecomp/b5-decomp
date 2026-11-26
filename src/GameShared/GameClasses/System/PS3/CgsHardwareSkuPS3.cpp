@@ -55,7 +55,7 @@ const CgsLanguage::ELanguage HardwareSku::FindLanguage()
             }
 
         default:
-            CGS_ASSERT_AT(false, "Unknown sku or no sku set", KAC_ARTIST_HARDWARE_SKU_SOURCE, 208);
+            CGS_FAIL_AT("Unknown sku or no sku set", KAC_ARTIST_HARDWARE_SKU_SOURCE, 208);
             return static_cast<CgsLanguage::ELanguage>(7);
     }
 }

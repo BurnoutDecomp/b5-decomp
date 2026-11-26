@@ -159,11 +159,11 @@ void ChallengeManager::Construct(GameStateModule*                    lpGameState
     maBillboardsCollected.Clear();         // X360 stw 0,+0x3A0 (miCount = 0)
 
     // Back-pointer non-null asserts (X360 order + message strings; BrnChallengeManager.cpp:265-269).
-    CGS_ASSERT(lpProgression != 0, CGS_ASSERT_MESSAGE_AT("lpProgression", CGS_ARTIST_FILE, 265));
-    CGS_ASSERT(lpRoadRulesManager != 0, CGS_ASSERT_MESSAGE_AT("lpRoadRulesManager", CGS_ARTIST_FILE, 266));
-    CGS_ASSERT(lpTriggerQueryManager != 0, CGS_ASSERT_MESSAGE_AT("lpTriggerQueryManager", CGS_ARTIST_FILE, 267));
-    CGS_ASSERT(lpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateModule", CGS_ARTIST_FILE, 268));
-    CGS_ASSERT(lpModeManager != 0, CGS_ASSERT_MESSAGE_AT("lpModeManager", CGS_ARTIST_FILE, 269));
+    CGS_ASSERT_AT(lpProgression != 0, "lpProgression", CGS_ARTIST_FILE, 265);
+    CGS_ASSERT_AT(lpRoadRulesManager != 0, "lpRoadRulesManager", CGS_ARTIST_FILE, 266);
+    CGS_ASSERT_AT(lpTriggerQueryManager != 0, "lpTriggerQueryManager", CGS_ARTIST_FILE, 267);
+    CGS_ASSERT_AT(lpGameStateModule != 0, "lpGameStateModule", CGS_ARTIST_FILE, 268);
+    CGS_ASSERT_AT(lpModeManager != 0, "lpModeManager", CGS_ARTIST_FILE, 269);
 
     mpGameStateModule    = lpGameStateModule;     // X360 stw,+0xE48
     mpModeManager        = lpModeManager;         // X360 stw,+0xE4C (X360-only member)
@@ -232,7 +232,7 @@ bool ChallengeManager::UpdateResultsTimer(f32 lfTimeStep)
 // ----------------------------------------------------------------------------
 bool ChallengeManager::ReceivedSuccessUpdatesFromAllPlayers()
 {
-    CGS_ASSERT(mpCurrentChallenge != 0, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 5159));
+    CGS_ASSERT_AT(mpCurrentChallenge != 0, "mpCurrentChallenge", CGS_ARTIST_FILE, 5159);
 
     s32 liNumUpdatesReceived = 0;
     for (s32 liPlayer = 0; liPlayer < KI_MAX_CHALLENGE_PLAYERS; ++liPlayer)
@@ -243,8 +243,8 @@ bool ChallengeManager::ReceivedSuccessUpdatesFromAllPlayers()
         }
     }
 
-    CGS_ASSERT(liNumUpdatesReceived <= mpCurrentChallenge->GetNumPlayers(),
-               CGS_ASSERT_MESSAGE_AT("liNumUpdatesReceived <= mpCurrentChallenge->GetNumPlayers()", CGS_ARTIST_FILE, 5170));
+    CGS_ASSERT_AT(liNumUpdatesReceived <= mpCurrentChallenge->GetNumPlayers(),
+               "liNumUpdatesReceived <= mpCurrentChallenge->GetNumPlayers()", CGS_ARTIST_FILE, 5170);
 
     return liNumUpdatesReceived == mpCurrentChallenge->GetNumPlayers();
 }
@@ -266,10 +266,10 @@ s32 ChallengeManager::GetNumPlayerSucceeding(s32 liActionIndex)
         }
     }
 
-    CGS_ASSERT(liNumPlayersSucceeding <= mpCurrentChallenge->GetNumPlayers(),
-               CGS_ASSERT_MESSAGE_AT(
-                   "liNumPlayersSucceeding <= mpCurrentChallenge->GetNumPlayers()",
-                   CGS_ARTIST_FILE, 5206));  // 0x82316FF0
+    CGS_ASSERT_AT(liNumPlayersSucceeding <= mpCurrentChallenge->GetNumPlayers(),
+               "liNumPlayersSucceeding <= mpCurrentChallenge->GetNumPlayers()",
+                   CGS_ARTIST_FILE, 5206);  // 0x82316FF0
+
 
     return liNumPlayersSucceeding;
 }
@@ -289,10 +289,10 @@ s32 ChallengeManager::GetNumPlayersContributing(s32 liActionIndex)
         }
     }
 
-    CGS_ASSERT(liNumPlayersContributing <= mpCurrentChallenge->GetNumPlayers(),
-               CGS_ASSERT_MESSAGE_AT(
-                   "liNumPlayersContributing <= mpCurrentChallenge->GetNumPlayers()",
-                   CGS_ARTIST_FILE, 5237));  // 0x82317110
+    CGS_ASSERT_AT(liNumPlayersContributing <= mpCurrentChallenge->GetNumPlayers(),
+               "liNumPlayersContributing <= mpCurrentChallenge->GetNumPlayers()",
+                   CGS_ARTIST_FILE, 5237);  // 0x82317110
+
 
     return liNumPlayersContributing;
 }
@@ -349,8 +349,8 @@ s32 ChallengeManager::CountCompletedChallenges()
 // ----------------------------------------------------------------------------
 void ChallengeManager::ResetActionData(s32 liActionToResetIndex)
 {
-    CGS_ASSERT(liActionToResetIndex < mpCurrentChallenge->GetNumActions(),
-               CGS_ASSERT_MESSAGE_AT("liActionToResetIndex < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 6068));
+    CGS_ASSERT_AT(liActionToResetIndex < mpCurrentChallenge->GetNumActions(),
+               "liActionToResetIndex < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 6068);
 
     const BrnResource::ChallengeListEntryAction* lpAction =
         mpCurrentChallenge->GetAction(liActionToResetIndex);
@@ -401,7 +401,7 @@ void ChallengeManager::ResetActionData(s32 liActionToResetIndex)
 // ----------------------------------------------------------------------------
 void ChallengeManager::UpdateStuntScores(const void* lpStuntScoreInfo)
 {
-    CGS_ASSERT(lpStuntScoreInfo != 0, CGS_ASSERT_MESSAGE_AT("lpStuntScoreInfo", CGS_ARTIST_FILE, 4148));
+    CGS_ASSERT_AT(lpStuntScoreInfo != 0, "lpStuntScoreInfo", CGS_ARTIST_FILE, 4148);
 
     const u8* lpInfo = static_cast<const u8*>(lpStuntScoreInfo);
 
@@ -601,15 +601,15 @@ void ChallengeManager::SetCurrentSkillScore(EFreeburnSkill leFreeburnSkill, f32 
     // Non-fatal range asserts (X360 cmpwi r29,0 / cmpwi 0x26; both continue on failure). The
     // upper bound is the X360-drift count (38) per KI_FREEBURN_SKILL_COUNT_X360; the verbatim
     // string names the enumerator E_FREEBURN_SKILL_COUNT.
-    CGS_ASSERT(static_cast<s32>(leFreeburnSkill) >= 0, CGS_ASSERT_MESSAGE_AT("leFreeburnSkill >= 0", CGS_ARTIST_FILE, 5925));
-    CGS_ASSERT(static_cast<s32>(leFreeburnSkill) < KI_FREEBURN_SKILL_COUNT_X360,
-               CGS_ASSERT_MESSAGE_AT("leFreeburnSkill < E_FREEBURN_SKILL_COUNT", CGS_ARTIST_FILE, 5926));
+    CGS_ASSERT_AT(static_cast<s32>(leFreeburnSkill) >= 0, "leFreeburnSkill >= 0", CGS_ARTIST_FILE, 5925);
+    CGS_ASSERT_AT(static_cast<s32>(leFreeburnSkill) < KI_FREEBURN_SKILL_COUNT_X360,
+               "leFreeburnSkill < E_FREEBURN_SKILL_COUNT", CGS_ARTIST_FILE, 5926);
 
     if (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING)   // X360 lwz +0xE08 == 2
     {
-        CGS_ASSERT(mpCurrentChallenge != 0, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 5931));
-        CGS_ASSERT(miCurrentChallengeAction < mpCurrentChallenge->GetNumActions(),
-                   CGS_ASSERT_MESSAGE_AT("miCurrentChallengeAction < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 5932));
+        CGS_ASSERT_AT(mpCurrentChallenge != 0, "mpCurrentChallenge", CGS_ARTIST_FILE, 5931);
+        CGS_ASSERT_AT(miCurrentChallengeAction < mpCurrentChallenge->GetNumActions(),
+                   "miCurrentChallengeAction < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 5932);
 
         if (mabIsLocationOk[miCurrentChallengeAction])   // X360 lbz +0xFD8 (base + miCurrentChallengeAction)
         {
@@ -768,10 +768,10 @@ namespace BrnGameState
     {
         if ( lbIsLocationOk )
         {
-            CGS_ASSERT( liActionIndex < mpCurrentChallenge->GetNumActions(),
-                        CGS_ASSERT_MESSAGE_AT(
-                            "liActionIndex < mpCurrentChallenge->GetNumActions()",
-                            CGS_ARTIST_FILE, 2883 ) );  // ARTIST 0x8233B2EC
+            CGS_ASSERT_AT( liActionIndex < mpCurrentChallenge->GetNumActions(),
+                        "liActionIndex < mpCurrentChallenge->GetNumActions()",
+                            CGS_ARTIST_FILE, 2883  );  // ARTIST 0x8233B2EC
+
 
             return mafCumulativeActionScores[ liActionIndex ] * GetScaleFactor() * lfTimeStep;
         }
@@ -821,18 +821,18 @@ namespace BrnGameState
                                                      EActiveRaceCarIndex leActiveRaceCarIndex,
                                                      f32 lfScore )
     {
-        CGS_ASSERT( ( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )
+        CGS_ASSERT_AT( ( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )
                         && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ),
-                    CGS_ASSERT_MESSAGE_AT("( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )", CGS_ARTIST_FILE, 3837) );
+                    "( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )", CGS_ARTIST_FILE, 3837 );
 
         if ( lbIsLocationOk )
         {
             return;
         }
 
-        CGS_ASSERT( mpCurrentChallenge, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 3843) );
-        CGS_ASSERT( liActionIndex < mpCurrentChallenge->GetNumActions(),
-                    CGS_ASSERT_MESSAGE_AT("liActionIndex < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 3844) );
+        CGS_ASSERT_AT( mpCurrentChallenge, "mpCurrentChallenge", CGS_ARTIST_FILE, 3843 );
+        CGS_ASSERT_AT( liActionIndex < mpCurrentChallenge->GetNumActions(),
+                    "liActionIndex < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 3844 );
 
         const BrnResource::ChallengeListEntryAction* lpAction =
             mpCurrentChallenge->GetAction( liActionIndex );
@@ -1087,7 +1087,7 @@ void ChallengeManager::Destruct()
 // Its BrnChallengeManager.cpp:191 assert is followed by the one pointer store.
 void ChallengeManager::ApplyVehicleList(const BrnResource::VehicleList* lpVehicleList)
 {
-    CGS_ASSERT(lpVehicleList != NULL, CGS_ASSERT_MESSAGE_AT("lpVehicleList != NULL", CGS_ARTIST_FILE, 191));
+    CGS_ASSERT_AT(lpVehicleList != NULL, "lpVehicleList != NULL", CGS_ARTIST_FILE, 191);
     mpVehicleList = lpVehicleList;
 }
 
@@ -1098,7 +1098,7 @@ void ChallengeManager::ApplyVehicleList(const BrnResource::VehicleList* lpVehicl
 // ----------------------------------------------------------------------------
 bool ChallengeManager::Prepare(const BrnResource::ChallengeList* lpFreeburnChallengeList)
 {
-    CGS_ASSERT(lpFreeburnChallengeList != 0, CGS_ASSERT_MESSAGE_AT("lpFreeburnChallengeList", CGS_ARTIST_FILE, 434));
+    CGS_ASSERT_AT(lpFreeburnChallengeList != 0, "lpFreeburnChallengeList", CGS_ARTIST_FILE, 434);
     mpFreeburnChallengeList = lpFreeburnChallengeList;   // X360 stw,+0xE38
 
     for (s32 liPlayerCount = 0; liPlayerCount < KI_MAX_CHALLENGE_PLAYERS; ++liPlayerCount)
@@ -1109,7 +1109,7 @@ bool ChallengeManager::Prepare(const BrnResource::ChallengeList* lpFreeburnChall
     for (s32 liChallenge = 0; liChallenge < mpFreeburnChallengeList->GetChallengeCount(); ++liChallenge)
     {
         const BrnResource::ChallengeListEntry* lpChallenge = mpFreeburnChallengeList->GetChallengeData(liChallenge);
-        CGS_ASSERT(lpChallenge != NULL, CGS_ASSERT_MESSAGE_AT("lpChallengeListEntry != NULL", CGS_ARTIST_FILE, 448));
+        CGS_ASSERT_AT(lpChallenge != NULL, "lpChallengeListEntry != NULL", CGS_ARTIST_FILE, 448);
         // X360: index == ((byte0xD3 & 0xF) + 0x3F6) word -> maChallengePlayerCounts[GetNumPlayers()-1].
         ++maChallengePlayerCounts[lpChallenge->GetNumPlayers() - 1];
     }
@@ -1163,7 +1163,7 @@ namespace BrnGameState
 // ----------------------------------------------------------------------------
 s32 ChallengeManager::GetChallengeIndex(CgsID lChallengeID) const
 {
-    CGS_ASSERT(mpFreeburnChallengeList != 0, CGS_ASSERT_MESSAGE_AT("mpFreeburnChallengeList", CGS_ARTIST_FILE, 2566));   // X360 asserts +0xE38 non-null (line 2566)
+    CGS_ASSERT_AT(mpFreeburnChallengeList != 0, "mpFreeburnChallengeList", CGS_ARTIST_FILE, 2566);   // X360 asserts +0xE38 non-null (line 2566)
 
     const s32 liChallengeIndex = mpFreeburnChallengeList->GetChallengeIndex(lChallengeID);
     CGS_ASSERT(liChallengeIndex >= 0, "liChallengeIndex >= 0");            // X360 asserts index found (line 2570)
@@ -1178,7 +1178,7 @@ s32 ChallengeManager::GetChallengeIndex(CgsID lChallengeID) const
 // ----------------------------------------------------------------------------
 const BrnResource::ChallengeListEntry* ChallengeManager::GetChallengeFromID(CgsID lChallengeID) const
 {
-    CGS_ASSERT(mpFreeburnChallengeList != 0, CGS_ASSERT_MESSAGE_AT("mpFreeburnChallengeList", CGS_ARTIST_FILE, 2542));
+    CGS_ASSERT_AT(mpFreeburnChallengeList != 0, "mpFreeburnChallengeList", CGS_ARTIST_FILE, 2542);
 
     const BrnResource::ChallengeListEntry* lpChallenge = 0;
     const s32 liChallengeIndex = mpFreeburnChallengeList->GetChallengeIndex(lChallengeID);
@@ -1260,7 +1260,7 @@ void ChallengeManager::CheckForOnlineChallengeUnlocks()
     {
         const BrnResource::ChallengeListEntry* lpChallengeListEntry =
             mpFreeburnChallengeList->GetChallengeData(liChallenge);
-        CGS_ASSERT(lpChallengeListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpChallengeListEntry != NULL", CGS_ARTIST_FILE, 2392));   // X360 line 2392
+        CGS_ASSERT_AT(lpChallengeListEntry != 0, "lpChallengeListEntry != NULL", CGS_ARTIST_FILE, 2392);   // X360 line 2392
 
         if (mpProgression->GetProfile()->HasPlayerCompletedFreeburnChallenge(lpChallengeListEntry->GetChallengeID()))
         {
@@ -1288,8 +1288,8 @@ void ChallengeManager::CheckForOnlineChallengeUnlocks()
 // ----------------------------------------------------------------------------
 void ChallengeManager::OnProfileLoaded()
 {
-    CGS_ASSERT(mpProgression != 0, CGS_ASSERT_MESSAGE_AT("mpProgression", CGS_ARTIST_FILE, 4895));                    // X360 line 4895
-    CGS_ASSERT(mpFreeburnChallengeList != 0, CGS_ASSERT_MESSAGE_AT("mpFreeburnChallengeList", CGS_ARTIST_FILE, 4896)); // X360 line 4896
+    CGS_ASSERT_AT(mpProgression != 0, "mpProgression", CGS_ARTIST_FILE, 4895);                    // X360 line 4895
+    CGS_ASSERT_AT(mpFreeburnChallengeList != 0, "mpFreeburnChallengeList", CGS_ARTIST_FILE, 4896); // X360 line 4896
 
     for (s32 liChallenge = 0; liChallenge < mpFreeburnChallengeList->GetChallengeCount(); ++liChallenge)
     {
@@ -1339,8 +1339,8 @@ bool ChallengeManager::CheckForModifiers(
     const BrnResource::ChallengeListEntryAction*                                 lpAction,
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface)
 {
-    CGS_ASSERT(lpAction, CGS_ASSERT_MESSAGE_AT("lpAction", CGS_ARTIST_FILE, 2818));                                        // X360 line 2818
-    CGS_ASSERT(lpActiveRaceCarOutputInterface, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarOutputInterface", CGS_ARTIST_FILE, 2819)); // X360 line 2819
+    CGS_ASSERT_AT(lpAction, "lpAction", CGS_ARTIST_FILE, 2818);                                        // X360 line 2818
+    CGS_ASSERT_AT(lpActiveRaceCarOutputInterface, "lpActiveRaceCarOutputInterface", CGS_ARTIST_FILE, 2819); // X360 line 2819
 
     if (!lpAction->GetModifier())
     {
@@ -1349,7 +1349,7 @@ bool ChallengeManager::CheckForModifiers(
 
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState* lpRaceCarState =
         lpActiveRaceCarOutputInterface->GetPlayerRaceCarState();
-    CGS_ASSERT(lpRaceCarState, CGS_ASSERT_MESSAGE_AT("lpRaceCarState", CGS_ARTIST_FILE, 2832));
+    CGS_ASSERT_AT(lpRaceCarState, "lpRaceCarState", CGS_ARTIST_FILE, 2832);
 
     bool lbMeetingModifiers = true;
     if ((lpAction->GetModifier() & BrnResource::ChallengeListEntryAction::KX_MODIFIER_IN_AIR) ==
@@ -1372,18 +1372,18 @@ bool ChallengeManager::CheckForModifiers(
 void ChallengeManager::UpdateBurnouts(
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface)
 {
-    CGS_ASSERT(lpActiveRaceCarOutputInterface, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarOutputInterface", CGS_ARTIST_FILE, 4104)); // X360 line 4104
+    CGS_ASSERT_AT(lpActiveRaceCarOutputInterface, "lpActiveRaceCarOutputInterface", CGS_ARTIST_FILE, 4104); // X360 line 4104
 
     const EActiveRaceCarIndex lePlayerRaceCarIndex =
         lpActiveRaceCarOutputInterface->GetPlayerActiveRaceCarIndex();      // inlined +10328 read + "index set" assert (h:980)
-    CGS_ASSERT(lePlayerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               CGS_ASSERT_MESSAGE_AT("lePlayerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 4108));        // X360 line 4108
-    CGS_ASSERT(lePlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("lePlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 4109));     // X360 line 4109
+    CGS_ASSERT_AT(lePlayerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "lePlayerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 4108);        // X360 line 4108
+    CGS_ASSERT_AT(lePlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "lePlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 4109);     // X360 line 4109
 
     const BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo* lpBoostInfo =
         lpActiveRaceCarOutputInterface->GetBoostOutputInfoN(lePlayerRaceCarIndex);
-    CGS_ASSERT(lpBoostInfo, CGS_ASSERT_MESSAGE_AT("lpBoostInfo", CGS_ARTIST_FILE, 4111));                                 // X360 line 4111
+    CGS_ASSERT_AT(lpBoostInfo, "lpBoostInfo", CGS_ARTIST_FILE, 4111);                                 // X360 line 4111
 
     if (lpBoostInfo->mbIsBoosting)                                          // X360 lbz +0 (mbIsBoosting)
     {
@@ -1446,13 +1446,13 @@ bool ChallengeManager::UpdateTimer(f32 lfTimeStep)
 {
     if (!mbChallengeTimerRunning)
     {
-        CGS_ASSERT(mpCurrentChallenge != 0, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 570));
-        CGS_ASSERT(miCurrentChallengeAction < mpCurrentChallenge->GetNumActions(),
-                   CGS_ASSERT_MESSAGE_AT("miCurrentChallengeAction < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 571));
+        CGS_ASSERT_AT(mpCurrentChallenge != 0, "mpCurrentChallenge", CGS_ARTIST_FILE, 570);
+        CGS_ASSERT_AT(miCurrentChallengeAction < mpCurrentChallenge->GetNumActions(),
+                   "miCurrentChallengeAction < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 571);
 
         const BrnResource::ChallengeListEntryAction* lpAction =
             mpCurrentChallenge->GetAction(miCurrentChallengeAction);
-        CGS_ASSERT(lpAction != 0, CGS_ASSERT_MESSAGE_AT("lpAction", CGS_ARTIST_FILE, 573));
+        CGS_ASSERT_AT(lpAction != 0, "lpAction", CGS_ARTIST_FILE, 573);
 
         // X360 lfs f0,+0x40(action) compared to 0.0, then re-reads it via GetTimeLimit for the
         // store (both are the action's mfTimeLimit @+0x40).
@@ -1559,7 +1559,7 @@ void ChallengeManager::CancelFreeburnChallenge(TGameActionQueue* lpActionQueue)
     }
     else if (mpCurrentChallenge != 0)   // X360 loc_82350758: lwz +0xE0C; cmplwi 0; beq -> return
     {
-        CGS_ASSERT(lpActionQueue != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 2213));   // X360 cmplwi r30,0; assert @ ...2213
+        CGS_ASSERT_AT(lpActionQueue != 0, "lpOutput", CGS_ARTIST_FILE, 2213);   // X360 cmplwi r30,0; assert @ ...2213
 
         // Empty end-not-active action (no payload): X360 posts &stack, size 1, id 154.
         GameStateModuleIO::GameAction<GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_END_NOT_ACTIVE>
@@ -1620,8 +1620,8 @@ namespace BrnGameState
 // ----------------------------------------------------------------------------
 void ChallengeManager::RemoteEndChallenge(TGameActionQueue* lpActionQueue, EChallengeStatus leChallengeStatus)
 {
-    CGS_ASSERT(leChallengeStatus != E_CHALLENGE_STATUS_ONGOING,
-               CGS_ASSERT_MESSAGE_AT("leChallengeStatus != E_CHALLENGE_STATUS_ONGOING", CGS_ARTIST_FILE, 2494));   // X360 cmpwi r30,0; bne skip; @2494
+    CGS_ASSERT_AT(leChallengeStatus != E_CHALLENGE_STATUS_ONGOING,
+               "leChallengeStatus != E_CHALLENGE_STATUS_ONGOING", CGS_ARTIST_FILE, 2494);   // X360 cmpwi r30,0; bne skip; @2494
 
     if (meChallengeManagerStatus != E_CHALLENGE_MANAGER_STATUS_NONE)   // X360 lwz +0xE08; cmpwi 0; bne
     {
@@ -1632,13 +1632,13 @@ void ChallengeManager::RemoteEndChallenge(TGameActionQueue* lpActionQueue, EChal
 
     if (leChallengeStatus == E_CHALLENGE_STATUS_SUCCESS)   // X360 loc_823470F4: cmpwi r30,1; bne
     {
-        CGS_ASSERT(mpCurrentChallenge != 0, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 2509));   // X360 lwz +0xE0C; @2509
+        CGS_ASSERT_AT(mpCurrentChallenge != 0, "mpCurrentChallenge", CGS_ARTIST_FILE, 2509);   // X360 lwz +0xE0C; @2509
 
         // X360 ld +0xC0 (mpCurrentChallenge->GetChallengeID()); bl GetChallengeIndex.
         const s32 liChallengeIndex = GetChallengeIndex(mpCurrentChallenge->GetChallengeID());
         if (liChallengeIndex < 0)   // ARTIST 0x8234713C branches over the assertion for a valid index.
         {
-            CGS_ASSERT(liChallengeIndex >= 0, CGS_ASSERT_MESSAGE_AT("liChallengeIndex >= 0", CGS_ARTIST_FILE, 2511));   // X360 @2511
+            CGS_ASSERT_AT(liChallengeIndex >= 0, "liChallengeIndex >= 0", CGS_ARTIST_FILE, 2511);   // X360 @2511
         }
         else
         {
@@ -1842,7 +1842,7 @@ void ChallengeManager::UpdateRemotePlayerSuccessStatus(
     TGameActionQueue* lpActionQueue)
 {
     // X360 cmplwi r20,0; bne -> skip. Non-gating tripwire, then the queue is used regardless.
-    CGS_ASSERT(lpCompletedChallengeStatusQueue != 0, CGS_ASSERT_MESSAGE_AT("lpCompletedChallengeStatusQueue", CGS_ARTIST_FILE, 4663));
+    CGS_ASSERT_AT(lpCompletedChallengeStatusQueue != 0, "lpCompletedChallengeStatusQueue", CGS_ARTIST_FILE, 4663);
 
     if (lpCompletedChallengeStatusQueue->GetLength() > 0)   // X360 lwz r11,8(r20); cmpwi 0; ble skip
     {
@@ -1875,7 +1875,7 @@ void ChallengeManager::UpdateRemotePlayerSuccessStatus(
             }
             else
             {
-                CGS_ASSERT(false,
+                CGS_FAIL(
                            "Failed to find challenge status data entry for player () who sent us data\n");
             }
 
@@ -1892,7 +1892,7 @@ void ChallengeManager::UpdateRemotePlayerSuccessStatus(
 
     if (lpCompletedChallengeStatusQueue->GetLength() > 0)   // X360 second lwz r11,8(r20); cmpwi 0; ble skip
     {
-        CGS_ASSERT(lpActionQueue != 0, CGS_ASSERT_MESSAGE_AT("lpActionQueue", CGS_ARTIST_FILE, 4681));   // X360 cmplwi r31,0; bne -> skip
+        CGS_ASSERT_AT(lpActionQueue != 0, "lpActionQueue", CGS_ARTIST_FILE, 4681);   // X360 cmplwi r31,0; bne -> skip
         OutputFreeburnChallengeEveryPlayerStatusEvent(lpActionQueue);
     }
 }
@@ -1947,16 +1947,16 @@ void ChallengeManager::HandleSuccessUpdateEvent(
     const CgsSystem::TimerStatusInterface* lpTimerStatusInterface,
     const GameStateModuleIO::FburnChallengeSuccessUpdateEvent* lpEvent)
 {
-    CGS_ASSERT(lpTimerStatusInterface, CGS_ASSERT_MESSAGE_AT("lpTimerStatusInterface", CGS_ARTIST_FILE, 4698));   // X360 line 4698
-    CGS_ASSERT(lpEvent, CGS_ASSERT_MESSAGE_AT("lpEvent", CGS_ARTIST_FILE, 4699));                                 // X360 line 4699
+    CGS_ASSERT_AT(lpTimerStatusInterface, "lpTimerStatusInterface", CGS_ARTIST_FILE, 4698);   // X360 line 4698
+    CGS_ASSERT_AT(lpEvent, "lpEvent", CGS_ARTIST_FILE, 4699);                                 // X360 line 4699
 
     if (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING)   // X360 lwz +0xE08; cmpwi 2
     {
         const EActiveRaceCarIndex leActiveRaceCarIndex = lpEvent->meActiveRaceCarIndex;   // X360 lwz +8
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 4712));     // X360 line 4712
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 4713));  // X360 line 4713
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 4712);     // X360 line 4712
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 4713);  // X360 line 4713
 
         mabReceivedSuccessUpdates[leActiveRaceCarIndex] = true;             // X360 stb 1, +0x590 + arci
 
@@ -2005,23 +2005,23 @@ void ChallengeManager::HandleSuccessUpdateEvent(
 void ChallengeManager::HandleChallengeSuccessEvent(
     const GameStateModuleIO::FburnChallengeSuccessEvent* lpEvent)
 {
-    CGS_ASSERT(lpEvent, CGS_ASSERT_MESSAGE_AT("lpEvent", CGS_ARTIST_FILE, 4778));   // X360 line 4778
+    CGS_ASSERT_AT(lpEvent, "lpEvent", CGS_ARTIST_FILE, 4778);   // X360 line 4778
 
     if (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING &&      // X360 lwz +0xE08; cmpwi 2
         lpEvent->miChallengeUpdateFrame > miLastChallengeResetFrame)           // X360 lwz +0xC > lwz +0x1000
     {
         const EActiveRaceCarIndex leActiveRaceCarIndex = lpEvent->meActiveRaceCarIndex;   // X360 lwz +0x10
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 4792));        // X360 line 4792
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 4793));     // X360 line 4793
-        CGS_ASSERT(mpCurrentChallenge, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 4794));                  // X360 line 4794
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 4792);        // X360 line 4792
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 4793);     // X360 line 4793
+        CGS_ASSERT_AT(mpCurrentChallenge, "mpCurrentChallenge", CGS_ARTIST_FILE, 4794);                  // X360 line 4794
 
         for (s32 liActionIndex = 0; liActionIndex < KI_MAX_CHALLENGE_ACTIONS; ++liActionIndex)
         {
             const BrnResource::ChallengeListEntryAction* lpAction =
                 mpCurrentChallenge->GetAction(liActionIndex);
-            CGS_ASSERT(lpAction, CGS_ASSERT_MESSAGE_AT("lpAction", CGS_ARTIST_FILE, 4800));   // X360 line 4800
+            CGS_ASSERT_AT(lpAction, "lpAction", CGS_ARTIST_FILE, 4800);   // X360 line 4800
 
             if (lpEvent->mabSuccessfulActions[liActionIndex])   // X360 lbzx +8 + action
             {
@@ -2110,9 +2110,9 @@ void ChallengeManager::HandleRoadRuleScore(BrnStreetData::ChallengePlayerScoreEn
 {
     if (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING)   // X360 lwz +0xE08; cmpwi 2
     {
-        CGS_ASSERT(mpCurrentChallenge, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 5849));             // X360 line 5849
-        CGS_ASSERT(miCurrentChallengeAction < mpCurrentChallenge->GetNumActions(),
-                   CGS_ASSERT_MESSAGE_AT("miCurrentChallengeAction < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 5851));   // X360 line 5851
+        CGS_ASSERT_AT(mpCurrentChallenge, "mpCurrentChallenge", CGS_ARTIST_FILE, 5849);             // X360 line 5849
+        CGS_ASSERT_AT(miCurrentChallengeAction < mpCurrentChallenge->GetNumActions(),
+                   "miCurrentChallengeAction < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 5851);   // X360 line 5851
 
         const BrnResource::ChallengeListEntryAction* lpAction =
             mpCurrentChallenge->GetAction(miCurrentChallengeAction);
@@ -2211,14 +2211,14 @@ namespace BrnGameState
 // per-player "started challenge" flags into the GameState->Network interface.
 void ChallengeManager::WriteDataToOutput(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 1705));   // BrnChallengeManager.cpp:1705
+    CGS_ASSERT_AT(lpOutputBuffer, "lpOutput", CGS_ARTIST_FILE, 1705);   // BrnChallengeManager.cpp:1705
 
     if (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING ||
         meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RESULTS)
     {
         CGS_ASSERT(mpCurrentChallenge, "mpCurrentChallenge");   // :1718
-        CGS_ASSERT(miCurrentArbitrationIndex < mpCurrentChallenge->GetNumActions(),
-                   CGS_ASSERT_MESSAGE_AT("miCurrentArbitrationIndex < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 1719));   // :1719
+        CGS_ASSERT_AT(miCurrentArbitrationIndex < mpCurrentChallenge->GetNumActions(),
+                   "miCurrentArbitrationIndex < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 1719);   // :1719
 
         const BrnResource::ChallengeListEntryAction* lpArbitrationAction =
             mpCurrentChallenge->GetAction(miCurrentArbitrationIndex);
@@ -2259,7 +2259,7 @@ void ChallengeManager::WriteDataToOutput(GameStateModuleIO::OutputBuffer* lpOutp
                 CGS_ASSERT(mpCurrentChallenge, "mpCurrentChallenge");   // :1749
                 const BrnResource::ChallengeListEntryAction* lpScanAction =
                     mpCurrentChallenge->GetAction(liScanAction);
-                CGS_ASSERT(lpScanAction, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge->GetAction(liIndex)", CGS_ARTIST_FILE, 1750));   // :1750
+                CGS_ASSERT_AT(lpScanAction, "mpCurrentChallenge->GetAction(liIndex)", CGS_ARTIST_FILE, 1750);   // :1750
                 if (static_cast<s32>(lpScanAction->GetActionType()) == 22)   // X360-drift MEET-UP-style action id
                 {
                     lbWriteAllTargets = true;
@@ -2295,7 +2295,7 @@ void ChallengeManager::WriteDataToOutput(GameStateModuleIO::OutputBuffer* lpOutp
             WriteDataToOutputForTarget(&loUpdateAction, miCurrentArbitrationIndex);
         }
 
-        CGS_ASSERT(lpOutputBuffer->GetGameActionQueue() != 0, CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 1778));   // :1778
+        CGS_ASSERT_AT(lpOutputBuffer->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 1778);   // :1778
         TGameActionQueue* lpActionQueue = lpOutputBuffer->GetGuiOutputQueue();
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&loUpdateAction),
                                 GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_UPDATE,
@@ -2305,8 +2305,8 @@ void ChallengeManager::WriteDataToOutput(GameStateModuleIO::OutputBuffer* lpOutp
     // Publish the per-player "player started the challenge" flags to the network interface.
     for (s32 liActiveRaceCarIndex = 0; liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liActiveRaceCarIndex)
     {
-        CGS_ASSERT(lpOutputBuffer->GetGameStateToNetworkInterface(),
-                   CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameStateToNetworkInterface()", CGS_ARTIST_FILE, 1787));   // :1787
+        CGS_ASSERT_AT(lpOutputBuffer->GetGameStateToNetworkInterface(),
+                   "lpOutput->GetGameStateToNetworkInterface()", CGS_ARTIST_FILE, 1787);   // :1787
         lpOutputBuffer->GetGameStateToNetworkInterface()->SetPlayerInFreeburnChallenge(
             static_cast< ::EActiveRaceCarIndex>(liActiveRaceCarIndex),
             mabPlayerStartedChallenge[liActiveRaceCarIndex]);
@@ -2437,8 +2437,8 @@ void ChallengeManager::WriteDataToOutputForTarget(GameStateModuleIO::FreeburnCha
             break;
         }
 
-        CGS_ASSERT(liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
-                   CGS_ASSERT_MESSAGE_AT("liTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_FILE, 1956));   // :1956
+        CGS_ASSERT_AT(liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
+                   "liTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_FILE, 1956);   // :1956
         CGS_ASSERT(lpUpdateAction->miNumTargetsUsed < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
                    "lpOutEvent->miNumTargetsUsed < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE");   // :1957
         liOverallTargetRemaining = maiRemainingTarget[liActionIndex];
@@ -2487,9 +2487,9 @@ void ChallengeManager::WriteDataToOutputForTarget(GameStateModuleIO::FreeburnCha
         else
         {
             CGS_ASSERT(mpGameStateModule, "mpGameStateModule");   // :2001
-            CGS_ASSERT(mpGameStateModule->GetModeManager(), CGS_ASSERT_MESSAGE_AT("mpGameStateModule->GetModeManager()", CGS_ARTIST_FILE, 2002));   // :2002
+            CGS_ASSERT_AT(mpGameStateModule->GetModeManager(), "mpGameStateModule->GetModeManager()", CGS_ARTIST_FILE, 2002);   // :2002
             ScoringSystem* lpScoringSystem = mpGameStateModule->GetModeManager()->GetScoringSystem();
-            CGS_ASSERT(lpScoringSystem, CGS_ASSERT_MESSAGE_AT("lpScoringSystem", CGS_ARTIST_FILE, 2004));   // :2004
+            CGS_ASSERT_AT(lpScoringSystem, "lpScoringSystem", CGS_ARTIST_FILE, 2004);   // :2004
             if (lpScoringSystem->GetCarData(static_cast<EActiveRaceCarIndex>(liCar)))
             {
                 lpUpdateAction->maaeCompleted[lpUpdateAction->miNumTargetsUsed][liCar] =
@@ -2614,10 +2614,10 @@ void ChallengeManager::UpdateActionSuccess(const BrnResource::ChallengeListEntry
                                            TGameActionQueue* lpActionQueue,
                                            bool lbIsOnline)
 {
-    CGS_ASSERT(lpAction != 0, CGS_ASSERT_MESSAGE_AT("lpAction", CGS_ARTIST_FILE, 1130));   // X360 @ BrnChallengeManager.cpp:1130
-    CGS_ASSERT(leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+    CGS_ASSERT_AT(lpAction != 0, "lpAction", CGS_ARTIST_FILE, 1130);   // X360 @ BrnChallengeManager.cpp:1130
+    CGS_ASSERT_AT(leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                    leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )", CGS_ARTIST_FILE, 1131)); // :1131
+               "( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )", CGS_ARTIST_FILE, 1131); // :1131
 
     switch (lpAction->GetCoopType())   // X360 lbz +0x01(lpAction); jump table (cases 0-6)
     {
@@ -2787,7 +2787,7 @@ void ChallengeManager::UpdateActionSuccess(const BrnResource::ChallengeListEntry
         }
 
         default:
-            CGS_ASSERT(false, "Unknown action coop type to deal with\n");   // X360 @ :1300
+            CGS_FAIL("Unknown action coop type to deal with\n");   // X360 @ :1300
             break;
     }
 }
@@ -2848,9 +2848,9 @@ void ChallengeManager::PreWorldUpdate(
     bool                                                                         lbIsArbitrator,
     GameStateModuleIO::OutputBuffer*                                             lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 688));                                       // X360 line 0x2B0
-    CGS_ASSERT(lpOutputBuffer->GetGameActionQueue(), CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 689)); // X360 line 0x2B1
-    CGS_ASSERT(lpTimerStatusInterface, CGS_ASSERT_MESSAGE_AT("lpTimerStatusInterface", CGS_ARTIST_FILE, 692));                 // X360 line 0x2B4
+    CGS_ASSERT_AT(lpOutputBuffer, "lpOutput", CGS_ARTIST_FILE, 688);                                       // X360 line 0x2B0
+    CGS_ASSERT_AT(lpOutputBuffer->GetGameActionQueue(), "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 689); // X360 line 0x2B1
+    CGS_ASSERT_AT(lpTimerStatusInterface, "lpTimerStatusInterface", CGS_ARTIST_FILE, 692);                 // X360 line 0x2B4
 
     // Fixed frame step + the network-frame snapshot (X360 stw,+0xFFC).
     const f32 lfTimeStep = lpTimerStatusInterface->GetSimTimerStatus()->GetCurrentTimeStep(); // lfs +0x20 * lfs +0x1C
@@ -2939,14 +2939,14 @@ void ChallengeManager::UpdateRunning(
     {
         bool lbChallengeFailed = false;
 
-        CGS_ASSERT(mpCurrentChallenge, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 995));             // X360 line 0x3E3
+        CGS_ASSERT_AT(mpCurrentChallenge, "mpCurrentChallenge", CGS_ARTIST_FILE, 995);             // X360 line 0x3E3
 
         const ::EActiveRaceCarIndex lePlayerActiveRaceCarIndex =
             lpActiveRaceCarOutputInterface->GetPlayerActiveRaceCarIndex(); // inlined +10328 read + "index set" assert (h:980)
-        CGS_ASSERT(lePlayerActiveRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
-                   CGS_ASSERT_MESSAGE_AT("lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 999));      // X360 line 0x3E7
-        CGS_ASSERT(lePlayerActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 1000));   // X360 line 0x3E8
+        CGS_ASSERT_AT(lePlayerActiveRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
+                   "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 999);      // X360 line 0x3E7
+        CGS_ASSERT_AT(lePlayerActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 1000);   // X360 line 0x3E8
 
         if (!UpdateTimer(lfTimeStep))
         {
@@ -3027,15 +3027,15 @@ namespace BrnGameState
         (void)lfTimeStep;   // consumed by the (blocked) CheckCurrentLocation path only
 
         CGS_ASSERT(lpActiveRaceCarOutputInterface, "lpActiveRaceCarOutputInterface");
-        CGS_ASSERT(lpAction, CGS_ASSERT_MESSAGE_AT("lpAction", CGS_ARTIST_FILE, 3007));
-        CGS_ASSERT(liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
-                   CGS_ASSERT_MESSAGE_AT("liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_FILE, 3008));
+        CGS_ASSERT_AT(lpAction, "lpAction", CGS_ARTIST_FILE, 3007);
+        CGS_ASSERT_AT(liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
+                   "liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_FILE, 3008);
 
         EChallengeStatus leChallengeStatus = E_CHALLENGE_STATUS_ONGOING;
 
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState* lpRaceCarState =
             lpActiveRaceCarOutputInterface->GetPlayerRaceCarState();
-        CGS_ASSERT(lpRaceCarState, CGS_ASSERT_MESSAGE_AT("lpRaceCarState", CGS_ARTIST_FILE, 3015));
+        CGS_ASSERT_AT(lpRaceCarState, "lpRaceCarState", CGS_ARTIST_FILE, 3015);
 
         CGS_ASSERT(lpActiveRaceCarOutputInterface, "lpActiveRaceCarOutputInterface");
 
@@ -3445,7 +3445,7 @@ namespace BrnGameState
 
             default:
                 leChallengeStatus = E_CHALLENGE_STATUS_ONGOING;
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown challenge type.", CGS_ARTIST_FILE, 3749));
+                CGS_FAIL_AT("Unknown challenge type.", CGS_ARTIST_FILE, 3749);
                 break;
             }
         }
@@ -3596,7 +3596,7 @@ void ChallengeManager::TriggerFreeburnChallenge(CgsID lChallengeID, TGameActionQ
     }
 
     meChallengeManagerStatus = E_CHALLENGE_MANAGER_STATUS_RUNNING;   // stw 2, +0xE08
-    CGS_ASSERT(mpGameStateModule, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 2102));              // :2102
+    CGS_ASSERT_AT(mpGameStateModule, "mpGameStateModule", CGS_ARTIST_FILE, 2102);              // :2102
 
     // Every finalised remote slot's player joins the challenge. The X360 walks the slots by their
     // +0x100 id field (this+0x6C8, stride 0x108) and reads the mbFinalised byte right after it.
@@ -3619,10 +3619,10 @@ void ChallengeManager::TriggerFreeburnChallenge(CgsID lChallengeID, TGameActionQ
     }
 
     // Both bound asserts re-call the accessor (three calls in total in the asm).
-    CGS_ASSERT(mpGameStateModule->GetPlayerActiveRaceCarIndex() >= ::E_ACTIVE_RACE_CAR_INDEX_0,
-               CGS_ASSERT_MESSAGE_AT("mpGameStateModule->GetPlayerActiveRaceCarIndex() >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 2120));   // :2120
-    CGS_ASSERT(mpGameStateModule->GetPlayerActiveRaceCarIndex() < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("mpGameStateModule->GetPlayerActiveRaceCarIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 2121));  // :2121
+    CGS_ASSERT_AT(mpGameStateModule->GetPlayerActiveRaceCarIndex() >= ::E_ACTIVE_RACE_CAR_INDEX_0,
+               "mpGameStateModule->GetPlayerActiveRaceCarIndex() >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 2120);   // :2120
+    CGS_ASSERT_AT(mpGameStateModule->GetPlayerActiveRaceCarIndex() < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "mpGameStateModule->GetPlayerActiveRaceCarIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 2121);  // :2121
 
     mabPlayerStartedChallenge[mpGameStateModule->GetPlayerActiveRaceCarIndex()] = true;
 
@@ -3641,7 +3641,7 @@ void ChallengeManager::TriggerFreeburnChallenge(CgsID lChallengeID, TGameActionQ
                             GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE,
                             sizeof(GameStateModuleIO::FreeburnChallengeAction));
 
-    CGS_ASSERT(mpCurrentChallenge, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 2137));   // :2137
+    CGS_ASSERT_AT(mpCurrentChallenge, "mpCurrentChallenge", CGS_ARTIST_FILE, 2137);   // :2137
 
     // Leap-car tracking is only run when one of the challenge's actions is LEAP_CARS.
     // GetAction inlines its own index guards (ChallengeListEntry.h:941/942) and GetActionType
@@ -3651,7 +3651,7 @@ void ChallengeManager::TriggerFreeburnChallenge(CgsID lChallengeID, TGameActionQ
     {
         const BrnResource::ChallengeListEntryAction* lpAction =
             mpCurrentChallenge->GetAction(liActionIndex);
-        CGS_ASSERT(lpAction, CGS_ASSERT_MESSAGE_AT("lpAction", CGS_ARTIST_FILE, 2144));   // :2144
+        CGS_ASSERT_AT(lpAction, "lpAction", CGS_ARTIST_FILE, 2144);   // :2144
 
         if (lpAction->GetActionType() ==
             BrnResource::ChallengeListEntryAction::E_CHALLENGE_ACTION_LEAP_CARS)   // == 3
@@ -3693,7 +3693,7 @@ void ChallengeManager::UpdateResults(f32 lfTimeStep, TGameActionQueue* lpActionQ
     lAction.miNumChallengesComplete       = -1;
     lAction.miTotalNumChallenges          = -1;
 
-    CGS_ASSERT(lpActionQueue, CGS_ASSERT_MESSAGE_AT("lpActionQueue", CGS_ARTIST_FILE, 884));   // :884
+    CGS_ASSERT_AT(lpActionQueue, "lpActionQueue", CGS_ARTIST_FILE, 884);   // :884
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
                             GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE,
                             sizeof(GameStateModuleIO::FreeburnChallengeAction));
@@ -3771,18 +3771,18 @@ void ChallengeManager::EndChallenge(EChallengeStatus leChallengeStatus,
 {
     // X360 inlines IsChallengeActive() as `meChallengeManagerStatus != E_CHALLENGE_MANAGER_STATUS_NONE`
     // (lwz +0xE08; cmpwi 0) -- the assert text is the source expression.
-    CGS_ASSERT(IsChallengeActive(), CGS_ASSERT_MESSAGE_AT("IsChallengeActive()", CGS_ARTIST_FILE, 2239));   // :2239
-    CGS_ASSERT(lpActionQueue, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 2240));                    // :2240
+    CGS_ASSERT_AT(IsChallengeActive(), "IsChallengeActive()", CGS_ARTIST_FILE, 2239);   // :2239
+    CGS_ASSERT_AT(lpActionQueue, "lpOutput", CGS_ARTIST_FILE, 2240);                    // :2240
 
     const CgsID lActiveChallengeID = mpCurrentChallenge->GetChallengeID();   // lwz +0xE0C; ld +0xC0
-    CGS_ASSERT(lActiveChallengeID != 0, CGS_ASSERT_MESSAGE_AT("lActiveChallengeID != 0", CGS_ARTIST_FILE, 2246));          // :2246
+    CGS_ASSERT_AT(lActiveChallengeID != 0, "lActiveChallengeID != 0", CGS_ARTIST_FILE, 2246);          // :2246
 
     meLocalChallengeStatus = leChallengeStatus;   // stw +0xE30
 
     if (leChallengeStatus == E_CHALLENGE_STATUS_SUCCESS)   // X360 folds `status - 1 == 0` into a bool
     {
-        CGS_ASSERT(mpCurrentChallenge, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 2258));   // :2258
-        CGS_ASSERT(mpProgression, CGS_ASSERT_MESSAGE_AT("mpProgression", CGS_ARTIST_FILE, 2259));             // :2259
+        CGS_ASSERT_AT(mpCurrentChallenge, "mpCurrentChallenge", CGS_ARTIST_FILE, 2258);   // :2258
+        CGS_ASSERT_AT(mpProgression, "mpProgression", CGS_ARTIST_FILE, 2259);             // :2259
 
         // First completion only: bank it in the profile, tell the achievement manager the new
         // completed-challenge count and re-scan the online unlocks.
@@ -3805,7 +3805,7 @@ void ChallengeManager::EndChallenge(EChallengeStatus leChallengeStatus,
         }
         else
         {
-            CGS_ASSERT(liChallengeIndex >= 0, CGS_ASSERT_MESSAGE_AT("liChallengeIndex >= 0", CGS_ARTIST_FILE, 2268));   // :2268
+            CGS_ASSERT_AT(liChallengeIndex >= 0, "liChallengeIndex >= 0", CGS_ARTIST_FILE, 2268);   // :2268
         }
 
         // X360 posts a single ZEROED byte under the RAW action id 55. No committed
@@ -3917,7 +3917,7 @@ void ChallengeManager::UpdateArbitration(
 
         miCurrentChallengeAction = miCurrentArbitrationIndex;   // stw +0xE10 (before the post)
 
-        CGS_ASSERT(lpActionQueue, CGS_ASSERT_MESSAGE_AT("lpActionQueue", CGS_ARTIST_FILE, 1349));   // :1349
+        CGS_ASSERT_AT(lpActionQueue, "lpActionQueue", CGS_ARTIST_FILE, 1349);   // :1349
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResetAction),
                                 GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE,
                                 sizeof(GameStateModuleIO::FreeburnChallengeAction));   // li r5,0x99; li r6,0x20
@@ -4027,8 +4027,8 @@ void ChallengeManager::UpdateArbitration(
 
             case BrnResource::ChallengeListEntryAction::E_CHALLENGE_COOP_TYPE_CUMULATIVE:   // 4
             {
-                CGS_ASSERT(liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
-                           CGS_ASSERT_MESSAGE_AT("liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_FILE, 3008));   // :1449
+                CGS_ASSERT_AT(liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
+                           "liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_FILE, 3008);   // :1449
 
                 // Fold this frame's per-player scores into the cumulative total and clear them.
                 for (::EActiveRaceCarIndex lePlayer = ::E_ACTIVE_RACE_CAR_INDEX_0;
@@ -4153,10 +4153,10 @@ void ChallengeManager::UpdateArbitration(
 // Register map (asm prologue): r3 this, r4 liActionIndex, r5 lpActionQueue.
 bool ChallengeManager::UpdateArbitrationSuccess(s32 liActionIndex, TGameActionQueue* lpActionQueue)
 {
-    CGS_ASSERT(mpCurrentChallenge, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 1595));   // :1595
+    CGS_ASSERT_AT(mpCurrentChallenge, "mpCurrentChallenge", CGS_ARTIST_FILE, 1595);   // :1595
 
     const BrnResource::ChallengeListEntryAction* lpAction = mpCurrentChallenge->GetAction(liActionIndex);
-    CGS_ASSERT(lpAction, CGS_ASSERT_MESSAGE_AT("lpAction", CGS_ARTIST_FILE, 1597));   // :1597
+    CGS_ASSERT_AT(lpAction, "lpAction", CGS_ARTIST_FILE, 1597);   // :1597
 
     mabIndividualActionsSuccessUpdateSent[liActionIndex] = true;   // stb 1, +0xFDA
 
@@ -4218,7 +4218,7 @@ bool ChallengeManager::UpdateArbitrationSuccess(s32 liActionIndex, TGameActionQu
         lSuccessAction.mbIsHost                      = true;                         // stb 1, sp+var_84
         lSuccessAction.mbAbortingToStartNewChallenge = false;                        // stb 0, sp+var_83
 
-        CGS_ASSERT(lpActionQueue, CGS_ASSERT_MESSAGE_AT("lpActionQueue", CGS_ARTIST_FILE, 1670));   // :1670
+        CGS_ASSERT_AT(lpActionQueue, "lpActionQueue", CGS_ARTIST_FILE, 1670);   // :1670
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSuccessAction),
                                 GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE,
                                 sizeof(GameStateModuleIO::FreeburnChallengeAction));   // li r5,0x99; li r6,0x20
@@ -4296,7 +4296,7 @@ void ChallengeManager::NetworkPlayerFinalised(BrnNetwork::NetworkPlayerID lPlaye
             break;
         }
     }
-    CGS_ASSERT(lpEntry != 0, CGS_ASSERT_MESSAGE_AT("lpEntry", CGS_ARTIST_FILE, 4958));   // X360 :4958 -- non-gating
+    CGS_ASSERT_AT(lpEntry != 0, "lpEntry", CGS_ARTIST_FILE, 4958);   // X360 :4958 -- non-gating
 
     lpEntry->mbFinalised = true;           // X360 stb 1, 0x104(r30)
 
@@ -4309,7 +4309,7 @@ void ChallengeManager::NetworkPlayerFinalised(BrnNetwork::NetworkPlayerID lPlaye
     std::memcpy(&lStatusAction.mCompletedChallenges, &mLocalChallengeCompletionData, 256);
     lStatusAction.mPlayerID = lPlayerID;    // X360 stw r29, sp+0x180 (action+0x100)
 
-    CGS_ASSERT(lpActionQueue != 0, CGS_ASSERT_MESSAGE_AT("lpActionQueue", CGS_ARTIST_FILE, 4964));   // X360 :4964
+    CGS_ASSERT_AT(lpActionQueue != 0, "lpActionQueue", CGS_ARTIST_FILE, 4964);   // X360 :4964
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStatusAction),
                             GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_COMPLETION_STATUS,
                             sizeof(GameStateModuleIO::FburnChallengeStatusAction));   // X360 li r5,0x9C; li r6,0x108
@@ -4321,7 +4321,7 @@ void ChallengeManager::NetworkPlayerFinalised(BrnNetwork::NetworkPlayerID lPlaye
                                         meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RESULTS;
         if (lbChallengeRunning)
         {
-            CGS_ASSERT(mpCurrentChallenge != 0, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 4974));   // X360 :4974
+            CGS_ASSERT_AT(mpCurrentChallenge != 0, "mpCurrentChallenge", CGS_ARTIST_FILE, 4974);   // X360 :4974
 
             GameStateModuleIO::ActiveFburnChallengeAction lActiveChallengeAction;
             lActiveChallengeAction.mChallengeID            = mpCurrentChallenge->GetChallengeID(); // X360 ld +0xC0
@@ -4334,9 +4334,9 @@ void ChallengeManager::NetworkPlayerFinalised(BrnNetwork::NetworkPlayerID lPlaye
             {
                 if (mabPlayerStartedChallenge[leActiveRaceCarIndex])   // X360 lbzx r11, r26(this+0x598), r30
                 {
-                    CGS_ASSERT(lActiveChallengeAction.miNumPlayersInChallenge <
+                    CGS_ASSERT_AT(lActiveChallengeAction.miNumPlayersInChallenge <
                                    GameStateModuleIO::ActiveFburnChallengeAction::KI_MAX_NETWORK_PLAYERS,
-                               CGS_ASSERT_MESSAGE_AT("lActiveChallengeAction.miNumPlayersInChallenge < KI_MAX_NETWORK_PLAYERS", CGS_ARTIST_FILE, 4983));   // X360 :4983 -- non-gating
+                               "lActiveChallengeAction.miNumPlayersInChallenge < KI_MAX_NETWORK_PLAYERS", CGS_ARTIST_FILE, 4983);   // X360 :4983 -- non-gating
                     lActiveChallengeAction.maePlayersInChallengeARCI[
                         lActiveChallengeAction.miNumPlayersInChallenge] = leActiveRaceCarIndex;   // X360 stwx r30, count*4, sp+0x58
                     ++lActiveChallengeAction.miNumPlayersInChallenge;   // X360 lwz sp+0x78; addi 1; stw back
@@ -4381,7 +4381,7 @@ void ChallengeManager::NetworkPlayerRemoved(BrnNetwork::NetworkPlayerID lPlayerI
 
     if (meChallengeManagerStatus != E_CHALLENGE_MANAGER_STATUS_NONE)   // X360 lwz +0xE08; cmpwi 0; beq -> return
     {
-        CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 5026));   // X360 :5026
+        CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 5026);   // X360 :5026
 
         const EActiveRaceCarIndex leActiveRaceCarIndex = mpGameStateModule->GetActiveRaceCarIndex(lPlayerID);
         if (leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&   // X360 cmpwi r3,-1; beq -> return
@@ -4419,14 +4419,14 @@ void ChallengeManager::SetRemotePlayersChallengeCompleted(s32 liChallengeIndex)
     {
         if (maChallengeCompletionData[liSlot].mNetworkPlayerID != -1)   // X360 lwz +0x100; cmpwi -1; beq next
         {
-            CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 2436));   // X360 :2436
+            CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 2436);   // X360 :2436
 
             const EActiveRaceCarIndex leActiveRaceCarIndex =
                 mpGameStateModule->GetActiveRaceCarIndex(maChallengeCompletionData[liSlot].mNetworkPlayerID);
-            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                       CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 2438));        // X360 :2438 -- non-gating
-            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 2439));     // X360 :2439 -- non-gating
+            CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                       "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 2438);        // X360 :2438 -- non-gating
+            CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 2439);     // X360 :2439 -- non-gating
 
             if (mabPlayerStartedChallenge[leActiveRaceCarIndex])   // X360 lbz 0x598(r31+this)
             {
@@ -4495,11 +4495,11 @@ void ChallengeManager::OutputFreeburnChallengeEveryPlayerStatusEvent(TGameAction
         }
     }
 
-    CGS_ASSERT(lpActionQueue != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpActionQueue",
+    CGS_ASSERT_AT(lpActionQueue != 0,
+        "lpActionQueue",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../GameState/ModeManager/ChallengeManager/BrnChallengeManager.cpp", 5113 /* ARTIST 0x823480EC */));   // BrnChallengeManager.cpp:5113
+            "../GameState/ModeManager/ChallengeManager/BrnChallengeManager.cpp", 5113 /* ARTIST 0x823480EC */);   // BrnChallengeManager.cpp:5113
+
 
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStatusData),
                             GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_EVERY_PLAYER_COMPLETION_STATUS,
@@ -4533,15 +4533,15 @@ bool ChallengeManager::CheckCurrentCar(
         return true;
     }
 
-    CGS_ASSERT(mpVehicleList != 0, CGS_ASSERT_MESSAGE_AT("mpVehicleList != NULL", CGS_ARTIST_FILE, 2678));   // BrnChallengeManager.cpp:2678
+    CGS_ASSERT_AT(mpVehicleList != 0, "mpVehicleList != NULL", CGS_ARTIST_FILE, 2678);   // BrnChallengeManager.cpp:2678
 
     const s32 liModelIndex = mpVehicleList->GetVehicleIndex(
         lpActiveRaceCarOutputInterface->GetCarModelId(
             lpActiveRaceCarOutputInterface->GetPlayerActiveRaceCarIndex()));
-    CGS_ASSERT(liModelIndex >= 0, CGS_ASSERT_MESSAGE_AT("liModelIndex >= 0", CGS_ARTIST_FILE, 2681));   // :2681
+    CGS_ASSERT_AT(liModelIndex >= 0, "liModelIndex >= 0", CGS_ARTIST_FILE, 2681);   // :2681
 
     const BrnResource::VehicleListEntry* lpListEntry = mpVehicleList->GetVehicleData(liModelIndex);
-    CGS_ASSERT(lpListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpListEntry != NULL", CGS_ARTIST_FILE, 2685));   // :2685
+    CGS_ASSERT_AT(lpListEntry != 0, "lpListEntry != NULL", CGS_ARTIST_FILE, 2685);   // :2685
 
     // VehicleListEntry::GetCarType() is the raw +0xE8 boost-class byte
     // (0 == DANGER, 1 == AGGRESSION, 2 == STUNTS); the challenge restriction enum is 1-based.
@@ -4719,8 +4719,8 @@ static const s32 KI_LEAPT_CAR_POOL_CAPACITY = 7;
 // Register map (asm prologue): r3 this, r4 lpPoint (r19), r5 lTriggerID (r20, 64-bit CgsID).
 bool ChallengeManager::IsPointInTriggerRegion(const Vector3* lpPoint, CgsID lTriggerID)
 {
-    CGS_ASSERT(lpPoint, CGS_ASSERT_MESSAGE_AT("lpPosition", CGS_ARTIST_FILE, 2594));                                   // X360 line 2594
-    CGS_ASSERT(mpTriggerQueryManager, CGS_ASSERT_MESSAGE_AT("mpTriggerQueryManager", CGS_ARTIST_FILE, 2595));          // X360 line 2595
+    CGS_ASSERT_AT(lpPoint, "lpPosition", CGS_ARTIST_FILE, 2594);                                   // X360 line 2594
+    CGS_ASSERT_AT(mpTriggerQueryManager, "mpTriggerQueryManager", CGS_ARTIST_FILE, 2595);          // X360 line 2595
 
     // Linear scan of the armed trigger set. The X360 re-reads the live count through the
     // accessor on every iteration (the CgsArray "Array used before Construct/Clear was called"
@@ -4813,17 +4813,17 @@ bool ChallengeManager::CheckCurrentLocation(
     const BrnResource::ChallengeListEntryAction*                                 lpAction,
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface)
 {
-    CGS_ASSERT(lpAction, CGS_ASSERT_MESSAGE_AT("lpAction", CGS_ARTIST_FILE, 2723));                                             // X360 line 2723
-    CGS_ASSERT(mpRoadRulesManager, CGS_ASSERT_MESSAGE_AT("mpRoadRulesManager", CGS_ARTIST_FILE, 2724));                         // X360 line 2724
-    CGS_ASSERT(lpActiveRaceCarOutputInterface, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarOutputInterface", CGS_ARTIST_FILE, 2725)); // X360 line 2725
+    CGS_ASSERT_AT(lpAction, "lpAction", CGS_ARTIST_FILE, 2723);                                             // X360 line 2723
+    CGS_ASSERT_AT(mpRoadRulesManager, "mpRoadRulesManager", CGS_ARTIST_FILE, 2724);                         // X360 line 2724
+    CGS_ASSERT_AT(lpActiveRaceCarOutputInterface, "lpActiveRaceCarOutputInterface", CGS_ARTIST_FILE, 2725); // X360 line 2725
 
     // sub_82310240 == the committed GetPlayerRaceCarState() (it carries its own player-index asserts).
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState* lpRaceCarState =
         lpActiveRaceCarOutputInterface->GetPlayerRaceCarState();
-    CGS_ASSERT(lpRaceCarState, CGS_ASSERT_MESSAGE_AT("lpRaceCarState", CGS_ARTIST_FILE, 2729));                                 // X360 line 2729
+    CGS_ASSERT_AT(lpRaceCarState, "lpRaceCarState", CGS_ARTIST_FILE, 2729);                                 // X360 line 2729
 
     const CgsWorld::WorldMap2D* lpWorldMap = lpActiveRaceCarOutputInterface->GetWorldMap2D();
-    CGS_ASSERT(lpWorldMap, CGS_ASSERT_MESSAGE_AT("lpWorldMap", CGS_ARTIST_FILE, 2733));                                         // X360 line 2733
+    CGS_ASSERT_AT(lpWorldMap, "lpWorldMap", CGS_ARTIST_FILE, 2733);                                         // X360 line 2733
 
     // `lvx v0, r0, (state+544)` + `stvx v0` into the stack local == the by-value copy of the
     // transform's translation row. The local is address-taken by the TRIGGER case below.
@@ -4929,7 +4929,7 @@ void ChallengeManager::UpdateLeaptCars(
 
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState* lpPlayerRaceCarState =
         lpActiveRaceCarOutputInterface->GetPlayerRaceCarState();
-    CGS_ASSERT(lpPlayerRaceCarState, CGS_ASSERT_MESSAGE_AT("lpPlayerRaceCarState", CGS_ARTIST_FILE, 3903));                       // X360 line 3903
+    CGS_ASSERT_AT(lpPlayerRaceCarState, "lpPlayerRaceCarState", CGS_ARTIST_FILE, 3903);                       // X360 line 3903
 
     // ---------------- phase 1: off-gas wind-down ----------------
     if (lpPlayerRaceCarState->mfGas <= 0.0f)                                        // lfs +0x404
@@ -5356,7 +5356,7 @@ void ChallengeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventTyp
             const GameStateModuleIO::BoostTimeCompleteEvent* lpBoostTimeComplete =
                 reinterpret_cast<const GameStateModuleIO::BoostTimeCompleteEvent*>(lpEvent);
 
-            CGS_ASSERT(lpBoostTimeComplete, CGS_ASSERT_MESSAGE_AT("lpBoostTimeComplete", CGS_ARTIST_FILE, 5816));   // BrnChallengeManager.cpp:5816
+            CGS_ASSERT_AT(lpBoostTimeComplete, "lpBoostTimeComplete", CGS_ARTIST_FILE, 5816);   // BrnChallengeManager.cpp:5816
 
             SetCurrentSkillScore(E_FREEBURN_SKILL_BOOST_TIME, lpBoostTimeComplete->mfTimeSpentBoosting, true);
             break;
@@ -5368,7 +5368,7 @@ void ChallengeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventTyp
             const GameStateModuleIO::NearMissEvent* lpNearMissEvent =
                 reinterpret_cast<const GameStateModuleIO::NearMissEvent*>(lpEvent);
 
-            CGS_ASSERT(lpNearMissEvent, CGS_ASSERT_MESSAGE_AT("lpNearMissEvent", CGS_ARTIST_FILE, 5443));           // :5443
+            CGS_ASSERT_AT(lpNearMissEvent, "lpNearMissEvent", CGS_ARTIST_FILE, 5443);           // :5443
 
             SetCurrentSkillScore(E_FREEBURN_SKILL_NEAR_MISS,
                                  static_cast<f32>(lpNearMissEvent->miCount), false);
@@ -5381,7 +5381,7 @@ void ChallengeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventTyp
             const GameStateModuleIO::NearMissChainCompleteEvent* lpNearMissCompleteEvent =
                 reinterpret_cast<const GameStateModuleIO::NearMissChainCompleteEvent*>(lpEvent);
 
-            CGS_ASSERT(lpNearMissCompleteEvent, CGS_ASSERT_MESSAGE_AT("lpNearMissCompleteEvent", CGS_ARTIST_FILE, 5454));   // :5454
+            CGS_ASSERT_AT(lpNearMissCompleteEvent, "lpNearMissCompleteEvent", CGS_ARTIST_FILE, 5454);   // :5454
 
             SetCurrentSkillScore(E_FREEBURN_SKILL_NEAR_MISS,
                                  static_cast<f32>(lpNearMissCompleteEvent->miCount), true);
@@ -5394,7 +5394,7 @@ void ChallengeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventTyp
             const GameStateModuleIO::DriftingEvent* lpDriftEvent =
                 reinterpret_cast<const GameStateModuleIO::DriftingEvent*>(lpEvent);
 
-            CGS_ASSERT(lpDriftEvent, CGS_ASSERT_MESSAGE_AT("lpDriftEvent", CGS_ARTIST_FILE, 5432));                 // :5432
+            CGS_ASSERT_AT(lpDriftEvent, "lpDriftEvent", CGS_ARTIST_FILE, 5432);                 // :5432
 
             SetCurrentSkillScore(E_FREEBURN_SKILL_DRIFT, lpDriftEvent->mfDistance, false);
             break;
@@ -5426,7 +5426,7 @@ void ChallengeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventTyp
             const GameStateModuleIO::CompletedStuntEvent* lpCompletedStuntEvent =
                 reinterpret_cast<const GameStateModuleIO::CompletedStuntEvent*>(lpEvent);
 
-            CGS_ASSERT(lpCompletedStuntEvent, CGS_ASSERT_MESSAGE_AT("lpCompletedStuntEvent", CGS_ARTIST_FILE, 5635));   // :5635
+            CGS_ASSERT_AT(lpCompletedStuntEvent, "lpCompletedStuntEvent", CGS_ARTIST_FILE, 5635);   // :5635
 
             // Drift: either of the two drift bits scores the completed drift distance.
             if ((lpCompletedStuntEvent->muStuntActionComplete & 0x40) == 0x40 ||
@@ -5532,7 +5532,7 @@ void ChallengeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventTyp
             const GameStateModuleIO::InProgressStuntEvent* lpInProgressStuntEvent =
                 reinterpret_cast<const GameStateModuleIO::InProgressStuntEvent*>(lpEvent);
 
-            CGS_ASSERT(lpInProgressStuntEvent, CGS_ASSERT_MESSAGE_AT("lpInProgressStuntEvent", CGS_ARTIST_FILE, 5466));   // :5466
+            CGS_ASSERT_AT(lpInProgressStuntEvent, "lpInProgressStuntEvent", CGS_ARTIST_FILE, 5466);   // :5466
 
             if ((lpInProgressStuntEvent->muStuntActionInProgress & 1) == 1)
             {
@@ -5694,7 +5694,7 @@ void ChallengeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventTyp
             const GameStateModuleIO::FreeburnChallengeActionSuccessEvent* lpActionSuccessEvent =
                 reinterpret_cast<const GameStateModuleIO::FreeburnChallengeActionSuccessEvent*>(lpEvent);
 
-            CGS_ASSERT(lpActionSuccessEvent, CGS_ASSERT_MESSAGE_AT("lpActionSuccessEvent", CGS_ARTIST_FILE, 5299));   // :5299
+            CGS_ASSERT_AT(lpActionSuccessEvent, "lpActionSuccessEvent", CGS_ARTIST_FILE, 5299);   // :5299
 
             if (meChallengeManagerStatus != E_CHALLENGE_MANAGER_STATUS_RUNNING)
             {
@@ -5706,12 +5706,12 @@ void ChallengeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventTyp
                 break;
             }
 
-            CGS_ASSERT(lpActionSuccessEvent->miActionIndex < mpCurrentChallenge->GetNumActions(),
-                       CGS_ASSERT_MESSAGE_AT("lpActionSuccessEvent->miActionIndex < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 5309));   // :5309
+            CGS_ASSERT_AT(lpActionSuccessEvent->miActionIndex < mpCurrentChallenge->GetNumActions(),
+                       "lpActionSuccessEvent->miActionIndex < mpCurrentChallenge->GetNumActions()", CGS_ARTIST_FILE, 5309);   // :5309
 
             const BrnResource::ChallengeListEntryAction* lpAction =
                 mpCurrentChallenge->GetAction(lpActionSuccessEvent->miActionIndex);
-            CGS_ASSERT(lpAction, CGS_ASSERT_MESSAGE_AT("lpAction", CGS_ARTIST_FILE, 5311));   // :5311
+            CGS_ASSERT_AT(lpAction, "lpAction", CGS_ARTIST_FILE, 5311);   // :5311
 
             if (lpAction->GetCombineAction() != BrnResource::ChallengeListEntryAction::E_COMBINE_ACTION_COUNT)
             {
@@ -5803,16 +5803,16 @@ void ChallengeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventTyp
             const GameStateModuleIO::ActiveFburnChallengeEvent* lpActiveChallengeEvent =
                 reinterpret_cast<const GameStateModuleIO::ActiveFburnChallengeEvent*>(lpEvent);
 
-            CGS_ASSERT(lpActiveChallengeEvent, CGS_ASSERT_MESSAGE_AT("lpActiveChallengeEvent", CGS_ARTIST_FILE, 5788));   // :5788
+            CGS_ASSERT_AT(lpActiveChallengeEvent, "lpActiveChallengeEvent", CGS_ARTIST_FILE, 5788);   // :5788
 
             if (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_NONE)
             {
                 for (s32 liIndex = 0; liIndex < lpActiveChallengeEvent->miNumPlayersInChallenge; ++liIndex)
                 {
-                    CGS_ASSERT(lpActiveChallengeEvent->maePlayersInChallengeARCI[liIndex] >= ::E_ACTIVE_RACE_CAR_INDEX_0,
-                               CGS_ASSERT_MESSAGE_AT("lpActiveChallengeEvent->maePlayersInChallengeARCI[liIndex] >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5798));   // :5798
-                    CGS_ASSERT(lpActiveChallengeEvent->maePlayersInChallengeARCI[liIndex] < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                               CGS_ASSERT_MESSAGE_AT("lpActiveChallengeEvent->maePlayersInChallengeARCI[liIndex] < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5799));   // :5799
+                    CGS_ASSERT_AT(lpActiveChallengeEvent->maePlayersInChallengeARCI[liIndex] >= ::E_ACTIVE_RACE_CAR_INDEX_0,
+                               "lpActiveChallengeEvent->maePlayersInChallengeARCI[liIndex] >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 5798);   // :5798
+                    CGS_ASSERT_AT(lpActiveChallengeEvent->maePlayersInChallengeARCI[liIndex] < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                               "lpActiveChallengeEvent->maePlayersInChallengeARCI[liIndex] < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 5799);   // :5799
 
                     mabPlayerStartedChallenge[lpActiveChallengeEvent->maePlayersInChallengeARCI[liIndex]] = true;
                 }
@@ -5843,9 +5843,9 @@ void ChallengeManager::UpdateChallenge(f32 lfTimeStep, s32 liFramesSinceNetworkS
                                        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface,
                                        TGameActionQueue* lpActionQueue, bool lbIsOnline)
 {
-    CGS_ASSERT(mpCurrentChallenge, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 4255));                       // :4255
-    CGS_ASSERT(miCurrentArbitrationIndex <= miCurrentChallengeAction,
-               CGS_ASSERT_MESSAGE_AT("miCurrentArbitrationIndex <= miCurrentChallengeAction", CGS_ARTIST_FILE, 4256));        // :4256
+    CGS_ASSERT_AT(mpCurrentChallenge, "mpCurrentChallenge", CGS_ARTIST_FILE, 4255);                       // :4255
+    CGS_ASSERT_AT(miCurrentArbitrationIndex <= miCurrentChallengeAction,
+               "miCurrentArbitrationIndex <= miCurrentChallengeAction", CGS_ARTIST_FILE, 4256);        // :4256
 
     // The per-frame success broadcast is built up across the action loop and posted at the
     // tail; only the flags are cleared here (the scores are memcpy'd in just before the post).

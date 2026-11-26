@@ -103,7 +103,7 @@ namespace BrnDirector
             {
                 CGS_ASSERT(lpcName != 0, "lpcName != NULL");
                 CGS_ASSERT(lpfVariableToTweak != 0, "lpfVariableToTweak != NULL");
-                CGS_ASSERT(leAxisToMapTo < E_AXIS_COUNT, CGS_ASSERT_MESSAGE_AT("leAxisToMapTo < E_AXIS_COUNT", CGS_ARTIST_FILE, 172));
+                CGS_ASSERT_AT(leAxisToMapTo < E_AXIS_COUNT, "leAxisToMapTo < E_AXIS_COUNT", CGS_ARTIST_FILE, 172);
                 CGS_ASSERT(leMap < E_MAP_COUNT, "leMap < E_MAP_COUNT");
 
                 AxisMapping& lrMapping = maAxisMapping[leMap][leAxisToMapTo];
@@ -121,21 +121,21 @@ namespace BrnDirector
             void Tweaker::AddMapping(const char* lpcName, f32* lpfVariableToTweak, f32* lpfScale,
                                      EAxis leAxisToMapTo, EMap leMap)
             {
-                CGS_ASSERT(lpcName != 0,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "lpcName != NULL", CGS_ARTIST_FILE, 169 /* ARTIST 0x821F861C */));
-                CGS_ASSERT(lpfVariableToTweak != 0,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "lpfVariableToTweak != NULL", CGS_ARTIST_FILE, 170 /* ARTIST 0x821F8640 */));
-                CGS_ASSERT(lpfScale != 0,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "lpfScale != NULL", CGS_ARTIST_FILE, 171 /* ARTIST 0x821F8664 */));
-                CGS_ASSERT(leAxisToMapTo < E_AXIS_COUNT,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "leAxisToMapTo < E_AXIS_COUNT", CGS_ARTIST_FILE, 172 /* ARTIST 0x821F8688 */));
-                CGS_ASSERT(leMap < E_MAP_COUNT,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "leMap < E_MAP_COUNT", CGS_ARTIST_FILE, 173 /* ARTIST 0x821F86AC */));
+                CGS_ASSERT_AT(lpcName != 0,
+                    "lpcName != NULL", CGS_ARTIST_FILE, 169 /* ARTIST 0x821F861C */);
+
+                CGS_ASSERT_AT(lpfVariableToTweak != 0,
+                    "lpfVariableToTweak != NULL", CGS_ARTIST_FILE, 170 /* ARTIST 0x821F8640 */);
+
+                CGS_ASSERT_AT(lpfScale != 0,
+                    "lpfScale != NULL", CGS_ARTIST_FILE, 171 /* ARTIST 0x821F8664 */);
+
+                CGS_ASSERT_AT(leAxisToMapTo < E_AXIS_COUNT,
+                    "leAxisToMapTo < E_AXIS_COUNT", CGS_ARTIST_FILE, 172 /* ARTIST 0x821F8688 */);
+
+                CGS_ASSERT_AT(leMap < E_MAP_COUNT,
+                    "leMap < E_MAP_COUNT", CGS_ARTIST_FILE, 173 /* ARTIST 0x821F86AC */);
+
 
                 AxisMapping& lrMapping = maAxisMapping[leMap][leAxisToMapTo];
                 lrMapping.mfScale            = 0.0f;
@@ -152,7 +152,7 @@ namespace BrnDirector
                                                 EMap leMap)
             {
                 CGS_ASSERT(lpcName != 0, "lpcName != NULL");
-                CGS_ASSERT(lpFunction != 0, CGS_ASSERT_MESSAGE_AT("lpFunction != NULL", CGS_ARTIST_FILE, 195));
+                CGS_ASSERT_AT(lpFunction != 0, "lpFunction != NULL", CGS_ARTIST_FILE, 195);
                 CGS_ASSERT(leControl < DebugController::E_CONTROL_COUNT, "leControl < E_CONTROL_COUNT");
                 CGS_ASSERT(leMap < E_MAP_COUNT, "leMap < E_MAP_COUNT");
 
@@ -250,7 +250,7 @@ namespace BrnDirector
                              - lrInfo.mafControlValue[DebugController::E_CONTROL_LEFT_BUTTON];
 
                     default:
-                        CGS_ASSERT(false,
+                        CGS_FAIL(
                                    "BrnDirector::Camera::Utils::Tweaker::GetAxisValue : unhandled axis");
                         break;
                 }

@@ -92,8 +92,8 @@ namespace Playback
         void* GetData()
         {
             void* lpvData = const_cast<void*>(mpResource->GetData());
-            CGS_ASSERT(lpvData, CGS_ASSERT_MESSAGE_AT("lpvData",
-                "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsContentLoader.h", 165));
+            CGS_ASSERT_AT(lpvData, "lpvData",
+                "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsContentLoader.h", 165);
             return lpvData;
         }
 

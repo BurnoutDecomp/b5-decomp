@@ -218,7 +218,7 @@ bool StreamingStateManager::Prepare()
         case 16: lpacBundle = "sound\\streams\\StreamHeaders_JP.bundle"; break;
         case 22: lpacBundle = "sound\\streams\\StreamHeaders_ES.bundle"; break;
         default:
-            CGS_ASSERT(false, "Unhandled Language when loading Sound Stream Headers.");
+            CGS_FAIL("Unhandled Language when loading Sound Stream Headers.");
             lpacBundle = "sound\\streams\\StreamHeaders.bundle";
             break;
         }
@@ -298,10 +298,10 @@ bool StreamingStateManager::Release()
 // ---------------------------------------------------------------------------
 void StreamingStateManager::PostStreamRequest( const StreamRequest& lStreamRequest )
 {
-    CGS_ASSERT( muPlayRequestCount < E_MAX_STREAM_REQUESTS,
-        CGS_ASSERT_MESSAGE_AT(
-            "muPlayRequestCount < E_MAX_STREAM_REQUESTS",
-            KAC_ARTIST_ASSERT_FILE, 257 /* ARTIST 0x82683520 */));
+    CGS_ASSERT_AT( muPlayRequestCount < E_MAX_STREAM_REQUESTS,
+        "muPlayRequestCount < E_MAX_STREAM_REQUESTS",
+            KAC_ARTIST_ASSERT_FILE, 257 /* ARTIST 0x82683520 */);
+
 
     maPlayRequests[muPlayRequestCount] = lStreamRequest;
 
@@ -328,10 +328,10 @@ void StreamingStateManager::PostStreamRequest( const StreamRequest& lStreamReque
 // ---------------------------------------------------------------------------
 void StreamingStateManager::PostStreamRequestInternal( const StreamRequest& arRequest )
 {
-    CGS_ASSERT( muPlayRequestCount < E_MAX_STREAM_REQUESTS,
-        CGS_ASSERT_MESSAGE_AT(
-            "muPlayRequestCount < E_MAX_STREAM_REQUESTS",
-            KAC_ARTIST_ASSERT_FILE, 307 /* ARTIST 0x826836D8 */));
+    CGS_ASSERT_AT( muPlayRequestCount < E_MAX_STREAM_REQUESTS,
+        "muPlayRequestCount < E_MAX_STREAM_REQUESTS",
+            KAC_ARTIST_ASSERT_FILE, 307 /* ARTIST 0x826836D8 */);
+
 
     maPlayRequests[muPlayRequestCount] = arRequest;
     ++muPlayRequestCount;
@@ -351,10 +351,10 @@ void StreamingStateManager::PostStreamRequestInternal( const StreamRequest& arRe
 // ---------------------------------------------------------------------------
 void StreamingStateManager::RePostStreamRequest( const StreamRequest& request )
 {
-    CGS_ASSERT( muNumRePostRequests < E_MAX_REQUEST_RE_POSTS,
-        CGS_ASSERT_MESSAGE_AT(
-            "muNumRePostRequests < E_MAX_REQUEST_RE_POSTS",
-            KAC_ARTIST_ASSERT_FILE, 349 /* ARTIST 0x82683780 */));
+    CGS_ASSERT_AT( muNumRePostRequests < E_MAX_REQUEST_RE_POSTS,
+        "muNumRePostRequests < E_MAX_REQUEST_RE_POSTS",
+            KAC_ARTIST_ASSERT_FILE, 349 /* ARTIST 0x82683780 */);
+
 
     maRePostRequests[muNumRePostRequests] = request;
     ++muNumRePostRequests;
@@ -401,7 +401,7 @@ void StreamingStateManager::CheckForDuplicates(u32 auSourceIndex) const
     {
         if (luIndex != auSourceIndex && !maPlayRequests[luIndex].mbDirty &&
             maPlayRequests[luIndex].mpAttachment == maPlayRequests[auSourceIndex].mpAttachment)
-            CGS_ASSERT(false, "[Stream] User made multiple requests");
+            CGS_FAIL("[Stream] User made multiple requests");
     }
 }
 

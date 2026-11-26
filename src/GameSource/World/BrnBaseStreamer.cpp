@@ -552,7 +552,7 @@ bool InternalBaseStreamer::UpdateLoading()
         }
 
     default:
-        CGS_ASSERT( false, "Invalid load stream stage" );
+        CGS_FAIL( "Invalid load stream stage" );
         return false;
     }
 }
@@ -640,7 +640,7 @@ bool InternalBaseStreamer::UpdateUnloading()
         return true;
 
     default:
-        CGS_ASSERT( false, "Invalid unload stream stage" );
+        CGS_FAIL( "Invalid unload stream stage" );
         return false;
     }
 }
@@ -674,7 +674,7 @@ void InternalBaseStreamer::Update()
         break;
 
     default:
-        CGS_ASSERT_AT( false, "Invalid stream mode" , CGS_ARTIST_UNITY_BRNBASESTREAMER_CPP_FILE, 472);
+        CGS_FAIL_AT( "Invalid stream mode" , CGS_ARTIST_UNITY_BRNBASESTREAMER_CPP_FILE, 472);
         break;
     }
 }
@@ -770,10 +770,10 @@ bool InternalBaseStreamer::IsAssetLoaded( CgsID lId, u64 luUserData ) const
 //   produce the bool (status == 3).
 bool InternalBaseStreamer::IsEntryReady( s32 liIndex ) const
 {
-    CGS_ASSERT( liIndex < miStreamListLength,
-        CGS_ASSERT_MESSAGE_AT(
-            "liIndex < miStreamListLength",
-            "..\\..\\..\\GameSource\\World/BrnBaseStreamer.h", 409 /* ARTIST 0x827B0288 */));
+    CGS_ASSERT_AT( liIndex < miStreamListLength,
+        "liIndex < miStreamListLength",
+            "..\\..\\..\\GameSource\\World/BrnBaseStreamer.h", 409 /* ARTIST 0x827B0288 */);
+
     return mpCurrentEntryList[liIndex].meStatus == StreamerCurrentEntry::E_STATUS_READY;
 }
 

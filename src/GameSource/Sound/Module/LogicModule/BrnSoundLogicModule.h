@@ -297,10 +297,10 @@ public:
 // UpdateParams, ...). The assert names the member, a non-gating tripwire.
 inline Io::LogicInputBuffer* SoundLogicModule::GetBrnInputStructure()
 {
-    CGS_ASSERT(mpBrnLogicInputBuffer,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpBrnLogicInputBuffer",
-            "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnSoundLogicModule.h", 432 /* ARTIST 0x82682540 */));
+    CGS_ASSERT_AT(mpBrnLogicInputBuffer,
+        "mpBrnLogicInputBuffer",
+            "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnSoundLogicModule.h", 432 /* ARTIST 0x82682540 */);
+
     return mpBrnLogicInputBuffer;
 }
 

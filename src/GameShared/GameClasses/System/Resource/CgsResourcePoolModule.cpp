@@ -179,7 +179,7 @@ namespace CgsResource
             mePoolPrepareStage = E_POOLPREPARE_DONE;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Invalid prepare stage\n", CGS_ARTIST_POOL_MODULE_FILE, 247);
+            CGS_FAIL_AT("Invalid prepare stage\n", CGS_ARTIST_POOL_MODULE_FILE, 247);
             return false;
         }
     }
@@ -216,7 +216,7 @@ namespace CgsResource
             mePoolReleaseStage = E_POOLRELEASE_DONE;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Invalid release stage\n", CGS_ARTIST_POOL_MODULE_FILE, 315);
+            CGS_FAIL_AT("Invalid release stage\n", CGS_ARTIST_POOL_MODULE_FILE, 315);
             return false;
         }
     }

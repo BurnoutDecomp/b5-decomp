@@ -1495,7 +1495,7 @@ namespace Deformation
         // the sensor and a NaN point with a valid normal was dropped.)
         if (!IsValidVec3Lanes(lrPotentialContact.mNormal))
         {
-            CGS_ASSERT(false, "Invalid contact added to deformation. Ignoring...\n");
+            CGS_FAIL("Invalid contact added to deformation. Ignoring...\n");
             return;
         }
 
@@ -1505,7 +1505,7 @@ namespace Deformation
         const s32 liModelIndexA = FindModelIndexByGlobalEntityID(lEntityA);
         if (liModelIndexA == -1)
         {
-            CGS_ASSERT(false, "liModelIndexA != -1");
+            CGS_FAIL("liModelIndexA != -1");
             return;
         }
 

@@ -85,10 +85,10 @@ namespace CgsNetwork
     {
         const EComponents leOld = leEnumIndex;
         leEnumIndex = static_cast<EComponents>(leEnumIndex + 1);
-        CGS_ASSERT(leEnumIndex <= E_COMPONENTS_COUNT,
-            CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_COMPONENTS_COUNT",
+        CGS_ASSERT_AT(leEnumIndex <= E_COMPONENTS_COUNT,
+            "leEnumIndex <= E_COMPONENTS_COUNT",
                 "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\"
-                "DirtySock\\CgsServerInterfaceDirtySock.h", 99 /* ARTIST 0x8287617C */));
+                "DirtySock\\CgsServerInterfaceDirtySock.h", 99 /* ARTIST 0x8287617C */);
         return leOld;
     }
 
@@ -355,11 +355,11 @@ namespace CgsNetwork
         // inlines; the const twin serves the const status / error queries).
         ServerInterfaceComponent* GetComponent(EComponents leComponent)
         {
-            CGS_ASSERT(leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT,
-                CGS_ASSERT_MESSAGE_AT(
-                    "leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT",
+            CGS_ASSERT_AT(leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT,
+                "leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT",
                     "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\"
-                    "DirtySock\\CgsServerInterfaceDirtySock.h", 738 /* ARTIST 0x825416CC */));
+                    "DirtySock\\CgsServerInterfaceDirtySock.h", 738 /* ARTIST 0x825416CC */);
+
             return maComponents[leComponent].mpComponent;
         }
         const ServerInterfaceComponent* GetComponent(EComponents leComponent) const;

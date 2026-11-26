@@ -110,10 +110,10 @@ namespace DirectorIO
         CgsModule::IOBuffer::Construct();
         mResultsQueue.Construct();
         const bool lbPrepared = mResultsQueue.Prepare();
-        CGS_ASSERT(lbPrepared,
-            CGS_ASSERT_MESSAGE_AT(
-                "mResultsQueue.Prepare()",
-                CGS_ARTIST_FILE, 192 /* ARTIST 0x8221B350 */));
+        CGS_ASSERT_AT(lbPrepared,
+            "mResultsQueue.Prepare()",
+                CGS_ARTIST_FILE, 192 /* ARTIST 0x8221B350 */);
+
         (void)lbPrepared;
     }
 
@@ -122,10 +122,10 @@ namespace DirectorIO
     void SceneQueryInputBuffer::Destruct()
     {
         const bool lbReleased = mResultsQueue.Release();
-        CGS_ASSERT(lbReleased,
-            CGS_ASSERT_MESSAGE_AT(
-                "mResultsQueue.Release()",
-                CGS_ARTIST_FILE, 207 /* ARTIST 0x8221B3B8 */));                        // BrnDirectorModuleIO.cpp:207
+        CGS_ASSERT_AT(lbReleased,
+            "mResultsQueue.Release()",
+                CGS_ARTIST_FILE, 207 /* ARTIST 0x8221B3B8 */);                        // BrnDirectorModuleIO.cpp:207
+
         (void)lbReleased;
         mResultsQueue.Destruct();
         CgsModule::IOBuffer::Destruct();

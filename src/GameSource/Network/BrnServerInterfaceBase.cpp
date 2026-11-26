@@ -94,39 +94,39 @@ namespace BrnNetwork
         miNetworkServerInterfaceBasePM10 = CgsDev::PerfMonCpu::AddMonitor( "Int - Usersets Update",   CgsDev::E_PMP_9, false, 5.0f, true );
         miNetworkServerInterfaceBasePM11 = CgsDev::PerfMonCpu::AddMonitor( "Int - Debug Update",      CgsDev::E_PMP_9, false, 5.0f, true );
 
-        CGS_ASSERT( miNetworkServerInterfaceBasePM1 >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNetworkServerInterfaceBasePM1 >= 0", __FILE__, 89 /* ARTIST 0x825894BC */));
-        CGS_ASSERT( miNetworkServerInterfaceBasePM2 >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNetworkServerInterfaceBasePM2 >= 0", __FILE__, 90 /* ARTIST 0x825894E4 */));
-        CGS_ASSERT( miNetworkServerInterfaceBasePM3 >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNetworkServerInterfaceBasePM3 >= 0", __FILE__, 91 /* ARTIST 0x8258950C */));
-        CGS_ASSERT( miNetworkServerInterfaceBasePM4 >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNetworkServerInterfaceBasePM4 >= 0", __FILE__, 92 /* ARTIST 0x82589534 */));
-        CGS_ASSERT( miNetworkServerInterfaceBasePM5 >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNetworkServerInterfaceBasePM5 >= 0", __FILE__, 93 /* ARTIST 0x8258955C */));
-        CGS_ASSERT( miNetworkServerInterfaceBasePM6 >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNetworkServerInterfaceBasePM6 >= 0", __FILE__, 94 /* ARTIST 0x82589584 */));
-        CGS_ASSERT( miNetworkServerInterfaceBasePM7 >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNetworkServerInterfaceBasePM7 >= 0", __FILE__, 95 /* ARTIST 0x825895AC */));
-        CGS_ASSERT( miNetworkServerInterfaceBasePM8 >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNetworkServerInterfaceBasePM8 >= 0", __FILE__, 96 /* ARTIST 0x825895D4 */));
-        CGS_ASSERT( miNetworkServerInterfaceBasePM9 >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNetworkServerInterfaceBasePM9 >= 0", __FILE__, 97 /* ARTIST 0x825895FC */));
-        CGS_ASSERT( miNetworkServerInterfaceBasePM10 >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNetworkServerInterfaceBasePM10 >= 0", __FILE__, 98 /* ARTIST 0x82589624 */));
-        CGS_ASSERT( miNetworkServerInterfaceBasePM11 >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miNetworkServerInterfaceBasePM11 >= 0", __FILE__, 99 /* ARTIST 0x8258964C */));
+        CGS_ASSERT_AT( miNetworkServerInterfaceBasePM1 >= 0,
+            "miNetworkServerInterfaceBasePM1 >= 0", __FILE__, 89 /* ARTIST 0x825894BC */);
+
+        CGS_ASSERT_AT( miNetworkServerInterfaceBasePM2 >= 0,
+            "miNetworkServerInterfaceBasePM2 >= 0", __FILE__, 90 /* ARTIST 0x825894E4 */);
+
+        CGS_ASSERT_AT( miNetworkServerInterfaceBasePM3 >= 0,
+            "miNetworkServerInterfaceBasePM3 >= 0", __FILE__, 91 /* ARTIST 0x8258950C */);
+
+        CGS_ASSERT_AT( miNetworkServerInterfaceBasePM4 >= 0,
+            "miNetworkServerInterfaceBasePM4 >= 0", __FILE__, 92 /* ARTIST 0x82589534 */);
+
+        CGS_ASSERT_AT( miNetworkServerInterfaceBasePM5 >= 0,
+            "miNetworkServerInterfaceBasePM5 >= 0", __FILE__, 93 /* ARTIST 0x8258955C */);
+
+        CGS_ASSERT_AT( miNetworkServerInterfaceBasePM6 >= 0,
+            "miNetworkServerInterfaceBasePM6 >= 0", __FILE__, 94 /* ARTIST 0x82589584 */);
+
+        CGS_ASSERT_AT( miNetworkServerInterfaceBasePM7 >= 0,
+            "miNetworkServerInterfaceBasePM7 >= 0", __FILE__, 95 /* ARTIST 0x825895AC */);
+
+        CGS_ASSERT_AT( miNetworkServerInterfaceBasePM8 >= 0,
+            "miNetworkServerInterfaceBasePM8 >= 0", __FILE__, 96 /* ARTIST 0x825895D4 */);
+
+        CGS_ASSERT_AT( miNetworkServerInterfaceBasePM9 >= 0,
+            "miNetworkServerInterfaceBasePM9 >= 0", __FILE__, 97 /* ARTIST 0x825895FC */);
+
+        CGS_ASSERT_AT( miNetworkServerInterfaceBasePM10 >= 0,
+            "miNetworkServerInterfaceBasePM10 >= 0", __FILE__, 98 /* ARTIST 0x82589624 */);
+
+        CGS_ASSERT_AT( miNetworkServerInterfaceBasePM11 >= 0,
+            "miNetworkServerInterfaceBasePM11 >= 0", __FILE__, 99 /* ARTIST 0x8258964C */);
+
     }
 
     // Forward every server-interface event to the network manager first, then let the
@@ -250,9 +250,9 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(false,
                 "0",
-                __FILE__, 290 /* ARTIST 0x82589940 */));
+                __FILE__, 290 /* ARTIST 0x82589940 */);
             return false;
         }
     }
@@ -357,9 +357,9 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(false,
                 "0",
-                __FILE__, 468 /* ARTIST 0x82589B74 */));
+                __FILE__, 468 /* ARTIST 0x82589B74 */);
             return false;
         }
     }

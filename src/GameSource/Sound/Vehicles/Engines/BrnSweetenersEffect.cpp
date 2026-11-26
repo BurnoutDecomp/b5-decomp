@@ -134,7 +134,7 @@ void SweetenersEffect::AttachController(CgsSound::Logic::EffectBase* apControlle
         mpShiftingControl = static_cast<ShiftControl*>(apController);
         break;
     default:
-        CGS_ASSERT_AT(false, "Unexpected control.", BRN_SWEETENERSEFFECT_CPP_FILE, 145);
+        CGS_FAIL_AT("Unexpected control.", BRN_SWEETENERSEFFECT_CPP_FILE, 145);
         break;
     }
 }
@@ -277,7 +277,7 @@ bool SweetenersEffect::Attach()
     case E_SWEETENER_STATE_UPDATING:
         return true;
     default:
-        CGS_ASSERT(false, "Invalid state");
+        CGS_FAIL("Invalid state");
         return true;
     }
 }
@@ -285,9 +285,9 @@ bool SweetenersEffect::Attach()
 bool SweetenersEffect::SelectSampleIndex(eSweetenerBankElement aeElement,
                                          s32& ariSampleIndex)
 {
-    CGS_ASSERT(aeElement < E_SWEETENER_BANK_ELEMENT_COUNT,
-        CGS_ASSERT_MESSAGE_AT("E_SWEETENER_BANK_ELEMENT_COUNT > leElement",
-            BRN_SWEETENERSEFFECT_CPP_FILE, 798));
+    CGS_ASSERT_AT(aeElement < E_SWEETENER_BANK_ELEMENT_COUNT,
+        "E_SWEETENER_BANK_ELEMENT_COUNT > leElement",
+            BRN_SWEETENERSEFFECT_CPP_FILE, 798);
 
     const SweetenerInfo& lrInfo = maSweetenerInfo[aeElement];
     if (lrInfo.mi16FirstIndex != -1)

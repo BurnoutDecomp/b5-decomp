@@ -116,7 +116,7 @@ namespace CgsGui
         default:
             // The console asserts then returns its untouched result storage.
             // It does not choose a different selector or construct a fallback camera.
-            CGS_ASSERT(false, "Bad GuiCamera type\n"); // 820E3E74, CgsGuiShared.cpp:233
+            CGS_FAIL("Bad GuiCamera type\n"); // 820E3E74, CgsGuiShared.cpp:233
             break;
         }
         return lCamera;

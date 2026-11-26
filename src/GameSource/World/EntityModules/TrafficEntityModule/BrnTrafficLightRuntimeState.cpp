@@ -50,7 +50,7 @@ void TrafficLightRuntimeState::Update(f32 lfTimeDelta)
     }
     else if (muState >= E_STATE_COUNT)
     {
-        CGS_ASSERT(false, "Unknown light state ");
+        CGS_FAIL("Unknown light state ");
     }
 }
 

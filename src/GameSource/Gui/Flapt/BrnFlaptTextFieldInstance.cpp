@@ -36,12 +36,12 @@ void TextFieldInstance::Construct(const MovieClip* lpMovieClip,
                                   const RGBA* lpAlternateTextColours,
                                   s32 liNumAlternateColours)
 {
-    CGS_ASSERT(lpMovieClip != 0,
-        CGS_ASSERT_MESSAGE_AT("lpMovieClip", __FILE__, 48 /* ARTIST 0x8246F584 */));
-    CGS_ASSERT(luTextFieldIndex < lpMovieClip->muNumTextFields,
-        CGS_ASSERT_MESSAGE_AT(
-            "luTextFieldIndex < lpMovieClip->muNumTextFields",
-            __FILE__, 49 /* ARTIST 0x8246F5AC */));
+    CGS_ASSERT_AT(lpMovieClip != 0,
+        "lpMovieClip", __FILE__, 48 /* ARTIST 0x8246F584 */);
+    CGS_ASSERT_AT(luTextFieldIndex < lpMovieClip->muNumTextFields,
+        "luTextFieldIndex < lpMovieClip->muNumTextFields",
+            __FILE__, 49 /* ARTIST 0x8246F5AC */);
+
 
     // Cache the alternate-text-colour table + construct the embedded text object.
     mAptString.Construct(lpAlternateTextColours, liNumAlternateColours);
@@ -78,14 +78,14 @@ void TextFieldInstance::SetUpAptStringParams(const TextField* lpTextField,
                                              const CgsUnicode::CgsUtf8* lpInitialText,
                                              AptAllocateStringParameters* lpOutAptStringParams)
 {
-    CGS_ASSERT(lpTextField != 0,
-        CGS_ASSERT_MESSAGE_AT("lpTextField", __FILE__, 81 /* ARTIST 0x8246DF8C */));
-    CGS_ASSERT(lpFontStyle != 0,
-        CGS_ASSERT_MESSAGE_AT("lpFontStyle", __FILE__, 82 /* ARTIST 0x8246DFB0 */));
-    CGS_ASSERT(lpInitialText != 0,
-        CGS_ASSERT_MESSAGE_AT("lpInitialText", __FILE__, 83 /* ARTIST 0x8246DFD4 */));
-    CGS_ASSERT(lpOutAptStringParams != 0,
-        CGS_ASSERT_MESSAGE_AT("lpOutAptStringParams", __FILE__, 84 /* ARTIST 0x8246DFF8 */));
+    CGS_ASSERT_AT(lpTextField != 0,
+        "lpTextField", __FILE__, 81 /* ARTIST 0x8246DF8C */);
+    CGS_ASSERT_AT(lpFontStyle != 0,
+        "lpFontStyle", __FILE__, 82 /* ARTIST 0x8246DFB0 */);
+    CGS_ASSERT_AT(lpInitialText != 0,
+        "lpInitialText", __FILE__, 83 /* ARTIST 0x8246DFD4 */);
+    CGS_ASSERT_AT(lpOutAptStringParams != 0,
+        "lpOutAptStringParams", __FILE__, 84 /* ARTIST 0x8246DFF8 */);
 
     // Flags byte (TextField+0x0B): bit0 -> word-wrap, bit1 -> multiline.
     lpOutAptStringParams->bWordWrap  = lpTextField->mxFlags & 1;

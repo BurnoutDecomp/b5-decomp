@@ -39,7 +39,7 @@ const VoiceSchema& VoiceSpec::GetVoiceSchema() const
 
 u32 VoiceSpec::GetSlotCount() const
 {
-    CGS_ASSERT(mpVoiceSchema, CGS_ASSERT_MESSAGE_AT("mpVoiceSchema", CGS_VOICE_SPEC_ARTIST_FILE, 1631));
+    CGS_ASSERT_AT(mpVoiceSchema, "mpVoiceSchema", CGS_VOICE_SPEC_ARTIST_FILE, 1631);
     CGS_ASSERT_STREAM_AT((reinterpret_cast<uintptr_t>(mpVoiceSchema) & 1) == 0,
         "This Data Structure is not resolved. (Name "
             << Name(reinterpret_cast<uintptr_t>(mpVoiceSchema)) << " found in a pointer context.)",
@@ -49,7 +49,7 @@ u32 VoiceSpec::GetSlotCount() const
 
 u32 VoiceSpec::GetParameterCount() const
 {
-    CGS_ASSERT(mpVoiceSchema, CGS_ASSERT_MESSAGE_AT("mpVoiceSchema", CGS_VOICE_SPEC_ARTIST_FILE, 1639));
+    CGS_ASSERT_AT(mpVoiceSchema, "mpVoiceSchema", CGS_VOICE_SPEC_ARTIST_FILE, 1639);
     CGS_ASSERT_STREAM_AT((reinterpret_cast<uintptr_t>(mpVoiceSchema) & 1) == 0,
         "This Data Structure is not resolved. (Name "
             << Name(reinterpret_cast<uintptr_t>(mpVoiceSchema)) << " found in a pointer context.)",
@@ -59,7 +59,7 @@ u32 VoiceSpec::GetParameterCount() const
 
 u32 VoiceSpec::GetOutputParameterCount() const
 {
-    CGS_ASSERT(mpVoiceSchema, CGS_ASSERT_MESSAGE_AT("mpVoiceSchema", CGS_VOICE_SPEC_ARTIST_FILE, 1647));
+    CGS_ASSERT_AT(mpVoiceSchema, "mpVoiceSchema", CGS_VOICE_SPEC_ARTIST_FILE, 1647);
     CGS_ASSERT_STREAM_AT((reinterpret_cast<uintptr_t>(mpVoiceSchema) & 1) == 0,
         "This Data Structure is not resolved. (Name "
             << Name(reinterpret_cast<uintptr_t>(mpVoiceSchema)) << " found in a pointer context.)",

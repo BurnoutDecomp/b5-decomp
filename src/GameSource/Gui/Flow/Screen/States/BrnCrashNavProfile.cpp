@@ -122,10 +122,10 @@ namespace BrnGui
     void CrashNavProfile::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm,
                                     ProfileManager& lrProfileManager)
     {
-        CGS_ASSERT(lpFsm != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpFsm",
-                CGS_ARTIST_FILE, 85 /* ARTIST 0x824B7AC4 */));
+        CGS_ASSERT_AT(lpFsm != 0,
+            "lpFsm",
+                CGS_ARTIST_FILE, 85 /* ARTIST 0x824B7AC4 */);
+
 
         CgsGui::State::Construct(liId, lpFsm);
         mpProfileManager = &lrProfileManager;
@@ -201,7 +201,7 @@ namespace BrnGui
     // inventing behaviour the build does not have.
     void CrashNavProfile::HandleTriggers(const CgsModule::Event* lpAptTrigger)
     {
-        CGS_ASSERT(lpAptTrigger != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in CrashNavMapMain::HandleTriggers", CGS_ARTIST_FILE, 395));
+        CGS_ASSERT_STREAM_AT(lpAptTrigger != 0, "Invalid event in CrashNavMapMain::HandleTriggers", CGS_ARTIST_FILE, 395);
     }
 
     // ---- HandleControllerInput -----------------------------------------------------

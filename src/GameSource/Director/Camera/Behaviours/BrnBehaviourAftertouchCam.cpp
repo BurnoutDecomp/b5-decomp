@@ -141,10 +141,10 @@ bool BehaviourAftertouchCam::Prepare(const BehaviourSharedPrepareReleaseInfo& /*
 {
     SetNotPrepared();
 
-    CGS_ASSERT(mpParameters != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpParameters != NULL",
-            CGS_ARTIST_FILE, 99 /* ARTIST 0x821FA348 */));                                              // :99
+    CGS_ASSERT_AT(mpParameters != 0,
+        "mpParameters != NULL",
+            CGS_ARTIST_FILE, 99 /* ARTIST 0x821FA348 */);                                              // :99
+
 
     mfBlendFactor = mpParameters->mfMinimumBlendFactor;
     mfHeight      = mpParameters->mfMaxHeight;
@@ -323,8 +323,8 @@ Vector3 BehaviourAftertouchCam::CalculateDesiredTargetPos(const BehaviourSharedI
 // ----------------------------------------------------------------------------
 bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
 {
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 310));                                              // :310
-    CGS_ASSERT(mSourceShot.IsValid(), CGS_ASSERT_MESSAGE_AT("mParameters.IsValid()", CGS_ARTIST_FILE, 311));                                         // :311
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters != NULL", CGS_ARTIST_FILE, 310);                                              // :310
+    CGS_ASSERT_AT(mSourceShot.IsValid(), "mParameters.IsValid()", CGS_ARTIST_FILE, 311);                                         // :311
 
     const BrnPhysics::Vehicle::RaceCarState& lrCarState = lrSharedInfo.mPlayerInfo.mRaceCarState;
     const f32 lfTimestep = lrSharedInfo.GetTimestep(BrnDirector::Timestep::E_WORLD);
@@ -366,8 +366,8 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
     {
         mDesiredWorldSpaceNormalizedVectorFromCar = -Scale(lDesiredVector,
             RefinedReciprocalSqrt(Utils::ConsoleVpu::Dot3(lDesiredVector, lDesiredVector)));
-        CGS_ASSERT(!IsZeroVmx(mDesiredWorldSpaceNormalizedVectorFromCar, KF_EPSILON),
-                   CGS_ASSERT_MESSAGE_AT("!IsZero(mDesiredWorldSpaceNormalizedVectorFromCar)", CGS_ARTIST_FILE, 348));                                // :348
+        CGS_ASSERT_AT(!IsZeroVmx(mDesiredWorldSpaceNormalizedVectorFromCar, KF_EPSILON),
+                   "!IsZero(mDesiredWorldSpaceNormalizedVectorFromCar)", CGS_ARTIST_FILE, 348);                                // :348
     }
 
     if (lfPlayerSpeed < mpParameters->mfHeightDistanceVelocityRange)
@@ -425,7 +425,7 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
             {
                 const f32 lfAgreement = (lfControlAgreementWithCamera > 1.0f) ? 1.0f : lfControlAgreementWithCamera;
 
-                CGS_ASSERT(!IsZeroVmx(lNormalisedPlayerVel, KF_EPSILON), CGS_ASSERT_MESSAGE_AT("!IsZero(lNormalisedPlayerVel)", CGS_ARTIST_FILE, 404));     // :404
+                CGS_ASSERT_AT(!IsZeroVmx(lNormalisedPlayerVel, KF_EPSILON), "!IsZero(lNormalisedPlayerVel)", CGS_ARTIST_FILE, 404);     // :404
                 mWorldSpaceNormalizedVectorFromCar = Utils::SafeSLerp(
                     mWorldSpaceNormalizedVectorFromCar, -lNormalisedPlayerVel, VecFloat(lfT * lfAgreement));
                 mWorldSpaceNormalizedVectorFromCar = Utils::SafeSLerp(
@@ -451,9 +451,9 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
     CGS_ASSERT(!IsZeroVmx(mWorldSpaceNormalizedVectorFromCar, KF_EPSILON),
                "!IsZero(mWorldSpaceNormalizedVectorFromCar)");                                           // :432
     // `fcmpu d, eps ; bgt` then `fcmpu d, -eps ; bge`: a NaN distance fires it, as on the console.
-    CGS_ASSERT(mfDistance > KF_EPSILON || mfDistance < -KF_EPSILON, CGS_ASSERT_MESSAGE_AT("!rw::math::fpu::IsZero(mfDistance)", CGS_ARTIST_FILE, 433)); // :433
-    CGS_ASSERT(!IsZeroVmx(Scale(mWorldSpaceNormalizedVectorFromCar, mfDistance), KF_EPSILON),
-               CGS_ASSERT_MESSAGE_AT("!IsZero(mWorldSpaceNormalizedVectorFromCar * mfDistance)", CGS_ARTIST_FILE, 434));                             // :434
+    CGS_ASSERT_AT(mfDistance > KF_EPSILON || mfDistance < -KF_EPSILON, "!rw::math::fpu::IsZero(mfDistance)", CGS_ARTIST_FILE, 433); // :433
+    CGS_ASSERT_AT(!IsZeroVmx(Scale(mWorldSpaceNormalizedVectorFromCar, mfDistance), KF_EPSILON),
+               "!IsZero(mWorldSpaceNormalizedVectorFromCar * mfDistance)", CGS_ARTIST_FILE, 434);                             // :434
 
     Matrix44Affine lTransform = Utils::CreateLookAt(
         Utils::ConsoleVpu::MultiplyAdd(mWorldSpaceNormalizedVectorFromCar, mfDistance, lCarPosition), lCarPosition);

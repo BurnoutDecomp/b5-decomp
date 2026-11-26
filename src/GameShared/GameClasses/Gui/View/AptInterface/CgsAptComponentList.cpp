@@ -45,12 +45,12 @@ namespace CgsGui
     //               == mapComponentReference[liComponent].
     AptValue* AptComponentList::GetAptValue(s32 liComponent) const
     {
-        CGS_ASSERT(liComponent >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 166 /* ARTIST 0x82846A98 */));
-        CGS_ASSERT(liComponent < KU_MAX_COMPONENTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 167 /* ARTIST 0x82846AB8 */));
+        CGS_ASSERT_AT(liComponent >= 0,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 166 /* ARTIST 0x82846A98 */);
+
+        CGS_ASSERT_AT(liComponent < KU_MAX_COMPONENTS,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 167 /* ARTIST 0x82846AB8 */);
+
 
         return mapComponentReference[liComponent];
     }
@@ -59,12 +59,12 @@ namespace CgsGui
     //               == maapComponentData[liComponent][liKey].
     KeyValue* AptComponentList::GetKeyValue(s32 liComponent, s32 liKey) const
     {
-        CGS_ASSERT(liComponent >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 158 /* ARTIST 0x82846A1C */));
-        CGS_ASSERT(liComponent < KU_MAX_COMPONENTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 159 /* ARTIST 0x82846A3C */));
+        CGS_ASSERT_AT(liComponent >= 0,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 158 /* ARTIST 0x82846A1C */);
+
+        CGS_ASSERT_AT(liComponent < KU_MAX_COMPONENTS,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 159 /* ARTIST 0x82846A3C */);
+
 
         return maapComponentData[liComponent][liKey];
     }
@@ -73,12 +73,12 @@ namespace CgsGui
     //               == maiNumUsedData[liComponent].
     u8 AptComponentList::GetUsedData(s32 liComponent) const
     {
-        CGS_ASSERT(liComponent >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 174 /* ARTIST 0x82846B10 */));
-        CGS_ASSERT(liComponent < KU_MAX_COMPONENTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 175 /* ARTIST 0x82846B30 */));
+        CGS_ASSERT_AT(liComponent >= 0,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 174 /* ARTIST 0x82846B10 */);
+
+        CGS_ASSERT_AT(liComponent < KU_MAX_COMPONENTS,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 175 /* ARTIST 0x82846B30 */);
+
 
         return maiNumUsedData[liComponent];
     }
@@ -87,12 +87,12 @@ namespace CgsGui
     //               == mapComponentReference[liComponent] = lpValue.
     void AptComponentList::SetAptValue(s32 liComponent, AptValue* lpValue)
     {
-        CGS_ASSERT(liComponent >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 206 /* ARTIST 0x82846C1C */));
-        CGS_ASSERT(liComponent < KU_MAX_COMPONENTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 207 /* ARTIST 0x82846C3C */));
+        CGS_ASSERT_AT(liComponent >= 0,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 206 /* ARTIST 0x82846C1C */);
+
+        CGS_ASSERT_AT(liComponent < KU_MAX_COMPONENTS,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 207 /* ARTIST 0x82846C3C */);
+
 
         mapComponentReference[liComponent] = lpValue;
     }
@@ -101,12 +101,12 @@ namespace CgsGui
     //               == maapComponentData[liComponent][liKey] = lpKeyValue.
     void AptComponentList::SetKeyValue(s32 liComponent, s32 liKey, KeyValue* lpKeyValue)
     {
-        CGS_ASSERT(liComponent >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 198 /* ARTIST 0x82846B98 */));
-        CGS_ASSERT(liComponent < KU_MAX_COMPONENTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 199 /* ARTIST 0x82846BB8 */));
+        CGS_ASSERT_AT(liComponent >= 0,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 198 /* ARTIST 0x82846B98 */);
+
+        CGS_ASSERT_AT(liComponent < KU_MAX_COMPONENTS,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 199 /* ARTIST 0x82846BB8 */);
+
 
         maapComponentData[liComponent][liKey] = lpKeyValue;
     }
@@ -115,12 +115,12 @@ namespace CgsGui
     //               == maiNumUsedData[liComponent] = lu8Used.
     void AptComponentList::SetUsedData(s32 liComponent, u8 lu8Used)
     {
-        CGS_ASSERT(liComponent >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 215 /* ARTIST 0x82846C9C */));
-        CGS_ASSERT(liComponent < KU_MAX_COMPONENTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 216 /* ARTIST 0x82846CBC */));
+        CGS_ASSERT_AT(liComponent >= 0,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 215 /* ARTIST 0x82846C9C */);
+
+        CGS_ASSERT_AT(liComponent < KU_MAX_COMPONENTS,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 216 /* ARTIST 0x82846CBC */);
+
 
         maiNumUsedData[liComponent] = lu8Used;
     }
@@ -129,12 +129,12 @@ namespace CgsGui
     //               == mauHashedName[liComponent] = luHash.
     void AptComponentList::SetHashedName(s32 liComponent, u32 luHash)
     {
-        CGS_ASSERT(liComponent >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 223 /* ARTIST 0x82846D1C */));
-        CGS_ASSERT(liComponent < KU_MAX_COMPONENTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 224 /* ARTIST 0x82846D3C */));
+        CGS_ASSERT_AT(liComponent >= 0,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 223 /* ARTIST 0x82846D1C */);
+
+        CGS_ASSERT_AT(liComponent < KU_MAX_COMPONENTS,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 224 /* ARTIST 0x82846D3C */);
+
 
         mauHashedName[liComponent] = luHash;
     }
@@ -143,12 +143,12 @@ namespace CgsGui
     //               == mauHashedReferenceName[liComponent] = luHash.
     void AptComponentList::SetHashedReferenceName(s32 liComponent, u32 luHash)
     {
-        CGS_ASSERT(liComponent >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 231 /* ARTIST 0x82846D9C */));
-        CGS_ASSERT(liComponent < KU_MAX_COMPONENTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 232 /* ARTIST 0x82846DBC */));
+        CGS_ASSERT_AT(liComponent >= 0,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 231 /* ARTIST 0x82846D9C */);
+
+        CGS_ASSERT_AT(liComponent < KU_MAX_COMPONENTS,
+            "Invalid Component Index", KAC_ARTIST_ASSERT_FILE, 232 /* ARTIST 0x82846DBC */);
+
 
         mauHashedReferenceName[liComponent] = luHash;
     }
@@ -180,18 +180,18 @@ namespace CgsGui
     // is deliberately left untouched, matching the X360 body.
     void AptComponentList::MoveComponent(s32 liFrom, s32 liTo)
     {
-        CGS_ASSERT(liFrom >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index in Copy From", KAC_ARTIST_ASSERT_FILE, 239 /* ARTIST 0x8284E224 */));
-        CGS_ASSERT(liFrom < KU_MAX_COMPONENTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index in Copy From", KAC_ARTIST_ASSERT_FILE, 240 /* ARTIST 0x8284E244 */));
-        CGS_ASSERT(liTo >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index in Copy To", KAC_ARTIST_ASSERT_FILE, 241 /* ARTIST 0x8284E26C */));
-        CGS_ASSERT(liTo < KU_MAX_COMPONENTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Component Index in Copy To", KAC_ARTIST_ASSERT_FILE, 242 /* ARTIST 0x8284E28C */));
+        CGS_ASSERT_AT(liFrom >= 0,
+            "Invalid Component Index in Copy From", KAC_ARTIST_ASSERT_FILE, 239 /* ARTIST 0x8284E224 */);
+
+        CGS_ASSERT_AT(liFrom < KU_MAX_COMPONENTS,
+            "Invalid Component Index in Copy From", KAC_ARTIST_ASSERT_FILE, 240 /* ARTIST 0x8284E244 */);
+
+        CGS_ASSERT_AT(liTo >= 0,
+            "Invalid Component Index in Copy To", KAC_ARTIST_ASSERT_FILE, 241 /* ARTIST 0x8284E26C */);
+
+        CGS_ASSERT_AT(liTo < KU_MAX_COMPONENTS,
+            "Invalid Component Index in Copy To", KAC_ARTIST_ASSERT_FILE, 242 /* ARTIST 0x8284E28C */);
+
 
         // Copy the 32-pointer key block (X360 do-while over r11=32).
         for (s32 liKey = 0; liKey < KI_MAX_DATA_PER_COMPONENT; ++liKey)

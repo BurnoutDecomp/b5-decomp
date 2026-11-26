@@ -78,7 +78,7 @@ namespace CgsGui
 
         // No free slot: fire the "No room to add font <name>" assert and drop the handle
         // (CgsGuiFontCollection.cpp:86; see file-header note on the StrStream collapse).
-        CGS_ASSERT(false, "No room to add font");
+        CGS_FAIL("No room to add font");
     }
 
     const CgsResource::SafeResourceHandle<CgsResource::Font>& FontCollection::FindFont(const char* lpcFontName) const

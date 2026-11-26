@@ -93,8 +93,8 @@ void BridgeInputToAIModule(
     const BrnWorldIO::GameActionQueue* const lpInQueue = lpWorldInput->GetGameActionQueue();
     BrnAI::AIModuleIO::InputBuffer::GameActionQueue* const lpOutQueue = lpAIInputBuffer->GetGameActionQueue();
 
-    CGS_ASSERT(lpInQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInQueue", KAC_ARTIST_INPUT_TO_AI_FILE, 45));     // :45
-    CGS_ASSERT(lpOutQueue != 0, CGS_ASSERT_MESSAGE_AT("lpOutQueue", KAC_ARTIST_INPUT_TO_AI_FILE, 46));   // :46
+    CGS_ASSERT_AT(lpInQueue != 0, "lpInQueue", KAC_ARTIST_INPUT_TO_AI_FILE, 45);     // :45
+    CGS_ASSERT_AT(lpOutQueue != 0, "lpOutQueue", KAC_ARTIST_INPUT_TO_AI_FILE, 46);   // :46
 
     lpOutQueue->Append(*lpInQueue);
 
@@ -170,8 +170,8 @@ void BridgePhysicsModuleToAIModule_PostPhysics(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpAIModuleInputBuffer_PostPhysics != 0, CGS_ASSERT_MESSAGE_AT("lpAIModuleInputBuffer_PostPhysics != NULL", __FILE__, 142));   // :142
-    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleOutputBuffer != NULL", __FILE__, 143));               // :143
+    CGS_ASSERT_AT(lpAIModuleInputBuffer_PostPhysics != 0, "lpAIModuleInputBuffer_PostPhysics != NULL", __FILE__, 142);   // :142
+    CGS_ASSERT_AT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL", __FILE__, 143);               // :143
     lpAIModuleInputBuffer_PostPhysics->AppendContacts(lpPhysicsModuleOutputBuffer->GetContactSpyInterface());
 }
 
@@ -301,7 +301,7 @@ namespace BrnAI
 {
     void AIModule::PostPhysicsUpdate( const AIModuleIO::InputBuffer_PostPhysics* lpInputBuffer )
     {
-        CGS_ASSERT(lpInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpInputBuffer != NULL", __FILE__, 738));   // :738
+        CGS_ASSERT_AT(lpInputBuffer != 0, "lpInputBuffer != NULL", __FILE__, 738);   // :738
         lpInputBuffer->LockForRead();
 
         mContactSpyInterface.Construct();

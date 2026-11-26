@@ -68,10 +68,10 @@ namespace BrnNetwork
     void FburnChallengeStatusMessage::PrepareForSend(u16 lu16FrameCount,
                                                      const FburnChallengeStatusPayload* lpCompletedChallenges)
     {
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16FrameCount != KU16_INVALID_FRAME",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeStatusMessage.cpp", 119 /* ARTIST 0x8257C844 */));
+        CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
+            "lu16FrameCount != KU16_INVALID_FRAME",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeStatusMessage.cpp", 119 /* ARTIST 0x8257C844 */);
+
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
         {

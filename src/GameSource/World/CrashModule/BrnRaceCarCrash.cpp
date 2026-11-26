@@ -44,11 +44,11 @@ namespace BrnWorld
     // performs -- the value is held/compared/stored as a single-precision float.
     void RaceCarCrash::SetSecondsBeforeCleanup(f32 lfSeconds)
     {
-        CGS_ASSERT(lfSeconds > 0.0f,
-            CGS_ASSERT_MESSAGE_AT(
-                "lfSeconds > 0.0f",
+        CGS_ASSERT_AT(lfSeconds > 0.0f,
+            "lfSeconds > 0.0f",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../World/CrashModule/BrnCrashModule.cpp", 194 /* ARTIST 0x827B15D4 */));
+                "../World/CrashModule/BrnCrashModule.cpp", 194 /* ARTIST 0x827B15D4 */);
+
         mfSecondsBeforeCleanup = lfSeconds;   // stfs @0xC
     }
 
@@ -76,8 +76,8 @@ namespace BrnWorld
     {
         // 1u == BrnWorld::E_ENTITYTYPE_RACECAR (the enum has no home in this tree; every other
         // consumer spells it the same way -- see BrnVehicleManager.h:2655).
-        CGS_ASSERT(lRaceCarVolumeInstanceId.GetEntityIDOwner() == 1u,
-                   CGS_ASSERT_MESSAGE_AT("lVolumeInstanceID.GetEntityIDOwner() == E_ENTITYTYPE_RACECAR", CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE, 79));   // ARTIST li r5,0x4F
+        CGS_ASSERT_AT(lRaceCarVolumeInstanceId.GetEntityIDOwner() == 1u,
+                   "lVolumeInstanceID.GetEntityIDOwner() == E_ENTITYTYPE_RACECAR", CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE, 79);   // ARTIST li r5,0x4F
 
         // Member declaration order (DWARF BrnCrashModule.h:89..:94): ARTIST's stores group the
         // floats before the two byte stores (0x827B14F8..0x827B1514).
@@ -147,7 +147,7 @@ namespace BrnWorld
         // 0x827BF0E4 `lfs f30, 0xC(this)` -- the PRE-decrement value, kept for the edge test.
         const f32 lfSecondsBefore = mfSecondsBeforeCleanup;
 
-        CGS_ASSERT(lpActiveRaceCarInterface != 0, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface", __FILE__, 112));   // :112
+        CGS_ASSERT_AT(lpActiveRaceCarInterface != 0, "lpActiveRaceCarInterface", __FILE__, 112);   // :112
 
         // 0x827BF118..0x827BF124
         const f32 lfSecondsAfter = mfSecondsBeforeCleanup - lfTimeStep;

@@ -173,14 +173,14 @@ void StuntModeScoring::DealWithStunt(const GameStateModuleIO::WorldStuntAction* 
                 break;
 
             default:  // >= E_STUNT_ELEMENT_TYPE_COUNT (3)
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown world stunt type.", CGS_ARTIST_FILE, 1247));
+                CGS_FAIL_AT("Unknown world stunt type.", CGS_ARTIST_FILE, 1247);
                 break;
         }
 
         if (lbScored)
         {
-            CGS_ASSERT(mRecentStuntElementSet.GetLength() < mRecentStuntElementSet.GetCapacity(),
-                       CGS_ASSERT_MESSAGE_AT("mRecentStuntElementSet.GetLength() < mRecentStuntElementSet.GetCapacity()", CGS_ARTIST_FILE, 1254));
+            CGS_ASSERT_AT(mRecentStuntElementSet.GetLength() < mRecentStuntElementSet.GetCapacity(),
+                       "mRecentStuntElementSet.GetLength() < mRecentStuntElementSet.GetCapacity()", CGS_ARTIST_FILE, 1254);
             mRecentStuntElementSet.Insert(lElementId);
         }
     }
@@ -305,11 +305,11 @@ void StuntModeScoring::UpdateStuntRepetition(f32 lfDelta)
 // ----------------------------------------------------------------------------
 void StuntModeScoring::UpdateStuntRating(EStuntType leStuntType, f32 lfA, f32 lfB, f32 lfC)
 {
-    CGS_ASSERT(mbStuntInProgress && mbComboInProgress,
-        CGS_ASSERT_MESSAGE_AT(
-            "mbStuntInProgress && mbComboInProgress",
+    CGS_ASSERT_AT(mbStuntInProgress && mbComboInProgress,
+        "mbStuntInProgress && mbComboInProgress",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1010 /* ARTIST 0x8231311C */));
+            "../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1010 /* ARTIST 0x8231311C */);
+
 
     // Both gates skip on `fcmpu` + `blt`, which is NOT taken when the compare is unordered, so a
     // NaN measurement still promotes the stunt: written `!(a < b)`, not `a >= b`.
@@ -409,7 +409,7 @@ void StuntModeScoring::DealWithInProgressStunt(const GameStateModuleIO::OnStuntE
         if (liMemberIndex >= 8)
         {
             // X360 assert at BrnStuntModeScoring.cpp:1666 (the player must be in this convoy).
-            CGS_ASSERT(false, "Player not in this convoy!");
+            CGS_FAIL("Player not in this convoy!");
             return;
         }
     }

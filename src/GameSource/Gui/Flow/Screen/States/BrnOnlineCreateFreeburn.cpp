@@ -329,7 +329,7 @@ namespace BrnGui
     void OnlineCreateFreeburn::HandleInGameFailedEvent(const CgsModule::Event* lpEvent)
     {
         // The console's text names HandleInGameEvent (the same pooled string).
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineCreateFreeburn::HandleInGameEvent", CGS_ARTIST_FILE, 361));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineCreateFreeburn::HandleInGameEvent", CGS_ARTIST_FILE, 361);
 
         SendStateEvent("GO_BACK");
     }
@@ -339,7 +339,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineCreateFreeburn::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineCreateFreeburn::HandleControllerInput", CGS_ARTIST_FILE, 297));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineCreateFreeburn::HandleControllerInput", CGS_ARTIST_FILE, 297);
     }
 }
 

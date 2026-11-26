@@ -39,9 +39,9 @@ namespace SceneManagerIO
         lEvent.mEntityId = lEntityId;
         lEvent.mPosition = lPosition;
 
-        CGS_ASSERT(mUpdatePositionQueue.GetLength() < mUpdatePositionQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mUpdatePositionQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 884));
+        CGS_ASSERT_STREAM_AT(mUpdatePositionQueue.GetLength() < mUpdatePositionQueue.GetMaxLength(),
+                   "SceneManager.mUpdatePositionQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 884);
         mUpdatePositionQueue.AddEvent(lEvent);
     }
 
@@ -71,9 +71,9 @@ namespace SceneManagerIO
         lEvent.mxVolumeTypeID = lxVolumeTypeFlags;
         // DecFIGS volume.h:39 aliases the SDK Volume to VolRef::Volume.
         lEvent.mVolumeBuffer.SetVolume(reinterpret_cast<const VolRef::Volume*>(lpVolume));
-        CGS_ASSERT(mAddDynamicVolumeQueue.GetLength() < mAddDynamicVolumeQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mAddDynamicVolumeQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 933));
+        CGS_ASSERT_STREAM_AT(mAddDynamicVolumeQueue.GetLength() < mAddDynamicVolumeQueue.GetMaxLength(),
+                   "SceneManager.mAddDynamicVolumeQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 933);
         mAddDynamicVolumeQueue.AddEvent(lEvent);
     }
 
@@ -83,9 +83,9 @@ namespace SceneManagerIO
         InEventReplaceDynamicVolume lEvent;
         lEvent.mVolumeId = lVolumeId;
         lEvent.mVolumeBuffer.SetVolume(reinterpret_cast<const VolRef::Volume*>(lpVolume));
-        CGS_ASSERT(mReplaceDynamicVolumeQueue.GetLength() < mReplaceDynamicVolumeQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mReplaceDynamicVolumeQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 954));
+        CGS_ASSERT_STREAM_AT(mReplaceDynamicVolumeQueue.GetLength() < mReplaceDynamicVolumeQueue.GetMaxLength(),
+                   "SceneManager.mReplaceDynamicVolumeQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 954);
         mReplaceDynamicVolumeQueue.AddEvent(lEvent);
     }
 
@@ -96,9 +96,9 @@ namespace SceneManagerIO
         lEvent.mEntityId = lEntityId;   // stw a2 @+0x00
         lEvent.mbRemoveVolumeInstances = lbRemoveVolumeInstances;
 
-        CGS_ASSERT(mRemoveEntityQueue.GetLength() < mRemoveEntityQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mRemoveEntityQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 863));
+        CGS_ASSERT_STREAM_AT(mRemoveEntityQueue.GetLength() < mRemoveEntityQueue.GetMaxLength(),
+                   "SceneManager.mRemoveEntityQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 863);
         mRemoveEntityQueue.AddEvent(lEvent);
     }
 
@@ -109,9 +109,9 @@ namespace SceneManagerIO
         InEventRemoveForCollision lEvent;
         lEvent.mVolumeInstanceId = lVolumeInstanceId;
 
-        CGS_ASSERT(mRemoveForCollisionQueue.GetLength() < mRemoveForCollisionQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mRemoveForCollisionQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1089));
+        CGS_ASSERT_STREAM_AT(mRemoveForCollisionQueue.GetLength() < mRemoveForCollisionQueue.GetMaxLength(),
+                   "SceneManager.mRemoveForCollisionQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1089);
         mRemoveForCollisionQueue.AddEvent(lEvent);
     }
 
@@ -121,9 +121,9 @@ namespace SceneManagerIO
         InEventRemoveVolume lEvent;
         lEvent.mVolumeId = lVolumeId;
 
-        CGS_ASSERT(mRemoveVolumeQueue.GetLength() < mRemoveVolumeQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mRemoveVolumeQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 973));
+        CGS_ASSERT_STREAM_AT(mRemoveVolumeQueue.GetLength() < mRemoveVolumeQueue.GetMaxLength(),
+                   "SceneManager.mRemoveVolumeQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 973);
         mRemoveVolumeQueue.AddEvent(lEvent);
     }
 
@@ -133,9 +133,9 @@ namespace SceneManagerIO
         InEventRemoveVolumeInstance lEvent;
         lEvent.mVolumeInstanceId = lVolumeInstanceId;
 
-        CGS_ASSERT(mRemoveVolumeInstanceQueue.GetLength() < mRemoveVolumeInstanceQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mRemoveVolumeInstanceQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1019));
+        CGS_ASSERT_STREAM_AT(mRemoveVolumeInstanceQueue.GetLength() < mRemoveVolumeInstanceQueue.GetMaxLength(),
+                   "SceneManager.mRemoveVolumeInstanceQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1019);
         mRemoveVolumeInstanceQueue.AddEvent(lEvent);
     }
 
@@ -192,9 +192,9 @@ namespace SceneManagerIO
         lEvent.mVolumeId         = lVolumeId;           // std a3 @+0x08
         lEvent.mTransform        = lrTransform;         // four stvx128 lanes @+0x10
 
-        CGS_ASSERT(mAddVolumeInstanceQueue.GetLength() < mAddVolumeInstanceQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mAddVolumeInstanceQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1000));
+        CGS_ASSERT_STREAM_AT(mAddVolumeInstanceQueue.GetLength() < mAddVolumeInstanceQueue.GetMaxLength(),
+                   "SceneManager.mAddVolumeInstanceQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1000);
         mAddVolumeInstanceQueue.AddEvent(lEvent);
     }
 
@@ -232,8 +232,8 @@ namespace SceneManagerIO
                                                  Vector3 lPadding,
                                                  EAddForCollisionCacheOptions leCacheOptions)
     {
-        CGS_ASSERT(leCacheOptions < E_NUM_CACHE_OPTIONS,
-                   CGS_ASSERT_MESSAGE_AT("leCacheOptions < E_NUM_CACHE_OPTIONS", KAC_SCENE_UPDATE_ARTIST_FILE, 1062));
+        CGS_ASSERT_AT(leCacheOptions < E_NUM_CACHE_OPTIONS,
+                   "leCacheOptions < E_NUM_CACHE_OPTIONS", KAC_SCENE_UPDATE_ARTIST_FILE, 1062);
 
         InEventAddForCollision lEvent;
         lEvent.mVolumeInstanceId = lVolumeInstanceId;
@@ -242,9 +242,9 @@ namespace SceneManagerIO
         lEvent.SetBodyState(leBodyState);                // stb @+0x1C, own tripwire
         lEvent.SetCacheOptions(leCacheOptions);          // stb @+0x1D, own tripwire
 
-        CGS_ASSERT(mAddForCollisionQueue.GetLength() < mAddForCollisionQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mAddForCollisionQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1070));
+        CGS_ASSERT_STREAM_AT(mAddForCollisionQueue.GetLength() < mAddForCollisionQueue.GetMaxLength(),
+                   "SceneManager.mAddForCollisionQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1070);
         mAddForCollisionQueue.AddEvent(lEvent);
     }
 
@@ -256,9 +256,9 @@ namespace SceneManagerIO
         lEvent.mEntityId = lEntityId;         // stw a2 @+0x00
         lEvent.mfRadius  = lfBoundingRadius;   // stfs a3 @+0x04
 
-        CGS_ASSERT(mSetEntityRadiusQueue.GetLength() < mSetEntityRadiusQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mSetEntityRadiusQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 905));
+        CGS_ASSERT_STREAM_AT(mSetEntityRadiusQueue.GetLength() < mSetEntityRadiusQueue.GetMaxLength(),
+                   "SceneManager.mSetEntityRadiusQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 905);
         mSetEntityRadiusQueue.AddEvent(lEvent);
     }
 
@@ -269,9 +269,9 @@ namespace SceneManagerIO
         InEventClearCullingTable lEvent;
         lEvent.mbCullAll = lbCullAll;   // stb a2 @+0x00
 
-        CGS_ASSERT(mClearCullingTableQueue.GetLength() < mClearCullingTableQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mClearCullingTableQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1150));
+        CGS_ASSERT_STREAM_AT(mClearCullingTableQueue.GetLength() < mClearCullingTableQueue.GetMaxLength(),
+                   "SceneManager.mClearCullingTableQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1150);
         mClearCullingTableQueue.AddEvent(lEvent);
     }
 
@@ -282,9 +282,9 @@ namespace SceneManagerIO
         InEventClearEntityPadding lEvent;
         lEvent.mEntity = lEntityId;   // stw a2 @+0x00
 
-        CGS_ASSERT(mClearEntityPaddingQueue.GetLength() < mClearEntityPaddingQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mClearEntityPaddingQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1193));
+        CGS_ASSERT_STREAM_AT(mClearEntityPaddingQueue.GetLength() < mClearEntityPaddingQueue.GetMaxLength(),
+                   "SceneManager.mClearEntityPaddingQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1193);
         mClearEntityPaddingQueue.AddEvent(lEvent);
     }
 
@@ -297,9 +297,9 @@ namespace SceneManagerIO
         lEvent.mVolumeInstanceId = lVolumeInstanceId;   // std a2 @+0x00
         lEvent.mTransform        = lTransform;           // four stvx128 lanes @+0x10
 
-        CGS_ASSERT(mSetVolumeInstanceTransformQueue.GetLength() < mSetVolumeInstanceTransformQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mSetVolumeInstanceTransformQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1040));
+        CGS_ASSERT_STREAM_AT(mSetVolumeInstanceTransformQueue.GetLength() < mSetVolumeInstanceTransformQueue.GetMaxLength(),
+                   "SceneManager.mSetVolumeInstanceTransformQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1040);
         mSetVolumeInstanceTransformQueue.AddEvent(lEvent);
     }
 
@@ -318,9 +318,9 @@ namespace SceneManagerIO
         lEvent.mCullingGroup = lCullingGroup;
         lEvent.mVolumeInstanceId = lVolumeInstanceId;
 
-        CGS_ASSERT(mSetVolumeInstanceCullingGroupQueue.GetLength() < mSetVolumeInstanceCullingGroupQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mSetVolumeInstanceCullingGroupQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1110));
+        CGS_ASSERT_STREAM_AT(mSetVolumeInstanceCullingGroupQueue.GetLength() < mSetVolumeInstanceCullingGroupQueue.GetMaxLength(),
+                   "SceneManager.mSetVolumeInstanceCullingGroupQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1110);
         mSetVolumeInstanceCullingGroupQueue.AddEvent(lEvent);
     }
 
@@ -331,18 +331,18 @@ namespace SceneManagerIO
     void InSceneUpdateInterface::AddVolumeInstanceForCaching(VolumeInstanceId lVolumeInstanceId,
                                                               EAddForCollisionCacheOptions leCacheOptions)
     {
-        CGS_ASSERT(leCacheOptions < E_NUM_CACHE_OPTIONS,
-                   CGS_ASSERT_MESSAGE_AT("leCacheOptions < E_NUM_CACHE_OPTIONS", KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1232));
-        CGS_ASSERT(leCacheOptions != E_DO_NOT_ADD_TO_CACHE_MANAGER,
-                   CGS_ASSERT_MESSAGE_AT("leCacheOptions != E_DO_NOT_ADD_TO_CACHE_MANAGER", KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1233));
+        CGS_ASSERT_AT(leCacheOptions < E_NUM_CACHE_OPTIONS,
+                   "leCacheOptions < E_NUM_CACHE_OPTIONS", KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1232);
+        CGS_ASSERT_AT(leCacheOptions != E_DO_NOT_ADD_TO_CACHE_MANAGER,
+                   "leCacheOptions != E_DO_NOT_ADD_TO_CACHE_MANAGER", KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1233);
 
         InEventAddVolumeInstanceForCaching lEvent;
         lEvent.mVolumeInstanceId = lVolumeInstanceId;   // std a2 @+0x00
         lEvent.meCacheOptions    = leCacheOptions;      // stw a3 @+0x08
 
-        CGS_ASSERT(mAddVolumeInstanceForCachingQueue.GetLength() < mAddVolumeInstanceForCachingQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mAddVolumeInstanceForCachingQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1240));
+        CGS_ASSERT_STREAM_AT(mAddVolumeInstanceForCachingQueue.GetLength() < mAddVolumeInstanceForCachingQueue.GetMaxLength(),
+                   "SceneManager.mAddVolumeInstanceForCachingQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1240);
         mAddVolumeInstanceForCachingQueue.AddEvent(lEvent);
     }
 
@@ -355,9 +355,9 @@ namespace SceneManagerIO
         lEvent.mCullingGroupA = lGroupA;
         lEvent.mCullingGroupB = lGroupB;
 
-        CGS_ASSERT(mSetCullingGroupPairQueue.GetLength() < mSetCullingGroupPairQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mSetCullingGroupPairQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1133));
+        CGS_ASSERT_STREAM_AT(mSetCullingGroupPairQueue.GetLength() < mSetCullingGroupPairQueue.GetMaxLength(),
+                   "SceneManager.mSetCullingGroupPairQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1133);
         mSetCullingGroupPairQueue.AddEvent(lEvent);
     }
 
@@ -411,9 +411,9 @@ namespace SceneManagerIO
         lEvent.miField14      = static_cast<s32>(luEntityTypeFlag); // stw a3 @+0x14
         lEvent.mfField18      = lfBoundingRadius;                // stfs a4 @+0x18
 
-        CGS_ASSERT(mAddEntityQueue.GetLength() < mAddEntityQueue.GetMaxLength(),
-                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mAddEntityQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_SCENE_UPDATE_ARTIST_FILE, 825));
+        CGS_ASSERT_STREAM_AT(mAddEntityQueue.GetLength() < mAddEntityQueue.GetMaxLength(),
+                   "SceneManager.mAddEntityQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 825);
         mAddEntityQueue.AddEvent(lEvent);
     }
 

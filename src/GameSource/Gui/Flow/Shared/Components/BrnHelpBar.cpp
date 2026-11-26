@@ -69,12 +69,12 @@ namespace BrnGui
     void HelpBar::SetupComponent()
     {
         Animator* lpAnimator = &maAnimators[0];
-        CGS_ASSERT(lpAnimator != 0,
-            CGS_ASSERT_MESSAGE_AT("lpAnimator", __FILE__, 104 /* ARTIST 0x824E259C */));
+        CGS_ASSERT_AT(lpAnimator != 0,
+            "lpAnimator", __FILE__, 104 /* ARTIST 0x824E259C */);
 
         CgsGui::ObjectController* lpObjectController = lpAnimator->GetObjectController();
-        CGS_ASSERT(lpObjectController != 0,
-            CGS_ASSERT_MESSAGE_AT("lpObjectController", __FILE__, 107 /* ARTIST 0x824E25C4 */));
+        CGS_ASSERT_AT(lpObjectController != 0,
+            "lpObjectController", __FILE__, 107 /* ARTIST 0x824E25C4 */);
 
         mBasePosition = lpObjectController->GetPos();
     }
@@ -101,7 +101,7 @@ namespace BrnGui
     // ------------------------------------------------------------ GetItemNameHash
     s32 HelpBar::GetItemNameHash(s32 liItem) const
     {
-        CGS_ASSERT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid item index", CGS_ARTIST_FILE, 197));
+        CGS_ASSERT_STREAM_AT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, "Invalid item index", CGS_ARTIST_FILE, 197);
 
         return static_cast<s32>(maItems[liItem].GetNameHash());
     }
@@ -109,7 +109,7 @@ namespace BrnGui
     // ------------------------------------------------------------ GetAnimator
     Animator* HelpBar::GetAnimator(s32 liItem)
     {
-        CGS_ASSERT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid item index", CGS_ARTIST_FILE, 241));
+        CGS_ASSERT_STREAM_AT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, "Invalid item index", CGS_ARTIST_FILE, 241);
 
         return &maAnimators[liItem];
     }
@@ -175,7 +175,7 @@ namespace BrnGui
                 lfX += lfTotalWidth * 0.5f;
                 break;
             default:
-                CGS_ASSERT(false, "Unhandled case");
+                CGS_FAIL("Unhandled case");
                 break;
         }
 
@@ -207,7 +207,7 @@ namespace BrnGui
     void HelpBar::InvalidateItemInfo(s32 liItem)
     {
         CgsGui::ObjectController* lpObjectController = maAnimators[liItem].GetObjectController();
-        CGS_ASSERT(lpObjectController != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ObjectController", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnHelpBar.cpp", 411));
+        CGS_ASSERT_STREAM_AT(lpObjectController != 0, "Invalid ObjectController", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnHelpBar.cpp", 411);
 
         mafItemWidths[liItem] = KF_ITEMWIDTH_INVALID;
         lpObjectController->SetObjectVariableFloat(KAC_WIDTHVAR_NAME, KF_ITEMWIDTH_INVALID);

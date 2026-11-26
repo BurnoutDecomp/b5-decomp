@@ -17,9 +17,9 @@ const f32 SurvivorMode::KF_OUTRO_TIME_SECONDS = 0.0f;
 void SurvivorMode::Start(const StartGameModeParams* lpStartGameModeParams,
                          GameModeParams* lpGameModeParams, ScoringSystem*)
 {
-    CGS_ASSERT(lpStartGameModeParams->GetEventData(), CGS_ASSERT_MESSAGE_AT("lpEventData", CGS_ARTIST_FILE, 67));
+    CGS_ASSERT_AT(lpStartGameModeParams->GetEventData(), "lpEventData", CGS_ARTIST_FILE, 67);
     const BrnProgression::ProgressionRankData* lpRank = lpStartGameModeParams->GetProgressionRankData();
-    CGS_ASSERT(lpRank, CGS_ASSERT_MESSAGE_AT("lpProgressionRankData", CGS_ARTIST_FILE, 70));
+    CGS_ASSERT_AT(lpRank, "lpProgressionRankData", CGS_ARTIST_FILE, 70);
     lpGameModeParams->Construct(lpStartGameModeParams->GetGameModeType());
 
     const f32 lfMinOpponentCount = static_cast<f32>(giMarkedManMinOpponentCount);

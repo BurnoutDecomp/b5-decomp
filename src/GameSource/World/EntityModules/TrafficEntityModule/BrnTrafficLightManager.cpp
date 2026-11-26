@@ -31,9 +31,9 @@ namespace BrnTraffic
 
 TrafficLightRuntimeState* TrafficLightManager::GetLightState(u32 luInstance)
 {
-    CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES,
-        CGS_ASSERT_MESSAGE_AT("luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES",
-            KAC_TRAFFIC_LIGHT_MANAGER_H_FILE, 209 /* ARTIST li r5,0xD1 at 0x8274F9CC */));
+    CGS_ASSERT_AT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES,
+        "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES",
+            KAC_TRAFFIC_LIGHT_MANAGER_H_FILE, 209 /* ARTIST li r5,0xD1 at 0x8274F9CC */);
 
     return &maLightStates[luInstance];
 }
@@ -49,15 +49,15 @@ TrafficLightRuntimeState* TrafficLightManager::GetLightState(u32 luInstance)
 void TrafficLightManager::TrafficLightGotSmashed(const TrafficLightCollection* lpTrafficLightData,
                                                  u32 luInstanceID)
 {
-    CGS_ASSERT(lpTrafficLightData,
-        CGS_ASSERT_MESSAGE_AT("lpTrafficLightData", KAC_ARTIST_ASSERT_FILE, 417 /* ARTIST 0x827519D0 */));
+    CGS_ASSERT_AT(lpTrafficLightData,
+        "lpTrafficLightData", KAC_ARTIST_ASSERT_FILE, 417 /* ARTIST 0x827519D0 */);
 
     const s32 liInstanceIndex = lpTrafficLightData->GetInstanceIndexForInstanceID(luInstanceID);
     if (liInstanceIndex != -1)
     {
         TrafficLightRuntimeState* lpState = GetLightState(static_cast<u32>(liInstanceIndex));
-        CGS_ASSERT(lpState,
-            CGS_ASSERT_MESSAGE_AT("lpState", KAC_ARTIST_ASSERT_FILE, 425 /* ARTIST 0x82751A18 */));
+        CGS_ASSERT_AT(lpState,
+            "lpState", KAC_ARTIST_ASSERT_FILE, 425 /* ARTIST 0x82751A18 */);
 
         lpState->mxStateBits |= 0x80u;
 
@@ -88,15 +88,15 @@ void TrafficLightManager::TrafficLightGotSmashed(const TrafficLightCollection* l
 void TrafficLightManager::TrafficLightGotRestored(const TrafficLightCollection* lpTrafficLightData,
                                                   u32 luInstanceID)
 {
-    CGS_ASSERT(lpTrafficLightData,
-        CGS_ASSERT_MESSAGE_AT("lpTrafficLightData", KAC_ARTIST_ASSERT_FILE, 443 /* ARTIST 0x82751A70 */));
+    CGS_ASSERT_AT(lpTrafficLightData,
+        "lpTrafficLightData", KAC_ARTIST_ASSERT_FILE, 443 /* ARTIST 0x82751A70 */);
 
     const s32 liInstanceIndex = lpTrafficLightData->GetInstanceIndexForInstanceID(luInstanceID);
     if (liInstanceIndex != -1)
     {
         TrafficLightRuntimeState* lpState = GetLightState(static_cast<u32>(liInstanceIndex));
-        CGS_ASSERT(lpState,
-            CGS_ASSERT_MESSAGE_AT("lpState", KAC_ARTIST_ASSERT_FILE, 451 /* ARTIST 0x82751AB8 */));
+        CGS_ASSERT_AT(lpState,
+            "lpState", KAC_ARTIST_ASSERT_FILE, 451 /* ARTIST 0x82751AB8 */);
 
         lpState->mxStateBits &= 0x7Fu;
 
@@ -203,9 +203,9 @@ void TrafficLightManager::SetCountdownValue(s32 liCountdownDisplay)
 // down to RED in TrafficLightRuntimeState::Update @0x827515D8.
 void TrafficLightManager::ChangeLightState(u32 luInstance, bool lbChangeToRed)
 {
-    CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES,
-        CGS_ASSERT_MESSAGE_AT(
-            "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES", KAC_ARTIST_ASSERT_FILE, 391 /* ARTIST 0x82751908 */));
+    CGS_ASSERT_AT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES,
+        "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES", KAC_ARTIST_ASSERT_FILE, 391 /* ARTIST 0x82751908 */);
+
 
     if (lbChangeToRed)
     {
@@ -358,14 +358,14 @@ void TrafficLightManager::RenderAllLightsToBeInStateForHull(const Hull* lpHull,
                                                             Vector3 lCameraPosition, Vector3 lCameraDirection,
                                                             VecFloat lfCullDistSq) const
 {
-    CGS_ASSERT(lpHull, CGS_ASSERT_MESSAGE_AT("lpHull", __FILE__, 359));                                                        // .cpp:359
-    CGS_ASSERT(lpTrafficLightData, CGS_ASSERT_MESSAGE_AT("lpTrafficLightData", __FILE__, 360));                                // .cpp:360
+    CGS_ASSERT_AT(lpHull, "lpHull", __FILE__, 359);                                                        // .cpp:359
+    CGS_ASSERT_AT(lpTrafficLightData, "lpTrafficLightData", __FILE__, 360);                                // .cpp:360
 
     for (u32 luInstance = lpHull->muFirstTrafficLight; luInstance < lpHull->muLastTrafficLight; ++luInstance)
     {
         const TrafficLightRuntimeState* lpLightState =
             GetLightState(luInstance);
-        CGS_ASSERT(lpLightState, CGS_ASSERT_MESSAGE_AT("lpLightState", __FILE__, 366));                                          // .cpp:366
+        CGS_ASSERT_AT(lpLightState, "lpLightState", __FILE__, 366);                                          // .cpp:366
         if (!lpLightState->IsSmashed())
         {
             lpTrafficLightData->RenderCoronasForInstance(luInstance, luActiveStates, lpCoronaSubmissionInterface,

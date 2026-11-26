@@ -94,14 +94,14 @@ namespace PropEntityIO
     // X360 0x827A1B68 (own TU): read-lock; return this + 4.
     const OutputBuffer_PrePhysics::PropInputInterfaceStorage* OutputBuffer_PrePhysics::GetPropInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 701));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 701);
         return &mPropInputInterface;
     }
 
     // X360 0x822B99D8 (own TU): write-lock; return this + 4.
     OutputBuffer_PrePhysics::PropInputInterfaceStorage* OutputBuffer_PrePhysics::GetPropInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 703));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 703);
         return &mPropInputInterface;
     }
 
@@ -109,7 +109,7 @@ namespace PropEntityIO
     // Called by WorldModule::BridgePropModuleToTrafficModule_PrePhysics.
     const OutputBuffer_PrePhysics::PropToTrafficInterfaceStorage* OutputBuffer_PrePhysics::GetPropToTrafficInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 705));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 705);
         return &mPropToTrafficInterface;
     }
 
@@ -118,7 +118,7 @@ namespace PropEntityIO
     //           BrnWorld::PropEntityModule::ChangePropState.
     OutputBuffer_PrePhysics::PropToTrafficInterfaceStorage* OutputBuffer_PrePhysics::GetPropToTrafficInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 706));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 706);
         return &mPropToTrafficInterface;
     }
 }

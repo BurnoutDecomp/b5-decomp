@@ -185,7 +185,7 @@ namespace CgsResource
 
         default:
             // meState >= 3 -- an impossible step value.
-            CGS_ASSERT(false, "Defrag state is invalid\n");
+            CGS_FAIL("Defrag state is invalid\n");
             return E_RESULT_ERROR;
         }
     }

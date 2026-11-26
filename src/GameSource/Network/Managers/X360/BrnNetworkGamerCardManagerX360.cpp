@@ -76,10 +76,10 @@ namespace BrnNetwork
         // The X360 asserts the first action slot of each of the 5 processes is not KI_NO_ACTION.
         for (s32 liProcess = 0; liProcess < KI_NUMBER_OF_PROCESSES; ++liProcess)
         {
-            CGS_ASSERT(maProcessActions[liProcess * KI_ACTIONS_PER_PROCESS] != KI_NO_ACTION,
-                CGS_ASSERT_MESSAGE_AT(
-                    "No actions supplied for this process",
-                    CGS_ARTIST_FILE, 262 /* ARTIST 0x8254CAF8 */));
+            CGS_ASSERT_AT(maProcessActions[liProcess * KI_ACTIONS_PER_PROCESS] != KI_NO_ACTION,
+                "No actions supplied for this process",
+                    CGS_ARTIST_FILE, 262 /* ARTIST 0x8254CAF8 */);
+
         }
     }
 
@@ -93,9 +93,9 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_NUMBER_OF_SUBSTATES; ++li)
         {
-            CGS_ASSERT(mapUpdateFunctions[li] != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(mapUpdateFunctions[li] != 0,
                 "No update function supplied for this substate",
-                __FILE__, 179 /* ARTIST 0x8255E8B0 */));
+                __FILE__, 179 /* ARTIST 0x8255E8B0 */);
         }
     }
 
@@ -108,9 +108,9 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_NUMBER_OF_ACTIONS; ++li)
         {
-            CGS_ASSERT(mapActionFunctions[li] != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(mapActionFunctions[li] != 0,
                 "No function supplied for this action",
-                __FILE__, 211 /* ARTIST 0x82557B40 */));
+                __FILE__, 211 /* ARTIST 0x82557B40 */);
         }
     }
 
@@ -121,10 +121,10 @@ namespace BrnNetwork
         InitialiseActionArray();
         InitialiseProcessArray();
 
-        CGS_ASSERT(lpServerInterface != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpServerInterface",
-                CGS_ARTIST_FILE, 58 /* ARTIST 0x825618D0 */));
+        CGS_ASSERT_AT(lpServerInterface != 0,
+            "lpServerInterface",
+                CGS_ARTIST_FILE, 58 /* ARTIST 0x825618D0 */);
+
 
         mpServerInterface          = lpServerInterface;   // *(a1 + 148) = a2
         maRequestedPlayerName.macName[0] = '\0';          // stb 0, 0x68
@@ -186,7 +186,7 @@ namespace BrnNetwork
     // X360 0x8254CC50 -- dispatch the update function for the current sub-state.
     bool NetworkGamerCardManagerX360::ProcessBeforeSimulation()
     {
-        CGS_ASSERT(mapUpdateFunctions[meSubState] != 0, CGS_ASSERT_STREAM_MESSAGE_AT("No update function supplied for the current substate", CGS_ARTIST_FILE, 375));
+        CGS_ASSERT_STREAM_AT(mapUpdateFunctions[meSubState] != 0, "No update function supplied for the current substate", CGS_ARTIST_FILE, 375);
 
         return (this->*mapUpdateFunctions[meSubState])();
     }
@@ -280,7 +280,7 @@ namespace BrnNetwork
             return 1;                                 // li r3, 1
         }
 
-        CGS_ASSERT(false, "Trying to request gamercard for an empty player name");
+        CGS_FAIL("Trying to request gamercard for an empty player name");
         return 0;
     }
 
@@ -296,12 +296,12 @@ namespace BrnNetwork
     // wait-for-sign-in sub-state.
     bool NetworkGamerCardManagerX360::ActionShowGamercardUI()
     {
-        CGS_ASSERT(muRequestingControllerPort != KU_NUMBER_OF_PADS, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(muRequestingControllerPort != KU_NUMBER_OF_PADS,
             "muRequestingControllerPort != CgsInput::KU_NUMBER_OF_PADS",
-            CGS_ARTIST_FILE, 499 /* ARTIST 0x8254CE68 */));
-        CGS_ASSERT(mRequestedGamerCardXUID != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 499 /* ARTIST 0x8254CE68 */);
+        CGS_ASSERT_AT(mRequestedGamerCardXUID != 0,
             "mRequestedGamerCardXUID != 0",
-            CGS_ARTIST_FILE, 500 /* ARTIST 0x8254CE90 */));
+            CGS_ARTIST_FILE, 500 /* ARTIST 0x8254CE90 */);
 
         // The X360 sets up only two arg registers: r3 = the controller/user-index member
         // (lwz r3, 0x80(r30)) and r4 = the full 64-bit requested XUID (ld r4, 0x78(r30)).
@@ -326,7 +326,7 @@ namespace BrnNetwork
         if (luStatus == 1)
         {
             // Error: report it, clear it, and abandon the request.
-            CGS_ASSERT(false, "ERROR running gamercard process");
+            CGS_FAIL("ERROR running gamercard process");
             mpServerInterface->GetPlayerInfoComponent()->ClearLastError();
             ProcessComplete(0);
             return 0;
@@ -337,7 +337,7 @@ namespace BrnNetwork
             return 1;
         }
 
-        CGS_ASSERT(false, "Player info component is in a bad state.");
+        CGS_FAIL("Player info component is in a bad state.");
         return 0;
     }
 
@@ -361,7 +361,7 @@ namespace BrnNetwork
             }
             else if (luNotification == static_cast<u32>(KI_NOTIFY_INVITE_ACCEPTED))
             {
-                CGS_ASSERT(false,
+                CGS_FAIL(
                     "Invite notification processed by Online main menu screen. "
                     "This could break cross game invites");
             }
@@ -403,12 +403,12 @@ namespace BrnNetwork
         s32 liResult = 0;
         if (meProcess == KI_PROCESS_NONE)
         {
-            CGS_ASSERT(luRequestingControllerPort != KU_NUMBER_OF_PADS, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(luRequestingControllerPort != KU_NUMBER_OF_PADS,
                 "luRequestingControllerPort != CgsInput::KU_NUMBER_OF_PADS",
-                __FILE__, 694 /* ARTIST 0x8254D1E8 */));
-            CGS_ASSERT(lPlayerXuid != 0, CGS_ASSERT_MESSAGE_AT(
+                __FILE__, 694 /* ARTIST 0x8254D1E8 */);
+            CGS_ASSERT_AT(lPlayerXuid != 0,
                 "lPlayerXuid != 0",
-                __FILE__, 695 /* ARTIST 0x8254D20C */));
+                __FILE__, 695 /* ARTIST 0x8254D20C */);
 
             mRequestedGamerCardXUID    = lPlayerXuid;             // std r28, 0x78
             muRequestingControllerPort = luRequestingControllerPort; // stw r29, 0x80

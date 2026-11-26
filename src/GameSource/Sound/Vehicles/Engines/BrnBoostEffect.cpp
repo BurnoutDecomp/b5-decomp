@@ -133,7 +133,7 @@ void BoostEffect::AttachController(CgsSound::Logic::EffectBase* apController)
         mpSpeedStreamControl = static_cast<BrnSound::Vehicles::Environment::SpeedStreamControl*>(apController);
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+        CGS_FAIL_STREAM_AT("Cound't attach controller " << apController->GetId(),
                              BRN_BOOSTEFFECT_CPP_FILE, 143);
         break;
     }

@@ -146,7 +146,7 @@ VolumeStore<tiCapacity>::GetVolumeResourceDescriptor(const VolRef::Volume* lpVol
         luEntry0Align = 0x10u;   // 16-byte aligned
         break;
     default:
-        CGS_ASSERT_AT(false, "Volume type not supported by CgsVolumeManager", CGS_ARTIST_VOLUME_STORE_FILE, 366);
+        CGS_FAIL_AT("Volume type not supported by CgsVolumeManager", CGS_ARTIST_VOLUME_STORE_FILE, 366);
         luEntry0Size  = 0u;
         luEntry0Align = 1u;
         break;
@@ -196,7 +196,7 @@ bool VolumeStore<tiCapacity>::ReplaceVolume(s32 liVolumeIndex, const VolRef::Vol
 
     if (!IsPrimitiveVolume(lpVolume))
     {
-        CGS_ASSERT_AT(false, "Aggregate volumes are not supported by the scene manager", CGS_ARTIST_VOLUME_STORE_FILE, 325);
+        CGS_FAIL_AT("Aggregate volumes are not supported by the scene manager", CGS_ARTIST_VOLUME_STORE_FILE, 325);
         return false;
     }
 

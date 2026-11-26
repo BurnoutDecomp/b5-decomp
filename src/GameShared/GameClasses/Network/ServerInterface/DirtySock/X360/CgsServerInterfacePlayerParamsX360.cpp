@@ -49,7 +49,7 @@ bool ServerInterfacePlayerParamsX360::Prepare()
         break;
     default:
         // ARTIST names the shared player-params file (li r5,0xA3 @0x8287A290).
-        CGS_ASSERT_AT(false, "invalid X360 NAT type\n",
+        CGS_FAIL_AT("invalid X360 NAT type\n",
                       "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerParams.cpp",
                       163);
         break;

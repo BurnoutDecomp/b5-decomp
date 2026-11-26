@@ -41,9 +41,9 @@ bool DynamicMixer::ConnectDMixIO(Nicotine::DMixIO* apDMixIO)
 {
     const s32 liStateId = apDMixIO->GetStateID();
     Environment* lpEnvironment = mpEnvironment;
-    CGS_ASSERT(liStateId < KI_MAX_NUMBER_OF_STATES,
-        CGS_ASSERT_MESSAGE_AT("liStateManId < KI_MAX_NUMBER_OF_STATES",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.cpp", 481));
+    CGS_ASSERT_AT(liStateId < KI_MAX_NUMBER_OF_STATES,
+        "liStateManId < KI_MAX_NUMBER_OF_STATES",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.cpp", 481);
     StateManager* const lpManager = lpEnvironment->mapStateManagers[liStateId];
     if (lpManager == 0)
         return false;
@@ -100,10 +100,10 @@ int DynamicMixer::DMixPrintf(const char* apFormat, ...)
     va_start(lArgs, apFormat);
     const int liCopied = ::vsnprintf(lacText, sizeof(lacText), apFormat, lArgs);
     va_end(lArgs);
-    CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacText)),
-        CGS_ASSERT_MESSAGE_AT(
-            "lNumBytesCopied<(int32_t)luBytes",
-            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96 /* ARTIST 0x8268D2F4 */));
+    CGS_ASSERT_AT(liCopied < static_cast<int>(sizeof(lacText)),
+        "lNumBytesCopied<(int32_t)luBytes",
+            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96 /* ARTIST 0x8268D2F4 */);
+
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << lacText;
     return 0;
@@ -119,11 +119,11 @@ void DynamicMixer::DMixAssert(bool abCondition, const char* apFormat, ...)
     va_start(lArgs, apFormat);
     const int liCopied = ::vsnprintf(lacText, sizeof(lacText), apFormat, lArgs);
     va_end(lArgs);
-    CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacText)),
-        CGS_ASSERT_MESSAGE_AT("lNumBytesCopied<(int32_t)luBytes",
-            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96));
-    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(lacText,
-        "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.cpp", 608));
+    CGS_ASSERT_AT(liCopied < static_cast<int>(sizeof(lacText)),
+        "lNumBytesCopied<(int32_t)luBytes",
+            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96);
+    CGS_FAIL_AT(lacText,
+        "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.cpp", 608);
 }
 
 } // namespace Logic

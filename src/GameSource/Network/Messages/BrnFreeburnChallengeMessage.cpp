@@ -109,15 +109,15 @@ namespace BrnNetwork
                                             BrnGameState::EChallengeStatus* lpeChallengeStatus,
                                             s32* lpiActionIndex)
     {
-        CGS_ASSERT(lpChallengeID, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpChallengeID,
             "lpChallengeID",
-            CGS_ARTIST_FILE, 178 /* ARTIST 0x8257F964 */));
-        CGS_ASSERT(lpeEventType, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 178 /* ARTIST 0x8257F964 */);
+        CGS_ASSERT_AT(lpeEventType,
             "lpeEventType",
-            CGS_ARTIST_FILE, 179 /* ARTIST 0x8257F988 */));
-        CGS_ASSERT(lpeChallengeStatus, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 179 /* ARTIST 0x8257F988 */);
+        CGS_ASSERT_AT(lpeChallengeStatus,
             "lpeChallengeStatus",
-            CGS_ARTIST_FILE, 180 /* ARTIST 0x8257F9AC */));
+            CGS_ARTIST_FILE, 180 /* ARTIST 0x8257F9AC */);
 
         // ARTIST 0x8257F9C0 branches to a trailing `return false` (0x8257F9FC): the copy-out is the body
         // of the valid test.

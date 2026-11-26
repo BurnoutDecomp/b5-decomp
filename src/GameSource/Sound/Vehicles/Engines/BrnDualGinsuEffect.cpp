@@ -451,7 +451,7 @@ void DualGinsuEffect::AttachController(CgsSound::Logic::EffectBase* apController
         mpHybridControl = static_cast<HybridExhaustControl*>(apController);
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+        CGS_FAIL_STREAM_AT("Cound't attach controller " << apController->GetId(),
                              BRN_DUALGINSUEFFECT_CPP_FILE, 211);
         break;
     }

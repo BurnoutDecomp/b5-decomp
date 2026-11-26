@@ -307,7 +307,7 @@ namespace BrnGameState
     {
         const PreparedForInviteAction* lpPreparedForInviteAction =
             reinterpret_cast<const PreparedForInviteAction*>(lpAction);
-        CGS_ASSERT(lpPreparedForInviteAction, CGS_ASSERT_MESSAGE_AT("lpPreparedForInviteAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/InviteManager/BrnGameStateInviteManager.cpp", 505));
+        CGS_ASSERT_AT(lpPreparedForInviteAction, "lpPreparedForInviteAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/InviteManager/BrnGameStateInviteManager.cpp", 505);
 
         mModulePreparedBitArray.SetBit(lpPreparedForInviteAction->meModulePreparedForInvite);
     }

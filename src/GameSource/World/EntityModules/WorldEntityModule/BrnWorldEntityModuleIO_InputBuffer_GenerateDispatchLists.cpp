@@ -33,28 +33,28 @@ namespace WorldEntityIO
     // X360 0x822BAA08: read-lock; return muDispatchFrame (this+4).
     CgsGraphics::DispatchFrame* InputBuffer_GenerateDispatchLists::GetDispatchFrame() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 278));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 278);
         return mpDispatchFrame;
     }
 
     // X360 0x827A2FC8: write-lock; set muDispatchFrame (this+4).
     void InputBuffer_GenerateDispatchLists::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 279));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 279);
         mpDispatchFrame = lpDispatchFrame;
     }
 
     // X360 0x822BAAB0: read-lock; return muShadowMap (this+0x8018).
     BrnWorld::ShadowMap* InputBuffer_GenerateDispatchLists::GetShadowMap() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 281));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 281);
         return mpShadowMap;
     }
 
     // X360 0x827A3070: write-lock; set muShadowMap (this+0x8018).
     void InputBuffer_GenerateDispatchLists::SetShadowMap(BrnWorld::ShadowMap* lpShadowMap)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 282));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 282);
         mpShadowMap = lpShadowMap;
     }
 }

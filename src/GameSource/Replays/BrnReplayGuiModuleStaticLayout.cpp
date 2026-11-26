@@ -68,8 +68,8 @@ namespace BrnReplays
             maCarFlagsBuffer0[liIndex][0] = 0; // stb buffer0[i]+0
             maCarFlagsBuffer1[liIndex][0] = 0; // stb buffer1[i]+0
 
-            CGS_ASSERT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 39));
+            CGS_ASSERT_AT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 39);
         }
 
         return this;
@@ -102,8 +102,8 @@ namespace BrnReplays
             else
                 maCarFlagsBuffer1[liIndex][0] = 0;
 
-            CGS_ASSERT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 39));
+            CGS_ASSERT_AT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 39);
         }
 
         return this;

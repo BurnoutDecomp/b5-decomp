@@ -51,7 +51,7 @@ namespace PropEntityIO
     // X360 0x822CD378 (:117) -- queue a knock-down request for the given traffic-light instance.
     void PropToTrafficInterface::RequestTrafficLightKnockDown(u32 luInstanceID)
     {
-        CGS_ASSERT(luInstanceID != 0, CGS_ASSERT_MESSAGE_AT("luInstanceID != 0", KAC_ARTIST_ASSERT_FILE, 149));
+        CGS_ASSERT_AT(luInstanceID != 0, "luInstanceID != 0", KAC_ARTIST_ASSERT_FILE, 149);
 
         TrafficLightKnockDownEvent lEvent = { luInstanceID };
         mTrafficLightKnockDownQueue.AddEvent(lEvent);
@@ -64,7 +64,7 @@ namespace PropEntityIO
     // interface's mTrafficLightRestoreQueue (its 2nd member, +0x8C).
     void PropToTrafficInterface::RequestTrafficLightRestore(u32 luInstanceID)
     {
-        CGS_ASSERT(luInstanceID != 0, CGS_ASSERT_MESSAGE_AT("luInstanceID != 0", KAC_ARTIST_ASSERT_FILE, 163));
+        CGS_ASSERT_AT(luInstanceID != 0, "luInstanceID != 0", KAC_ARTIST_ASSERT_FILE, 163);
 
         TrafficLightRestoreEvent lEvent = { luInstanceID };
         mTrafficLightRestoreQueue.AddEvent(lEvent);

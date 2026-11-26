@@ -84,7 +84,7 @@ namespace Fuzzy
             case 8: lpSet = &mSwerveDistanceEnvelopes;break;   // this+0x240
             case 9: lpSet = &mSwerveAngleEnvelopes;   break;   // this+0x280
             default:
-                CGS_ASSERT_AT(false, "Unknown category", CGS_ARTIST_UNITY_BRNTRAFFICFUZZYLOGICBEHAVIOURS_CPP_FILE, 690);
+                CGS_FAIL_AT("Unknown category", CGS_ARTIST_UNITY_BRNTRAFFICFUZZYLOGICBEHAVIOURS_CPP_FILE, 690);
                 return;
         }
         // The corners are scalar floats here but the envelope set works in broadcast
@@ -103,7 +103,7 @@ namespace Fuzzy
         CGS_ASSERT_AT(mpTweakValues != 0, "mpTweakValues", CGS_ARTIST_UNITY_BRNTRAFFICFUZZYLOGICBEHAVIOURS_CPP_FILE, 706);
         if (!mpTweakValues->SetByIndex(liValueIndex, lfValue))
         {
-            CGS_ASSERT_AT(false, "Unknown mega-tweek value", CGS_ARTIST_UNITY_BRNTRAFFICFUZZYLOGICBEHAVIOURS_CPP_FILE, 839);
+            CGS_FAIL_AT("Unknown mega-tweek value", CGS_ARTIST_UNITY_BRNTRAFFICFUZZYLOGICBEHAVIOURS_CPP_FILE, 839);
         }
     }
 

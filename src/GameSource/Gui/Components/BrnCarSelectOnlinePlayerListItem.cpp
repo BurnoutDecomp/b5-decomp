@@ -86,7 +86,7 @@ namespace BrnGui
         }
         else
         {
-            CGS_ASSERT(false, "Unhandled load notification : ");
+            CGS_FAIL("Unhandled load notification : ");
         }
     }
 

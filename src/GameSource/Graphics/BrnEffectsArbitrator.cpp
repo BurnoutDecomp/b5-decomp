@@ -282,7 +282,7 @@ namespace
 
             default:
                 // ../Graphics/BrnEffectsArbitrator.cpp:522 on the console (`li r5, 0x20A`).
-                CGS_ASSERT(false, kacInvalidSlotCount);
+                CGS_FAIL(kacInvalidSlotCount);
                 lAltData.Construct();
                 lrAltWeight = KF_ZERO_LAYER_WEIGHT;
                 break;
@@ -294,7 +294,7 @@ namespace
                 char lacError[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                 CgsCore::SPrintf(lacError, CgsDev::Assert::KI_MESSAGEBUFFERSIZE,
                                  kacInvalidLayerWeights, lrAltWeight, lu8Layer);
-                CGS_ASSERT(false, lacError);
+                CGS_FAIL(lacError);
             }
 
             // Fold this layer in: the accumulated result keeps (1 - layerWeight) of itself.
@@ -526,7 +526,7 @@ bool EffectsArbitrator::EvalTint(rw::graphics::postfx::ColourCube** lppColourCub
             char lacError[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsCore::SPrintf(lacError, CgsDev::Assert::KI_MESSAGEBUFFERSIZE,
                              kacInvalidLayerWeights, lfLayerWeight, lu8Layer);
-            CGS_ASSERT(false, lacError);
+            CGS_FAIL(lacError);
         }
 
         // Re-weight the colour cubes accumulated by the EARLIER layers by the residual

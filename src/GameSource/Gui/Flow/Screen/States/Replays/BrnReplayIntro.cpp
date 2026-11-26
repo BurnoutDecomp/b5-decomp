@@ -117,7 +117,7 @@ void ReplayIntro::Update()
 
     default:
         // Streamed in place, as ARTIST builds it (cpp:144).
-        CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+        CGS_FAIL_STREAM_AT("Invalid internal state : " << meInternalState << "\n",
                              CGS_ARTIST_FILE, 144);
         break;
     }

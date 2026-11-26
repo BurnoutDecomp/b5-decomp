@@ -231,7 +231,7 @@ void BurnoutSkillsManager::SelectNextSkill()
 // ----------------------------------------------------------------------------
 void BurnoutSkillsManager::Update()
 {
-    CGS_ASSERT(mpCache, CGS_ASSERT_MESSAGE_AT("mpCache", CGS_ARTIST_FILE, 107 /* ARTIST 0x824F9E38 */));
+    CGS_ASSERT_AT(mpCache, "mpCache", CGS_ARTIST_FILE, 107 /* ARTIST 0x824F9E38 */);
 
     if (mpCache->GetGameMode() == KI_SKILLS_ACTIVE_GAME_MODE_TYPE)
     {
@@ -302,10 +302,10 @@ void BurnoutSkillsManager::SetRoadRuleMode(BrnGameState::EActiveRoadRule leRoadR
             break;
 
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "Invalid road rule mode\n",
-                    CGS_ARTIST_FILE, 465 /* ARTIST 0x824F9FE0 */));
+            CGS_FAIL_AT(
+                "Invalid road rule mode\n",
+                    CGS_ARTIST_FILE, 465 /* ARTIST 0x824F9FE0 */);
+
             break;
     }
 }
@@ -321,14 +321,14 @@ f32 BurnoutSkillsManager::GetBurnoutSkillForARC(
     BrnGameState::BurnoutSkillzData::EBurnoutSkillType leSkill,
     EActiveRaceCarIndex leActiveRaceCar) const
 {
-    CGS_ASSERT(leActiveRaceCar >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-            KAC_ARTIST_ASSERT_FILE, 174 /* ARTIST 0x8240EBE0 */));
-    CGS_ASSERT(leActiveRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-            KAC_ARTIST_ASSERT_FILE, 175 /* ARTIST 0x8240EC04 */));
+    CGS_ASSERT_AT(leActiveRaceCar >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+            KAC_ARTIST_ASSERT_FILE, 174 /* ARTIST 0x8240EBE0 */);
+
+    CGS_ASSERT_AT(leActiveRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 175 /* ARTIST 0x8240EC04 */);
+
 
     return maSkillzData[leActiveRaceCar].GetBurnoutSkill(leSkill);
 }

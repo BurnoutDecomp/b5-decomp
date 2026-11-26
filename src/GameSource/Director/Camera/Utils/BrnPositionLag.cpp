@@ -82,7 +82,7 @@ void PositionLag::Construct()
 // ----------------------------------------------------------------------------
 void PositionLag::Update(const Parameters& lrParameters, f32 lfTimestep, rw::math::vpu::Matrix44Affine& lrTransform)
 {
-    CGS_ASSERT(mbConstructed, CGS_ASSERT_MESSAGE_AT("mbConstructed", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnPositionLag.cpp", 69));
+    CGS_ASSERT_AT(mbConstructed, "mbConstructed", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnPositionLag.cpp", 69);
 
     // (1) Inverse of the orthonormal affine: transpose the 3x3, inverse-transform the position.
     const rw::math::vpu::Matrix44Affine lInverseTransform =

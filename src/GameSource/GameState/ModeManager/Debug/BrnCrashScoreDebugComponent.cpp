@@ -38,9 +38,9 @@ namespace BrnGameState
     // @ 0x82312168 - assert the scoring object is wired (the base Update has nothing else to do here).
     void CrashScoreDebugComponent::Update()
     {
-        CGS_ASSERT(mpCrashScoring != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpCrashScoring != NULL", CGS_ARTIST_FILE, 100 /* ARTIST 0x82312188 */));
+        CGS_ASSERT_AT(mpCrashScoring != 0,
+            "mpCrashScoring != NULL", CGS_ARTIST_FILE, 100 /* ARTIST 0x82312188 */);
+
     }
 
     // @ 0x823121B0
@@ -99,8 +99,8 @@ namespace BrnGameState
     // @ 0x8231EB90 - assert the scoring object is wired, then draw the readout if "Display score" is on.
     void CrashScoreDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     {
-        CGS_ASSERT(mpCrashScoring != 0,
-            CGS_ASSERT_MESSAGE_AT("mpCrashScoring != NULL", CGS_ARTIST_FILE, 82 /* ARTIST 0x8231EBC0 */));
+        CGS_ASSERT_AT(mpCrashScoring != 0,
+            "mpCrashScoring != NULL", CGS_ARTIST_FILE, 82 /* ARTIST 0x8231EBC0 */);
         if (mbShowScoring)
             DisplayScores(lpRender);
     }

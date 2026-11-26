@@ -99,8 +99,8 @@ inline rw::math::vpu::Vector3
 AttachmentTruck::GetPosition() const
 {
     // ARTIST 0x821F4028 fires it at BrnBehaviourGyroCam.h:75, the truck's original home.
-    CGS_ASSERT(!mbFirstFrame, CGS_ASSERT_MESSAGE_AT("!mbFirstFrame",
-        "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.h", 75));
+    CGS_ASSERT_AT(!mbFirstFrame, "!mbFirstFrame",
+        "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.h", 75);
     return mPosition;                                  // lvx128 v0,(this=r4); stvx128 v0,(sret=r3)
 }
 

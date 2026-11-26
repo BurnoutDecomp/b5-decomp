@@ -170,7 +170,7 @@ const s32 OfflineRivalShutdown::miNumEventsObserved = 5;
 // run the base Construct, then zero the state word (+0x38) and the cache pointer (+0x40).
 void OfflineRivalShutdown::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
 {
-    CGS_ASSERT(lpFsm != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ScriptedFsm ptr", CGS_ARTIST_FILE, 88));   // cpp:88
+    CGS_ASSERT_STREAM_AT(lpFsm != 0, "Invalid ScriptedFsm ptr", CGS_ARTIST_FILE, 88);   // cpp:88
 
     CgsGui::State::Construct(liId, lpFsm);
 
@@ -369,10 +369,10 @@ void OfflineRivalShutdown::HandleIncomingEvents()
 // composed "<parent>_<name>"), on the screen flow (r4 = 0), in the console's order.
 void OfflineRivalShutdown::AppendExpectedComponents()
 {
-    CGS_ASSERT(mpGuiCache,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpGuiCache",
-            CGS_ARTIST_FILE, 374 /* ARTIST 0x824B96C8 */));   // cpp:374
+    CGS_ASSERT_AT(mpGuiCache,
+        "mpGuiCache",
+            CGS_ARTIST_FILE, 374 /* ARTIST 0x824B96C8 */);   // cpp:374
+
 
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mScreenAnim.GetName());
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mManufacturerIcon.GetName());
@@ -490,10 +490,10 @@ void OfflineRivalShutdown::HandleAptTriggers(const CgsGui::GuiEventAptTriggerPay
 // cpp:525 -- only the "pressed" record (id 6) is answered.
 void OfflineRivalShutdown::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liEventType)
 {
-    CGS_ASSERT(lpEvent,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpEvent",
-            CGS_ARTIST_FILE, 527 /* ARTIST 0x824BD128 */));   // cpp:527
+    CGS_ASSERT_AT(lpEvent,
+        "lpEvent",
+            CGS_ARTIST_FILE, 527 /* ARTIST 0x824BD128 */);   // cpp:527
+
 
     if (liEventType == KI_EVENT_CONTROLLER_INPUT_PRESSED)
     {

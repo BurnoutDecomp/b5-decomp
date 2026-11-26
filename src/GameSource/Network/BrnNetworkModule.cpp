@@ -110,36 +110,36 @@ namespace BrnNetwork
         miNetworkAfterSim7PM = CgsDev::PerfMonCpu::AddMonitor("Module - Process after 7",       CgsDev::E_PMP_9, false, 1.0f, true);
         miNetworkAfterSim8PM = CgsDev::PerfMonCpu::AddMonitor("Module - Process after 8",       CgsDev::E_PMP_9, false, 1.0f, true);
 
-        CGS_ASSERT(miNetworkBeforeSimPM >= 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(miNetworkBeforeSimPM >= 0,
             "miNetworkBeforeSimPM >= 0",
-            __FILE__, 119 /* ARTIST 0x82592C54 */));
-        CGS_ASSERT(miNetworkAfterSimPM  >= 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 119 /* ARTIST 0x82592C54 */);
+        CGS_ASSERT_AT(miNetworkAfterSimPM  >= 0,
             "miNetworkAfterSimPM >= 0",
-            __FILE__, 120 /* ARTIST 0x82592C7C */));
-        CGS_ASSERT(miNetworkAfterSim1PM >= 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 120 /* ARTIST 0x82592C7C */);
+        CGS_ASSERT_AT(miNetworkAfterSim1PM >= 0,
             "miNetworkAfterSim1PM >= 0",
-            __FILE__, 121 /* ARTIST 0x82592CA4 */));
-        CGS_ASSERT(miNetworkAfterSim2PM >= 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 121 /* ARTIST 0x82592CA4 */);
+        CGS_ASSERT_AT(miNetworkAfterSim2PM >= 0,
             "miNetworkAfterSim2PM >= 0",
-            __FILE__, 122 /* ARTIST 0x82592CCC */));
-        CGS_ASSERT(miNetworkAfterSim3PM >= 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 122 /* ARTIST 0x82592CCC */);
+        CGS_ASSERT_AT(miNetworkAfterSim3PM >= 0,
             "miNetworkAfterSim3PM >= 0",
-            __FILE__, 123 /* ARTIST 0x82592CF4 */));
-        CGS_ASSERT(miNetworkAfterSim4PM >= 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 123 /* ARTIST 0x82592CF4 */);
+        CGS_ASSERT_AT(miNetworkAfterSim4PM >= 0,
             "miNetworkAfterSim4PM >= 0",
-            __FILE__, 124 /* ARTIST 0x82592D1C */));
-        CGS_ASSERT(miNetworkAfterSim5PM >= 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 124 /* ARTIST 0x82592D1C */);
+        CGS_ASSERT_AT(miNetworkAfterSim5PM >= 0,
             "miNetworkAfterSim5PM >= 0",
-            __FILE__, 125 /* ARTIST 0x82592D44 */));
-        CGS_ASSERT(miNetworkAfterSim6PM >= 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 125 /* ARTIST 0x82592D44 */);
+        CGS_ASSERT_AT(miNetworkAfterSim6PM >= 0,
             "miNetworkAfterSim6PM >= 0",
-            __FILE__, 126 /* ARTIST 0x82592D6C */));
-        CGS_ASSERT(miNetworkAfterSim7PM >= 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 126 /* ARTIST 0x82592D6C */);
+        CGS_ASSERT_AT(miNetworkAfterSim7PM >= 0,
             "miNetworkAfterSim7PM >= 0",
-            __FILE__, 127 /* ARTIST 0x82592D94 */));
-        CGS_ASSERT(miNetworkAfterSim8PM >= 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 127 /* ARTIST 0x82592D94 */);
+        CGS_ASSERT_AT(miNetworkAfterSim8PM >= 0,
             "miNetworkAfterSim8PM >= 0",
-            __FILE__, 128 /* ARTIST 0x82592DBC */));
+            __FILE__, 128 /* ARTIST 0x82592DBC */);
 
         CgsNetwork::NetworkImageConverter::SetupPerfmons();
     }
@@ -182,15 +182,15 @@ namespace BrnNetwork
             mePrepareStage = E_PREPARESTAGE_DONE;
             meReleaseStage = E_RELEASESTAGE_START;
 
-            CGS_ASSERT(mInputGuiEventQueue.Prepare(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(mInputGuiEventQueue.Prepare(),
                 "mInputGuiEventQueue.Prepare()",
-                CGS_ARTIST_FILE, 198 /* ARTIST 0x8259B448 */));
-            CGS_ASSERT(mOutputGuiEventQueue.Prepare(), CGS_ASSERT_MESSAGE_AT(
+                CGS_ARTIST_FILE, 198 /* ARTIST 0x8259B448 */);
+            CGS_ASSERT_AT(mOutputGuiEventQueue.Prepare(),
                 "mOutputGuiEventQueue.Prepare()",
-                CGS_ARTIST_FILE, 199 /* ARTIST 0x8259B47C */));
-            CGS_ASSERT(mNetworkEventQueue.Prepare(), CGS_ASSERT_MESSAGE_AT(
+                CGS_ARTIST_FILE, 199 /* ARTIST 0x8259B47C */);
+            CGS_ASSERT_AT(mNetworkEventQueue.Prepare(),
                 "mNetworkEventQueue.Prepare()",
-                CGS_ARTIST_FILE, 200 /* ARTIST 0x8259B4B0 */));
+                CGS_ARTIST_FILE, 200 /* ARTIST 0x8259B4B0 */);
 
             CgsDev::DebugInterface lDebugInterface;
             mbOutputSendUpdateMessages = false;
@@ -204,9 +204,9 @@ namespace BrnNetwork
             return true;
         }
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "unknown prepare stage",
-                CGS_ARTIST_FILE, 221 /* ARTIST 0x8259B55C */));
+                CGS_ARTIST_FILE, 221 /* ARTIST 0x8259B55C */);
             break;
         }
 
@@ -230,9 +230,9 @@ namespace BrnNetwork
             CgsDev::DebugInterface lDebugInterface;
             lDebugInterface.UnregisterVariable(&mbOutputSendUpdateMessages);
             lDebugInterface.UnregisterVariable(&mbOutputRecvUpdateMessages);
-            CGS_ASSERT(mNetworkEventQueue.Release(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(mNetworkEventQueue.Release(),
                 "mNetworkEventQueue.Release()",
-                CGS_ARTIST_FILE, 257 /* ARTIST 0x82592E8C */));
+                CGS_ARTIST_FILE, 257 /* ARTIST 0x82592E8C */);
         }
             // fall through
         case E_RELEASESTAGE_NETWORK_MANAGER:
@@ -257,9 +257,9 @@ namespace BrnNetwork
             mbPadIdle      = true;
             return true;
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "unknown release stage",
-                CGS_ARTIST_FILE, 300 /* ARTIST 0x82592F30 */));
+                CGS_ARTIST_FILE, 300 /* ARTIST 0x82592F30 */);
             break;
         }
 
@@ -281,19 +281,19 @@ namespace BrnNetwork
     // Records, in registry order, every player the games component reports as in the game.
     void BrnNetworkModule::CacheNetworkPlayerIDsAtGameStart()
     {
-        CGS_ASSERT(mNetworkManager.GetServerInterface(),
-            CGS_ASSERT_MESSAGE_AT(
-                "mNetworkManager.GetServerInterface()", __FILE__, 515 /* ARTIST 0x82581A70 */));
+        CGS_ASSERT_AT(mNetworkManager.GetServerInterface(),
+            "mNetworkManager.GetServerInterface()", __FILE__, 515 /* ARTIST 0x82581A70 */);
+
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = mNetworkManager.GetServerInterface()->GetGameComponent();
         CgsNetwork::PlayerManager*        lpPlayerManager        = mNetworkManager.GetPlayerManager();
         NetworkPlayerID                   lPlayerID              = CgsNetwork::KI_INVALID_PLAYER_ID;
 
-        CGS_ASSERT(lpServerInterfaceGames,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpServerInterfaceGames", __FILE__, 521 /* ARTIST 0x82581AA4 */));
-        CGS_ASSERT(lpPlayerManager,
-            CGS_ASSERT_MESSAGE_AT("lpPlayerManager", __FILE__, 522 /* ARTIST 0x82581AC8 */));
+        CGS_ASSERT_AT(lpServerInterfaceGames,
+            "lpServerInterfaceGames", __FILE__, 521 /* ARTIST 0x82581AA4 */);
+
+        CGS_ASSERT_AT(lpPlayerManager,
+            "lpPlayerManager", __FILE__, 522 /* ARTIST 0x82581AC8 */);
 
         miCachedPlayersInGame = 0;
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
@@ -461,25 +461,25 @@ namespace BrnNetwork
     // larger reconstructions of those callers would inline them and drop the exact copies.
     CgsModule::VariableEventQueue<18432, 16>* BrnNetworkModule::GetInputGuiEventQueue()
     {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(mbIsUpdating,
             "Can not use this function unless module is updating\n",
-            CGS_ARTIST_FILE_BRNNETWORKMODULE, 458));
+            CGS_ARTIST_FILE_BRNNETWORKMODULE, 458);
         return &mInputGuiEventQueue;
     }
 
     bool BrnNetworkModule::IsSendUpdateMessageToBeShown() const
     {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(mbIsUpdating,
             "Can not use this function unless module is updating\n",
-            CGS_ARTIST_FILE_BRNNETWORKMODULE, 514));
+            CGS_ARTIST_FILE_BRNNETWORKMODULE, 514);
         return mbOutputSendUpdateMessages;
     }
 
     bool BrnNetworkModule::IsRecvUpdateMessageToBeShown() const
     {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(mbIsUpdating,
             "Can not use this function unless module is updating\n",
-            CGS_ARTIST_FILE_BRNNETWORKMODULE, 522));
+            CGS_ARTIST_FILE_BRNNETWORKMODULE, 522);
         return mbOutputRecvUpdateMessages;
     }
 

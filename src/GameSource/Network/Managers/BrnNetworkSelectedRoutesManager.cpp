@@ -58,12 +58,12 @@ namespace BrnNetwork
     void SelectedRoutesManager::Construct(BrnNetworkModule* lpNetworkModule,
                                           CgsNetwork::TimeManager* lpTimeManager)
     {
-        CGS_ASSERT(lpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpNetworkModule != 0,
             "lpNetworkModule",
-            __FILE__, 50 /* ARTIST 0x8255BC74 */));
-        CGS_ASSERT(lpTimeManager != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 50 /* ARTIST 0x8255BC74 */);
+        CGS_ASSERT_AT(lpTimeManager != 0,
             "lpTimeManager",
-            __FILE__, 51 /* ARTIST 0x8255BC98 */));
+            __FILE__, 51 /* ARTIST 0x8255BC98 */);
 
         mpNetworkModule = lpNetworkModule;
         mpTimeManager   = lpTimeManager;
@@ -174,9 +174,9 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     void SelectedRoutesManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetPlayerManager() != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetPlayerManager() != 0,
             "mpNetworkModule->GetNetworkManager()->GetPlayerManager()",
-            __FILE__, 183 /* ARTIST 0x8255BDE0 */));
+            __FILE__, 183 /* ARTIST 0x8255BDE0 */);
 
         CgsNetwork::PlayerManager* lpPlayerManager =
             mpNetworkModule->GetNetworkManager()->GetPlayerManager();
@@ -194,9 +194,9 @@ namespace BrnNetwork
                     break;
                 }
             }
-            CGS_ASSERT(lpDataEntry != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(lpDataEntry != 0,
                 "lpDataEntry",
-                __FILE__, 191 /* ARTIST 0x8255BE60 */));
+                __FILE__, 191 /* ARTIST 0x8255BE60 */);
 
             lpNetworkPlayer->RegisterMessageType(
                 KI_SELECTED_ROUTES_MESSAGE_TYPE,
@@ -223,9 +223,9 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     void SelectedRoutesManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetPlayerManager() != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetPlayerManager() != 0,
             "mpNetworkModule->GetNetworkManager()->GetPlayerManager()",
-            __FILE__, 229 /* ARTIST 0x8255BF0C */));
+            __FILE__, 229 /* ARTIST 0x8255BF0C */);
 
         CgsNetwork::PlayerManager* lpPlayerManager =
             mpNetworkModule->GetNetworkManager()->GetPlayerManager();
@@ -257,9 +257,9 @@ namespace BrnNetwork
             if (maSelectedRoutesData[liPlayerIndex].mPlayerID != KI_INVALID_PLAYER_ID)
             {
                 RemovePlayer(maSelectedRoutesData[liPlayerIndex].mPlayerID);
-                CGS_ASSERT(maSelectedRoutesData[liPlayerIndex].mPlayerID == KI_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+                CGS_ASSERT_AT(maSelectedRoutesData[liPlayerIndex].mPlayerID == KI_INVALID_PLAYER_ID,
                     "maSelectedRoutesData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
-                    __FILE__, 277 /* ARTIST 0x8255C010 */));
+                    __FILE__, 277 /* ARTIST 0x8255C010 */);
             }
         }
 

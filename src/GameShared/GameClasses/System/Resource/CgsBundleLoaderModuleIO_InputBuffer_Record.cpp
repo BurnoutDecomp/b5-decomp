@@ -32,15 +32,15 @@ namespace BundleLoaderIO
 
     const InputBuffer_Record::PoolReceiveQueue* InputBuffer_Record::GetPoolReceiveQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for reading\n", CGS_ARTIST_FILE, 112));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+            "Not locked for reading\n", CGS_ARTIST_FILE, 112);
         return &mPoolReceiveQueue;
     }
 
     InputBuffer_Record::PoolReceiveQueue* InputBuffer_Record::GetPoolReceiveQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for writing\n", CGS_ARTIST_FILE, 113));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+            "Not locked for writing\n", CGS_ARTIST_FILE, 113);
         return &mPoolReceiveQueue;
     }
 

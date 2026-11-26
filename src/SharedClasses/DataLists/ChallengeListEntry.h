@@ -330,10 +330,10 @@ private:
 inline ChallengeListEntryAction::EChallengeActionType
 ChallengeListEntryAction::GetActionType() const
 {
-    CGS_ASSERT(
+    CGS_ASSERT_AT(
         muActionType < E_ACTION_COUNT,
-        CGS_ASSERT_MESSAGE_AT( "(ChallengeListEntryAction::EChallengeActionType)muActionType < ChallengeListEntryAction::E_ACTION_COUNT",
-             CGS_ARTIST_CHALLENGELISTENTRY_FILE, 660 ) );
+         "(ChallengeListEntryAction::EChallengeActionType)muActionType < ChallengeListEntryAction::E_ACTION_COUNT",
+             CGS_ARTIST_CHALLENGELISTENTRY_FILE, 660  );
 
     return static_cast<EChallengeActionType>( muActionType );
 }
@@ -347,9 +347,9 @@ ChallengeListEntryAction::GetActionType() const
 // out-of-range index).
 inline ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liActionIndex )
 {
-    CGS_ASSERT( liActionIndex >= 0, CGS_ASSERT_MESSAGE_AT( "liActionIndex >= 0", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 941 ) );
-    CGS_ASSERT( liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE,
-                CGS_ASSERT_MESSAGE_AT( "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 942 ) );
+    CGS_ASSERT_AT( liActionIndex >= 0,  "liActionIndex >= 0", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 941  );
+    CGS_ASSERT_AT( liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE,
+                 "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 942  );
 
     return &maAction[ liActionIndex ];
 }
@@ -477,8 +477,8 @@ inline int32_t ChallengeListEntry::GetOriginalNumPlayers() const
 // GetOriginalNumPlayers above.
 inline void ChallengeListEntry::SetNumPlayers( int32_t liNum )
 {
-    CGS_ASSERT( liNum >= 1, CGS_ASSERT_MESSAGE_AT( "liNumPlayers >= 1", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 874 ) );
-    CGS_ASSERT( liNum <= KI_MAX_PLAYERS, CGS_ASSERT_MESSAGE_AT( "liNumPlayers <= KI_MAX_PLAYERS", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 876 ) );
+    CGS_ASSERT_AT( liNum >= 1,  "liNumPlayers >= 1", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 874  );
+    CGS_ASSERT_AT( liNum <= KI_MAX_PLAYERS,  "liNumPlayers <= KI_MAX_PLAYERS", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 876  );
 
     muNumPlayers = static_cast<uint8_t>( 17 * liNum );
 }
@@ -492,8 +492,8 @@ inline void ChallengeListEntry::SetNewNumPlayers( int32_t liNumPlayers )
 inline void ChallengeListEntry::ResetNumPlayers()
 {
     const int32_t liNumPlayers = GetOriginalNumPlayers();
-    CGS_ASSERT( liNumPlayers >= 1, CGS_ASSERT_MESSAGE_AT( "liNumPlayers >= 1", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 888 ) );
-    CGS_ASSERT( liNumPlayers <= KI_MAX_PLAYERS, CGS_ASSERT_MESSAGE_AT( "liNumPlayers <= KI_MAX_PLAYERS", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 890 ) );
+    CGS_ASSERT_AT( liNumPlayers >= 1,  "liNumPlayers >= 1", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 888  );
+    CGS_ASSERT_AT( liNumPlayers <= KI_MAX_PLAYERS,  "liNumPlayers <= KI_MAX_PLAYERS", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 890  );
     muNumPlayers = static_cast<uint8_t>( (muNumPlayers & 0xF0) | liNumPlayers );
 }
 
@@ -509,9 +509,9 @@ inline void ChallengeListEntryAction::SetCombineAction( ECombineActionType leTyp
 
 inline const ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liActionIndex ) const
 {
-    CGS_ASSERT( liActionIndex >= 0, CGS_ASSERT_MESSAGE_AT( "liActionIndex >= 0", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 941 ) );
-    CGS_ASSERT( liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE,
-                CGS_ASSERT_MESSAGE_AT( "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 942 ) );
+    CGS_ASSERT_AT( liActionIndex >= 0,  "liActionIndex >= 0", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 941  );
+    CGS_ASSERT_AT( liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE,
+                 "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 942  );
 
     return &maAction[ liActionIndex ];
 }
@@ -541,10 +541,10 @@ ChallengeListEntryAction::GetCombineAction() const
 // Sibling of GetDistrict (type==DISTRICT, 4-byte) and GetRoadID (type==ROAD, 8-byte).
 inline CgsID ChallengeListEntryAction::GetTriggerID( uint8_t lu8Index ) const
 {
-    CGS_ASSERT( lu8Index < KU_MAX_LOCATIONS_PER_ACTION,
-                CGS_ASSERT_MESSAGE_AT( "luLocationIndex < KU_MAX_LOCATIONS_PER_ACTION", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 793 ) );
-    CGS_ASSERT( (ELocationType) mauLocationType[ lu8Index ] == E_LOCATION_TYPE_TRIGGER,
-                CGS_ASSERT_MESSAGE_AT( "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_TRIGGER", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 794 ) );
+    CGS_ASSERT_AT( lu8Index < KU_MAX_LOCATIONS_PER_ACTION,
+                 "luLocationIndex < KU_MAX_LOCATIONS_PER_ACTION", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 793  );
+    CGS_ASSERT_AT( (ELocationType) mauLocationType[ lu8Index ] == E_LOCATION_TYPE_TRIGGER,
+                 "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_TRIGGER", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 794  );
 
     return maLocationData[ lu8Index ].mTriggerID;
 }
@@ -619,12 +619,12 @@ inline bool ChallengeListEntryAction::HasTimeLimit() const
 // ChallengeListEntry.h:179)  lwzx == 32-bit read at 0x34+4*index.
 inline int32_t ChallengeListEntryAction::GetTargetValue( int32_t liTargetIndex ) const
 {
-    CGS_ASSERT( liTargetIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liTargetIndex >= 0", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 694 /* ARTIST 0x8230EEC4 */));
-    CGS_ASSERT( liTargetIndex < KI_MAX_TARGETS_PER_CHALLENGE_ACTION,
-        CGS_ASSERT_MESSAGE_AT(
-            "liTargetIndex < KI_MAX_TARGETS_PER_CHALLENGE_ACTION",
-            CGS_ARTIST_CHALLENGELISTENTRY_FILE, 695 /* ARTIST 0x8230EEE8 */));
+    CGS_ASSERT_AT( liTargetIndex >= 0,
+        "liTargetIndex >= 0", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 694 /* ARTIST 0x8230EEC4 */);
+    CGS_ASSERT_AT( liTargetIndex < KI_MAX_TARGETS_PER_CHALLENGE_ACTION,
+        "liTargetIndex < KI_MAX_TARGETS_PER_CHALLENGE_ACTION",
+            CGS_ARTIST_CHALLENGELISTENTRY_FILE, 695 /* ARTIST 0x8230EEE8 */);
+
 
     return maiTargetValue[ liTargetIndex ];
 }

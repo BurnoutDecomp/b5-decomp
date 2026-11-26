@@ -198,8 +198,8 @@ void BridgePhysicsModuleToPropModule_PostPhysics(
 {
     (void)lpWorldModule;   // X360 r3 -- overwritten at 0x827AB9FC, never read
 
-    CGS_ASSERT(lpPropInputBuffer_PostPhysics != 0, CGS_ASSERT_MESSAGE_AT("lpPropInputBuffer_PostPhysics != NULL", __FILE__, 102));  // :102
-    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleOutputBuffer != NULL", __FILE__, 103));      // :103
+    CGS_ASSERT_AT(lpPropInputBuffer_PostPhysics != 0, "lpPropInputBuffer_PostPhysics != NULL", __FILE__, 102);  // :102
+    CGS_ASSERT_AT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL", __FILE__, 103);      // :103
 
     // ---- LEG 1 -- the updated-prop queue (0x827ABA00 GetPropManagerOutputInterface const,
     // then the folded +0xA2A0 GetUpdatedProps, then 0x827ABA14 AppendUpdatedPropQueue).
@@ -279,8 +279,8 @@ void BridgeSceneContactsToPropModule_PrePhysics(
 {
     (void)lpWorldModule;   // X360 r3 -- overwritten at 0x827ABD14, never read
 
-    CGS_ASSERT(lpPropInputBuffer_PrePhysics != 0, CGS_ASSERT_MESSAGE_AT("lpPropInputBuffer_PrePhysics != NULL", __FILE__, 209));  // :209
-    CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpSceneModuleOutputBuffer != NULL", __FILE__, 210));        // :210
+    CGS_ASSERT_AT(lpPropInputBuffer_PrePhysics != 0, "lpPropInputBuffer_PrePhysics != NULL", __FILE__, 209);  // :209
+    CGS_ASSERT_AT(lpSceneModuleOutputBuffer != 0, "lpSceneModuleOutputBuffer != NULL", __FILE__, 210);        // :210
 
     const CgsSceneManager::SceneManagerIO::OutputBuffer::OutPotentialContactQueue* const
         lpPotentialContacts = lpSceneModuleOutputBuffer->GetPotentialContactQueue();  // @0x8279C098
@@ -414,10 +414,10 @@ void BridgePropModuleToTrafficModule_PrePhysics(
 {
     (void)lpWorldModule;   // X360 r3 -- overwritten at 0x827AEAD4, never read
 
-    CGS_ASSERT(lpTrafficInputBuffer_PrePhysics != 0, CGS_ASSERT_MESSAGE_AT("lpTrafficInputBuffer_PrePhysics != NULL", __FILE__, 123)); // :123
+    CGS_ASSERT_AT(lpTrafficInputBuffer_PrePhysics != 0, "lpTrafficInputBuffer_PrePhysics != NULL", __FILE__, 123); // :123
     // Console string verbatim, typo included ("Outbut"): CGS_ASSERT messages are transcribed,
     // not corrected.
-    CGS_ASSERT(lpPropOutputBuffer_PrePhysics != 0, CGS_ASSERT_MESSAGE_AT("lpPropOutbutBuffer_PrePhysics != NULL", __FILE__, 124));     // :124
+    CGS_ASSERT_AT(lpPropOutputBuffer_PrePhysics != 0, "lpPropOutbutBuffer_PrePhysics != NULL", __FILE__, 124);     // :124
 
     typedef BrnWorld::PropEntityIO::PropToTrafficInterface PropToTrafficInterface;
 

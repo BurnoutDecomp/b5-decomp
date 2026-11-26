@@ -20,9 +20,9 @@ namespace CgsNetwork
                                                  u16 lu16Frame)
     {
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Preparing ConnectionStatusMessage\n";
-        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lu16Frame != KU16_INVALID_FRAME,
             "lu16Frame != KU16_INVALID_FRAME",
-            __FILE__, 80 /* ARTIST 0x82883194 */));
+            __FILE__, 80 /* ARTIST 0x82883194 */);
 
         for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
         {
@@ -46,9 +46,9 @@ namespace CgsNetwork
             }
 
             SetMessageInvalid();
-            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(!IsMessageValid(),
                 "!IsMessageValid()",
-                __FILE__, 121 /* ARTIST 0x82883294 */));
+                __FILE__, 121 /* ARTIST 0x82883294 */);
             return true;
         }
 

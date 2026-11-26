@@ -100,9 +100,9 @@ namespace CgsResource
         // Read-lock gate, then return the embedded status interface (X360 this+1).
         const FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface() const
         {
-            CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
                 "Not locked for reading\n",
-                CGS_ARTIST_FILE, 110));
+                CGS_ARTIST_FILE, 110);
             return &mFileSystemStatusInterface;
         }
 
@@ -112,9 +112,9 @@ namespace CgsResource
         // writing\n" at CgsResourceModuleIO.h:111 when the buffer is not write-locked.
         FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface()
         {
-            CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
                 "Not locked for writing\n",
-                "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourceModuleIO.h", 111));
+                "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourceModuleIO.h", 111);
             return &mFileSystemStatusInterface;
         }
     }

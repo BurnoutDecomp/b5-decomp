@@ -78,12 +78,12 @@ namespace BrnNetwork
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
 
-        CGS_ASSERT(lpaPlayerTeamInfo != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpaPlayerTeamInfo != 0,
             "lpaPlayerTeamInfo",
-            __FILE__, 96 /* ARTIST 0x825800D4 */));
-        CGS_ASSERT(sizeof(maPlayerTeamInfo) >= liNumPlayers * sizeof(PlayerTeamInfo), CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 96 /* ARTIST 0x825800D4 */);
+        CGS_ASSERT_AT(sizeof(maPlayerTeamInfo) >= liNumPlayers * sizeof(PlayerTeamInfo),
             "sizeof( maPlayerTeamInfo) >= liNumPlayers * sizeof( PlayerTeamInfo )",
-            __FILE__, 97 /* ARTIST 0x825800FC */));
+            __FILE__, 97 /* ARTIST 0x825800FC */);
 
         XMemCpy(maPlayerTeamInfo, lpaPlayerTeamInfo, sizeof(maPlayerTeamInfo));   // +0x28, src, 0x40
         miNumPlayers     = liNumPlayers;        // stw, +0x68
@@ -92,9 +92,9 @@ namespace BrnNetwork
         mbFinalSelection = lbFinalSelection;    // stb, +0x71
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_TEAM_SELECT_MESSAGE_TYPE, lu16Frame);
-        CGS_ASSERT(IsReliable(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(IsReliable(),
             "IsReliable()",
-            __FILE__, 106 /* ARTIST 0x82580168 */));
+            __FILE__, 106 /* ARTIST 0x82580168 */);
     }
 
     // ---------------------------------------------------------------------------------
@@ -106,21 +106,21 @@ namespace BrnNetwork
     bool TeamSelectMessage::Retrieve(PlayerTeamInfo* lpaPlayerTeamInfo, s32* lpiNumPlayers,
                                      s32* lpiNumTeams, bool* lpbAutobalance, bool* lpbFinalSelection)
     {
-        CGS_ASSERT(lpaPlayerTeamInfo != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpaPlayerTeamInfo != 0,
             "lpaPlayerTeamInfo",
-            CGS_ARTIST_FILE, 129 /* ARTIST 0x825801C0 */));
-        CGS_ASSERT(lpiNumPlayers != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 129 /* ARTIST 0x825801C0 */);
+        CGS_ASSERT_AT(lpiNumPlayers != 0,
             "lpiNumPlayers",
-            CGS_ARTIST_FILE, 130 /* ARTIST 0x825801E4 */));
-        CGS_ASSERT(lpiNumTeams != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 130 /* ARTIST 0x825801E4 */);
+        CGS_ASSERT_AT(lpiNumTeams != 0,
             "lpiNumTeams",
-            CGS_ARTIST_FILE, 131 /* ARTIST 0x82580208 */));
-        CGS_ASSERT(lpbAutobalance != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 131 /* ARTIST 0x82580208 */);
+        CGS_ASSERT_AT(lpbAutobalance != 0,
             "lpbAutobalance",
-            CGS_ARTIST_FILE, 132 /* ARTIST 0x8258022C */));
-        CGS_ASSERT(lpbFinalSelection != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 132 /* ARTIST 0x8258022C */);
+        CGS_ASSERT_AT(lpbFinalSelection != 0,
             "lpbFinalSelection",
-            CGS_ARTIST_FILE, 133 /* ARTIST 0x82580250 */));
+            CGS_ARTIST_FILE, 133 /* ARTIST 0x82580250 */);
 
         // ARTIST 0x82580264 branches to a trailing `return false` (0x825802D8): the copy-out is the body
         // of the valid test.
@@ -133,9 +133,9 @@ namespace BrnNetwork
             *lpbFinalSelection = mbFinalSelection;    // lbz +0x71
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                CGS_ARTIST_FILE, 147 /* ARTIST 0x825802C4 */));
+                CGS_ARTIST_FILE, 147 /* ARTIST 0x825802C4 */);
             return true;
         }
         return false;

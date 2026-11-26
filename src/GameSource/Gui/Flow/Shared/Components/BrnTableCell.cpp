@@ -43,8 +43,8 @@ TableCell::TableCell()
 // the field's text buffer.
 const char* TableCell::GetText() const
 {
-    CGS_ASSERT(mpComponent != NULL, CGS_ASSERT_STREAM_MESSAGE_AT("TableCell::GetText() Invalid cell component", CGS_ARTIST_FILE, 173));
-    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD, CGS_ASSERT_STREAM_MESSAGE_AT("TableCell::GetText() Cannot get text from a non-TextField cell", CGS_ARTIST_FILE, 174));
+    CGS_ASSERT_STREAM_AT(mpComponent != NULL, "TableCell::GetText() Invalid cell component", CGS_ARTIST_FILE, 173);
+    CGS_ASSERT_STREAM_AT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD, "TableCell::GetText() Cannot get text from a non-TextField cell", CGS_ARTIST_FILE, 174);
 
 
     return static_cast<const TextField*>(mpComponent)->GetText();
@@ -54,8 +54,8 @@ const char* TableCell::GetText() const
 // (+0x04 == 1); forwards straight to TextField::SetText.
 void TableCell::SetText(const char* lpacText)
 {
-    CGS_ASSERT(mpComponent != NULL, CGS_ASSERT_STREAM_MESSAGE_AT("TableCell::SetText() Invalid cell component", CGS_ARTIST_BRNTABLECELL_FILE, 190));
-    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD, CGS_ASSERT_STREAM_MESSAGE_AT("TableCell::SetText() Cannot set text in a non-TextField cell", CGS_ARTIST_BRNTABLECELL_FILE, 191));
+    CGS_ASSERT_STREAM_AT(mpComponent != NULL, "TableCell::SetText() Invalid cell component", CGS_ARTIST_BRNTABLECELL_FILE, 190);
+    CGS_ASSERT_STREAM_AT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD, "TableCell::SetText() Cannot set text in a non-TextField cell", CGS_ARTIST_BRNTABLECELL_FILE, 191);
 
 
     static_cast<TextField*>(mpComponent)->SetText(lpacText);

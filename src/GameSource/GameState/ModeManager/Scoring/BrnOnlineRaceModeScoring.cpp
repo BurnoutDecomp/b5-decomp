@@ -64,8 +64,8 @@ int OnlineRaceModeScoring::_PlayerFinishTimesCompare(const void* lpPlayer1, cons
 {
     s32 liResult = 0;
 
-    CGS_ASSERT(lpPlayer1, CGS_ASSERT_MESSAGE_AT("lpPlayer1", CGS_ARTIST_FILE, 126));
-    CGS_ASSERT(lpPlayer2, CGS_ASSERT_MESSAGE_AT("lpPlayer2", CGS_ARTIST_FILE, 127));
+    CGS_ASSERT_AT(lpPlayer1, "lpPlayer1", CGS_ARTIST_FILE, 126);
+    CGS_ASSERT_AT(lpPlayer2, "lpPlayer2", CGS_ARTIST_FILE, 127);
 
     const IndexToFinishTuple* lpP1 = static_cast<const IndexToFinishTuple*>(lpPlayer1);
     const IndexToFinishTuple* lpP2 = static_cast<const IndexToFinishTuple*>(lpPlayer2);
@@ -174,7 +174,7 @@ void OnlineRaceModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s
 {
     GameStateModuleIO::CarScoreData lDefaultScoreData;
 
-    CGS_ASSERT(lpScoringSystem, CGS_ASSERT_MESSAGE_AT("lpScoringSystem", CGS_ARTIST_FILE, 248));
+    CGS_ASSERT_AT(lpScoringSystem, "lpScoringSystem", CGS_ARTIST_FILE, 248);
 
     lDefaultScoreData.ClearData();
 

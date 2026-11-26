@@ -197,7 +197,7 @@ namespace BrnGui
             lpDriveThruStringID = "DRIVETHRU_CAR_PARK_PLURAL";
             break;
         default:
-            CGS_ASSERT_AT(false, "Unknown drive thru type", CGS_ARTIST_FILE, 223);
+            CGS_FAIL_AT("Unknown drive thru type", CGS_ARTIST_FILE, 223);
             break;
         }
 

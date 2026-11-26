@@ -39,8 +39,8 @@ namespace BrnGui
     // @ 0x8241B6B0
     void LargeCarComponent::SetCarInfo(CgsID lCarId, BrnGuiResourceId luResourceIdType)
     {
-        CGS_ASSERT(lCarId != 0,
-            CGS_ASSERT_MESSAGE_AT("kCGSID_NULL != lCarId", __FILE__, 78 /* ARTIST 0x8241B6D8 */));
+        CGS_ASSERT_AT(lCarId != 0,
+            "kCGSID_NULL != lCarId", __FILE__, 78 /* ARTIST 0x8241B6D8 */);
 
         muResourceIdType = static_cast<u32>(luResourceIdType);   // this+0xBC
         mCurrentCarId    = lCarId;                                // this+0xC0 (full 64-bit CgsID)
@@ -56,10 +56,10 @@ namespace BrnGui
     // @ 0x8241B738
     void LargeCarComponent::ShowCar()
     {
-        CGS_ASSERT(meCurrentState >= E_INTERNAL_STATE_READY,
-            CGS_ASSERT_MESSAGE_AT(
-                "E_INTERNAL_STATE_READY <= meCurrentState",
-                __FILE__, 180 /* ARTIST 0x8241B760 */));
+        CGS_ASSERT_AT(meCurrentState >= E_INTERNAL_STATE_READY,
+            "E_INTERNAL_STATE_READY <= meCurrentState",
+                __FILE__, 180 /* ARTIST 0x8241B760 */);
+
 
         SetState("transIn");
         meCurrentState = E_INTERNAL_STATE_SHOWING;
@@ -68,20 +68,20 @@ namespace BrnGui
     // @ 0x8241B7A8
     void LargeCarComponent::HandleLoadNotification(const CgsGui::GuiEventLoadNotification* lpLoadEvent)
     {
-        CGS_ASSERT(lpLoadEvent != 0,
-            CGS_ASSERT_MESSAGE_AT("lpLoadEvent", __FILE__, 222 /* ARTIST 0x8241B7D4 */));
+        CGS_ASSERT_AT(lpLoadEvent != 0,
+            "lpLoadEvent", __FILE__, 222 /* ARTIST 0x8241B7D4 */);
 
         if (lpLoadEvent->meRequestType == CgsGui::E_GUI_RESOURCETYPE_APT &&
             muResourceIdType == lpLoadEvent->muLoadRequestId)
         {
-            CGS_ASSERT(E_INTERNAL_STATE_RESOURCES_REQUESTED == meCurrentState,
-                CGS_ASSERT_MESSAGE_AT(
-                    "E_INTERNAL_STATE_RESOURCES_REQUESTED == meCurrentState",
-                    __FILE__, 227 /* ARTIST 0x8241B818 */));
-            CGS_ASSERT(muResourceIdType != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "muResourceIdType != 0",
-                    __FILE__, 228 /* ARTIST 0x8241B840 */));
+            CGS_ASSERT_AT(E_INTERNAL_STATE_RESOURCES_REQUESTED == meCurrentState,
+                "E_INTERNAL_STATE_RESOURCES_REQUESTED == meCurrentState",
+                    __FILE__, 227 /* ARTIST 0x8241B818 */);
+
+            CGS_ASSERT_AT(muResourceIdType != 0,
+                "muResourceIdType != 0",
+                    __FILE__, 228 /* ARTIST 0x8241B840 */);
+
             meCurrentState = E_INTERNAL_STATE_READY;
         }
     }
@@ -89,20 +89,20 @@ namespace BrnGui
     // @ 0x8241B868
     void LargeCarComponent::HandleUnloadNotification(const CgsGui::GuiEventUnloadNotification* lpUnloadEvent)
     {
-        CGS_ASSERT(lpUnloadEvent != 0,
-            CGS_ASSERT_MESSAGE_AT("lpUnloadEvent", __FILE__, 247 /* ARTIST 0x8241B894 */));
+        CGS_ASSERT_AT(lpUnloadEvent != 0,
+            "lpUnloadEvent", __FILE__, 247 /* ARTIST 0x8241B894 */);
 
         if (lpUnloadEvent->meRequestType == CgsGui::E_GUI_RESOURCETYPE_APT &&
             muResourceIdType == lpUnloadEvent->muLoadRequestId)
         {
-            CGS_ASSERT(E_INTERNAL_STATE_UNLOAD_REQUESTED == meCurrentState,
-                CGS_ASSERT_MESSAGE_AT(
-                    "E_INTERNAL_STATE_UNLOAD_REQUESTED == meCurrentState",
-                    __FILE__, 252 /* ARTIST 0x8241B8D8 */));
-            CGS_ASSERT(muResourceIdType != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "muResourceIdType != 0",
-                    __FILE__, 253 /* ARTIST 0x8241B900 */));
+            CGS_ASSERT_AT(E_INTERNAL_STATE_UNLOAD_REQUESTED == meCurrentState,
+                "E_INTERNAL_STATE_UNLOAD_REQUESTED == meCurrentState",
+                    __FILE__, 252 /* ARTIST 0x8241B8D8 */);
+
+            CGS_ASSERT_AT(muResourceIdType != 0,
+                "muResourceIdType != 0",
+                    __FILE__, 253 /* ARTIST 0x8241B900 */);
+
             meCurrentState = E_INTERNAL_STATE_DATA_SUPPLIED;
         }
     }
@@ -110,9 +110,9 @@ namespace BrnGui
     // @ 0x8241B928
     bool LargeCarComponent::HandleAptLoadTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger)
     {
-        CGS_ASSERT(lpAptTrigger != 0, CGS_ASSERT_MESSAGE_AT("lpAptTrigger", CGS_ARTIST_FILE, 273 /* ARTIST 0x8241B960 */));
-        CGS_ASSERT(CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType,
-                   CGS_ASSERT_MESSAGE_AT("CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType", CGS_ARTIST_FILE, 274 /* ARTIST 0x8241B988 */));
+        CGS_ASSERT_AT(lpAptTrigger != 0, "lpAptTrigger", CGS_ARTIST_FILE, 273 /* ARTIST 0x8241B960 */);
+        CGS_ASSERT_AT(CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType,
+                   "CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType", CGS_ARTIST_FILE, 274 /* ARTIST 0x8241B988 */);
 
         bool lbHandled = false;
         if (strcmp(GetName(), lpAptTrigger->mpacComponentName) == 0)
@@ -143,7 +143,7 @@ namespace BrnGui
             }
             else
             {
-                CGS_ASSERT(false,
+                CGS_FAIL(
                            "This component should not generate a trans complete in this state (");
             }
         }
@@ -162,15 +162,15 @@ namespace BrnGui
     // @ 0x8243DB98
     void LargeCarComponent::ReleaseResources()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 146 /* ARTIST 0x8243DBCC */));
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache", __FILE__, 146 /* ARTIST 0x8243DBCC */);
 
         if (meCurrentState >= E_INTERNAL_STATE_RESOURCES_REQUESTED &&
             meCurrentState <  E_INTERNAL_STATE_UNLOAD_REQUESTED)
         {
-            CGS_ASSERT(muResourceIdType != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "muResourceIdType != 0", __FILE__, 151 /* ARTIST 0x8243DC08 */));
+            CGS_ASSERT_AT(muResourceIdType != 0,
+                "muResourceIdType != 0", __FILE__, 151 /* ARTIST 0x8243DC08 */);
+
 
             mpStateInterface->PlayAptMovie("", 4);
             mpStateInterface->RequestResource(
@@ -185,10 +185,10 @@ namespace BrnGui
     // @ 0x824B3740
     void LargeCarComponent::SetCachePointer(GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "NULL != lpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLargeCarComponent.h", 187 /* ARTIST 0x824B376C */));
+        CGS_ASSERT_AT(lpGuiCache != 0,
+            "NULL != lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLargeCarComponent.h", 187 /* ARTIST 0x824B376C */);
+
 
         mpGuiCache = lpGuiCache;   // this+0xB8
     }

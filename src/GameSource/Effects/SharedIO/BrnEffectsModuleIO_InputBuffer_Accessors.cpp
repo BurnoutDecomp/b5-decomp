@@ -72,19 +72,19 @@ const InputBuffer::InTriangleCacheInterface* InputBuffer::GetTriangleCacheInterf
 
 const BrnDirector::Camera::Camera* InputBuffer::GetCameraInput() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 119));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 119);
     return &mCameraInput;
 }
 
 const CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 123));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 123);
     return &mTimerStatusInterface;
 }
 
 const BrnPhysics::ContactSpy::ContactSpyInterface* InputBuffer::GetContactSpyInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 127));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 127);
     return &mContactSpyInterface;
 }
 
@@ -96,9 +96,9 @@ const BrnPhysics::Deformation::DeformationOutputInterface* InputBuffer::GetDefor
 
 const InputBuffer::AudioEffectsMessageQueue* InputBuffer::GetAudioEffectsMessageQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
         "Not locked for reading\n",
-        CGS_ARTIST_FILE, 156));
+        CGS_ARTIST_FILE, 156);
     return &mAudioEffectsMessageQueue;
 }
 
@@ -137,7 +137,7 @@ const EffectsEnvironmentInterface* InputBuffer::GetEffectsEnvironmentInterface()
 // X360 0x823BA708 (:142) -- the game-action queue for the bridge's Append.
 InputBuffer::GameActionQueue* InputBuffer::GetGameActionQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 137));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 137);
     return &mGameActionQueue;
 }
 
@@ -147,42 +147,42 @@ InputBuffer::GameActionQueue* InputBuffer::GetGameActionQueue()
 // console copies the interface bitwise; the host copy is the same object bitwise.
 void InputBuffer::SetActiveRaceCarInterface(const RCEntityActiveRaceCarOutputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 109));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 109);
     mActiveRaceCarInterface = *lpInterface;   // the header-inline operator=: XMemCpy (0x823BA538)
 }
 
 // X360 0x823C96B8 (:91) -- `stw 0, 8(queue)` (Clear) then BaseEventQueue::Append(source).
 void InputBuffer::SetVehiclePhysicalStateQueue(const PhysicalTrafficStateQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 113));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 113);
     mVehiclePhysicalStateQueue = *lpQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194)
 }
 
 // X360 0x823C9770 (:100) -- mCameraInput = *lpCameraInput (Camera::operator=).
 void InputBuffer::SetCameraInput(const BrnDirector::Camera::Camera* lpCameraInput)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 117));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 117);
     mCameraInput = *lpCameraInput;
 }
 
 // X360 0x823BA548 (:109) -- the 48-byte (two 24-byte TimerStatus) copy.
 void InputBuffer::SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpTimer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 121));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 121);
     std::memcpy(&mTimerStatusInterface, lpTimer, sizeof(mTimerStatusInterface));
 }
 
 // X360 0x823BA658 (:118) -- one word: the interface IS its ContactSpyData pointer.
 void InputBuffer::SetContactSpyInterface(const BrnPhysics::ContactSpy::ContactSpyInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 125));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 125);
     mContactSpyInterface = *lpInterface;
 }
 
 // X360 0x823C9820 (:127) -- mDeformationInterface = *lpInterface (its operator=).
 void InputBuffer::SetDeformationInterface(const BrnPhysics::Deformation::DeformationOutputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 129));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 129);
     mDeformationInterface = *lpInterface;
 }
 
@@ -197,28 +197,28 @@ void InputBuffer::SetBoostInfoN(s32 liIndex, const BoostOutputInfo* lpBoostInfo)
 // X360 0x823BA7B0 (:151) -- mReplayStatusInterface = *lpStatus (its operator=).
 void InputBuffer::SetReplayStatusInterface(const ReplayStatusInterface* lpStatus)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 141));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 141);
     mReplayStatusInterface = *lpStatus;
 }
 
 // X360 0x823BA868 (:154) -- the 16-byte (one Vector2) copy.
 void InputBuffer::SetEffectsEnvironmentInterface(const EffectsEnvironmentInterface* lpEnv)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 143));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 143);
     mEffectsEnvironmentInterface = *lpEnv;
 }
 
 // X360 0x823C98D0 (:163) -- `stw 0, 8(queue)` (Clear) then BaseEventQueue::Append(source).
 void InputBuffer::SetPropVFXLocatorQueue(const PropVFXLocatorQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 147));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 147);
     mPropVFXLocatorQueue = *lpQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194)
 }
 
 // X360 0x823BA928 (:172) -- one word: the interface IS its TriangleCacheManager pointer.
 void InputBuffer::SetTriangleCacheInterface(const InTriangleCacheInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 151));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 151);
     mTriangleCacheInterface = *lpInterface;
 }
 
@@ -226,7 +226,7 @@ void InputBuffer::SetTriangleCacheInterface(const InTriangleCacheInterface* lpIn
 // copy of the whole VariableEventQueue<128,16> (its buffer is inline -- no pointer to alias).
 void InputBuffer::SetAudioEffectsMessageQueue(const AudioEffectsMessageQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 154));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 154);
     std::memcpy(&mAudioEffectsMessageQueue, lpQueue, sizeof(mAudioEffectsMessageQueue));
 }
 

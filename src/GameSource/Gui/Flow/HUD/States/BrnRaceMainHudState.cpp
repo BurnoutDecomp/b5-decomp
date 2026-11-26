@@ -332,7 +332,7 @@ namespace BrnGui
         else
             DoMugshot(lpEvent);
 
-        CGS_ASSERT(mpCache != 0, CGS_ASSERT_MESSAGE_AT("mpCache", CGS_ARTIST_FILE, 3844 /* ARTIST 0x82475D38 */));
+        CGS_ASSERT_AT(mpCache != 0, "mpCache", CGS_ARTIST_FILE, 3844 /* ARTIST 0x82475D38 */);
         const s32 liGameMode = mpCache->GetGameMode();
         if ((liGameMode == 15 || liGameMode == 16) &&
             (lpEvent->meResponse == E_MUGSHOT_RESPONSE_STOP_MY_MUGSHOT ||
@@ -797,10 +797,10 @@ namespace BrnGui
 
         SetExpectedComponent(mGeneralTransitionComponentApt.GetName());
 
-        CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
-            CGS_ASSERT_MESSAGE_AT(
-                "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM",
-                __FILE__, 3527 /* ARTIST 0x82474A18 */));   // cpp:3527
+        CGS_ASSERT_AT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
+            "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM",
+                __FILE__, 3527 /* ARTIST 0x82474A18 */);   // cpp:3527
+
 
         mpCache->SetExpectedAptComponentList(E_GUIFLOW_HUD, mauExpectedComponentIds,
                                              muNumExpectedComponents);
@@ -1016,7 +1016,7 @@ namespace BrnGui
         default:
             // The X360 streams "Invalid game mode ( <n> ) for this state - should be an on
             // or offline race \n" through the assert StrStream, then falls into LABEL_25.
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "Invalid game mode for this state - should be an on or offline race");   // cpp:1925
             liLadderEntry = 25;
             break;
@@ -2357,7 +2357,7 @@ namespace BrnGui
                     }
                     break;
                 default:
-                    CGS_ASSERT(false, "Unknown freeburn challenge selector action");   // cpp:1478 (streamed)
+                    CGS_FAIL("Unknown freeburn challenge selector action");   // cpp:1478 (streamed)
                     break;
                 }
                 break;
@@ -2592,10 +2592,10 @@ namespace BrnGui
     // "transin". The mode word is GuiCache::meGameModeType (X360 cache+40536).
     void RaceMainHudState::SetupEventInfo()
     {
-        CGS_ASSERT(mpCache != 0,
-            CGS_ASSERT_MESSAGE_AT("mpCache", __FILE__, 3804 /* ARTIST 0x82474A94 */));           // cpp:3804 (non-gating)
-        CGS_ASSERT(mbEventInfo,
-            CGS_ASSERT_MESSAGE_AT("mbEventInfo", __FILE__, 3805 /* ARTIST 0x82474ABC */));        // cpp:3805 (non-gating)
+        CGS_ASSERT_AT(mpCache != 0,
+            "mpCache", __FILE__, 3804 /* ARTIST 0x82474A94 */);           // cpp:3804 (non-gating)
+        CGS_ASSERT_AT(mbEventInfo,
+            "mbEventInfo", __FILE__, 3805 /* ARTIST 0x82474ABC */);        // cpp:3805 (non-gating)
 
         const s32 liGameMode = mpCache->GetGameMode();
         mEventInfoComponent.SetEventType(
@@ -2685,7 +2685,7 @@ namespace BrnGui
         case 9:
             break;
         default:
-            CGS_ASSERT_AT(false,
+            CGS_FAIL_AT(
                        "Unexpected Countdown State in RaceMainHudState::UpdateEventCountdown", CGS_ARTIST_FILE, 3392);   // cpp:3392
             break;
         }
@@ -2701,8 +2701,8 @@ namespace BrnGui
     {
         if (mbPreRaceCountdown && meCurrentEventCountdownState == E_EVENT_COUNTDOWN_STATE_GO)
         {
-            CGS_ASSERT(mpCache != 0,
-                CGS_ASSERT_MESSAGE_AT("mpCache", __FILE__, 3423 /* ARTIST 0x82474930 */));   // cpp:3423 (non-gating)
+            CGS_ASSERT_AT(mpCache != 0,
+                "mpCache", __FILE__, 3423 /* ARTIST 0x82474930 */);   // cpp:3423 (non-gating)
             if (mpCache->GetTime() >= mfEventCountdownTimer)
             {
                 const bool lbRenders = mbPreRaceCountdownRenders;
@@ -3011,7 +3011,7 @@ namespace BrnGui
     // record to the sat-nav component under the ORIGINAL event id, so one body serves both.
     void RaceMainHudState::UpdateSatNav(const CgsModule::Event* lpEvent, s32 liEventId)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT(" invalid event passed ", CGS_ARTIST_FILE, 3226));                 // cpp:3226
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, " invalid event passed ", CGS_ARTIST_FILE, 3226);                 // cpp:3226
         // (the assert string's leading and trailing spaces are the console's, verbatim)
 
         if (mbSatNav)                                                       // lbz 0x150

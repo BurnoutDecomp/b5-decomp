@@ -245,7 +245,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT_AT(false, "Unhandled number of options in profile message displayer\n", CGS_ARTIST_FILE, 177);   // cpp:177
+            CGS_FAIL_AT("Unhandled number of options in profile message displayer\n", CGS_ARTIST_FILE, 177);   // cpp:177
             break;
         }
     }
@@ -285,7 +285,7 @@ namespace BrnGui
         default:
             // The X360 streams the same "Unhandled number of options" assert (cpp:223)
             // and still falls through to the resend.
-            CGS_ASSERT(false, "Unhandled number of options in profile message displayer\n");
+            CGS_FAIL("Unhandled number of options in profile message displayer\n");
             break;
         }
 
@@ -348,10 +348,10 @@ namespace BrnGui
     void BootProfile::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm,
                                 ProfileManager& lrProfileManager)
     {
-        CGS_ASSERT(lpFsm != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpFsm",
-                "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootProfile.cpp", 282 /* ARTIST 0x82474424 */));   // cpp:282
+        CGS_ASSERT_AT(lpFsm != 0,
+            "lpFsm",
+                "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootProfile.cpp", 282 /* ARTIST 0x82474424 */);   // cpp:282
+
         CgsGui::State::Construct(liId, lpFsm);
         mpProfileManager = &lrProfileManager;
         mpGuiCache       = 0;
@@ -569,7 +569,7 @@ namespace BrnGui
         }
 
         default:
-            CGS_ASSERT_AT(false, "Invalid internal state", CGS_ARTIST_FILE, 464);   // cpp:464
+            CGS_FAIL_AT("Invalid internal state", CGS_ARTIST_FILE, 464);   // cpp:464
             mpInGuiEventQueue->Clear();
             break;
         }

@@ -45,11 +45,11 @@ namespace BrnNetwork
 
     void SuspensionManager::Resume(Callback lpfCallback, void* lpUserData)
     {
-        CGS_ASSERT(lpfCallback,
-            CGS_ASSERT_MESSAGE_AT("lCallback", __FILE__, 279 /* ARTIST 0x82544CB8 */));
-        CGS_ASSERT(meSubState == E_SUBSTATE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "meSubState == E_SUBSTATE_COUNT", __FILE__, 280 /* ARTIST 0x82544CE0 */));
+        CGS_ASSERT_AT(lpfCallback,
+            "lCallback", __FILE__, 279 /* ARTIST 0x82544CB8 */);
+        CGS_ASSERT_AT(meSubState == E_SUBSTATE_COUNT,
+            "meSubState == E_SUBSTATE_COUNT", __FILE__, 280 /* ARTIST 0x82544CE0 */);
+
 
         mCallback = lpfCallback;
         mpUserData = lpUserData;

@@ -22,17 +22,6 @@ namespace CgsDev
         mePrintMode = E_PRINTMODE_DECIMAL;
     }
 
-    // ARTIST821F0E50 / 821F0EC8: 0 decimal, 1/2 hex, other modes silent.
-    StrStreamBase& StrStreamBase::operator<<(s32 liValue)
-    {
-        return PrintSignedInteger(liValue);
-    }
-
-    // ARTIST LogFileBuffered::Open calls the original unsigned overload at both insertions.
-    __declspec(noinline) StrStreamBase& StrStreamBase::operator<<(u32 luValue)
-    {
-        return PrintUnsignedInteger(luValue);
-    }
     StrStreamBase& StrStreamBase::operator<<(u64 luValue)
     {
         switch (mePrintMode)

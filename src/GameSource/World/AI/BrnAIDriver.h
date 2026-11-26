@@ -115,12 +115,12 @@ namespace BrnAI
         {
             // ARTIST compiled this body from BrnAIDriver.cpp (unity TU), so the tripwires carry
             // that file and its lines rather than this header's.
-            CGS_ASSERT(miCount >= 0,
-                CGS_ASSERT_MESSAGE_AT("miCount >= 0",
-                    CGS_ARTIST_BRNAIDRIVER_FILE, 2912 /* ARTIST 0x8276677C */));
-            CGS_ASSERT(miCount <= KI_MAX_NEARBY_VEHICLES,
-                CGS_ASSERT_MESSAGE_AT("miCount <= KI_MAX_NEARBY_TRAFFIC",
-                    CGS_ARTIST_BRNAIDRIVER_FILE, 2913 /* ARTIST 0x827667A4 */));
+            CGS_ASSERT_AT(miCount >= 0,
+                "miCount >= 0",
+                    CGS_ARTIST_BRNAIDRIVER_FILE, 2912 /* ARTIST 0x8276677C */);
+            CGS_ASSERT_AT(miCount <= KI_MAX_NEARBY_VEHICLES,
+                "miCount <= KI_MAX_NEARBY_TRAFFIC",
+                    CGS_ARTIST_BRNAIDRIVER_FILE, 2913 /* ARTIST 0x827667A4 */);
             return miCount;
         }
         void Reset()          { miCount = 0; }                          // :110 (inlined)

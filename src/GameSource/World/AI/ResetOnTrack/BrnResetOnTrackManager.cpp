@@ -300,14 +300,14 @@ namespace BrnAI
     // member and Prepare stage 3 passes it. This helper now returns a real object every call.
     AICar* ResetOnTrackManager::GetAICar(EGlobalRaceCarIndex leGlobalRaceCarIndex)
     {
-        CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
-                __FILE__, 419 /* ARTIST 0x827658A4 */));
-        CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
-                __FILE__, 420 /* ARTIST 0x827658C8 */));
+        CGS_ASSERT_AT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
+            "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
+                __FILE__, 419 /* ARTIST 0x827658A4 */);
+
+        CGS_ASSERT_AT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
+            "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
+                __FILE__, 420 /* ARTIST 0x827658C8 */);
+
 
         static const u32 KU_AI_CAR_STRIDE = 0x1560;  // sizeof(AICar) == 5472 (X360-attested)
         return reinterpret_cast<AICar*>(
@@ -384,7 +384,7 @@ namespace BrnAI
             }
         }
 
-        CGS_ASSERT(luIndex < 0x23u, CGS_ASSERT_MESSAGE_AT("Overflow in ResetOnTrackManager request queue", __FILE__, 187));   // :187
+        CGS_ASSERT_AT(luIndex < 0x23u, "Overflow in ResetOnTrackManager request queue", __FILE__, 187);   // :187
 
         mResetOnTrackRequestQueue.Append(*lpRequest);
     }
@@ -544,7 +544,7 @@ namespace BrnAI
 
             default:
             {
-                CGS_ASSERT(false, "Bad reset type used !\n");   // :443
+                CGS_FAIL("Bad reset type used !\n");   // :443
                 lbFoundCoordinates = false;
                 break;
             }

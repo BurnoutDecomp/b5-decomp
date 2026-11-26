@@ -153,8 +153,8 @@ namespace Playback
         // stored with the CHANGED bit inserted (rlwimi at 0x82680CA4).
         void SetContentState(EContentState leContentState)
         {
-            CGS_ASSERT(!(leContentState & E_CONTENT_STATE_CHANGED), CGS_ASSERT_MESSAGE_AT(
-                       "!(leContentState & E_CONTENT_STATE_CHANGED)", CGS_ARTIST_CGSCONTENT_H_FILE, 462));
+            CGS_ASSERT_AT(!(leContentState & E_CONTENT_STATE_CHANGED),
+                       "!(leContentState & E_CONTENT_STATE_CHANGED)", CGS_ARTIST_CGSCONTENT_H_FILE, 462);
             if (GetContentState() != leContentState)
                 mu8ContentState = static_cast<u8>(leContentState | E_CONTENT_STATE_CHANGED);
         }

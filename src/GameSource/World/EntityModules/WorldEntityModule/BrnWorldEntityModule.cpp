@@ -357,10 +357,10 @@ WorldEntityModule::Prepare( WorldEntityIO::OutputBuffer_Prepare* lpOutputBuffer 
 
         default:
         {
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "Invalid Stage\n",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../World/EntityModules/WorldEntityModule/BrnWorldEntityModule.cpp", 631));  // ARTIST 0x823029DC
+                "../World/EntityModules/WorldEntityModule/BrnWorldEntityModule.cpp", 631);  // ARTIST 0x823029DC
         }
         break;
     }
@@ -425,7 +425,7 @@ WorldEntityModule::Release( void )
 
         default:
         {
-            CGS_ASSERT_AT( false, "Invalid Stage\n" , KAC_ARTIST_ASSERT_FILE, 917);
+            CGS_FAIL_AT( "Invalid Stage\n" , KAC_ARTIST_ASSERT_FILE, 917);
         }
         break;
     }
@@ -565,8 +565,8 @@ WorldEntityModule::PreSceneUpdate(
 void
 WorldEntityModule::UpdateCollisionValidation( WorldEntityIO::OutputBuffer_PostPhysics* lpOutputBuffer )
 {
-    CGS_ASSERT( lpOutputBuffer,
-        CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", KAC_ARTIST_ASSERT_FILE, 1098 /* ARTIST 0x82307FE4 */));
+    CGS_ASSERT_AT( lpOutputBuffer,
+        "lpOutputBuffer", KAC_ARTIST_ASSERT_FILE, 1098 /* ARTIST 0x82307FE4 */);
 
     lpOutputBuffer->GetStatusInterface()->SetCollisionWorldInvalid( meCollisionWorldState != E_COLWORLDSTATE_VALID );
     lpOutputBuffer->GetStatusInterface()->SetCollisionWorldInvalidating( meCollisionWorldState == E_COLWORLDSTATE_INVALIDATING );
@@ -1112,7 +1112,7 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
 
         default:
         {
-            CGS_ASSERT_AT( false, "Invalid surface list prepare state" , KAC_ARTIST_ASSERT_FILE, 2091);
+            CGS_FAIL_AT( "Invalid surface list prepare state" , KAC_ARTIST_ASSERT_FILE, 2091);
         }
         break;
     }
@@ -1129,10 +1129,10 @@ WorldEntityModule::PrepareWorldCollision(
     WorldEntityIO::SceneInputInterface* lpSceneInterface,
     bool lbLoadBundle )
 {
-    CGS_ASSERT( lpRequestInterface && lpSceneInterface,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpRequestInterface && lpSceneInterface",
-            KAC_ARTIST_ASSERT_FILE, 2117 /* ARTIST 0x8230692C */));
+    CGS_ASSERT_AT( lpRequestInterface && lpSceneInterface,
+        "lpRequestInterface && lpSceneInterface",
+            KAC_ARTIST_ASSERT_FILE, 2117 /* ARTIST 0x8230692C */);
+
 
     switch ( meWorldColPrepareStage )
     {
@@ -1335,7 +1335,7 @@ WorldEntityModule::HandleExternalRequests( const WorldEntityIO::InputBuffer_Post
         else
         {
             // (assert text preserved from the original source)
-            CGS_ASSERT_AT( false, "Unknown GameAction coming into TrafficModule" , KAC_ARTIST_ASSERT_FILE, 2408);
+            CGS_FAIL_AT( "Unknown GameAction coming into TrafficModule" , KAC_ARTIST_ASSERT_FILE, 2408);
         }
 
         liEventId = lpQueue->GetNextEvent( lpEventData, &lpEventData, &liEventSize );
@@ -1396,7 +1396,7 @@ WorldEntityModule::ValidateCollision(
 
         default:
         {
-            CGS_ASSERT_AT( false, "Invalid validation state\n" , KAC_ARTIST_ASSERT_FILE, 2479);
+            CGS_FAIL_AT( "Invalid validation state\n" , KAC_ARTIST_ASSERT_FILE, 2479);
         }
         break;
     }
@@ -1456,7 +1456,7 @@ WorldEntityModule::InvalidateCollision(
 
         default:
         {
-            CGS_ASSERT_AT( false, "Invalid invalidation state\n" , KAC_ARTIST_ASSERT_FILE, 2546);
+            CGS_FAIL_AT( "Invalid invalidation state\n" , KAC_ARTIST_ASSERT_FILE, 2546);
         }
         break;
     }

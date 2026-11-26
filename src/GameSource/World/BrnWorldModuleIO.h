@@ -651,9 +651,9 @@ namespace BrnWorldIO
         // ---- gui events (+170176; :607 read-lock, :608 write-lock) ----
         const GuiEventInputQueue* GetGuiEventQueue() const
         {
-            CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
                 "Not locked for reading\n",
-                "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 607));
+                "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 607);
             return &mGuiEventQueue;
         }
         GuiEventInputQueue* GetGuiEventQueue();                                           // X360 0x827A4E08

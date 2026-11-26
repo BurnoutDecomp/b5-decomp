@@ -187,7 +187,7 @@ void MomentTumbling::SetGyroCamParameters(const MomentSharedInfo& lrSharedInfo)
         return;
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("invalid subtype", CGS_ARTIST_FILE, 343));   //  (non-gating)
+        CGS_FAIL_AT("invalid subtype", CGS_ARTIST_FILE, 343);   //  (non-gating)
         return;
     }
 }
@@ -196,7 +196,7 @@ void MomentTumbling::SetGyroCamParameters(const MomentSharedInfo& lrSharedInfo)
 // request pair (behaviour +0x630/+0x631).
 void MomentTumbling::SignalIsGoodTimeToPlant()
 {
-    CGS_ASSERT(IsValid(), CGS_ASSERT_MESSAGE_AT("IsValid()", CGS_ARTIST_FILE, 265));   //  (non-gating)
+    CGS_ASSERT_AT(IsValid(), "IsValid()", CGS_ARTIST_FILE, 265);   //  (non-gating)
     if (mpParameters->meSubType == Parameters::E_SUBTYPE_LEAD)
     {
         mGyroCam.Get()->SignalGoodTimeToPlant();
@@ -238,7 +238,7 @@ void MomentTumbling::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
     Camera::BehaviourManager* lpBehaviourManager =
         &lrBehaviourController;
 
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 89));   //  (non-gating)
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters != NULL", CGS_ARTIST_FILE, 89);   //  (non-gating)
 
     // ---- the per-frame angular-velocity smoother (before the state machine) ----
     {
@@ -349,7 +349,7 @@ void MomentTumbling::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
         break;
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", CGS_ARTIST_FILE, 250));   //  (non-gating)
+        CGS_FAIL_AT("unhandled case in switch", CGS_ARTIST_FILE, 250);   //  (non-gating)
         return;
     }
 

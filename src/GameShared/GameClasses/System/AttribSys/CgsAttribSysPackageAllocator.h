@@ -89,9 +89,9 @@ public:
     // FAKEMATCH: ARTIST inlines the guard and byte accounting at the EASTL free sites.
     __forceinline void FreeSized(void* lpBlock, size_t lnSize)
     {
-        CGS_ASSERT(mbHasAllocator, CGS_ASSERT_MESSAGE_AT("mbHasAllocator",
+        CGS_ASSERT_AT(mbHasAllocator, "mbHasAllocator",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysPackageAllocator.h",
-            324 /* ARTIST 0x8280402C */));
+            324 /* ARTIST 0x8280402C */);
         mpHeapAllocator->Free(lpBlock);
         miFreeTotal += static_cast<s32>(lnSize);
     }

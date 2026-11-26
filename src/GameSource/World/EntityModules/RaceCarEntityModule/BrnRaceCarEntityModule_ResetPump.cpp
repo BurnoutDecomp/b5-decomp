@@ -137,8 +137,8 @@ void RaceCarEntityModule::WriteUpdatedAIData( RaceCarEntityModuleIO::OutputBuffe
     {
         return;
     }
-    CGS_ASSERT( mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                CGS_ASSERT_MESSAGE_AT("mePlayerActiveRaceCarIndex >= 0", __FILE__, 5533));   // X360 :5533
+    CGS_ASSERT_AT( mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                "mePlayerActiveRaceCarIndex >= 0", __FILE__, 5533);   // X360 :5533
 
     {
         const ActiveRaceCar* lpPlayerCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
@@ -165,7 +165,7 @@ void RaceCarEntityModule::WriteUpdatedAIData( RaceCarEntityModuleIO::OutputBuffe
         }
 
         const BrnPhysics::Vehicle::RaceCarState* lpPhysicsState = lpCar->GetPhysicsState();
-        CGS_ASSERT(lpPhysicsState != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsState", __FILE__, 5553));   // X360 :5553
+        CGS_ASSERT_AT(lpPhysicsState != 0, "lpPhysicsState", __FILE__, 5553);   // X360 :5553
 
         // 0x822D2130..0x822D2154: `cmpw r22, player ; bne -> 0` then `lbzx r11, r28, 0x1823D`
         // with r28 == this -- module +0x1823D is mCrashPlayManager (+0x180F0) . mbIsInShowtime
@@ -311,7 +311,7 @@ void RaceCarEntityModule::ProcessResetOnTrackResultQueue(
         const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput )
 {
-    CGS_ASSERT(lpInput != 0, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", __FILE__, 1539));   // X360 :1539
+    CGS_ASSERT_AT(lpInput != 0, "lpInput != NULL", __FILE__, 1539);   // X360 :1539
     if( lpInput == 0 || lpOutput == 0 )
     {
         return;

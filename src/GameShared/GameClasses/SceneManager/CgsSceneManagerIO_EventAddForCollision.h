@@ -100,8 +100,8 @@ namespace SceneManagerIO
 
         void SetBodyState(rw::physics::BodyState leBodyState)
         {
-            CGS_ASSERT(static_cast<int>(leBodyState) <= 0xff,
-                       CGS_ASSERT_MESSAGE_AT("(int)leBodyState <= 0xff", KAC_SCENE_UPDATE_ARTIST_FILE, 188));
+            CGS_ASSERT_AT(static_cast<int>(leBodyState) <= 0xff,
+                       "(int)leBodyState <= 0xff", KAC_SCENE_UPDATE_ARTIST_FILE, 188);
             muBodyState = static_cast<u8>(leBodyState);
         }
 
@@ -112,8 +112,8 @@ namespace SceneManagerIO
 
         void SetCacheOptions(EAddForCollisionCacheOptions leOptions)
         {
-            CGS_ASSERT(static_cast<int>(leOptions) <= 0xff,
-                       CGS_ASSERT_MESSAGE_AT("(int)leOptions <= 0xff", KAC_SCENE_UPDATE_ARTIST_FILE, 201));
+            CGS_ASSERT_AT(static_cast<int>(leOptions) <= 0xff,
+                       "(int)leOptions <= 0xff", KAC_SCENE_UPDATE_ARTIST_FILE, 201);
             muCacheOptions = static_cast<u8>(leOptions);
         }
 

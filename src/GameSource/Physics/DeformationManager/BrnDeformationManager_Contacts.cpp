@@ -230,9 +230,9 @@ namespace Deformation
     // ==========================================================================================
     void DeformationManager::UpdateTriangleCache(InputBuffer_Update* lpSimInputUpdate)
     {
-        CGS_ASSERT(lpSimInputUpdate != NULL,
-                   CGS_ASSERT_MESSAGE_AT("lpSceneInputBuffer_Update != NULL",
-                                         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/BrnDeformationManager.cpp", 2077));
+        CGS_ASSERT_AT(lpSimInputUpdate != NULL,
+                   "lpSceneInputBuffer_Update != NULL",
+                                         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/BrnDeformationManager.cpp", 2077);
 
         mDetachedPartManager.UpdateTriangleCache(lpSimInputUpdate->GetInSceneUpdateInterface());
         mDetachedWheelManager.UpdateTriangleCache(lpSimInputUpdate->GetInSceneUpdateInterface());
@@ -270,10 +270,10 @@ namespace Deformation
     void DeformationManager::GetDeformedBBox(EntityId lEntityId, CgsGeometric::Box* lpBoxOut) const
     {
         const s32 liIndex = FindModelIndexByEntityID(lEntityId);
-        CGS_ASSERT(liIndex != -1,
-            CGS_ASSERT_MESSAGE_AT(
-                "liIndex != -1",
-                "..\\..\\..\\GameSource\\Physics/DeformationManager/BrnDeformationManager.h", 551 /* ARTIST 0x825E87CC */));
+        CGS_ASSERT_AT(liIndex != -1,
+            "liIndex != -1",
+                "..\\..\\..\\GameSource\\Physics/DeformationManager/BrnDeformationManager.h", 551 /* ARTIST 0x825E87CC */);
+
         mpaModels[liIndex].GetBoundingBox(lpBoxOut);
     }
 

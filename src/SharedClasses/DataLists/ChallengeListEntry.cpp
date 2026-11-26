@@ -38,14 +38,14 @@ f32 ChallengeListEntryAction::GetConvoyTime() const
 // which stores meDistrict as int32_t.) lwzx == 32-bit read at 0x10+8*index.
 int32_t ChallengeListEntryAction::GetDistrict( uint8_t lu8Index ) const
 {
-    CGS_ASSERT( lu8Index < KU_MAX_LOCATIONS_PER_ACTION,
-        CGS_ASSERT_MESSAGE_AT(
-            "luLocationIndex < KU_MAX_LOCATIONS_PER_ACTION",
-            KAC_ARTIST_ASSERT_FILE, 772 /* ARTIST 0x8230EFA4 */));
-    CGS_ASSERT( (ELocationType)mauLocationType[ lu8Index ] == E_LOCATION_TYPE_DISTRICT,
-        CGS_ASSERT_MESSAGE_AT(
-            "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_DISTRICT",
-            KAC_ARTIST_ASSERT_FILE, 773 /* ARTIST 0x8230EFD0 */));
+    CGS_ASSERT_AT( lu8Index < KU_MAX_LOCATIONS_PER_ACTION,
+        "luLocationIndex < KU_MAX_LOCATIONS_PER_ACTION",
+            KAC_ARTIST_ASSERT_FILE, 772 /* ARTIST 0x8230EFA4 */);
+
+    CGS_ASSERT_AT( (ELocationType)mauLocationType[ lu8Index ] == E_LOCATION_TYPE_DISTRICT,
+        "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_DISTRICT",
+            KAC_ARTIST_ASSERT_FILE, 773 /* ARTIST 0x8230EFD0 */);
+
 
     return maLocationData[ lu8Index ].meDistrict;
 }
@@ -66,14 +66,14 @@ ChallengeListEntryAction::GetLocationType( uint8_t lu8Index ) const
 // ldx == 64-bit read of mRoadID at 0x10+8*index.
 CgsID ChallengeListEntryAction::GetRoadID( uint8_t lu8Index ) const
 {
-    CGS_ASSERT( lu8Index < KU_MAX_LOCATIONS_PER_ACTION,
-        CGS_ASSERT_MESSAGE_AT(
-            "luLocationIndex < KU_MAX_LOCATIONS_PER_ACTION",
-            KAC_ARTIST_ASSERT_FILE, 812 /* ARTIST 0x8230F0A4 */));
-    CGS_ASSERT( (ELocationType)mauLocationType[ lu8Index ] == E_LOCATION_TYPE_ROAD,
-        CGS_ASSERT_MESSAGE_AT(
-            "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_ROAD",
-            KAC_ARTIST_ASSERT_FILE, 813 /* ARTIST 0x8230F0D0 */));
+    CGS_ASSERT_AT( lu8Index < KU_MAX_LOCATIONS_PER_ACTION,
+        "luLocationIndex < KU_MAX_LOCATIONS_PER_ACTION",
+            KAC_ARTIST_ASSERT_FILE, 812 /* ARTIST 0x8230F0A4 */);
+
+    CGS_ASSERT_AT( (ELocationType)mauLocationType[ lu8Index ] == E_LOCATION_TYPE_ROAD,
+        "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_ROAD",
+            KAC_ARTIST_ASSERT_FILE, 813 /* ARTIST 0x8230F0D0 */);
+
 
     return maLocationData[ lu8Index ].mRoadID;
 }

@@ -155,11 +155,11 @@ namespace BrnNetwork
             const_cast<char*>("TIME_BETWEEN_OFFLINE_PROGRESSION_UPLOADS"), CgsNetwork::E_TYPE_FLOAT,
             offsetof(BrnServerInterfaceDownloadableConfig, mfTimeBetweenOfflineProgressionUpload));
 
-        CGS_ASSERT(miSizeOfMemLookupTable == KI_MAX_ELEMENTS_IN_MEMADDR_LOOKUP,
-                   CGS_ASSERT_MESSAGE_AT(
-                       "miSizeOfMemLookupTable == KI_MAX_ELEMENTS_IN_MEMADDR_LOOKUP",
+        CGS_ASSERT_AT(miSizeOfMemLookupTable == KI_MAX_ELEMENTS_IN_MEMADDR_LOOKUP,
+                   "miSizeOfMemLookupTable == KI_MAX_ELEMENTS_IN_MEMADDR_LOOKUP",
                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                       "../Network/Components/BrnServerInterfaceDownloadableConfig.cpp", 145));  // 0x8258341C
+                       "../Network/Components/BrnServerInterfaceDownloadableConfig.cpp", 145);  // 0x8258341C
+
 
         return true;
     }

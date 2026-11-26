@@ -28,11 +28,11 @@ namespace Explosion
 
 void ExplosionState::Attach(void* lpvAttachment)
 {
-    CGS_ASSERT(lpvAttachment != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpvAttachment",
+    CGS_ASSERT_AT(lpvAttachment != 0,
+        "lpvAttachment",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Sound/Explosions/BrnExplosionState.cpp", 69 /* ARTIST 0x826891D4 */));
+            "../Sound/Explosions/BrnExplosionState.cpp", 69 /* ARTIST 0x826891D4 */);
+
 }
 
 // ARTIST 0x826D5740 uses the base State teardown.

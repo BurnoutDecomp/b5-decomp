@@ -209,8 +209,8 @@ struct RwacCommandVoiceRelease : public RwacCommand
         : RwacCommand(E_RWAC_COMMAND_VOICE_RELEASE)
     {
         mpVoice = lpVoice;
-        CGS_ASSERT(mpVoice, CGS_ASSERT_MESSAGE_AT("mpVoice",
-            CGS_RWAC_FACTORY_H_ASSERT_FILE, 243));
+        CGS_ASSERT_AT(mpVoice, "mpVoice",
+            CGS_RWAC_FACTORY_H_ASSERT_FILE, 243);
     }
 
     // @ 0x82681320. Copy-construct from a source record of luCommandCount words.
@@ -262,8 +262,8 @@ struct RwacCommandPluginEvent : public RwacCommand
         mpPlugin = lpPlugin;
         muEvent = luEvent;
         muParameters = leParameters;
-        CGS_ASSERT(mpPlugin, CGS_ASSERT_MESSAGE_AT("mpPlugin",
-            CGS_RWAC_FACTORY_H_ASSERT_FILE, 289));
+        CGS_ASSERT_AT(mpPlugin, "mpPlugin",
+            CGS_RWAC_FACTORY_H_ASSERT_FILE, 289);
     }
 
     rw::audio::core::PlugIn* mpPlugin;     // word 1 -- DWARF h:324
@@ -289,8 +289,8 @@ struct RwacCommandPluginGetAttribute : public RwacCommand
         mpPlugin = lpPlugin;
         muAttribute = luAttribute;
         mpfAddress = lpfAddress;
-        CGS_ASSERT(lpPlugin, CGS_ASSERT_MESSAGE_AT("lpPlugin",
-            CGS_RWAC_FACTORY_H_ASSERT_FILE, 397));
+        CGS_ASSERT_AT(lpPlugin, "lpPlugin",
+            CGS_RWAC_FACTORY_H_ASSERT_FILE, 397);
     }
 
     // @ 0x826814C8. Copy-construct from a source record of luCommandCount words.
@@ -329,8 +329,8 @@ struct RwacCommandQueue
     // 690) and inlines it into GenericRwacVoice::Update<T> (0x826D8270..0x826D82A4).
     void PostCommand(uint32_t luCommandCount, const uintptr_t* lpuFirstCommand)
     {
-        CGS_ASSERT(lpuFirstCommand, CGS_ASSERT_MESSAGE_AT("lpuFirstCommand",
-            CGS_RWAC_FACTORY_H_ASSERT_FILE, 690));
+        CGS_ASSERT_AT(lpuFirstCommand, "lpuFirstCommand",
+            CGS_RWAC_FACTORY_H_ASSERT_FILE, 690);
         PostCommand(luCommandCount);
         for (uint32_t i = 0; i < luCommandCount; ++i)
         {
@@ -355,8 +355,8 @@ private:
     {
         mauCommandQueue[mu32Write] = luCommand;
         mu32Write = (mu32Write + 1) & (E_QUEUE_LENGTH - 1);
-        CGS_ASSERT(mu32Write != mu32Read, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Out of command buffer. SKU32_COMMAND_COUNT", CGS_RWAC_FACTORY_H_ASSERT_FILE, 730));
+        CGS_ASSERT_STREAM_AT(mu32Write != mu32Read,
+            "Out of command buffer. SKU32_COMMAND_COUNT", CGS_RWAC_FACTORY_H_ASSERT_FILE, 730);
     }
 
 

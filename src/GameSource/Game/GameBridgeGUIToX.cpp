@@ -32,12 +32,12 @@ namespace BrnGame
         BrnReplays::ReplayIO::InputBuffer_PostSim* lpReplayModuleInputBuffer,
         const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer)
     {
-        CGS_ASSERT(lpReplayModuleInputBuffer != 0 && lpGuiOutputBuffer != 0,
-                   CGS_ASSERT_MESSAGE_AT("lpReplayModuleInputBuffer && lpGuiOutputBuffer", CGS_ARTIST_FILE, 1721));
+        CGS_ASSERT_AT(lpReplayModuleInputBuffer != 0 && lpGuiOutputBuffer != 0,
+                   "lpReplayModuleInputBuffer && lpGuiOutputBuffer", CGS_ARTIST_FILE, 1721);
 
         const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue =
             GetGuiOutEventQueue(lpGuiOutputBuffer);
-        CGS_ASSERT(lpGuiEventQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGuiEventQueue", CGS_ARTIST_FILE, 1726));
+        CGS_ASSERT_AT(lpGuiEventQueue != 0, "lpGuiEventQueue", CGS_ARTIST_FILE, 1726);
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
@@ -277,7 +277,7 @@ namespace BrnGame
                 }
                 case 120:  // scoreboard gamercard: the highlighted PlayerName
                 {
-                    CGS_ASSERT(lp != 0, CGS_ASSERT_MESSAGE_AT("lpGuiGamercardEvent", CGS_ARTIST_FILE, 1154));
+                    CGS_ASSERT_AT(lp != 0, "lpGuiGamercardEvent", CGS_ARTIST_FILE, 1154);
                     CgsNetwork::PlayerName lShowGamerCard;
                     std::memcpy(&lShowGamerCard, lp, sizeof(lShowGamerCard));
                     lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lShowGamerCard), 47,
@@ -286,7 +286,7 @@ namespace BrnGame
                 }
                 case 121:  // scoreboard score target: payload {score, category, index, variation, name[16], flag}
                 {          // -> {name[16], score, category, index, variation, flag}, 36 bytes
-                    CGS_ASSERT(lp != 0, CGS_ASSERT_MESSAGE_AT("lpGuiReqScoreTargetEvent", CGS_ARTIST_FILE, 1169));
+                    CGS_ASSERT_AT(lp != 0, "lpGuiReqScoreTargetEvent", CGS_ARTIST_FILE, 1169);
                     s32 laiScoreTarget[9];
                     u8* lpScoreTarget = reinterpret_cast<u8*>(laiScoreTarget);
                     std::memcpy(lpScoreTarget, lp + 16, 16);
@@ -370,7 +370,7 @@ namespace BrnGame
                 }
                 case 568:  // compressed camera-picture request: {quality, format, target texture}
                 {
-                    CGS_ASSERT(lp != 0, CGS_ASSERT_MESSAGE_AT("lpReqCompCamPicEvent", CGS_ARTIST_FILE, 1218));
+                    CGS_ASSERT_AT(lp != 0, "lpReqCompCamPicEvent", CGS_ARTIST_FILE, 1218);
                     IO::NetworkInReqCamPicEvent lReqCamPicEvent;
                     lReqCamPicEvent.miQualitySetting   = lpW[0];
                     lReqCamPicEvent.meCompressedFormat = static_cast<renderengine::PixelFormat>(lpW[1]);
@@ -623,7 +623,7 @@ namespace BrnGame
 
                 // ---- switch C (329..580) ----
                 case 329:
-                    CGS_ASSERT(lp != 0, CGS_ASSERT_MESSAGE_AT("lpScoreRequestEvent", CGS_ARTIST_FILE, 655));
+                    CGS_ASSERT_AT(lp != 0, "lpScoreRequestEvent", CGS_ARTIST_FILE, 655);
                     reinterpret_cast<s32*>(lpOut)[0] = lpW[0];
                     liType = 97; liSize = 4; lbEmit = true;
                     break;
@@ -632,7 +632,7 @@ namespace BrnGame
                     liType = 100; liSize = 1; lbEmit = true;
                     break;
                 case 331:
-                    CGS_ASSERT(lp != 0, CGS_ASSERT_MESSAGE_AT("lpRequest", CGS_ARTIST_FILE, 562));
+                    CGS_ASSERT_AT(lp != 0, "lpRequest", CGS_ARTIST_FILE, 562);
                     *reinterpret_cast<u64*>(lpOut) = *reinterpret_cast<const u64*>(lp);
                     liType = 104; liSize = 8; lbEmit = true;
                     break;
@@ -646,7 +646,7 @@ namespace BrnGame
                     break;
                 case 357:
                 {
-                    CGS_ASSERT(lp != 0, CGS_ASSERT_MESSAGE_AT("lpAutosaveCompletedEvent", CGS_ARTIST_FILE, 670));
+                    CGS_ASSERT_AT(lp != 0, "lpAutosaveCompletedEvent", CGS_ARTIST_FILE, 670);
                     const s32 liCount = lpW[0];
                     if (liCount <= 0)
                         break;
@@ -656,7 +656,7 @@ namespace BrnGame
                     break;
                 }
                 case 360:
-                    CGS_ASSERT(lp != 0, CGS_ASSERT_MESSAGE_AT("lpImagesLoadedEvent", CGS_ARTIST_FILE, 695));
+                    CGS_ASSERT_AT(lp != 0, "lpImagesLoadedEvent", CGS_ARTIST_FILE, 695);
                     std::memcpy(lpOut, lp, 48);
                     liType = 161; liSize = 48; lbEmit = true;
                     break;
@@ -742,7 +742,7 @@ namespace BrnGame
                     break;   // no standard emit
                 }
                 case 517:
-                    CGS_ASSERT(lp != 0, CGS_ASSERT_MESSAGE_AT("lpGuiImageGalleryRequest", CGS_ARTIST_FILE, 607));
+                    CGS_ASSERT_AT(lp != 0, "lpGuiImageGalleryRequest", CGS_ARTIST_FILE, 607);
                     std::memcpy(lpOut, lp, 16);
                     liType = 158; liSize = 16; lbEmit = true;
                     break;
@@ -763,7 +763,7 @@ namespace BrnGame
                     break;
                 case 573:
                 {
-                    CGS_ASSERT(lp != 0, CGS_ASSERT_MESSAGE_AT("lpChallengeSelectedEvent", CGS_ARTIST_FILE, 727));
+                    CGS_ASSERT_AT(lp != 0, "lpChallengeSelectedEvent", CGS_ARTIST_FILE, 727);
                     *reinterpret_cast<u64*>(lpOut) = *reinterpret_cast<const u64*>(lp);
                     reinterpret_cast<s32*>(lpOut)[3] = lpW[3];
                     const s32 liSelector = lpW[2];
@@ -838,12 +838,12 @@ namespace BrnGame
         BrnSound::Module::Io::RootInputBuffer* lpSoundModuleInputBuffer,
         const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer)
     {
-        CGS_ASSERT(lpSoundModuleInputBuffer != 0 && lpGuiOutputBuffer != 0,
-                   CGS_ASSERT_MESSAGE_AT("lpSoundModuleInputBuffer && lpGuiOutputBuffer", CGS_ARTIST_FILE, 1694));
+        CGS_ASSERT_AT(lpSoundModuleInputBuffer != 0 && lpGuiOutputBuffer != 0,
+                   "lpSoundModuleInputBuffer && lpGuiOutputBuffer", CGS_ARTIST_FILE, 1694);
 
         const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue =
             GetGuiOutEventQueue(lpGuiOutputBuffer);
-        CGS_ASSERT(lpGuiEventQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGuiEventQueue", CGS_ARTIST_FILE, 1699));
+        CGS_ASSERT_AT(lpGuiEventQueue != 0, "lpGuiEventQueue", CGS_ARTIST_FILE, 1699);
         lpSoundModuleInputBuffer->SetGuiEventQueue(
             reinterpret_cast<const BrnSound::Module::Io::RootInputBuffer::GuiEventQueue*>(
                 lpGuiEventQueue));
@@ -938,7 +938,7 @@ namespace BrnGame
                 else if (luRequest == CollisionWorldEvent::E_COLLISON_WORLD_VALIDATE)
                     lpWorldInput->GetWorldEntityRequestInterface()->ValidateCollisionWorld();
                 else
-                    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid collsion world request event type", CGS_ARTIST_FILE, 1409));
+                    CGS_FAIL_AT("Invalid collsion world request event type", CGS_ARTIST_FILE, 1409);
             }
             liEventType = lpGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }

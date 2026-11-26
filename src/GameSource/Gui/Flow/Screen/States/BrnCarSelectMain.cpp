@@ -145,10 +145,10 @@ namespace BrnGui
     {
         mDesiredSetupInfo = *lpSetupInfo;  // copies mCarId + mbSelectable (X360 two-qword store)
 
-        CGS_ASSERT(mDesiredSetupInfo.mbSelectable,
-            CGS_ASSERT_MESSAGE_AT(
-                "mDesiredSetupInfo.mbSelectable",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectMain.cpp", 600 /* ARTIST 0x824B5584 */));   // cpp:600
+        CGS_ASSERT_AT(mDesiredSetupInfo.mbSelectable,
+            "mDesiredSetupInfo.mbSelectable",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectMain.cpp", 600 /* ARTIST 0x824B5584 */);   // cpp:600
+
 
         mbCarChangeInProgress = true;
     }
@@ -916,7 +916,7 @@ namespace BrnGui
 
         default:
             // E_CARSELECT_INVALID (-1) and anything >= E_CARSELECT_COUNT land here.
-            CGS_ASSERT_AT(false, "Invalid, unhandled state", CGS_ARTIST_FILE, 291);   // cpp:291
+            CGS_FAIL_AT("Invalid, unhandled state", CGS_ARTIST_FILE, 291);   // cpp:291
             break;
         }
 

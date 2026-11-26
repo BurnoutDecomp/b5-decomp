@@ -75,7 +75,7 @@ namespace
                                                     const BundleV2::ResourceEntry* lpEntries, s32 liNumEntries,
                                                     bool* lpOutNeeds, SmallResource* lpOutResources)
     {
-        CGS_ASSERT(meState == E_STATE_IDLE, CGS_ASSERT_STREAM_MESSAGE_AT("Can not begin allocation during none-idle state\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsLiveUpdatePoolModuleState.cpp", 75));   // :75
+        CGS_ASSERT_STREAM_AT(meState == E_STATE_IDLE, "Can not begin allocation during none-idle state\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsLiveUpdatePoolModuleState.cpp", 75);   // :75
 
         miElapsedWaitFrames = 0;              // stw 0, 0x38
         mpPool              = lpPool;          // stw r4, 0x04
@@ -173,7 +173,7 @@ namespace
         }
 
         default:
-            CGS_ASSERT(false, "Live update state is invalid\n");   // :193
+            CGS_FAIL("Live update state is invalid\n");   // :193
             return E_RESULT_ERROR;
         }
     }

@@ -708,10 +708,10 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     Vector3 RaceCarPhysics::GetNormalCausingCrash()
     {
-        CGS_ASSERT(IsCrashing(),
-            CGS_ASSERT_MESSAGE_AT(
-                "mbCrashing",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\VehiclePhysics/RaceCarPhysics.h", 328 /* ARTIST 0x825B3958 */));   // lbz this+0x710 (base mbIsCrashing)
+        CGS_ASSERT_AT(IsCrashing(),
+            "mbCrashing",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\VehiclePhysics/RaceCarPhysics.h", 328 /* ARTIST 0x825B3958 */);   // lbz this+0x710 (base mbIsCrashing)
+
         return mCrashNormal;   // lvx128 this+0x1440 -> hidden-sret stvx128
     }
 

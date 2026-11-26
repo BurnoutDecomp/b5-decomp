@@ -148,7 +148,7 @@ const u32 OfflineTrophyCarUnlock::muNumResourcesToLoad = 4;
 // pointer and the profile pointer.
 void OfflineTrophyCarUnlock::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
 {
-    CGS_ASSERT(lpFsm != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ScriptedFsm ptr", CGS_ARTIST_FILE, 89));
+    CGS_ASSERT_STREAM_AT(lpFsm != 0, "Invalid ScriptedFsm ptr", CGS_ARTIST_FILE, 89);
 
     CgsGui::State::Construct(liId, lpFsm);
 
@@ -366,10 +366,10 @@ void OfflineTrophyCarUnlock::HandleIncomingEvents()
 // order.
 void OfflineTrophyCarUnlock::AppendExpectedComponents()
 {
-    CGS_ASSERT(mpGuiCache,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpGuiCache",
-            CGS_ARTIST_FILE, 401 /* ARTIST 0x824B9AC8 */));
+    CGS_ASSERT_AT(mpGuiCache,
+        "mpGuiCache",
+            CGS_ARTIST_FILE, 401 /* ARTIST 0x824B9AC8 */);
+
 
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mScreenAnim.GetName());
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mManufacturerIcon.GetName());
@@ -446,10 +446,10 @@ void OfflineTrophyCarUnlock::HandleAptTriggers(const CgsGui::GuiEventAptTriggerP
 // Only the "pressed" record (id 6) is answered.
 void OfflineTrophyCarUnlock::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liEventType)
 {
-    CGS_ASSERT(lpEvent,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpEvent",
-            CGS_ARTIST_FILE, 523 /* ARTIST 0x824BD188 */));
+    CGS_ASSERT_AT(lpEvent,
+        "lpEvent",
+            CGS_ARTIST_FILE, 523 /* ARTIST 0x824BD188 */);
+
 
     if (liEventType == KI_EVENT_CONTROLLER_INPUT_PRESSED)
     {

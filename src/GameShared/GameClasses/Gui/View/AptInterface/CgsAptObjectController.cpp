@@ -53,16 +53,16 @@ namespace CgsGui
     // X360 0x8284A838. Return the controlled component's name.
     const char* ObjectController::GetName()
     {
-        CGS_ASSERT(mpControlledObject != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid component in GetName", CGS_ARTIST_FILE, 104));
+        CGS_ASSERT_STREAM_AT(mpControlledObject != 0, "Invalid component in GetName", CGS_ARTIST_FILE, 104);
         return mpControlledObject->GetName();
     }
 
     // X360 0x8284A610. Register this object as an apt extension.
     void ObjectController::Register()
     {
-        CGS_ASSERT(mpControlledObject != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Cannot register ourselves without knowing which GuiComponent we're attached to", CGS_ARTIST_FILE, 67));
+        CGS_ASSERT_STREAM_AT(mpControlledObject != 0, "Cannot register ourselves without knowing which GuiComponent we're attached to", CGS_ARTIST_FILE, 67);
 
-        CGS_ASSERT(!mbRegistered, CGS_ASSERT_STREAM_MESSAGE_AT("This object is already registered. Please UnRegister() first", CGS_ARTIST_FILE, 68));
+        CGS_ASSERT_STREAM_AT(!mbRegistered, "This object is already registered. Please UnRegister() first", CGS_ARTIST_FILE, 68);
 
         AptRegisterExtension(this);
         mbRegistered = true;
@@ -71,8 +71,8 @@ namespace CgsGui
     // X360 0x8284A728. Tear down the apt-extension registration.
     void ObjectController::UnRegister()
     {
-        CGS_ASSERT(mpControlledObject != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Not target object", CGS_ARTIST_FILE, 84));
-        CGS_ASSERT(mbRegistered, CGS_ASSERT_STREAM_MESSAGE_AT("This object is not registered.", CGS_ARTIST_FILE, 85));
+        CGS_ASSERT_STREAM_AT(mpControlledObject != 0, "Not target object", CGS_ARTIST_FILE, 84);
+        CGS_ASSERT_STREAM_AT(mbRegistered, "This object is not registered.", CGS_ARTIST_FILE, 85);
 
         mbRegistered = false;
         AptUnRegisterExtension(this);

@@ -67,9 +67,9 @@ namespace BrnGui
 
     void MovieAllocator::DoFreeDisposable(rw::Resource&)
     {
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "Not implemented",
-                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 1151 /* ARTIST 0x824F1914 */)); // ARTIST 824F1900.
+        CGS_FAIL_AT(
+            "Not implemented",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 1151 /* ARTIST 0x824F1914 */); // ARTIST 824F1900.
+
     }
 }

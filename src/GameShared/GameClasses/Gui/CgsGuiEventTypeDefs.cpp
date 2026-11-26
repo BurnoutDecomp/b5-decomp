@@ -13,10 +13,10 @@ namespace CgsGui
     // (GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h:250).
     f64 GuiEventTimeInfo::GetTime() const
     {
-        CGS_ASSERT(mfTimeNow != -FLT_MAX,
-            CGS_ASSERT_MESSAGE_AT(
-                "mfTimeNow!=-FLT_MAX",
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiEventTypeDefs.h", 250 /* ARTIST 0x8240E358 */));
+        CGS_ASSERT_AT(mfTimeNow != -FLT_MAX,
+            "mfTimeNow!=-FLT_MAX",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiEventTypeDefs.h", 250 /* ARTIST 0x8240E358 */);
+
         return mfTimeNow;
     }
 }

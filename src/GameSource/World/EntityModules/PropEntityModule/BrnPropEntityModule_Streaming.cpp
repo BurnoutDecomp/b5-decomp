@@ -272,7 +272,7 @@ namespace BrnWorld
             break;
 
         default:
-            CGS_ASSERT_AT( false, "Bad streaming state\n" , CGS_ARTIST_UNITY_BRNPROPENTITYMODULE_CPP_FILE, 967);   // BrnPropEntityModule.cpp:967
+            CGS_FAIL_AT( "Bad streaming state\n" , CGS_ARTIST_UNITY_BRNPROPENTITYMODULE_CPP_FILE, 967);   // BrnPropEntityModule.cpp:967
             break;
         }
     }

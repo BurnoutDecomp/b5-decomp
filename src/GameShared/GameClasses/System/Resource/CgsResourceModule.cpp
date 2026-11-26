@@ -80,7 +80,7 @@ namespace CgsResource
             mePrepareStage = E_PREPARE_DONE;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Invalid stage\n", CGS_ARTIST_FILE, 272);
+            CGS_FAIL_AT("Invalid stage\n", CGS_ARTIST_FILE, 272);
             return false;
         }
     }
@@ -124,7 +124,7 @@ namespace CgsResource
             meReleaseStage = E_RELEASE_DONE;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Invalid stage\n", CGS_ARTIST_FILE, 363);
+            CGS_FAIL_AT("Invalid stage\n", CGS_ARTIST_FILE, 363);
             return false;
         }
     }
@@ -714,7 +714,7 @@ namespace CgsResource
             case 22: lrModule.AddRegisterMemFileRequest(reinterpret_cast<const Events::RegisterMemFileRequest*>(lpEvent)); break;
             case 23: lrModule.AddUnregisterMemFileRequest(reinterpret_cast<const Events::UnregisterMemFileRequest*>(lpEvent)); break;
             case 25: lrModule.AddAddPatchRequest(reinterpret_cast<const Events::AddPatchRequest*>(lpEvent)); break;
-            default: CGS_ASSERT(false, "Invalid event id\n"); break;
+            default: CGS_FAIL("Invalid event id\n"); break;
             }
         }
     }
@@ -753,7 +753,7 @@ namespace CgsResource
             else if (liTag == 18)
                 AddCloseReadStreamRequest(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent));
             else
-                CGS_ASSERT(false, "Unexpected request from bundle loader\n");
+                CGS_FAIL("Unexpected request from bundle loader\n");
             const CgsModule::Event* lpNext = 0;
             liTag = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
@@ -1001,7 +1001,7 @@ namespace CgsResource
                 break;
 
             default:
-                CGS_ASSERT_STREAM_AT(false, "Unexpected pending file response\n", CGS_ARTIST_FILE, 1160);
+                CGS_FAIL_STREAM_AT("Unexpected pending file response\n", CGS_ARTIST_FILE, 1160);
                 break;
             }
         }
@@ -1087,7 +1087,7 @@ namespace CgsResource
             if (liId == 10 || liId == 13)   // CreatePool / DeletePool memory requests
                 lpMemQ->AddEvent(lpEvent, 1, liSize);
             else
-                CGS_ASSERT(false, "Unexpected request from bundle loader\n");
+                CGS_FAIL("Unexpected request from bundle loader\n");
 
             const CgsModule::Event* lpNext = 0;
             liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
@@ -1128,7 +1128,7 @@ namespace CgsResource
     // request param is unused (ARTIST streams the rejection diagnostic and returns false).
     bool ResourceModule::AddOpenWriteStreamRequest(const Events::OpenWriteStreamRequest* /*lpRequest*/)
     {
-        CGS_ASSERT_STREAM_AT(false, "Write streams deprecated\n", CGS_RESOURCE_MODULE_ARTIST_HEADER, 840);
+        CGS_FAIL_STREAM_AT("Write streams deprecated\n", CGS_RESOURCE_MODULE_ARTIST_HEADER, 840);
         return false;
     }
 
@@ -1136,7 +1136,7 @@ namespace CgsResource
     // request param is unused (ARTIST streams the rejection diagnostic and returns false).
     bool ResourceModule::AddCloseWriteStreamRequest(const Events::CloseWriteStreamRequest* /*lpRequest*/)
     {
-        CGS_ASSERT_STREAM_AT(false, "Write streams deprecated\n", CGS_RESOURCE_MODULE_ARTIST_HEADER, 903);
+        CGS_FAIL_STREAM_AT("Write streams deprecated\n", CGS_RESOURCE_MODULE_ARTIST_HEADER, 903);
         return false;
     }
 }

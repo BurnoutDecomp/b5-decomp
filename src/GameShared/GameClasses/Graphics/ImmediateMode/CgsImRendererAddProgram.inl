@@ -9,14 +9,14 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     {
         if (!mapVertexProgramBuffer[li8ProgramIndex])
         {
-            CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == 0,
-                CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ li8ProgramIndex ] == NULL", KAC_IM_RENDERER_ASSERT_FILE, 487));
+            CGS_ASSERT_AT(mapPixelProgramBuffer[li8ProgramIndex] == 0,
+                "mapPixelProgramBuffer[ li8ProgramIndex ] == NULL", KAC_IM_RENDERER_ASSERT_FILE, 487);
             break;
         }
     } while (++li8ProgramIndex < KI8_MAX_PROGRAMS);
 
-    CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
-               CGS_ASSERT_MESSAGE_AT("Adding too many shader programs to the immediate mode renderer", KAC_IM_RENDERER_ASSERT_FILE, 491));
+    CGS_ASSERT_AT(li8ProgramIndex < KI8_MAX_PROGRAMS,
+               "Adding too many shader programs to the immediate mode renderer", KAC_IM_RENDERER_ASSERT_FILE, 491);
 
     renderengine::ProgramBufferParameters lVertexParams;
     lVertexParams.mMicrocodeParts.cbCachedPartSize    = 0;

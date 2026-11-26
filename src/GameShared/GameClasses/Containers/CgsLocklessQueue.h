@@ -121,7 +121,7 @@ void LocklessQueue<T>::Unlock()
         {
             return;
         }
-        CGS_ASSERT_AT(false, "Another thread changed the status while locked by this thread\n",
+        CGS_FAIL_AT("Another thread changed the status while locked by this thread\n",
                       CGS_ARTIST_LOCKLESS_QUEUE_FILE, 284);
     }
 }
@@ -160,7 +160,7 @@ bool LocklessQueue<T>::Post(const T* lpItem, bool lbWaitIfFull, s32 liSleepTime)
             lbSucceeded = true;
             break;
         }
-        CGS_ASSERT_AT(false, "Another thread changed the status while locked by this thread\n",
+        CGS_FAIL_AT("Another thread changed the status while locked by this thread\n",
                       CGS_ARTIST_LOCKLESS_QUEUE_FILE, 349);
     }
     Unlock();
@@ -201,7 +201,7 @@ bool LocklessQueue<T>::Pop(T* lpItem, bool lbWaitIfEmpty, s32 liSleepTime)
             lbSucceeded = true;
             break;
         }
-        CGS_ASSERT_AT(false, "Another thread changed the status while locked by this thread\n",
+        CGS_FAIL_AT("Another thread changed the status while locked by this thread\n",
                       CGS_ARTIST_LOCKLESS_QUEUE_FILE, 421);
     }
     Unlock();

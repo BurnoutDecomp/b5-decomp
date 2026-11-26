@@ -101,7 +101,7 @@ namespace CgsSceneManager
                 ++luEntry;
                 if (luEntry >= muLen)
                 {
-                    CGS_ASSERT(false, "Error in IntervalStack::Pop");
+                    CGS_FAIL("Error in IntervalStack::Pop");
                     return muLen;
                 }
             }
@@ -114,7 +114,7 @@ namespace CgsSceneManager
         }
         else
         {
-            CGS_ASSERT(false, "Error in IntervalStack::Pop");
+            CGS_FAIL("Error in IntervalStack::Pop");
         }
         return muLen;
     }

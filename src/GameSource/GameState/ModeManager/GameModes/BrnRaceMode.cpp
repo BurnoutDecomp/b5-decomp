@@ -48,9 +48,9 @@ void RaceMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // from BrnGameModeParams.h on the StartGameModeParams accessors); the lpGameModeParams /
     // lpProgressionRankData / lpEventData asserts fire from BrnRaceMode.cpp.
     CGS_ASSERT(lpProgressionRankData != 0, "mpProgressionRankData != NULL");
-    CGS_ASSERT(lpEventData != 0, CGS_ASSERT_MESSAGE_AT("lpEventData != NULL", CGS_ARTIST_FILE, 87));
-    CGS_ASSERT(lpGameModeParams != 0, CGS_ASSERT_MESSAGE_AT("lpGameModeParams != NULL", CGS_ARTIST_FILE, 88));
-    CGS_ASSERT(lpProgressionRankData != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionRankData != NULL", CGS_ARTIST_FILE, 91));
+    CGS_ASSERT_AT(lpEventData != 0, "lpEventData != NULL", CGS_ARTIST_FILE, 87);
+    CGS_ASSERT_AT(lpGameModeParams != 0, "lpGameModeParams != NULL", CGS_ARTIST_FILE, 88);
+    CGS_ASSERT_AT(lpProgressionRankData != 0, "lpProgressionRankData != NULL", CGS_ARTIST_FILE, 91);
 
     // Initialise the run-time param block for this mode type, then thread through the start
     // mechanism / traffic-light trigger straight from the immutable start params.

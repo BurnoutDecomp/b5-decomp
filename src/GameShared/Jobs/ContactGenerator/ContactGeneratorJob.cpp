@@ -508,7 +508,7 @@ void ContactGeneratorJob::Execute(void* lpvJobData)
             break;
 
         default:
-            CGS_ASSERT(false, "Unsupported collision job");     // :135
+            CGS_FAIL("Unsupported collision job");     // :135
             break;
     }
 }
@@ -1524,7 +1524,7 @@ void ContactGeneratorJob::ExecuteBoxListWithTriangleList()
     CollisionResultList lResultsList;
     LoadResultList(mpJobDescription->GetResultsList(), &lResultsList);
 
-    CGS_ASSERT(false, "Not implemented");                                            // :841
+    CGS_FAIL("Not implemented");                                            // :841
 }
 
 // =============================================================================================
@@ -2023,7 +2023,7 @@ void ContactGeneratorJob::BuildGPInstance(PrimitivePairList::EVolumeType leVolum
         case PrimitivePairList::E_VOLUME_TYPE_4TRIANGLES:        // jumptable case 2 -> 0x829224F4
         {
             // Assert and return; the instance is left exactly as the caller had it.
-            CGS_ASSERT(false, "Are you mad? Triangle-Triangle collision");            // :1660
+            CGS_FAIL("Are you mad? Triangle-Triangle collision");            // :1660
             break;
         }
 

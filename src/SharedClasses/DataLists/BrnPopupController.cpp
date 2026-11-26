@@ -75,7 +75,7 @@ bool PopupController::GetPopup(BrnGui::GuiOverlayFullInfoResponse* lpOverlayInfo
         liIndex = GetIndexFromPopupHash(CgsIDCompress("TestPopup"));
         if (liIndex == -1)
         {
-            CGS_ASSERT(false, "Can't find default popup to display");   // cpp:72
+            CGS_FAIL("Can't find default popup to display");   // cpp:72
             return false;
         }
     }

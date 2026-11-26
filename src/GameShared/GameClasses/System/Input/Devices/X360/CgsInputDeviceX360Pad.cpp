@@ -212,7 +212,7 @@ namespace CgsInput
     {
         if (luControl > KU_VALID_BUTTON_MAX)
         {
-            CGS_ASSERT(false, "lbValidControl");                            // line 304
+            CGS_FAIL("lbValidControl");                            // line 304
             return KF_ZERO;
         }
         return mafControls[luControl];

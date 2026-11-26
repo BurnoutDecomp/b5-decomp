@@ -101,7 +101,7 @@ namespace BrnWorld
     void PropEntityDebugComponent::Construct(PropEntityModule* lpPropEntityModule)
     {
         CgsDev::DebugComponent::Construct();   // ARTIST 0x822A96C4 (folded at 0x8284CB38)
-        CGS_ASSERT(lpPropEntityModule != 0, CGS_ASSERT_MESSAGE_AT("lpPropEntityModule != NULL", __FILE__, 50));
+        CGS_ASSERT_AT(lpPropEntityModule != 0, "lpPropEntityModule != NULL", __FILE__, 50);
         mpPropEntityModule = lpPropEntityModule;
 
         mbRenderProps         = false;   // +0x38
@@ -142,7 +142,7 @@ namespace BrnWorld
 
         RegisterVariable(&mbRenderTrafficLights, "Render props marked as Traffic Lights");
 
-        CGS_ASSERT(mpPropEntityModule != 0, CGS_ASSERT_MESSAGE_AT("mpPropEntityModule != NULL", __FILE__, 290));   // ARTIST 0x822C53B8
+        CGS_ASSERT_AT(mpPropEntityModule != 0, "mpPropEntityModule != NULL", __FILE__, 290);   // ARTIST 0x822C53B8
 
         RegisterVariable(&mpPropEntityModule->mbUseOverrides,          "Overrides...", "Use Overrides");
         RegisterVariable(&mpPropEntityModule->mfOverrideLeanThreshold, "Overrides...", "Override Lean Threshold");
@@ -240,7 +240,7 @@ namespace BrnWorld
 
             default:
             {
-                CGS_ASSERT(false, "Collision volume very confused about what type it is... corrupted?");
+                CGS_FAIL("Collision volume very confused about what type it is... corrupted?");
             }
             break;
         }

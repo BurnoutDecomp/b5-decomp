@@ -26,10 +26,10 @@ Factory::Factory(Name aName, Environment& arEnvironment)
       mEnvironment(arEnvironment)
 {
     bool lbResult = Environment::AddFactory(mEnvironment, this);
-    CGS_ASSERT(lbResult,
-        CGS_ASSERT_MESSAGE_AT(
-            "lbResult",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsFactory.h", 251 /* ARTIST 0x826AD398 */));
+    CGS_ASSERT_AT(lbResult,
+        "lbResult",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsFactory.h", 251 /* ARTIST 0x826AD398 */);
+
 }
 
 // @ 0x826AD4D0. The Hex-Rays view shows an "arg-less bool virtual at vtable slot 3";

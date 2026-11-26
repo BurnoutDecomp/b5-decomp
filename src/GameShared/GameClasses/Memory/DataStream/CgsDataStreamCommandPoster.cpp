@@ -132,11 +132,11 @@ namespace CgsMemory
     s32 DataStreamCommandPoster::AllocateCommand(void** lppOutBuffer)
     {
         // Three X360 assert tripwires (fire-on-failure), in store order.
-        CGS_ASSERT(!mbStreaming, CGS_ASSERT_STREAM_MESSAGE_AT("Streaming has already begun so can't synchronously add commands\n", CGS_ARTIST_FILE, 242));
+        CGS_ASSERT_STREAM_AT(!mbStreaming, "Streaming has already begun so can't synchronously add commands\n", CGS_ARTIST_FILE, 242);
 
-        CGS_ASSERT(miNumCommands < miMaxCommands, CGS_ASSERT_STREAM_MESSAGE_AT("No space for more commands\n", CGS_ARTIST_FILE, 243));
+        CGS_ASSERT_STREAM_AT(miNumCommands < miMaxCommands, "No space for more commands\n", CGS_ARTIST_FILE, 243);
 
-        CGS_ASSERT(lppOutBuffer != 0, CGS_ASSERT_STREAM_MESSAGE_AT("lppOutBuffer is NULL\n", CGS_ARTIST_FILE, 244));
+        CGS_ASSERT_STREAM_AT(lppOutBuffer != 0, "lppOutBuffer is NULL\n", CGS_ARTIST_FILE, 244);
 
 
         *lppOutBuffer = mpcCommandBuffer + miCommandSize * miNumCommands;
@@ -169,7 +169,7 @@ namespace CgsMemory
     // ld r3,0(this)=mEncodedStatus and return it.
     u64 DataStreamCommandPoster::GetEncodedStatus() const
     {
-        CGS_ASSERT(mbStreaming, CGS_ASSERT_STREAM_MESSAGE_AT("Encoded status is only valid during stream\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\datastream\\CgsDataStreamCommandPoster.h", 175));
+        CGS_ASSERT_STREAM_AT(mbStreaming, "Encoded status is only valid during stream\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\datastream\\CgsDataStreamCommandPoster.h", 175);
 
 
         return mEncodedStatus.GetValue();

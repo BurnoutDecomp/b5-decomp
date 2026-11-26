@@ -52,11 +52,11 @@ namespace Playback
     {
         if (arSpec.mu8LoadMethod != 1)
         {
-            CGS_ASSERT(arSpec.mu8LoadMethod == 1, CGS_ASSERT_MESSAGE_AT("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 68));
+            CGS_ASSERT_AT(arSpec.mu8LoadMethod == 1, "Invalid Content load method", KAC_CONTENT_LOADER_FILE, 68);
             return false;
         }
 
-        CGS_ASSERT(arContent.GetLoadService(), CGS_ASSERT_MESSAGE_AT("lContent.GetLoadService()", KAC_CONTENT_LOADER_FILE, 52));
+        CGS_ASSERT_AT(arContent.GetLoadService(), "lContent.GetLoadService()", KAC_CONTENT_LOADER_FILE, 52);
 
         // ARTIST 0x826DCC88: the fresh-load call is the fall-through (bne to the restart).
         if (!mpLoadData)
@@ -75,7 +75,7 @@ namespace Playback
     {
         if (arSpec.mu8LoadMethod != 1)
         {
-            CGS_ASSERT(arSpec.mu8LoadMethod == 1, CGS_ASSERT_MESSAGE_AT("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 106));
+            CGS_ASSERT_AT(arSpec.mu8LoadMethod == 1, "Invalid Content load method", KAC_CONTENT_LOADER_FILE, 106);
             return false;
         }
 
@@ -103,7 +103,7 @@ namespace Playback
     bool ContentLoader<ResType>::StartResourceModuleLoading(Content& arContent,
                                                             const ContentSpec& /*arSpec*/)
     {
-        CGS_ASSERT(mpLoadData == 0, CGS_ASSERT_MESSAGE_AT("0 == mpLoadData", KAC_CONTENT_LOADER_FILE, 243));
+        CGS_ASSERT_AT(mpLoadData == 0, "0 == mpLoadData", KAC_CONTENT_LOADER_FILE, 243);
 
         mpLoadData = static_cast<ResourceModuleLoadData*>(
             arContent.GetFactory().GetEnvironment().Allocate(
@@ -128,7 +128,7 @@ namespace Playback
     void ContentLoader<ResType>::RestartResourceModuleLoading(Content& /*arContent*/,
                                                               const ContentSpec& /*arSpec*/)
     {
-        CGS_ASSERT(mpLoadData, CGS_ASSERT_MESSAGE_AT("mpLoadData", KAC_CONTENT_LOADER_FILE, 269));
+        CGS_ASSERT_AT(mpLoadData, "mpLoadData", KAC_CONTENT_LOADER_FILE, 269);
 
         ++mpLoadData->mi16CurrentRequest;     // +0x04 (sth after lhz+1)
         mpLoadData->mu8IsCancelled = 0;        // +0x06
@@ -141,7 +141,7 @@ namespace Playback
     void ContentLoader<ResType>::CancelResourceModuleLoading(Content& /*arContent*/,
                                                             const ContentSpec& /*arSpec*/)
     {
-        CGS_ASSERT(mpLoadData, CGS_ASSERT_MESSAGE_AT("mpLoadData", KAC_CONTENT_LOADER_FILE, 360));
+        CGS_ASSERT_AT(mpLoadData, "mpLoadData", KAC_CONTENT_LOADER_FILE, 360);
         mpLoadData->mu8IsCancelled = 1;
     }
 
@@ -160,7 +160,7 @@ namespace Playback
         if (!mpLoadData)
             return;
 
-        CGS_ASSERT(arSpec.mu8LoadMethod == 1, CGS_ASSERT_MESSAGE_AT("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 226));
+        CGS_ASSERT_AT(arSpec.mu8LoadMethod == 1, "Invalid Content load method", KAC_CONTENT_LOADER_FILE, 226);
 
         // Factory::mEnvironment -> Environment::mpAllocator, by name (see
         // StartResourceModuleLoading above).
@@ -182,7 +182,7 @@ namespace Playback
         case CgsSound::Playback::E_CONTENT_STATE_LOADING:   // 2
             if (arSpec.mu8LoadMethod != 1)
             {
-                CGS_ASSERT(arSpec.mu8LoadMethod == 1, CGS_ASSERT_MESSAGE_AT("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 135));
+                CGS_ASSERT_AT(arSpec.mu8LoadMethod == 1, "Invalid Content load method", KAC_CONTENT_LOADER_FILE, 135);
                 return;
             }
             UpdateResourceModuleLoading(arContent, arSpec);
@@ -210,7 +210,7 @@ namespace Playback
     void ContentLoader<ResType>::UpdateResourceModuleLoading(Content& arContent,
                                                              const ContentSpec& arSpec)
     {
-        CGS_ASSERT(mpLoadData, CGS_ASSERT_MESSAGE_AT("mpLoadData", KAC_CONTENT_LOADER_FILE, 287));
+        CGS_ASSERT_AT(mpLoadData, "mpLoadData", KAC_CONTENT_LOADER_FILE, 287);
 
         ResourceModuleLoadData* lpLoadData = mpLoadData;
         switch (lpLoadData->meState)
@@ -228,7 +228,7 @@ namespace Playback
             }
             else
             {
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("LOAD FAILED", KAC_CONTENT_LOADER_FILE, 311));
+                CGS_FAIL_AT("LOAD FAILED", KAC_CONTENT_LOADER_FILE, 311);
             }
             return;
         }
@@ -287,7 +287,7 @@ namespace Playback
         case E_US_UNLOADING:
             if (arSpec.mu8LoadMethod != E_CONTENT_LOAD_RESOURCE_MODULE)
             {
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 193));
+                CGS_FAIL_AT("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 193);
             }
             else
             {

@@ -43,8 +43,8 @@ void BridgeRaceCarResourceRequestsToOutput_Prepare(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpWorldOutput != 0, CGS_ASSERT_MESSAGE_AT("lpWorldOutput != NULL", __FILE__, 169));                                   // :169
-    CGS_ASSERT(lpRaceCarOutputBuffer_Prepare != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarOutputBuffer_Prepare != NULL", __FILE__, 170));   // :170
+    CGS_ASSERT_AT(lpWorldOutput != 0, "lpWorldOutput != NULL", __FILE__, 169);                                   // :169
+    CGS_ASSERT_AT(lpRaceCarOutputBuffer_Prepare != 0, "lpRaceCarOutputBuffer_Prepare != NULL", __FILE__, 170);   // :170
 
     const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_Prepare::ResourceRequestInterface* lpSourceInterface = lpRaceCarOutputBuffer_Prepare->GetResourceRequestInterface();
 
@@ -84,8 +84,8 @@ void BridgePropResourceRequestsToOutput_Prepare(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpWorldOutput != 0, CGS_ASSERT_MESSAGE_AT("lpWorldOutput != NULL", __FILE__, 247));                                 // :247
-    CGS_ASSERT(lpPropOutputBuffer_Prepare != 0, CGS_ASSERT_MESSAGE_AT("lpPropOutputBuffer_Prepare != NULL", __FILE__, 248));       // :248
+    CGS_ASSERT_AT(lpWorldOutput != 0, "lpWorldOutput != NULL", __FILE__, 247);                                 // :247
+    CGS_ASSERT_AT(lpPropOutputBuffer_Prepare != 0, "lpPropOutputBuffer_Prepare != NULL", __FILE__, 248);       // :248
 
     const BrnWorld::PropEntityIO::OutputBuffer_Prepare::ResourceRequestInterfaceStorage* lpSourceInterface = lpPropOutputBuffer_Prepare->GetResourceRequestInterface();
 
@@ -101,9 +101,9 @@ void BridgeEntityModulesToOutput_PrePhysics(
     const BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics* lpTrafficOutput_PrePhysics,
     const BrnWorld::TriggerEntityModuleIO::OutputBuffer_PrePhysics* lpTriggerOutput_PrePhysics)
 {
-    CGS_ASSERT(lpOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", __FILE__, 42));                          // :42
-    CGS_ASSERT(lpRaceCarOutput_PrePhysics != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarOutput_PrePhysics", __FILE__, 43));  // :43
-    CGS_ASSERT(lpTriggerOutput_PrePhysics != 0, CGS_ASSERT_MESSAGE_AT("lpTriggerOutput_PrePhysics", __FILE__, 44));  // :44
+    CGS_ASSERT_AT(lpOutputBuffer != 0, "lpOutputBuffer", __FILE__, 42);                          // :42
+    CGS_ASSERT_AT(lpRaceCarOutput_PrePhysics != 0, "lpRaceCarOutput_PrePhysics", __FILE__, 43);  // :43
+    CGS_ASSERT_AT(lpTriggerOutput_PrePhysics != 0, "lpTriggerOutput_PrePhysics", __FILE__, 44);  // :44
 
     BridgeRaceCarEntityInfoToOutput_PrePhysics(lpWorldModule, lpOutputBuffer, lpRaceCarOutput_PrePhysics);
     BridgeTrafficCarEntityInfoToOutput_PrePhysics(lpWorldModule, lpOutputBuffer, lpTrafficOutput_PrePhysics);
@@ -153,8 +153,8 @@ void BridgePropToOutput_PreScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpWorldOutput != NULL", __FILE__, 268));                            // :268
-    CGS_ASSERT(lpPropOutput_PreScene != 0, CGS_ASSERT_MESSAGE_AT("lpPropOutputBuffer_PreScene != NULL", __FILE__, 269));       // :269
+    CGS_ASSERT_AT(lpOutputBuffer != 0, "lpWorldOutput != NULL", __FILE__, 268);                            // :268
+    CGS_ASSERT_AT(lpPropOutput_PreScene != 0, "lpPropOutputBuffer_PreScene != NULL", __FILE__, 269);       // :269
 
     // Append the actual prop resource request queue, as in ARTIST 0x827AF258.
     const BrnWorld::PropEntityIO::OutputBuffer_PreScene::ResourceRequestInterfaceStorage* lpSourceInterface = lpPropOutput_PreScene->GetResourceRequestInterface();
@@ -652,8 +652,8 @@ void BridgeRaceCarEntityInfoToOutput_PostPhysics(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpWorldOutput != NULL", __FILE__, 402));                                  // :402
-    CGS_ASSERT(lpRaceCarOutput_PostPhysics != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarOutputBuffer_PostPhysics != NULL", __FILE__, 403)); // :403
+    CGS_ASSERT_AT(lpOutputBuffer != 0, "lpWorldOutput != NULL", __FILE__, 402);                                  // :402
+    CGS_ASSERT_AT(lpRaceCarOutput_PostPhysics != 0, "lpRaceCarOutputBuffer_PostPhysics != NULL", __FILE__, 403); // :403
 
     lpOutputBuffer->SetActiveRaceCarOutputInterface(
         lpRaceCarOutput_PostPhysics->GetActiveRaceCarOutputInterface());
@@ -771,10 +771,10 @@ void BridgeAIModuleToOutput(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpWorldOutput != 0, CGS_ASSERT_MESSAGE_AT(
-        "lpWorldOutput != NULL", KAC_ARTIST_AI_TO_OUTPUT_FILE, 40));
-    CGS_ASSERT(lpAIOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT(
-        "lpAIOutputBuffer != NULL", KAC_ARTIST_AI_TO_OUTPUT_FILE, 41));
+    CGS_ASSERT_AT(lpWorldOutput != 0,
+        "lpWorldOutput != NULL", KAC_ARTIST_AI_TO_OUTPUT_FILE, 40);
+    CGS_ASSERT_AT(lpAIOutputBuffer != 0,
+        "lpAIOutputBuffer != NULL", KAC_ARTIST_AI_TO_OUTPUT_FILE, 41);
 
     // ⭐ GUARDS DELETED 2026-08-25 (aimodule wave), exactly as the note they replaced asked
     // ("delete the guards when the AI output buffer's members land"). The four const getters

@@ -424,7 +424,7 @@ namespace BrnGui
     // pending-id bookkeeping.
     void OnlineScoreboards::ClearExpectedComponent()
     {
-        CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 430 /* ARTIST 0x82486960 */));   // cpp:430 (non-fatal -- the call below runs regardless)
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 430 /* ARTIST 0x82486960 */);   // cpp:430 (non-fatal -- the call below runs regardless)
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -453,7 +453,7 @@ namespace BrnGui
     // GuiCache event (type 64) and latch its carried cache pointer into mpGuiCache.
     void OnlineScoreboards::UpdateGetCache()
     {
-        CGS_ASSERT(mpGuiCache == NULL, CGS_ASSERT_MESSAGE_AT("NULL == mpGuiCache", CGS_ARTIST_FILE, 473 /* ARTIST 0x82491818 */));   // cpp:473 (the cache must still be unset here)
+        CGS_ASSERT_AT(mpGuiCache == NULL, "NULL == mpGuiCache", CGS_ARTIST_FILE, 473 /* ARTIST 0x82491818 */);   // cpp:473 (the cache must still be unset here)
 
         StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
@@ -474,14 +474,14 @@ namespace BrnGui
             {
                 // The cache event carries the GuiCache pointer in its leading word.
                 GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
-                CGS_ASSERT(lpCache != NULL, CGS_ASSERT_MESSAGE_AT("NULL != lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 483 /* ARTIST 0x82491888 */));   // cpp:483
+                CGS_ASSERT_AT(lpCache != NULL, "NULL != lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 483 /* ARTIST 0x82491888 */);   // cpp:483
 
                 // X360 stores unconditionally, after the (non-fatal) assert above.
                 mpGuiCache = lpCache;
             }
         }
 
-        CGS_ASSERT(mpGuiCache != NULL, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", CGS_ARTIST_FILE, 492 /* ARTIST 0x824918B8 */));   // cpp:492
+        CGS_ASSERT_AT(mpGuiCache != NULL, "NULL != mpGuiCache", CGS_ARTIST_FILE, 492 /* ARTIST 0x824918B8 */);   // cpp:492
     }
 }
 
@@ -531,8 +531,8 @@ namespace BrnGui
     int OnlineScoreboards::_RoadQSortFunction(const void* lpRoadData1, const void* lpRoadData2)
     {
         // cpp:173 / cpp:174 -- both non-fatal on the X360: the compare runs regardless.
-        CGS_ASSERT(lpRoadData1 != 0, CGS_ASSERT_MESSAGE_AT("lpRoadData1", CGS_ARTIST_FILE, 173 /* ARTIST 0x82486800 */));
-        CGS_ASSERT(lpRoadData2 != 0, CGS_ASSERT_MESSAGE_AT("lpRoadData2", CGS_ARTIST_FILE, 174 /* ARTIST 0x82486824 */));
+        CGS_ASSERT_AT(lpRoadData1 != 0, "lpRoadData1", CGS_ARTIST_FILE, 173 /* ARTIST 0x82486800 */);
+        CGS_ASSERT_AT(lpRoadData2 != 0, "lpRoadData2", CGS_ARTIST_FILE, 174 /* ARTIST 0x82486824 */);
 
         // X360 `addi rN, rN, 4`: the compared field is the record's name, not the record.
         // Reached through the named member so the host's own offset is used.
@@ -1061,7 +1061,7 @@ namespace BrnGui
                 // The X360 streams the offending state value into the message
                 // ("invalid request state : " << meLeaderboardRequestState << "\n"); project
                 // policy lowers a streamed assert to its static text. Non-fatal.
-                CGS_ASSERT(false, "invalid request state : ");
+                CGS_FAIL("invalid request state : ");
                 break;
         }
     }
@@ -1717,7 +1717,7 @@ namespace BrnGui
                 else
                 {
                     // The console streams the filter index after this text.
-                    CGS_ASSERT(false, "Invalid filter selected : ");
+                    CGS_FAIL("Invalid filter selected : ");
                 }
 
                 // A changed filter forgets the challenge target.
@@ -1817,7 +1817,7 @@ namespace BrnGui
             default:
                 // The console streams the state value after this text.
                 // Streamed in place, as ARTIST builds it (cpp:369).
-                CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+                CGS_FAIL_STREAM_AT("Invalid internal state : " << meInternalState << "\n",
                                      CGS_ARTIST_FILE, 369);
                 break;
         }

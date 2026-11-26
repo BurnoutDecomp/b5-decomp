@@ -363,11 +363,11 @@ bool StreetManager::LoadAIData( GameStateModuleIO::OutputBuffer* lpOutput,
             const CgsModule::Event* lpEvent = NULL;
             s32 liEventSize = 0;
             lpReceiverQueue->GetFirstEvent( &lpEvent, &liEventSize );
-            CGS_ASSERT( lpEvent != NULL, CGS_ASSERT_MESSAGE_AT("lpEvent != NULL", CGS_ARTIST_FILE, 3464) );
+            CGS_ASSERT_AT( lpEvent != NULL, "lpEvent != NULL", CGS_ARTIST_FILE, 3464 );
 
             const BrnResource::GameDataIO::GameDataEvent* lpAIDataResponse =
                 reinterpret_cast<const BrnResource::GameDataIO::GameDataEvent*>( lpEvent );
-            CGS_ASSERT( lpAIDataResponse->miEventId == 1, CGS_ASSERT_MESSAGE_AT("lpAIDataResponse->GetEventId() == 1", CGS_ARTIST_FILE, 3468) );
+            CGS_ASSERT_AT( lpAIDataResponse->miEventId == 1, "lpAIDataResponse->GetEventId() == 1", CGS_ARTIST_FILE, 3468 );
 
             // ARTIST 0x8234FA70 binds the received AI-lanes resource before
             // marking the load complete (same native-width handle as Progression).
@@ -495,7 +495,7 @@ bool StreetManager::LoadDistrictMap( GameStateModuleIO::OutputBuffer* lpOutput,
             return true;
 
         default:
-            CGS_ASSERT( false, CGS_ASSERT_MESSAGE_AT("Unknown meDistrictMapLoadStage", CGS_ARTIST_FILE, 3573) );
+            CGS_FAIL_AT( "Unknown meDistrictMapLoadStage", CGS_ARTIST_FILE, 3573 );
             return false;
     }
 }
@@ -552,7 +552,7 @@ BrnStreetData::RoadIndex StreetManager::GetRoadIndexFromAISectionIndex(u16 secti
 // ARTIST 0x8230F8F8 (64-bit ID return).
 CgsID StreetManager::GetParRivalId(s32 road, BrnStreetData::ScoreType type)
 {
-    CGS_ASSERT(static_cast<u32>(road) < KI_MAX_CHALLENGES, CGS_ASSERT_MESSAGE_AT("liRoadIndex >= 0 && liRoadIndex < KI_MAX_CHALLENGES", CGS_ARTIST_FILE_BRNGAMESTATESTREETMANAGER, 972));
+    CGS_ASSERT_AT(static_cast<u32>(road) < KI_MAX_CHALLENGES, "liRoadIndex >= 0 && liRoadIndex < KI_MAX_CHALLENGES", CGS_ARTIST_FILE_BRNGAMESTATESTREETMANAGER, 972);
     CGS_ASSERT(static_cast<u32>(type) < BrnStreetData::E_SCORE_TYPE_COUNT, "Invalid score type");
     return maaParRivalIds[road][type];
 }
@@ -621,8 +621,8 @@ void StreetManager::FillInRoadRulesQuery( GameStateModuleIO::RoadRulesBatchQuery
     // ARTIST 0x823365C4 and 0x82336628 use the mutable ResourcePtr overload.
     lpRulesQueryAction->miNumRoads = mpStreetData->GetRoadCount();
 
-    CGS_ASSERT( lpRulesQueryAction->miNumRoads <= KI_MAX_CHALLENGES,
-                CGS_ASSERT_MESSAGE_AT("lpRulesQueryAction->miNumRoads <= KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 4295) );
+    CGS_ASSERT_AT( lpRulesQueryAction->miNumRoads <= KI_MAX_CHALLENGES,
+                "lpRulesQueryAction->miNumRoads <= KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 4295 );
 
     for ( s32 liRoadIndex = 0; liRoadIndex < lpRulesQueryAction->miNumRoads; ++liRoadIndex )
     {
@@ -727,7 +727,7 @@ namespace BrnGameState
 void StreetManager::GetChallengeParScore( BrnStreetData::ChallengeIndex liIndex,
                                           BrnStreetData::ChallengeParScoresEntry* lpData ) const
 {
-    CGS_ASSERT( lpData, CGS_ASSERT_MESSAGE_AT("lpData", CGS_ARTIST_FILE, 3750) );
+    CGS_ASSERT_AT( lpData, "lpData", CGS_ARTIST_FILE, 3750 );
 
     lpData->Copy( mpStreetData->GetChallengeParScore( liIndex ) );
 }
@@ -949,7 +949,7 @@ void StreetManager::GetChallengeUserScore( BrnStreetData::ChallengeIndex liIndex
                                            BrnStreetData::ChallengePlayerScoreEntry* lpData,
                                            bool lbByRoadIndex ) const
 {
-    CGS_ASSERT( lpData, CGS_ASSERT_MESSAGE_AT("lpData", CGS_ARTIST_FILE, 3593) );
+    CGS_ASSERT_AT( lpData, "lpData", CGS_ARTIST_FILE, 3593 );
 
     lpData->Construct();
 
@@ -963,11 +963,11 @@ void StreetManager::GetChallengeUserScore( BrnStreetData::ChallengeIndex liIndex
 
     if ( liChallengeIndex >= 0 )
     {
-        CGS_ASSERT( liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES,
-                    CGS_ASSERT_MESSAGE_AT("liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 3606) );
+        CGS_ASSERT_AT( liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES,
+                    "liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 3606 );
 
         const BrnStreetData::ChallengePlayerScoreEntry* lpChallenge = &maChallengeData[liChallengeIndex];
-        CGS_ASSERT( lpChallenge, CGS_ASSERT_MESSAGE_AT("lpChallenge", CGS_ARTIST_FILE, 3610) );
+        CGS_ASSERT_AT( lpChallenge, "lpChallenge", CGS_ARTIST_FILE, 3610 );
         lpData->Copy( lpChallenge );
     }
 }
@@ -979,10 +979,10 @@ void StreetManager::GetChallengeFriendHighScore( BrnStreetData::ChallengeIndex l
                                                  BrnStreetData::ChallengeHighScoreEntry* lpData,
                                                  bool lbByRoadIndex ) const
 {
-    CGS_ASSERT( liIndex < BrnGameState::KI_MAX_CHALLENGES,
-                CGS_ASSERT_MESSAGE_AT("liIndex < BrnGameState::KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 3624) );
-    CGS_ASSERT( liIndex >= 0, CGS_ASSERT_MESSAGE_AT("liIndex >= 0", CGS_ARTIST_FILE, 3625) );
-    CGS_ASSERT( lpData, CGS_ASSERT_MESSAGE_AT("lpData", CGS_ARTIST_FILE, 3626) );
+    CGS_ASSERT_AT( liIndex < BrnGameState::KI_MAX_CHALLENGES,
+                "liIndex < BrnGameState::KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 3624 );
+    CGS_ASSERT_AT( liIndex >= 0, "liIndex >= 0", CGS_ARTIST_FILE, 3625 );
+    CGS_ASSERT_AT( lpData, "lpData", CGS_ARTIST_FILE, 3626 );
 
     lpData->Construct();
 
@@ -997,7 +997,7 @@ void StreetManager::GetChallengeFriendHighScore( BrnStreetData::ChallengeIndex l
     if ( liSlotIndex >= 0 )
     {
         const BrnStreetData::ChallengeHighScoreEntry* lpChallenge = &maNetworkChallengeData[liSlotIndex];
-        CGS_ASSERT( lpChallenge, CGS_ASSERT_MESSAGE_AT("lpChallenge", CGS_ARTIST_FILE, 3641) );
+        CGS_ASSERT_AT( lpChallenge, "lpChallenge", CGS_ARTIST_FILE, 3641 );
         lpData->Copy( lpChallenge );
     }
 }
@@ -1041,13 +1041,13 @@ namespace BrnGameState
     {
         mStreetManagerDebugComponent.Construct( this );
 
-        CGS_ASSERT( lpProgression, CGS_ASSERT_MESSAGE_AT("lpProgression", CGS_ARTIST_FILE, 151) );
+        CGS_ASSERT_AT( lpProgression, "lpProgression", CGS_ARTIST_FILE, 151 );
         mpProgressionManager = lpProgression;
 
-        CGS_ASSERT( lpGameStateModule, CGS_ASSERT_MESSAGE_AT("lpGameStateModule", CGS_ARTIST_FILE, 153) );
+        CGS_ASSERT_AT( lpGameStateModule, "lpGameStateModule", CGS_ARTIST_FILE, 153 );
         mpGameStateModule = lpGameStateModule;
 
-        CGS_ASSERT( lpRoadRulesManager, CGS_ASSERT_MESSAGE_AT("lpRoadRulesManager", CGS_ARTIST_FILE, 155) );
+        CGS_ASSERT_AT( lpRoadRulesManager, "lpRoadRulesManager", CGS_ARTIST_FILE, 155 );
         mpRoadRulesManager = lpRoadRulesManager;
 
         meLoadStage            = E_LOAD_NOT_STARTED;
@@ -1126,11 +1126,11 @@ namespace BrnGameState
             CgsDev::PerfMonCpu::AddMonitor( "UpcomingRoadsQSort",
                                             CgsDev::E_PMP_5, false, 1.0f, true );
 
-        CGS_ASSERT( miSetRoadRuleChallengeDataPM >= 0,     CGS_ASSERT_MESSAGE_AT("miSetRoadRuleChallengeDataPM >= 0", CGS_ARTIST_FILE, 224) );
-        CGS_ASSERT( miSetRoadRuleNetworkHighScoresPM >= 0, CGS_ASSERT_MESSAGE_AT("miSetRoadRuleNetworkHighScoresPM >= 0", CGS_ARTIST_FILE, 225) );
-        CGS_ASSERT( miUpcomingRoadsPM >= 0,                CGS_ASSERT_MESSAGE_AT("miUpcomingRoadsPM >= 0", CGS_ARTIST_FILE, 226) );
-        CGS_ASSERT( miUpcomingRoadsSentMessagePM >= 0,     CGS_ASSERT_MESSAGE_AT("miUpcomingRoadsSentMessagePM >= 0", CGS_ARTIST_FILE, 227) );
-        CGS_ASSERT( miUpcomingRoadsQSortPM >= 0,           CGS_ASSERT_MESSAGE_AT("miUpcomingRoadsQSortPM >= 0", CGS_ARTIST_FILE, 228) );
+        CGS_ASSERT_AT( miSetRoadRuleChallengeDataPM >= 0,     "miSetRoadRuleChallengeDataPM >= 0", CGS_ARTIST_FILE, 224 );
+        CGS_ASSERT_AT( miSetRoadRuleNetworkHighScoresPM >= 0, "miSetRoadRuleNetworkHighScoresPM >= 0", CGS_ARTIST_FILE, 225 );
+        CGS_ASSERT_AT( miUpcomingRoadsPM >= 0,                "miUpcomingRoadsPM >= 0", CGS_ARTIST_FILE, 226 );
+        CGS_ASSERT_AT( miUpcomingRoadsSentMessagePM >= 0,     "miUpcomingRoadsSentMessagePM >= 0", CGS_ARTIST_FILE, 227 );
+        CGS_ASSERT_AT( miUpcomingRoadsQSortPM >= 0,           "miUpcomingRoadsQSortPM >= 0", CGS_ARTIST_FILE, 228 );
     }
 
     // -----------------------------------------------------------------------
@@ -1342,7 +1342,7 @@ namespace BrnGameState
                     }
                     break;
                 default:
-                    CGS_ASSERT( false, CGS_ASSERT_MESSAGE_AT("How did it get here?", CGS_ARTIST_FILE, 1050) );
+                    CGS_FAIL_AT( "How did it get here?", CGS_ARTIST_FILE, 1050 );
                     break;
             }
         }
@@ -1360,7 +1360,7 @@ namespace BrnGameState
         {
             const BrnAI::Portal* lpPortal = lpSection->GetPortal( static_cast<u8>( liPortalIndex ) );
             const u16 luLinkSectionIndex = lpPortal->GetLinkSectionIndex();
-            CGS_ASSERT( luLinkSectionIndex != 0x7FFF, CGS_ASSERT_MESSAGE_AT("luLinkSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", CGS_ARTIST_FILE, 1084) );
+            CGS_ASSERT_AT( luLinkSectionIndex != 0x7FFF, "luLinkSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", CGS_ARTIST_FILE, 1084 );
 
             // HasSectionAlreadyBeenWalked (inlined scan of mauWalkedSections).
             bool lbAlreadyWalked = false;
@@ -1462,7 +1462,7 @@ namespace BrnGameState
             return;
         }
 
-        CGS_ASSERT( liNumPortalsToExplore > 0, CGS_ASSERT_MESSAGE_AT("liNumPortalsToExplore > 0", CGS_ARTIST_FILE, 1187) );
+        CGS_ASSERT_AT( liNumPortalsToExplore > 0, "liNumPortalsToExplore > 0", CGS_ARTIST_FILE, 1187 );
 
         CgsDev::PerfMonCpu::StartMonitor( miUpcomingRoadsQSortPM );
         qsort( laSectionWalkData, static_cast<size_t>( liNumPortalsToExplore ),
@@ -1765,12 +1765,12 @@ namespace BrnGameState {
 // ARTIST 0x8230F990 / 0x8230FA20, the bounded portal-walk stack.
 void StreetManager::PushSectionIndex(u16 section)
 {
-    CGS_ASSERT(miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK,
-        CGS_ASSERT_MESSAGE_AT(
-            "miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK", CGS_ARTIST_FILE_BRNGAMESTATESTREETMANAGER, 1062 /* ARTIST 0x8230F9C0 */));
-    CGS_ASSERT(section != 0x7FFF,
-        CGS_ASSERT_MESSAGE_AT(
-            "luNewSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", CGS_ARTIST_FILE_BRNGAMESTATESTREETMANAGER, 1063 /* ARTIST 0x8230F9E8 */));
+    CGS_ASSERT_AT(miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK,
+        "miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK", CGS_ARTIST_FILE_BRNGAMESTATESTREETMANAGER, 1062 /* ARTIST 0x8230F9C0 */);
+
+    CGS_ASSERT_AT(section != 0x7FFF,
+        "luNewSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", CGS_ARTIST_FILE_BRNGAMESTATESTREETMANAGER, 1063 /* ARTIST 0x8230F9E8 */);
+
     mauWalkedSections[miNextFreeSectionSlot++] = section;
 }
 bool StreetManager::CanContinueWalking() { return miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK; }
@@ -1824,7 +1824,7 @@ namespace BrnGameState
             BrnAI::AIModuleIO::AICarOutputInterface* lpLastAICarOutputInterface,
             BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface )
     {
-        CGS_ASSERT( lpLastAICarOutputInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpLastAICarOutputInterface != NULL", CGS_ARTIST_FILE, 1934) );
+        CGS_ASSERT_AT( lpLastAICarOutputInterface != NULL, "lpLastAICarOutputInterface != NULL", CGS_ARTIST_FILE, 1934 );
 
         const s32 liPlayerRoadTargetNodeIndex = miNewRoadNodeIndex - 2;
         if ( liPlayerRoadTargetNodeIndex >= 0 )
@@ -1833,13 +1833,13 @@ namespace BrnGameState
             // view it as the now-committed BrnAI::Route (same address the X360 asserts twice).
             const BrnAI::Route* lpPlayerRoute =
                 reinterpret_cast<const BrnAI::Route*>( lpLastAICarOutputInterface->GetPlayerRoute() );
-            CGS_ASSERT( lpPlayerRoute != NULL, CGS_ASSERT_MESSAGE_AT("lpPlayerRoute != NULL", CGS_ARTIST_FILE, 1946) );
+            CGS_ASSERT_AT( lpPlayerRoute != NULL, "lpPlayerRoute != NULL", CGS_ARTIST_FILE, 1946 );
 
             if ( lpPlayerRoute->GetNodeCount() >= 1 )
             {
                 const BrnAI::RouteNode* lpPlayerRoadTargetRouteNode =
                     lpPlayerRoute->GetNode( liPlayerRoadTargetNodeIndex );
-                CGS_ASSERT( lpPlayerRoadTargetRouteNode != NULL, CGS_ASSERT_MESSAGE_AT("lpPlayerRoadTargetRouteNode != NULL", CGS_ARTIST_FILE, 1955) );
+                CGS_ASSERT_AT( lpPlayerRoadTargetRouteNode != NULL, "lpPlayerRoadTargetRouteNode != NULL", CGS_ARTIST_FILE, 1955 );
 
                 // Node position onto the ground plane: (x, 0, y).
                 const f32 lfTargetNodeX = lpPlayerRoadTargetRouteNode->GetX();
@@ -1878,8 +1878,8 @@ namespace BrnGameState
     {
         bool lbFoundRoad = false;
 
-        CGS_ASSERT( lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                    CGS_ASSERT_MESSAGE_AT("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BRNRACECARENTITYMODULEOUTPUTINTERFACE, 967) );
+        CGS_ASSERT_AT( lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                    "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BRNRACECARENTITYMODULEOUTPUTINTERFACE, 967 );
 
         const ::EActiveRaceCarIndex lePlayerActiveRaceCarIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
         bool lbPlayerCarActive = false;
@@ -1890,12 +1890,12 @@ namespace BrnGameState
 
         if ( lbPlayerCarActive )
         {
-            CGS_ASSERT( lePlayerActiveRaceCarIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                        CGS_ASSERT_MESSAGE_AT("Player car index hasn't been set", CGS_ARTIST_FILE_BRNRACECARENTITYMODULEOUTPUTINTERFACE, 980) );
-            CGS_ASSERT( lePlayerActiveRaceCarIndex > ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                        CGS_ASSERT_MESSAGE_AT("lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ARTIST_FILE, 561) );
-            CGS_ASSERT( lePlayerActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                        CGS_ASSERT_MESSAGE_AT("lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 562) );
+            CGS_ASSERT_AT( lePlayerActiveRaceCarIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                        "Player car index hasn't been set", CGS_ARTIST_FILE_BRNRACECARENTITYMODULEOUTPUTINTERFACE, 980 );
+            CGS_ASSERT_AT( lePlayerActiveRaceCarIndex > ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                        "lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ARTIST_FILE, 561 );
+            CGS_ASSERT_AT( lePlayerActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                        "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 562 );
 
             const u16 luRaceCarAISection = lpActiveRaceCarInterface->GetRaceCarAISection( lePlayerActiveRaceCarIndex );
             const BrnStreetData::RoadIndex liRoadIndex = GetRoadIndexFromAISectionIndex( luRaceCarAISection );
@@ -2689,8 +2689,8 @@ namespace BrnGameState
     bool StreetManager::Prepare( GameStateModuleIO::OutputBuffer* lpOutput,
                                  CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue )
     {
-        CGS_ASSERT( lpOutput, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 281) );
-        CGS_ASSERT( lpReceiverQueue, CGS_ASSERT_MESSAGE_AT("lpReceiverQueue", CGS_ARTIST_FILE, 282) );
+        CGS_ASSERT_AT( lpOutput, "lpOutput", CGS_ARTIST_FILE, 281 );
+        CGS_ASSERT_AT( lpReceiverQueue, "lpReceiverQueue", CGS_ARTIST_FILE, 282 );
 
         if ( LoadAIData( lpOutput, lpReceiverQueue ) && LoadDistrictMap( lpOutput, lpReceiverQueue ) )
         {
@@ -2800,10 +2800,10 @@ bool StreetManager::Prepare2( GameStateModuleIO::OutputBuffer* lpOutput,
                               CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue,
                               const TriggerQueryManager* lpTriggerQueryManager )
 {
-    CGS_ASSERT( lpOutput != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 314 /* ARTIST 0x82350A0C */));
-    CGS_ASSERT( lpReceiverQueue != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpReceiverQueue", CGS_ARTIST_FILE, 315 /* ARTIST 0x82350A30 */));
+    CGS_ASSERT_AT( lpOutput != NULL,
+        "lpOutput", CGS_ARTIST_FILE, 314 /* ARTIST 0x82350A0C */);
+    CGS_ASSERT_AT( lpReceiverQueue != NULL,
+        "lpReceiverQueue", CGS_ARTIST_FILE, 315 /* ARTIST 0x82350A30 */);
 
     if ( !LoadStreetData( lpOutput, lpReceiverQueue ) )
     {
@@ -2944,8 +2944,8 @@ void StreetManager::SetupParRivals( const TriggerQueryManager* lpTriggerQueryMan
                          KV2_DISTRICT_MAP_WORLD_ORIGIN,
                          KV2_DISTRICT_MAP_WORLD_SIZE );
 
-    CGS_ASSERT( mpStreetData->GetRoadCount() <= KI_MAX_CHALLENGES,
-                CGS_ASSERT_MESSAGE_AT("mpStreetData->GetRoadCount() <= KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 3978) );
+    CGS_ASSERT_AT( mpStreetData->GetRoadCount() <= KI_MAX_CHALLENGES,
+                "mpStreetData->GetRoadCount() <= KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 3978 );
 
     for ( BrnStreetData::RoadIndex liRoadIndex = 0;
           liRoadIndex < mpStreetData->GetRoadCount();
@@ -3063,7 +3063,7 @@ namespace BrnGameState
                                                const BrnStreetData::ChallengePlayerScoreEntry* lpEntry,
                                                bool lbUpdateHighScore )
     {
-        CGS_ASSERT( lpEntry, CGS_ASSERT_MESSAGE_AT("lpData", CGS_ARTIST_FILE, 3654) );
+        CGS_ASSERT_AT( lpEntry, "lpData", CGS_ARTIST_FILE, 3654 );
 
         if ( lbUpdateHighScore )
         {
@@ -3085,8 +3085,8 @@ namespace BrnGameState
 
         if ( liRoadIndex >= 0 )
         {
-            CGS_ASSERT( liRoadIndex < KI_MAX_CHALLENGES,
-                        CGS_ASSERT_MESSAGE_AT("liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 3665) );
+            CGS_ASSERT_AT( liRoadIndex < KI_MAX_CHALLENGES,
+                        "liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 3665 );
             maChallengeData[liRoadIndex].Copy( lpEntry );
         }
     }
@@ -3098,7 +3098,7 @@ namespace BrnGameState
     void StreetManager::CopyUserChallengeData( BrnStreetData::ChallengePlayerScoreEntry* lpDest,
                                                s32 liSizeInBytes )
     {
-        CGS_ASSERT( lpDest, CGS_ASSERT_MESSAGE_AT("lpDest", CGS_ARTIST_FILE, 3941) );
+        CGS_ASSERT_AT( lpDest, "lpDest", CGS_ARTIST_FILE, 3941 );
 
         if ( liSizeInBytes >= static_cast<s32>( sizeof( maChallengeData ) ) )
         {
@@ -3108,7 +3108,7 @@ namespace BrnGameState
         {
             // X360 composes this through a gpcMessageBuffer StrStream; per the
             // project convention the streamed message lowers to CGS_ASSERT.
-            CGS_ASSERT( false, " not enough space to copy into " );
+            CGS_FAIL( " not enough space to copy into " );
         }
     }
 
@@ -3174,8 +3174,8 @@ void StreetManager::UpdateTrophyUnlockOnRoadRuleWin( BrnStreetData::ScoreType le
 
     s32 liTotalNumberOfRoads = GetStreetData()->GetRoadCount();
 
-    CGS_ASSERT( liNumberOfShowTimeRoadsRuled <= liTotalNumberOfRoads,  CGS_ASSERT_MESSAGE_AT("liNumberOfShowTimeRoadsRuled <= liTotalNumberOfRoads", CGS_ARTIST_FILE, 2807) );
-    CGS_ASSERT( liNumberOfTimeTrailRoadsRuled <= liTotalNumberOfRoads, CGS_ASSERT_MESSAGE_AT("liNumberOfTimeTrailRoadsRuled <= liTotalNumberOfRoads", CGS_ARTIST_FILE, 2808) );
+    CGS_ASSERT_AT( liNumberOfShowTimeRoadsRuled <= liTotalNumberOfRoads,  "liNumberOfShowTimeRoadsRuled <= liTotalNumberOfRoads", CGS_ARTIST_FILE, 2807 );
+    CGS_ASSERT_AT( liNumberOfTimeTrailRoadsRuled <= liTotalNumberOfRoads, "liNumberOfTimeTrailRoadsRuled <= liTotalNumberOfRoads", CGS_ARTIST_FILE, 2808 );
 
     switch ( leScoreType )
     {
@@ -3252,7 +3252,7 @@ namespace BrnGameState
 void StreetManager::ProcessUploadEvent(
     const GameStateModuleIO::OnlineRoadRulesUploadedEvent* lpUploadedEvent )
 {
-    CGS_ASSERT( lpUploadedEvent, CGS_ASSERT_MESSAGE_AT("lpUploadedEvent", CGS_ARTIST_FILE, 3037) );
+    CGS_ASSERT_AT( lpUploadedEvent, "lpUploadedEvent", CGS_ARTIST_FILE, 3037 );
 
     for ( BrnStreetData::ChallengeIndex liChallengeIndex = lpUploadedEvent->mStartUploadIndex;
           liChallengeIndex < lpUploadedEvent->mEndUploadIndex;
@@ -3274,10 +3274,10 @@ void StreetManager::ProcessUploadEvent(
 void StreetManager::ProcessDownloadEvent(
     const GameStateModuleIO::OnlineRoadRulesDownloadedEvent* lpDownloadedEvent )
 {
-    CGS_ASSERT( lpDownloadedEvent,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpDownloadedEvent",
-            CGS_ARTIST_FILE, 3065 /* ARTIST 0x82324B5C */));
+    CGS_ASSERT_AT( lpDownloadedEvent,
+        "lpDownloadedEvent",
+            CGS_ARTIST_FILE, 3065 /* ARTIST 0x82324B5C */);
+
 }
 
 // ----------------------------------------------------------------------------
@@ -3341,13 +3341,13 @@ void StreetManager::ProcessNetworkHighScoreEvent(
         GameStateModuleIO::OutputBuffer* lpOutput,
         const GameStateModuleIO::OnlineRoadRulesPersonalBestRecvEvent* lpPersonalBestEvent )
 {
-    CGS_ASSERT( lpPersonalBestEvent, CGS_ASSERT_MESSAGE_AT("lpPersonalBestEvent", CGS_ARTIST_FILE, 2973) );
+    CGS_ASSERT_AT( lpPersonalBestEvent, "lpPersonalBestEvent", CGS_ARTIST_FILE, 2973 );
 
     BrnStreetData::ChallengeHighScoreEntry lPersonalBest = lpPersonalBestEvent->mPersonalBestScore;
 
     const BrnStreetData::ChallengeIndex liChallengeIndex = lpPersonalBestEvent->mPersonalBestChallengeIndex;
-    CGS_ASSERT( liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES && liChallengeIndex >= 0,
-                CGS_ASSERT_MESSAGE_AT("lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES && lChallengeIndex >= 0", CGS_ARTIST_FILE, 2978) );
+    CGS_ASSERT_AT( liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES && liChallengeIndex >= 0,
+                "lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES && lChallengeIndex >= 0", CGS_ARTIST_FILE, 2978 );
 
     const BrnStreetData::Road* lpRoad = mpStreetData->GetRoad( liChallengeIndex );
 
@@ -3367,7 +3367,7 @@ void StreetManager::ProcessNetworkHighScoreEvent(
 
             if ( lbIsNewHighScore )
             {
-                CGS_ASSERT( mpRoadRulesManager, CGS_ASSERT_MESSAGE_AT("mpRoadRulesManager", CGS_ARTIST_FILE, 3004) );
+                CGS_ASSERT_AT( mpRoadRulesManager, "mpRoadRulesManager", CGS_ARTIST_FILE, 3004 );
 
                 if ( mpRoadRulesManager->GetCurrentRoadID() == KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liSlotIndex] )
                 {
@@ -3376,8 +3376,8 @@ void StreetManager::ProcessNetworkHighScoreEvent(
                     GetChallengeFriendHighScore( liSlotIndex, &lRecord.mFriendScores, false );
                     lRecord.mRoadId = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liSlotIndex];
 
-                    CGS_ASSERT( lpOutput, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 3016) );
-                    CGS_ASSERT( lpOutput->GetGameActionQueue(), CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 3017) );
+                    CGS_ASSERT_AT( lpOutput, "lpOutput", CGS_ARTIST_FILE, 3016 );
+                    CGS_ASSERT_AT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 3017 );
 
                     GameStateModuleIO::GameActionQueue* lpQueue = lpOutput->GetGameActionQueue();
                     lpQueue->AddEvent( &lRecord,
@@ -3396,12 +3396,12 @@ void StreetManager::ProcessBuddyRemoved(
         GameStateModuleIO::OutputBuffer* lpOutput,
         const GameStateModuleIO::BuddyRemovedEvent* lpBuddyRemovedEvent )
 {
-    CGS_ASSERT( lpOutput, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 4217) );
-    CGS_ASSERT( lpOutput->GetGameActionQueue(), CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 4218) );
+    CGS_ASSERT_AT( lpOutput, "lpOutput", CGS_ARTIST_FILE, 4217 );
+    CGS_ASSERT_AT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 4218 );
 
     const bool lbScoresCleared = ClearAllChallengeDataForBuddy( &lpBuddyRemovedEvent->mRemovedBuddyName );
 
-    CGS_ASSERT( mpRoadRulesManager, CGS_ASSERT_MESSAGE_AT("mpRoadRulesManager", CGS_ARTIST_FILE, 4225) );
+    CGS_ASSERT_AT( mpRoadRulesManager, "mpRoadRulesManager", CGS_ARTIST_FILE, 4225 );
 
     if ( lbScoresCleared )
     {
@@ -3552,7 +3552,7 @@ namespace BrnGameState
 
                 if ( lbIsNewHighScore )
                 {
-                    CGS_ASSERT( mpRoadRulesManager, CGS_ASSERT_MESSAGE_AT("mpRoadRulesManager", CGS_ARTIST_FILE, 2055) );
+                    CGS_ASSERT_AT( mpRoadRulesManager, "mpRoadRulesManager", CGS_ARTIST_FILE, 2055 );
 
                     if ( mpRoadRulesManager->GetCurrentRoadID() == KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liRoadIndex] )
                     {
@@ -3562,7 +3562,7 @@ namespace BrnGameState
                         lAction.mRoadId = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liRoadIndex];
 
                         CGS_ASSERT( lpOutput, "lpOutput" );
-                        CGS_ASSERT( lpOutput->GetGameActionQueue() != NULL, CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 2068) );
+                        CGS_ASSERT_AT( lpOutput->GetGameActionQueue() != NULL, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 2068 );
 
                         lpOutput->GetGuiOutputQueue()->AddEvent(
                             reinterpret_cast<const CgsModule::Event*>( &lAction ),
@@ -3715,9 +3715,9 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
 
             bool lbUserScoreBeatsPar = false;
 
-            CGS_ASSERT( mpGameStateModule, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 2614) );
-            CGS_ASSERT( mpGameStateModule->GetDeveloperChallengeManager(),
-                        CGS_ASSERT_MESSAGE_AT("mpGameStateModule->GetDeveloperChallengeManager()", CGS_ARTIST_FILE, 2615) );
+            CGS_ASSERT_AT( mpGameStateModule, "mpGameStateModule", CGS_ARTIST_FILE, 2614 );
+            CGS_ASSERT_AT( mpGameStateModule->GetDeveloperChallengeManager(),
+                        "mpGameStateModule->GetDeveloperChallengeManager()", CGS_ARTIST_FILE, 2615 );
 
             // The full 64-bit road id, as the console passes it.
             mpGameStateModule->GetDeveloperChallengeManager()->OnSetRoadRule(
@@ -3728,7 +3728,7 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
             if ( leScoreType == BrnStreetData::E_SCORE_TYPE_CRASH )
             {
                 BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-                CGS_ASSERT( lpProfile != NULL, CGS_ASSERT_MESSAGE_AT("lpProfile != NULL", CGS_ARTIST_FILE, 2621) );
+                CGS_ASSERT_AT( lpProfile != NULL, "lpProfile != NULL", CGS_ARTIST_FILE, 2621 );
 
                 if ( liNewScore > lpProfile->GetNewHighShowtimeScore() )
                 {
@@ -3758,7 +3758,7 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
                 lUserScore.SetScore( leScoreType, liNewScore );
 
                 CGS_ASSERT( mpProgressionManager, "mpProgressionManager" );
-                CGS_ASSERT( mpProgressionManager->GetProfile(), CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 2656) );
+                CGS_ASSERT_AT( mpProgressionManager->GetProfile(), "mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 2656 );
 
                 const ::CgsID lActivePlayerCarId = mpGameStateModule->GetActivePlayerCarId();
                 lUserScore.SetCarID( leScoreType, lActivePlayerCarId );
@@ -3795,7 +3795,7 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
             }
         }
 
-        CGS_ASSERT( lpOutput->GetGameActionQueue(), CGS_ASSERT_MESSAGE_AT("lpOutputBuffer->GetGameActionQueue()", CGS_ARTIST_FILE, 2699) );
+        CGS_ASSERT_AT( lpOutput->GetGameActionQueue(), "lpOutputBuffer->GetGameActionQueue()", CGS_ARTIST_FILE, 2699 );
 
         if ( lNewEntry.ContainsData( BrnStreetData::E_SCORE_TYPE_COUNT ) )
         {
@@ -3853,8 +3853,8 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
             UpdateTrophyUnlockOnRoadRuleWin( leScoreType );
 
             CGS_ASSERT( mpProgressionManager, "mpProgressionManager" );
-            CGS_ASSERT( mpProgressionManager->GetAchievementManager(),
-                        CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetAchievementManager()", CGS_ARTIST_FILE, 2762) );
+            CGS_ASSERT_AT( mpProgressionManager->GetAchievementManager(),
+                        "mpProgressionManager->GetAchievementManager()", CGS_ARTIST_FILE, 2762 );
 
             mpProgressionManager->GetAchievementManager()->OnSetRoadRule(
                 leScoreType, mpStreetData->GetRoad( liChallengeIndex )->GetId() );
@@ -3892,7 +3892,7 @@ void StreetManager::UpdateBufferedHighScores( f32 lfSimTimeStep,
                                               bool lbIsAnythingPaused,
                                               GameStateModuleIO::OutputBuffer* lpOutput )
 {
-    CGS_ASSERT( lpOutput, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 2311) );
+    CGS_ASSERT_AT( lpOutput, "lpOutput", CGS_ARTIST_FILE, 2311 );
 
     if ( lbIsAnythingPaused )
     {
@@ -4029,8 +4029,8 @@ void StreetManager::ProcessScoreRequestEvent(
         return;
     }
 
-    CGS_ASSERT( lpOutput, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 3128) );
-    CGS_ASSERT( lpScoreRequestEvent, CGS_ASSERT_MESSAGE_AT("lpRequestEvent", CGS_ARTIST_FILE, 3129) );
+    CGS_ASSERT_AT( lpOutput, "lpOutput", CGS_ARTIST_FILE, 3128 );
+    CGS_ASSERT_AT( lpScoreRequestEvent, "lpRequestEvent", CGS_ARTIST_FILE, 3129 );
 
     GameStateModuleIO::RoadRulesRoadScoreAction lResponse;
     lResponse.mPlayerName.Construct( "" );
@@ -4140,7 +4140,7 @@ void StreetManager::ProcessScoreRequestEvent(
         lResponse.mbAIRulesRoadOnline = true;
     }
 
-    CGS_ASSERT( lpOutput->GetGameActionQueue(), CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 3272) );
+    CGS_ASSERT_AT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 3272 );
 
     CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpOutput->GetGuiOutputQueue();
     lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lResponse ),
@@ -4201,8 +4201,8 @@ namespace BrnGameState
     // -----------------------------------------------------------------------
     void StreetManager::OnProfileLoaded( GameStateModuleIO::OutputBuffer* lpOutput )
     {
-        CGS_ASSERT( mpProgressionManager, CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 2938) );
-        CGS_ASSERT( mpProgressionManager->GetProfile(), CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 2939) );
+        CGS_ASSERT_AT( mpProgressionManager, "mpProgressionManager", CGS_ARTIST_FILE, 2938 );
+        CGS_ASSERT_AT( mpProgressionManager->GetProfile(), "mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 2939 );
 
         BrnProgression::ProgressionManager* lpProgressionManager = mpProgressionManager;
         memcpy( maNetworkChallengeData, lpProgressionManager->GetProfile()->GetNetworkChallengeData( 0 ), sizeof( maNetworkChallengeData ) );
@@ -4230,8 +4230,8 @@ namespace BrnGameState
             GameStateModuleIO::OutputBuffer* lpOutput,
             const GameStateModuleIO::OnlineRoadRulesConnectInfoEvent* lpConnectInfoEvent )
     {
-        CGS_ASSERT( mpProgressionManager, CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 3084) );
-        CGS_ASSERT( mpProgressionManager->GetProfile(), CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 3085) );
+        CGS_ASSERT_AT( mpProgressionManager, "mpProgressionManager", CGS_ARTIST_FILE, 3084 );
+        CGS_ASSERT_AT( mpProgressionManager->GetProfile(), "mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 3085 );
 
         if ( mpProgressionManager->GetProfile()->GetLastRoadRulesResetTime()
              != lpConnectInfoEvent->muLastRoadRulesResetTime )
@@ -4272,8 +4272,8 @@ namespace BrnGameState
 
         if ( lpQueue->GetLength() > 0 )
         {
-            CGS_ASSERT( mpProgressionManager, CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 2198) );
-            CGS_ASSERT( mpProgressionManager->GetProfile(), CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 2199) );
+            CGS_ASSERT_AT( mpProgressionManager, "mpProgressionManager", CGS_ARTIST_FILE, 2198 );
+            CGS_ASSERT_AT( mpProgressionManager->GetProfile(), "mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 2199 );
 
             for ( s32 liRecord = 0; liRecord < lpQueue->GetLength(); ++liRecord )
             {
@@ -4429,8 +4429,8 @@ void StreetManager::Update( bool lbIsAnythingPaused,
 {
     mStreetManagerDebugComponent.Update( lpOutput );
 
-    CGS_ASSERT( lpInput, CGS_ASSERT_MESSAGE_AT("lpInput", CGS_ARTIST_FILE, 466) );
-    CGS_ASSERT( lpInput->GetNetworkToGameStateInterface(), CGS_ASSERT_MESSAGE_AT("lpInput->GetNetworkToGameStateInterface()", CGS_ARTIST_FILE, 467) );
+    CGS_ASSERT_AT( lpInput, "lpInput", CGS_ARTIST_FILE, 466 );
+    CGS_ASSERT_AT( lpInput->GetNetworkToGameStateInterface(), "lpInput->GetNetworkToGameStateInterface()", CGS_ARTIST_FILE, 467 );
 
     if ( !lbCurrentGameModeDisablesUpcoming )
     {
@@ -4465,10 +4465,10 @@ void StreetManager::Update( bool lbIsAnythingPaused,
 // ----------------------------------------------------------------------------
 void StreetManager::UpdateRoadRulesProfileScores()
 {
-    CGS_ASSERT( mpProgressionManager,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpProgressionManager",
-            CGS_ARTIST_FILE, 2443 /* ARTIST 0x823174A8 */));
+    CGS_ASSERT_AT( mpProgressionManager,
+        "mpProgressionManager",
+            CGS_ARTIST_FILE, 2443 /* ARTIST 0x823174A8 */);
+
 
     CgsDev::PerfMonCpu::StartMonitor( miSetRoadRuleNetworkHighScoresPM );
     mpProgressionManager->SetRoadRuleNetworkHighScores( maNetworkChallengeData );
@@ -4740,13 +4740,13 @@ bool StreetManager::ClearAllChallengeDataForBuddy( const CgsNetwork::PlayerName*
 void StreetManager::SetChallengeFriendHighScore( BrnStreetData::ChallengeIndex liIndex,
                                                  const BrnStreetData::ChallengeHighScoreEntry* lpData )
 {
-    CGS_ASSERT( liIndex < BrnGameState::KI_MAX_CHALLENGES,
-        CGS_ASSERT_MESSAGE_AT(
-            "liIndex < BrnGameState::KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 3674 /* ARTIST 0x82324C30 */));
-    CGS_ASSERT( liIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liIndex >= 0", CGS_ARTIST_FILE, 3675 /* ARTIST 0x82324C54 */));
-    CGS_ASSERT( lpData,
-        CGS_ASSERT_MESSAGE_AT("lpData", CGS_ARTIST_FILE, 3676 /* ARTIST 0x82324C78 */));
+    CGS_ASSERT_AT( liIndex < BrnGameState::KI_MAX_CHALLENGES,
+        "liIndex < BrnGameState::KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 3674 /* ARTIST 0x82324C30 */);
+
+    CGS_ASSERT_AT( liIndex >= 0,
+        "liIndex >= 0", CGS_ARTIST_FILE, 3675 /* ARTIST 0x82324C54 */);
+    CGS_ASSERT_AT( lpData,
+        "lpData", CGS_ARTIST_FILE, 3676 /* ARTIST 0x82324C78 */);
 
     maNetworkChallengeData[liIndex].Copy( lpData );
 }

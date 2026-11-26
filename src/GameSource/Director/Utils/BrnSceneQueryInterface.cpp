@@ -13,17 +13,17 @@
 // ⭐ TYPED 2026-09-25 (FX-DIRECTOR2): see the header banner.
 // =============================================================================
 
-namespace CgsContainers
-{
-    // ARTIST AddPostBox calls these three Contains instantiations out of line.
-    // Keep the original call at 8222D1DC, 8222D30C and 8222D6AC.
-    template __declspec(noinline) bool Array<BrnDirector::PostBox<const CgsSceneManager::SceneManagerIO::OutEventLineTestFineResult*>*, 10>::Contains(
-        BrnDirector::PostBox<const CgsSceneManager::SceneManagerIO::OutEventLineTestFineResult*>* const&) const;
-    template __declspec(noinline) bool Array<BrnDirector::PostBox<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult>*, 40>::Contains(
-        BrnDirector::PostBox<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult>* const&) const;
-    template __declspec(noinline) bool Array<BrnDirector::PostBox<CgsSceneManager::SceneManagerIO::OutEventVolumeTestDeepestResult>*, 10>::Contains(
-        BrnDirector::PostBox<CgsSceneManager::SceneManagerIO::OutEventVolumeTestDeepestResult>* const&) const;
-}
+// ARTIST AddPostBox calls Array<PostBox<...>*, N>::Contains out of line (8222D1DC, 8222D30C,
+// 8222D6AC). The implicit instantiations do so once the asserts have the original if-form
+// (D12, asserts lane); the explicit noinline instantiations that stood here are gone.
+
+
+
+
+
+
+
+
 
 namespace BrnDirector
 {
@@ -62,8 +62,8 @@ namespace BrnDirector
                                            CgsSceneManager::EntityId                        lExcludeEntityId,
                                            CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
-        CGS_ASSERT(mpSceneQueryInterface != 0,    CGS_ASSERT_MESSAGE_AT("mpSceneQueryInterface != NULL", CGS_ARTIST_FILE, 188));      // h:188
-        CGS_ASSERT(mpLineTestFinePostOffice != 0, CGS_ASSERT_MESSAGE_AT("mpLineTestFinePostOffice != NULL", CGS_ARTIST_FILE, 189));   // h:189
+        CGS_ASSERT_AT(mpSceneQueryInterface != 0,    "mpSceneQueryInterface != NULL", CGS_ARTIST_FILE, 188);      // h:188
+        CGS_ASSERT_AT(mpLineTestFinePostOffice != 0, "mpLineTestFinePostOffice != NULL", CGS_ARTIST_FILE, 189);   // h:189
 
         CgsSceneManager::SceneQueryId lQueryId;
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpLineTestFinePostOffice->AddPostBox(lrPostBox));
@@ -87,8 +87,8 @@ namespace BrnDirector
                                               CgsSceneManager::EntityId                        lExcludeEntityId,
                                               CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
-        CGS_ASSERT(mpSceneQueryInterface != 0,       CGS_ASSERT_MESSAGE_AT("mpSceneQueryInterface != NULL", CGS_ARTIST_FILE, 216));        // h:216
-        CGS_ASSERT(mpLineTestNearestPostOffice != 0, CGS_ASSERT_MESSAGE_AT("mpLineTestNearestPostOffice != NULL", CGS_ARTIST_FILE, 217));  // h:217
+        CGS_ASSERT_AT(mpSceneQueryInterface != 0,       "mpSceneQueryInterface != NULL", CGS_ARTIST_FILE, 216);        // h:216
+        CGS_ASSERT_AT(mpLineTestNearestPostOffice != 0, "mpLineTestNearestPostOffice != NULL", CGS_ARTIST_FILE, 217);  // h:217
 
         CgsSceneManager::SceneQueryId lQueryId;
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpLineTestNearestPostOffice->AddPostBox(lrPostBox));
@@ -114,8 +114,8 @@ namespace BrnDirector
                                                 CgsSceneManager::EntityId                        lExcludeEntityId,
                                                 CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
-        CGS_ASSERT(mpSceneQueryInterface != 0,         CGS_ASSERT_MESSAGE_AT("mpSceneQueryInterface != NULL", CGS_ARTIST_FILE, 316));          // h:316
-        CGS_ASSERT(mpVolumeTestDeepestPostOffice != 0, CGS_ASSERT_MESSAGE_AT("mpVolumeTestDeepestPostOffice != NULL", CGS_ARTIST_FILE, 317));  // h:317
+        CGS_ASSERT_AT(mpSceneQueryInterface != 0,         "mpSceneQueryInterface != NULL", CGS_ARTIST_FILE, 316);          // h:316
+        CGS_ASSERT_AT(mpVolumeTestDeepestPostOffice != 0, "mpVolumeTestDeepestPostOffice != NULL", CGS_ARTIST_FILE, 317);  // h:317
 
         CgsSceneManager::SceneQueryId lQueryId;
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpVolumeTestDeepestPostOffice->AddPostBox(lrPostBox));

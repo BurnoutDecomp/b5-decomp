@@ -110,7 +110,7 @@ namespace BrnGui
     void EventIconManager::ReleaseResources(CgsGui::StateInterface* lpStateInterface,
                                             f32 lfOptionalFadeDuration)
     {
-        CGS_ASSERT(lpStateInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpStateInterface", __FILE__, 173 /* ARTIST 0x825174FC */));   // cpp:173
+        CGS_ASSERT_AT(lpStateInterface != NULL, "lpStateInterface", __FILE__, 173 /* ARTIST 0x825174FC */);   // cpp:173
 
         // `*(this + 2100) = 0` -- the count only; the console leaves the table itself alone.
         miNumEventIcons = 0;
@@ -129,11 +129,11 @@ namespace BrnGui
     // @ 0x824F5938
     void EventIconManager::Update2DIcons(const EventIcon2D* lpaEventIcons, s32 liNumIcons)
     {
-        CGS_ASSERT(liNumIcons <= KI_MAX_2DEVENTICONS,
-            CGS_ASSERT_MESSAGE_AT(
-                "liNumIcons <= KI_MAX_2DEVENTICONS", __FILE__, 101 /* ARTIST 0x824F5968 */));
-        CGS_ASSERT(lpaEventIcons != NULL,
-            CGS_ASSERT_MESSAGE_AT("lpaEventIcons", __FILE__, 102 /* ARTIST 0x824F598C */));
+        CGS_ASSERT_AT(liNumIcons <= KI_MAX_2DEVENTICONS,
+            "liNumIcons <= KI_MAX_2DEVENTICONS", __FILE__, 101 /* ARTIST 0x824F5968 */);
+
+        CGS_ASSERT_AT(lpaEventIcons != NULL,
+            "lpaEventIcons", __FILE__, 102 /* ARTIST 0x824F598C */);
 
         std::memcpy(ma2DEventIcons, lpaEventIcons, sizeof(EventIcon2D) * liNumIcons);
         miNumEventIcons = liNumIcons;
@@ -142,7 +142,7 @@ namespace BrnGui
     // @ 0x824F59C8
     void EventIconManager::GetEventIconPositions(Vector2* lv2IconPositions, s32* lpiNumIcons)
     {
-        CGS_ASSERT(lpiNumIcons != NULL, CGS_ASSERT_MESSAGE_AT("lpiNumIcons", __FILE__, 122 /* ARTIST 0x824F5A00 */));
+        CGS_ASSERT_AT(lpiNumIcons != NULL, "lpiNumIcons", __FILE__, 122 /* ARTIST 0x824F5A00 */);
 
         // One 16-byte lane store per icon: {x, y, 0, 0} (the X360 zeroes the zw pair
         // before the lvx/stvx copy -- Vector2::Set semantics).
@@ -164,11 +164,11 @@ namespace BrnGui
     // @ 0x824F5A78
     u32 EventIconManager::GetEventIDForIconIndex(s32 liIconIndex) const
     {
-        CGS_ASSERT(liIconIndex >= 0,
-            CGS_ASSERT_MESSAGE_AT("liIconIndex >= 0", __FILE__, 153 /* ARTIST 0x824F5AA4 */));
-        CGS_ASSERT(liIconIndex < miNumEventIcons,
-            CGS_ASSERT_MESSAGE_AT(
-                "liIconIndex < miNumEventIcons", __FILE__, 154 /* ARTIST 0x824F5ACC */));
+        CGS_ASSERT_AT(liIconIndex >= 0,
+            "liIconIndex >= 0", __FILE__, 153 /* ARTIST 0x824F5AA4 */);
+        CGS_ASSERT_AT(liIconIndex < miNumEventIcons,
+            "liIconIndex < miNumEventIcons", __FILE__, 154 /* ARTIST 0x824F5ACC */);
+
 
         return ma2DEventIcons[liIconIndex].muEventID;
     }

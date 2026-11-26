@@ -40,10 +40,10 @@ namespace CgsGraphics
 // head, returning the command and recording it as the packet's last command.
 DispatchCommand* DispatchBin::AllocateCommand(u32 luNumExtraQwords)
 {
-    CGS_ASSERT(m_pPacketStart != NULL,
-        CGS_ASSERT_MESSAGE_AT("m_pPacketStart != NULL", KAC_ARTIST_ASSERT_FILE, 476));
-    CGS_ASSERT(m_pActiveAllocateMemoryBlock == NULL,
-        CGS_ASSERT_MESSAGE_AT("m_pActiveAllocateMemoryBlock == NULL", KAC_ARTIST_ASSERT_FILE, 477));
+    CGS_ASSERT_AT(m_pPacketStart != NULL,
+        "m_pPacketStart != NULL", KAC_ARTIST_ASSERT_FILE, 476);
+    CGS_ASSERT_AT(m_pActiveAllocateMemoryBlock == NULL,
+        "m_pActiveAllocateMemoryBlock == NULL", KAC_ARTIST_ASSERT_FILE, 477);
 
     const u32 luNumQwords = luNumExtraQwords + 1;
     if (static_cast<u32>(m_pNextWord - m_pBin) + luNumQwords >= m_uSize)
@@ -51,10 +51,10 @@ DispatchCommand* DispatchBin::AllocateCommand(u32 luNumExtraQwords)
         HandleMemoryOverflow(luNumQwords);
     }
 
-    CGS_ASSERT(m_pLastCommandInPacket == NULL
+    CGS_ASSERT_AT(m_pLastCommandInPacket == NULL
                    || m_pLastCommandInPacket->GetPacketLength() == m_uSizeUsedLastTime,
-        CGS_ASSERT_MESSAGE_AT("m_pLastCommandInPacket->GetPacketLength() == m_uLastAllocationSize",
-            KAC_ARTIST_ASSERT_FILE, 489));
+        "m_pLastCommandInPacket->GetPacketLength() == m_uLastAllocationSize",
+            KAC_ARTIST_ASSERT_FILE, 489);
 
     DispatchCommand* lpCommand = m_pNextWord;
     m_uSizeUsedLastTime = luNumExtraQwords;
@@ -68,10 +68,10 @@ DispatchCommand* DispatchBin::AllocateCommand(u32 luNumExtraQwords)
 // quad-words and return the old head. Must not be called mid-packet.
 void* DispatchBin::AllocateMemoryFast(u32 luQwords)
 {
-    CGS_ASSERT(m_pPacketStart == NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "m_pPacketStart == NULL",
-            "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsDispatcher.h", 437 /* ARTIST 0x822A0650 */));
+    CGS_ASSERT_AT(m_pPacketStart == NULL,
+        "m_pPacketStart == NULL",
+            "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsDispatcher.h", 437 /* ARTIST 0x822A0650 */);
+
 
     if (static_cast<u32>(m_pNextWord - m_pBin) + luQwords >= m_uSize)
     {
@@ -106,14 +106,14 @@ void* DispatchBin::BeginAllocateMemory(u32 luMaxQwords)
         HandleMemoryOverflow(luMaxQwords);
     }
 
-    CGS_ASSERT(m_pActiveAllocateMemoryBlock == NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "m_pActiveAllocateMemoryBlock == NULL",
-            KAC_ARTIST_ASSERT_FILE, 522 /* ARTIST 0x827F92B8 */));
-    CGS_ASSERT(reinterpret_cast<void*>(m_pPacketStart) == reinterpret_cast<void*>(m_pNextWord),
-        CGS_ASSERT_MESSAGE_AT(
-            "m_pPacketStart == m_pNextWord",
-            KAC_ARTIST_ASSERT_FILE, 525 /* ARTIST 0x827F92E4 */));
+    CGS_ASSERT_AT(m_pActiveAllocateMemoryBlock == NULL,
+        "m_pActiveAllocateMemoryBlock == NULL",
+            KAC_ARTIST_ASSERT_FILE, 522 /* ARTIST 0x827F92B8 */);
+
+    CGS_ASSERT_AT(reinterpret_cast<void*>(m_pPacketStart) == reinterpret_cast<void*>(m_pNextWord),
+        "m_pPacketStart == m_pNextWord",
+            KAC_ARTIST_ASSERT_FILE, 525 /* ARTIST 0x827F92E4 */);
+
 
     m_pActiveAllocateMemoryBlock = m_pNextWord;
     return m_pActiveAllocateMemoryBlock;
@@ -123,14 +123,14 @@ void* DispatchBin::BeginAllocateMemory(u32 luMaxQwords)
 // Open a packet: stamp the packet start at the current write head.
 void DispatchBin::BeginPacket()
 {
-    CGS_ASSERT(m_pNextWord != NULL,
-        CGS_ASSERT_MESSAGE_AT("m_pNextWord != NULL", KAC_ARTIST_ASSERT_FILE, 455 /* ARTIST 0x822A06F4 */));
-    CGS_ASSERT(m_pPacketStart == NULL,
-        CGS_ASSERT_MESSAGE_AT("m_pPacketStart == NULL", KAC_ARTIST_ASSERT_FILE, 456 /* ARTIST 0x822A071C */));
-    CGS_ASSERT(static_cast<u32>(m_pNextWord - m_pBin) < m_uSize,
-        CGS_ASSERT_MESSAGE_AT(
-            "uint32_t( m_pNextWord - m_pBin ) < m_uSize",
-            KAC_ARTIST_ASSERT_FILE, 457 /* ARTIST 0x822A0754 */));
+    CGS_ASSERT_AT(m_pNextWord != NULL,
+        "m_pNextWord != NULL", KAC_ARTIST_ASSERT_FILE, 455 /* ARTIST 0x822A06F4 */);
+    CGS_ASSERT_AT(m_pPacketStart == NULL,
+        "m_pPacketStart == NULL", KAC_ARTIST_ASSERT_FILE, 456 /* ARTIST 0x822A071C */);
+    CGS_ASSERT_AT(static_cast<u32>(m_pNextWord - m_pBin) < m_uSize,
+        "uint32_t( m_pNextWord - m_pBin ) < m_uSize",
+            KAC_ARTIST_ASSERT_FILE, 457 /* ARTIST 0x822A0754 */);
+
 
     m_pPacketStart = m_pNextWord;
 }
@@ -140,18 +140,18 @@ void DispatchBin::BeginPacket()
 // advancing both the packet start and the write head past the block.
 void DispatchBin::EndAllocateMemory(u32 luActualQwords)
 {
-    CGS_ASSERT(m_pActiveAllocateMemoryBlock != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "m_pActiveAllocateMemoryBlock != NULL",
-            KAC_ARTIST_ASSERT_FILE, 535 /* ARTIST 0x827E6690 */));
-    CGS_ASSERT(reinterpret_cast<void*>(m_pPacketStart) == reinterpret_cast<void*>(m_pNextWord),
-        CGS_ASSERT_MESSAGE_AT(
-            "m_pPacketStart == m_pNextWord",
-            KAC_ARTIST_ASSERT_FILE, 540 /* ARTIST 0x827E66BC */));
-    CGS_ASSERT(reinterpret_cast<void*>(m_pPacketStart) == m_pActiveAllocateMemoryBlock,
-        CGS_ASSERT_MESSAGE_AT(
-            "m_pPacketStart == m_pActiveAllocateMemoryBlock",
-            KAC_ARTIST_ASSERT_FILE, 541 /* ARTIST 0x827E66E8 */));
+    CGS_ASSERT_AT(m_pActiveAllocateMemoryBlock != NULL,
+        "m_pActiveAllocateMemoryBlock != NULL",
+            KAC_ARTIST_ASSERT_FILE, 535 /* ARTIST 0x827E6690 */);
+
+    CGS_ASSERT_AT(reinterpret_cast<void*>(m_pPacketStart) == reinterpret_cast<void*>(m_pNextWord),
+        "m_pPacketStart == m_pNextWord",
+            KAC_ARTIST_ASSERT_FILE, 540 /* ARTIST 0x827E66BC */);
+
+    CGS_ASSERT_AT(reinterpret_cast<void*>(m_pPacketStart) == m_pActiveAllocateMemoryBlock,
+        "m_pPacketStart == m_pActiveAllocateMemoryBlock",
+            KAC_ARTIST_ASSERT_FILE, 541 /* ARTIST 0x827E66E8 */);
+
 
     DispatchPacket* lpEnd = m_pPacketStart + luActualQwords;
     m_pActiveAllocateMemoryBlock = NULL;
@@ -202,8 +202,8 @@ void DispatchFrame::Construct(u32 luNumLists, u32 luBinSizeBytes, rw::IResourceA
 
     // Native new[] emits the original384-byte stride and overflow clamp.
     m_paLists = new DispatchList[luNumLists];
-    CGS_ASSERT(m_paLists != NULL,
-        CGS_ASSERT_MESSAGE_AT("m_paLists != NULL", KAC_ARTIST_ASSERT_CPP, 713));
+    CGS_ASSERT_AT(m_paLists != NULL,
+        "m_paLists != NULL", KAC_ARTIST_ASSERT_CPP, 713);
 
     m_Bin.mpDispatchFrame = this;
     m_Bin.Construct(luBinSizeBytes, lpAllocator);
@@ -246,8 +246,8 @@ void DispatchList::Reset()
 // ARTIST 0x827FA8E0.
 void DispatchFrame::Reset()
 {
-    CGS_ASSERT(m_paLists != NULL,
-        CGS_ASSERT_MESSAGE_AT("m_paLists != NULL", KAC_ARTIST_ASSERT_CPP, 743));
+    CGS_ASSERT_AT(m_paLists != NULL,
+        "m_paLists != NULL", KAC_ARTIST_ASSERT_CPP, 743);
 
     m_Bin.Reset();
     for (u32 luListId = 0; luListId < muNumDispatchLists; ++luListId)
@@ -259,8 +259,8 @@ void DispatchFrame::Reset()
 // DecFIGS CgsDispatcher.cpp:84. ARTIST 0x827E96F0?0x827E9730.
 void DispatchBin::Release()
 {
-    CGS_ASSERT(m_pPacketStart == NULL,
-        CGS_ASSERT_MESSAGE_AT("m_pPacketStart == NULL", KAC_ARTIST_ASSERT_CPP, 86));
+    CGS_ASSERT_AT(m_pPacketStart == NULL,
+        "m_pPacketStart == NULL", KAC_ARTIST_ASSERT_CPP, 86);
 
     if (m_pBin != NULL)
     {
@@ -272,8 +272,8 @@ void DispatchBin::Release()
 // ARTIST 0x827E96A8.
 void DispatchFrame::Release()
 {
-    CGS_ASSERT(m_paLists != NULL,
-        CGS_ASSERT_MESSAGE_AT("m_paLists != NULL", KAC_ARTIST_ASSERT_CPP, 727));
+    CGS_ASSERT_AT(m_paLists != NULL,
+        "m_paLists != NULL", KAC_ARTIST_ASSERT_CPP, 727);
 
     delete[] m_paLists;
     m_Bin.Release();

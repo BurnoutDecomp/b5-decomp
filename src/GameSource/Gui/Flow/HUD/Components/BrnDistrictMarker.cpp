@@ -209,7 +209,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT_AT(false, "Invalid marker state in CountyMarkerComponent::SetCounty", CGS_ARTIST_FILE, 232);
+            CGS_FAIL_AT("Invalid marker state in CountyMarkerComponent::SetCounty", CGS_ARTIST_FILE, 232);
             break;
         }
     }
@@ -251,7 +251,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT_AT(false, "Invalid marker state in DistrictMarkerComponent::SetDistrict", CGS_ARTIST_FILE, 307);
+            CGS_FAIL_AT("Invalid marker state in DistrictMarkerComponent::SetDistrict", CGS_ARTIST_FILE, 307);
             break;
         }
     }
@@ -298,8 +298,8 @@ namespace BrnGui
     // handler (the u16 frame arg is unused).
     void DistrictMarkerComponent::CountyTransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
     {
-        CGS_ASSERT(lpUserData != 0,
-            CGS_ASSERT_MESSAGE_AT("lpUserData", __FILE__, 471 /* ARTIST 0x82412B64 */));
+        CGS_ASSERT_AT(lpUserData != 0,
+            "lpUserData", __FILE__, 471 /* ARTIST 0x82412B64 */);
 
         DistrictMarkerComponent* const lpThis = static_cast<DistrictMarkerComponent*>(lpUserData);
         lpThis->ProcessCountyTransitionComplete(0);
@@ -308,8 +308,8 @@ namespace BrnGui
     // @ 0x82412BA0 -- district counterpart of CountyTransitionCompleteCallback.
     void DistrictMarkerComponent::DistrictTransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
     {
-        CGS_ASSERT(lpUserData != 0,
-            CGS_ASSERT_MESSAGE_AT("lpUserData", __FILE__, 492 /* ARTIST 0x82412BC4 */));
+        CGS_ASSERT_AT(lpUserData != 0,
+            "lpUserData", __FILE__, 492 /* ARTIST 0x82412BC4 */);
 
         DistrictMarkerComponent* const lpThis = static_cast<DistrictMarkerComponent*>(lpUserData);
         lpThis->ProcessDistrictTransitionComplete(0);

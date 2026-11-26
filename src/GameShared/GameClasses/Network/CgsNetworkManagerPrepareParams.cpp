@@ -25,12 +25,12 @@ void NetworkManagerPrepareParams::Construct(
         const PlayerManagerPrepareParams* lpPlayerManager,
         CgsSystem::EFrameRate leLocalConsoleFrameRate)
 {
-    CGS_ASSERT(lpVersionDisplay,
-        CGS_ASSERT_MESSAGE_AT("lpVersionDisplay", __FILE__, 412 /* ARTIST 0x825814A0 */));
-    CGS_ASSERT(lpNetworkAdapter,
-        CGS_ASSERT_MESSAGE_AT("lpNetworkAdapter", __FILE__, 413 /* ARTIST 0x825814C4 */));
-    CGS_ASSERT(lpPlayerManager,
-        CGS_ASSERT_MESSAGE_AT("lpPlayerManager", __FILE__, 414 /* ARTIST 0x825814E8 */));
+    CGS_ASSERT_AT(lpVersionDisplay,
+        "lpVersionDisplay", __FILE__, 412 /* ARTIST 0x825814A0 */);
+    CGS_ASSERT_AT(lpNetworkAdapter,
+        "lpNetworkAdapter", __FILE__, 413 /* ARTIST 0x825814C4 */);
+    CGS_ASSERT_AT(lpPlayerManager,
+        "lpPlayerManager", __FILE__, 414 /* ARTIST 0x825814E8 */);
 
     mVersionDisplay         = *lpVersionDisplay;
     mNetworkAdapter         = *lpNetworkAdapter;
@@ -44,12 +44,12 @@ void NetworkManagerPrepareParams::VersionDisplayPrepareParams::Construct(
         u32 luField_04,
         EServerType leServerType)
 {
-    CGS_ASSERT(lpcServerVersion != 0,
-        CGS_ASSERT_MESSAGE_AT("lpcServerVersion", __FILE__, 452 /* ARTIST 0x8258159C */));
-    CGS_ASSERT((leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT),
-        CGS_ASSERT_MESSAGE_AT(
-            "(leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT)",
-            __FILE__, 453 /* ARTIST 0x825815C8 */));
+    CGS_ASSERT_AT(lpcServerVersion != 0,
+        "lpcServerVersion", __FILE__, 452 /* ARTIST 0x8258159C */);
+    CGS_ASSERT_AT((leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT),
+        "(leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT)",
+            __FILE__, 453 /* ARTIST 0x825815C8 */);
+
 
     mpcVersion   = lpcServerVersion;
     muField_04   = luField_04;
@@ -63,10 +63,10 @@ void NetworkManagerPrepareParams::PlayerManagerPrepareParams::Construct(
         void* lpConnectionFinalisedUserData,
         CgsMemory::HeapMalloc* lpNetworkHeapAllocator)
 {
-    CGS_ASSERT(lpServerInterface != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpServerInterface",
-            "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkManager.h", 486 /* ARTIST 0x82581624 */));
+    CGS_ASSERT_AT(lpServerInterface != 0,
+        "lpServerInterface",
+            "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkManager.h", 486 /* ARTIST 0x82581624 */);
+
 
     mpServerInterface                = lpServerInterface;
     mpfOnReceivedFromWrongIPCallback = lpfOnReceivedFromWrongIPCallback;

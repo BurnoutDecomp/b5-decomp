@@ -89,19 +89,19 @@ void PhysicalTrafficManager::ProcessTrafficEvents(
     VehicleOutputInterface* lpVehicleOutputInterface,
     BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface)
 {
-    CGS_ASSERT(lpInputInterface         != 0,
-        CGS_ASSERT_MESSAGE_AT("lpInputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 413 /* ARTIST 0x82643FEC */));          // :413
-    CGS_ASSERT(lpOutputRequestInterface != 0,
-        CGS_ASSERT_MESSAGE_AT("lpOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 414 /* ARTIST 0x82644010 */));         // :414
-    CGS_ASSERT(lpManagerOutputInterface != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpManagerOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 415 /* ARTIST 0x82644034 */));  // :415
-    CGS_ASSERT(lpVehicleOutputInterface != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpVehicleOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 416 /* ARTIST 0x82644058 */));  // :416
-    CGS_ASSERT(lpDeformationInterface   != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpDeformationInterface != NULL", KAC_ARTIST_ASSERT_FILE, 417 /* ARTIST 0x8264407C */));    // :417
+    CGS_ASSERT_AT(lpInputInterface         != 0,
+        "lpInputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 413 /* ARTIST 0x82643FEC */);          // :413
+    CGS_ASSERT_AT(lpOutputRequestInterface != 0,
+        "lpOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 414 /* ARTIST 0x82644010 */);         // :414
+    CGS_ASSERT_AT(lpManagerOutputInterface != 0,
+        "lpManagerOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 415 /* ARTIST 0x82644034 */);  // :415
+
+    CGS_ASSERT_AT(lpVehicleOutputInterface != 0,
+        "lpVehicleOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 416 /* ARTIST 0x82644058 */);  // :416
+
+    CGS_ASSERT_AT(lpDeformationInterface   != 0,
+        "lpDeformationInterface != NULL", KAC_ARTIST_ASSERT_FILE, 417 /* ARTIST 0x8264407C */);    // :417
+
 
     ProcessSetTrafficCrashingEvents(lpInputInterface, lpOutputRequestInterface,
                                     lpManagerOutputInterface, lpVehicleOutputInterface,

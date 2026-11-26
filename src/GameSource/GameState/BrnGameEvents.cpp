@@ -10,46 +10,46 @@ namespace GameStateModuleIO
 // X360 0x823A78F0.
 void ChangeNetworkCarEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
-    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CGS_ASSERT_MESSAGE_AT(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3362 /* ARTIST 0x823A791C */));
+    CGS_ASSERT_AT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+        "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3362 /* ARTIST 0x823A791C */);
+
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
 // X360 0x823A77D0.
 void OnlinePlayerAddedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
-    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CGS_ASSERT_MESSAGE_AT(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3207 /* ARTIST 0x823A77FC */));
+    CGS_ASSERT_AT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+        "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3207 /* ARTIST 0x823A77FC */);
+
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
 // X360 0x823A7830.
 void OnlinePlayerFinalisedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
-    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CGS_ASSERT_MESSAGE_AT(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            CGS_ARTIST_FILE, 3221 /* ARTIST 0x823A785C */));
+    CGS_ASSERT_AT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+        "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            CGS_ARTIST_FILE, 3221 /* ARTIST 0x823A785C */);
+
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
 // X360 0x823A7890.
 void OnlinePlayerRemovedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
-    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CGS_ASSERT_MESSAGE_AT(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3331 /* ARTIST 0x823A78BC */));
+    CGS_ASSERT_AT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+        "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3331 /* ARTIST 0x823A78BC */);
+
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
 // X360 0x823A7770. Store the disconnecting player's network id (must not be the invalid sentinel).
 void RemotePlayerDisconnectedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
-    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CGS_ASSERT_MESSAGE_AT(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3189 /* ARTIST 0x823A779C */));
+    CGS_ASSERT_AT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+        "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3189 /* ARTIST 0x823A779C */);
+
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
@@ -87,10 +87,10 @@ void StartNetworkGameEvent::SetPlayerData(s32                         liPlayerIn
 {
     (void)lWheelId;
 
-    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CGS_ASSERT_MESSAGE_AT(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            CGS_ARTIST_FILE, 3447 /* ARTIST 0x82542104 */));
+    CGS_ASSERT_AT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+        "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            CGS_ARTIST_FILE, 3447 /* ARTIST 0x82542104 */);
+
 
     maNetworkPlayerID[liPlayerIndex]        = lNetworkPlayerID;
     maCarIds[liPlayerIndex]                 = lCarId;

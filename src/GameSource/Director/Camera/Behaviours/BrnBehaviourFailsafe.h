@@ -148,8 +148,8 @@ public:
 inline void
 BehaviourFailsafe::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourFailsafe,
-               CGS_ASSERT_MESSAGE_AT("lpParameters->GetType() == eBehaviourFailsafe", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.h", 146));
+    CGS_ASSERT_AT(lpParameters->GetType() == eBehaviourFailsafe,
+               "lpParameters->GetType() == eBehaviourFailsafe", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.h", 146);
     SetDebugParametersName(lpParameters->GetDebugName());
     mpParameters = lpParameters;
 }

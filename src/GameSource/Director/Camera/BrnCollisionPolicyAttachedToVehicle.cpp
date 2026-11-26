@@ -254,10 +254,10 @@ void CollisionPolicyAttachedToVehicle::SetDesiredHeight(f32 lfDesiredHeight)
     // GroundConstraint::GenerateSceneQueries on it -- i.e. asking for a desired height IS
     // asking for the ground constraint.
     mbUseGroundConstraint = 1;                                        // stb 1, 0x24B (before assert)
-    CGS_ASSERT(lfDesiredHeight > 0.0f,
-        CGS_ASSERT_MESSAGE_AT(
-            "lfDesiredHeight > 0.0f",
-            "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h", 489 /* ARTIST 0x821F398C */));     // fcmpu f31, 0.0f; bgt
+    CGS_ASSERT_AT(lfDesiredHeight > 0.0f,
+        "lfDesiredHeight > 0.0f",
+            "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h", 489 /* ARTIST 0x821F398C */);     // fcmpu f31, 0.0f; bgt
+
     // +0x210 is mGroundConstraint (+0x1C0)'s own mfDesiredHeight (+0x50): the inlined
     // GroundConstraint::SetDesiredHeight (DWARF BrnCollisionPolicy.h:313). Until 2026-09-28 the
     // policy modelled it as a flat float of its own.
@@ -759,7 +759,7 @@ void FrustrumCollisionResolver::ResolveVehicleCollisions(const AllVehicleData* l
     Vector3 lCurrentCameraPos = lCameraPos;
 
     const CgsContainers::Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpAllTraffic = lpAllVehicles->GetTraffic();
-    CGS_ASSERT(lpAllTraffic != 0, CGS_ASSERT_MESSAGE_AT("mpTrafficVehicleArray != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorAllVehicleData.h", 96));
+    CGS_ASSERT_AT(lpAllTraffic != 0, "mpTrafficVehicleArray != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorAllVehicleData.h", 96);
     const s32 liNumTrafficVehicles = static_cast<s32>(lpAllTraffic->GetLength());
     for (s32 liTrafficIndex = 0; liTrafficIndex < liNumTrafficVehicles; ++liTrafficIndex)
     {

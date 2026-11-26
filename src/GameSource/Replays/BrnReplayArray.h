@@ -114,7 +114,7 @@ namespace BrnReplays
         // maElements[muLength] and post-increments the count.
         T& PushBack(const T& lrElement)
         {
-            CGS_ASSERT(muLength < KU_MAX_LENGTH, CGS_ASSERT_MESSAGE_AT("muLength < MaxLength", "..\\..\\..\\GameSource\\Replays/BrnReplayArray.h", 98));
+            CGS_ASSERT_AT(muLength < KU_MAX_LENGTH, "muLength < MaxLength", "..\\..\\..\\GameSource\\Replays/BrnReplayArray.h", 98);
             T& lrSlot = maElements[muLength];
             lrSlot = lrElement;
             ++muLength;

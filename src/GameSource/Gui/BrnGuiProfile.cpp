@@ -474,8 +474,8 @@ void ProfileManager::Construct(GuiCache& lrGuiCache, CgsGui::SystemUserProfile& 
 // ---------------------------------------------------------------------------
 bool ProfileManager::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc, CgsMemory::LinearMalloc* lpLinearMalloc)
 {
-    CGS_ASSERT(lpHeapMalloc != 0,
-        CGS_ASSERT_MESSAGE_AT("lpHeapMalloc != NULL", __FILE__, 231 /* ARTIST 0x824F8D08 */));
+    CGS_ASSERT_AT(lpHeapMalloc != 0,
+        "lpHeapMalloc != NULL", __FILE__, 231 /* ARTIST 0x824F8D08 */);
 
     mpHeapMalloc = lpHeapMalloc;
 
@@ -536,7 +536,7 @@ void ProfileManager::AttachMessageDisplay(ProfileMessageDisplay* lpMessageDispla
 // ---------------------------------------------------------------------------
 void ProfileManager::DetachMessageDisplay(ProfileMessageDisplay& lrMessageDisplay)
 {
-    CGS_ASSERT(mpMessageDisplay == &lrMessageDisplay, CGS_ASSERT_STREAM_MESSAGE_AT("DetachMessageDisplay: MessageDisplay was not attached", "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.h", 627));
+    CGS_ASSERT_STREAM_AT(mpMessageDisplay == &lrMessageDisplay, "DetachMessageDisplay: MessageDisplay was not attached", "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.h", 627);
 
 
     mpMessageDisplay = 0;
@@ -550,9 +550,9 @@ void ProfileManager::HandleMessageChoice(u32 luChoice)
 {
     if (luChoice < muOptionCount)
     {
-        CGS_ASSERT(mpOptionHandler != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpOptionHandler != 0", KAC_ARTIST_ASSERT_HEADER, 686 /* ARTIST 0x8247336C */));
+        CGS_ASSERT_AT(mpOptionHandler != 0,
+            "mpOptionHandler != 0", KAC_ARTIST_ASSERT_HEADER, 686 /* ARTIST 0x8247336C */);
+
         mpOptionHandler->HandleOption(luChoice);
     }
 }
@@ -615,7 +615,7 @@ void ProfileManager::ShowNoSpaceMessage(CgsGui::MessageDisplay::OptionHandler* l
 // ---------------------------------------------------------------------------
 void ProfileManager::HideMessage()
 {
-    CGS_ASSERT(mpOptionHandler != 0, CGS_ASSERT_STREAM_MESSAGE_AT("SaveLoad::HideMessage: a message is not being shown", "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.cpp", 1420));
+    CGS_ASSERT_STREAM_AT(mpOptionHandler != 0, "SaveLoad::HideMessage: a message is not being shown", "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.cpp", 1420);
 
     mpOptionHandler = 0;
     muOptionCount   = 0;
@@ -648,8 +648,8 @@ void ProfileManager::HandleOption(u32 luOption)
 {
     HideMessage();   // X360: virtual dispatch through the MessageDisplay base
 
-    CGS_ASSERT(mpOptionFunc != 0,
-        CGS_ASSERT_MESSAGE_AT("mpOptionFunc", __FILE__, 1312 /* ARTIST 0x824EF834 */));
+    CGS_ASSERT_AT(mpOptionFunc != 0,
+        "mpOptionFunc", __FILE__, 1312 /* ARTIST 0x824EF834 */);
     (this->*mpOptionFunc)(luOption);
 }
 
@@ -746,9 +746,9 @@ void ProfileManager::UIClosed()
 void ProfileManager::SetProgressionProfile(BrnProgression::Profile* lpProgressionProfile,
                                            const BrnProgression::ProgressionData* lpProgressionData)
 {
-    CGS_ASSERT(lpProgressionProfile != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpProgressionProfile != NULL", KAC_ARTIST_ASSERT_HEADER, 655 /* ARTIST 0x824ECCC0 */));
+    CGS_ASSERT_AT(lpProgressionProfile != 0,
+        "lpProgressionProfile != NULL", KAC_ARTIST_ASSERT_HEADER, 655 /* ARTIST 0x824ECCC0 */);
+
 
     mpProgressionProfile = lpProgressionProfile;
     mpProgressionData    = lpProgressionData;
@@ -860,18 +860,18 @@ void ProfileManager::HandleSaveLoadTaskResult(CgsGui::ESaveLoadTaskResult leResu
 // ---------------------------------------------------------------------------
 void ProfileManager::CheckDiskSpace(ProfileTaskResultHandler* lpTaskResultHandler)
 {
-    CGS_ASSERT(lpTaskResultHandler != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpTaskResultHandler != NULL", __FILE__, 371 /* ARTIST 0x82523CCC */));
-    CGS_ASSERT(!TaskIsRunning(),
-        CGS_ASSERT_MESSAGE_AT("!TaskIsRunning()", __FILE__, 372 /* ARTIST 0x82523CFC */));
+    CGS_ASSERT_AT(lpTaskResultHandler != 0,
+        "lpTaskResultHandler != NULL", __FILE__, 371 /* ARTIST 0x82523CCC */);
+
+    CGS_ASSERT_AT(!TaskIsRunning(),
+        "!TaskIsRunning()", __FILE__, 372 /* ARTIST 0x82523CFC */);
 
     mpTaskResultHandler   = lpTaskResultHandler;
     mpTaskResultFunc      = &ProfileManager::CheckDiskSpaceResult;
     mMetadata.mStoredData = CgsGui::MakeOpaqueBuffer(mStoredData);
 
-    CGS_ASSERT(false,
-        CGS_ASSERT_MESSAGE_AT("Should never get here", __FILE__, 382 /* ARTIST 0x82523D58 */));
+    CGS_FAIL_AT(
+        "Should never get here", __FILE__, 382 /* ARTIST 0x82523D58 */);
 }
 
 // ---------------------------------------------------------------------------
@@ -890,7 +890,7 @@ void ProfileManager::CheckDiskSpaceResult(CgsGui::ESaveLoadTaskResult /*leResult
 // ---------------------------------------------------------------------------
 void ProfileManager::Bootup(ProfileTaskResultHandler& lrTaskResultHandler, bool lbAutoLoad)
 {
-    CGS_ASSERT(!TaskIsRunning(), CGS_ASSERT_MESSAGE_AT("!TaskIsRunning()", __FILE__, 405 /* ARTIST 0x825138B4 */));
+    CGS_ASSERT_AT(!TaskIsRunning(), "!TaskIsRunning()", __FILE__, 405 /* ARTIST 0x825138B4 */);
 
     mbAutoLoad        = lbAutoLoad;
     mbAutosaveEnabled = false;
@@ -911,7 +911,7 @@ void ProfileManager::Bootup(ProfileTaskResultHandler& lrTaskResultHandler, bool 
 // ---------------------------------------------------------------------------
 void ProfileManager::BootupResult(CgsGui::ESaveLoadTaskResult leResult)
 {
-    CGS_ASSERT(!mbAutosaveEnabled, CGS_ASSERT_MESSAGE_AT("!mbAutosaveEnabled", __FILE__, 428 /* ARTIST 0x82510FC0 */));
+    CGS_ASSERT_AT(!mbAutosaveEnabled, "!mbAutosaveEnabled", __FILE__, 428 /* ARTIST 0x82510FC0 */);
 
     if (leResult == CgsGui::E_SAVELOADTASKRESULT_SUCCESS)
     {
@@ -1109,10 +1109,10 @@ void ProfileManager::LoadResult(CgsGui::ESaveLoadTaskResult leResult)
 void ProfileManager::LoadImageFiles(ProfileTaskResultHandler* lpTaskResultHandler,
                                     const CgsGui::ImageFileInfo* laImageFileInfo)
 {
-    CGS_ASSERT(lpTaskResultHandler != 0, CGS_ASSERT_MESSAGE_AT("lpTaskResultHandler != NULL",
-                __FILE__, 720 /* ARTIST 0x82513C3C */));
-    CGS_ASSERT(laImageFileInfo != 0, CGS_ASSERT_MESSAGE_AT("laImageFileInfo != NULL",
-                __FILE__, 721 /* ARTIST 0x82513C60 */));
+    CGS_ASSERT_AT(lpTaskResultHandler != 0, "lpTaskResultHandler != NULL",
+                __FILE__, 720 /* ARTIST 0x82513C3C */);
+    CGS_ASSERT_AT(laImageFileInfo != 0, "laImageFileInfo != NULL",
+                __FILE__, 721 /* ARTIST 0x82513C60 */);
 
     s32 liNumberOfImageFiles = 0;
     for (s32 liIndex = 0; liIndex < CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION; ++liIndex)
@@ -1120,14 +1120,14 @@ void ProfileManager::LoadImageFiles(ProfileTaskResultHandler* lpTaskResultHandle
         if (laImageFileInfo[liIndex].IsValid())
         {
             ++liNumberOfImageFiles;
-            CGS_ASSERT(laImageFileInfo[liIndex].miSize > 0, CGS_ASSERT_MESSAGE_AT("laImageFileInfo[liIndex].miSize > 0",
-                __FILE__, 734 /* ARTIST 0x82513CC8 */));
-            CGS_ASSERT(laImageFileInfo[liIndex].mpBuffer != 0, CGS_ASSERT_MESSAGE_AT("laImageFileInfo[liIndex].mpBuffer != NULL",
-                __FILE__, 735 /* ARTIST 0x82513CEC */));
+            CGS_ASSERT_AT(laImageFileInfo[liIndex].miSize > 0, "laImageFileInfo[liIndex].miSize > 0",
+                __FILE__, 734 /* ARTIST 0x82513CC8 */);
+            CGS_ASSERT_AT(laImageFileInfo[liIndex].mpBuffer != 0, "laImageFileInfo[liIndex].mpBuffer != NULL",
+                __FILE__, 735 /* ARTIST 0x82513CEC */);
         }
     }
-    CGS_ASSERT(liNumberOfImageFiles > 0, CGS_ASSERT_MESSAGE_AT("liNumberOfImageFiles > 0",
-                __FILE__, 739 /* ARTIST 0x82513D20 */));
+    CGS_ASSERT_AT(liNumberOfImageFiles > 0, "liNumberOfImageFiles > 0",
+                __FILE__, 739 /* ARTIST 0x82513D20 */);
 
     if (TaskIsRunning())
     {
@@ -1183,11 +1183,11 @@ void ProfileManager::BufferProfileOperation(EProfileOperation leProfileOperation
                                             s32 liNumberOfImageFiles,
                                             const CgsGui::ImageFileInfo* laImageFileInfoArray)
 {
-    CGS_ASSERT(TaskIsRunning() == true, CGS_ASSERT_MESSAGE_AT("TaskIsRunning() == true",
-                __FILE__, 1081 /* ARTIST 0x824F8F40 */));
-    CGS_ASSERT(meBufferedOperation == leProfileOperation || meBufferedOperation == E_PROFILEOPERATION_NONE,
-               CGS_ASSERT_MESSAGE_AT("meBufferedOperation == leProfileOperation || meBufferedOperation == E_PROFILEOPERATION_NONE",
-                __FILE__, 1083 /* ARTIST 0x824F8F78 */));
+    CGS_ASSERT_AT(TaskIsRunning() == true, "TaskIsRunning() == true",
+                __FILE__, 1081 /* ARTIST 0x824F8F40 */);
+    CGS_ASSERT_AT(meBufferedOperation == leProfileOperation || meBufferedOperation == E_PROFILEOPERATION_NONE,
+               "meBufferedOperation == leProfileOperation || meBufferedOperation == E_PROFILEOPERATION_NONE",
+                __FILE__, 1083 /* ARTIST 0x824F8F78 */);
 
     if (meBufferedOperation == E_PROFILEOPERATION_NONE)
     {
@@ -1202,11 +1202,11 @@ void ProfileManager::BufferProfileOperation(EProfileOperation leProfileOperation
 
     if (liNumberOfImageFiles > 0)
     {
-        CGS_ASSERT(laImageFileInfoArray != 0, CGS_ASSERT_MESSAGE_AT("laImageFileInfoArray != NULL",
-                __FILE__, 1099 /* ARTIST 0x824F9008 */));
-        CGS_ASSERT(miBufferedNumberOfImageFiles + liNumberOfImageFiles <= CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION,
-                   CGS_ASSERT_MESSAGE_AT("miBufferedNumberOfImageFiles + liNumberOfImageFiles <= CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION",
-                __FILE__, 1100 /* ARTIST 0x824F9038 */));
+        CGS_ASSERT_AT(laImageFileInfoArray != 0, "laImageFileInfoArray != NULL",
+                __FILE__, 1099 /* ARTIST 0x824F9008 */);
+        CGS_ASSERT_AT(miBufferedNumberOfImageFiles + liNumberOfImageFiles <= CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION,
+                   "miBufferedNumberOfImageFiles + liNumberOfImageFiles <= CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION",
+                __FILE__, 1100 /* ARTIST 0x824F9038 */);
 
         std::memcpy(&maBufferedImageFileInfo[miBufferedNumberOfImageFiles], laImageFileInfoArray,
                     static_cast<usize>(liNumberOfImageFiles) * sizeof(CgsGui::ImageFileInfo));
@@ -1478,8 +1478,8 @@ bool ProfileManager::ValidateProfiles()
 void ProfileManager::SetMugshotBufferFromCircularBuffer(CgsGui::ImageFileInfo* lpDestImageFileInfo,
                                                         const CgsGui::ImageFileInfo* lpSourceImageFileInfo)
 {
-    CGS_ASSERT(lpDestImageFileInfo != 0,
-        CGS_ASSERT_MESSAGE_AT("lpDestImageFileInfo != NULL", __FILE__, 1458 /* ARTIST 0x824EFC64 */));
+    CGS_ASSERT_AT(lpDestImageFileInfo != 0,
+        "lpDestImageFileInfo != NULL", __FILE__, 1458 /* ARTIST 0x824EFC64 */);
 
     // An unsigned compare (cmplwi @0x824EFC70): the record size is sizeof the slot.
     if (lpDestImageFileInfo->miSize == sizeof(MugshotSaveBuffer))
@@ -1494,9 +1494,9 @@ void ProfileManager::SetMugshotBufferFromCircularBuffer(CgsGui::ImageFileInfo* l
 
     if (lpSourceImageFileInfo != 0)
     {
-        CGS_ASSERT(lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES,
-            CGS_ASSERT_MESSAGE_AT("lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES",
-                                      __FILE__, 1475 /* ARTIST 0x824EFCCC */));
+        CGS_ASSERT_AT(lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES,
+            "lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES",
+                                      __FILE__, 1475 /* ARTIST 0x824EFCCC */);
         lpSlot->Construct(lpSourceImageFileInfo->mpBuffer, KI_MUGSHOT_PICTURE_SIZE_BYTES);
     }
     else
@@ -1631,7 +1631,7 @@ s32 ProfileManager::LoadProfileUpgradeData(CgsGui::CgsGuiModuleIO::OutputBuffer*
             return 1;
 
         default:
-            CGS_ASSERT(false, "ProgressionManager::meProfileUpgradeLoadStage in a weird state");
+            CGS_FAIL("ProgressionManager::meProfileUpgradeLoadStage in a weird state");
             return 0;
     }
 }

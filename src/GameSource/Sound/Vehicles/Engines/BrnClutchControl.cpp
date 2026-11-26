@@ -133,7 +133,7 @@ void ClutchControl::AttachController(CgsSound::Logic::EffectBase* apController)
         mpWheelControl = static_cast<BrnSound::Vehicles::Wheels::WheelControl*>(apController);
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+        CGS_FAIL_STREAM_AT("Cound't attach controller " << apController->GetId(),
                              BRN_CLUTCHCONTROL_CPP_FILE, 262);
         break;
     }

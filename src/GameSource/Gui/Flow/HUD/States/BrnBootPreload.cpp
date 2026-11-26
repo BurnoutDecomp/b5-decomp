@@ -162,7 +162,7 @@ namespace BrnGui
         // cache pointer. Trivial as a line of code, not trivial as a tripwire -- leaving
         // BF_PRELOAD without a cache means the whole preload ladder above ran against
         // nothing, and this is the one place that would say so.
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootPreload.cpp", 386 /* ARTIST 0x82473A98 */));
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootPreload.cpp", 386 /* ARTIST 0x82473A98 */);
 
         // Unguarded, as ARTIST calls it (@0x82473AB0).
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
@@ -253,7 +253,7 @@ namespace BrnGui
             }
             else
             {
-                CGS_ASSERT(false, "Unexpected event in IntroHudState::Update");
+                CGS_FAIL("Unexpected event in IntroHudState::Update");
             }
         }
 

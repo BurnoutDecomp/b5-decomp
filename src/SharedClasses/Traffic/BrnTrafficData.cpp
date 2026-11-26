@@ -226,10 +226,10 @@ namespace BrnTraffic
     // then returns the u8 count read at +0x168 (`lbz 0x168`). The DWARF return type is int32_t.
     s32 TrafficData::GetNumPaintColours() const
     {
-        CGS_ASSERT(muNumPaintColours != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "muNumPaintColours > 0",
-                "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficData.h", 247 /* ARTIST 0x82705F80 */));
+        CGS_ASSERT_AT(muNumPaintColours != 0,
+            "muNumPaintColours > 0",
+                "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficData.h", 247 /* ARTIST 0x82705F80 */);
+
         return muNumPaintColours;
     }
 
@@ -412,7 +412,7 @@ namespace BrnTraffic
             }
         }
 
-        CGS_ASSERT(false, "Failed to find traffic kill zone with id . Your traffic & trigger data are probably "
+        CGS_FAIL("Failed to find traffic kill zone with id . Your traffic & trigger data are probably "
                           "out of date.");                                    // BrnTrafficData.cpp:303
         return 0;
     }

@@ -65,7 +65,7 @@ namespace BrnGui
             return false;
         if ((lu & E_FLAG_HIGHLIGHTABLE) == 0 && lbHighlighted)
         {
-            CGS_ASSERT(false, "Setting unhighlightable item to highlighted!");
+            CGS_FAIL("Setting unhighlightable item to highlighted!");
         }
         mxFlags = static_cast<u8>(lbHighlighted ? (mxFlags | E_FLAG_HIGHLIGHTED)
                                                 : (mxFlags ^ E_FLAG_HIGHLIGHTED));

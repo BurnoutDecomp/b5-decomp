@@ -112,14 +112,14 @@ namespace BrnNetwork
     // Parse one downloaded stat string into its value slot and record how it is displayed.
     void NetworkPlayerStats::SetStat(EStatsValue leValue, const char* lpcStat, EStatType leType)
     {
-        CGS_ASSERT(leValue >= E_STATS_VALUE_START,
-            CGS_ASSERT_MESSAGE_AT(
-                "leValue >= E_STATS_VALUE_START", __FILE__, 195 /* ARTIST 0x825469DC */));
-        CGS_ASSERT(leValue < E_STATS_VALUE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leValue < E_STATS_VALUE_COUNT", __FILE__, 196 /* ARTIST 0x82546A00 */));
-        CGS_ASSERT(lpcStat != 0,
-            CGS_ASSERT_MESSAGE_AT("lpcStat", __FILE__, 197 /* ARTIST 0x82546A24 */));
+        CGS_ASSERT_AT(leValue >= E_STATS_VALUE_START,
+            "leValue >= E_STATS_VALUE_START", __FILE__, 195 /* ARTIST 0x825469DC */);
+
+        CGS_ASSERT_AT(leValue < E_STATS_VALUE_COUNT,
+            "leValue < E_STATS_VALUE_COUNT", __FILE__, 196 /* ARTIST 0x82546A00 */);
+
+        CGS_ASSERT_AT(lpcStat != 0,
+            "lpcStat", __FILE__, 197 /* ARTIST 0x82546A24 */);
 
         maiValues[leValue]   = std::atoi(lpcStat);
         maeStatType[leValue] = leType;
@@ -147,12 +147,12 @@ namespace BrnNetwork
     // ------------------------------------------------------------ GetStatAsInt
     const s32 NetworkPlayerStats::GetStatAsInt(EStatsValue leValue) const
     {
-        CGS_ASSERT(leValue >= E_STATS_VALUE_START,
-            CGS_ASSERT_MESSAGE_AT(
-                "leValue >= E_STATS_VALUE_START", __FILE__, 154 /* ARTIST 0x825468EC */));
-        CGS_ASSERT(leValue < E_STATS_VALUE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leValue < E_STATS_VALUE_COUNT", __FILE__, 155 /* ARTIST 0x82546910 */));
+        CGS_ASSERT_AT(leValue >= E_STATS_VALUE_START,
+            "leValue >= E_STATS_VALUE_START", __FILE__, 154 /* ARTIST 0x825468EC */);
+
+        CGS_ASSERT_AT(leValue < E_STATS_VALUE_COUNT,
+            "leValue < E_STATS_VALUE_COUNT", __FILE__, 155 /* ARTIST 0x82546910 */);
+
 
         return maiValues[leValue];
     }
@@ -160,9 +160,9 @@ namespace BrnNetwork
     // ------------------------------------------------------------ GetStatAsString
     void NetworkPlayerStats::GetStatAsString(EStatsValue leValue, char* lpcBuffer, s32 liSize) const
     {
-        CGS_ASSERT(liSize >= KI_MININUM_CHAR_BUFFER_SIZE,
-            CGS_ASSERT_MESSAGE_AT(
-                "liSize >= KI_MININUM_CHAR_BUFFER_SIZE", __FILE__, 174 /* ARTIST 0x82546964 */));
+        CGS_ASSERT_AT(liSize >= KI_MININUM_CHAR_BUFFER_SIZE,
+            "liSize >= KI_MININUM_CHAR_BUFFER_SIZE", __FILE__, 174 /* ARTIST 0x82546964 */);
+
 
         CgsCore::SPrintf(lpcBuffer, liSize, "%i", GetStatAsInt(leValue));
     }
@@ -170,12 +170,12 @@ namespace BrnNetwork
     // ------------------------------------------------------------ GetStatType
     NetworkPlayerStats::EStatType NetworkPlayerStats::GetStatType(EStatsValue leValue) const
     {
-        CGS_ASSERT(leValue >= E_STATS_VALUE_START,
-            CGS_ASSERT_MESSAGE_AT(
-                "leValue >= E_STATS_VALUE_START", __FILE__, 218 /* ARTIST 0x82546A8C */));
-        CGS_ASSERT(leValue < E_STATS_VALUE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leValue < E_STATS_VALUE_COUNT", __FILE__, 219 /* ARTIST 0x82546AB0 */));
+        CGS_ASSERT_AT(leValue >= E_STATS_VALUE_START,
+            "leValue >= E_STATS_VALUE_START", __FILE__, 218 /* ARTIST 0x82546A8C */);
+
+        CGS_ASSERT_AT(leValue < E_STATS_VALUE_COUNT,
+            "leValue < E_STATS_VALUE_COUNT", __FILE__, 219 /* ARTIST 0x82546AB0 */);
+
 
         return maeStatType[leValue];
     }

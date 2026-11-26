@@ -14,11 +14,11 @@ const char* FlybyManager::KPC_GAMERTAG_STRING_ID = "GAMERTAG";
 
 void FlybyManager::Construct(GameStateModule* lpGameStateModule, ScoringSystem* lpScoringSystem)
 {
-    CGS_ASSERT(lpGameStateModule, CGS_ASSERT_MESSAGE_AT("lpGameStateModule", CGS_ARTIST_FILE, 123));
+    CGS_ASSERT_AT(lpGameStateModule, "lpGameStateModule", CGS_ARTIST_FILE, 123);
 
     mpGameStateModule = lpGameStateModule;
 
-    CGS_ASSERT(lpScoringSystem, CGS_ASSERT_MESSAGE_AT("lpScoringSystem", CGS_ARTIST_FILE, 126));
+    CGS_ASSERT_AT(lpScoringSystem, "lpScoringSystem", CGS_ARTIST_FILE, 126);
 
     mpScoringSystem = lpScoringSystem;
     mRandom.Construct();
@@ -27,10 +27,10 @@ void FlybyManager::Construct(GameStateModule* lpGameStateModule, ScoringSystem* 
 // X360. Accessor for the owning GameStateModule; asserts it was set by Construct.
 GameStateModule* FlybyManager::GetGameStateModule()
 {
-    CGS_ASSERT(mpGameStateModule,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpGameStateModule",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\flybymanager\\BrnGameStateFlybyManager.h", 204 /* ARTIST 0x82358748 */));
+    CGS_ASSERT_AT(mpGameStateModule,
+        "mpGameStateModule",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\flybymanager\\BrnGameStateFlybyManager.h", 204 /* ARTIST 0x82358748 */);
+
     return mpGameStateModule;
 }
 
@@ -41,8 +41,8 @@ s32 FlybyManager::RivalRating::SortRivalsCallback(const void* lpData0, const voi
 
     if (lpRival0->mPlayerID == lpRival1->mPlayerID)
     {
-        CGS_ASSERT((lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID) && (lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID),
-                   CGS_ASSERT_MESSAGE_AT("( lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID ) && ( lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID )", CGS_ARTIST_FILE, 83));
+        CGS_ASSERT_AT((lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID) && (lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID),
+                   "( lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID ) && ( lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID )", CGS_ARTIST_FILE, 83);
 
         return 0;
     }

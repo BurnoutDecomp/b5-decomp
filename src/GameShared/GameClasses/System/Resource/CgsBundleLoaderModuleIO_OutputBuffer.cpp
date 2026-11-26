@@ -36,8 +36,8 @@ namespace BundleLoaderIO
 
     const OutputBuffer::PoolSendQueue* OutputBuffer::GetPoolSendQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for reading\n", CGS_ARTIST_FILE, 142));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+            "Not locked for reading\n", CGS_ARTIST_FILE, 142);
         return &mPoolSendQueue;
     }
 
@@ -47,17 +47,17 @@ namespace BundleLoaderIO
 
     OutputBuffer::StreamRequestQueue* OutputBuffer::GetStreamRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for writing\n", CGS_ARTIST_FILE, 152));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+            "Not locked for writing\n", CGS_ARTIST_FILE, 152);
         return &mStreamRequestQueue;
     }
 
     // X360 0x828E21E0: write-lock; return this + 4 (the pool-send queue).
     OutputBuffer::PoolStorage* OutputBuffer::GetPool()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            CGS_ARTIST_FILE, 143));   // :143
+            CGS_ARTIST_FILE, 143);   // :143
         return &mPoolSendQueue;
     }
 
@@ -66,17 +66,17 @@ namespace BundleLoaderIO
     // CgsResource::ResourceModule::ProcessResourceResponses.
     const OutputBuffer::LoadBundleResponseQueue* OutputBuffer::GetLoadBundleResponseQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for reading\n", CGS_ARTIST_FILE, 145));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+            "Not locked for reading\n", CGS_ARTIST_FILE, 145);
         return &mLoadBundleResponseQueue;
     }
 
     // X360 0x828E2330: write-lock (bit 3); return &mLoadBundleResponseQueue (this + 0x1014).
     OutputBuffer::LoadBundleResponseQueue* OutputBuffer::GetLoadBundleResponseQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            CGS_ARTIST_FILE, 146));   // :146
+            CGS_ARTIST_FILE, 146);   // :146
         return &mLoadBundleResponseQueue;
     }
 
@@ -84,8 +84,8 @@ namespace BundleLoaderIO
     // (DWARF CgsBundleLoaderModuleIO.h:148, const overload.)
     const OutputBuffer::UnloadBundleResponseQueue* OutputBuffer::GetUnloadBundleResponseQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for reading\n", CGS_ARTIST_FILE, 148));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+            "Not locked for reading\n", CGS_ARTIST_FILE, 148);
         return &mUnloadBundleResponseQueue;
     }
 
@@ -94,16 +94,16 @@ namespace BundleLoaderIO
     // CgsResource::BundleLoaderModule::CheckForUnloads.
     OutputBuffer::UnloadBundleResponseQueue* OutputBuffer::GetUnloadBundleResponseQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for writing\n", CGS_ARTIST_FILE, 149));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+            "Not locked for writing\n", CGS_ARTIST_FILE, 149);
         return &mUnloadBundleResponseQueue;
     }
 
     // X360 0x828E2528: read-lock; return this + 0x1342C (the stream-request queue).
     const OutputBuffer::StreamRequestQueue* OutputBuffer::GetStreamRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for reading\n", CGS_ARTIST_FILE, 151));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+            "Not locked for reading\n", CGS_ARTIST_FILE, 151);
         return &mStreamRequestQueue;
     }
 }

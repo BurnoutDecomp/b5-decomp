@@ -371,7 +371,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateOnlineCarSelect.cpp", 269));
+            CGS_FAIL_AT("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateOnlineCarSelect.cpp", 269);
             break;
         }
 

@@ -159,7 +159,7 @@ void InGameMessageRenderer::InGameMessage::SetupMessage(
         }
 
         default:
-            CGS_ASSERT_AT(false,
+            CGS_FAIL_AT(
                        "Unhandled number of params in InGameMessageRenderer::InGameMessage::SetupMessage\n", CGS_ARTIST_FILE, 2023); // :2036
             break;
     }
@@ -270,7 +270,7 @@ bool InGameMessageRenderer::Prepare(CgsGui::GuiEventQueueSmall* lpEventQueue,
             return true;
 
         default:
-            CGS_ASSERT(false, " unknown prepare stage in InGameMessageRenderer ");   // :285
+            CGS_FAIL(" unknown prepare stage in InGameMessageRenderer ");   // :285
             return false;
     }
 }
@@ -296,7 +296,7 @@ bool InGameMessageRenderer::Release()
             return true;
 
         default:
-            CGS_ASSERT(false, " unknown release stage in InGameMessageRenderer ");   // :332
+            CGS_FAIL(" unknown release stage in InGameMessageRenderer ");   // :332
             return false;
     }
 }
@@ -373,7 +373,7 @@ void InGameMessageRenderer::ResetYPos()
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid ticker mode  in InGameMessageRenderer::ResetYPos\n");  // :1925
+            CGS_FAIL("Invalid ticker mode  in InGameMessageRenderer::ResetYPos\n");  // :1925
             break;
     }
 }
@@ -532,7 +532,7 @@ bool InGameMessageRenderer::AddNewMessage(
 {
     if (lbPriority && lbCustom)
     {
-        CGS_ASSERT_AT(false,
+        CGS_FAIL_AT(
                    "false == (( true == lbIsPriorityMessage) && ( true == lbIsCustomMessage ))", CGS_ARTIST_FILE, 1120); // :1120
     }
     // The console evaluates the handle cast here; on a NULL handle the cast's own
@@ -857,7 +857,7 @@ void InGameMessageRenderer::BufferMessagesForGameMode()
     {
         case E_TICKERMODE_NONE:
         case E_TICKERMODE_NUM:
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "Unhandled ticker mode in InGameMessageRenderer::BufferMessagesForGameMode"); // :1726
             break;
 
@@ -980,7 +980,7 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
             lFont.mpSourceEntry    = lpcNotification->mResourceHandle.mpSourceEntry;
             if (lFont.mpResourceMemory == 0)
             {
-                CGS_ASSERT(false, "lpFont != CgsResource::NULLResourceHandle");   // :406
+                CGS_FAIL("lpFont != CgsResource::NULLResourceHandle");   // :406
                 break;
             }
 
@@ -1028,7 +1028,7 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
             GuiCache* const* lppCache = reinterpret_cast<GuiCache* const*>(lpEvent);
             if (*lppCache == 0)
             {
-                CGS_ASSERT_AT(false, "Invalid GUI cache pointer", CGS_ARTIST_FILE, 406);   // :433
+                CGS_FAIL_AT("Invalid GUI cache pointer", CGS_ARTIST_FILE, 406);   // :433
             }
             mpGuiCache = *lppCache;
             break;
@@ -1063,7 +1063,7 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
             mfTextPosY = lfY;
             if (lfY < 0.0f || lfY >= 720.0f)
             {
-                CGS_ASSERT(false, "Moving ticker off-screen - is this right?");   // :472
+                CGS_FAIL("Moving ticker off-screen - is this right?");   // :472
             }
             break;
         }
@@ -1130,7 +1130,7 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
                 }
                 else
                 {
-                    CGS_ASSERT(false,
+                    CGS_FAIL(
                                "Unhandled string type  handling message E_GUI_TICKER_CUSTOM_MESSAGE\n"); // :528
                     lbResolved = false;
                     break;
@@ -1167,7 +1167,7 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
                 }
                 if (lbTraining)
                 {
-                    CGS_ASSERT_AT(false, "Ticker is too full for a training message!\n", CGS_ARTIST_FILE, 556);   // :556
+                    CGS_FAIL_AT("Ticker is too full for a training message!\n", CGS_ARTIST_FILE, 556);   // :556
                 }
             }
             break;
@@ -1595,7 +1595,7 @@ void InGameMessageRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet
         }
 
         default:
-            CGS_ASSERT_AT(false, "Unhandled state in InGameMessageRenderer::Update\n", CGS_ARTIST_FILE, 1067);   // :1067
+            CGS_FAIL_AT("Unhandled state in InGameMessageRenderer::Update\n", CGS_ARTIST_FILE, 1067);   // :1067
             break;
     }
     lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard); // ARTIST8246A3EC

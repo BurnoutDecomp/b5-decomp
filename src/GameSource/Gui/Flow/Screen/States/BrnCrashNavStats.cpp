@@ -209,13 +209,13 @@ namespace BrnGui
     // ---- HandleTriggers @ 0x824B6370 ----------------------------------------------
     void CrashNavStats::HandleTriggers(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in CrashNavStats::HandleTriggers", CGS_ARTIST_FILE, 615));   // cpp:615
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event in CrashNavStats::HandleTriggers", CGS_ARTIST_FILE, 615);   // cpp:615
     }
 
     // ---- SetExpectedAptComponents @ 0x824B6408 ------------------------------------
     void CrashNavStats::SetExpectedAptComponents()
     {
-        CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 628 /* ARTIST 0x824B643C */));
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 628 /* ARTIST 0x824B643C */);
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -281,7 +281,7 @@ namespace BrnGui
     // ---- UpdateInitialising @ 0x824B5C60 ------------------------------------------
     bool CrashNavStats::UpdateInitialising()
     {
-        CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", CGS_ARTIST_FILE, 339 /* ARTIST 0x824B5C9C */));
+        CGS_ASSERT_AT(mpGuiCache, "NULL != mpGuiCache", CGS_ARTIST_FILE, 339 /* ARTIST 0x824B5C9C */);
 
         bool lbReturnValue = false;
 
@@ -356,7 +356,7 @@ namespace BrnGui
         default:
             // X360 cpp:207 -- the streamed form, "Invalid internal state (" << state << ").
             // Streamed in place, as ARTIST builds it (cpp:207).
-            CGS_ASSERT_STREAM_AT(false, "Invalid internal state (" << meCurrentState << ") \n",
+            CGS_FAIL_STREAM_AT("Invalid internal state (" << meCurrentState << ") \n",
                                  CGS_ARTIST_FILE, 207);
             break;
         }

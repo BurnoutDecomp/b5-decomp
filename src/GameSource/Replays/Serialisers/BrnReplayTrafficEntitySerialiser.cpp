@@ -55,7 +55,7 @@ namespace BrnReplays
         // static buffer pointer is non-null; return it.
         CGS_ASSERT(GetStaticBufferSize() >= static_cast<s32>(KU_STATIC_BUFFER_SIZE),
                    "Static buffer size is too small\n");
-        CGS_ASSERT(mpStaticBuffer != 0, CGS_ASSERT_MESSAGE_AT("GetStaticBuffer()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\serialisers\\BrnReplayTrafficEntitySerialiser.h", 423));
+        CGS_ASSERT_AT(mpStaticBuffer != 0, "GetStaticBuffer()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\serialisers\\BrnReplayTrafficEntitySerialiser.h", 423);
         return reinterpret_cast<TrafficEntitySerialiserStaticLayout*>(mpStaticBuffer);
     }
 
@@ -83,8 +83,8 @@ namespace BrnReplays
     BrnTraffic::TrafficPhysicsInfo* TrafficEntitySerialiser::GetPhysicsInfo(u32 luPhysicsInfo)
     {
         TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
-        CGS_ASSERT(lpLayout->mPhysicsBits.IsBitSet(luPhysicsInfo),
-                   CGS_ASSERT_MESSAGE_AT("lpFrame->mHeader.mPhysicsBits.IsBitSet( luPhysicsInfo )", CGS_ARTIST_FILE, 534));
+        CGS_ASSERT_AT(lpLayout->mPhysicsBits.IsBitSet(luPhysicsInfo),
+                   "lpFrame->mHeader.mPhysicsBits.IsBitSet( luPhysicsInfo )", CGS_ARTIST_FILE, 534);
         return &lpLayout->maPhysicsInfo[luPhysicsInfo];
     }
 
@@ -93,10 +93,10 @@ namespace BrnReplays
     // local = v%200, address = base + 13408*chunk + 3*local + 256.
     TrafficVehicleDataRecord* TrafficEntitySerialiser::GetVehicleData(u32 luVehicle)
     {
-        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
-            CGS_ASSERT_MESSAGE_AT(
-                "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
-                CGS_ARTIST_FILE, 507 /* ARTIST 0x827072AC */));
+        CGS_ASSERT_AT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
+            "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                CGS_ARTIST_FILE, 507 /* ARTIST 0x827072AC */);
+
 
         u8* lpBase = reinterpret_cast<u8*>(GetStaticLayout());
         const u32 luChunk = luVehicle / KU_VEHICLES_PER_CHUNK;
@@ -113,10 +113,10 @@ namespace BrnReplays
     // base + 13408*chunk + (local << 6) + 864.
     TrafficVehicleTransformRecord* TrafficEntitySerialiser::GetVehicleTransform(u32 luVehicle)
     {
-        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
-            CGS_ASSERT_MESSAGE_AT(
-                "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
-                CGS_ARTIST_FILE, 476 /* ARTIST 0x82707214 */));
+        CGS_ASSERT_AT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
+            "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                CGS_ARTIST_FILE, 476 /* ARTIST 0x82707214 */);
+
 
         u8* lpBase = reinterpret_cast<u8*>(GetStaticLayout());
         const u32 luChunk = luVehicle / KU_VEHICLES_PER_CHUNK;
@@ -132,10 +132,10 @@ namespace BrnReplays
     // Copy the 148-byte active-hull header for the local player into the static layout.
     void TrafficEntitySerialiser::SetActiveHullsForLocalPlayer(const TrafficSerialiserFrame::ActiveHullSet* lpActiveHulls)
     {
-        CGS_ASSERT(lpActiveHulls != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpActiveHulls",
-                CGS_ARTIST_FILE, 557 /* ARTIST 0x827073F4 */));
+        CGS_ASSERT_AT(lpActiveHulls != 0,
+            "lpActiveHulls",
+                CGS_ARTIST_FILE, 557 /* ARTIST 0x827073F4 */);
+
         std::memcpy(&GetStaticLayout()->mActiveHullsForLocalPlayer, lpActiveHulls, sizeof(*lpActiveHulls));
     }
 
@@ -144,9 +144,9 @@ namespace BrnReplays
     // ids at +151..).
     void TrafficEntitySerialiser::SetBonusAssets(const u8* lpauBonusAssets, u32 luNumBonusAssets)
     {
-        CGS_ASSERT(lpauBonusAssets != 0, CGS_ASSERT_MESSAGE_AT("lpauBonusAssets", CGS_ARTIST_FILE, 572));
-        CGS_ASSERT(luNumBonusAssets <= KU_MAX_BONUS_STREAMED_ASSETS,
-                   CGS_ASSERT_MESSAGE_AT("luNumBonusAssets <= BrnTraffic::KU_MAX_BONUS_STREAMED_ASSETS", CGS_ARTIST_FILE, 573));
+        CGS_ASSERT_AT(lpauBonusAssets != 0, "lpauBonusAssets", CGS_ARTIST_FILE, 572);
+        CGS_ASSERT_AT(luNumBonusAssets <= KU_MAX_BONUS_STREAMED_ASSETS,
+                   "luNumBonusAssets <= BrnTraffic::KU_MAX_BONUS_STREAMED_ASSETS", CGS_ARTIST_FILE, 573);
 
         TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
         for (u32 luAsset = 0; luAsset < luNumBonusAssets; ++luAsset)
@@ -165,8 +165,8 @@ namespace BrnReplays
     void TrafficEntitySerialiser::SetPhysicsData(const CgsContainers::BitArray<KU_NUM_PHYSICS_INFO>* lpBits,
                                                   const BrnTraffic::TrafficPhysicsInfo* lpaPhysicsInfo)
     {
-        CGS_ASSERT(lpBits != 0, CGS_ASSERT_MESSAGE_AT("lpBits", CGS_ARTIST_FILE, 520));
-        CGS_ASSERT(lpaPhysicsInfo != 0, CGS_ASSERT_MESSAGE_AT("lpaPhysicsInfo", CGS_ARTIST_FILE, 521));
+        CGS_ASSERT_AT(lpBits != 0, "lpBits", CGS_ARTIST_FILE, 520);
+        CGS_ASSERT_AT(lpaPhysicsInfo != 0, "lpaPhysicsInfo", CGS_ARTIST_FILE, 521);
 
         TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
         // asm: ld r10,0(a2) ; std r10,0xF0(layout) -- copy all 8 bytes of *lpBits as-is.
@@ -182,8 +182,8 @@ namespace BrnReplays
     // is -1 unless the vehicle is physical (E_FLAG_PHYSICAL == 0x08).
     void TrafficEntitySerialiser::SetVehicleData(u32 luVehicle, BrnTraffic::Vehicle* lpVehicle)
     {
-        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
-                   CGS_ASSERT_MESSAGE_AT("luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_FILE, 489));
+        CGS_ASSERT_AT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
+                   "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_FILE, 489);
 
         s32 liPhysicalPartsIndex = -1;
         if ((lpVehicle->GetFlags() & BrnTraffic::Vehicle::E_FLAG_PHYSICAL) != 0)
@@ -200,7 +200,7 @@ namespace BrnReplays
     // chunks' transform regions.
     void TrafficEntitySerialiser::SetVehicleTransforms(const void* lpaTransforms)
     {
-        CGS_ASSERT(lpaTransforms != 0, CGS_ASSERT_MESSAGE_AT("lpaTransforms", CGS_ARTIST_FILE, 457));
+        CGS_ASSERT_AT(lpaTransforms != 0, "lpaTransforms", CGS_ARTIST_FILE, 457);
 
         u8* lpDest = reinterpret_cast<u8*>(GetStaticLayout()) + KU_OFFSET_VEHICLE_TRANSFORM;
         const u8* lpSource = static_cast<const u8*>(lpaTransforms);
@@ -282,17 +282,17 @@ namespace BrnReplays
     // GetFirstBitSet / GetNextBitSet.
     void TrafficEntitySerialiser::ReadFrame(TrafficEntitySerialiserStaticLayout* lpFrame, s32 liArg3)
     {
-        CGS_ASSERT(lpFrame != 0, CGS_ASSERT_MESSAGE_AT("lpFrame", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 438));
+        CGS_ASSERT_AT(lpFrame != 0, "lpFrame", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 438);
         // The X360 fires FOUR alignment asserts under the single (ptr & 0xF) != 0 guard
         // (0x8265DD9C-0x8265DE18), each citing a distinct member.
         CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mActiveHullsForLocalPlayer) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
         CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mActiveHullsForLocalPlayer) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maPhysicsInfo) & 0xf) == 0,
-                   CGS_ASSERT_MESSAGE_AT("(reinterpret_cast<uintptr_t>(&lpFrame->maPhysicsInfo) & 0xf) == 0", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 449));
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0,
-                   CGS_ASSERT_MESSAGE_AT("(reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 451));
+        CGS_ASSERT_AT((reinterpret_cast<uintptr_t>(lpFrame->maPhysicsInfo) & 0xf) == 0,
+                   "(reinterpret_cast<uintptr_t>(&lpFrame->maPhysicsInfo) & 0xf) == 0", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 449);
+        CGS_ASSERT_AT((reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0,
+                   "(reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 451);
 
         BaseSerialiser::Read(&lpFrame->mActiveHullsForLocalPlayer, 148);
         BaseSerialiser::Read(&lpFrame->muLocalPlayerHull, 2);
@@ -338,17 +338,17 @@ namespace BrnReplays
     // Record one whole frame buffer (the write mirror of ReadFrame).
     void TrafficEntitySerialiser::WriteFrame(TrafficEntitySerialiserStaticLayout* lpFrame, s32 liArg3)
     {
-        CGS_ASSERT(lpFrame != 0, CGS_ASSERT_MESSAGE_AT("lpFrame", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 280));
+        CGS_ASSERT_AT(lpFrame != 0, "lpFrame", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 280);
         // The X360 fires FOUR alignment asserts under the single (ptr & 0xF) != 0 guard
         // (0x8265D2EC-0x8265D368), each citing a distinct member.
         CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mActiveHullsForLocalPlayer) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
         CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mActiveHullsForLocalPlayer) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maPhysicsInfo) & 0xf) == 0,
-                   CGS_ASSERT_MESSAGE_AT("(reinterpret_cast<uintptr_t>(&lpFrame->maPhysicsInfo) & 0xf) == 0", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 296));
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0,
-                   CGS_ASSERT_MESSAGE_AT("(reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 298));
+        CGS_ASSERT_AT((reinterpret_cast<uintptr_t>(lpFrame->maPhysicsInfo) & 0xf) == 0,
+                   "(reinterpret_cast<uintptr_t>(&lpFrame->maPhysicsInfo) & 0xf) == 0", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 296);
+        CGS_ASSERT_AT((reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0,
+                   "(reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 298);
 
         BaseSerialiser::Write(&lpFrame->mActiveHullsForLocalPlayer, 148);
         BaseSerialiser::Write(&lpFrame->muLocalPlayerHull, 2);
@@ -398,7 +398,7 @@ namespace BrnReplays
     s32 TrafficEntitySerialiser::Read()
     {
         Lock();
-        CGS_ASSERT(GetStaticLayout() != 0, CGS_ASSERT_MESSAGE_AT("GetStaticLayout()", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 138));
+        CGS_ASSERT_AT(GetStaticLayout() != 0, "GetStaticLayout()", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 138);
 
         const EMode leMode = meMode;
 
@@ -451,7 +451,7 @@ namespace BrnReplays
     s32 TrafficEntitySerialiser::Write()
     {
         Lock();
-        CGS_ASSERT(GetStaticLayout() != 0, CGS_ASSERT_MESSAGE_AT("GetStaticLayout()", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 228));
+        CGS_ASSERT_AT(GetStaticLayout() != 0, "GetStaticLayout()", CGS_ARTIST_BRNREPLAYTRAFFICENTITYSERIALISER_FILE, 228);
 
         if (mpStaticBuffer != 0)
         {
@@ -496,8 +496,8 @@ namespace BrnReplays
                                             s32 liPhysicalPartsIndex)
     {
         // Leading asserts (asm 0x82713E5C / 0x82713E88 / 0x82713EC4).
-        CGS_ASSERT(lpVehicle != 0, CGS_ASSERT_MESSAGE_AT("lpVehicle", CGS_ARTIST_FILE, 380));
-        CGS_ASSERT(lpVehicle->IsAlive(), CGS_ASSERT_MESSAGE_AT("lpVehicle->IsAlive()", CGS_ARTIST_FILE, 381));
+        CGS_ASSERT_AT(lpVehicle != 0, "lpVehicle", CGS_ARTIST_FILE, 380);
+        CGS_ASSERT_AT(lpVehicle->IsAlive(), "lpVehicle->IsAlive()", CGS_ARTIST_FILE, 381);
 
         // record[0] = vehicle type byte (`lbz 0(r31); stb 0(r29)`), NOT the flags byte.
         lpRecord->muVehicleType = lpVehicle->GetVehicleType();
@@ -505,8 +505,8 @@ namespace BrnReplays
         // a3 != -1 && !lpVehicle->IsPhysical()  ->  assert (asm 0x82713EEC-0x82713EFC).
         if (liPhysicalPartsIndex != -1)
         {
-            CGS_ASSERT(lpVehicle->IsPhysical(),
-                       CGS_ASSERT_MESSAGE_AT("liPhysicsIndex == -1 || lpVehicle->IsPhysical()", CGS_ARTIST_FILE, 385));
+            CGS_ASSERT_AT(lpVehicle->IsPhysical(),
+                       "liPhysicsIndex == -1 || lpVehicle->IsPhysical()", CGS_ARTIST_FILE, 385);
         }
 
         // record[2] = physical-parts index; record[1] starts cleared.

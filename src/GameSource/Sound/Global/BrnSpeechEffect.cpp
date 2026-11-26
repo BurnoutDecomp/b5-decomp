@@ -787,7 +787,7 @@ void SpeechEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
     }
 
     default:
-        CGS_ASSERT(false, "Unexpected sound message.");
+        CGS_FAIL("Unexpected sound message.");
         break;
     }
 }
@@ -797,7 +797,7 @@ const char* SpeechEffect::CompassDirectionToString(int aiDirection)
     static const char* const kapDirections[] = { "n", "nw", "w", "sw", "s", "se", "e", "ne" };
     if (aiDirection >= 0 && aiDirection < 8)
         return kapDirections[aiDirection];
-    CGS_ASSERT(false, "Unknown compass direction");
+    CGS_FAIL("Unknown compass direction");
     return "";
 }
 

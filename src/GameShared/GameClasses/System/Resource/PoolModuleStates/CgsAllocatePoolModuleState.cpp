@@ -114,7 +114,7 @@ namespace CgsResource
             Entry* lpList = CreateEntryListResource();
             if (!lpList)
             {
-                CGS_ASSERT(false, "Could not create resource to hold entry list with entries\n");
+                CGS_FAIL("Could not create resource to hold entry list with entries\n");
                 meState = E_STATE_IDLE;
                 return E_RESULT_ERROR;
             }
@@ -124,7 +124,7 @@ namespace CgsResource
             return E_RESULT_SUCCESS;
         }
         default:
-            CGS_ASSERT(false, "Allocate internal state is invalid\n");
+            CGS_FAIL("Allocate internal state is invalid\n");
             return E_RESULT_ERROR;
         }
     }
@@ -152,7 +152,7 @@ namespace CgsResource
                                                   AllocListSet* lpAllocListSet, bool* lpOutNeeds,
                                                   SmallResource* lpOutResources, bool lbAllowFailiure)
     {
-        CGS_ASSERT(meState == E_STATE_IDLE, CGS_ASSERT_STREAM_MESSAGE_AT("Can not begin allocation during none-idle state\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsAllocatePoolModuleState.cpp", 88));   // :88
+        CGS_ASSERT_STREAM_AT(meState == E_STATE_IDLE, "Can not begin allocation during none-idle state\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsAllocatePoolModuleState.cpp", 88);   // :88
 
         mpPool         = lpPool;
         mListId        = lListId;

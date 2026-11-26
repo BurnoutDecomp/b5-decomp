@@ -266,7 +266,7 @@ bool OverlapCullingModule::Prepare(EntityManager* lpEntityManager, VolumeManager
         {
             if (mePrepareStage >= 3)
             {
-                CGS_ASSERT(false, "Unrecognised prepare stage");
+                CGS_FAIL("Unrecognised prepare stage");
                 return false;
             }
             // PREPARESTAGE_DONE: restart the handshake.
@@ -333,7 +333,7 @@ bool OverlapCullingModule::Release()
         {
             if (leStage >= 3)
             {
-                CGS_ASSERT(false, "Bad prepare state");
+                CGS_FAIL("Bad prepare state");
                 return false;
             }
             // RELEASESTAGE_DONE: drop straight to the reset (LABEL_9).
@@ -394,10 +394,10 @@ bool OverlapCullingModule::Release()
 void OverlapCullingModule::Update(OverlapCullingIO::InputBuffer* lpInputBuffer,
                                   OverlapCullingIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != 0,
-        CGS_ASSERT_MESSAGE_AT("lpInputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 209 /* ARTIST 0x828D1D80 */));    // .cpp:209
-    CGS_ASSERT(lpOutputBuffer != 0,
-        CGS_ASSERT_MESSAGE_AT("lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 210 /* ARTIST 0x828D1DA4 */));  // .cpp:210
+    CGS_ASSERT_AT(lpInputBuffer != 0,
+        "lpInputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 209 /* ARTIST 0x828D1D80 */);    // .cpp:209
+    CGS_ASSERT_AT(lpOutputBuffer != 0,
+        "lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 210 /* ARTIST 0x828D1DA4 */);  // .cpp:210
 
     lpInputBuffer->LockForRead();
     lpOutputBuffer->LockForWrite();
@@ -1064,20 +1064,20 @@ bool OverlapCullingModule::IsInsideEscapeVolume(s32 liVolumeInstanceIndex)
     VolumeInstance* lpEscapeVolInst =
         mpEntityManager->GetVolumeInstance(static_cast<s32>(luEscapeVolumeInstanceIndex));
 
-    CGS_ASSERT(lpVolInst != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpVolInst", KAC_ARTIST_ASSERT_FILE, 614 /* ARTIST 0x828CB0FC */));              // .cpp:614
-    CGS_ASSERT(lpEscapeVolInst != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpEscapeVolInst", KAC_ARTIST_ASSERT_FILE, 615 /* ARTIST 0x828CB120 */));  // .cpp:615
+    CGS_ASSERT_AT(lpVolInst != NULL,
+        "lpVolInst", KAC_ARTIST_ASSERT_FILE, 614 /* ARTIST 0x828CB0FC */);              // .cpp:614
+    CGS_ASSERT_AT(lpEscapeVolInst != NULL,
+        "lpEscapeVolInst", KAC_ARTIST_ASSERT_FILE, 615 /* ARTIST 0x828CB120 */);  // .cpp:615
 
     const VolRef::Volume* lpVol =
         mpVolumeManager->GetRwVolume(lpVolInst->miVolumeIndex);
     const VolRef::Volume* lpEscapeVol =
         mpVolumeManager->GetRwVolume(lpEscapeVolInst->miVolumeIndex);
 
-    CGS_ASSERT(lpVol != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpVol", KAC_ARTIST_ASSERT_FILE, 619 /* ARTIST 0x828CB164 */));              // .cpp:619
-    CGS_ASSERT(lpEscapeVol != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpEscapeVol", KAC_ARTIST_ASSERT_FILE, 620 /* ARTIST 0x828CB188 */));  // .cpp:620
+    CGS_ASSERT_AT(lpVol != NULL,
+        "lpVol", KAC_ARTIST_ASSERT_FILE, 619 /* ARTIST 0x828CB164 */);              // .cpp:619
+    CGS_ASSERT_AT(lpEscapeVol != NULL,
+        "lpEscapeVol", KAC_ARTIST_ASSERT_FILE, 620 /* ARTIST 0x828CB188 */);  // .cpp:620
 
     rw::collision::PrimitivePairIntersectResult lIntersectResult;
 
@@ -1144,20 +1144,20 @@ void OverlapCullingModule::DoInternalCollision(s32 liVolumeInstanceIndex,
     VolumeInstance* lpIntVolInst =
         mpEntityManager->GetVolumeInstance(static_cast<s32>(luInternalVolumeInstanceIndex));
 
-    CGS_ASSERT(lpVolInst != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpVolInst", KAC_ARTIST_ASSERT_FILE, 657 /* ARTIST 0x828CB234 */));        // .cpp:657
-    CGS_ASSERT(lpIntVolInst != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpIntVolInst", KAC_ARTIST_ASSERT_FILE, 658 /* ARTIST 0x828CB258 */));  // .cpp:658
+    CGS_ASSERT_AT(lpVolInst != NULL,
+        "lpVolInst", KAC_ARTIST_ASSERT_FILE, 657 /* ARTIST 0x828CB234 */);        // .cpp:657
+    CGS_ASSERT_AT(lpIntVolInst != NULL,
+        "lpIntVolInst", KAC_ARTIST_ASSERT_FILE, 658 /* ARTIST 0x828CB258 */);  // .cpp:658
 
     const VolRef::Volume* lpVol =
         mpVolumeManager->GetRwVolume(lpVolInst->miVolumeIndex);
     const VolRef::Volume* lpIntVol =
         mpVolumeManager->GetRwVolume(lpIntVolInst->miVolumeIndex);
 
-    CGS_ASSERT(lpVol != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpVol", KAC_ARTIST_ASSERT_FILE, 662 /* ARTIST 0x828CB29C */));        // .cpp:662
-    CGS_ASSERT(lpIntVol != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpIntVol", KAC_ARTIST_ASSERT_FILE, 663 /* ARTIST 0x828CB2C0 */));  // .cpp:663
+    CGS_ASSERT_AT(lpVol != NULL,
+        "lpVol", KAC_ARTIST_ASSERT_FILE, 662 /* ARTIST 0x828CB29C */);        // .cpp:662
+    CGS_ASSERT_AT(lpIntVol != NULL,
+        "lpIntVol", KAC_ARTIST_ASSERT_FILE, 663 /* ARTIST 0x828CB2C0 */);  // .cpp:663
 
     DoPairQuery(lpOutputBuffer,
                 lpVolInst, static_cast<u32>(liVolumeInstanceIndex), lpVol,

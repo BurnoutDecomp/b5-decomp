@@ -171,7 +171,7 @@ void Credits::Update()
         // the assert message buffer and fires unconditionally; the macro carries the fixed
         // half of that text.
         // Streamed in place, as ARTIST builds it (cpp:124).
-        CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+        CGS_FAIL_STREAM_AT("Invalid internal state : " << meInternalState << "\n",
                              CGS_ARTIST_FILE, 124);
         break;
     }

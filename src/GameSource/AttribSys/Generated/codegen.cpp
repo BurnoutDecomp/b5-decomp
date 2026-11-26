@@ -68,10 +68,10 @@ namespace Attrib
 
     void* DefaultDataArea(u32 luSize)
     {
-        CGS_ASSERT(luSize <= KU_MAX_DEFAULT_DATA_SIZE,
-            CGS_ASSERT_MESSAGE_AT(
-                "DefaultData requested for type which is too large.",
-                "..\\..\\..\\GameSource\\AttribSys\\Generated/codegen.cpp", 14 /* ARTIST 0x821F0064 */));
+        CGS_ASSERT_AT(luSize <= KU_MAX_DEFAULT_DATA_SIZE,
+            "DefaultData requested for type which is too large.",
+                "..\\..\\..\\GameSource\\AttribSys\\Generated/codegen.cpp", 14 /* ARTIST 0x821F0064 */);
+
         return gaDefaultData;
     }
 

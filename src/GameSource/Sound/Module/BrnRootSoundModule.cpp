@@ -260,7 +260,7 @@ namespace Module
             case 22: luLanguageIndex = 4; break;
             case 16: luLanguageIndex = 5; break;
             default:
-                CGS_ASSERT(false,
+                CGS_FAIL(
                     "Unhandled Language when loading Sound Streams Registry.\n");
                 return false;
             }
@@ -268,7 +268,7 @@ namespace Module
         }
         else
         {
-            CGS_ASSERT(false, "RootSoundModule::LoadLoopModelResouces in a weird state");
+            CGS_FAIL("RootSoundModule::LoadLoopModelResouces in a weird state");
             return false;
         }
 
@@ -357,7 +357,7 @@ namespace Module
                     }
                     else if (luRegistryId >= 4)
                     {
-                        CGS_ASSERT(false,
+                        CGS_FAIL(
                             "RootSoundModule::RegistryLoad have received a resource with an ID that wasn't requested");
                     }
 
@@ -386,7 +386,7 @@ namespace Module
                 *mLogicModule.GetPlaybackModule().GetEnvironment().GetRegistry());
             return true;
         default:
-            CGS_ASSERT(false, "RootSoundModule::LoadLoopModelResouces in a weird state");
+            CGS_FAIL("RootSoundModule::LoadLoopModelResouces in a weird state");
             return false;
         }
     }
@@ -617,7 +617,7 @@ namespace Module
             break;
         default:
             // X360 BrnRootSoundModule.cpp:576.
-            CGS_ASSERT(false, "Invalid Stage\n");
+            CGS_FAIL("Invalid Stage\n");
             break;
         }
 
@@ -692,14 +692,14 @@ namespace Module
     void RootSoundModule::PreUpdate(CgsModule::IOBufferStack* lpOutputBufferStack,
                                     Io::RootPreUpdateOutputBuffer* lpRootPreUpdateOutput)
     {
-        CGS_ASSERT(lpOutputBufferStack != 0,
-            CGS_ASSERT_MESSAGE_AT("0 != lpOutputBufferStack",
+        CGS_ASSERT_AT(lpOutputBufferStack != 0,
+            "0 != lpOutputBufferStack",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../Sound/Module/BrnRootSoundModule.cpp", 829 /* ARTIST 0x826EB958 */));
-        CGS_ASSERT(lpRootPreUpdateOutput != 0,
-            CGS_ASSERT_MESSAGE_AT("0 != lpRootPreUpdateOutput",
+                "../Sound/Module/BrnRootSoundModule.cpp", 829 /* ARTIST 0x826EB958 */);
+        CGS_ASSERT_AT(lpRootPreUpdateOutput != 0,
+            "0 != lpRootPreUpdateOutput",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../Sound/Module/BrnRootSoundModule.cpp", 830 /* ARTIST 0x826EB97C */));
+                "../Sound/Module/BrnRootSoundModule.cpp", 830 /* ARTIST 0x826EB97C */);
 
         Io::LogicPreUpdateOutputBuffer* lpLogicPreUpdateOutput = 0;
         lpOutputBufferStack->CreateIOBuffer<Io::LogicPreUpdateOutputBuffer>(

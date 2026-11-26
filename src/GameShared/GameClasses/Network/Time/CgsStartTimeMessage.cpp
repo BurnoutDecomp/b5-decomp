@@ -60,10 +60,10 @@ namespace CgsNetwork
                                           const StartTime* lpStartTime,
                                           MessageWithPlayerIDs::NetworkPlayerID* lpaReceivedClientsIDs)
     {
-        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16Frame != KU16_INVALID_FRAME",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsStartTimeMessage.cpp", 75 /* ARTIST 0x8288A4C8 */));
+        CGS_ASSERT_AT(lu16Frame != KU16_INVALID_FRAME,
+            "lu16Frame != KU16_INVALID_FRAME",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsStartTimeMessage.cpp", 75 /* ARTIST 0x8288A4C8 */);
+
 
         mStartTime = *lpStartTime;
         for (s32 liClient = 0; liClient < KI_START_TIME_CLIENT_COUNT; ++liClient)
@@ -90,9 +90,9 @@ namespace CgsNetwork
             }
 
             SetMessageInvalid();
-            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(!IsMessageValid(),
                 "!IsMessageValid()",
-                __FILE__, 159 /* ARTIST 0x8288A600 */));
+                __FILE__, 159 /* ARTIST 0x8288A600 */);
             return true;
         }
         return false;

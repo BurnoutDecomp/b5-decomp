@@ -353,7 +353,7 @@ void Cgs3dEffectControl::Generate3DParams(s32 /*aiUnused*/)
     }
     else if (lrMicSystem.GetNumberOfPlayers() != 0)
     {
-        CGS_ASSERT(false, "Two Player game not supported yet. Needs some work.");
+        CGS_FAIL("Two Player game not supported yet. Needs some work.");
     }
 }
 

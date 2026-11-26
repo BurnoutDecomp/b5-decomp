@@ -253,7 +253,7 @@ void AemsFactory::DoUpdate(f32 /*af32DeltaTime*/)
             break;
         }
         default:
-            CGS_ASSERT(false, "Invalid CSIS command");
+            CGS_FAIL("Invalid CSIS command");
             break;
         }
     }

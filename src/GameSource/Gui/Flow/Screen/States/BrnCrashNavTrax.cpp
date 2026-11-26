@@ -209,7 +209,7 @@ namespace BrnGui
         default:
             // X360 cpp:155 -- the streamed form, "Invalid internal state (" << state << ").
             // Streamed in place, as ARTIST builds it (cpp:155).
-            CGS_ASSERT_STREAM_AT(false, "Invalid internal state (" << meCurrentState << ") \n",
+            CGS_FAIL_STREAM_AT("Invalid internal state (" << meCurrentState << ") \n",
                                  CGS_ARTIST_FILE, 155);
             break;
         }
@@ -440,17 +440,17 @@ namespace BrnGui
     // trigger it acts on.
     void CrashNavTrax::HandleTriggers(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in CrashNavTrax::HandleTriggers", CGS_ARTIST_FILE, 636));   // cpp:636
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event in CrashNavTrax::HandleTriggers", CGS_ARTIST_FILE, 636);   // cpp:636
         (void)lpEvent;
     }
 
     // ---- HandleOverlayCompleteEvent @0x824DEF60 -------------------------------------
     void CrashNavTrax::HandleOverlayCompleteEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpOverlayCompleteEvent",
-                CGS_ARTIST_FILE, 544 /* ARTIST 0x824DEF8C */));   // cpp:544
+        CGS_ASSERT_AT(lpEvent != 0,
+            "lpOverlayCompleteEvent",
+                CGS_ARTIST_FILE, 544 /* ARTIST 0x824DEF8C */);   // cpp:544
+
 
         const GuiOverlayCompletePayload* lpComplete =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpEvent);
@@ -510,7 +510,7 @@ namespace BrnGui
     // CrashNavOptionsData::OutputEvents ends with.
     void CrashNavTrax::ApplyAndSaveSettings()
     {
-        CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 670 /* ARTIST 0x824CF974 */));   // cpp:670
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 670 /* ARTIST 0x824CF974 */);   // cpp:670
 
         OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
         lpProfile->SetTraxAvailableInFreeBurn(

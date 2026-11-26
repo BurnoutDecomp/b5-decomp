@@ -497,7 +497,7 @@ namespace Camera
         // members: the DWARF types this word as a BehaviourHelperIndex).
         BehaviourHelperIndex GetBehaviourHelperIndex() const
         {
-            CGS_ASSERT(mbAllocated, CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 643));
+            CGS_ASSERT_AT(mbAllocated, "IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 643);
             return mBehaviourHelperIndex;
         }
 
@@ -514,13 +514,13 @@ namespace Camera
         // NewBehaviour<T> (e.g. 0x82260F50..0x82260F98: IsAllocated, operator[], one store).
         void SetDebugArbitratorStateOwner(const ArbitratorState* lpOwner)
         {
-            CGS_ASSERT(IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 654));
+            CGS_ASSERT_AT(IsAllocated(), "IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 654);
             GetHelper().SetDebugArbitratorStateOwner(lpOwner);
         }
 
         void SetDebugMomentOwner(const Moment* lpOwner)
         {
-            CGS_ASSERT(IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 665));
+            CGS_ASSERT_AT(IsAllocated(), "IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 665);
             GetHelper().SetMomentOwner(lpOwner);
         }
 
@@ -571,7 +571,7 @@ namespace Camera
             if (mSmallBehaviourPool.IsFull())
             {
                 DebugDumpToTTY();
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Ran out of slots when trying to allocate a small behaviour", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 1137));
+                CGS_FAIL_AT("Ran out of slots when trying to allocate a small behaviour", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 1137);
             }
             lVoidHandle = mSmallBehaviourPool.AllocateVoid<TBehaviour>();
         }
@@ -580,7 +580,7 @@ namespace Camera
             if (mLargeBehaviourPool.IsFull())
             {
                 DebugDumpToTTY();
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Ran out of slots when trying to allocate a large behaviour", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 1148));
+                CGS_FAIL_AT("Ran out of slots when trying to allocate a large behaviour", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 1148);
             }
             lVoidHandle = mLargeBehaviourPool.AllocateVoid<TBehaviour>();
         }
@@ -679,16 +679,16 @@ namespace Camera
     {
         const BehaviourHelperIndex lHelperID = mBehaviourHelperPool.AllocateObject();
 
-        CGS_ASSERT(static_cast<s32>(lHelperID) >= 0, CGS_ASSERT_MESSAGE_AT("lHelperID >= 0", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 782));
-        CGS_ASSERT(liRefLimit >= 0, CGS_ASSERT_MESSAGE_AT("liRefLimit >= 0", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 784));
-        CGS_ASSERT(!mBehaviourNeedsPreparingFlags.IsBitSet(static_cast<u32>(lHelperID)),
-                   CGS_ASSERT_MESSAGE_AT("!mBehaviourNeedsPreparingFlags.IsBitSet(lHelperID)", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 786));
-        CGS_ASSERT(!mBehaviourNeedsReleasingFlags.IsBitSet(static_cast<u32>(lHelperID)),
-                   CGS_ASSERT_MESSAGE_AT("!mBehaviourNeedsReleasingFlags.IsBitSet(lHelperID)", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 787));
-        CGS_ASSERT(!mBehaviourUsedByHandleFlags.IsBitSet(static_cast<u32>(lHelperID)),
-                   CGS_ASSERT_MESSAGE_AT("!mBehaviourUsedByHandleFlags.IsBitSet(lHelperID)", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 788));
-        CGS_ASSERT(mBehaviourRefCounts[static_cast<u32>(lHelperID)] == 0,
-                   CGS_ASSERT_MESSAGE_AT("mBehaviourRefCounts[lHelperID] == 0", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 789));
+        CGS_ASSERT_AT(static_cast<s32>(lHelperID) >= 0, "lHelperID >= 0", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 782);
+        CGS_ASSERT_AT(liRefLimit >= 0, "liRefLimit >= 0", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 784);
+        CGS_ASSERT_AT(!mBehaviourNeedsPreparingFlags.IsBitSet(static_cast<u32>(lHelperID)),
+                   "!mBehaviourNeedsPreparingFlags.IsBitSet(lHelperID)", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 786);
+        CGS_ASSERT_AT(!mBehaviourNeedsReleasingFlags.IsBitSet(static_cast<u32>(lHelperID)),
+                   "!mBehaviourNeedsReleasingFlags.IsBitSet(lHelperID)", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 787);
+        CGS_ASSERT_AT(!mBehaviourUsedByHandleFlags.IsBitSet(static_cast<u32>(lHelperID)),
+                   "!mBehaviourUsedByHandleFlags.IsBitSet(lHelperID)", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 788);
+        CGS_ASSERT_AT(mBehaviourRefCounts[static_cast<u32>(lHelperID)] == 0,
+                   "mBehaviourRefCounts[lHelperID] == 0", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 789);
 
         mBehaviourNeedsPreparingFlags.SetBit(static_cast<u32>(lHelperID));
         mBehaviourUpdateDuringPauseFlags.UnSetBit(static_cast<u32>(lHelperID));
@@ -700,8 +700,8 @@ namespace Camera
 
         BehaviourHelper& lrHelper = mBehaviourHelperPool[lHelperID];
         const bool lbHelperPrepared = lrHelper.Prepare(AllocateBehaviour<TBehaviour>());
-        CGS_ASSERT(lbHelperPrepared,
-                   CGS_ASSERT_MESSAGE_AT("lrHelper.Prepare(AllocateBehaviour<BehaviourClass>())", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 810));
+        CGS_ASSERT_AT(lbHelperPrepared,
+                   "lrHelper.Prepare(AllocateBehaviour<BehaviourClass>())", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 810);
         (void)lbHelperPrepared;
 
         lrHandle.Prepare(lHelperID, &mBehaviourHelperPool, this);
@@ -724,14 +724,14 @@ namespace Camera
     template <typename TBehaviour>
     inline TBehaviour* BehaviourHandle<TBehaviour>::Get()
     {
-        CGS_ASSERT(IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 589));
+        CGS_ASSERT_AT(IsAllocated(), "IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 589);
         return static_cast<TBehaviour*>(GetHelper().GetPoolHandle().Get());
     }
 
     template <typename TBehaviour>
     inline const TBehaviour* BehaviourHandle<TBehaviour>::Get() const
     {
-        CGS_ASSERT(IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 600));
+        CGS_ASSERT_AT(IsAllocated(), "IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 600);
         return static_cast<const TBehaviour*>(GetHelper().GetPoolHandle().Get());
     }
 
@@ -760,7 +760,7 @@ namespace Camera
 
         mpManager->SetBehaviourUsedByHandle(mBehaviourHelperIndex);
 
-        CGS_ASSERT(mbAllocated, CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 589));   // the inlined Get()
+        CGS_ASSERT_AT(mbAllocated, "IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 589);   // the inlined Get()
 
         // The console's `mpBehaviour = *GetBehaviourSlotFromHandle<T>(pool, index)` -- the
         // dereference is the helper's FIRST word, i.e. the pooled object. Taken from the
@@ -798,7 +798,7 @@ namespace Camera
     template <typename TBehaviour>
     inline void BehaviourHandle<TBehaviour>::SetUpdatesDuringPause(bool lbUpdatesDuringPause)
     {
-        CGS_ASSERT(mbAllocated, CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 676));
+        CGS_ASSERT_AT(mbAllocated, "IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 676);
         mpManager->SetBehaviourUpdatesDuringPause(mBehaviourHelperIndex, lbUpdatesDuringPause);
     }
 
@@ -812,14 +812,14 @@ namespace Camera
     template <typename TBehaviour>
     inline void BehaviourHandle<TBehaviour>::AttachTweaker()
     {
-        CGS_ASSERT(mbAllocated, CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 623));
+        CGS_ASSERT_AT(mbAllocated, "IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 623);
         mpManager->AttachTweaker(mBehaviourHelperIndex);
     }
 
     template <typename TBehaviour>
     inline void BehaviourHandle<TBehaviour>::DetachTweaker()
     {
-        CGS_ASSERT(mbAllocated, CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 633));
+        CGS_ASSERT_AT(mbAllocated, "IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 633);
         mpManager->DetachTweaker(mBehaviourHelperIndex);
     }
 
@@ -834,7 +834,7 @@ namespace Camera
     template <typename TBehaviour>
     inline bool BehaviourHandle<TBehaviour>::IsBehaviourWaitingToPrepare() const
     {
-        CGS_ASSERT(mbAllocated, CGS_ASSERT_MESSAGE_AT("mbIsAllocated", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 517));
+        CGS_ASSERT_AT(mbAllocated, "mbIsAllocated", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 517);
         return mpManager->IsBehaviourWaitingToPrepare(mBehaviourHelperIndex);
     }
 
@@ -846,7 +846,7 @@ namespace Camera
     template <typename TBehaviour>
     inline bool BehaviourHandle<TBehaviour>::IsBehaviourPrepared() const
     {
-        CGS_ASSERT(mbAllocated, CGS_ASSERT_MESSAGE_AT("mbIsAllocated", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 517));
+        CGS_ASSERT_AT(mbAllocated, "mbIsAllocated", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 517);
         return mpManager->IsBehaviourWaitingToPrepare(mBehaviourHelperIndex) == false;
     }
 
@@ -855,7 +855,7 @@ namespace Camera
     template <typename TBehaviour>
     inline const Camera& BehaviourHandle<TBehaviour>::GetCamera() const
     {
-        CGS_ASSERT(mbAllocated, CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 610));
+        CGS_ASSERT_AT(mbAllocated, "IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 610);
         return GetHelper().GetCamera();
     }
 

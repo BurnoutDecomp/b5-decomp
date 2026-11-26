@@ -169,9 +169,9 @@ namespace BrnDirector
 
         GameState& lrGameState = *lrSharedInfo.mpGameState;
 
-        CGS_ASSERT(lrGameState.mbDriveThruActive, CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpGameState->mbDriveThruActive", CGS_ARTIST_FILE, 54));
-        CGS_ASSERT(lrGameState.meDriveThruType != GameState::E_DRIVETHRU_INVALID,
-                   CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpGameState->meDriveThruType != GameState::E_DRIVETHRU_INVALID", CGS_ARTIST_FILE, 55));
+        CGS_ASSERT_AT(lrGameState.mbDriveThruActive, "lSharedInfo.mpGameState->mbDriveThruActive", CGS_ARTIST_FILE, 54);
+        CGS_ASSERT_AT(lrGameState.meDriveThruType != GameState::E_DRIVETHRU_INVALID,
+                   "lSharedInfo.mpGameState->meDriveThruType != GameState::E_DRIVETHRU_INVALID", CGS_ARTIST_FILE, 55);
 
         // ---- resolve whether the bay approach is reversed ---------------------------------
         // X360: dot(mDriveThruTransform.Pos() - mpPlayerCarTransform->Pos(), mDriveThruTransform.At()) < 0.
@@ -237,7 +237,7 @@ namespace BrnDirector
 
             const Attrib::Gen::shotgroup& lrShotGroup = *lpShotGroup;
 
-            CGS_ASSERT(lrShotGroup.Num_ShotList() > 0, CGS_ASSERT_MESSAGE_AT("lpShotGroup->Num_ShotList()>0", CGS_ARTIST_FILE, 117));
+            CGS_ASSERT_AT(lrShotGroup.Num_ShotList() > 0, "lpShotGroup->Num_ShotList()>0", CGS_ARTIST_FILE, 117);
 
             // When the group has at least two shots and the approach is reversed, use the
             // second shot (the group's reverse-approach take); otherwise the first.
@@ -246,7 +246,7 @@ namespace BrnDirector
 
             if (lbUseSecondShot)
             {
-                CGS_ASSERT(lrShotGroup.Num_ShotList() >= 2, CGS_ASSERT_MESSAGE_AT("lpShotGroup->Num_ShotList() >= 2", CGS_ARTIST_FILE, 124));
+                CGS_ASSERT_AT(lrShotGroup.Num_ShotList() >= 2, "lpShotGroup->Num_ShotList() >= 2", CGS_ARTIST_FILE, 124);
             }
 
             const void* lpShotData = lrShotGroup.GetShotListData(lbUseSecondShot);
@@ -344,7 +344,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 201));
+            CGS_FAIL_AT("unhandled state", CGS_ARTIST_FILE, 201);
             break;
         }
     }

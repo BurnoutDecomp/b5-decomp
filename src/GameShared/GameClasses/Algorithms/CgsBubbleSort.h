@@ -47,8 +47,8 @@ namespace CgsAlgorithms
     template <typename T, typename ArrayType>
     void BubbleSort(ArrayType& lrArray, s32 liStart, s32 liEnd)
     {
-        CGS_ASSERT(liStart <= liEnd,
-            CGS_ASSERT_MESSAGE_AT("liStart <= liEnd", KAC_BUBBLE_SORT_ASSERT_FILE, 93));
+        CGS_ASSERT_AT(liStart <= liEnd,
+            "liStart <= liEnd", KAC_BUBBLE_SORT_ASSERT_FILE, 93);
 
         for (s32 liLast = liEnd; liLast != liStart; --liLast)
         {
@@ -81,8 +81,8 @@ namespace CgsAlgorithms
         // *(a1+96) == -1 guard: GetLength() itself asserts miCount != KI_UNCONSTRUCTED(-1)
         // ("Array used before Construct/Clear was called").
         const s32 liLast = static_cast<s32>(lrArray.GetLength()) - 1;   // v2 = length - 1
-        CGS_ASSERT(liLast >= 0,
-            CGS_ASSERT_MESSAGE_AT("Array is too large to sort, or it is zero size!", KAC_BUBBLE_SORT_ASSERT_FILE, 158));
+        CGS_ASSERT_AT(liLast >= 0,
+            "Array is too large to sort, or it is zero size!", KAC_BUBBLE_SORT_ASSERT_FILE, 158);
 
         BubbleSort<T>(lrArray, 0, liLast);
     }

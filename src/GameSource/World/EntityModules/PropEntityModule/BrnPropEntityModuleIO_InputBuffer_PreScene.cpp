@@ -44,7 +44,7 @@ namespace PropEntityIO
 void
 InputBuffer_PreScene::SetReplayStatusInterface(const BrnReplays::ReplayIO::StatusInterface* lpReplayStatusInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 462));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 462);
     mReplayStatusInterface = *lpReplayStatusInterface;
 }
 
@@ -113,7 +113,7 @@ InputBuffer_PreScene::Construct()
 const InputBuffer_PreScene::PropGraphicsLoadedQueue*
 InputBuffer_PreScene::GetPropGraphicsLoadedQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 452));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 452);
     return &mPropGraphicsLoadedQueue;
 }
 
@@ -130,7 +130,7 @@ InputBuffer_PreScene::GetPropGraphicsLoadedQueue()
 const InputBuffer_PreScene::PropGraphicsUnloadedQueue*
 InputBuffer_PreScene::GetPropGraphicsUnloadedQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 455));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 455);
     return &mPropGraphicsUnloadedQueue;
 }
 
@@ -148,7 +148,7 @@ InputBuffer_PreScene::GetPropGraphicsUnloadedQueue()
 const InputBuffer_PreScene::PropInstancesNeededForZoneQueue*
 InputBuffer_PreScene::GetPropInstancesNeededForZoneQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 458));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 458);
     return &mPropInstancesNeededForZoneQueue;
 }
 

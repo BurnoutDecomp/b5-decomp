@@ -141,8 +141,8 @@ public:
     // established MomentController::MomentHandle::GetMoment() pointer convention. Same read.
     Moment* GetSelectedMoment()   // DWARF :182 non-const
     {
-        CGS_ASSERT(HasSelectedMoment(), CGS_ASSERT_MESSAGE_AT(
-            "HasSelectedMoment()", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 182 /* ARTIST 0x82219868 */));
+        CGS_ASSERT_AT(HasSelectedMoment(),
+            "HasSelectedMoment()", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 182 /* ARTIST 0x82219868 */);
         return &mMomentHandleArray[static_cast<u32>(miSelectedMoment)].GetMoment();
     }
 
@@ -150,16 +150,16 @@ public:
     // ONLY -- the console does not touch miSelectedMoment here.
     void CancelSelection()
     {
-        CGS_ASSERT(HasSelectedMoment(), CGS_ASSERT_MESSAGE_AT(
-            "HasSelectedMoment()", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 185 /* ARTIST 0x821F5868 */));
+        CGS_ASSERT_AT(HasSelectedMoment(),
+            "HasSelectedMoment()", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 185 /* ARTIST 0x821F5868 */);
         mbHasSelectedMoment = false;
     }
 
     // Pick with no exclusion (-1).
     bool SelectBestMoment(CgsNumeric::Random& lRandom)
     {
-        CGS_ASSERT(!HasSelectedMoment(), CGS_ASSERT_MESSAGE_AT(
-            "!HasSelectedMoment()", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 172 /* ARTIST 0x82254DA8 */));
+        CGS_ASSERT_AT(!HasSelectedMoment(),
+            "!HasSelectedMoment()", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 172 /* ARTIST 0x82254DA8 */);
         return SelectBestMomentWithExclusion(lRandom, -1);
     }
 
@@ -171,9 +171,9 @@ public:
     // The two compared constants are 0.0f and 1.0f, both named by the assert string itself.
     void SetRecencyFactor(f32 lfRecencyFactor01)
     {
-        CGS_ASSERT(lfRecencyFactor01 >= 0.0f && lfRecencyFactor01 < 1.0f, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lfRecencyFactor01 >= 0.0f && lfRecencyFactor01 < 1.0f,
             "lfRecencyFactor01 >= 0.0f && lfRecencyFactor01 < 1.0f",
-            CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 166 /* ARTIST 0x821F57F0 */));
+            CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 166 /* ARTIST 0x821F57F0 */);
         mfRecencyFactor = lfRecencyFactor01;
     }
 
@@ -182,10 +182,10 @@ public:
     void SetMaxActiveMoments(u32 luMaxMoments)
     {
         // ARTIST 0x82208570 fires both at line 189.
-        CGS_ASSERT(!mbPrepared, CGS_ASSERT_MESSAGE_AT(
-            "!mbPrepared", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 189));
-        CGS_ASSERT(luMaxMoments < mMomentHandleArray.GetLength(), CGS_ASSERT_MESSAGE_AT(
-            "luMaxMoments < mMomentHandleArray.GetLength()", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 189));
+        CGS_ASSERT_AT(!mbPrepared,
+            "!mbPrepared", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 189);
+        CGS_ASSERT_AT(luMaxMoments < mMomentHandleArray.GetLength(),
+            "luMaxMoments < mMomentHandleArray.GetLength()", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 189);
         muMaxActiveMomentLimit = luMaxMoments;
         mbHasMaxLimit          = true;
     }
@@ -286,8 +286,8 @@ private:
 // mbHasSelectedMoment, then re-picks excluding it -- preserve that order.
 inline bool MomentSelector::SelectNewBestMoment(CgsNumeric::Random& lRandom)
 {
-    CGS_ASSERT(HasSelectedMoment(), CGS_ASSERT_MESSAGE_AT(
-        "HasSelectedMoment()", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 364 /* ARTIST 0x82254E18 */));
+    CGS_ASSERT_AT(HasSelectedMoment(),
+        "HasSelectedMoment()", CGS_ARTIST_BRNMOMENTSELECTOR_FILE, 364 /* ARTIST 0x82254E18 */);
 
     const s32 liExclusion = miSelectedMoment;
     mbHasSelectedMoment   = false;

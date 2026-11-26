@@ -29,7 +29,7 @@ namespace CgsResource
     {
         BaseDefragPoolModuleState::Begin(lpParams);
 
-        CGS_ASSERT(meState == E_STATE_IDLE, CGS_ASSERT_STREAM_MESSAGE_AT("Can not defrag unless in idle state\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsEmergencyFragPoolModuleState.cpp", 64));
+        CGS_ASSERT_STREAM_AT(meState == E_STATE_IDLE, "Can not defrag unless in idle state\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsEmergencyFragPoolModuleState.cpp", 64);
 
         meState            = E_STATE_START_DEFRAGMENTING;
         miCountdown        = 2;                             // the arm-up countdown, a literal
@@ -154,7 +154,7 @@ namespace CgsResource
             return E_RESULT_PEND;
         }
 
-        CGS_ASSERT(false, "Defrag state is invalid\n");
+        CGS_FAIL("Defrag state is invalid\n");
         return E_RESULT_ERROR;
     }
 }

@@ -453,9 +453,9 @@ bool DrawRenderableMesh::AddToBin(const RenderableMesh* lpMesh, DispatchBin* lpB
     AssertDispatcher(lpMesh != 0, "Adding null mesh pointer to bin", 1835);
     AssertDispatcher(lpBin != 0, "Trying to fill null bin", 1836);
     AssertDispatcher(lpMesh->mpMaterialAssembly != 0, "lpMesh->mpMaterialAssembly", 1837);
-    CGS_ASSERT(lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength(),
-        CGS_ASSERT_MESSAGE_AT("lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength()",
-            kDispatcherSource, 1838));
+    CGS_ASSERT_AT(lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength(),
+        "lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength()",
+            kDispatcherSource, 1838);
     const MaterialTechnique* lpMaterialTechnique = lpMesh->mpMaterialAssembly->GetMaterial(lu8TechniqueIndex);
     AssertDispatcher(lpMaterialTechnique != 0, "Null material technique on mesh", 1843);
 
@@ -486,9 +486,9 @@ bool DrawRenderableMeshZOnly::AddToBin(const RenderableMesh* lpMesh, DispatchBin
     AssertDispatcher(lpMesh != 0, "Adding null mesh pointer to bin", 2462);
     AssertDispatcher(lpBin != 0, "Trying to fill null bin", 2463);
     AssertDispatcher(lpMesh->mpMaterialAssembly != 0, "lpMesh->mpMaterialAssembly", 2464);
-    CGS_ASSERT(lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength(),
-        CGS_ASSERT_MESSAGE_AT("lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength()",
-            kDispatcherSource, 2465));
+    CGS_ASSERT_AT(lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength(),
+        "lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength()",
+            kDispatcherSource, 2465);
     const MaterialTechnique* lpMaterialTechnique = lpMesh->mpMaterialAssembly->GetMaterial(lu8TechniqueIndex);
     AssertDispatcher(lpMaterialTechnique != 0, "Null material technique on mesh", 2468);
 
@@ -957,19 +957,19 @@ s32 DispatchList::DispatchAllMeshes(const DispatchPacketInterpreter* lpInterpret
 
 inline void DispatchPacketInterpreter::InterpretMeshZOnly(DispatchPacket* pPacket, void* lpContext) const
 {
-    CGS_ASSERT(pPacket != 0, CGS_ASSERT_MESSAGE_AT("pPacket", kDispatcherSource, 2854));
-    CGS_ASSERT(pPacket->GetCommandID() == DispatchCommand::E_DRAWRENDERABLEMESHZONLY,
-        CGS_ASSERT_MESSAGE_AT("pCommand->GetCommandID() == DRAWRENDERABLEMESHZONLY",
-            kDispatcherSource, 2858));
+    CGS_ASSERT_AT(pPacket != 0, "pPacket", kDispatcherSource, 2854);
+    CGS_ASSERT_AT(pPacket->GetCommandID() == DispatchCommand::E_DRAWRENDERABLEMESHZONLY,
+        "pCommand->GetCommandID() == DRAWRENDERABLEMESHZONLY",
+            kDispatcherSource, 2858);
     DrawRenderableMeshZOnly::Interpret(pPacket, 0, lpContext, mfTime);
 }
 
 inline void DispatchPacketInterpreter::InterpretMeshOcclusionQuery(DispatchPacket* pPacket) const
 {
-    CGS_ASSERT(pPacket != 0, CGS_ASSERT_MESSAGE_AT("pPacket", kDispatcherSource, 2867));
-    CGS_ASSERT(pPacket->GetCommandID() == DispatchCommand::E_DRAWRENDERABLEMESH,
-        CGS_ASSERT_MESSAGE_AT("pCommand->GetCommandID() == DRAWRENDERABLEMESH",
-            kDispatcherSource, 2871));
+    CGS_ASSERT_AT(pPacket != 0, "pPacket", kDispatcherSource, 2867);
+    CGS_ASSERT_AT(pPacket->GetCommandID() == DispatchCommand::E_DRAWRENDERABLEMESH,
+        "pCommand->GetCommandID() == DRAWRENDERABLEMESH",
+            kDispatcherSource, 2871);
     DrawRenderableMesh::InterpretOcclusionQuery(pPacket, mfTime);
 }
 
@@ -1125,8 +1125,8 @@ void ObjectToMeshJob::ExecuteImplementation(ObjectToMeshJobInfo* lpData)
     lContext.mpJobState = &lState;
     lState.lpObjectToMeshJobInfo = lpData;
     lState.lInputDispatchList = *lpData->mpDispatchListInput;
-    CGS_ASSERT(lpData->muDispatchListOutputCount <= DispatchObjectContext_JobState::KU_MAX_OUTPUT_DISPATCH_LISTS,
-        CGS_ASSERT_MESSAGE_AT("Try increasing KU_MAX_OUTPUT_DISPATCH_LISTS", kDispatcherSource, 3021));
+    CGS_ASSERT_AT(lpData->muDispatchListOutputCount <= DispatchObjectContext_JobState::KU_MAX_OUTPUT_DISPATCH_LISTS,
+        "Try increasing KU_MAX_OUTPUT_DISPATCH_LISTS", kDispatcherSource, 3021);
     DispatchFrame& lrOutput = lState.lDispatchFrameLocal;
     lrOutput.ConstructWithSharedBinMemory(lpData->mpaDispatchListOutputArray,
         lpData->muDispatchListOutputCount, reinterpret_cast<uintptr_t>(lpData->mpDispatchBinMasterAddress),

@@ -50,10 +50,10 @@ EventInterpreterModule::EventInterpreterPrepareStage operator++(
 {
     const EventInterpreterModule::EventInterpreterPrepareStage leOldStage = lrStage;
     lrStage = static_cast<EventInterpreterModule::EventInterpreterPrepareStage>(leOldStage + 1);
-    CGS_ASSERT(lrStage <= EventInterpreterModule::E_PREPARE_DONE,
-        CGS_ASSERT_MESSAGE_AT(
-            "leEnumIndex <= EventInterpreterModule::E_PREPARE_DONE",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\model\\CgsEventInterpreterModule.h", 303 /* ARTIST 0x828470FC */));
+    CGS_ASSERT_AT(lrStage <= EventInterpreterModule::E_PREPARE_DONE,
+        "leEnumIndex <= EventInterpreterModule::E_PREPARE_DONE",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\model\\CgsEventInterpreterModule.h", 303 /* ARTIST 0x828470FC */);
+
     return leOldStage;
 }
 
@@ -99,7 +99,7 @@ bool EventInterpreterModule::Prepare()
     {
         // Stage past DONE is unrecognised: assert and reject. (DONE itself falls straight
         // through to the tail with no base-prepare and no stage bump.)
-        CGS_ASSERT(false, "Unkown prepare stage");
+        CGS_FAIL("Unkown prepare stage");
         return false;
     }
 
@@ -132,7 +132,7 @@ bool EventInterpreterModule::Release()
     }
     else if (meReleaseStage > E_RELEASE_DONE)
     {
-        CGS_ASSERT(false, "Unkown release stage");
+        CGS_FAIL("Unkown release stage");
         return false;
     }
 
@@ -167,7 +167,7 @@ s32 EventInterpreterModule::FindObserverInEventObserverList(EventObserver* lpEve
             }
             if (lpSlot->mpObserver == 0)
             {
-                CGS_ASSERT_AT(false,
+                CGS_FAIL_AT(
                     "Should not reach a null value while searching the event observer list: ", CGS_ARTIST_FILE, 636);
                 break;
             }
@@ -539,7 +539,7 @@ __declspec(noinline) void EventInterpreterModule::ProcessOneOutEvent(
             }
             else
             {
-                CGS_ASSERT(false,
+                CGS_FAIL(
                     "Unexpected output event type in EventInterpreterModule::ProcessOutEvents");
             }
             break;
@@ -643,7 +643,7 @@ bool EventInterpreterModule::RegisterForEvent(EventObserver* lpEventObserver, s3
     {
         if (mnNumberEventObservers >= KI_MAX_OBSERVERS)
         {
-            CGS_ASSERT(false, "Trying to register too many objects in: ");
+            CGS_FAIL("Trying to register too many objects in: ");
             return false;
         }
 
@@ -670,7 +670,7 @@ void EventInterpreterModule::UnRegisterForEvent(EventObserver* lpEventObserver, 
 
     if (lpObjectEventObserver == 0)
     {
-        CGS_ASSERT_AT(false,
+        CGS_FAIL_AT(
             "Trying to remove an object as an observer when object is not in observer list: ", CGS_ARTIST_FILE, 441);
         return;
     }
@@ -709,7 +709,7 @@ bool EventInterpreterModule::RegisterPriorityEvent(EventObserver* lpEventObserve
     {
         if (mnNumberPriorityEventObservers >= KI_MAX_OBSERVERS)
         {
-            CGS_ASSERT(false, "Trying to register too many objects in: ");
+            CGS_FAIL("Trying to register too many objects in: ");
             return false;
         }
 
@@ -795,7 +795,7 @@ s32 EventInterpreterModule::FindPriorityObserverInEventObserverList(
         }
         if (lpSlot->mpObserver == 0)
         {
-            CGS_ASSERT(false,
+            CGS_FAIL(
                 "Should not reach a null value while searching the event observer list: ");
             break;
         }

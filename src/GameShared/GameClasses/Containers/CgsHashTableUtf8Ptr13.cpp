@@ -28,7 +28,7 @@ namespace CgsContainers
         Node* lpNode = GetInternal(luKey, &lpBin);
         if (lpNode == 0)
         {
-            CGS_ASSERT_AT(false, "Node not found", CGS_ARTIST_HASH_TABLE_FILE, 340);
+            CGS_FAIL_AT("Node not found", CGS_ARTIST_HASH_TABLE_FILE, 340);
             return;
         }
         lpBin->InternalRemoveNode(lpNode);

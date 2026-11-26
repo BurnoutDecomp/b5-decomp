@@ -50,7 +50,7 @@ namespace BrnGui
     // non-null (BrnGuiHudMessageDirector.h:174).
     void HudMessageDirector::SetController(const BrnResource::HudMessageController* lpController)
     {
-        CGS_ASSERT(lpController != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid controller passed in to HudMessageDirector::SetController", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageDirector.h", 174));
+        CGS_ASSERT_STREAM_AT(lpController != 0, "Invalid controller passed in to HudMessageDirector::SetController", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageDirector.h", 174);
 
         mpController = lpController;
     }

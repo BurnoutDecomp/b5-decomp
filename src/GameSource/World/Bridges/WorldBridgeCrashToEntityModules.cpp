@@ -19,8 +19,8 @@ void BridgeCrashModuleToPhysicsModule(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleInputBuffer", __FILE__, 58));   // :58
-    CGS_ASSERT(lpCrashOutput_PreScene != 0, CGS_ASSERT_MESSAGE_AT("lpCrashOutput_PreScene", __FILE__, 59));           // :59
+    CGS_ASSERT_AT(lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer", __FILE__, 58);   // :58
+    CGS_ASSERT_AT(lpCrashOutput_PreScene != 0, "lpCrashOutput_PreScene", __FILE__, 59);           // :59
 
     const BrnPhysics::Vehicle::VehicleInputInterface* lpCrashVehicleInput =
         lpCrashOutput_PreScene->GetVehicleInputInterface();                        // 0x827AACD8

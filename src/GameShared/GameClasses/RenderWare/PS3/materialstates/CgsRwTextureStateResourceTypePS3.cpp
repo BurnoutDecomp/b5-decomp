@@ -63,7 +63,7 @@ namespace CgsResource
             *reinterpret_cast<const u32*>(static_cast<const u8*>(lpResource) + KU_TEXTURE_IMPORT_OFFSET);
         if (luTextureHandle == 0xFFFFFFFFu)   // *(a2+32) == -1
         {
-            CGS_ASSERT(false, "Texture state has invalid texture value\n");
+            CGS_FAIL("Texture state has invalid texture value\n");
             return false;                     // result = 0
         }
         return true;                          // result = 1

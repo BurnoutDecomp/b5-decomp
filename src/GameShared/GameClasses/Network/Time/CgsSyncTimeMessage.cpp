@@ -53,10 +53,10 @@ namespace CgsNetwork
                                   MessageWithPlayerIDs::NetworkPlayerID liHostPlayerID,
                                   CgsSystem::Time lHostTime)
     {
-        CGS_ASSERT(!IsMessageValid(),
-            CGS_ASSERT_MESSAGE_AT(
-                "!IsMessageValid()",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeMessage.cpp", 79 /* ARTIST 0x8287D430 */));
+        CGS_ASSERT_AT(!IsMessageValid(),
+            "!IsMessageValid()",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeMessage.cpp", 79 /* ARTIST 0x8287D430 */);
+
 
         mClientPlayerID = liClientPlayerID;
         mClientSendTime = lClientSendTime;
@@ -70,18 +70,18 @@ namespace CgsNetwork
                                    MessageWithPlayerIDs::NetworkPlayerID* lpHostID,
                                    CgsSystem::Time* lpHostTime)
     {
-        CGS_ASSERT(lpClientID, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpClientID,
             "lpClientID",
-            __FILE__, 105 /* ARTIST 0x8288B18C */));
-        CGS_ASSERT(lpClientTime, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 105 /* ARTIST 0x8288B18C */);
+        CGS_ASSERT_AT(lpClientTime,
             "lpClientTime",
-            __FILE__, 106 /* ARTIST 0x8288B1B0 */));
-        CGS_ASSERT(lpHostID, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 106 /* ARTIST 0x8288B1B0 */);
+        CGS_ASSERT_AT(lpHostID,
             "lpHostID",
-            __FILE__, 107 /* ARTIST 0x8288B1D4 */));
-        CGS_ASSERT(lpHostTime, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 107 /* ARTIST 0x8288B1D4 */);
+        CGS_ASSERT_AT(lpHostTime,
             "lpHostTime",
-            __FILE__, 108 /* ARTIST 0x8288B1F8 */));
+            __FILE__, 108 /* ARTIST 0x8288B1F8 */);
 
         // ARTIST 0x8288B20C branches to a trailing `return false` (0x8288B258): the copy-out is the body
         // of the valid test.

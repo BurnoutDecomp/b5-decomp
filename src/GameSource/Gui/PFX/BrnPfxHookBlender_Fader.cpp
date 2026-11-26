@@ -175,7 +175,7 @@ namespace BrnGui
             case E_FINISHED:
                 return;
             default:
-                CGS_ASSERT(false, "Bad state in PFXNodeFader");       // :438
+                CGS_FAIL("Bad state in PFXNodeFader");       // :438
                 break;
             }
             return;
@@ -233,7 +233,7 @@ namespace BrnGui
             meState = E_FADEOUT;
             break;
         default:
-            CGS_ASSERT(false, "Bad state in node fader.");             // :486
+            CGS_FAIL("Bad state in node fader.");             // :486
             break;
         }
         mfExpiredTime = 0.0f;

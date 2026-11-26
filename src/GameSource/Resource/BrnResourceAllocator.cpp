@@ -256,13 +256,13 @@ namespace BrnResource
     // ARTIST 0x82661CF8: this initial global allocator is monotonic and cannot free a block.
     void DefaultLinearAllocator::DoFree(const rw::Resource& /*lrResource*/)
     {
-        CGS_ASSERT_STREAM_AT(false, "Should never be freeing memory from the global allocator\n", CGS_ARTIST_FILE, 984);
+        CGS_FAIL_STREAM_AT("Should never be freeing memory from the global allocator\n", CGS_ARTIST_FILE, 984);
     }
 
     // ARTIST 0x82661D88: disposable allocation/free is not supported on this allocator.
     void DefaultLinearAllocator::DoFreeDisposable(rw::Resource& /*lrResource*/)
     {
-        CGS_ASSERT_STREAM_AT(false, "Should never be allocating or freeing disposable memory!!!\n", CGS_ARTIST_FILE, 999);
+        CGS_FAIL_STREAM_AT("Should never be allocating or freeing disposable memory!!!\n", CGS_ARTIST_FILE, 999);
     }
 
     // Out-of-line defaulted destructor: anchors the DefaultLinearAllocator vtable in this TU so
@@ -416,7 +416,7 @@ namespace BrnResource
     {
         CGS_ASSERT_STREAM_AT(mpGeneralAllocator != 0,
             "General allocator not set\n", CGS_ARTIST_FILE, 1209);
-        CGS_ASSERT_STREAM_AT(false,
+        CGS_FAIL_STREAM_AT(
             "Should never be allocating or freeing disposable memory!!!\n", CGS_ARTIST_FILE, 1210);
     }
 
@@ -614,7 +614,7 @@ namespace BrnResource
     void LinearResourceAllocator::DoFreeDisposable(rw::Resource& /*lrResource*/)
     {
         CGS_ASSERT_STREAM_AT(mpLinearAllocator != 0, "General allocator not set\n", CGS_ARTIST_FILE, 1414);
-        CGS_ASSERT_STREAM_AT(false, "Should never be allocating or freeing disposable memory!!!\n",
+        CGS_FAIL_STREAM_AT("Should never be allocating or freeing disposable memory!!!\n",
             CGS_ARTIST_FILE, 1415);
     }
 }

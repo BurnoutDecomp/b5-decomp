@@ -55,7 +55,7 @@ namespace CgsResource
             meReleaseStage = E_RELEASESTAGE_START;
             return true;
         }
-        CGS_ASSERT(false, "Should never get here!\n");
+        CGS_FAIL("Should never get here!\n");
         return false;
     }
 
@@ -117,7 +117,7 @@ namespace CgsResource
     // ARTIST 828D7E50; native ScratchEntry widens its three pointers.
     ScratchEntry* ScratchPool::GetEntry(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < muNumEntries, CGS_ASSERT_STREAM_MESSAGE_AT("Entry out of range\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceScratchPool.h", 254));
+        CGS_ASSERT_STREAM_AT(luIndex < muNumEntries, "Entry out of range\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceScratchPool.h", 254);
         return &mpEntries[luIndex];
     }
 
@@ -215,7 +215,7 @@ namespace CgsResource
                     CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
                     lMessage << lapNames[luField] << lu << " is " << static_cast<u64>(lauValues[luField])
                              << " - not multiple of 16 bytes\n";
-                    CGS_ASSERT(false, lacMessage);
+                    CGS_FAIL(lacMessage);
                 }
             }
         }

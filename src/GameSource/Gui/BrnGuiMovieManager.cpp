@@ -206,7 +206,7 @@ namespace BrnGui
     // ---- events (ARTIST RecvEvent 0x824F9688: 504 audio / 508 play / 509 stop) -----------------------
     void MovieManager::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventId)
     {
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("invalid event passed through ", CGS_ARTIST_FILE, 633));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "invalid event passed through ", CGS_ARTIST_FILE, 633);
         switch (liEventId)
         {
         case KI_GUIEVENT_AUDIO_READY:   // 504
@@ -277,7 +277,7 @@ namespace BrnGui
         // The assert arm first, the request in the else (ARTIST 0x824EAE0C beq to the store).
         if (meCollisionWorldState != E_COLLISIONWORLDSTATE_VALID)
         {
-            CGS_ASSERT_AT(false, "Invalidation of collision world requested when collision world wasn't valid",
+            CGS_FAIL_AT("Invalidation of collision world requested when collision world wasn't valid",
                           CGS_ARTIST_FILE, 466);
         }
         else
@@ -291,7 +291,7 @@ namespace BrnGui
     {
         if (meCollisionWorldState != E_COLLISIONWORLDSTATE_INVALID)
         {
-            CGS_ASSERT_AT(false, "Validation of collision world requested when collision world wasn't invalid",
+            CGS_FAIL_AT("Validation of collision world requested when collision world wasn't invalid",
                           CGS_ARTIST_FILE, 524);
         }
         else
@@ -305,7 +305,7 @@ namespace BrnGui
     {
         if (meCarPoolState != E_CARPOOLSTATE_VALID)
         {
-            CGS_ASSERT_AT(false, "Invalidation of car pool requested when collision world wasn't valid",
+            CGS_FAIL_AT("Invalidation of car pool requested when collision world wasn't valid",
                           CGS_ARTIST_FILE, 495);
         }
         else
@@ -319,7 +319,7 @@ namespace BrnGui
     {
         if (meCarPoolState != E_CARPOOLSTATE_INVALID)
         {
-            CGS_ASSERT_AT(false, "Validation of car pool requested when car pool wasn't invalid",
+            CGS_FAIL_AT("Validation of car pool requested when car pool wasn't invalid",
                           CGS_ARTIST_FILE, 553);
         }
         else
@@ -379,10 +379,10 @@ namespace BrnGui
 
     void MovieManager::DestroyMemoryResourceAndDescriptor()
     {
-        CGS_ASSERT(mResourceAllocatorResource.m_baseResources[0] != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mResourceAllocatorResource.GetMemoryResource()",
-                CGS_ARTIST_FILE, 582 /* ARTIST 0x824F9648 */));
+        CGS_ASSERT_AT(mResourceAllocatorResource.m_baseResources[0] != 0,
+            "mResourceAllocatorResource.GetMemoryResource()",
+                CGS_ARTIST_FILE, 582 /* ARTIST 0x824F9648 */);
+
         XPhysicalFree(mResourceAllocatorResource.m_baseResources[0]);
         mResourceAllocatorResource.m_baseResources[0] = 0;
     }
@@ -626,13 +626,13 @@ namespace BrnGui
                 meState = E_MOVIEMANAGERSTATE_REQUESTING_AUDIO;
             }
             if (mPlayingMovie.mbDisableCustomSoundtracks)
-                CGS_ASSERT_AT(XMPOverrideBackgroundMusic() == ERROR_SUCCESS,
-                           "XMPOverrideBackgroundMusic() == ERROR_SUCCESS", CGS_ARTIST_FILE, 454);
+            {   CGS_ASSERT_AT(XMPOverrideBackgroundMusic() == ERROR_SUCCESS,
+                           "XMPOverrideBackgroundMusic() == ERROR_SUCCESS", CGS_ARTIST_FILE, 454); }
             else if (BrnSound::Logic::MusicEffect::IsCustomSoundtrackActive())
                 meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
             return;
         default:
-            CGS_ASSERT_AT(false, "Unhandled state", CGS_ARTIST_FILE, 482);
+            CGS_FAIL_AT("Unhandled state", CGS_ARTIST_FILE, 482);
             return;
         }
     }

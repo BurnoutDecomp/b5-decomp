@@ -50,9 +50,9 @@ namespace BrnNetwork
 
     bool CameraRequestMessage::Retrieve(bool* lpbReleaseFeed)
     {
-        CGS_ASSERT(lpbReleaseFeed, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpbReleaseFeed,
             "lpbReleaseFeed",
-            CGS_ARTIST_FILE, 102 /* ARTIST 0x8257E658 */));
+            CGS_ARTIST_FILE, 102 /* ARTIST 0x8257E658 */);
 
         // ARTIST 0x8257E66C branches to a trailing `return false` (0x8257E6B8): the copy-out is the body
         // of the valid test.
@@ -60,9 +60,9 @@ namespace BrnNetwork
         {
             *lpbReleaseFeed = mbReleaseFeed;
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                CGS_ARTIST_FILE, 112 /* ARTIST 0x8257E6A4 */));
+                CGS_ARTIST_FILE, 112 /* ARTIST 0x8257E6A4 */);
             return true;
         }
         return false;

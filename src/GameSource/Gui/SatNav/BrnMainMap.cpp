@@ -874,7 +874,7 @@ namespace BrnGui
                 break;
             default:
                 // cpp:635 -- the console's out-of-range tripwire.
-                CGS_ASSERT_AT(false, "Unexpected zoom factor", CGS_ARTIST_FILE, 635);
+                CGS_FAIL_AT("Unexpected zoom factor", CGS_ARTIST_FILE, 635);
                 break;
             }
         }

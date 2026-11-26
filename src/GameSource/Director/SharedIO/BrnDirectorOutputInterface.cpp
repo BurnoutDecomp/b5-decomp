@@ -13,11 +13,11 @@ namespace BrnDirector
 bool DirectorOutputInterface::IsIntroCameraStartingToLookAtRival(
     u32* lpuRivalryNumberOut, f32* lpfSecsRemaining) const
 {
-    CGS_ASSERT(lpuRivalryNumberOut != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpuRivalryNumberOut != NULL", CGS_ARTIST_FILE, 101 /* ARTIST 0x823A7AE8 */));   // :101
-    CGS_ASSERT(lpfSecsRemaining != 0,
-        CGS_ASSERT_MESSAGE_AT("lpfSecsRemaining != NULL", CGS_ARTIST_FILE, 102 /* ARTIST 0x823A7B0C */));         // :102
+    CGS_ASSERT_AT(lpuRivalryNumberOut != 0,
+        "lpuRivalryNumberOut != NULL", CGS_ARTIST_FILE, 101 /* ARTIST 0x823A7AE8 */);   // :101
+
+    CGS_ASSERT_AT(lpfSecsRemaining != 0,
+        "lpfSecsRemaining != NULL", CGS_ARTIST_FILE, 102 /* ARTIST 0x823A7B0C */);         // :102
 
     *lpuRivalryNumberOut = muIntroCameraRivalryNumber;
     *lpfSecsRemaining    = mfIntroCameraSecsRemaining;

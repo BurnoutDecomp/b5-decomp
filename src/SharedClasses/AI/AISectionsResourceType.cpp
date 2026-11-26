@@ -65,10 +65,10 @@ namespace BrnAI
     // const). CGS_ASSERT fills __FILE__/__LINE__; the X360-baked d:\p4 path/line 1201 is dropped.
     const BrnAI::AISection* BrnAI::AISectionsData::GetAISection( u32 luSectionIndex ) const
     {
-        CGS_ASSERT( luSectionIndex < muNumSections,
-            CGS_ASSERT_MESSAGE_AT(
-                "luSectionIndex < muNumSections",
-                CGS_ARTIST_FILE, 1201 /* ARTIST 0x8230F700 */));
+        CGS_ASSERT_AT( luSectionIndex < muNumSections,
+            "luSectionIndex < muNumSections",
+                CGS_ARTIST_FILE, 1201 /* ARTIST 0x8230F700 */);
+
         return &mpaSections[luSectionIndex];
     }
 

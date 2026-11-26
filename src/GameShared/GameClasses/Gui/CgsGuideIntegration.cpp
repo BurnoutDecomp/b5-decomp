@@ -73,7 +73,7 @@ namespace CgsGui
                 }
                 break;
             case 0x2000002: // XN_LIVE_INVITE_ACCEPTED
-                CGS_ASSERT(false,
+                CGS_FAIL(
                            "Invite notification processed by Gui Integration class. This could break cross game invites\n");
                 break;
             default:
@@ -110,7 +110,7 @@ namespace CgsGui
         }
         else
         {
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "SystemUserProfile::AttachListener: listener not already attached");
             mpListener = 0;
         }
@@ -143,11 +143,11 @@ namespace CgsGui
         if (XUserReadProfileSettings(0, luUserIndex, 2, laSettingIds,
                                      &lcbResults, &lReadBuffer.mResults, 0))
         {
-            CGS_ASSERT(false, " problem reading user settings - check buffer length");
+            CGS_FAIL(" problem reading user settings - check buffer length");
         }
         if (lcbResults > sizeof(lReadBuffer))
         {
-            CGS_ASSERT(false, " data returned is too large ");
+            CGS_FAIL(" data returned is too large ");
         }
 
         const XUSER_PROFILE_SETTING* lpSettings = lReadBuffer.mResults.pSettings;

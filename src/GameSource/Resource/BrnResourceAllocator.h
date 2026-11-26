@@ -203,7 +203,7 @@ inline HeapResourceAllocator* GetDebugAllocator()
 // [PC] the print is additionally gated on the memory log category, which the PC default filter
 // (CgsLog.cpp) leaves off: once the network module runs, dozens of these lines fire per frame.
 #define BRN_RESOURCE_MEMORY_CHECK(luMemory)                                                                    \
-    do                                                                                                         \
+    /* D12: a block, not a do/while(0) loop: ARTIST 0x82597960 calls operator<<(s32/u32) here */               \
     {                                                                                                          \
         const u32 luMemoryNow = BrnResource::GetAvailableMemory();                                             \
         if ((luMemory) != luMemoryNow)                                                                         \
@@ -218,6 +218,6 @@ inline HeapResourceAllocator* GetDebugAllocator()
             (luMemory) = luMemoryNow;                                                                          \
             CGS_ASSERT(!BrnResource::Allocators::mbAssertOnMemoryChange, "Memory check failed");               \
         }                                                                                                      \
-    } while (0)
+    }
 
 #endif // GAMESOURCE_RESOURCE_BRNRESOURCEALLOCATOR_H

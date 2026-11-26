@@ -164,8 +164,8 @@ namespace BrnGameState
     // Accumulate frame time both for the car's team and for its current time in that team.
     void ScoringSystem::UpdateTeamStats(f32 lfDeltaTime)
     {
-        CGS_ASSERT(GetNumberOfActiveCars() <= static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   CGS_ASSERT_MESSAGE_AT("muCarsInCurrentMode <= uint32_t(BrnWorld::KI_MAX_ACTIVE_RACE_CARS)", CGS_ARTIST_FILE, 576));
+        CGS_ASSERT_AT(GetNumberOfActiveCars() <= static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "muCarsInCurrentMode <= uint32_t(BrnWorld::KI_MAX_ACTIVE_RACE_CARS)", CGS_ARTIST_FILE, 576);
 
         for (EActiveRaceCarIndex leCar = E_ACTIVE_RACE_CAR_INDEX_0;
              leCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; leCar++)
@@ -201,8 +201,8 @@ namespace BrnGameState
     {
         muCarsInCurrentMode = lpOutput->maCarsInTheRace.GetLength();
 
-        CGS_ASSERT(muCarsInCurrentMode <= static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   CGS_ASSERT_MESSAGE_AT("Too many global race cars think they are in the current mode", CGS_ARTIST_FILE, 601));
+        CGS_ASSERT_AT(muCarsInCurrentMode <= static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "Too many global race cars think they are in the current mode", CGS_ARTIST_FILE, 601);
     }
 
     // ------------------------------------------------------------------------
@@ -239,11 +239,11 @@ namespace BrnGameState
                                                      s32* lpiScore,
                                                      EActiveRaceCarIndex* lpeRaceCarIndex)
     {
-        CGS_ASSERT(lpiScore != NULL, CGS_ASSERT_MESSAGE_AT("lpiScore", CGS_ARTIST_FILE, 1431));
-        CGS_ASSERT(lpeRaceCarIndex != NULL, CGS_ASSERT_MESSAGE_AT("lpeActiveRaceCarIndex", CGS_ARTIST_FILE, 1432));
+        CGS_ASSERT_AT(lpiScore != NULL, "lpiScore", CGS_ARTIST_FILE, 1431);
+        CGS_ASSERT_AT(lpeRaceCarIndex != NULL, "lpeActiveRaceCarIndex", CGS_ARTIST_FILE, 1432);
         // BrnGameState::KI_MAX_CHALLENGES == 64 (BrnGameStateStreetManager.h, not yet homed).
-        CGS_ASSERT(lChallenge < 64 && lChallenge >= 0,
-                   CGS_ASSERT_MESSAGE_AT("liIndex < BrnGameState::KI_MAX_CHALLENGES && liIndex >= 0", CGS_ARTIST_FILE, 1433));
+        CGS_ASSERT_AT(lChallenge < 64 && lChallenge >= 0,
+                   "liIndex < BrnGameState::KI_MAX_CHALLENGES && liIndex >= 0", CGS_ARTIST_FILE, 1433);
 
         // Best-score seed: higher-is-better types start at 0, lower-is-better (TIME) at INT_MAX.
         s32 liBestScore = (leScoreType != BrnStreetData::E_SCORE_TYPE_TIME) ? 0 : 0x7FFFFFFF;
@@ -376,8 +376,8 @@ namespace BrnGameState
                        "RwMathFPU::IsValid( lfCheckpointDistanceToFinish )");
         }
 
-        CGS_ASSERT(lpActive->maCarsInTheRace.GetLength() == muCarsInCurrentMode,
-                   CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface->maCarsInTheRace.GetLength() == muCarsInCurrentMode", CGS_ARTIST_FILE, 693)); // :693
+        CGS_ASSERT_AT(lpActive->maCarsInTheRace.GetLength() == muCarsInCurrentMode,
+                   "lpActiveRaceCarInterface->maCarsInTheRace.GetLength() == muCarsInCurrentMode", CGS_ARTIST_FILE, 693); // :693
 
         // --- SORT: best (closest-to-finish) car first ---
         // X360 qsort(&maRaceCarPositioningData, 8, sizeof(RaceCarPositioningData),
@@ -406,9 +406,9 @@ namespace BrnGameState
                 continue;
 
             ++liPosition;   // 1-based race position
-            CGS_ASSERT(leIdx >= E_ACTIVE_RACE_CAR_INDEX_0, CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= 0", CGS_ARTIST_FILE, 732));           // :732
-            CGS_ASSERT(leIdx <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 733));                // :733
+            CGS_ASSERT_AT(leIdx >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= 0", CGS_ARTIST_FILE, 732);           // :732
+            CGS_ASSERT_AT(leIdx <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 733);                // :733
 
             GameStateModuleIO::CarScoreData* lpScore = lpCarData->GetScoreData();
 
@@ -528,7 +528,7 @@ namespace BrnGameState
                                         ::EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
                                         bool lbStuntChallengeActive)
     {
-        CGS_ASSERT(lpQueue != NULL, CGS_ASSERT_MESSAGE_AT("lpTakedownQueue != NULL", CGS_ARTIST_FILE, 987));
+        CGS_ASSERT_AT(lpQueue != NULL, "lpTakedownQueue != NULL", CGS_ARTIST_FILE, 987);
 
         for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
         {
@@ -540,10 +540,10 @@ namespace BrnGameState
             const ::EActiveRaceCarIndex leVictim    = static_cast< ::EActiveRaceCarIndex>(liVictim);
 
             // The console's bounds asserts, compared on the raw value.
-            CGS_ASSERT((liAggressor >= 0) && (liAggressor < 8),
-                       CGS_ASSERT_MESSAGE_AT("(leAggressorRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leAggressorRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 997));
-            CGS_ASSERT((liVictim >= 0) && (liVictim < 8),
-                       CGS_ASSERT_MESSAGE_AT("(leVictimRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 1001));
+            CGS_ASSERT_AT((liAggressor >= 0) && (liAggressor < 8),
+                       "(leAggressorRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leAggressorRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 997);
+            CGS_ASSERT_AT((liVictim >= 0) && (liVictim < 8),
+                       "(leVictimRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 1001);
 
             CarData* lpAggressorCarData = GetCarData(leAggressor);
             CarData* lpVictimCarData    = GetCarData(leVictim);
@@ -607,7 +607,7 @@ namespace BrnGameState
     // left UNCHANGED -- the byte offset is X360-proven and the home is grow-only.
     void ScoringSystem::UpdateCrashes(const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpQueue)
     {
-        CGS_ASSERT(lpQueue != NULL, CGS_ASSERT_MESSAGE_AT("lpRaceCarCrashQueue != NULL", CGS_ARTIST_FILE, 1107));
+        CGS_ASSERT_AT(lpQueue != NULL, "lpRaceCarCrashQueue != NULL", CGS_ARTIST_FILE, 1107);
 
         for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
         {
@@ -615,7 +615,7 @@ namespace BrnGameState
             // X360 asserts the per-event pointer non-NULL (cpp:1117). GetEvent returns a
             // reference into the inline buffer, so the address is non-NULL by construction;
             // the assert is preserved verbatim as a tripwire.
-            CGS_ASSERT(lpCrashEvent != NULL, CGS_ASSERT_MESSAGE_AT("lpCrashEvent != NULL", CGS_ARTIST_FILE, 1117));
+            CGS_ASSERT_AT(lpCrashEvent != NULL, "lpCrashEvent != NULL", CGS_ARTIST_FILE, 1117);
 
             if (lpCrashEvent->mbIsPrimaryCrash)   // event +0x38
             {

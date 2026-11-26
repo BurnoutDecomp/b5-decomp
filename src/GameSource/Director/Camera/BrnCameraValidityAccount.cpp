@@ -138,8 +138,8 @@ void ValidityAccount::Print(DebugLog& lrDebugLog) const
 // in the u64-backed set (the X360 inlines the BitArray 64-bit-field SetBit).
 void ValidityAccount::SetFlag(EFailedFlag leFlag)
 {
-    CGS_ASSERT(leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG,
-               CGS_ASSERT_MESSAGE_AT("leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG", CGS_ARTIST_VALIDITY_ACCOUNT_FILE, 219));   // h:219 (non-gating)
+    CGS_ASSERT_AT(leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG,
+               "leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG", CGS_ARTIST_VALIDITY_ACCOUNT_FILE, 219);   // h:219 (non-gating)
     mFailedFlags.SetBit(static_cast<u32>(leFlag));
 }
 
@@ -168,9 +168,9 @@ void ValidityAccount::MaskToFailFlags()
 // hands it `camera + 0x138` -- this account.
 void ValidityAccount::SetFlag(ENoCutFromFlag leFlag)
 {
-    CGS_ASSERT(leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag < E_END_NOCUTFROM_FLAG,
-               CGS_ASSERT_MESSAGE_AT("leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag < E_END_NOCUTFROM_FLAG",
-                                     CGS_ARTIST_VALIDITY_ACCOUNT_FILE, 245));
+    CGS_ASSERT_AT(leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag < E_END_NOCUTFROM_FLAG,
+               "leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag < E_END_NOCUTFROM_FLAG",
+                                     CGS_ARTIST_VALIDITY_ACCOUNT_FILE, 245);
     mFailedFlags.SetBit(static_cast<u32>(leFlag));
 }
 

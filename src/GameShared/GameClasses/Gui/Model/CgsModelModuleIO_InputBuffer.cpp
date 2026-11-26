@@ -101,9 +101,9 @@ namespace ModelIO
     // X360 0x824F7490 (non-const overload -- write-lock guarded).
     InputBuffer::GuiEventQueueSmall* InputBuffer::GetLoadRequests()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
             "Not locked for writing\n",
-            "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.h", 214));
+            "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.h", 214);
         return &mLoadRequests;
     }
 }

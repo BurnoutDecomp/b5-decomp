@@ -191,12 +191,12 @@ CgsID RCEntityGlobalRaceCarOutputInterface::GetRivalId(
 CgsID RCEntityGlobalRaceCarOutputInterface::GetCarModelId(
         EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 1482 /* ARTIST 0x823A7C6C */));
-    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 1483 /* ARTIST 0x823A7C90 */));
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
+        "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 1482 /* ARTIST 0x823A7C6C */);
+
+    CGS_ASSERT_AT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT,
+        "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 1483 /* ARTIST 0x823A7C90 */);
+
     return maCarModelIds[leGlobalRaceCarIndex];             // 8*(idx+210) @+0x690
 }
 
@@ -228,12 +228,12 @@ bool RCEntityGlobalRaceCarOutputInterface::IsInRange(EGlobalRaceCarIndex leGloba
 // ============================================================================
 void RCEntityGlobalRaceCarOutputInterface::SetPlayerGlobalRaceCarIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex)
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lePlayerGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 1368 /* ARTIST 0x822A12BC */));
-    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "lePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 1369 /* ARTIST 0x822A12E0 */));
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
+        "lePlayerGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 1368 /* ARTIST 0x822A12BC */);
+
+    CGS_ASSERT_AT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT,
+        "lePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 1369 /* ARTIST 0x822A12E0 */);
+
     mePlayerGlobalRaceCarIndex = leGlobalRaceCarIndex;   // @+0x968
 }
 

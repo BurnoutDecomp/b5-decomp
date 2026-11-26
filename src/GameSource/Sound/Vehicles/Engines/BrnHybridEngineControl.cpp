@@ -147,7 +147,7 @@ void HybridEngineControl::AttachController(CgsSound::Logic::EffectBase* apContro
     case 13:
         break;
     default:
-        CGS_ASSERT_AT(false, "I don't know how to handle attaching this type of EffectBase.",
+        CGS_FAIL_AT("I don't know how to handle attaching this type of EffectBase.",
                       BRN_HYBRIDENGINECONTROL_CPP_FILE, 1005);
         break;
     }

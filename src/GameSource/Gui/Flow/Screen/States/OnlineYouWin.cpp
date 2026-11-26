@@ -145,7 +145,7 @@ void OnlineYouWin::Update()
         default:
             // The console streams "Invalid internal state : " << state << "\n".
             // Streamed in place, as ARTIST builds it (cpp:166).
-            CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+            CGS_FAIL_STREAM_AT("Invalid internal state : " << meInternalState << "\n",
                                  CGS_ARTIST_FILE, 166);
             break;
     }
@@ -159,7 +159,7 @@ void OnlineYouWin::Update()
 // leave the screen as soon as the cache is known.
 void OnlineYouWin::UpdateGetCache()
 {
-    CGS_ASSERT(mpGuiCache == 0, CGS_ASSERT_MESSAGE_AT("NULL == mpGuiCache", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 218));
+    CGS_ASSERT_AT(mpGuiCache == 0, "NULL == mpGuiCache", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 218);
 
 
     const CgsModule::Event* lpEvent;
@@ -171,7 +171,7 @@ void OnlineYouWin::UpdateGetCache()
         if (liEventId == KI_EVENT_GUI_CACHE)
         {
             const GuiEventCachePointer* lpCacheEvent = reinterpret_cast<const GuiEventCachePointer*>(lpEvent);
-            CGS_ASSERT(lpCacheEvent->mpCachePointer != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpCacheEvent->mpCachePointer", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 228));
+            CGS_ASSERT_AT(lpCacheEvent->mpCachePointer != 0, "NULL != lpCacheEvent->mpCachePointer", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 228);
             mpGuiCache = lpCacheEvent->mpCachePointer;
             if (IsStuntRunGameMode(mpGuiCache->GetGameMode()))
             {
@@ -181,7 +181,7 @@ void OnlineYouWin::UpdateGetCache()
         }
     }
 
-    CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 243));
+    CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 243);
 }
 
 // ---- UpdateWFWinResult ---------------------------------------------------------
@@ -246,7 +246,7 @@ bool OnlineYouWin::UpdateLoadResources()
 // the photo finish.
 bool OnlineYouWin::UpdateWFInit()
 {
-    CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/OnlineYouWin.cpp", 330 /* ARTIST 0x824A24A0 */));
+    CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/OnlineYouWin.cpp", 330 /* ARTIST 0x824A24A0 */);
 
     if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
     {

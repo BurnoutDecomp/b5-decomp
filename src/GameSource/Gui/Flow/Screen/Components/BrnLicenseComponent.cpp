@@ -258,12 +258,12 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::AppendExpectedAptComponent(GuiFlow leFlow)
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x8241A7C0 */));                         // cpp:145
-        CGS_ASSERT((E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow),
-            CGS_ASSERT_MESSAGE_AT(
-                "(E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow)",
-                KAC_ARTIST_ASSERT_FILE, 147 /* ARTIST 0x8241A7EC */));   // cpp:147
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "NULL != mpGuiCache", KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x8241A7C0 */);                         // cpp:145
+        CGS_ASSERT_AT((E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow),
+            "(E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow)",
+                KAC_ARTIST_ASSERT_FILE, 147 /* ARTIST 0x8241A7EC */);   // cpp:147
+
 
         mpGuiCache->AppendExpectedAptComponent(leFlow, GetName());
         mpGuiCache->AppendExpectedAptComponent(leFlow, mPlayerNameTextField.GetName());
@@ -320,12 +320,12 @@ namespace BrnGui
     // ================================================================================
     bool LicenseComponent::HandleAptLoadTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger)
     {
-        CGS_ASSERT(lpAptTrigger != 0,
-            CGS_ASSERT_MESSAGE_AT("lpAptTrigger",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp", 234));
-        CGS_ASSERT(lpAptTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD,
-            CGS_ASSERT_MESSAGE_AT("CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp", 235));
+        CGS_ASSERT_AT(lpAptTrigger != 0,
+            "lpAptTrigger",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp", 234);
+        CGS_ASSERT_AT(lpAptTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD,
+            "CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp", 235);
 
         bool lbTriggerDealtWith = false;
         if (std::strcmp(mPlayerNameTextField.GetName(), lpAptTrigger->mpacComponentName) == 0)
@@ -942,10 +942,10 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::SetCachePointer(GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "NULL != lpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.h", 366 /* ARTIST 0x824B3214 */));   // h:366
+        CGS_ASSERT_AT(lpGuiCache != 0,
+            "NULL != lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.h", 366 /* ARTIST 0x824B3214 */);   // h:366
+
         mpGuiCache = lpGuiCache;
     }
 
@@ -955,9 +955,9 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::SetProfilePointer(BrnProgression::Profile* lpProfile)
     {
-        CGS_ASSERT(lpProfile != 0,
-            CGS_ASSERT_MESSAGE_AT("NULL != lpProfile",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.h", 384));
+        CGS_ASSERT_AT(lpProfile != 0,
+            "NULL != lpProfile",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.h", 384);
 
         if (mpProfile != lpProfile)
         {
@@ -1036,12 +1036,12 @@ namespace BrnGui
     // ================================================================================
     bool LicenseComponent::EnsureResourcesAreUnloaded()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_ARTIST_ASSERT_HEADER, 448 /* ARTIST 0x824B342C */));   // h:448
-        CGS_ASSERT(meCurrentLicenseState == E_LICENSE_RESOURCES_UNLOADED,
-            CGS_ASSERT_MESSAGE_AT(
-                "E_LICENSE_RESOURCES_UNLOADED == meCurrentLicenseState",
-                KAC_ARTIST_ASSERT_HEADER, 449 /* ARTIST 0x824B3454 */));   // h:449
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "NULL != mpGuiCache", KAC_ARTIST_ASSERT_HEADER, 448 /* ARTIST 0x824B342C */);   // h:448
+        CGS_ASSERT_AT(meCurrentLicenseState == E_LICENSE_RESOURCES_UNLOADED,
+            "E_LICENSE_RESOURCES_UNLOADED == meCurrentLicenseState",
+                KAC_ARTIST_ASSERT_HEADER, 449 /* ARTIST 0x824B3454 */);   // h:449
+
 
         return mpGuiCache->EnsureResourcesAreUnloaded(maLicenseResourcesToLoad,
                                                       static_cast<u32>(miNumResourcesToLoad));
@@ -1060,10 +1060,10 @@ namespace BrnGui
         if (mbFinishedGame || mbElite)
             return;
 
-        CGS_ASSERT(miWinsInCurrentRank >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "miWinsInCurrentRank >= 0",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp", 1167 /* ARTIST 0x8242D8DC */));   // cpp:1167
+        CGS_ASSERT_AT(miWinsInCurrentRank >= 0,
+            "miWinsInCurrentRank >= 0",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp", 1167 /* ARTIST 0x8242D8DC */);   // cpp:1167
+
 
         const s32 liRequiredWins = mpGuiCache->GetWorldDataController()->GetRequiredWinsInRank(miCurrentRank);
 
@@ -1108,8 +1108,8 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::StartOutputtingGamerpic()
     {
-        CGS_ASSERT(mpProfile != 0, CGS_ASSERT_MESSAGE_AT("mpProfile", KAC_ARTIST_ASSERT_FILE, 1231));
-        CGS_ASSERT(mbShowingProfilePicture == false, CGS_ASSERT_MESSAGE_AT("mbShowingProfilePicture == false", KAC_ARTIST_ASSERT_FILE, 1232));
+        CGS_ASSERT_AT(mpProfile != 0, "mpProfile", KAC_ARTIST_ASSERT_FILE, 1231);
+        CGS_ASSERT_AT(mbShowingProfilePicture == false, "mbShowingProfilePicture == false", KAC_ARTIST_ASSERT_FILE, 1232);
 
         PostPlayerTextureEvent(mpStateInterface, E_PLAYERTEXTURE_LICENCE_GAMERPIC);
     }

@@ -146,16 +146,16 @@ namespace BrnParticle
     // otherwise publish the kill and changed flags to the dispatch thread.
     void ParticleModule::StopLionEffect(LionEffect* lpEffect)
     {
-        CGS_ASSERT(lpEffect != 0,
-            CGS_ASSERT_MESSAGE_AT("lpEffect != NULL", __FILE__, 1833 /* ARTIST 0x8228A268 */));
-        CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_IN_USE) != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagInUse ) != 0",
-                __FILE__, 1835 /* ARTIST 0x8228A294 */));
-        CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_KILL) == 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagKill ) == 0",
-                __FILE__, 1836 /* ARTIST 0x8228A2C0 */));
+        CGS_ASSERT_AT(lpEffect != 0,
+            "lpEffect != NULL", __FILE__, 1833 /* ARTIST 0x8228A268 */);
+        CGS_ASSERT_AT((lpEffect->muFlags & LionEffect::EPPE_FLAG_IN_USE) != 0,
+            "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagInUse ) != 0",
+                __FILE__, 1835 /* ARTIST 0x8228A294 */);
+
+        CGS_ASSERT_AT((lpEffect->muFlags & LionEffect::EPPE_FLAG_KILL) == 0,
+            "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagKill ) == 0",
+                __FILE__, 1836 /* ARTIST 0x8228A2C0 */);
+
         if (lpEffect->muFlags & LionEffect::EPPE_FLAG_CREATE)
             lpEffect->Construct();
         else
@@ -167,10 +167,10 @@ namespace BrnParticle
     LionEffect* ParticleModule::GetLionEffect(u32 luHandle)
     {
         const u32 luArrayIndex = luHandle & LionEffect::KU_HANDLE_INDEX_MASK;
-        CGS_ASSERT(luArrayIndex < KU_MAX_PLAYING_EFFECTS,
-            CGS_ASSERT_MESSAGE_AT(
-                "luArrayIndex < KU_MAX_PLAYING_EFFECTS",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\Particles/ParticleModule.h", 382 /* ARTIST 0x822783A8 */));
+        CGS_ASSERT_AT(luArrayIndex < KU_MAX_PLAYING_EFFECTS,
+            "luArrayIndex < KU_MAX_PLAYING_EFFECTS",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\Particles/ParticleModule.h", 382 /* ARTIST 0x822783A8 */);
+
 
         LionEffect* lpEffect = &maPlayingEffects[luArrayIndex];
         if (lpEffect->muHandle != luHandle)
@@ -599,8 +599,8 @@ namespace BrnParticle
                                          eParticleEvent_DebrisBatchSpawn, liSize);
                 if (lpData != 0)
                 {
-                    CGS_ASSERT((reinterpret_cast<uintptr_t>(lpData) & 0xF) == 0,
-                               CGS_ASSERT_MESSAGE_AT("(((uint32_t)lpData) & 0xf) == 0", __FILE__, 843));                 // .cpp:843
+                    CGS_ASSERT_AT((reinterpret_cast<uintptr_t>(lpData) & 0xF) == 0,
+                               "(((uint32_t)lpData) & 0xf) == 0", __FILE__, 843);                 // .cpp:843
                     memcpy(lpData, &mu16SpawnBufferCount, 16);
                     memcpy(static_cast<u8*>(lpData) + 16, mpSparkSpawnBuffer,
                            static_cast<size_t>(lu16Count) * 80);

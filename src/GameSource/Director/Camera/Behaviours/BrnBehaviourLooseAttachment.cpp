@@ -43,12 +43,12 @@ bool BehaviourLooseAttachment::Update(Camera& lrCamera, const BehaviourSharedInf
     {
         if (mTarget.mbSet)
         {
-            CGS_ASSERT(mTarget != mAttachment, CGS_ASSERT_MESSAGE_AT("mTarget != mAttachment", CGS_ARTIST_FILE, 135));
+            CGS_ASSERT_AT(mTarget != mAttachment, "mTarget != mAttachment", CGS_ARTIST_FILE, 135);
             const rw::math::vpu::Vector3 target = mTarget.Get(lrInfo.GetWorld())->mRaceCarState.mTransform.Pos();
             mWorldSpaceOffsetFromCar = attachment.mRaceCarState.mTransform.Pos() - target;
             if (mpParameters->mbLookFromTarget) mWorldSpaceOffsetFromCar = -mWorldSpaceOffsetFromCar;
             mWorldSpaceOffsetFromCar.SetY(0.0f);
-            CGS_ASSERT(!IsZero(mWorldSpaceOffsetFromCar, 1.1920929e-7f), CGS_ASSERT_MESSAGE_AT("!IsZero(mWorldSpaceOffsetFromCar)", CGS_ARTIST_FILE, 147));
+            CGS_ASSERT_AT(!IsZero(mWorldSpaceOffsetFromCar, 1.1920929e-7f), "!IsZero(mWorldSpaceOffsetFromCar)", CGS_ARTIST_FILE, 147);
             mWorldSpaceOffsetFromCar = Normalize(mWorldSpaceOffsetFromCar) * mpParameters->mfDistance;
             if (mbTargetVectorLock) SetPrepared();
         }
@@ -175,10 +175,10 @@ void BehaviourLooseAttachment::Construct()
 // ----------------------------------------------------------------------------
 bool BehaviourLooseAttachment::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
-    CGS_ASSERT(mAttachment.mbSet,
-        CGS_ASSERT_MESSAGE_AT(
-            "mAttachment.HasBeenSet()",
-            CGS_ARTIST_FILE, 88 /* ARTIST 0x821FAA18 */));
+    CGS_ASSERT_AT(mAttachment.mbSet,
+        "mAttachment.HasBeenSet()",
+            CGS_ARTIST_FILE, 88 /* ARTIST 0x821FAA18 */);
+
 
     SetNotPrepared();                                       // stb 0, +0x08
     mbFirstFrame = true;                                    // stb 1, +0x32D
@@ -256,10 +256,10 @@ void BehaviourLooseAttachment::AttachTo(s32 leRaceCarIndex)
     mAttachment.meType         = BrnDirector::VehicleRef::E_RACE_CAR;   // stw 1, +0x314
     mAttachment.muRef          = 0;                         // stw 0,  +0x31C
 
-    CGS_ASSERT(leRaceCarIndex < KU_MAX_NUM_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
-            CGS_ARTIST_FILE_BRNVEHICLEREF, 222 /* ARTIST 0x821F448C */));
+    CGS_ASSERT_AT(leRaceCarIndex < KU_MAX_NUM_RACE_CARS,
+        "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
+            CGS_ARTIST_FILE_BRNVEHICLEREF, 222 /* ARTIST 0x821F448C */);
+
 }
 
 // ----------------------------------------------------------------------------
@@ -277,10 +277,10 @@ void BehaviourLooseAttachment::SetTarget(s32 leRaceCarIndex)
     mTarget.meType         = BrnDirector::VehicleRef::E_RACE_CAR;       // stw 1, +0x304
     mTarget.muRef          = 0;                             // stw 0,  +0x30C
 
-    CGS_ASSERT(leRaceCarIndex < KU_MAX_NUM_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
-            CGS_ARTIST_FILE_BRNVEHICLEREF, 222 /* ARTIST 0x821F44EC */));
+    CGS_ASSERT_AT(leRaceCarIndex < KU_MAX_NUM_RACE_CARS,
+        "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
+            CGS_ARTIST_FILE_BRNVEHICLEREF, 222 /* ARTIST 0x821F44EC */);
+
 }
 
 // Pin the field-walk offsets of the parameter block: the derived members start right after the

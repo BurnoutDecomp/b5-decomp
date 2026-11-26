@@ -112,9 +112,9 @@ void FlaptFileInstance::SetData(CgsResource::ResourceHandle lHandle,
 // root clip tree by the time step.
 void FlaptFileInstance::Update(f32 lfTimeStep)
 {
-    CGS_ASSERT(mbIsActive, CGS_ASSERT_MESSAGE_AT("IsActive()", CGS_ARTIST_FILE, 144 /* ARTIST 0x82471868 */));
-    CGS_ASSERT(mpFile->muNumMovieClips > 0, CGS_ASSERT_MESSAGE_AT("mpFile->muNumMovieClips > 0", CGS_ARTIST_FILE, 145 /* ARTIST 0x82471898 */));
-    CGS_ASSERT(mpRootMovieClipInstance != 0, CGS_ASSERT_MESSAGE_AT("mpRootMovieClipInstance", CGS_ARTIST_FILE, 146 /* ARTIST 0x824718C0 */));
+    CGS_ASSERT_AT(mbIsActive, "IsActive()", CGS_ARTIST_FILE, 144 /* ARTIST 0x82471868 */);
+    CGS_ASSERT_AT(mpFile->muNumMovieClips > 0, "mpFile->muNumMovieClips > 0", CGS_ARTIST_FILE, 145 /* ARTIST 0x82471898 */);
+    CGS_ASSERT_AT(mpRootMovieClipInstance != 0, "mpRootMovieClipInstance", CGS_ARTIST_FILE, 146 /* ARTIST 0x824718C0 */);
 
     mpRootMovieClipInstance->Update(lfTimeStep);
 }
@@ -124,9 +124,9 @@ void FlaptFileInstance::Update(f32 lfTimeStep)
 // manager's renderer.
 void FlaptFileInstance::Render(FlaptRenderer* lpRenderer)
 {
-    CGS_ASSERT(mbIsActive, CGS_ASSERT_MESSAGE_AT("IsActive()", CGS_ARTIST_FILE, 162 /* ARTIST 0x824724BC */));
-    CGS_ASSERT(mpFile->muNumMovieClips > 0, CGS_ASSERT_MESSAGE_AT("mpFile->muNumMovieClips > 0", CGS_ARTIST_FILE, 163 /* ARTIST 0x824724EC */));
-    CGS_ASSERT(mpRootMovieClipInstance != 0, CGS_ASSERT_MESSAGE_AT("mpRootMovieClipInstance", CGS_ARTIST_FILE, 164 /* ARTIST 0x82472514 */));
+    CGS_ASSERT_AT(mbIsActive, "IsActive()", CGS_ARTIST_FILE, 162 /* ARTIST 0x824724BC */);
+    CGS_ASSERT_AT(mpFile->muNumMovieClips > 0, "mpFile->muNumMovieClips > 0", CGS_ARTIST_FILE, 163 /* ARTIST 0x824724EC */);
+    CGS_ASSERT_AT(mpRootMovieClipInstance != 0, "mpRootMovieClipInstance", CGS_ARTIST_FILE, 164 /* ARTIST 0x82472514 */);
 
     mpRootMovieClipInstance->Render(lpRenderer);
 }
@@ -175,7 +175,7 @@ MovieClipRef* FlaptFileInstance::FindComponent(u32 luHash, MovieClipRef* lpOutRe
     }
 
     (void)lpcName; // only decorates ARTIST's streamed assertion text
-    CGS_ASSERT(false, "Unable to find FLApt component");
+    CGS_FAIL("Unable to find FLApt component");
     return lpOutRef;
 }
 

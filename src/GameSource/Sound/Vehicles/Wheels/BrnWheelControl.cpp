@@ -188,7 +188,7 @@ void WheelControl::AttachController(CgsSound::Logic::EffectBase* apController)
         mpRight3dControl = static_cast<RightSide3dControl*>(apController);
         break;
     default:
-        CGS_ASSERT_AT(false, "Bad attach", BRN_WHEELCONTROL_CPP_FILE, 509);
+        CGS_FAIL_AT("Bad attach", BRN_WHEELCONTROL_CPP_FILE, 509);
         break;
     }
 }

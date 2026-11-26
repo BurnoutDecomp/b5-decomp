@@ -122,7 +122,7 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager
 
     Camera::BehaviourManager& lrBehaviourManager = lrBehaviourController;
 
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 74));   // :74
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters != NULL", CGS_ARTIST_FILE, 74);   // :74
 
     switch (GetState())
     {
@@ -203,7 +203,7 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager
     }
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", CGS_ARTIST_FILE, 158));   // :158
+        CGS_FAIL_AT("unhandled case in switch", CGS_ARTIST_FILE, 158);   // :158
         break;
     }
 }

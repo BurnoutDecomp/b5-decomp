@@ -106,7 +106,7 @@ s32 MovieClip::FindLabelledFrameIndex(u32 luLabelId, const char* lpcLabelText) c
         }
     }
 
-    CGS_ASSERT(false,
+    CGS_FAIL(
         "Tried to find missing frame labelled ");
     return -1;
 }

@@ -230,7 +230,7 @@ namespace BrnResource
             mePrepareStage = E_PREPARE_GAMETALK;
             if (!mGameTalk.Prepare(10.0f, 0.01666666753590107f))
                 goto Pending;
-            CGS_ASSERT(mDebugGameTalkInterface.Prepare(), CGS_ASSERT_MESSAGE_AT("mDebugGameTalkInterface.Prepare()", CGS_ARTIST_FILE, 519));
+            CGS_ASSERT_AT(mDebugGameTalkInterface.Prepare(), "mDebugGameTalkInterface.Prepare()", CGS_ARTIST_FILE, 519);
             // fall through
         case E_PREPARE_LIVE_UPDATE:
             mePrepareStage = E_PREPARE_LIVE_UPDATE;
@@ -292,7 +292,7 @@ namespace BrnResource
             lpOutputBuffer->UnlockForWrite();
             return true;
         default:
-            CGS_ASSERT(false, "Invalid stage");
+            CGS_FAIL("Invalid stage");
             goto Pending;
         }
     Pending:
@@ -488,7 +488,7 @@ namespace BrnResource
                 case 14:
                     break;
                 default:
-                    CGS_ASSERT(false, "Invalid event type\n");
+                    CGS_FAIL("Invalid event type\n");
                     break;
                 }
                 liType = mReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
@@ -519,7 +519,7 @@ namespace BrnResource
     bool GameDataModule::PrepareAttribSysSchemaResource(CgsModule::IOBufferStack* lpInputStack,
         CgsModule::IOBufferStack* lpOutputStack, CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
     {
-        CGS_ASSERT(lpAttribModuleInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpAttribModuleInputBuffer != NULL", CGS_ARTIST_FILE, 1481));
+        CGS_ASSERT_AT(lpAttribModuleInputBuffer != 0, "lpAttribModuleInputBuffer != NULL", CGS_ARTIST_FILE, 1481);
         CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
         lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
         lpResourceInput->LockForWrite();
@@ -546,7 +546,7 @@ namespace BrnResource
             lpInputStack->DestroyIOBuffer(&lpResourceInput);
             return true;
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid resource prepare stage.\n", CGS_ARTIST_FILE, 1534));
+            CGS_FAIL_AT("Invalid resource prepare stage.\n", CGS_ARTIST_FILE, 1534);
             break;
         }
         lpResourceInput->UnlockForWrite();
@@ -1137,7 +1137,7 @@ namespace BrnResource
             ProcessInternalValidateResponse(lpResourceInput, lpEvent);
             break;
         default:
-            CGS_ASSERT(false, "Invalid request received\n");   // X360 line 1904
+            CGS_FAIL("Invalid request received\n");   // X360 line 1904
             break;
         }
     }
@@ -1269,7 +1269,7 @@ namespace BrnResource
                 else if (liType == 5)
                     ProcessUnregisterVehicleAttribsResponse(lpResourceInput, lpEvent);
                 else
-                    CGS_ASSERT(false, "Invalid request received\n");   // X360 line 1946
+                    CGS_FAIL("Invalid request received\n");   // X360 line 1946
                 liType = mAttribSysReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
             }
             mAttribSysReceiverQueue.Clear();   // X360 ring-rewind, same as mReceiverQueue
@@ -1312,7 +1312,7 @@ namespace BrnResource
                 static_cast<const GameDataIO::SwapInCollisionWorldRequest*>(lpEvent));
             break;
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid event id\n", CGS_ARTIST_FILE, 2791));   // X360 line 2791
+            CGS_FAIL_AT("Invalid event id\n", CGS_ARTIST_FILE, 2791);   // X360 line 2791
             break;
         }
     }
@@ -1394,7 +1394,7 @@ namespace BrnResource
             else if (memcmp(lacName + 4, "INST", 4) == 0)
                 ProcessLoadPropInstancesRequest(lpResourceInput, lpEvent, 35, liIndex);
             else
-                CGS_ASSERT(false, "Invalid game data id: ");   // X360 streams the id (line 2899)
+                CGS_FAIL("Invalid game data id: ");   // X360 streams the id (line 2899)
         }
         else if (memcmp(lacName, "GD__", 4) == 0)
         {
@@ -1403,7 +1403,7 @@ namespace BrnResource
             else if (memcmp(lacName + 4, "AI__", 4) == 0)
                 ProcessLoadAILanesRequest(lpResourceInput, lpEvent, 29, liIndex);
             else
-                CGS_ASSERT(false, "Invalid game data id: ");   // X360 streams the id (line 2914)
+                CGS_FAIL("Invalid game data id: ");   // X360 streams the id (line 2914)
         }
         else if (memcmp(lacName, "TRK_", 4) == 0)
         {
@@ -1414,7 +1414,7 @@ namespace BrnResource
             else if (memcmp(lacName + 4, "ZONE", 4) == 0)
                 ProcessLoadPVSRequest(lpResourceInput, lpEvent, 33, liIndex);
             else
-                CGS_ASSERT(false, "Invalid track data id: ");   // X360 streams the id (line 2933)
+                CGS_FAIL("Invalid track data id: ");   // X360 streams the id (line 2933)
         }
         else if (memcmp(lacName, "SURF", 4) == 0)
         {
@@ -1422,7 +1422,7 @@ namespace BrnResource
         }
         else
         {
-            CGS_ASSERT(false, "Invalid data id: ");   // X360 streams the id (line 2945)
+            CGS_FAIL("Invalid data id: ");   // X360 streams the id (line 2945)
         }
     }
 
@@ -1485,7 +1485,7 @@ namespace BrnResource
             else if (memcmp(lacName + 4, "INST", 4) == 0)
                 ProcessGetPropInstancesRequest(lpResourceInput, lpEvent, 62, liIndex);
             else
-                CGS_ASSERT(false, "Invalid id\n");   // X360 line 3114
+                CGS_FAIL("Invalid id\n");   // X360 line 3114
         }
         else if (memcmp(lacName, "WL__", 4) == 0)
         {
@@ -1498,7 +1498,7 @@ namespace BrnResource
             else if (memcmp(lacName + 4, "AI__", 4) == 0)
                 ProcessGetAILanesRequest(lpResourceInput, lpEvent, 54, liIndex);
             else
-                CGS_ASSERT(false, "Invalid id\n");   // X360 line 3133
+                CGS_FAIL("Invalid id\n");   // X360 line 3133
         }
         else if (memcmp(lacName, "TRK_", 4) == 0)
         {
@@ -1509,11 +1509,11 @@ namespace BrnResource
             else if (memcmp(lacName + 4, "PVS_", 4) == 0)
                 ProcessGetPVSRequest(lpResourceInput, lpEvent, 58, liIndex);
             else
-                CGS_ASSERT(false, "Invalid id\n");   // X360 line 3152
+                CGS_FAIL("Invalid id\n");   // X360 line 3152
         }
         else
         {
-            CGS_ASSERT(false, "Invalid id\n");   // X360 line 3157
+            CGS_FAIL("Invalid id\n");   // X360 line 3157
         }
     }
 
@@ -1561,14 +1561,14 @@ namespace BrnResource
             else if (memcmp(lacName + 4, "AI__", 4) == 0)
                 ProcessUnloadAILanesRequest(lpResourceInput, lpEvent, 42, liIndex);
             else
-                CGS_ASSERT(false, "Invalid id\n");   // X360 line 3003
+                CGS_FAIL("Invalid id\n");   // X360 line 3003
         }
         else if (memcmp(lacName, "PRP_", 4) == 0)
         {
             if (memcmp(lacName + 4, "INST", 4) == 0)
                 ProcessUnloadPropInstancesRequest(lpResourceInput, lpEvent, 48, liIndex);
             else
-                CGS_ASSERT(false, "Invalid game data id: ");   // X360 streams the id (line 3014)
+                CGS_FAIL("Invalid game data id: ");   // X360 streams the id (line 3014)
         }
         else if (memcmp(lacName, "TRK_", 4) == 0)
         {
@@ -1579,11 +1579,11 @@ namespace BrnResource
             else if (memcmp(lacName + 4, "PVS_", 4) == 0)
                 ProcessUnloadPVSRequest(lpResourceInput, lpEvent, 46, liIndex);
             else
-                CGS_ASSERT(false, "Invalid id\n");   // X360 line 3033
+                CGS_FAIL("Invalid id\n");   // X360 line 3033
         }
         else
         {
-            CGS_ASSERT(false, "Invalid id\n");   // X360 line 3038
+            CGS_FAIL("Invalid id\n");   // X360 line 3038
         }
     }
 
@@ -1715,7 +1715,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
             const VehicleListEntry* lpVehicleListEntry =
                 mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
-            CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_FILE, 3956));   // X360 line 3956
+            CGS_ASSERT_AT(lpVehicleListEntry != 0, "lpVehicleListEntry", CGS_ARTIST_FILE, 3956);   // X360 line 3956
             if (lpVehicleListEntry == 0)
                 return;   // [marked deviation] the X360 assert is non-fatal and the next
                           // load would fault on the null entry; guard the host instead.
@@ -1762,8 +1762,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         CgsIDConvertToString(lpEvent->mId, lacVehicleID);
         char lacResourceName[128];
         strncpy(lacResourceName, lacVehicleID + 4, 9);
-        CGS_ASSERT(strlen(lacResourceName) + 10 < 0x7F,
-                   CGS_ASSERT_MESSAGE_AT("(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1", "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75));
+        CGS_ASSERT_AT(strlen(lacResourceName) + 10 < 0x7F,
+                   "(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1", "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75);
         strcat(lacResourceName, "_AttribSys");
 
         CgsResource::Events::AcquireResourceRequest lRequest;
@@ -1804,8 +1804,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         {
             CGS_ASSERT(strstr(lacVehicleID, "VEH_") != 0, "strstr( lacVehicleID, \"VEH_\" )");
             lpVehicle = mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
-            CGS_ASSERT(lpVehicle != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_FILE, 5031));
-            CGS_ASSERT(muLoadedSoundBundlesCount == 2, CGS_ASSERT_MESSAGE_AT("muLoadedSoundBundlesCount == 2", CGS_ARTIST_FILE, 5034));
+            CGS_ASSERT_AT(lpVehicle != 0, "lpVehicleListEntry", CGS_ARTIST_FILE, 5031);
+            CGS_ASSERT_AT(muLoadedSoundBundlesCount == 2, "muLoadedSoundBundlesCount == 2", CGS_ARTIST_FILE, 5034);
         }
         const u32 luBundleCount = lpEvent->meType == E_ASSETSET_SOUND ? 2 : 1;
         for (u32 luBundle = 0; luBundle < luBundleCount; ++luBundle)
@@ -2083,7 +2083,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
                 const VehicleListEntry* lpVehicleListEntry =
                     mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
-                CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_FILE, 4689));   // X360 line 4689
+                CGS_ASSERT_AT(lpVehicleListEntry != 0, "lpVehicleListEntry", CGS_ARTIST_FILE, 4689);   // X360 line 4689
                 if (lpVehicleListEntry == 0)
                     return;   // [marked deviation] see ProcessLoadVehicleRequest
 
@@ -2122,7 +2122,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                 return;
             }
 
-            CGS_ASSERT(false, "Tried to load too many sound bundles");   // X360 line 4721
+            CGS_FAIL("Tried to load too many sound bundles");   // X360 line 4721
             return;
         }
 
@@ -2682,8 +2682,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         CgsIDConvertToString(lpEvent->mId, lacResourceName);
 
         // X360 line 4155 (message-less assert: the stringized condition is the message).
-        CGS_ASSERT(strncmp(lacResourceName, "PRP_INST_", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0,
-                   CGS_ASSERT_MESSAGE_AT("strncmp(lacResourceName, \"PRP_INST_\", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0", CGS_ARTIST_FILE, 4155));
+        CGS_ASSERT_AT(strncmp(lacResourceName, "PRP_INST_", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0,
+                   "strncmp(lacResourceName, \"PRP_INST_\", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0", CGS_ARTIST_FILE, 4155);
 
         const u32 luZoneId = static_cast<u32>(atoi(&lacResourceName[KU_STRING_INDEX_OF_ZONE_NUMBER]));
         // X360 fires this guard TWICE (lines 4157 and 4160) inside one out-of-range branch;
@@ -3157,7 +3157,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         case 65: POST_HANDLE(GetICEMovieResponse, SetICEMovieObjectHandle); break;
         case 32: SendPlainResponse<GameDataIO::LoadWorldCollisionResponse>(lpSlot, liResponseId, lbFailFlag, luTypeLane); break;
         case 66: SendPlainResponse<GameDataIO::GetSurfaceListResponse>(lpSlot, liResponseId, lbFailFlag, luTypeLane); break;
-        default: CGS_ASSERT(false, "Invalid event type received\n"); break;
+        default: CGS_FAIL("Invalid event type received\n"); break;
         }
 #undef POST_HANDLE
     }
@@ -3281,7 +3281,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         }
 
         default:
-            CGS_ASSERT(false, "Invalid event type received\n");   // X360 line 3335
+            CGS_FAIL("Invalid event type received\n");   // X360 line 3335
             break;
         }
     }
@@ -3298,7 +3298,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             const CgsResource::Events::AcquireResourceResponse* lpResponse,
             CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
     {
-        CGS_ASSERT(lpAttribModuleInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpAttribModuleInputBuffer != NULL", CGS_ARTIST_FILE, 3357));   // X360 line 3357
+        CGS_ASSERT_AT(lpAttribModuleInputBuffer != 0, "lpAttribModuleInputBuffer != NULL", CGS_ARTIST_FILE, 3357);   // X360 line 3357
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(lpResponse->miEventId)];
         const s32 liSlotIndex = lpResponse->miEventId;
 
@@ -3316,8 +3316,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         case 40:   // vehicle unload -> AttribSys UnregisterVault (slot stays staged; the
                    // type-5 reply routes through ProcessUnregisterVehicleAttribsResponse)
         {
-            CGS_ASSERT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
-                       CGS_ASSERT_MESSAGE_AT("lpSlot->mEvent.GetGameDataType() == E_ASSETSET_ATTRIBS", CGS_ARTIST_FILE, 3542));   // line 3542
+            CGS_ASSERT_AT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
+                       "lpSlot->mEvent.GetGameDataType() == E_ASSETSET_ATTRIBS", CGS_ARTIST_FILE, 3542);   // line 3542
             if (lpSlot->mEvent.meType != E_ASSETSET_ATTRIBS)
                 break;
             CgsResource::ResourceHandle lHandle;
@@ -3410,7 +3410,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         }
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid event type received\n", CGS_ARTIST_FILE, 3559));   // X360 line 3559
+            CGS_FAIL_AT("Invalid event type received\n", CGS_ARTIST_FILE, 3559);   // X360 line 3559
             break;
         }
         lpAttribModuleInputBuffer->UnlockForWrite();
@@ -3456,7 +3456,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         if (lpSlot->mEvent.meType == E_ASSETSET_SOUND)
         {
-            CGS_ASSERT(muLoadedSoundBundlesCount != 0, CGS_ASSERT_MESSAGE_AT("muLoadedSoundBundlesCount != 0", CGS_ARTIST_FILE, 3618));   // line 3618
+            CGS_ASSERT_AT(muLoadedSoundBundlesCount != 0, "muLoadedSoundBundlesCount != 0", CGS_ARTIST_FILE, 3618);   // line 3618
             if (muLoadedSoundBundlesCount-- != 1)
                 return;   // more sound bundles still unloading -- keep the slot alive
         }
@@ -3591,7 +3591,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         const s32 liResponseId = lpSlot->miResponseEventId;
         if (liResponseId != 50 && liResponseId != 66)
         {
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid event type received\n", CGS_ARTIST_FILE, 3817));   // X360 line 3817
+            CGS_FAIL_AT("Invalid event type received\n", CGS_ARTIST_FILE, 3817);   // X360 line 3817
             return;
         }
         if (lpSlot->mEvent.meType != E_ASSETSET_ATTRIBS)
@@ -3614,8 +3614,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
     {
         const s32 liSlotIndex = *reinterpret_cast<const s32*>(lpResponse);
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)];
-        CGS_ASSERT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
-                   CGS_ASSERT_MESSAGE_AT("leBundleAssetSet == E_ASSETSET_ATTRIBS", CGS_ARTIST_FILE, 3861));   // X360 line 3861
+        CGS_ASSERT_AT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
+                   "leBundleAssetSet == E_ASSETSET_ATTRIBS", CGS_ARTIST_FILE, 3861);   // X360 line 3861
         char lacVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpSlot->mEvent.mId, lacVehicleID);
         char lacFileName[128];

@@ -46,7 +46,7 @@ namespace AttribSysIO
     // AttribSysEventQueue* so ProcessInputs' generic GetFirstEvent/GetNextEvent path compiles.
     const AttribSysEventQueue* Inp(const InputBuffer* lpInputBuffer)
     {
-        CGS_ASSERT(lpInputBuffer->IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 85));
+        CGS_ASSERT_STREAM_AT(lpInputBuffer->IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 85);
         return reinterpret_cast<const AttribSysEventQueue*>(
             &lpInputBuffer->mVaultRequestInterface.mRequestQueue);
     }
@@ -56,7 +56,7 @@ namespace AttribSysIO
     // non-const writer variant used by the request builders taking the exclusive write lock.
     AttribSysEventQueue* InputBuff(InputBuffer* lpInputBuffer)
     {
-        CGS_ASSERT(lpInputBuffer->IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 88));
+        CGS_ASSERT_STREAM_AT(lpInputBuffer->IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 88);
         return reinterpret_cast<AttribSysEventQueue*>(
             &lpInputBuffer->mVaultRequestInterface.mRequestQueue);
     }

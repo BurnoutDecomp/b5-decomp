@@ -134,8 +134,8 @@ void DispatchList::PrepareSortJobInfo(SortJobInputOutput& lrJobInfo)
                 lpBlock->muKeyCount * sizeof(*lpBlock->mpKeyArray));
             luKeysCopied += lpBlock->muKeyCount;
         }
-        CGS_ASSERT(luKeysCopied == muCount,
-            CGS_ASSERT_MESSAGE_AT("luKeysCopied == muTotalKeyCount", KAC_ARTIST_ASSERT_CPP, 317));
+        CGS_ASSERT_AT(luKeysCopied == muCount,
+            "luKeysCopied == muTotalKeyCount", KAC_ARTIST_ASSERT_CPP, 317);
 
         mpBlockListHead->mpKeyArray     = lrJobInfo.mpSortedPointerArray;
         mpBlockListHead->muKeyCount    = muCount;
@@ -165,10 +165,10 @@ void DispatchList::SortForDispatch()
 // the conversion jobs. Each chain still contains ordinary 64-key blocks.
 void DispatchList::ReconnectChainBlocks()
 {
-    CGS_ASSERT(mpBlockListHead == NULL,
-        CGS_ASSERT_MESSAGE_AT("mpBlockListHead == NULL", KAC_ARTIST_ASSERT_CPP, 237));
-    CGS_ASSERT(mpBlockListTail == NULL,
-        CGS_ASSERT_MESSAGE_AT("mpBlockListTail == NULL", KAC_ARTIST_ASSERT_CPP, 238));
+    CGS_ASSERT_AT(mpBlockListHead == NULL,
+        "mpBlockListHead == NULL", KAC_ARTIST_ASSERT_CPP, 237);
+    CGS_ASSERT_AT(mpBlockListTail == NULL,
+        "mpBlockListTail == NULL", KAC_ARTIST_ASSERT_CPP, 238);
 
     muCount = 0;
     if (muChainBlockCount != 0)
@@ -176,14 +176,14 @@ void DispatchList::ReconnectChainBlocks()
         for (u32 luChain = 0; luChain < muChainBlockCount; ++luChain)
         {
             SortKeyBlock* lpBlockWithinChain = mapChainBlockArray[luChain];
-            CGS_ASSERT(lpBlockWithinChain->muKeyCapacity <= KU_KEYBLOCK_CAPACITY,
-                CGS_ASSERT_MESSAGE_AT("lpBlockWithinChain->muKeyCapacity <= KU_MAX_KEYS_PER_BLOCK",
-                    KAC_ARTIST_ASSERT_CPP, 249));
+            CGS_ASSERT_AT(lpBlockWithinChain->muKeyCapacity <= KU_KEYBLOCK_CAPACITY,
+                "lpBlockWithinChain->muKeyCapacity <= KU_MAX_KEYS_PER_BLOCK",
+                    KAC_ARTIST_ASSERT_CPP, 249);
             while (lpBlockWithinChain->mpNextBlock != NULL)
             {
-                CGS_ASSERT(lpBlockWithinChain->muKeyCapacity <= KU_KEYBLOCK_CAPACITY,
-                    CGS_ASSERT_MESSAGE_AT("lpBlockWithinChain->muKeyCapacity <= KU_MAX_KEYS_PER_BLOCK",
-                        KAC_ARTIST_ASSERT_CPP, 253));
+                CGS_ASSERT_AT(lpBlockWithinChain->muKeyCapacity <= KU_KEYBLOCK_CAPACITY,
+                    "lpBlockWithinChain->muKeyCapacity <= KU_MAX_KEYS_PER_BLOCK",
+                        KAC_ARTIST_ASSERT_CPP, 253);
                 muCount += lpBlockWithinChain->muKeyCount;
                 lpBlockWithinChain = lpBlockWithinChain->mpNextBlock;
             }

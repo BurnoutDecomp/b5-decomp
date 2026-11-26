@@ -302,7 +302,7 @@ Matrix44Affine CameraInterpolationController::RotateAboutPivot(
         Camera::Utils::Interpolater& lrLookAtInterpolater,
         f32                          lfT)
 {
-    CGS_ASSERT(lfT >= KF_ZERO && lfT <= KF_ONE, CGS_ASSERT_MESSAGE_AT("lT >= 0.0f && lT <= 1.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnCameraInterpolationController.cpp", 212));   // cpp:212
+    CGS_ASSERT_AT(lfT >= KF_ZERO && lfT <= KF_ONE, "lT >= 0.0f && lT <= 1.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnCameraInterpolationController.cpp", 212);   // cpp:212
 
     const Matrix44Affine lInversePivot =
         rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lrPivot);

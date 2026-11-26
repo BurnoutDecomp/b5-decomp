@@ -207,7 +207,7 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
     default:
         // cpp:199 -- the X360 streams "Unhandled state <N> in ColourCalibrationScreen::
         // Prepare"; folded static.
-        CGS_ASSERT(false, "Unhandled state in ColourCalibrationScreen::Prepare");
+        CGS_FAIL("Unhandled state in ColourCalibrationScreen::Prepare");
         break;
     }
 }

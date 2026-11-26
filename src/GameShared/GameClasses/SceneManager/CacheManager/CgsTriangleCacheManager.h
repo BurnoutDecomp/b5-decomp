@@ -161,7 +161,7 @@ namespace CgsSceneManager
         // the single inlined X360 function store-for-store.
         const CgsGeometric::Triangle4* GetCachedTriangle(s32 liIndex) const
         {
-            CGS_ASSERT(mpaTriangleCache != NULL, CGS_ASSERT_MESSAGE_AT("mpaTriangleCache != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\cachemanager\\CgsCachedTriangleList.h", 153));
+            CGS_ASSERT_AT(mpaTriangleCache != NULL, "mpaTriangleCache != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\cachemanager\\CgsCachedTriangleList.h", 153);
             return &mpaTriangleCache[liIndex];
         }
     };

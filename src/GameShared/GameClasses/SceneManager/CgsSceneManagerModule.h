@@ -320,7 +320,7 @@ namespace CgsSceneManager
         void Destruct() ;    // @ 0x828D1640
         void Update()
         {
-            CGS_ASSERT_AT(false, "Don't use this function. Use UpdateScene(), UpdateSceneQueries() and UpdateContactGeneration() instead",
+            CGS_FAIL_AT("Don't use this function. Use UpdateScene(), UpdateSceneQueries() and UpdateContactGeneration() instead",
                           "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModule.h", 276);
         }
 

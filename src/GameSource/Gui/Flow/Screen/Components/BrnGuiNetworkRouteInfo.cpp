@@ -364,7 +364,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT_AT(false, "Invalid state", CGS_ARTIST_FILE, 455);
+            CGS_FAIL_AT("Invalid state", CGS_ARTIST_FILE, 455);
             return;
         }
 
@@ -420,7 +420,7 @@ namespace BrnGui
             return;
 
         default:
-            CGS_ASSERT(false, "Invalid game mode!\n");
+            CGS_FAIL("Invalid game mode!\n");
             lpiMappingTable = KAI_RACE_OPTION_TO_COMPONENT_MAPPING;
             break;
         }
@@ -537,10 +537,10 @@ namespace BrnGui
     // ------------------------------------------------------------ SetupMap
     void GuiNetworkRouteInfo::SetupMap()
     {
-        CGS_ASSERT(mpIconManager != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpIconManager",
-                CGS_ARTIST_FILE, 679 /* ARTIST 0x824302F4 */));
+        CGS_ASSERT_AT(mpIconManager != 0,
+            "mpIconManager",
+                CGS_ARTIST_FILE, 679 /* ARTIST 0x824302F4 */);
+
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
@@ -630,7 +630,7 @@ namespace BrnGui
     // Show each option row the mode's mapping table places, hide the rest.
     void GuiNetworkRouteInfo::ShowAppropiateOptions(const s32* lpiMappingTable)
     {
-        CGS_ASSERT(lpiMappingTable != 0, CGS_ASSERT_MESSAGE_AT("lpiMappingTable", CGS_ARTIST_FILE, 829 /* ARTIST 0x8241744C */));
+        CGS_ASSERT_AT(lpiMappingTable != 0, "lpiMappingTable", CGS_ARTIST_FILE, 829 /* ARTIST 0x8241744C */);
 
         for (s32 liComponent = 0; liComponent < E_OPTION_COMPONENT_COUNT; ++liComponent)
         {

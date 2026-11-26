@@ -43,8 +43,8 @@ void BridgePhysicsSceneUpdateToScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneInputBuffer_Update != 0, CGS_ASSERT_MESSAGE_AT("lpSceneInputBuffer_Update != NULL", __FILE__, 103));           // :103
-    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleOutputBuffer != NULL", __FILE__, 104));       // :104
+    CGS_ASSERT_AT(lpSceneInputBuffer_Update != 0, "lpSceneInputBuffer_Update != NULL", __FILE__, 103);           // :103
+    CGS_ASSERT_AT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL", __FILE__, 104);       // :104
 
     // The console's evaluation order: source (read-locked) first, destination (write-locked)
     // second, then the whole-interface merge.
@@ -100,8 +100,8 @@ void BridgePhysicsSceneQueriesToScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneInputBuffer_Query != 0, CGS_ASSERT_MESSAGE_AT("lpSceneInputBuffer_Query != NULL", __FILE__, 40));     // :40
-    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleOutputBuffer != NULL", __FILE__, 41));  // :41
+    CGS_ASSERT_AT(lpSceneInputBuffer_Query != 0, "lpSceneInputBuffer_Query != NULL", __FILE__, 40);     // :40
+    CGS_ASSERT_AT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL", __FILE__, 41);  // :41
 
     // The producer's own ids (BrnVehicleManager_UpdateVehiclePhysics.cpp,
     // KI_SCENE_QUERY_EVENT_LINE_TEST_NEAREST == 6); 7 is the deepest-volume request.

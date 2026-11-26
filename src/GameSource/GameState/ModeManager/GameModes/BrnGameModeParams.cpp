@@ -196,8 +196,8 @@ Vector3 GameModeParams::GetStartPosition(s32 liOpponentIndex) const
 {
     // The assert text names the signed test (BrnWorld::KI_MAX_ACTIVE_RACE_CARS is an int32_t 8):
     // ARTIST cmpwi 0 ; blt ; cmpwi 8.
-    CGS_ASSERT(liOpponentIndex >= 0 && liOpponentIndex < static_cast<s32>(KU_MAX_ACTIVE_RACE_CARS),
-               CGS_ASSERT_MESSAGE_AT("liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 1177));
+    CGS_ASSERT_AT(liOpponentIndex >= 0 && liOpponentIndex < static_cast<s32>(KU_MAX_ACTIVE_RACE_CARS),
+               "liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 1177);
     return maStartLocations.Ge(static_cast<u32>(liOpponentIndex)).mPosition;
 }
 
@@ -208,8 +208,8 @@ Vector3 GameModeParams::GetStartDirection(s32 liOpponentIndex) const
 {
     // The assert text names the signed test (BrnWorld::KI_MAX_ACTIVE_RACE_CARS is an int32_t 8):
     // ARTIST cmpwi 0 ; blt ; cmpwi 8.
-    CGS_ASSERT(liOpponentIndex >= 0 && liOpponentIndex < static_cast<s32>(KU_MAX_ACTIVE_RACE_CARS),
-               CGS_ASSERT_MESSAGE_AT("liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 1185));
+    CGS_ASSERT_AT(liOpponentIndex >= 0 && liOpponentIndex < static_cast<s32>(KU_MAX_ACTIVE_RACE_CARS),
+               "liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 1185);
     return maStartLocations.Ge(static_cast<u32>(liOpponentIndex)).mDirection;
 }
 
@@ -276,7 +276,7 @@ void StartGameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeT
                                     Vector3                          lPlayerPosition,
                                     EGameModeStartMechanism          leStartMechanism)
 {
-    CGS_ASSERT(static_cast<u32>(leStartMechanism) < E_GAMEMODESTARTMECHANISM_COUNT, CGS_ASSERT_MESSAGE_AT("(uint32_t)leStartMechanism < E_GAMEMODESTARTMECHANISM_COUNT", CGS_ARTIST_FILE, 700));
+    CGS_ASSERT_AT(static_cast<u32>(leStartMechanism) < E_GAMEMODESTARTMECHANISM_COUNT, "(uint32_t)leStartMechanism < E_GAMEMODESTARTMECHANISM_COUNT", CGS_ARTIST_FILE, 700);
 
     meGameModeType   = leGameModeType;        // [180] +720
     meStartMechanism = leStartMechanism;      // [196] +784
@@ -327,7 +327,7 @@ LightTriggerId StartGameModeParams::GetTrafficLightTriggerId() const
 {
     const bool lbIsValid = !(((mTrafficLightTriggerId & 0xFFFF00u) == 0xFFFF00u) ||
                              (mTrafficLightTriggerId == 255u));
-    CGS_ASSERT(lbIsValid, CGS_ASSERT_MESSAGE_AT("mTrafficLightTriggerId.IsValid()", CGS_ARTIST_FILE, 854));
+    CGS_ASSERT_AT(lbIsValid, "mTrafficLightTriggerId.IsValid()", CGS_ARTIST_FILE, 854);
     return mTrafficLightTriggerId;
 }
 
@@ -342,7 +342,7 @@ void StartGameModeParams::SetTrafficLightTriggerId(LightTriggerId lTriggerId)
     // `clrlwi r11,r31,24 ; cmplwi 0xFF`). LightTriggerId is still a u32 typedef in this tree.
     const bool lbIsValid = !(((lTriggerId & 0xFFFF00u) == 0xFFFF00u) ||
                              ((lTriggerId & 0xFFu) == 0xFFu));
-    CGS_ASSERT(lbIsValid, CGS_ASSERT_MESSAGE_AT("lTriggerId.IsValid()", CGS_ARTIST_FILE, 847));
+    CGS_ASSERT_AT(lbIsValid, "lTriggerId.IsValid()", CGS_ARTIST_FILE, 847);
     mTrafficLightTriggerId = lTriggerId;
 }
 
@@ -352,9 +352,9 @@ void StartGameModeParams::SetTrafficLightTriggerId(LightTriggerId lTriggerId)
 // -----------------------------------------------------------------------------
 void StartGameModeParams::SetProgressionRankData(const BrnProgression::ProgressionRankData* lpProgressionRankData)
 {
-    CGS_ASSERT(lpProgressionRankData != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpProgressionRankData != NULL", CGS_ARTIST_FILE, 953 /* ARTIST 0x823544BC */));
+    CGS_ASSERT_AT(lpProgressionRankData != NULL,
+        "lpProgressionRankData != NULL", CGS_ARTIST_FILE, 953 /* ARTIST 0x823544BC */);
+
     mpProgressionRankData = lpProgressionRankData;
 }
 
@@ -383,9 +383,9 @@ void StartGameModeParams::SetProgressionRankAsRatio(f32 lfProgressionRankAsRatio
 // -----------------------------------------------------------------------------
 void StartGameModeParams::SetPlayerVehicleGamePlayData(const BrnResource::VehicleListEntry* lpPlayerCarVehicleListEntry)
 {
-    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayerCarVehicleListEntry != NULL", CGS_ARTIST_FILE, 985 /* ARTIST 0x823545BC */));
+    CGS_ASSERT_AT(lpPlayerCarVehicleListEntry != NULL,
+        "lpPlayerCarVehicleListEntry != NULL", CGS_ARTIST_FILE, 985 /* ARTIST 0x823545BC */);
+
     mpPlayerCarVehicleListEntry = lpPlayerCarVehicleListEntry;
 }
 

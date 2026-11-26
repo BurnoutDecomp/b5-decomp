@@ -57,11 +57,11 @@ namespace CgsNetwork
 
     s32 ServerInterfacePingRegions::GetPingValue(s32 liRegion) const
     {
-        CGS_ASSERT(liRegion >= 0,
-            CGS_ASSERT_MESSAGE_AT("liRegion >= 0", CGS_ARTIST_HEADER, 201 /* ARTIST 0x82877994 */));
-        CGS_ASSERT(liRegion < miCurrentRegion,
-            CGS_ASSERT_MESSAGE_AT(
-                "liRegion < miCurrentRegion", CGS_ARTIST_HEADER, 202 /* ARTIST 0x828779BC */));
+        CGS_ASSERT_AT(liRegion >= 0,
+            "liRegion >= 0", CGS_ARTIST_HEADER, 201 /* ARTIST 0x82877994 */);
+        CGS_ASSERT_AT(liRegion < miCurrentRegion,
+            "liRegion < miCurrentRegion", CGS_ARTIST_HEADER, 202 /* ARTIST 0x828779BC */);
+
 
         return maiPingResults[liRegion];
     }
@@ -145,9 +145,9 @@ namespace CgsNetwork
             return;
         }
 
-        CGS_ASSERT(mpHostAddress != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpHostAddress != 0,
             "mpHostAddress",
-            __FILE__, 236 /* ARTIST 0x82889F54 */));
+            __FILE__, 236 /* ARTIST 0x82889F54 */);
 
         const s32 liDone = mpHostAddress->Done(mpHostAddress);
         if (liDone == KI_HOST_LOOKUP_FAILED)
@@ -193,11 +193,11 @@ namespace CgsNetwork
 
     void ServerInterfacePingRegions::StartPingRegions()
     {
-        CGS_ASSERT(meCurrentAction == E_ACTION_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "meCurrentAction == E_ACTION_COUNT", __FILE__, 442 /* ARTIST 0x8288A044 */));
-        CGS_ASSERT(mpHostAddress == 0,
-            CGS_ASSERT_MESSAGE_AT("mpHostAddress == NULL", __FILE__, 443 /* ARTIST 0x8288A06C */));
+        CGS_ASSERT_AT(meCurrentAction == E_ACTION_COUNT,
+            "meCurrentAction == E_ACTION_COUNT", __FILE__, 442 /* ARTIST 0x8288A044 */);
+
+        CGS_ASSERT_AT(mpHostAddress == 0,
+            "mpHostAddress == NULL", __FILE__, 443 /* ARTIST 0x8288A06C */);
 
         miPingRequest   = -1;
         miCurrentRegion = 0;
@@ -221,9 +221,9 @@ namespace CgsNetwork
         // (ARTIST 0x8287CAE0 branches the pinging path into the resolving one at 0x8287CAEC).
         if (meState == E_STATE_PINGING)
         {
-            CGS_ASSERT(miPingRequest > -1, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(miPingRequest > -1,
                 "miPingRequest > -1",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePingRegions.cpp", 476 /* ARTIST 0x8287CAC4 */));
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePingRegions.cpp", 476 /* ARTIST 0x8287CAC4 */);
             PingManagerCancelServerRequest(mpPingManagerRefT, static_cast<u32>(miPingRequest));
             miPingRequest = -1;
             if (mpHostAddress != 0)
@@ -276,8 +276,8 @@ namespace CgsNetwork
             return false;
         }
 
-        CGS_ASSERT(mpHostAddress == 0,
-            CGS_ASSERT_MESSAGE_AT("!mpHostAddress", __FILE__, 531 /* ARTIST 0x8287CBBC */));
+        CGS_ASSERT_AT(mpHostAddress == 0,
+            "!mpHostAddress", __FILE__, 531 /* ARTIST 0x8287CBBC */);
 
         mpHostAddress = ProtoNameAsync(lacHostName, KI_NAME_RESOLVE_TIMEOUT);
         if (mpHostAddress == 0)
@@ -291,11 +291,11 @@ namespace CgsNetwork
 
     void ServerInterfacePingRegions::HandlePingResults(s32 liPing)
     {
-        CGS_ASSERT(miCurrentRegion >= 0,
-            CGS_ASSERT_MESSAGE_AT("miCurrentRegion >= 0", __FILE__, 567 /* ARTIST 0x8287CC48 */));
-        CGS_ASSERT(miCurrentRegion < KI_MAX_PING_REGIONS,
-            CGS_ASSERT_MESSAGE_AT(
-                "miCurrentRegion < KI_MAX_PING_REGIONS", __FILE__, 568 /* ARTIST 0x8287CC70 */));
+        CGS_ASSERT_AT(miCurrentRegion >= 0,
+            "miCurrentRegion >= 0", __FILE__, 567 /* ARTIST 0x8287CC48 */);
+        CGS_ASSERT_AT(miCurrentRegion < KI_MAX_PING_REGIONS,
+            "miCurrentRegion < KI_MAX_PING_REGIONS", __FILE__, 568 /* ARTIST 0x8287CC70 */);
+
 
         miPingRequest                   = -1;
         maiPingResults[miCurrentRegion] = liPing;

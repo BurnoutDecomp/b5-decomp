@@ -418,10 +418,10 @@ namespace CgsLanguage
     // non-fatal/continue in this codebase).
     const char* LanguageManager::GetDefaultFont() const
     {
-        CGS_ASSERT(mpcDefaultFontName != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Invalid Default Font Name in Language Manager",
-                "..\\..\\..\\GameShared\\GameClasses\\Language/CgsLanguageManager.h", 642 /* ARTIST 0x824434E8 */));
+        CGS_ASSERT_AT(mpcDefaultFontName != 0,
+            "Invalid Default Font Name in Language Manager",
+                "..\\..\\..\\GameShared\\GameClasses\\Language/CgsLanguageManager.h", 642 /* ARTIST 0x824434E8 */);
+
         return mpcDefaultFontName;
     }
 
@@ -432,10 +432,10 @@ namespace CgsLanguage
     // true (the X360 body has no failure return).
     bool LanguageManager::Prepare(CgsMemory::HeapMalloc* lpLanguageAllocator)
     {
-        CGS_ASSERT(lpLanguageAllocator != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "Null pointer for language allocator given",
-                CGS_ARTIST_LANGUAGE_MANAGER_FILE, 180 /* ARTIST 0x828608FC */));
+        CGS_ASSERT_AT(lpLanguageAllocator != 0,
+            "Null pointer for language allocator given",
+                CGS_ARTIST_LANGUAGE_MANAGER_FILE, 180 /* ARTIST 0x828608FC */);
+
         mpLanguageAllocator = lpLanguageAllocator;
         mDebugComponent.Register();
         return true;
@@ -633,7 +633,7 @@ namespace CgsLanguage
                 mpDistanceFormatLongL  = FindString(KAC_DISTANCE_FORMAT_LONG_L);
                 return;
             }
-            CGS_ASSERT(false, "DISTANCE_FORMAT_ISMETRIC needs to be set to either 0 or 1");    // cpp:2407
+            CGS_FAIL("DISTANCE_FORMAT_ISMETRIC needs to be set to either 0 or 1");    // cpp:2407
         }
 
         CGS_ASSERT(mpDistanceFormatShort != 0,  KAC_DISTANCE_FORMAT_SHORT);               // cpp:2410
@@ -666,7 +666,7 @@ namespace CgsLanguage
             FormatCurrencyString(lpUtf8Target, liValue, static_cast<s32>(luBufferSize));
             break;
         default:
-            CGS_ASSERT_STREAM_AT(false, "Invalid Parameter sent to SetLocalisedText with int",
+            CGS_FAIL_STREAM_AT("Invalid Parameter sent to SetLocalisedText with int",
                 CGS_ARTIST_LANGUAGE_MANAGER_FILE, 968);
             break;
         }
@@ -1552,7 +1552,7 @@ namespace CgsLanguage
             FormatCurrencyString(lpUtf8Target, static_cast<s32>(lfValue), static_cast<s32>(luBufferSize));
             break;
         default:
-            CGS_ASSERT_STREAM_AT(false, "Invalid Parameter sent to SetLocalisedText with float : " << leType << "\n",
+            CGS_FAIL_STREAM_AT("Invalid Parameter sent to SetLocalisedText with float : " << leType << "\n",
                 CGS_ARTIST_LANGUAGE_MANAGER_FILE, 916);
             break;
         }
@@ -1640,7 +1640,7 @@ namespace CgsLanguage
         }
 
         default:
-            CGS_ASSERT(false, "Invalid Parameter sent to FormatText");
+            CGS_FAIL("Invalid Parameter sent to FormatText");
             return false;
         }
     }

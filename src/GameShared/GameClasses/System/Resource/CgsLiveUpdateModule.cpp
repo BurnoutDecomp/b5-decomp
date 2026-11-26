@@ -27,10 +27,10 @@ namespace CgsResource
     void LiveUpdateModule::Construct(CgsGameTalk::GameTalk* lpGameTalk)
     {
         // Only one live-update module may exist at a time.
-        CGS_ASSERT(spInstance == 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "spInstance==NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsLiveUpdateModule.cpp", 52 /* ARTIST 0x828E6574 */));
+        CGS_ASSERT_AT(spInstance == 0,
+            "spInstance==NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsLiveUpdateModule.cpp", 52 /* ARTIST 0x828E6574 */);
+
 
         // Chain the base single-buffered module Construct.
         ModuleSingleBuffered::Construct();
@@ -51,7 +51,7 @@ namespace CgsResource
     {
         if (static_cast<u32>(miField273) > 1)
         {
-            CGS_ASSERT(false, "Invalid stage\n");
+            CGS_FAIL("Invalid stage\n");
             return false;
         }
         if (miField273 == 0)
@@ -83,7 +83,7 @@ namespace CgsResource
         }
         else if (meReleaseStage != 1)
         {
-            CGS_ASSERT(false, "Invalid stage\n");
+            CGS_FAIL("Invalid stage\n");
             return false;
         }
 

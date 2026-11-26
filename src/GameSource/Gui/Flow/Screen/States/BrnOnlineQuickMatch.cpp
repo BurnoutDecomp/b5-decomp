@@ -252,7 +252,7 @@ namespace BrnGui
             default:
                 // The console streams the event id and its file/line (line 208) after this
                 // text; lowered to the static text.
-                CGS_ASSERT(false, "Unexpected event received : ");
+                CGS_FAIL("Unexpected event received : ");
                 break;
             }
         }

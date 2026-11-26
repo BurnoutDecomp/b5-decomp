@@ -34,10 +34,10 @@ bool BehaviourPassengerCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
     (void)lrCamera;
     (void)lrInfo;
 
-    CGS_ASSERT(mpParameters != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpParameters != NULL",
-            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourPassengerCam.cpp", 86 /* ARTIST 0x821F9E90 */));   // :86 (non-gating)
+    CGS_ASSERT_AT(mpParameters != 0,
+        "mpParameters != NULL",
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourPassengerCam.cpp", 86 /* ARTIST 0x821F9E90 */);   // :86 (non-gating)
+
     return true;
 }
 
@@ -76,9 +76,9 @@ void BehaviourPassengerCam::Parameters::Construct()
 void BehaviourPassengerCam::SetParameters(const Parameters* lpParameters)
 {
     // ARTIST 0x821F3A60 fires this at BehaviourPassengerCam.h:124 (an inline of the header).
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourPassengerCam, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpParameters->GetType() == eBehaviourPassengerCam,
                "lpParameters->GetType() == eBehaviourPassengerCam",
-               "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourPassengerCam.h", 124));
+               "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourPassengerCam.h", 124);
 
     SetDebugParametersName(lpParameters->GetDebugName());        // +0x10
     mpParameters = lpParameters;                                 // +0x14

@@ -61,18 +61,18 @@ void OnlineBurningHomeRunMode::SwitchBurningHomeRunRunner(::EActiveRaceCarIndex 
                                                           ::EActiveRaceCarIndex            leNewRunnerRaceCarIndex,
                                                           GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(leOldRunnerRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
-               CGS_ASSERT_MESSAGE_AT("leOldRunnerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 242));
-    CGS_ASSERT(leOldRunnerRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leOldRunnerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 243));
-    CGS_ASSERT(leNewRunnerRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
-               CGS_ASSERT_MESSAGE_AT("leNewRunnerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 245));
-    CGS_ASSERT(leNewRunnerRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CGS_ASSERT_MESSAGE_AT("leNewRunnerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 246));
+    CGS_ASSERT_AT(leOldRunnerRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
+               "leOldRunnerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 242);
+    CGS_ASSERT_AT(leOldRunnerRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leOldRunnerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 243);
+    CGS_ASSERT_AT(leNewRunnerRaceCarIndex >= ::E_ACTIVE_RACE_CAR_INDEX_0,
+               "leNewRunnerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 245);
+    CGS_ASSERT_AT(leNewRunnerRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leNewRunnerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 246);
 
-    CGS_ASSERT(mpModeManager != NULL, CGS_ASSERT_MESSAGE_AT("mpModeManager", CGS_ARTIST_FILE, 248));
-    CGS_ASSERT(mpModeManager->GetScoringSystem() != NULL, CGS_ASSERT_MESSAGE_AT("mpModeManager->GetScoringSystem()", CGS_ARTIST_FILE, 249));
-    CGS_ASSERT(mpModeManager->GetHUDMessageLogic() != NULL, CGS_ASSERT_MESSAGE_AT("mpModeManager->GetHUDMessageLogic()", CGS_ARTIST_FILE, 250));
+    CGS_ASSERT_AT(mpModeManager != NULL, "mpModeManager", CGS_ARTIST_FILE, 248);
+    CGS_ASSERT_AT(mpModeManager->GetScoringSystem() != NULL, "mpModeManager->GetScoringSystem()", CGS_ARTIST_FILE, 249);
+    CGS_ASSERT_AT(mpModeManager->GetHUDMessageLogic() != NULL, "mpModeManager->GetHUDMessageLogic()", CGS_ARTIST_FILE, 250);
 
     if (mfTimeSinceRunnerSwitch < KF_RUNNER_SWITCH_MIN_SECONDS)
     {
@@ -121,8 +121,8 @@ void OnlineBurningHomeRunMode::SwitchBurningHomeRunRunner(::EActiveRaceCarIndex 
     }
 
     const CarData* lpCarData = mpModeManager->GetScoringSystem()->GetCarData(leNewRunnerRaceCarIndex);
-    CGS_ASSERT(lpCarData, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE, 312));
-    CGS_ASSERT(lpCarData->GetScoreData(), CGS_ASSERT_MESSAGE_AT("lpCarData->GetScoreData()", CGS_ARTIST_FILE, 313));
+    CGS_ASSERT_AT(lpCarData, "lpCarData", CGS_ARTIST_FILE, 312);
+    CGS_ASSERT_AT(lpCarData->GetScoreData(), "lpCarData->GetScoreData()", CGS_ARTIST_FILE, 313);
 
     miNumCrashesWhenPlayerBecameRunner = lpCarData->GetScoreData()->GetMarkedManTakedownsFor();
     miNumCrashesAsRunner               = 0;
@@ -165,9 +165,9 @@ void OnlineBurningHomeRunMode::PickNewBurningHomeRunRunner(
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface,
         GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    CGS_ASSERT(lpActionQueue != NULL, CGS_ASSERT_MESSAGE_AT("lpActionQueue", CGS_ARTIST_FILE, 344));
-    CGS_ASSERT(mpModeManager != NULL, CGS_ASSERT_MESSAGE_AT("mpModeManager", CGS_ARTIST_FILE, 345));
-    CGS_ASSERT(mpModeManager->GetScoringSystem() != NULL, CGS_ASSERT_MESSAGE_AT("mpModeManager->GetScoringSystem()", CGS_ARTIST_FILE, 249));
+    CGS_ASSERT_AT(lpActionQueue != NULL, "lpActionQueue", CGS_ARTIST_FILE, 344);
+    CGS_ASSERT_AT(mpModeManager != NULL, "mpModeManager", CGS_ARTIST_FILE, 345);
+    CGS_ASSERT_AT(mpModeManager->GetScoringSystem() != NULL, "mpModeManager->GetScoringSystem()", CGS_ARTIST_FILE, 249);
 
     ScoringSystem* lpScoringSystem = mpModeManager->GetScoringSystem();
 
@@ -185,8 +185,8 @@ void OnlineBurningHomeRunMode::PickNewBurningHomeRunRunner(
     {
         leActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
     }
-    CGS_ASSERT(leActiveRaceCarIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
-               CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ARTIST_FILE, 350));
+    CGS_ASSERT_AT(leActiveRaceCarIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
+               "leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ARTIST_FILE, 350);
 
     const Vector3 lRunnerPosition =
         lpActiveCarInterface->GetRaceCarState(leActiveRaceCarIndex)->mTransform.Pos();
@@ -226,7 +226,7 @@ void OnlineBurningHomeRunMode::PickNewBurningHomeRunRunner(
     if (leNewRunnerIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID)
     {
         const CarData* lpCarData = lpConstScoringSystem->GetCarData(leNewRunnerIndex);
-        CGS_ASSERT(lpCarData != NULL, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE, 400));
+        CGS_ASSERT_AT(lpCarData != NULL, "lpCarData", CGS_ARTIST_FILE, 400);
 
         GameStateModuleIO::SwitchBurningHomeRunRunnerAction lAction;
         lAction.mNewRunnerPlayerID = lpCarData->GetNetworkPlayerID();

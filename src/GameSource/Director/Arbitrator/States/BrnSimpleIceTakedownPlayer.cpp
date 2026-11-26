@@ -30,11 +30,11 @@ namespace BrnDirector
     void SimpleIceTakedownPlayer::SetIceAnim(Camera::Camera::ShotReference* lpIceAnim)
     {
         // The && short-circuit matches the asm: the class key is only read when the shot is non-null.
-        CGS_ASSERT(lpIceAnim != 0 &&
+        CGS_ASSERT_AT(lpIceAnim != 0 &&
                    static_cast<s64>(lpIceAnim->GetClassKey()) == Attrib::Gen::iceanim::ClassKey(),
-            CGS_ASSERT_MESSAGE_AT(
-                "lpIceAnim && lpIceAnim->GetClassKey()==Attrib::Gen::iceanim::ClassKey()",
-                "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.h", 236 /* ARTIST 0x821F5914 */));
+            "lpIceAnim && lpIceAnim->GetClassKey()==Attrib::Gen::iceanim::ClassKey()",
+                "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.h", 236 /* ARTIST 0x821F5914 */);
+
 
         mpIceAnim = lpIceAnim;
     }

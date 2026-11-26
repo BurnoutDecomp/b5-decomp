@@ -374,8 +374,8 @@ void ShaderConstantTableElement::SetSize(u8 lu8SizeInBytes)
     mu8SizeInBytes = lu8SizeInBytes;
 
     const u32 luNumQwInArray = (mu8NumEntries * mu8SizeInBytes) / 16;
-    CGS_ASSERT(luNumQwInArray <= 0xFFFF,
-        CGS_ASSERT_MESSAGE_AT("luNumQwInArray <= 0xFFFF", KAC_ARTIST_ASSERT_HEADER, 148));
+    CGS_ASSERT_AT(luNumQwInArray <= 0xFFFF,
+        "luNumQwInArray <= 0xFFFF", KAC_ARTIST_ASSERT_HEADER, 148);
     mu16SizeOfArrayInQw = static_cast<u16>(luNumQwInArray);
 }
 
@@ -388,8 +388,8 @@ void ShaderConstantTableElement::SetNumEntries(u8 lu8NumEntries)
     mu8NumEntries = lu8NumEntries;
 
     const u32 luNumQwInArray = (mu8NumEntries * mu8SizeInBytes) / 16;
-    CGS_ASSERT(luNumQwInArray <= 0xFFFF,
-        CGS_ASSERT_MESSAGE_AT("luNumQwInArray <= 0xFFFF", KAC_ARTIST_ASSERT_HEADER, 178));
+    CGS_ASSERT_AT(luNumQwInArray <= 0xFFFF,
+        "luNumQwInArray <= 0xFFFF", KAC_ARTIST_ASSERT_HEADER, 178);
     mu16SizeOfArrayInQw = static_cast<u16>(luNumQwInArray);
 }
 
@@ -406,8 +406,8 @@ void ShaderConstantTableElement::SetNumEntries(u8 lu8NumEntries)
 // fits a byte (< 256). Returns int 0 on X360 (u32 per the DWARF signature).
 u32 ShaderConstantsCPU::FixUp(u8* lpBaseData)
 {
-    CGS_ASSERT(muNumConstantsInstances < 256,
-        CGS_ASSERT_MESSAGE_AT("muNumConstantsInstances<256", KAC_ARTIST_MATERIAL_ANIMATION_FILE, 126));
+    CGS_ASSERT_AT(muNumConstantsInstances < 256,
+        "muNumConstantsInstances<256", KAC_ARTIST_MATERIAL_ANIMATION_FILE, 126);
 
     const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
 
@@ -416,25 +416,25 @@ u32 ShaderConstantsCPU::FixUp(u8* lpBaseData)
         reinterpret_cast<uintptr_t>(mppaConstantsInstanceData) + luBase);
     mppacNames = reinterpret_cast<const char**>(reinterpret_cast<uintptr_t>(mppacNames) + luBase);
 
-    if (muNumConstantsInstances > 0)
+    // ARTIST 0x827E9870..0x827E98B4 is one counted loop over the instances, the guard included
+    // (the XDK keeps a for loop's entry test); the PS3 DecFIGS body (0xAB0F6C) is the same
+    // single loop relocating both pointers by the base. The earlier shape (a do/while under a
+    // guarding if, and the instance pointer relocated by lpBaseData where every other
+    // pointer takes luBase) was fitted under the do/while(0) assert form and stopped
+    // matching once the asserts took the original if-form (D12, asserts lane).
+
+    for (u32 luIndex = 0; luIndex < muNumConstantsInstances; ++luIndex)
     {
-        u32 luIndex = 0;
-        do
+        if (mppacNames[luIndex] != 0)
         {
-            if (mppacNames[luIndex] != 0)
-            {
-                mppacNames[luIndex] = reinterpret_cast<const char*>(
-                    reinterpret_cast<uintptr_t>(mppacNames[luIndex]) + luBase);
-            }
-
-            mppaConstantsInstanceData[luIndex] = reinterpret_cast<u32*>(
-                reinterpret_cast<uintptr_t>(mppaConstantsInstanceData[luIndex]) +
-                reinterpret_cast<uintptr_t>(lpBaseData));
-
-            ++luIndex;
+            mppacNames[luIndex] = reinterpret_cast<const char*>(
+                reinterpret_cast<uintptr_t>(mppacNames[luIndex]) + luBase);
         }
-        while (luIndex < muNumConstantsInstances);
+
+        mppaConstantsInstanceData[luIndex] = reinterpret_cast<u32*>(
+            reinterpret_cast<uintptr_t>(mppaConstantsInstanceData[luIndex]) + luBase);
     }
+
 
     return 0;
 }

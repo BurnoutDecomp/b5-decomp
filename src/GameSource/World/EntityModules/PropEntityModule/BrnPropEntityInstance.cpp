@@ -160,18 +160,18 @@ namespace BrnWorld
     // X360 (subfc/subfe carry trick) -> a plain unsigned compare here.
     bool PropEntityInstance::IsSmashed() const
     {
-        CGS_ASSERT(mu8State < E_STATE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822B82F0 */));
+        CGS_ASSERT_AT(mu8State < E_STATE_COUNT,
+            "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822B82F0 */);
+
         return mu8State >= E_SMASHED;
     }
 
     // @ 0x822B8338. True when the prop is in the plain physical state (state == E_PHYSICAL).
     bool PropEntityInstance::IsPhysical() const
     {
-        CGS_ASSERT(mu8State < E_STATE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822B8360 */));
+        CGS_ASSERT_AT(mu8State < E_STATE_COUNT,
+            "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822B8360 */);
+
         return mu8State == E_PHYSICAL;
     }
 
@@ -236,18 +236,18 @@ namespace BrnWorld
     // EndAssert triple), after which it returns the same byte.
     EPropState PropEntityInstance::GetState() const
     {
-        CGS_ASSERT(mu8State < E_STATE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822A1B90 */));
+        CGS_ASSERT_AT(mu8State < E_STATE_COUNT,
+            "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822A1B90 */);
+
         return static_cast<EPropState>(mu8State);
     }
 
     // @ 0x822A1BC0. Set the prop's simulation state (range-checked against E_STATE_COUNT).
     void PropEntityInstance::SetState(EPropState leState)
     {
-        CGS_ASSERT(leState < E_STATE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leState < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 666 /* ARTIST 0x822A1BEC */));
+        CGS_ASSERT_AT(leState < E_STATE_COUNT,
+            "leState < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 666 /* ARTIST 0x822A1BEC */);
+
         mu8State = static_cast<u8>(leState);   // +77
     }
 
@@ -336,12 +336,12 @@ namespace BrnWorld
     // @ 0x822A1C20. Assign the prop's slot in the physics pool (0 .. KU_MAX_PHYSICAL_PROPS-1).
     void PropEntityInstance::SetPhysicsIndex(s32 liPhysicsIndex)
     {
-        CGS_ASSERT(liPhysicsIndex >= 0,
-            CGS_ASSERT_MESSAGE_AT("liPhysicsIndex >= 0", KAC_ARTIST_ASSERT_FILE, 725 /* ARTIST 0x822A1C4C */));
-        CGS_ASSERT(liPhysicsIndex < 15,
-            CGS_ASSERT_MESSAGE_AT(
-                "liPhysicsIndex < static_cast< int32_t > ( BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS )",
-                KAC_ARTIST_ASSERT_FILE, 726 /* ARTIST 0x822A1C70 */));
+        CGS_ASSERT_AT(liPhysicsIndex >= 0,
+            "liPhysicsIndex >= 0", KAC_ARTIST_ASSERT_FILE, 725 /* ARTIST 0x822A1C4C */);
+        CGS_ASSERT_AT(liPhysicsIndex < 15,
+            "liPhysicsIndex < static_cast< int32_t > ( BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS )",
+                KAC_ARTIST_ASSERT_FILE, 726 /* ARTIST 0x822A1C70 */);
+
         mu8PhysicsIndex = static_cast<u8>(liPhysicsIndex);   // +76
     }
 

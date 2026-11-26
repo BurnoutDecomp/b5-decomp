@@ -149,7 +149,7 @@ bool BehaviourSpirallingDeathcam::Prepare(const BehaviourSharedPrepareReleaseInf
 // ----------------------------------------------------------------------------
 bool BehaviourSpirallingDeathcam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 129));                              // cpp:129
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters != NULL", CGS_ARTIST_FILE, 129);                              // cpp:129
     const Parameters& lrParams = *mpParameters;
 
     // 1. the collision policy hangs off the same car (16-byte copy +0x2D4 -> +0x240).
@@ -257,7 +257,7 @@ bool BehaviourSpirallingDeathcam::Update(Camera& lrCamera, const BehaviourShared
     lrCamera.GetEffects().mu8BlendCurve = 1;                      // stb 1, camera +0xB5
 
     // 11. the screen hook.
-    CGS_ASSERT(lrInfo.mpEffectInterface != 0, CGS_ASSERT_MESSAGE_AT("lrSharedInfo.mpEffectInterface", CGS_ARTIST_FILE, 210));    // cpp:210
+    CGS_ASSERT_AT(lrInfo.mpEffectInterface != 0, "lrSharedInfo.mpEffectInterface", CGS_ARTIST_FILE, 210);    // cpp:210
     EnsureEffectIsPlaying(lrCamera, *lrInfo.mpEffectInterface, "Player_Shutdown", 1.0f);
 
     // 12. the clock.
@@ -293,10 +293,10 @@ const char* BehaviourSpirallingDeathcam::GetName() const
 // ----------------------------------------------------------------------------
 void BehaviourSpirallingDeathcam::Start()
 {
-    CGS_ASSERT(!mbStarted,
-        CGS_ASSERT_MESSAGE_AT(
-            "!mbStarted",
-            CGS_ARTIST_BRNBEHAVIOURSPIRALLINGDEATHCAM_FILE, 99 /* ARTIST 0x821F5648 */));   // lbz 0x2F4; assert clear
+    CGS_ASSERT_AT(!mbStarted,
+        "!mbStarted",
+            CGS_ARTIST_BRNBEHAVIOURSPIRALLINGDEATHCAM_FILE, 99 /* ARTIST 0x821F5648 */);   // lbz 0x2F4; assert clear
+
     mbStarted = true;                       // stb 1, 0x2F4(this)
 }
 
@@ -313,10 +313,10 @@ void BehaviourSpirallingDeathcam::Start()
 // ----------------------------------------------------------------------------
 void BehaviourSpirallingDeathcam::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourSpirallingDeathcam,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpParameters->GetType() == eBehaviourSpirallingDeathcam",
-            CGS_ARTIST_BRNBEHAVIOURSPIRALLINGDEATHCAM_FILE, 193 /* ARTIST 0x821F56B0 */));   // h:193
+    CGS_ASSERT_AT(lpParameters->GetType() == eBehaviourSpirallingDeathcam,
+        "lpParameters->GetType() == eBehaviourSpirallingDeathcam",
+            CGS_ARTIST_BRNBEHAVIOURSPIRALLINGDEATHCAM_FILE, 193 /* ARTIST 0x821F56B0 */);   // h:193
+
     mpParameters = lpParameters;   // stw 0x2D0(this)
 }
 

@@ -2,11 +2,11 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Module/CgsIOBuffer.h"
-#define IO_ASSERT(condition, message, line) do { if (!(condition)) { \
-    CgsDev::Assert::BeginAssert(); \
-    CgsDev::Assert::FireAssert(message, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, line)); \
-    CgsDev::Assert::EndAssert(); \
-} } while (0)
+// IO_ASSERT: an assert located in CgsIOBuffer.h, the shared if-form CGS_ASSERT_AT (D12: a
+// do { } while (0) wrapper makes the XDK treat each site as a loop and changes its inlining).
+#define IO_ASSERT(condition, message, line) \
+    CGS_ASSERT_AT(condition, message, CGS_ARTIST_FILE, line)
+
 
 // CgsModule::IOBuffer - read/write lock state machine over the status flags. Each Lock asserts
 // the legal preconditions (constructed; not already locked the conflicting way) then sets its

@@ -152,8 +152,8 @@ namespace GameDataIO
     template <s32 N>
     void InputBuffer::AppendRequestInterface(const RequestInterface<N>* lpSourceInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not locked for writing\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModuleIO.h", 204));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+            "Not locked for writing\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModuleIO.h", 204);
         mRequestInterface.mRequestQueue.Append(lpSourceInterface->mRequestQueue);
     }
 

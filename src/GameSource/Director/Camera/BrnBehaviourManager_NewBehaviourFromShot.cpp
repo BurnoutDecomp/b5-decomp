@@ -74,16 +74,16 @@ namespace Camera
         // ---- the shared prologue: reserve a helper slot and book-keep it -----------------
         const BehaviourHelperIndex lHelperID = mBehaviourHelperPool.AllocateObject();
 
-        CGS_ASSERT(static_cast<s32>(lHelperID) >= 0, CGS_ASSERT_MESSAGE_AT("lHelperID >= 0", CGS_ARTIST_FILE, 623));                   // :623
-        CGS_ASSERT(liArgB >= 0, CGS_ASSERT_MESSAGE_AT("liRefLimit >= 0", CGS_ARTIST_FILE, 625));                                       // :625
-        CGS_ASSERT(!mBehaviourNeedsPreparingFlags.IsBitSet(static_cast<u32>(lHelperID)),
-                   CGS_ASSERT_MESSAGE_AT("!mBehaviourNeedsPreparingFlags.IsBitSet(lHelperID)", CGS_ARTIST_FILE, 627));                 // :627
-        CGS_ASSERT(!mBehaviourNeedsReleasingFlags.IsBitSet(static_cast<u32>(lHelperID)),
-                   CGS_ASSERT_MESSAGE_AT("!mBehaviourNeedsReleasingFlags.IsBitSet(lHelperID)", CGS_ARTIST_FILE, 628));                 // :628
-        CGS_ASSERT(!mBehaviourUsedByHandleFlags.IsBitSet(static_cast<u32>(lHelperID)),
-                   CGS_ASSERT_MESSAGE_AT("!mBehaviourUsedByHandleFlags.IsBitSet(lHelperID)", CGS_ARTIST_FILE, 629));                   // :629
-        CGS_ASSERT(mBehaviourRefCounts[static_cast<u32>(lHelperID)] == 0,
-                   CGS_ASSERT_MESSAGE_AT("mBehaviourRefCounts[lHelperID] == 0", CGS_ARTIST_FILE, 630));                                // :630
+        CGS_ASSERT_AT(static_cast<s32>(lHelperID) >= 0, "lHelperID >= 0", CGS_ARTIST_FILE, 623);                   // :623
+        CGS_ASSERT_AT(liArgB >= 0, "liRefLimit >= 0", CGS_ARTIST_FILE, 625);                                       // :625
+        CGS_ASSERT_AT(!mBehaviourNeedsPreparingFlags.IsBitSet(static_cast<u32>(lHelperID)),
+                   "!mBehaviourNeedsPreparingFlags.IsBitSet(lHelperID)", CGS_ARTIST_FILE, 627);                 // :627
+        CGS_ASSERT_AT(!mBehaviourNeedsReleasingFlags.IsBitSet(static_cast<u32>(lHelperID)),
+                   "!mBehaviourNeedsReleasingFlags.IsBitSet(lHelperID)", CGS_ARTIST_FILE, 628);                 // :628
+        CGS_ASSERT_AT(!mBehaviourUsedByHandleFlags.IsBitSet(static_cast<u32>(lHelperID)),
+                   "!mBehaviourUsedByHandleFlags.IsBitSet(lHelperID)", CGS_ARTIST_FILE, 629);                   // :629
+        CGS_ASSERT_AT(mBehaviourRefCounts[static_cast<u32>(lHelperID)] == 0,
+                   "mBehaviourRefCounts[lHelperID] == 0", CGS_ARTIST_FILE, 630);                                // :630
 
         mBehaviourNeedsPreparingFlags.SetBit(static_cast<u32>(lHelperID));
         mBehaviourUpdateDuringPauseFlags.UnSetBit(static_cast<u32>(lHelperID));
@@ -104,8 +104,8 @@ namespace Camera
             // drive-thru shop shot, every shotgroup take and every ICE moment shot lands on.
             const bool lbHelperPrepared =
                 lrHelper.Prepare(AllocateBehaviour<BehaviourIceAnim>());
-            CGS_ASSERT(lbHelperPrepared,
-                       CGS_ASSERT_MESSAGE_AT("lrHelper.Prepare(AllocateBehaviour<BehaviourIceAnim>())", CGS_ARTIST_FILE, 666));        // :666
+            CGS_ASSERT_AT(lbHelperPrepared,
+                       "lrHelper.Prepare(AllocateBehaviour<BehaviourIceAnim>())", CGS_ARTIST_FILE, 666);        // :666
             (void)lbHelperPrepared;
 
             // X360 `lwz r3, 0(r31)` -- the helper's first word, i.e. the pooled object -- then
@@ -125,8 +125,8 @@ namespace Camera
 
             const bool lbHelperPrepared =
                 lrHelper.Prepare(AllocateBehaviour<BehaviourAftertouchCam>());
-            CGS_ASSERT(lbHelperPrepared,
-                       CGS_ASSERT_MESSAGE_AT("lrHelper.Prepare(AllocateBehaviour<BehaviourAftertouchCam>())", CGS_ARTIST_FILE, 655));  // :655
+            CGS_ASSERT_AT(lbHelperPrepared,
+                       "lrHelper.Prepare(AllocateBehaviour<BehaviourAftertouchCam>())", CGS_ARTIST_FILE, 655);  // :655
             (void)lbHelperPrepared;
 
             // The helper's first word -- the pooled object -- then the bank's FIRST named
@@ -196,12 +196,12 @@ namespace Camera
             }
             else
             {
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unsupported Procedural Shot Type", CGS_ARTIST_FILE, 700));                    // :700
+                CGS_FAIL_AT("Unsupported Procedural Shot Type", CGS_ARTIST_FILE, 700);                    // :700
             }
         }
         else
         {
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unsupported Behavour Type", CGS_ARTIST_FILE, 707));                               // :707
+            CGS_FAIL_AT("Unsupported Behavour Type", CGS_ARTIST_FILE, 707);                               // :707
         }
 
         // [DIAG] NOT IN THE X360 BINARY. Off unless BRN_DRIVETHRU_DIAG is set. The class key is

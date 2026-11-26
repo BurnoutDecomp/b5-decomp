@@ -109,8 +109,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     const NetworkPlayerStats* NetworkPlayerStatsManager::GetPlayerStatsByName(const char* lpcName)
     {
-        CGS_ASSERT(lpcName != 0,
-            CGS_ASSERT_MESSAGE_AT("lpcName", __FILE__, 597 /* ARTIST 0x82562478 */));
+        CGS_ASSERT_AT(lpcName != 0,
+            "lpcName", __FILE__, 597 /* ARTIST 0x82562478 */);
 
         return mPlayerStatsCache.GetPlayerStats(lpcName);
     }
@@ -151,14 +151,14 @@ namespace BrnNetwork
         {
             meCurrentStatus = E_STATS_STATUS_OFFLINE_PROGRESSION;
 
-            CGS_ASSERT(mpServerInterface != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "mpServerInterface",
-                    __FILE__, 1052 /* ARTIST 0x82546C1C */));
-            CGS_ASSERT(mpServerInterface->GetCustomCommandsComponent() != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "mpServerInterface->GetCustomCommandsComponent()",
-                    __FILE__, 1053 /* ARTIST 0x82546C48 */));
+            CGS_ASSERT_AT(mpServerInterface != 0,
+                "mpServerInterface",
+                    __FILE__, 1052 /* ARTIST 0x82546C1C */);
+
+            CGS_ASSERT_AT(mpServerInterface->GetCustomCommandsComponent() != 0,
+                "mpServerInterface->GetCustomCommandsComponent()",
+                    __FILE__, 1053 /* ARTIST 0x82546C48 */);
+
 
             // The event's OfflineProgressionT record sits at offset 0, so the event pointer
             // doubles as the OFFPROG record pointer the custom-commands component expects.
@@ -226,14 +226,14 @@ namespace BrnNetwork
     // empty the request queue, reset the scalar state and every per-player update entry.
     void NetworkPlayerStatsManager::Construct(BrnNetworkModule* lpNetworkModule)
     {
-        CGS_ASSERT(lpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpNetworkModule != 0,
             "lpNetworkModule",
-            __FILE__, 60 /* ARTIST 0x82559D58 */));
+            __FILE__, 60 /* ARTIST 0x82559D58 */);
         mpNetworkModule  = lpNetworkModule;
         mpNetworkManager = lpNetworkModule->GetNetworkManager();
-        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpNetworkManager != 0,
             "mpNetworkManager",
-            __FILE__, 63 /* ARTIST 0x82559D8C */));
+            __FILE__, 63 /* ARTIST 0x82559D8C */);
 
         mPlayerStatsCache.Construct(mpNetworkManager);
 
@@ -261,17 +261,17 @@ namespace BrnNetwork
             return false;
         }
 
-        CGS_ASSERT(mpNetworkManager != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpNetworkManager != NULL", __FILE__, 99 /* ARTIST 0x82559E38 */));
+        CGS_ASSERT_AT(mpNetworkManager != 0,
+            "mpNetworkManager != NULL", __FILE__, 99 /* ARTIST 0x82559E38 */);
+
         mpServerInterface = mpNetworkManager->GetServerInterface();
-        CGS_ASSERT(mpServerInterface != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpServerInterface != NULL", __FILE__, 101 /* ARTIST 0x82559E64 */));
+        CGS_ASSERT_AT(mpServerInterface != 0,
+            "mpServerInterface != NULL", __FILE__, 101 /* ARTIST 0x82559E64 */);
+
         mpServerInterfacePlayerInfo = mpServerInterface->GetPlayerInfoComponent();
-        CGS_ASSERT(mpServerInterfacePlayerInfo != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpServerInterfacePlayerInfo != NULL", __FILE__, 104 /* ARTIST 0x82559E94 */));
+        CGS_ASSERT_AT(mpServerInterfacePlayerInfo != 0,
+            "mpServerInterfacePlayerInfo != NULL", __FILE__, 104 /* ARTIST 0x82559E94 */);
+
 
         mEventQueue.miReadIndex  = 0;
         meCurrentStatus          = E_STATS_STATUS_IDLE;
@@ -353,12 +353,12 @@ namespace BrnNetwork
 
     void NetworkPlayerStatsManager::AddEvent(const StatsRequestEvent* lpStatsRequestEvent)
     {
-        CGS_ASSERT(lpStatsRequestEvent != 0,
-            CGS_ASSERT_MESSAGE_AT("lpStatsRequestEvent", __FILE__, 574 /* ARTIST 0x82552674 */));
-        CGS_ASSERT(mEventQueue.GetLength() + 1 < mEventQueue.GetMaxLength(),
-            CGS_ASSERT_MESSAGE_AT(
-                "mEventQueue.GetLength() + 1 < mEventQueue.GetMaxLength()",
-                __FILE__, 575 /* ARTIST 0x825526A0 */));
+        CGS_ASSERT_AT(lpStatsRequestEvent != 0,
+            "lpStatsRequestEvent", __FILE__, 574 /* ARTIST 0x82552674 */);
+        CGS_ASSERT_AT(mEventQueue.GetLength() + 1 < mEventQueue.GetMaxLength(),
+            "mEventQueue.GetLength() + 1 < mEventQueue.GetMaxLength()",
+                __FILE__, 575 /* ARTIST 0x825526A0 */);
+
         mEventQueue.Push(lpStatsRequestEvent);
     }
 
@@ -376,10 +376,10 @@ namespace BrnNetwork
     // Queue a stats request for a connected player, by name.
     void NetworkPlayerStatsManager::AddEventFromNetworkPlayerID(NetworkPlayerID lNetworkPlayerID)
     {
-        CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-            CGS_ASSERT_MESSAGE_AT(
-                "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                __FILE__, 794 /* ARTIST 0x825624CC */));
+        CGS_ASSERT_AT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                __FILE__, 794 /* ARTIST 0x825624CC */);
+
 
         StatsRequestEvent lEvent;
         lEvent.Construct(GetPlayerNameFromID(lNetworkPlayerID), lNetworkPlayerID);
@@ -389,8 +389,8 @@ namespace BrnNetwork
     // Queue a stats request for a player known only by name.
     void NetworkPlayerStatsManager::RequestPlayerStats(const char* lpcPlayerName)
     {
-        CGS_ASSERT(lpcPlayerName != 0,
-            CGS_ASSERT_MESSAGE_AT("lpcPlayerName", __FILE__, 676 /* ARTIST 0x8255275C */));
+        CGS_ASSERT_AT(lpcPlayerName != 0,
+            "lpcPlayerName", __FILE__, 676 /* ARTIST 0x8255275C */);
 
         StatsRequestEvent lEvent;
         lEvent.Construct(lpcPlayerName, CgsNetwork::K_INVALID_PLAYER_ID);
@@ -419,9 +419,9 @@ namespace BrnNetwork
     // message pair with their network player.
     void NetworkPlayerStatsManager::AddPlayer(NetworkPlayerID lNetworkPlayerId)
     {
-        CGS_ASSERT(lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID,
             "lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID",
-            __FILE__, 638 /* ARTIST 0x825682A0 */));
+            __FILE__, 638 /* ARTIST 0x825682A0 */);
 
         AddEventFromNetworkPlayerID(lNetworkPlayerId);
 
@@ -452,9 +452,9 @@ namespace BrnNetwork
     // A player left: free their update entry and unregister its message pair.
     void NetworkPlayerStatsManager::RemovePlayer(NetworkPlayerID lNetworkPlayerId)
     {
-        CGS_ASSERT(lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID,
             "lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID",
-            __FILE__, 695 /* ARTIST 0x825527E0 */));
+            __FILE__, 695 /* ARTIST 0x825527E0 */);
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer =
             mpNetworkManager->GetPlayerManager()->GetPlayerByID(lNetworkPlayerId);
@@ -496,9 +496,9 @@ namespace BrnNetwork
 
     const NetworkPlayerStats* NetworkPlayerStatsManager::GetPlayerStatsByID(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-            CGS_ASSERT_MESSAGE_AT(
-                "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", __FILE__, 622 /* ARTIST 0x82562444 */));
+        CGS_ASSERT_AT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", __FILE__, 622 /* ARTIST 0x82562444 */);
+
         return GetPlayerStatsByName(GetPlayerNameFromID(lPlayerID));
     }
 
@@ -524,14 +524,14 @@ namespace BrnNetwork
             NetworkPlayerStats* lpPlayerStats = mPlayerStatsCache.GetPlayerStats(lLocalPlayerID);
             if (lpPlayerStats != 0)
             {
-                CGS_ASSERT(leStatType >= NetworkPlayerStats::E_STATS_VALUE_START,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "leStatType >= NetworkPlayerStats::E_STATS_VALUE_START",
-                        __FILE__, 1209 /* ARTIST 0x8255299C */));
-                CGS_ASSERT(leStatType < NetworkPlayerStats::E_STATS_VALUE_COUNT,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "leStatType < NetworkPlayerStats::E_STATS_VALUE_COUNT",
-                        __FILE__, 1210 /* ARTIST 0x825529C0 */));
+                CGS_ASSERT_AT(leStatType >= NetworkPlayerStats::E_STATS_VALUE_START,
+                    "leStatType >= NetworkPlayerStats::E_STATS_VALUE_START",
+                        __FILE__, 1209 /* ARTIST 0x8255299C */);
+
+                CGS_ASSERT_AT(leStatType < NetworkPlayerStats::E_STATS_VALUE_COUNT,
+                    "leStatType < NetworkPlayerStats::E_STATS_VALUE_COUNT",
+                        __FILE__, 1210 /* ARTIST 0x825529C0 */);
+
                 lpPlayerStats->SetStatAsInt(leStatType, liValue, NetworkPlayerStats::E_STAT_TYPE_NUMBER);
                 MarkNeedsUpdatingFlagInAllPlayers();
             }
@@ -550,23 +550,23 @@ namespace BrnNetwork
     void NetworkPlayerStatsManager::UploadFreeBurnLobbyStats(
         const BrnGameState::GameStateModuleIO::OnlineGameResults* lpResults)
     {
-        CGS_ASSERT(lpResults != 0,
-            CGS_ASSERT_MESSAGE_AT("lpResults", __FILE__, 989 /* ARTIST 0x8255F7C4 */));
+        CGS_ASSERT_AT(lpResults != 0,
+            "lpResults", __FILE__, 989 /* ARTIST 0x8255F7C4 */);
 
         if (meCurrentStatus == E_STATS_STATUS_IDLE
             && mpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_CUSTOM_COMMANDS)
                    == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
         {
-            CGS_ASSERT(mpServerInterface != 0,
-                CGS_ASSERT_MESSAGE_AT("mpServerInterface", __FILE__, 993 /* ARTIST 0x8255F80C */));
-            CGS_ASSERT(mpServerInterface->GetCustomCommandsComponent() != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "mpServerInterface->GetCustomCommandsComponent()",
-                    __FILE__, 994 /* ARTIST 0x8255F838 */));
-            CGS_ASSERT(mpNetworkManager->GetLiveRevengeManager() != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "mpNetworkManager->GetLiveRevengeManager()",
-                    __FILE__, 995 /* ARTIST 0x8255F868 */));
+            CGS_ASSERT_AT(mpServerInterface != 0,
+                "mpServerInterface", __FILE__, 993 /* ARTIST 0x8255F80C */);
+            CGS_ASSERT_AT(mpServerInterface->GetCustomCommandsComponent() != 0,
+                "mpServerInterface->GetCustomCommandsComponent()",
+                    __FILE__, 994 /* ARTIST 0x8255F838 */);
+
+            CGS_ASSERT_AT(mpNetworkManager->GetLiveRevengeManager() != 0,
+                "mpNetworkManager->GetLiveRevengeManager()",
+                    __FILE__, 995 /* ARTIST 0x8255F868 */);
+
 
             meCurrentStatus = E_STATS_STATUS_UPLOADING_FREE_BURN_STATS;
             mpServerInterface->GetCustomCommandsComponent()->UploadFreeBurnLobbyStats(
@@ -622,17 +622,17 @@ namespace BrnNetwork
     void NetworkPlayerStatsManager::ProcessAfterSimulation(
         const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
-        CGS_ASSERT(lpInput != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpInput != 0,
             "lpInput",
-            CGS_ARTIST_FILE, 873 /* ARTIST 0x8255F5F8 */));
-        CGS_ASSERT(lpInput->GetStatsInputInterface() != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 873 /* ARTIST 0x8255F5F8 */);
+        CGS_ASSERT_AT(lpInput->GetStatsInputInterface() != 0,
             "lpInput->GetStatsInputInterface()",
-            CGS_ARTIST_FILE, 874 /* ARTIST 0x8255F624 */));
+            CGS_ARTIST_FILE, 874 /* ARTIST 0x8255F624 */);
         CopyEvents(lpInput->GetStatsInputInterface()->GetStatsInputQueue());
 
-        CGS_ASSERT(lpInput->GetNetworkEventQueue() != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpInput->GetNetworkEventQueue() != 0,
             "lpInput->GetNetworkEventQueue()",
-            CGS_ARTIST_FILE, 884 /* ARTIST 0x8255F664 */));
+            CGS_ARTIST_FILE, 884 /* ARTIST 0x8255F664 */);
 
         const CgsModule::Event* lpEvent;
         s32 liEventSize;
@@ -761,7 +761,7 @@ namespace BrnNetwork
         }
 
         default:
-            CGS_ASSERT(false, "Unknown StatsManager Status");
+            CGS_FAIL("Unknown StatsManager Status");
             break;
         }
     }
@@ -910,9 +910,9 @@ namespace BrnNetwork
     // A server-interface component failed: log its error, clear it and drop back to idle.
     bool NetworkPlayerStatsManager::CheckForAndHandleServerErrors(CgsNetwork::EComponents leComponent)
     {
-        CGS_ASSERT(mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpServerInterface != 0,
             "mpServerInterface",
-            __FILE__, 450 /* ARTIST 0x82546B10 */));
+            __FILE__, 450 /* ARTIST 0x82546B10 */);
 
         // ARTIST 0x82546B28 branches to the shared `return false` tail: the error case is the body.
         if (mpServerInterface->GetStatus(leComponent) == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
@@ -937,18 +937,18 @@ namespace BrnNetwork
     {
         PlayerInfoData lPlayerInfo;
 
-        CGS_ASSERT(mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(mpServerInterface != 0,
             "mpServerInterface",
-            CGS_ARTIST_FILE, 833 /* ARTIST 0x8255F440 */));
-        CGS_ASSERT(mpServerInterface->GetGameComponent() != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 833 /* ARTIST 0x8255F440 */);
+        CGS_ASSERT_AT(mpServerInterface->GetGameComponent() != 0,
             "mpServerInterface->GetGameComponent()",
-            CGS_ARTIST_FILE, 834 /* ARTIST 0x8255F46C */));
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 834 /* ARTIST 0x8255F46C */);
+        CGS_ASSERT_AT(mpNetworkManager->GetPlayerManager() != 0,
             "mpNetworkManager->GetPlayerManager()",
-            CGS_ARTIST_FILE, 835 /* ARTIST 0x8255F494 */));
-        CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 835 /* ARTIST 0x8255F494 */);
+        CGS_ASSERT_AT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
             "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            CGS_ARTIST_FILE, 836 /* ARTIST 0x8255F4B8 */));
+            CGS_ARTIST_FILE, 836 /* ARTIST 0x8255F4B8 */);
 
         if (mpServerInterface->GetGameComponent()->IsLocalPlayerInGame())
         {
@@ -956,23 +956,23 @@ namespace BrnNetwork
                 mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lNetworkPlayerID);
             if (lpMenuData != 0)
             {
-                CGS_ASSERT(lpMenuData->macName[0] != '\0', CGS_ASSERT_MESSAGE_AT(
+                CGS_ASSERT_AT(lpMenuData->macName[0] != '\0',
                     "lpMenuData->macName[0] != '\\0'",
-                    CGS_ARTIST_FILE, 846 /* ARTIST 0x8255F514 */));
+                    CGS_ARTIST_FILE, 846 /* ARTIST 0x8255F514 */);
                 return lpMenuData->macName;
             }
         }
 
-        CGS_ASSERT(lPlayerInfo.Prepare(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lPlayerInfo.Prepare(),
             "lPlayerInfo.Prepare()",
-            CGS_ARTIST_FILE, 852 /* ARTIST 0x8255F550 */));
-        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 852 /* ARTIST 0x8255F550 */);
+        CGS_ASSERT_AT(mpServerInterfacePlayerInfo != 0,
             "mpServerInterfacePlayerInfo",
-            CGS_ARTIST_FILE, 854 /* ARTIST 0x8255F578 */));
+            CGS_ARTIST_FILE, 854 /* ARTIST 0x8255F578 */);
         mpServerInterfacePlayerInfo->GetLocalPlayerInfo(&lPlayerInfo);
-        CGS_ASSERT(lPlayerInfo.GetID() == lNetworkPlayerID, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lPlayerInfo.GetID() == lNetworkPlayerID,
             "lPlayerInfo.GetID() == lNetworkPlayerID",
-            CGS_ARTIST_FILE, 857 /* ARTIST 0x8255F5AC */));
+            CGS_ARTIST_FILE, 857 /* ARTIST 0x8255F5AC */);
 
         // The console hands back the name inside this stack-local record.
         return lPlayerInfo.GetName();
@@ -982,12 +982,12 @@ namespace BrnNetwork
     bool NetworkPlayerStatsManager::IsThisLocalPlayer(const char* lpcName)
     {
         PlayerInfoData lPlayerInfo;
-        CGS_ASSERT(lPlayerInfo.Prepare(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lPlayerInfo.Prepare(),
             "lPlayerInfo.Prepare()",
-            __FILE__, 969 /* ARTIST 0x8255F740 */));
-        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 969 /* ARTIST 0x8255F740 */);
+        CGS_ASSERT_AT(mpServerInterfacePlayerInfo != 0,
             "mpServerInterfacePlayerInfo",
-            __FILE__, 971 /* ARTIST 0x8255F768 */));
+            __FILE__, 971 /* ARTIST 0x8255F768 */);
         mpServerInterfacePlayerInfo->GetLocalPlayerInfo(&lPlayerInfo);
         return ::LobbyNameCmp(lpcName, lPlayerInfo.GetName()) == 0;
     }
@@ -997,9 +997,9 @@ namespace BrnNetwork
                                                        s32 liNumberOfRivals, s32 liNumberOfAchievements,
                                                        s32 liNumberOfTakedowns)
     {
-        CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
             "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            CGS_ARTIST_FILE, 1236 /* ARTIST 0x82552A64 */));
+            CGS_ARTIST_FILE, 1236 /* ARTIST 0x82552A64 */);
 
         NetworkPlayerStats* lpPlayerStats = mPlayerStatsCache.GetPlayerStats(lPlayerID);
         if (lpPlayerStats != 0)
@@ -1035,9 +1035,9 @@ namespace BrnNetwork
             if (lAggressorID != CgsNetwork::K_INVALID_PLAYER_ID && lAggressorID == lLocalPlayerID)
             {
                 NetworkPlayerStats* lpLocalPlayersStats = mPlayerStatsCache.GetPlayerStats(lLocalPlayerID);
-                CGS_ASSERT(lpLocalPlayersStats != 0, CGS_ASSERT_MESSAGE_AT(
+                CGS_ASSERT_AT(lpLocalPlayersStats != 0,
                     "lpLocalPlayersStats",
-                    __FILE__, 1313 /* ARTIST 0x82552BC0 */));
+                    __FILE__, 1313 /* ARTIST 0x82552BC0 */);
                 if (lpLocalPlayersStats != 0)
                 {
                     lpLocalPlayersStats->SetStatAsInt(
@@ -1066,9 +1066,9 @@ namespace BrnNetwork
                 && mpNetworkManager->GetPlayerManager()->IsPlayerTurnToSendRoundRobinMessage(lEntry.mPlayerID, true, 0))
             {
                 const NetworkPlayerStats* lpLocalPlayerStats = GetLocalPlayerStats();
-                CGS_ASSERT(lpLocalPlayerStats != 0, CGS_ASSERT_MESSAGE_AT(
+                CGS_ASSERT_AT(lpLocalPlayerStats != 0,
                     "lpLocalPlayerStats",
-                    __FILE__, 1156 /* ARTIST 0x8255A280 */));
+                    __FILE__, 1156 /* ARTIST 0x8255A280 */);
 
                 lEntry.mSendMessage.PrepareForSend(
                     mpNetworkManager->GetTimeManager()->GetU16FrameCount(),

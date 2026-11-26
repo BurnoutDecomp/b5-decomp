@@ -20,16 +20,16 @@ void StreamedVaultAllocator::Construct()
 // at least 16, and that the carve succeeded.
 void StreamedVaultAllocator::Prepare(CgsMemory::LinearMalloc* lpAllocator)
 {
-    CGS_ASSERT(lpAllocator != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpAllocator != NULL", __FILE__, 65 /* ARTIST 0x82803C44 */));                       // .cpp:65
-    CGS_ASSERT(lpAllocator->GetAlignment() >= 16,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpAllocator->GetAlignment() >= 16", __FILE__, 66 /* ARTIST 0x82803C6C */));   // .cpp:66
+    CGS_ASSERT_AT(lpAllocator != NULL,
+        "lpAllocator != NULL", __FILE__, 65 /* ARTIST 0x82803C44 */);                       // .cpp:65
+    CGS_ASSERT_AT(lpAllocator->GetAlignment() >= 16,
+        "lpAllocator->GetAlignment() >= 16", __FILE__, 66 /* ARTIST 0x82803C6C */);   // .cpp:66
+
 
     mpau8VaultMemory = static_cast<u8*>(
         lpAllocator->Malloc(KI_MAX_NUM_STREAMED_VAULTS * KI_MAX_STREAMED_VAULT_BIN_SIZE));
-    CGS_ASSERT(mpau8VaultMemory != NULL,
-        CGS_ASSERT_MESSAGE_AT("mpau8VaultMemory != NULL", __FILE__, 77 /* ARTIST 0x82803CA4 */));             // .cpp:77
+    CGS_ASSERT_AT(mpau8VaultMemory != NULL,
+        "mpau8VaultMemory != NULL", __FILE__, 77 /* ARTIST 0x82803CA4 */);             // .cpp:77
 }
 // Returns a pointer to the 4 KiB bin backing the given streamed-vault slot. The
 // X360 build inlines the BitArray bounds check and IsBitSet probe; both are

@@ -43,10 +43,10 @@ namespace Camera
 // ============================================================================
 void Behaviour::SetCantSwitchFromMeNow(Camera& lrCamera, ValidityAccount::ENoCutFromFlag leNoCutFromFlag)
 {
-    CGS_ASSERT(!mbHasFailed,
-        CGS_ASSERT_MESSAGE_AT(
-            "Setting \"Cant switch from me now\" when behaviour has failed",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\behaviours\\Behaviour.h", 460 /* ARTIST 0x822063B4 */));   // Behaviour.h:460
+    CGS_ASSERT_AT(!mbHasFailed,
+        "Setting \"Cant switch from me now\" when behaviour has failed",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\behaviours\\Behaviour.h", 460 /* ARTIST 0x822063B4 */);   // Behaviour.h:460
+
 
     lrCamera.GetValidityAccount().SetFlag(leNoCutFromFlag);
 

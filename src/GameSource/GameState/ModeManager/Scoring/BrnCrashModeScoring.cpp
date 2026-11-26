@@ -447,11 +447,11 @@ namespace BrnGameState
     bool CrashModeScoring::IsActiveCrash(const RecentCrash* lpCrash) const
     {
         const f32 lfTimeSinceCrash = mfTimeSinceModeStart - lpCrash->mfTimeOfCrash;
-        CGS_ASSERT(lfTimeSinceCrash >= 0.0f,
-            CGS_ASSERT_MESSAGE_AT(
-                "lfTimeSinceCrash >= 0.0f",
+        CGS_ASSERT_AT(lfTimeSinceCrash >= 0.0f,
+            "lfTimeSinceCrash >= 0.0f",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 836 /* ARTIST 0x82312A64 */));
+                "../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 836 /* ARTIST 0x82312A64 */);
+
         return lfTimeSinceCrash < 5.0f;
     }
 
@@ -533,11 +533,11 @@ namespace BrnGameState
             s32* lpiScoreMultiplierEarned,
             s32* lpiComboBonusEarned)
     {
-        CGS_ASSERT(lpiVehicleTypeCrashed,    CGS_ASSERT_MESSAGE_AT("lpiVehicleTypeCrashed", CGS_ARTIST_FILE, 564));
-        CGS_ASSERT(lpiVehicleBaseScore,      CGS_ASSERT_MESSAGE_AT("lpiVehicleBaseScore", CGS_ARTIST_FILE, 565));
-        CGS_ASSERT(lpeVehicleScoreCategory,  CGS_ASSERT_MESSAGE_AT("lpeVehicleScoreCategory", CGS_ARTIST_FILE, 566));
-        CGS_ASSERT(lpiScoreMultiplierEarned, CGS_ASSERT_MESSAGE_AT("lpiScoreMultiplierEarned", CGS_ARTIST_FILE, 567));
-        CGS_ASSERT(lpiComboBonusEarned,      CGS_ASSERT_MESSAGE_AT("lpiComboBonusEarned", CGS_ARTIST_FILE, 568));
+        CGS_ASSERT_AT(lpiVehicleTypeCrashed,    "lpiVehicleTypeCrashed", CGS_ARTIST_FILE, 564);
+        CGS_ASSERT_AT(lpiVehicleBaseScore,      "lpiVehicleBaseScore", CGS_ARTIST_FILE, 565);
+        CGS_ASSERT_AT(lpeVehicleScoreCategory,  "lpeVehicleScoreCategory", CGS_ARTIST_FILE, 566);
+        CGS_ASSERT_AT(lpiScoreMultiplierEarned, "lpiScoreMultiplierEarned", CGS_ARTIST_FILE, 567);
+        CGS_ASSERT_AT(lpiComboBonusEarned,      "lpiComboBonusEarned", CGS_ARTIST_FILE, 568);
 
         s32 liChainBonus = 0;
         s32 liBaseValue  = 0;
@@ -589,9 +589,9 @@ namespace BrnGameState
             s32* lpiScore, s32* lpiMultiplier,
             BrnTraffic::VehicleScoreCategory* lpeCategory)
     {
-        CGS_ASSERT(lpiScore,    CGS_ASSERT_MESSAGE_AT("lpiScore", CGS_ARTIST_FILE, 887));
-        CGS_ASSERT(lpiMultiplier, CGS_ASSERT_MESSAGE_AT("lpiMultiplier", CGS_ARTIST_FILE, 888));
-        CGS_ASSERT(lpeCategory, CGS_ASSERT_MESSAGE_AT("lpeCategory", CGS_ARTIST_FILE, 889));
+        CGS_ASSERT_AT(lpiScore,    "lpiScore", CGS_ARTIST_FILE, 887);
+        CGS_ASSERT_AT(lpiMultiplier, "lpiMultiplier", CGS_ARTIST_FILE, 888);
+        CGS_ASSERT_AT(lpeCategory, "lpeCategory", CGS_ARTIST_FILE, 889);
 
         // VehicleScoreLookup row (DWARF BrnCrashModeScoring.cpp:79-84): midType@+0 (CgsID, 8B),
         // meCategory@+8, miScore@+0xC (s16), miMultiplier@+0xE (s16). 16-byte stride.
@@ -675,7 +675,7 @@ namespace BrnGameState
             *lpeCategory = BrnTraffic::E_VEHICLESCORE_BIGRIG; *lpiScore = 10000; *lpiMultiplier = 0;
             break;
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown vehicle class in CrashModeScoring.", CGS_ARTIST_FILE, 937));
+            CGS_FAIL_AT("Unknown vehicle class in CrashModeScoring.", CGS_ARTIST_FILE, 937);
             break;
         }
 
@@ -729,8 +729,8 @@ namespace BrnGameState
         if (luOwnerA == K_OWNER_RACE_CAR)
         {
             // Player (A) hit traffic (B).
-            CGS_ASSERT(luOwnerB == K_OWNER_TRAFFIC_VEHICLE,
-                       CGS_ASSERT_MESSAGE_AT("lEntityIdB.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", CGS_ARTIST_FILE, 442));
+            CGS_ASSERT_AT(luOwnerB == K_OWNER_TRAFFIC_VEHICLE,
+                       "lEntityIdB.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", CGS_ARTIST_FILE, 442);
             if (luIndexA != luLocalPlayerIndex || GetRecentCrash(static_cast<u16>(luIndexB)) != 0)
             {
                 return false;
@@ -741,8 +741,8 @@ namespace BrnGameState
         else if (luOwnerB == K_OWNER_RACE_CAR)
         {
             // Player (B) hit traffic (A).
-            CGS_ASSERT(luOwnerA == K_OWNER_TRAFFIC_VEHICLE,
-                       CGS_ASSERT_MESSAGE_AT("lEntityIdA.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", CGS_ARTIST_FILE, 459));
+            CGS_ASSERT_AT(luOwnerA == K_OWNER_TRAFFIC_VEHICLE,
+                       "lEntityIdA.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", CGS_ARTIST_FILE, 459);
             if (luIndexB != luLocalPlayerIndex || GetRecentCrash(static_cast<u16>(luIndexA)) != 0)
             {
                 return false;
@@ -792,7 +792,7 @@ namespace BrnGameState
         {
             maRecentCrashes.Erase(0);
         }
-        CGS_ASSERT(GetRecentCrash(luTrafficCarIndex) == 0, CGS_ASSERT_MESSAGE_AT("GetRecentCrash(luTrafficCarIndex) == NULL", CGS_ARTIST_FILE, 530));
+        CGS_ASSERT_AT(GetRecentCrash(luTrafficCarIndex) == 0, "GetRecentCrash(luTrafficCarIndex) == NULL", CGS_ARTIST_FILE, 530);
         maRecentCrashes.Append(lCrash);
 
         ++miCurrentComboCount;        // *(a1+0x2E0) = *(a1+0x2E0)+1  (chain link recorded)
@@ -890,11 +890,11 @@ namespace BrnGameState
     {
         // The console's own two asserts, with their baked line numbers. Neither gates: it fires
         // and dereferences anyway.
-        CGS_ASSERT(lpActiveRaceCarInterface != 0, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface != NULL", CGS_ARTIST_FILE, 189));  // :189
+        CGS_ASSERT_AT(lpActiveRaceCarInterface != 0, "lpActiveRaceCarInterface != NULL", CGS_ARTIST_FILE, 189);  // :189
 
         const BrnPhysics::Vehicle::RaceCarState* const lpPlayerState =
             lpActiveRaceCarInterface->GetPlayerRaceCarState();
-        CGS_ASSERT(lpPlayerState != 0, CGS_ASSERT_MESSAGE_AT("lpPlayerState != NULL", CGS_ARTIST_FILE, 193));                        // :193
+        CGS_ASSERT_AT(lpPlayerState != 0, "lpPlayerState != NULL", CGS_ARTIST_FILE, 193);                        // :193
 
         // ---- 0x823208C4..0x82320948: the two speeds, computed BEFORE the clocks store ------
         // The console's VMX form is `vmsum3fp128` + two Newton-Raphson rsqrt refinements + a

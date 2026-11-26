@@ -67,10 +67,10 @@ void* Attrib::Vault_ScalarDeletingDtor(Attrib::Vault* lpVault, int liDeleteFlag)
 // only the first word -- the payload pointer -- is read).
 void* Attrib::Vault::GetExportData(unsigned int luIndex) const
 {
-    CGS_ASSERT(luIndex < mNumExports,
-        CGS_ASSERT_MESSAGE_AT("Attrib::Vault given bad index.",
+    CGS_ASSERT_AT(luIndex < mNumExports,
+        "Attrib::Vault given bad index.",
             CGS_ARTIST_FILE,
-            526 /* ARTIST 0x82803450 */));
+            526 /* ARTIST 0x82803450 */);
     return mExportData[luIndex].GetData();
 }
 
@@ -103,11 +103,11 @@ void Attrib::Vault::ResolveDependency(unsigned int luIndex, void* lpData,
 // store with the X360, which computes &table[count] then stores count+1 first).
 void Attrib::ExportManager::AddExportPolicy(TypeID luType, IExportPolicy* lpPolicy)
 {
-    CGS_ASSERT(mNumPolicies < mMaxPolicies,
-        CGS_ASSERT_MESSAGE_AT(
-            "ExportManager::AddExportPolicy -- insufficient entries reserved in policy table.",
+    CGS_ASSERT_AT(mNumPolicies < mMaxPolicies,
+        "ExportManager::AddExportPolicy -- insufficient entries reserved in policy table.",
             CGS_ARTIST_FILE,
-            46 /* ARTIST 0x82803168 */));
+            46 /* ARTIST 0x82803168 */);
+
 
     ExportPolicyPair& lrSlot = mpPolicies[mNumPolicies];
     ++mNumPolicies;

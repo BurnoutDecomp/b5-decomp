@@ -129,10 +129,10 @@ namespace shadow
         renderengine::VertexProgramState* lpVertexProgramState =
             renderengine::VertexProgramState::InitializeNoBindX360(
                 sVertexProgramStateResource, lParameters);
-        CGS_ASSERT(lpVertexProgramState,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpVertexProgramState",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/shadowingdevice.cpp", 476 /* ARTIST 0x827E79DC */));
+        CGS_ASSERT_AT(lpVertexProgramState,
+            "lpVertexProgramState",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/shadowingdevice.cpp", 476 /* ARTIST 0x827E79DC */);
+
         return lpVertexProgramState;
     }
 
@@ -160,10 +160,10 @@ namespace shadow
 
         D3DDevice_SetIndices(gpD3DDevice, lpMesh->GetIndexBuffer());
         const u32 luNumVertexBuffers = lpMesh->GetNumVertexBuffers();
-        CGS_ASSERT(luNumVertexBuffers > 0,
-            CGS_ASSERT_MESSAGE_AT("luNumVertexBuffers > 0", KAC_ARTIST_SHADOW_HEADER, 846));
-        CGS_ASSERT(luNumVertexBuffers <= 2,
-            CGS_ASSERT_MESSAGE_AT("luNumVertexBuffers <= 2", KAC_ARTIST_SHADOW_HEADER, 847));
+        CGS_ASSERT_AT(luNumVertexBuffers > 0,
+            "luNumVertexBuffers > 0", KAC_ARTIST_SHADOW_HEADER, 846);
+        CGS_ASSERT_AT(luNumVertexBuffers <= 2,
+            "luNumVertexBuffers <= 2", KAC_ARTIST_SHADOW_HEADER, 847);
         D3DDevice_SetStreamSource(gpD3DDevice, 0, lpMesh->GetVertexBuffer(0), 0, 0, 1);
         if (luNumVertexBuffers == 2)
             D3DDevice_SetStreamSource(gpD3DDevice, 1, lpMesh->GetVertexBuffer(1), 0, 0, 1);
@@ -179,10 +179,10 @@ namespace shadow
         if (luInstanceCount == 0)
             return;
 
-        CGS_ASSERT(luInstanceCount >= 1,
-            CGS_ASSERT_MESSAGE_AT("luInstanceCount >= 1", KAC_ARTIST_SHADOW_SOURCE, 574));
-        CGS_ASSERT(luInstanceCount <= luInstanceMax,
-            CGS_ASSERT_MESSAGE_AT("luInstanceCount <= luInstanceMax", KAC_ARTIST_SHADOW_SOURCE, 575));
+        CGS_ASSERT_AT(luInstanceCount >= 1,
+            "luInstanceCount >= 1", KAC_ARTIST_SHADOW_SOURCE, 574);
+        CGS_ASSERT_AT(luInstanceCount <= luInstanceMax,
+            "luInstanceCount <= luInstanceMax", KAC_ARTIST_SHADOW_SOURCE, 575);
 
         FlushVertexProgramState();
         const u32 luOriginalIndexCount = lrParameters.GetIndexCount();
@@ -332,8 +332,8 @@ namespace shadow
         {
             renderengine::VertexProgramState* lpState =
                 GetVertexProgramState(m_Shadow.m_pVertexProgramBuffer, m_Shadow.m_pVertexDescriptor);
-            CGS_ASSERT(lpState != 0,
-                CGS_ASSERT_MESSAGE_AT("lVertexProgramState != NULL", KAC_ARTIST_SHADOW_SOURCE, 493));
+            CGS_ASSERT_AT(lpState != 0,
+                "lVertexProgramState != NULL", KAC_ARTIST_SHADOW_SOURCE, 493);
 
             D3DVertexShader* lpShader = lpState->GetD3DVertexShader();
             D3DDevice_SetVertexShader(gpD3DDevice, lpShader);
@@ -354,8 +354,8 @@ namespace shadow
                 const renderengine::VertexElement* lpElement = lpVertexDescriptor->maElements;
                 do
                 {
-                    CGS_ASSERT(lpElement->muStream < 8,
-                        CGS_ASSERT_MESSAGE_AT("lpElement->stream < 8", KAC_ARTIST_SHADOW_SOURCE, 515));
+                    CGS_ASSERT_AT(lpElement->muStream < 8,
+                        "lpElement->stream < 8", KAC_ARTIST_SHADOW_SOURCE, 515);
                     const u8 luStride = lpStrides[luElement];
                     lauStreamStride[lpElement->muStream] = luStride;
                     ++luElement;
@@ -383,8 +383,8 @@ namespace shadow
                 const renderengine::VertexElement* lpElement = lpVertexDescriptor->maElements;
                 do
                 {
-                    CGS_ASSERT(lpElement->muStream < 8,
-                        CGS_ASSERT_MESSAGE_AT("lpElement->stream < 8", KAC_ARTIST_SHADOW_SOURCE, 543));
+                    CGS_ASSERT_AT(lpElement->muStream < 8,
+                        "lpElement->stream < 8", KAC_ARTIST_SHADOW_SOURCE, 543);
                     const u8 luStride = lpStrides[luElement];
                     lauStreamStride[lpElement->muStream] = luStride;
                     ++luElement;
@@ -405,10 +405,10 @@ namespace shadow
     // @0x823F3250: open a force-stencil-write window.
     void Device::BeginForceStencilWrite(u32 luStencilValueToWrite)
     {
-        CGS_ASSERT(!mbForceStencilWrite,
-            CGS_ASSERT_MESSAGE_AT("!mbForceStencilWrite", KAC_ARTIST_SHADOW_HEADER, 1246));
-        CGS_ASSERT(luStencilValueToWrite <= 255,
-            CGS_ASSERT_MESSAGE_AT("luStencilValueToWrite <= 255", KAC_ARTIST_SHADOW_HEADER, 1247));
+        CGS_ASSERT_AT(!mbForceStencilWrite,
+            "!mbForceStencilWrite", KAC_ARTIST_SHADOW_HEADER, 1246);
+        CGS_ASSERT_AT(luStencilValueToWrite <= 255,
+            "luStencilValueToWrite <= 255", KAC_ARTIST_SHADOW_HEADER, 1247);
         muStencilValueToWrite = luStencilValueToWrite;
         mbForceStencilWrite = true;
         m_Shadow.m_pDepthStencilState = 0;   // dword_83010A28 = 0 @0x823F32D4
@@ -417,8 +417,8 @@ namespace shadow
     // @0x823F32E0: close a force-stencil-write window.
     void Device::EndForceStencilWrite()
     {
-        CGS_ASSERT(mbForceStencilWrite,
-            CGS_ASSERT_MESSAGE_AT("mbForceStencilWrite", KAC_ARTIST_SHADOW_HEADER, 1256));
+        CGS_ASSERT_AT(mbForceStencilWrite,
+            "mbForceStencilWrite", KAC_ARTIST_SHADOW_HEADER, 1256);
         mbForceStencilWrite = false;
         m_Shadow.m_pDepthStencilState = 0;   // dword_83010A28 = 0
     }
@@ -426,16 +426,16 @@ namespace shadow
     // @0x823F3190: lock the rasteriser state.
     void Device::LockRasteriserState()
     {
-        CGS_ASSERT(false == mbRasteriserStateLocked,
-            CGS_ASSERT_MESSAGE_AT("false == mbRasteriserStateLocked", KAC_ARTIST_SHADOW_HEADER, 1215));
+        CGS_ASSERT_AT(false == mbRasteriserStateLocked,
+            "false == mbRasteriserStateLocked", KAC_ARTIST_SHADOW_HEADER, 1215);
         mbRasteriserStateLocked = true;
     }
 
     // @0x823F31F0: unlock the rasteriser state.
     void Device::UnlockRasteriserState()
     {
-        CGS_ASSERT(true == mbRasteriserStateLocked,
-            CGS_ASSERT_MESSAGE_AT("true == mbRasteriserStateLocked", KAC_ARTIST_SHADOW_HEADER, 1220));
+        CGS_ASSERT_AT(true == mbRasteriserStateLocked,
+            "true == mbRasteriserStateLocked", KAC_ARTIST_SHADOW_HEADER, 1220);
         mbRasteriserStateLocked = false;
     }
 
@@ -452,15 +452,15 @@ namespace shadow
     // invalidating the shadow here would force a redundant rebind on the next unlocked setter.
     void Device::LockDepthStencilState()
     {
-        CGS_ASSERT(false == mbDepthStencilStateLocked,
-            CGS_ASSERT_MESSAGE_AT("false == mbDepthStencilStateLocked", KAC_ARTIST_SHADOW_HEADER, 1235));
+        CGS_ASSERT_AT(false == mbDepthStencilStateLocked,
+            "false == mbDepthStencilStateLocked", KAC_ARTIST_SHADOW_HEADER, 1235);
         mbDepthStencilStateLocked = true;
     }
 
     void Device::UnlockDepthStencilState()
     {
-        CGS_ASSERT(true == mbDepthStencilStateLocked,
-            CGS_ASSERT_MESSAGE_AT("true == mbDepthStencilStateLocked", KAC_ARTIST_SHADOW_HEADER, 1240));
+        CGS_ASSERT_AT(true == mbDepthStencilStateLocked,
+            "true == mbDepthStencilStateLocked", KAC_ARTIST_SHADOW_HEADER, 1240);
         mbDepthStencilStateLocked = false;
     }
 

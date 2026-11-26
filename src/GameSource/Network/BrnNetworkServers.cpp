@@ -23,15 +23,15 @@ namespace BrnNetwork
 
     const char* NetworkServers::GetServerIP() const
     {
-        CGS_ASSERT(mpcServerIP,
-            CGS_ASSERT_MESSAGE_AT("mpcServerIP", __FILE__, 171 /* ARTIST 0x82582BC0 */));
+        CGS_ASSERT_AT(mpcServerIP,
+            "mpcServerIP", __FILE__, 171 /* ARTIST 0x82582BC0 */);
         return mpcServerIP;
     }
 
     s32 NetworkServers::GetServerPort() const
     {
-        CGS_ASSERT(miServerPort > 0,
-            CGS_ASSERT_MESSAGE_AT("miServerPort > 0", __FILE__, 189 /* ARTIST 0x82582C18 */));
+        CGS_ASSERT_AT(miServerPort > 0,
+            "miServerPort > 0", __FILE__, 189 /* ARTIST 0x82582C18 */);
         return miServerPort;
     }
 
@@ -71,9 +71,9 @@ namespace BrnNetwork
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+            CGS_FAIL_AT(
                 "Unknown server type",
-                __FILE__, 319 /* ARTIST 0x82582D08 */));
+                __FILE__, 319 /* ARTIST 0x82582D08 */);
             mpcServerIP = KAC_TEST_SERVER_IP;
             break;
         }

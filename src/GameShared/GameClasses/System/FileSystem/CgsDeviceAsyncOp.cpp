@@ -22,7 +22,7 @@ namespace CgsFileSystem
     // @ 0x828F2300.
     void AsyncOp::Open(const char* lpcFileName, u32 luFlags, s32 liPriority)
     {
-        CGS_ASSERT(!mbOperating, CGS_ASSERT_STREAM_MESSAGE_AT("Last operation has not been waited before\n", CGS_ARTIST_FILE, 56));
+        CGS_ASSERT_STREAM_AT(!mbOperating, "Last operation has not been waited before\n", CGS_ARTIST_FILE, 56);
         mbOperating = true;
         GetDeviceManager()->Open(lpcFileName, luFlags, &AsyncOp::CompletionCallback, this, liPriority);
     }
@@ -30,7 +30,7 @@ namespace CgsFileSystem
     // @ 0x828F23D8.
     void AsyncOp::Read(Handle lHandle, u64 luPosition, void* lpBuffer, u32 luBufferSize, s32 liPriority)
     {
-        CGS_ASSERT(!mbOperating, CGS_ASSERT_STREAM_MESSAGE_AT("Last operation has not been waited before\n", CGS_ARTIST_FILE, 69));
+        CGS_ASSERT_STREAM_AT(!mbOperating, "Last operation has not been waited before\n", CGS_ARTIST_FILE, 69);
         mbOperating = true;
         GetDeviceManager()->Read(lHandle, luPosition, lpBuffer, luBufferSize, &AsyncOp::CompletionCallback, this, liPriority);
     }
@@ -38,7 +38,7 @@ namespace CgsFileSystem
     // @ 0x828F24C0.
     void AsyncOp::Close(Handle lHandle, s32 liPriority)
     {
-        CGS_ASSERT(!mbOperating, CGS_ASSERT_STREAM_MESSAGE_AT("Last operation has not been waited before\n", CGS_ARTIST_FILE, 92));
+        CGS_ASSERT_STREAM_AT(!mbOperating, "Last operation has not been waited before\n", CGS_ARTIST_FILE, 92);
         mbOperating = true;
         GetDeviceManager()->Close(lHandle, &AsyncOp::CompletionCallback, this, liPriority);
     }

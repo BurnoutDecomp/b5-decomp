@@ -73,8 +73,8 @@ void CgsSceneManager::SceneManagerIO::OutputBuffer::Construct()
     mTriangleCacheInterface.mpTriangleCacheManager = 0;      // this + 217164
 
     const bool lbResultsQueuePrepared = mResultsQueue.Prepare();
-    CGS_ASSERT(lbResultsQueuePrepared,
-               CGS_ASSERT_MESSAGE_AT("mResultsQueue.Prepare()", KAC_SCENE_MANAGER_IO_ARTIST_FILE, 224));
+    CGS_ASSERT_AT(lbResultsQueuePrepared,
+               "mResultsQueue.Prepare()", KAC_SCENE_MANAGER_IO_ARTIST_FILE, 224);
 
     mPotentialContactQueue.Clear();
     mErrorQueue.Clear();
@@ -97,8 +97,8 @@ void CgsSceneManager::SceneManagerIO::OutputBuffer::Destruct()
     mPotentialContactQueue.Clear();
 
     const bool lbResultsQueueReleased = mResultsQueue.Release();
-    CGS_ASSERT(lbResultsQueueReleased,
-               CGS_ASSERT_MESSAGE_AT("mResultsQueue.Release()", KAC_SCENE_MANAGER_IO_ARTIST_FILE, 256));
+    CGS_ASSERT_AT(lbResultsQueueReleased,
+               "mResultsQueue.Release()", KAC_SCENE_MANAGER_IO_ARTIST_FILE, 256);
 
     mErrorQueue.Clear();
     mPotentialContactQueue.Clear();

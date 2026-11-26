@@ -58,7 +58,7 @@ namespace BrnNetwork
                     break;
                 }
                 default:
-                    CGS_ASSERT(false, "No custom results for this game mode type.\n");
+                    CGS_FAIL("No custom results for this game mode type.\n");
                     break;
             }
         }
@@ -186,7 +186,7 @@ namespace BrnNetwork
                     break;
                 }
                 default:
-                    CGS_ASSERT(false, "No specific results for this game mode type.\n");
+                    CGS_FAIL("No specific results for this game mode type.\n");
                     break;
             }
         }
@@ -214,7 +214,7 @@ namespace BrnNetwork
     // pattern ("lll") that is never consumed.
     const char* GameResults::GetPattern() const
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("These results are serialised differently.  You should be using SeraliseToString!!!", CGS_ARTIST_FILE, 96));
+        CGS_FAIL_STREAM_AT("These results are serialised differently.  You should be using SeraliseToString!!!", CGS_ARTIST_FILE, 96);
         return "lll";
     }
 
@@ -222,7 +222,7 @@ namespace BrnNetwork
     // asserts then returns 4 (li r3,4 -- not derived from the 3-char "lll").
     s32 GameResults::GetPatternLength() const
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("These results are serialised differently.  You should be using SeraliseToString!!!", CGS_ARTIST_FILE, 112));
+        CGS_FAIL_STREAM_AT("These results are serialised differently.  You should be using SeraliseToString!!!", CGS_ARTIST_FILE, 112);
         return 4;
     }
 
@@ -231,7 +231,7 @@ namespace BrnNetwork
     // SerialiseToString, never through the generic sized-blob path.
     u32 GameResults::GetDataSize() const
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("These results are serialised differently.  You should be using SeraliseToString!!!", CGS_ARTIST_FILE, 127));
+        CGS_FAIL_STREAM_AT("These results are serialised differently.  You should be using SeraliseToString!!!", CGS_ARTIST_FILE, 127);
         return 12u;
     }
 
@@ -240,14 +240,14 @@ namespace BrnNetwork
     // assert -- but it still returns the address of the result payload (console +0x04).
     void* GameResults::GetData()
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("These results are serialised differently.  You should be using SeraliseToString!!!", CGS_ARTIST_FILE, 142));
+        CGS_FAIL_STREAM_AT("These results are serialised differently.  You should be using SeraliseToString!!!", CGS_ARTIST_FILE, 142);
         return mGameData;
     }
 
     // Const twin of GetData: the same redirect assert, then the payload address (+0x04).
     const void* GameResults::GetData() const
     {
-        CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
+        CGS_FAIL("These results are serialised differently.  You should be using SeraliseToString!!!");
         return mGameData;
     }
 }

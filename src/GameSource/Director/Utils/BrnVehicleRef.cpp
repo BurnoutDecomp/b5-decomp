@@ -45,11 +45,11 @@ namespace BrnDirector
             break;
 
         case E_TRAFFIC_VEHICLE:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("not implemented yet", CGS_ARTIST_FILE, 189));   // BrnVehicleRef.h:189 (non-gating)
+            CGS_FAIL_AT("not implemented yet", CGS_ARTIST_FILE, 189);   // BrnVehicleRef.h:189 (non-gating)
             break;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unknown type", CGS_ARTIST_FILE, 195));          // BrnVehicleRef.h:195 (non-gating)
+            CGS_FAIL_AT("unknown type", CGS_ARTIST_FILE, 195);          // BrnVehicleRef.h:195 (non-gating)
             break;
         }
     }
@@ -69,10 +69,10 @@ namespace BrnDirector
         mbSet          = true;
         meType         = E_RACE_CAR;
         muRef          = 0;
-        CGS_ASSERT(static_cast<s32>(leRaceCar) < KI_MAX_NUM_RACE_CARS,
-            CGS_ASSERT_MESSAGE_AT(
-                "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
-                CGS_ARTIST_FILE, 222 /* ARTIST 0x821F2A0C */));   // BrnVehicleRef.h:222
+        CGS_ASSERT_AT(static_cast<s32>(leRaceCar) < KI_MAX_NUM_RACE_CARS,
+            "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
+                CGS_ARTIST_FILE, 222 /* ARTIST 0x821F2A0C */);   // BrnVehicleRef.h:222
+
     }
 
     // @ 0x821F2A38 (class:BrnDirector::VehicleRef TU) -- memberwise inequality over

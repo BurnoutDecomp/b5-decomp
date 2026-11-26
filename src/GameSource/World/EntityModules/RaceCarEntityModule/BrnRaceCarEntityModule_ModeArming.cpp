@@ -1056,7 +1056,7 @@ void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
             else
             {
                 // The console streams the type after the text; CGS_ASSERT forwards the literal.
-                CGS_ASSERT(false, "Could not get the correct car type: ");
+                CGS_FAIL("Could not get the correct car type: ");
             }
 
             // The entry's gameplay block (+0x90); the two stats bytes are +0x98 / +0x9A, the same

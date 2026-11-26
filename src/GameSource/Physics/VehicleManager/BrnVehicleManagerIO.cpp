@@ -50,7 +50,7 @@ namespace Vehicle
     const VehicleOutputRequestInterface*
     VehicleManagerOutputBuffer::GetVehicleOutputRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 60));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 60);
         return &mVehicleOutputRequestInterface;
     }
 
@@ -58,7 +58,7 @@ namespace Vehicle
     VehicleOutputRequestInterface*
     VehicleManagerOutputBuffer::GetVehicleOutputRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 61));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 61);
         return &mVehicleOutputRequestInterface;
     }
 }

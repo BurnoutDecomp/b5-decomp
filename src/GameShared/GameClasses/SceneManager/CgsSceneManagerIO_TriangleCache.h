@@ -39,8 +39,8 @@ namespace SceneManagerIO
         // h:1286 (li r5,0x506 at 0x82277840 and in the 8 physics callers that inline it).
         const CgsGeometric::Triangle4* GetCache(s32 liObjectIndex) const
         {
-            CGS_ASSERT(mpTriangleCacheManager != 0,
-                       CGS_ASSERT_MESSAGE_AT("mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1286));
+            CGS_ASSERT_AT(mpTriangleCacheManager != 0,
+                       "mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1286);
             return mpTriangleCacheManager->GetTrianglesForCachedObject(liObjectIndex);
         }
 
@@ -51,8 +51,8 @@ namespace SceneManagerIO
         // h:1295 into its copy and into every physics caller that inlines it.
         s32 GetNumCachedTriangleBatches(s32 liCacheSlotIndex) const
         {
-            CGS_ASSERT(mpTriangleCacheManager != 0,
-                       CGS_ASSERT_MESSAGE_AT("mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1295));
+            CGS_ASSERT_AT(mpTriangleCacheManager != 0,
+                       "mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1295);
             return mpTriangleCacheManager->mpaCachedObjectSlots[liCacheSlotIndex].miNumCachedTriangleBatches;
         }
 
@@ -88,8 +88,8 @@ namespace SceneManagerIO
         // rodata (no newline).
         void Append(const TriangleCacheInterface* lpInterfaceToAppend)
         {
-            CGS_ASSERT(lpInterfaceToAppend->mpTriangleCacheManager != 0,
-                       CGS_ASSERT_MESSAGE_AT("lpInterfaceToAppend->mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1277));
+            CGS_ASSERT_AT(lpInterfaceToAppend->mpTriangleCacheManager != 0,
+                       "lpInterfaceToAppend->mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1277);
             mpTriangleCacheManager = lpInterfaceToAppend->mpTriangleCacheManager;
         }
     };

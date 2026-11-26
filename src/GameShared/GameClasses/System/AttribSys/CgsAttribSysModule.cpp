@@ -35,10 +35,10 @@ AttribSysModule::EPrepareStage operator++(AttribSysModule::EPrepareStage& leStag
 {
     const AttribSysModule::EPrepareStage leOld = leStage;
     leStage = static_cast<AttribSysModule::EPrepareStage>(leStage + 1);
-    CGS_ASSERT(leStage <= AttribSysModule::E_PREPARESTAGE_DONE,
-        CGS_ASSERT_MESSAGE_AT(
-            "leEnumIndex <= AttribSysModule::E_PREPARESTAGE_DONE",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModule.h", 230 /* ARTIST 0x828024EC */));
+    CGS_ASSERT_AT(leStage <= AttribSysModule::E_PREPARESTAGE_DONE,
+        "leEnumIndex <= AttribSysModule::E_PREPARESTAGE_DONE",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModule.h", 230 /* ARTIST 0x828024EC */);
+
     return leOld;
 }
 
@@ -134,21 +134,21 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
         case E_PREPARESTAGE_MEMORY:
             mePrepareStage = E_PREPARESTAGE_MEMORY;
 
-            CGS_ASSERT(lpLinearAlloc   != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "lpLinearAlloc != NULL", CGS_ARTIST_FILE, 133 /* ARTIST 0x828076C8 */));
-            CGS_ASSERT(lpAttribSysHeap != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "lpAttribSysHeap != NULL", CGS_ARTIST_FILE, 134 /* ARTIST 0x828076EC */));
-            CGS_ASSERT(lpGameTalkHeap  != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "lpGameTalkHeap != NULL", CGS_ARTIST_FILE, 135 /* ARTIST 0x82807710 */));
-            CGS_ASSERT(lpEastlHeap     != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "lpEastlHeap != NULL", CGS_ARTIST_FILE, 136 /* ARTIST 0x82807734 */));
-            CGS_ASSERT(liMaxNumVaults > 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "liMaxNumVaults > 0", CGS_ARTIST_FILE, 137 /* ARTIST 0x82807758 */));
+            CGS_ASSERT_AT(lpLinearAlloc   != 0,
+                "lpLinearAlloc != NULL", CGS_ARTIST_FILE, 133 /* ARTIST 0x828076C8 */);
+
+            CGS_ASSERT_AT(lpAttribSysHeap != 0,
+                "lpAttribSysHeap != NULL", CGS_ARTIST_FILE, 134 /* ARTIST 0x828076EC */);
+
+            CGS_ASSERT_AT(lpGameTalkHeap  != 0,
+                "lpGameTalkHeap != NULL", CGS_ARTIST_FILE, 135 /* ARTIST 0x82807710 */);
+
+            CGS_ASSERT_AT(lpEastlHeap     != 0,
+                "lpEastlHeap != NULL", CGS_ARTIST_FILE, 136 /* ARTIST 0x82807734 */);
+
+            CGS_ASSERT_AT(liMaxNumVaults > 0,
+                "liMaxNumVaults > 0", CGS_ARTIST_FILE, 137 /* ARTIST 0x82807758 */);
+
 
             mMemoryManager.Prepare(lpLinearAlloc, lpAttribSysHeap,
                                             lpGameTalkHeap, lpEastlHeap);
@@ -156,9 +156,9 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
 
             mpSchemaVault = static_cast<Attrib::Vault*>(
                 lpLinearAlloc->Malloc(KI_SCHEMA_VAULT_BYTES));
-            CGS_ASSERT(mpSchemaVault != 0,
-                CGS_ASSERT_MESSAGE_AT(
-                    "mpSchemaVault != NULL", CGS_ARTIST_FILE, 152 /* ARTIST 0x828077B4 */));
+            CGS_ASSERT_AT(mpSchemaVault != 0,
+                "mpSchemaVault != NULL", CGS_ARTIST_FILE, 152 /* ARTIST 0x828077B4 */);
+
 
             mePrepareStage++;
             // fall through
@@ -167,9 +167,9 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
             mePrepareStage = E_PREPARESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "Invalid prepare state.\n", CGS_ARTIST_FILE, 169 /* ARTIST 0x828077F4 */));
+            CGS_FAIL_AT(
+                "Invalid prepare state.\n", CGS_ARTIST_FILE, 169 /* ARTIST 0x828077F4 */);
+
             return false;
     }
 }
@@ -195,9 +195,9 @@ bool AttribSysModule::Release()
             meReleaseStage = E_RELEASESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "Invalid release state.\n", CGS_ARTIST_FILE, 226 /* ARTIST 0x828025B4 */));
+            CGS_FAIL_AT(
+                "Invalid release state.\n", CGS_ARTIST_FILE, 226 /* ARTIST 0x828025B4 */);
+
             return false;
     }
 }
@@ -323,7 +323,7 @@ void AttribSysModule::ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffe
 
 
 
-                CGS_ASSERT_AT(false, "Unrecognised AttribSys event type\n", CGS_ARTIST_FILE, 334);
+                CGS_FAIL_AT("Unrecognised AttribSys event type\n", CGS_ARTIST_FILE, 334);
                 break;
         }
 

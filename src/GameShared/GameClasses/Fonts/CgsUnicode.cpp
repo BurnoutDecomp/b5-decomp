@@ -495,7 +495,7 @@ namespace CgsUnicode
         CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
                                    CgsDev::Assert::giMessageBufferSize);
         lMessage << "\n\nRan through ";
-        lMessage.PrintSignedInteger(KI_MAX_CHARACTERS_TO_SEARCH)
+        lMessage << KI_MAX_CHARACTERS_TO_SEARCH
             << " Utf8 characters without finding a null terminator.\n"
                "If this is correct the change the KI_MAX_CHARACTERS_TO_SEARCH variable to a larger number\n\n\n";
         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,

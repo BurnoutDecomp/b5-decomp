@@ -140,9 +140,9 @@ void PaybackComponent::BeginAwardAnimation(BrnNetwork::EPaybackType /*lePaybackT
 void PaybackComponent::ShowAvailableInstantly(BrnNetwork::EPaybackType lePaybackType,
                                               ::EActiveRaceCarIndex leVictimRaceCarIndex)
 {
-    CGS_ASSERT(lePaybackType >= BrnNetwork::E_PAYBACK_TYPE_START,
-               CGS_ASSERT_MESSAGE_AT("lePaybackType >= BrnNetwork::E_PAYBACK_TYPE_START", CGS_ARTIST_FILE, 442 /* ARTIST 0x8241FF7C */));
-    CGS_ASSERT(lePaybackType < 3, CGS_ASSERT_MESSAGE_AT("lePaybackType < BrnNetwork::E_PAYBACK_TYPE_COUNT", CGS_ARTIST_FILE, 443 /* ARTIST 0x8241FFA0 */));
+    CGS_ASSERT_AT(lePaybackType >= BrnNetwork::E_PAYBACK_TYPE_START,
+               "lePaybackType >= BrnNetwork::E_PAYBACK_TYPE_START", CGS_ARTIST_FILE, 442 /* ARTIST 0x8241FF7C */);
+    CGS_ASSERT_AT(lePaybackType < 3, "lePaybackType < BrnNetwork::E_PAYBACK_TYPE_COUNT", CGS_ARTIST_FILE, 443 /* ARTIST 0x8241FFA0 */);
 
     const EAwardTypes leAwardType = KAE_PAYBACKS_TO_AWARD_TYPE[lePaybackType];
     meVictimRaceCarIndex    = leVictimRaceCarIndex;   // +0xE0
@@ -245,8 +245,8 @@ void PaybackComponent::SendAwardTriggerableEvent()
 // @0x824116C8
 void PaybackComponent::SetDisplayedIcon(EAwardTypes leAwardType)
 {
-    CGS_ASSERT(leAwardType >= E_AT_START, CGS_ASSERT_MESSAGE_AT("leAwardType >= E_AT_START", CGS_ARTIST_FILE, 337 /* ARTIST 0x82411700 */));   // cpp:337
-    CGS_ASSERT(leAwardType < 3, CGS_ASSERT_MESSAGE_AT("leAwardType < E_AT_COUNT", CGS_ARTIST_FILE, 338 /* ARTIST 0x82411724 */));              // cpp:338 (asm bound == 3)
+    CGS_ASSERT_AT(leAwardType >= E_AT_START, "leAwardType >= E_AT_START", CGS_ARTIST_FILE, 337 /* ARTIST 0x82411700 */);   // cpp:337
+    CGS_ASSERT_AT(leAwardType < 3, "leAwardType < E_AT_COUNT", CGS_ARTIST_FILE, 338 /* ARTIST 0x82411724 */);              // cpp:338 (asm bound == 3)
     AddOutputAptViewState("TargetIconType", KAPC_AWARD_STRINGS[leAwardType], false);
 }
 
@@ -287,7 +287,7 @@ void PaybackComponent::TriggerAptAnimation(EPaybackComponentAnimations lePayback
             break;
         case E_PCA_ATSIDE:
         {
-            CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 407 /* ARTIST 0x82411858 */));
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", __FILE__, 407 /* ARTIST 0x82411858 */);
             lpacMainFrameState = "ShowText";
             lpacIconFrameState = "Static";
             AddOutputAptViewState("PaybackText", "Payback on", false);
@@ -305,9 +305,9 @@ void PaybackComponent::TriggerAptAnimation(EPaybackComponentAnimations lePayback
             break;
         }
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("false", __FILE__, 418 /* ARTIST 0x82411920 */));
-            CGS_ASSERT(lpacMainFrameState != 0, CGS_ASSERT_MESSAGE_AT("lpMainFrame != NULL", __FILE__, 423 /* ARTIST 0x82411944 */));
-            CGS_ASSERT(lpacIconFrameState != 0, CGS_ASSERT_MESSAGE_AT("lpIconFrame != NULL", __FILE__, 424 /* ARTIST 0x82411960 */));
+            CGS_ASSERT_AT(false, "false", __FILE__, 418 /* ARTIST 0x82411920 */);
+            CGS_ASSERT_AT(lpacMainFrameState != 0, "lpMainFrame != NULL", __FILE__, 423 /* ARTIST 0x82411944 */);
+            CGS_ASSERT_AT(lpacIconFrameState != 0, "lpIconFrame != NULL", __FILE__, 424 /* ARTIST 0x82411960 */);
             break;
     }
 

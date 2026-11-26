@@ -46,10 +46,10 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     void ScoringSystem::SetCheckpointDistances(u32 luCheckpoint, f32 lfDistance)
     {
-        CGS_ASSERT(lfDistance == lfDistance,
-                   CGS_ASSERT_MESSAGE_AT("RwMathFPU::IsValid( lfDistanceToFinish )", CGS_ARTIST_FILE, 1793));
-        CGS_ASSERT(luCheckpoint < static_cast<u32>(GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE),
-                   CGS_ASSERT_MESSAGE_AT("( luCheckpointIndexFromFinish >= 0 ) && ( luCheckpointIndexFromFinish < (uint32_t)KI_MAX_LANDMARKS_IN_MODE )", CGS_ARTIST_FILE, 1794));
+        CGS_ASSERT_AT(lfDistance == lfDistance,
+                   "RwMathFPU::IsValid( lfDistanceToFinish )", CGS_ARTIST_FILE, 1793);
+        CGS_ASSERT_AT(luCheckpoint < static_cast<u32>(GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE),
+                   "( luCheckpointIndexFromFinish >= 0 ) && ( luCheckpointIndexFromFinish < (uint32_t)KI_MAX_LANDMARKS_IN_MODE )", CGS_ARTIST_FILE, 1794);
 
         mafCheckpointSeparations[luCheckpoint] = lfDistance;
     }
@@ -61,8 +61,8 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     f32 ScoringSystem::GetCheckpointDistanceToFinish(u32 luCheckpoint) const
     {
-        CGS_ASSERT(luCheckpoint < static_cast<u32>(GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE),
-                   CGS_ASSERT_MESSAGE_AT("luCheckpointIndex < (uint32_t)KI_MAX_LANDMARKS_IN_MODE", CGS_ARTIST_FILE, 1821));
+        CGS_ASSERT_AT(luCheckpoint < static_cast<u32>(GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE),
+                   "luCheckpointIndex < (uint32_t)KI_MAX_LANDMARKS_IN_MODE", CGS_ARTIST_FILE, 1821);
         CGS_ASSERT(mbCheckPointDistancesToFinishReady,
                    "Distance to finish not ready");
 
@@ -144,7 +144,7 @@ namespace BrnGameState
             return;
         }
 
-        CGS_ASSERT(luCompletedLaps < 4u, CGS_ASSERT_MESSAGE_AT("luCompletedLaps < BrnWorld::KU_MAX_LAPS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 437));
+        CGS_ASSERT_AT(luCompletedLaps < 4u, "luCompletedLaps < BrnWorld::KU_MAX_LAPS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 437);
 
         // This lap's split = (now - mode start) minus every lap already banked for this car.
         CgsSystem::Time lLapTime = lTime - mStartTime;

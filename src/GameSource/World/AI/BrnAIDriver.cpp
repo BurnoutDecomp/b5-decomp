@@ -590,7 +590,7 @@ namespace BrnAI
                 break;
 
             default:
-                CGS_ASSERT_AT(false, "Unknown AI behaviour", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 1318);
+                CGS_FAIL_AT("Unknown AI behaviour", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 1318);
                 break;
         }
     }
@@ -799,7 +799,7 @@ namespace BrnAI
                 break;
 
             default:
-                CGS_ASSERT_AT(false, "AI driver with unknown behaviour", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 2015);
+                CGS_FAIL_AT("AI driver with unknown behaviour", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 2015);
                 break;
         }
 
@@ -1384,11 +1384,11 @@ namespace BrnAI
     // ================================================================================
     NearbyVehicle* NearbyVehicles::GetVehiclePointer(s32 liEntry)
     {
-        CGS_ASSERT(liEntry >= 0,
-            CGS_ASSERT_MESSAGE_AT("liEntry >= 0", __FILE__, 2942 /* ARTIST 0x8276689C */));                                 // :2942
-        CGS_ASSERT(liEntry < KI_MAX_NEARBY_VEHICLES,
-            CGS_ASSERT_MESSAGE_AT(
-                "liEntry < KI_MAX_NEARBY_TRAFFIC", __FILE__, 2943 /* ARTIST 0x827668C0 */));  // :2943
+        CGS_ASSERT_AT(liEntry >= 0,
+            "liEntry >= 0", __FILE__, 2942 /* ARTIST 0x8276689C */);                                 // :2942
+        CGS_ASSERT_AT(liEntry < KI_MAX_NEARBY_VEHICLES,
+            "liEntry < KI_MAX_NEARBY_TRAFFIC", __FILE__, 2943 /* ARTIST 0x827668C0 */);  // :2943
+
         return &mVehicle[liEntry];                                                // mulli 0x70; add
     }
 
@@ -1476,7 +1476,7 @@ namespace BrnAI
     // ================================================================================
     s32 AIDriver::ChooseAggressiveSteeringFan(AICar* lpPlayerCar)
     {
-        CGS_ASSERT(lpPlayerCar != 0, CGS_ASSERT_MESSAGE_AT("lpPlayerCar", __FILE__, 493));                     // :493
+        CGS_ASSERT_AT(lpPlayerCar != 0, "lpPlayerCar", __FILE__, 493);                     // :493
 
         // The player is crashing and this car drew an odd opponent index -> pile in (bias 2).
         if (lpPlayerCar->IsCrashing() && (mpCar->miOpponentIndex % 2) != 0)
@@ -1592,7 +1592,7 @@ namespace BrnAI
     // ================================================================================
     bool AIDriver::IsStuck()
     {
-        CGS_ASSERT(mpCar != 0, CGS_ASSERT_MESSAGE_AT("mpCar != NULL", __FILE__, 2519));                       // :2519
+        CGS_ASSERT_AT(mpCar != 0, "mpCar != NULL", __FILE__, 2519);                       // :2519
 
         AICar* lpCar = mpCar;
         f32 lfThreshold = KF_AI_TIME_FOR_BEING_STUCK;                      // 5.0
@@ -1812,7 +1812,7 @@ namespace BrnAI
                 break;
 
             default:
-                CGS_ASSERT(false, "AI Driver in bad Drift state");   // :1817
+                CGS_FAIL("AI Driver in bad Drift state");   // :1817
                 break;
         }
     }
@@ -2196,7 +2196,7 @@ namespace BrnAI
             mActiveRouteTimeStamp = lpCar->miRouteTimeStamp;
         }
 
-        CGS_ASSERT(lpCar != 0, CGS_ASSERT_MESSAGE_AT("AI car doesn't have a route", __FILE__, 905));   // :905
+        CGS_ASSERT_AT(lpCar != 0, "AI car doesn't have a route", __FILE__, 905);   // :905
 
         if (lpRoute->GetStatus() == Route::E_STATUS_UNINITIALISED)
             return;
@@ -2225,7 +2225,7 @@ namespace BrnAI
         mSteeringTargetVector.SetZero();                       // stvx 0x1C70
         mbIsRacingLineInitialised = 1;                         // stb 1, 0x1D68
 
-        CGS_ASSERT(GetRacingLine().mbIsInitialised, CGS_ASSERT_MESSAGE_AT("Racing line not initialised properly", __FILE__, 954));  // :954
+        CGS_ASSERT_AT(GetRacingLine().mbIsInitialised, "Racing line not initialised properly", __FILE__, 954);  // :954
     }
 
     // ================================================================================
@@ -2240,8 +2240,8 @@ namespace BrnAI
     {
         (void)lfTimeStep;   // the console body takes no float
 
-        CGS_ASSERT(mpCar != 0, CGS_ASSERT_MESSAGE_AT("AI driver trying to make a racing line without a car", __FILE__, 993));   // :993
-        CGS_ASSERT(GetRacingLine().mbIsInitialised, CGS_ASSERT_MESSAGE_AT("Racing line not initialised properly", __FILE__, 994));  // :994
+        CGS_ASSERT_AT(mpCar != 0, "AI driver trying to make a racing line without a car", __FILE__, 993);   // :993
+        CGS_ASSERT_AT(GetRacingLine().mbIsInitialised, "Racing line not initialised properly", __FILE__, 994);  // :994
 
         // stvx128 v0, r31, 6736 == this+0x1A50 == mRacingLine.mCarPos (RacingLine +0xB30)
         GetRacingLine().mCarPos = mpCar->GetPosition();
@@ -2485,9 +2485,9 @@ namespace BrnAI
     // ================================================================================
     bool AIDriver::AddNearbyTrafficToAvoidance(const BrnTraffic::BrnTrafficIO::TrafficAIEntity* lpEntity)
     {
-        CGS_ASSERT(mNearbyVehicles.GetCount() >= 0, CGS_ASSERT_MESSAGE_AT("mNearbyVehicles.GetCount() >= 0", __FILE__, 2591));   // :2591
-        CGS_ASSERT(mNearbyVehicles.GetCount() <= NearbyVehicles::KI_MAX_NEARBY_VEHICLES,
-                   CGS_ASSERT_MESSAGE_AT("mNearbyVehicles.GetCount() <= KI_MAX_NEARBY_TRAFFIC", __FILE__, 2592));                // :2592
+        CGS_ASSERT_AT(mNearbyVehicles.GetCount() >= 0, "mNearbyVehicles.GetCount() >= 0", __FILE__, 2591);   // :2591
+        CGS_ASSERT_AT(mNearbyVehicles.GetCount() <= NearbyVehicles::KI_MAX_NEARBY_VEHICLES,
+                   "mNearbyVehicles.GetCount() <= KI_MAX_NEARBY_TRAFFIC", __FILE__, 2592);                // :2592
 
         s32 liIndex;
         if (mNearbyVehicles.miCount < NearbyVehicles::KI_MAX_NEARBY_VEHICLES)   // lwz 0x700
@@ -2540,9 +2540,9 @@ namespace BrnAI
         if (rw::math::vpu::Dot(lSeparation, lUseful) < 0.0f && !lpCar->mbIsPlayer)         // lbz 0x1549
             return false;
 
-        CGS_ASSERT(mNearbyVehicles.GetCount() >= 0, CGS_ASSERT_MESSAGE_AT("mNearbyVehicles.GetCount() >= 0", __FILE__, 2674));    // :2674
-        CGS_ASSERT(mNearbyVehicles.GetCount() <= NearbyVehicles::KI_MAX_NEARBY_VEHICLES,
-                   CGS_ASSERT_MESSAGE_AT("mNearbyVehicles.GetCount() <= KI_MAX_NEARBY_TRAFFIC", __FILE__, 2675));                 // :2675
+        CGS_ASSERT_AT(mNearbyVehicles.GetCount() >= 0, "mNearbyVehicles.GetCount() >= 0", __FILE__, 2674);    // :2674
+        CGS_ASSERT_AT(mNearbyVehicles.GetCount() <= NearbyVehicles::KI_MAX_NEARBY_VEHICLES,
+                   "mNearbyVehicles.GetCount() <= KI_MAX_NEARBY_TRAFFIC", __FILE__, 2675);                 // :2675
 
         const Vector2 lCentre = To2DU(lpCar->GetPosition());       // the console re-fetches it
 

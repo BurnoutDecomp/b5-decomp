@@ -285,7 +285,7 @@ bool WorldDataController::Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDa
 
     default:
         // X360 cpp:243, streamed: "Unhandled state [" << meState << "] in WorldDataController::Prepare"
-        CGS_ASSERT(false, "Unhandled state in WorldDataController::Prepare");
+        CGS_FAIL("Unhandled state in WorldDataController::Prepare");
         return false;
     }
 }
@@ -426,7 +426,7 @@ bool WorldDataController::Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameD
         // X360 cpp:360, streamed: "Unhandled state [" << meState << "] in
         // WorldDataController::Prepare" -- note the console streams meState (+0x00), NOT the
         // meState2 it switched on. Reproduced as the same static message this file's Prepare uses.
-        CGS_ASSERT(false, "Unhandled state in WorldDataController::Prepare");
+        CGS_FAIL("Unhandled state in WorldDataController::Prepare");
         return false;
     }
 }
@@ -434,8 +434,8 @@ bool WorldDataController::Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameD
 // X360 0x8248E6D8. Total landmark count in the loaded trigger data (TriggerData::miLandmarkCount @+0x34).
 s32 WorldDataController::GetTotalNumberOfLandmarks() const
 {
-    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        CGS_ASSERT_MESSAGE_AT("E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 229 /* ARTIST 0x8248E710 */));
+    CGS_ASSERT_AT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 229 /* ARTIST 0x8248E710 */);
     return mpTriggerData->GetNumLandmarks();
 }
 
@@ -444,8 +444,8 @@ s32 WorldDataController::GetTotalNumberOfLandmarks() const
 // names READY -- reproduced as-is.
 s32 WorldDataController::GetTotalNumberOfOnlineLandmarks() const
 {
-    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        CGS_ASSERT_MESSAGE_AT("E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 246 /* ARTIST 0x82428718 */));
+    CGS_ASSERT_AT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 246 /* ARTIST 0x82428718 */);
     return mpTriggerData->GetOnlineLandmarkCount();
 }
 
@@ -483,8 +483,8 @@ s32 WorldDataController::GetRequiredWinsInRank(s32 liRank) const
 // reached the ready state, then returns the resource pointer (ResourcePtr operator-> const).
 const BrnProgression::ProgressionData* WorldDataController::GetProgressionData() const
 {
-    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        CGS_ASSERT_MESSAGE_AT("E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 306 /* ARTIST 0x82428850 */));
+    CGS_ASSERT_AT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 306 /* ARTIST 0x82428850 */);
     return mpProgressionData.operator->();
 }
 
@@ -618,7 +618,7 @@ WorldDataController::GetTriggerVolumeRegion(CgsID lTriggerID, BrnTrigger::BoxReg
     }
     else
     {
-        CGS_ASSERT(false, "Can't find any triggers in the data\n");
+        CGS_FAIL("Can't find any triggers in the data\n");
     }
 
     CGS_ASSERT(liRegionIndex < mpTriggerData->GetGenericRegionCount(), "requested trigger wasn't found");

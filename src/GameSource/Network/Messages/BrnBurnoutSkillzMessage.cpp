@@ -78,12 +78,12 @@ namespace BrnNetwork
                                               const BrnGameState::BurnoutSkillzData* lpSkillzData,
                                               bool lbInitialData)
     {
-        CGS_ASSERT(lpSkillzData,
-            CGS_ASSERT_MESSAGE_AT("lpSkillzData", __FILE__, 146 /* ARTIST 0x8257F6FC */));
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16FrameCount != KU16_INVALID_FRAME",
-                __FILE__, 147 /* ARTIST 0x8257F724 */));
+        CGS_ASSERT_AT(lpSkillzData,
+            "lpSkillzData", __FILE__, 146 /* ARTIST 0x8257F6FC */);
+        CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
+            "lu16FrameCount != KU16_INVALID_FRAME",
+                __FILE__, 147 /* ARTIST 0x8257F724 */);
+
 
         // A slot already flagged VALID is being re-armed: clear the flag instead of
         // stamping the initial-data marker (asm: lbz 0x19 ; if bit0 set -> clear bit0 ;
@@ -100,10 +100,10 @@ namespace BrnNetwork
     bool BurnoutSkillzMessage::Retrieve(BrnGameState::BurnoutSkillzData* lpSkillzData,
                                         bool* lpbInitialData)
     {
-        CGS_ASSERT(lpSkillzData,
-            CGS_ASSERT_MESSAGE_AT("lpSkillzData", __FILE__, 183 /* ARTIST 0x8257F7B0 */));
-        CGS_ASSERT(lpbInitialData,
-            CGS_ASSERT_MESSAGE_AT("lpbInitialData", __FILE__, 184 /* ARTIST 0x8257F7D4 */));
+        CGS_ASSERT_AT(lpSkillzData,
+            "lpSkillzData", __FILE__, 183 /* ARTIST 0x8257F7B0 */);
+        CGS_ASSERT_AT(lpbInitialData,
+            "lpbInitialData", __FILE__, 184 /* ARTIST 0x8257F7D4 */);
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {

@@ -119,10 +119,10 @@ namespace CgsGameTalk
     // X360 @0x828DAEE8 (header-inline in the original CgsGameTalk.h:178-179).
     s32 GameTalk::SendMessage(const char* lpTarget, EA::GameTalk::GameTalkMessage* lpMessage)
     {
-        CGS_ASSERT(lpTarget != 0,
-            CGS_ASSERT_MESSAGE_AT("lpTarget", __FILE__, 178 /* ARTIST 0x828DAF14 */));
-        CGS_ASSERT(lpMessage != 0,
-            CGS_ASSERT_MESSAGE_AT("lpMessage", __FILE__, 179 /* ARTIST 0x828DAF38 */));
+        CGS_ASSERT_AT(lpTarget != 0,
+            "lpTarget", __FILE__, 178 /* ARTIST 0x828DAF14 */);
+        CGS_ASSERT_AT(lpMessage != 0,
+            "lpMessage", __FILE__, 179 /* ARTIST 0x828DAF38 */);
 
         return EA::GameTalk::GameTalkManager::SendMessage(lpTarget, lpMessage);
     }

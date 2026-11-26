@@ -302,7 +302,7 @@ namespace BrnParticle
                 break;
 
             default:
-                CGS_ASSERT_AT(false, "Unhandled Event", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 938);
+                CGS_FAIL_AT("Unhandled Event", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 938);
                 break;
             }
 
@@ -815,7 +815,7 @@ namespace BrnParticle
                 lfSizeMax = BurstLayoutF32(lpLayout, KA_DEBRIS_BURST_TYPE_FIELDS[luType].muSizeMax);
                 break;
             default:
-                CGS_ASSERT_AT(false, "Unknown Debris Type in ParticleModule !", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 1500);
+                CGS_FAIL_AT("Unknown Debris Type in ParticleModule !", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 1500);
                 break;
             }
 

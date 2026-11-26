@@ -220,16 +220,16 @@ void CgsRenderTarget::End()
 // The resolved colour texture for colour section luIndex.
 renderengine::Texture* CgsRenderTarget::GetTexture(u32 luIndex)
 {
-    CGS_ASSERT(mpRenderTarget != 0,
-        CGS_ASSERT_MESSAGE_AT("mpRenderTarget", KAC_ARTIST_ASSERT_FILE, 240 /* ARTIST 0x827E74D8 */));
+    CGS_ASSERT_AT(mpRenderTarget != 0,
+        "mpRenderTarget", KAC_ARTIST_ASSERT_FILE, 240 /* ARTIST 0x827E74D8 */);
     return mpRenderTarget->maColourTargets[luIndex].mpTextureState->mpRaster;
 }
 
 // The resolved depth/stencil texture.
 renderengine::Texture* CgsRenderTarget::GetDepthTexture()
 {
-    CGS_ASSERT(mpRenderTarget != 0,
-        CGS_ASSERT_MESSAGE_AT("mpRenderTarget", KAC_ARTIST_ASSERT_FILE, 257 /* ARTIST 0x827E7550 */));
+    CGS_ASSERT_AT(mpRenderTarget != 0,
+        "mpRenderTarget", KAC_ARTIST_ASSERT_FILE, 257 /* ARTIST 0x827E7550 */);
     return mpRenderTarget->mDepthTarget.mpTexture;
 }
 

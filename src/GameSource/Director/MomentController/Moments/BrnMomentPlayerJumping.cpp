@@ -91,8 +91,8 @@ void BehaviourCollection<TBehaviour, TParameters, N>::Construct(const Arbitrator
 template <typename TBehaviour, typename TParameters, u32 N>
 void BehaviourCollection<TBehaviour, TParameters, N>::AddShot(const TParameters* lpParams)
 {
-    CGS_ASSERT(!mbAllocatedShots,
-               CGS_ASSERT_MESSAGE_AT("can't add shots when the behaviours have been allocated (although this could be changed)", CGS_ARTIST_FILE, 159));   // :159
+    CGS_ASSERT_AT(!mbAllocatedShots,
+               "can't add shots when the behaviours have been allocated (although this could be changed)", CGS_ARTIST_FILE, 159);   // :159
 
     Shot lShot;
     lShot.mHandle.Construct();
@@ -127,7 +127,7 @@ bool BehaviourCollection<TBehaviour, TParameters, N>::Release()
 template <typename TBehaviour, typename TParameters, u32 N>
 bool BehaviourCollection<TBehaviour, TParameters, N>::Prepare(Camera::BehaviourManager& lrBehaviourManager)
 {
-    CGS_ASSERT(maShots.GetLength() > 0, CGS_ASSERT_MESSAGE_AT("maShots.GetLength() > 0", CGS_ARTIST_FILE, 55));
+    CGS_ASSERT_AT(maShots.GetLength() > 0, "maShots.GetLength() > 0", CGS_ARTIST_FILE, 55);
     if (!mbAllocatedShots)
     {
         ++miCurrentCamera;
@@ -147,20 +147,20 @@ bool BehaviourCollection<TBehaviour, TParameters, N>::Prepare(Camera::BehaviourM
 template <typename TBehaviour, typename TParameters, u32 N>
 bool BehaviourCollection<TBehaviour, TParameters, N>::HasFailed()
 {
-    CGS_ASSERT(mbAllocatedShots,
-               CGS_ASSERT_MESSAGE_AT("mbAllocatedShots", CGS_ARTIST_FILE, 146));
-    CGS_ASSERT(mbHasCurrentCamera,
-               CGS_ASSERT_MESSAGE_AT("mbHasCurrentCamera", CGS_ARTIST_FILE, 147));
+    CGS_ASSERT_AT(mbAllocatedShots,
+               "mbAllocatedShots", CGS_ARTIST_FILE, 146);
+    CGS_ASSERT_AT(mbHasCurrentCamera,
+               "mbHasCurrentCamera", CGS_ARTIST_FILE, 147);
     return false;
 }
 
 template <typename TBehaviour, typename TParameters, u32 N>
 bool BehaviourCollection<TBehaviour, TParameters, N>::CanSwitchToMeNow()
 {
-    CGS_ASSERT(mbAllocatedShots,
-               CGS_ASSERT_MESSAGE_AT("mbAllocatedShots", CGS_ARTIST_FILE, 123));
-    CGS_ASSERT(mbHasCurrentCamera,
-               CGS_ASSERT_MESSAGE_AT("mbHasCurrentCamera", CGS_ARTIST_FILE, 124));
+    CGS_ASSERT_AT(mbAllocatedShots,
+               "mbAllocatedShots", CGS_ARTIST_FILE, 123);
+    CGS_ASSERT_AT(mbHasCurrentCamera,
+               "mbHasCurrentCamera", CGS_ARTIST_FILE, 124);
     return true;
 }
 
@@ -291,70 +291,70 @@ bool MomentPlayerJumping::PrepareCameras(Camera::BehaviourManager& lrBehaviourMa
     case E_TYPE_ICE_RIG:
     {
         const bool lbIce = mIceCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbIce,
-            CGS_ASSERT_MESSAGE_AT(
-                "mIceCollection.Prepare(lBehaviourManager)",
-                CGS_ARTIST_FILE, 416 /* ARTIST 0x82275610 */));
+        CGS_ASSERT_AT(lbIce,
+            "mIceCollection.Prepare(lBehaviourManager)",
+                CGS_ARTIST_FILE, 416 /* ARTIST 0x82275610 */);
+
         break;
     }
     case E_TYPE_DROPPED_RIG_THEN_ATTACHED_RIG_SEQUENCE:
     {
         const bool lbDropped = mDroppedRigCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbDropped,
-            CGS_ASSERT_MESSAGE_AT(
-                "mDroppedRigCollection.Prepare(lBehaviourManager)",
-                CGS_ARTIST_FILE, 422 /* ARTIST 0x8227565C */));
+        CGS_ASSERT_AT(lbDropped,
+            "mDroppedRigCollection.Prepare(lBehaviourManager)",
+                CGS_ARTIST_FILE, 422 /* ARTIST 0x8227565C */);
+
         const bool lbRig = mRigCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbRig,
-            CGS_ASSERT_MESSAGE_AT(
-                "mRigCollection.Prepare(lBehaviourManager)",
-                CGS_ARTIST_FILE, 423 /* ARTIST 0x82275690 */));
+        CGS_ASSERT_AT(lbRig,
+            "mRigCollection.Prepare(lBehaviourManager)",
+                CGS_ARTIST_FILE, 423 /* ARTIST 0x82275690 */);
+
         break;
     }
     case E_TYPE_BYSTANDER_THEN_ATTACHED_RIG_SEQUENCE:
     {
         const bool lbBystander = mBystanderCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbBystander,
-            CGS_ASSERT_MESSAGE_AT(
-                "mBystanderCollection.Prepare(lBehaviourManager)",
-                CGS_ARTIST_FILE, 429 /* ARTIST 0x822756D8 */));
+        CGS_ASSERT_AT(lbBystander,
+            "mBystanderCollection.Prepare(lBehaviourManager)",
+                CGS_ARTIST_FILE, 429 /* ARTIST 0x822756D8 */);
+
         const bool lbRig = mRigCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbRig,
-            CGS_ASSERT_MESSAGE_AT(
-                "mRigCollection.Prepare(lBehaviourManager)",
-                CGS_ARTIST_FILE, 430 /* ARTIST 0x8227570C */));
+        CGS_ASSERT_AT(lbRig,
+            "mRigCollection.Prepare(lBehaviourManager)",
+                CGS_ARTIST_FILE, 430 /* ARTIST 0x8227570C */);
+
         break;
     }
     case E_TYPE_BYSTANDER_SHOT:
     {
         const bool lbBystander = mBystanderCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbBystander,
-            CGS_ASSERT_MESSAGE_AT(
-                "mBystanderCollection.Prepare(lBehaviourManager)",
-                CGS_ARTIST_FILE, 436 /* ARTIST 0x8227574C */));
+        CGS_ASSERT_AT(lbBystander,
+            "mBystanderCollection.Prepare(lBehaviourManager)",
+                CGS_ARTIST_FILE, 436 /* ARTIST 0x8227574C */);
+
         break;
     }
     case E_TYPE_DROPPED_RIG_SHOT:
     {
         const bool lbDropped = mDroppedRigCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbDropped,
-            CGS_ASSERT_MESSAGE_AT(
-                "mDroppedRigCollection.Prepare(lBehaviourManager)",
-                CGS_ARTIST_FILE, 442 /* ARTIST 0x82275790 */));
+        CGS_ASSERT_AT(lbDropped,
+            "mDroppedRigCollection.Prepare(lBehaviourManager)",
+                CGS_ARTIST_FILE, 442 /* ARTIST 0x82275790 */);
+
         break;
     }
     case E_TYPE_ATTACHED_RIG_SHOT:
     {
         const bool lbRig = mRigCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbRig,
-            CGS_ASSERT_MESSAGE_AT(
-                "mRigCollection.Prepare(lBehaviourManager)",
-                CGS_ARTIST_FILE, 448 /* ARTIST 0x822757D4 */));
+        CGS_ASSERT_AT(lbRig,
+            "mRigCollection.Prepare(lBehaviourManager)",
+                CGS_ARTIST_FILE, 448 /* ARTIST 0x822757D4 */);
+
         break;
     }
     default:
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT("invalid type", CGS_ARTIST_FILE, 454 /* ARTIST 0x82275800 */));
+        CGS_FAIL_AT(
+            "invalid type", CGS_ARTIST_FILE, 454 /* ARTIST 0x82275800 */);
         break;
     }
     return true;
@@ -398,7 +398,7 @@ MomentPlayerJumping::EStatus MomentPlayerJumping::GetCameraStatus()
             leStatus = E_STATUS_READY;
         break;
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("invalid type", CGS_ARTIST_FILE, 543));
+        CGS_FAIL_AT("invalid type", CGS_ARTIST_FILE, 543);
         break;
     }
     return leStatus;
@@ -438,7 +438,7 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBeh
 {
     Camera::BehaviourManager& lrBehaviourManager = lrBehaviourController;
 
-    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 263));   // :263
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_FILE, 263);   // :263
 
     switch (GetState())
     {
@@ -495,7 +495,7 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBeh
             SetState(E_STATE_INVALID_SEARCHING);
             return;
         }
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unhandled status", CGS_ARTIST_FILE, 332));   // :332
+        CGS_FAIL_AT("Unhandled status", CGS_ARTIST_FILE, 332);   // :332
         if (leStatus == E_STATUS_FAILED || leStatus == E_STATUS_WAITING)
         {
             return;
@@ -507,7 +507,7 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBeh
         break;
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", CGS_ARTIST_FILE, 400));   // :400
+        CGS_FAIL_AT("unhandled case in switch", CGS_ARTIST_FILE, 400);   // :400
         return;
     }
 
@@ -597,7 +597,7 @@ bool MomentPlayerJumping::UpdateCamera(Camera::Camera& lrCamera)
         lbFailed = mRigCollection.HasFailed();
         break;
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("invalid type", CGS_ARTIST_FILE, 665));
+        CGS_FAIL_AT("invalid type", CGS_ARTIST_FILE, 665);
         break;
     }
     return !lbFailed;

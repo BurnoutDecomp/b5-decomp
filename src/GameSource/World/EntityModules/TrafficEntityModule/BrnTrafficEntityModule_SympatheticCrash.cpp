@@ -181,7 +181,7 @@ void TrafficEntityModule::CrashVehicleForSympatheticCrashState(
 
     Vehicle* const lpVehicle = GetVehicle(luVehicle);
 
-    CGS_ASSERT(lpVehicle->IsPhysical(), CGS_ASSERT_MESSAGE_AT("lpVehicle->IsPhysical()", __FILE__, 17094));   // .cpp:17094
+    CGS_ASSERT_AT(lpVehicle->IsPhysical(), "lpVehicle->IsPhysical()", __FILE__, 17094);   // .cpp:17094
     CGS_ASSERT(lpVehicle->IsAlive(),    "IsAlive()");                 // BrnTrafficVehicle.h:1798
 
     lpVehicle->SetPhysicalReason(static_cast<s8>(E_PHYSICALREASON_CRASHED));
@@ -245,9 +245,9 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
         BrnPhysics::Vehicle::BrnTrafficDriverControls* lpOutControls,
         f32 lfTimeStep)
 {
-    CGS_ASSERT(lpOutput       != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", __FILE__, 16288));                // :16288
-    CGS_ASSERT(lpOutControls  != 0, CGS_ASSERT_MESSAGE_AT("lpOutControls", __FILE__, 16289));                 // :16289
-    CGS_ASSERT(lEntityId.muValue != 0xFFFFFFFFu, CGS_ASSERT_MESSAGE_AT("lTarget.IsValid()", __FILE__, 16290));// :16290
+    CGS_ASSERT_AT(lpOutput       != 0, "lpOutputBuffer", __FILE__, 16288);                // :16288
+    CGS_ASSERT_AT(lpOutControls  != 0, "lpOutControls", __FILE__, 16289);                 // :16289
+    CGS_ASSERT_AT(lEntityId.muValue != 0xFFFFFFFFu, "lTarget.IsValid()", __FILE__, 16290);// :16290
     CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");   // .h:2459
 
     Vehicle* const lpVehicle = GetVehicle(luVehicle);
@@ -260,8 +260,8 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     GetSympCrashingTargetPos(lEntityId, &lTargetPos);
     lpVehicle->SetTargetPos(lTargetPos);
 
-    CGS_ASSERT(rw::math::vpu::IsValid(lpVehicle->GetTargetPos()),
-               CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( lpVehicle->GetTargetPos() )", __FILE__, 16298));       // :16298
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lpVehicle->GetTargetPos()),
+               "RwMath::IsValid( lpVehicle->GetTargetPos() )", __FILE__, 16298);       // :16298
 
     // ---- 2. geometry + the timer --------------------------------------------------------------
     // 0x8273D518..0x8273D57C. v123 is the transform's Pos row (+0x30), v126 its At row (+0x20);
@@ -279,7 +279,7 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     const f32 lfForwardDistance = rw::math::vpu::Dot(lvToTarget, lvVehicleAt);
 
     TrafficPhysicsInfo* const lpPhysicsInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
-    CGS_ASSERT(lpPhysicsInfo != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsInfo", __FILE__, 16310));                  // :16310
+    CGS_ASSERT_AT(lpPhysicsInfo != 0, "lpPhysicsInfo", __FILE__, 16310);                  // :16310
 
     // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Where the crasher is, THIS frame --
     // published before the give-up arm so a give-up frame is stamped too.
@@ -310,7 +310,7 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     // ---- 4. the showtime demotion (0x8273D638..0x8273D6BC) ------------------------------------
     CGS_ASSERT(luVehicle < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");  // .h:2350
     Param* const lpParam = GetParam(luVehicle);
-    CGS_ASSERT(lpParam != 0, CGS_ASSERT_MESSAGE_AT("lpParam", __FILE__, 16324));                               // :16324
+    CGS_ASSERT_AT(lpParam != 0, "lpParam", __FILE__, 16324);                               // :16324
 
     // `lbz r11, 0x6C(r28) ; clrlwi r11, r11, 31` -- bit 0 of Param::muExtraBehaviourFlags,
     // NOT mxFlags/IsAlive (that byte is +0x40). An ACCELERATE car carrying the bit restarts as
@@ -440,7 +440,7 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     default:
         // 0x8273DC54: the console streams the state into gpcMessageBuffer. Lowered to the plain
         // CGS_ASSERT per the standing rule; fire-and-continue, exactly as the console does.
-        CGS_ASSERT(false, "Invalid sympathetic crashing state.");      // :16475
+        CGS_FAIL("Invalid sympathetic crashing state.");      // :16475
         return;
     }
 }

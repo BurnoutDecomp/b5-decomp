@@ -142,12 +142,12 @@ namespace BrnGui
         mCurrentTopIndex = 0;
         mTotalNumberTracks = liTotalNumberTracks;
 
-        CGS_ASSERT(mTotalNumberTracks <= KI_MAX_TRAX_IN_GAME,
-            CGS_ASSERT_MESSAGE_AT("mTotalNumberTracks <= KI_MAX_TRAX_IN_GAME",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEATraxMenuComponent.cpp", 209));
-        CGS_ASSERT(mTotalNumberTracks > 0,
-            CGS_ASSERT_MESSAGE_AT("mTotalNumberTracks > 0",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEATraxMenuComponent.cpp", 210));
+        CGS_ASSERT_AT(mTotalNumberTracks <= KI_MAX_TRAX_IN_GAME,
+            "mTotalNumberTracks <= KI_MAX_TRAX_IN_GAME",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEATraxMenuComponent.cpp", 209);
+        CGS_ASSERT_AT(mTotalNumberTracks > 0,
+            "mTotalNumberTracks > 0",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEATraxMenuComponent.cpp", 210);
 
         mCurrentHighlightedIndex = 0;   // the console stores it a second time
         BuildStringIDs();
@@ -247,11 +247,11 @@ namespace BrnGui
     void EATraxMenuComponent::UpdatePlayOrderMode(
         GuiEventAudioTraxPlayOrder::ETraxPlayOrderMode lePlayOrderMode)
     {
-        CGS_ASSERT(lePlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_RANDOM ||
+        CGS_ASSERT_AT(lePlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_RANDOM ||
                    lePlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_SEQUENTIAL,
-            CGS_ASSERT_MESSAGE_AT(
-                "liPlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_RANDOM || liPlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_SEQUENTIAL",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEATraxMenuComponent.cpp", 321 /* ARTIST 0x82419824 */));
+            "liPlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_RANDOM || liPlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_SEQUENTIAL",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEATraxMenuComponent.cpp", 321 /* ARTIST 0x82419824 */);
+
 
         mPlayMode.SetText(KAPC_PLAY_ORDER_MODES[static_cast<s32>(lePlayOrderMode)]);
         mbSettingsChanged = true;
@@ -361,7 +361,7 @@ namespace BrnGui
             mEATraxEnabledInFreeBurnBitfield.UnSetBit(luIndex);
             break;
         default:
-            CGS_ASSERT(false, "Invalid mode");
+            CGS_FAIL("Invalid mode");
             break;
         }
     }

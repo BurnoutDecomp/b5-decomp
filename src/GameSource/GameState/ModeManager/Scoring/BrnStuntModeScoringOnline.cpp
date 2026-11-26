@@ -226,14 +226,14 @@ s32 StuntModeScoringOnline::CalculateMultiplier(const StuntInfo* lpStuntInfo,
 // ----------------------------------------------------------------------------
 void StuntModeScoringOnline::BankMultiplier(StuntInfo* lpRecentStunt)
 {
-    CGS_ASSERT(lpRecentStunt != NULL, CGS_ASSERT_MESSAGE_AT("lpRecentStunt", CGS_ARTIST_FILE, 628));
+    CGS_ASSERT_AT(lpRecentStunt != NULL, "lpRecentStunt", CGS_ARTIST_FILE, 628);
 
     // The recorded 6-word record's 4th word is cleared first (X360 a2[3] = 0).
     reinterpret_cast<s32*>(lpRecentStunt)[3] = 0;
 
     // Reserve the next free banked-multiplier slot (X360 BrnGameState::S == Array<>::AddNew).
     MultiplierData* lpSlot = maMultiplierData.AddNew();
-    CGS_ASSERT(lpSlot != NULL, CGS_ASSERT_MESSAGE_AT("lpMultiplierData", CGS_ARTIST_FILE, 633));
+    CGS_ASSERT_AT(lpSlot != NULL, "lpMultiplierData", CGS_ARTIST_FILE, 633);
     if (lpSlot == NULL)
     {
         return;
@@ -279,14 +279,14 @@ bool StuntModeScoringOnline::WasStuntRecentlyPerformed(StuntInfo* lpStuntInfo)
 // ----------------------------------------------------------------------------
 int StuntModeScoringOnline::_ChainableMultipliersSort(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 789 /* ARTIST 0x823136E4 */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 790 /* ARTIST 0x82313708 */));
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpChainableInfo1", CGS_ARTIST_FILE, 794 /* ARTIST 0x8231372C */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpChainableInfo2", CGS_ARTIST_FILE, 795 /* ARTIST 0x82313750 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 789 /* ARTIST 0x823136E4 */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 790 /* ARTIST 0x82313708 */);
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpChainableInfo1", CGS_ARTIST_FILE, 794 /* ARTIST 0x8231372C */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpChainableInfo2", CGS_ARTIST_FILE, 795 /* ARTIST 0x82313750 */);
 
     const GameStateModuleIO::ChainableMultiplierInfo* lp1 =
         static_cast<const GameStateModuleIO::ChainableMultiplierInfo*>(lpData1);
@@ -414,7 +414,7 @@ void StuntModeScoringOnline::UpdateCarLeapStunts(const ActiveRaceCarOutputInterf
         }
         const RaceCarState* lpOtherState =
             lpRaceCar->GetRaceCarState(leCar);   // RCEntityActiveRaceCarO
-        CGS_ASSERT(lpOtherState != NULL, CGS_ASSERT_MESSAGE_AT("lpRaceCarState", CGS_ARTIST_FILE, 387));
+        CGS_ASSERT_AT(lpOtherState != NULL, "lpRaceCarState", CGS_ARTIST_FILE, 387);
         if (lpOtherState == NULL)
         {
             continue;
@@ -522,7 +522,7 @@ void StuntModeScoringOnline::UpdateCarLeapStunts(const ActiveRaceCarOutputInterf
 void StuntModeScoringOnline::UpdateCarsAroundPlayerAtTakeoff(const ActiveRaceCarOutputInterface* lpRaceCar)
 {
     const RaceCarState* lpPlayerState = lpRaceCar->GetPlayerRaceCarState();   // sub_82310240
-    CGS_ASSERT(lpPlayerState != NULL, CGS_ASSERT_MESSAGE_AT("lpLocalPlayersCarState", CGS_ARTIST_FILE, 722));
+    CGS_ASSERT_AT(lpPlayerState != NULL, "lpLocalPlayersCarState", CGS_ARTIST_FILE, 722);
 
     // Capture once per airborne window: only when not already captured AND the player is in the air
     // (X360 player air-time *(state + 0x404) > 0).
@@ -540,7 +540,7 @@ void StuntModeScoringOnline::UpdateCarsAroundPlayerAtTakeoff(const ActiveRaceCar
                 continue;
             }
             // Skip the player's own car.
-            CGS_ASSERT(static_cast<s32>(lePlayerIdx) != -1, CGS_ASSERT_MESSAGE_AT("Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980));
+            CGS_ASSERT_AT(static_cast<s32>(lePlayerIdx) != -1, "Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980);
             if (static_cast<s32>(lePlayerIdx) == liCar)
             {
                 continue;
@@ -633,7 +633,7 @@ void StuntModeScoringOnline::Update(const ActiveRaceCarOutputInterface* lpRaceCa
     // When the player has landed (air-time <= 0) and no multipliers are live, refresh the cached
     // display score.
     const RaceCarState* lpPlayerState = lpRaceCar->GetPlayerRaceCarState();
-    CGS_ASSERT(lpPlayerState != NULL, CGS_ASSERT_MESSAGE_AT("lpLocalPlayersCarState", CGS_ARTIST_FILE, 243));
+    CGS_ASSERT_AT(lpPlayerState != NULL, "lpLocalPlayersCarState", CGS_ARTIST_FILE, 243);
     const f32 lfAirTime = (lpPlayerState != NULL) ? lpRaceCar->TimePlayerInAir() : 0.0f;
     if (lfAirTime <= 0.0f)
     {

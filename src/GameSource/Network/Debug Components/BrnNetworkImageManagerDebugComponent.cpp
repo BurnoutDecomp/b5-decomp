@@ -29,14 +29,14 @@ namespace BrnNetwork
         miNumEncodes   = 0;
         mbRenderImage  = false;
 
-        CGS_ASSERT(lpImageManager != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpImageManager != 0,
             "lpImageManager",
-            __FILE__, 59 /* ARTIST 0x82586488 */));
+            __FILE__, 59 /* ARTIST 0x82586488 */);
         mpImageManager = lpImageManager;
 
-        CGS_ASSERT(lpTextureCompressor != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpTextureCompressor != 0,
             "lpTextureCompressor",
-            __FILE__, 62 /* ARTIST 0x825864B0 */));
+            __FILE__, 62 /* ARTIST 0x825864B0 */);
         mpTextureCompressor = lpTextureCompressor;
 
         Register();

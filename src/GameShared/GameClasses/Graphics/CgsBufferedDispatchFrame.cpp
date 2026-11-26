@@ -125,10 +125,10 @@ void BufferedDispatchFrame::Swap()
 // List `luListId` of the frame under the write cursor.
 DispatchList& BufferedDispatchFrame::GetDispatchListForWrite(u32 luListId)
 {
-    CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForWrite,
-        CGS_ASSERT_MESSAGE_AT(
-            "muNumDispatchFrames > muCurrentFrameForWrite",
-            KAC_ARTIST_ASSERT_FILE, 171 /* ARTIST 0x827E77DC */));
+    CGS_ASSERT_AT(muNumDispatchFrames > muCurrentFrameForWrite,
+        "muNumDispatchFrames > muCurrentFrameForWrite",
+            KAC_ARTIST_ASSERT_FILE, 171 /* ARTIST 0x827E77DC */);
+
 
     return *mapDispatchFrame[muCurrentFrameForWrite]->GetList(luListId);
 }
@@ -137,10 +137,10 @@ DispatchList& BufferedDispatchFrame::GetDispatchListForWrite(u32 luListId)
 // Embedded dispatch bin of the frame under the write cursor (X360: frame + 0x80).
 DispatchBin& BufferedDispatchFrame::GetDispatchBinForWrite()
 {
-    CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForWrite,
-        CGS_ASSERT_MESSAGE_AT(
-            "muNumDispatchFrames > muCurrentFrameForWrite",
-            KAC_ARTIST_ASSERT_FILE, 189 /* ARTIST 0x827E7854 */));
+    CGS_ASSERT_AT(muNumDispatchFrames > muCurrentFrameForWrite,
+        "muNumDispatchFrames > muCurrentFrameForWrite",
+            KAC_ARTIST_ASSERT_FILE, 189 /* ARTIST 0x827E7854 */);
+
 
     return mapDispatchFrame[muCurrentFrameForWrite]->GetBin();
 }
@@ -149,10 +149,10 @@ DispatchBin& BufferedDispatchFrame::GetDispatchBinForWrite()
 // The frame under the write cursor.
 DispatchFrame& BufferedDispatchFrame::GetDispatchFrameForWrite()
 {
-    CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForWrite,
-        CGS_ASSERT_MESSAGE_AT(
-            "muNumDispatchFrames > muCurrentFrameForWrite",
-            KAC_ARTIST_ASSERT_FILE, 207 /* ARTIST 0x827E78C4 */));
+    CGS_ASSERT_AT(muNumDispatchFrames > muCurrentFrameForWrite,
+        "muNumDispatchFrames > muCurrentFrameForWrite",
+            KAC_ARTIST_ASSERT_FILE, 207 /* ARTIST 0x827E78C4 */);
+
 
     return *mapDispatchFrame[muCurrentFrameForWrite];
 }
@@ -161,10 +161,10 @@ DispatchFrame& BufferedDispatchFrame::GetDispatchFrameForWrite()
 // The frame under the read cursor.
 DispatchFrame& BufferedDispatchFrame::GetDispatchFrameForRead()
 {
-    CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForRead,
-        CGS_ASSERT_MESSAGE_AT(
-            "muNumDispatchFrames > muCurrentFrameForRead",
-            KAC_ARTIST_ASSERT_FILE, 226 /* ARTIST 0x827E792C */));
+    CGS_ASSERT_AT(muNumDispatchFrames > muCurrentFrameForRead,
+        "muNumDispatchFrames > muCurrentFrameForRead",
+            KAC_ARTIST_ASSERT_FILE, 226 /* ARTIST 0x827E792C */);
+
 
     return *mapDispatchFrame[muCurrentFrameForRead];
 }

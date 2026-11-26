@@ -112,9 +112,9 @@ namespace BrnGui
         // Fixed row indices fold the capacity assertion at ARTIST 0x82440440.
         MenuToggle* GetSelectable(s32 liIndex)
         {
-            CGS_ASSERT(liIndex >= 0 && liIndex < TI_SIZE,
-                CGS_ASSERT_STREAM_MESSAGE_AT("MenuToggleGroup::GetSelectable() invalid index specified",
-                    "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuToggleGroup.h", 241));
+            CGS_ASSERT_STREAM_AT(liIndex >= 0 && liIndex < TI_SIZE,
+                "MenuToggleGroup::GetSelectable() invalid index specified",
+                    "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuToggleGroup.h", 241);
 
             return static_cast<MenuToggle*>(SelectableGroup::GetSelectable(liIndex));
         }

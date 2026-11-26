@@ -141,7 +141,7 @@ namespace BrnGui
                                          const BrnFlapt::FileRef& lFile,
                                          const char* lacParentName)
     {
-        CGS_ASSERT(lacName != 0, CGS_ASSERT_MESSAGE_AT("lacName", CGS_ARTIST_FILE, 65 /* ARTIST 0x8241C5A8 */));
+        CGS_ASSERT_AT(lacName != 0, "lacName", CGS_ARTIST_FILE, 65 /* ARTIST 0x8241C5A8 */);
 
         BrnFlaptComponent::Prepare(lacName, lFile, lacParentName);
         muCurrentStateHash = 0;
@@ -151,7 +151,7 @@ namespace BrnGui
 
         BrnFlapt::MovieClipRef lParentClip = mAptRef.GetParent();
 
-        CGS_ASSERT(lpTriggerParameters != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpTriggerParameters", CGS_ARTIST_FILE, 180 /* ARTIST 0x8241C604 */));
+        CGS_ASSERT_AT(lpTriggerParameters != 0, "NULL != lpTriggerParameters", CGS_ARTIST_FILE, 180 /* ARTIST 0x8241C604 */);
 
         int liCount = 0;
         do
@@ -206,10 +206,10 @@ namespace BrnGui
     // @ 0x8241C710 -- goto-and-play lpcFrameName on every controlled child clip.
     void FlaptAnimatorComponent::Run(const char* lpcFrameName)
     {
-        CGS_ASSERT(lpcFrameName != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "NULL != lpcFrameName",
-                CGS_ARTIST_FILE, 247 /* ARTIST 0x8241C734 */));
+        CGS_ASSERT_AT(lpcFrameName != 0,
+            "NULL != lpcFrameName",
+                CGS_ARTIST_FILE, 247 /* ARTIST 0x8241C734 */);
+
 
         for (int liClip = 0; liClip < miNumChildMovieClips; ++liClip)
         {

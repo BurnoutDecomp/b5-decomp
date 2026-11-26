@@ -173,7 +173,7 @@ namespace Vehicle
                 }
 
                 default:
-                    CGS_ASSERT_AT(false, "Unrecognised event in update queue",
+                    CGS_FAIL_AT("Unrecognised event in update queue",
                                   BRN_VEHICLEMANAGER_CPP_FILE, 3644);   // li r5,0xE3C
                     break;
             }

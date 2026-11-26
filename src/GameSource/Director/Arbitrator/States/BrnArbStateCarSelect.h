@@ -106,7 +106,7 @@ namespace BrnDirector
         // tripwire + the manager IsBehaviourWaitingToPrepare()==0 tail).
         bool IsReady() const
         {
-            CGS_ASSERT(IsPrepared(), CGS_ASSERT_MESSAGE_AT("IsPrepared()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 62));   // :62 (non-gating)
+            CGS_ASSERT_AT(IsPrepared(), "IsPrepared()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 62);   // :62 (non-gating)
             return mInterpolater.IsBehaviourPrepared();
         }
 
@@ -116,7 +116,7 @@ namespace BrnDirector
         // GetBehaviour() cache is that same pointee by Prepare's definition).
         bool HasFinished() const
         {
-            CGS_ASSERT(IsPrepared(), CGS_ASSERT_MESSAGE_AT("IsPrepared()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 65));            // :65 (non-gating)
+            CGS_ASSERT_AT(IsPrepared(), "IsPrepared()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 65);            // :65 (non-gating)
             return mInterpolater.Get()->HasFinished();   // the const Get(): BrnBehaviourManager.h:600 assert + pool lookup
         }
 
@@ -127,7 +127,7 @@ namespace BrnDirector
         // which carries the :610 handle tripwire).
         Camera::Camera GetCamera() const
         {
-            CGS_ASSERT(IsReady(), CGS_ASSERT_MESSAGE_AT("IsReady()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 68));   // :68 (non-gating)
+            CGS_ASSERT_AT(IsReady(), "IsReady()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 68);   // :68 (non-gating)
             return mInterpolater.GetCamera();
         }
 

@@ -176,10 +176,10 @@ namespace RaceCarEntityModuleIO
         // asserts) and emits the out-of-line copy 0x82277B10. Bit 0 of the per-car flag halfword.
         bool IsRaceCarActive(EActiveRaceCarIndex leActiveRaceCarIndex) const
         {
-            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 854));
-            CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 855));
+            CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 854);
+            CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 855);
             return (maxRaceCarFlags[leActiveRaceCarIndex] & 1) != 0;
         }
         // :248. Bit 4 (E_RACE_CAR_OUTPUT_FLAG_LOADED). No out-of-line export carries it; the
@@ -204,8 +204,8 @@ namespace RaceCarEntityModuleIO
         // out-of-line copy is 0x82277B90). The -1 sentinel short-circuits mbIsPlayerCarActive.
         bool IsPlayerCarActive() const
         {
-            CGS_ASSERT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                CGS_ASSERT_MESSAGE_AT("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 967));
+            CGS_ASSERT_AT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 967);
             if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
             {
                 return false;
@@ -216,8 +216,8 @@ namespace RaceCarEntityModuleIO
         // out-of-line copy is 0x82277BF8, `cmpwi -1` then FireAssert).
         EActiveRaceCarIndex GetPlayerActiveRaceCarIndex() const
         {
-            CGS_ASSERT(mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                CGS_ASSERT_MESSAGE_AT("Player car index hasn't been set", BRN_RCEMOI_H_ASSERT_FILE, 980));
+            CGS_ASSERT_AT(mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                "Player car index hasn't been set", BRN_RCEMOI_H_ASSERT_FILE, 980);
             return mePlayerActiveRaceCarIndex;
         }
         EntityId GetPlayerRaceCarEntityId() const;                                           // :293 (own TU)
@@ -318,10 +318,10 @@ namespace RaceCarEntityModuleIO
         // `36*idx + this + 528` -- the 36-byte BoostOutputInfo stride at maBoostOutputInfo.
         const BoostOutputInfo* GetBoostOutputInfoN(EActiveRaceCarIndex leActiveRaceCarIndex) const
         {
-            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 1157));
-            CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 1158));
+            CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 1157);
+            CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 1158);
             return &maBoostOutputInfo[leActiveRaceCarIndex];
         }
         // ⚠️ PARAMETER ORDER (asm-attested, 2026-08-01): the console passes

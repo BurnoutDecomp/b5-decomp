@@ -42,9 +42,9 @@ namespace CgsNetwork
             }
 
             SetMessageInvalid();
-            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(!IsMessageValid(),
                 "!IsMessageValid()",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsNewHostMessage.cpp", 118 /* ARTIST 0x8288255C */));
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsNewHostMessage.cpp", 118 /* ARTIST 0x8288255C */);
             return true;
         }
         return false;

@@ -84,8 +84,8 @@ public:
     // takes the DERIVED Parameters type, so it HIDES the base's non-virtual pair.
     void SetParameters(const Parameters* lpParameters)
     {
-        CGS_ASSERT(lpParameters->GetType() == eBehaviourFixedCam,
-                   CGS_ASSERT_MESSAGE_AT("lpParameters->GetType() == eBehaviourFixedCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFixedCam.h", 124));   // h:124
+        CGS_ASSERT_AT(lpParameters->GetType() == eBehaviourFixedCam,
+                   "lpParameters->GetType() == eBehaviourFixedCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFixedCam.h", 124);   // h:124
         SetDebugParametersName(lpParameters->GetDebugName());          // lwz 4(lp) ; stw 0x10(this)
         mpParameters = lpParameters;                                    // stw r4, 0x2A0(this)
     }

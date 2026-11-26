@@ -30,10 +30,10 @@ namespace BrnNetwork
     bool NetworkNotificationManagerX360::Prepare()
     {
         mhNotifier = XNotifyCreateListener(1);   // li r3, 1 ; bl XNotifyCreateListener ; stw r3, 8(this)
-        CGS_ASSERT(mhNotifier != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mhNotifier",
-                "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkNotificationManagerX360.cpp", 62 /* ARTIST 0x8254C710 */));
+        CGS_ASSERT_AT(mhNotifier != 0,
+            "mhNotifier",
+                "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkNotificationManagerX360.cpp", 62 /* ARTIST 0x8254C710 */);
+
         return true;                             // li r3, 1
     }
 

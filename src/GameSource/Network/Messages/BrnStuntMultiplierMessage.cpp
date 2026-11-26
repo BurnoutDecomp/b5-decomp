@@ -50,30 +50,30 @@ namespace BrnNetwork
     void StuntMultiplierMessage::PrepareForSend(u16 lu16FrameCount, s32 liFramesSinceStart,
                                                 MultiplierInfo lMultiplierInfo)
     {
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16FrameCount != KU16_INVALID_FRAME",
-                __FILE__, 145 /* ARTIST 0x8257D334 */));
-        CGS_ASSERT(lMultiplierInfo.muMultiplierStuntTypes > 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lMultiplierInfo.muMultiplierStuntTypes > 0",
-                __FILE__, 146 /* ARTIST 0x8257D35C */));
-        CGS_ASSERT(lMultiplierInfo.muMultiplierStuntTypes <= 0x3FFFFu,
-            CGS_ASSERT_MESSAGE_AT(
-                "lMultiplierInfo.muMultiplierStuntTypes <= static_cast<uint32_t>( KI_MAX_MULTIPLIER_STUNT_TYPES )",
-                __FILE__, 147 /* ARTIST 0x8257D388 */));
-        CGS_ASSERT(lMultiplierInfo.mu16BarrelRolls <= 8u,
-            CGS_ASSERT_MESSAGE_AT(
-                "lMultiplierInfo.muBarrelRolls <= static_cast<uint32_t>( KI_MAX_BARREL_ROLLS )",
-                __FILE__, 148 /* ARTIST 0x8257D3B0 */));
-        CGS_ASSERT(lMultiplierInfo.mu16FlatSpins <= 16u,
-            CGS_ASSERT_MESSAGE_AT(
-                "lMultiplierInfo.muFlatSpins <= static_cast<uint32_t>( KI_MAX_FLAT_SPINS )",
-                __FILE__, 149 /* ARTIST 0x8257D3D8 */));
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                __FILE__, 152 /* ARTIST 0x8257D404 */));
+        CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
+            "lu16FrameCount != KU16_INVALID_FRAME",
+                __FILE__, 145 /* ARTIST 0x8257D334 */);
+
+        CGS_ASSERT_AT(lMultiplierInfo.muMultiplierStuntTypes > 0,
+            "lMultiplierInfo.muMultiplierStuntTypes > 0",
+                __FILE__, 146 /* ARTIST 0x8257D35C */);
+
+        CGS_ASSERT_AT(lMultiplierInfo.muMultiplierStuntTypes <= 0x3FFFFu,
+            "lMultiplierInfo.muMultiplierStuntTypes <= static_cast<uint32_t>( KI_MAX_MULTIPLIER_STUNT_TYPES )",
+                __FILE__, 147 /* ARTIST 0x8257D388 */);
+
+        CGS_ASSERT_AT(lMultiplierInfo.mu16BarrelRolls <= 8u,
+            "lMultiplierInfo.muBarrelRolls <= static_cast<uint32_t>( KI_MAX_BARREL_ROLLS )",
+                __FILE__, 148 /* ARTIST 0x8257D3B0 */);
+
+        CGS_ASSERT_AT(lMultiplierInfo.mu16FlatSpins <= 16u,
+            "lMultiplierInfo.muFlatSpins <= static_cast<uint32_t>( KI_MAX_FLAT_SPINS )",
+                __FILE__, 149 /* ARTIST 0x8257D3D8 */);
+
+        CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
+            "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                __FILE__, 152 /* ARTIST 0x8257D404 */);
+
 
         mMultiplierInfo    = lMultiplierInfo;      // the whole 8-byte record, +0x28
         miFramesSinceStart = liFramesSinceStart;   // +0x30

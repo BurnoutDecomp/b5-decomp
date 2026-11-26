@@ -22,7 +22,7 @@ namespace PhysicsModuleIO
     // X360 0x8259F948 (DWARF :278): read-lock; return &mVehicleDriverInterface (this+142544).
     const InputBuffer::VehicleDriverInputInterfaceStorage* InputBuffer::GetVehicleDriverInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 278));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 278);
         return &mVehicleDriverInterface;
     }
 
@@ -34,28 +34,28 @@ namespace PhysicsModuleIO
     // FireAssert line 0x117 == 279, then `addis r3,r28,2 / addi r3,r3,0x2CD0` == this+142544.
     InputBuffer::VehicleDriverInputInterfaceStorage* InputBuffer::GetVehicleDriverInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 279));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 279);
         return &mVehicleDriverInterface;
     }
 
     // X360 0x8259F9F0 (DWARF :281): read-lock; return &mVehicleEffectsInputInterface (this+147840).
     const InputBuffer::VehicleEffectsInputInterfaceStorage* InputBuffer::GetVehicleEffectsInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 281));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 281);
         return &mVehicleEffectsInputInterface;
     }
 
     // X360 0x8259FE88 (DWARF :304): read-lock; return &mGameActionQueue (this+338496).
     const InputBuffer::GameActionQueueStorage* InputBuffer::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 304));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 304);
         return &mGameActionQueue;
     }
 
     // X360 0x8279F3A0 (DWARF :305): write-lock; return &mGameActionQueue (this+338496).
     InputBuffer::GameActionQueueStorage* InputBuffer::GetGameActionQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 305));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 305);
         return &mGameActionQueue;
     }
 
@@ -71,7 +71,7 @@ namespace PhysicsModuleIO
     // ARTIST 0x8259FA98: assert h:284 (the FireAssert at 0x8259FB28).
     const InputBuffer::RCEntityOutputInterfaceStorage* InputBuffer::GetRCEntityOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 284));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 284);
         return &mRCEntityOutputInterface;
     }
 }
@@ -90,7 +90,7 @@ namespace PhysicsModuleIO
     const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>*
     InputBuffer::GetPotentialContactQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 289));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 289);
         return &mPotentialContactQueue;
     }
 
@@ -99,7 +99,7 @@ namespace PhysicsModuleIO
     const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>*
     InputBuffer::GetOverlapPairsQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 292));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 292);
         return &mOverlapPairsQueue;
     }
 
@@ -108,7 +108,7 @@ namespace PhysicsModuleIO
     CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>*
     InputBuffer::GetPotentialContactQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 290));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 290);
         return &mPotentialContactQueue;
     }
 
@@ -117,7 +117,7 @@ namespace PhysicsModuleIO
     CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>*
     InputBuffer::GetOverlapPairsQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 293));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 293);
         return &mOverlapPairsQueue;
     }
 }

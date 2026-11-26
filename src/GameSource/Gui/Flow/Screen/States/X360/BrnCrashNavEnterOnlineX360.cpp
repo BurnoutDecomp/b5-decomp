@@ -74,7 +74,7 @@ namespace BrnGui
         }
         else if (luId == XN_LIVE_INVITE_ACCEPTED)
         {
-            CGS_ASSERT(false,
+            CGS_FAIL(
                        "Invite notification processed by EnterOnline screen. This could break cross game invites\n");
         }
     }

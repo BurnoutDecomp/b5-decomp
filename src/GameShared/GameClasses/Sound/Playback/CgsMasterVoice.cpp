@@ -13,8 +13,8 @@ MasterVoice::MasterVoice(size_t auClientSize, Factory& arFactory,
                          const VoiceSpec& arVoiceSpec, u32 au32Ident)
     : SubmixVoice(auClientSize, arFactory, arVoiceSpec, au32Ident)
 {
-    CGS_ASSERT(spMasterVoice == 0, CGS_ASSERT_MESSAGE_AT("0 == spMasterVoice",
-        "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsMasterVoice.h", 85));
+    CGS_ASSERT_AT(spMasterVoice == 0, "0 == spMasterVoice",
+        "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsMasterVoice.h", 85);
     spMasterVoice = this;
 }
 
@@ -32,8 +32,8 @@ bool MasterVoice::IsCompatible(EVoiceType leVoiceType)
 // @ 0x826D7A28
 MasterVoice::~MasterVoice()
 {
-    CGS_ASSERT(spMasterVoice, CGS_ASSERT_MESSAGE_AT("spMasterVoice",
-        "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsMasterVoice.cpp", 48));
+    CGS_ASSERT_AT(spMasterVoice, "spMasterVoice",
+        "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsMasterVoice.cpp", 48);
     spMasterVoice = NULL;
 }
 

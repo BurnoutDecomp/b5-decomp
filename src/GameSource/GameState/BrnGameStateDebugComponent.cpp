@@ -178,7 +178,7 @@ namespace
     {
         DebugComponent::Construct();   // ARTIST 0x823574BC (folded at 0x8284CB38)
 
-        CGS_ASSERT(lpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateModule != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateDebugComponent.cpp", 205));
+        CGS_ASSERT_AT(lpGameStateModule != 0, "lpGameStateModule != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateDebugComponent.cpp", 205);
 
         mpGameStateModule = lpGameStateModule;
         mbShowUpComingRoadRules = false;

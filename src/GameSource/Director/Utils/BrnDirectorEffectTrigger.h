@@ -43,9 +43,9 @@ namespace BrnDirector
         //   a plain strcpy including the NUL.
         void Set(const char* lpcName)
         {
-            CGS_ASSERT(lpcName != NULL, CGS_ASSERT_MESSAGE_AT("lpcName != NULL", CGS_ARTIST_BRNDIRECTOREFFECTTRIGGER_FILE, 54));                              // 1st
-            CGS_ASSERT(strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH,
-                       CGS_ASSERT_MESSAGE_AT("strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH", CGS_ARTIST_BRNDIRECTOREFFECTTRIGGER_FILE, 55));               // 2nd
+            CGS_ASSERT_AT(lpcName != NULL, "lpcName != NULL", CGS_ARTIST_BRNDIRECTOREFFECTTRIGGER_FILE, 54);                              // 1st
+            CGS_ASSERT_AT(strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH,
+                       "strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH", CGS_ARTIST_BRNDIRECTOREFFECTTRIGGER_FILE, 55);               // 2nd
             CGS_ASSERT(strlen(lpcName) < 32, "String is too long. Buffer size = 32");    // 3rd
             strcpy(mHookNameString, lpcName);
         }
@@ -120,7 +120,7 @@ namespace BrnDirector
         // wrapper's address == its string; non-gating).
         const char* GetCurrentEffectName() const
         {
-            CGS_ASSERT(mbHasCurrentEffectName, CGS_ASSERT_MESSAGE_AT("HasCurrentEffectName()", CGS_ARTIST_BRNDIRECTOREFFECTTRIGGER_FILE, 112));   // non-gating
+            CGS_ASSERT_AT(mbHasCurrentEffectName, "HasCurrentEffectName()", CGS_ARTIST_BRNDIRECTOREFFECTTRIGGER_FILE, 112);   // non-gating
             return mCurrentEffectName.mHookNameString;
         }
 

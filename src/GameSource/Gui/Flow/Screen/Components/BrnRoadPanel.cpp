@@ -187,10 +187,10 @@ namespace BrnGui
     // @ 0x82418410 -------------------------------------------------------------------
     void RoadPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRoadPanel.cpp", 174 /* ARTIST 0x82418438 */));   // cpp:174
+        CGS_ASSERT_AT(lpGuiCache != 0,
+            "lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRoadPanel.cpp", 174 /* ARTIST 0x82418438 */);   // cpp:174
+
 
         lpGuiCache->AppendExpectedAptComponent(leFlow, GetNameHash());          // a1[33]  == +0x84
         // The road sign's own name hash (the embedded RoadSignIcon's muHashedName).
@@ -279,7 +279,7 @@ namespace BrnGui
             {
                 // meCurrentRule > COUNT -- the console asserts and then falls straight through
                 // to the latch + repaint WITHOUT pushing any state.
-                CGS_ASSERT(false,
+                CGS_FAIL(
                            "Unknown type of road rule currently selected: Type ");   // cpp:275
             }
 
@@ -486,10 +486,10 @@ namespace BrnGui
     // @ 0x82417FF8 -------------------------------------------------------------------
     const char* RoadPanel::GetSelectedFriendName() const
     {
-        CGS_ASSERT(meCurrentScoreMode == KI_ROAD_PANEL_MODE_ONLINE,
-            CGS_ASSERT_MESSAGE_AT(
-                "GetScoringMode() == GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnRoadPanel.h", 231 /* ARTIST 0x82418020 */)); // @0x82418018
+        CGS_ASSERT_AT(meCurrentScoreMode == KI_ROAD_PANEL_MODE_ONLINE,
+            "GetScoringMode() == GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnRoadPanel.h", 231 /* ARTIST 0x82418020 */); // @0x82418018
+
 
         // X360: 0xA2*meCurrentRule + this + 0x1A2 == mPanels[meCurrentRule].mNames[1].
         return mRoadPanelData.mPanels[meCurrentRule].mNames[KI_FRIEND_ROW];

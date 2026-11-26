@@ -187,14 +187,14 @@ void VehicleState::AttachInfo::Construct(
     u64 aAttachToken, void* apVehicleAsset, u32 auVehicleIndex )
 {
     // Signed bounds check -- the X360 compares as a signed int (blt/cmpwi).
-    CGS_ASSERT(
+    CGS_ASSERT_AT(
         static_cast<s32>(auVehicleIndex) >= 0
             && static_cast<s32>(auVehicleIndex) < static_cast<s32>(KI_MAX_ACTIVE_RACE_CARS),
-        CGS_ASSERT_MESSAGE_AT(
-            "liVehicleIndex >= 0 && liVehicleIndex < static_cast<int32_t>(BrnWorld::KI_MAX_ACTIVE_RACE_CARS)",
-            CGS_ARTIST_FILE, 275));
+        "liVehicleIndex >= 0 && liVehicleIndex < static_cast<int32_t>(BrnWorld::KI_MAX_ACTIVE_RACE_CARS)",
+            CGS_ARTIST_FILE, 275);
 
-    CGS_ASSERT(apVehicleAsset != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleAsset", CGS_ARTIST_FILE, 276));
+
+    CGS_ASSERT_AT(apVehicleAsset != 0, "lpVehicleAsset", CGS_ARTIST_FILE, 276);
 
     muVehicleIndex = auVehicleIndex; // stw r30, 0x04
     mAttachToken   = aAttachToken;   // std r27, 0x08

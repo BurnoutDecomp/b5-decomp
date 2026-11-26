@@ -352,7 +352,7 @@ namespace Deformation
         }
         else if ( luPreset >= 3u )
         {
-            CGS_ASSERT( false, "Invalid compression preset" );   // BrnDeformationDebugComponent.cpp:2009
+            CGS_FAIL( "Invalid compression preset" );   // BrnDeformationDebugComponent.cpp:2009
             return;
         }
         else   // E_COMPRESS_MAX_TOTAL
@@ -504,7 +504,7 @@ namespace Deformation
         {
             if ( lpRig->GetIKPartDebug( liPart ).GetMeshId() == giDebugOnlyRenderThisCarPart )
             {
-                CGS_ASSERT( false, "No longer works" );   // BrnDeformationDebugComponent.cpp:2075
+                CGS_FAIL( "No longer works" );   // BrnDeformationDebugComponent.cpp:2075
                 break;
             }
         }
@@ -1140,9 +1140,9 @@ namespace Deformation
         // CgsDev::DebugComponent::Construct is `;`) folded at 0x8284CB38.
         CgsDev::DebugComponent::Construct();
 
-        CGS_ASSERT(lpDeformationManager != 0, CGS_ASSERT_MESSAGE_AT("lpDeformationManager != NULL",
+        CGS_ASSERT_AT(lpDeformationManager != 0, "lpDeformationManager != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Physics/DeformationManager/BrnDeformationDebugComponent.cpp", 158 /* ARTIST 0x826064B0 */));
+            "../Physics/DeformationManager/BrnDeformationDebugComponent.cpp", 158 /* ARTIST 0x826064B0 */);
         mpDeformationManager = lpDeformationManager;
 
         mfCompressRightSide = 0.0f;

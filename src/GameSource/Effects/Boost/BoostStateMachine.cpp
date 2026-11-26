@@ -368,7 +368,7 @@ void BoostStateMachine::OnChangeState(EffectsState leNewState,
             break;
 
         default:
-            CGS_ASSERT(false, "Unknown state in BrnEffects::BoostStateMachine");
+            CGS_FAIL("Unknown state in BrnEffects::BoostStateMachine");
             break;
     }
 }
@@ -541,7 +541,7 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             return lbStateTimerExpired ? EffectsStateAllOff : leCurrentState;
 
         default:
-            CGS_ASSERT_AT(false, "Unknown state", CGS_ARTIST_UNITY_BOOSTSTATEMACHINE_CPP_FILE, 281);
+            CGS_FAIL_AT("Unknown state", CGS_ARTIST_UNITY_BOOSTSTATEMACHINE_CPP_FILE, 281);
             return leCurrentState;
     }
 }

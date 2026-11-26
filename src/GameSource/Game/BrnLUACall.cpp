@@ -86,14 +86,14 @@ namespace BrnGame
             return E_BOOL;
 
         // Unconditional fall-through: fire the assert then return E_UNKNOWN.
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Could not derive arg type", CGS_ARTIST_FILE, 198));
+        CGS_FAIL_AT("Could not derive arg type", CGS_ARTIST_FILE, 198);
         return E_UNKNOWN;
     }
 
     // @ 0x823C5C60
     s32 LUACall::GetInt32(s32 liResultIndex)
     {
-        CGS_ASSERT(IsNumber(liResultIndex), CGS_ASSERT_MESSAGE_AT("IsNumber(liResultIndex)", CGS_ARTIST_FILE, 149));
+        CGS_ASSERT_AT(IsNumber(liResultIndex), "IsNumber(liResultIndex)", CGS_ARTIST_FILE, 149);
 
         // fctiwz f0, f1 ; stfiwx -- truncate the Lua number to a 32-bit int.
         return static_cast<s32>(lua_tonumber(mpLuaHandle, ResultIndexToStackIndex(liResultIndex)));
@@ -102,7 +102,7 @@ namespace BrnGame
     // @ 0x823C5CF0
     const char* LUACall::GetString(s32 liResultIndex) const
     {
-        CGS_ASSERT(IsString(liResultIndex), CGS_ASSERT_MESSAGE_AT("IsString(liResultIndex)", CGS_ARTIST_FILE, 156));
+        CGS_ASSERT_AT(IsString(liResultIndex), "IsString(liResultIndex)", CGS_ARTIST_FILE, 156);
 
         // li r5, 0 -- length out-param is null.
         return lua_tolstring(mpLuaHandle, ResultIndexToStackIndex(liResultIndex), 0);

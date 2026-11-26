@@ -133,9 +133,9 @@ namespace BrnNetwork
     // the rival has a (non-empty) name.
     void LiveRevengeDebugComponent::AddPlayer(LiveRevengeRelationship* lpRelationship)
     {
-        CGS_ASSERT(lpRelationship->GetRivalName(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpRelationship->GetRivalName(),
             "lpRelationship->GetRivalName()",
-            __FILE__, 180 /* ARTIST 0x8258500C */));
+            __FILE__, 180 /* ARTIST 0x8258500C */);
 
         const char* lpcRivalName = lpRelationship->GetRivalName()->GetPlayerName();
         if (lpcRivalName[0] != '\0')
@@ -232,11 +232,11 @@ namespace BrnNetwork
     {
         LiveRevengeDebugComponent* lpDebugComponent = static_cast<LiveRevengeDebugComponent*>(lpUserData);
 
-        CGS_ASSERT(lpDebugComponent != 0,
-            CGS_ASSERT_MESSAGE_AT("lpDebugComponent", __FILE__, 302 /* ARTIST 0x82585188 */));
-        CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpDebugComponent->mpLiveRevengeManager", __FILE__, 303 /* ARTIST 0x825851B0 */));
+        CGS_ASSERT_AT(lpDebugComponent != 0,
+            "lpDebugComponent", __FILE__, 302 /* ARTIST 0x82585188 */);
+        CGS_ASSERT_AT(lpDebugComponent->mpLiveRevengeManager != 0,
+            "lpDebugComponent->mpLiveRevengeManager", __FILE__, 303 /* ARTIST 0x825851B0 */);
+
 
         lpDebugComponent->mpLiveRevengeManager->SendLiveRevengeRivalsToServer();
     }

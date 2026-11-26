@@ -82,10 +82,10 @@ namespace BrnNetwork
         mu8DirtyTrickType         = lu8DirtyTrickType;      // stb, +0x30
         mu8DirtyTrickStatus       = lu8DirtyTrickStatus;    // stb, +0x31
         CgsNetwork::ReliableMessage::PrepareForSend(KI_DIRTY_TRICK_MESSAGE_TYPE, lu16Frame);
-        CGS_ASSERT(IsReliable(),
-            CGS_ASSERT_MESSAGE_AT(
-                "IsReliable()",
-                CGS_ARTIST_FILE, 106 /* ARTIST 0x8257AC2C */));
+        CGS_ASSERT_AT(IsReliable(),
+            "IsReliable()",
+                CGS_ARTIST_FILE, 106 /* ARTIST 0x8257AC2C */);
+
     }
 
     s32 DirtyTrickMessage::GetPackedMessageSize()
@@ -119,18 +119,18 @@ namespace BrnNetwork
     bool DirtyTrickMessage::Retrieve(NetworkPlayerID* lpAggressorPlayerID, NetworkPlayerID* lpVictimPlayerID,
                                      u8* lpu8DirtyTrickType, u8* lpu8DirtyTrickStatus)
     {
-        CGS_ASSERT(lpAggressorPlayerID != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpAggressorPlayerID != 0,
             "lpAggressorNetworkPlayerID",
-            CGS_ARTIST_FILE, 131 /* ARTIST 0x8257E52C */));
-        CGS_ASSERT(lpVictimPlayerID    != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 131 /* ARTIST 0x8257E52C */);
+        CGS_ASSERT_AT(lpVictimPlayerID    != 0,
             "lpVictimNetworkPlayerID",
-            CGS_ARTIST_FILE, 132 /* ARTIST 0x8257E550 */));
-        CGS_ASSERT(lpu8DirtyTrickType  != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 132 /* ARTIST 0x8257E550 */);
+        CGS_ASSERT_AT(lpu8DirtyTrickType  != 0,
             "lpu8DirtyTrickType",
-            CGS_ARTIST_FILE, 133 /* ARTIST 0x8257E574 */));
-        CGS_ASSERT(lpu8DirtyTrickStatus != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 133 /* ARTIST 0x8257E574 */);
+        CGS_ASSERT_AT(lpu8DirtyTrickStatus != 0,
             "lpu8DirtyTrickStatus",
-            CGS_ARTIST_FILE, 134 /* ARTIST 0x8257E598 */));
+            CGS_ARTIST_FILE, 134 /* ARTIST 0x8257E598 */);
 
         // ARTIST 0x8257E5AC branches to a trailing `return false` (0x8257E610): the copy-out is the body
         // of the valid test.
@@ -141,9 +141,9 @@ namespace BrnNetwork
             *lpu8DirtyTrickType   = mu8DirtyTrickType;
             *lpu8DirtyTrickStatus = mu8DirtyTrickStatus;
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                CGS_ARTIST_FILE, 146 /* ARTIST 0x8257E5FC */));
+                CGS_ARTIST_FILE, 146 /* ARTIST 0x8257E5FC */);
             return true;
         }
         return false;

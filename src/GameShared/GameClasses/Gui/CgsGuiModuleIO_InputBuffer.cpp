@@ -66,7 +66,7 @@ namespace CgsGuiModuleIO
     // pseudocode tests ((*a1 >> 4) & 1) == read-lock bit, then returns this+0x8020 (32800).
     const ImRendererSet& InputBuffer::GetImRenderers() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 360));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 360);
         return mRendererSet;
     }
 
@@ -100,7 +100,7 @@ namespace CgsGuiModuleIO
     // via CgsGraphics::Camera::operator=. This is the function owned by the CgsGuiModuleIO.h TU.
     void InputBuffer::SetCamera(CgsGraphics::Camera& lrCamera)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 389));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 389);
         mRendererSet.mCamera = lrCamera;
     }
 }

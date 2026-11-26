@@ -125,8 +125,8 @@ namespace BrnGui
     // make the sign clip visible the first time it is displayed.
     void FlaptRoadSignIconComponent::DisplayRoad(const char* lpcRoadName, bool lbVisible)
     {
-        CGS_ASSERT(lpcRoadName != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpcRoadName", CGS_ARTIST_FILE, 198 /* ARTIST 0x82427E94 */));
-        CGS_ASSERT(lpcRoadName[0] != '\0', CGS_ASSERT_MESSAGE_AT("'\\0' != lpcRoadName[0]", CGS_ARTIST_FILE, 199 /* ARTIST 0x82427EBC */));
+        CGS_ASSERT_AT(lpcRoadName != 0, "NULL != lpcRoadName", CGS_ARTIST_FILE, 198 /* ARTIST 0x82427E94 */);
+        CGS_ASSERT_AT(lpcRoadName[0] != '\0', "'\\0' != lpcRoadName[0]", CGS_ARTIST_FILE, 199 /* ARTIST 0x82427EBC */);
 
         if (mAptRef.mpMovieClipInst != 0)
         {

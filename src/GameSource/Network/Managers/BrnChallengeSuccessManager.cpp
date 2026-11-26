@@ -164,12 +164,12 @@ namespace BrnNetwork
         mpPlayerManager = lpPlayerManager;
         mpTimeManager   = lpTimeManager;
 
-        CGS_ASSERT(mpNetworkModule != 0,
-            CGS_ASSERT_MESSAGE_AT("mpNetworkModule", __FILE__, 68 /* ARTIST 0x8255DD0C */));
-        CGS_ASSERT(mpPlayerManager != 0,
-            CGS_ASSERT_MESSAGE_AT("mpPlayerManager", __FILE__, 69 /* ARTIST 0x8255DD34 */));
-        CGS_ASSERT(mpTimeManager != 0,
-            CGS_ASSERT_MESSAGE_AT("mpTimeManager", __FILE__, 70 /* ARTIST 0x8255DD5C */));
+        CGS_ASSERT_AT(mpNetworkModule != 0,
+            "mpNetworkModule", __FILE__, 68 /* ARTIST 0x8255DD0C */);
+        CGS_ASSERT_AT(mpPlayerManager != 0,
+            "mpPlayerManager", __FILE__, 69 /* ARTIST 0x8255DD34 */);
+        CGS_ASSERT_AT(mpTimeManager != 0,
+            "mpTimeManager", __FILE__, 70 /* ARTIST 0x8255DD5C */);
 
         for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
@@ -244,8 +244,8 @@ namespace BrnNetwork
     void ChallengeSuccessManager::ProcessAfterSimulation(
         const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
-        CGS_ASSERT(lpInput != 0,
-            CGS_ASSERT_MESSAGE_AT("lpInput", __FILE__, 290 /* ARTIST 0x8256FEA4 */));
+        CGS_ASSERT_AT(lpInput != 0,
+            "lpInput", __FILE__, 290 /* ARTIST 0x8256FEA4 */);
         ProcessNetworkEvents(lpInput->GetNetworkEventQueue());
         CheckForNewUpdateMessages();
     }
@@ -267,7 +267,7 @@ namespace BrnNetwork
             }
         }
 
-        CGS_ASSERT(false, "lpEntry");
+        CGS_FAIL("lpEntry");
         return 0;
     }
 
@@ -278,15 +278,15 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ChallengeSuccessManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != 0,
-            CGS_ASSERT_MESSAGE_AT("mpPlayerManager", __FILE__, 607 /* ARTIST 0x8256BF50 */));
+        CGS_ASSERT_AT(mpPlayerManager != 0,
+            "mpPlayerManager", __FILE__, 607 /* ARTIST 0x8256BF50 */);
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
         if (lpNetworkPlayer != 0)
         {
             ChallengeSuccessData* lpEntry = GetChallengeSuccessDataEntry(CgsNetwork::KI_INVALID_PLAYER_ID);
-            CGS_ASSERT(lpEntry != 0,
-                CGS_ASSERT_MESSAGE_AT("lpEntry", __FILE__, 619 /* ARTIST 0x8256BF9C */));
+            CGS_ASSERT_AT(lpEntry != 0,
+                "lpEntry", __FILE__, 619 /* ARTIST 0x8256BF9C */);
 
             // Unreliable per-frame update message pair (no arrival/delivery callbacks).
             lpNetworkPlayer->RegisterMessageType(KI_UPDATE_MESSAGE_TYPE,
@@ -314,8 +314,8 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ChallengeSuccessManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != 0,
-            CGS_ASSERT_MESSAGE_AT("mpPlayerManager", __FILE__, 654 /* ARTIST 0x82556A28 */));
+        CGS_ASSERT_AT(mpPlayerManager != 0,
+            "mpPlayerManager", __FILE__, 654 /* ARTIST 0x82556A28 */);
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
         if (lpNetworkPlayer != 0)
@@ -324,8 +324,8 @@ namespace BrnNetwork
             lpNetworkPlayer->UnRegisterMessageType(KI_CHALLENGE_SUCCESS_MESSAGE_TYPE);
 
             ChallengeSuccessData* lpEntry = GetChallengeSuccessDataEntry(lPlayerID);
-            CGS_ASSERT(lpEntry != 0,
-                CGS_ASSERT_MESSAGE_AT("lpEntry", __FILE__, 669 /* ARTIST 0x82556A88 */));
+            CGS_ASSERT_AT(lpEntry != 0,
+                "lpEntry", __FILE__, 669 /* ARTIST 0x82556A88 */);
             lpEntry->mPlayerID = CgsNetwork::KI_INVALID_PLAYER_ID;
         }
     }
@@ -343,9 +343,9 @@ namespace BrnNetwork
                 RemovePlayer(maChallengeSuccessData[liIndex].mPlayerID);
                 // ARTIST 0x8255DF74 reports line 695; the path is a literal (as __FILE__ is): a
                 // named path array reorders the loop-hoisted message/file registers.
-                CGS_ASSERT(maChallengeSuccessData[liIndex].mPlayerID == CgsNetwork::KI_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+                CGS_ASSERT_AT(maChallengeSuccessData[liIndex].mPlayerID == CgsNetwork::KI_INVALID_PLAYER_ID,
                     "maChallengeSuccessData[liIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
-                    "..\\..\\..\\GameSource\\Network/Managers/BrnChallengeSuccessManager.cpp", 695));
+                    "..\\..\\..\\GameSource\\Network/Managers/BrnChallengeSuccessManager.cpp", 695);
             }
         }
 

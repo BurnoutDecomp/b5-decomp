@@ -425,7 +425,7 @@ namespace BrnGui
             meReleaseStage = E_RELEASE_START;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Invalid prepare state", CGS_ARTIST_FILE, 608);
+            CGS_FAIL_AT("Invalid prepare state", CGS_ARTIST_FILE, 608);
             return false;
         }
     }
@@ -625,9 +625,9 @@ namespace BrnGui
         CGS_ASSERT(mCollisonPoolValidationReceiverQueue.GetLength() == 1,
             "mCollisonPoolValidationReceiverQueue.GetLength() == 1");
         if (liExpectedType == 67)
-            CGS_ASSERT(liType == 67, "liEventId == BrnResource::GameDataIO::EVENT_SWAP_OUT_COLLISION_WORLD");
+        {   CGS_ASSERT(liType == 67, "liEventId == BrnResource::GameDataIO::EVENT_SWAP_OUT_COLLISION_WORLD"); }
         else
-            CGS_ASSERT(liType == 68, "liEventId == BrnResource::GameDataIO::EVENT_SWAP_IN_COLLISION_WORLD");
+        {   CGS_ASSERT(liType == 68, "liEventId == BrnResource::GameDataIO::EVENT_SWAP_IN_COLLISION_WORLD"); }
         return lpEvent;
     }
 
@@ -873,7 +873,7 @@ namespace BrnGui
                 meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE;
             break;
         default:
-            CGS_ASSERT_AT(false, "Unhandled state", CGS_ARTIST_FILE, 1553);
+            CGS_FAIL_AT("Unhandled state", CGS_ARTIST_FILE, 1553);
             break;
         }
     }
@@ -980,7 +980,7 @@ namespace BrnGui
             }
             break;
         default:
-            CGS_ASSERT_AT(false, "Unhandled state", CGS_ARTIST_FILE, 1039);
+            CGS_FAIL_AT("Unhandled state", CGS_ARTIST_FILE, 1039);
             break;
         }
     }

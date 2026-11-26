@@ -25,7 +25,7 @@ PlayersConnectionManager::GetEntry(NetworkPlayerID lPlayerID) const
 
     CgsDev::Assert::BeginAssert();
     CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-    (lStream << "Could not find player ").PrintSignedInteger(lPlayerID) << " conenction entry\n";
+    lStream << "Could not find player " << lPlayerID << " conenction entry\n";
     CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1148));
     CgsDev::Assert::EndAssert();
     return 0;

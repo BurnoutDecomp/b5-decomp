@@ -494,7 +494,7 @@ namespace BrnGui
                         // cpp:701 -- streamed as "Invalid car select type : " << type << "\n";
                         // lowered to the static text per project policy. Non-fatal: the X360
                         // falls straight through into the plain car-select transition.
-                        CGS_ASSERT(false, "Invalid car select type : ");
+                        CGS_FAIL("Invalid car select type : ");
                         SendStateEvent("TO_CSELECT");
                     }
                     break;
@@ -580,7 +580,7 @@ namespace BrnGui
                     // cpp:748 -- streamed as "Unexpected event received : " << liEventId <<
                     // " in " << <file> << " at line " << 748 << "\n"; lowered to the static
                     // text per project policy. Non-fatal.
-                    CGS_ASSERT(false, "Unexpected event received : ");
+                    CGS_FAIL("Unexpected event received : ");
                     break;
             }
         }
@@ -697,7 +697,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameRoomPlayerInfo::UpdateSoundSettings()
     {
-        CGS_ASSERT(mpStateInterface != 0, CGS_ASSERT_MESSAGE_AT("mpStateInterface", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 4636));
+        CGS_ASSERT_AT(mpStateInterface != 0, "mpStateInterface", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 4636);
 
         // { 8, 463, 12, music, sfx } on channel 40, X360 record size 20. The X360 copies
         // the two adjacent option words out as one doubleword; they are the two volume
@@ -752,10 +752,10 @@ namespace BrnGui
     // overrides and the first-map-update latch.
     void OnlineGameRoomPlayerInfo::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
-        CGS_ASSERT(lpFsm != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpFsm",
-                CGS_ARTIST_FILE, 338 /* ARTIST 0x82484B58 */));   // X360 BrnOnlineGameRoomPlayerInfo.cpp:338
+        CGS_ASSERT_AT(lpFsm != 0,
+            "lpFsm",
+                CGS_ARTIST_FILE, 338 /* ARTIST 0x82484B58 */);   // X360 BrnOnlineGameRoomPlayerInfo.cpp:338
+
 
         CrashNavMap::Construct(liId, lpFsm);
 
@@ -1196,8 +1196,8 @@ namespace BrnGui
     // 1 (true) as MenuToggle::AppendExpectedAptComponent's trailing argument.
     void OnlineGameRoomPlayerInfo::SetExpectedChallengesComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 3962 /* ARTIST 0x824850AC */));   // cpp:3962
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache", __FILE__, 3962 /* ARTIST 0x824850AC */);   // cpp:3962
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -1215,8 +1215,8 @@ namespace BrnGui
     // the whole page, and its AppendExpectedAptComponent walks its own live rows.
     void OnlineGameRoomPlayerInfo::SetExpectedSettingsComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 4354 /* ARTIST 0x8248C65C */));   // cpp:4354
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache", __FILE__, 4354 /* ARTIST 0x8248C65C */);   // cpp:4354
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -1460,7 +1460,7 @@ namespace BrnGui
             {
                 // X360 streams the prefix then `<< meCameraStatus` into the assert buffer;
                 // collapsed to the verbatim prefix per convention.
-                CGS_ASSERT(false, "Ended up with bad meCameraStatus: ");   // cpp:3431
+                CGS_FAIL("Ended up with bad meCameraStatus: ");   // cpp:3431
                 lIcons.mVideoStatusIcon.SetState(KU_VIDEO_STATUS_NO_CAMERA);
             }
 
@@ -1473,7 +1473,7 @@ namespace BrnGui
             }
             else
             {
-                CGS_ASSERT(false, "Ended up with bad mVoipStatusIcon: ");   // cpp:3442
+                CGS_FAIL("Ended up with bad mVoipStatusIcon: ");   // cpp:3442
                 lIcons.mVoipStatusIcon.SetState(KU_VOIP_STATUS_NO_HEADSET);
             }
 
@@ -1606,7 +1606,7 @@ namespace BrnGui
     {
         typedef BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData InGamePlayerStatusData;
 
-        CGS_ASSERT(lpiNumOptions != 0, CGS_ASSERT_MESSAGE_AT("lpiNumOptions", CGS_ARTIST_FILE, 3279 /* ARTIST 0x82484CFC */));   // cpp:3279
+        CGS_ASSERT_AT(lpiNumOptions != 0, "lpiNumOptions", CGS_ARTIST_FILE, 3279 /* ARTIST 0x82484CFC */);   // cpp:3279
 
         s32 liOptionIndex = 0;
 
@@ -1636,10 +1636,10 @@ namespace BrnGui
             }
         }
 
-        CGS_ASSERT(liOptionIndex <= KI_MAX_PLAYER_OPTIONS,
-                   CGS_ASSERT_MESSAGE_AT("liOptionIndex <= KI_MAX_PLAYER_OPTIONS", CGS_ARTIST_FILE, 3302 /* ARTIST 0x82484DAC */));         // cpp:3302
-        CGS_ASSERT(liOptionIndex <= KI_MAX_DISPLAYABLE_OPTIONS,
-                   CGS_ASSERT_MESSAGE_AT("liOptionIndex <= KI_MAX_DISPLAYABLE_OPTIONS", CGS_ARTIST_FILE, 3303 /* ARTIST 0x82484DD0 */));    // cpp:3303
+        CGS_ASSERT_AT(liOptionIndex <= KI_MAX_PLAYER_OPTIONS,
+                   "liOptionIndex <= KI_MAX_PLAYER_OPTIONS", CGS_ARTIST_FILE, 3302 /* ARTIST 0x82484DAC */);         // cpp:3302
+        CGS_ASSERT_AT(liOptionIndex <= KI_MAX_DISPLAYABLE_OPTIONS,
+                   "liOptionIndex <= KI_MAX_DISPLAYABLE_OPTIONS", CGS_ARTIST_FILE, 3303 /* ARTIST 0x82484DD0 */);    // cpp:3303
 
         *lpiNumOptions = liOptionIndex;
     }
@@ -1740,7 +1740,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
     {
         // cpp:1294. Streamed into the assert buffer by the X360; non-fatal.
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputPressed", CGS_ARTIST_FILE, 1294));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputPressed", CGS_ARTIST_FILE, 1294);
 
 
         switch (meSubState)
@@ -1782,7 +1782,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::HandleControllerInputReleased(const CgsModule::Event* lpEvent)
     {
         // cpp:1373. Streamed into the assert buffer by the X360; non-fatal.
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputReleased", CGS_ARTIST_FILE, 1373));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputReleased", CGS_ARTIST_FILE, 1373);
 
 
         if (meSubState == E_SUBSTATE_MAP)
@@ -2299,10 +2299,10 @@ namespace BrnGui
     // debounce timers (Update runs them down).
     void OnlineGameRoomPlayerInfo::HandleControllerInputFreeBurnSubState(const CgsModule::Event* lpControllerEvent)
     {
-        CGS_ASSERT(lpControllerEvent != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpControllerEvent",
-                CGS_ARTIST_FILE, 1532 /* ARTIST 0x824A4A34 */));   // cpp:1532 (non-fatal)
+        CGS_ASSERT_AT(lpControllerEvent != 0,
+            "lpControllerEvent",
+                CGS_ARTIST_FILE, 1532 /* ARTIST 0x824A4A34 */);   // cpp:1532 (non-fatal)
+
 
         if (mpGuiCache == 0 || mpGuiCache->mbFreeBurnInputDisabled)
         {
@@ -2352,20 +2352,20 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::ShowPauseScreen()
     {
         // cpp:3826 -- the X360 fires the bare expression text (non-fatal).
-        CGS_ASSERT(meSubState == E_SUBSTATE_FREE_BURNING ||
+        CGS_ASSERT_AT(meSubState == E_SUBSTATE_FREE_BURNING ||
                    meSubState == E_SUBSTATE_MAIN ||
                    meSubState == E_SUBSTATE_MAP ||
                    meSubState == E_SUBSTATE_CHALLENGES ||
                    meSubState == E_SUBSTATE_SECURITY_OPTIONS ||
                    meSubState == E_SUBSTATE_VIEW_EVENT ||
                    meSubState == E_SUBSTATE_SETTINGS,
-                   CGS_ASSERT_MESSAGE_AT(
-                       "( meSubState == E_SUBSTATE_FREE_BURNING ) || ( meSubState == E_SUBSTATE_MAIN ) || "
+                   "( meSubState == E_SUBSTATE_FREE_BURNING ) || ( meSubState == E_SUBSTATE_MAIN ) || "
                        "( meSubState == E_SUBSTATE_MAP ) || ( meSubState == E_SUBSTATE_CHALLENGES) || "
                        "( meSubState == E_SUBSTATE_SECURITY_OPTIONS) || ( meSubState == E_SUBSTATE_VIEW_EVENT) || "
                        "( meSubState == E_SUBSTATE_SETTINGS)",
                        CGS_ARTIST_FILE,
-                       3826 /* ARTIST 0x82484E44 */));
+                       3826 /* ARTIST 0x82484E44 */);
+
 
         meSubState = E_SUBSTATE_LOADING_PAUSE_SCREEN;
     }
@@ -2393,7 +2393,7 @@ namespace BrnGui
             default:
                 // cpp:3776 -- streamed as "Substate " << meSubState << " should not be
                 // leaving the menus.\n"; lowered to the static text per project policy.
-                CGS_ASSERT(false, "Substate  should not be leaving the menus.\n");
+                CGS_FAIL("Substate  should not be leaving the menus.\n");
                 break;
         }
 
@@ -3030,10 +3030,10 @@ namespace BrnGui
     {
         // X360 assert string, verbatim (it names HandleCreateMatchEventEvent -- the
         // handler this one was copy-pasted from), BrnOnlineGameRoomPlayerInfo.cpp:2682.
-        CGS_ASSERT(lpEvent != 0,
-                   CGS_ASSERT_STREAM_MESSAGE_AT(
-                       "Invalid event sent to OnlineGameRoomPlayerInfo::HandleCreateMatchEventEvent",
-                       CGS_ARTIST_FILE, 2682));
+        CGS_ASSERT_STREAM_AT(lpEvent != 0,
+                   "Invalid event sent to OnlineGameRoomPlayerInfo::HandleCreateMatchEventEvent",
+                       CGS_ARTIST_FILE, 2682);
+
 
         if (mpGuiCache != 0)
         {
@@ -3354,7 +3354,7 @@ namespace BrnGui
             // << "\n" into CgsDev::Assert::gpcMessageBuffer before FireAssert; modelled
             // through CGS_ASSERT per this tree's assert-machinery convention (the live
             // value is not re-streamed). No ids are written on this path.
-            CGS_ASSERT(false, "Unknown security value");
+            CGS_FAIL("Unknown security value");
             break;
         }
 
@@ -3696,7 +3696,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT_AT(false, "Invalid game action to perform\n", CGS_ARTIST_FILE, 4112);   // cpp:4112
+            CGS_FAIL_AT("Invalid game action to perform\n", CGS_ARTIST_FILE, 4112);   // cpp:4112
             break;
         }
     }
@@ -3855,18 +3855,18 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::ClearSplashScreenOverlay(
         const OverlayCompleteData* lpOverlayCompleteEvent)
     {
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 2990));
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 2990);
 
         const s32 leGameModeType = mpGuiCache->meGameModeType;
         if (leGameModeType != BrnGameState::GameStateModuleIO::E_MODE_NONE)
         {
             // ARTIST E_MODE_COUNT (the X360 compares against 18) -- see KI_ARTIST_MODE_COUNT.
-            CGS_ASSERT(leGameModeType < KI_ARTIST_MODE_COUNT,
-                CGS_ASSERT_MESSAGE_AT("leGameModeType < GsmIO::E_MODE_COUNT", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 2997));
+            CGS_ASSERT_AT(leGameModeType < KI_ARTIST_MODE_COUNT,
+                "leGameModeType < GsmIO::E_MODE_COUNT", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 2997);
 
             const char* lpcSplashScreenID = GetSplashScreenIDForGameMode(
                 static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(leGameModeType));
-            CGS_ASSERT(lpcSplashScreenID != 0, CGS_ASSERT_MESSAGE_AT("lpcSplashScreenID != NULL", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 3002));
+            CGS_ASSERT_AT(lpcSplashScreenID != 0, "lpcSplashScreenID != NULL", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 3002);
 
             if (lpOverlayCompleteEvent->mOverlayId == CgsIDCompress(lpcSplashScreenID) &&
                 lpOverlayCompleteEvent->miLeaveMethod == 0)
@@ -4573,10 +4573,10 @@ namespace BrnGui
     // only while it still belongs to the player the list is highlighting.
     void OnlineGameRoomPlayerInfo::HandlePlayerStatsEvent(const CgsModule::Event* lpPlayerStatsEvent)
     {
-        CGS_ASSERT(lpPlayerStatsEvent != 0,
-                   CGS_ASSERT_STREAM_MESSAGE_AT(
-                       "Invalid event sent to OnlineGameRoomPlayerInfo::HandlePlayerStatsEvent",
-                       CGS_ARTIST_FILE, 2648));
+        CGS_ASSERT_STREAM_AT(lpPlayerStatsEvent != 0,
+                   "Invalid event sent to OnlineGameRoomPlayerInfo::HandlePlayerStatsEvent",
+                       CGS_ARTIST_FILE, 2648);
+
 
         const GuiEventNetworkPlayerStats* lpPayload =
             reinterpret_cast<const GuiEventNetworkPlayerStats*>(lpPlayerStatsEvent);
@@ -4794,8 +4794,8 @@ namespace BrnGui
     // player rows. The asm passes flow 0 (E_GUIFLOW_SCREEN) to every call.
     void OnlineGameRoomPlayerInfo::SetExpectedLobbyComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 3908 /* ARTIST 0x82484EA4 */));   // cpp:3908
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache", __FILE__, 3908 /* ARTIST 0x82484EA4 */);   // cpp:3908
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -4839,8 +4839,8 @@ namespace BrnGui
     // menu and its button-prompt animation are the whole page.
     void OnlineGameRoomPlayerInfo::SetExpectedPauseComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 3944 /* ARTIST 0x82485014 */));   // cpp:3944
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache", __FILE__, 3944 /* ARTIST 0x82485014 */);   // cpp:3944
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -4854,8 +4854,8 @@ namespace BrnGui
     // the route-info panel (which walks its own owned text fields).
     void OnlineGameRoomPlayerInfo::SetExpectedViewEventComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 4482 /* ARTIST 0x824851DC */));   // cpp:4482
+        CGS_ASSERT_AT(mpGuiCache != 0,
+            "mpGuiCache", __FILE__, 4482 /* ARTIST 0x824851DC */);   // cpp:4482
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -6305,13 +6305,13 @@ namespace BrnGui
                 else
                 {
                     // The console streams the id after the text; lowered to the static text.
-                    CGS_ASSERT(false, "Invalid ID for selected option \n");
+                    CGS_FAIL("Invalid ID for selected option \n");
                 }
                 break;
 
             default:
                 // The console streams the row after the text; lowered to the static text.
-                CGS_ASSERT(false, "Unknown option ");
+                CGS_FAIL("Unknown option ");
                 break;
         }
     }

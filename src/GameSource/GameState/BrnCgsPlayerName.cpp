@@ -20,7 +20,7 @@ namespace CgsNetwork
 
 void PlayerName::Construct(const char* lpcPlayerName)
 {
-    CGS_ASSERT(lpcPlayerName, CGS_ASSERT_MESSAGE_AT("lpcPlayerName", CGS_ARTIST_FILE, 86));
+    CGS_ASSERT_AT(lpcPlayerName, "lpcPlayerName", CGS_ARTIST_FILE, 86);
     if (std::strlen(lpcPlayerName) >= static_cast<u32>(KI_USERNAME_LENGTH))
     {
         CgsDev::Assert::BeginAssert();

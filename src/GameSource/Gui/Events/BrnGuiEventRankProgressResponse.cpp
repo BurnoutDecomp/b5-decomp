@@ -63,10 +63,10 @@ void GuiEventRankProgressResponse::Construct(
 // convention; the stringized condition matches the X360 assert message text.
 s32 GuiEventRankProgressResponse::GetPlayerRank() const
 {
-    CGS_ASSERT( miCurrentRank != KI_PLAYER_HAS_FINISHED_LAST_RANK,
-        CGS_ASSERT_MESSAGE_AT(
-            "miCurrentRank != KI_PLAYER_HAS_FINISHED_LAST_RANK",
-            "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7841 /* ARTIST 0x8240EA50 */));
+    CGS_ASSERT_AT( miCurrentRank != KI_PLAYER_HAS_FINISHED_LAST_RANK,
+        "miCurrentRank != KI_PLAYER_HAS_FINISHED_LAST_RANK",
+            "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7841 /* ARTIST 0x8240EA50 */);
+
     return miCurrentRank;
 }
 

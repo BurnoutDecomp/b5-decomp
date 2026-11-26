@@ -115,53 +115,53 @@ namespace BrnPhysics
 
         miPhysicsPreSceneUpdatePM = CgsDev::PerfMonCpu::AddMonitor(
             "    Physics Pre Scene Update", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsPreSceneUpdatePM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsPreSceneUpdatePM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 63));
+        CGS_ASSERT_AT(miPhysicsPreSceneUpdatePM >= 0,
+            "miPhysicsPreSceneUpdatePM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 63);
 
         miGenerateSceneQueriesPM = CgsDev::PerfMonCpu::AddMonitor(
             "    Generate Scene Queries", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miGenerateSceneQueriesPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miGenerateSceneQueriesPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 66));
+        CGS_ASSERT_AT(miGenerateSceneQueriesPM >= 0,
+            "miGenerateSceneQueriesPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 66);
 
         miDeformationManagerPM = CgsDev::PerfMonCpu::AddMonitor(
             "    DeformationManager", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miDeformationManagerPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miDeformationManagerPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 69));
+        CGS_ASSERT_AT(miDeformationManagerPM >= 0,
+            "miDeformationManagerPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 69);
 
         miPhysicsBridgeContactsPM = CgsDev::PerfMonCpu::AddMonitor(
             "    Bridge Contacts To Sim", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsBridgeContactsPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsBridgeContactsPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 72));
+        CGS_ASSERT_AT(miPhysicsBridgeContactsPM >= 0,
+            "miPhysicsBridgeContactsPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 72);
 
         miPhysicsUpdateContactGenAsyncPM = CgsDev::PerfMonCpu::AddMonitor(
             "    Asyncronous contact gen", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateContactGenAsyncPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateContactGenAsyncPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 75));
+        CGS_ASSERT_AT(miPhysicsUpdateContactGenAsyncPM >= 0,
+            "miPhysicsUpdateContactGenAsyncPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 75);
 
         miPhysicsUpdateDoVehicleContactGenStartPM = CgsDev::PerfMonCpu::AddMonitor(
             "        Veh Cont Gen Start", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateDoVehicleContactGenStartPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateDoVehicleContactGenStartPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 78));
+        CGS_ASSERT_AT(miPhysicsUpdateDoVehicleContactGenStartPM >= 0,
+            "miPhysicsUpdateDoVehicleContactGenStartPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 78);
 
         miPhysicsUpdateDoPartContactGenStartPM = CgsDev::PerfMonCpu::AddMonitor(
             "        Part Cont Gen Start", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateDoPartContactGenStartPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateDoPartContactGenStartPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 81));
+        CGS_ASSERT_AT(miPhysicsUpdateDoPartContactGenStartPM >= 0,
+            "miPhysicsUpdateDoPartContactGenStartPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 81);
 
         miPhysicsUpdateDoPropContactGenStartPM = CgsDev::PerfMonCpu::AddMonitor(
             "        Prop Cont Gen Start", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateDoPropContactGenStartPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateDoPropContactGenStartPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 84));
+        CGS_ASSERT_AT(miPhysicsUpdateDoPropContactGenStartPM >= 0,
+            "miPhysicsUpdateDoPropContactGenStartPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 84);
 
         miPhysicsUpdateDoVehicleContactGenEndPM = CgsDev::PerfMonCpu::AddMonitor(
             "        Vehicle Cont Gen End", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateDoVehicleContactGenEndPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateDoVehicleContactGenEndPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 87));
+        CGS_ASSERT_AT(miPhysicsUpdateDoVehicleContactGenEndPM >= 0,
+            "miPhysicsUpdateDoVehicleContactGenEndPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 87);
 
         miPhysicsUpdateValidateRaceCarWorldContactPM = CgsDev::PerfMonCpu::AddMonitor(
             "        Validate RC-world conts", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateValidateRaceCarWorldContactPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateValidateRaceCarWorldContactPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 90));
+        CGS_ASSERT_AT(miPhysicsUpdateValidateRaceCarWorldContactPM >= 0,
+            "miPhysicsUpdateValidateRaceCarWorldContactPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 90);
 
         // REPRODUCED BUG, NOT A TRANSCRIPTION SLIP -- the shipped console source asserts the
         // WRONG member here. The asm is unambiguous (0x825AE674 `stwx r3,r31,0x69C30` stores the
@@ -173,59 +173,59 @@ namespace BrnPhysics
         // member reads 0 and the assert passes -- which is also why it never fired on the console.
         miPhysicsUpdateFixUpVehContactsPM = CgsDev::PerfMonCpu::AddMonitor(
             "        Fix up vehicle conts", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateCrashPredictionPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateCrashPredictionPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 93));
+        CGS_ASSERT_AT(miPhysicsUpdateCrashPredictionPM >= 0,
+            "miPhysicsUpdateCrashPredictionPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 93);
 
         miPhysicsUpdateCrashPredictionPM = CgsDev::PerfMonCpu::AddMonitor(
             "        Crash Prediction", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateCrashPredictionPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateCrashPredictionPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 96));
+        CGS_ASSERT_AT(miPhysicsUpdateCrashPredictionPM >= 0,
+            "miPhysicsUpdateCrashPredictionPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 96);
 
         miPhysicsUpdateVehiclePhysicsPM = CgsDev::PerfMonCpu::AddMonitor(
             "        Vehicle Physics", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateVehiclePhysicsPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateVehiclePhysicsPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 99));
+        CGS_ASSERT_AT(miPhysicsUpdateVehiclePhysicsPM >= 0,
+            "miPhysicsUpdateVehiclePhysicsPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 99);
 
         miPhysicsUpdateDoPartContactGenEndPM = CgsDev::PerfMonCpu::AddMonitor(
             "        Part Cont Gen End", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateDoPartContactGenEndPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateDoPartContactGenEndPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 102));
+        CGS_ASSERT_AT(miPhysicsUpdateDoPartContactGenEndPM >= 0,
+            "miPhysicsUpdateDoPartContactGenEndPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 102);
 
         miPhysicsUpdateDoPropContactGenEndPM = CgsDev::PerfMonCpu::AddMonitor(
             "        Prop Cont Gen End", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateDoPropContactGenEndPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateDoPropContactGenEndPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 105));
+        CGS_ASSERT_AT(miPhysicsUpdateDoPropContactGenEndPM >= 0,
+            "miPhysicsUpdateDoPropContactGenEndPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 105);
 
         miPhysicsProcessRaceCarContactsPM = CgsDev::PerfMonCpu::AddMonitor(
             "    Process Race Car Contacts", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsProcessRaceCarContactsPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsProcessRaceCarContactsPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 108));
+        CGS_ASSERT_AT(miPhysicsProcessRaceCarContactsPM >= 0,
+            "miPhysicsProcessRaceCarContactsPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 108);
 
         miPhysicsUpdateSimulationPM = CgsDev::PerfMonCpu::AddMonitor(
             "    Simulation", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateSimulationPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateSimulationPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 111));
+        CGS_ASSERT_AT(miPhysicsUpdateSimulationPM >= 0,
+            "miPhysicsUpdateSimulationPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 111);
 
         miPhysicsUpdateReadUpdatedBodiesPM = CgsDev::PerfMonCpu::AddMonitor(
             "    ReadUpdatedBodies", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miPhysicsUpdateReadUpdatedBodiesPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPhysicsUpdateReadUpdatedBodiesPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 114));
+        CGS_ASSERT_AT(miPhysicsUpdateReadUpdatedBodiesPM >= 0,
+            "miPhysicsUpdateReadUpdatedBodiesPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 114);
 
         miDeformationMaintenancePM = CgsDev::PerfMonCpu::AddMonitor(
             "    Deformation Maintenance", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miDeformationMaintenancePM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miDeformationMaintenancePM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 117));
+        CGS_ASSERT_AT(miDeformationMaintenancePM >= 0,
+            "miDeformationMaintenancePM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 117);
 
         miContactSpyListGenerationPM = CgsDev::PerfMonCpu::AddMonitor(
             "    Contact Spy generation", CgsDev::E_PMP_6, false, lfMonitorBudget, true);
-        CGS_ASSERT(miContactSpyListGenerationPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miContactSpyListGenerationPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 120));
+        CGS_ASSERT_AT(miContactSpyListGenerationPM >= 0,
+            "miContactSpyListGenerationPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 120);
 
         // The one monitor registered against a 2.0f budget (X360 flt_82001D9C), not 10.0f.
         miPropManagerPM = CgsDev::PerfMonCpu::AddMonitor(
             "    Prop Manager", CgsDev::E_PMP_6, false, KF_PROPMANAGER_PERFMON_BUDGET, true);
-        CGS_ASSERT(miPropManagerPM >= 0,
-            CGS_ASSERT_MESSAGE_AT("miPropManagerPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 123));
+        CGS_ASSERT_AT(miPropManagerPM >= 0,
+            "miPropManagerPM >= 0", KAC_PHYSICS_MODULE_ASSERT_FILE, 123);
 
         // The six prop-manager monitor ids the module owns but does NOT register: it zeroes its
         // own copy and delegates the real registration to the prop manager, whose two
@@ -327,7 +327,7 @@ namespace BrnPhysics
             return true;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", KAC_PHYSICS_MODULE_ASSERT_FILE, 433));
+            CGS_FAIL_AT("Invalid Stage\n", KAC_PHYSICS_MODULE_ASSERT_FILE, 433);
             return false;
         }
     }
@@ -363,14 +363,14 @@ namespace BrnPhysics
                                  CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
                                  const BrnResource::GameDataIO::AllocatorList* lpAllocatorList )
     {
-        CGS_ASSERT(lpInputBufferStack  != 0,
-            CGS_ASSERT_MESSAGE_AT("lpInputBufferStack != NULL", KAC_PHYSICS_MODULE_ASSERT_FILE, 194));
-        CGS_ASSERT(lpOutputBufferStack != 0,
-            CGS_ASSERT_MESSAGE_AT("lpOutputBufferStack != NULL", KAC_PHYSICS_MODULE_ASSERT_FILE, 195));
-        CGS_ASSERT(lpSceneInputBuffer  != 0,
-            CGS_ASSERT_MESSAGE_AT("lpSceneInputBuffer_Update != NULL", KAC_PHYSICS_MODULE_ASSERT_FILE, 196));
-        CGS_ASSERT(lpAllocatorList     != 0,
-            CGS_ASSERT_MESSAGE_AT("lpAllocatorList != NULL", KAC_PHYSICS_MODULE_ASSERT_FILE, 197));
+        CGS_ASSERT_AT(lpInputBufferStack  != 0,
+            "lpInputBufferStack != NULL", KAC_PHYSICS_MODULE_ASSERT_FILE, 194);
+        CGS_ASSERT_AT(lpOutputBufferStack != 0,
+            "lpOutputBufferStack != NULL", KAC_PHYSICS_MODULE_ASSERT_FILE, 195);
+        CGS_ASSERT_AT(lpSceneInputBuffer  != 0,
+            "lpSceneInputBuffer_Update != NULL", KAC_PHYSICS_MODULE_ASSERT_FILE, 196);
+        CGS_ASSERT_AT(lpAllocatorList     != 0,
+            "lpAllocatorList != NULL", KAC_PHYSICS_MODULE_ASSERT_FILE, 197);
 
         (void)lpOutputBufferStack;     // asserted only; the console never uses it either
         (void)lpSceneInputBuffer;      // consumed by stage 6's VehicleManager::Prepare
@@ -379,7 +379,7 @@ namespace BrnPhysics
         {
         default:
             // `FireAssert("Invalid Stage\n", ..., 332)`
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", KAC_PHYSICS_MODULE_ASSERT_FILE, 332));
+            CGS_FAIL_AT("Invalid Stage\n", KAC_PHYSICS_MODULE_ASSERT_FILE, 332);
             return false;
 
         case E_PREPARESTAGE_START:
@@ -694,11 +694,11 @@ namespace BrnPhysics
     void PhysicsModule::UpdateCachedPositions(
         CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer )
     {
-        CGS_ASSERT( lpSceneInputBuffer != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpSceneInputBuffer_Update != NULL",
+        CGS_ASSERT_AT( lpSceneInputBuffer != NULL,
+            "lpSceneInputBuffer_Update != NULL",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../Physics/BrnPhysicsModule.cpp", 617 /* ARTIST 0x8259C39C */));   // :617
+                "../Physics/BrnPhysicsModule.cpp", 617 /* ARTIST 0x8259C39C */);   // :617
+
 
         mVehicleManager.UpdateTriangleCache( lpSceneInputBuffer );
         mPropManager.UpdateTriangleCache( lpSceneInputBuffer );
@@ -835,11 +835,11 @@ namespace BrnPhysics
                                              BrnUpdateSet /*lUpdateSet*/)
     {
         mVehicleManager.CheckState();
-        CGS_ASSERT(lpInputBuffer != NULL,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpInputBuffer != NULL",
+        CGS_ASSERT_AT(lpInputBuffer != NULL,
+            "lpInputBuffer != NULL",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../Physics/BrnPhysicsModuleUpdateFunctions.cpp", 1049 /* ARTIST 0x825A153C */));
+                "../Physics/BrnPhysicsModuleUpdateFunctions.cpp", 1049 /* ARTIST 0x825A153C */);
+
 
         lpInputBuffer->LockForRead();
         const Vehicle::VehicleDriverInputInterface* const lpDriverInterface =

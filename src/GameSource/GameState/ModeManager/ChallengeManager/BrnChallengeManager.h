@@ -144,9 +144,9 @@ namespace BrnGameState
         lreSkill = static_cast<EFreeburnSkill>(static_cast<s32>(lreSkill) + 1);
         // ARTIST fires it at line 113 of the header (`li r5, 0x71`, e.g.
         // UpdateLocationOKStatusChange 0x8232408C), path string @0x82022300.
-        CGS_ASSERT(static_cast<s32>(lreSkill) <= KI_FREEBURN_SKILL_COUNT_X360, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(static_cast<s32>(lreSkill) <= KI_FREEBURN_SKILL_COUNT_X360,
                    "leEnumIndex <= E_FREEBURN_SKILL_COUNT",
-                   "..\\..\\..\\GameSource\\GameState/ModeManager/ChallengeManager/BrnChallengeManager.h", 113));
+                   "..\\..\\..\\GameSource\\GameState/ModeManager/ChallengeManager/BrnChallengeManager.h", 113);
         return leOld;
     }
 

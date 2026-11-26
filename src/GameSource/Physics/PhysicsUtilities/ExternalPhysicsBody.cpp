@@ -454,7 +454,7 @@ namespace BrnPhysics
         {
             if (CgsDev::Message::gxMessageFilterFlags & 1)
                 *CgsDev::Log::gpDebugPrint << context;
-            CGS_ASSERT(false, message);
+            CGS_FAIL(message);
         }
     }
 

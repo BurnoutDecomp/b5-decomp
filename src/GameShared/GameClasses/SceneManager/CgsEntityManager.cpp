@@ -121,9 +121,9 @@ const VolumeInstance* EntityManager::GetFirstEntityVolumeInstance(
 VolumeInstanceId EntityManager::GetVolumeInstanceIdByIndex(s32 liIndex) const
 {
     // ARTIST assertion at 0x828B9E40.
-    CGS_ASSERT(liIndex < KI_MAX_NUM_VOLUME_INSTANCES && liIndex >= 0, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(liIndex < KI_MAX_NUM_VOLUME_INSTANCES && liIndex >= 0,
         "liIndex < KI_MAX_NUM_VOLUME_INSTANCES && liIndex >= 0",
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityManager.h", 345));
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityManager.h", 345);
 
     return mVolumeInstancePool[liIndex].mUserID;
 }
@@ -173,15 +173,15 @@ s32 EntityManager::GetVolumeInstanceIndexByID(VolumeInstanceId lVolumeInstanceId
 // ===========================================================================
 const VolumeInstance* EntityManager::GetVolumeInstance(s32 liViIndex) const
 {
-    CGS_ASSERT(liViIndex < KI_MAX_NUM_VOLUME_INSTANCES,
-               CGS_ASSERT_MESSAGE_AT("liViIndex < KI_MAX_NUM_VOLUME_INSTANCES", KAC_ENTITY_MANAGER_ARTIST_HEADER, 488));
+    CGS_ASSERT_AT(liViIndex < KI_MAX_NUM_VOLUME_INSTANCES,
+               "liViIndex < KI_MAX_NUM_VOLUME_INSTANCES", KAC_ENTITY_MANAGER_ARTIST_HEADER, 488);
 
     if (liViIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
         return NULL;
     }
 
-    CGS_ASSERT(liViIndex >= 0, CGS_ASSERT_MESSAGE_AT("liViIndex >= 0", KAC_ENTITY_MANAGER_ARTIST_HEADER, 493));
+    CGS_ASSERT_AT(liViIndex >= 0, "liViIndex >= 0", KAC_ENTITY_MANAGER_ARTIST_HEADER, 493);
 
     if (!mVolumeInstancePool.IsObjectAllocated(liViIndex))
     {
@@ -219,7 +219,7 @@ void EntityManager::SetVolumeForCollision(VolumeInstanceId lVolumeInstanceId, bo
     const s32 liIndex = GetVolumeInstanceIndexByID(lVolumeInstanceId);
     if (liIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_ASSERT(false, "Volume instance not found");
+        CGS_FAIL("Volume instance not found");
         return;
     }
 
@@ -231,7 +231,7 @@ void EntityManager::SetVolumeForCollisionByIndex(s32 liIndex, bool lbForCollisio
 {
     if (liIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_ASSERT(false, "Volume instance not found");
+        CGS_FAIL("Volume instance not found");
         return;
     }
 
@@ -248,7 +248,7 @@ Vector3 EntityManager::SetVolumeInstanceTransform(VolumeInstanceId lVolumeInstan
     if (liIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
         lPositionDelta.SetZero();
-        CGS_ASSERT(false, "Volume instance not found");
+        CGS_FAIL("Volume instance not found");
     }
     else
     {
@@ -287,7 +287,7 @@ u16 EntityManager::AddEntity(EntityId lEntityId)
 
     if (liIndex == -1)
     {
-        CGS_ASSERT(false, "Failed to allocate entity ");
+        CGS_FAIL("Failed to allocate entity ");
         return KU16_INVALID_ENTITY_INDEX;
     }
 
@@ -405,7 +405,7 @@ s32 EntityManager::AddVolumeInstance(VolumeInstanceId lVolumeInstanceId,
     const s32 liVolumeInstanceIndex = mVolumeInstancePool.AllocateObject();   // cpp:191
     if (liVolumeInstanceIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_ASSERT(false, "liVolumeInstanceIndex != -1");                    // cpp:218
+        CGS_FAIL("liVolumeInstanceIndex != -1");                    // cpp:218
         return liVolumeInstanceIndex;
     }
 
@@ -532,9 +532,9 @@ void EntityManager::RemoveVolumeInstanceFromEntity(s32 liVolumeInstanceIndex)
     SceneManagerEntity& lrEntity = mEntityPool[lrVolumeInstance.mu16EntityIndex];    // cpp:302
 
     // ARTIST assertion at 0x828BA1D4.
-    CGS_ASSERT(lrEntity.mu16NumVolumeInstances > 0, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lrEntity.mu16NumVolumeInstances > 0,
         "lpEntity->mu16NumVolumeInstances > 0",
-        CGS_ARTIST_FILE, 304));
+        CGS_ARTIST_FILE, 304);
 
     s32 liCurrentVI = lrEntity.miFirstVolumeInstance;                                // cpp:307
     if (liCurrentVI == liVolumeInstanceIndex)
@@ -558,9 +558,9 @@ void EntityManager::RemoveVolumeInstanceFromEntity(s32 liVolumeInstanceIndex)
     }
 
     // ARTIST assertion at 0x828BA240.
-    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+    CGS_FAIL_AT(
         "Entity does not contain the specified volume instance",
-        CGS_ARTIST_FILE, 329));
+        CGS_ARTIST_FILE, 329);
 }
 
 // ===========================================================================

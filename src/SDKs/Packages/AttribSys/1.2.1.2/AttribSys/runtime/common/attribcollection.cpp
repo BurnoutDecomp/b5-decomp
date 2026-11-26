@@ -475,7 +475,7 @@ void Attrib::Collection::Clear()
         }
         else
         {
-            CGS_ASSERT(false, "Attribute wasn't freed from collection");
+            CGS_FAIL("Attribute wasn't freed from collection");
         }
 
         luLayoutCap = lpLayout->muCapacity;

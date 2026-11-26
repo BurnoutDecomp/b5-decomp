@@ -86,10 +86,10 @@ operator++(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int)
 {
     const FriendsListComponent::EFriendListBranchState leOld = lreEnumIndex;
     lreEnumIndex = static_cast<FriendsListComponent::EFriendListBranchState>(lreEnumIndex + 1);
-    CGS_ASSERT(lreEnumIndex <= FriendsListComponent::E_FRIENDLISTBRANCH_THIRD_OF_THREE,
-        CGS_ASSERT_MESSAGE_AT(
-            "leEnumIndex <= FriendsListComponent::E_FRIENDLISTBRANCH_THIRD_OF_THREE",
-            KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x82410984 */));
+    CGS_ASSERT_AT(lreEnumIndex <= FriendsListComponent::E_FRIENDLISTBRANCH_THIRD_OF_THREE,
+        "leEnumIndex <= FriendsListComponent::E_FRIENDLISTBRANCH_THIRD_OF_THREE",
+            KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x82410984 */);
+
     return leOld;
 }
 
@@ -101,10 +101,10 @@ operator--(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int)
 {
     const FriendsListComponent::EFriendListBranchState leOld = lreEnumIndex;
     lreEnumIndex = static_cast<FriendsListComponent::EFriendListBranchState>(lreEnumIndex - 1);
-    CGS_ASSERT(lreEnumIndex >= FriendsListComponent::E_FRIENDLISTBRANCH_FIRST_OF_ONE,
-        CGS_ASSERT_MESSAGE_AT(
-            "leEnumIndex >= FriendsListComponent::E_FRIENDLISTBRANCH_FIRST_OF_ONE",
-            KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x824109E4 */));
+    CGS_ASSERT_AT(lreEnumIndex >= FriendsListComponent::E_FRIENDLISTBRANCH_FIRST_OF_ONE,
+        "leEnumIndex >= FriendsListComponent::E_FRIENDLISTBRANCH_FIRST_OF_ONE",
+            KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x824109E4 */);
+
     return leOld;
 }
 
@@ -197,7 +197,7 @@ void FriendsListComponent::SaveCurrentState()
 // @0x82414AA0 --------------------------------------------------------------------
 void FriendsListComponent::TransitionCompleteCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, CGS_ASSERT_MESSAGE_AT("lpUserData", CGS_ARTIST_FILE, 3900 /* ARTIST 0x82414AD4 */));
+    CGS_ASSERT_AT(lpUserData != 0, "lpUserData", CGS_ARTIST_FILE, 3900 /* ARTIST 0x82414AD4 */);
     FriendsListComponent& lrSelf = *static_cast<FriendsListComponent*>(lpUserData);
     if (lrSelf.meCurrentState == 1)
         lrSelf.meCurrentState = 2;
@@ -1103,7 +1103,7 @@ void FriendsListComponent::UpdateAllEntryData()
     case 1: UpdateAllFriendsEntryData(); break;
     case 2: UpdateAllShortcutsEntryData(); break;
     case 3: UpdateAllChallengesEntryData(); break;
-    default: CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown list type\n", CGS_ARTIST_FILE, 2656 /* ARTIST 0x82440060 */)); break;
+    default: CGS_FAIL_AT("Unknown list type\n", CGS_ARTIST_FILE, 2656 /* ARTIST 0x82440060 */); break;
     }
 }
 
@@ -1188,7 +1188,7 @@ void FriendsListComponent::HandleDPadRight()
     case 1: HandleDPadRightFriends(); break;
     case 2: HandleDPadRightShortcuts(); break;
     case 3: HandleDPadRightChallenges(); break;
-    default: CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unknown list type\n", CGS_ARTIST_FILE, 1066 /* ARTIST 0x82442DF8 */)); break;
+    default: CGS_FAIL_AT("unknown list type\n", CGS_ARTIST_FILE, 1066 /* ARTIST 0x82442DF8 */); break;
     }
 }
 
@@ -1237,8 +1237,8 @@ void FriendsListComponent::HandleTableInteraction(s32 liAction)
 // ARTIST 0x82443280.
 void FriendsListComponent::HandleControllerInput(const s32* input)
 {
-    CGS_ASSERT(input != 0, CGS_ASSERT_MESSAGE_AT("lpControllerInput", CGS_ARTIST_FILE, 849 /* ARTIST 0x824432B8 */));
-    CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 856 /* ARTIST 0x824432E0 */));
+    CGS_ASSERT_AT(input != 0, "lpControllerInput", CGS_ARTIST_FILE, 849 /* ARTIST 0x824432B8 */);
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 856 /* ARTIST 0x824432E0 */);
     // Host diagnostic: one record per GUI press, disabled in normal play.
     if (!mpGuiCache->GetGameplayHudReady() || (meListType == 1 && meDataCollectionState != 2)) return;
     if (meCurrentState == 2 && meBranchState != 0) HandleBranchInteraction(input[1]);
@@ -1369,7 +1369,7 @@ void FriendsListComponent::ShowShortcutsBranch()
         maeAvailableShortcutBranchOptions[0] = mpGuiCache->GetOnlineGameModeOptions()->meSecurity == 0 ? 13 : 12;
         maeAvailableShortcutBranchOptions[1] = mpGuiCache->GetOnlineGameModeOptions()->meSecurity == 2 ? 13 : 14;
         break;
-    default: CGS_ASSERT_AT(false, "Shortcut option doesn't have branches", CGS_ARTIST_FILE, 1952); break;
+    default: CGS_FAIL_AT("Shortcut option doesn't have branches", CGS_ARTIST_FILE, 1952); break;
     }
     if (first >= 0)
     {
@@ -1412,7 +1412,7 @@ void FriendsListComponent::HandleBranchInteraction(s32 action)
         case 1: HandleBranchDPadRightFriends(); break;
         case 2: HandleBranchDPadRightShortcuts(); break;
         case 3: break;
-        default: CGS_ASSERT_AT(false, "unknown list type", CGS_ARTIST_FILE, 2197); break;
+        default: CGS_FAIL_AT("unknown list type", CGS_ARTIST_FILE, 2197); break;
         }
     }
     CGS_ASSERT_AT(miCurrentlyHighlightedBranch >= 0 && miCurrentlyHighlightedBranch < 3,
@@ -1445,7 +1445,7 @@ void FriendsListComponent::HandleBranchDPadRightShortcuts()
         memcpy(event.maData, &option, 4);
         mpStateInterface->OutputInternalState(event);
     }
-    else CGS_ASSERT_AT(false, "Unknown branch option", CGS_ARTIST_FILE, 1669);
+    else CGS_FAIL_AT("Unknown branch option", CGS_ARTIST_FILE, 1669);
     WithdrawBranches();
     meCurrentState = 5;
     SetDirty();
@@ -1490,7 +1490,7 @@ void FriendsListComponent::HandleDPadRightShortcuts()
         meCurrentState = 0;
         ShowSpecificChallenge(s_u64SavedChallengeUid);
         return;
-    default: CGS_ASSERT_AT(false, "Unknown shortcut option", CGS_ARTIST_FILE, 1313); break;
+    default: CGS_FAIL_AT("Unknown shortcut option", CGS_ARTIST_FILE, 1313); break;
     }
     meCurrentState = 5;
     SetDirty();
@@ -1559,23 +1559,23 @@ void FriendsListComponent::SortFullList()
 // ARTIST 0x824430D0.
 void FriendsListComponent::ProcessNewEntryData(const GuiEventOnlineReceiveFriendInfo* lpFriendInfo)
 {
-    CGS_ASSERT(lpFriendInfo != 0, CGS_ASSERT_MESSAGE_AT("lpFriendInfo", CGS_ARTIST_FILE, 706 /* ARTIST 0x82443104 */));
+    CGS_ASSERT_AT(lpFriendInfo != 0, "lpFriendInfo", CGS_ARTIST_FILE, 706 /* ARTIST 0x82443104 */);
     if (meListType != 1) return;
-    const GuiEventOnlineReceiveFriendInfo& event = *lpFriendInfo;
-    if (!event.mbConnected) { HandleNotConnected(); meDataCollectionState = 2; return; }
-    if (event.miNumberOfBuddiesInEvent == 0) { HandleNoFriends(); meDataCollectionState = 2; return; }
-    for (s32 i = 0; i < event.miNumberOfBuddiesInEvent; ++i)
-        maFullBuddyList[event.miIndexOfFirstBuddyInFullBuddyList + i] = event.mBuddyInformation[i];
-    if (event.miIndexOfFirstBuddyInFullBuddyList + event.miNumberOfBuddiesInEvent < static_cast<s32>(miTotalOptions)) return;
+    // DWARF (BrnFriendsList.cpp:736/:779) names the locals liEventIndex and lbShouldAnimateOut; no local holds the event.
+    if (!lpFriendInfo->mbConnected) { HandleNotConnected(); meDataCollectionState = 2; return; }
+    if (lpFriendInfo->miNumberOfBuddiesInEvent == 0) { HandleNoFriends(); meDataCollectionState = 2; return; }
+    for (s32 liEventIndex = 0; liEventIndex < lpFriendInfo->miNumberOfBuddiesInEvent; ++liEventIndex)
+        maFullBuddyList[lpFriendInfo->miIndexOfFirstBuddyInFullBuddyList + liEventIndex] = lpFriendInfo->mBuddyInformation[liEventIndex];
+    if (lpFriendInfo->miIndexOfFirstBuddyInFullBuddyList + lpFriendInfo->miNumberOfBuddiesInEvent < static_cast<s32>(miTotalOptions)) return;
     meDataCollectionState = 2;
     SortFullList();
     RemoveUnneededFriends();
     if (miTotalOptions == 0) { HandleNoFriends(); return; }
-    bool reopen = false;
+    bool lbShouldAnimateOut = false;
     if (meBranchState != 0)
-        reopen = MoveHighlightDueToBranchOpen();
+        lbShouldAnimateOut = MoveHighlightDueToBranchOpen();
     UpdateAllEntryData();
-    if (reopen) { meBranchState = 0; HandleTableInteraction(40); }
+    if (lbShouldAnimateOut) { meBranchState = 0; HandleTableInteraction(40); }
     else if (s_abStateSavedFlag && s_aiSavedListType == 1)
     {
         ShowSpecificFriend(s_amabSavedNames[0].macName);
@@ -1595,7 +1595,7 @@ void FriendsListComponent::ShowFriendsListBranch()
     case 2: status = 15; break;
     case 3: status = 16; break;
     case 4: status = 0; break;
-    default: CGS_ASSERT(false, "Invalid case in switch"); status = maEntries[miCurrentlyHighlightedSlot].GetEntryStatus(); break;
+    default: CGS_FAIL("Invalid case in switch"); status = maEntries[miCurrentlyHighlightedSlot].GetEntryStatus(); break;
     }
     if (!CgsSystem::HardwareInit::IsHardDiskAvailable() && status != 2) status = 3;
     s32 count = 0;
@@ -1636,7 +1636,7 @@ void FriendsListComponent::HandleBranchDPadRightFriends()
     case 2: status = 15; break;
     case 3: status = 16; break;
     case 4: status = 0; break;
-    default: CGS_ASSERT(false, "Invalid case in switch"); status = maEntries[miCurrentlyHighlightedSlot].GetEntryStatus(); break;
+    default: CGS_FAIL("Invalid case in switch"); status = maEntries[miCurrentlyHighlightedSlot].GetEntryStatus(); break;
     }
     const s32 branch = KAA_FRIEND_BRANCHES[status][miCurrentlyHighlightedBranch];
     bool close = false;

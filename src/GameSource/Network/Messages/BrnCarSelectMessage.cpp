@@ -87,10 +87,10 @@ namespace BrnNetwork
         mbFinalSelection        = lbFinalSelection;          // stb, +0x40
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_CAR_SELECT_MESSAGE_TYPE, lu16Frame);
-        CGS_ASSERT(IsReliable(),
-            CGS_ASSERT_MESSAGE_AT(
-                "IsReliable()",
-                CGS_ARTIST_FILE, 110 /* ARTIST 0x8257A50C */));
+        CGS_ASSERT_AT(IsReliable(),
+            "IsReliable()",
+                CGS_ARTIST_FILE, 110 /* ARTIST 0x8257A50C */);
+
     }
 
     // ---------------------------------------------------------------------------------
@@ -103,24 +103,24 @@ namespace BrnNetwork
                                     u16* lpu16CarColourIndex, u16* lpu16CarPaintFinishIndex,
                                     f32* lpfBaseDeformationAmount, bool* lpbFinalSelection)
     {
-        CGS_ASSERT(lpCarId, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpCarId,
             "lpCarId",
-            CGS_ARTIST_FILE, 134 /* ARTIST 0x8257E034 */));
-        CGS_ASSERT(lpWheelId, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 134 /* ARTIST 0x8257E034 */);
+        CGS_ASSERT_AT(lpWheelId,
             "lpWheelId",
-            CGS_ARTIST_FILE, 135 /* ARTIST 0x8257E058 */));
-        CGS_ASSERT(lpbFinalSelection, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 135 /* ARTIST 0x8257E058 */);
+        CGS_ASSERT_AT(lpbFinalSelection,
             "lpbFinalSelection",
-            CGS_ARTIST_FILE, 136 /* ARTIST 0x8257E07C */));
-        CGS_ASSERT(lpu16CarColourIndex, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 136 /* ARTIST 0x8257E07C */);
+        CGS_ASSERT_AT(lpu16CarColourIndex,
             "lpu16CarColourIndex",
-            CGS_ARTIST_FILE, 137 /* ARTIST 0x8257E0A0 */));
-        CGS_ASSERT(lpu16CarPaintFinishIndex, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 137 /* ARTIST 0x8257E0A0 */);
+        CGS_ASSERT_AT(lpu16CarPaintFinishIndex,
             "lpu16CarPaintFinishIndex",
-            CGS_ARTIST_FILE, 138 /* ARTIST 0x8257E0C4 */));
-        CGS_ASSERT(lpfBaseDeformationAmount, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 138 /* ARTIST 0x8257E0C4 */);
+        CGS_ASSERT_AT(lpfBaseDeformationAmount,
             "lpfBaseDeformationAmount",
-            CGS_ARTIST_FILE, 139 /* ARTIST 0x8257E0E8 */));
+            CGS_ARTIST_FILE, 139 /* ARTIST 0x8257E0E8 */);
 
         // ARTIST 0x8257E0FC branches to a trailing `return false` (0x8257E170): the copy-out is the body
         // of the valid test.
@@ -134,9 +134,9 @@ namespace BrnNetwork
             *lpfBaseDeformationAmount  = mfBaseDeformationAmount;   // lfs +0x38
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                CGS_ARTIST_FILE, 154 /* ARTIST 0x8257E15C */));
+                CGS_ARTIST_FILE, 154 /* ARTIST 0x8257E15C */);
             return true;
         }
         return false;

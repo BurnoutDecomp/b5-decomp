@@ -95,7 +95,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, Camera::BehaviourMana
     Camera::BehaviourManager* lpBehaviourManager =
         &lrBehaviourController;
 
-    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 87));   //  (non-gating)
+    CGS_ASSERT_AT(mpParameters != 0, "mpParameters != NULL", CGS_ARTIST_FILE, 87);   //  (non-gating)
 
     switch (GetState())
     {
@@ -177,7 +177,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, Camera::BehaviourMana
         break;   // the shared valid tail
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", CGS_ARTIST_FILE, 196));   //  (non-gating)
+        CGS_FAIL_AT("unhandled case in switch", CGS_ARTIST_FILE, 196);   //  (non-gating)
         return;
     }
 
@@ -224,7 +224,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, Camera::BehaviourMana
 // the zoom re-snap its FOV band continuously.
 void MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor(f32 lfFactor)
 {
-    CGS_ASSERT(mBystander.IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 589));
+    CGS_ASSERT_AT(mBystander.IsAllocated(), "IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 589);
 
     mBystander.Get()->SetPerceivedDistanceModificationFactor(lfFactor);
 }

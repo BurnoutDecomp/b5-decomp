@@ -154,7 +154,7 @@ void VehicleTypeRuntime::Prepare(
     // This released assert is LIVE; a fire on shipped data is data news, do not re-gate it.
     const f32 lfMass =
         lVehicleAttribs.mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.mV.x;
-    CGS_ASSERT(lfMass > 0.0f, CGS_ASSERT_MESSAGE_AT("lVehicleAttribs.mBaseAttribs.GetMass() > 0.0f", __FILE__, 125));   // .cpp:125
+    CGS_ASSERT_AT(lfMass > 0.0f, "lVehicleAttribs.mBaseAttribs.GetMass() > 0.0f", __FILE__, 125);   // .cpp:125
     mMass_WheelRadius_Z_W.mV.x = lfMass;
 
     // ARTIST 82761E04..82761FA4: transpose the handling 3x3 and transform

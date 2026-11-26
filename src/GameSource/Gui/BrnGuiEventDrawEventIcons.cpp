@@ -39,11 +39,11 @@ void GuiEventDrawEventIcons::Construct(bool lbDrawIcons,
     meIconDisplayType  = leIconDisplayType;
     miNumIconsToIgnore = liNumIconsToIgnore;
 
-    CGS_ASSERT( (miNumIconsToIgnore == 0) ||
+    CGS_ASSERT_AT( (miNumIconsToIgnore == 0) ||
                 ((lpuIconsToIgnore != 0) && (miNumIconsToIgnore <= KI_MAX_ICONS_TO_IGNORE)),
-        CGS_ASSERT_MESSAGE_AT(
-            "(miNumIconsToIgnore == 0) || ((lpuIconsToIgnore != NULL) && (miNumIconsToIgnore <= KI_MAX_ICONS_TO_IGNORE) )",
-            KAC_ARTIST_ASSERT_FILE, 2785 /* ARTIST 0x824EB264 */));
+        "(miNumIconsToIgnore == 0) || ((lpuIconsToIgnore != NULL) && (miNumIconsToIgnore <= KI_MAX_ICONS_TO_IGNORE) )",
+            KAC_ARTIST_ASSERT_FILE, 2785 /* ARTIST 0x824EB264 */);
+
 
     for ( s32 liIndex = 0; liIndex < miNumIconsToIgnore; ++liIndex )
         mauIconsToIgnore[liIndex] = lpuIconsToIgnore[liIndex];
@@ -61,10 +61,10 @@ void GuiEventDrawEventIcons::Construct(bool lbDrawIcons,
 void GuiEventDrawEventIcons::GetIgnoreIcons(u32* lpuIconsToIgnore,
                                             s32* lpiNumIconsToIgnore) const
 {
-    CGS_ASSERT( lpuIconsToIgnore != 0,
-        CGS_ASSERT_MESSAGE_AT("lpuIconsToIgnore", KAC_ARTIST_ASSERT_FILE, 2815 /* ARTIST 0x82443548 */));
-    CGS_ASSERT( lpiNumIconsToIgnore != 0,
-        CGS_ASSERT_MESSAGE_AT("lpiNumIconsToIgnore", KAC_ARTIST_ASSERT_FILE, 2816 /* ARTIST 0x8244356C */));
+    CGS_ASSERT_AT( lpuIconsToIgnore != 0,
+        "lpuIconsToIgnore", KAC_ARTIST_ASSERT_FILE, 2815 /* ARTIST 0x82443548 */);
+    CGS_ASSERT_AT( lpiNumIconsToIgnore != 0,
+        "lpiNumIconsToIgnore", KAC_ARTIST_ASSERT_FILE, 2816 /* ARTIST 0x8244356C */);
 
     *lpiNumIconsToIgnore = miNumIconsToIgnore;
 

@@ -152,7 +152,7 @@ void DeformationEffect::AttachController(CgsSound::Logic::EffectBase* apControll
         mpPhysicsControl = static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
         break;
     default:
-        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+        CGS_FAIL_STREAM_AT("Cound't attach controller " << apController->GetId(),
                              BRN_DEFORMATIONEFFECT_CPP_FILE, 128);
         break;
     }

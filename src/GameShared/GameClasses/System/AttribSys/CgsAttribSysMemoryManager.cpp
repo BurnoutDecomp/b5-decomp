@@ -24,9 +24,9 @@ AttribSysPackageAllocator AttribSysMemoryManager::sEaStlAllocator;
 // CgsAttribSysMemoryManager.h:211 "sbHasLinearAllocator".)
 AttribSysPackageAllocator* AttribSysMemoryManager::GetAttribSysAllocator()
 {
-    CGS_ASSERT(sbHasLinearAllocator, CGS_ASSERT_MESSAGE_AT("sbHasLinearAllocator",
+    CGS_ASSERT_AT(sbHasLinearAllocator, "sbHasLinearAllocator",
         "..\\..\\..\\GameShared\\GameClasses\\System/AttribSys/CgsAttribSysMemoryManager.h",
-        211 /* ARTIST 0x821F02C4 */));
+        211 /* ARTIST 0x821F02C4 */);
 
     return &sAttribSysAllocator;
 }

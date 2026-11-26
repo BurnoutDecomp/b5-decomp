@@ -127,10 +127,10 @@ void MusicStream::Update(Streaming::StreamingStateManager* apStreamingManager, f
 
 void MusicStream::SetSongQueued(bool abSongQueued)
 {
-    CGS_ASSERT(abSongQueued != mbSongQueued,
-        CGS_ASSERT_MESSAGE_AT(
-            "lbSongQueued != mbSongQueued",
-            "..\\..\\..\\GameSource\\Sound/Global/BrnMusicEffect.h", 1080 /* ARTIST 0x8268323C */));
+    CGS_ASSERT_AT(abSongQueued != mbSongQueued,
+        "lbSongQueued != mbSongQueued",
+            "..\\..\\..\\GameSource\\Sound/Global/BrnMusicEffect.h", 1080 /* ARTIST 0x8268323C */);
+
     mbSongQueued = abSongQueued;
 }
 

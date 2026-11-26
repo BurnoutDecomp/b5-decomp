@@ -233,7 +233,7 @@ namespace BrnGui
                     }
                     break;
                 case XN_LIVE_INVITE_ACCEPTED:
-                    CGS_ASSERT_STREAM_AT(false, "Invite notification processed by Online main menu screen. "
+                    CGS_FAIL_STREAM_AT("Invite notification processed by Online main menu screen. "
                                                 "This could break cross game invites\n",
                                          CGS_ARTIST_FILE, 196);
                     break;
@@ -244,7 +244,7 @@ namespace BrnGui
 
         default:
             // Streamed in place, as ARTIST builds it (cpp:218).
-            CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+            CGS_FAIL_STREAM_AT("Invalid internal state : " << meInternalState << "\n",
                                  CGS_ARTIST_FILE, 218);
             break;
         }

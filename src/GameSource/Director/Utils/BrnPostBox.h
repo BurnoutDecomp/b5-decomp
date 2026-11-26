@@ -88,9 +88,9 @@ namespace BrnDirector
             // ARTIST's every inlined copy fires at BrnPostBox.h line 110 (`li r5, 0x6E`, e.g.
             // ResolveCollisions 0x822249AC, VisibilityTest::ProcessSceneQueryResults), path string
             // aDP4B5MainBurno_11 @0x82005790.
-            CGS_ASSERT(meState == E_STATE_GOT_PACKAGE, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(meState == E_STATE_GOT_PACKAGE,
                 "meState == E_STATE_GOT_PACKAGE",
-                CGS_ARTIST_BRNPOSTBOX_H, 110));
+                CGS_ARTIST_BRNPOSTBOX_H, 110);
             return mPackage;
         }
 

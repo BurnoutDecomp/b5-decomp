@@ -368,8 +368,8 @@ void BrnPostFx::BeginTintBlend()
         lrBlendParameters.factor[luSource] = m_tintFactors[luSource];
     }
 
-    CGS_ASSERT(m_numCubesToBlend <= 5u,
-               CGS_ASSERT_MESSAGE_AT("m_numCubesToBlend <= 5", __FILE__, 266));   // ARTIST 0x823F8430
+    CGS_ASSERT_AT(m_numCubesToBlend <= 5u,
+               "m_numCubesToBlend <= 5", __FILE__, 266);   // ARTIST 0x823F8430
 
     lrBlendParameters.factor[5] = KF_POST_FX_ZERO;   // stfs flt_82001CC0, 0x40(r29)
 

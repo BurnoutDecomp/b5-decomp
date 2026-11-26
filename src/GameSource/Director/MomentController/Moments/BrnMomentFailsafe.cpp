@@ -47,8 +47,8 @@ void MomentFailSafe::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
     (void)lrBehaviourController;
     (void)lrSharedInfo;
 
-    CGS_ASSERT(mpParameters != NULL,
-        CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 69 /* ARTIST 0x8220A2E4 */));
+    CGS_ASSERT_AT(mpParameters != NULL,
+        "mpParameters != NULL", CGS_ARTIST_FILE, 69 /* ARTIST 0x8220A2E4 */);
 
     switch (GetState())
     {
@@ -61,9 +61,9 @@ void MomentFailSafe::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
         break;
 
     default:
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "unhandled case in switch", CGS_ARTIST_FILE, 92 /* ARTIST 0x8220A314 */));
+        CGS_FAIL_AT(
+            "unhandled case in switch", CGS_ARTIST_FILE, 92 /* ARTIST 0x8220A314 */);
+
         break;
     }
 }

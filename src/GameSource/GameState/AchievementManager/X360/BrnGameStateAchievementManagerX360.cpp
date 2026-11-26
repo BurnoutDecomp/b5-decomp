@@ -125,7 +125,7 @@ void AchievementManagerX360::AchievementEarnt(EAchievement leAchievement)
     {
         // X360 line 544 -- streamed "Trying to write achievement index <i> more
         // than once."; collapsed to the project's static string.
-        CGS_ASSERT(false, "Trying to write achievement index more than once.");
+        CGS_FAIL("Trying to write achievement index more than once.");
     }
     else
     {
@@ -213,9 +213,9 @@ bool AchievementManagerX360::Release()
 void AchievementManagerX360::Update(const GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
                                     GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpPreWorldInputBuffer, CGS_ASSERT_MESSAGE_AT("lpPreWorldInputBuffer", CGS_ARTIST_FILE, 388));
-    CGS_ASSERT(lpPreWorldInputBuffer->GetControllerToGameStateInterface(),
-               CGS_ASSERT_MESSAGE_AT("lpPreWorldInputBuffer->GetControllerToGameStateInterface()", CGS_ARTIST_FILE, 389));
+    CGS_ASSERT_AT(lpPreWorldInputBuffer, "lpPreWorldInputBuffer", CGS_ARTIST_FILE, 388);
+    CGS_ASSERT_AT(lpPreWorldInputBuffer->GetControllerToGameStateInterface(),
+               "lpPreWorldInputBuffer->GetControllerToGameStateInterface()", CGS_ARTIST_FILE, 389);
 
     const s32 liActiveControllerPort =
         lpPreWorldInputBuffer->GetControllerToGameStateInterface()->GetActiveControllerPort();
@@ -233,8 +233,8 @@ void AchievementManagerX360::Update(const GameStateModuleIO::PreWorldInputBuffer
         return;
     }
 
-    CGS_ASSERT(miUserIndex >= KI_MIN_USER_INDEX, CGS_ASSERT_MESSAGE_AT("miUserIndex >= 0", CGS_ARTIST_FILE, 408));
-    CGS_ASSERT(miUserIndex <= KI_MAX_USER_INDEX, CGS_ASSERT_MESSAGE_AT("miUserIndex <= 3", CGS_ARTIST_FILE, 409));
+    CGS_ASSERT_AT(miUserIndex >= KI_MIN_USER_INDEX, "miUserIndex >= 0", CGS_ARTIST_FILE, 408);
+    CGS_ASSERT_AT(miUserIndex <= KI_MAX_USER_INDEX, "miUserIndex <= 3", CGS_ARTIST_FILE, 409);
 
     if (mOverLapped.IsOperationInProgress())
     {
@@ -259,8 +259,8 @@ bool AchievementManagerX360::GetAchievementsFromX360Api(GameStateModuleIO::Outpu
 {
     if (miState == KI_STATE_IDLE)
     {
-        CGS_ASSERT(miUserIndex >= KI_MIN_USER_INDEX, CGS_ASSERT_MESSAGE_AT("miUserIndex >= 0", CGS_ARTIST_FILE, 408));
-        CGS_ASSERT(miUserIndex <= KI_MAX_USER_INDEX, CGS_ASSERT_MESSAGE_AT("miUserIndex <= 3", CGS_ARTIST_FILE, 409));
+        CGS_ASSERT_AT(miUserIndex >= KI_MIN_USER_INDEX, "miUserIndex >= 0", CGS_ARTIST_FILE, 408);
+        CGS_ASSERT_AT(miUserIndex <= KI_MAX_USER_INDEX, "miUserIndex <= 3", CGS_ARTIST_FILE, 409);
 
         if (XUserCreateAchievementEnumerator(KU_ACHIEVEMENT_ENUMERATE_TITLE_ID, static_cast<u32>(miUserIndex),
                                              KU_ACHIEVEMENT_ENUMERATE_XUID,
@@ -278,13 +278,13 @@ bool AchievementManagerX360::GetAchievementsFromX360Api(GameStateModuleIO::Outpu
         if (luResult != KU_ERROR_SUCCESS && luResult != KU_ERROR_IO_PENDING)
         {
             // The console streams the failure code after this text.
-            CGS_ASSERT(false, "XEnumerate failed for reason: ");
+            CGS_FAIL("XEnumerate failed for reason: ");
         }
     }
     else if (miState != KI_STATE_ENUMERATING)
     {
-        CGS_ASSERT(false, "Achievement manager is confused!");
-        CGS_ASSERT(false, "The achievement manager logic is screwed up!");
+        CGS_FAIL("Achievement manager is confused!");
+        CGS_FAIL("The achievement manager logic is screwed up!");
         return false;
     }
 
@@ -307,8 +307,8 @@ bool AchievementManagerX360::GetAchievementsFromX360Api(GameStateModuleIO::Outpu
         return false;
     }
 
-    CGS_ASSERT(mAchievementsToWrite.GetFirstNonZeroBit() == CgsContainers::BitArray<KU_NUM_ACHIEVEMENTS>::KI_INVALID_BITINDEX,
-               CGS_ASSERT_MESSAGE_AT("mAchievementsToWrite.GetFirstNonZeroBit() == -1", "^h^<NULLSTRING>", 318));
+    CGS_ASSERT_AT(mAchievementsToWrite.GetFirstNonZeroBit() == CgsContainers::BitArray<KU_NUM_ACHIEVEMENTS>::KI_INVALID_BITINDEX,
+               "mAchievementsToWrite.GetFirstNonZeroBit() == -1", "^h^<NULLSTRING>", 318);
     mAchievementsToWrite.UnSetAll();
     mAchievementsEarnt.UnSetAll();
 
@@ -365,7 +365,7 @@ bool AchievementManagerX360::GetAchievementsFromX360Api(GameStateModuleIO::Outpu
 // ----------------------------------------------------------------------------
 void AchievementManagerX360::WriteAchievements(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(!mOverLapped.IsOperationInProgress(), CGS_ASSERT_MESSAGE_AT("!mOverLapped.IsOperationInProgress()", CGS_ARTIST_FILE, 453));
+    CGS_ASSERT_AT(!mOverLapped.IsOperationInProgress(), "!mOverLapped.IsOperationInProgress()", CGS_ARTIST_FILE, 453);
     mOverLapped.Construct();
 
     s32 liNumAchievements = 0;

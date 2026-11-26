@@ -14,11 +14,11 @@ namespace BrnGameState
 // then upper-bound), each with its own baked-in message string and source line (343 / 344).
 s32 BaseOnlineModeScoring::GetPlayerPosition(s32 liRaceCarIndex)
 {
-    CGS_ASSERT(liRaceCarIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liRaceCarIndex >= 0", CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 343 /* ARTIST 0x82310724 */));
-    CGS_ASSERT(liRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 344 /* ARTIST 0x82310748 */));
+    CGS_ASSERT_AT(liRaceCarIndex >= 0,
+        "liRaceCarIndex >= 0", CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 343 /* ARTIST 0x82310724 */);
+    CGS_ASSERT_AT(liRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS,
+        "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 344 /* ARTIST 0x82310748 */);
+
     return maiPlayerPositions[liRaceCarIndex];
 }
 
@@ -28,18 +28,18 @@ s32 BaseOnlineModeScoring::GetPlayerPosition(s32 liRaceCarIndex)
 // so the table write executes unconditionally even on a failed bound.
 void BaseOnlineModeScoring::SetPlayerPosition(s32 liRaceCarIndex, s32 liPlayerPosition)
 {
-    CGS_ASSERT(liRaceCarIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liRaceCarIndex >= 0", CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 356 /* ARTIST 0x823107A0 */));
-    CGS_ASSERT(liRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 357 /* ARTIST 0x823107C4 */));
-    CGS_ASSERT(liPlayerPosition >= 0,
-        CGS_ASSERT_MESSAGE_AT("liPlayerPosition >= 0", CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 359 /* ARTIST 0x823107E8 */));
-    CGS_ASSERT(liPlayerPosition < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CGS_ASSERT_MESSAGE_AT(
-            "liPlayerPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 360 /* ARTIST 0x8231080C */));
+    CGS_ASSERT_AT(liRaceCarIndex >= 0,
+        "liRaceCarIndex >= 0", CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 356 /* ARTIST 0x823107A0 */);
+    CGS_ASSERT_AT(liRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
+            CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 357 /* ARTIST 0x823107C4 */);
+
+    CGS_ASSERT_AT(liPlayerPosition >= 0,
+        "liPlayerPosition >= 0", CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 359 /* ARTIST 0x823107E8 */);
+    CGS_ASSERT_AT(liPlayerPosition < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "liPlayerPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
+            CGS_ARTIST_BRNBASEONLINEMODESCORING_FILE, 360 /* ARTIST 0x8231080C */);
+
 
     maiPlayerPositions[liRaceCarIndex] = liPlayerPosition;
 }
@@ -51,8 +51,8 @@ void BaseOnlineModeScoring::SetPlayerPosition(s32 liRaceCarIndex, s32 liPlayerPo
 GameStateModuleIO::EPlayerTeam
 BaseOnlineModeScoring::GetCurrentPlayerTeam(s32 liRaceCarIndex)
 {
-    CGS_ASSERT(liRaceCarIndex >= 0, CGS_ASSERT_MESSAGE_AT("liRaceCarIndex >= 0", CGS_ARTIST_FILE, 1010));
-    CGS_ASSERT(liRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS, CGS_ASSERT_MESSAGE_AT("liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 1011));
+    CGS_ASSERT_AT(liRaceCarIndex >= 0, "liRaceCarIndex >= 0", CGS_ARTIST_FILE, 1010);
+    CGS_ASSERT_AT(liRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 1011);
     return maePlayerTeams[liRaceCarIndex];
 }
 
@@ -125,7 +125,7 @@ void BaseOnlineModeScoring::WriteDataToOutput(OnlineScoringOutputInterface* lpOu
 // (.cpp line 1028) but never early-returns.
 void BaseOnlineModeScoring::CompareDistanceToFinish(f32 lfDistance1, f32 lfDistance2, s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL, CGS_ASSERT_MESSAGE_AT("lpiResult != NULL", CGS_ARTIST_FILE, 1028));
+    CGS_ASSERT_AT(lpiResult != NULL, "lpiResult != NULL", CGS_ARTIST_FILE, 1028);
 
     if (*lpiResult == 0)
     {
@@ -150,7 +150,7 @@ void BaseOnlineModeScoring::CompareNetworkPlayerID(BrnNetwork::NetworkPlayerID l
                                                    BrnNetwork::NetworkPlayerID lID2,
                                                    s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL, CGS_ASSERT_MESSAGE_AT("lpiResult != NULL", CGS_ARTIST_FILE, 1063));
+    CGS_ASSERT_AT(lpiResult != NULL, "lpiResult != NULL", CGS_ARTIST_FILE, 1063);
 
     if (*lpiResult == 0)
     {
@@ -178,9 +178,9 @@ void BaseOnlineModeScoring::CompareFinishTime(const CgsSystem::Time* lpTime1,
                                               const CgsSystem::Time* lpTime2,
                                               s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL, CGS_ASSERT_MESSAGE_AT("lpiResult != NULL", CGS_ARTIST_FILE, 1097));
-    CGS_ASSERT(lpTime1->GetFloatVal() > 0.0f, CGS_ASSERT_MESSAGE_AT("lpPlayer1FinishTime->GetFloatVal() > 0.0f", CGS_ARTIST_FILE, 1098));
-    CGS_ASSERT(lpTime2->GetFloatVal() > 0.0f, CGS_ASSERT_MESSAGE_AT("lpPlayer2FinishTime->GetFloatVal() > 0.0f", CGS_ARTIST_FILE, 1099));
+    CGS_ASSERT_AT(lpiResult != NULL, "lpiResult != NULL", CGS_ARTIST_FILE, 1097);
+    CGS_ASSERT_AT(lpTime1->GetFloatVal() > 0.0f, "lpPlayer1FinishTime->GetFloatVal() > 0.0f", CGS_ARTIST_FILE, 1098);
+    CGS_ASSERT_AT(lpTime2->GetFloatVal() > 0.0f, "lpPlayer2FinishTime->GetFloatVal() > 0.0f", CGS_ARTIST_FILE, 1099);
 
     if (*lpiResult == 0)
     {
@@ -208,8 +208,8 @@ void BaseOnlineModeScoring::CompareFinishTime(const CgsSystem::Time* lpTime1,
 void BaseOnlineModeScoring::CompareCheckpointsReached(s32 liCheckpoints1, s32 liCheckpoints2,
                                                       s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpiResult != NULL", CGS_ARTIST_FILE, 1134 /* ARTIST 0x82314950 */));
+    CGS_ASSERT_AT(lpiResult != NULL,
+        "lpiResult != NULL", CGS_ARTIST_FILE, 1134 /* ARTIST 0x82314950 */);
 
     if (*lpiResult == 0)
     {
@@ -229,8 +229,8 @@ void BaseOnlineModeScoring::CompareCheckpointsReached(s32 liCheckpoints1, s32 li
 // less/equal branch as CompareCheckpointsReached.
 void BaseOnlineModeScoring::CompareTakedowns(s32 liTakedowns1, s32 liTakedowns2, s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpiResult != NULL", CGS_ARTIST_FILE, 1168 /* ARTIST 0x823149D0 */));
+    CGS_ASSERT_AT(lpiResult != NULL,
+        "lpiResult != NULL", CGS_ARTIST_FILE, 1168 /* ARTIST 0x823149D0 */);
 
     if (*lpiResult == 0)
     {
@@ -253,8 +253,8 @@ void BaseOnlineModeScoring::CompareTakedowns(s32 liTakedowns1, s32 liTakedowns2,
 void BaseOnlineModeScoring::CompareTimeAsRunner(CgsSystem::Time lTime1, CgsSystem::Time lTime2,
                                                 s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpiResult != NULL", CGS_ARTIST_FILE, 1236 /* ARTIST 0x82314A50 */));
+    CGS_ASSERT_AT(lpiResult != NULL,
+        "lpiResult != NULL", CGS_ARTIST_FILE, 1236 /* ARTIST 0x82314A50 */);
 
     if (*lpiResult == 0)
     {
@@ -302,7 +302,7 @@ void BaseOnlineModeScoring::CompareTimeAsRunner(CgsSystem::Time lTime1, CgsSyste
 void BaseOnlineModeScoring::UpdatePlayerTeams(const ScoringSystem* lpScoringSystem,
                                               s32 /*liNumberOfCars*/)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, CGS_ASSERT_MESSAGE_AT("lpScoringSystem", CGS_ARTIST_FILE, 212));
+    CGS_ASSERT_AT(lpScoringSystem != NULL, "lpScoringSystem", CGS_ARTIST_FILE, 212);
 
     for (s32 liSlot = 0; liSlot < KI_MAX_ACTIVE_RACE_CARS; ++liSlot)
     {
@@ -401,10 +401,10 @@ void BaseOnlineModeScoring::AwardNetworkRatings(const ScoringSystem* lpScoringSy
         maOnlineAwards[liSlot] = E_ONLINE_AWARD_INVALID;
     }
 
-    CGS_ASSERT(lpScoringSystem != NULL, CGS_ASSERT_MESSAGE_AT("lpScoringSystem", CGS_ARTIST_FILE, 263));
+    CGS_ASSERT_AT(lpScoringSystem != NULL, "lpScoringSystem", CGS_ARTIST_FILE, 263);
 
     const s32 liNumActiveRaceCars = static_cast<s32>(lpScoringSystem->GetNumberOfActiveCars());
-    CGS_ASSERT(liNumActiveRaceCars > 0, CGS_ASSERT_MESSAGE_AT("liNumActiveRaceCars > 0", CGS_ARTIST_FILE, 268));
+    CGS_ASSERT_AT(liNumActiveRaceCars > 0, "liNumActiveRaceCars > 0", CGS_ARTIST_FILE, 268);
 
     if (liNumActiveRaceCars > 1)
     {
@@ -470,7 +470,7 @@ void BaseOnlineModeScoring::AwardNetworkRatings(const ScoringSystem* lpScoringSy
 // longest drift truncated to an integer. The other awards carry no parameter.
 s32 BaseOnlineModeScoring::GetAwardParameter(const NetworkAwardData* lpAwardData, EOnlineAwardID leAwardID)
 {
-    CGS_ASSERT(lpAwardData != NULL, CGS_ASSERT_MESSAGE_AT("lpAwardData", CGS_ARTIST_FILE, 339));
+    CGS_ASSERT_AT(lpAwardData != NULL, "lpAwardData", CGS_ARTIST_FILE, 339);
 
     switch (leAwardID)
     {
@@ -494,30 +494,30 @@ s32 BaseOnlineModeScoring::GetAwardParameter(const NetworkAwardData* lpAwardData
 // Ascending finishing position. Two cars never share a position.
 int BaseOnlineModeScoring::_RaceWinnerCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 392 /* ARTIST 0x823138AC */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 393 /* ARTIST 0x823138D0 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 392 /* ARTIST 0x823138AC */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 393 /* ARTIST 0x823138D0 */);
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
 
-    CGS_ASSERT(lpPlayer1->miRaceCarPosition >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer1->miRaceCarPosition >= 0",
-            CGS_ARTIST_FILE, 399 /* ARTIST 0x823138F8 */));
-    CGS_ASSERT(lpPlayer1->miRaceCarPosition < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer1->miRaceCarPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            CGS_ARTIST_FILE, 400 /* ARTIST 0x82313920 */));
-    CGS_ASSERT(lpPlayer2->miRaceCarPosition >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer2->miRaceCarPosition >= 0",
-            CGS_ARTIST_FILE, 401 /* ARTIST 0x82313948 */));
-    CGS_ASSERT(lpPlayer2->miRaceCarPosition < KI_MAX_ACTIVE_RACE_CARS,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer2->miRaceCarPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            CGS_ARTIST_FILE, 402 /* ARTIST 0x82313970 */));
+    CGS_ASSERT_AT(lpPlayer1->miRaceCarPosition >= 0,
+        "lpPlayer1->miRaceCarPosition >= 0",
+            CGS_ARTIST_FILE, 399 /* ARTIST 0x823138F8 */);
+
+    CGS_ASSERT_AT(lpPlayer1->miRaceCarPosition < KI_MAX_ACTIVE_RACE_CARS,
+        "lpPlayer1->miRaceCarPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
+            CGS_ARTIST_FILE, 400 /* ARTIST 0x82313920 */);
+
+    CGS_ASSERT_AT(lpPlayer2->miRaceCarPosition >= 0,
+        "lpPlayer2->miRaceCarPosition >= 0",
+            CGS_ARTIST_FILE, 401 /* ARTIST 0x82313948 */);
+
+    CGS_ASSERT_AT(lpPlayer2->miRaceCarPosition < KI_MAX_ACTIVE_RACE_CARS,
+        "lpPlayer2->miRaceCarPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
+            CGS_ARTIST_FILE, 402 /* ARTIST 0x82313970 */);
+
 
     if (lpPlayer1->miRaceCarPosition > lpPlayer2->miRaceCarPosition)
     {
@@ -528,30 +528,30 @@ int BaseOnlineModeScoring::_RaceWinnerCompare(const void* lpData1, const void* l
         return -1;
     }
 
-    CGS_ASSERT(lpPlayer1->miRaceCarPosition != lpPlayer2->miRaceCarPosition,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer1->miRaceCarPosition != lpPlayer2->miRaceCarPosition",
-            CGS_ARTIST_FILE, 415 /* ARTIST 0x823139C0 */));
+    CGS_ASSERT_AT(lpPlayer1->miRaceCarPosition != lpPlayer2->miRaceCarPosition,
+        "lpPlayer1->miRaceCarPosition != lpPlayer2->miRaceCarPosition",
+            CGS_ARTIST_FILE, 415 /* ARTIST 0x823139C0 */);
+
     return 0;
 }
 
 // Most takedowns first.
 int BaseOnlineModeScoring::_TakedownsForCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 433 /* ARTIST 0x82313A0C */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 434 /* ARTIST 0x82313A30 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 433 /* ARTIST 0x82313A0C */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 434 /* ARTIST 0x82313A30 */);
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
 
-    CGS_ASSERT(lpPlayer1->miTakedownsFor >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer1->miTakedownsFor >= 0", CGS_ARTIST_FILE, 439 /* ARTIST 0x82313A58 */));
-    CGS_ASSERT(lpPlayer2->miTakedownsFor >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer2->miTakedownsFor >= 0", CGS_ARTIST_FILE, 440 /* ARTIST 0x82313A80 */));
+    CGS_ASSERT_AT(lpPlayer1->miTakedownsFor >= 0,
+        "lpPlayer1->miTakedownsFor >= 0", CGS_ARTIST_FILE, 439 /* ARTIST 0x82313A58 */);
+
+    CGS_ASSERT_AT(lpPlayer2->miTakedownsFor >= 0,
+        "lpPlayer2->miTakedownsFor >= 0", CGS_ARTIST_FILE, 440 /* ARTIST 0x82313A80 */);
+
 
     if (lpPlayer1->miTakedownsFor > lpPlayer2->miTakedownsFor)
     {
@@ -563,20 +563,20 @@ int BaseOnlineModeScoring::_TakedownsForCompare(const void* lpData1, const void*
 // Most takedowns suffered first.
 int BaseOnlineModeScoring::_TakedownsAgainstCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 468 /* ARTIST 0x82313AF4 */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 469 /* ARTIST 0x82313B18 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 468 /* ARTIST 0x82313AF4 */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 469 /* ARTIST 0x82313B18 */);
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
 
-    CGS_ASSERT(lpPlayer1->miTakedownsAgainst >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer1->miTakedownsAgainst >= 0", CGS_ARTIST_FILE, 474 /* ARTIST 0x82313B40 */));
-    CGS_ASSERT(lpPlayer2->miTakedownsAgainst >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer2->miTakedownsAgainst >= 0", CGS_ARTIST_FILE, 475 /* ARTIST 0x82313B68 */));
+    CGS_ASSERT_AT(lpPlayer1->miTakedownsAgainst >= 0,
+        "lpPlayer1->miTakedownsAgainst >= 0", CGS_ARTIST_FILE, 474 /* ARTIST 0x82313B40 */);
+
+    CGS_ASSERT_AT(lpPlayer2->miTakedownsAgainst >= 0,
+        "lpPlayer2->miTakedownsAgainst >= 0", CGS_ARTIST_FILE, 475 /* ARTIST 0x82313B68 */);
+
 
     if (lpPlayer1->miTakedownsAgainst > lpPlayer2->miTakedownsAgainst)
     {
@@ -588,20 +588,20 @@ int BaseOnlineModeScoring::_TakedownsAgainstCompare(const void* lpData1, const v
 // Most crashes first.
 int BaseOnlineModeScoring::_MostCrashesCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 503 /* ARTIST 0x82313BDC */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 504 /* ARTIST 0x82313C00 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 503 /* ARTIST 0x82313BDC */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 504 /* ARTIST 0x82313C00 */);
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
 
-    CGS_ASSERT(lpPlayer1->miNumberOfCrashes >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer1->miNumberOfCrashes >= 0", CGS_ARTIST_FILE, 509 /* ARTIST 0x82313C28 */));
-    CGS_ASSERT(lpPlayer2->miNumberOfCrashes >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer2->miNumberOfCrashes >= 0", CGS_ARTIST_FILE, 510 /* ARTIST 0x82313C50 */));
+    CGS_ASSERT_AT(lpPlayer1->miNumberOfCrashes >= 0,
+        "lpPlayer1->miNumberOfCrashes >= 0", CGS_ARTIST_FILE, 509 /* ARTIST 0x82313C28 */);
+
+    CGS_ASSERT_AT(lpPlayer2->miNumberOfCrashes >= 0,
+        "lpPlayer2->miNumberOfCrashes >= 0", CGS_ARTIST_FILE, 510 /* ARTIST 0x82313C50 */);
+
 
     if (lpPlayer1->miNumberOfCrashes > lpPlayer2->miNumberOfCrashes)
     {
@@ -613,10 +613,10 @@ int BaseOnlineModeScoring::_MostCrashesCompare(const void* lpData1, const void* 
 // Shortest fastest-lap time first.
 int BaseOnlineModeScoring::_FastestLapCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 538 /* ARTIST 0x82313CC4 */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 539 /* ARTIST 0x82313CE8 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 538 /* ARTIST 0x82313CC4 */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 539 /* ARTIST 0x82313CE8 */);
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -631,10 +631,10 @@ int BaseOnlineModeScoring::_FastestLapCompare(const void* lpData1, const void* l
 // Cars whose distance is valid first, then the shortest distance driven.
 int BaseOnlineModeScoring::_ShortestDistanceLapCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 569 /* ARTIST 0x82313DF4 */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 570 /* ARTIST 0x82313E18 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 569 /* ARTIST 0x82313DF4 */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 570 /* ARTIST 0x82313E18 */);
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -656,20 +656,20 @@ int BaseOnlineModeScoring::_ShortestDistanceLapCompare(const void* lpData1, cons
         return 1;
     }
 
-    CGS_ASSERT(lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven",
-            CGS_ARTIST_FILE, 595 /* ARTIST 0x82313E84 */));
+    CGS_ASSERT_AT(lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven,
+        "lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven",
+            CGS_ARTIST_FILE, 595 /* ARTIST 0x82313E84 */);
+
     return 0;
 }
 
 // Cars whose distance is valid first, then the longest distance driven.
 int BaseOnlineModeScoring::_LongestDistanceLapCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 612 /* ARTIST 0x82313ED4 */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 613 /* ARTIST 0x82313EF8 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 612 /* ARTIST 0x82313ED4 */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 613 /* ARTIST 0x82313EF8 */);
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -691,20 +691,20 @@ int BaseOnlineModeScoring::_LongestDistanceLapCompare(const void* lpData1, const
         return 1;
     }
 
-    CGS_ASSERT(lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven",
-            CGS_ARTIST_FILE, 638 /* ARTIST 0x82313F64 */));
+    CGS_ASSERT_AT(lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven,
+        "lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven",
+            CGS_ARTIST_FILE, 638 /* ARTIST 0x82313F64 */);
+
     return 0;
 }
 
 // Longest time in first place first.
 int BaseOnlineModeScoring::_TimeInFirstPlaceCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 655 /* ARTIST 0x82313FB4 */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 656 /* ARTIST 0x82313FD8 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 655 /* ARTIST 0x82313FB4 */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 656 /* ARTIST 0x82313FD8 */);
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -719,10 +719,10 @@ int BaseOnlineModeScoring::_TimeInFirstPlaceCompare(const void* lpData1, const v
 // Longest time in last place first.
 int BaseOnlineModeScoring::_TimeInLastPlaceCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 686 /* ARTIST 0x823140CC */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 687 /* ARTIST 0x823140F0 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 686 /* ARTIST 0x823140CC */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 687 /* ARTIST 0x823140F0 */);
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -737,10 +737,10 @@ int BaseOnlineModeScoring::_TimeInLastPlaceCompare(const void* lpData1, const vo
 // Longest time boosting first.
 int BaseOnlineModeScoring::_MostTimeBoostingAwardCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 717 /* ARTIST 0x823141E4 */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 718 /* ARTIST 0x82314208 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 717 /* ARTIST 0x823141E4 */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 718 /* ARTIST 0x82314208 */);
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -756,10 +756,10 @@ int BaseOnlineModeScoring::_MostTimeBoostingAwardCompare(const void* lpData1, co
 // The matching give test and award parameter do use mfLongestDrift.
 int BaseOnlineModeScoring::_LongestDriftCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData1", CGS_ARTIST_FILE, 748 /* ARTIST 0x823142FC */));
-    CGS_ASSERT(lpData2 != NULL,
-        CGS_ASSERT_MESSAGE_AT("lpData2", CGS_ARTIST_FILE, 749 /* ARTIST 0x82314320 */));
+    CGS_ASSERT_AT(lpData1 != NULL,
+        "lpData1", CGS_ARTIST_FILE, 748 /* ARTIST 0x823142FC */);
+    CGS_ASSERT_AT(lpData2 != NULL,
+        "lpData2", CGS_ARTIST_FILE, 749 /* ARTIST 0x82314320 */);
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -777,11 +777,11 @@ int BaseOnlineModeScoring::_LongestDriftCompare(const void* lpData1, const void*
 bool BaseOnlineModeScoring::_GiveRaceWinnerAward(const NetworkAwardData* lpaNetworkAwardData,
                                                  s32 liNumberOfRaceCars)
 {
-    CGS_ASSERT(lpaNetworkAwardData[0].miRaceCarPosition < lpaNetworkAwardData[1].miRaceCarPosition ||
+    CGS_ASSERT_AT(lpaNetworkAwardData[0].miRaceCarPosition < lpaNetworkAwardData[1].miRaceCarPosition ||
                    liNumberOfRaceCars < 2,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpaNetworkAwardData[0].miRaceCarPosition < lpaNetworkAwardData[1].miRaceCarPosition || liNumberOfRaceCars < 2",
-            CGS_ARTIST_FILE, 779 /* ARTIST 0x82314394 */));
+        "lpaNetworkAwardData[0].miRaceCarPosition < lpaNetworkAwardData[1].miRaceCarPosition || liNumberOfRaceCars < 2",
+            CGS_ARTIST_FILE, 779 /* ARTIST 0x82314394 */);
+
     return true;
 }
 

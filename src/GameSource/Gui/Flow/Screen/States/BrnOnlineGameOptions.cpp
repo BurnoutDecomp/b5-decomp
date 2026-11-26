@@ -335,8 +335,8 @@ namespace BrnGui
     {
         // cpp:1920 -- non-fatal on the X360; the cache pointer is reloaded and used either
         // way (the assert only reports it).
-        CGS_ASSERT(mpGuiCache,
-            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 1920 /* ARTIST 0x82485C44 */));
+        CGS_ASSERT_AT(mpGuiCache,
+            "mpGuiCache", __FILE__, 1920 /* ARTIST 0x82485C44 */);
 
         return mpGuiCache->IsMultiplayerAllowed();
     }
@@ -399,9 +399,9 @@ namespace BrnGui
 
             default:
                 // cpp:1841 -- non-fatal; the X360 leaves the stored mode as it was.
-                CGS_ASSERT(false,
-                    CGS_ASSERT_MESSAGE_AT(
-                        "Invalid game mode option", __FILE__, 1841 /* ARTIST 0x82490DB8 */));
+                CGS_FAIL_AT(
+                    "Invalid game mode option", __FILE__, 1841 /* ARTIST 0x82490DB8 */);
+
                 break;
         }
     }
@@ -906,9 +906,9 @@ namespace BrnGui
                 // total -- and it is kept where the console put it.
                 // ARTIST passes the filename at 0x82060B60 and line 1387.
                 // Keep the original diagnostic location after folding the source.
-                CGS_ASSERT(liNumOptions <= KI_MAX_TOGGLE_OPTIONS,
-                           CGS_ASSERT_MESSAGE_AT("Too many options specified",
-                               CGS_ARTIST_FILE, 1387));
+                CGS_ASSERT_AT(liNumOptions <= KI_MAX_TOGGLE_OPTIONS,
+                           "Too many options specified",
+                               CGS_ARTIST_FILE, 1387);
 
                 ++liRowIndex;
                 leRowOption = maOptions.GetItem(static_cast<u32>(liRowIndex)).meOption;
@@ -984,7 +984,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptions::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 413 /* ARTIST 0x824A779C */));   // cpp:413 (non-fatal)
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 413 /* ARTIST 0x824A779C */);   // cpp:413 (non-fatal)
 
         switch (meSubState)
         {
@@ -1509,7 +1509,7 @@ namespace BrnGui
                         break;
 
                     default:
-                        CGS_ASSERT_AT(false, "Unknown game mode option", CGS_ARTIST_FILE, 1777);          // cpp:1777
+                        CGS_FAIL_AT("Unknown game mode option", CGS_ARTIST_FILE, 1777);          // cpp:1777
                         break;
                 }
             }
@@ -1615,7 +1615,7 @@ namespace BrnGui
                 // SetupGameModeOptions -- so the rows below are highlighted against
                 // whatever the group already holds.
                 lpeGameModeOptions = KAE_RACE_MODE_OPTIONS;
-                CGS_ASSERT_AT(false, "Invalid game mode option", CGS_ARTIST_FILE, 1496);                  // cpp:1496
+                CGS_FAIL_AT("Invalid game mode option", CGS_ARTIST_FILE, 1496);                  // cpp:1496
                 break;
         }
 
@@ -1683,7 +1683,7 @@ namespace BrnGui
                         break;
 
                     default:
-                        CGS_ASSERT_AT(false, "Unknown game mode option", CGS_ARTIST_FILE, 1611);          // cpp:1611
+                        CGS_FAIL_AT("Unknown game mode option", CGS_ARTIST_FILE, 1611);          // cpp:1611
                         break;
                 }
             }

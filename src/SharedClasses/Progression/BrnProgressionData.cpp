@@ -45,10 +45,10 @@ const EventJunction* ProgressionData::GetEventJunction(u32 luIndex) const
 // X360 0x823569F0. Bounds-checked accessor into the trophy-unlock table (16-byte stride).
 TrophyUnlockData* ProgressionData::GetTrophyUnlock(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < muTrophyUnlockCount,
-        CGS_ASSERT_MESSAGE_AT(
-            "luIndex < muTrophyUnlockCount",
-            BRN_PROGRESSION_ARTIST_HEADER, 302 /* ARTIST 0x82356A20 */));
+    CGS_ASSERT_AT(luIndex < muTrophyUnlockCount,
+        "luIndex < muTrophyUnlockCount",
+            BRN_PROGRESSION_ARTIST_HEADER, 302 /* ARTIST 0x82356A20 */);
+
     return &GetTrophyUnlocks()[luIndex];
 }
 

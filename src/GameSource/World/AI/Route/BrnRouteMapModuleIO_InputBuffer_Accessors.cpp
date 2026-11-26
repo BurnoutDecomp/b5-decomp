@@ -17,7 +17,7 @@ namespace RouteMapModuleIO
     // non-const getter: asserts the WRITE lock (status bit 3), reproduced verbatim.
     RaceRouteRequestQueue* InputBuffer::GetRaceRouteRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 583));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 583);
         return &mRaceRouteRequestQueue;
     }
 
@@ -25,7 +25,7 @@ namespace RouteMapModuleIO
     // non-const getter: asserts the WRITE lock (status bit 3), reproduced verbatim.
     ExtrapolatedRouteRequestQueue* InputBuffer::GetExtrapolatedRouteRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 597));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 597);
         return &mExtrapolatedRouteRequestQueue;
     }
 }

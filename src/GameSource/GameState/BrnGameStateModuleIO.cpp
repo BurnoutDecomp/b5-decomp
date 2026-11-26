@@ -93,14 +93,14 @@ void PreWorldInputBuffer::Destruct()
 // X360 0x823632F8 - read-lock accessor for the controller input (this+0x34).
 const ControllerInput* PreWorldInputBuffer::GetControllerInput() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 377));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 377);
     return &mControllerInput;
 }
 
 // X360 0x8231CE28 - read-lock accessor for the timer-status payload (this+0x04).
 const TimerStatusInterface* PreWorldInputBuffer::GetTimerStatusInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 133));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 133);
     return &mTimerStatusInterface;
 }
 
@@ -108,7 +108,7 @@ const TimerStatusInterface* PreWorldInputBuffer::GetTimerStatusInterface() const
 // TimerStatusInterface::operator= as the field-by-field copy of both blocks.
 void PreWorldInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lpSource)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 135));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 135);
     mTimerStatusInterface = *lpSource;
 }
 
@@ -164,7 +164,7 @@ void PreWorldInputBuffer::SetButtonPressed(const ControllerActionSource* lpActio
 void PreWorldInputBuffer::SetPlayerStatusInterface(
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpSource)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 147));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 147);
     mPlayerStatusInterface = *lpSource;
 }
 
@@ -172,14 +172,14 @@ void PreWorldInputBuffer::SetPlayerStatusInterface(
 // Forwards to the committed BrnNetwork PlayerResultsInterface::operator= (X360 0x823B8F68).
 void PreWorldInputBuffer::SetNetworkPlayerResultsInterface(const NetworkPlayerResultsInterface* lpSource)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 150));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 150);
     mNetworkPlayerResultsInterface = *lpSource;
 }
 
 // X360 0x8231CD80 - read-lock accessor for the buffered game-event queue (this+0x4C).
 const GameEventQueue* PreWorldInputBuffer::GetGameEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 130));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 130);
     // [gateui] `&member`, not a reinterpret_cast over a u8 seat -- the seat is the real type now.
     return &mGameEventQueue;
 }
@@ -187,35 +187,35 @@ const GameEventQueue* PreWorldInputBuffer::GetGameEventQueue() const
 // X360 0x823B8C60 - write-lock (mutable) accessor for the game-event queue (this+0x4C).
 GameEventQueue* PreWorldInputBuffer::GetGameEventQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 131));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 131);
     return &mGameEventQueue;
 }
 
 // X360 0x823B8E18 - write-lock accessor for the takedown-event input queue (this+0x660).
 TakedownEventInputQueueType* PreWorldInputBuffer::GetTakedownEventInputQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 138));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 138);
     return &mTakedownEventInputQueue;
 }
 
 // X360 0x82362778 - read-lock accessor for the takedown-event input queue (this+0x660).
 const TakedownEventInputQueueType* PreWorldInputBuffer::GetTakedownEventInputQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 137));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 137);
     return &mTakedownEventInputQueue;
 }
 
 // X360 0x8231D020 - read-lock accessor for the network player-results interface (this+0x36B8).
 const NetworkPlayerResultsInterface* PreWorldInputBuffer::GetNetworkPlayerResultsInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 149));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 149);
     return &mNetworkPlayerResultsInterface;
 }
 
 // X360 0x8231CED0 - read-lock accessor for the network-to-game-state input interface (this+0x7B0).
 const NetworkToGameStateInterface* PreWorldInputBuffer::GetNetworkToGameStateInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 140));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 140);
     return &mNetworkToGameStateInterface;
 }
 
@@ -231,7 +231,7 @@ const NetworkToGameStateInterface* PreWorldInputBuffer::GetNetworkToGameStateInt
 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface*
 PreWorldInputBuffer::GetPlayerStatusInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 146));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 146);
     return &mPlayerStatusInterface;
 }
 
@@ -241,9 +241,9 @@ PreWorldInputBuffer::GetPlayerStatusInterface() const
 // "lpPreWorldInputBuffer->GetControllerToGameStateInterface()".
 const ControllerToGameStateInterface* PreWorldInputBuffer::GetControllerToGameStateInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
         "Not locked for reading\n",
-        CGS_ARTIST_FILE, 143));
+        CGS_ARTIST_FILE, 143);
     return &mControllerToGameStateInterface;
 }
 
@@ -251,7 +251,7 @@ const ControllerToGameStateInterface* PreWorldInputBuffer::GetControllerToGameSt
 // The assertion continues to the same canonical interface on failure.
 ControllerToGameStateInterface* PreWorldInputBuffer::GetControllerToGameStateInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 144));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 144);
     return &mControllerToGameStateInterface;
 }
 
@@ -310,21 +310,21 @@ void PostWorldInputBuffer::Destruct()
 // X360 0x8231D218 - read-lock accessor for the vehicle output interface (this+0x220).
 const VehicleOutputInterface* PostWorldInputBuffer::GetVehicleOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 201));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 201);
     return &mVehicleOutputInterface;
 }
 
 // X360 0x823B9300 - write-lock accessor for the vehicle output interface (this+0x220).
 VehicleOutputInterface* PostWorldInputBuffer::GetVehicleOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 202));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 202);
     return &mVehicleOutputInterface;
 }
 
 // X360 0x8231D0C8 - read-lock accessor for the game-event queue (this+0xA4B0).
 const GameEventQueue* PostWorldInputBuffer::GetGameEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 195));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 195);
     // [gateui] `&member`, not a reinterpret_cast over a u8 seat -- the seat is the real type now.
     // This is the queue owner `bridge`'s BridgeWorldToGameState @0x823E5368 Appends the world's
     // per-frame game events into, and the one GameStateModule::PostWorldUpdate @0x8238F358 drains
@@ -335,7 +335,7 @@ const GameEventQueue* PostWorldInputBuffer::GetGameEventQueue() const
 // X360 0x823B91B0 - write-lock accessor for the game-event queue (this+0xA4B0).
 GameEventQueue* PostWorldInputBuffer::GetGameEventQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 196));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 196);
     return &mGameEventQueue;
 }
 
@@ -343,7 +343,7 @@ GameEventQueue* PostWorldInputBuffer::GetGameEventQueue()
 const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
 PostWorldInputBuffer::GetActiveRaceCarOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 210));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 210);
     return &mActiveRaceCarOutputInterface;
 }
 
@@ -357,7 +357,7 @@ PostWorldInputBuffer::RCEntityActiveRaceCarOutputInterface* PostWorldInputBuffer
 // X360 0x8231D410 - read-lock accessor for the AI-car output interface (this+0xAAC0).
 const AICarOutputInterface* PostWorldInputBuffer::GetAICarOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 216));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 216);
     return &mAICarOutputInterface;
 }
 
@@ -365,7 +365,7 @@ const AICarOutputInterface* PostWorldInputBuffer::GetAICarOutputInterface() cons
 // Non-const twin of GetAICarOutputInterface() const.
 AICarOutputInterface* PostWorldInputBuffer::GetAICarOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 217));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 217);
     return &mAICarOutputInterface;
 }
 
@@ -373,7 +373,7 @@ AICarOutputInterface* PostWorldInputBuffer::GetAICarOutputInterface()
 // (+0xBFA8) with the queue's own Append.
 void PostWorldInputBuffer::AppendTrafficTypeResponseQueue(const TrafficTypeResponseQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 220));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 220);
     mTrafficTypeResponseQueue.Append(*lpQueue);
 }
 
@@ -387,7 +387,7 @@ const PostWorldInputBuffer::TrafficTypeResponseQueue* PostWorldInputBuffer::GetT
 // X360 0x8231D170 - read-lock accessor for the race-car crash-event queue (this+0x10).
 const RaceCarCrashEventQueue* PostWorldInputBuffer::GetRaceCarCrashEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 198));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 198);
     return &mRaceCarCrashEventQueue;
 }
 
@@ -401,7 +401,7 @@ RaceCarCrashEventQueue* PostWorldInputBuffer::GetRaceCarCrashEventQueue()
 // X360 0x82362A30 - read-lock accessor for the trigger-entity-module output interface (this+0x6E34).
 const TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntityOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 207));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 207);
     return &mTriggerEntityOutputInterface;
 }
 
@@ -409,7 +409,7 @@ const TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntity
 // interface (this+0x6E34).
 TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntityOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 208));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 208);
     return &mTriggerEntityOutputInterface;
 }
 
@@ -431,7 +431,7 @@ PostWorldInputBuffer::ContactSpyInterface* PostWorldInputBuffer::GetContactSpyIn
 // X360 0x8231D368 (streamed read-lock assert at BrnGameStateModuleIO.h:213).
 const PostWorldInputBuffer::RCEntityGlobalRaceCarOutputInterface* PostWorldInputBuffer::GetGlobalRaceCarOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 213));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 213);
     return &mGlobalRaceCarOutputInterface;
 }
 
@@ -656,7 +656,7 @@ void OutputBuffer::Destruct()
 // X360 0x8231D4B8 - write-lock accessor for the game-action queue (this+0x04).
 GameActionQueue* OutputBuffer::GetGameActionQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 266));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 266);
     return reinterpret_cast<GameActionQueue*>(&mGameActionQueueStorage);
 }
 
@@ -664,7 +664,7 @@ GameActionQueue* OutputBuffer::GetGameActionQueue()
 // queue (this+0x04); assert __FILE__/__LINE__ = BrnGameStateModuleIO.h:265.
 const GameActionQueue* OutputBuffer::GetGameActionQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 265));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 265);
     return reinterpret_cast<const GameActionQueue*>(&mGameActionQueueStorage);
 }
 
@@ -672,21 +672,21 @@ const GameActionQueue* OutputBuffer::GetGameActionQueue() const
 // output queue (this+0x4040); assert __FILE__/__LINE__ = BrnGameStateModuleIO.h:271.
 const TakedownEventOutputQueueType* OutputBuffer::GetTakedownEventOutputQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 271));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 271);
     return &mTakedownEventOutputQueue;
 }
 
 // X360 0x823B9798 - read-lock accessor for the resource-request interface (this+0x3414).
 const ResourceRequestInterface* OutputBuffer::GetResourceRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 268));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 268);
     return reinterpret_cast<const ResourceRequestInterface*>(&mResourceRequestInterfaceStorage);
 }
 
 // X360 0x82362B80 - write-lock accessor for the takedown-event output queue (this+0x4040).
 TakedownEventOutputQueueType* OutputBuffer::GetTakedownEventOutputQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 272));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 272);
     return &mTakedownEventOutputQueue;
 }
 
@@ -739,7 +739,7 @@ const BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* OutputBuffer:
 // X360 0x8231D8A8 - write-lock accessor for the game-state-to-GUI interface (this+0x4450).
 GameStateToGuiInterface* OutputBuffer::GetGameStateToGuiInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 296));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 296);
     return &mGameStateToGuiInterface;
 }
 
@@ -747,14 +747,14 @@ GameStateToGuiInterface* OutputBuffer::GetGameStateToGuiInterface()
 // == 17488). class:BrnGameState catch-all TU; BridgeGameStateToGui reads it under a read lock.
 const GameStateToGuiInterface* OutputBuffer::GetGameStateToGuiInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 295));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 295);
     return &mGameStateToGuiInterface;
 }
 
 // X360 0x823630F0 - write-lock accessor for the race-car race-distance interface (this+0x2A48C).
 RaceCarRaceDistanceInterface* OutputBuffer::GetRaceCarRaceDistanceInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 311));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 311);
     return reinterpret_cast<RaceCarRaceDistanceInterface*>(&mRaceCarRaceDistanceInterfaceStorage);
 }
 
@@ -774,7 +774,7 @@ GameStateToControllerInterface* OutputBuffer::GetGameStateToControllerInterface(
 // X360 0x823B9AE0 - read-lock accessor for the trigger-management input interface (this+0x9050).
 const TriggerManagementInputInterface* OutputBuffer::GetTriggerManagementInputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 283));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 283);
     return &mTriggerManagementInputInterface;
 }
 
@@ -782,7 +782,7 @@ const TriggerManagementInputInterface* OutputBuffer::GetTriggerManagementInputIn
 // (this+0x9050).
 TriggerManagementInputInterface* OutputBuffer::GetTriggerManagementInputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 284));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 284);
     return &mTriggerManagementInputInterface;
 }
 
@@ -812,7 +812,7 @@ const TriggerQueryInputInterface* OutputBuffer::GetTriggerQueryInputInterface() 
 // race-distance interface (this+173196); const twin of the 0x823630F0 write-side accessor.
 const RaceCarRaceDistanceInterface* OutputBuffer::GetRaceCarRaceDistanceInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 310));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 310);
     return reinterpret_cast<const RaceCarRaceDistanceInterface*>(&mRaceCarRaceDistanceInterfaceStorage);
 }
 
@@ -903,34 +903,34 @@ GameModeOutputInterface* OutputBuffer::GetGameModeOutputInterface()
 // X360 0x8231D560 - write-lock accessor for the resource-request interface (this+0x3414).
 ResourceRequestInterface* OutputBuffer::GetResourceRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 269));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 269);
     return reinterpret_cast<ResourceRequestInterface*>(&mResourceRequestInterfaceStorage);
 }
 
 // X360 0x8231D608 - write-lock accessor for the timer-request interface (this+16420).
 OutputBufferTimerRequestInterface* OutputBuffer::GetTimerRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
         "Not locked for writing\n",
-        CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 275));
+        CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 275);
     return &mTimerRequestInterface;
 }
 
 // X360 0x823B98E8 - read-lock accessor for the timer-request interface (this+16420).
 const OutputBufferTimerRequestInterface* OutputBuffer::GetTimerRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
         "Not locked for reading\n",
-        CGS_ARTIST_FILE, 274));
+        CGS_ARTIST_FILE, 274);
     return &mTimerRequestInterface;
 }
 
 // X360 0x8231D6B0 - write-lock accessor for the frame-rate-type request interface (this+16436).
 OutputBufferFrameRateTypeReqInterface* OutputBuffer::GetFrameRateTypeRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
         "Not locked for writing\n",
-        CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 278));
+        CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 278);
     return &mFrameRateTypeRequestInterface;
 }
 
@@ -950,35 +950,35 @@ const OutputBufferFrameRateTypeReqInterface* OutputBuffer::GetFrameRateTypeReque
 // X360 0x82362C28 - write-lock accessor for the GUI event queue (this+18496).
 OutputBufferGuiEventQueue* OutputBuffer::GetGuiEventQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 281));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 281);
     return &mGuiEventQueue;
 }
 
 // X360 0x823B9A38 - read-lock accessor for the GUI event queue (this+18496).
 const OutputBufferGuiEventQueue* OutputBuffer::GetGuiEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 280));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 280);
     return &mGuiEventQueue;
 }
 
 // X360 0x823B9E28 - read-lock getter for meActivePaybackType (this+173180).
 BrnNetwork::EPaybackType OutputBuffer::GetActivePaybackType() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 298));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 298);
     return meActivePaybackType;
 }
 
 // X360 0x82362E20 - write-lock setter for meActivePaybackType (this+173180).
 void OutputBuffer::SetActivePaybackType(BrnNetwork::EPaybackType lePaybackType)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 299));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 299);
     meActivePaybackType = lePaybackType;
 }
 
 // X360 0x823B9ED8 - read-lock getter for meActivePaybackAggressor (this+173184).
 ::EActiveRaceCarIndex OutputBuffer::GetActivePaybackAggressor() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 301));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 301);
     return meActivePaybackAggressor;
 }
 
@@ -986,7 +986,7 @@ void OutputBuffer::SetActivePaybackType(BrnNetwork::EPaybackType lePaybackType)
 // (Verifier fix: was CGS_ASSERT_W, an undefined macro -> explicit Begin/Fire/End.)
 void OutputBuffer::SetActivePaybackAggressor(::EActiveRaceCarIndex leAggressor)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 302));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 302);
     meActivePaybackAggressor = leAggressor;
 }
 
@@ -994,14 +994,14 @@ void OutputBuffer::SetActivePaybackAggressor(::EActiveRaceCarIndex leAggressor)
 // (Verifier fix: was CGS_ASSERT_W -> explicit Begin/Fire/End.)
 void OutputBuffer::SetGameModeElapsedTime(const CgsSystem::Time* lpTime)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 305));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 305);
     mGameModeElapsedTime = *lpTime;
 }
 
 // X360 0x823B9F88 - read-lock getter for mbControllerActive (this+192490).
 bool OutputBuffer::GetControllerActive() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 307));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 307);
     return mbControllerActive;
 }
 
@@ -1009,14 +1009,14 @@ bool OutputBuffer::GetControllerActive() const
 // (Verifier fix: was CGS_ASSERT_W -> explicit Begin/Fire/End.)
 void OutputBuffer::SetControllerActive(bool lbActive)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 308));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 308);
     mbControllerActive = lbActive;
 }
 
 // X360 0x823BA0E0 - read-lock getter for mbSetUpAllEventStartsInterfaceIsValid (this+192488).
 bool OutputBuffer::GetSetUpAllEventStartsInterfaceIsValid() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 328));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 328);
     return mbSetUpAllEventStartsInterfaceIsValid;
 }
 
@@ -1024,7 +1024,7 @@ bool OutputBuffer::GetSetUpAllEventStartsInterfaceIsValid() const
 // (Verifier fix: was CGS_ASSERT_W -> explicit Begin/Fire/End.)
 void OutputBuffer::SetSetUpAllEventStartsInterfaceIsValid(bool lbValid)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 329));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 329);
     mbSetUpAllEventStartsInterfaceIsValid = lbValid;
 }
 
@@ -1063,7 +1063,7 @@ const SpecificGameModeEventInterface& OutputBuffer::GetSpecificGameModeEventInte
 // X360 0x823BA190 - read-lock getter for mbSpecificGameModeEventInterfaceIsValid (this+192489).
 bool OutputBuffer::GetSpecificGameModeEventInterfaceIsValid() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 334));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 334);
     return mbSpecificGameModeEventInterfaceIsValid;
 }
 
@@ -1071,7 +1071,7 @@ bool OutputBuffer::GetSpecificGameModeEventInterfaceIsValid() const
 // (Verifier fix: was CGS_ASSERT_W -> explicit Begin/Fire/End.)
 void OutputBuffer::SetSpecificGameModeEventInterfaceIsValid(bool lbValid)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 335));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 335);
     mbSpecificGameModeEventInterfaceIsValid = lbValid;
 }
 

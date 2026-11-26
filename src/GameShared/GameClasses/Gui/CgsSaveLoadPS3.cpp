@@ -232,10 +232,10 @@ void SaveLoadSystem::ShowAutosaveIcon(bool visible)
 // 8284C730
 void SaveLoadSystem::HandleOption(u32 option)
 {
-    CGS_ASSERT(mMessageDisplayOptionFunc != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "mpMessageDisplayOptionFunc != 0",
-            "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp", 843 /* ARTIST 0x8284C760 */));
+    CGS_ASSERT_AT(mMessageDisplayOptionFunc != 0,
+        "mpMessageDisplayOptionFunc != 0",
+            "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp", 843 /* ARTIST 0x8284C760 */);
+
     mpMessageDisplay->HideMessage();
     void (SaveLoadSystem::*callback)(u32) = mMessageDisplayOptionFunc;
     mMessageDisplayOptionFunc = 0;
@@ -315,7 +315,7 @@ void SaveLoadSystem::SaveDone(u32 result, u32, const char*)
         mpMessageDisplay->ShowMessage(this, "SAVELOAD_RETRY_BOOT", options, 2);
     }
     else
-        CGS_ASSERT(false, "Should not get here");
+        CGS_FAIL("Should not get here");
 }
 // Folded bodies in table820CF148, not synthesized defaults.
 void SaveLoadSystem::SaveCheckDone(u32, u32, u32, u32, const int*, s32) {} // 8284CB38
@@ -324,7 +324,7 @@ void SaveLoadSystem::Callback3C(u32, u32, const void*) {}               // 8284C
 void SaveLoadSystem::SetActiveCardDone(u32, u32) {}                    // 8284CB38
 void SaveLoadSystem::ClearEntries()                                  // 8284CB40
 {
-    CGS_ASSERT(false, "ClearEntries called");
+    CGS_FAIL("ClearEntries called");
 }
 void SaveLoadSystem::LoadImageFiles(SaveLoadTaskResultHandler* /*lpResultHandler*/,
                                         const void* /*lpMetadata*/, s32 liNumberOfImageFiles,
@@ -371,7 +371,7 @@ u32 SaveLoadSystem::MessageChoiceForOptionIndex(u32 luOptionIndex)
         case 2: return 3;
         case 3: return 4;
         default:
-            CGS_ASSERT(false, "SaveLoad: unexpected option index: ");
+            CGS_FAIL("SaveLoad: unexpected option index: ");
             return 0;
         }
     }
@@ -381,22 +381,22 @@ void* SaveLoadSystem::GetMugshotBufferFromImageId(s32 liImageId)
         const s32 liType  = liImageId / 1000;
         const s32 liTypeIndex = liImageId % 1000;
 
-        CGS_ASSERT(liType < miNumberOfMugshotTypes,
-            CGS_ASSERT_MESSAGE_AT(
-                "liType < miNumberOfMugshotTypes",
-                __FILE__, 1153 /* ARTIST 0x8284C964 */));
-        CGS_ASSERT(liTypeIndex < miNumberOfMugshotsPerType,
-            CGS_ASSERT_MESSAGE_AT(
-                "liIndex < miNumberOfMugshotsPerType",
-                __FILE__, 1154 /* ARTIST 0x8284C98C */));
+        CGS_ASSERT_AT(liType < miNumberOfMugshotTypes,
+            "liType < miNumberOfMugshotTypes",
+                __FILE__, 1153 /* ARTIST 0x8284C964 */);
+
+        CGS_ASSERT_AT(liTypeIndex < miNumberOfMugshotsPerType,
+            "liIndex < miNumberOfMugshotsPerType",
+                __FILE__, 1154 /* ARTIST 0x8284C98C */);
+
 
         const s32 liIndex = miNumberOfMugshotsPerType * liType + liTypeIndex;
-        CGS_ASSERT(0 <= liIndex,
-            CGS_ASSERT_MESSAGE_AT("0 <= liIndex", __FILE__, 1160 /* ARTIST 0x8284C9BC */));
-        CGS_ASSERT(liIndex <= miNumberOfMugshotTypes * miNumberOfMugshotsPerType,
-            CGS_ASSERT_MESSAGE_AT(
-                "liIndex <= miNumberOfMugshotTypes * miNumberOfMugshotsPerType",
-                __FILE__, 1161 /* ARTIST 0x8284C9EC */));
+        CGS_ASSERT_AT(0 <= liIndex,
+            "0 <= liIndex", __FILE__, 1160 /* ARTIST 0x8284C9BC */);
+        CGS_ASSERT_AT(liIndex <= miNumberOfMugshotTypes * miNumberOfMugshotsPerType,
+            "liIndex <= miNumberOfMugshotTypes * miNumberOfMugshotsPerType",
+                __FILE__, 1161 /* ARTIST 0x8284C9EC */);
+
 
         return reinterpret_cast<u8*>(mpMugshotBufferData) + miExtraFilesSizeBytes * liIndex;
     }

@@ -82,21 +82,21 @@ namespace BrnNetwork
         CgsNetwork::ServerInterfaceUsersets* lpUsersets =
             reinterpret_cast<CgsNetwork::ServerInterfaceUsersets*>(lpServerInterface->GetUsersetsComponent());
 
-        CGS_ASSERT(lpGames, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpGames,
             "lpGames",
-            __FILE__, 226 /* ARTIST 0x825668C8 */));
-        CGS_ASSERT(lpUsersets, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 226 /* ARTIST 0x825668C8 */);
+        CGS_ASSERT_AT(lpUsersets,
             "lpUsersets",
-            __FILE__, 227 /* ARTIST 0x825668EC */));
+            __FILE__, 227 /* ARTIST 0x825668EC */);
 
         // Fetch the target player's lobby parameters (fills the name we kick by).
         PlayerParams lPlayerParams;
         lPlayerParams.Prepare();
         lpGames->GetPlayerParametersByPlayerID(liPlayerID, &lPlayerParams);
 
-        CGS_ASSERT(lpGames->IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpGames->IsLocalPlayerInGame(),
             "Natting when not in a game or a userset!",
-            __FILE__, 232 /* ARTIST 0x82566934 */));
+            __FILE__, 232 /* ARTIST 0x82566934 */);
 
         if (lpGames->IsLocalPlayerInGame())
         {

@@ -118,7 +118,7 @@ namespace CgsContainers
         }
         else
         {
-            CGS_ASSERT(false, "Node not found");
+            CGS_FAIL("Node not found");
         }
     }
 }

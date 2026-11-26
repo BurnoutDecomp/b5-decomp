@@ -139,14 +139,14 @@ namespace BrnNetwork
     // literal 9, even though the rodata names E_PLAYER_TEAM_COUNT).
     BrnGameState::GameStateModuleIO::EPlayerTeam PlayerParamsBase::GetPlayerTeam() const
     {
-        CGS_ASSERT(mData.mi8PlayerTeam >= 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mData.mi8PlayerTeam >= GsmIO::E_PLAYER_TEAM_NONE",
-                __FILE__, 204 /* ARTIST 0x82541BD4 */));
-        CGS_ASSERT(mData.mi8PlayerTeam < 9,
-            CGS_ASSERT_MESSAGE_AT(
-                "mData.mi8PlayerTeam < GsmIO::E_PLAYER_TEAM_COUNT",
-                __FILE__, 205 /* ARTIST 0x82541C00 */));
+        CGS_ASSERT_AT(mData.mi8PlayerTeam >= 0,
+            "mData.mi8PlayerTeam >= GsmIO::E_PLAYER_TEAM_NONE",
+                __FILE__, 204 /* ARTIST 0x82541BD4 */);
+
+        CGS_ASSERT_AT(mData.mi8PlayerTeam < 9,
+            "mData.mi8PlayerTeam < GsmIO::E_PLAYER_TEAM_COUNT",
+                __FILE__, 205 /* ARTIST 0x82541C00 */);
+
         return static_cast<BrnGameState::GameStateModuleIO::EPlayerTeam>(mData.mi8PlayerTeam);
     }
 
@@ -165,7 +165,7 @@ namespace BrnNetwork
             }
             else if (leFrameRate != CgsSystem::E_FRAMERATE_60HZ)
             {
-                CGS_ASSERT(false, "Invalid frame rate ");
+                CGS_FAIL("Invalid frame rate ");
             }
         }
     }

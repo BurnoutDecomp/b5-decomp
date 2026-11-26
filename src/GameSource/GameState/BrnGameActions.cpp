@@ -69,10 +69,10 @@ bool SoundTriggerAction::IsEmpty()
 // X360 0x8230FE98. Range-checked setter for the disconnected player's active-race-car slot.
 void RemotePlayerDisconnectedAction::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
-    CGS_ASSERT((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-        CGS_ASSERT_MESSAGE_AT(
-            "( leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )",
-            CGS_ARTIST_FILE, 6360 /* ARTIST 0x8230FECC */));
+    CGS_ASSERT_AT((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+        "( leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )",
+            CGS_ARTIST_FILE, 6360 /* ARTIST 0x8230FECC */);
+
 
     meActiveRaceCarIndex = leActiveRaceCarIndex;
 }
@@ -80,10 +80,10 @@ void RemotePlayerDisconnectedAction::SetActiveRaceCarIndex(EActiveRaceCarIndex l
 // X360 0x8230FF00. Store the disconnected player's network id (must not be the invalid sentinel).
 void RemotePlayerDisconnectedAction::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lPlayerID)
 {
-    CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CGS_ASSERT_MESSAGE_AT(
-            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            CGS_ARTIST_FILE, 6374 /* ARTIST 0x8230FF2C */));
+    CGS_ASSERT_AT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+        "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            CGS_ARTIST_FILE, 6374 /* ARTIST 0x8230FF2C */);
+
 
     mPlayerID = lPlayerID;
 }
@@ -98,9 +98,9 @@ void SetupNetworkCarAction::Construct(EPlayerScoringIndex lePlayerScoringIndex,
                                       CgsID               lWheelModelId,
                                       f32                 lfBaseDeformationAmount)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 783));
-    CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 784));
-    CGS_ASSERT(lModelId != 0, CGS_ASSERT_MESSAGE_AT("lModelId != kCGSID_NULL", CGS_ARTIST_FILE, 785));
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 783);
+    CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 784);
+    CGS_ASSERT_AT(lModelId != 0, "lModelId != kCGSID_NULL", CGS_ARTIST_FILE, 785);
 
     mfBaseDeformationAmount = lfBaseDeformationAmount;   // stfs f31, 0x38(r31) @0x82355140
     mWorldSpacePosition  = lPos;
@@ -115,12 +115,12 @@ void SetupNetworkCarAction::Construct(EPlayerScoringIndex lePlayerScoringIndex,
 // X360 0x823551F0. Bounds-checked setter for the added player's scoring slot.
 void OnlinePlayerAddedAction::SetPlayerScoringIndex(EPlayerScoringIndex lePlayerScoringIndex)
 {
-    CGS_ASSERT(
+    CGS_ASSERT_AT(
         (lePlayerScoringIndex >= E_PLAYER_SCORING_INDEX_0) &&
         (lePlayerScoringIndex <  E_PLAYER_SCORING_INDEX_COUNT),
-        CGS_ASSERT_MESSAGE_AT(
-            "(lePlayerScoringIndex >= E_PLAYER_SCORING_INDEX_0) && (lePlayerScoringIndex < E_PLAYER_SCORING_INDEX_COUNT)",
-            CGS_ARTIST_FILE, 6390 /* ARTIST 0x82355224 */));
+        "(lePlayerScoringIndex >= E_PLAYER_SCORING_INDEX_0) && (lePlayerScoringIndex < E_PLAYER_SCORING_INDEX_COUNT)",
+            CGS_ARTIST_FILE, 6390 /* ARTIST 0x82355224 */);
+
 
     mePlayerScoringIndex = lePlayerScoringIndex;
 }
@@ -142,12 +142,12 @@ void OnlinePlayerRemovedAction::SetActiveRaceCarIndex(EActiveRaceCarIndex leActi
 void RankInfoResponseAction::SetProgressionRanks(s32 liPlayerRank, s32 liRankCount, s32 liOfflineRace,
                                                  s32 liRoadRage, s32 liStuntAttack, s32 liMarkedMan)
 {
-    CGS_ASSERT(liPlayerRank < liRankCount,
-        CGS_ASSERT_MESSAGE_AT(
-            "liPlayerRank < liRankCount", CGS_ARTIST_FILE, 6879 /* ARTIST 0x823554EC */));
-    CGS_ASSERT(liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK,
-        CGS_ASSERT_MESSAGE_AT(
-            "liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK", CGS_ARTIST_FILE, 6880 /* ARTIST 0x82355510 */));
+    CGS_ASSERT_AT(liPlayerRank < liRankCount,
+        "liPlayerRank < liRankCount", CGS_ARTIST_FILE, 6879 /* ARTIST 0x823554EC */);
+
+    CGS_ASSERT_AT(liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK,
+        "liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK", CGS_ARTIST_FILE, 6880 /* ARTIST 0x82355510 */);
+
 
     miPlayerRank  = liPlayerRank;
     miOfflineRace = liOfflineRace;
@@ -182,8 +182,8 @@ void PrepareForModeAction::Construct(const GameModeParams* lpGameModeParams,
                                      s32                    liCurrentRound,
                                      bool                   lbComingFromOnlineLobbyMode)
 {
-    CGS_ASSERT(lpGameModeParams,
-        CGS_ASSERT_MESSAGE_AT("lpGameModeParams", CGS_ARTIST_FILE, 1183 /* ARTIST 0x8230FE1C */));
+    CGS_ASSERT_AT(lpGameModeParams,
+        "lpGameModeParams", CGS_ARTIST_FILE, 1183 /* ARTIST 0x8230FE1C */);
 
     mePrepareForModeStage             = E_PFM_STAGE_ALL_IN_ONE;
     mGameModeParams                   = *lpGameModeParams;
@@ -212,10 +212,10 @@ void PrepareForModeAction::Construct(const GameModeParams* lpGameModeParams,
 // of the miNumPlayersDisconnected recorded ids. The two asserts bound the count to [0, 8).
 bool PrepareForModeAction::GetPlayerDisconnected(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const
 {
-    CGS_ASSERT(miNumPlayersDisconnected >= 0,
-        CGS_ASSERT_MESSAGE_AT("miNumPlayersDisconnected >= 0", CGS_ARTIST_FILE, 1136 /* ARTIST 0x822A01C8 */));
-    CGS_ASSERT(miNumPlayersDisconnected < KI_MAX_DISCONNECTED_NETWORK_PLAYERS,
-        CGS_ASSERT_MESSAGE_AT("miNumPlayersDisconnected < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 1137 /* ARTIST 0x822A01F0 */));
+    CGS_ASSERT_AT(miNumPlayersDisconnected >= 0,
+        "miNumPlayersDisconnected >= 0", CGS_ARTIST_FILE, 1136 /* ARTIST 0x822A01C8 */);
+    CGS_ASSERT_AT(miNumPlayersDisconnected < KI_MAX_DISCONNECTED_NETWORK_PLAYERS,
+        "miNumPlayersDisconnected < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 1137 /* ARTIST 0x822A01F0 */);
 
     for (s32 liIndex = 0; liIndex < miNumPlayersDisconnected; ++liIndex)
     {
@@ -231,12 +231,12 @@ bool PrepareForModeAction::GetPlayerDisconnected(BrnNetwork::NetworkPlayerID lNe
 // list, then bump the count. The two asserts bound the count (>= 0 and < KI_MAX_ACTIVE_RACE_CARS - 1).
 void PrepareForModeAction::SetPlayerDisconnected(BrnNetwork::NetworkPlayerID lPlayerID)
 {
-    CGS_ASSERT(miNumPlayersDisconnected >= 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "miNumPlayersDisconnected >= 0", CGS_ARTIST_FILE, 1160 /* ARTIST 0x8230FD90 */));
-    CGS_ASSERT(miNumPlayersDisconnected < 7,
-        CGS_ASSERT_MESSAGE_AT(
-            "miNumPlayersDisconnected < (BrnWorld::KI_MAX_ACTIVE_RACE_CARS - 1)", CGS_ARTIST_FILE, 1161 /* ARTIST 0x8230FDB8 */));
+    CGS_ASSERT_AT(miNumPlayersDisconnected >= 0,
+        "miNumPlayersDisconnected >= 0", CGS_ARTIST_FILE, 1160 /* ARTIST 0x8230FD90 */);
+
+    CGS_ASSERT_AT(miNumPlayersDisconnected < 7,
+        "miNumPlayersDisconnected < (BrnWorld::KI_MAX_ACTIVE_RACE_CARS - 1)", CGS_ARTIST_FILE, 1161 /* ARTIST 0x8230FDB8 */);
+
 
     maDisconnectedNetworkPlayerID[miNumPlayersDisconnected] = lPlayerID;
     ++miNumPlayersDisconnected;
@@ -258,10 +258,10 @@ void OnlineRoundResults::Construct()
 // bounds-check the position and store the id at that slot. (X360 return-result artifact dropped.)
 void OnlineRoundResults::SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liPosition)
 {
-    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CGS_ASSERT_MESSAGE_AT(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            CGS_ARTIST_FILE, 6641 /* ARTIST 0x8231CA6C */));
+    CGS_ASSERT_AT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+        "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            CGS_ARTIST_FILE, 6641 /* ARTIST 0x8231CA6C */);
+
 
     if (liPosition == -1)
     {
@@ -269,12 +269,12 @@ void OnlineRoundResults::SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerI
     }
     else
     {
-        CGS_ASSERT(liPosition >= 0,
-            CGS_ASSERT_MESSAGE_AT("liPosition >= 0", CGS_ARTIST_FILE, 6649 /* ARTIST 0x8231CAAC */));
-        CGS_ASSERT(liPosition < KI_MAX_PLAYERS,
-            CGS_ASSERT_MESSAGE_AT(
-                "liPosition < KI_MAX_PLAYERS",
-                CGS_ARTIST_FILE, 6650 /* ARTIST 0x8231CAD0 */));
+        CGS_ASSERT_AT(liPosition >= 0,
+            "liPosition >= 0", CGS_ARTIST_FILE, 6649 /* ARTIST 0x8231CAAC */);
+        CGS_ASSERT_AT(liPosition < KI_MAX_PLAYERS,
+            "liPosition < KI_MAX_PLAYERS",
+                CGS_ARTIST_FILE, 6650 /* ARTIST 0x8231CAD0 */);
+
 
         maPlayerPosition[liPosition] = lNetworkPlayerID;
     }
@@ -286,8 +286,8 @@ void OnlineRoundResults::SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerI
 // reduced to a static CGS_ASSERT, still returning the -1 sentinel).
 s32 OnlineRoundResults::GetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const
 {
-    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-               CGS_ASSERT_MESSAGE_AT("lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameActions.h", 6670));
+    CGS_ASSERT_AT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+               "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameActions.h", 6670);
 
     for (s32 liIndex = 0; liIndex < maDisconnectedPlayers.GetCount(); ++liIndex)
     {
@@ -305,7 +305,7 @@ s32 OnlineRoundResults::GetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID
         }
     }
 
-    CGS_ASSERT(false, "Player has no result position.");
+    CGS_FAIL("Player has no result position.");
     return KI_POSITION_DISCONNECTED;
 }
 
@@ -344,7 +344,7 @@ void OnlineGameResults::Clear()
 // "index: N rounds M" message through CgsStrStream, matching the X360).
 void OnlineGameResults::SetRaceResults(s32 liRoundIndex, const CgsSystem::Time& lRoundTime, f32 lfRoundDistance)
 {
-    CGS_ASSERT(E_MODE_ONLINE_RACE == miEventType, CGS_ASSERT_MESSAGE_AT("E_MODE_ONLINE_RACE == meEventType", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2131));
+    CGS_ASSERT_AT(E_MODE_ONLINE_RACE == miEventType, "E_MODE_ONLINE_RACE == meEventType", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2131);
 
     CGS_ASSERT_STREAM_AT(liRoundIndex < miNumberOfRounds,
                          "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n",
@@ -357,7 +357,7 @@ void OnlineGameResults::SetRaceResults(s32 liRoundIndex, const CgsSystem::Time& 
 // X360 0x82580C60. Read back an online-race round result (same guards as SetRaceResults).
 void OnlineGameResults::GetRaceResults(s32 liRoundIndex, CgsSystem::Time* lpRoundTime, f32* lpfRoundDistance) const
 {
-    CGS_ASSERT(E_MODE_ONLINE_RACE == miEventType, CGS_ASSERT_MESSAGE_AT("E_MODE_ONLINE_RACE == meEventType", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2159));
+    CGS_ASSERT_AT(E_MODE_ONLINE_RACE == miEventType, "E_MODE_ONLINE_RACE == meEventType", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2159);
 
     CGS_ASSERT_STREAM_AT(liRoundIndex < miNumberOfRounds,
                          "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n",
@@ -372,8 +372,8 @@ void OnlineGameResults::GetRaceResults(s32 liRoundIndex, CgsSystem::Time* lpRoun
 // liRoundIndex in range.
 void OnlineGameResults::SetStuntResults(s32 liRoundIndex, s32 liScore, s32 liMultiplier)
 {
-    CGS_ASSERT(IsOnlineStuntRun(static_cast<EGameModeType>(miEventType)),
-               CGS_ASSERT_MESSAGE_AT("IsOnlineStuntRun( meEventType )", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2145));
+    CGS_ASSERT_AT(IsOnlineStuntRun(static_cast<EGameModeType>(miEventType)),
+               "IsOnlineStuntRun( meEventType )", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2145);
 
     CGS_ASSERT_STREAM_AT(liRoundIndex < miNumberOfRounds,
                          "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n",
@@ -386,8 +386,8 @@ void OnlineGameResults::SetStuntResults(s32 liRoundIndex, s32 liScore, s32 liMul
 // X360 0x82580DA8. Read back an online-stunt round result (same guards as SetStuntResults).
 void OnlineGameResults::GetStuntResults(s32 liRoundIndex, s32* lpiScore, s32* lpiMultiplier) const
 {
-    CGS_ASSERT(IsOnlineStuntRun(static_cast<EGameModeType>(miEventType)),
-               CGS_ASSERT_MESSAGE_AT("IsOnlineStuntRun( meEventType )", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2173));
+    CGS_ASSERT_AT(IsOnlineStuntRun(static_cast<EGameModeType>(miEventType)),
+               "IsOnlineStuntRun( meEventType )", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2173);
 
     CGS_ASSERT_STREAM_AT(liRoundIndex < miNumberOfRounds,
                          "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n",

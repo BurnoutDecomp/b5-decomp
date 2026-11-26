@@ -69,15 +69,15 @@ static const char KAC_FILE[] =
 
 const OutOverlappingPairQueue* OutputBuffer::GetOverlappingPairQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(),
-               CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", KAC_FILE, 266));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
+               "Not locked for reading\n", KAC_FILE, 266);
     return &mOverlappingPairQueue;
 }
 
 OutOverlappingPairQueue* OutputBuffer::GetOverlappingPairQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(),
-               CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", KAC_FILE, 267));
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(),
+               "Not locked for writing\n", KAC_FILE, 267);
     return &mOverlappingPairQueue;
 }
 

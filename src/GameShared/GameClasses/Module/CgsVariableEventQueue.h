@@ -191,11 +191,11 @@ namespace CgsModule
         mbIsConstructed = true;
         miFirstEventOffset = liFirstEventOffset;
 
-        CGS_ASSERT(liFirstEventOffset >= 0, CGS_ASSERT_MESSAGE_AT(
-            "miFirstEventOffset >= 0", detail::KAC_VEQ_FILE, 226));
-        CGS_ASSERT(((reinterpret_cast<s32>(macData) + miFirstEventOffset) % ALIGN) == 0,
-                   CGS_ASSERT_MESSAGE_AT(
-                       "( ( (int32_t)&macData[0] + miFirstEventOffset ) % Alignment ) == 0", detail::KAC_VEQ_FILE, 227));
+        CGS_ASSERT_AT(liFirstEventOffset >= 0,
+            "miFirstEventOffset >= 0", detail::KAC_VEQ_FILE, 226);
+        CGS_ASSERT_AT(((reinterpret_cast<s32>(macData) + miFirstEventOffset) % ALIGN) == 0,
+                   "( ( (int32_t)&macData[0] + miFirstEventOffset ) % Alignment ) == 0", detail::KAC_VEQ_FILE, 227);
+
 
         Clear();
     }
@@ -353,8 +353,8 @@ namespace CgsModule
     s32 VariableEventQueue<BUFSIZE, ALIGN>::GetNextEvent(
         const Event* lpEvent, const Event** lppNextEvent, s32* lpiSize) const
     {
-        CGS_ASSERT(mbIsConstructed, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not Constructed\n", detail::KAC_VEQ_FILE, 407));
+        CGS_ASSERT_STREAM_AT(mbIsConstructed,
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 407);
 
         s32 liPrevEntryPosition =
             (s32)(reinterpret_cast<const char*>(lpEvent) - macData) - (s32)sizeof(CBufferEntry);
@@ -411,8 +411,8 @@ namespace CgsModule
     template <s32 BUFSIZE, s32 ALIGN>
     bool VariableEventQueue<BUFSIZE, ALIGN>::AddEvent(const Event* lpEvent, s32 liType, s32 liSize)
     {
-        CGS_ASSERT(mbIsConstructed, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not Constructed\n", detail::KAC_VEQ_FILE, 454));
+        CGS_ASSERT_STREAM_AT(mbIsConstructed,
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 454);
 
         s32 liTotalEventSize = liSize + (s32)sizeof(CBufferEntry);
         s32 liPaddingBytes = GetEventPaddingSize(liTotalEventSize);
@@ -454,8 +454,8 @@ namespace CgsModule
     template <typename EventT>
     bool VariableEventQueue<BUFSIZE, ALIGN>::AddEvent(const EventT& lEvent, s32 liEventId)
     {
-        CGS_ASSERT(mbIsConstructed, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not Constructed\n", detail::KAC_VEQ_FILE, 688));
+        CGS_ASSERT_STREAM_AT(mbIsConstructed,
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 688);
 
         // DWARF derives every record from CgsModule::Event and ARTIST converts implicitly (for
         // CgsSound::Io::Message<T>, whose Event base follows MessageHeader's vptr, 0x826DDF28 adds
@@ -561,8 +561,8 @@ namespace CgsModule
     template <s32 BUFSIZE, s32 ALIGN>
     void* VariableEventQueue<BUFSIZE, ALIGN>::AllocateEvent(s32 liType, s32 liSize)
     {
-        CGS_ASSERT(mbIsConstructed, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not Constructed\n", detail::KAC_VEQ_FILE, 556));
+        CGS_ASSERT_STREAM_AT(mbIsConstructed,
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 556);
 
         s32 liTotalEventSize = liSize + (s32)sizeof(CBufferEntry);
         s32 liPaddingBytes = GetEventPaddingSize(liTotalEventSize);
@@ -685,15 +685,15 @@ namespace CgsModule
             {
                 CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint;
                 lrStream << "ERROR: Event Type ";
-                lrStream.PrintSignedInteger(laiTypes[liIndex]);
+                lrStream << laiTypes[liIndex];
                 lrStream << " has ";
                 const s32 liCount = laiCounts[liIndex];
-                lrStream.PrintSignedInteger(liCount);
+                lrStream << liCount;
                 lrStream << " entries in the queue and each event's size is ";
                 const s32 liEventSize = laiSizes[liIndex];
-                lrStream.PrintSignedInteger(liEventSize);
+                lrStream << liEventSize;
                 lrStream << " (total mem usage is ";
-                lrStream.PrintSignedInteger(liCount * liEventSize);
+                lrStream << liCount * liEventSize;
                 lrStream << ") \n";
             }
         }
@@ -719,8 +719,8 @@ namespace CgsModule
     template <s32 BUFSIZE, s32 ALIGN>
     bool VariableEventQueue<BUFSIZE, ALIGN>::AddEventSafe(const Event* lpEvent, s32 liType, s32 liSize)
     {
-        CGS_ASSERT(mbIsConstructed, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Not Constructed\n", detail::KAC_VEQ_FILE, 508));
+        CGS_ASSERT_STREAM_AT(mbIsConstructed,
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 508);
         s32 liTotalEventSize = liSize + (s32)sizeof(CBufferEntry);
         s32 liPaddingBytes = GetEventPaddingSize(liTotalEventSize);
         if ((miBufferWritePos + liPaddingBytes + liTotalEventSize) <= BUFSIZE)

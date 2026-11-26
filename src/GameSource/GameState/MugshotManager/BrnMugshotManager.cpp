@@ -248,8 +248,8 @@ bool MugshotManager::DoesPlayerHaveACamera(::EActiveRaceCarIndex lePlayerRaceCar
             return false;
     }
 
-    CGS_ASSERT(maCameraStatusData[liPlayerIndex].meCameraStatus != BrnNetwork::E_CAMERA_STATUS_COUNT,
-               CGS_ASSERT_MESSAGE_AT("maCameraStatusData[liPlayerIndex].meCameraStatus != BrnNetwork::E_CAMERA_STATUS_COUNT", CGS_ARTIST_FILE, 435));
+    CGS_ASSERT_AT(maCameraStatusData[liPlayerIndex].meCameraStatus != BrnNetwork::E_CAMERA_STATUS_COUNT,
+               "maCameraStatusData[liPlayerIndex].meCameraStatus != BrnNetwork::E_CAMERA_STATUS_COUNT", CGS_ARTIST_FILE, 435);
 
     if (maCameraStatusData[liPlayerIndex].meCameraStatus == BrnNetwork::E_CAMERA_STATUS_NONE)
         return false;
@@ -262,11 +262,11 @@ bool MugshotManager::DoesPlayerHaveACamera(::EActiveRaceCarIndex lePlayerRaceCar
 // ---------------------------------------------------------------------------
 void MugshotManager::UpdateCameraStatusData(const GameStateModuleIO::PreWorldInputBuffer* lpInput)
 {
-    CGS_ASSERT(lpInput != 0, CGS_ASSERT_MESSAGE_AT("lpInput", CGS_ARTIST_FILE, 461));
+    CGS_ASSERT_AT(lpInput != 0, "lpInput", CGS_ARTIST_FILE, 461);
 
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpPlayerStatusInterface =
         lpInput->GetPlayerStatusInterface();
-    CGS_ASSERT(lpPlayerStatusInterface != 0, CGS_ASSERT_MESSAGE_AT("lpPlayerStatusInterface", CGS_ARTIST_FILE, 463));
+    CGS_ASSERT_AT(lpPlayerStatusInterface != 0, "lpPlayerStatusInterface", CGS_ARTIST_FILE, 463);
 
     s32 liIndex = 0;
     const s32 liNumPlayers = lpPlayerStatusInterface->GetNumPlayers();
@@ -274,8 +274,8 @@ void MugshotManager::UpdateCameraStatusData(const GameStateModuleIO::PreWorldInp
     {
         // The console reads the player record directly; the bounds asserts below mirror its
         // GetPlayerStatusData asserts (file BrnNetworkModuleInGamePlayerStatusInterface.h).
-        CGS_ASSERT(liIndex >= 0, CGS_ASSERT_MESSAGE_AT("liIndex >= 0", CGS_ARTIST_BRNNETWORKMODULEINGAMEPLAYERSTATUSINTERFACE_FILE, 256));
-        CGS_ASSERT(liIndex < liNumPlayers, CGS_ASSERT_MESSAGE_AT("liIndex < miNumPlayers", CGS_ARTIST_BRNNETWORKMODULEINGAMEPLAYERSTATUSINTERFACE_FILE, 257));
+        CGS_ASSERT_AT(liIndex >= 0, "liIndex >= 0", CGS_ARTIST_BRNNETWORKMODULEINGAMEPLAYERSTATUSINTERFACE_FILE, 256);
+        CGS_ASSERT_AT(liIndex < liNumPlayers, "liIndex < miNumPlayers", CGS_ARTIST_BRNNETWORKMODULEINGAMEPLAYERSTATUSINTERFACE_FILE, 257);
 
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerData =
             lpPlayerStatusInterface->GetPlayerStatusData(liIndex);
@@ -301,8 +301,8 @@ void MugshotManager::StartMugshotCapture(GameStateModuleIO::OutputBuffer* lpOutp
                                          ::EActiveRaceCarIndex leMugshotCaptureRaceCarIndex,
                                          bool lbMugshotRequiresBroadcast)
 {
-    CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 209));
-    CGS_ASSERT(mpGameStateModule->GetModeManager() != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule->GetModeManager()", CGS_ARTIST_FILE, 210));
+    CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 209);
+    CGS_ASSERT_AT(mpGameStateModule->GetModeManager() != 0, "mpGameStateModule->GetModeManager()", CGS_ARTIST_FILE, 210);
 
     if (mbIsAnythingPaused)
         return;
@@ -407,18 +407,18 @@ void MugshotManager::ProcessTakedownEvents(const GameStateModuleIO::PreWorldInpu
         const EActiveRaceCarIndex leTakedownAggressorRaceCarIndex = lEvent.meAggressorIndex;
         const EActiveRaceCarIndex leTakedownVictimRaceCarIndex    = lEvent.meVictimIndex;
 
-        CGS_ASSERT(leTakedownAggressorRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                   CGS_ASSERT_MESSAGE_AT("leTakedownAggressorRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ARTIST_FILE, 325));
-        CGS_ASSERT(leTakedownAggressorRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0
+        CGS_ASSERT_AT(leTakedownAggressorRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                   "leTakedownAggressorRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ARTIST_FILE, 325);
+        CGS_ASSERT_AT(leTakedownAggressorRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0
                    && leTakedownAggressorRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("leTakedownAggressorRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leTakedownAggressorRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 327));
-        CGS_ASSERT(leTakedownVictimRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                   CGS_ASSERT_MESSAGE_AT("leTakedownVictimRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ARTIST_FILE, 328));
-        CGS_ASSERT(leTakedownVictimRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0
+                   "leTakedownAggressorRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leTakedownAggressorRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 327);
+        CGS_ASSERT_AT(leTakedownVictimRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                   "leTakedownVictimRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ARTIST_FILE, 328);
+        CGS_ASSERT_AT(leTakedownVictimRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0
                    && leTakedownVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("leTakedownVictimRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leTakedownVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 330));
+                   "leTakedownVictimRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leTakedownVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 330);
 
-        CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 333));
+        CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 333);
 
         // Only react when the local player is the aggressor or the victim.
         const bool lbPlayerIsParty =
@@ -482,11 +482,11 @@ void MugshotManager::ProcessTakedownEvents(const GameStateModuleIO::PreWorldInpu
 void MugshotManager::CheckForSuccessfulPayback(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                                                GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpInput != 0, CGS_ASSERT_MESSAGE_AT("lpInput", CGS_ARTIST_FILE, 378));
-    CGS_ASSERT(lpInput->GetNetworkToGameStateInterface() != 0,
-               CGS_ASSERT_MESSAGE_AT("lpInput->GetNetworkToGameStateInterface()", CGS_ARTIST_FILE, 379));
-    CGS_ASSERT(lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue() != 0,
-               CGS_ASSERT_MESSAGE_AT("lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue()", CGS_ARTIST_FILE, 380));
+    CGS_ASSERT_AT(lpInput != 0, "lpInput", CGS_ARTIST_FILE, 378);
+    CGS_ASSERT_AT(lpInput->GetNetworkToGameStateInterface() != 0,
+               "lpInput->GetNetworkToGameStateInterface()", CGS_ARTIST_FILE, 379);
+    CGS_ASSERT_AT(lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue() != 0,
+               "lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue()", CGS_ARTIST_FILE, 380);
 
     const GameStateModuleIO::NetworkToGameStateInterface::DirtyTrickQueue* lpDirtyTrickQueue =
         lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue();
@@ -551,8 +551,8 @@ void MugshotManager::HandleCapturingMugshot(GameStateModuleIO::OutputBuffer* lpO
         lAction.mbFlagA         = false;
         lAction.mbBroadcast     = (meCaptureMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
 
-        CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 636));
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 637));
+        CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 636);
+        CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 637);
         AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAction),
             KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
@@ -609,8 +609,8 @@ void MugshotManager::HandleCapturingTheirMugshot(GameStateModuleIO::OutputBuffer
         lAction.mbFlagA         = true;
         lAction.mbBroadcast     = (meShowMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
 
-        CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 775));
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 776));
+        CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 775);
+        CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 776);
         AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAction),
             KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
@@ -717,7 +717,7 @@ void MugshotManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInpu
             HandleTakingMugshot(lpOutput, lpVehicleOutput, leGameModeType);
             break;
         default:
-            CGS_ASSERT(false, "Unknown mugshot capture state: ");
+            CGS_FAIL("Unknown mugshot capture state: ");
             break;
     }
 
@@ -740,7 +740,7 @@ void MugshotManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInpu
             HandleShowingTheirMugshot(lpOutput);
             break;
         default:
-            CGS_ASSERT(false, "Unknown mugshot victim state: ");
+            CGS_FAIL("Unknown mugshot victim state: ");
             break;
     }
 }
@@ -751,9 +751,9 @@ void MugshotManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInpu
 // ---------------------------------------------------------------------------
 void MugshotManager::ProcessImageReceivedEvent(const OnlineImageReceivedEvent* lpImageReceivedEvent)
 {
-    CGS_ASSERT(lpImageReceivedEvent != 0, CGS_ASSERT_MESSAGE_AT("lpImageReceivedEvent", CGS_ARTIST_FILE, 853));
-    CGS_ASSERT(mpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 854));
-    CGS_ASSERT(mpGameStateModule->GetModeManager() != 0, CGS_ASSERT_MESSAGE_AT("mpGameStateModule->GetModeManager()", CGS_ARTIST_FILE, 855));
+    CGS_ASSERT_AT(lpImageReceivedEvent != 0, "lpImageReceivedEvent", CGS_ARTIST_FILE, 853);
+    CGS_ASSERT_AT(mpGameStateModule != 0, "mpGameStateModule", CGS_ARTIST_FILE, 854);
+    CGS_ASSERT_AT(mpGameStateModule->GetModeManager() != 0, "mpGameStateModule->GetModeManager()", CGS_ARTIST_FILE, 855);
 
     // console gate: proceed when the show FSM is idle, OR it is in the capture-their state AND the
     // current mode is NOT in a blocked post-event camera state.
@@ -826,7 +826,7 @@ void MugshotManager::ProcessOnlineWin(GameStateModuleIO::OutputBuffer* lpOutput)
 // ---------------------------------------------------------------------------
 void MugshotManager::ProcessAbortCaptureEvent(const OnlineImageCaptureAbortedEvent* lpAbortEvent)
 {
-    CGS_ASSERT(lpAbortEvent != 0, CGS_ASSERT_MESSAGE_AT("lpAbortEvent", CGS_ARTIST_FILE, 889));
+    CGS_ASSERT_AT(lpAbortEvent != 0, "lpAbortEvent", CGS_ARTIST_FILE, 889);
 
     if (lpAbortEvent->mbAbortCaptureMachine)
     {

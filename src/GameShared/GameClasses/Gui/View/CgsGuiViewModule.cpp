@@ -174,7 +174,7 @@ namespace CgsGui
             meReleaseStage = E_RELEASESTAGE_START;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Unknown prepare stage", CGS_ARTIST_FILE_CPP, 203);
+            CGS_FAIL_AT("Unknown prepare stage", CGS_ARTIST_FILE_CPP, 203);
             return false;
         }
     }
@@ -209,7 +209,7 @@ namespace CgsGui
             mePrepareStage = E_PREPARESTAGE_START;
             return true;
         default:
-            CGS_ASSERT_AT(false, "Unknown release stage", CGS_ARTIST_FILE_CPP, 287);
+            CGS_FAIL_AT("Unknown release stage", CGS_ARTIST_FILE_CPP, 287);
             return false;
         }
     }
@@ -321,7 +321,7 @@ namespace CgsGui
                 }
                 else
                 {
-                    CGS_ASSERT(false, "Unhandled enum");
+                    CGS_FAIL("Unhandled enum");
                 }
                 break;
             }
@@ -395,7 +395,7 @@ namespace CgsGui
         switch (liEventId)
         {
         case 17:
-            CGS_ASSERT_AT(false,
+            CGS_FAIL_AT(
                 "This should never happen - we have a message for Apt View, seriously that's mental!", CGS_ARTIST_FILE_CPP, 393);
             break;
 
@@ -433,7 +433,7 @@ namespace CgsGui
         }
 
         default:
-            CGS_ASSERT_AT(false, "Unexpected event sent to ViewModule::ProcessIncomingAptEvent", CGS_ARTIST_FILE_CPP, 453);
+            CGS_FAIL_AT("Unexpected event sent to ViewModule::ProcessIncomingAptEvent", CGS_ARTIST_FILE_CPP, 453);
             break;
         }
     }
@@ -586,18 +586,18 @@ namespace CgsGui
     // 32*1783, stride 32); DWARF declares the const char* return.
     const char* ViewModule::GetMovieNameByLevel(int liLevel) const
     {
-        CGS_ASSERT(liLevel >= 0 && liLevel < KI_NUM_MOVIE_LEVELS,
-            CGS_ASSERT_MESSAGE_AT(
-                "liLevel>=0 && liLevel < KI_NUM_MOVIE_LEVELS",
-                CGS_ARTIST_FILE, 498 /* ARTIST 0x824EBCDC */));
+        CGS_ASSERT_AT(liLevel >= 0 && liLevel < KI_NUM_MOVIE_LEVELS,
+            "liLevel>=0 && liLevel < KI_NUM_MOVIE_LEVELS",
+                CGS_ARTIST_FILE, 498 /* ARTIST 0x824EBCDC */);
+
         return macCurrentlyPlayingMovies[liLevel];
     }
 
     void ViewModule::SetClearScreenAlpha(f32 lfAlpha)
     {
-        CGS_ASSERT(lfAlpha >= 0.0f && lfAlpha <= 1.0f,
-            CGS_ASSERT_MESSAGE_AT("lfAlpha>=0.0f && lfAlpha <= 1.0f",
-                CGS_ARTIST_FILE, 482 /* ARTIST 0x82847544 */));
+        CGS_ASSERT_AT(lfAlpha >= 0.0f && lfAlpha <= 1.0f,
+            "lfAlpha>=0.0f && lfAlpha <= 1.0f",
+                CGS_ARTIST_FILE, 482 /* ARTIST 0x82847544 */);
         mfClearScreenAlpha = lfAlpha;
     }
 

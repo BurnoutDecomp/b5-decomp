@@ -74,7 +74,7 @@ void SpeedStreamEffect::AttachController(CgsSound::Logic::EffectBase* apControll
         mpSpeedStreamControl = static_cast<SpeedStreamControl*>(apController);
         break;
     default:
-        CGS_ASSERT_AT(false, "Unexpected control.", BRN_SPEEDSTREAMEFFECT_CPP_FILE, 324);
+        CGS_FAIL_AT("Unexpected control.", BRN_SPEEDSTREAMEFFECT_CPP_FILE, 324);
         break;
     }
 }

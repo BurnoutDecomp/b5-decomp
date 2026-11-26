@@ -191,23 +191,23 @@ static const char KAC_ARTIST_DATABASE_FILE[] =
 // Clean is a programming error.
 void ClassExportPolicy::Clean(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Classes should not have export entries!\n",
-        KAC_ARTIST_DATABASE_FILE, 274 /* ARTIST 0x82805634 */));
+    CGS_FAIL_AT("Classes should not have export entries!\n",
+        KAC_ARTIST_DATABASE_FILE, 274 /* ARTIST 0x82805634 */);
 }
 
 // @ 0x82805660 (attribdatabase.cpp:292). Same guard on the per-export Deinitialize hook.
 void ClassExportPolicy::Deinitialize(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Classes should not have export entries!\n",
-        KAC_ARTIST_DATABASE_FILE, 292 /* ARTIST 0x82805674 */));
+    CGS_FAIL_AT("Classes should not have export entries!\n",
+        KAC_ARTIST_DATABASE_FILE, 292 /* ARTIST 0x82805674 */);
 }
 
 // @ 0x828056A0 (attribdatabase.cpp:341). A Collection is never placed in the export table,
 // so IsReferenced can only be reached in error; it asserts and reports "not referenced".
 bool CollectionExportPolicy::IsReferenced(const Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Collections should not be in export table!\n",
-        KAC_ARTIST_DATABASE_FILE, 341 /* ARTIST 0x828056B4 */));
+    CGS_FAIL_AT("Collections should not be in export table!\n",
+        KAC_ARTIST_DATABASE_FILE, 341 /* ARTIST 0x828056B4 */);
     return false;
 }
 
@@ -215,16 +215,16 @@ bool CollectionExportPolicy::IsReferenced(const Vault&, const TypeID&, const Exp
 // per-export Clean hook is a dead path. (Shares the Class rodata message.)
 void CollectionExportPolicy::Clean(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Classes should not have export entries!\n",
-        KAC_ARTIST_DATABASE_FILE, 366 /* ARTIST 0x828056F4 */));
+    CGS_FAIL_AT("Classes should not have export entries!\n",
+        KAC_ARTIST_DATABASE_FILE, 366 /* ARTIST 0x828056F4 */);
 }
 
 // @ 0x82805720 (attribdatabase.cpp:391). Same guard on the Collection per-export
 // Deinitialize hook.
 void CollectionExportPolicy::Deinitialize(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Classes should not have export entries!\n",
-        KAC_ARTIST_DATABASE_FILE, 391 /* ARTIST 0x82805734 */));
+    CGS_FAIL_AT("Classes should not have export entries!\n",
+        KAC_ARTIST_DATABASE_FILE, 391 /* ARTIST 0x82805734 */);
 }
 
 // =============================================================================
@@ -283,7 +283,7 @@ void Database::CollectGarbage()
         Database* lpDatabase = sThis;
         if (lpDatabase == NULL)
         {
-            CGS_ASSERT(false, "Attribute database not initialized.");
+            CGS_FAIL("Attribute database not initialized.");
             lpDatabase = sThis;
         }
         if (lpDatabase != NULL)
@@ -348,21 +348,21 @@ bool ClassExportPolicy::IsReferenced(const Vault&, const TypeID&, const ExportID
 //      register path this wave lands) --------------------------------------
 bool DatabaseExportPolicy::IsReferenced(const Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, "DatabaseExportPolicy::IsReferenced @0x82807EC0: deferred TU");
+    CGS_FAIL("DatabaseExportPolicy::IsReferenced @0x82807EC0: deferred TU");
     return false;
 }
 void DatabaseExportPolicy::Deinitialize(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, "DatabaseExportPolicy::Deinitialize @0x8280F5D0: deferred TU");
+    CGS_FAIL("DatabaseExportPolicy::Deinitialize @0x8280F5D0: deferred TU");
 }
 bool ClassExportPolicy::AnyReferences(const Vault&)
 {
-    CGS_ASSERT(false, "ClassExportPolicy::AnyReferences @0x8280B2F0: deferred TU");
+    CGS_FAIL("ClassExportPolicy::AnyReferences @0x8280B2F0: deferred TU");
     return false;
 }
 void ClassExportPolicy::PrepareToClean(Vault&)
 {
-    CGS_ASSERT(false, "ClassExportPolicy::PrepareToClean @0x8280B450: deferred TU");
+    CGS_FAIL("ClassExportPolicy::PrepareToClean @0x8280B450: deferred TU");
 }
 // attribprivate.h:383/386. The cursor uses the registered table's own key accessor.
     template<class Map>
@@ -399,12 +399,12 @@ void ClassExportPolicy::PrepareToDeinitialize(Vault& lrVault)
 }
 bool CollectionExportPolicy::AnyReferences(const Vault&)
 {
-    CGS_ASSERT(false, "CollectionExportPolicy::AnyReferences @0x8280B728: deferred TU");
+    CGS_FAIL("CollectionExportPolicy::AnyReferences @0x8280B728: deferred TU");
     return false;
 }
 void CollectionExportPolicy::PrepareToClean(Vault&)
 {
-    CGS_ASSERT(false, "CollectionExportPolicy::PrepareToClean @0x8280B9F8: deferred TU");
+    CGS_FAIL("CollectionExportPolicy::PrepareToClean @0x8280B9F8: deferred TU");
 }
 // @ 0x8280CD80. Clean references in ALL collections before releasing this vault's own.
 void CollectionExportPolicy::PrepareToDeinitialize(Vault& lrVault)
@@ -531,8 +531,8 @@ void DatabaseExportPolicy::Initialize(Vault& lrVault, const TypeID& lrType,
                                       const ExportID& lrExport, void* lpData,
                                       unsigned int luSize)
 {
-    CGS_ASSERT(luSize >= 0x10, CGS_ASSERT_MESSAGE_AT(
-        "Invalid DatabaseLoadData.", CGS_ARTIST_FILE, 130));
+    CGS_ASSERT_AT(luSize >= 0x10,
+        "Invalid DatabaseLoadData.", CGS_ARTIST_FILE, 130);
 
     void* lpBlock = Attrib::Alloc(sizeof(DatabasePrivate), NULL);
     Database::sThis = lpBlock != NULL
@@ -593,8 +593,8 @@ void CollectionExportPolicy::Initialize(Vault& lrVault, const TypeID& /*lrType*/
                                         const ExportID& /*lrExport*/, void* lpData,
                                         unsigned int luSize)
 {
-    CGS_ASSERT(luSize >= 0x30, CGS_ASSERT_MESSAGE_AT(
-        "Invalid CollectionLoadData.", CGS_ARTIST_FILE, 309));
+    CGS_ASSERT_AT(luSize >= 0x30,
+        "Invalid CollectionLoadData.", CGS_ARTIST_FILE, 309);
 
     DatabasePrivate* lpPrivates = GetDatabasePrivate();
     const CollectionLoadData* lpLoad = static_cast<const CollectionLoadData*>(lpData);

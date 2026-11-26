@@ -65,7 +65,7 @@ namespace CgsMemory
     void DataStreamResultReader::Begin()
     {
         __lwsync();
-        CGS_ASSERT(!mbStreaming, CGS_ASSERT_STREAM_MESSAGE_AT("Already streaming\n", CGS_ARTIST_FILE, 104));
+        CGS_ASSERT_STREAM_AT(!mbStreaming, "Already streaming\n", CGS_ARTIST_FILE, 104);
 
         miNextResult      = 0;   // this[9]
         miNumResultsAtEnd = 0;   // this[10]

@@ -229,7 +229,7 @@ void OnlinePlay::OnLeave()
 // ------------------------------------------------ HandleControllerInput @ 0x824AD6A0
 void OnlinePlay::HandleControllerInput(const CgsModule::Event* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlinePlay::HandleControllerInput", CGS_ARTIST_FILE, 487));
+    CGS_ASSERT_STREAM_AT(lpEvent != NULL, "Invalid event sent to OnlinePlay::HandleControllerInput", CGS_ARTIST_FILE, 487);
 
     if (meSubState == E_SUBSTATE_MAIN)
         HandleControllerInputMainMenu(
@@ -380,7 +380,7 @@ bool OnlinePlay::CheckPrivileges(EMainMenuOptions leOption)
             return true;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid menu option", CGS_ARTIST_FILE, 872 /* ARTIST 0x824859F0 */));
+            CGS_FAIL_AT("Invalid menu option", CGS_ARTIST_FILE, 872 /* ARTIST 0x824859F0 */);
             return false;
     }
 }
@@ -524,7 +524,7 @@ void OnlinePlay::Update()
                 break;
 
             default:
-                CGS_ASSERT(false, "Unexpected event received");
+                CGS_FAIL("Unexpected event received");
                 break;
         }
     }
@@ -556,7 +556,7 @@ void OnlinePlay::Update()
             }
             else if (luNotificationId == XN_LIVE_INVITE_ACCEPTED)
             {
-                CGS_ASSERT(false, "Invite notification processed by Online main menu screen. "
+                CGS_FAIL("Invite notification processed by Online main menu screen. "
                                   "This could break cross game invites\n");
             }
         }
@@ -629,7 +629,7 @@ void OnlinePlay::CheckForCompletedLoads()
 // ------------------------------------------------ HandlePlayerStatsEvent
 void OnlinePlay::HandlePlayerStatsEvent(const CgsModule::Event* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlinePlay::HandlePlayerStatsEvent", CGS_ARTIST_FILE, 708));
+    CGS_ASSERT_STREAM_AT(lpEvent != NULL, "Invalid event sent to OnlinePlay::HandlePlayerStatsEvent", CGS_ARTIST_FILE, 708);
 
     if (!CgsSystem::HardwareInit::IsHardDiskAvailable())
         return;

@@ -196,10 +196,10 @@ const f32 KF_FALL_PAST_TIME_LERP_HI   = 2.0f;   // rodata 0x820C428C == 0x400000
     // here so the whole AIAggression body set lives in one file.)
     Vector3 AIAggression::GetTargetPos()
     {
-        CGS_ASSERT(mbTargetPosValid,
-            CGS_ASSERT_MESSAGE_AT(
-                "mbTargetPosValid",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIAggression.h", 442 /* ARTIST 0x82765700 */));
+        CGS_ASSERT_AT(mbTargetPosValid,
+            "mbTargetPosValid",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIAggression.h", 442 /* ARTIST 0x82765700 */);
+
         return mTargetPos;
     }
 
@@ -216,8 +216,8 @@ const f32 KF_FALL_PAST_TIME_LERP_HI   = 2.0f;   // rodata 0x820C428C == 0x400000
 f32 CurveToKeepLarge(f32 lfInput)
 {
     static const char KAC_ARTIST_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIAggression.cpp";
-    CGS_ASSERT(!(lfInput < -1.0f), CGS_ASSERT_MESSAGE_AT("lfDistScale >= -1.0f", KAC_ARTIST_FILE, 2182));
-    CGS_ASSERT(!(lfInput > 1.0f), CGS_ASSERT_MESSAGE_AT("lfDistScale <= 1.0f", KAC_ARTIST_FILE, 2183));
+    CGS_ASSERT_AT(!(lfInput < -1.0f), "lfDistScale >= -1.0f", KAC_ARTIST_FILE, 2182);
+    CGS_ASSERT_AT(!(lfInput > 1.0f), "lfDistScale <= 1.0f", KAC_ARTIST_FILE, 2183);
 
     if ( lfInput > 0.0f )
         return -(((1.0f - lfInput) * (1.0f - lfInput)) - 1.0f);
@@ -358,11 +358,11 @@ bool AIAggression::CanSlam()
 // True when the candidate car's speed is below the minimum required to be worth targeting.
 bool AIAggression::CarIsTooSlow(const AICar* lpCar)
 {
-    CGS_ASSERT(lpCar != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpCar",
+    CGS_ASSERT_AT(lpCar != 0,
+        "lpCar",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../World/AI/BrnAIAggression.cpp", 1179 /* ARTIST 0x8276696C */));
+            "../World/AI/BrnAIAggression.cpp", 1179 /* ARTIST 0x8276696C */);
+
     return lpCar->GetSpeed() < KF_CAR_TOO_SLOW_SPEED;
 }
 
@@ -582,11 +582,11 @@ f32 AIAggression::GetAcrossSeparation(const AICar* lpThisCar, const AICar* lpOth
 // only the offset is flattened, the direction is normalised un-flattened.
 f32 AIAggression::GetAheadness(const AICar* lpPlayerCar, Vector3 lPosition)
 {
-    CGS_ASSERT(lpPlayerCar != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpPlayerCar != NULL",
+    CGS_ASSERT_AT(lpPlayerCar != NULL,
+        "lpPlayerCar != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../World/AI/BrnAIAggression.cpp", 1715 /* ARTIST 0x82771050 */));
+            "../World/AI/BrnAIAggression.cpp", 1715 /* ARTIST 0x82771050 */);
+
 
     Vector3 lvOffset = lPosition - lpPlayerCar->GetPosition();
     lvOffset.mV.y = 0.0f;
@@ -714,16 +714,16 @@ Vector3 AIAggression::GetPositionNextToTarget(const AICar* lpTargetCar, const AI
 // is the same value with the zero case handled implicitly.
 f32 AIAggression::GetSeparation(const AICar* lpThisCar, const AICar* lpOtherCar)
 {
-    CGS_ASSERT(lpThisCar != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpThisCar != NULL",
+    CGS_ASSERT_AT(lpThisCar != NULL,
+        "lpThisCar != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../World/AI/BrnAIAggression.cpp", 1660 /* ARTIST 0x82770F5C */));
-    CGS_ASSERT(lpOtherCar != NULL,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpOtherCar != NULL",
+            "../World/AI/BrnAIAggression.cpp", 1660 /* ARTIST 0x82770F5C */);
+
+    CGS_ASSERT_AT(lpOtherCar != NULL,
+        "lpOtherCar != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../World/AI/BrnAIAggression.cpp", 1661 /* ARTIST 0x82770F80 */));
+            "../World/AI/BrnAIAggression.cpp", 1661 /* ARTIST 0x82770F80 */);
+
 
     const Vector3 lvDelta = lpOtherCar->GetPosition() - lpThisCar->GetPosition();
     return rw::math::vpu::Magnitude(lvDelta);
@@ -1150,7 +1150,7 @@ void AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar)
             UpdateAggressionStateHangAboutAhead(mpPlayerCar);
             break;
         default:
-            CGS_ASSERT_AT(false, "Unknown aggression state", CGS_ARTIST_FILE, 556);
+            CGS_FAIL_AT("Unknown aggression state", CGS_ARTIST_FILE, 556);
             break;
     }
 }

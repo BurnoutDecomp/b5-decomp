@@ -19,8 +19,8 @@ void BridgeRaceCarModuleToAIModule_PreScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpAIInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpAIInputBuffer", __FILE__, 40));                                   // :40
-    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarOutputBuffer_PreScene", __FILE__, 41));     // :41
+    CGS_ASSERT_AT(lpAIInputBuffer != 0, "lpAIInputBuffer", __FILE__, 40);                                   // :40
+    CGS_ASSERT_AT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene", __FILE__, 41);     // :41
 
     lpAIInputBuffer->SetRaceCarAIInterface(
         lpRaceCarOutputBuffer_PreScene->GetRaceCarAIInterface());
@@ -52,8 +52,8 @@ void BridgeRaceCarModuleToAIModule_PostScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpAIInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpAIInputBuffer", __FILE__, 60));                                    // :60
-    CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarOutputBuffer_PostScene", __FILE__, 61));    // :61
+    CGS_ASSERT_AT(lpAIInputBuffer != 0, "lpAIInputBuffer", __FILE__, 60);                                    // :60
+    CGS_ASSERT_AT(lpRaceCarOutputBuffer_PostScene != 0, "lpRaceCarOutputBuffer_PostScene", __FILE__, 61);    // :61
 
     lpAIInputBuffer->AppendAIModuleRequestInterface(
         lpRaceCarOutputBuffer_PostScene->GetAIModuleRequestInterface());

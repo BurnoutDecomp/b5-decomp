@@ -107,21 +107,21 @@ namespace BrnNetwork
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
             return;
 
-        CGS_ASSERT(lpEvent != 0,
-            CGS_ASSERT_MESSAGE_AT("lpEvent", __FILE__, 95 /* ARTIST 0x8257AFC4 */));
-        CGS_ASSERT(liRoundNumber >= KI_MIN_ROUND_NUM,
-            CGS_ASSERT_MESSAGE_AT(
-                "liRoundNumber>=KI_MIN_ROUND_NUM", __FILE__, 96 /* ARTIST 0x8257AFE8 */));
-        CGS_ASSERT(liRoundNumber <= KI_MAX_ROUND_NUM,
-            CGS_ASSERT_MESSAGE_AT(
-                "liRoundNumber<=KI_MAX_ROUND_NUM", __FILE__, 97 /* ARTIST 0x8257B00C */));
+        CGS_ASSERT_AT(lpEvent != 0,
+            "lpEvent", __FILE__, 95 /* ARTIST 0x8257AFC4 */);
+        CGS_ASSERT_AT(liRoundNumber >= KI_MIN_ROUND_NUM,
+            "liRoundNumber>=KI_MIN_ROUND_NUM", __FILE__, 96 /* ARTIST 0x8257AFE8 */);
+
+        CGS_ASSERT_AT(liRoundNumber <= KI_MAX_ROUND_NUM,
+            "liRoundNumber<=KI_MAX_ROUND_NUM", __FILE__, 97 /* ARTIST 0x8257B00C */);
+
 
         miRoundNumber = liRoundNumber;          // stw, +0x54
         mEvent        = *lpEvent;               // 44-byte payload copy in (memcpy +0x28, 0x2C)
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_SELECTED_ROUTES_MESSAGE_TYPE, lu16Frame);
-        CGS_ASSERT(IsReliable(),
-            CGS_ASSERT_MESSAGE_AT("IsReliable()", __FILE__, 103 /* ARTIST 0x8257B06C */));
+        CGS_ASSERT_AT(IsReliable(),
+            "IsReliable()", __FILE__, 103 /* ARTIST 0x8257B06C */);
     }
 
     // ---------------------------------------------------------------------------------
@@ -132,12 +132,12 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     bool SelectedRoutesMessage::Retrieve(s32* lpiRoundNumber, Event* lpEvent)
     {
-        CGS_ASSERT(lpiRoundNumber != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpiRoundNumber != 0,
             "lpiRoundNumber",
-            CGS_ARTIST_FILE, 123 /* ARTIST 0x8257E7AC */));
-        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ARTIST_FILE, 123 /* ARTIST 0x8257E7AC */);
+        CGS_ASSERT_AT(lpEvent != 0,
             "lpEvent",
-            CGS_ARTIST_FILE, 124 /* ARTIST 0x8257E7D0 */));
+            CGS_ARTIST_FILE, 124 /* ARTIST 0x8257E7D0 */);
 
         // ARTIST 0x8257E7E4 branches to a trailing `return false` (0x8257E840): the copy-out is the body
         // of the valid test.
@@ -147,9 +147,9 @@ namespace BrnNetwork
             *lpEvent        = mEvent;               // 44-byte payload copy out (memcpy +0x28, 0x2C)
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                CGS_ARTIST_FILE, 135 /* ARTIST 0x8257E82C */));
+                CGS_ARTIST_FILE, 135 /* ARTIST 0x8257E82C */);
             return true;
         }
         return false;

@@ -577,7 +577,7 @@ namespace BrnGame
         // (+0x140E), the route's distance or 0.0f with no nodes }. Same write-locked destination
         // queue as leg 2 (legs 3-9 never touch it), so the world's events come first.
         const BrnAI::RouteMapModuleIO::RouteResponseQueue* lpRouteResponseOutput = lpWorldOutput->GetRouteResponseQueue();
-        CGS_ASSERT(lpRouteResponseOutput != 0, CGS_ASSERT_MESSAGE_AT("lpRouteResponseOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToX.cpp", 505));
+        CGS_ASSERT_AT(lpRouteResponseOutput != 0, "lpRouteResponseOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToX.cpp", 505);
 
         const s32 liNumResponses = lpRouteResponseOutput->GetLength();
         for (s32 liResponse = 0; liResponse < liNumResponses; ++liResponse)

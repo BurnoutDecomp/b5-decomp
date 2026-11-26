@@ -54,7 +54,7 @@ public:
     // was predicted (non-gating), then returns the record.
     const PredictedCollision& GetSoonestPredictedCollision() const
     {
-        CGS_ASSERT(HasPredictedCollision(), CGS_ASSERT_MESSAGE_AT("HasPredictedCollision()", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnVehicleCollisionPredictor.h", 69));   // :69 (non-gating)
+        CGS_ASSERT_AT(HasPredictedCollision(), "HasPredictedCollision()", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnVehicleCollisionPredictor.h", 69);   // :69 (non-gating)
         return mSoonestPredictedCollision;
     }
 

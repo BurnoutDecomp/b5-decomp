@@ -75,11 +75,11 @@ void CrashMode::SendEvent(EGameModeEvent leEvent)
         case 5:   // Quit -- terminal
             return;
         default:
-            CGS_ASSERT(false,
-                CGS_ASSERT_MESSAGE_AT(
-                    "Should not be in this state in Showtime mode!",
+            CGS_FAIL_AT(
+                "Should not be in this state in Showtime mode!",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                    "../GameState/ModeManager/GameModes/BrnCrashMode.cpp", 151 /* ARTIST 0x82330B60 */));
+                    "../GameState/ModeManager/GameModes/BrnCrashMode.cpp", 151 /* ARTIST 0x82330B60 */);
+
             break;
     }
 }

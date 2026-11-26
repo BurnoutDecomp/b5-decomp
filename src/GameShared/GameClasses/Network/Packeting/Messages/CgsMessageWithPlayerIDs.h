@@ -65,16 +65,16 @@ namespace CgsNetwork
         // Inlined at every call site on the console: range assert, then the word store.
         void            SetSendingPlayerID(NetworkPlayerID lSendingPlayerID)
         {
-            CGS_ASSERT(lSendingPlayerID >= 0, CGS_ASSERT_MESSAGE_AT(
-                "lSendingPlayerID>=0", CGS_ARTIST_MESSAGE_WITH_PLAYER_IDS, 123));
+            CGS_ASSERT_AT(lSendingPlayerID >= 0,
+                "lSendingPlayerID>=0", CGS_ARTIST_MESSAGE_WITH_PLAYER_IDS, 123);
             mSendingPlayerID = lSendingPlayerID;
         }
         NetworkPlayerID GetSendingPlayerID() const;
         NetworkPlayerID GetSendingPlayerIDForNack() const { return mSendingPlayerID; }
         void            SetRecvingPlayerID(NetworkPlayerID lRecvingPlayerID)
         {
-            CGS_ASSERT(lRecvingPlayerID >= 0, CGS_ASSERT_MESSAGE_AT(
-                "lRecvingPlayerID>=0", CGS_ARTIST_MESSAGE_WITH_PLAYER_IDS, 185));
+            CGS_ASSERT_AT(lRecvingPlayerID >= 0,
+                "lRecvingPlayerID>=0", CGS_ARTIST_MESSAGE_WITH_PLAYER_IDS, 185);
             mRecvingPlayerID = lRecvingPlayerID;
         }
         NetworkPlayerID GetRecvingPlayerID() const;

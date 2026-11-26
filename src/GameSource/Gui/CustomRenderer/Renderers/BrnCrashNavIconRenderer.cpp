@@ -360,7 +360,7 @@ bool CrashNavIconRenderer::Prepare(CgsGui::GuiEventQueueSmall* lpOutputEventQueu
     default:
         // The console streams "Unhandled prepare stage <n> in CrashNavIconRenderer::Prepare"
         // through StrStream; lowered to the static message (console line 321).
-        CGS_ASSERT(false, "Unhandled prepare stage in CrashNavIconRenderer::Prepare");
+        CGS_FAIL("Unhandled prepare stage in CrashNavIconRenderer::Prepare");
         return false;
     }
 }
@@ -1438,7 +1438,7 @@ u32 CrashNavIconRenderer::GetNumIcons() const
         return static_cast<u32>(mpGuiCache->GetNumPresetEvents());
 
     default:
-        CGS_ASSERT_AT(false, "Invalid icon display type in GetNumIcons", CGS_ARTIST_FILE, 899);   // console line 899
+        CGS_FAIL_AT("Invalid icon display type in GetNumIcons", CGS_ARTIST_FILE, 899);   // console line 899
         return 0;
     }
 }
@@ -1668,7 +1668,7 @@ void CrashNavIconRenderer::GetIconInformation(u32 luIndex, bool* lpbFiltered,
     }
 
     default:
-        CGS_ASSERT(false, "Invalid icon display type in GetIconInformation");   // console line 1101
+        CGS_FAIL("Invalid icon display type in GetIconInformation");   // console line 1101
         break;
     }
 }

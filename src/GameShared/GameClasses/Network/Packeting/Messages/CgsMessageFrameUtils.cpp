@@ -52,12 +52,12 @@ namespace CgsNetwork
     // the unsigned forward distance (lu16A - lu16B) is in the near half.
     bool UInt16IsLargerOrEqualWrapped(u16 lu16A, u16 lu16B)
     {
-        CGS_ASSERT(lu16A != KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16A != KU16_INVALID_FRAME", __FILE__, 522 /* ARTIST 0x82540F54 */));
-        CGS_ASSERT(lu16B != KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16B != KU16_INVALID_FRAME", __FILE__, 523 /* ARTIST 0x82540F7C */));
+        CGS_ASSERT_AT(lu16A != KU16_INVALID_FRAME,
+            "lu16A != KU16_INVALID_FRAME", __FILE__, 522 /* ARTIST 0x82540F54 */);
+
+        CGS_ASSERT_AT(lu16B != KU16_INVALID_FRAME,
+            "lu16B != KU16_INVALID_FRAME", __FILE__, 523 /* ARTIST 0x82540F7C */);
+
         return static_cast<u16>(lu16A - lu16B) < KU16_HALF_OF_FRAMES;
     }
 
@@ -65,12 +65,12 @@ namespace CgsNetwork
     // Strict version: equal frames are not "larger".
     bool UInt16IsLargerWrapped(u16 lu16A, u16 lu16B)
     {
-        CGS_ASSERT(lu16A != KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16A != KU16_INVALID_FRAME", __FILE__, 544 /* ARTIST 0x82540FE8 */));
-        CGS_ASSERT(lu16B != KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16B != KU16_INVALID_FRAME", __FILE__, 545 /* ARTIST 0x82541010 */));
+        CGS_ASSERT_AT(lu16A != KU16_INVALID_FRAME,
+            "lu16A != KU16_INVALID_FRAME", __FILE__, 544 /* ARTIST 0x82540FE8 */);
+
+        CGS_ASSERT_AT(lu16B != KU16_INVALID_FRAME,
+            "lu16B != KU16_INVALID_FRAME", __FILE__, 545 /* ARTIST 0x82541010 */);
+
         if (lu16A == lu16B)
         {
             return false;

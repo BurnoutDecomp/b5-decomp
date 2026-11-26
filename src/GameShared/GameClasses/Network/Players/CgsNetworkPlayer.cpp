@@ -112,9 +112,9 @@ void NetMessageData::Prepare(s32 leType, s32 liLength, Message* lpMsg)
 // fields with their invalid sentinels.
 void NetworkPlayer::Construct(CgsNetworkPlayerConstructParams* lpConstructParams)
 {
-    CGS_ASSERT(lpConstructParams, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpConstructParams,
         "lpConstructParams",
-        CGS_ARTIST_FILE, 159 /* ARTIST 0x82872328 */));
+        CGS_ARTIST_FILE, 159 /* ARTIST 0x82872328 */);
 
     mpNetworkAdapter = 0;
     mPlayerID = KI_INVALID_PLAYER_ID;
@@ -158,10 +158,10 @@ bool NetworkPlayer::IsMessageTypeRegistered(s32 leType)
     {
         if (maSendMessageData[liIndex].meType == leType)
         {
-            CGS_ASSERT(maRecvMessageData[liIndex].meType == leType,
-                CGS_ASSERT_MESSAGE_AT(
-                    "maRecvMessageData[i].meType == leType",
-                    CGS_ARTIST_FILE, 908 /* ARTIST 0x82872B64 */));
+            CGS_ASSERT_AT(maRecvMessageData[liIndex].meType == leType,
+                "maRecvMessageData[i].meType == leType",
+                    CGS_ARTIST_FILE, 908 /* ARTIST 0x82872B64 */);
+
             return true;
         }
     }
@@ -181,7 +181,7 @@ Message* NetworkPlayer::GetRegisteredSendMessage(s32 leType)
 
     CgsDev::Assert::BeginAssert();
     CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-    (lStream << "Failed to find registered message type ").PrintSignedInteger(leType) << "\n";
+    lStream << "Failed to find registered message type " << leType << "\n";
     CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1001));
     CgsDev::Assert::EndAssert();
     return 0;
@@ -200,7 +200,7 @@ Message* NetworkPlayer::GetRegisteredRecvMessage(s32 leType)
 
     CgsDev::Assert::BeginAssert();
     CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-    (lStream << "Failed to find registered message type ").PrintSignedInteger(leType) << "\n";
+    lStream << "Failed to find registered message type " << leType << "\n";
     CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1031));
     CgsDev::Assert::EndAssert();
     return 0;
@@ -216,28 +216,28 @@ void NetworkPlayer::RegisterMessageType(s32 leType, s32 liLength, Message* lpSen
                                         ReliableMessageDeliveredCallback lpfDelivered,
                                         void* lpUserData)
 {
-    CGS_ASSERT(liLength > 0, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(liLength > 0,
         "liLength > 0",
-        __FILE__, 742 /* ARTIST 0x82872610 */));
-    CGS_ASSERT(leType >= 0, CGS_ASSERT_MESSAGE_AT(
+        __FILE__, 742 /* ARTIST 0x82872610 */);
+    CGS_ASSERT_AT(leType >= 0,
         "leType >= 0",
-        __FILE__, 743 /* ARTIST 0x82872634 */));
-    CGS_ASSERT(miNumberMessagesRegistered < KI_MAX_MESSAGE_TYPES, CGS_ASSERT_MESSAGE_AT(
+        __FILE__, 743 /* ARTIST 0x82872634 */);
+    CGS_ASSERT_AT(miNumberMessagesRegistered < KI_MAX_MESSAGE_TYPES,
         "miNumberMessagesRegistered < KI_MAX_MESSAGE_TYPES",
-        __FILE__, 746 /* ARTIST 0x8287265C */));
+        __FILE__, 746 /* ARTIST 0x8287265C */);
 
-    CGS_ASSERT(!lpSendMsg->IsReliable() || lpfArrived, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(!lpSendMsg->IsReliable() || lpfArrived,
         "!lpSendMsg->IsReliable() || lpfMsgArrivedCallback",
-        __FILE__, 749 /* ARTIST 0x828726A0 */));
-    CGS_ASSERT(lpRecvMsg, CGS_ASSERT_MESSAGE_AT(
+        __FILE__, 749 /* ARTIST 0x828726A0 */);
+    CGS_ASSERT_AT(lpRecvMsg,
         "lpRecvMsg",
-        __FILE__, 752 /* ARTIST 0x828726C4 */));
+        __FILE__, 752 /* ARTIST 0x828726C4 */);
 
     for (s32 liIndex = 0; liIndex < miNumberMessagesRegistered; ++liIndex)
     {
-        CGS_ASSERT(maSendMessageData[liIndex].meType != leType, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(maSendMessageData[liIndex].meType != leType,
             "maSendMessageData[i].meType != leType",
-            __FILE__, 760 /* ARTIST 0x82872708 */));
+            __FILE__, 760 /* ARTIST 0x82872708 */);
     }
 
     const s32 liSlot = miNumberMessagesRegistered;
@@ -278,7 +278,7 @@ void NetworkPlayer::UnRegisterMessageType(s32 leType)
     {
         *CgsDev::Log::gpDebugPrint << "Failed to find message of type "
                                    << CgsDev::E_PRINTMODE_HEXONCE << leType << " to unregister";
-        CGS_ASSERT(false, "Failed to find message of type to unregister");
+        CGS_FAIL("Failed to find message of type to unregister");
         return;
     }
 
@@ -376,7 +376,7 @@ bool NetworkPlayer::Prepare(NetworkAdapter* lpNetworkAdapter,
     if (liNameLength >= 16)
     {
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "String too long: " << (lpcName ? lpcName : "<NULLSTRING>");
-        CGS_ASSERT(false, "String too long");
+        CGS_FAIL("String too long");
     }
     std::strncpy(macName, lpcName, 16);
 
@@ -453,9 +453,9 @@ void NetworkPlayer::CheckForPlayerDisconnectTimeout(const CgsSystem::TimerStatus
 
     CgsSystem::Time lTimeGap;
     lTimeGap = lpTimerStatus->GetTime() - mTimeLastPacketReceived;
-    CGS_ASSERT(lTimeGap.GetFloatVal() >= 0.0f, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lTimeGap.GetFloatVal() >= 0.0f,
         "lTimeGap.GetFloatVal() >= 0.0f",
-        CGS_ARTIST_FILE, 1324 /* ARTIST 0x828731B4 */));
+        CGS_ARTIST_FILE, 1324 /* ARTIST 0x828731B4 */);
 
     // DWARF: the timeout test is CgsSystem::Time::operator> (inlined).
     mbNetworkPlayerPaused = lTimeGap > K_NETWORK_PLAYER_TIMEOUT;
@@ -735,9 +735,9 @@ void NetworkPlayer::UpdateMessagesReceived()
             continue;
         }
 
-        CGS_ASSERT(lData.miValidCountdown == 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lData.miValidCountdown == 0,
             "maRecvMessageData[liIndex].miValidCountdown == 0",
-            __FILE__, 1235 /* ARTIST 0x82873000 */));
+            __FILE__, 1235 /* ARTIST 0x82873000 */);
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Removing message received data for message type "
                                    << lData.meType << " with frame "
                                    << static_cast<s32>(lData.mu16Frame) << "\n";
@@ -888,13 +888,13 @@ void NetworkPlayer::OnMessageUnpackedCallback(Message* lpMsg, void* lpUserData)
 {
     NetworkPlayer* lpNetPlayer = static_cast<NetworkPlayer*>(lpUserData);
 
-    CGS_ASSERT(lpMsg->IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lpMsg->IsMessageValid(),
         "lpMsg->IsMessageValid()",
-        __FILE__, 1142 /* ARTIST 0x82883E58 */));
+        __FILE__, 1142 /* ARTIST 0x82883E58 */);
     const u8 lu8GameID = lpMsg->GetGameID();
-    CGS_ASSERT(lu8GameID != KU8_INVALID_GAME_ID, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(lu8GameID != KU8_INVALID_GAME_ID,
         "lu8GameID != KU8_INVALID_GAME_ID",
-        __FILE__, 1148 /* ARTIST 0x82883E88 */));
+        __FILE__, 1148 /* ARTIST 0x82883E88 */);
 
     const u8 lu8MyGameID = lpNetPlayer->mpPlayerManager->GetGameID();
     if (lu8GameID != lu8MyGameID)
@@ -922,16 +922,16 @@ void NetworkPlayer::OnMessageUnpackedCallback(Message* lpMsg, void* lpUserData)
             break;
         }
     }
-    CGS_ASSERT(i < lpNetPlayer->miNumberMessagesRegistered, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(i < lpNetPlayer->miNumberMessagesRegistered,
         "i < lpNetPlayer->miNumberMessagesRegistered",
-        __FILE__, 1177 /* ARTIST 0x82883FD0 */));
+        __FILE__, 1177 /* ARTIST 0x82883FD0 */);
 
     NetMessageData& lData = lpNetPlayer->maRecvMessageData[i];
     if (lpMsg->IsReliable())
     {
-        CGS_ASSERT(lData.mpfMsgArrivedCallback, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lData.mpfMsgArrivedCallback,
             "lpNetPlayer->maRecvMessageData[i].mpfMsgArrivedCallback",
-            __FILE__, 1184 /* ARTIST 0x82884020 */));
+            __FILE__, 1184 /* ARTIST 0x82884020 */);
         void* lpCallbackUserData = lData.mpCallbackUserData;
         ReliableMessage* lpReliableMsg = static_cast<ReliableMessage*>(lpMsg);
         lData.mpfMsgArrivedCallback(lpReliableMsg, lpReliableMsg->GetSendingPlayerID(),
@@ -939,9 +939,9 @@ void NetworkPlayer::OnMessageUnpackedCallback(Message* lpMsg, void* lpUserData)
         return;
     }
 
-    CGS_ASSERT(!lData.mpfMsgArrivedCallback, CGS_ASSERT_MESSAGE_AT(
+    CGS_ASSERT_AT(!lData.mpfMsgArrivedCallback,
         "!lpNetPlayer->maRecvMessageData[i].mpfMsgArrivedCallback",
-        __FILE__, 1193 /* ARTIST 0x82884070 */));
+        __FILE__, 1193 /* ARTIST 0x82884070 */);
     if (lData.mu16Frame == KU16_INVALID_FRAME || UInt16IsLargerWrapped(lpMsg->mu16Frame, lData.mu16Frame))
     {
         lData.mu16Frame        = lpMsg->mu16Frame;

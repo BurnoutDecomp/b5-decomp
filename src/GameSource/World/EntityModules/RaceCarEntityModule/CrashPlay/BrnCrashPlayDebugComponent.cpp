@@ -22,23 +22,23 @@ namespace BrnWorld
 
     void CrashPlayDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender*)
     {
-        CGS_ASSERT(mpCrashPlayManager != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpCrashPlayManager != NULL", KAC_ARTIST_ASSERT_FILE, 82 /* ARTIST 0x822C3490 */));
+        CGS_ASSERT_AT(mpCrashPlayManager != 0,
+            "mpCrashPlayManager != NULL", KAC_ARTIST_ASSERT_FILE, 82 /* ARTIST 0x822C3490 */);
+
     }
 
     void CrashPlayDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender*)
     {
-        CGS_ASSERT(mpCrashPlayManager != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpCrashPlayManager != NULL", KAC_ARTIST_ASSERT_FILE, 99 /* ARTIST 0x822A8188 */));
+        CGS_ASSERT_AT(mpCrashPlayManager != 0,
+            "mpCrashPlayManager != NULL", KAC_ARTIST_ASSERT_FILE, 99 /* ARTIST 0x822A8188 */);
+
     }
 
     void CrashPlayDebugComponent::Update()
     {
-        CGS_ASSERT(mpCrashPlayManager != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpCrashPlayManager != NULL", KAC_ARTIST_ASSERT_FILE, 111 /* ARTIST 0x822A81D0 */));
+        CGS_ASSERT_AT(mpCrashPlayManager != 0,
+            "mpCrashPlayManager != NULL", KAC_ARTIST_ASSERT_FILE, 111 /* ARTIST 0x822A81D0 */);
+
     }
 
     const char* CrashPlayDebugComponent::GetName() const

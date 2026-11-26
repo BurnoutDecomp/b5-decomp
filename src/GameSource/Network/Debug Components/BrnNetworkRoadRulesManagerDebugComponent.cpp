@@ -67,13 +67,13 @@ namespace BrnNetwork
     // reconstruction retains the same event and stores for that original constant.
     void RoadRulesManagerDebugComponent::TriggerPersonalBest( void* lpData )
     {
-        CGS_ASSERT(lpData != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpData != 0,
             "lpData",
-            __FILE__, 104 /* ARTIST 0x8258AEEC */));
+            __FILE__, 104 /* ARTIST 0x8258AEEC */);
         RoadRulesManagerDebugComponent* lpThis = static_cast<RoadRulesManagerDebugComponent*>( lpData );
-        CGS_ASSERT(lpThis != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpThis != 0,
             "lpRoadRulesManagerDebugCmpt",
-            __FILE__, 106 /* ARTIST 0x8258AF08 */));
+            __FILE__, 106 /* ARTIST 0x8258AF08 */);
 
         // The record is a whole personal-best event: the score entry, then challenge 0 and the
         // not-a-lobby-score flag (the two stores just before the call).
@@ -94,12 +94,12 @@ namespace BrnNetwork
     // @ 0x825863A8. Request the latest road-rules high scores from the server.
     void RoadRulesManagerDebugComponent::RequestRoadRulesHighScores( void* lpData )
     {
-        CGS_ASSERT( lpData != 0,
-            CGS_ASSERT_MESSAGE_AT("lpData", __FILE__, 141 /* ARTIST 0x825863D0 */));
+        CGS_ASSERT_AT( lpData != 0,
+            "lpData", __FILE__, 141 /* ARTIST 0x825863D0 */);
         RoadRulesManagerDebugComponent* lpThis = static_cast<RoadRulesManagerDebugComponent*>( lpData );
-        CGS_ASSERT( lpThis != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lpRoadRulesManagerDebugCmpt", __FILE__, 143 /* ARTIST 0x825863F4 */));
+        CGS_ASSERT_AT( lpThis != 0,
+            "lpRoadRulesManagerDebugCmpt", __FILE__, 143 /* ARTIST 0x825863F4 */);
+
 
         lpThis->mpRoadRulesManager->StartDownloadingRoadRulesScoresFromServer();
     }

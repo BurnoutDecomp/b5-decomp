@@ -270,7 +270,7 @@ namespace BrnDirector
             return true;
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case", CGS_ARTIST_FILE, 190));
+            CGS_FAIL_AT("unhandled case", CGS_ARTIST_FILE, 190);
             return false;
         }
     }
@@ -414,8 +414,8 @@ namespace BrnDirector
     // is called on `this`+0 in the X360.
     const BrnTraffic::TrafficData* WorldMap::GetTrafficData() const
     {
-        CGS_ASSERT(meLoadingState == E_LOADING_STATE_LOADED,
-                   CGS_ASSERT_MESSAGE_AT("meLoadingState == E_LOADING_STATE_LOADED", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.h", 90));
+        CGS_ASSERT_AT(meLoadingState == E_LOADING_STATE_LOADED,
+                   "meLoadingState == E_LOADING_STATE_LOADED", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.h", 90);
         return mpTrafficData.GetMemoryResource();
     }
 
@@ -454,8 +454,8 @@ namespace BrnDirector
             if (luNeighbour == 0xFFFFu)
                 break;
 
-            CGS_ASSERT(lpHull->mpaNeighbourData != 0, CGS_ASSERT_MESSAGE_AT("mpaNeighbourData", CGS_ARTIST_FILE_BRNTRAFFICHULL, 247));
-            CGS_ASSERT(luNeighbour < lpHull->muNumNeighbours, CGS_ASSERT_MESSAGE_AT("luIndex < muNumNeighbours", CGS_ARTIST_FILE_BRNTRAFFICHULL, 248));
+            CGS_ASSERT_AT(lpHull->mpaNeighbourData != 0, "mpaNeighbourData", CGS_ARTIST_FILE_BRNTRAFFICHULL, 247);
+            CGS_ASSERT_AT(luNeighbour < lpHull->muNumNeighbours, "luIndex < muNumNeighbours", CGS_ARTIST_FILE_BRNTRAFFICHULL, 248);
             const BrnTraffic::Neighbour* lpNeighbour = &lpHull->mpaNeighbourData[luNeighbour];
 
             // Cross into the neighbour section (GetSection asserts luIndex < muNumSections).
@@ -465,16 +465,16 @@ namespace BrnDirector
             // Rung, in the neighbour's frame (two stores, matching the two stb in the asm).
             *lpu8Rung = static_cast<u8>(*lpu8Rung - lpNeighbour->muOurStartRung);
             *lpu8Rung = static_cast<u8>(lpNeighbour->muTheirStartRung + *lpu8Rung);
-            CGS_ASSERT(*lpu8Rung <= lpSection->muNumRungs,
-                       CGS_ASSERT_MESSAGE_AT("*lpu8Rung <= lpSection->muNumRungs", CGS_ARTIST_FILE, 500));
+            CGS_ASSERT_AT(*lpu8Rung <= lpSection->muNumRungs,
+                       "*lpu8Rung <= lpSection->muNumRungs", CGS_ARTIST_FILE, 500);
 
             // Parameter, likewise (two stfs).
             *lpfParameterOnSection = *lpfParameterOnSection
                                    - static_cast<f32>(lpNeighbour->muOurStartRung);
             *lpfParameterOnSection = static_cast<f32>(lpNeighbour->muTheirStartRung)
                                    + *lpfParameterOnSection;
-            CGS_ASSERT(*lpfParameterOnSection <= static_cast<f32>(lpSection->muNumRungs),
-                       CGS_ASSERT_MESSAGE_AT("*lpfParameterOnSection <= (float32_t)lpSection->muNumRungs", CGS_ARTIST_FILE, 504));
+            CGS_ASSERT_AT(*lpfParameterOnSection <= static_cast<f32>(lpSection->muNumRungs),
+                       "*lpfParameterOnSection <= (float32_t)lpSection->muNumRungs", CGS_ARTIST_FILE, 504);
         }
     }
 
@@ -486,8 +486,8 @@ namespace BrnDirector
                                            Vector3* lpExtentsOut,
                                            Matrix44Affine* lpTransformOut) const
     {
-        CGS_ASSERT(lpExtentsOut  != 0, CGS_ASSERT_MESSAGE_AT("lpExtentsOut != NULL", CGS_ARTIST_FILE, 451));
-        CGS_ASSERT(lpTransformOut != 0, CGS_ASSERT_MESSAGE_AT("lpTransformOut != NULL", CGS_ARTIST_FILE, 452));
+        CGS_ASSERT_AT(lpExtentsOut  != 0, "lpExtentsOut != NULL", CGS_ARTIST_FILE, 451);
+        CGS_ASSERT_AT(lpTransformOut != 0, "lpTransformOut != NULL", CGS_ARTIST_FILE, 452);
 
         const s32 liGenericRegionCount =
             mpTriggerData.operator->()->GetGenericRegionCount();
@@ -522,8 +522,8 @@ namespace BrnDirector
     // leftmost lane, and drop the result KF_SAFE_POSITION_DROP below the lane along its up.
     bool WorldMap::GetSafePositionNearest(Vector3 lPosition, Vector3& lOut) const
     {
-        CGS_ASSERT(meLoadingState == E_LOADING_STATE_LOADED,
-                   CGS_ASSERT_MESSAGE_AT("meLoadingState == E_LOADING_STATE_LOADED", CGS_ARTIST_FILE, 205));
+        CGS_ASSERT_AT(meLoadingState == E_LOADING_STATE_LOADED,
+                   "meLoadingState == E_LOADING_STATE_LOADED", CGS_ARTIST_FILE, 205);
 
         lOut = lPosition;   // stvx128 v127 -> lOut (initial store, overwritten below)
 
@@ -600,8 +600,8 @@ namespace BrnDirector
                                                                Vector3 lDisplacement,
                                                                Vector3& lOut) const
     {
-        CGS_ASSERT(meLoadingState == E_LOADING_STATE_LOADED,
-                   CGS_ASSERT_MESSAGE_AT("meLoadingState == E_LOADING_STATE_LOADED", CGS_ARTIST_FILE, 278));
+        CGS_ASSERT_AT(meLoadingState == E_LOADING_STATE_LOADED,
+                   "meLoadingState == E_LOADING_STATE_LOADED", CGS_ARTIST_FILE, 278);
 
         lOut = lPosition;   // stvx128 v126 -> lOut (initial store)
 

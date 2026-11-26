@@ -77,9 +77,9 @@ namespace GuiResourceModuleIO
     // X360 0x8284DFF8: read-lock (bit 4) const handle to the load-notification queue (this+0x814).
     const OutputBuffer::GuiEventQueue* OutputBuffer::GetLoadNotifications() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(),
             "Not locked for reading\n",
-            "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/Resources/CgsGuiResourceModuleIO.h", 397));
+            "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/Resources/CgsGuiResourceModuleIO.h", 397);
         return &mLoadNotifications;
     }
 

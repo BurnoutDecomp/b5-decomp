@@ -15,10 +15,10 @@ static const char K_EFFECTS_VERTEX_MANAGER_ASSERT_FILE[] =
 //      rotlwi r11,r11,2 (index*4); lwzx r3,r11,r31 -> mapVertexBuffer[index].
 renderengine::VertexBuffer* EffectsVertexBufferManager::GetVertexBuffer() const
 {
-    CGS_ASSERT(!mbLocked,
-        CGS_ASSERT_MESSAGE_AT(
-            "!mbLocked",
-            "..\\..\\..\\GameSource\\Effects/Particles/EffectsVertexBufferManager.h", 97 /* ARTIST 0x82278348 */));
+    CGS_ASSERT_AT(!mbLocked,
+        "!mbLocked",
+            "..\\..\\..\\GameSource\\Effects/Particles/EffectsVertexBufferManager.h", 97 /* ARTIST 0x82278348 */);
+
     return mapVertexBuffer[muCurrentBuffer];
 }
 

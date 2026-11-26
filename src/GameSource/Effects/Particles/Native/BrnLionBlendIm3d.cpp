@@ -156,14 +156,14 @@ namespace CgsGraphics
 template <typename V>
 void ImRenderer<V>::BeginRendering(s8 li8Program)
 {
-    CGS_ASSERT((li8Program >= 0) && (li8Program < KI8_MAX_PROGRAMS),
-        CGS_ASSERT_MESSAGE_AT("( li8Program >= 0 ) && ( li8Program < KI8_MAX_PROGRAMS )", KAC_IM_RENDERER_ASSERT_FILE, 617));
-    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
-        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 618));
-    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
-        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 619));
-    CGS_ASSERT(mgpActiveRenderer == 0,
-        CGS_ASSERT_MESSAGE_AT("mgpActiveRenderer == NULL", KAC_IM_RENDERER_ASSERT_FILE, 620));
+    CGS_ASSERT_AT((li8Program >= 0) && (li8Program < KI8_MAX_PROGRAMS),
+        "( li8Program >= 0 ) && ( li8Program < KI8_MAX_PROGRAMS )", KAC_IM_RENDERER_ASSERT_FILE, 617);
+    CGS_ASSERT_AT(mapVertexProgramBuffer[li8Program] != 0,
+        "mapVertexProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 618);
+    CGS_ASSERT_AT(mapPixelProgramBuffer[li8Program] != 0,
+        "mapPixelProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 619);
+    CGS_ASSERT_AT(mgpActiveRenderer == 0,
+        "mgpActiveRenderer == NULL", KAC_IM_RENDERER_ASSERT_FILE, 620);
 
     // X360 stores `this + 4` (the ImRendererBase subobject past this renderer's vptr) == `this`, or 0
     // when `this` is null.
@@ -304,10 +304,10 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
 template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
-    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
-        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 526));
-    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
-        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 527));
+    CGS_ASSERT_AT(mapVertexProgramBuffer[li8Program] != 0,
+        "mapVertexProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 526);
+    CGS_ASSERT_AT(mapPixelProgramBuffer[li8Program] != 0,
+        "mapPixelProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 527);
 
     renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
     // Device::SetVertexProgram IS the console's compare-and-bind (it returns false when the shadow

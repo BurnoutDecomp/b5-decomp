@@ -189,9 +189,9 @@ namespace BrnNetwork
 
             // Consume the slot: clear VALID, then assert it is now invalid.
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(!IsMessageValid(),
                 "!IsMessageValid()",
-                CGS_ARTIST_FILE, 222 /* ARTIST 0x8257E4AC */));
+                CGS_ARTIST_FILE, 222 /* ARTIST 0x8257E4AC */);
             return true;
         }
         return false;

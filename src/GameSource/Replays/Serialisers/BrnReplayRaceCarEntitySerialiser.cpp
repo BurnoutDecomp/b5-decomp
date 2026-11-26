@@ -53,7 +53,7 @@ namespace BrnReplays
     {
         // asm: `lwz r11,0x24(this)` (miStaticBufferSize) compared `< 0x1B000`; named-member
         // access is what matters on the 64-bit host.
-        CGS_ASSERT(GetStaticBufferSize() >= KI_STATIC_BUFFER_SIZE, CGS_ASSERT_STREAM_MESSAGE_AT("Static buffer size is too small\n", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.h", 151));
+        CGS_ASSERT_STREAM_AT(GetStaticBufferSize() >= KI_STATIC_BUFFER_SIZE, "Static buffer size is too small\n", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.h", 151);
 
         return reinterpret_cast<RaceCarEntitySerialiserStaticLayout*>(GetStaticBuffer());
     }
@@ -91,7 +91,7 @@ namespace BrnReplays
     {
         Lock();
         RaceCarEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
-        CGS_ASSERT(lpLayout != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.cpp", 127));
+        CGS_ASSERT_AT(lpLayout != 0, "lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.cpp", 127);
 
         // ARTIST 0x8264C568..0x8264C5D8: the inlined DWARF predicates in this order.
         if (!IsStalled() && !IsPreparing() && !IsRestoring() && IsPlaying())

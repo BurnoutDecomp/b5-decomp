@@ -35,7 +35,7 @@ namespace WorldEntityIO
     const InputBuffer_PostPhysics::GameActionQueue*
     InputBuffer_PostPhysics::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 223));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 223);
         return &mGameActionQueue;
     }
 
@@ -43,7 +43,7 @@ namespace WorldEntityIO
     InputBuffer_PostPhysics::GameActionQueue*
     InputBuffer_PostPhysics::GetGameActionQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 224));
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 224);
         return &mGameActionQueue;
     }
 }

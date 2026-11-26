@@ -55,7 +55,7 @@ static const CgsResource::ID MakeCGSId(IceMovie::EIceGroup leGroup, u32 luTakeIn
         CgsCore::SPrintf(lacName, sizeof(lacName), "World_LandMark_%i", luDisplayIndex);
         break;
     case IceMovie::E_ICE_GROUP_WORLD_SIGNATURE:
-        CGS_ASSERT(static_cast<s32>(luTakeIndex) != -1, CGS_ASSERT_MESSAGE_AT("luTakeIndex > 0", CGS_ARTIST_FILE, 65));
+        CGS_ASSERT_AT(static_cast<s32>(luTakeIndex) != -1, "luTakeIndex > 0", CGS_ARTIST_FILE, 65);
         // World-signature is the ONE group that formats the RAW 0-based take index, not the
         // +1 display index: the X360 computes (luTakeIndex + 1) - 1 == luTakeIndex here
         // (XEX MakeCGSId @0x821F79F8 `v8 - 1`; PS3 DecFIGS @0x4D390 `World_Signature_%i,
@@ -72,7 +72,7 @@ static const CgsResource::ID MakeCGSId(IceMovie::EIceGroup leGroup, u32 luTakeIn
         CgsCore::SPrintf(lacName, sizeof(lacName), "Generic_All_%i", luDisplayIndex);
         break;
     default:
-        CGS_ASSERT(false, "Invalid ICE group: ");
+        CGS_FAIL("Invalid ICE group: ");
         lacName[0] = '\0';
         break;
     }
@@ -105,7 +105,7 @@ const CgsResource::ID IceMovie::GetCgsID() const
         return MakeCGSId(meGroup, muTakeIndex);
     }
 
-    CGS_ASSERT(false, "Invalid ref type ");
+    CGS_FAIL("Invalid ref type ");
     return mCgsID;
 }
 
@@ -158,19 +158,19 @@ void ICEMoviePlaylist::Construct()
 void ICEMoviePlaylist::InsertMovieBefore(s32 liDesiredZeroBasedIndex, const IceMovie& lrMovie)
 {
     const s32 liMoviePoolIndex = mMoviePool.AllocateObject();
-    CGS_ASSERT(liMoviePoolIndex != -1, CGS_ASSERT_MESSAGE_AT("liMoviePoolIndex != -1", CGS_ARTIST_FILE, 235));
+    CGS_ASSERT_AT(liMoviePoolIndex != -1, "liMoviePoolIndex != -1", CGS_ARTIST_FILE, 235);
 
     mMoviePool[liMoviePoolIndex] = lrMovie;
 
-    CGS_ASSERT(liDesiredZeroBasedIndex >= 0, CGS_ASSERT_MESSAGE_AT("liDesiredZeroBasedIndex >= 0", CGS_ARTIST_FILE, 237));
+    CGS_ASSERT_AT(liDesiredZeroBasedIndex >= 0, "liDesiredZeroBasedIndex >= 0", CGS_ARTIST_FILE, 237);
     mMoviePoolIndicies.InsertBefore(static_cast<u32>(liDesiredZeroBasedIndex), liMoviePoolIndex);
 
     const s32 liIndex = mDebugMenuRemoveData.AllocateObject();
-    CGS_ASSERT(liIndex != -1, CGS_ASSERT_MESSAGE_AT("liIndex != -1", CGS_ARTIST_FILE, 244));
+    CGS_ASSERT_AT(liIndex != -1, "liIndex != -1", CGS_ARTIST_FILE, 244);
 
     mDebugMenuRemoveData[liIndex].mpThisPlaylist = this;
     mDebugMenuRemoveData[liIndex].miIndex        = liMoviePoolIndex;
-    CGS_ASSERT(liIndex == liMoviePoolIndex, CGS_ASSERT_MESSAGE_AT("liIndex == liMoviePoolIndex", CGS_ARTIST_FILE, 247));
+    CGS_ASSERT_AT(liIndex == liMoviePoolIndex, "liIndex == liMoviePoolIndex", CGS_ARTIST_FILE, 247);
 
     // GetCount() carries the "Array used before Construct/Clear was called" assert.
     miDebugMenuNewMovieIndex = mMoviePoolIndicies.GetCount() + 1;
@@ -325,10 +325,10 @@ void SharedPlaylists::Construct()
 const ICEMoviePlaylist&
 SharedPlaylists::GetPausePlaylist() const
 {
-    CGS_ASSERT(muCurrentPausePlaylist < KU_NUM_PAUSE_PLAYLISTS,
-        CGS_ASSERT_MESSAGE_AT(
-            "muCurrentPausePlaylist < KI_NUM_PAUSE_PLAYLISTS",
-            CGS_ARTIST_BRNICEMOVIEPLAYER_FILE, 629 /* ARTIST 0x821F5A20 */));
+    CGS_ASSERT_AT(muCurrentPausePlaylist < KU_NUM_PAUSE_PLAYLISTS,
+        "muCurrentPausePlaylist < KI_NUM_PAUSE_PLAYLISTS",
+            CGS_ARTIST_BRNICEMOVIEPLAYER_FILE, 629 /* ARTIST 0x821F5A20 */);
+
     return maPausePlaylists[muCurrentPausePlaylist];
 }
 
@@ -374,8 +374,8 @@ void ICEMoviePlayer::Construct()
 // ----------------------------------------------------------------------------
 bool ICEMoviePlayer::Prepare(ICEWrapper* lpICEWrapper)
 {
-    CGS_ASSERT(lpICEWrapper != 0,
-        CGS_ASSERT_MESSAGE_AT("lpICEWrapper != NULL", CGS_ARTIST_FILE, 460 /* ARTIST 0x821F7CF4 */));
+    CGS_ASSERT_AT(lpICEWrapper != 0,
+        "lpICEWrapper != NULL", CGS_ARTIST_FILE, 460 /* ARTIST 0x821F7CF4 */);
     mpICEWrapper = lpICEWrapper;
     return true;
 }
@@ -424,8 +424,8 @@ void ICEMoviePlayer::ApplyFlashHookToCamera()
 // ----------------------------------------------------------------------------
 void ICEMoviePlayer::Play()
 {
-    CGS_ASSERT(mpICEWrapper != 0, CGS_ASSERT_MESSAGE_AT("mpICEWrapper != NULL", CGS_ARTIST_FILE, 471));
-    CGS_ASSERT(!mbIsPlaying, CGS_ASSERT_MESSAGE_AT("!mbIsPlaying", CGS_ARTIST_FILE, 472));
+    CGS_ASSERT_AT(mpICEWrapper != 0, "mpICEWrapper != NULL", CGS_ARTIST_FILE, 471);
+    CGS_ASSERT_AT(!mbIsPlaying, "!mbIsPlaying", CGS_ARTIST_FILE, 472);
 
     mbIsLooping           = false;
     mbIsPlaying           = true;
@@ -450,10 +450,10 @@ void ICEMoviePlayer::Play()
 // ----------------------------------------------------------------------------
 void ICEMoviePlayer::Loop()
 {
-    CGS_ASSERT(mpICEWrapper != 0,
-        CGS_ASSERT_MESSAGE_AT("mpICEWrapper != NULL", CGS_ARTIST_FILE, 494 /* ARTIST 0x82251374 */));
-    CGS_ASSERT(!mbIsPlaying,
-        CGS_ASSERT_MESSAGE_AT("!mbIsPlaying", CGS_ARTIST_FILE, 495 /* ARTIST 0x8225139C */));
+    CGS_ASSERT_AT(mpICEWrapper != 0,
+        "mpICEWrapper != NULL", CGS_ARTIST_FILE, 494 /* ARTIST 0x82251374 */);
+    CGS_ASSERT_AT(!mbIsPlaying,
+        "!mbIsPlaying", CGS_ARTIST_FILE, 495 /* ARTIST 0x8225139C */);
 
     Play();
     mbIsLooping = true;
@@ -467,14 +467,14 @@ void ICEMoviePlayer::Loop()
 // ----------------------------------------------------------------------------
 void ICEMoviePlayer::CutToInterpolateOut()
 {
-    CGS_ASSERT(mpICEWrapper != 0,
-        CGS_ASSERT_MESSAGE_AT("mpICEWrapper != NULL", CGS_ARTIST_FILE, 506 /* ARTIST 0x821F7D64 */));
-    CGS_ASSERT(mbIsPlaying,
-        CGS_ASSERT_MESSAGE_AT("mbIsPlaying", CGS_ARTIST_FILE, 507 /* ARTIST 0x821F7D8C */));
-    CGS_ASSERT(mbIsLooping,
-        CGS_ASSERT_MESSAGE_AT("mbIsLooping", CGS_ARTIST_FILE, 508 /* ARTIST 0x821F7DB4 */));
-    CGS_ASSERT(mbShouldInterpolateOut,
-        CGS_ASSERT_MESSAGE_AT("mbShouldInterpolateOut", CGS_ARTIST_FILE, 509 /* ARTIST 0x821F7DDC */));
+    CGS_ASSERT_AT(mpICEWrapper != 0,
+        "mpICEWrapper != NULL", CGS_ARTIST_FILE, 506 /* ARTIST 0x821F7D64 */);
+    CGS_ASSERT_AT(mbIsPlaying,
+        "mbIsPlaying", CGS_ARTIST_FILE, 507 /* ARTIST 0x821F7D8C */);
+    CGS_ASSERT_AT(mbIsLooping,
+        "mbIsLooping", CGS_ARTIST_FILE, 508 /* ARTIST 0x821F7DB4 */);
+    CGS_ASSERT_AT(mbShouldInterpolateOut,
+        "mbShouldInterpolateOut", CGS_ARTIST_FILE, 509 /* ARTIST 0x821F7DDC */);
 
     mbInterpolateOutNow = true;
 }
@@ -487,8 +487,8 @@ void ICEMoviePlayer::CutToInterpolateOut()
 // ----------------------------------------------------------------------------
 void ICEMoviePlayer::Stop()
 {
-    CGS_ASSERT(mpICEWrapper != 0, CGS_ASSERT_MESSAGE_AT("mpICEWrapper != NULL", CGS_ARTIST_FILE, 519));
-    CGS_ASSERT(mbIsPlaying, CGS_ASSERT_MESSAGE_AT("mbIsPlaying", CGS_ARTIST_FILE, 520));
+    CGS_ASSERT_AT(mpICEWrapper != 0, "mpICEWrapper != NULL", CGS_ARTIST_FILE, 519);
+    CGS_ASSERT_AT(mbIsPlaying, "mbIsPlaying", CGS_ARTIST_FILE, 520);
 
     mbIsPlaying     = false;
     mbHasReachedEnd = false;
@@ -634,10 +634,10 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
 // ----------------------------------------------------------------------------
 const Camera::Camera& ICEMoviePlayer::GetCamera() const
 {
-    CGS_ASSERT(mbIsPlaying,
-        CGS_ASSERT_MESSAGE_AT(
-            "mbIsPlaying",
-            CGS_ARTIST_BRNICEMOVIEPLAYER_FILE, 434 /* ARTIST 0x821F59C8 */));
+    CGS_ASSERT_AT(mbIsPlaying,
+        "mbIsPlaying",
+            CGS_ARTIST_BRNICEMOVIEPLAYER_FILE, 434 /* ARTIST 0x821F59C8 */);
+
     return mCamera;
 }
 
@@ -657,8 +657,8 @@ void ICEMoviePlayer::InterpolateFrom(Camera::BehaviourManager& lrBehaviourManage
                                      const Camera::BehaviourInterpolate::Parameters* lpParams,
                                      bool lbUpdatesDuringPause)
 {
-    CGS_ASSERT(!mbIsPlaying, CGS_ASSERT_MESSAGE_AT("Asking to interpolate while already playing", CGS_ARTIST_BRNICEMOVIEPLAYER_FILE, 448));
-    CGS_ASSERT(!mbInterpolateIn, CGS_ASSERT_MESSAGE_AT("Already interpolating in", CGS_ARTIST_BRNICEMOVIEPLAYER_FILE, 449));
+    CGS_ASSERT_AT(!mbIsPlaying, "Asking to interpolate while already playing", CGS_ARTIST_BRNICEMOVIEPLAYER_FILE, 448);
+    CGS_ASSERT_AT(!mbInterpolateIn, "Already interpolating in", CGS_ARTIST_BRNICEMOVIEPLAYER_FILE, 449);
 
     mpInterpolateInParams     = lpParams;
     mfInterpolateInDuration   = lfDuration;
@@ -681,21 +681,21 @@ void ICEMoviePlayer::InterpolateFrom(Camera::BehaviourManager& lrBehaviourManage
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
     {
         Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.Get();
-        CGS_ASSERT(!lpInterpolate->HasFinished(), CGS_ASSERT_MESSAGE_AT("Can't setup duration after Setup() has been called", CGS_ARTIST_FILE_BRNBEHAVIOURINTERPOLATE, 304));
+        CGS_ASSERT_AT(!lpInterpolate->HasFinished(), "Can't setup duration after Setup() has been called", CGS_ARTIST_FILE_BRNBEHAVIOURINTERPOLATE, 304);
         lpInterpolate->SetupDuration(mfInterpolateInDuration);
     }
 
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
     {
         Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.Get();
-        CGS_ASSERT(!lpInterpolate->HasFinished(), CGS_ASSERT_MESSAGE_AT("Can't setup camera A after Setup() has been called", CGS_ARTIST_FILE_BRNBEHAVIOURINTERPOLATE, 313));
+        CGS_ASSERT_AT(!lpInterpolate->HasFinished(), "Can't setup camera A after Setup() has been called", CGS_ARTIST_FILE_BRNBEHAVIOURINTERPOLATE, 313);
         lpInterpolate->SetupCameraAFromHelper(mFromBehaviourHelperIndex, lrBehaviourManager);
     }
 
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
     {
         Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.Get();
-        CGS_ASSERT(!lpInterpolate->HasFinished(), CGS_ASSERT_MESSAGE_AT("Can't setup camera B after Setup() has been called", CGS_ARTIST_FILE_BRNBEHAVIOURINTERPOLATE, 322));
+        CGS_ASSERT_AT(!lpInterpolate->HasFinished(), "Can't setup camera B after Setup() has been called", CGS_ARTIST_FILE_BRNBEHAVIOURINTERPOLATE, 322);
         // Camera B is the ICE wrapper's live take camera. (SETTLED 2026-08-01: the old FLAG
         // here -- "the source passes a pointer to the wrapper" -- was reading the console's
         // POINTER-returning ICEWrapper::GetCamera, DWARF ICEWrapper.hpp:198; the accessor is

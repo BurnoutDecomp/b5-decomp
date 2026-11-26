@@ -177,7 +177,7 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, Camera::BehaviourManager&
         break;
 
     default:
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPassengerSeesAction.cpp", 198));   //  (non-gating)
+        CGS_FAIL_AT("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPassengerSeesAction.cpp", 198);   //  (non-gating)
         return;
     }
 

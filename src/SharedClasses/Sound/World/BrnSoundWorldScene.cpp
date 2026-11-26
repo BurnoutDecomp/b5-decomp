@@ -67,11 +67,11 @@ void SoundWorldScene::Construct()
 bool SoundWorldScene::Prepare(BrnSound::Module::SoundLogicModule* lpLogicModule,
                               const char* lpcResourceExt)
 {
-    CGS_ASSERT(lpLogicModule && lpcResourceExt,
-        CGS_ASSERT_MESSAGE_AT(
-            "( lpLogicModule ) && ( lpcResourceExt )",
+    CGS_ASSERT_AT(lpLogicModule && lpcResourceExt,
+        "( lpLogicModule ) && ( lpcResourceExt )",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Sound/World/BrnSoundWorldScene.cpp", 145 /* ARTIST 0x82686560 */));
+            "../Sound/World/BrnSoundWorldScene.cpp", 145 /* ARTIST 0x82686560 */);
+
     mpcResourceExt = lpcResourceExt;
     mpLogicModule = lpLogicModule;
     return true;
@@ -176,7 +176,7 @@ void SoundWorldScene::Update()
                  BrnSound::Module::Io::SoundWorldLoadEvent::E_LOAD_EVENT_PASSBY_MAP_UNLOAD)
             HandleWorldZoneUnload(lrEvent.GetZone());
         else
-            CGS_ASSERT(false, "SoundWorldScene : unexpected world load event.");
+            CGS_FAIL("SoundWorldScene : unexpected world load event.");
     }
 
     if (!mbAcquireInProgress)

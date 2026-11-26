@@ -113,8 +113,8 @@ namespace BrnDirector
             const Attrib::Gen::shotgroup& lrRankUpShots =
                 lrSharedInfo.mpDirectorResourceManager->GetRankUp();
 
-            CGS_ASSERT(lrRankUpShots.Num_ShotList() > 0,
-                       CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpDirectorResourceManager->GetRankUp().Num_ShotList() > 0", CGS_ARTIST_FILE, 53));
+            CGS_ASSERT_AT(lrRankUpShots.Num_ShotList() > 0,
+                       "lSharedInfo.mpDirectorResourceManager->GetRankUp().Num_ShotList() > 0", CGS_ARTIST_FILE, 53);
 
             // Allocate the ICE-anim behaviour into the handle.
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
@@ -262,7 +262,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 153));
+            CGS_FAIL_AT("unhandled state", CGS_ARTIST_FILE, 153);
             break;
         }
     }

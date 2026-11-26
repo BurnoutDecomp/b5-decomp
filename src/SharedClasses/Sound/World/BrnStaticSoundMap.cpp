@@ -89,11 +89,11 @@ const SubRegionDescriptor* StaticSoundMap::GetSubRegionDescrip(const rw::math::f
 // retired (2026-08-25, audio-faithfulness wave 2).
 const StaticSoundEntity& StaticSoundMap::GetEntity(s32 liEntityIndex) const
 {
-    CGS_ASSERT(mpEntities != 0,
-        CGS_ASSERT_MESSAGE_AT("mpEntities", KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x826755A8 */));
-    CGS_ASSERT(liEntityIndex < miNumEntities,
-        CGS_ASSERT_MESSAGE_AT(
-            "liEntityIndex < miNumEntities", KAC_ARTIST_ASSERT_FILE, 223 /* ARTIST 0x826755D0 */));
+    CGS_ASSERT_AT(mpEntities != 0,
+        "mpEntities", KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x826755A8 */);
+    CGS_ASSERT_AT(liEntityIndex < miNumEntities,
+        "liEntityIndex < miNumEntities", KAC_ARTIST_ASSERT_FILE, 223 /* ARTIST 0x826755D0 */);
+
 
     return mpEntities[liEntityIndex];
 }

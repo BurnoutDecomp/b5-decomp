@@ -259,7 +259,7 @@ namespace CgsGraphics
         }
 
         default:
-            CGS_ASSERT_STREAM_AT(false, "Unhandled state " << static_cast<s32>(mePlayerState) << "\n",
+            CGS_FAIL_STREAM_AT("Unhandled state " << static_cast<s32>(mePlayerState) << "\n",
                 CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 370);
             return false;
         }

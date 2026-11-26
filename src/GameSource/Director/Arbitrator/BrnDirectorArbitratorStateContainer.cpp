@@ -43,10 +43,10 @@ namespace BrnDirector
     // reads/returns the +0x35CC word; here that is mpCurrentState, accessed by name.
     ArbitratorState* ArbitratorStateContainer::GetCurrentState() const
     {
-        CGS_ASSERT(mpCurrentState != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpCurrentState != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\arbitrator\\BrnDirectorArbitratorStateContainer.h", 131 /* ARTIST 0x821F5A88 */));
+        CGS_ASSERT_AT(mpCurrentState != 0,
+            "mpCurrentState != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\arbitrator\\BrnDirectorArbitratorStateContainer.h", 131 /* ARTIST 0x821F5A88 */);
+
         return mpCurrentState;
     }
 
@@ -136,7 +136,7 @@ namespace BrnDirector
         {
             CGS_ASSERT_STREAM_AT(mArrayOfStatePointers[luLoop] != 0, "Uninitialised state pointer", CGS_ARTIST_FILE, 98);
             bool lbReleased = mArrayOfStatePointers[luLoop]->Release(lrSharedInfo);
-            CGS_ASSERT(lbReleased, CGS_ASSERT_MESSAGE_AT("mArrayOfStatePointers[luLoop]->Release(lSharedInfo)", CGS_ARTIST_FILE, 99));
+            CGS_ASSERT_AT(lbReleased, "mArrayOfStatePointers[luLoop]->Release(lSharedInfo)", CGS_ARTIST_FILE, 99);
         }
     }
 }

@@ -289,12 +289,12 @@ namespace CgsNetwork
     {
         char lacBool[6] = { 0, 0, 0, 0, 0, 0 };
 
-        CGS_ASSERT(lpacConfigData != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(lpacConfigData != 0,
             "NULL != lpacConfigData",
-            __FILE__, 416 /* ARTIST 0x8287AED4 */));
-        CGS_ASSERT(mpaDataIDToMemAddrs != 0, CGS_ASSERT_MESSAGE_AT(
+            __FILE__, 416 /* ARTIST 0x8287AED4 */);
+        CGS_ASSERT_AT(mpaDataIDToMemAddrs != 0,
             "mpaDataIDToMemAddrs != NULL",
-            __FILE__, 417 /* ARTIST 0x8287AEFC */));
+            __FILE__, 417 /* ARTIST 0x8287AEFC */);
 
         char* lpacBase = reinterpret_cast<char*>(this);
 
@@ -358,9 +358,9 @@ namespace CgsNetwork
 
                 default:
                 {
-                    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+                    CGS_FAIL_AT(
                         "Invalid Data Type",
-                        __FILE__, 478 /* ARTIST 0x8287B0A4 */));
+                        __FILE__, 478 /* ARTIST 0x8287B0A4 */);
                     break;
                 }
             }

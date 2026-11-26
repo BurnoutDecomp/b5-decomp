@@ -110,7 +110,7 @@ const IEntityFixer* IEntityFixer::GetFixer(Name aName)
 // ============================================================================
 const ContentClass& ContentType::GetContentClass() const
 {
-    CGS_ASSERT(mpContentClass, CGS_ASSERT_MESSAGE_AT("mpContentClass", CGS_ARTIST_FILE, 499));
+    CGS_ASSERT_AT(mpContentClass, "mpContentClass", CGS_ARTIST_FILE, 499);
     CGS_ASSERT_STREAM_AT((reinterpret_cast<uintptr_t>(mpContentClass) & 1) == 0,
         "This Data Structure is not resolved. (Name "
             << Name(reinterpret_cast<uintptr_t>(mpContentClass)) << " found in a pointer context.)",

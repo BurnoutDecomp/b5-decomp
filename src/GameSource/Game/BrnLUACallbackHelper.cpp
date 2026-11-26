@@ -50,10 +50,10 @@ namespace BrnGame
             return E_BOOL;
         }
 
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "Could not derive arg type",
-                CGS_ARTIST_FILE, 197 /* ARTIST 0x823C0404 */));
+        CGS_FAIL_AT(
+            "Could not derive arg type",
+                CGS_ARTIST_FILE, 197 /* ARTIST 0x823C0404 */);
+
         return E_UNKNOWN;
     }
 
@@ -64,10 +64,10 @@ namespace BrnGame
         const s32 liStackIndex = liParamIndex + 1;
 
         // if (!lua_isnumber(mpLUAHandle, liStackIndex)) assert.
-        CGS_ASSERT(lua_isnumber(mpLUAHandle, liStackIndex) != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "IsParamNumber(liParamIndex)",
-                CGS_ARTIST_FILE, 148 /* ARTIST 0x823C5DA8 */));
+        CGS_ASSERT_AT(lua_isnumber(mpLUAHandle, liStackIndex) != 0,
+            "IsParamNumber(liParamIndex)",
+                CGS_ARTIST_FILE, 148 /* ARTIST 0x823C5DA8 */);
+
 
         // lua_tonumber returns a double; fctiwz truncates it to a signed 32-bit int.
         return static_cast<s32>(lua_tonumber(mpLUAHandle, liStackIndex));
@@ -80,10 +80,10 @@ namespace BrnGame
         const s32 liStackIndex = liParamIndex + 1;
 
         // if (!lua_isstring(mpLUAHandle, liStackIndex)) assert.
-        CGS_ASSERT(lua_isstring(mpLUAHandle, liStackIndex) != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "IsParamString(liParamIndex)",
-                CGS_ARTIST_FILE, 155 /* ARTIST 0x823C5E30 */));
+        CGS_ASSERT_AT(lua_isstring(mpLUAHandle, liStackIndex) != 0,
+            "IsParamString(liParamIndex)",
+                CGS_ARTIST_FILE, 155 /* ARTIST 0x823C5E30 */);
+
 
         // lua_tolstring(L, idx, len) with a null length pointer (li r5,0).
         return lua_tolstring(mpLUAHandle, liStackIndex, 0);

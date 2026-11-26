@@ -287,7 +287,7 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
 {
     if (mePrepareStage == E_PREPARESTAGE_LOADING)
     {
-        CGS_ASSERT(false, "Invalid Stage\n");   // ParticleModule.cpp:538
+        CGS_FAIL("Invalid Stage\n");   // ParticleModule.cpp:538
         return false;
     }
 
@@ -506,7 +506,7 @@ bool ParticleModule::PostPreparePrepare(ParticleIO::PrepareOutputBuffer* lpOutpu
     }
     else if (mePrepareStage != E_PREPARESTAGE_DONE)
     {
-        CGS_ASSERT(false, "Invalid Stage\n");   // ParticleModule.cpp:579
+        CGS_FAIL("Invalid Stage\n");   // ParticleModule.cpp:579
         return false;
     }
 
@@ -593,7 +593,7 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
             const AcquireResponse* const lpReply = reinterpret_cast<const AcquireResponse*>(lpEvent);
             if (lpReply->miEventId != 0)
             {
-                CGS_ASSERT(false, "Invalid event id\n");
+                CGS_FAIL("Invalid event id\n");
                 continue;
             }
             CgsResource::ResourceHandle lHandle;
@@ -866,7 +866,7 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         break;
     }
     default:
-        CGS_ASSERT(false, "Invalid Stage\n");
+        CGS_FAIL("Invalid Stage\n");
         break;
     }
 
@@ -995,7 +995,7 @@ u32 ParticleModule::StartLionEffect(u32 luNameHash, const char* lpcEffectName, u
 
     if (lpDefinition == 0)
     {
-        CGS_ASSERT(false, "ParticleModule: Couldn't locate lion effect description ");
+        CGS_FAIL("ParticleModule: Couldn't locate lion effect description ");
         LogEffectLookupMiss(luNameHash, lpcEffectName);
         return LionEffect::KU_HANDLE_INVALID;
     }
@@ -1013,7 +1013,7 @@ u32 ParticleModule::StartLionEffect(u32 luNameHash, const char* lpcEffectName, u
             (muUpdateThreadNextLionEffect + 1) & LionEffect::KU_HANDLE_INDEX_MASK;
         if (luTries >= KU_MAX_PLAYING_EFFECTS)
         {
-            CGS_ASSERT(false, "ParticleModule: No free effect instances available to play effect: ");
+            CGS_FAIL("ParticleModule: No free effect instances available to play effect: ");
             LogNoFreeSlot(lpcEffectName);
             return LionEffect::KU_HANDLE_INVALID;
         }

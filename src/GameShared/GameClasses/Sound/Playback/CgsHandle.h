@@ -106,14 +106,14 @@ public:
     // DWARF CgsHandle.h:285; ARTIST asserts at line 287 (e.g. 0x826C4DEC, file 0x820AE018).
     T* operator->()
     {
-        CGS_ASSERT(mpObject, CGS_ASSERT_MESSAGE_AT("mpObject",
-            CGS_ARTIST_CGSHANDLE_FILE, 287));
+        CGS_ASSERT_AT(mpObject, "mpObject",
+            CGS_ARTIST_CGSHANDLE_FILE, 287);
         return mpObject;
     }
     const T* operator->() const
     {
-        CGS_ASSERT(mpObject, CGS_ASSERT_MESSAGE_AT("mpObject",
-            CGS_ARTIST_CGSHANDLE_FILE, 296));
+        CGS_ASSERT_AT(mpObject, "mpObject",
+            CGS_ARTIST_CGSHANDLE_FILE, 296);
         return mpObject;
     }
 
@@ -122,8 +122,8 @@ public:
     // DWARF CgsHandle.h:303; ARTIST asserts at line 305 (e.g. Factory::CreateContent 0x826AD51C).
     T& operator*()
     {
-        CGS_ASSERT(mpObject, CGS_ASSERT_MESSAGE_AT("mpObject",
-            CGS_ARTIST_CGSHANDLE_FILE, 305));
+        CGS_ASSERT_AT(mpObject, "mpObject",
+            CGS_ARTIST_CGSHANDLE_FILE, 305);
         return *mpObject;
     }
 
@@ -175,13 +175,13 @@ private:
 
 struct Content;
 
-// ARTIST VoiceWrapper::Release calls the Content handle's non-const accessor.
-template <>
-__declspec(noinline) inline Content* Handle<Content>::operator->()
-{
-    CGS_ASSERT(mpObject, CGS_ASSERT_MESSAGE_AT("mpObject", CGS_ARTIST_CGSHANDLE_FILE, 287));
-    return mpObject;
-}
+// ARTIST VoiceWrapper::Release calls the Content handle's non-const operator-> out of line.
+// The generic member does so without a specialization or a noinline directive once the
+// asserts have the original if-form (D12, asserts lane).
+
+
+
+
 
 } // namespace Playback
 } // namespace CgsSound

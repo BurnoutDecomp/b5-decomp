@@ -622,10 +622,10 @@ void OnlineInviteMessageComponent::RemoveMessage()
 void OnlineInviteMessageComponent::DoTransitionComplete()
 {
     // Guest: lwz r11, 0x30(this); cmpwi r11, 2 -- must be transitioning out.
-    CGS_ASSERT(meShowingState == E_SHOWINGSTATE_TRANSITIONING_OUT,
-        CGS_ASSERT_MESSAGE_AT(
-            "meShowingState == E_SHOWINGSTATE_TRANSITIONING_OUT",
-            CGS_ARTIST_FILE, 624 /* ARTIST 0x82416308 */));
+    CGS_ASSERT_AT(meShowingState == E_SHOWINGSTATE_TRANSITIONING_OUT,
+        "meShowingState == E_SHOWINGSTATE_TRANSITIONING_OUT",
+            CGS_ARTIST_FILE, 624 /* ARTIST 0x82416308 */);
+
 
     // Guest: lwz r10, 0x34(this) -- snapshot the secondary state BEFORE clearing +0x30.
     const EOnlineNotificationChyronType leShowingType = meShowingType;
@@ -649,10 +649,10 @@ void OnlineInviteMessageComponent::TransitionCompleteCallback(void* lpUserData,
                                                               u16 luFrame)
 {
     (void)luFrame;
-    CGS_ASSERT(lpUserData != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "lpUserData",
-            CGS_ARTIST_FILE, 650 /* ARTIST 0x82416374 */));
+    CGS_ASSERT_AT(lpUserData != 0,
+        "lpUserData",
+            CGS_ARTIST_FILE, 650 /* ARTIST 0x82416374 */);
+
     static_cast<OnlineInviteMessageComponent*>(lpUserData)->DoTransitionComplete();
 }
 

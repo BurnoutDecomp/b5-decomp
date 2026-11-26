@@ -99,11 +99,11 @@ namespace BrnProgression
             CgsID lParentCarId;
             const BrnResource::VehicleListEntry* lpVehicleListEntry;
 
-            CGS_ASSERT(lpVehicleList != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleList", CGS_ARTIST_BRNDERIVEDCARS_FILE, 93));
-            CGS_ASSERT(lParentOrSiblingCarId != 0, CGS_ASSERT_MESSAGE_AT("lParentOrSiblingCarId != kCGSID_NULL", CGS_ARTIST_BRNDERIVEDCARS_FILE, 94));
+            CGS_ASSERT_AT(lpVehicleList != 0, "lpVehicleList", CGS_ARTIST_BRNDERIVEDCARS_FILE, 93);
+            CGS_ASSERT_AT(lParentOrSiblingCarId != 0, "lParentOrSiblingCarId != kCGSID_NULL", CGS_ARTIST_BRNDERIVEDCARS_FILE, 94);
 
             lpVehicleListEntry = lpVehicleList->GetVehicleData(lParentOrSiblingCarId);
-            CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 97));
+            CGS_ASSERT_AT(lpVehicleListEntry != 0, "lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 97);
 
             // A colour-livery seed hops to its parent; a base car IS the parent.
             if (lpVehicleListEntry->IsLiveryColour())
@@ -114,14 +114,14 @@ namespace BrnProgression
             {
                 lParentCarId = lParentOrSiblingCarId;
             }
-            CGS_ASSERT(lParentCarId != 0, CGS_ASSERT_MESSAGE_AT("lParentCarId != kCGSID_NULL", CGS_ARTIST_BRNDERIVEDCARS_FILE, 112));
+            CGS_ASSERT_AT(lParentCarId != 0, "lParentCarId != kCGSID_NULL", CGS_ARTIST_BRNDERIVEDCARS_FILE, 112);
 
             Construct();                 // the CgsID array count   (X360 `*(this+64)=0`)
             maLiveryTypes.Construct();   // the parallel kind array (X360 `*(this+104)=0`)
 
             // Seed both arrays with the parent's entry.
             lpVehicleListEntry = lpVehicleList->GetVehicleData(lParentCarId);
-            CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 120));
+            CGS_ASSERT_AT(lpVehicleListEntry != 0, "lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 120);
             Append(lParentCarId);
             maLiveryTypes.Append(static_cast<BrnResource::VehicleListEntry::ELiveryType>(
                 lpVehicleListEntry->GetLiveryType()));
@@ -130,7 +130,7 @@ namespace BrnProgression
             for (s32 liCurrentVehicle = 0; liCurrentVehicle < lpVehicleList->GetVehicleCount(); ++liCurrentVehicle)
             {
                 lpVehicleListEntry = lpVehicleList->GetVehicleData(liCurrentVehicle);
-                CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 130));
+                CGS_ASSERT_AT(lpVehicleListEntry != 0, "lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 130);
                 if (lpVehicleListEntry->GetParentId() == lParentCarId && lpVehicleListEntry->IsLiveryColour())
                 {
                     Append(lpVehicleListEntry->GetId());
@@ -151,13 +151,13 @@ namespace BrnProgression
             CgsID lParentCarId;
             const BrnResource::VehicleListEntry* lpVehicleListEntry;
 
-            CGS_ASSERT(lpVehicleList != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleList", CGS_ARTIST_BRNDERIVEDCARS_FILE, 159));
-            CGS_ASSERT(lParentOrSiblingCarId != 0, CGS_ASSERT_MESSAGE_AT("lParentOrSiblingCarId != kCGSID_NULL", CGS_ARTIST_BRNDERIVEDCARS_FILE, 160));
+            CGS_ASSERT_AT(lpVehicleList != 0, "lpVehicleList", CGS_ARTIST_BRNDERIVEDCARS_FILE, 159);
+            CGS_ASSERT_AT(lParentOrSiblingCarId != 0, "lParentOrSiblingCarId != kCGSID_NULL", CGS_ARTIST_BRNDERIVEDCARS_FILE, 160);
 
             lpVehicleListEntry = lpVehicleList->GetVehicleData(lParentOrSiblingCarId);
-            CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 163));
-            CGS_ASSERT(!lpVehicleListEntry->IsLiveryColour(),
-                       CGS_ASSERT_MESSAGE_AT("!lpVehicleListEntry->IsLiveryColour()", CGS_ARTIST_BRNDERIVEDCARS_FILE, 164));
+            CGS_ASSERT_AT(lpVehicleListEntry != 0, "lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 163);
+            CGS_ASSERT_AT(!lpVehicleListEntry->IsLiveryColour(),
+                       "!lpVehicleListEntry->IsLiveryColour()", CGS_ARTIST_BRNDERIVEDCARS_FILE, 164);
 
             // A pattern-livery seed hops to its parent; a base car IS the parent.
             if (lpVehicleListEntry->GetLiveryType() == BrnResource::VehicleListEntry::E_LIVERY_TYPE_PATTERN)
@@ -168,13 +168,13 @@ namespace BrnProgression
             {
                 lParentCarId = lParentOrSiblingCarId;
             }
-            CGS_ASSERT(lParentCarId != 0, CGS_ASSERT_MESSAGE_AT("lParentCarId != kCGSID_NULL", CGS_ARTIST_BRNDERIVEDCARS_FILE, 178));
+            CGS_ASSERT_AT(lParentCarId != 0, "lParentCarId != kCGSID_NULL", CGS_ARTIST_BRNDERIVEDCARS_FILE, 178);
 
             Construct();                 // X360 `*(this+64)=0`
             maLiveryTypes.Construct();   // X360 `*(this+104)=0`
 
             lpVehicleListEntry = lpVehicleList->GetVehicleData(lParentCarId);
-            CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 186));
+            CGS_ASSERT_AT(lpVehicleListEntry != 0, "lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 186);
             Append(lParentCarId);
             maLiveryTypes.Append(static_cast<BrnResource::VehicleListEntry::ELiveryType>(
                 lpVehicleListEntry->GetLiveryType()));
@@ -182,7 +182,7 @@ namespace BrnProgression
             for (s32 liCurrentVehicle = 0; liCurrentVehicle < lpVehicleList->GetVehicleCount(); ++liCurrentVehicle)
             {
                 lpVehicleListEntry = lpVehicleList->GetVehicleData(liCurrentVehicle);
-                CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 196));
+                CGS_ASSERT_AT(lpVehicleListEntry != 0, "lpVehicleListEntry", CGS_ARTIST_BRNDERIVEDCARS_FILE, 196);
                 if (lpVehicleListEntry->GetParentId() == lParentCarId
                     && lpVehicleListEntry->GetLiveryType() == BrnResource::VehicleListEntry::E_LIVERY_TYPE_PATTERN)
                 {
@@ -207,8 +207,8 @@ namespace BrnProgression
         // count -- the count check is the one GetItem does for itself.
         BrnResource::VehicleListEntry::ELiveryType GetLiveryType(u32 luIndex) const
         {
-            CGS_ASSERT(luIndex < KU_MAX_AMOUNT_OF_DERIVED_CARS,
-                       CGS_ASSERT_MESSAGE_AT("luIndex < KU_MAX_AMOUNT_OF_DERIVED_CARS", CGS_ARTIST_BRNDERIVEDCARS_FILE, 232));
+            CGS_ASSERT_AT(luIndex < KU_MAX_AMOUNT_OF_DERIVED_CARS,
+                       "luIndex < KU_MAX_AMOUNT_OF_DERIVED_CARS", CGS_ARTIST_BRNDERIVEDCARS_FILE, 232);
             return maLiveryTypes.GetItem(luIndex);
         }
 
@@ -234,7 +234,7 @@ namespace BrnProgression
             u32  luCurrentVehicle;
             char lacName[KI_CGSID_STRING_LEN];
 
-            CGS_ASSERT(GetLength() != 0, CGS_ASSERT_MESSAGE_AT("GetLength() != 0", CGS_ARTIST_BRNDERIVEDCARS_FILE, 248));
+            CGS_ASSERT_AT(GetLength() != 0, "GetLength() != 0", CGS_ARTIST_BRNDERIVEDCARS_FILE, 248);
 
             // h:253 / h:255 / h:260: the three message statements (each its own filter test,
             // ARTIST 0x8236AD60 / 0x8236ADA4 / 0x8236AE7C).

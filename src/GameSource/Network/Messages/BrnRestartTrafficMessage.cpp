@@ -62,18 +62,18 @@ namespace BrnNetwork
                                                const u16* lpau16ActiveTrafficHulls,
                                                const NetworkPlayerID* lpaPlayerIDsForActiveHulls)
     {
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
             "!CgsNetwork::ReliableMessage::IsMessageValid()",
-            CGS_ARTIST_FILE, 85 /* ARTIST 0x8257BC1C */));
+            CGS_ARTIST_FILE, 85 /* ARTIST 0x8257BC1C */);
 
         mu16FrameSinceStartToResetTraffic = lu16FrameSinceStartToResetTraffic;   // +0x58
         XMemCpy(mau16ActiveTrafficHulls,   lpau16ActiveTrafficHulls,   sizeof(mau16ActiveTrafficHulls));        // +0x48, 8 x u16
         XMemCpy(maPlayerIDsForActiveHulls, lpaPlayerIDsForActiveHulls, sizeof(maPlayerIDsForActiveHulls));        // +0x28, 8 x s32
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_RESTART_TRAFFIC_MESSAGE_TYPE, lu16CurrentFrame);
-        CGS_ASSERT(IsReliable(), CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT_AT(IsReliable(),
             "IsReliable()",
-            CGS_ARTIST_FILE, 94 /* ARTIST 0x8257BC8C */));
+            CGS_ARTIST_FILE, 94 /* ARTIST 0x8257BC8C */);
     }
 
     s32 RestartTrafficMessage::GetPackedMessageSize()
@@ -103,9 +103,9 @@ namespace BrnNetwork
             // Consume the message: clear VALID, then assert it is no longer valid (the
             // X360 re-reads +0x19 and fires the IsMessageValid assert -- always passes here).
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
+            CGS_ASSERT_AT(!IsMessageValid(),
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                CGS_ARTIST_FILE, 126 /* ARTIST 0x8257EC38 */));
+                CGS_ARTIST_FILE, 126 /* ARTIST 0x8257EC38 */);
             return true;
         }
         return false;

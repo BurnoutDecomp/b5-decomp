@@ -67,10 +67,10 @@ void BoostManager::SetBoostStrategy(BoostStrategyId leStrategy)
         mpBoostStrategy = &mBoostBurnout5;
         break;
     default:
-        CGS_ASSERT(false,
-            CGS_ASSERT_MESSAGE_AT(
-                "Unknown boost strategy",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\Boost/BrnBoostManager.h", 431 /* ARTIST 0x822A3348 */));
+        CGS_FAIL_AT(
+            "Unknown boost strategy",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\Boost/BrnBoostManager.h", 431 /* ARTIST 0x822A3348 */);
+
         break;
     }
 
