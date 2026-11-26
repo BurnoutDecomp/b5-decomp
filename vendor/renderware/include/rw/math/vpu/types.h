@@ -98,10 +98,15 @@ namespace vpu
         Matrix44(VectorIntrinsicInParam x, VectorIntrinsicInParam y, VectorIntrinsicInParam z, VectorIntrinsicInParam w)
             : xAxis(x), yAxis(y), zAxis(z), wAxis(w) {}
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
-        void SetIdentity()
+        // rwmath matrix44_type_inline.h:78 (DecFIGS the same line; always_inline in the SDK): the four
+        // rows from the unit axis registers, as ARTIST loads them in Debug3DImmediateRender::
+        // SetProjectionMode 0x8281B9F0..0x8281BA6C (lvx from 0x82181500/10/20/30).
+        __forceinline void SetIdentity()
         {
-            const Vector4 lxAxis(1.0f, 0.0f, 0.0f, 0.0f); xAxis = lxAxis; const Vector4 lyAxis(0.0f, 1.0f, 0.0f, 0.0f); yAxis = lyAxis;
-            const Vector4 lzAxis(0.0f, 0.0f, 1.0f, 0.0f); zAxis = lzAxis; const Vector4 lwAxis(0.0f, 0.0f, 0.0f, 1.0f); wAxis = lwAxis;
+            { xAxis.mV = ::rw::math::vpu::detail::gIVector; };
+            { yAxis.mV = ::rw::math::vpu::detail::gJVector; };
+            { zAxis.mV = ::rw::math::vpu::detail::gKVector; };
+            { wAxis.mV = ::rw::math::vpu::detail::gLVector; };
         }
     };
     struct CGS_ALIGN(16) Matrix44Affine

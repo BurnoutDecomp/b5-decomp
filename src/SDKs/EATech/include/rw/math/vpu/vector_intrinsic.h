@@ -27,6 +27,15 @@ namespace vpu
             VectorIntrinsic vector;
         };
 
+        // DecFIGS vector_intrinsic.h:25..28: the unit axis registers. ARTIST holds them in the rwmath
+        // library's .rdata, 0x82181500 (1,0,0,0), 0x82181510 (0,1,0,0), 0x82181520 (0,0,1,0),
+        // 0x82181530 (0,0,0,1), and Matrix44::SetIdentity loads them (Debug3DImmediateRender::
+        // SetProjectionMode 0x8281B9F0..0x8281BA6C).
+        extern const VectorIntrinsic gIVector;
+        extern const VectorIntrinsic gJVector;
+        extern const VectorIntrinsic gKVector;
+        extern const VectorIntrinsic gLVector;
+
         // DecFIGS vector_intrinsic.h:37: the vperm controls of the runtime-lane swizzle store; entry
         // D * 4 + S copies lane S of the second operand into lane D of the first. ARTIST holds the table
         // at 0x8327F140 (.bss, filled by the rwmath dynamic initialiser 0x82C74120) and every
