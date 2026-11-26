@@ -22,6 +22,7 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"    // CgsModule::EventQueue<T,N> (mTrafficTypeResponseQueue)
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<N,16> (GUI output / dirty-trick HUD events)
+#include "GameSource/GameState/BrnGameEvents.h"             // GameStateModuleIO::GameEventQueue (DWARF home BrnGameEvents.h:314)
 #include "GameSource/BurnoutConstants.h"                    // EActiveRaceCarIndex (enum : s32)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::EPaybackType (enum : s32)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h" // BrnTraffic::BrnTrafficIO::TrafficTypeResponse
@@ -83,9 +84,8 @@ namespace GameStateModuleIO
     // KI_..._SEAT_SIZE static_asserts below fail loudly the day that stops being true. The
     // PostWorld seat is therefore an exact fit; the PreWorld seat keeps 4 bytes of trailing
     // console padding, spelled as an explicit pad rather than folded into the member.
-    class GameEventQueue : public CgsModule::VariableEventQueue<1536, 16>
-    {
-    };
+    // The class itself now lives in its DWARF home, BrnGameEvents.h:314 (included above), with
+    // its AddGameEvent member template (h:3463).
 
     // PreWorldInputBuffer +0x660: the online takedowns the network module hands the game state.
     // BridgeNetworkToGameState appends the network output's EventQueue<TakedownEvent,8> into it

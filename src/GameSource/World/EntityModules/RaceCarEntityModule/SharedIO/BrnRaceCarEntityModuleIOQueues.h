@@ -59,6 +59,7 @@
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact (PotentialContactQueue element)
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"  // BrnResource::GameDataIO::RequestInterface<8192>
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h" // BrnGameState::TakedownEvent (TakedownEventQueue element)
+#include "GameSource/GameState/BrnGameEvents.h"                    // BrnGameState::GameStateModuleIO::GameEventQueue (GameEventQueue IS this)
 
 namespace BrnWorld
 {
@@ -128,12 +129,12 @@ namespace RaceCarEntityModuleIO
     // The same VariableEventQueue<1536,16> is already the committed shape of the game-state
     // module's own game-event queue (GameBridgeGUIToX.cpp:146), i.e. two independent
     // attestations of the width.
-    // Derives (rather than typedefs) so existing `struct GameEventQueue` forward references
-    // stay valid -- same move as SceneResultQueue below. (PotentialContactQueue no longer
-    // belongs on that list: its fork was collapsed to the DWARF typedef on 2026-08-19.)
-    struct CGS_ALIGN(16) GameEventQueue : public CgsModule::VariableEventQueue<1536, 16>
-    {
-    };
+    // FORK COLLAPSED 2026-11-26: DWARF BrnRaceCarEntityModuleIO.h:520 has
+    // `typedef GameEventQueue GameEventQueue;`, the game-state module's own queue
+    // (BrnGameEvents.h:314), and the PS3 build posts into it with
+    // GameStateModuleIO::GameEventQueue::AddGameEvent<T> (UpdateCarLeaping 0x14E590 on
+    // lpOutput+0x24690). The pointer-only headers declare the same typedef.
+    typedef BrnGameState::GameStateModuleIO::GameEventQueue GameEventQueue;
 
     // ---- Potential-contact queue (InputBuffer_PrePhysics :441) ----------------------------
     // GROWN (was a 256-byte NOMINAL opaque): InputBuffer_PrePhysics::SetPotentialContactQueue

@@ -30,16 +30,17 @@
 // NOTE: the struct previously lived (forked, minimal, mis-ordered) inside
 // BrnPowerParkingDebugComponent.h; it is homed here now and that header forward-declares it.
 // ============================================================================
+namespace BrnGameState { namespace GameStateModuleIO { class GameEventQueue; } }   // DWARF home BrnGameEvents.h:314
 namespace BrnWorld
 {
     // Update's pointer-only parameters -- forward declarations (the BoostStrategy.h precedent). The
-    // queue's home is SharedIO/BrnRaceCarEntityModuleIOQueues.h (`struct GameEventQueue :
-    // CgsModule::VariableEventQueue<1536,16>`); the DWARF spells the parameter
+    // queue is the game-state module's GameEventQueue (typedef, BrnRaceCarEntityModuleIO.h:520);
+    // the DWARF spells the parameter
     // GameStateModuleIO::GameEventQueue* in the declaration and OutputBuffer_PrePhysics::GameEventQueue*
     // in the definition -- the same 1536/16 queue UpdatePowerParking takes off its output buffer.
     class ActiveRaceCar;
     struct PlayerVehicleControls;
-    namespace RaceCarEntityModuleIO { struct GameEventQueue; }
+    namespace RaceCarEntityModuleIO { typedef BrnGameState::GameStateModuleIO::GameEventQueue GameEventQueue; }   // DWARF BrnRaceCarEntityModuleIO.h:520
 
     // DWARF BrnPowerParkingManager.h:46. The image carries only its square: CheckVehicleForPowerPark's
     // range test `lfDistanceSq > KF_POWER_PARK_NEARBY_RADIUS * KF_POWER_PARK_NEARBY_RADIUS` is folded

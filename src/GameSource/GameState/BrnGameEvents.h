@@ -13,11 +13,13 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // BrnGameState::BurnoutSkillzData (NewRemoteBurnoutSkillzEvent)
 #include "GameSource/GameState/SharedIO/BrnTargetEventScore.h" // GameStateModuleIO::TargetEventScore (TargetEventScoreEvent)
 #include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<s64,15> (UploadedModeScoresEvent)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::Event, VariableEventQueue<1536,16> (GameEventQueue)
 
 // Owning header for the BrnGameState::GameStateModuleIO GameEvent<> family slices reconstructed
 // by the GameMode/ModeManager leaf batch. Minimal slices: only members the reconstructed bodies
-// touch. GameEvent<T> is an empty template spine (the real build adds only a static type tag);
-// its real Event base + the per-event mseType definitions land with the full BrnGameEvents TU.
+// touch. GameEvent<T> derives from CgsModule::Event and carries the static type tag mseType
+// (DWARF BrnGameEvents.h:298/301, LegacySrc BrnGameEvents.h:165); GameEventQueue (h:314) posts a
+// typed event with AddGameEvent (h:3463).
 
 namespace BrnGameState
 {
@@ -362,8 +364,27 @@ enum EGameEventType
     E_EVENT_IMAGE_FILES_LOADED                     = 161,
 };
 
-template <EGameEventType T>
-struct GameEvent { };
+// DWARF BrnGameEvents.h:298 `struct GameEvent<T> : public Event`, h:301 `mseType`; LegacySrc
+// BrnGameEvents.h:165 initialises the tag in the class.
+template <EGameEventType leEventType>
+struct GameEvent : public CgsModule::Event
+{
+    static const EGameEventType mseType = leEventType;
+};
+
+// DWARF BrnGameEvents.h:314 `struct GameEventQueue : public VariableEventQueue<1536,16>` (the
+// tree's forward declarations spell it `class`). AddGameEvent posts a typed event with its own
+// tag and size (h:3463, defined at the end of this header as LegacySrc BrnGameEvents.h:1625 does).
+// ARTIST inlines it everywhere: the caller calls VariableEventQueue<1536,16>::AddEvent
+// (0x822E5548) itself with li r6,sizeof / li r5,mseType / addi r4,&event after fetching the
+// queue (e.g. CrashPlayManager::UpdateCarLeaping 0x822F91F8..0x822F9208; the PS3 build calls
+// GameEventQueue::AddGameEvent<VehicleLeaptEvent> out of line there, 0x14E590).
+class GameEventQueue : public CgsModule::VariableEventQueue<1536, 16>
+{
+public:
+    template <class DerivedGameEvent>
+    bool AddGameEvent(const DerivedGameEvent& lEvent);
+};
 
 // DecFIGS BrnGameEvents.h:1934. ARTIST event 115 carries the two words
 // copied by HandleWorldRegionChangeEvent at 0x82357CAC-0x82357CBC.
@@ -1544,5 +1565,15 @@ struct TeamSelectionEvent
     EPlayerTeam maePlayerTeam[E_ACTIVE_RACE_CAR_INDEX_COUNT];   // +0x00, one word per car
 };
 CGS_STATIC_ASSERT((sizeof(TeamSelectionEvent) == 32), "posted with size 32");
+
+// DWARF BrnGameEvents.h:3463; LegacySrc BrnGameEvents.h:1625.
+template <class DerivedGameEvent>
+bool
+GameEventQueue::AddGameEvent(const DerivedGameEvent& lEvent)
+{
+    return AddEvent(&lEvent,
+                    DerivedGameEvent::mseType,
+                    sizeof(DerivedGameEvent));
+}
 }
 }

@@ -79,6 +79,7 @@
 // BrnScoringSystem.h / BrnGuiEventTypeDefs.h); the home is
 // GameSource/Physics/VehicleManager/BrnVehicleConstants.h (`enum EImpactType : s32`).
 namespace BrnPhysics { namespace Vehicle { enum EImpactType ; } }
+namespace BrnGameState { namespace GameStateModuleIO { class GameEventQueue; } }   // DWARF home BrnGameEvents.h:314
 
 // Pointer-only param of UpdateStuntBoost -- forward declaration (documented
 // exception: pointer-only use; the type's home, the BrnGameActions.h action
@@ -90,14 +91,11 @@ namespace BrnWorld
 {
 
 // Pointer-only param of Update -- forward declaration (documented exception:
-// pointer-only use avoiding the RaceCarEntityModuleIO header cascade). Real
-// home: SharedIO/BrnRaceCarEntityModuleIOQueues.h
-// (`struct GameEventQueue : CgsModule::VariableEventQueue<1536,16>`). The DWARF
-// spells this parameter `OutputBuffer_PrePhysics::GameEventQueue*`; that nested
-// name is a typedef of this same struct (BrnRaceCarEntityModuleIO.h :429), so
-// the type identity is unchanged. X360 Update @0x822F81F8 AddEvents through
-// CgsModule::VariableEventQueue<1536,16> on this parameter.
-namespace RaceCarEntityModuleIO { struct GameEventQueue; }
+// pointer-only use avoiding the RaceCarEntityModuleIO header cascade). The DWARF
+// spells this parameter `OutputBuffer_PrePhysics::GameEventQueue*`, a typedef of
+// the game-state module's GameEventQueue (BrnRaceCarEntityModuleIO.h:520). X360
+// Update @0x822F81F8 AddEvents through CgsModule::VariableEventQueue<1536,16> on it.
+namespace RaceCarEntityModuleIO { typedef BrnGameState::GameStateModuleIO::GameEventQueue GameEventQueue; }   // DWARF BrnRaceCarEntityModuleIO.h:520
 
 class BoostDebugComponent;   // friend below (its home is the BoostDebugComponent TU)
 

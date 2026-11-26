@@ -71,6 +71,7 @@ namespace BrnGameState { namespace GameStateModuleIO {
     struct StopModeAction;          // game action 39 -- HandleStopModeAction's record
     struct AddRivalCarAction;       // game action 196 -- AddRivalCar's record
     struct SetupNetworkCarAction;   // game action 5 -- HandleSetupNetworkCarAction's record
+    class GameEventQueue;           // DWARF home BrnGameEvents.h:314
 } }
 // [stuntrace start-grid wave] SetupOpponents / SetUpPlayerCarForMode take the mode's parameter
 // block by pointer; the .cpp includes BrnGameModeParams.h for the members.
@@ -103,7 +104,8 @@ const s32 KI_TRAINING_REQUEST_QUEUE_SIZE = 8;
 namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; }
 // Pointer-only dependency; the queue is owned by SharedIO/BrnRaceCarEntityModuleIOQueues.h.
 namespace RaceCarEntityModuleIO { struct TakedownEventQueue; }
-namespace RaceCarEntityModuleIO { struct GameEventQueue; class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_GenerateDispatchLists; struct InputBuffer_PreScene; struct OutputBuffer_PreScene; struct InputBuffer_PostPhysics; struct OutputBuffer_PostPhysics; struct OutputBuffer_Prepare; }
+namespace RaceCarEntityModuleIO { typedef BrnGameState::GameStateModuleIO::GameEventQueue GameEventQueue; }   // DWARF BrnRaceCarEntityModuleIO.h:520
+namespace RaceCarEntityModuleIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_GenerateDispatchLists; struct InputBuffer_PreScene; struct OutputBuffer_PreScene; struct InputBuffer_PostPhysics; struct OutputBuffer_PostPhysics; struct OutputBuffer_Prepare; }
 
 // The "CarColours" palette resource LoadGlobalResources acquires (real home
 // SharedClasses/Graphics/BrnGlobalColourPalette.h); held by pointer only here.

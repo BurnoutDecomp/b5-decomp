@@ -95,10 +95,11 @@ namespace BrnVehicle { struct GraphicsSpec; }
 namespace CgsNumeric { class Random; }   // ActiveRaceCar::Update's lpRandom (pointer-only; CgsRandom.h)
 // GetPropCollisionBox's return type (pointer-only here; vendor/renderware/collision/CollisionVolume.hpp).
 namespace rw { namespace collision { struct BoxVolume; } }
+namespace BrnGameState { namespace GameStateModuleIO { class GameEventQueue; } }   // DWARF home BrnGameEvents.h:314
 
 namespace BrnWorld
 {
-namespace RaceCarEntityModuleIO { struct GameEventQueue; }
+namespace RaceCarEntityModuleIO { typedef BrnGameState::GameStateModuleIO::GameEventQueue GameEventQueue; }   // DWARF BrnRaceCarEntityModuleIO.h:520
 class RaceCar;
 
 
