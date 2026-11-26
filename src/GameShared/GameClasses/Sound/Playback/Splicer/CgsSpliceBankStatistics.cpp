@@ -21,16 +21,6 @@ namespace CgsSound { namespace Playback {
 
 SpliceBankStatistics* SpliceBankStatistics::spHead = 0;
 
-SpliceBankStatistics::SpliceBankStatistics()
-    : mpSpliceContent(0)
-    , mpSpliceBank(0)
-    , mpaStats(0)
-    , muStatCount(0)
-    , mpNext(0)
-    , muIndex(0)
-{
-}
-
 SpliceBankStatistics::SpliceBankStatistics(const SpliceManager::SpliceContainer* lpSpliceBank,
                                            const SplicerContent* lpSpliceContent, u32 luIndex)
 {

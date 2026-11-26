@@ -107,7 +107,15 @@ private:
 // =============================================================================
 struct AemsContent : public Content
 {
-    AemsContent(Factory& aFactory, const ContentSpec& aSpec, u32 au32DataSize); // :123 (own TU)
+    // DWARF CgsAemsContent.h:123, in-class: ARTIST's inlined copy in FactoryNew<AemsContent>
+    // (0x826DD950) stores only mpAemsData (+0x50) after the loader; miAemsBankHandle and
+    // mbRemoveBegun are left as allocated.
+    AemsContent(Factory& aFactory, const ContentSpec& aSpec, u32 au32Ident)
+        : Content(aFactory, aSpec, au32Ident),
+          mLoader(),
+          mpAemsData(0)
+    {
+    }
     virtual ~AemsContent();                                                     // :129
 
 protected:

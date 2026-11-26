@@ -100,11 +100,8 @@ struct CsisUpdateCommand : public CsisCommand
     CsisUpdateCommand(uintptr_t luCommandCount, uintptr_t* lpuCommandBuffer);
 };
 
-// CgsAemsFactory.h:240 (DWARF). Post a typed CSIS command record onto the queue and
-// return the queue (for chaining). X360: forwards to CommandQueue<>::PostCommand with
-// the record's word count (sizeof(T)/sizeof(uintptr_t)) and asserts on overflow.
-template <typename T>
-CsisCommandQueue& operator<<(CsisCommandQueue& arQueue, const T& arCommand);
+// CsisCommandQueue::operator<< <T> (DWARF CgsAemsFactory.h:240) is a member template
+// declared in CgsCommandQueue.h and instantiated in CgsCsisCommandQueue.cpp.
 
 } // namespace Playback
 } // namespace CgsSound

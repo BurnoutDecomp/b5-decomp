@@ -28,6 +28,8 @@
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsCsisCommandQueue.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // the streamed overflow assert
 
 #include "types.hpp" // std::uintptr_t
 
@@ -41,26 +43,28 @@ namespace Playback
 // word count is the record's pointer-word footprint (X360: the literal immediate the
 // compiler folded sizeof(T)/sizeof(uintptr_t) to -- 5/3/4/2 for the four records).
 template <typename T>
-CsisCommandQueue& operator<<(CsisCommandQueue& arQueue, const T& arCommand)
+CsisCommandQueue& CsisCommandQueue::operator<<(const T& lCommand)
 {
-    const bool lbPosted = arQueue.mQueue.PostCommand(
+    // DWARF local lbResult (CgsAemsFactory.h:244); the overflow assert streams its message (:248).
+    bool lbResult = mQueue.PostCommand(
         static_cast<unsigned int>(sizeof(T) / sizeof(uintptr_t)),
-        arCommand.AsCommand());
+        lCommand.AsCommand());
 
-    CGS_ASSERT(lbPosted, "Possibly need to increase CsisCommandQueue::E_QUEUE_LENGTH");
+    CGS_ASSERT_STREAM_AT(lbResult, "Possibly need to increase CsisCommandQueue::E_QUEUE_LENGTH",
+                         "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Aems/CgsAemsFactory.h", 248);
 
-    return arQueue;
+    return *this;
 }
 
 // The four explicit instantiations the X360 emitted (one per CSIS command record).
-template CsisCommandQueue& operator<< <CsisSetClassHandleCommand>(
-    CsisCommandQueue& arQueue, const CsisSetClassHandleCommand& arCommand); // 0x826C64A0
-template CsisCommandQueue& operator<< <CsisUpdateCommand>(
-    CsisCommandQueue& arQueue, const CsisUpdateCommand& arCommand);         // 0x826C6550
-template CsisCommandQueue& operator<< <CsisCreateCommand>(
-    CsisCommandQueue& arQueue, const CsisCreateCommand& arCommand);         // 0x826C6600
-template CsisCommandQueue& operator<< <CsisReleaseCommand>(
-    CsisCommandQueue& arQueue, const CsisReleaseCommand& arCommand);        // 0x826C66B0
+template CsisCommandQueue& CsisCommandQueue::operator<< <CsisSetClassHandleCommand>(
+    const CsisSetClassHandleCommand& lCommand); // 0x826C64A0
+template CsisCommandQueue& CsisCommandQueue::operator<< <CsisUpdateCommand>(
+    const CsisUpdateCommand& lCommand);         // 0x826C6550
+template CsisCommandQueue& CsisCommandQueue::operator<< <CsisCreateCommand>(
+    const CsisCreateCommand& lCommand);         // 0x826C6600
+template CsisCommandQueue& CsisCommandQueue::operator<< <CsisReleaseCommand>(
+    const CsisReleaseCommand& lCommand);        // 0x826C66B0
 
 } // namespace Playback
 } // namespace CgsSound

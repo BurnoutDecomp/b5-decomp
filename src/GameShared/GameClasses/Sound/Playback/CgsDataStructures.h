@@ -208,6 +208,15 @@ struct VoiceSchema : public Entity
     // store-for-store from the X360 ctor @ 0x82691E98.
     explicit VoiceSchema(u32 au32FeatureSchemaCount);
 
+    // DWARF CgsDataStructures.h:1240 / :1247, header-inline: the carve for a schema of
+    // lu32FeatureSchemaCount features ((count + 6) * 4 on the X360, AemsPlayerVoice ctor
+    // 0x826DA364..0x826DA36C).
+    static size_t GetAllocationSize(u32 lu32FeatureSchemaCount)
+    {
+        return sizeof(VoiceSchema) + sizeof(const FeatureSchema*) * (lu32FeatureSchemaCount - 1);
+    }
+    size_t GetAllocatedSize() const { return GetAllocationSize(mu32FeatureSchemaCount); }
+
     // CgsDataStructures.h:1271.
     u32 GetFeatureSchemaCount() const { return mu32FeatureSchemaCount; }
 
@@ -470,6 +479,17 @@ struct VoiceSpec : public Entity
     // FLAG (DEFER): declared-only -- bodied with the spec slices (asserts the
     // schema present + resolved, like the count forwarders above).
     const VoiceSchema& GetVoiceSchema() const;
+
+    // DWARF CgsDataStructures.h:1510 / :1517 / :1540 / :1555, header-inline (the AemsPlayerVoice
+    // ctor copies a spec with them: (sends + 4) * 4 bytes at 0x826DA338..0x826DA350, then
+    // stores the schema (+8) and the voice type (+0xF), 0x826DA400 / 0x826DA404).
+    static size_t GetAllocationSize(u32 lu32SendCount)
+    {
+        return sizeof(VoiceSpec) + sizeof(Name) * (lu32SendCount - 1);
+    }
+    size_t GetAllocatedSize() const { return GetAllocationSize(mu8SendCount); }
+    void SetVoiceType(EVoiceType leVoiceType) { mu8VoiceType = static_cast<u8>(leVoiceType); }
+    void SetVoiceSchema(const VoiceSchema& lVoiceSchema) { mpVoiceSchema = &lVoiceSchema; }
 
     // CgsDataStructures.h (+0x8). The resolved voice schema. Low tag bit set while
     // still a serialized index; a live VoiceSchema* once resolved.

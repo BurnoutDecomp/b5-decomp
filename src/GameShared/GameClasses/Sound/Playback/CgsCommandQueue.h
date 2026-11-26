@@ -114,12 +114,15 @@ struct CsisCommandQueue
 
     // CgsAemsFactory.h:256. Pop one command's words.
     bool GetCommand(u32& arCount, uintptr_t* apWords);
+
+    // DWARF CgsAemsFactory.h:240: the member template posting a typed command (ARTIST
+    // decorations ??$?6V<Command>@...@CsisCommandQueue@...@QAAAAV012@ABV<Command>@12@@Z,
+    // instances 0x826C64A0 / 0x826C6550 / 0x826C6600 / 0x826C66B0). Defined, with its four
+    // explicit instantiations, in AEMS/CgsCsisCommandQueue.cpp.
+    template <typename T>
+    CsisCommandQueue& operator<<(const T& lCommand);
 };
 
-// CgsAemsFactory.h:240 (DWARF). Free operator that posts a typed command onto the
-// queue and returns the queue (for chaining). FLAG: own TU @ 0x826C66B0 -- declared
-// here, defined elsewhere.
-CsisCommandQueue& operator<<(CsisCommandQueue& arQueue, const CsisReleaseCommand& arCommand);
 
 } // namespace Playback
 } // namespace CgsSound

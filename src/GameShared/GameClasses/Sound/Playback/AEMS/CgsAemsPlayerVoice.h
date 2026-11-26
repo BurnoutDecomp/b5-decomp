@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsDataStructures.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoice.h"
 #include "SDKs/Csis/CsisClass.h"
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"   // GetAemsFactory (h:119)
 
 #include <cstddef>
 
@@ -21,8 +22,6 @@ namespace Playback
 
 class AemsFactory;
 struct AemsRWSamplePlayer;
-
-Registry* GetAemsFactoryRegistry(Factory* lpAemsFactory);
 
 // ARTIST @0x826DA1E8. The primary Playback::PlayerVoice is followed by the
 // non-polymorphic GenericRwacVoice half, matching the game’s multiple-inheritance
@@ -52,25 +51,39 @@ struct AemsPlayerVoice : public PlayerVoice, public GenericRwacVoice
 
     void AddSamplePlayer(AemsRWSamplePlayer* apPlayer);
     void RemoveSamplePlayer(AemsRWSamplePlayer* apPlayer);
+    // DWARF CgsAemsPlayerVoice.h:110.
     rw::audio::core::PlugIn* GetInternalSubmix() const
     {
         return mpInternalSubmix;
     }
-    bool IsCreated() const { return mbCreated; }
+
+    // DWARF CgsAemsPlayerVoice.h:119: the owning factory, reached through a null-checked
+    // pointer downcast of the voice's Factory (`addi -4`, Play 0x826DAECC, Stop 0x826DAF40).
+    AemsFactory& GetAemsFactory()
+    {
+        return *static_cast<AemsFactory*>(const_cast<Factory*>(&GetFactory()));
+    }
 
 private:
     friend struct AemsRWSamplePlayer;
 
-    f32 mfSamplePlayerCpuTicks;
-    AemsRWSamplePlayer* mpFirstPlayer;
-    rw::audio::core::PlugIn* mpInternalSubmix;
-    Csis::ClassHandle mhClass;
-    Csis::Class* mpRequest;
-    u32 mu32UserParameterStart;
-    u32 mu32AemsInputParameterCount;
-    bool mbRemoving;
-    bool mbCreated;
-    s32* mpAemsParameters;
+    // DWARF CgsAemsPlayerVoice.h:204: the parameter block allocated after the object
+    // (GetClientAllocationSize; ARTIST indexes it as this + 0xA8 + 4 * index).
+    uint32_t& GetAemsParameter(uint32_t lu32Index)
+    {
+        return reinterpret_cast<uint32_t*>(this + 1)[lu32Index];
+    }
+
+    // DWARF CgsAemsPlayerVoice.h:201..224 (X360 +0x84..+0xA4, sizeof 0xA8: AemsFactory::
+    // DoCreateVoice allocates `li r3,0xA8`).
+    uint32_t                 muAemsTicks;            // :201
+    AemsRWSamplePlayer*      mpFirstPlayer;          // :217
+    rw::audio::core::PlugIn* mpInternalSubmix;       // :218
+    Csis::ClassHandle        mCsisHandle;            // :219
+    Csis::Class*             mpCsisClass;            // :220
+    uint32_t                 mu32AemsFirstUserParam; // :221
+    uint32_t                 mu32AemsParamCount;     // :222
+    bool                     mbRemoving;             // :224
 };
 
 } // namespace Playback

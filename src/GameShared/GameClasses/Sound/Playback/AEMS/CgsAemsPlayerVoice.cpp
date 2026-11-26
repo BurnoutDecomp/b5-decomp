@@ -7,144 +7,123 @@
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsCsisCommandQueue.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 #include "rw/audio/core/Voice.h"
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // the constructor's local allocator (DWARF h:301)
 
 #include "rw/math/fpu/scalar_operation.h"  // rw::math::fpu::Min / Max / Clamp
 #include <cstring>
 #include <new>
-#include <vector>
 
 namespace CgsSound
 {
 namespace Playback
 {
 
+// This header's / file's paths as ARTIST's asserts spell them (strings 0x820B0338 / 0x820AD8A8).
+#define KAC_AEMS_PLAYER_VOICE_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/AEMS/CgsAemsPlayerVoice.h"
+#define KAC_AEMS_PLAYER_VOICE_CPP_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/AEMS/CgsAemsPlayerVoice.cpp"
+
+// ARTIST 0x826A2B58 (DWARF CgsAemsPlayerVoice.h:242, locals lpCsis :244, lu32ParamCount :248): the
+// voice's CSIS class from the factory registry (the voice schema's name), then the object plus one
+// word per AEMS parameter (the class's user parameters and the AEMS feature's parameters).
 size_t AemsPlayerVoice::GetClientAllocationSize(
-    Factory& arFactory, const VoiceSpec& arVoiceSpec)
+    Factory& lFactory, const VoiceSpec& lVoiceSpec)
 {
-    Registry* lpRegistry = GetAemsFactoryRegistry(&arFactory);
-    CGS_ASSERT(lpRegistry, "mpRegistry");
-
-    const VoiceSchema& lrSchema = arVoiceSpec.GetVoiceSchema();
-    Name lSchemaName = lrSchema.GetName();
-    const AemsVoiceCsisClass* lpCsis =
-        lpRegistry->GetEntity<AemsVoiceCsisClass>(lSchemaName);
-    CGS_ASSERT(lpCsis, "lpCsis");
-    const FeatureSchema& lrAemsFeature = lrSchema.GetFeatureSchema(0);
-
-    return sizeof(AemsPlayerVoice) + sizeof(s32) *
-        (lpCsis->GetUserParameterStart() +
-         lrAemsFeature.GetParameterSchemaCount());
+    const AemsVoiceCsisClass* lpCsis = static_cast<AemsFactory*>(&lFactory)->GetRegistry().
+        GetEntity<AemsVoiceCsisClass>(lVoiceSpec.GetVoiceSchema().GetName());
+    CGS_ASSERT_AT(lpCsis, "lpCsis", KAC_AEMS_PLAYER_VOICE_H_FILE, 246);
+    uint32_t lu32ParamCount = lpCsis->GetUserParameterStart() +
+        lVoiceSpec.GetVoiceSchema().GetFeatureSchema(0).GetParameterSchemaCount();
+    return sizeof(AemsPlayerVoice) + sizeof(uint32_t) * lu32ParamCount;
 }
 
-// DWARF CgsAemsPlayerVoice.h:283 takes the base Factory& (FactoryNew<AemsPlayerVoice> passes
-// the factory's Factory sub-object); ARTIST reaches the AemsFactory with a null-checked
-// pointer downcast (`addi r22,r30,-4`, 0x826DA280..0x826DA290).
-AemsPlayerVoice::AemsPlayerVoice(Factory& arBaseFactory,
-                                 const VoiceSpec& arVoiceSpec,
-                                 u32 au32Ident)
-    : PlayerVoice(GetClientAllocationSize(arBaseFactory, arVoiceSpec),
-                  arBaseFactory, arVoiceSpec, au32Ident),
+// ARTIST 0x826DA1E8 (DWARF CgsAemsPlayerVoice.h:283 with the base Factory&; locals lAemsFactory :295,
+// lLocalBuffer / lAllocator :300/:301, lpvMem :308, lpVoiceSpec :310, lu32FeatureCount :315,
+// lpVoiceSchema :316, i :318, lpCsis :331, lCommand :348, lSlot :354, lpSf :358, lu32I :367). The RWAC
+// half is created from a stack copy of the spec whose schema drops the AEMS feature (feature 0) and
+// whose voice type is E_SUBMIX_VOICE; the CSIS class handle is requested; the AEMS content slot is
+// installed; the parameter block starts with the voice's ident, the rest cleared.
+AemsPlayerVoice::AemsPlayerVoice(Factory& lFactory,
+                                 const VoiceSpec& lVoiceSpec,
+                                 u32 luiIdent)
+    : PlayerVoice(GetClientAllocationSize(lFactory, lVoiceSpec),
+                  lFactory, lVoiceSpec, luiIdent),
       GenericRwacVoice(),
-      mfSamplePlayerCpuTicks(0.0f),
       mpFirstPlayer(0),
       mpInternalSubmix(0),
-      mhClass(),
-      mpRequest(0),
-      mu32UserParameterStart(0),
-      mu32AemsInputParameterCount(0),
-      mbRemoving(false),
-      mbCreated(false),
-      mpAemsParameters(reinterpret_cast<s32*>(
-          reinterpret_cast<u8*>(this) + sizeof(AemsPlayerVoice)))
+      mCsisHandle(),
+      mpCsisClass(0),
+      mbRemoving(false)
 {
-    AemsFactory& lrAemsFactory = *static_cast<AemsFactory*>(&arBaseFactory);
-    const VoiceSchema& lrSourceSchema = arVoiceSpec.GetVoiceSchema();
-    CGS_ASSERT(lrSourceSchema.GetFeatureSchemaCount() != 0,
-               "AEMS voice has an AEMS feature");
+    mu32AemsParamCount = lVoiceSpec.GetVoiceSchema().GetFeatureSchema(0).GetParameterSchemaCount();
+    const AemsFactory& lAemsFactory = *static_cast<const AemsFactory*>(&lFactory);
+    CGS_ASSERT_AT(0 == lVoiceSpec.GetVoiceSchema().GetFeatureSchema(0).GetOutputParamCount(),
+                  "0 == lVoiceSpec.GetVoiceSchema().GetFeatureSchema(0).GetOutputParamCount()",
+                  KAC_AEMS_PLAYER_VOICE_H_FILE, 296);
 
-    Name lSchemaName = lrSourceSchema.GetName();
-    const AemsVoiceCsisClass* lpCsis = lrAemsFactory.GetRegistry()->
-        GetEntity<AemsVoiceCsisClass>(lSchemaName);
-    CGS_ASSERT(lpCsis, "lpCsis");
-    const FeatureSchema& lrAemsFeature = lrSourceSchema.GetFeatureSchema(0);
-    CGS_ASSERT(lrAemsFeature.GetOutputParamCount() == 0,
-               "AEMS feature has no output parameters");
+    const int32_t KI_LOCAL_ALLOCATOR = 1024;
+    char lLocalBuffer[KI_LOCAL_ALLOCATOR];
+    CgsMemory::LinearMalloc lAllocator;
+    lAllocator.Construct();
+    lAllocator.Create(lLocalBuffer, KI_LOCAL_ALLOCATOR);
+    lAllocator.SetAlignment(4);
 
-    mu32UserParameterStart = lpCsis->GetUserParameterStart();
-    mu32AemsInputParameterCount = lrAemsFeature.GetParameterSchemaCount();
-    const u32 luParameterWords =
-        mu32UserParameterStart + mu32AemsInputParameterCount;
-    std::memset(mpAemsParameters, 0, sizeof(s32) * luParameterWords);
-    if (luParameterWords)
-        mpAemsParameters[0] = static_cast<s32>(au32Ident);
+    void* lpvMem = lAllocator.Malloc(lVoiceSpec.GetAllocatedSize());
+    CGS_ASSERT_AT(lpvMem, "lpvMem", KAC_AEMS_PLAYER_VOICE_H_FILE, 309);
+    VoiceSpec* lpVoiceSpec = static_cast<VoiceSpec*>(memcpy(lpvMem, &lVoiceSpec, lVoiceSpec.GetAllocatedSize()));
 
-    // Feature zero is the AEMS/CSIS control feature. The RWAC graph receives a
-    // temporary schema containing only the ordinary audio features, exactly as
-    // ARTIST's constructor does before posting GenericRwacVoice creation.
-    const u32 luRwacFeatureCount =
-        lrSourceSchema.GetFeatureSchemaCount() - 1u;
-    const size_t luSchemaBytes = sizeof(VoiceSchema) +
-        (luRwacFeatureCount > 0 ?
-            sizeof(FeatureSchema*) * (luRwacFeatureCount - 1u) : 0u);
-    std::vector<u8> laSchemaStorage(luSchemaBytes);
-    VoiceSchema* lpRwacSchema = ::new (&laSchemaStorage[0])
-        VoiceSchema(luRwacFeatureCount);
-    lpRwacSchema->mName = lrSourceSchema.mName;
-    lpRwacSchema->mTypeName = lrSourceSchema.mTypeName;
-    for (u32 luFeature = 0; luFeature < luRwacFeatureCount; ++luFeature)
-        lpRwacSchema->SetFeatureSchema(
-            luFeature, lrSourceSchema.GetFeatureSchema(luFeature + 1u));
-
-    const u32 luSendCount = arVoiceSpec.GetSendCount();
-    const size_t luSpecBytes = sizeof(VoiceSpec) +
-        (luSendCount > 0 ? sizeof(Name) * (luSendCount - 1u) : 0u);
-    std::vector<u8> laSpecStorage(luSpecBytes);
-    VoiceSpec* lpRwacSpec = reinterpret_cast<VoiceSpec*>(&laSpecStorage[0]);
-    std::memcpy(lpRwacSpec, &arVoiceSpec, luSpecBytes);
-    lpRwacSpec->mpVoiceSchema = lpRwacSchema;
-    // ARTIST @ 0x826DA3FC-0x826DA404 writes 1 to VoiceSpec +0x0F: the
-    // voice-type byte, not processing stage (+0x0D).  The RWAC half is an
-    // internal submix voice, matching the SplicerPlayerVoice construction.
-    lpRwacSpec->mu8VoiceType = E_SUBMIX_VOICE;
-
-    mbCreated = CreateVoiceInstance(*lpRwacSpec, *this,
-                                    lrAemsFactory.GetRwacFactory(),
-                                    &mpInternalSubmix);
-
-    CsisSetClassHandleCommand lSetClass(
-        reinterpret_cast<uintptr_t>(&mhClass), lpCsis->GetClassName(),
-        lpCsis->GetSystemCrc(), lpCsis->GetClassCrc());
-    lrAemsFactory.GetCommandQueue() << lSetClass;
-
-    if (GetSlotCount() != 0)
+    lpvMem = lAllocator.Malloc(lVoiceSpec.GetVoiceSchema().GetAllocatedSize());
+    CGS_ASSERT_AT(lpvMem, "lpvMem", KAC_AEMS_PLAYER_VOICE_H_FILE, 314);
+    uint32_t lu32FeatureCount = lVoiceSpec.GetVoiceSchema().GetFeatureSchemaCount();
+    VoiceSchema* lpVoiceSchema = new (lpvMem) VoiceSchema(lu32FeatureCount - 1);
+    for (uint32_t i = 1; i < lu32FeatureCount; ++i)
     {
-        void* lpSlotMemory = lrAemsFactory.GetEnvironment().Allocate(
-            static_cast<u32>(sizeof(AemsContentSlot)),
-            static_cast<u32>(__alignof(AemsContentSlot)), "AemsContentSlot");
-        CGS_ASSERT(lpSlotMemory, "lpSlotMemory");
-        if (lpSlotMemory)
-            GetSlot(0).SetImplementation(::new (lpSlotMemory) AemsContentSlot());
+        lpVoiceSchema->SetFeatureSchema(i - 1, lVoiceSpec.GetVoiceSchema().GetFeatureSchema(i));
     }
-    AcknowledgePlaybackStateChange();
+    lpVoiceSpec->SetVoiceSchema(*lpVoiceSchema);
+    lpVoiceSpec->SetVoiceType(E_SUBMIX_VOICE);
+
+    CGS_ASSERT_AT(CreateVoiceInstance(*lpVoiceSpec, *this,
+                                      const_cast<AemsFactory&>(lAemsFactory).GetRwacFactory(),
+                                      &mpInternalSubmix),
+                  "NOT CREATE VOICE", KAC_AEMS_PLAYER_VOICE_H_FILE, 328);
+
+    const AemsVoiceCsisClass* lpCsis = const_cast<AemsFactory&>(lAemsFactory).GetRegistry().
+        GetEntity<AemsVoiceCsisClass>(lVoiceSpec.GetVoiceSchema().GetName());
+    if (lpCsis)
+    {
+        mu32AemsFirstUserParam = lpCsis->GetUserParameterStart();
+        CsisSetClassHandleCommand lCommand(
+            reinterpret_cast<uintptr_t>(&mCsisHandle), lpCsis->GetClassName(),
+            lpCsis->GetSystemCrc(), lpCsis->GetClassCrc());
+        const_cast<AemsFactory&>(lAemsFactory).GetCommandQueue() << lCommand;
+    }
+
+    Slot& lSlot = GetSlot(0);
+    CGS_ASSERT_AT(0 == lSlot.GetImplementation(), "0 == lSlot.GetImplementation()",
+                  KAC_AEMS_PLAYER_VOICE_H_FILE, 356);
+    const ISlotFactory* lpSf = ISlotFactory::GetFactory(Name("~AemsContentSlot~"));
+    CGS_ASSERT_AT(lpSf, "lpSf", KAC_AEMS_PLAYER_VOICE_H_FILE, 359);
+    lSlot.SetImplementation(lpSf->DoCreateSlot(*this));
+
+    GetAemsParameter(0) = GetIdent();
+    for (uint32_t lu32I = 1; lu32I < mu32AemsParamCount; ++lu32I)
+    {
+        GetAemsParameter(lu32I) = 0;
+    }
+
+    lAllocator.Destruct();
 }
 
+// ARTIST 0x826DA668: the sample players' rw voice ticks accumulated in muAemsTicks, plus the RWAC
+// half's own.
 f32 AemsPlayerVoice::GetCpuTicks()
 {
-    mfSamplePlayerCpuTicks = 0.0f;
-    for (AemsRWSamplePlayer* lpPlayer = mpFirstPlayer; lpPlayer;
-         lpPlayer = lpPlayer->mpNext)
+    muAemsTicks = 0;
+    for (AemsRWSamplePlayer* lpPlayer = mpFirstPlayer; lpPlayer; lpPlayer = lpPlayer->mpNext)
     {
-        if (lpPlayer->mpVoice)
-            mfSamplePlayerCpuTicks +=
-                static_cast<f32>(lpPlayer->mpVoice->miLastFrameCpuTicks);
-        for (u32 luPanner = 0; luPanner < lpPlayer->mNumPannerVoices; ++luPanner)
-        {
-            if (lpPlayer->mpPannerVoice[luPanner])
-                mfSamplePlayerCpuTicks += static_cast<f32>(
-                    lpPlayer->mpPannerVoice[luPanner]->miLastFrameCpuTicks);
-        }
+        muAemsTicks += lpPlayer->mpVoice->miLastFrameCpuTicks;
     }
-    return mfSamplePlayerCpuTicks + GenericRwacVoice::GetCpuTicks();
+    return static_cast<f32>(muAemsTicks) + GenericRwacVoice::GetCpuTicks();
 }
 
 Voice::EProfileVoiceType AemsPlayerVoice::GetProfileVoiceType()
@@ -172,75 +151,82 @@ bool AemsPlayerVoice::DoRemove()
     return 0 == mpFirstPlayer;   // constant first: ARTIST's addi rX,rX,0 before cntlzw (0x826DAFC8)
 }
 
+// ARTIST 0x826DAE38 (DWARF CgsAemsPlayerVoice.cpp:141): no class yet, so copy the clamped AEMS
+// inputs into the parameter block after the class's user parameters (as unsigned words: fctidz +
+// stfiwx) and post the CSIS create.
 bool AemsPlayerVoice::Play(u32 /*au32Param*/)
 {
-    if (mpRequest != 0)
-        return false;
-
-    for (u32 luIndex = 0; luIndex < mu32AemsInputParameterCount; ++luIndex)
+    if (!mpCsisClass)
     {
-        const InputParameter& lrInput = GetInputParameter(luIndex);
-        // rw::math::fpu::Clamp: ARTIST fsel(min - value) then fsel(max - v') (0x826DAE9C / 0x826DAD64).
-        const f32 lfClamped = rw::math::fpu::Clamp(lrInput.GetValueRaw(), lrInput.GetMin(), lrInput.GetMax());
-        mpAemsParameters[mu32UserParameterStart + luIndex] =
-            static_cast<s32>(lfClamped);
-    }
+        for (uint32_t lu32I = 0; lu32I < mu32AemsParamCount; ++lu32I)
+        {
+            const InputParameter& lParameter = GetInputParameter(lu32I);
+            // rw::math::fpu::Clamp: ARTIST fsel(min - value) then fsel(max - v') (0x826DAE9C / 0x826DAEA4).
+            GetAemsParameter(mu32AemsFirstUserParam + lu32I) = static_cast<uint32_t>(
+                rw::math::fpu::Clamp(lParameter.GetValueRaw(), lParameter.GetMin(), lParameter.GetMax()));
+        }
 
-    AemsFactory& lrFactory =
-        const_cast<AemsFactory&>(static_cast<const AemsFactory&>(GetFactory()));
-    CsisCreateCommand lCommand(
-        reinterpret_cast<uintptr_t>(&mhClass),
-        reinterpret_cast<uintptr_t>(mpAemsParameters),
-        reinterpret_cast<uintptr_t>(&mpRequest));
-    lrFactory.GetCommandQueue() << lCommand;
-    return true;
+        CsisCreateCommand lCommand(
+            reinterpret_cast<uintptr_t>(&mCsisHandle),
+            reinterpret_cast<uintptr_t>(&GetAemsParameter(0)),
+            reinterpret_cast<uintptr_t>(&mpCsisClass));
+        GetAemsFactory().GetCommandQueue() << lCommand;
+        return true;
+    }
+    return false;
 }
 
+// ARTIST 0x826DAD00 (DWARF CgsAemsPlayerVoice.cpp:97): refresh the changed inputs; while the CSIS
+// class lives, report it finished once only the voice holds it, else post the new parameters.
 bool AemsPlayerVoice::Update(f32 /*af32Dt*/)
 {
     bool lbChanged = false;
-    for (u32 luIndex = 0; luIndex < mu32AemsInputParameterCount; ++luIndex)
+    for (uint32_t lu32I = 0; lu32I < mu32AemsParamCount; ++lu32I)
     {
-        const InputParameter& lrInput = GetInputParameter(luIndex);
-        if (!lrInput.HasChanged())
-            continue;
-        lbChanged = true;
-        // rw::math::fpu::Clamp: ARTIST fsel(min - value) then fsel(max - v') (0x826DAE9C / 0x826DAD64).
-        const f32 lfClamped = rw::math::fpu::Clamp(lrInput.GetValueRaw(), lrInput.GetMin(), lrInput.GetMax());
-        mpAemsParameters[mu32UserParameterStart + luIndex] =
-            static_cast<s32>(lfClamped);
+        const InputParameter& lParameter = GetInputParameter(lu32I);
+        if (lParameter.HasChanged())
+        {
+            lbChanged = true;
+            // rw::math::fpu::Clamp: ARTIST fsel(min - value) then fsel(max - v') (0x826DAD64 / 0x826DAD6C).
+            GetAemsParameter(mu32AemsFirstUserParam + lu32I) = static_cast<uint32_t>(
+                rw::math::fpu::Clamp(lParameter.GetValueRaw(), lParameter.GetMin(), lParameter.GetMax()));
+        }
     }
 
-    if (mpRequest)
+    if (mpCsisClass)
     {
         s32 liRefCount = 0;
-        const int liResult = mpRequest->GetRefCount(&liRefCount);
-        CGS_ASSERT(liResult == 0, "Failed to GetRefCount on Csis Pointer");
-        if (liRefCount <= 2)
-            return false;
-        if (lbChanged)
+        CGS_ASSERT_AT(0 == mpCsisClass->GetRefCount(&liRefCount),
+                      "Failed to GetRefCount on Csis Pointer", KAC_AEMS_PLAYER_VOICE_CPP_FILE, 118);
+        if (liRefCount > 2)
         {
-            AemsFactory& lrFactory = const_cast<AemsFactory&>(
-                static_cast<const AemsFactory&>(GetFactory()));
-            CsisUpdateCommand lCommand(
-                reinterpret_cast<uintptr_t>(mpRequest),
-                reinterpret_cast<uintptr_t>(mpAemsParameters));
-            lrFactory.GetCommandQueue() << lCommand;
+            if (lbChanged)
+            {
+                CsisUpdateCommand lCommand(
+                    reinterpret_cast<uintptr_t>(mpCsisClass),
+                    reinterpret_cast<uintptr_t>(&GetAemsParameter(0)));
+                GetAemsFactory().GetCommandQueue() << lCommand;
+            }
+        }
+        else
+        {
+            return false;
         }
     }
     return true;
 }
 
+// ARTIST 0x826DAF10 (DWARF CgsAemsPlayerVoice.cpp:163): release the CSIS class, if any.
 bool AemsPlayerVoice::Stop()
 {
-    if (!mpRequest)
-        return false;
-    AemsFactory& lrFactory =
-        const_cast<AemsFactory&>(static_cast<const AemsFactory&>(GetFactory()));
-    CsisReleaseCommand lCommand(reinterpret_cast<uintptr_t>(mpRequest));
-    lrFactory.GetCommandQueue() << lCommand;
-    mpRequest = 0;
-    return true;
+    if (mpCsisClass)
+    {
+        CsisReleaseCommand lCommand(reinterpret_cast<uintptr_t>(mpCsisClass));
+        GetAemsFactory().GetCommandQueue() << lCommand;
+        mpCsisClass = 0;
+        return true;
+    }
+    return false;
 }
 
 void AemsPlayerVoice::AddSamplePlayer(AemsRWSamplePlayer* apPlayer)
@@ -257,6 +243,9 @@ void AemsPlayerVoice::RemoveSamplePlayer(AemsRWSamplePlayer* apPlayer)
     if (*lppLink == apPlayer)
         *lppLink = apPlayer->mpNext;
 }
+
+#undef KAC_AEMS_PLAYER_VOICE_H_FILE
+#undef KAC_AEMS_PLAYER_VOICE_CPP_FILE
 
 } // namespace Playback
 } // namespace CgsSound

@@ -442,7 +442,7 @@ void Module::DumpRegistries()
 
     AemsFactory* lpAemsFactory = mhAemsFactory.GetObject();
     CGS_ASSERT(lpAemsFactory, "mpObject");
-    lpAemsFactory->GetRegistry()->Dump();
+    lpAemsFactory->GetRegistry().Dump();
 }
 
 // ---------------------------------------------------------------------------
@@ -521,9 +521,7 @@ void Module::AddRegistry(Registry& arRegistry, u32 au32RegistryId)
     {
         AemsFactory* lpFactory = mhAemsFactory.GetObject();
         CGS_ASSERT(lpFactory != 0, "mpObject");
-        Registry* lpRegistry = lpFactory->GetRegistry();
-        CGS_ASSERT(lpRegistry != 0, "mpRegistry");
-        *lpRegistry += arRegistry;
+        lpFactory->GetRegistry() += arRegistry;   // AemsFactory::GetRegistry asserts mpRegistry (h:422)
         break;
     }
     case 3:

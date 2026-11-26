@@ -72,14 +72,6 @@ bool CsisContent::DoOnPreUnload()
     return true;
 }
 
-AemsContent::AemsContent(Factory& arFactory, const ContentSpec& akrSpec, u32 au32Ident)
-    : Content(arFactory, akrSpec, au32Ident),
-      mLoader(),
-      miAemsBankHandle(0),
-      mbRemoveBegun(false),
-      mpAemsData(0)
-{
-}
 
 bool AemsContent::DoLoad()
 {

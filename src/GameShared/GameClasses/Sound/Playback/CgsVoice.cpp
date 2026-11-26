@@ -448,8 +448,10 @@ u32 Voice::GetIndexOfOutputParameter(Name akName) const
 // stride is sizeof(OutputParameter)==12 (Name + 2 floats).
 OutputParameter& Voice::GetOutputParameter(u32 au32Index) const
 {
-    CGS_ASSERT(au32Index < mu32OutputParameterCount,
-               "lu32Index < mu32OutputParameterCount");
+    // ARTIST streams both operands (CgsVoice.h:1539, strings 0x820AE51C / 0x820AE554).
+    CGS_ASSERT_STREAM_AT(au32Index < mu32OutputParameterCount,
+        "lu32Index" << au32Index << " mu32OutputParameterCount" << mu32OutputParameterCount,
+        CGS_ARTIST_FILE, 1539);
 
     u8* lpu8Table = const_cast<u8*>(reinterpret_cast<const u8*>(this))
                     + mOffsets.muOutputParameterOffset;
@@ -463,7 +465,9 @@ OutputParameter& Voice::GetOutputParameter(u32 au32Index) const
 // GetOutputParameter above.
 Slot& Voice::GetSlot(u32 au32Index) const
 {
-    CGS_ASSERT(au32Index < mu32SlotCount, "lu32Index < mu32SlotCount");
+    // ARTIST streams both operands (CgsVoice.h:1509, strings 0x820AE51C / 0x820AE50C).
+    CGS_ASSERT_STREAM_AT(au32Index < mu32SlotCount,
+        "lu32Index" << au32Index << " mu32SlotCount" << mu32SlotCount, CGS_ARTIST_FILE, 1509);
     u8* lpu8Table = const_cast<u8*>(reinterpret_cast<const u8*>(this))
                     + mOffsets.muSlotOffset;
     return reinterpret_cast<Slot*>(lpu8Table)[au32Index];
@@ -471,7 +475,9 @@ Slot& Voice::GetSlot(u32 au32Index) const
 
 Send& Voice::GetSend(u32 au32Index) const
 {
-    CGS_ASSERT(au32Index < mu32SendCount, "lu32Index < mu32SendCount");
+    // ARTIST streams both operands (CgsVoice.h:1519, strings 0x820AE51C / 0x820AE528).
+    CGS_ASSERT_STREAM_AT(au32Index < mu32SendCount,
+        "lu32Index" << au32Index << " mu32SendCount" << mu32SendCount, CGS_ARTIST_FILE, 1519);
     u8* lpu8Table = const_cast<u8*>(reinterpret_cast<const u8*>(this))
                     + mOffsets.muSendOffset;
     return reinterpret_cast<Send*>(lpu8Table)[au32Index];
@@ -479,8 +485,10 @@ Send& Voice::GetSend(u32 au32Index) const
 
 InputParameter& Voice::GetInputParameter(u32 au32Index) const
 {
-    CGS_ASSERT(au32Index < mu32InputParameterCount,
-               "lu32Index < mu32InputParameterCount");
+    // ARTIST streams both operands (CgsVoice.h:1529, strings 0x820AE51C / 0x820AE538).
+    CGS_ASSERT_STREAM_AT(au32Index < mu32InputParameterCount,
+        "lu32Index" << au32Index << " mu32InputParameterCount" << mu32InputParameterCount,
+        CGS_ARTIST_FILE, 1529);
     u8* lpu8Table = const_cast<u8*>(reinterpret_cast<const u8*>(this))
                     + mOffsets.muInputParameterOffset;
     return reinterpret_cast<InputParameter*>(lpu8Table)[au32Index];

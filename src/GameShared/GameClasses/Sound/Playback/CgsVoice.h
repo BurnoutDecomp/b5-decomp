@@ -457,6 +457,8 @@ public:
     {
         mpImpl = apImplementation;
     }
+    // DWARF CgsVoice.h:322, header-inline.
+    ISlotImplementation* GetImplementation() const { return mpImpl; }
 
 private:
     Name                 mName;          // +0x00  interned slot name

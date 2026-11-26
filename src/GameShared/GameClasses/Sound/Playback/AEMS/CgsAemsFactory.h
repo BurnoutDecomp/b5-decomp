@@ -47,7 +47,15 @@ public:
                                       const AemsFactorySpec& akrSpec);
     AemsFactory(Environment& arEnvironment, const AemsFactorySpec& akrSpec);
 
-    Registry* GetRegistry() { return mpRegistry; }
+    // DWARF CgsAemsFactory.h:420, header-inline; the assert names the header as ARTIST spells
+    // it ("Aems", string 0x820AB1A8, line 422: AemsPlayerVoice::GetClientAllocationSize
+    // 0x826A2BA4, the AemsPlayerVoice ctor 0x826DA50C).
+    Registry& GetRegistry()
+    {
+        CGS_ASSERT_AT(mpRegistry, "mpRegistry",
+                      "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Aems/CgsAemsFactory.h", 422);
+        return *mpRegistry;
+    }
     CsisCommandQueue& GetCommandQueue() { return mCommandQueue; }
     GenericRwacFactory& GetRwacFactory() const { return *mpRwacFactory; }
 

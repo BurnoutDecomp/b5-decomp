@@ -45,8 +45,16 @@ struct SpliceBankStatistics
         u16 muPlayCount;    // :130 (+0x00)
     };
 
-    // :47 default ctor (own TU -- declared only).
-    SpliceBankStatistics();
+    // DWARF CgsSplicerContent.h:47, header-inline: ARTIST's inlined copy in
+    // FactoryNew<SplicerContent> (0x826DDA6C..0x826DDA80) clears every member but mpNext.
+    SpliceBankStatistics()
+        : mpSpliceContent(0)
+        , mpSpliceBank(0)
+        , mpaStats(0)
+        , muStatCount(0)
+        , muIndex(0)
+    {
+    }
 
     // :58 -- (spliceBank, spliceContent, index). Allocate + zero the per-splice Stats
     // bank and register onto spHead. Bodied in CgsSpliceBankStatistics.cpp.

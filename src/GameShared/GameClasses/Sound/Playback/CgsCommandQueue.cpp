@@ -136,15 +136,8 @@ template struct CommandQueue<255u, uintptr_t>;
 // (`*(this+8) - 4 + 0x68` == the owning AemsFactory's embedded CsisCommandQueue)
 // is documented on the class's mpCommandQueue stand-in.
 
-CsisCommandQueue& operator<<(CsisCommandQueue& arQueue,
-                             const CsisReleaseCommand& arCommand)
-{
-    const bool lbPosted = arQueue.mQueue.PostCommand(
-        static_cast<unsigned int>(sizeof(arCommand) / sizeof(uintptr_t)),
-        arCommand.AsCommand());
-    CGS_ASSERT(lbPosted, "Possibly need to increase CsisCommandQueue::E_QUEUE_LENGTH");
-    return arQueue;
-}
+// CsisCommandQueue::operator<< <CsisReleaseCommand> is the member template's instance in
+// AEMS/CgsCsisCommandQueue.cpp (DWARF CgsAemsFactory.h:240).
 
 bool CsisCommandQueue::GetCommand(u32& arCount, uintptr_t* apWords)
 {

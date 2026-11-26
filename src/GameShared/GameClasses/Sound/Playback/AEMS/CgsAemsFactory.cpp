@@ -133,15 +133,6 @@ AemsFactory::AemsFactory(Environment& arEnvironment, const AemsFactorySpec& akrS
     muPatchMonitorCount = 0;
 }
 
-// The per-factory registry accessor (CgsSoundPlaybackModule.h:100 -- the console
-// reads AemsFactory+0x60). The generic Factory* arrives as the Factory SUBOBJECT
-// pointer (the environment table stores that, per the MI decode), so the cast
-// walks down through the real hierarchy.
-Registry* GetAemsFactoryRegistry(Factory* lpAemsFactory)
-{
-    return static_cast<AemsFactory*>(lpAemsFactory)->GetRegistry();
-}
-
 const Name& AemsFactorySkName()
 {
     return skAemsFactoryName;
