@@ -2044,8 +2044,9 @@ void ActiveRaceCar::OnCrash(bool lbIsPrimaryCrash,
 
     if( mPhysicsState.mbCrashing )                                       // lbz 0x52A
     {
-        // The console's dev-log warning (gxMessageFilterFlags bit 0); log only, no state change.
-        if( CgsDev::Log::gpDebugPrint != 0 )
+        // The console's dev-log warning, gated on CgsDev::Message::gxMessageFilterFlags bit 0
+        // (ld 0x82F31908; clrldi 63 at 0x822A4E20..28); log only, no state change.
+        if( CgsDev::Message::gxMessageFilterFlags & 1 )
         {
             *CgsDev::Log::gpDebugPrint
                 << "Warning: crashing an active race car that is already crashing\n";

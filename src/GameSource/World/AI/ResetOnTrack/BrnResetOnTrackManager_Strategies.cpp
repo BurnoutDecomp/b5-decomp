@@ -608,7 +608,7 @@ Vector3 ResetOnTrackManager::DeterminePositionBetweenNodes(Vector3 lPrevPortalPo
     {
         // `ld gxMessageFilterFlags ; clrldi 63 ; cmpldi ; beq` 0x82785E9C..0x82785EB4: bit 0 gates the line.
         // [FX-TAILS-A item 8 2026-09-24: printed whenever gpDebugPrint was set]
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "<AI> Nodes in same place\n";
         }
@@ -619,7 +619,7 @@ Vector3 ResetOnTrackManager::DeterminePositionBetweenNodes(Vector3 lPrevPortalPo
 
     // 0x82785ED4..0x82785F38, the same bit-0 gate: "Lerping " t " from " prev " to " next "\n" (f31 / f30 /
     // f28, StrStreamBase::operator<<(float) sub_821F0F40 = "%f"). [FX-TAILS-A item 8: this line was absent]
-    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
         *CgsDev::Log::gpDebugPrint << "Lerping " << lfInterp << " from " << lfPrevAheadness
                                    << " to " << lfNextAheadness << "\n";
@@ -675,7 +675,7 @@ bool ResetOnTrackManager::ConvertNodesToPositionAndDirection(const RouteNode* lp
 
     // `ld gxMessageFilterFlags ; clrldi 63 ; cmpldi ; beq` 0x82790380..0x82790390: bit 0 gates the line.
     // [FX-TAILS-A item 8 2026-09-24: printed whenever gpDebugPrint was set]
-    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
         *CgsDev::Log::gpDebugPrint << "Converting nodes to position & direction\n";
     }
@@ -773,7 +773,7 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
     {
         // `ld gxMessageFilterFlags ; clrldi 63 ; cmpldi ; beq` 0x8278450C..0x8278451C: bit 0 gates the line.
         // [FX-TAILS-A item 8 2026-09-24: printed whenever gpDebugPrint was set]
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "<AI> routeless fail\n";
         }
@@ -829,7 +829,7 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
     {
         // `ld gxMessageFilterFlags ; clrldi 63 ; cmpldi ; beq` 0x82784738..0x82784748: bit 0 gates the line.
         // [FX-TAILS-A item 8 2026-09-24: printed whenever gpDebugPrint was set]
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
             *CgsDev::Log::gpDebugPrint
                 << "<AI> Car tried to start ahead of player. Forced behind instead.\n";
@@ -1408,7 +1408,7 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
     if (lfAheadness < KF_ASSUMED_FOV_FOR_RESET_AHEAD &&
         lfSeparation < KF_TOO_CLOSE_TO_SPAWN_IN_VIEW)
     {
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "Pop up prevented\n";
         }

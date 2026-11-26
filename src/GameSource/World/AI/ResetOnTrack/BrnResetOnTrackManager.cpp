@@ -692,19 +692,6 @@ namespace BrnAI
 
         mResetOnTrackDebugComponent.PushResetInfo(lpRequest, &lResult);
 
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            // [DIAG rot] NOT IN THE X360 BINARY. One line per resolved request -- the witness that
-            // separates "the pump ran" from "the pump found a pose", which are different claims
-            // and the whole reason this wave exists.
-            *CgsDev::Log::gpDebugPrint
-                << "[rot] request resolved: car " << static_cast<s32>(lpRequest->GetGlobalRaceCarIndex())
-                << " type " << static_cast<s32>(lpRequest->GetResetType())
-                << " speed " << lpRequest->GetResetSpeed()
-                << " -> " << (lResult.GetState() == AIModuleIO::ResetOnTrackResult::E_STATE_SUCCESS
-                              ? "SUCCESS (AI pose)" : "FAILURE (consumer uses GetResetCoords)")
-                << " resetCount " << miResetCount << "\n";
-        }
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -802,26 +789,6 @@ namespace BrnAI
                 const u16 luPlayerSection = lpPlayerAICar->GetBestSectionIndex();
                 lbProcess = (luPlayerSection != AICar::KI_INVALID_SECTION_INDEX);
 
-                if (!lbProcess && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    // [DIAG rot] NOT IN THE X360 BINARY. First-N only. Separates "the manager
-                    // declined" from "the manager never saw it", which is the exact ambiguity
-                    // this lane existed to remove.
-                    static s32 siReportedNoPlayerSection = 0;
-                    if (siReportedNoPlayerSection < 4)
-                    {
-                        ++siReportedNoPlayerSection;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[rot] non-STANDARD request (type "
-                            << static_cast<s32>(lrRequest.GetResetType())
-                            << ", car " << static_cast<s32>(lrRequest.GetGlobalRaceCarIndex())
-                            << ") HELD: the player AI car (global "
-                            << static_cast<s32>(mePlayerGlobalRaceCarIndex)
-                            << ") has no best/default AI section yet -- the console's own gate at "
-                               "X360 0x8279A900. It will resolve on the frame the player car "
-                               "acquires a section.\n";
-                    }
-                }
             }
 
             if (lbProcess)

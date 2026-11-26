@@ -823,7 +823,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
 
             if (lpCar->meCarState == E_AI_CAR_STATE_OUT_OF_RANGE)                         // 0x82798A20
             {
-                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "WARNING: AI car " << static_cast<s32>(leGlobalRaceCarIndex)
@@ -1248,7 +1248,7 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
         // ---- 106  E_ACTION_DRIVE_THRU_JUNK_YARD_ON_GAME_START (case 99, asm 0x827924C8) ---
         case E_ACTION_DRIVE_THRU_JUNK_YARD_ON_GAME_START:
         {
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
                 *CgsDev::Log::gpDebugPrint << "<AI> Is in startup junkyard\n";              // 0x827924E0
             }

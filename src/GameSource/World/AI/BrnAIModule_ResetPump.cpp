@@ -117,18 +117,6 @@ void AIModule::ProcessRequestInterface(const AIModuleIO::InputBuffer* lpInputBuf
     {
         mResetOnTrackManager.PushResetOnTrackRequest(&lpQueue->GetEvent(liRequest));
 
-        // [DIAG resetpump] NOT IN THE X360 BINARY. The middle witness of the three-point pair
-        // the race-car module opens and closes: "the request left RCEM", "the AI RECEIVED it",
-        // "a result came back". Without the middle one a lost request and a refused request
-        // look identical in the log.
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[resetpump] request RECEIVED by the AI module: global car "
-                << static_cast<s32>(lpQueue->GetEvent(liRequest).GetGlobalRaceCarIndex())
-                << " type " << static_cast<s32>(lpQueue->GetEvent(liRequest).GetResetType())
-                << "\n";
-        }
     }
     // ---- the STUCK-DRIVER sweep, 0x8278A86C..0x8278A92C (landed 2026-09-04, lane R4's recovery) --------
     // The park that stood here said GetAIDriver / IsStuck / the driver objects "do not exist in this
@@ -163,9 +151,6 @@ void AIModule::ProcessRequestInterface(const AIModuleIO::InputBuffer* lpInputBuf
                                E_RESET_TYPE_STANDARD);
             mResetOnTrackManager.PushResetOnTrackRequest(&lRequest);
             lpDriver->ResetStuckTime();
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-            }
         }
     }
 

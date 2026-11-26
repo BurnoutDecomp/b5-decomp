@@ -304,12 +304,12 @@ void PlaceOnTrackManager::PostSceneUpdate( RaceCarEntityModuleIO::OutputBuffer_P
         lEvent.meExclusionMode     = CgsSceneManager::SceneManagerIO::E_EXCLUDE_ENTITY_ONLY;
         lEvent.mxVolumeTypeFlags   = KU8_ALL_VOLUME_TYPE_FLAGS;
 
-        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
         {
             *CgsDev::Log::gpDebugPrint << "[PLACEONTRACK] Generating line test to place race car "
                                        << static_cast<s32>( leActiveRaceCarIndex ) << " on track\n";
         }
-        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
         {
             *CgsDev::Log::gpDebugPrint << "    lEvent.mLineStart=";
             CgsDev::Log::gpDebugPrint->AppendFormat( "(%f, %f, %f)", lEvent.mLineStart.mV.x,
@@ -326,7 +326,7 @@ void PlaceOnTrackManager::PostSceneUpdate( RaceCarEntityModuleIO::OutputBuffer_P
         mpRaceCarEntityModule->mRCEntityModuleDebugComponent.mLastResetLineTestStart = lEvent.mLineStart;
         mpRaceCarEntityModule->mRCEntityModuleDebugComponent.mLastResetLineTestEnd = lEvent.mLineEnd;
 
-        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
         {
             *CgsDev::Log::gpDebugPrint << "[PLACEONTRACK] Line test requested\n";
         }
@@ -412,12 +412,12 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
             // empty one included. (The per-intersection "      Intersection 0: " << record lines that
             // follow on the console print through CgsSceneManager::operator<<(LineTestIntersection),
             // which this tree has no body for -- not reproduced.)
-            if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+            if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
             {
                 *CgsDev::Log::gpDebugPrint << "[PLACEONTRACK] Received line test result for race car "
                                            << static_cast<s32>( leActiveRaceCarIndex ) << "\n";
             }
-            if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+            if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
             {
                 *CgsDev::Log::gpDebugPrint << "    lpLineTestResult->miNumIntersections="
                                            << lpLineTestResult->muNumCandidates << "\n";
@@ -444,8 +444,7 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
 
             // The console's "    Selected intersection " << index << " as place on track destination\n"
             // (index = (best - &list.maCandidates[0]), `subf ; srawi 6`), printed before the car-select arm.
-            if( lpBestIntersection != 0 && ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0
-                && CgsDev::Log::gpDebugPrint != 0 )
+            if( lpBestIntersection != 0 && ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
             {
                 *CgsDev::Log::gpDebugPrint << "    Selected intersection "
                                            << static_cast<s32>( lpBestIntersection - lpLineTestResult->maCandidates )
@@ -508,7 +507,7 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
             GetValuesForCarSelect( lpBestIntersection, lpActiveRaceCar,
                                    &lResetPosition, &lResetNormal, &lResetDirection );
             // 0x822F7224..0x822F7248 (gxMessageFilterFlags & 1), string 0x8201E9E8.
-            if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+            if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
                 *CgsDev::Log::gpDebugPrint << "    Selecting special values for car select\n";
         }
     }
@@ -532,7 +531,7 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
         // The practical difference: a reset whose only candidates are unusable (ComputeBestPlaceOnT
         // returns none -- e.g. every surface under the request is fatal) now reverts to the last
         // recorded road pose, as on the console, instead of seating the car on the request.
-        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
         {
             *CgsDev::Log::gpDebugPrint
                 << "    Failed to find valid place on track location - reverting to ring buffer\n";
@@ -549,7 +548,7 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
     // each vector through AppendFormat("(%f, %f, %f)"), then "\n" (0x82001CC4). CORRECTED
     // 2026-09-24 (FX-GEOMETRIC): it printed only with an intersection, without the direction and
     // with three PC fields appended; those now go on their own tagged line below.
-    if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+    if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
     {
         *CgsDev::Log::gpDebugPrint << "    Selected reset data: lResetPosition=";
         CgsDev::Log::gpDebugPrint->AppendFormat( "(%f, %f, %f)", lResetPosition.mV.x, lResetPosition.mV.y,
@@ -564,7 +563,7 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
     }
     // [DIAG] NOT AN X360 PRINT (car-select drop wave 2026-09-18): the chosen intersection's own
     // height beside the reset pose, so a log shows a car-select DROP height at a glance.
-    if( lpBestIntersection != 0 && CgsDev::Log::gpDebugPrint != 0 )
+    if( lpBestIntersection != 0 )
     {
         *CgsDev::Log::gpDebugPrint << "    [pc-diag] intersection.y=" << lpBestIntersection->mPosition.mV.y
             << " carSelect=" << ( mpRaceCarEntityModule->IsInCarSelectScreen() ? 1 : 0 )
