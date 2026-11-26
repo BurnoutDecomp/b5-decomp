@@ -9,8 +9,6 @@
 using rw::audio::core::System;
 using namespace Snd9;
 
-extern "C" System* off_83271928;
-
 namespace Snd9
 {
     SystemOptions gOptions;
@@ -87,7 +85,7 @@ extern "C" s32 SNDSYSI_chanpubinit()
 {
     const u32 luBytes = (sizeof(Hal::Channel) + sizeof(f32) * Hal::giNumOutputs) * giVoiceCount;
     Hal::gpChannels = static_cast<Hal::Channel*>(
-        off_83271928->Alloc(luBytes, "Common Voice State", 16, 0));
+        System::GetInstance()->Alloc(luBytes, "Common Voice State", 16, 0));
     std::memset(Hal::gpChannels, 0, luBytes);
 
     f32* lpGains = reinterpret_cast<f32*>(Hal::gpChannels + giVoiceCount);

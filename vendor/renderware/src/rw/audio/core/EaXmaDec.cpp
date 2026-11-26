@@ -80,10 +80,6 @@ EaXmaDec::PoolNode *EaXmaDec::spFreeHead = 0;             // off_8327A318
 EaXmaDec::PoolNode *EaXmaDec::spFreeTail = 0;             // off_8327A31C
 u32 EaXmaDec::suFreeCount = 0;                            // dword_8327A320
 
-// The shared rwaudio System singleton (off_83271928). Its object is defined/owned by the
-// System TU; the pool allocates and frees through it (Decoder.cpp/CMpegBase.cpp precedent).
-extern "C" System *off_83271928;
-
 // This codec's static registration descriptor (off_82F89394, .data). DEFINED here
 // (2026-08-25, faithful-audio-engine phase A2 -- the mounted build links it). XEX
 // recovery (big-endian .data @0x82F89394):
@@ -169,7 +165,7 @@ void EaXmaDec::AllocateResources()
     if (sbResourcesAllocated)
         return;
 
-    System *lpSystem = off_83271928;
+    System *lpSystem = System::GetInstance();
     sbResourcesAllocated = true;
 
     spInputMemory = 0;
@@ -264,7 +260,7 @@ void EaXmaDec::DeallocateResources()
 
     spPoolMutex->~Mutex();
 
-    System *lpSystem = off_83271928;
+    System *lpSystem = System::GetInstance();
     lpSystem->Free(spPoolMutex, 0);
     spRecords = 0;
     spPoolMutex = 0;

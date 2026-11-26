@@ -31,11 +31,6 @@ namespace audio
 namespace core
 {
 
-// The shared rwaudio System singleton (off_83271928); its ICoreAllocator (slot +0x14) backs
-// the one scratch allocation this engine makes. Defined/owned by the System TU. Configure /
-// Reset / the destructor reach it exactly as ReverbModel1.cpp does.
-extern "C" System *off_83271928;
-
 namespace
 {
 // XMemSet / XMemCpy @ the X360 build == byte-wise memset / memcpy. They return the
@@ -87,7 +82,7 @@ FastFirEngine::FastFirEngine()
 FastFirEngine::~FastFirEngine()
 {
     if (mpBuffer)
-        off_83271928->mpAllocator->Free(mpBuffer, 0);
+        System::GetInstance()->mpAllocator->Free(mpBuffer, 0);
 
     if (mFFTInstance.pData)
         FFT_Free(&mFFTInstance);
@@ -101,7 +96,7 @@ void FastFirEngine::Reset()
 {
     if (mpBuffer)
     {
-        off_83271928->mpAllocator->Free(mpBuffer, 0);
+        System::GetInstance()->mpAllocator->Free(mpBuffer, 0);
         mpBuffer = 0;
     }
     if (mFFTInstance.pData)
@@ -199,7 +194,7 @@ int FastFirEngine::Configure(FastFirEngine *self, s32 channels, s32 blockSize, s
 
     // Straight to the System allocator's aligned Alloc (flags 1, align 16, offset 0); the
     // console does not go through System::Alloc here.
-    void *buffer = off_83271928->mpAllocator->Alloc(totalBytes, "Reverb IR Buffer", 1, 16, 0);
+    void *buffer = System::GetInstance()->mpAllocator->Alloc(totalBytes, "Reverb IR Buffer", 1, 16, 0);
     self->mpBuffer = buffer;
     XMemSet(buffer, 0, totalBytes);
 

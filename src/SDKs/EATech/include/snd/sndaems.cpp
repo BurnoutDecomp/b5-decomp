@@ -10,7 +10,7 @@
 //
 // The `_savegprlr_23` / `_restgprlr_23` calls in the pseudocode are the compiler's
 // register save/restore prologue/epilogue helpers -- not source-level calls -- so
-// they are dropped. off_83271928 is the shared rwaudio System singleton (same
+// they are dropped. System::spInstance (ARTIST 0x83271928) is the shared rwaudio System singleton (same
 // global reached by Decoder.cpp / PlugIn.cpp), whose Lock/Unlock guard the registry
 // walks and whose deferred-command ring receives the queued remove command.
 // ============================================================================
@@ -31,11 +31,6 @@
 #include "types.hpp"
 #include <cstring>
 #include <limits>
-
-// The shared rwaudio System singleton (off_83271928). Defined/owned by the System
-// sub-system TU; declared here as the target of Lock/Unlock/Free and the command
-// ring. Same declaration form Decoder.cpp uses.
-extern "C" rw::audio::core::System* off_83271928;
 
 // The C-facing AEMS instance layer's per-subscriber teardown (SNDAEMSI_updatedestroy,
 // paired with Csis::Function::UnsubscribeFast). Its body lives in its own TU;
@@ -1378,12 +1373,12 @@ bool AddAemsTimer()
         return true;
     // The timer record is carved from the audio System's allocator, which the add-bank
     // path only touches inside the System critical section.
-    rw::audio::core::System::Lock(off_83271928);
-    const bool lbFailed = off_83271928->mTimerManager.AddTimer(
+    rw::audio::core::System::Lock(rw::audio::core::System::GetInstance());
+    const bool lbFailed = rw::audio::core::System::GetInstance()->mTimerManager.AddTimer(
             &gAemsTimerHandle,
             &AemsTimerCallback, 0, "Aems Modules", rw::audio::core::TIMERSTAGE_BEFORECOMMANDS,
             rw::audio::core::TIMERVISIBILITY_SHOWN);
-    rw::audio::core::System::Unlock(off_83271928);
+    rw::audio::core::System::Unlock(rw::audio::core::System::GetInstance());
     if (lbFailed)
         return false;
     gbAemsTimerAdded = true;
@@ -1394,7 +1389,7 @@ void RemoveAemsTimer()
 {
     if (!gbAemsTimerAdded)
         return;
-    off_83271928->mTimerManager.RemoveTimer(&gAemsTimerHandle);
+    rw::audio::core::System::GetInstance()->mTimerManager.RemoveTimer(&gAemsTimerHandle);
     gbAemsTimerAdded = false;
     gfAemsTimerPeriod = -1.0f;
 }
@@ -1428,7 +1423,7 @@ CGS_STATIC_ASSERT((sizeof(RemoveModuleBankCommand) == 12),
 // ----------------------------------------------------------------------------
 s32 BeginRemoveModuleBank(s32 aiBankHandle)
 {
-    rw::audio::core::System* lpSystem = off_83271928;
+    rw::audio::core::System* lpSystem = rw::audio::core::System::GetInstance();
     rw::audio::core::System::Lock(lpSystem);
 
     // Locate the registered bank whose handle matches (registry is threaded through
@@ -1509,7 +1504,7 @@ bool IsModuleBankRemoved(s32 aiBankHandle)
         return true;
     }
 
-    rw::audio::core::System* lpSystem = off_83271928;
+    rw::audio::core::System* lpSystem = rw::audio::core::System::GetInstance();
     rw::audio::core::System::Lock(lpSystem);
 
     bool lbRemoved = true;
@@ -1713,7 +1708,7 @@ extern "C" void SNDAEMSI_CreateModuleInstance(Csis::Class* apClass,
 {
     using namespace Snd9::Aems;
     ModuleRecord* lpModule = static_cast<ModuleRecord*>(apModule);
-    rw::audio::core::System* lpSystem = off_83271928;
+    rw::audio::core::System* lpSystem = rw::audio::core::System::GetInstance();
     rw::audio::core::System::Lock(lpSystem);
 
     if (!lpModule || lpModule->muCurrentInstances >= lpModule->muMaxInstances ||
@@ -1878,6 +1873,6 @@ extern "C" int SNDAEMSI_updatedestroy(void* apSubscriber)
     }
 
     --lpModule->muCurrentInstances;
-    off_83271928->Free(lpInstance, 0);
+    rw::audio::core::System::GetInstance()->Free(lpInstance, 0);
     return 0;
 }

@@ -37,10 +37,6 @@ namespace audio
 namespace core
 {
 
-// The shared rwaudio System singleton (off_83271928). Its object is defined/owned by the
-// System TU; ReleaseEvent removes the reconfigure timer through it.
-extern "C" System *off_83271928;
-
 // off_8217F58C -- the Delay v-table installed at construction. off_820AA810 -- the base
 // PlugIn v-table the destructor reinstalls before any free. These are opaque data symbols in
 // the XEX (no exported contents); modelled as honest placeholder storage so the ctor / dtor
@@ -346,7 +342,7 @@ void Delay::ReleaseEvent()
     mDelayLine.Release();
 
     if (mbActive)
-        System::RemoveTimer(off_83271928, &mTimer);
+        System::RemoveTimer(System::GetInstance(), &mTimer);
 
 }
 

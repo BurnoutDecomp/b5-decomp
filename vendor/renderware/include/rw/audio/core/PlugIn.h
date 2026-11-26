@@ -276,7 +276,7 @@ private:
 
 // -------------------------------------------------------------------------------------
 // System -- the owning rwaudio sub-system: the hub every audio-core family hangs off
-// (the singleton lives at off_83271928, defined in System.cpp). The layout below is the
+// (the singleton is System::spInstance, ARTIST 0x83271928, defined in System.cpp). The layout below is the
 // FULL System (rwaudio PDB reconcile, wave E -- see the FLAG note over the member list);
 // the bodies live in System.cpp. The deferred-command ring (mpDeferredRingBase +
 // muDeferredRingCursor) is the queue PlugIn::SetAttribute / Voice::Release / etc. push
@@ -308,7 +308,7 @@ public:
     // Allocate the singleton System (align 16) through `allocator`, placement-construct it
     // (System_ctor), carve the two mutexes + the two thread-id slots from the allocation
     // tail, allocate the first VoiceListNode entry and the deferred-command ring
-    // (`commandBufferSize` bytes), and seed every field. Publishes off_83271928 (BEFORE
+    // (`commandBufferSize` bytes), and seed every field. Publishes spInstance (BEFORE
     // the mutexes are initialised, and it is NOT cleared on the failure path -- both
     // faithful to the asm). Returns the System, or null when any allocation fails (the
     // partial allocations are freed). X360 @0x82B6F420. Full per-store map:
@@ -320,7 +320,7 @@ public:
     // ExecuteCommands (sleeping 1ms per lap, the command mutex held) until the ring is
     // empty and miRefCount drains to 0, then release the XMA contexts, the three
     // registries, the profiler, the TimerManager, the ring + voice-node allocations and
-    // finally the System block itself; off_83271928 is cleared. (The X360 r3 return is a
+    // finally the System block itself; spInstance is cleared. (The X360 r3 return is a
     // dead unlock-result passthrough -- modelled void, same as Lock/Unlock.)
     // X360 @0x82B6F998.
     static void Release(System *self);
@@ -397,7 +397,7 @@ public:
 
     // Lazily create + return the decoder registry (@+0x2C). @0x82B6DD78 (dossier
     // re-exported for the RWAC/AEMS factory registration pass, 2026-08-28): the exact
-    // sibling of GetPlugInRegistry -- DecoderRegistry::CreateInstance(off_83271928)
+    // sibling of GetPlugInRegistry -- DecoderRegistry::CreateInstance(spInstance)
     // on first use, cached at mpDecoderRegistry.
     static DecoderRegistry *GetDecoderRegistry(System *self);
 
@@ -421,6 +421,21 @@ public:
 
     // Swap the lock/unlock hooks (@+0x40/+0x44) over to the Csis mutex primitives. @0x82B6FC50.
     static System *VectorToCsisMutex(System *self);
+
+    // The singleton accessor, DWARF system.h:1288 `System *GetInstance()`. Inline: neither
+    // ARTIST nor the PS3 build has a copy, and the BrnSoundUnity DWARF records it inlined in
+    // GenericRwacFactory's constructor and AddRegistry, AemsRWSampleFactory's constructor and
+    // Module::Prepare. Code outside System reads the singleton through it.
+    static System *GetInstance() { return spInstance; }
+
+private:
+    // The singleton: DWARF system.h:3112 `static System *spInstance` (private), PS3
+    // _ZN2rw5audio4core6System10spInstanceE, the X360 audio MAP
+    // ?spInstance@System@core@audio@rw@@0PAV1234@A. ARTIST 0x83271928 (IDA off_83271928).
+    // Published by CreateInstance, cleared by Release; defined in System.cpp.
+    static System *spInstance;
+
+public:
 
     // ----------------------------------------------------------------------------------
     // Layout. The +0xNN annotations are the X360 (32-bit-pointer) offsets from the asm and

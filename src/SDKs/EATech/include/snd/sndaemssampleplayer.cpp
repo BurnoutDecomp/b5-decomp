@@ -13,7 +13,7 @@
 //
 // The `_savegprlr_NN` / `_restgprlr_NN` calls in the pseudocode are the compiler's
 // register save/restore prologue/epilogue helpers -- not source-level calls -- so
-// they are dropped. off_83271928 is the shared rwaudio System singleton (same global
+// they are dropped. System::spInstance (ARTIST 0x83271928) is the shared rwaudio System singleton (same global
 // reached by sndaems.cpp / PlugIn.cpp / Decoder.cpp), the allocator Release frees the
 // player block back through.
 //
@@ -33,11 +33,6 @@
 #include "rw/audio/core/Voice.h"  // rw::audio::core::Voice::Release
 #include "rw/audio/core/PlugIn.h" // rw::audio::core::PlugIn::SetAttribute, System::Free
 #include "rw/audio/core/plugins/SndPlayer1.h" // SndPlayer1 sample-position attribute
-
-// The shared rwaudio System singleton (off_83271928). Defined/owned by the System
-// sub-system TU; declared here as the target of System::Free. Same declaration form
-// sndaems.cpp / Decoder.cpp use.
-extern "C" rw::audio::core::System* off_83271928;
 
 namespace Snd9
 {
@@ -110,7 +105,7 @@ void AemsStandardSamplePlayer::Release()
         }
     }
 
-    off_83271928->Free(this, 0);
+    rw::audio::core::System::GetInstance()->Free(this, 0);
 }
 
 // ARTIST 0x82B72060

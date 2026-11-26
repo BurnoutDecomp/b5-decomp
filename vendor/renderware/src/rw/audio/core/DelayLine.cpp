@@ -11,7 +11,7 @@
 // The `__twllei/__twlgei` traps are the PPC signed-divide guard instructions the compiler
 // emits around `%` / `divw`; they are dropped and the plain modulo/division restored.
 // XMemCpy is the Xbox platform interleaved block copy (declared here, defined in the
-// platform TU, same as Decoder/Collection). off_83271928 is the shared rwaudio System
+// platform TU, same as Decoder/Collection). System::spInstance (ARTIST 0x83271928) is the shared rwaudio System
 // singleton; the ring is taken from / returned to its ICoreAllocator at System+0x14 (the
 // asm dispatches vtable[1] = Alloc(size,name,flags,align,offset) and vtable[3] = Free) --
 // the same singleton Collection.cpp / Decoder.cpp reach.
@@ -36,8 +36,6 @@ namespace core
 
 // Xbox platform interleaved block copy (declaration only for the per-TU compile gate).
 extern "C" void *XMemCpy(void *pDest, const void *pSrc, unsigned int uiCount);
-
-extern "C" System *off_83271928;
 
 namespace
 {
@@ -140,7 +138,7 @@ bool DelayLine::Init(s32 channels, s32 maxDelaySamples, s32 readLength)
     bool  ok = true;
     if (delay)
     {
-        pRing = off_83271928->mpAllocator->Alloc(4u * capacity * static_cast<u32>(channels),
+        pRing = System::GetInstance()->mpAllocator->Alloc(4u * capacity * static_cast<u32>(channels),
                                    KA_DELAY_BUFFER, EA::Allocator::kFlagPermMemory, 128, 0);
         ok = (pRing != 0);
     }
@@ -492,7 +490,7 @@ bool DelayLine::Resize(s32 maxDelaySamples)
     if (miCapacity < newCapacity)
     {
         f32 *const pNew = static_cast<f32 *>(
-            off_83271928->mpAllocator->Alloc(4u * static_cast<u32>(miChannelCount) * static_cast<u32>(newCapacity),
+            System::GetInstance()->mpAllocator->Alloc(4u * static_cast<u32>(miChannelCount) * static_cast<u32>(newCapacity),
                                KA_DELAY_BUFFER, EA::Allocator::kFlagPermMemory, 128, 0));
         if (!pNew)
             return false;
@@ -525,7 +523,7 @@ bool DelayLine::Resize(s32 maxDelaySamples)
         }
 
         if (mpBuffer)
-            off_83271928->mpAllocator->Free(mpBuffer, 0);
+            System::GetInstance()->mpAllocator->Free(mpBuffer, 0);
 
         miWritePhase = miGuardSamples; // +0x34 <- old +0x18
         mpBuffer = pNew;               // +0x00
@@ -544,7 +542,7 @@ void DelayLine::Release()
 {
     if (mpBuffer)
     {
-        off_83271928->mpAllocator->Free(mpBuffer, 0);
+        System::GetInstance()->mpAllocator->Free(mpBuffer, 0);
         mpBuffer = 0;
     }
     mpLocalBuffer = 0; // +0x08

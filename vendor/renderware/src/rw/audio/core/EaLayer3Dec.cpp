@@ -21,8 +21,6 @@ namespace audio
 namespace core
 {
 
-extern "C" System *off_83271928;
-
 struct HuffTable
 {
     u16 tableSize;
@@ -154,7 +152,7 @@ void CMpegLayer3Base::HuffmanTableSetup()
 s32 CMpegLayer3Base::AllocateHybrid(s32 channels)
 {
     const s32 bytes = channels * 2304;
-    mpHybridHistory = static_cast<f32 *>(off_83271928->Alloc(bytes, "MP3HybridHistory", 16, 0));
+    mpHybridHistory = static_cast<f32 *>(System::GetInstance()->Alloc(bytes, "MP3HybridHistory", 16, 0));
     if (!mpHybridHistory)
         return -1;
     XMemSet(mpHybridHistory, 0, bytes);
@@ -165,14 +163,14 @@ s32 CMpegLayer3Base::AllocateHybrid(s32 channels)
 CMpegBase::~CMpegBase()
 {
     if (mpPolySynthHistory)
-        off_83271928->Free(mpPolySynthHistory, 0);
+        System::GetInstance()->Free(mpPolySynthHistory, 0);
 }
 
 // ARTIST 0x82B93B08
 CMpegLayer3Base::~CMpegLayer3Base()
 {
     if (mpHybridHistory)
-        off_83271928->Free(mpHybridHistory, 0);
+        System::GetInstance()->Free(mpHybridHistory, 0);
 }
 
 // ARTIST 0x82B94F50

@@ -38,10 +38,6 @@
 #include "rw/audio/core/plugins/SndPlayer1.h"
 #include "rw/audio/core/Voice.h"
 
-// The audio-core System singleton (PS3 rw::audio::core::System::spInstance), declared in each
-// user as the vendor tree does (System.cpp defines it).
-extern "C" rw::audio::core::System* off_83271928;
-
 #include <algorithm>
 #include <cstring>
 #include <new>
@@ -126,7 +122,7 @@ namespace Playback
         // ARTIST 0x826C2708..0x826C2710: the System singleton is read directly and locked with
         // System::Lock; System::Unlock follows the decoder registrations (0x826C27FC). No
         // RwacLock guard and no GetDefaultRwacSystem call appear in this body.
-        rw::audio::core::System* lpSystem = off_83271928;
+        rw::audio::core::System* lpSystem = rw::audio::core::System::GetInstance();
         rw::audio::core::System::Lock(lpSystem);
         {
 
@@ -432,7 +428,7 @@ namespace Playback
     // ARTIST 0x826A2EC8 (and the PS3 body): each released handle is cleared, the panner
     // voices are only walked when there is more than one (signed index, the count re-read
     // after every release), and the memory goes back to the audio-core System singleton
-    // (PS3 rw::audio::core::System::spInstance, this tree's off_83271928), not mpRwacSystem.
+    // (PS3 rw::audio::core::System::spInstance, read through System::GetInstance(); ARTIST 0x83271928), not mpRwacSystem.
     void AemsRWSamplePlayer::Release()
     {
         if (mpPlayerVoice)
@@ -454,7 +450,7 @@ namespace Playback
             }
         }
         this->~AemsRWSamplePlayer();
-        off_83271928->Free(this, 0);
+        rw::audio::core::System::GetInstance()->Free(this, 0);
     }
 
     void AemsRWSamplePlayer::Pause()

@@ -63,10 +63,6 @@
 #include "types.hpp" // intptr_t (the RwacPlugInEvent r5 ride-through)
 #include <new>   // placement new (the in-carve construct)
 
-// The process-wide System singleton the vendor System.cpp publishes from
-// CreateInstance (extern "C" System *off_83271928).
-extern "C" rw::audio::core::System* off_83271928;
-
 namespace rw
 {
 namespace audio
@@ -134,12 +130,12 @@ void GenericRwacFeatureImplementation::ResolvePluginInfoHandle(
     lpInfo->mHandle = apRegistry->GetPlugInHandle(lpInfo->mGuid);
 }
     // The process-wide default RWAC System accessor (bodied phase B5): the console
-    // inlines the off_83271928 read + the "mpSystem" assert (CgsGenericRwacFactory.h:59)
+    // inlines the System::GetInstance() read (0x83271928) + the "mpSystem" assert (CgsGenericRwacFactory.h:59)
     // at every consumer.
     rw::audio::core::System* GetDefaultRwacSystem()
     {
-        CGS_ASSERT(off_83271928 != 0, "mpSystem");
-        return off_83271928;
+        CGS_ASSERT(rw::audio::core::System::GetInstance() != 0, "mpSystem");
+        return rw::audio::core::System::GetInstance();
     }
 } // namespace Playback
 } // namespace CgsSound
@@ -154,7 +150,7 @@ RwacLock::RwacLock(rw::audio::core::System* apSystem)
 {
     if (mpSystem == 0)
     {
-        mpSystem = off_83271928;
+        mpSystem = rw::audio::core::System::GetInstance();
         CGS_ASSERT(mpSystem, CGS_ASSERT_MESSAGE_AT("mpSystem",
             CGS_RWAC_FACTORY_H_ASSERT_FILE, 59));
     }
@@ -214,7 +210,7 @@ namespace
 Handle<GenericRwacFactory> GenericRwacFactory::Create(Environment& arEnvironment,
                                                       GenericRwacFactorySpec aSpec)
 {
-    // Null-system resolution: off_83271928, asserted (console "lSpec.mpSystem",
+    // Null-system resolution: System::GetInstance() (0x83271928), asserted (console "lSpec.mpSystem",
     // CgsGenericRwacFactory.h:906).
     if (aSpec.mpSystem == 0)
     {

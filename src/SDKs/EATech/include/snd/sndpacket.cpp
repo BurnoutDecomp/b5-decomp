@@ -9,8 +9,6 @@ using rw::audio::core::System;
 using namespace Snd9;
 using namespace Snd9::Packet;
 
-extern "C" System* off_83271928;
-
 namespace Snd9
 {
 namespace Packet
@@ -84,7 +82,7 @@ CGS_STATIC_ASSERT((offsetof(Submission, mapChannelSamples) == 0xC), "ARTIST subm
 extern "C" s32 SNDPKTPLAY_create(PacketReleased apPacketReleased, FramesReleased apFramesReleased,
                                  void* apContext, Buffer* apBuffer, u32 auBufferBytes)
 {
-    System::Lock(off_83271928);
+    System::Lock(System::GetInstance());
     const s32 liLimit = gOptions.mOutput.mucPacketCount;
     for (s32 i = 0; i < liLimit; ++i)
     {
@@ -97,10 +95,10 @@ extern "C" s32 SNDPKTPLAY_create(PacketReleased apPacketReleased, FramesReleased
         apBuffer->miCapacity = (auBufferBytes - sizeof(Buffer) - sizeof(Slot)) / sizeof(Slot);
         apBuffer->miVoiceHandle = -1;
         gapBuffers[i] = apBuffer;
-        System::Unlock(off_83271928);
+        System::Unlock(System::GetInstance());
         return i;
     }
-    System::Unlock(off_83271928);
+    System::Unlock(System::GetInstance());
     return -9;
 }
 

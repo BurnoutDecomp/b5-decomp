@@ -24,8 +24,6 @@ namespace rw { namespace audio { namespace core
     CGS_STATIC_ASSERT(offsetof(FastFirEngine, mFFTInstance) == 0x6C, "ARTIST FFT allocation owner");
     CGS_STATIC_ASSERT(offsetof(FastFirEngine, miInputChannels) == 0x74, "ARTIST FFT allocation end");
 
-    extern "C" System* off_83271928;
-
 #if defined(_XBOX) && defined(_MSC_VER)
 // The original rwAudio common object uses the smaller instruction form here.
 #pragma optimize("s", on)
@@ -42,7 +40,7 @@ namespace rw { namespace audio { namespace core
         const u32 bytes = (length + 2 * tableLength + 2) * sizeof(f32) + sizeof(FFTState);
 
         FFTState* state = static_cast<FFTState*>(
-            off_83271928->mpAllocator->Alloc(bytes, "FFT instance", 1, 128, 0));
+            System::GetInstance()->mpAllocator->Alloc(bytes, "FFT instance", 1, 128, 0));
         if (!state)
         {
             allocation->size = 0;
@@ -394,7 +392,7 @@ namespace rw { namespace audio { namespace core
     // ARTIST 0x82B6D618
     s32 FFT_Free(DataDescriptor* pAllocation)
     {
-        off_83271928->mpAllocator->Free(pAllocation->pData, 0);
+        System::GetInstance()->mpAllocator->Free(pAllocation->pData, 0);
         pAllocation->pData = 0;
         pAllocation->size = 0;
         return 0;

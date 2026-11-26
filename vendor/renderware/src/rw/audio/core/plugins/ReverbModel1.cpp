@@ -60,10 +60,6 @@ namespace audio
 namespace core
 {
 
-// The shared rwaudio System singleton (off_83271928). Its object is defined/owned by the
-// System TU; ReleaseEvent removes the timer through it.
-extern "C" System *off_83271928;
-
 // off_8217F59C -- the ReverbModel1 v-table installed at construction. off_820AA810 -- the
 // base PlugIn v-table the destructor reinstalls before any free. off_82F8FA14 -- the
 // registered run-time descriptor record (its label is the string "ReverbModel1"). These are
@@ -824,7 +820,7 @@ void ReverbModel1::ReleaseEvent(ReverbModel1 *self)
         self->mAllPassDelay[i].Release();
 
     if (self->mbTimerAdded)
-        System::RemoveTimer(off_83271928, &self->mTimer);
+        System::RemoveTimer(System::GetInstance(), &self->mTimer);
 
 }
 

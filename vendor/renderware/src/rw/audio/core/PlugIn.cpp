@@ -24,16 +24,6 @@ namespace core
 // PlugInConfig -- see Voice.h's phase-D root-cause note.)
 typedef int (*PlugInCreateInstanceFn)(PlugIn *self, void *context);
 
-// off_83271928 -- the shared System-singleton POINTER installed into PlugIn::mpSystem
-// at construction time (the owner of the deferred SetAttribute command ring). The
-// System TU defines it (`System *off_83271928`, published by System::CreateInstance);
-// the X360 store here is `lwz off_83271928 ; stw -> +0x04` -- the pointer VALUE, not
-// an object address. (2026-08-25, faithful-audio-engine phase A: this TU used to
-// model it as an `extern System g_PlugInSystem` object and take its address -- a
-// model mismatch with the System TU's pointer definition that broke the mounted
-// link; reconciled to the System TU's shape.)
-extern "C" System *off_83271928;
-
 // -------------------------------------------------------------------------------------
 // PlugIn::CreateInstance @0x82B6A818
 // Placement-constructs a PlugIn over `self`, wires its links, and runs the factory's
@@ -47,7 +37,7 @@ PlugIn *PlugIn::CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pD
     self->mDecaySamples = 0.0f;               // stfs flt(0) -> 0x18
     self->mpPlugInDescRunTime = pDesc;        // stw a3 -> 0x10
     self->mCpuTicks = 0;                      // stw 0 -> 0x1C
-    self->mpSystemUseGetSystemAccessor = off_83271928; // lwz off_83271928 ; stw -> 0x04
+    self->mpSystemUseGetSystemAccessor = System::GetInstance(); // lwz off_83271928 ; stw -> 0x04
     self->mInputChannels = flag;             // stb a5 -> 0x20
 
     self->mOutputChannels =

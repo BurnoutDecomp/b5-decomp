@@ -31,11 +31,7 @@
 #include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.h"  // SplicerFactory::Create (the stage-3 create, cascade slice 3)
 #include <cstddef>
 
-// The stage-3 stream-provider interface global (X360 off_82FFBA0C): Prepare
-// publishes the module's IStreamProvider sub-object (console `= &this->+0x228`)
-// after the third factory create; the SndPlayer1_CgsStreamMod side reads it.
-// Defined here (the publisher's TU); C linkage keeps the console symbol name.
-extern "C" CgsSound::Playback::IStreamProvider* off_82FFBA0C = 0;
+#include "GameShared/GameClasses/Sound/Playback/Plugins/Streaming/internal/sndplayer1shared.h" // SndPlayer1_CgsStreamMod::SetStreamProvider
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"    // OpenReadStreamRequest / ReadStreamEvent (phase B4)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"          // ID::HashString (DoServiceContentLoadRequest)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"         // BaseResourcePtr (the type-4 response rebind)
@@ -285,7 +281,9 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
                 lhSplicerFactory.GetObject()->Release();
             CGS_ASSERT(!!mhSplicerFactory, "mhSplicerFactory");
 
-            off_82FFBA0C = static_cast<IStreamProvider*>(this);
+            // DWARF: SndPlayer1_CgsStreamMod::SetStreamProvider inlined here (BrnSoundUnity);
+            // the store to spStreamProvider (X360 off_82FFBA0C) of `&this->+0x228`.
+            rw::audio::core::SndPlayer1_CgsStreamMod::SetStreamProvider(static_cast<IStreamProvider*>(this));
         }
 
         // The stream-buffer carve (real): LinearMalloc-backed when supplied

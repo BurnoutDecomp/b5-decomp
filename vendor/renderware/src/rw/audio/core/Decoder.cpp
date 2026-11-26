@@ -15,7 +15,7 @@
 // The `_savegprlr_24` / `_restgprlr_24` calls in Decode's pseudocode are the compiler's
 // register save/restore prologue/epilogue helpers -- not source-level calls -- so they
 // are dropped. XMemCpy is the Xbox platform block copy (declared here, defined in the
-// platform TU). off_83271928 is the shared rwaudio System singleton, freed through
+// platform TU). System::spInstance (ARTIST 0x83271928) is the shared rwaudio System singleton, freed through
 // System::Free (the same singleton Collection/PlugIn reach).
 // =====================================================================================
 
@@ -33,11 +33,6 @@ namespace core
 
 // Xbox platform interleaved block copy (declaration only for the per-TU compile gate).
 extern "C" void *XMemCpy(void *pDest, const void *pSrc, unsigned int uiCount);
-
-// The shared rwaudio System singleton (off_83271928). Its object is defined/owned by the
-// System allocator TU; here it is only the target for System::Free. Same global reached
-// by Collection.cpp / PlugIn.cpp.
-extern "C" System *off_83271928;
 
 // --- layout pins for the inline request ring ---
 //
@@ -246,9 +241,9 @@ void Decoder::Release()
         mpFinaliser(this);
 
     if (mpAllocatedBlock)
-        off_83271928->Free(mpAllocatedBlock, 0);
+        System::GetInstance()->Free(mpAllocatedBlock, 0);
 
-    off_83271928->Free(this, 0);
+    System::GetInstance()->Free(this, 0);
 }
 
 // -------------------------------------------------------------------------------------

@@ -19,8 +19,6 @@ namespace audio
 namespace core
 {
 
-extern "C" System *off_83271928;
-
 CGS_STATIC_ASSERT(offsetof(Collection::ItemNode, node) == 0, "item link is the first member");
 CGS_STATIC_ASSERT(offsetof(Collection::NodeBlockHeader, node) == 0, "block link is the first member");
 
@@ -28,7 +26,7 @@ bool Collection::AddCapacity(int count)
 {
     bool failed = true;
     const int slots = count + mCapacity;
-    NodeBlockHeader *block = static_cast<NodeBlockHeader *>(off_83271928->mpAllocator->Alloc(
+    NodeBlockHeader *block = static_cast<NodeBlockHeader *>(System::GetInstance()->mpAllocator->Alloc(
         sizeof(NodeBlockHeader) + sizeof(ItemNode) * static_cast<size_t>(slots),
         "rw::audio::core::Collection: NodeBlock", 1, 16, 0));
     if (block)
@@ -114,7 +112,7 @@ bool Collection::Defragment()
 
         mNodeBlocks.Pop();
         mCapacity -= block->size;
-        off_83271928->mpAllocator->Free(block, 0);
+        System::GetInstance()->mpAllocator->Free(block, 0);
         reclaimed = true;
     }
     return reclaimed;
@@ -127,7 +125,7 @@ void Collection::Release()
     {
         do
         {
-            off_83271928->mpAllocator->Free(block, 0);
+            System::GetInstance()->mpAllocator->Free(block, 0);
             block = mNodeBlocks.Pop();
         } while (block);
     }

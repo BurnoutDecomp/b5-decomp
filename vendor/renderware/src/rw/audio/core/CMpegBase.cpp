@@ -37,10 +37,6 @@ namespace core
 
 namespace
 {
-// The shared rwaudio System singleton (off_83271928). Its object is defined/owned by the
-// System allocator TU; here it is the target for System::Alloc / System::Free. Same global
-// reached from Decoder.cpp / Collection.cpp.
-extern "C" System *off_83271928;
 
 // The MPEG frame-header lookup tables (off_8215A66C / off_8215A680 in the X360 rodata).
 // ProcessHeader only *indexes* them -- their contents (the standard MPEG sample-rate Hz and
@@ -81,7 +77,7 @@ s32 CMpegBase::AllocateSynth(s32 iChannelCount)
 {
     const s32 liSize = iChannelCount * 2304;
 
-    void *pHistory = off_83271928->Alloc(liSize, "PolySynthHistoryF", 16, 0);
+    void *pHistory = System::GetInstance()->Alloc(liSize, "PolySynthHistoryF", 16, 0);
     mpPolySynthHistory = pHistory;
 
     if (!pHistory)

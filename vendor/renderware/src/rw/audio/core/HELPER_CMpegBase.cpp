@@ -52,10 +52,6 @@ namespace core
 
 namespace
 {
-// The shared rwaudio System singleton (off_83271928). Its object is defined/owned by the
-// System allocator TU; here it is the target for System::Alloc / System::Free. Same global
-// reached from CMpegBase.cpp / Decoder.cpp.
-extern "C" System *off_83271928;
 
 // The MPEG bitrate table (word_82156658 @0x82156658 in the X360 rodata, dumped 2026-08-04;
 // the standard ISO 11172-3 / 13818-3 table, mpg123's `tabsel_123`, read with `lhax` --
@@ -153,7 +149,7 @@ s32 HELPER_CMpegBase::Close()
         mucIsOpen = 0;
 
         if (pHistory)
-            off_83271928->Free(pHistory, 0);
+            System::GetInstance()->Free(pHistory, 0);
     }
     return 0;
 }
@@ -229,7 +225,7 @@ s32 HELPER_CMpegBase::OpenSynth()
     {
         const u32 uSize = static_cast<u32>(sizeof(f32[2][288])) * mucChannelCount;
 
-        void *pHistory = off_83271928->Alloc(uSize, "PolySynthHistoryF", 16, 0);
+        void *pHistory = System::GetInstance()->Alloc(uSize, "PolySynthHistoryF", 16, 0);
         mpPolySynthHistoryF = static_cast<f32 (*)[2][288]>(pHistory);
 
         if (!pHistory)

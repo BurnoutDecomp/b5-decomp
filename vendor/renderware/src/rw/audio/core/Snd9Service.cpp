@@ -37,10 +37,6 @@ namespace audio
 namespace core
 {
 
-// The audio-core System singleton (off_83271928) -- ReleaseEvent frees the mix buffer back
-// through it. Defined (as C linkage) in the System TU; declared here so this TU links.
-extern "C" System *off_83271928;
-
 // -------------------------------------------------------------------------------------
 // Opaque data symbols in the XEX (no exported contents); modelled as honest placeholder
 // storage so the bodies below link without fabricating their contents.
@@ -181,7 +177,7 @@ void Snd9Service::ReleaseEvent(Snd9Service *self)
     SNDSYS_restore();
 
     if (self->mpMixBufStart)
-        off_83271928->Free(self->mpMixBufStart, 0);
+        System::GetInstance()->Free(self->mpMixBufStart, 0);
 }
 
 // -------------------------------------------------------------------------------------

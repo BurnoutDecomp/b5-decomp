@@ -39,9 +39,6 @@ CGS_STATIC_ASSERT((offsetof(Dac, mpPacketEvent) == 0x304C), "ARTIST event offset
 CGS_STATIC_ASSERT((offsetof(Dac, maPacketDesc) == 0x3050), "ARTIST packet offset");
 CGS_STATIC_ASSERT((offsetof(Dac, mauPacketState) == 0x3100), "ARTIST packet-state offset");
 
-// The System singleton pointer (X360 off_83271928; defined in System.cpp).
-extern "C" System *off_83271928;
-
 // The PPC timebase read (System.cpp owns the one definition; local declaration --
 // the Profiler.cpp / CpuLoadBalancer.cpp convention, link-merged).
 u32 GetCpuCycle();
@@ -620,7 +617,7 @@ int Dac::Mix(Dac *self)
     sMixerExecuteParams.muNumVoices = lpSystem->muActiveVoiceCount;    // lhz +0x10F4
     // (mu8NumPlugInsRegistered is NOT written -- faithful.)
     sMixerExecuteParams.mbVerifyFloats =
-        (off_83271928->maucDebugFeatures[2] != 0) ? 1 : 0;             // lbz +0x10FD fold
+        (System::GetInstance()->maucDebugFeatures[2] != 0) ? 1 : 0;             // lbz +0x10FD fold
 
     int liStatus = Mixer::Execute(self->mpMixer, &sMixerExecuteParams);
 

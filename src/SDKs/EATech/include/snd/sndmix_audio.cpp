@@ -25,7 +25,6 @@ extern "C" void MIX_audio(f32* const* appChannels, s32 aiSampleCount)
 using namespace Snd9::Mix;
 using Snd9::Hal::MixChannel;
 using rw::audio::core::System;
-extern "C" System* off_83271928;
 
 namespace Snd9 { namespace Mix {
 // ARTIST native globals: six output tails, post-mix callback, and FX state word.
@@ -99,7 +98,7 @@ extern "C" void MIX_stop(s32 aiVoice)
         if (lpFilter->mpRestore) lpFilter->mpRestore(lpFilter);
         lpFilter=lrVoice.mpFilter;
         FilterState* lpNext=lpFilter->mpNext;
-        off_83271928->Free(lpFilter,0);
+        System::GetInstance()->Free(lpFilter,0);
         lrVoice.mpFilter=lpNext;
     } while (lrVoice.mpFilter);
     lrVoice.mucState=0;

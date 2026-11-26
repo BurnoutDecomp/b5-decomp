@@ -53,11 +53,11 @@ namespace audio
 namespace core
 {
 
-// The audio-core System singleton (off_83271928). Set by CreateInstance (below) and
-// cleared by Release (still to be reconstructed); read by
-// GetPlugInRegistry. Defined here -- its home -- as zero-initialised storage so the many
-// consumers that `extern "C"` it link. C linkage: the name is namespace-independent.
-extern "C" System *off_83271928 = 0;
+// The audio-core System singleton, System::spInstance (DWARF system.h:3112; ARTIST
+// 0x83271928, IDA off_83271928). Set by CreateInstance (below) and cleared by Release;
+// read by GetPlugInRegistry / GetDecoderRegistry. Code outside System reads it through
+// System::GetInstance() (DWARF system.h:1288).
+System *System::spInstance = 0;
 
 // The Csis integration's mutex primitives, installed into the System lock hooks by
 // VectorToCsisMutex. Each is a `b` thunk onto the nullary Csis::System::Lock/Unlock
@@ -124,7 +124,7 @@ System *System::System_ctor(System *self)
 // deferred-command ring, and seed every field. Returns null (having freed whatever it did
 // allocate) when any allocation fails.
 //
-// Two faithful oddities, both preserved: off_83271928 is published very early -- before the
+// Two faithful oddities, both preserved: spInstance is published very early -- before the
 // mutexes are even constructed -- and the failure path does NOT clear it again.
 // -------------------------------------------------------------------------------------
 System *System::CreateInstance(EA::Allocator::ICoreAllocator *allocator, u32 commandBufferSize)
@@ -162,7 +162,7 @@ System *System::CreateInstance(EA::Allocator::ICoreAllocator *allocator, u32 com
     lpSelf->mpDeferredRingBase = 0;
     lpSelf->mppVoiceListNodes = 0;
     lpSelf->muExpelAfterDecayCount = 0;
-    off_83271928 = lpSelf; // published here, and deliberately not cleared on failure
+    spInstance = lpSelf; // published here, and deliberately not cleared on failure
     lpSelf->mpAllocator = allocator;
     lpSelf->mpfnPhysicalAlloc = 0;
     lpSelf->mpfnPhysicalFree = 0;
@@ -374,7 +374,7 @@ bool System::IsCommandComplete(System *self, u32 commandId)
 PlugInRegistry *System::GetPlugInRegistry(System *self)
 {
     if (!self->mpPlugInRegistry)
-        self->mpPlugInRegistry = PlugInRegistry::CreateInstance(off_83271928);
+        self->mpPlugInRegistry = PlugInRegistry::CreateInstance(spInstance);
     return self->mpPlugInRegistry;
 }
 
@@ -386,7 +386,7 @@ PlugInRegistry *System::GetPlugInRegistry(System *self)
 DecoderRegistry *System::GetDecoderRegistry(System *self)
 {
     if (!self->mpDecoderRegistry)
-        self->mpDecoderRegistry = DecoderRegistry::CreateInstance(off_83271928);
+        self->mpDecoderRegistry = DecoderRegistry::CreateInstance(spInstance);
     return self->mpDecoderRegistry;
 }
 
@@ -612,7 +612,7 @@ void System::Release(System *self)
         self->mpAllocator->Free(self->mppVoiceListNodes, 0);
     self->mpAllocator->Free(self, 0);
 
-    off_83271928 = 0;
+    spInstance = 0;
 
     // FLAG (original defect, reproduced deliberately): the final unlock re-reads the
     // JUST-FREED System block (the +0x44 hook, else the +0x4C mutex pointer) -- a

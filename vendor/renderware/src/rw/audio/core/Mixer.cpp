@@ -26,10 +26,6 @@ namespace audio
 namespace core
 {
 
-// The System singleton pointer (X360 off_83271928; defined in System.cpp, published by
-// System::CreateInstance). Mixer::Mixer reads it to link the StackAllocator.
-extern "C" System *off_83271928;
-
 // The PPC timebase read (System.cpp owns the one definition; this TU keeps a local
 // declaration, the Profiler.cpp / CpuLoadBalancer.cpp convention -- link-merged).
 u32 GetCpuCycle();
@@ -85,7 +81,7 @@ Mixer *Mixer::Mixer_ctor(Mixer *self)
     // width: upper/top = align-down of the arena END, lower = align-down of base+0x7F
     // (== align-UP of the unaligned base). (The asm's `cmplwi 0x80` guard on the end
     // address is constant-true on the console image and folds away.)
-    System *lpSystem = off_83271928;
+    System *lpSystem = System::GetInstance();
     StackAllocator *lpStack = static_cast<StackAllocator *>(lpSystem->mpObjectTable);
     lpStack->mpSystem = lpSystem;
     u8 *lpUpper = AlignDown128(sMixerScratchArena + sizeof(sMixerScratchArena));

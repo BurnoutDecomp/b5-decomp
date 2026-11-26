@@ -3,7 +3,6 @@
 #include "rw/audio/core/PlugIn.h"
 
 using rw::audio::core::System;
-extern "C" System* off_83271928;
 
 namespace Snd9
 {
@@ -229,7 +228,7 @@ extern "C" void MIX_setpitch(s32 aiVoice, s32 aiPitch)
     if (!lrChannel.mpResample)
     {
         lrChannel.mpResample = static_cast<ResampleFilter*>(
-            off_83271928->Alloc(sizeof(ResampleFilter), "Resample Filter State", 16, 0));
+            System::GetInstance()->Alloc(sizeof(ResampleFilter), "Resample Filter State", 16, 0));
         lrChannel.mpResample->mHeader.mpRestore = 0;
         lrChannel.mpResample->mHeader.muPriority = 160;
         lrChannel.mpResample->mHeader.mucFlags = 0;

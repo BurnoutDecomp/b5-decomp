@@ -11,7 +11,6 @@
 #include "rw/audio/core/PlugIn.h"
 
 using rw::audio::core::System;
-extern "C" System* off_83271928;
 
 namespace Snd9
 {
@@ -96,10 +95,10 @@ namespace
 extern "C" void SNDI_precalcaztospkrvol()
 {
     using namespace Snd9;
-    System::Lock(off_83271928);
-    gpAzimuthToSpeakerStorage=static_cast<u8*>(off_83271928->Alloc(
+    System::Lock(System::GetInstance());
+    gpAzimuthToSpeakerStorage=static_cast<u8*>(System::GetInstance()->Alloc(
         static_cast<u32>(gOptions.mOutput.mucDirectOutputCount)*256u, "Azimuth to Spkr Table",16,0));
-    System::Unlock(off_83271928);
+    System::Unlock(System::GetInstance());
     const s32 count=gOptions.mOutput.mucDirectOutputCount;
     u8* row=gpAzimuthToSpeakerStorage;
     for (s32 i=0;i<count;++i) { gapAzimuthToSpeaker[i]=row; row+=256; }
@@ -125,7 +124,7 @@ extern "C" void SNDI_precalcaztospkrvol()
 // ARTIST 0x82B7CFF8. The original does not clear the global after freeing.
 extern "C" void SNDI_freespkrtable()
 {
-    System::Lock(off_83271928);
-    off_83271928->Free(Snd9::gpAzimuthToSpeakerStorage,0);
-    System::Unlock(off_83271928);
+    System::Lock(System::GetInstance());
+    System::GetInstance()->Free(Snd9::gpAzimuthToSpeakerStorage,0);
+    System::Unlock(System::GetInstance());
 }

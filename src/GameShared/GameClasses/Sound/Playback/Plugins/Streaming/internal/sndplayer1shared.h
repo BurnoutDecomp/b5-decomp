@@ -10,6 +10,7 @@
 #include <cstddef> // size_t (the host layout computation)
 
 namespace CgsFileSystem { struct ReadStream; }
+namespace CgsSound { namespace Playback { struct IStreamProvider; } } // CgsStreamingPlugin.h
 
 // ============================================================================
 // rw::audio::core::SndPlayer1_CgsStreamMod -- the streaming sound-player plugin
@@ -70,6 +71,21 @@ public:
     // (null until the RWAC stage runs). Added 2026-08-25, faithful-audio-engine
     // phase A4.
     static const char* spPathPrefix;
+
+    // The stream provider the SndPlayer1 side opens and closes its streams through:
+    // DWARF sndplayer1.h:91 / sndplayer1.cpp:149 `static IStreamProvider *spStreamProvider`
+    // (PS3 _ZN2rw5audio4core23SndPlayer1_CgsStreamMod16spStreamProviderE), defined beside
+    // spPathPrefix as in DWARF (sndplayer1.cpp:148/149; ARTIST 0x82FFBA08/0x82FFBA0C, IDA
+    // dword_82FFBA08/off_82FFBA0C). Module::Prepare publishes the module's IStreamProvider
+    // through SetStreamProvider.
+    static CgsSound::Playback::IStreamProvider* spStreamProvider;
+
+    // DWARF sndplayer1.h:78. Inline: the BrnSoundUnity DWARF records it inlined in
+    // CgsSound::Playback::Module::Module::Prepare (ARTIST has no copy).
+    static void SetStreamProvider(CgsSound::Playback::IStreamProvider* lpProvider)
+    {
+        spStreamProvider = lpProvider;
+    }
 
     // ⭐ CORRECTED 2026-08-28 (phase E) FROM THE DecFIGS DWARF FOR THIS EXACT CLASS:
     // references/DecFIGS/dwarfdump/GameShared/GameClasses/Sound/Playback/Plugins/

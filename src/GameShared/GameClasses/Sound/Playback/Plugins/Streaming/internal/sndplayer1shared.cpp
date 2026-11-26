@@ -17,8 +17,6 @@
 #include <new>
 #include <ppcintrinsics.h>
 
-extern "C" CgsSound::Playback::IStreamProvider* off_82FFBA0C;
-
 CgsSound::Playback::IStreamProvider::StreamSpec::StreamSpec() {}
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x8268CD20
@@ -50,6 +48,8 @@ namespace rw { namespace audio { namespace core {
     // X360 dword_82FFBA08 (see the header note). Null until the RWAC init stage
     // seeds "SOUND\\STREAMS\\".
     const char* SndPlayer1_CgsStreamMod::spPathPrefix = 0;
+    // X360 off_82FFBA0C: the stream provider, published by Module::Prepare.
+    CgsSound::Playback::IStreamProvider* SndPlayer1_CgsStreamMod::spStreamProvider = 0;
 
     void SndPlayer1_CgsStreamMod::AdvanceCurrentRequest()
     {
@@ -623,7 +623,7 @@ s32 SndPlayer1_CgsStreamMod::PlayHandler(Command * apCommand)
         spec.mpPlugin = self;
         spec.mi32PriorityLow = 0;
         spec.mi32PriorityHigh = 50;
-        external.pReadStream = off_82FFBA0C->DoOpenStream(spec);
+        external.pReadStream = spStreamProvider->DoOpenStream(spec);
         if (!external.pReadStream)
         {
             request.state = E_REQUESTSTATE_FREE;
@@ -687,7 +687,7 @@ void SndPlayer1_CgsStreamMod::RemoveRequest(u32 auIndex)
         if (mFeedDesc[liIndex].requestIndex == auIndex)
             mFeedDesc[liIndex].feedState = 0;
     }
-    off_82FFBA0C->DoCloseStream(lpExternal->pReadStream);
+    spStreamProvider->DoCloseStream(lpExternal->pReadStream);
     if (lpExternal->pStreamLoopFileName)
         lpSystem->Free(lpExternal->pStreamLoopFileName, 0);
     lpRequest->state = E_REQUESTSTATE_FREE;

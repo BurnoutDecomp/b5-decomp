@@ -14,7 +14,7 @@
 // CgsGenericRwacFactory.h); bodied in the RWAC System TU.
 namespace rw { namespace audio { namespace core {
     void RwacSystemUnlock( System* apSystem );
-} } } extern "C" rw::audio::core::System* off_83271928;   // the System singleton (vendor System.cpp)
+} } }
 
 // ============================================================================
 // SpliceObjects.cpp -- runtime splice / splice-sample playback objects.
@@ -241,8 +241,8 @@ void SpliceSample::FreeVoice()
     if ( mpVoicePluginPair )
     {
         // System::Lock / Unlock on the System singleton, read at each call (ARTIST 0x826A3890 /
-        // 0x826A391C; PS3 System::spInstance, the tree's off_83271928).
-        rw::audio::core::System::Lock( off_83271928 );
+        // 0x826A391C; System::spInstance, read through System::GetInstance()).
+        rw::audio::core::System::Lock( rw::audio::core::System::GetInstance() );
         if ( mbUsingDynamicVoice )
         {
             gpSpliceManager->DestroyVoice( mpVoicePluginPair );
@@ -260,7 +260,7 @@ void SpliceSample::FreeVoice()
         mbStartVoice      = false;
         mpSubMix          = 0;
 
-        rw::audio::core::System::Unlock( off_83271928 );
+        rw::audio::core::System::Unlock( rw::audio::core::System::GetInstance() );
     }
 }
 
@@ -289,8 +289,8 @@ void StereoSpliceSample::StartVoice()
     if ( !mpVoicePluginPair )
     {
         // PS3 0x82A998: System::Lock / Unlock on rw::audio::core::System::spInstance, read at
-        // each call (ARTIST 0x826A4004 / 0x826A4054); the tree names that global off_83271928.
-        rw::audio::core::System::Lock( off_83271928 );
+        // each call (ARTIST 0x826A4004 / 0x826A4054); read through System::GetInstance().
+        rw::audio::core::System::Lock( rw::audio::core::System::GetInstance() );
         mpVoicePluginPair = &mDynamicVoicePluginPair;
         gpSpliceManager->CreateStereoVoice( &mDynamicVoicePluginPair );
 
@@ -302,7 +302,7 @@ void StereoSpliceSample::StartVoice()
         }
 
         mbUsingDynamicVoice = true;
-        rw::audio::core::System::Unlock( off_83271928 );
+        rw::audio::core::System::Unlock( rw::audio::core::System::GetInstance() );
     }
 
     if ( !mpVoicePluginPair )

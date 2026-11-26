@@ -46,8 +46,6 @@ static uintptr_t AlignUpDecoderFactoryPointer(uintptr_t value,
     return (value + alignment - 1u) & ~(alignment - 1u);
 }
 
-extern "C" System *off_83271928;
-
 // -------------------------------------------------------------------------------------
 // DecoderRegistry::CreateInstance @0x82B6C728
 // Allocate a 16-aligned registry via System::New2<DecoderRegistry> and stash the owning
@@ -137,7 +135,7 @@ Decoder *DecoderRegistry::DecoderFactory(DecoderHandle decoderHandle,
     }
 
     Decoder *decoder = 0;
-    off_83271928->New2<Decoder>(&decoder, 0, instanceBytes, alignment, 0);
+    System::GetInstance()->New2<Decoder>(&decoder, 0, instanceBytes, alignment, 0);
     if (!decoder)
         return 0;
 
