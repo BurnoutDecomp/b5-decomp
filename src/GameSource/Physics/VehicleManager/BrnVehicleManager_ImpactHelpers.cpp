@@ -7,6 +7,10 @@
 
 #include <cmath>   // std::fabs
 
+// These helpers live in BrnVehicleManager.cpp in the original (DWARF); ARTIST asserts with that unity
+// path (string 0x82091150).
+#define BRN_VEHICLEMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManager.cpp"
+
 // BrnPhysics::Vehicle::VehicleManager -- the car-vs-car impact HELPER family, reconstructed from
 // BURNOUT_X360_ARTIST.XEX (physics mount wave B3b, 2026-08-24). These are the declared-only
 // callees the takedown chain in BrnVehicleManager.cpp names at its call sites:
@@ -258,7 +262,8 @@ namespace Vehicle
                                            f32 lfSteeringDirection, f32 lfRecoveryTime,
                                            u8 lu8Score)
     {
-        CGS_ASSERT(lpImpactEventQueue != 0, "lpImpactEventQueue");   // :9145
+        CGS_ASSERT_AT(lpImpactEventQueue != 0, "lpImpactEventQueue",
+                      BRN_VEHICLEMANAGER_CPP_FILE, 9145);   // li r5,0x23B9
 
         ImpactEvent lEvent;
         lEvent.mDirection                    = lvDirection;                    // stvx  @+0x00

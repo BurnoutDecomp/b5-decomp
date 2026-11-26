@@ -12,6 +12,8 @@
 // ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
 // containers\./CgsBitArray.h, e.g. PhysicalTrafficManager::GetGlobalTrafficEntityId 0x825C2C38): see CgsBitArray.h.
 #define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
+// This unit's own asserts name its unity path (string 0x820945F0).
+#define BRN_PHYSICALTRAFFICMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnPhysicalTrafficManager.cpp"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
@@ -1579,12 +1581,18 @@ namespace Vehicle
             VehicleDriver* lpaRaceCarDrivers,
             CgsContainers::BitArray<8u>* lpUsedRaceCars)
     {
-        CGS_ASSERT(lpInputInterface          != 0, "lpInputInterface != NULL");          // :791
-        CGS_ASSERT(lpManagerOutputInterface  != 0, "lpManagerOutputInterface != NULL");  // :792
-        CGS_ASSERT(lpOutputRequestInterface  != 0, "lpOutputRequestInterface != NULL");  // :793
-        CGS_ASSERT(lpDeformationInterface    != 0, "lpDeformationInterface != NULL");    // :794
-        CGS_ASSERT(lpaRaceCarVehicles        != 0, "lpaRaceCarVehicles != NULL");        // :795
-        CGS_ASSERT(lpUsedRaceCars            != 0, "lpUsedRaceCars != NULL");            // :796
+        CGS_ASSERT_AT(lpInputInterface != 0, "lpInputInterface != NULL",
+                      BRN_PHYSICALTRAFFICMANAGER_CPP_FILE, 791);
+        CGS_ASSERT_AT(lpManagerOutputInterface != 0, "lpManagerOutputInterface != NULL",
+                      BRN_PHYSICALTRAFFICMANAGER_CPP_FILE, 792);
+        CGS_ASSERT_AT(lpOutputRequestInterface != 0, "lpOutputRequestInterface != NULL",
+                      BRN_PHYSICALTRAFFICMANAGER_CPP_FILE, 793);
+        CGS_ASSERT_AT(lpDeformationInterface != 0, "lpDeformationInterface != NULL",
+                      BRN_PHYSICALTRAFFICMANAGER_CPP_FILE, 794);
+        CGS_ASSERT_AT(lpaRaceCarVehicles != 0, "lpaRaceCarVehicles != NULL",
+                      BRN_PHYSICALTRAFFICMANAGER_CPP_FILE, 795);
+        CGS_ASSERT_AT(lpUsedRaceCars != 0, "lpUsedRaceCars != NULL",
+                      BRN_PHYSICALTRAFFICMANAGER_CPP_FILE, 796);
 
         // The original create drain removes any broken joint slots before processing new pairs.
         mArticulatedJointPool.RemoveBrokenJointsFromSimulation(mpArticulatedJointCreateBuffer);

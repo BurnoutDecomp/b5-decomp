@@ -4,6 +4,9 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+
+// This header's path as ARTIST's inlined asserts spell it (string 0x820AABEC).
+#define CGS_ARTIST_CGSVOICE_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsHandle.h"    // Handle<Content>
 #include "GameShared/GameClasses/Sound/Playback/CgsContent.h"   // Content, ContentSpec, Object
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"    // Name
@@ -413,7 +416,9 @@ public:
     // the asynchronous content is not loaded yet (ARTIST OnAttach @0x826A23A8).
     void PendingAttach()
     {
-        CGS_ASSERT(mu8Attach == 0, "AS_DETACHED == mu8Attach");
+        // DWARF CgsVoice.h:294; the assert sits on h:296 in every ARTIST copy (Content::OnAttach
+        // 0x826A242C li r5,0x128).
+        CGS_ASSERT_AT(mu8Attach == 0, "AS_DETACHED == mu8Attach", CGS_ARTIST_CGSVOICE_H_FILE, 296);
         mu8Attach = 1;
     }
 

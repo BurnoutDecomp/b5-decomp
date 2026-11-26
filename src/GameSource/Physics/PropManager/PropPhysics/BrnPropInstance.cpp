@@ -55,8 +55,8 @@ namespace Props
     // Called by PropManager::ReadUpdatedBodies @0x82632918 (the prop leg's velocity write-back).
     void PropInstance::SetLinearVelocity(Vector3 lLinearVelocity)
     {
-        CGS_ASSERT(rw::math::vpu::IsValid(lLinearVelocity),
-                   "RwMath::IsValid( lLinearVelocity )");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lLinearVelocity),
+                      "RwMath::IsValid( lLinearVelocity )", CGS_ARTIST_FILE, 266);   // li r5,0x10A
         mLinearVelocity = lLinearVelocity;
     }
 

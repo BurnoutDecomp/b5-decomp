@@ -1,5 +1,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnImpulsePasser.h"
 
+#define BRN_IMPULSEPASSER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnImpulsePasser.cpp"
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // BrnPhysics::Deformation::ImpulsePasser -- out-of-line bodies. ⭐ TU CREATED 2026-08-14
@@ -99,10 +101,13 @@ namespace Deformation
     void ImpulsePasser::PassOnImpulse(u8 lu8Index, const ImpulseParams* lpImpulseParams,
                                       VecFloat lvfHierarchicalImpulse)
     {
-        CGS_ASSERT(static_cast<s32>(lu8Index) < KI_MAX_COLLIDABLE_BODIES,
-                   "lu8ReceivingBodyIndex < KI_MAX_NUM_COLLIDABLE_BODIES_PER_DEFORMABLE_OBJECT");   // :156
-        CGS_ASSERT(mapCollidableBodies[lu8Index] != 0,
-                   "mapCollidableBodies[lu8ReceivingBodyIndex] != NULL");                            // :157
+        // Asserts on the unity path's BrnImpulsePasser.cpp:156/157 (string 0x820929A8).
+        CGS_ASSERT_AT(static_cast<s32>(lu8Index) < KI_MAX_COLLIDABLE_BODIES,
+                      "lu8ReceivingBodyIndex < KI_MAX_NUM_COLLIDABLE_BODIES_PER_DEFORMABLE_OBJECT",
+                      BRN_IMPULSEPASSER_CPP_FILE, 156);
+        CGS_ASSERT_AT(mapCollidableBodies[lu8Index] != 0,
+                      "mapCollidableBodies[lu8ReceivingBodyIndex] != NULL",
+                      BRN_IMPULSEPASSER_CPP_FILE, 157);
 
         // The console calls through regardless (fire-and-continue past both asserts).
         mapCollidableBodies[lu8Index]->RecievePassedOnImpulse(lpImpulseParams, lvfHierarchicalImpulse);

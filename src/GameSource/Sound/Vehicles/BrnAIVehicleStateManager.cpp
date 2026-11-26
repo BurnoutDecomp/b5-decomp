@@ -670,10 +670,12 @@ const CgsSound::Logic::Content* AIVehicleStateManager::GetLoopModelContent( s32 
 
 const CgsSound::Logic::Content* AIVehicleStateManager::GetAccelGinsuContent( s32 liAIEngineIndex )
 {
-    CGS_ASSERT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
-                "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES" );
+    CGS_ASSERT_AT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
+                   "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES",
+                   KAC_ARTIST_ASSERT_FILE, 170 );   // ARTIST 0x826988AC
     const CgsSound::Logic::Content* lpContent = &maGinsuAccelContentSpecs[liAIEngineIndex];
-    CGS_ASSERT( lpContent->IsLoaded(), "maGinsuAccelContentSpecs[liAIEngineIndex].IsLoaded()" );
+    CGS_ASSERT_AT( lpContent->IsLoaded(), "maGinsuAccelContentSpecs[liAIEngineIndex].IsLoaded()",
+                   KAC_ARTIST_ASSERT_FILE, 171 );   // ARTIST 0x826988F0
     return lpContent;
 }
 

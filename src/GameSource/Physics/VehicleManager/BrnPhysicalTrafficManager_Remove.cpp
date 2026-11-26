@@ -46,6 +46,9 @@
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"            // InAddRigidBody / InRemoveRigidBody
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                          // CGS_ASSERT + ARTIST locations
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                           // the named gates
+
+// The header path ARTIST's inlined DeallocateInternalBuffers asserts name (string 0x8208C828).
+#define BRN_PHYSICALTRAFFICMANAGER_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\BrnPhysicalTrafficManager.h"
 #include "rw/physics/inertia.h"                                                      // rw::physics::Inertia
 
 #include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG witness below)
@@ -125,15 +128,19 @@ namespace Vehicle
     void PhysicalTrafficManager::DeallocateInternalBuffers(CgsModule::IOBufferStack* lpInputBufferStack,
                                                            CgsModule::IOBufferStack* lpOutputBufferStack)
     {
-        CGS_ASSERT(lpInputBufferStack  != 0, "lpInputBufferStack != NULL");                  // h:865
-        CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");                 // h:866
-        CGS_ASSERT(mpArticulatedJointCreateBuffer != 0,
-                   "mpArticulatedJointCreateBuffer != NULL");                                // h:867
+        CGS_ASSERT_AT(lpInputBufferStack  != 0, "lpInputBufferStack != NULL",
+                      BRN_PHYSICALTRAFFICMANAGER_H_FILE, 865);
+        CGS_ASSERT_AT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL",
+                      BRN_PHYSICALTRAFFICMANAGER_H_FILE, 866);
+        CGS_ASSERT_AT(mpArticulatedJointCreateBuffer != 0,
+                      "mpArticulatedJointCreateBuffer != NULL",
+                      BRN_PHYSICALTRAFFICMANAGER_H_FILE, 867);
 
         lpInputBufferStack->DestroyIOBuffer<ArticulatedJointCreateBuffer>(&mpArticulatedJointCreateBuffer);
 
-        CGS_ASSERT(mpArticulatedJointCreateBuffer == 0,
-                   "mpArticulatedJointCreateBuffer == NULL");                                // h:872
+        CGS_ASSERT_AT(mpArticulatedJointCreateBuffer == 0,
+                      "mpArticulatedJointCreateBuffer == NULL",
+                      BRN_PHYSICALTRAFFICMANAGER_H_FILE, 872);
     }
 
     // =============================================================================================

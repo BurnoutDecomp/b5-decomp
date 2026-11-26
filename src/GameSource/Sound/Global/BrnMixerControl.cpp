@@ -1,11 +1,15 @@
 #include "GameSource/Sound/Global/BrnMixerControl.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"   // E_SOUNDMESSAGE_*
 #include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstring>
+
+// The unity path ARTIST's asserts name (string 0x820B40D0).
+#define BRN_MIXERCONTROL_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Global/BrnMixerControl.cpp"
 
 // =============================================================================
 // BrnSound::Logic::MixerControl — out-of-line bodies.
@@ -114,27 +118,24 @@ void MixerControl::UpdateParams(f32)
     // two the sting / EA Trax channels are scaled by (map: SFXCTL st0 sfx0 slots 3/4).
 }
 
-void MixerControl::Notify(const CgsSound::Io::MessageHeader* apMessage)
+// DWARF BrnMixerControl.cpp:156; the assert (cpp:163) names the parameter lpMessageHeader and is a
+// tripwire only (ARTIST 0x826D24DC reads the id again with no null test). The id dispatch is a
+// switch (ARTIST tests 12 then 43, RestartMixer's block first).
+void MixerControl::Notify(const CgsSound::Io::MessageHeader* lpMessageHeader)
 {
-    CGS_ASSERT(apMessage && (apMessage->GetEventId() == 12 || apMessage->GetEventId() == 43),
-        "( lpMessageHeader ) && ( lpMessageHeader->GetEventId() == E_SOUNDMESSAGE_SETTINGS || lpMessageHeader->GetEventId() == E_SOUNDMESSAGE_RESTART_MIXER )");
-    if (!apMessage)
-        return;
+    CGS_ASSERT_AT(( lpMessageHeader ) && ( lpMessageHeader->GetEventId() == E_SOUNDMESSAGE_SETTINGS || lpMessageHeader->GetEventId() == E_SOUNDMESSAGE_RESTART_MIXER ),
+        "( lpMessageHeader ) && ( lpMessageHeader->GetEventId() == E_SOUNDMESSAGE_SETTINGS || lpMessageHeader->GetEventId() == E_SOUNDMESSAGE_RESTART_MIXER )",
+        BRN_MIXERCONTROL_CPP_FILE, 163);
 
-    if (apMessage->GetEventId() == 12)
+    switch (lpMessageHeader->GetEventId())
     {
-        const CgsSound::Io::Message<GuiEventAudioSettings>* lpSettings =
-            static_cast<const CgsSound::Io::Message<GuiEventAudioSettings>*>(apMessage);
-        mCachedSettings = lpSettings->mData;
-
-        // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1). The message-12 payload AS
-        // THIS CONSUMER READS IT (the console reads +16 music, +20 sfx): both words,
-        // so a producer that posted fewer than 8 bytes shows as a garbage second word.
-
-    }
-    else if (apMessage->GetEventId() == 43)
-    {
+    case E_SOUNDMESSAGE_SETTINGS:
+        mCachedSettings =
+            static_cast<const CgsSound::Io::Message<GuiEventAudioSettings>*>(lpMessageHeader)->mData;
+        break;
+    case E_SOUNDMESSAGE_RESTART_MIXER:
         RestartMixer();
+        break;
     }
 }
 

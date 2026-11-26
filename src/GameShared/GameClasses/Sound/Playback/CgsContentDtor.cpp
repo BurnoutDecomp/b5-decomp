@@ -58,8 +58,17 @@ namespace Playback
 
     void Content::OnAttach(Voice& arVoice, Slot& arSlot)
     {
-        if (mu16LoadCount != 0 || DoLoad())
+        // Two increments: ARTIST 0x826A23C8 branches a non-zero count straight to the shared
+        // `addi` (0x826A23EC) and only the DoLoad path reloads the count first.
+        if (mu16LoadCount == 0)
+        {
+            if (DoLoad())
+                ++mu16LoadCount;
+        }
+        else
+        {
             ++mu16LoadCount;
+        }
 
         if (GetContentState() == E_CONTENT_STATE_LOADED)
             arSlot.HandleAttach(arVoice);

@@ -43,11 +43,12 @@ namespace Deformation
                                              const CgsGeometric::Sphere** lppSpheresOut)
     {
         const s32 liIndex = FindModelIndexByEntityID(lEntityId);
-        if (liIndex < 0)
+        // Found case first: ARTIST 0x825C2284 branches the miss to a trailing `li r3,-1`.
+        if (liIndex >= 0)
         {
-            return -1;
+            return mpaModels[liIndex].GetWorldSpaceSpheres(lppSpheresOut);
         }
-        return mpaModels[liIndex].GetWorldSpaceSpheres(lppSpheresOut);
+        return -1;
     }
 
     // ==========================================================================================

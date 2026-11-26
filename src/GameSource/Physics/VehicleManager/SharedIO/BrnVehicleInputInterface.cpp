@@ -355,7 +355,8 @@ namespace Vehicle
     void VehicleInputInterface::AppendTriangleCacheInterface(
         const InTriangleCacheInterface* lpTriangleCacheInterface)
     {
-        CGS_ASSERT(lpTriangleCacheInterface != 0, "lpTriangleCacheInterface != NULL");
+        CGS_ASSERT_AT(lpTriangleCacheInterface != 0, "lpTriangleCacheInterface != NULL",
+                      KAC_ARTIST_INPUT_FILE, 627);   // inline in the header on the original: li r5,0x273
         mTriangleCacheInterface.Append(lpTriangleCacheInterface);
     }
 

@@ -65,6 +65,17 @@ namespace Vehicle
             mRemovedJointBitArray.UnSetAll();
         }
 
+        // DWARF BrnPhysicalTrafficManagerIO.h:67. DecFIGS PS3 0x6D7834 (out of line): both masks'
+        // BitArray<10>::Destruct, then the base IOBuffer::Destruct; X360
+        // DestroyIOBuffer<ArticulatedJointCreateBuffer> 0x82614BD0 inlines it as
+        // `std r28,0x7E0(r3) ; std r28,0x7E8(r3) ; bl IOBuffer::Destruct`.
+        void Destruct()
+        {
+            mCreatedJointBitArray.Destruct();
+            mRemovedJointBitArray.Destruct();
+            CgsModule::IOBuffer::Destruct();
+        }
+
         // @0x825C23B0: stash an add-joint request in slot liJointIndex and flag the slot for
         // creation (unconditional SetBit).
         void FlagJointToBeCreated(s32 liJointIndex, const InAddJoint& lrAddJointEvent);

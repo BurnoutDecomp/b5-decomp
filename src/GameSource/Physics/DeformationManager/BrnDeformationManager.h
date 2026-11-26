@@ -112,6 +112,11 @@
 // pointer). FLAG: minimal additive include + alias, strictly required for the contact spine to gate.
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"                                         // CgsModule::IOBufferStack
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsInputBufferUpdate.h"                      // CgsSceneManager::SceneManagerIO::InputBuffer_Update
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                                 // CGS_ASSERT_STREAM_AT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                                        // the streamed FindModelIndexByEntityID assert
+
+// This header's path as ARTIST's copies of its inline functions assert it (string 0x8208C7E0).
+#define CGS_ARTIST_BRNDEFORMATIONMANAGER_H_FILE "..\\..\\..\\GameSource\\Physics/DeformationManager/BrnDeformationManager.h"
 
 // ---- forward declarations (cross-subsystem types referenced only by pointer/ref) ---
 // Spelled with the qualified namespace their real home uses (proven by the sibling
@@ -746,17 +751,24 @@ namespace Deformation
     // ==========================================================================================
     inline s32 DeformationManager::FindModelIndexByEntityID(EntityId lEntityId) const
     {
-        const u32 luOwner = (lEntityId.muValue >> 24) & 0xFFu;
+        const u32 luOwner = lEntityId.muValue >> 24;   // srwi r25,r27,24
+        // 0x8259BBEC..0x8259BC7C: one streamed assert for any owner but RACECAR (1) / TRAFFIC (2),
+        // "Bad entityID finding car: " << id << "\n" (strings 0x8208C7C4, 0x82001CC4).
+        CGS_ASSERT_STREAM_AT(luOwner == 1u || luOwner == 2u,
+                             "Bad entityID finding car: " << lEntityId.muValue << "\n",
+                             CGS_ARTIST_BRNDEFORMATIONMANAGER_H_FILE, 695);
         if (luOwner == 1u)   // BrnWorld::E_ENTITYTYPE_RACECAR
         {
-            const u32 lu16RaceCarIndex = (lEntityId.muValue >> 10) & 0x3FFFu;
-            CGS_ASSERT(lu16RaceCarIndex < 8u, "lu16RaceCarIndex < Vehicle::ku8MaxNumRaceCars");   // :701
+            const u16 lu16RaceCarIndex = static_cast<u16>((lEntityId.muValue >> 10) & 0x3FFFu);
+            CGS_ASSERT_AT(lu16RaceCarIndex < 8u, "lu16RaceCarIndex < Vehicle::ku8MaxNumRaceCars",
+                          CGS_ARTIST_BRNDEFORMATIONMANAGER_H_FILE, 701);
             return ma8RaceCarToModelIndex[lu16RaceCarIndex];
         }
 
-        CGS_ASSERT(luOwner == 2u, "Bad entityID finding car: ");   // :695 (streamed on console)
-        const u32 lu16TrafficIndex = (lEntityId.muValue >> 10) & 0x3FFFu;
-        CGS_ASSERT(lu16TrafficIndex < 0x14u, "lu16TrafficIndex < Vehicle::ku8TotalMaxNumPhysicalTraffic");   // :710
+        const u16 lu16TrafficIndex = static_cast<u16>((lEntityId.muValue >> 10) & 0x3FFFu);
+        CGS_ASSERT_AT(lu16TrafficIndex < 0x14u,
+                      "lu16TrafficIndex < Vehicle::ku8TotalMaxNumPhysicalTraffic",
+                      CGS_ARTIST_BRNDEFORMATIONMANAGER_H_FILE, 710);
         return ma8TrafficToModelIndex[lu16TrafficIndex];
     }
 }

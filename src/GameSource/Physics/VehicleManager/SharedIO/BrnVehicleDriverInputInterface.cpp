@@ -52,12 +52,18 @@ namespace Vehicle
              leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
              leRaceCarIndex++)
         {
-            CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-            CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            // The header's two range-checked setters, inlined (asserts h:277/278 and h:296/297,
+            // ARTIST 0x822CBFC4..0x822CC028; see CopyBaseDeformationParams).
+            CGS_ASSERT_AT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                          KAC_ARTIST_ASSERT_FILE, 277);
+            CGS_ASSERT_AT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                          KAC_ARTIST_ASSERT_FILE, 278);
             maBaseDeformationAmounts[leRaceCarIndex] = 0.0f;
 
-            CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-            CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CGS_ASSERT_AT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                          KAC_ARTIST_ASSERT_FILE, 296);
+            CGS_ASSERT_AT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                          KAC_ARTIST_ASSERT_FILE, 297);
             maBaseDeformationFrames[leRaceCarIndex] = -1;
         }
     }
@@ -145,20 +151,25 @@ namespace Vehicle
              leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
              leRaceCarIndex++)
         {
-            CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-            CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-            const f32 lfAmount = lpInterfaceToCopy->maBaseDeformationAmounts[leRaceCarIndex];
+            // ARTIST inlines the header's range-checked accessors here: the amount getter
+            // (h:286/287, out of line at 0x825B3588), its setter (h:277/278), the frame getter
+            // (h:305/306, 0x825B3600) and its setter (h:296/297). The setters have no ARTIST copy and
+            // no DWARF (the PS3 build predates these members), so their range checks are spelled
+            // here on their header lines.
+            const f32 lfAmount = lpInterfaceToCopy->GetBaseDeformationAmount(leRaceCarIndex);
 
-            CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-            CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CGS_ASSERT_AT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                          KAC_ARTIST_ASSERT_FILE, 277);
+            CGS_ASSERT_AT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                          KAC_ARTIST_ASSERT_FILE, 278);
             maBaseDeformationAmounts[leRaceCarIndex] = lfAmount;
 
-            CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-            CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-            const s32 liFrame = lpInterfaceToCopy->maBaseDeformationFrames[leRaceCarIndex];
+            const s32 liFrame = lpInterfaceToCopy->Ge(leRaceCarIndex);
 
-            CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-            CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CGS_ASSERT_AT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                          KAC_ARTIST_ASSERT_FILE, 296);
+            CGS_ASSERT_AT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                          KAC_ARTIST_ASSERT_FILE, 297);
             maBaseDeformationFrames[leRaceCarIndex] = liFrame;
         }
     }

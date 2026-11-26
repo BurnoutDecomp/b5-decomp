@@ -1,4 +1,7 @@
 #include "GameSource/Sound/Collision/BrnCollisionDataStructures.h"
+
+// ScrapeInfo::operator== is inline in this header on the original (ARTIST string 0x820AB6B0).
+#define BRN_COLLISIONDATASTRUCTURES_H_FILE "..\\..\\..\\GameSource\\Sound/Collision/BrnCollisionDataStructures.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (validity / same-scrape tripwires)
 
 // =============================================================================
@@ -41,23 +44,17 @@ namespace Collision
 // ---------------------------------------------------------------------------
 bool ScrapeInfo::operator==( const ScrapeInfo& lInfo ) const
 {
-    CGS_ASSERT( mbValid,       "mbValid" );
-    CGS_ASSERT( lInfo.mbValid, "lInfo.mbValid" );
+    // Inline in BrnCollisionDataStructures.h on the original: ARTIST's copy asserts on the
+    // header's lines 111/112 (string 0x820AB6B0) and returns the whole comparison as one bool
+    // (each exit materialises it: li 1/0 + clrlwi 24 at 0x826822A4 / 0x826822B4).
+    CGS_ASSERT_AT( mbValid,       "mbValid",       BRN_COLLISIONDATASTRUCTURES_H_FILE, 111 );
+    CGS_ASSERT_AT( lInfo.mbValid, "lInfo.mbValid", BRN_COLLISIONDATASTRUCTURES_H_FILE, 112 );
 
-    bool lbEqual = false;
-
-    if ( lInfo.meOrientation == meOrientation )
-    {
-        if ( ( lInfo.mEntityIdA.muValue == mEntityIdA.muValue &&
+    return lInfo.meOrientation == meOrientation
+        && ( ( lInfo.mEntityIdA.muValue == mEntityIdA.muValue &&
                lInfo.mEntityIdB.muValue == mEntityIdB.muValue )
           || ( lInfo.mEntityIdA.muValue == mEntityIdB.muValue &&
-               lInfo.mEntityIdB.muValue == mEntityIdA.muValue ) )
-        {
-            lbEqual = true;
-        }
-    }
-
-    return lbEqual;
+               lInfo.mEntityIdB.muValue == mEntityIdA.muValue ) );
 }
 
 // ---------------------------------------------------------------------------

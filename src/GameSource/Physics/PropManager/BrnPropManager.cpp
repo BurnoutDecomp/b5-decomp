@@ -1433,8 +1433,9 @@ PropManager::ProcessRemovePropInstanceEvents(
 
         // 0x826277C8 -- SIGNED compare (`cmpwi cr6, r30, -1`). NON-GATING: the console falls
         // straight through into RemoveProp whether or not this fires.
-        CGS_ASSERT( liPropIndex != KI_PROP_INDEX_NOT_FOUND,
-                    "liPropIndex != KI_PROP_INDEX_NOT_FOUND" );           // :689 (baked 0x2B1)
+        CGS_ASSERT_AT( liPropIndex != KI_PROP_INDEX_NOT_FOUND,
+                       "liPropIndex != KI_PROP_INDEX_NOT_FOUND",
+                       CGS_ARTIST_FILE, 689 );                            // li r5,0x2B1
 
         RemoveProp( lEntityId,
                     static_cast<u32>( liPropIndex ),

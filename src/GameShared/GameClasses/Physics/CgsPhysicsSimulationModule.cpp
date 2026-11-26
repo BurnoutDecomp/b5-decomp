@@ -829,9 +829,11 @@ namespace CgsPhysics
                 return false;                      // li r3, 0 @0x828A20BC
 
             // The same twelve `std 0` + three `stw 0` block Construct writes.
-            mNeedFreeze.UnSetAll();                // +0x47E8
-            mDone.UnSetAll();                      // +0x4808
-            mSeen.UnSetAll();                      // +0x4828
+            // BitArray::Release on each in PS3 0xC32B14's order (+0x47E8, +0x4828, +0x4808 on
+            // ARTIST 0x828A20C8..0x828A20FC).
+            mNeedFreeze.Release();                 // +0x47E8
+            mSeen.Release();                       // +0x4828
+            mDone.Release();                       // +0x4808
             miNumRigidBodies = 0;                  // stw r30(=0), 0x4848(r31)
             miNumDrives      = 0;                  // stw r30(=0), 0x484C(r31)
             miNumJoints      = 0;                  // stw r30(=0), 0x4850(r31)
@@ -845,10 +847,11 @@ namespace CgsPhysics
 
         // The console's out-of-range arm fires an assert whose message/file operands are both
         // literal 0 and whose line operand is literal -1 (`li r3,0 ; li r4,0 ; li r5,-1` at
-        // 0x828A207C..0x828A2084) -- i.e. it carries no text of its own. CGS_ASSERT supplies its
-        // own __FILE__/__LINE__, so the condition is reproduced and the message is left describing
-        // the tripwire rather than inventing console text.
-        CGS_ASSERT(false, "meReleaseStage out of range");
+        // 0x828A207C..0x828A2084; the PS3 build has the same FireAssert(0, 0, -1)) -- it carries
+        // no text or location of its own, so the sequence is written out as the console has it.
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(0, 0, -1);
+        CgsDev::Assert::EndAssert();
         return false;                              // li r3, 0 @0x828A2090
     }
 
@@ -980,8 +983,9 @@ namespace CgsPhysics
         PhysicsSimulationModule::EPrepareStage leOld = leEnumIndex;
         leEnumIndex = static_cast<PhysicsSimulationModule::EPrepareStage>(
             static_cast<int>(leEnumIndex) + 1);
-        CGS_ASSERT(leEnumIndex <= PhysicsSimulationModule::PREPARESTAGE_DONE,
-                   "leEnumIndex <= PhysicsSimulationModule::PREPARESTAGE_DONE");
+        CGS_ASSERT_AT(leEnumIndex <= PhysicsSimulationModule::PREPARESTAGE_DONE,
+                      "leEnumIndex <= PhysicsSimulationModule::PREPARESTAGE_DONE",
+                      KAC_ARTIST_ASSERT_FILE, 565);   // ARTIST 0x828A6A8C li r5,0x235
         return leOld;
     }
 
@@ -1019,7 +1023,9 @@ namespace CgsPhysics
         {
         default:
             // `if (v4 >= 3) { BeginAssert; FireAssert(0, 0, -1); EndAssert; return 0; }`
-            CGS_ASSERT(false, "mePrepareStage out of range");
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(0, 0, -1);   // ARTIST 0x828A6A50..58, as Release
+            CgsDev::Assert::EndAssert();
             return false;
 
         case PREPARESTAGE_DONE:
@@ -1037,9 +1043,10 @@ namespace CgsPhysics
                 return false;                       // cursor stays on MANAGER; retried next frame
 
             // The same twelve `std 0` block Construct and Release write, at +0x47E8.
-            mNeedFreeze.UnSetAll();
-            mDone.UnSetAll();
-            mSeen.UnSetAll();
+            // BitArray::Prepare on each in PS3 0xC35304's order (+0x47E8, +0x4828, +0x4808).
+            mNeedFreeze.Prepare();
+            mSeen.Prepare();
+            mDone.Prepare();
 
             AllocateMemoryAndInitialiseRW(lpAllocator, lrParams);
 

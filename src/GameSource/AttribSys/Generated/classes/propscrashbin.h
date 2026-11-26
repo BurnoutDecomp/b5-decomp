@@ -174,9 +174,9 @@ namespace Gen
         // (Instance(Collection*, void* lpOwner)). NOTE: `using Instance::IsValid;` makes
         // bin.IsValid() CALLABLE (all GetRandomSampleID @0x82703A78 does) but
         // &propscrashbin::IsValid cannot be formed through the private base (C2247).
+        // ARTIST 0x826972D8 resolves the key with Attrib::FindCollection (0x82697308).
         propscrashbin(u64 luCollectionKey, void* lpOwner)
-            : Instance(FindCollectionWithDefault(KU_PROPSCRASHBIN_CLASS_KEY,
-                                                 luCollectionKey), lpOwner)
+            : Instance(FindCollection(KU_PROPSCRASHBIN_CLASS_KEY, luCollectionKey), lpOwner)
         {
             if (!mpAttributeData)
                 mpAttributeData = DefaultDataArea(KU_LAYOUT_SIZE);
