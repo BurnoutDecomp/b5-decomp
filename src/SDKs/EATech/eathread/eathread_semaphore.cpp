@@ -144,37 +144,28 @@ Semaphore::~Semaphore()
 // ---------------------------------------------------------------------------
 bool Semaphore::Init(const SemaphoreParameters* pParameters)
 {
-    if (pParameters == 0)
-        return false;
-    if (mSemaphoreData.mhSemaphore != 0)
-        return false;
-
-    s32 iCount = pParameters->mInitialCount;     // lwz 0(a2)
-    mSemaphoreData.mnCount = iCount;             // stw r11, 4(this)
-    if (iCount < 0)
-        mSemaphoreData.mnCount = 0;              // clamp negative initial count
-
-    mSemaphoreData.mbIntraProcess = (pParameters->mbIntraProcess != false); // lbz 4(a2) -> stb 0xC
-    LONG        lInitialCount = 0;
-    const char* pName         = 0;
-
-    if (mSemaphoreData.mbIntraProcess)
+    // EAThread eathread_semaphore_pc.cpp:123 shape: one guarded block, the member flag copied as is
+    // (ARTIST lbz/stb 0x82B429C8..0x82B429D0, no normalisation), the intra-process semaphore created
+    // with no permits and no name, the result read back from the member (0x82B42A0C..0x82B42A1C).
+    if (pParameters && !mSemaphoreData.mhSemaphore)
     {
-        // intra-process: OS object starts at 0 permits, no name.
-        lInitialCount = 0;
-        pName         = 0;
-    }
-    else
-    {
-        // inter-process: a non-empty name is passed through; the OS object is
-        // seeded with the live (clamped) permit count.
-        pName         = (pParameters->mName[0] != '\0') ? pParameters->mName : 0;
-        lInitialCount = mSemaphoreData.mnCount;
+        mSemaphoreData.mnCount = pParameters->mInitialCount;
+
+        if (mSemaphoreData.mnCount < 0)
+            mSemaphoreData.mnCount = 0;
+
+        mSemaphoreData.mbIntraProcess = pParameters->mbIntraProcess;
+
+        if (mSemaphoreData.mbIntraProcess)
+            mSemaphoreData.mhSemaphore = ::CreateSemaphoreA(0, 0, 0x3FFFFFFF, 0);
+        else
+            mSemaphoreData.mhSemaphore = ::CreateSemaphoreA(0, (LONG)mSemaphoreData.mnCount, 0x3FFFFFFF,
+                                                            pParameters->mName[0] ? pParameters->mName : 0);
+
+        return mSemaphoreData.mhSemaphore != 0;
     }
 
-    HANDLE hSemaphore = ::CreateSemaphoreA(0, lInitialCount, 0x3FFFFFFF, pName);
-    mSemaphoreData.mhSemaphore = hSemaphore;
-    return hSemaphore != 0;
+    return false;
 }
 
 // ---------------------------------------------------------------------------

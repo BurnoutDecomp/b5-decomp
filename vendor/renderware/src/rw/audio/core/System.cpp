@@ -458,7 +458,7 @@ void System::ExecuteCommands(System *self)
 
     // ---- B. voice expulsion, deliberately OUTSIDE the lock (faithful) ----------------
     u32 luExpelStart = GetCpuCycle();
-    UpdateExpellingVoices(self);
+    self->UpdateExpellingVoices();
     self->muExpelVoicesCpuTicks = GetCpuCycle() - luExpelStart; // +0x10E0
 
     // ---- C. deferred-command ring replay, under the system lock ----------------------
@@ -678,41 +678,27 @@ System *System::SetThreadProcessor(System *self, u8 processor)
 // expelling voice, clamp its fade window and expel it once fully faded; otherwise drop it
 // from the list by swap-remove. Loops while entries remain.
 // -------------------------------------------------------------------------------------
-Voice *System::UpdateExpellingVoices(System *self)
+void System::UpdateExpellingVoices()
 {
-    // The asm returns r3, which is the System on entry (used only when the candidate list
-    // is empty) and the last-touched voice otherwise. The sole caller discards it, so this
-    // register passthrough is not load-bearing.
-    Voice *result = reinterpret_cast<Voice *>(self);
     u32 index = 0;
-    if (self->muExpelAfterDecayCount)
+    while (index < muExpelAfterDecayCount)
     {
-        do
+        Voice *voice = mpExpelAfterDecayList[index];
+        if (voice->mucState == 1)
         {
-            Voice *voice = self->mpExpelAfterDecayList[index];
-            result = voice;
-            if (voice->mucState == 1)
-            {
-                if (voice->mfFadeEnd < voice->mfFadeStart)
-                    voice->mfFadeEnd = voice->mfFadeStart;
-                if (voice->mfParam2C >= voice->mfFadeEnd)
-                    result = Voice::ExpelImmediate(voice, 3);
-                ++index;
-            }
-            else
-            {
-                u32 count = self->muExpelAfterDecayCount;
-                if (index < count)
-                {
-                    u32 last = count - 1;
-                    self->muExpelAfterDecayCount = last;
-                    if (last != 0 && last != index)
-                        self->mpExpelAfterDecayList[index] = self->mpExpelAfterDecayList[last];
-                }
-            }
-        } while (index < self->muExpelAfterDecayCount);
+            if (voice->mfFadeEnd < voice->mfFadeStart)
+                voice->mfFadeEnd = voice->mfFadeStart;
+            if (voice->mfParam2C >= voice->mfFadeEnd)
+                Voice::ExpelImmediate(voice, 3);
+            ++index;
+        }
+        else if (index < muExpelAfterDecayCount)
+        {
+            // swap-remove: the count re-read and decremented in place (ARTIST 0x82B6EB3C..0x82B6EB68)
+            if (--muExpelAfterDecayCount != 0 && muExpelAfterDecayCount != index)
+                mpExpelAfterDecayList[index] = mpExpelAfterDecayList[muExpelAfterDecayCount];
+        }
     }
-    return result;
 }
 
 // -------------------------------------------------------------------------------------

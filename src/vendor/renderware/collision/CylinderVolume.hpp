@@ -118,6 +118,10 @@ public:
     // Canonical default ctor (members left uninitialised until Initialize).
     CylinderVolume() {}
 
+    // DecFIGS cmn/rw/collision/cylinder.h:131 `float32_t GetHalfHeight() const` (inline, no ARTIST copy;
+    // the by-value return shows where GetMaximumFeature reads it).
+    f32 GetHalfHeight() const { return mCylinderData.mfHalfHeight; }
+
     RwBool GetInterval(const Vector3& arDir, Interval& arInterval) const;
     void Release();
 

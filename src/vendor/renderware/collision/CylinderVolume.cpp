@@ -412,14 +412,10 @@ RwBool CylinderVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool abTight
 // ---------------------------------------------------------------------------
 RwBool CylinderVolume::GetMaximumFeature(RwBool /*abCcw*/, const Vector3& /*arDir*/, Feature& arResult) const
 {
-    const __vector4 axis = mTransform.yAxis.mV;
-    const __vector4 centre = mTransform.wAxis.mV;
-    const f32 halfHeight = mCylinderData.mfHalfHeight;
-    const __vector4 height = __vspltw(__lvlx(&halfHeight, 0), 0);
-    const Vector3 plus(__vmaddfp(axis, height, centre));
-    const Vector3 minus(__vsubfp(centre, __vmulfp(axis, height)));
-    const FeatureEdge edge(plus, minus);
-    memcpy(&arResult.edges[0], &edge, sizeof(edge));
+    // As CapsuleVolume's, with GetHalfHeight() returned by value: each VecFloat(const float&) splats a stack
+    // copy (ARTIST stfs 0x50 + lvlx at 0x82BAC9A0 / 0x82BAC9C4); the edge is assigned from the constructor's this.
+    arResult.edges[0] = FeatureEdge(mTransform.wAxis + mTransform.yAxis * VecFloat(GetHalfHeight()),
+                                    mTransform.wAxis - mTransform.yAxis * VecFloat(GetHalfHeight()));
     arResult.numedges = 1;
     return 1;
 }

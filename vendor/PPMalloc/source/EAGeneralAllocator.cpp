@@ -175,7 +175,7 @@ bool GeneralAllocator::Init(void* pInitialCore, size_t nInitialCoreSize,
         mnMMapMallocTotal = 0;
         mnMMapMaxAllowed = 0x10000;
         mnMMapThreshold = 0x20000;
-        mnMaxFastBinChunkSize = (mnMaxFastBinChunkSize & 1) | 0x48;
+        SetMaxFastBinDataSize(64);   // kFastBinDefaultMaxDataSize (LegacySrc GeneralAllocator.h:1094): chunk size 0x48 | flag, ARTIST 0x82B4FAFC..0x82B4FB3C
         mbMMapTopDown = false;
         memset(&mHeadMMapChunk, 0, sizeof(mHeadMMapChunk));
         mHeadMMapChunk.mpPrevChunk = &mHeadMMapChunk;
@@ -239,15 +239,7 @@ void GeneralAllocator::SetOption(int option, int nValue) // 82B4DF60, table 8214
         {
             PPMAutoMutex lock(mpMutex);
             ClearFastBins();
-            const unsigned int nFlags = mnMaxFastBinChunkSize & 1;
-            if (nValue)
-            {
-                unsigned int nSize = static_cast<unsigned int>(nValue);
-                if (nSize > 80) nSize = 80;
-                mnMaxFastBinChunkSize = GetChunkSizeFromDataSize(nSize) | nFlags;
-            }
-            else
-                mnMaxFastBinChunkSize = nFlags;
+            SetMaxFastBinDataSize(static_cast<unsigned int>(nValue));
         }
         break;
     case kOptionTrimThreshold: mnTrimThreshold = nValue; break;
@@ -324,6 +316,20 @@ void GeneralAllocator::LinkChunk(Chunk* pChunk, Chunk* pChunkPrev, Chunk* pChunk
     pChunkNext->mpPrevChunk = pChunk;   // the PPMalloc LinkChunk order)
 }
 int GeneralAllocator::GetFastBinChunksExist() const { return mnMaxFastBinChunkSize & 1; }
+// LegacySrc rw/core GeneralAllocator.h:2064, inline in the SDK (no out-of-line copy in ARTIST): the flag bit is
+// kept, the size is clamped to kFastBinMaxDataSize (80) and stored as its chunk size (SetOption 0x82B4E138..0x82B4E178).
+void GeneralAllocator::SetMaxFastBinDataSize(unsigned int nSize)
+{
+    const unsigned int nExistingFlags = (mnMaxFastBinChunkSize & 1);
+    if (nSize)
+    {
+        if (nSize > 80)
+            nSize = 80;
+        mnMaxFastBinChunkSize = GetChunkSizeFromDataSize(nSize) | nExistingFlags;
+    }
+    else
+        mnMaxFastBinChunkSize = nExistingFlags;
+}
 int GeneralAllocator::GetLargeBinIndexFromChunkSize(unsigned int nSize) // 82B4D810, static
 {
     if ((nSize >> 6) <= 32) return 56 + (nSize >> 6);

@@ -415,10 +415,6 @@ public:
     // Record which hardware thread the audio update runs on (@+0x10FA). @0x82B6BC98.
     static System *SetThreadProcessor(System *self, u8 processor);
 
-    // Walk the expel-after-decay candidate list; expel each fully-faded voice and compact
-    // the list. @0x82B6EAD0.
-    static Voice *UpdateExpellingVoices(System *self);
-
     // Swap the lock/unlock hooks (@+0x40/+0x44) over to the Csis mutex primitives. @0x82B6FC50.
     static System *VectorToCsisMutex(System *self);
 
@@ -434,6 +430,11 @@ private:
     // ?spInstance@System@core@audio@rw@@0PAV1234@A. ARTIST 0x83271928 (IDA off_83271928).
     // Published by CreateInstance, cleared by Release; defined in System.cpp.
     static System *spInstance;
+
+    // Walk the expel-after-decay candidate list; expel each fully-faded voice and compact
+    // the list. @0x82B6EAD0. The X360 audio MAP's ?UpdateExpellingVoices@System@core@audio@rw@@AAAXXZ:
+    // a private, non-static void member (ARTIST leaves r3 untouched on the empty-list path).
+    void UpdateExpellingVoices();
 
 public:
 

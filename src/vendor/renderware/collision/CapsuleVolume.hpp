@@ -66,6 +66,10 @@ public:
     // Canonical default ctor (members left uninitialised).
     CapsuleVolume() {}
 
+    // DecFIGS cmn/rw/collision/capsule.h:102 `const float32_t& GetHalfHeight() const` (inline, no ARTIST copy;
+    // the by-reference return shows where GetMaximumFeature reads it).
+    const f32& GetHalfHeight() const { return mCapsuleData.mfHalfHeight; }
+
     RwBool GetInterval(const Vector3& arDir, Interval& arInterval) const;
     void Release();
 

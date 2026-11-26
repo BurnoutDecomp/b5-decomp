@@ -124,16 +124,18 @@ namespace
 // ===========================================================================
 void GPCapsule::GetMaximumFeature(RwBool /*abCcw*/, math::vpu::Vector3 arDir, Feature& arFeature) const
 {
+    // the half height read through the lane reference, VecFloat(VecFloatRef<X>) (addi + lvx + vspltw,
+    // ARTIST 0x82BAFA94..0x82BAFAAC)
+    const __vector4 halfHeight = math::vpu::VecFloat(mDimensions.GetX()).mV;
     const __vector4 axis = mEdgeDirections[0].mV;
-    const __vector4 halfHeight = __vspltw(mDimensions.mV, 0);
     const f32 projection = __vmsum3fp(axis, arDir.mV).x;
     if (std::fabs(projection) < 0.05f)
     {
         const __vector4 scaled = __vmulfp(axis, halfHeight);
-        const math::vpu::Vector3 plus(__vaddfp(mPos.mV, scaled));
-        const math::vpu::Vector3 minus(__vsubfp(mPos.mV, scaled));
-        const FeatureEdge edge(plus, minus);
-        memcpy(&arFeature.edges[0], &edge, sizeof(edge));
+        // The edge is built from two temporaries and assigned (ARTIST evaluates the minus end first,
+        // right to left, and copies from the constructor's returned this: mr r4,r3 at 0x82BAFB04).
+        arFeature.edges[0] = FeatureEdge(math::vpu::Vector3(__vaddfp(mPos.mV, scaled)),
+                                         math::vpu::Vector3(__vsubfp(mPos.mV, scaled)));
         arFeature.numedges = 1;
     }
     else

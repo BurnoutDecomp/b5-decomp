@@ -242,12 +242,11 @@ namespace CgsDev
                 }
                 else
                 {
-                    Matrix44 lProjection;
-                    lProjection.SetIdentity();
-                    const Vector4 yAxis(0.0f, -1.0f, 0.0f, 0.0f);
-                    lProjection.yAxis = yAxis;
+                    Matrix44 lMatrix;
+                    lMatrix.SetIdentity();
+                    lMatrix.yAxis *= -1.0f;
                     mpRenderBuffer->SetState(sgDepth2D);
-                    mpRenderBuffer->SetTransform(lProjection);
+                    mpRenderBuffer->SetTransform(lMatrix);
                 }
             }
         }
