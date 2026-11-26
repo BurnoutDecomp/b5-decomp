@@ -122,13 +122,13 @@ namespace BrnGameState
         u32 GetGamePlayFlags(const BrnResource::VehicleListEntry* lpVehicle)
         {
             u32 luFlags = 0;
-            std::memcpy(&luFlags, &lpVehicle->maPad0[KU_GAMEPLAY_FLAGS_OFFSET], sizeof(luFlags));
+            std::memcpy(&luFlags, &lpVehicle->maGamePlayDataHead[KU_GAMEPLAY_FLAGS_OFFSET - 0x90], sizeof(luFlags));
             return luFlags;
         }
 
         s32 GetGamePlayStat(const BrnResource::VehicleListEntry* lpVehicle, EPlayerStats leStat)
         {
-            return lpVehicle->maPad0[KU_GAMEPLAY_STATS_OFFSET + leStat];
+            return lpVehicle->maGamePlayDataHead[KU_GAMEPLAY_STATS_OFFSET - 0x90 + leStat];
         }
     }
 

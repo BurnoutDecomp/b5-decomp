@@ -99,7 +99,7 @@ struct VehicleListEntry
     //   GetUnlockRank()-> X360 byte at entry+0x90+0x09 (the embedded gameplay-data sub-object's
     //                     required-progression-rank field).
     // FLAG: the +0x94 bit0 / +0x99 byte offsets are recovered from the asm, not the exports.
-    CgsID GetId() const;
+    CgsID GetId() const { return mId; }   // DWARF h:362, header-inline (no ARTIST copy)
     bool  IsTrophyCar() const;
     u8    GetUnlockRank() const;
 
@@ -107,7 +107,7 @@ struct VehicleListEntry
     // BrnGameState::DeveloperChallengeManager::CheckCarID parent-chain walk. X360 CheckCarID reads
     // the entry's parent-car id and chases it until it matches the target (or runs out). Per the
     // Vehicle-List wiki the parent id sits at entry+0x08 (CgsID mParentId, 0 == no parent).
-    CgsID GetParentId() const;
+    CgsID GetParentId() const { return mParentId; }   // DWARF h:365, header-inline (no ARTIST copy)
 
     // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
     // BrnGui::LeaderboardTableComponent::SetCell car-name path. The livery/"Finish Type" tag
@@ -115,7 +115,7 @@ struct VehicleListEntry
     // its parent car's id. X360 SetCell reads it as `lbz r11,0xE9(entry)`; the +0xE9 offset is
     // the wiki-named muLiveryType byte (Vehicle List / Burnout Paradise). FLAG: offset recovered
     // from the asm; the field name is taken from the burnout.wiki VehicleListEntry table.
-    u8 GetLiveryType() const;
+    u8 GetLiveryType() const { return mu8LiveryType; }   // DWARF h:401, header-inline (no ARTIST copy)
 
     // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
     // ChallengeManager keystone (wave C). The car's boost class / car type. X360
@@ -214,7 +214,13 @@ struct VehicleListEntry
     u32 GetAIMusicLoop() const { return muiMusicLoopContentSpec; }
 
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
-    u8 maPad0[0x9B];                                                      // +0x00
+    // DWARF h:460..464 (the gameplay-data head stays opaque: flags +0x94, unlock rank +0x99).
+    CgsID mId;                                                            // +0x00
+    CgsID mParentId;                                                      // +0x08
+    char  mDefaultWheelName[32];                                          // +0x10
+    char  macVehicleName[64];                                             // +0x30
+    char  macManufacturerName[32];                                        // +0x70
+    u8    maGamePlayDataHead[0x0B];                                       // +0x90
     u8 mu8StrengthRating;                                                 // +0x9B
     u8 maPad9C[0xA0 - 0x9C];                                              // +0x9C (padding)
     CgsAttribSys::AttribSysCollectionKey mAttribCollectionKey;                           // +0xA0

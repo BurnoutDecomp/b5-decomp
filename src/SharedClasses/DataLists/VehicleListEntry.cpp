@@ -69,59 +69,41 @@ namespace
     }
 }
 
-// The leading car id (X360 reads it at entry+0x00 as an 8-byte load).
-CgsID VehicleListEntry::GetId() const
-{
-    return static_cast<CgsID>(ReadU64(&maPad0[KU_OFFSET_ID]));
-}
-
-// The parent/derived-from car id (0 == no parent).
-CgsID VehicleListEntry::GetParentId() const
-{
-    return static_cast<CgsID>(ReadU64(&maPad0[KU_OFFSET_PARENT_ID]));
-}
-
 // The display name C-string (macVehicleName, char[64] at +0x30).
 const char* VehicleListEntry::GetName() const
 {
-    return reinterpret_cast<const char*>(&maPad0[KU_OFFSET_VEHICLE_NAME]);
+    return macVehicleName;
 }
 
 // The default wheel-set name C-string (mDefaultWheelName, char[32] at +0x10) -- what the
 // streaming path hands to WheelList::FindWheelIndexFromName.
 const char* VehicleListEntry::GetDefaultWheelName() const
 {
-    return reinterpret_cast<const char*>(&maPad0[KU_OFFSET_WHEEL_NAME]);
+    return mDefaultWheelName;
 }
 
 // X360 `lwz r11,0x94(r3); extrwi r11,r11,1,31` -- bit 0 of the +0x94 flags word.
 bool VehicleListEntry::IsTrophyCar() const
 {
-    return (ReadU32(&maPad0[KU_OFFSET_FLAGS]) & KU_FLAG_TROPHY_CAR) != 0;
+    return (ReadU32(&maGamePlayDataHead[KU_OFFSET_FLAGS - 0x90]) & KU_FLAG_TROPHY_CAR) != 0;
 }
 
 // X360 `lwz r11,0x94(r3); extrwi r11,r11,1,25` -- bit 6 of the same flags word.
 bool VehicleListEntry::CanAutoRepair() const
 {
-    return (ReadU32(&maPad0[KU_OFFSET_FLAGS]) & KU_FLAG_CAN_AUTOREPAIR) != 0;
+    return (ReadU32(&maGamePlayDataHead[KU_OFFSET_FLAGS - 0x90]) & KU_FLAG_CAN_AUTOREPAIR) != 0;
 }
 
 // The required-progression-rank byte inside the gameplay-data sub-object (+0x99).
 u8 VehicleListEntry::GetUnlockRank() const
 {
-    return maPad0[KU_OFFSET_UNLOCK_RANK];
+    return maGamePlayDataHead[KU_OFFSET_UNLOCK_RANK - 0x90];
 }
 
 // The car's boost class (+0xE8) -- raw byte, mapped by the caller.
 u8 VehicleListEntry::GetCarType() const
 {
     return mu8CarType;
-}
-
-// The livery/"Finish Type" tag (+0xE9) -- raw byte, mapped by the caller.
-u8 VehicleListEntry::GetLiveryType() const
-{
-    return mu8LiveryType;
 }
 
 // The car-select speed gauge rating (+0xEC) -- raw byte, scaled by the caller's stats bar.

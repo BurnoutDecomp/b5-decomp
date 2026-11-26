@@ -414,30 +414,15 @@ void CarSelectManager::EndTransitionInState(GameStateModuleIO::GameActionQueue* 
 // ============================================================================
 void CarSelectManager::SaveChosenLiveryForCar(CgsID lCarId)
 {
+    // DWARF cpp:1544..1546.
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-    if (lpProfile == 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1550));
-        CgsDev::Assert::EndAssert();
-        return;
-    }
+    CGS_ASSERT_AT(lpProfile, "lpProfile", KAC_CSM_FILE, 1550);
 
-    const BrnResource::VehicleList* lpVehicleList = mpVehicleList;
-    const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lCarId);
-    const BrnResource::VehicleListEntry* lpVehicleListEntry =
-        (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
+    const BrnResource::VehicleListEntry* lpVehicleListEntry = mpVehicleList->GetVehicleData(lCarId);
+    CGS_ASSERT_AT(lpVehicleListEntry, "lpVehicleListEntry", KAC_CSM_FILE, 1553);
 
-    if (lpVehicleListEntry == 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpVehicleListEntry", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1553));
-        CgsDev::Assert::EndAssert();
-        return;   // the X360 falls through into a null deref; bail instead of faulting
-    }
-
-    const u8 luLiveryType = lpVehicleListEntry->GetLiveryType();
-    if (luLiveryType == 1 || luLiveryType == 3 || luLiveryType == 4)
+    // A livery colour is keyed under its parent car, anything else under itself.
+    if (lpVehicleListEntry->IsLiveryColour())
     {
         lpProfile->SetChosenLiveryIdForBaseCar(lpVehicleListEntry->GetParentId(), lCarId);
     }

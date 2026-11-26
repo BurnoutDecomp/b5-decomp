@@ -110,7 +110,17 @@ public:
     s32 GetVehicleIndex(CgsID lCarId) const;            // :112  RECONSTRUCTED @0x822188C8
 
     // ---- declared-only (each reconstructed in its own TU) ----
-    const VehicleListEntry* GetVehicleData(CgsID lID) const;   // :109
+    // DWARF h:109, header-inline: CarSelectManager::SaveChosenLiveryForCar 0x82379F3C..50 inlines it
+    // (GetVehicleIndex, < 0 -> NULL, the out-of-line int overload); 0x82233A28 is a COMDAT copy.
+    const VehicleListEntry* GetVehicleData(CgsID lID) const
+    {
+        const s32 liIndex = GetVehicleIndex(lID);
+        if (liIndex >= 0)
+        {
+            return GetVehicleData(liIndex);
+        }
+        return 0;
+    }
     bool IsVehicleInList(CgsID lID) const;                     // :115
     bool IsVehicleSponsorVehicle(CgsID lID) const;             // :119
     bool IsVehicleContentBought(s32 liIndex) const;            // :122

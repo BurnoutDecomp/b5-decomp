@@ -129,7 +129,8 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
         *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "EnterOnlineCarSelect\n" << "\n";
     }
 
-    CGS_ASSERT(meInternalState == E_INTERNAL_STATE_NONE, "OnlineCarSelectManager: State is invalid");
+    CGS_ASSERT_STREAM_AT(meInternalState == E_INTERNAL_STATE_NONE, "OnlineCarSelectManager: State is invalid",
+                         CGS_ARTIST_FILE, 158);
 
     mbHostChoiceAndNotHost = lbHostChoiceAndNotHost;
     miVehicleClassLimit    = liVehicleClassLimit;
@@ -219,8 +220,8 @@ void OnlineCarSelectManager::StartCarModificationState(GameStateModuleIO::GameAc
         *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "StartCarModificationState\n" << "\n";
     }
 
-    CGS_ASSERT(meInternalState == E_INTERNAL_STATE_CAR_SELECT,
-               "OnlineCarSelectManager: State needs to be in E_INTERNAL_STATE_CAR_SELECT.");
+    CGS_ASSERT_STREAM_AT(meInternalState == E_INTERNAL_STATE_CAR_SELECT,
+                         "OnlineCarSelectManager: State needs to be in E_INTERNAL_STATE_CAR_SELECT.", CGS_ARTIST_FILE, 317);
 
     meInternalState = E_INTERNAL_STATE_CAR_MODIFICATION;
 
@@ -399,8 +400,8 @@ void OnlineCarSelectManager::SubmitFinalCarSelection(GameStateModuleIO::GameActi
 // the current vehicle out, and mark the change busy and the streamer pending.
 void OnlineCarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    CGS_ASSERT(meStateOfChangingCars == E_CAR_CHANGE_REQUEST,
-               "CarSelectManager: State needs to be in E_STATE_REQUEST_CAR_CHANGE.");
+    CGS_ASSERT_STREAM_AT(meStateOfChangingCars == E_CAR_CHANGE_REQUEST,
+                         "CarSelectManager: State needs to be in E_STATE_REQUEST_CAR_CHANGE.", CGS_ARTIST_FILE, 496);
 
     if (mbWaitingForStreaming)
     {
@@ -429,8 +430,8 @@ void OnlineCarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::Game
 // carries out the pick cached during the change or, with the clock run out, waits for the session.
 void OnlineCarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    CGS_ASSERT(meStateOfChangingCars == E_CAR_CHANGE_BUSY,
-               "CarSelectManager: State needs to be in E_INTERNAL_STATE_BUSY_CHANGING_CAR.");
+    CGS_ASSERT_STREAM_AT(meStateOfChangingCars == E_CAR_CHANGE_BUSY,
+                         "CarSelectManager: State needs to be in E_INTERNAL_STATE_BUSY_CHANGING_CAR.", CGS_ARTIST_FILE, 528);
 
     if (mbWaitingForStreaming)
     {
@@ -454,26 +455,21 @@ void OnlineCarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQ
 
     meStateOfChangingCars = E_CAR_CHANGE_NONE;
 
-    if (mbHostChoiceAndNotHost)
+    if (!mbHostChoiceAndNotHost)
     {
-        return;
-    }
-
-    if (mfTimeLeftInCarSelect > 0.0f)
-    {
-        if (mCacheDuringChangeCarId != 0)
+        if (mfTimeLeftInCarSelect <= 0.0f)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "TIMEOUT" << "\n";
+            }
+            StartWaitForOnline(lpActionQueue);
+        }
+        else if (mCacheDuringChangeCarId != 0)
         {
             RequestChangeCar(lpActionQueue, mCacheDuringChangeCarId);
             mCacheDuringChangeCarId = 0;
         }
-    }
-    else
-    {
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-        {
-            *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "TIMEOUT" << "\n";
-        }
-        StartWaitForOnline(lpActionQueue);
     }
 }
 }
