@@ -60,9 +60,16 @@ inline void Vector4::Set(VecFloatRef<XSRC_INDEX> x, VecFloatRef<YSRC_INDEX> y,
 //  SetComponent / SetX / SetY / SetZ / SetW -- single-lane writes
 // =====================================================================================
 
+// DecFIGS vector4_type_inline.h:59 declares the local VectorIntrinsicUnion temp (h:62), as
+// rwmath 1.02.00 writes it: copy the register out, replace one lane, copy it back. ARTIST
+// keeps that round trip through a stack slot (FlaptTimerFieldComponent::Construct
+// 0x8241C89C, RoadRuleComponent::Construct 0x8242AE78).
 inline void Vector4::SetComponent(int i, float value)
 {
-    mV.v[i] = value;
+    detail::VectorIntrinsicUnion temp;
+    temp.vector = mV;
+    temp.scalarFloat[i] = value;
+    mV = temp.vector;
 }
 
 inline void Vector4::SetComponent(int i, VecFloat::InParam value)
