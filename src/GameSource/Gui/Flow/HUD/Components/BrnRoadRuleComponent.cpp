@@ -269,9 +269,7 @@ void RoadRuleComponent::Construct(const char* lpacName, CgsGui::StateInterface* 
 
     // Base init (inlined): bind the state channel, clear the root clip and the four
     // leading child-clip handles (the X360 zeroes +0x04..+0x2B in one run).
-    CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");   // BrnGuiFlaptComponent.h:113 (non-gating)
-    mpStateInterface = lpStateInterface;
-    mAptRef.SetInvalid();
+    BrnFlaptComponent::Construct(lpStateInterface);   // header-inline, assert h:113
     mRoadSignAnimationsMC.SetInvalid();
     mSubComponentPositionsMC.SetInvalid();
     mLeftSignAlignmentsMC.SetInvalid();

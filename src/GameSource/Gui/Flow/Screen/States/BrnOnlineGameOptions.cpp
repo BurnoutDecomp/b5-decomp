@@ -1092,23 +1092,6 @@ namespace BrnGui
             GuiEventNetworkOutputPlayerTextureRecord() {}
         };
 
-        // Id 65 == the car-control-change request (BrnGuiDemangledEventTypes.h names it
-        // GuiRequestCarControlChangeEvent; that header cannot be included alongside
-        // BrnGuiEventTypeDefs.h, so the record is rebuilt here). One payload byte, cleared
-        // -- the create-match page takes car control away while the menu is up.
-        // X360 record size 16.
-        struct GuiRequestCarControlChangeWire : public CgsGui::GuiEvent<65>
-        {
-            bool mbCarControlEnabled;   // payload +0x00
-
-            // Same payload-byte-count rule as the id-148 record above (X360 word0 = 1 from
-            // the shared r28, AddEvent size 16 at 0x8249C40C).
-            explicit GuiRequestCarControlChangeWire(bool lbCarControlEnabled)
-                : mbCarControlEnabled(lbCarControlEnabled)
-            {
-            }
-            GuiRequestCarControlChangeWire() {}
-        };
     }
 
     // ================================================================================
@@ -1172,8 +1155,9 @@ namespace BrnGui
         lShowHideHudEvent.mbShow = false;
         mpStateInterface->OutputGuiEvent(lShowHideHudEvent);               // X360 record size 16
 
-        GuiRequestCarControlChangeWire lDisableCarControl(false);
-        mpStateInterface->OutputGuiEvent(lDisableCarControl);     // X360 record size 16
+        GuiRequestCarControlChangeEvent lChangeEvent;
+        lChangeEvent.mbPlayerShouldHaveControl = false;
+        mpStateInterface->OutputGuiEvent(lChangeEvent);     // X360 record size 16
 
         // The X360 stores this LAST, after the four posts -- keep the order.
         meOptionsToLoad = E_OPTIONS_TO_LOAD_SAVED;

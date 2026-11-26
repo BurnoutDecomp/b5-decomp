@@ -2255,22 +2255,6 @@ namespace BrnGui
         // two are carried as file-local wire views -- the same accommodation BrnInGame.cpp,
         // BrnCarSelectMain_wG_02.cpp and BrnOnlineGameRoomPlayerInfo_wH_05.cpp make.
 
-        // Id 65 == BrnGui::GuiRequestCarControlChangeEvent (payload size 1). X360 stores 1
-        // in the payload byte. FLAG: the payload field has no name in the recovered DWARF
-        // slice; the polarity reading (1 == hand car control back) comes from the event name
-        // and from this handler being the return-to-HUD path.
-        typedef CgsGui::GuiEvent<65> RequestCarControlChangeHeader;
-        struct GuiRequestCarControlChangeWire : public RequestCarControlChangeHeader
-        {
-            bool mbEnableCarControl;   // +0x0C
-
-            explicit GuiRequestCarControlChangeWire(bool lbEnableCarControl)
-                : mbEnableCarControl(lbEnableCarControl)
-            {
-            }
-            GuiRequestCarControlChangeWire() {}
-        };
-
         // Id 533 -- the screen-flow command the online back-out paths post (the committed
         // BrnOnlinePlay.cpp posts the identical { 1, 533, 12, <payload byte> } record on
         // channel 40 from its own GO_BACK path). Payload size 1.
@@ -2417,8 +2401,9 @@ namespace BrnGui
         miDelayFrameCount = KI_CONTROLLER_DISABLE_DELAY_FRAME_COUNT;
 
         // 1. Hand car control back to the player (X360 record size 16, channel 40).
-        GuiRequestCarControlChangeWire lCarControl(true);
-        mpStateInterface->OutputGuiEvent(lCarControl);
+        GuiRequestCarControlChangeEvent lChangeEvent;
+        lChangeEvent.mbPlayerShouldHaveControl = true;
+        mpStateInterface->OutputGuiEvent(lChangeEvent);
 
         // 2. Unmount the lobby apt movie: the inlined CgsGui::GuiEventPlayAptMovie record
         //    { 8, 18, 12, "", 3 } on channel 41 (the empty name is the &unk_820046A7
@@ -5349,7 +5334,7 @@ namespace BrnGui
         void PostCarControlChange(CgsGui::StateInterface* lpStateInterface, bool lbEnableCarControl)
         {
             GuiRequestCarControlChangeEvent lCarControl;
-            lCarControl.maData[0] = lbEnableCarControl ? 1 : 0;
+            lCarControl.mbPlayerShouldHaveControl = lbEnableCarControl;
             OutputGuiEventRecord(lpStateInterface, lCarControl);
         }
 

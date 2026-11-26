@@ -236,7 +236,7 @@ namespace BrnGui
         mpStateInterface->OutputInternalState(lHideSatNav);
 
         GuiEventShowHideBoostBar lHideBoostBar;
-        lHideBoostBar.maData[0] = 0;
+        lHideBoostBar.mbShow = false;
         mpStateInterface->OutputViewState(lHideBoostBar);
 
         GuiEventShowHideHud lHideHudEvent;   // DWARF local cpp:149

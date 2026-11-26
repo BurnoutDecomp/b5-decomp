@@ -57,7 +57,8 @@ namespace BrnGui
         static const s32 KI_MAX_IMAGES = 20;
 
         // Compiler-emitted ctor: State base + the embedded GUI sub-objects.
-        ImageGalleryState();
+        // Implicit constructor (DWARF: on the class line BrnImageGallery.h:53). ARTIST emits it @0x82500328, with
+        // the vtable and GetResourcesToLoad @0x82500480, where the flow creates the state.
 
         virtual void OnEnter();
         virtual void OnLeave();

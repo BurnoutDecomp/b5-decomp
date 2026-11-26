@@ -30,8 +30,13 @@ namespace BrnGui
 
         // @ 0x825009C0 -- hands the screen's static resource list to the loader
         // (X360: *r4 = &maResourcesToLoad; *r5 = muNumResourcesToLoad, count == 1).
+        // Header-inline (ARTIST emits it @0x825009C0 in the flow TU, beside the implicit ctor).
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
-                                        u32* lpuNumberOfResources) const;
+                                        u32* lpuNumberOfResources) const
+        {
+            *lppResourceTuples    = maResourcesToLoad;
+            *lpuNumberOfResources = muNumResourcesToLoad;
+        }
 
     private:
         // @0x824D49F8 -- stream the single static resource; bind "ReplaysLoading" once loaded.

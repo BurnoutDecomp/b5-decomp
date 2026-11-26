@@ -30,15 +30,6 @@ namespace
     const s32 KI_INTRO_MOVIE_LEVEL = 4;
     const s32 KI_MAIN_MOVIE_LEVEL  = 3;
 
-    // GuiEventShowHideAboveCar (console id 215): { 1, 215, 12 } + the show byte, 16 bytes.
-    struct GuiEventShowHideAboveCarWire : public CgsGui::GuiEvent<215>
-    {
-        bool mbShow;   // +0x0C
-        explicit GuiEventShowHideAboveCarWire(bool lbShow)
-            : mbShow(lbShow) {}
-        GuiEventShowHideAboveCarWire() {}
-    };
-
     // The intro card's outro request (console id 530): { 1, 530, 12 }, 16 bytes; the console
     // writes no payload byte.
     struct GuiEventReplayIntroOutroWire : public CgsGui::GuiEvent<530>
@@ -78,7 +69,8 @@ void ReplayIntro::OnEnter()
     meInternalState = E_INTERNALSTATE_LOADRESOURCES;
     meIntroStage    = E_INTROSTAGE_SHOWING;
 
-    GuiEventShowHideAboveCarWire lShowAboveCar(true);
+    GuiEventShowHideAboveCar lShowAboveCar;
+    lShowAboveCar.mbShow = true;
     mpStateInterface->OutputGuiEvent(lShowAboveCar);
 
     mpGuiCache->ClearReplayPlayerActive();

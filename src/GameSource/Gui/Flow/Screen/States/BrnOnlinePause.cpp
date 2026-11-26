@@ -73,6 +73,11 @@ namespace BrnGui
         const s32 KI_GUI_EVENT_LEAVE_GAME         = 250;
         const s32 KI_GUI_EVENT_SCREEN_CLOSED      = 533;
 
+        // FLAG: the X360-only screen-closed record (id 533): no DWARF type, empty payload.
+        struct GuiEventScreenClosed : public CgsGui::GuiEvent<KI_GUI_EVENT_SCREEN_CLOSED>
+        {
+        };
+
         // The game modes that leave through the showtime post-event screens
         // (GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME / E_MODE_ONLINE_SHOWTIME).
         const s32 KI_MODE_OFFLINE_SHOWTIME = 2;
@@ -170,9 +175,19 @@ namespace BrnGui
 
         meSubState = E_SUBSTATE_LOADING_SCREEN;
 
-        PostByteInternalState<KI_GUI_EVENT_SHOW_HIDE_HUD>(mpStateInterface, 0);
-        PostActivateCrashNav(mpStateInterface, false);
-        PostByteEvent<KI_GUI_EVENT_CAR_CONTROL_CHANGE>(mpStateInterface, 0);
+        // DWARF locals cpp:86 / :90 / :95.
+        GuiEventShowHideHud lShowHideHud;
+        lShowHideHud.mbShow = false;
+        mpStateInterface->OutputInternalState(lShowHideHud);
+
+        GuiEventActivateCrashNav lActivateCrashNav;
+        lActivateCrashNav.muActivate = 0u;
+        lActivateCrashNav.muParam = 0;
+        mpStateInterface->OutputGuiEvent(lActivateCrashNav);
+
+        GuiRequestCarControlChangeEvent lChangeEvent;
+        lChangeEvent.mbPlayerShouldHaveControl = false;
+        mpStateInterface->OutputGuiEvent(lChangeEvent);
 
         mpGuiCache = 0;
     }
@@ -184,9 +199,19 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie(KPC_NO_MOVIE_NAME, KI_APT_MOVIE_LEVEL);
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        PostActivateCrashNav(mpStateInterface, true);
-        PostByteEvent<KI_GUI_EVENT_SCREEN_CLOSED>(mpStateInterface, 0);
-        PostByteEvent<KI_GUI_EVENT_CAR_CONTROL_CHANGE>(mpStateInterface, 1);
+        // DWARF locals cpp:237 / :242; the X360-only 533 record between them has no DWARF
+        // type (PS3 ids 518..521 sit at X360 528..536) and no payload store.
+        GuiEventActivateCrashNav lActivateCrashNav;
+        lActivateCrashNav.muActivate = 1u;
+        lActivateCrashNav.muParam = 0;
+        mpStateInterface->OutputGuiEvent(lActivateCrashNav);
+
+        GuiEventScreenClosed lScreenClosed;
+        mpStateInterface->OutputGuiEvent(lScreenClosed);
+
+        GuiRequestCarControlChangeEvent lChangeEvent;
+        lChangeEvent.mbPlayerShouldHaveControl = true;
+        mpStateInterface->OutputGuiEvent(lChangeEvent);
     }
 
     // Drain the in-queue, then update the menu and step the load sequencer.

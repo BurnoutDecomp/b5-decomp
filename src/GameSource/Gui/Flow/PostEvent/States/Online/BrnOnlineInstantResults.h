@@ -68,7 +68,8 @@ namespace BrnGui
         static const s32       KI_NUM_ONLINE_AWARD_TYPES = 11;
         static const AwardData KA_AWARD_OVERALL[KI_NUM_ONLINE_AWARD_TYPES];
 
-        OnlineInstantResultsState();
+        // Implicit constructor (DWARF: on the class line BrnOnlineInstantResults.h:53). ARTIST emits it @0x82508DC8, with
+        // the vtable and GetResourcesToLoad @0x82508F30, where the flow creates the state.
         virtual void OnEnter() ;
         virtual void OnLeave() ;
         virtual void Update() ;

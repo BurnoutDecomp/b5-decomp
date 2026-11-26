@@ -24,9 +24,6 @@ const CgsGui::sResourceTuple OnlineViewChallenges::maResourceTuplesToLoad[] =
     { { 187, CgsGui::E_GUI_RESOURCETYPE_APT } };
 const s32 OnlineViewChallenges::miNumResourcesToLoad = 1;
 
-// ARTIST compiler ctor 0x825005C0; native members own the original subobjects.
-OnlineViewChallenges::OnlineViewChallenges() : CgsGui::State() {}
-
 // ARTIST 0x824A1D68.
 void OnlineViewChallenges::OnEnter()
 {

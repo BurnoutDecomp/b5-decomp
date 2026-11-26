@@ -35,8 +35,13 @@ namespace BrnGui
         virtual void Update();
 
         // Hands the loader the online clip-list movie resource.
+        // Header-inline (ARTIST emits it @0x82500980 in the flow TU, beside the implicit ctor).
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
-                                        u32* lpuNumberOfResources) const;
+                                        u32* lpuNumberOfResources) const
+        {
+            *lppResourceTuples    = maResourcesToLoad;
+            *lpuNumberOfResources = muNumResourcesToLoad;
+        }
 
     private:
         bool UpdateLoadResources();

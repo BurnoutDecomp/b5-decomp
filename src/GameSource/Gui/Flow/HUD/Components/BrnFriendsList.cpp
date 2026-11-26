@@ -130,10 +130,8 @@ namespace
 void FriendsListComponent::Construct(const char* /*lacName*/, CgsGui::StateInterface* lpStateInterface,
                                      const char* /*lpacParentName*/)
 {
-    CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");       // cpp:0x71 (+ base h:113)
-    // base Construct is header-inline on console (h:113): adopt channel + drop clip.
-    mpStateInterface = lpStateInterface;
-    mAptRef.SetInvalid();
+    // The header-inline base Construct (assert h:113): adopt the channel, drop the clip.
+    BrnFlaptComponent::Construct(lpStateInterface);
 
     maeAvailableShortcutBranchOptions[0] = maeAvailableShortcutBranchOptions[1] = maeAvailableShortcutBranchOptions[2] = 0;
     for (s32 i = 0; i < KI_VISIBLE_ROWS; ++i)

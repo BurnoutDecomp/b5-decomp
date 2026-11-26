@@ -1642,7 +1642,7 @@ namespace BrnGui
             {
                 // @0x8247A564..0x8247A570 -- a single show byte, wrapped onto channel 41.
                 GuiEventShowHideBoostBar lShowBoostBar;
-                lShowBoostBar.maData[0] = 1;
+                lShowBoostBar.mbShow = true;
                 mpStateInterface->OutputViewState(lShowBoostBar);
             }
 
@@ -2131,7 +2131,7 @@ namespace BrnGui
                 if (lpiPayload[0] != 1)
                 {
                     GuiEventShowHideBoostBar lBoostBar;
-                    lBoostBar.maData[0] = 0;
+                    lBoostBar.mbShow = false;
                     mpStateInterface->OutputViewState(lBoostBar);
                 }
                 break;
@@ -2141,7 +2141,7 @@ namespace BrnGui
                 mGeneralTransitionComponentApt.AddOutputAptViewState("apt_Transition", "visible", false);
                 mGeneralTransitionComponentFlapt.Run("visible");
                 GuiEventShowHideBoostBar lBoostBar;
-                lBoostBar.maData[0] = 1;
+                lBoostBar.mbShow = true;
                 mpStateInterface->OutputViewState(lBoostBar);
                 break;
             }
@@ -2180,7 +2180,7 @@ namespace BrnGui
                                 "apt_Transition", "invisible", false);
                             mGeneralTransitionComponentFlapt.Run("invisible");
                             GuiEventShowHideBoostBar lBoostBar;
-                            lBoostBar.maData[0] = 0;
+                            lBoostBar.mbShow = false;
                             mpStateInterface->OutputViewState(lBoostBar);
                             lu8Show = 0;
                         }
@@ -2190,7 +2190,7 @@ namespace BrnGui
                                 "apt_Transition", "visible", false);
                             mGeneralTransitionComponentFlapt.Run("visible");
                             GuiEventShowHideBoostBar lBoostBar;
-                            lBoostBar.maData[0] = 1;
+                            lBoostBar.mbShow = true;
                             mpStateInterface->OutputViewState(lBoostBar);
                             lu8Show = 1;
                         }

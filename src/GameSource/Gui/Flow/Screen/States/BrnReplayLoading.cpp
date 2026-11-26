@@ -35,14 +35,6 @@ const CgsGui::sResourceTuple ReplayLoading::maResourcesToLoad[] =
 };
 const u32 ReplayLoading::muNumResourcesToLoad = 1;   // @0x82066A28
 
-// ------------------------------------------------ GetResourcesToLoad @ 0x825009C0
-void ReplayLoading::GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
-                                       u32* lpuNumberOfResources) const
-{
-    *lppResourceTuples    = maResourcesToLoad;    // X360 &unk_82066A20
-    *lpuNumberOfResources = muNumResourcesToLoad;  // X360 dword_82066A28 == 1
-}
-
 // ------------------------------------------------ OnEnter @ 0x824BA120
 void ReplayLoading::OnEnter()
 {

@@ -1352,29 +1352,6 @@ namespace BrnGui
             GuiEventNetworkCustomMatchJoinWire() {}
         };
 
-        // The id-253 record the cancel arm publishes before dropping back to the parameter
-        // page: { 1, 253, 12 } + one payload byte, channel 40, 16 bytes (0x82497758..
-        // 0x82497784 store only the three header words, then `li r6, 0x10`).
-        //
-        // FLAG -- consumer-named. Id 253 has no entry in BrnGuiDemangledEventTypes.h and no
-        // producer-side name anywhere in the recovered DWARF; the role ("stop the custom-match
-        // search that is in flight") comes from the call site alone, so this record is named
-        // for what it does and is deliberately NOT homed as a shared type.
-        //
-        // PAYLOAD BYTE: the X360 NEVER writes it -- the console record's fourth word keeps
-        // whatever the caller's stack frame held (the AddEvent size is 16, so the byte IS
-        // published). It is zero-initialised here because the host cannot reproduce an
-        // uninitialised console stack slot and must not pretend to.
-        struct CustomMatchSearchStopWire : public CgsGui::GuiEvent<253>
-        {
-            u8 muUnwrittenPayload;   // payload +0x00 (never stored by the X360 -- see above)
-
-            CustomMatchSearchStopWire()
-                : muUnwrittenPayload(0)
-            {
-            }
-        };
-
         // OutputGuiEvent<BrnGui::GuiOverlayRequest> (instantiation @0x82436BE0): the record is
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes -- the same
         // wire BrnCarSelectMain_wG_02.cpp builds for its overlay posts.
@@ -1499,8 +1476,8 @@ namespace BrnGui
             {
                 // Ranked/normal flow: stop the search that produced this list and go back
                 // to the parameter page.
-                CustomMatchSearchStopWire lStopSearch;
-                mpStateInterface->OutputGuiEvent(lStopSearch);                // X360 record size 16
+                GuiEventNetworkCancelSearch lCancelSearch;
+                mpStateInterface->OutputGuiEvent(lCancelSearch);                // X360 record size 16
 
                 ShowParamSelection();
             }
@@ -2384,26 +2361,9 @@ namespace BrnGui
             s32 meError;   // +0x00
         };
 
-// (fold: an identical definition of CustomMatchSearchStopWire was dropped here -- this TU defines it once, above)
-
-        // { 2, 536, 12, u16 0 }, channel 40, 16 bytes -- GuiEventTickerClearMessages with
-        // both bytes CLEAR (0x82497190 `stb 0 ; stb 0`). Field names per the HUD twin
-        // (BrnRaceMainHudState_wS2.cpp GuiTickerClearWire536).
-        struct GuiTickerClearWire536 : public CgsGui::GuiEvent<536>
-        {
-            u8 mbForceFadeOut;            // +0x0C == 0
-            u8 mbDeleteChallengeMessages; // +0x0D == 0
-
-            GuiTickerClearWire536()
-                : mbForceFadeOut(0), mbDeleteChallengeMessages(0)
-            {
-            }
-        };
 
 // (fold: an identical definition of GuiOverlayWaitFinishRequestWire was dropped here -- this TU defines it once, above)
 
-        typedef char KAC_ASSERT_STOP_WIRE_SIZE[sizeof(CgsGui::GuiEventOut<CustomMatchSearchStopWire>) == 16 ? 1 : -1];
-        typedef char KAC_ASSERT_CLEAR_WIRE_SIZE[sizeof(CgsGui::GuiEventOut<GuiTickerClearWire536>) == 16 ? 1 : -1];
         typedef char KAC_ASSERT_WAIT_FINISH_WIRE_SIZE[sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequestWire>) == 24 ? 1 : -1];
         // The 604-byte AddOutputGuiEvent record IS the member (headerless on both sides).
         typedef char KAC_ASSERT_RESULTS_RECORD_SIZE[sizeof(GuiEventNetworkCustomMatchResults) == 604 ? 1 : -1];
@@ -2421,12 +2381,14 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
 
         // Stop any custom-match search still in flight.
-        CustomMatchSearchStopWire lStop;
-        mpStateInterface->OutputGuiEvent(lStop);   // X360 record size 16
+        GuiEventNetworkCancelSearch lCancelSearch;
+        mpStateInterface->OutputGuiEvent(lCancelSearch);   // X360 record size 16
 
         // ...and clear the ticker (no fade-out force, challenge messages kept).
-        GuiTickerClearWire536 lClear;
-        mpStateInterface->OutputGuiEvent(lClear);  // X360 record size 16
+        GuiEventTickerClearMessages lClearTicker;   // DWARF local cpp:408
+        lClearTicker.mbForceFadeOut = false;
+        lClearTicker.mbDeleteChallengeMessages = false;
+        mpStateInterface->OutputGuiEvent(lClearTicker);  // X360 record size 16
     }
 
     // ================================================================================

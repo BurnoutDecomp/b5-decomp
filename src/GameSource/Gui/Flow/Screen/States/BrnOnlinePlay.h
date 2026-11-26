@@ -76,7 +76,8 @@ namespace BrnGui
         //   embedded sub-objects (news-animation carrier / main-menu / player-stats panel /
         //   local player-stats event record). No scalar members are stored in the ctor asm
         //   (OnEnter primes them); the recovered effect is base + member default-construction.
-        OnlinePlay();
+        // Implicit constructor (DWARF: on the class line BrnOnlinePlay.h:50). ARTIST emits it @0x82508B40, with
+        // the vtable and GetResourcesToLoad @0x82508C00, where the flow creates the state.
 
         // The FSM enter/leave/update
         // virtuals. OnEnter registers the eight observed events, builds the news-animation +

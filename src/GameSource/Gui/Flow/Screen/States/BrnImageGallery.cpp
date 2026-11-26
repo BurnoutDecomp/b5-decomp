@@ -252,14 +252,6 @@ namespace BrnGui
         }
     }
 
-    // Compiler-emitted construction of the image-gallery flow state: the CgsGui::State base
-    // plus the embedded GUI sub-objects (each lays down its own vtables). No member payload
-    // beyond the vtables is set here; OnEnter initialises the state.
-    ImageGalleryState::ImageGalleryState()
-        : CgsGui::State()
-    {
-    }
-
     // Subscribe, take the cache, build every component (the four category tabs, the 20
     // overview slots, the carousel and its animators / text fields), reset the counters
     // and post "crash nav inactive" + "hide the HUD".

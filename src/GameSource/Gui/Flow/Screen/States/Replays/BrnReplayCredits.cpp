@@ -24,11 +24,6 @@ namespace
     const u32 KU_REPLAYS_CREDITS_RESOURCE = 163;
     const s32 KI_CREDITS_MOVIE_LEVEL      = 3;
 
-    // The replay status bit that holds the roll on screen: the replay module sets it in its
-    // save mode (with the playing bit) and while a played reel is not yet ready. FLAG: name
-    // inferred from those writers (ReplayModule::SetStatusInterface).
-    const u32 KU_REPLAY_STATUS_SAVING = 0x10;
-
     // The roll's display time: a base, a slice per listed car and a pause per tier.
     const f32 KF_CREDITS_BASE_TIME     = 8.0f;
     const f32 KF_CREDITS_TIME_PER_CAR  = 0.4f;
@@ -54,10 +49,10 @@ namespace
 
     // GuiEventLeaveCredits (console id 588): { 1, 588, 12 }, 16 bytes; the console writes no
     // payload byte.
+    // FLAG: X360-only (the replay screens have no PS3 DWARF); empty, as ARTIST stores no
+    // payload byte (OnLeave @0x824D56D0).
     struct GuiEventLeaveCreditsWire : public CgsGui::GuiEvent<588>
     {
-        u8 muReserved;   // +0x0C (never written by the console)
-        GuiEventLeaveCreditsWire() : muReserved(0) {}
     };
 
     const char* const KAC_DETAIL_PLAYER = "REPLAY_CREDITS_DETAIL_0";
@@ -71,13 +66,6 @@ const CgsGui::sResourceTuple ReplayCredits::maResourcesToLoad[1] =
     { KU_REPLAYS_CREDITS_RESOURCE, CgsGui::E_GUI_RESOURCETYPE_APT },
 };
 const u32 ReplayCredits::muNumResourcesToLoad = 1;
-
-void ReplayCredits::GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
-                                       u32* lpuNumberOfResources) const
-{
-    *lppResourceTuples    = maResourcesToLoad;
-    *lpuNumberOfResources = muNumResourcesToLoad;
-}
 
 void ReplayCredits::OnEnter()
 {
@@ -221,7 +209,7 @@ void ReplayCredits::UpdateRunning()
 {
     mfTimeRemaining -= mpGuiCache->GetTimeStep();
 
-    if ((mpGuiCache->mReplayStatusInterface.mxStatusFlags & KU_REPLAY_STATUS_SAVING) != 0)
+    if (mpGuiCache->mReplayStatusInterface.IsSaving())
         return;
     if (!(mfTimeRemaining > 0.0f))
         SendStateEvent("ADVANCE");

@@ -551,20 +551,23 @@ namespace BrnGui
     // observer fan-out, not by a direct hand-off from here.
     void CrashNavColourCalibrate::ShowCalibrationCard(bool lbShow)
     {
+        // DWARF locals cpp:133 / :140 / :145.
         if (lbShow)
         {
-            GuiCommandWire16<KI_EVENT_COLOUR_CALIBRATION_SHOW> lShow;
-            mpStateInterface->OutputGuiEvent(lShow);
-            return;
+            GuiEventColourCalibrationScreenShow lShowCalibrationScreenEvent;
+            mpStateInterface->OutputGuiEvent(lShowCalibrationScreenEvent);
         }
+        else
+        {
+            GuiEventColourCalibrationScreenHide lHideCalibrationScreenEvent;
+            mpStateInterface->OutputGuiEvent(lHideCalibrationScreenEvent);
 
-        GuiCommandWire16<KI_EVENT_COLOUR_CALIBRATION_HIDE> lHide;
-        mpStateInterface->OutputGuiEvent(lHide);
-
-        // The hide path also posts the commit marker with its payload byte SET
-        // (`li r11, 1 ; stb r11, var_24`).
-        GuiCommandWire16<KI_EVENT_COMMIT_SETTINGS> lCommit(1);
-        mpStateInterface->OutputGuiEvent(lCommit);
+            // The hide path also asks for an autosave with the force byte SET
+            // (`li r11, 1 ; stb r11, var_24`).
+            GuiAutosaveRequestEvent lAutosaveRequestEvent;
+            lAutosaveRequestEvent.maData[0] = 1;
+            mpStateInterface->OutputGuiEvent(lAutosaveRequestEvent);
+        }
     }
 
     // ---- HandleControllerInput @ 0x824D9978 ----------------------------------------

@@ -46,7 +46,8 @@ namespace BrnGui
         };
 
         // @0x825010E8 -- body owned by the class:BrnGui::CrashNavEnterOnlineBase TU.
-        CrashNavEnterOnlineBase();
+        // Implicit constructor (DWARF: on the class line BrnCrashNavEnterOnline.h:47). ARTIST emits it @0x825010E8, with
+        // the vtable and GetResourcesToLoad @0x82501170, where the flow creates the state.
 
         // @ 0x82501170 - hands the enter-online screen's static resource list to the
         // loader (X360: *r4 = &maResourceTuplesToLoad; *r5 = miNumResourcesToLoad, count = 1).

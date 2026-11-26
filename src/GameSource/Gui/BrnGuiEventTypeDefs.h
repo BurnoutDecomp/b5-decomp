@@ -751,14 +751,14 @@ CGS_STATIC_ASSERT((offsetof(GuiNewBurnoutHudMessageEvent, meMessageType) == 8 &&
 // record (its TU-local GuiCommandWire16<514>/<515>, header {1, id, 12} + one unwritten payload
 // byte); the consumer, BrnGui::ColourCalibrationScreen::RecvEvent, keys on the id alone. These
 // two empty types are the DWARF-named payloads for that record.
-struct GuiEventColourCalibrationScreenShow : public CgsModule::Event
+// CgsGui::GuiEvent<N> is itself empty (CgsGuiEvent.h), so deriving from it keeps the 1-byte
+// payload while carrying the X360 id the DWARF base names (PS3 504/505).
+struct GuiEventColourCalibrationScreenShow : public CgsGui::GuiEvent<514>
 {
-    s32 GetEventType() const { return 514; }
 };
 
-struct GuiEventColourCalibrationScreenHide : public CgsModule::Event
+struct GuiEventColourCalibrationScreenHide : public CgsGui::GuiEvent<515>
 {
-    s32 GetEventType() const { return 515; }
 };
 
 // The options screen's DISPLAY-CALIBRATION hand-off -- the event that carries the
@@ -831,11 +831,12 @@ struct GuiEventActivateCrashNav : public CgsGui::GuiEvent<191>
     u32 muParam;      // +0x04 payload word 1 (role not recovered; posted as 0)
 };
 
-// Declaration mirror of the DWARF parent (BrnGuiEventTypeDefs.h:1902). Only the nested
-// EIconDisplayType enum is modelled -- it is the type of SatNavRenderer::meIconDisplayType
-// (which "event set" the sat-nav renderer draws). ADDITIVE GROW (BrnSatNavRenderer TU):
-// adds the enum at its DWARF home; nothing existing is changed.
-struct GuiEventEnableSatNavIcons
+// DWARF BrnGuiEventTypeDefs.h:1902..1915: GuiEvent<202> on PS3, id 204 on the X360
+// (FBurnMainHudState::EnableSatNavEventsFilter @0x8247CB00 `li r26, 0xcc`). The X360 lays the
+// members out type, filter, flag -- the producer stores payload +0 = 0, +4 = the filter,
+// +8 = the byte (@0x8247CB1C..34) and SatNavRenderer::RecvEvent reads them back the same
+// way -- where the PS3 DWARF lists mbIconsEnabled first; ARTIST decides the layout.
+struct GuiEventEnableSatNavIcons : public CgsGui::GuiEvent<204>
 {
     enum EIconDisplayType
     {
@@ -846,6 +847,10 @@ struct GuiEventEnableSatNavIcons
         E_ICON_DISPLAY_TYPE_ONLINE_EVENT_PRESETS  = 4,
         E_ICON_DISPLAY_TYPE_COUNT                 = 5,
     };
+
+    EIconDisplayType meIconDisplayType;   // h:1914
+    s32              meModeToFilter;      // h:1915 BrnProgression::RaceEventData::EModeType (not modelled here)
+    bool             mbIconsEnabled;      // h:1913
 };
 
 // ===================================================================================

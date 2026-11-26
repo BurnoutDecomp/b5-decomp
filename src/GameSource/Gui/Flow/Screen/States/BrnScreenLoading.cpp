@@ -39,29 +39,6 @@ namespace BrnGui
             GuiCache* mpGuiCache;
         };
 
-        // 16-byte GuiEvent<N> command { 1, N, 12 } (the shared channel-command record;
-        // same shape as BrnBootProfile.cpp's).
-        template <s32 N>
-        struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
-        {
-            u8 mu8Flag;
-            GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag) {}
-        };
-
-        template <s32 N>
-        void PostCommand16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
-        {
-            GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->OutputGuiEvent(lEvent);
-        }
-
-        template <s32 N>
-        void PostViewState16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
-        {
-            GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->OutputViewState(lEvent);
-        }
-
         // ---- the options-profile repost records (ApplyOptionsDataProfileSettings
         //      re-publishes the profile's load-complete feedback onto the GUI out
         //      channel; record shapes from the X360 emitters) -------------------------
@@ -171,20 +148,17 @@ namespace BrnGui
     {
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        PostCommand16<135>(mpStateInterface);
-        PostViewState16<214>(mpStateInterface, 0);
+        // DWARF locals cpp:59 / :62, then two inlined StateInterface::PlayAptMovie calls
+        // that clear apt levels 3 and 1.
+        GuiEventStreamingComplete lEvent;
+        mpStateInterface->OutputGuiEvent(lEvent);
 
-        // X360 records are 20 bytes with 4-byte pointers; the record carries a pointer,
-        // so the x64 gate posts with sizeof (the pointer widens).
-        CgsGui::GuiEventPlayAptMovie lUnloadLevel3;
-        lUnloadLevel3.mpacMovieName = "";
-        lUnloadLevel3.miLevelNum    = 3;
-        mpStateInterface->OutputViewState(lUnloadLevel3);
+        GuiEventShowHideBoostBar lShowHideBoostBar;
+        lShowHideBoostBar.mbShow = false;
+        mpStateInterface->OutputViewState(lShowHideBoostBar);
 
-        CgsGui::GuiEventPlayAptMovie lUnloadLevel1;
-        lUnloadLevel1.mpacMovieName = "";
-        lUnloadLevel1.miLevelNum    = 1;
-        mpStateInterface->OutputViewState(lUnloadLevel1);
+        mpStateInterface->PlayAptMovie("", 3);
+        mpStateInterface->PlayAptMovie("", 1);
 
         mpGuiCache                    = 0;
         mbInviteInProgress            = false;

@@ -355,11 +355,6 @@ namespace BrnGui
         }
     }
 
-    // ARTIST82508DC8: typed members supply the original constructors/vtables and Time defaults.
-    OnlineInstantResultsState::OnlineInstantResultsState()
-    {
-    }
-
     // ARTIST82494418. Build every owned component before accepting a cache/load completion.
     void OnlineInstantResultsState::OnEnter()
     {
@@ -469,8 +464,9 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie("", 3);
         GuiEventNetworkOutputPlayerTexture lTexture = { GuiEventNetworkOutputPlayerTexture::E_OUTPUT_OFF, -1 };
         OutputGuiEvent(mpStateInterface, lTexture);
-        GuiRequestCarControlChangeEvent lControl = { { 1 } };
-        OutputGuiEvent(mpStateInterface, lControl);
+        GuiRequestCarControlChangeEvent lChangeEvent;
+        lChangeEvent.mbPlayerShouldHaveControl = true;
+        OutputGuiEvent(mpStateInterface, lChangeEvent);
         PostEventTag294 lLeft;
         OutputGuiEvent(mpStateInterface, lLeft);
     }
@@ -847,15 +843,17 @@ namespace BrnGui
                     mbPlayerCanLeave = true;
                     mbAbortDueToDisconnects = true;
                     mButtonAnimationComponent.AddOutputAptViewState("apt_Transition", KAPC_BUTTON_ANIMATION_STATES[2], false);
-                    GuiRequestCarControlChangeEvent lControl = { { 0 } };
-                    OutputGuiEvent(mpStateInterface, lControl);
+                    GuiRequestCarControlChangeEvent lChangeEvent;
+                    lChangeEvent.mbPlayerShouldHaveControl = false;
+                    OutputGuiEvent(mpStateInterface, lChangeEvent);
                 }
                 else if (lpStopped->mbModeStartedFromRegion || lpStopped->mbNoRoundsRemaining)
                 {
                     mbPlayerCanLeave = false;
                     mbAbortDueToDisconnects = lpStopped->mbModeStartedFromRegion != 0;
-                    GuiRequestCarControlChangeEvent lControl = { { 0 } };
-                    OutputGuiEvent(mpStateInterface, lControl);
+                    GuiRequestCarControlChangeEvent lChangeEvent;
+                    lChangeEvent.mbPlayerShouldHaveControl = false;
+                    OutputGuiEvent(mpStateInterface, lChangeEvent);
                 }
                 else
                     SendStateEvent("TO_ON_PLAY");

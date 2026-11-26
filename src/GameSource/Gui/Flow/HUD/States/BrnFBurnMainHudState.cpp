@@ -1429,34 +1429,22 @@ namespace BrnGui
     // the 12-byte payload.
     void FBurnMainHudState::EnableSatNavEventsFilter()
     {
-        struct GuiEvent204 : public CgsGui::GuiEvent<204>
-        {
-            s32 miDisplayType;
-            s32 miModeFilter;
-            u8  mu8Show;   // sizeof 12: the {12, 204, 12} record
-        };
-
-        GuiEvent204 lRecord;
-        lRecord.miDisplayType = 0;
-        lRecord.miModeFilter  = meSatNavEventFilter;
-        lRecord.mu8Show       = 1;
-        mpStateInterface->OutputViewState(lRecord);
-        mpStateInterface->OutputInternalState(lRecord);
+        // DWARF local cpp:2237; the view and the gui-out channels (41, 40).
+        GuiEventEnableSatNavIcons lDrawEventIcons;
+        lDrawEventIcons.mbIconsEnabled    = true;
+        lDrawEventIcons.meIconDisplayType = GuiEventEnableSatNavIcons::E_ICON_DISPLAY_TYPE_OFFLINE_EVENTS;
+        lDrawEventIcons.meModeToFilter    = meSatNavEventFilter;
+        mpStateInterface->OutputViewState(lDrawEventIcons);
+        mpStateInterface->OutputGuiEvent(lDrawEventIcons);
     }
 
     void FBurnMainHudState::DisableSatNavEventsFilter()
     {
-        struct GuiEvent204 : public CgsGui::GuiEvent<204>
-        {
-            s32 miDisplayType;
-            s32 miModeFilter;
-            u8  mu8Show;   // sizeof 12: the {12, 204, 12} record
-        };
-
-        GuiEvent204 lRecord;
-        lRecord.miDisplayType = 5;
-        lRecord.miModeFilter  = 6;
-        lRecord.mu8Show       = 0;
-        mpStateInterface->OutputViewState(lRecord);
+        // DWARF local cpp:2261.
+        GuiEventEnableSatNavIcons lDrawEventIcons;
+        lDrawEventIcons.mbIconsEnabled    = false;
+        lDrawEventIcons.meIconDisplayType = GuiEventEnableSatNavIcons::E_ICON_DISPLAY_TYPE_COUNT;
+        lDrawEventIcons.meModeToFilter    = 6;
+        mpStateInterface->OutputViewState(lDrawEventIcons);
     }
 }

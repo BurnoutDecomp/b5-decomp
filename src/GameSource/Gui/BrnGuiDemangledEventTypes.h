@@ -1294,6 +1294,12 @@ namespace BrnGui
     public:
         s32 miReel;
     };
+    // DWARF BrnGuiEventTypeDefs.h:6317..6319: GuiEvent<518> on PS3 with an int32_t
+    // miDummyPadding; the X360 (id 528) posts it with a payload size of 1 and stores no
+    // payload (ReplayOutro::OnLeave @0x824D4FE0), so the X360 event is empty.
+    class GuiReplayStopPlayingReelEvent : public CgsGui::GuiEvent<528>
+    {
+    };
     // ARTIST82518E7C..82518E8C and8252A0D0..8252A0DC publish the
     // contained GUI serialiser; BridgeGuiToReplay_PostSim823CCEB8 reads that
     // same pointer and registers it through the actual replay request owner.
@@ -1309,7 +1315,11 @@ namespace BrnGui
     public:
         s32 miMode;
     };
-    struct GuiRequestCarControlChangeEvent { u8 maData[1]; s32 GetEventType() const { return 65; } };  // id 65 size 1
+    // DWARF BrnGuiEventTypeDefs.h:831..833 (GuiEvent<65>, the same id on the X360).
+    struct GuiRequestCarControlChangeEvent : public CgsGui::GuiEvent<65>
+    {
+        bool mbPlayerShouldHaveControl;   // h:833
+    };
     // ARTIST825293D8..82529584: preserve the request word and write the
     // formatted local date/time into32 bytes; there is no in-payload header.
     struct GuiResponseTimeDateString
@@ -1345,7 +1355,22 @@ namespace BrnGui
     struct GuiEventPerformOnlinePauseOption { u8 maData[4]; s32 GetEventType() const { return 283; } };  // id 283 size 4
     struct GuiEventFilterEventIcons { u8 maData[4]; s32 GetEventType() const { return 557; } };  // id 557 size 4
     struct GuiEventSetInspectedEventIcon { u8 maData[4]; s32 GetEventType() const { return 558; } };  // id 558 size 4 (OutputViewState + OutputInternalState)
-    struct GuiEventShowHideBoostBar { u8 maData[1]; s32 GetEventType() const { return 214; } };  // id 214 size 1
+    // DWARF BrnGuiEventTypeDefs.h:2049..2051: GuiEvent<212> on PS3, id 214 on the X360.
+    struct GuiEventShowHideBoostBar : public CgsGui::GuiEvent<214>
+    {
+        bool mbShow;   // h:2051
+    };
+    // DWARF: a typedef of the empty GuiEvent<133> (PS3); id 135 on the X360
+    // (ScreenLoading::OnEnter @0x824D0CDC `li r11, 0x87`).
+    typedef CgsGui::GuiEvent<135> GuiEventStreamingComplete;
+    // DWARF: a typedef of the empty GuiEvent<251> (PS3); id 253 on the X360
+    // (OnlineCustomMatch::OnLeave @0x82497168 `li r11, 0xfd`, no payload store).
+    typedef CgsGui::GuiEvent<253> GuiEventNetworkCancelSearch;
+    // DWARF BrnGuiEventTypeDefs.h:2056..2058: GuiEvent<213> on PS3, id 215 on the X360.
+    struct GuiEventShowHideAboveCar : public CgsGui::GuiEvent<215>
+    {
+        bool mbShow;   // h:2058
+    };
     // id 213, PAYLOAD 12 bytes -- and it stays a raw 12-byte payload, with no
     // CgsGui::GuiEvent<213> base, because this type only ever travels the WRAPPED channels.
     // MEASURED: OutputViewState<GuiEventShowHideSatNav> @0x82476DD8 and

@@ -55,13 +55,6 @@ const CgsGui::sResourceTuple ReplayClipsOnline::maInfoResourcesToLoad[1] =
     { KU_REPLAYS_INFO_RESOURCE, CgsGui::E_GUI_RESOURCETYPE_APT_LOADING_SCREEN },
 };
 
-void ReplayClipsOnline::GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
-                                     u32* lpuNumberOfResources) const
-{
-    *lppResourceTuples    = maResourcesToLoad;
-    *lpuNumberOfResources = muNumResourcesToLoad;
-}
-
 void ReplayClipsOnline::OnEnter()
 {
     mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);

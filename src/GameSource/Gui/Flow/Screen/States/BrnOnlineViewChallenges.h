@@ -10,7 +10,8 @@ class GuiCache;
 // DecFIGS BrnOnlineViewChallenges.h:46; ARTIST state at 0x824A1D68.
 struct OnlineViewChallenges : public CgsGui::State
 {
-    OnlineViewChallenges();
+    // Implicit constructor (DWARF: on the class line h:46): ARTIST emits it, the vtable
+    // and GetResourcesToLoad @0x825005C0/0x82500658 where the flow creates the state.
     void OnEnter() ;
     void OnLeave() ;
     void Update() ;

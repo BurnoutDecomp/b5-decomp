@@ -62,7 +62,8 @@ namespace BrnGui
         };
 
         // compiler-emitted: constructs the members below and nothing else.
-        OnlineSelectRoute();
+        // Implicit constructor (DWARF: on the class line BrnOnlineSelectRoute.h:48). ARTIST emits it @0x8251AE30, with
+        // the vtable and GetResourcesToLoad @0x8251AEF8, where the flow creates the state.
 
         // @ 0x8251AEF8 - hands the route-select screen's static resource list to the loader
         // (X360: *r4 = &maResourceTuplesToLoad; *r5 = miNumResourcesToLoad, count = 2).

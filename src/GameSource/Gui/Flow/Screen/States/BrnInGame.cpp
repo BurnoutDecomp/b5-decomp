@@ -363,7 +363,10 @@ namespace BrnGui
 
         PostCommand16<261>(mpStateInterface);
         PostCommand16<145>(mpStateInterface);
-        PostCommand16<65>(mpStateInterface, 1);
+        // DWARF local cpp:170.
+        GuiRequestCarControlChangeEvent lChangeEvent;
+        lChangeEvent.mbPlayerShouldHaveControl = true;
+        mpStateInterface->OutputGuiEvent(lChangeEvent);
 
         // The wait-finish registrations: each overlay that must finish hiding before
         // its flow transition proceeds (X360 posts the 24-byte 188 record per name).

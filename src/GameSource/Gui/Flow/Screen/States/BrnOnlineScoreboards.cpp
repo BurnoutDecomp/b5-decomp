@@ -32,12 +32,6 @@ namespace BrnGui
     // literal in UpdatePermanent's case 118).
     const f32 OnlineScoreboards::KF_DELAY_TO_REQUEST_TABLE = 0.5f;
 
-    // member construction only: the console body installs the state vtable,
-    // runs the filter group's constructor and installs the vtables of the table (and its ten
-    // columns), the loading icon and the two animators.
-    OnlineScoreboards::OnlineScoreboards()
-    {
-    }
 }
 
 // FOLDED FROM BrnOnlineScoreboards_wI_00.cpp

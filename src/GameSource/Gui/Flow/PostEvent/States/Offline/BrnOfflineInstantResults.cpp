@@ -457,7 +457,7 @@ namespace BrnGui
         mpStateInterface->OutputInternalState(lHideSatNav);
 
         GuiEventShowHideBoostBar lHideBoostBar;
-        lHideBoostBar.maData[0] = 0;
+        lHideBoostBar.mbShow = false;
         mpStateInterface->OutputViewState(lHideBoostBar);
 
         for (s32 liHelpItem = 0; liHelpItem < KI_HELPITEMS; ++liHelpItem)

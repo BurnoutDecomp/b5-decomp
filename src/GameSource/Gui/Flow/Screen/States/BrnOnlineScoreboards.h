@@ -83,7 +83,8 @@ namespace BrnGui
         static const s32 KI_MAX_VARIATIONS          = 66;
         static const s32 KI_NUM_ALPHABETICAL_ROADS  = 64;
 
-        OnlineScoreboards();   // member construction only.
+        // Implicit constructor (DWARF: on the class line BrnOnlineScoreboards.h:46). ARTIST emits it @0x82508D08, with
+        // the vtable and GetResourcesToLoad @0x82508DA8, where the flow creates the state.
 
         // ---- lifecycle virtuals (dumped vtable @0x820755F0) --------------------------
         virtual void Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm);   // @0x824866F0 cpp:123

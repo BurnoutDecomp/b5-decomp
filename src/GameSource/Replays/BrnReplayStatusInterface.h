@@ -47,6 +47,10 @@ namespace BrnReplays
             s32  miCurrentPlaybackReel;  // @0x610
             f32  mfPlaybackTimeRemaining; // @0x614  (X360-only trailing seconds)
 
+            // DWARF h:70. The saving flag is bit 4 of the status word: ARTIST inlines it as
+            // `rlwinm r11, r11, 28, 31, 31` (ReplayCredits::UpdateRunning @0x824BA3C0).
+            bool IsSaving() const { return (mxStatusFlags & 0x10) != 0; }
+
             // Original DWARF h:82; native cache consumers read this full word.
             u32 GetStatusFlags() const { return mxStatusFlags; }
 

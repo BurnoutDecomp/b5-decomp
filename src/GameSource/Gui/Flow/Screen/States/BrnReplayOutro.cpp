@@ -34,25 +34,6 @@ namespace
     // The in-queue controller-accept event id (X360 0x15).
     const s32 KI_EVENT_ACCEPT = 21;
 
-    // 16-byte GuiEvent<N> command with header { 1, N, 12 } and one trailing flag byte
-    // (mirrors BrnBootLegal.cpp's GuiCommandEvent16; that one is file-local in BootLegal's
-    // own anon namespace, so it is re-declared here rather than shared).
-    template <s32 N>
-    struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
-    {
-        u8  mu8Flag;        // payload +0x00 (sizeof 1: the {1, N, 12} record)
-        GuiCommandEvent16(u8 lu8Flag = 0)
-            : mu8Flag(lu8Flag) {}
-    };
-
-    // Post a 16-byte GuiEvent<N> { 1, N, 12 } command on the given channel.
-    template <s32 N>
-    void PostCommand16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
-    {
-        GuiCommandEvent16<N> lEvent(lu8Flag);
-        lpInterface->OutputGuiEvent(lEvent);
-    }
-
     // 20-byte GuiEvent<25> "set option" command: header { 8, 25, 12 } then a reserved word
     // and a 1.0f payload word (the X360 UpdateRunning posts { 8, 25, 12, 0, 1.0f } on channel
     // 40, size 20). Same shape as BrnBootLegal.cpp's GuiOptionEvent20 (file-local in that TU's
@@ -122,8 +103,12 @@ void ReplayOutro::OnLeave()
     // Post the two teardown command records onto the out-queue (channel 40):
     //   GuiEvent<528> { 1, 528, 12 }                (16 bytes)
     //   GuiEvent<215> { 1, 215, 12 } + flag byte 0  (16 bytes)
-    PostCommand16<528>(mpStateInterface);
-    PostCommand16<215>(mpStateInterface, 0);
+    GuiReplayStopPlayingReelEvent lStopPlayingReel;
+    mpStateInterface->OutputGuiEvent(lStopPlayingReel);
+
+    GuiEventShowHideAboveCar lShowHideAboveCar;
+    lShowHideAboveCar.mbShow = false;
+    mpStateInterface->OutputGuiEvent(lShowHideAboveCar);
 }
 
 // ------------------------------------------------ UpdateLoadResources @ 0x824D5038

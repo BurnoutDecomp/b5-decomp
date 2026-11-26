@@ -227,13 +227,6 @@ namespace BrnGui
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
     }
 
-    // The constructor. The console body stores the vtables of the nine by-value components
-    // and runs the two container constructors (the button menu and the share-info toggle
-    // group); no scalar member is touched until OnEnter.
-    CrashNavEnterOnlineBase::CrashNavEnterOnlineBase()
-    {
-    }
-
     // Leaving the sign-in screen: finish the "OnConnecting" overlay wait, clear apt level 3,
     // stop observing the twelve events and drop the apt components the screen was waiting on.
     void CrashNavEnterOnlineBase::OnLeave()

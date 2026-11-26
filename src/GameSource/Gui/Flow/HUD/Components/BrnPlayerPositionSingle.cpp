@@ -80,10 +80,8 @@ void PlayerPositionSingleComponent::Construct(const char* /*lpacName*/,
                                               const char* /*lpacParentName*/)
 {
     // The inlined BrnFlaptComponent construct (assert BrnGuiFlaptComponent.h:113,
-    // non-gating; store the interface; drop the clip handle).
-    CGS_ASSERT(lpStateInterface != NULL, "lpStateInterface");
-    mpStateInterface = lpStateInterface;
-    mAptRef.SetInvalid();
+    // store the interface, drop the clip handle).
+    BrnFlaptComponent::Construct(lpStateInterface);
 
     mePlayerType         = E_PLAYERTYPES_INVISIBLE;
     meActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(-1);

@@ -123,19 +123,6 @@ namespace BrnGui
             GuiCache* mpCache;   // +0x00
         };
 
-        // ---- out-queue wire records ----------------------------------------------------
-        // { 1, 253, 12, <one byte> }, channel 40, 16 bytes: stop the search. The console
-        // never writes the payload byte (zero here).
-        struct CustomMatchSearchStopWire : public CgsGui::GuiEvent<253>
-        {
-            u8 muUnwrittenPayload;   // +0x0C
-
-            CustomMatchSearchStopWire()
-                : muUnwrittenPayload(0)
-            {
-            }
-        };
-
         // { 1, 533, 12, <one byte> }, channel 40, 16 bytes -- the record the screens post
         // when they hand the front end back (the pause screen and the online play screen
         // post the same one). The console never writes the payload byte (zero here).
@@ -152,7 +139,6 @@ namespace BrnGui
         // { 2, 251, 12, ranked, freeburn }, channel 40, 16 bytes: the quick-match request.
         typedef CgsGui::GuiEventOut<GuiEventNetworkQuickMatch> GuiEventNetworkQuickMatchWire;
 
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CustomMatchSearchStopWire>) == 16), "search-stop record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEvent533Wire>) == 16), "id-533 record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventNetworkQuickMatchWire) == 16), "quick-match record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
@@ -199,8 +185,8 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
 
         // Stop any search still in flight.
-        CustomMatchSearchStopWire lStop;
-        mpStateInterface->OutputGuiEvent(lStop);
+        GuiEventNetworkCancelSearch lCancelSearch;
+        mpStateInterface->OutputGuiEvent(lCancelSearch);
 
         if (mpGuiCache != 0)
         {

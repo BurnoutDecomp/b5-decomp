@@ -157,7 +157,9 @@ namespace BrnGui
     {
         const EGuiImageCategories leOld = leEnumIndex;
         leEnumIndex = static_cast<EGuiImageCategories>(leEnumIndex + 1);
-        CGS_ASSERT(leEnumIndex <= E_GUI_IMAGE_CATEGORIES_COUNT, "leEnumIndex <= E_GUI_IMAGE_CATEGORIES_COUNT");
+        // DWARF h:447; ARTIST bakes this header's absolute path and line 456 (UpdateSetup @0x82495FB4).
+        CGS_ASSERT_AT(leEnumIndex <= E_GUI_IMAGE_CATEGORIES_COUNT, "leEnumIndex <= E_GUI_IMAGE_CATEGORIES_COUNT",
+                      "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\BrnGuiShared.h", 456);
         return leOld;
     }
 
