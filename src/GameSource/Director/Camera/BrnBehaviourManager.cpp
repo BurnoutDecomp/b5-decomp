@@ -302,10 +302,8 @@ namespace Camera
     // committed arbitrator states (e.g. ArbStateAttractMode::Release) already inline the
     // handle-side half of this pair, so this body is what makes their teardown real.
     // ------------------------------------------------------------------------
-    void BehaviourManager::SetBehaviourUsedByHandle(u32 luAllocationKey)
+    void BehaviourManager::SetBehaviourUsedByHandle(BehaviourHelperIndex lBehaviourHelperIndex)
     {
-        const BehaviourHelperIndex lBehaviourHelperIndex(static_cast<s32>(luAllocationKey));
-
         CGS_ASSERT_AT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
                    "mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", CGS_ARTIST_FILE, 928);      // :928
         CGS_ASSERT_AT(mBehaviourRefCounts[lBehaviourHelperIndex] == 0,
@@ -318,10 +316,8 @@ namespace Camera
         mBehaviourUsedByHandleFlags.SetBit(lBehaviourHelperIndex);
     }
 
-    void BehaviourManager::UnSetBehaviourUsedByHandle(u32 luAllocationKey)
+    void BehaviourManager::UnSetBehaviourUsedByHandle(BehaviourHelperIndex lBehaviourHelperIndex)
     {
-        const BehaviourHelperIndex lBehaviourHelperIndex(static_cast<s32>(luAllocationKey));
-
         CGS_ASSERT_AT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
                    "mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", CGS_ARTIST_FILE, 942);      // :942
         CGS_ASSERT_AT(mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true,

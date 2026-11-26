@@ -1104,7 +1104,7 @@ namespace BrnDirector
         // ARTIST 0x82234970 releases the road-runner before its interpolater.
         if (mRoadRunnerCam.mbAllocated)         // +0x194 block
         {
-            mRoadRunnerCam.mpManager->UnSetBehaviourUsedByHandle(mRoadRunnerCam.muAllocationKey);
+            mRoadRunnerCam.mpManager->UnSetBehaviourUsedByHandle(mRoadRunnerCam.mBehaviourHelperIndex);
             mRoadRunnerCam.muHelperIndex = 0;
             mRoadRunnerCam.mpManager     = 0;
             mRoadRunnerCam.mpBehaviour   = 0;
@@ -1113,7 +1113,7 @@ namespace BrnDirector
 
         if (mInterpolater.mbAllocated)          // +0x180 block
         {
-            mInterpolater.mpManager->UnSetBehaviourUsedByHandle(mInterpolater.muAllocationKey);
+            mInterpolater.mpManager->UnSetBehaviourUsedByHandle(mInterpolater.mBehaviourHelperIndex);
             mInterpolater.muHelperIndex = 0;
             mInterpolater.mpManager     = 0;
             mInterpolater.mpBehaviour   = 0;

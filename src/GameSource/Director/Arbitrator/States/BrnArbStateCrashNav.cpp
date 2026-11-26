@@ -49,7 +49,7 @@ namespace BrnDirector
         // (SF_CRASHNAV_BLURRINESS, loaded as flt_82CDA4E0 into the camera's running-blur lane each
         // ACTIVE/TURNABOUT/WAITING frame: lfs @0x8226DDB0 / 0x8226DF54 / 0x8226E150, stfs camera
         // +0x134). VALUE READ FROM THE IMAGE (tools/re/x360rd.py 0x82CDA4E0): 3F800000 == 1.0.
-        const f32 SF_CRASHNAV_BLURRINESS = 1.0f;  // flt_82CDA4E0 == 3F800000
+        f32 SF_CRASHNAV_BLURRINESS = 1.0f;  // flt_82CDA4E0 == 3F800000
 
         // The two squared-distance gates the fly-by turnabout / re-entry tests the player's distance
         // from the crash-nav camera position against (the X360 vmsum3fp128 squared length compared by

@@ -112,19 +112,20 @@ namespace BrnDirector
 
         // ---- a typed handle to a camera behaviour owned by the BehaviourManager ----------
         // Released in Release() via BehaviourManager::UnSetBehaviourUsedByHandle(mpManager,
-        // muAllocationKey). 0x14-byte block (5 words) pinned from the Construct/Release asm:
-        // mbAllocated(+0x00), muAllocationKey(+0x04), a spare helper word(+0x08),
+        // mBehaviourHelperIndex). 0x14-byte block (5 words) pinned from the Construct/Release asm:
+        // mbAllocated(+0x00), mBehaviourHelperIndex(+0x04, the DWARF BehaviourHandle member, passed
+        // by value as UnSetBehaviourUsedByHandle's DWARF parameter: lwz r4, 0x198 0x8223499C), a spare helper word(+0x08),
         // mpManager(+0x0C), mpBehaviour(+0x10). FLAG: the +0x08 word's role is not recovered
         // (never read in this TU); modelled as an opaque helper-index word.
         template <typename TBehaviour>
         struct BehaviourHandle
         {
             BehaviourHandle()
-                : mbAllocated(false), muAllocationKey(0), muHelperIndex(0),
+                : mbAllocated(false), mBehaviourHelperIndex(0), muHelperIndex(0),
                   mpManager(0), mpBehaviour(0) {}
 
             bool                      mbAllocated;     // +0x00
-            u32                       muAllocationKey; // +0x04
+            Camera::BehaviourHelperIndex mBehaviourHelperIndex; // +0x04
             u32                       muHelperIndex;   // +0x08  FLAG: role not recovered (spare)
             Camera::BehaviourManager* mpManager;       // +0x0C
             TBehaviour*               mpBehaviour;     // +0x10

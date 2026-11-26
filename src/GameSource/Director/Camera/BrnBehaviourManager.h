@@ -239,11 +239,11 @@ namespace Camera
         // The per-handle manager-side hold book-keeping. X360-attested:
         //   SetBehaviourUsedByHandle   @0x8224B054 (from BehaviourHandle::Prepare)
         //   UnSetBehaviourUsedByHandle @0x822194B0 (from the arbitrator states' Release)
-        // The committed call sites pass the handle's allocation key (a u32); the DWARF names
-        // the arg as a BehaviourHelperIndex (which converts from/to s32). Declared with the
-        // u32 key signature the consumers use.
-        void SetBehaviourUsedByHandle(u32 luAllocationKey);
-        void UnSetBehaviourUsedByHandle(u32 luAllocationKey);
+        // DWARF h:217 / h:220 take the BehaviourHelperIndex by value (ARTIST uses r4 as the
+        // index directly); the arbitrator states' u32 allocation keys convert through its
+        // int32_t constructor.
+        void SetBehaviourUsedByHandle(BehaviourHelperIndex lBehaviourHelperIndex);
+        void UnSetBehaviourUsedByHandle(BehaviourHelperIndex lBehaviourHelperIndex);
 
         // The per-named-behaviour parameter bank (the DWARF :325 mBehaviourParameterBank
         // sub-object, X360 manager +0x12530). X360-attested consumers:

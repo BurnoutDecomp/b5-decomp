@@ -38,14 +38,11 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h" // BrnPhysics::Vehicle::EVehicleDrivenWheel
 #include "GameSource/World/BrnEntityTypes.h"                                           // BrnWorld::E_ENTITYTYPE_WORLD (UpdateImpacts' world-contact scale)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                     // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                             // [DIAG] CgsDev::Log::gpDebugPrint (PlayJolt witness)
 #include "rw/math/vpu/vector3_operation.h"                                             // rw::math::vpu::Magnitude (UpdateImpacts)
 #include "rw/math/fpu/scalar_operation.h"                                              // rw::math::fpu::Clamp / Max / Abs (UpdateImpacts, UpdateSurfaceRumble)
 #include "GameSource/AttribSys/Generated/classes/surface.h"                             // Attrib::Gen::surface (UpdateSurfaceRumble)
 #include "GameSource/AttribSys/Generated/classes/rumblesurface.h"                       // Attrib::Gen::rumblesurface (UpdateSurfaceRumble)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"      // Attrib::StringToKey (the surface-list collection key)
-
-#include <stdlib.h>                                                                    // [DIAG] getenv (BRN_RUMBLE_DIAG)
 
 namespace BrnGameState
 {
@@ -368,12 +365,6 @@ namespace BrnGameState
             CGS_ASSERT(!lbSampleColourIsZero, "Surface list appears to be corrupt");   // :376
         }
 
-        // [DIAG] BRN_RUMBLE_DIAG -- NOT IN THE X360 BINARY. The surface witness, part 1: ONCE, the list's
-        // rumble table -- every surface's rumblesurface priority and speed band, and whether its RumbleSurface
-        // ref resolved to a collection (a surface with priority < 0 never rumbles; an unresolved ref reads the
-        // zeroed default layout, priority 0). Read-only: the same accessors the passes below use.
-        static bool       sbSurfaceTableLogged = false;
-
         const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
             lpActiveRaceCarInterface->GetRaceCarState(lePlayerCarIndex);
 
@@ -400,14 +391,6 @@ namespace BrnGameState
                 }
                 Attrib::Gen::surface       lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
                 Attrib::Gen::rumblesurface lRumbleSurface(lSurface.RumbleSurface(), 0);
-
-                // [DIAG] BRN_RUMBLE_DIAG -- NOT IN THE X360 BINARY. The surface witness, part 2: one line
-                // whenever a grounded wheel's surface id changes (budgeted), with that surface's priority --
-                // the proof the wheel pass is dispatched on live data.
-                {
-                    static s32        saiLastSurface[4] = { -1, -1, -1, -1 };
-                    static s32        siWheelDiagLines = 0;
-                }
 
                 if (lRumbleSurface.RumblePriority() >= 0)
                 {
@@ -773,35 +756,36 @@ namespace BrnGameState
     void RumbleManager::BridgeRumbleToInput(CgsInput::InputIO::PreWorldInputBuffer* lpInputInputBuffer,
                                             const CgsSystem::TimerStatusInterface*  lpTimerStatusInterface)
     {
-        s32 liLength = mPlayJoltEffectEventQueue.GetLength();
-        for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+        // DWARF locals liIndex / liLength (cpp:811 / :812), shared by the four drains.
+        s32 liIndex;
+        s32 liLength;
+
+        liLength = mPlayJoltEffectEventQueue.GetLength();
+        for (liIndex = 0; liIndex < liLength; liIndex++)
         {
             const CgsInput::InputIO::PlayJoltEffectEvent& lJoltEvent = mPlayJoltEffectEventQueue.GetEvent(liIndex);
             lpInputInputBuffer->PostPlayJoltEffectByPlayer(lJoltEvent.miPlayer, lJoltEvent.miRumblePriority,
                                                            lJoltEvent.mJoltEffect);
         }
-        const s32 liNumJolts = liLength;
 
         liLength = mStopRumbleEffectEventQueue.GetLength();
-        for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+        for (liIndex = 0; liIndex < liLength; liIndex++)
         {
             const CgsInput::InputIO::StopRumbleEffectEvent& lStopRumbleEvent = mStopRumbleEffectEventQueue.GetEvent(liIndex);
             lpInputInputBuffer->PostStopRumbleEffectByPlayer(lStopRumbleEvent.miPlayer, lStopRumbleEvent.miRumbleId);
         }
-        const s32 liNumStops = liLength;
 
         liLength = mPlayRumbleEffectEventQueue.GetLength();
-        for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+        for (liIndex = 0; liIndex < liLength; liIndex++)
         {
             const CgsInput::InputIO::PlayRumbleEffectEvent& lPlayRumbleEvent = mPlayRumbleEffectEventQueue.GetEvent(liIndex);
             lpInputInputBuffer->PostPlayRumbleEffectByPlayer(lPlayRumbleEvent.miPlayer, lPlayRumbleEvent.miRumblePriority,
                                                              lPlayRumbleEvent.mJoltEffect, lPlayRumbleEvent.miRumbleId,
                                                              lPlayRumbleEvent.mfRumbleVolume);
         }
-        const s32 liNumPlays = liLength;
 
         liLength = mChangeVolumeRumbleEffectEventQueue.GetLength();
-        for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+        for (liIndex = 0; liIndex < liLength; liIndex++)
         {
             const CgsInput::InputIO::ChangeVolumeRumbleEffectEvent& lChangeVolumeRumbleEvent =
                 mChangeVolumeRumbleEffectEventQueue.GetEvent(liIndex);
@@ -810,7 +794,6 @@ namespace BrnGameState
                                                                      lChangeVolumeRumbleEvent.miRumbleId,
                                                                      lChangeVolumeRumbleEvent.mfRumbleVolume);
         }
-        const s32 liNumVolumes = liLength;
 
         lpInputInputBuffer->SetTimerStatusInterface(*lpTimerStatusInterface);
         lpInputInputBuffer->SetRumblePaused(mbRumblePaused || mbInPictureParadise);
@@ -821,15 +804,6 @@ namespace BrnGameState
         mPlayRumbleEffectEventQueue.Clear();
         mChangeVolumeRumbleEffectEventQueue.Clear();
         mStopRumbleEffectEventQueue.Clear();
-
-        // [DIAG] BRN_RUMBLE_DIAG -- NOT IN THE X360 BINARY. The dispatch witness for the drain: one
-        // line per update step that handed anything to the input buffer (budgeted), with the state
-        // flags it published. Pairs with PlayJolt's producer line below and, downstream, the
-        // "[rumble] pad-request" line (InputPads::UpdatePadRumble, CgsInputPads.cpp -- the motor
-        // speeds the effects ask for) and the "[rumble] motor" line (the PC XInputSetState leaf,
-        // CgsInputPadsPC.cpp -- what a connected pad was sent).
-        static s32        siBridgeDiagLines = 0;
-        const s32         KI_BRIDGE_DIAG_MAX_LINES = 64;
     }
 
     // ------------------------------------------------------------------------
@@ -841,8 +815,6 @@ namespace BrnGameState
     //   PlayRumble          0x82379250..0x82379318  {0, -1, priority, envelope, id, volume} -> +0x10C
     //   ChangeRumbleVolume  0x82378EF4..0x82378FB8  {0, -1, envelope, id, volume}           -> +0x228
     //   StopRumble          0x82378FD0..0x82378FE8  {0, -1, id}                             -> +0x334
-    // The [DIAG] lines (BRN_RUMBLE_DIAG, NOT IN THE X360 BINARY) are the surface-rumble witnesses,
-    // budgeted per kind.
     // ------------------------------------------------------------------------
     void RumbleManager::PlayRumble(s32 liRumbleId, f32 lfVolume, s32 liRumblePriority,
                                    const CgsInput::InputIO::JoltEffect& lJoltEffect)
@@ -855,8 +827,6 @@ namespace BrnGameState
         lEvent.miRumbleId       = liRumbleId;
         lEvent.mfRumbleVolume   = lfVolume;
         mPlayRumbleEffectEventQueue.AddEvent(lEvent);
-
-        static s32        siSurfaceDiagLines = 0;
     }
 
     void RumbleManager::ChangeRumbleVolume(s32 liRumbleId, f32 lfVolume, const CgsInput::InputIO::JoltEffect& lJoltEffect)
@@ -868,8 +838,6 @@ namespace BrnGameState
         lEvent.miRumbleId     = liRumbleId;
         lEvent.mfRumbleVolume = lfVolume;
         mChangeVolumeRumbleEffectEventQueue.AddEvent(lEvent);
-
-        static s32        siSurfaceDiagLines = 0;
     }
 
     void RumbleManager::StopRumble(s32 liRumbleId)
@@ -879,8 +847,6 @@ namespace BrnGameState
         lEvent.miPort     = -1;
         lEvent.miRumbleId = liRumbleId;
         mStopRumbleEffectEventQueue.AddEvent(lEvent);
-
-        static s32        siSurfaceDiagLines = 0;
     }
 
     // ------------------------------------------------------------------------
@@ -902,26 +868,6 @@ namespace BrnGameState
         lEvent.miRumblePriority = liRumblePriority;
         lEvent.mJoltEffect      = lJoltEffect;
 
-        const bool lbQueued = mPlayJoltEffectEventQueue.AddEventSafe(lEvent);
-
-        // [DIAG] BRN_RUMBLE_DIAG -- NOT IN THE X360 BINARY. The dispatch witness for the rumble
-        // producers (FX-RUMBLE): one line per jolt the game state asks for, with the priority that
-        // names its producer (1000 contact / 1001 race-car impact / 1002 landing / 1010 crash
-        // start), whether the jolt queue took it, and the scaled envelope. `queued=0` with len=4 was
-        // the missing-consumer hole of G10-D4 (nothing drained the queue on PC before FX-RUMBLE3's
-        // BridgeRumbleToInput); with the drain in place the queue empties every update step, so a
-        // `queued=0` now means five producers fired inside ONE step -- the console drops the fifth
-        // exactly the same way (AddEventSafe). The budget is PER PRODUCER: the contact jolt can fire
-        // on every frame of a scrape, and a shared budget would let it starve the rarer crash /
-        // landing / race-car-impact lines -- a witness that reports an absence it never observed.
-        // The drain and the motor have their own lines ("[rumble] bridge", "[rumble] pad-request",
-        // "[rumble] motor").
-        static s32        saiRumbleDiagLines[5] = { 0, 0, 0, 0, 0 };
-        const s32         KI_RUMBLE_DIAG_MAX_LINES_PER_PRODUCER = 16;
-        const s32         liSlot = (liRumblePriority == KN_RUMBLE_IMPACT_PRIORITY)         ? 0
-                                 : (liRumblePriority == KN_RUMBLE_VEHICLE_IMPACT_PRIORITY) ? 1
-                                 : (liRumblePriority == KN_LANDING_RUMBLE_PRIORITY)        ? 2
-                                 : (liRumblePriority == KN_CRASH_RUMBLE_PRIORITY)          ? 3
-                                 : 4;
+        mPlayJoltEffectEventQueue.AddEventSafe(lEvent);
     }
 }

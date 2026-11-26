@@ -81,11 +81,11 @@ namespace BrnGameState
 
         // X360 flt_82CDB790 (VA 0x82CDB790) -- UpdateCombo's "seconds without a scoring stunt
         // before the combo is lost" threshold (mfTimeSinceLastStunt crossing it auto-ends the combo).
-        const f32 KF_TIME_WITHOUT_STUNT_TO_LOSE_COMBO = 5.0f;
+        f32 KF_TIME_WITHOUT_STUNT_TO_LOSE_COMBO = 5.0f;
 
         // X360 flt_82CDB7B0 (VA 0x82CDB7B0) -- the delay EndCombo parks mfTimeDelayBeforeModeEnd at
         // when the combo ends with the time limit already expired (and the run is not endless).
-        const f32 KF_TIME_DELAY_BEFORE_MODE_END = 3.0f;
+        f32 KF_TIME_DELAY_BEFORE_MODE_END = 3.0f;
     }
 
 // ----------------------------------------------------------------------------

@@ -109,7 +109,7 @@ namespace BrnGameState
         const f32 KF_BARREL_ROLL_DEGREES_PER_ROLL          = 0.0027777778f; // flt_82004920 == 1/360 : rolls = degrees/360
 
         // UpdateBufferedScore armed pending-score window.
-        const f32 KF_PENDING_SCORE_PENDING_TIME            = 0.5f;  // flt_82CDB788 : armed pending-score window
+        f32 KF_PENDING_SCORE_PENDING_TIME            = 0.5f;  // flt_82CDB788 : armed pending-score window
 
     }
 

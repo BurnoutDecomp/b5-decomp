@@ -152,8 +152,8 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
     //   small ANGLE in radians -- the small-angle vibration of a camera sighting a subject
     //   10 m away. That is what a "focal distance" is doing as a divisor, and it is why the
     //   result is added to an EULER ANGLE vector rather than to a position.
-    const f32 kfShakeFocalDistance   = 10.0f;   // flt_82CDAD48
-    const f32 kfShakeVibrationAmount = 0.07f;   // flt_82CDAD4C
+    f32 kfShakeFocalDistance   = 10.0f;   // flt_82CDAD48
+    f32 kfShakeVibrationAmount = 0.07f;   // flt_82CDAD4C
 
     // ---- the shot clock ------------------------------------------------------
     // Runs UNGATED, before every early-out: `lfs f0, 0x7D0(r30); fadds f0, f1, f0; stfs`.
