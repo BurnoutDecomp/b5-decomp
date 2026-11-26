@@ -725,23 +725,6 @@ void OptionsDataProfile::NotifyOtherModulesLoadComplete(GuiEventQueueSmall* lpQu
 
 namespace BrnGui
 {
-    // Read inline by OnlinePlay::CheckForCompletedLoads (the "new news" transition state).
-    bool OptionsDataProfile::IsThereUnreadNews() const
-    {
-        return mbIsNewsUnread;
-    }
-
-    // Read inline by the create-match screen (OnlineGameOptions SetupHelpBar and the load list).
-    s32 OptionsDataProfile::GetNumCreatedOnlineGameOptions() const
-    {
-        return miNumCreatedOnlineGameOptions;
-    }
-
-    s32 OptionsDataProfile::GetNumReceivedOnlineGameOptions() const
-    {
-        return miNumReceivedOnlineGameOptions;
-    }
-
     // read entry liIndex of the created route table back out into game params.
     // The index-range asserts stream the offending index; lowered to the constant prefix.
     void OptionsDataProfile::GetCreatedOnlineGameOptions(s32 liIndex, GuiCache* lpCache,

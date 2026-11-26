@@ -173,8 +173,10 @@ struct OptionsDataProfile
 
     u64  GetUintFromBits(EATraxArrayType* lpBits);
 
-    s32  GetNumCreatedOnlineGameOptions() const;
-    s32  GetNumReceivedOnlineGameOptions() const;
+    // DWARF h:245 / h:249, header-inline: ARTIST has no copy and its callers read the counts
+    // in line (OnlineGameOptionsSummary::SetupSaveMenuText 0x8248D28C `lwzx` of +0x7308).
+    s32  GetNumCreatedOnlineGameOptions() const { return miNumCreatedOnlineGameOptions; }
+    s32  GetNumReceivedOnlineGameOptions() const { return miNumReceivedOnlineGameOptions; }
     void GetCreatedOnlineGameOptions(s32 liIndex, GuiCache* lpCache, GuiEventNetworkGameParams* lpParams) const;
     void GetReceivedOnlineGameOptions(s32 liIndex, GuiCache* lpCache, GuiEventNetworkGameParams* lpParams) const;
     const BrnDirector::GameState::DirectorProfileData* GetDirectorProfileData() const;
@@ -182,7 +184,7 @@ struct OptionsDataProfile
     void AddReceivedOnlineGameOptions(GuiCache* lpCache, const GuiEventNetworkGameParams* lpParams);
     void SetUnreadNews(bool lbUnread);
     void SetDirectorProfileData(const BrnDirector::GameState::DirectorProfileData* lpData);
-    bool IsThereUnreadNews() const;
+    bool IsThereUnreadNews() const { return mbIsNewsUnread; }   // DWARF h:294, header-inline (no ARTIST copy)
 
 private:
     // Leading version/director prefix. The X360 lays miVersionNumber at +0x0

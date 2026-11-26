@@ -183,11 +183,6 @@ namespace BrnGui
         // The number of online player records the GUI cache holds.
         const s32 KI_MAX_ONLINE_PLAYERS = 8;
 
-        template <class T>
-        void OutputGuiEvent(CgsGui::StateInterface* lpStateInterface, T& lrEvent)
-        {
-            lpStateInterface->OutputGuiEvent(lrEvent);
-        }
 
         // ARTIST 184: {288, 184, 16} + the request; GuiOverlayRequest is 8-aligned (its CgsID),
         // so GuiEventOut seats it at offset 16 in the 304-byte record.
@@ -203,7 +198,7 @@ namespace BrnGui
         GuiEventTickerClearMessages lClearTickerMessagesEvent;
         lClearTickerMessagesEvent.mbForceFadeOut = false;
         lClearTickerMessagesEvent.mbDeleteChallengeMessages = false;
-        OutputGuiEvent(mpStateInterface, lClearTickerMessagesEvent);
+        mpStateInterface->OutputGuiEvent(lClearTickerMessagesEvent);
 
         if (meCurrentState != E_ONLINE_INSTANT_RESULTS_STANDINGSUPDATE)
         {
@@ -271,7 +266,7 @@ namespace BrnGui
                 lMessage.AddString(lacAwardValue, KI_TICKER_STRING_PARAMETER);
             }
 
-            OutputGuiEvent(mpStateInterface, lMessage);
+            mpStateInterface->OutputGuiEvent(lMessage);
         }
     }
     void OnlineInstantResultsState::RenderDebug(CgsDev::Debug2DImmediateRender* lpDisplay)
@@ -432,7 +427,7 @@ namespace BrnGui
         GuiEventTickerClearMessages lClearTickerMessagesEvent;
         lClearTickerMessagesEvent.mbForceFadeOut = true;
         lClearTickerMessagesEvent.mbDeleteChallengeMessages = false;
-        OutputGuiEvent(mpStateInterface, lClearTickerMessagesEvent);
+        mpStateInterface->OutputGuiEvent(lClearTickerMessagesEvent);
         mTitleTextfield.Construct("Title_mc", mpStateInterface, 0);
         mWinnerGamertag.Construct("gamertag_mc", mpStateInterface, 0);
         mCurrentRound.Construct("RoundText", mpStateInterface, 0);
@@ -448,7 +443,7 @@ namespace BrnGui
         mRivalTeamScore.Construct("RivalTeamScore_mc", mpStateInterface, 0);
         mYourTeamIs.Construct("YourTeamIs_mc", mpStateInterface, 0);
         PostEventTag290 lEntered;
-        OutputGuiEvent(mpStateInterface, lEntered);
+        mpStateInterface->OutputGuiEvent(lEntered);
         mbReceivedFinishedModeResults = false;
     }
 
@@ -458,18 +453,18 @@ namespace BrnGui
         GuiEventTickerClearMessages lClearTickerMessagesEvent;
         lClearTickerMessagesEvent.mbForceFadeOut = true;
         lClearTickerMessagesEvent.mbDeleteChallengeMessages = false;
-        OutputGuiEvent(mpStateInterface, lClearTickerMessagesEvent);
+        mpStateInterface->OutputGuiEvent(lClearTickerMessagesEvent);
         mpGuiCache->RecEvent(reinterpret_cast<const CgsModule::Event*>(&mOnlineFinishingOrder), 317,
                              static_cast<s32>(sizeof(mOnlineFinishingOrder)));
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, 12);
         mpStateInterface->PlayAptMovie("", 3);
         GuiEventNetworkOutputPlayerTexture lTexture = { GuiEventNetworkOutputPlayerTexture::E_OUTPUT_OFF, -1 };
-        OutputGuiEvent(mpStateInterface, lTexture);
+        mpStateInterface->OutputGuiEvent(lTexture);
         GuiRequestCarControlChangeEvent lChangeEvent;
         lChangeEvent.mbPlayerShouldHaveControl = true;
-        OutputGuiEvent(mpStateInterface, lChangeEvent);
+        mpStateInterface->OutputGuiEvent(lChangeEvent);
         PostEventTag294 lLeft;
-        OutputGuiEvent(mpStateInterface, lLeft);
+        mpStateInterface->OutputGuiEvent(lLeft);
     }
 
     // ARTIST824A25A0: resource completion then the actual expected-component set.
@@ -653,7 +648,7 @@ namespace BrnGui
                 GuiEventNetworkSelectedPlayerOption lOption;
                 lOption.meOptionSelected = GuiEventNetworkSelectedPlayerOption::E_OPTION_SELECTED_VIEW_GAMERCARD;
                 lOption.mSelectedPlayerID = static_cast<s32>(mTable.GetHighlightedId());
-                OutputGuiEvent(mpStateInterface, lOption);
+                mpStateInterface->OutputGuiEvent(lOption);
             }
             break;
         default: break;
@@ -684,33 +679,42 @@ namespace BrnGui
     {
         if (mbAbortDueToDisconnects)
         {
+            // DWARF: lDisconnnectAbortOverlayRequest is declared just above the assert (PS3 cpp:1837/1838).
+            GuiOverlayRequest lDisconnnectAbortOverlayRequest;
             CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 2339);
-            GuiOverlayRequest lOverlay;
             const s32 liError = mpGuiCache->GetDoDisconnectPopupError();
             if (liError != 0)
             {
-                lOverlay.Construct(liError == 19 ? "CNLobbyDiscD" : "CNLobbyDisc");
+                if (liError == 19)
+                {
+                    lDisconnnectAbortOverlayRequest.Construct("CNLobbyDiscD");
+                }
+                else
+                {
+                    lDisconnnectAbortOverlayRequest.Construct("CNLobbyDisc");
+                }
                 mpGuiCache->SetDoDisconnectPopup(0);
             }
             else
             {
                 const bool lbPlayerDisconnected = mpGuiCache->GetOnlinePlayerDisconnected(
                     static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex()));
-                lOverlay.Construct(lbPlayerDisconnected ? "GMModeDisc" : "GMModeNoPlys");
+                lDisconnnectAbortOverlayRequest.Construct(lbPlayerDisconnected ? "GMModeDisc" : "GMModeNoPlys");
             }
-            OutputGuiEvent(mpStateInterface, lOverlay);
-            GuiEventRunFsm lRun;
-            lRun.mFsmId = CgsIDCompress("BRNFBFSM");
-            lRun.mInitialStateId = CgsIDCompress("PAUSED");
-            lRun.meFsmToRun = E_GUI_HUD_FREEBURN;
-            lRun.meFlowToUse = E_GUIFLOW_HUD;
-            OutputGuiEvent(mpStateInterface, lRun);
+            mpStateInterface->OutputGuiEvent(lDisconnnectAbortOverlayRequest);
+            // ARTIST order (0x82495808..0x82495834): fsm id, run target, initial state, flow.
+            GuiEventRunFsm lGuiEventRunFsm;
+            lGuiEventRunFsm.mFsmId = CgsIDCompress("BRNFBFSM");
+            lGuiEventRunFsm.meFsmToRun = E_GUI_HUD_FREEBURN;
+            lGuiEventRunFsm.mInitialStateId = CgsIDCompress("PAUSED");
+            lGuiEventRunFsm.meFlowToUse = E_GUIFLOW_HUD;
+            mpStateInterface->OutputGuiEvent(lGuiEventRunFsm);
             mpStateInterface->PlayAptMovie("", 3);
         }
         else
         {
             PostEventTag293 lLeftPostEvent;
-            OutputGuiEvent(mpStateInterface, lLeftPostEvent);
+            mpStateInterface->OutputGuiEvent(lLeftPostEvent);
             GuiEventRunFsm lRun;
             lRun.mInitialStateId = 0;
             if (mpGuiCache->GetGameMode() == -1)
@@ -724,7 +728,7 @@ namespace BrnGui
                 lRun.meFsmToRun = E_GUI_HUD_EVENT;
             }
             lRun.meFlowToUse = E_GUIFLOW_HUD;
-            OutputGuiEvent(mpStateInterface, lRun);
+            mpStateInterface->OutputGuiEvent(lRun);
             SendStateEvent("TO_GAME_ROOM");
         }
     }
@@ -798,7 +802,7 @@ namespace BrnGui
                 {
                     GuiOverlayRequest lOverlay;
                     lOverlay.Construct("CNInvSmGame");
-                    OutputGuiEvent(mpStateInterface, lOverlay);
+                    mpStateInterface->OutputGuiEvent(lOverlay);
                 }
                 break;
             }
@@ -819,7 +823,7 @@ namespace BrnGui
                     GuiEventNetworkSplashEvent::E_SPLASH_STATE_STOP)
                 {
                     GuiEventNetworkSplashEvent lSplash = { GuiEventNetworkSplashEvent::E_SPLASH_STATE_FINISHED };
-                    OutputGuiEvent(mpStateInterface, lSplash);
+                    mpStateInterface->OutputGuiEvent(lSplash);
                 }
                 break;
             case 274:
@@ -856,7 +860,7 @@ namespace BrnGui
                     mButtonAnimationComponent.AddOutputAptViewState("apt_Transition", KAPC_BUTTON_ANIMATION_STATES[2], false);
                     GuiRequestCarControlChangeEvent lChangeEvent;
                     lChangeEvent.mbPlayerShouldHaveControl = false;
-                    OutputGuiEvent(mpStateInterface, lChangeEvent);
+                    mpStateInterface->OutputGuiEvent(lChangeEvent);
                 }
                 else if (lpStopped->mbModeStartedFromRegion || lpStopped->mbNoRoundsRemaining)
                 {
@@ -864,7 +868,7 @@ namespace BrnGui
                     mbAbortDueToDisconnects = lpStopped->mbModeStartedFromRegion != 0;
                     GuiRequestCarControlChangeEvent lChangeEvent;
                     lChangeEvent.mbPlayerShouldHaveControl = false;
-                    OutputGuiEvent(mpStateInterface, lChangeEvent);
+                    mpStateInterface->OutputGuiEvent(lChangeEvent);
                 }
                 else
                     SendStateEvent("TO_ON_PLAY");
@@ -915,7 +919,7 @@ namespace BrnGui
         if (mfUpdateTimer > KF_UNORDERED_RESULTS_TIMEOUT)
         {
             PostEventTag292 lFinished;
-            OutputGuiEvent(mpStateInterface, lFinished);
+            mpStateInterface->OutputGuiEvent(lFinished);
             mfUpdateTimer = 0.0f;
             meCurrentState = E_ONLINE_INSTANT_RESULTS_FINAL_STANDINGS;
         }
@@ -963,7 +967,7 @@ namespace BrnGui
             CGS_ASSERT_AT(lpStatus, "lpInGamePlayerStatusData", CGS_ARTIST_FILE, 995);
             GuiEventNetworkOutputPlayerTexture lPicture =
                 { GuiEventNetworkOutputPlayerTexture::E_OUTPUT_WINNER_IMAGE, lpStatus->mNetworkPlayerID };
-            OutputGuiEvent(mpStateInterface, lPicture);
+            mpStateInterface->OutputGuiEvent(lPicture);
         }
         if ((meCurrentState == E_ONLINE_INSTANT_RESULTS_UPDATING ||
              meCurrentState == E_ONLINE_INSTANT_RESULTS_SHOWING) &&

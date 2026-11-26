@@ -20,6 +20,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineLoading.h"
 
 #include <cstring>                                                        // std::memcpy / std::memset
+#include "rw/core/stdc/util.h"                                          // rw::core::stdc::Min / Max
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStreamBase (unexpected-event log)
@@ -606,20 +607,16 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::HandleGameParamsChangedEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineLoading::HandleGameParamsChangedEvent");
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event sent to OnlineLoading::HandleGameParamsChangedEvent",
+                             CGS_ARTIST_FILE, 574);
 
         std::memcpy(&mCurrentGameParams, lpEvent, sizeof(mCurrentGameParams));
 
         if (mRouteInfoDisplay.IsComponentLoaded())
         {
-            if (!(miCurrentRoundDisplayed < mCurrentGameParams.miNumRounds - 1))
-            {
-                miCurrentRoundDisplayed = mCurrentGameParams.miNumRounds - 1;
-            }
-            if (!(miCurrentRoundDisplayed > 0))
-            {
-                miCurrentRoundDisplayed = 0;
-            }
+            // DWARF (_compile/BrnGuiOnlineScreenUnity.cpp): rw::core::stdc::Min then Max.
+            miCurrentRoundDisplayed = rw::core::stdc::Min(miCurrentRoundDisplayed, mCurrentGameParams.miNumRounds - 1);
+            miCurrentRoundDisplayed = rw::core::stdc::Max(miCurrentRoundDisplayed, 0);
             mRouteInfoDisplay.SetInfo(miCurrentRoundDisplayed, &mCurrentGameParams);
         }
     }

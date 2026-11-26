@@ -2825,6 +2825,7 @@ namespace BrnGui
 #include "GameSource/Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.h" // BrnGui::GuiNetworkRouteInfo
 
 #include <cstring>   // std::memcpy (the X360 params-mirror block copy)
+#include "rw/core/stdc/util.h"   // rw::core::stdc::Min / Max
 
 namespace BrnGui
 {
@@ -2983,11 +2984,10 @@ namespace BrnGui
     // channels.
     void OnlineGameRoomPlayerInfo::ShowViewEventOptions()
     {
-        // Two separate stores, as the X360 emits them (upper clamp, then lower clamp).
-        if (miCurrentRoundDisplayed >= mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1)
-            miCurrentRoundDisplayed = mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1;
-        if (miCurrentRoundDisplayed <= 0)
-            miCurrentRoundDisplayed = 0;
+        // DWARF (_compile/BrnGuiOnlineScreenUnity.cpp): rw::core::stdc::Min then Max, two stores.
+        miCurrentRoundDisplayed = rw::core::stdc::Min(miCurrentRoundDisplayed,
+                                                      mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1);
+        miCurrentRoundDisplayed = rw::core::stdc::Max(miCurrentRoundDisplayed, 0);
 
         // The X360 loads the count from .data (dword_8204C7A0 == 11) and stores it into
         // the ROUTE-INFO panel's loaded-component counter (abs +84304 == the panel at
@@ -3043,15 +3043,15 @@ namespace BrnGui
 
             if (mRouteInfoDisplay.IsComponentLoaded())
             {
-                const GuiEventNetworkGameParams* lpOptions = mpGuiCache->GetOnlineGameModeOptions();
-                const s32 liLastRound = lpOptions->miNumRounds - 1;
-                miCurrentRoundDisplayed = miCurrentRoundDisplayed < liLastRound
-                    ? miCurrentRoundDisplayed : liLastRound;
-                miCurrentRoundDisplayed = miCurrentRoundDisplayed > 0 ? miCurrentRoundDisplayed : 0;
+                // DWARF (_compile/BrnGuiOnlineScreenUnity.cpp) inlines rw::core::stdc::Min then
+                // Max here; ARTIST re-reads the cache's options for each use (0x824A53E8, 0x824A541C).
+                miCurrentRoundDisplayed = rw::core::stdc::Min(miCurrentRoundDisplayed,
+                                                              mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1);
+                miCurrentRoundDisplayed = rw::core::stdc::Max(miCurrentRoundDisplayed, 0);
 
                 mRouteInfoDisplay.SetInfo(
                     miCurrentRoundDisplayed,
-                    lpOptions);
+                    mpGuiCache->GetOnlineGameModeOptions());
 
                 // X360: the ==15 / ==16 pair, i.e. the inlined IsOnlineFreeBurnLobby.
                 if (BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(

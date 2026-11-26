@@ -276,15 +276,9 @@ namespace
     // transition-complete frame-trigger callback (passing `this` as the user data).
     void InGameMessagesComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFile)
     {
-        CGS_ASSERT(lacName != NULL, "lacName != NULL");
-
-        BrnFlapt::MovieClipRef lComponentRef;
-        lComponentRef = lFile.FindComponent(lacName);
-        mAptRef.mpMovieClipInst = lComponentRef.mpMovieClipInst;
-        mAptRef.mpTransform     = lComponentRef.mpTransform;
-
-        CGS_ASSERT(mAptRef.mpMovieClipInst != NULL, "mpMovieClipInst");
-        mAptRef.mpMovieClipInst->ResetTimeline();
+        // DWARF: the inlined base BrnFlaptComponent::Prepare (asserts on BrnGuiFlaptComponent.h:133
+        // and BrnFlaptMovieClipRef.h:272, ARTIST 0x8241F1B8/0x8241F208).
+        BrnFlaptComponent::Prepare(lacName, lFile, NULL);
 
         mAptRef.SetFrameTriggerCallback(
             reinterpret_cast<void*>(&InGameMessagesComponent::TransitionCompleteCallback), this);

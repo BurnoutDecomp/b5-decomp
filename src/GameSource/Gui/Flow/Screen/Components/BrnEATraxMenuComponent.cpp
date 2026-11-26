@@ -275,10 +275,14 @@ namespace BrnGui
                 continue;
             }
 
-            AddOutputAptViewState(msaacVisibleIDs[liRow],
-                                  liTrack == mCurrentHighlightedIndex ? "Highlighted"
-                                                                      : "Unhighlighted",
-                                  false);
+            if (liTrack == mCurrentHighlightedIndex)
+            {
+                AddOutputAptViewState(msaacVisibleIDs[liRow], "Highlighted", false);
+            }
+            else
+            {
+                AddOutputAptViewState(msaacVisibleIDs[liRow], "Unhighlighted", false);
+            }
 
             char lacIndex[8];
             CgsCore::SPrintf(lacIndex, sizeof(lacIndex), "%d", liTrack + 1);
@@ -295,21 +299,23 @@ namespace BrnGui
         // (0x824276E8..0x82427788): the denominator is mTotalNumberTracks + 4, i.e. the
         // track count plus one window minus one, and the reciprocal is computed ONCE and
         // reused for both ends -- reproduced in that order so the truncation matches.
-        const f32 lfStep = 1.0f / static_cast<f32>(mTotalNumberTracks +
-                                                   (KI_NUM_VISIBLE_TRACKS - 1));
-        const f32 lfHighlighted = static_cast<f32>(mCurrentHighlightedIndex);
+        // DWARF locals (_compile/BrnGuiComponentUnity.cpp, cpp:298..305). ARTIST forms the
+        // reciprocal of lfEffectiveNumSlots once (0x82427740) after the first product.
+        const int32_t liEffectiveNumSlots = mTotalNumberTracks + (KI_NUM_VISIBLE_TRACKS - 1);
+        const f32 lfEffectiveNumSlots = static_cast<f32>(liEffectiveNumSlots);
+        const f32 lfCurrentIndex = static_cast<f32>(mCurrentHighlightedIndex);
 
-        char lacBarStart[8];
-        CgsCore::SPrintf(lacBarStart, sizeof(lacBarStart), "%d",
-                         static_cast<s32>((lfHighlighted * 100.0f) * lfStep));
+        char lacBarStartNum[8];
+        CgsCore::SPrintf(lacBarStartNum, sizeof(lacBarStartNum), "%d",
+                         static_cast<int32_t>((lfCurrentIndex * 100.0f) / lfEffectiveNumSlots));
 
-        char lacBarEnd[8];
-        CgsCore::SPrintf(lacBarEnd, sizeof(lacBarEnd), "%d",
-                         static_cast<s32>(((KF_NUM_VISIBLE_TRACKS + lfHighlighted) * lfStep)
-                                          * 100.0f));
+        char lacBarEndNum[8];
+        CgsCore::SPrintf(lacBarEndNum, sizeof(lacBarEndNum), "%d",
+                         static_cast<int32_t>(((KF_NUM_VISIBLE_TRACKS + lfCurrentIndex) / lfEffectiveNumSlots)
+                                              * 100.0f));
 
-        AddOutputAptViewState(mspacBarStartID, lacBarStart, false);
-        AddOutputAptViewState(mspacBarEndID,   lacBarEnd,   false);
+        AddOutputAptViewState(mspacBarStartID, lacBarStartNum, false);
+        AddOutputAptViewState(mspacBarEndID,   lacBarEndNum,   false);
     }
 
     // ---- GetTrackMode @0x82426A60 --------------------------------------------------

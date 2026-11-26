@@ -88,11 +88,12 @@ namespace BrnGui
         mAchievementIcon.Prepare(KAC_ACHIEVEMENTICON_NAME, lFile, lacName);
 
         // The two text fields live under the "AchievementsBox_mc" child clip.
-        BrnFlapt::MovieClipRef lAchievementsBox;
-        lAchievementsBox = mAptRef.FindChildMovieClip("AchievementsBox_mc");
+        // DWARF local lAchievementPopupBox (cpp:80), copy-initialised: ARTIST builds the found
+        // clip straight into it (0x82415CE8).
+        BrnFlapt::MovieClipRef lAchievementPopupBox = mAptRef.FindChildMovieClip("AchievementsBox_mc");
 
-        mAchievementAwardedRef = lAchievementsBox.FindChildTextField("AchievementAwarded_txt");
-        mAchievementNameRef = lAchievementsBox.FindChildTextField("AchievementName_txt");
+        mAchievementAwardedRef = lAchievementPopupBox.FindChildTextField("AchievementAwarded_txt");
+        mAchievementNameRef = lAchievementPopupBox.FindChildTextField("AchievementName_txt");
     }
 
     // @ 0x8242C310 -- reset the runtime state to its idle defaults.
