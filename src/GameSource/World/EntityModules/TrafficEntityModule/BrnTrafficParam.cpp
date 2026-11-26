@@ -192,13 +192,14 @@ void Param::Initialise(u32 luHullIndex,
 void Param::SetParamAlong(f32 lfParamAlong)
 {
     // X360: RwMath::IsValid (vcmpeqfp self-compare == not-NaN), then range asserts.
-    CGS_ASSERT_AT(lfParamAlong == lfParamAlong, "RwMath::IsValid( lfParamAlong )", KAC_ARTIST_ASSERT_FILE, 508);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lfParamAlong), "RwMath::IsValid( lfParamAlong )", KAC_ARTIST_ASSERT_FILE, 508);
     CGS_ASSERT_AT(lfParamAlong >= 0.0f, "lfParamAlong >= 0.0f", KAC_ARTIST_ASSERT_FILE, 509);
     CGS_ASSERT_AT(lfParamAlong < 256.0f, "lfParamAlong < 256.0f", KAC_ARTIST_ASSERT_FILE, 510);
 
     mfParamAlong = lfParamAlong;
-    // asm: fctidz (truncate-toward-zero to int64) then store the low byte.
-    muCurrentSegment = static_cast<u8>(static_cast<s64>(lfParamAlong));
+    // asm: fctidz then `lbz 0x57(r1)`: the direct float -> uint8_t conversion reads only the
+    // low byte of the converted doubleword (0x82706AA0).
+    muCurrentSegment = static_cast<u8>(lfParamAlong);
 }
 
 // 0x82712398 — true when the param is crawling (not in a stopping behaviour) and slow.
@@ -554,19 +555,19 @@ void ParamTransform::Update(Vector3 lPos, Vector3 lDir, Vector3 lRight,
     CGS_ASSERT_AT(rw::math::vpu::IsValid(lPos),   "RwMath::IsValid( lPos )", KAC_ARTIST_ASSERT_FILE, 693);
     CGS_ASSERT_AT(rw::math::vpu::IsValid(lDir),   "RwMath::IsValid( lDir )", KAC_ARTIST_ASSERT_FILE, 694);
     CGS_ASSERT_AT(rw::math::vpu::IsValid(lRight), "RwMath::IsValid( lRight )", KAC_ARTIST_ASSERT_FILE, 695);
-    CGS_ASSERT_AT(lfSpeed.GetFloat() == lfSpeed.GetFloat(),
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lfSpeed),
                "RwMath::IsValid( lfSpeed )", KAC_ARTIST_ASSERT_FILE, 696);
-    CGS_ASSERT_AT(lfAcceleration.GetFloat() == lfAcceleration.GetFloat(),
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lfAcceleration),
                "RwMath::IsValid( lfAcceleration )", KAC_ARTIST_ASSERT_FILE, 697);
     CGS_ASSERT_AT(rw::math::vpu::IsValid(mPos), "RwMath::IsValid( mPos )", KAC_ARTIST_ASSERT_FILE, 700);
 
     mLerpedPosAndSpeed.SetVector3(mPos);
-    mLerpedPosAndSpeed.SetPlus(lfSpeed.GetFloat());
+    mLerpedPosAndSpeed.SetPlus(lfSpeed);
 
     mPos = lPos;
 
     mDirAndAccel.SetVector3(lDir);
-    mDirAndAccel.SetPlus(lfAcceleration.GetFloat());
+    mDirAndAccel.SetPlus(lfAcceleration);
 
     mRight = lRight;
 }

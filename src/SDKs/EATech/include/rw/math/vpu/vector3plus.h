@@ -102,7 +102,9 @@ namespace vpu
         void SetZ(VecFloatRefIndex::InParam value) { SetComponent(2, value); }
         template<VectorAxis I> void SetZ(VecFloatRef<I> value) { SetComponent(2, value); }
         void SetPlus(float value) { SetComponent(3, value); }
-        void SetPlus(VecFloat::InParam value) { mV.v[3] = value.mV.v[3]; }
+        // A lane insert, as SetVector3 below: ARTIST ParamTransform::Update 0x827130F8 /
+        // 0x82713114 (`vrlimi128` mask 1 of the splatted VecFloat, then stvx128).
+        void SetPlus(VecFloat::InParam value) { mV = __vrlimi(mV, value.mV, 1, 0); }
         void SetPlus(VecFloatRefIndex::InParam value) { SetComponent(3, value); }
         template<VectorAxis I> void SetPlus(VecFloatRef<I> value) { SetComponent(3, value); }
         void SetZero() { mV = __vspltisw(0); }
