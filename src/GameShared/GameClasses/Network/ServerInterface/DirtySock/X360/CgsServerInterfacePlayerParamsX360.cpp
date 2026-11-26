@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/X360/CgsServerInterfacePlayerParamsX360.h"
+#include "lobbyapi.h"        // LobbyApiPlayerT
 #include "lobbytagfield.h"   // DirtySDK TagFieldGetBinary
 #include <cstring>           // std::memcpy / std::strchr
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -65,12 +66,11 @@ void* ServerInterfacePlayerParamsX360::GetNetworkAddress(void* lpDestination, co
     return lpDestination;
 }
 
-void ServerInterfacePlayerParamsX360::SerialiseFromPlayer(const void* lpPlayer)
+void ServerInterfacePlayerParamsX360::SerialiseFromPlayer(const LobbyApiPlayerT* lpPlayer)
 {
     ServerInterfacePlayerParamsBase::SerialiseFromPlayer(lpPlayer);
 
-    const char* lpcRecord = reinterpret_cast<const char*>(lpPlayer);
-    const char* lpcMarker  = std::strchr(lpcRecord + 0x1C, '^');
+    const char* lpcMarker  = std::strchr(lpPlayer->strMachineAddr, '^');
     if (lpcMarker != 0)
     {
         TagFieldGetBinary(lpcMarker, macNetworkAddress, 36);

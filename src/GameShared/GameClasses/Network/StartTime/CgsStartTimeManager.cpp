@@ -474,7 +474,7 @@ StartTimeManager::EPlayerReadiness StartTimeManager::AreAllPlayersReadyToStart(
         if (mpPlayerManager->mConnectionManager.GetConnectionStatus(liPlayerID) != E_CONNECTION_SUCCESS)
             return E_NOT_READY;
 
-        if (lpPlayer->mbNetworkPlayerPaused || lpPlayer->HasConnectionFailed())
+        if (lpPlayer->HasConnectionFailed() || lpPlayer->mbNetworkPlayerPaused)
             continue;
 
         bool lbPlayerReady = false;

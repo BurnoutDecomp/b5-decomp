@@ -133,7 +133,7 @@ void NetworkPlayer::Construct(CgsNetworkPlayerConstructParams* lpConstructParams
 
     macName[0] = '\0';
     miNumberMessagesRegistered = 0;
-    mbNetworkPlayerPaused      = false;// +0xBA9
+    mbHasConnectionFailed      = false;// +0xBA9
 
     meLocalConsoleFrameRate    = static_cast<CgsSystem::EFrameRate>(-1);   // +0xC40 = -1
     meRemoteConsoleFrameRate   = static_cast<CgsSystem::EFrameRate>(-1);   // +0xC44 = -1
@@ -384,7 +384,7 @@ bool NetworkPlayer::Prepare(NetworkAdapter* lpNetworkAdapter,
     mPlayerID               = liPlayerID;           // +0x08
     meLocalConsoleFrameRate = leLocalConsoleFrameRate;   // +0xC40
     meRemoteConsoleFrameRate= leRemoteConsoleFrameRate;  // +0xC44
-    mbNetworkPlayerPaused   = false;                // +0xBA9
+    mbHasConnectionFailed   = false;                // +0xBA9
 
     mPacketPacker.ResetBandwidthUsed(lpTimerStatus);
 
@@ -456,7 +456,7 @@ void NetworkPlayer::CheckForPlayerDisconnectTimeout(const CgsSystem::TimerStatus
         "lTimeGap.GetFloatVal() >= 0.0f",
         CGS_ARTIST_FILE, 1324 /* ARTIST 0x828731B4 */));
 
-    // mbHasConnectionFailed = lTimeGap > K_NETWORK_PLAYER_TIMEOUT. The X360 inlines the
+    // mbNetworkPlayerPaused = lTimeGap > K_NETWORK_PLAYER_TIMEOUT. The X360 inlines the
     // CgsSystem::Time::operator> compare (seconds first, then fraction) against the two
     // timeout words; read off the real branch structure, not the Hex-Rays simplification.
     const s32 liGapSeconds   = lTimeGap.GetSeconds();
@@ -469,7 +469,7 @@ void NetworkPlayer::CheckForPlayerDisconnectTimeout(const CgsSystem::TimerStatus
     else
         lbTimedOut = (lfGapFraction > K_NETWORK_PLAYER_TIMEOUT.GetFraction());
 
-    mbHasConnectionFailed = lbTimedOut;
+    mbNetworkPlayerPaused = lbTimedOut;
 }
 
 // ---- Update @ 0x82899BF8 -------------------------------------------------------------
@@ -550,7 +550,7 @@ void NetworkPlayer::SendMessages()
             // clear its valid flag -- the reliable copy lives in the resend buffer now.
             // The "have a connection" test reads the connection-handle word at the head of
             // the serialised connection blob (mConnectionData[0] != 0).
-            if (!mbNetworkPlayerPaused && mConnectionData.IsValid())
+            if (!mbHasConnectionFailed && mConnectionData.IsValid())
             {
                 lpPlayerManager->mReliableMessageManager.AddBufferedReliableMessage(
                     mPlayerID, lpMsg, maSendMessageData[liIndex].miLength);
@@ -674,11 +674,11 @@ void NetworkPlayer::SendMessages()
         CgsDev::PerfMonCpu::StopMonitor(s_iNetworkPlayerPackMessagesPM);
 
         CgsDev::PerfMonCpu::StartMonitor(s_iNetworkPlayerSendToPM);
-        if (liBytesPacked > 0 && !mbNetworkPlayerPaused && mConnectionData.IsValid())
+        if (liBytesPacked > 0 && !mbHasConnectionFailed && mConnectionData.IsValid())
         {
             ConnectionData lConnectionData = mConnectionData;   // sent by value
             if (!mpNetworkAdapter->SendTo(lacPackBuffer, liBytesPacked, lConnectionData))
-                mbNetworkPlayerPaused = true;   // first send failure pauses the player
+                mbHasConnectionFailed = true;   // first send failure pauses the player
         }
         CgsDev::PerfMonCpu::StopMonitor(s_iNetworkPlayerSendToPM);
     }

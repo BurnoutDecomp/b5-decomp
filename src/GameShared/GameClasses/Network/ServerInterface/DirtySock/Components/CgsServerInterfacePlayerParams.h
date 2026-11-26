@@ -4,6 +4,8 @@
 #include "types.hpp"
 #include "../CgsServerInterfaceStructureInterface.h"
 
+struct LobbyApiPlayerT;   // DirtySDK lobbyapi.h (C, global scope)
+
 // ===========================================================================
 // CgsNetwork::ServerInterfacePlayerParamsBase
 //   Home: GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/
@@ -51,10 +53,8 @@ namespace CgsNetwork
         // overrides it), so no base body can be recovered.
         virtual bool Prepare() = 0;
 
-        // CgsServerInterfacePlayerParams.cpp:77
-        //   lpPlayer is a DirtySDK LobbyApiPlayerT* (raw lobby player record); its
-        //   internals are read by documented byte offset in the .cpp.
-        virtual void SerialiseFromPlayer(const void* lpPlayer);
+        // CgsServerInterfacePlayerParams.cpp:77 (DWARF h:123: the lobby's player record)
+        virtual void SerialiseFromPlayer(const LobbyApiPlayerT* lpPlayer);
 
         // CgsServerInterfacePlayerParams.cpp:106
         void SerialiseToString(char* lpcRecord, s32 liRecLen) const;

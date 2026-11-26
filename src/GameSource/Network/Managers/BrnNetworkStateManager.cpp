@@ -1293,7 +1293,7 @@ namespace BrnNetwork
 
             CgsNetwork::NetworkPlayer* lpPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
             if (!lpMenuData->mbFinalCarSelection
-                && (lpPlayer == 0 || !lpPlayer->mbNetworkPlayerPaused))
+                && (lpPlayer == 0 || !lpPlayer->HasConnectionFailed()))
             {
                 return false;
             }

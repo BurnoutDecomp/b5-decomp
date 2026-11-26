@@ -170,7 +170,7 @@ namespace BrnNetwork
                 BrnNetworkPlayer* lpPlayer =
                     static_cast<BrnNetworkPlayer*>(lpPlayerManager->GetPlayerByID(lPlayerID));
                 if (lpPlayer
-                    && lpPlayer->mbNetworkPlayerPaused
+                    && lpPlayer->HasConnectionFailed()
                     && lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_GAMES)
                            == BrnServerInterface::E_STATUS_IDLE)
                 {

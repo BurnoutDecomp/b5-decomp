@@ -28,7 +28,7 @@ void ServerInterfaceUsersetParamsX360::SerialiseToString(char* lpcRecord, s32 li
 }
 
 // SerialiseFromUserset @ 0x82889E90 -- pure tail-call forward to the base.
-void ServerInterfaceUsersetParamsX360::SerialiseFromUserset(const void* lpUserset)
+void ServerInterfaceUsersetParamsX360::SerialiseFromUserset(const LobbyApiUserSetT* lpUserset)
 {
     ServerInterfaceUsersetParamsBase::SerialiseFromUserset(lpUserset);
 }

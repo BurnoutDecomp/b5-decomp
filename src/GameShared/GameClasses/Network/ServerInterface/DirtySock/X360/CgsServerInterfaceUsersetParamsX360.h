@@ -36,7 +36,7 @@ namespace CgsNetwork
         virtual void SerialiseToString(char* lpcRecord, s32 liRecLen) const;
 
         // @ X360 0x82889E90 -- pure tail-call forward to the base (b instruction).
-        virtual void SerialiseFromUserset(const void* lpUserset);
+        virtual void SerialiseFromUserset(const LobbyApiUserSetT* lpUserset);
     };
 }
 

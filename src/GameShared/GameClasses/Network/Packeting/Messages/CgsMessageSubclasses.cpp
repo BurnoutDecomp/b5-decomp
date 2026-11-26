@@ -99,10 +99,9 @@ namespace CgsNetwork
         PackOrUnpackResult lxResult = ReliableMessage::PackOrUnpack();
         for (s32 liSlot = 0; liSlot < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liSlot)
         {
-            PlayerConnectionData& lrData = maConnectionData[liSlot];
-            lxResult = CgsNetwork::Message::PackOrUnpack(&lrData.mPlayerID, -1, 0x7FFFFFFF) | lxResult;
-            lxResult = CgsNetwork::Message::PackOrUnpack(reinterpret_cast<s32*>(&lrData.meConnectionStatus),
-                                       0, E_CONNECTION_STATUS_COUNT) | lxResult;
+            lxResult |= CgsNetwork::Message::PackOrUnpack(&maConnectionData[liSlot].mPlayerID, -1, 0x7FFFFFFF);
+            lxResult |= CgsNetwork::Message::PackOrUnpack(reinterpret_cast<s32*>(&maConnectionData[liSlot].meConnectionStatus),
+                                       0, E_CONNECTION_STATUS_COUNT);
         }
         return lxResult;
     }

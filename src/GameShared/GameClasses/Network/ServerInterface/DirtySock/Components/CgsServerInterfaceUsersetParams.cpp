@@ -1,6 +1,7 @@
 #include "CgsServerInterfaceUsersetParams.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::StrnCpy (over-length assert)
+#include "lobbyapi.h"                                         // LobbyApiUserSetT
 #include "lobbytagfield.h"                                    // DirtySDK TagFieldGet/Set*
 
 #include <string.h>
@@ -34,6 +35,9 @@
 // The StrnCpy over-length guard is CgsCore::StrnCpy's own (CgsStringUtils.h:53, assert
 // at :55); a file-local copy of it collided with its siblings in CgsNetworkUnity.
 
+#define CGS_ARTIST_FILE \
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceUsersetParams.cpp"
+
 namespace CgsNetwork
 {
     // Flag translation table (CgsServerInterfaceUsersetFlags.cpp @ 0x8287C7C0). No public
@@ -46,30 +50,6 @@ namespace CgsNetwork
 
     ServerInterfaceUsersetParamsBase::~ServerInterfaceUsersetParamsBase()
     {
-    }
-
-    // SetName @ 0x82541598 -- strncpy(this+4, src, 36); assert if strlen >= 36.
-    void ServerInterfaceUsersetParamsBase::SetName(const char* lpcName)
-    {
-        CGS_ASSERT(strlen(lpcName) < static_cast<size_t>(KI_USERSETPARAMS_NAME_LENGTH),
-                   "String too long");
-        strncpy(macName, lpcName, KI_USERSETPARAMS_NAME_LENGTH);
-    }
-
-    // SetPassword @ 0x8286F178 -- strncpy(this+40, src, 20); assert if strlen >= 20.
-    void ServerInterfaceUsersetParamsBase::SetPassword(const char* lpcPassword)
-    {
-        CGS_ASSERT(strlen(lpcPassword) < static_cast<size_t>(KI_USERSETPARAMS_PASSWORD_LENGTH),
-                   "String too long");
-        strncpy(macPassword, lpcPassword, KI_USERSETPARAMS_PASSWORD_LENGTH);
-    }
-
-    // SetDescription @ 0x8286F278 -- strncpy(this+60, src, 68); assert if strlen >= 68.
-    void ServerInterfaceUsersetParamsBase::SetDescription(const char* lpcDescription)
-    {
-        CGS_ASSERT(strlen(lpcDescription) < static_cast<size_t>(KI_USERSETPARAMS_DESCRIPTION_LENGTH),
-                   "String too long");
-        strncpy(macDescription, lpcDescription, KI_USERSETPARAMS_DESCRIPTION_LENGTH);
     }
 
     // Prepare @ 0x8287C708 -- reset the userset-params block to defaults; returns true.
@@ -131,53 +111,34 @@ namespace CgsNetwork
         TagFieldSetFlags(lpcRecord, liRecLen, "SYSFLAGS", liSysFlags);
     }
 
-    // SerialiseFromUserset @ 0x82889BF8 -- populate this block from a raw DirtySDK
-    //   lobby userset record (LobbyApiUserSetT*). Fields are read by the documented
-    //   byte offsets the X360 asm uses (verified store-for-store). lpUserset must be
-    //   non-null (asserted).
-    void ServerInterfaceUsersetParamsBase::SerialiseFromUserset(const void* lpUserset)
+    // SerialiseFromUserset @ 0x82889BF8 -- populate this block from the lobby's userset record.
+    void ServerInterfaceUsersetParamsBase::SerialiseFromUserset(const LobbyApiUserSetT* lpUserset)
     {
-        CGS_ASSERT(lpUserset != 0, "lpUserset");
+        CGS_ASSERT_AT(lpUserset != 0, "lpUserset", CGS_ARTIST_FILE, 128 /* ARTIST 0x82889C24 */);
 
-        const u8* lpcRec = static_cast<const u8*>(lpUserset);
-
-        // The record carries no password; clear it, then copy name (+0x28) and
-        // description (+0x4C) via the bounds-checked setters.
+        // The record carries no password.
         SetPassword("");
-        SetName(reinterpret_cast<const char*>(lpcRec + 0x28));
-        SetDescription(reinterpret_cast<const char*>(lpcRec + 0x4C));
+        SetName(lpUserset->strName);
+        SetDescription(lpUserset->strDesc);
+        SetMaxPlayers(lpUserset->iSize);
+        SetType(lpUserset->iType);
+        CgsCore::StrnCpy(macHostName, lpUserset->strOwner, KI_USERSETPARAMS_HOSTNAME_LENGTH);
+        miNumPlayers   = lpUserset->iCount;
+        miUsersetId    = lpUserset->iIdent;
+        muCustomFlags  = lpUserset->uCustFlags;
+        muUsersetFlags = static_cast<u32>(ConvertUsersetFlags(static_cast<int>(lpUserset->uSysFlags), 0));
 
-        miMaxNumPlayers = *reinterpret_cast<const s32*>(lpcRec + 0x20); // stw -> 0x9C
-        miType          = *reinterpret_cast<const s32*>(lpcRec + 0x04); // stw -> 0x94
-
-        // Host name lives at record + 0x10; copy 16 bytes into macHostName, guarding
-        // the over-length case (inlined StrnCpy<16> bounds check).
-        const char* lpcHostName = reinterpret_cast<const char*>(lpcRec + 0x10);
-        CgsCore::StrnCpy(macHostName, lpcHostName, KI_USERSETPARAMS_HOSTNAME_LENGTH);
-
-        miNumPlayers   = *reinterpret_cast<const s32*>(lpcRec + 0x24); // stw -> 0x98
-        miUsersetId    = *reinterpret_cast<const s32*>(lpcRec + 0x00); // stw -> 0x90
-        muCustomFlags  = *reinterpret_cast<const u32*>(lpcRec + 0x0C); // stw -> 0xA4
-        muUsersetFlags = static_cast<u32>(ConvertUsersetFlags(
-                            *reinterpret_cast<const s32*>(lpcRec + 0x08), 0)); // -> 0xA0
-
-        // Parse the custom userset structure blob (record + 0x90) into the
-        // structure-interface data buffer, but only when the structure exposes data
-        // and a non-zero size. The binary reads GetData through the const overload
-        // (vtable slot +0x14).
-        const void* lpcData = static_cast<const ServerInterfaceUsersetParamsBase*>(this)->GetData();
-        if (lpcData && GetDataSize())
+        // The custom structure blob, parsed only when the structure exposes data. The
+        // mutable GetData() is vtable slot +0x14 (MSVC lays the two overloads out in
+        // reverse declaration order), ARTIST 0x82889D84.
+        if (GetData() && GetDataSize())
         {
-            CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
-                       "strlen( GetPattern()) < (size_t) GetPatternLength()");
-
-            const char* lpcPattern   = GetPattern();
-            const u32   luDataSize   = GetDataSize();
-            const void* lpcParseInto =
-                static_cast<const ServerInterfaceUsersetParamsBase*>(this)->GetData();
-            TagFieldGetStructure(reinterpret_cast<const char*>(lpcRec + 0x90),
-                                 const_cast<void*>(lpcParseInto),
-                                 static_cast<s32>(luDataSize), lpcPattern);
+            CGS_ASSERT_AT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
+                          "strlen( GetPattern()) < (size_t) GetPatternLength()",
+                          CGS_ARTIST_FILE, 146 /* ARTIST 0x82889E10 */);
+            TagFieldGetStructure(lpUserset->strParams, GetData(), GetDataSize(), GetPattern());
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

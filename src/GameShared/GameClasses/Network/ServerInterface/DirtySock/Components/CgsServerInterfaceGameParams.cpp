@@ -28,32 +28,11 @@
 //      and returns the strncpy result (the destination pointer).
 // ---------------------------------------------------------------------------
 
+#define CGS_ARTIST_FILE \
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceGameParams.cpp"
+
 namespace CgsNetwork
 {
-    // SetName @ 0x825411E8 -- strncpy(this+4, src, 16); assert if strlen >= 16.
-    void ServerInterfaceGameParamsBase::SetName(const char* lpcName)
-    {
-        CGS_ASSERT(strlen(lpcName) < static_cast<size_t>(KI_GAMEPARAMS_NAME_LENGTH),
-                   "String too long");
-        strncpy(macName, lpcName, KI_GAMEPARAMS_NAME_LENGTH);
-    }
-
-    // SetPassword @ 0x825809F0 -- strncpy(this+40, src, 20); assert if strlen >= 20.
-    void ServerInterfaceGameParamsBase::SetPassword(const char* lpcPassword)
-    {
-        CGS_ASSERT(strlen(lpcPassword) < static_cast<size_t>(KI_GAMEPARAMS_PASSWORD_LENGTH),
-                   "String too long");
-        strncpy(macPassword, lpcPassword, KI_GAMEPARAMS_PASSWORD_LENGTH);
-    }
-
-    // SetSession @ 0x825412E8 -- strncpy(this+76, src, 128); assert if strlen >= 128.
-    void ServerInterfaceGameParamsBase::SetSession(const char* lpcSession)
-    {
-        CGS_ASSERT(strlen(lpcSession) < static_cast<size_t>(KI_GAMEPARAMS_SESSION_LENGTH),
-                   "String too long");
-        strncpy(macSession, lpcSession, KI_GAMEPARAMS_SESSION_LENGTH);
-    }
-
     // IsRankedGame @ 0x825413E8.
     //
     // The asm builds and emits a multi-line debug report through the global
@@ -177,15 +156,12 @@ namespace CgsNetwork
     // unpacked from the record's params text.
     void ServerInterfaceGameParamsBase::SerialiseFromGame(const void* lpGame)
     {
-        CGS_ASSERT(lpGame, "lpGame");
+        CGS_ASSERT_AT(lpGame, "lpGame", CGS_ARTIST_FILE, 155 /* ARTIST 0x82877578 */);
         const DirtySock::LobbyApiPlayT* lpRecord = static_cast<const DirtySock::LobbyApiPlayT*>(lpGame);
 
         SetName(lpRecord->strName);
         SetPassword("");
-        // The inlined bounded copy of the host name.
-        CGS_ASSERT(strlen(lpRecord->strHost) < static_cast<size_t>(KI_GAMEPARAMS_HOSTNAME_LENGTH),
-                   "String too long: ");
-        strncpy(macHostName, lpRecord->strHost, KI_GAMEPARAMS_HOSTNAME_LENGTH);
+        CgsCore::StrnCpy(macHostName, lpRecord->strHost, KI_GAMEPARAMS_HOSTNAME_LENGTH);
         SetSession(lpRecord->strSess);
 
         miGameID          = lpRecord->iIdent;
@@ -201,12 +177,10 @@ namespace CgsNetwork
 
         if (GetData() != 0 && GetDataSize() != 0)
         {
-            CGS_ASSERT(strlen(GetPattern()) < static_cast<size_t>(GetPatternLength()),
-                       "strlen( GetPattern()) < (size_t) GetPatternLength()");
-            const char* lpcPattern = GetPattern();
-            const s32   liSize     = static_cast<s32>(GetDataSize());
-            void*       lpData     = GetData();
-            TagFieldGetStructure(lpRecord->strParams, lpData, liSize, lpcPattern);
+            CGS_ASSERT_AT(strlen(GetPattern()) < static_cast<size_t>(GetPatternLength()),
+                          "strlen( GetPattern()) < (size_t) GetPatternLength()",
+                          CGS_ARTIST_FILE, 175 /* ARTIST 0x82877798 */);
+            TagFieldGetStructure(lpRecord->strParams, GetData(), GetDataSize(), GetPattern());
         }
     }
 
@@ -216,3 +190,5 @@ namespace CgsNetwork
         miNumPrivateSlots = liNumPrivateSlots;
     }
 }
+
+#undef CGS_ARTIST_FILE

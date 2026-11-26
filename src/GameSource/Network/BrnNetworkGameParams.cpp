@@ -2,6 +2,7 @@
 #include "GameSource/Network/Parameters/BrnNetworkParameterData.h"   // AmendGameModeContexts / MatchmakingContext
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                   // CGS_ASSERT (range/round-trip tripwires)
 
+#include "lobbyapi.h"   // LobbyApiPlayT
 #include <cstring>   // std::memcpy
 
 // =============================================================================
@@ -316,10 +317,8 @@ static const u32 KU_GAME_PARAMS_DEFAULT_PREVIOUS_GAMEMODE_FIELD = 8;   // packed
 static const s32 KI_GAME_PARAMS_DEFAULT_RUNNER_CRASHES  = 3;
 static const u32 KU_GAME_PARAMS_UNSET_LOCALITY          = 0x7A7A5A5Au;
 
-// The lobby game record SerialiseFromGame reads is the network library's own structure: its
-// per-player entries start at +0x294 and are 0xA4 bytes apart (console layout).
-static const s32 KI_LOBBY_GAME_PLAYER_RECORDS_OFFSET = 0x294;
-static const s32 KI_LOBBY_GAME_PLAYER_RECORD_SIZE    = 0xA4;
+// The lobby game record SerialiseFromGame reads is DirtySDK's LobbyApiPlayT (lobbyapi.h); its
+// player entries are the aOpponents records.
 
 // Reset to the default game: the platform defaults first, then an empty name and password,
 // the default slot counts and packed settings, an unranked game in the first game mode, and
@@ -390,10 +389,10 @@ void GameParams::SerialiseFromGame(const void* lpGame)
 {
     CgsNetwork::ServerInterfaceGameParamsX360::SerialiseFromGame(lpGame);
 
-    const u8* lpu8PlayerRecords = static_cast<const u8*>(lpGame) + KI_LOBBY_GAME_PLAYER_RECORDS_OFFSET;
+    const LobbyApiPlayT* lpGameRecord = static_cast<const LobbyApiPlayT*>(lpGame);
     for (s32 liSlot = 0; liSlot < KI_GAMEPARAMS_PLAYER_SLOTS; ++liSlot)
     {
-        maPlayerParams[liSlot].SerialiseFromPlayer(lpu8PlayerRecords + liSlot * KI_LOBBY_GAME_PLAYER_RECORD_SIZE);
+        maPlayerParams[liSlot].SerialiseFromPlayer(&lpGameRecord->aOpponents[liSlot]);
     }
 }
 

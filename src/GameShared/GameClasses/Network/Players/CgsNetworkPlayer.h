@@ -24,8 +24,8 @@
 //   +0xB90  miNumberMessagesRegistered (s32)
 //   +0xB94  mPacketPacker           (CompressionAndEncryptionUtils, 4B helper)
 //   +0xB98  macName[16]             (char[16])               Prepare: strncpy 16
-//   +0xBA8  mbHasConnectionFailed   (bool)
-//   +0xBA9  mbNetworkPlayerPaused   (bool)
+//   +0xBA8  mbNetworkPlayerPaused   (bool)
+//   +0xBA9  mbHasConnectionFailed   (bool)
 //   +0xBAC  mfPingInMs              (f32)
 //   +0xBB0  mPingMessageSend        (PingMessage, 0x24)
 //   +0xBD4  mPingMessageRecv        (PingMessage, 0x24)
@@ -240,8 +240,8 @@ namespace CgsNetwork
         CgsSystem::EFrameRate GetLocalConsoleFrameRate()       { return meLocalConsoleFrameRate; }
         CgsSystem::EFrameRate GetRemoteConsoleFrameRate()      { return meRemoteConsoleFrameRate; }
         bool            HasConnectionFailed() const { return mbHasConnectionFailed; }
-        // Raised by the registry when the session reports this player disconnected (+0xBA9).
-        void            SetDisconnected()                      { mbNetworkPlayerPaused = true; }
+        // Raised by the registry when the session reports this player disconnected (+0xBA9; DWARF h:461).
+        void            SetDisconnected()                      { mbHasConnectionFailed = true; }
 
     protected:
         void CheckForPlayerDisconnectTimeout(const CgsSystem::TimerStatus* lpTimerStatus);
@@ -277,15 +277,15 @@ namespace CgsNetwork
         // bandwidth ledger is class-static).
         CompressionAndEncryptionUtils mPacketPacker;     // +0xB94
         char                  macName[16];               // +0xB98
-        // NOTE: the source declares the paused flag first, so the source names of +0xBA8 and
-        // +0xBA9 are the other way round (+0xBA8 is what the no-packet timeout raises, +0xBA9
-        // what SetDisconnected and a failed send raise).
-        // The tree names are kept; every access matches the console offset.
-        bool                  mbHasConnectionFailed;     // +0xBA8
+        // DWARF order: the public paused flag (h:351) is declared first, the private
+        // connection-failed flag (h:383, read by HasConnectionFailed h:447) after it.
+        // +0xBA8 is what the no-packet timeout raises; +0xBA9 what SetDisconnected and a
+        // failed send raise (ARTIST 0x828731FC stb 0xBA8; 0x828846AC stb 0xBA9).
     public:
-        // Public in the class declaration: the start-time manager reads it directly.
-        bool                  mbNetworkPlayerPaused;     // +0xBA9
+        // Public in the class declaration: the managers read it directly.
+        bool                  mbNetworkPlayerPaused;     // +0xBA8
     private:
+        bool                  mbHasConnectionFailed;     // +0xBA9
         u8                    mPadBAA[2];                // +0xBAA (align f32 to +0xBAC)
         f32                   mfPingInMs;                // +0xBAC
         PingMessage           mPingMessageSend;          // +0xBB0 (0x24)

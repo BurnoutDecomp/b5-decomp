@@ -26,8 +26,11 @@
 
 namespace CgsNetwork
 {
-    const f32 PlayerManagerDebugComponent::KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH = 256.0f;
-    const f32 PlayerManagerDebugComponent::KF_DEFAULT_MAX_BANDWIDTH = 128.0f;
+    // DWARF CgsNetworkPlayerManagerDebugComponent.cpp:26/27: the graph scale the bandwidth bars
+    // start with (kbps at full width) and the budget they are coloured against
+    // (ARTIST .rdata 0x820E9584 / 0x820E9648).
+    const f32 KF_MAX_BANDWIDTH_ON_GRAPH = 256.0f;
+    const f32 KF_MAX_BANDWIDTH          = 128.0f;
 
     namespace
     {
@@ -47,6 +50,47 @@ namespace CgsNetwork
             { CompressionAndEncryptionUtils::E_AVERAGE_OVER_SECOND, "Average Over Last Second" },
             { CompressionAndEncryptionUtils::E_MAX_OVER_SECOND, "Maximum Over Second"      },
         };
+    }
+
+    void PlayerManagerDebugComponent::Construct(PlayerManager* lpPlayerManager)
+    {
+        CgsDev::DebugComponent::Construct();
+        mpPlayerManager               = lpPlayerManager;
+        Register();
+        mbDrawBandwidthUsage          = false;
+        mbShowUsedRegisteredMessages  = false;
+        miAverageType                 = 0;
+        mfMaxBandwidthForGraph        = KF_MAX_BANDWIDTH_ON_GRAPH;
+        mfMaxBandwidth                = KF_MAX_BANDWIDTH;
+    }
+
+    void PlayerManagerDebugComponent::Prepare()
+    {
+        mfMaxBandwidthForGraph        = KF_MAX_BANDWIDTH_ON_GRAPH;
+        mfMaxBandwidth                = KF_MAX_BANDWIDTH;
+        mbDrawBandwidthUsage          = false;
+        mbShowUsedRegisteredMessages  = false;
+        miAverageType                 = 0;
+    }
+
+    void PlayerManagerDebugComponent::Release()
+    {
+        mfMaxBandwidthForGraph        = KF_MAX_BANDWIDTH_ON_GRAPH;
+        mfMaxBandwidth                = KF_MAX_BANDWIDTH;
+        mbDrawBandwidthUsage          = false;
+        mbShowUsedRegisteredMessages  = false;
+        miAverageType                 = 0;
+    }
+
+    void PlayerManagerDebugComponent::Destruct()
+    {
+        mfMaxBandwidthForGraph        = KF_MAX_BANDWIDTH_ON_GRAPH;
+        mfMaxBandwidth                = KF_MAX_BANDWIDTH;
+        mpPlayerManager               = 0;
+        mbDrawBandwidthUsage          = false;
+        mbShowUsedRegisteredMessages  = false;
+        miAverageType                 = 0;
+        CgsDev::DebugComponent::Destruct();
     }
 
     // qsort comparator: descending order by miMaxBytes (larger first).

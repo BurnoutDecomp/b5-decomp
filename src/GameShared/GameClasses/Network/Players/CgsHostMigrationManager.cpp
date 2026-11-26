@@ -698,11 +698,13 @@ namespace CgsNetwork
             if (liIndex != KI_MAX_PLAYERS)
                 continue;
 
-            for (s32 liCheck1 = 1; liCheck1 < KI_MAX_PLAYERS; ++liCheck1)
+            // DWARF lnCheck1/lnCheck2 (CgsHostMigrationManager.cpp:485/486); every pair is
+            // checked (ARTIST 0x82894B18: the outer index starts at 0).
+            for (s32 lnCheck1 = 0; lnCheck1 < KI_MAX_PLAYERS - 1; ++lnCheck1)
             {
-                for (s32 liCheck2 = liCheck1 + 1; liCheck2 < KI_MAX_PLAYERS; ++liCheck2)
+                for (s32 lnCheck2 = lnCheck1 + 1; lnCheck2 < KI_MAX_PLAYERS; ++lnCheck2)
                 {
-                    CGS_ASSERT(lpaReceivedClientsIDs[liCheck2] == KI_INVALID_PLAYER_ID || lpaReceivedClientsIDs[liCheck1] != lpaReceivedClientsIDs[liCheck2], CGS_ASSERT_MESSAGE_AT(
+                    CGS_ASSERT(lpaReceivedClientsIDs[lnCheck2] == KI_INVALID_PLAYER_ID || lpaReceivedClientsIDs[lnCheck1] != lpaReceivedClientsIDs[lnCheck2], CGS_ASSERT_MESSAGE_AT(
                         "laBestReceivedClientsIDs[lnCheck2] == K_INVALID_PLAYER_ID || " "laBestReceivedClientsIDs[lnCheck1] != laBestReceivedClientsIDs[lnCheck2]",
                         __FILE__, 493 /* ARTIST 0x82894B5C */));
                 }

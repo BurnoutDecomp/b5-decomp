@@ -45,7 +45,7 @@ namespace CgsNetwork
     // string, no count, an out-of-range server type and no rebroadcast note.
     void VersionDisplay::Construct()
     {
-
+        CgsDev::DebugComponent::Construct();   // ARTIST 0x8289B3F8 (folded 0x8284CB38)
         mpcVersion       = 0;
         muField_04       = 0;
         meServerType     = E_SERVER_TYPE_COUNT;

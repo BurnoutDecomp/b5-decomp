@@ -116,18 +116,16 @@ void PlayerManager::Destruct()
 
     for (s32 liIndex = 0; liIndex < miNumActivePlayers; ++liIndex)
     {
-        NetworkPlayer* lpNetworkPlayer = maActivePlayers[liIndex].GetNetworkPlayer();
-        if (lpNetworkPlayer != 0)
+        if (maActivePlayers[liIndex].GetNetworkPlayer())
         {
-            lpNetworkPlayer->Destruct();
+            maActivePlayers[liIndex].GetNetworkPlayer()->Destruct();
         }
     }
     for (s32 liIndex = 0; liIndex < miNumInactivePlayers; ++liIndex)
     {
-        NetworkPlayer* lpNetworkPlayer = maInactivePlayers[liIndex].GetNetworkPlayer();
-        if (lpNetworkPlayer != 0)
+        if (maInactivePlayers[liIndex].GetNetworkPlayer())
         {
-            lpNetworkPlayer->Destruct();
+            maInactivePlayers[liIndex].GetNetworkPlayer()->Destruct();
         }
     }
 
@@ -301,13 +299,14 @@ void PlayerManager::Update(const CgsSystem::TimerStatus* lpTimerStatus, u16 lu16
             continue;
         }
 
-        const bool lbTalking = !lpNetworkPlayer->HasConnectionFailed();
+        const bool lbTalking = !lpNetworkPlayer->mbNetworkPlayerPaused;
         lpNetworkPlayer->Update(lpTimerStatus, mu16CurrentFrame, lbInGame);
-        if (lbTalking != !lpNetworkPlayer->HasConnectionFailed())
+        if (lbTalking != !lpNetworkPlayer->mbNetworkPlayerPaused)
         {
-            BroadcastEvent(lpNetworkPlayer->HasConnectionFailed() ? E_EVENT_PLAYER_LOST_CONTACT
-                                                                  : E_EVENT_PLAYER_REGAINED_CONTACT,
-                           reinterpret_cast<void*>(static_cast<intptr_t>(lPlayerID)));
+            if (!lpNetworkPlayer->mbNetworkPlayerPaused)
+                BroadcastEvent(E_EVENT_PLAYER_REGAINED_CONTACT, reinterpret_cast<void*>(static_cast<intptr_t>(lPlayerID)));
+            else
+                BroadcastEvent(E_EVENT_PLAYER_LOST_CONTACT, reinterpret_cast<void*>(static_cast<intptr_t>(lPlayerID)));
         }
     }
 }
@@ -588,7 +587,7 @@ bool PlayerManager::AreAnyPlayersConnected() const
     for (s32 liPlayer = 0; liPlayer < KI_MAX_PLAYERS; ++liPlayer)
     {
         const NetworkPlayer* lpNetworkPlayer = maActivePlayers[liPlayer].GetNetworkPlayer();
-        if (lpNetworkPlayer != 0 && !lpNetworkPlayer->mbNetworkPlayerPaused)
+        if (lpNetworkPlayer != 0 && !lpNetworkPlayer->HasConnectionFailed())
         {
             return true;
         }

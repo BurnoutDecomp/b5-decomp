@@ -41,7 +41,7 @@ namespace CgsNetwork
         // @ X360 0x8287A340 -- chain to the base, then parse the 36-byte network
         // address out of the lobby record. Returns the parsed blob pointer (the
         // TagFieldGetBinary result), or NULL if the record has no '^' marker.
-        virtual void SerialiseFromPlayer(const void* lpPlayer);
+        virtual void SerialiseFromPlayer(const LobbyApiPlayerT* lpPlayer);
 
         // @ X360 0x8287A308 -- static: copy the 36-byte secure network address
         // out of lpSource->macNetworkAddress into the raw lpDestination buffer.

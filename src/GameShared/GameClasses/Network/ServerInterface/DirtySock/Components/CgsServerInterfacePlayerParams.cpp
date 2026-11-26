@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CgsDev::Assert Begin/Fire/End
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::StrnCpy (over-length assert)
+#include "lobbyapi.h"                                         // LobbyApiPlayerT
 #include "lobbytagfield.h"                                    // DirtySDK TagFieldGet/Set*
 #include <cstring>                                            // std::strlen / std::strncpy
 
@@ -24,35 +25,26 @@
 namespace CgsNetwork
 {
 
-void ServerInterfacePlayerParamsBase::SerialiseFromPlayer(const void* lpPlayer)
+void ServerInterfacePlayerParamsBase::SerialiseFromPlayer(const LobbyApiPlayerT* lpPlayer)
 {
-    const u8* lpcRec = static_cast<const u8*>(lpPlayer);
+    CgsCore::StrnCpy(macMachineAddress, lpPlayer->strMachineAddr, 64);
 
-    // Machine address string lives at LobbyApiPlayerT + 0x1C; copy it into the
-    // 64-byte machine-address buffer (inlined StrnCpy<64> bounds guard first).
-    const char* lpcMachineAddr = reinterpret_cast<const char*>(lpcRec + 0x1C);
-    CgsCore::StrnCpy(macMachineAddress, lpcMachineAddr, 64);
-
-    // mpcName points at the lobby record's name field (LobbyApiPlayerT + 4).
-    mpcName           = reinterpret_cast<const char*>(lpcRec + 4);
-    miIdent           = *reinterpret_cast<const s32*>(lpcRec + 0x00);
-    miPresence        = *reinterpret_cast<const s32*>(lpcRec + 0x64);
-    muExternalAddress = *reinterpret_cast<const u32*>(lpcRec + 0x14);
-    muInternalAddress = *reinterpret_cast<const u32*>(lpcRec + 0x18);
-    muFlags           = *reinterpret_cast<const u32*>(lpcRec + 0x60);
+    mpcName           = lpPlayer->strPers;
+    miIdent           = lpPlayer->iIdent;
+    miPresence        = lpPlayer->iPresence;
+    muExternalAddress = lpPlayer->uAddr;
+    muInternalAddress = lpPlayer->uLocalAddr;
+    muFlags           = lpPlayer->uFlags;
 
     // Bounds-check the serialisation pattern, then parse the custom structure blob
     // (held at LobbyApiPlayerT + 0x68) into the structure-interface data buffer.
-    CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
-               "strlen( GetPattern() ) < (size_t) GetPatternLength()");
+    CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()), CGS_ASSERT_MESSAGE_AT(
+        "strlen( GetPattern() ) < (size_t) GetPatternLength()",
+        __FILE__, 88 /* ARTIST 0x8287A0A8 */));
 
-    const char* lpcPattern = GetPattern();
-    const u32   luDataSize = GetDataSize();
-    // NOTE: the binary dispatches through vtable slot +0x14 here, i.e. the
-    // const GetData() overload (not the non-const +0x10 one used elsewhere).
-    const void* lpcData    = static_cast<const ServerInterfacePlayerParamsBase*>(this)->GetData();
-    TagFieldGetStructure(reinterpret_cast<const char*>(lpcRec + 0x68),
-                         const_cast<void*>(lpcData), static_cast<s32>(luDataSize), lpcPattern);
+    // The mutable GetData() is vtable slot +0x14 (MSVC lays the two overloads out in
+    // reverse declaration order), ARTIST 0x8287A0F8; arguments evaluated right to left.
+    TagFieldGetStructure(lpPlayer->strParams, GetData(), GetDataSize(), GetPattern());
 }
 
 void ServerInterfacePlayerParamsBase::SerialiseToString(char* lpcRecord, s32 liRecLen) const

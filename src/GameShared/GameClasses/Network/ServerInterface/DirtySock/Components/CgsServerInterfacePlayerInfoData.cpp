@@ -1,117 +1,87 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CgsDev::Assert Begin/Fire/End
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::StrnCpy (over-length assert)
+#include "lobbyapi.h"                                         // LobbyApiUserT
 #include "lobbytagfield.h"                                    // DirtySDK TagFieldGetStructure
 #include <cstring>                                            // std::strlen / std::strncpy
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsNetwork::ServerInterfacePlayerInfoDataBase::Prepare           @ 0x828797E0
 //   CgsNetwork::ConvertHWFlags                                  @ 0x82879768
+//   CgsNetwork::ServerInterfacePlayerInfoDataBase::Prepare           @ 0x828797E0
 //   CgsNetwork::ServerInterfacePlayerInfoDataBase::SerialiseFromUser @ 0x828798A8
 //
-// ConvertHWFlags folds a lobby hardware-flag word onto the player-info hardware-flag
-// space using the {mask,value} mapping table. SerialiseFromUser copies the lobby user
-// record (a DirtySDK lobby user struct) into the named members -- each string copy is
-// the inlined StrnCpy<N> with its CgsStringUtils.h:55 over-length guard -- folds the
-// user flags, converts the HW flags, and finally parses the custom structure blob.
-//
-// FLAGGED:
-//  * The lobby user struct has no reconstructed home; its fields are read at the exact
-//    byte offsets the X360 asm uses (verified store-for-store).
+// The flag tables, their counts and the generic ConvertFlags follow the DWARF
+// (CgsServerInterfacePlayerInfoData.cpp:35/55/57/67/92/153). Each table row pairs the
+// player-info flag (column E_FLAGS_GAMESHARED) with the lobby flag (column E_FLAGS_DIRTYSOCK).
+
+#define CGS_ARTIST_FILE \
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfoData.cpp"
 
 namespace CgsNetwork
 {
-    // {value, mask} fold table for hardware flags (CgsServerInterfacePlayerInfoData.cpp:57).
-    //   KI_NUM_HW_FLAGS == 14 entries; ConvertHWFlags ORs in value when (mask & in) == mask.
-    //   Field order matches the X360 asm layout verbatim: each 8-byte entry is read as
-    //   value at +0, mask at +4 (both ConvertHWFlags @ 0x82879768 and the inlined fold
-    //   in SerialiseFromUser @ 0x82879CE8 read mask at the +4 slot of every entry).
-    struct FlagMapping
+    // cpp:35, read at 0x820E9260
+    const s32 KAAI_LOBBY_USER_FLAGS_TO_PLAYER_INFO_FLAGS[17][2] =
     {
-        u32 muValue;
-        u32 muMask;
+        { 0x00000001, 0x00000002 },
+        { 0x00000002, 0x00000010 },
+        { 0x00000004, 0x00000080 },
+        { 0x00000008, 0x00000100 },
+        { 0x00000010, 0x00001000 },
+        { 0x00000020, 0x00002000 },
+        { 0x00000040, 0x00004000 },
+        { 0x00000080, 0x00010000 },
+        { 0x00000100, 0x00100000 },
+        { 0x00000200, 0x00200000 },
+        { 0x00000400, 0x00400000 },
+        { 0x00000800, 0x02000000 },
+        { 0x00001000, 0x04000000 },
+        { 0x00002000, 0x08000000 },
+        { 0x00004000, 0x10000000 },
+        { 0x00008000, 0x20000000 },
+        { 0x00010000, 0x40000000 },
     };
 
+    // cpp:55
+    const s32 KI_NUM_FLAGS = 17;
+
+    // cpp:57, read at 0x820E92E8
+    const s32 KAAI_HW_FLAGS_TO_PLAYER_INFO_FLAGS[7][2] =
+    {
+        { 0x00000001, 0x00000004 },
+        { 0x00000002, 0x00000020 },
+        { 0x00000004, 0x00000100 },
+        { 0x00000008, 0x00000800 },
+        { 0x00000010, 0x00010000 },
+        { 0x00000020, 0x00200000 },
+        { 0x00000040, 0x00400000 },
+    };
+
+    // cpp:67. The original's count is twice the seven-row table: ConvertHWFlags walks 14
+    // rows (ARTIST 0x8287978C: seven passes of two rows), the last seven past the table.
     const s32 KI_NUM_HW_FLAGS = 14;
-    const s32 KI_NUM_FLAGS    = 17;
 
-    // { player-info hardware flag, lobby hardware flag } -- seven rows (the console .rdata
-    // table). The console's fold walks KI_NUM_HW_FLAGS (14) rows, i.e. it also reads the seven
-    // row-sized words of unrelated .rdata that follow the table; the host fold stops at the
-    // table's end (see ConvertHWFlags).
-    const FlagMapping KAA_HW_FLAGS_TO_PLAYER_INFO_FLAGS[] =
+    // cpp:92: map every flag whose source-column bits are all set onto its target column.
+    s32 ConvertFlags(s32 liFlags, EConversionFlags leConvertTo, const s32 (*laaiTable)[2], s32 liNumFlags)
     {
-        { 0x00000001u, 0x00000004u },
-        { 0x00000002u, 0x00000020u },
-        { 0x00000004u, 0x00000100u },
-        { 0x00000008u, 0x00000800u },
-        { 0x00000010u, 0x00010000u },
-        { 0x00000020u, 0x00200000u },
-        { 0x00000040u, 0x00400000u },
-    };
+        const EConversionFlags leConvertFrom =
+            (leConvertTo == E_FLAGS_GAMESHARED) ? E_FLAGS_DIRTYSOCK : E_FLAGS_GAMESHARED;
 
-    // { player-info flag, lobby user flag } (the console .rdata table).
-    const FlagMapping KAA_LOBBY_USER_FLAGS_TO_PLAYER_INFO_FLAGS[KI_NUM_FLAGS] =
-    {
-        { 0x00000001u, 0x00000002u },
-        { 0x00000002u, 0x00000010u },
-        { 0x00000004u, 0x00000080u },
-        { 0x00000008u, 0x00000100u },
-        { 0x00000010u, 0x00001000u },
-        { 0x00000020u, 0x00002000u },
-        { 0x00000040u, 0x00004000u },
-        { 0x00000080u, 0x00010000u },
-        { 0x00000100u, 0x00100000u },
-        { 0x00000200u, 0x00200000u },
-        { 0x00000400u, 0x00400000u },
-        { 0x00000800u, 0x02000000u },
-        { 0x00001000u, 0x04000000u },
-        { 0x00002000u, 0x08000000u },
-        { 0x00004000u, 0x10000000u },
-        { 0x00008000u, 0x20000000u },
-        { 0x00010000u, 0x40000000u },
-    };
-}
-
-namespace
-{
-    using CgsNetwork::FlagMapping;
-
-    // The StrnCpy over-length guard is CgsCore::StrnCpy's own (CgsStringUtils.h:53, assert
-    // at :55); a file-local copy of it collided with its siblings in CgsNetworkUnity.
-
-    // Fold an input flag word through a {mask,value} table.
-    u32 FoldFlags(u32 luInput, const FlagMapping* lpTable, s32 liCount)
-    {
-        u32 luResult = 0;
-        for (s32 li = 0; li < liCount; ++li)
+        s32 liNewFlags = 0;
+        for (s32 i = 0; i < liNumFlags; ++i)
         {
-            if ((lpTable[li].muMask & luInput) == lpTable[li].muMask)
+            if ((laaiTable[i][leConvertFrom] & liFlags) == laaiTable[i][leConvertFrom])
             {
-                luResult |= lpTable[li].muValue;
+                liNewFlags |= laaiTable[i][leConvertTo];
             }
         }
-        return luResult;
+        return liNewFlags;
     }
-}
 
-namespace CgsNetwork
-{
-
-s32 ConvertHWFlags(s32 liFlags, EConversionFlags leDirection)
-{
-    // The X360 build picks one of two interleaved columns of the mapping table by the
-    // direction argument (cntlzw-based select). Only the to-player-info direction
-    // (E_FLAGS_GAMESHARED == 0, the sole reachable caller) is reconstructed: fold the
-    // input flag word through the 14-entry hardware-flag mapping table.
-    (void)leDirection;
-    // The console walks KI_NUM_HW_FLAGS rows of the seven-row table (reading past its end);
-    // the host walks the table's own rows.
-    return static_cast<s32>(FoldFlags(static_cast<u32>(liFlags),
-                                      KAA_HW_FLAGS_TO_PLAYER_INFO_FLAGS,
-                                      static_cast<s32>(sizeof(KAA_HW_FLAGS_TO_PLAYER_INFO_FLAGS) /
-                                                       sizeof(KAA_HW_FLAGS_TO_PLAYER_INFO_FLAGS[0]))));
-}
+    // cpp:153
+    s32 ConvertHWFlags(s32 liFlags, EConversionFlags leConvertTo)
+    {
+        return ConvertFlags(liFlags, leConvertTo, KAAI_HW_FLAGS_TO_PLAYER_INFO_FLAGS, KI_NUM_HW_FLAGS);
+    }
 
 bool ServerInterfacePlayerInfoDataBase::Prepare()
 {
@@ -147,60 +117,49 @@ bool ServerInterfacePlayerInfoDataBase::Prepare()
 
 void ServerInterfacePlayerInfoDataBase::SerialiseFromUser(const LobbyApiUserT* lpUser)
 {
-    CGS_ASSERT(lpUser != 0, "lpUser");
+    CGS_ASSERT_AT(lpUser != 0, "lpUser", CGS_ARTIST_FILE, 210 /* ARTIST 0x828798D4 */);
 
-    // Lobby user record fields, by byte offset (the record type has no home here).
-    const u8* lpcRec = reinterpret_cast<const u8*>(lpUser);
+    CgsCore::StrnCpy(macName,          lpUser->name,       sizeof(macName));
+    CgsCore::StrnCpy(macAuxiliaryData, lpUser->aux,        sizeof(macAuxiliaryData));
+    CgsCore::StrnCpy(macClubID,        lpUser->strClubID,  sizeof(macClubID));
+    CgsCore::StrnCpy(macClubTag,       lpUser->strClubTag, sizeof(macClubTag));
+    CgsCore::StrnCpy(macPing,          lpUser->ping,       sizeof(macPing));
 
-    CgsCore::StrnCpy(macName,          reinterpret_cast<const char*>(lpcRec + 0x008), 16);   // name
-    CgsCore::StrnCpy(macAuxiliaryData, reinterpret_cast<const char*>(lpcRec + 0x12C), 132);  // aux
-    CgsCore::StrnCpy(macClubID,        reinterpret_cast<const char*>(lpcRec + 0x218), 20);   // club id
-    CgsCore::StrnCpy(macClubTag,       reinterpret_cast<const char*>(lpcRec + 0x22C), 8);    // club tag
-    CgsCore::StrnCpy(macPing,          reinterpret_cast<const char*>(lpcRec + 0x018), 8);    // ping
+    maColour[0] = lpUser->Color.uRed;
+    maColour[1] = lpUser->Color.uGreen;
+    maColour[2] = lpUser->Color.uBlue;
+    maColour[3] = lpUser->Color.uAlpha;
 
-    maColour[0] = lpcRec[0x1B8];
-    maColour[1] = lpcRec[0x1B9];
-    maColour[2] = lpcRec[0x1BA];
-    maColour[3] = lpcRec[0x1BB];
+    if (lpUser->ident)
+        miIdent = lpUser->ident;
+    else
+        miIdent = -1;
+    miFlags      = ConvertFlags(lpUser->flags, E_FLAGS_GAMESHARED,
+                                KAAI_LOBBY_USER_FLAGS_TO_PLAYER_INFO_FLAGS, KI_NUM_FLAGS);
+    miAttributes = lpUser->attr;
+    miRank       = lpUser->rank;
+    miGameID     = lpUser->game;
+    miReputation = lpUser->iReputation;
+    miUserSetID  = lpUser->iUserSetIdent;
+    muIPAddress  = lpUser->addr;
+    muLevel      = lpUser->uLevel;
+    muMedals     = lpUser->uMedals;
+    muHwFlags    = ConvertHWFlags(lpUser->uHwFlags, E_FLAGS_GAMESHARED);
+    muLocalAddr  = lpUser->uLocalAddr;
+    muLocality   = lpUser->uLocality;
 
-    const s32 liIdent = *reinterpret_cast<const s32*>(lpcRec + 0x000);
-    miIdent = (liIdent != 0) ? liIdent : -1;
-
-    miFlags = static_cast<s32>(FoldFlags(*reinterpret_cast<const u32*>(lpcRec + 0x004),
-                                         KAA_LOBBY_USER_FLAGS_TO_PLAYER_INFO_FLAGS,
-                                         KI_NUM_FLAGS));
-
-    miAttributes = *reinterpret_cast<const s32*>(lpcRec + 0x1B4);   // attr
-    miRank       = *reinterpret_cast<const s32*>(lpcRec + 0x024);   // rank
-    miGameID     = *reinterpret_cast<const s32*>(lpcRec + 0x1B0);   // game
-    miReputation = *reinterpret_cast<const s32*>(lpcRec + 0x1CC);   // reputation
-    miUserSetID  = *reinterpret_cast<const s32*>(lpcRec + 0x1C4);   // userset ident
-    muIPAddress  = *reinterpret_cast<const u32*>(lpcRec + 0x020);   // addr
-    muLevel      = *reinterpret_cast<const u32*>(lpcRec + 0x1BC);   // level
-    muMedals     = *reinterpret_cast<const u32*>(lpcRec + 0x1C0);   // medals
-    muHwFlags    = static_cast<u32>(ConvertHWFlags(*reinterpret_cast<const s32*>(lpcRec + 0x1C8),
-                                                   E_FLAGS_GAMESHARED));
-    muLocalAddr  = *reinterpret_cast<const u32*>(lpcRec + 0x210);   // local addr
-    muLocality   = *reinterpret_cast<const u32*>(lpcRec + 0x214);   // locality
-
-    // Parse the custom structure blob (held at lobby-user + 0x28) into the data buffer,
-    // gated on a non-null buffer + the GetPattern()/GetPatternLength() bounds assert.
-    // The X360 uses the const GetData() slot (vtable +0x14) here.
-    const ServerInterfacePlayerInfoDataBase* lpcThis = this;
-    const void* lpData = lpcThis->GetData();
-    if (lpData == 0)
+    // The custom structure blob, parsed only when the structure exposes data. The mutable
+    // GetData() is vtable slot +0x14 (MSVC lays the two overloads out in reverse
+    // declaration order), ARTIST 0x82879D90; arguments evaluated right to left.
+    if (GetData())
     {
-        return;
+        CGS_ASSERT_AT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
+                      "strlen( GetPattern() ) < (size_t) GetPatternLength()",
+                      CGS_ARTIST_FILE, 249 /* ARTIST 0x82879E08 */);
+        TagFieldGetStructure(lpUser->stat, GetData(), GetDataSize(), GetPattern());
     }
-
-    CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
-               "strlen( GetPattern() ) < (size_t) GetPatternLength()");
-
-    const char* lpcPattern = GetPattern();
-    const u32   luDataSize = GetDataSize();
-    void*       lpDataBuf  = const_cast<void*>(lpcThis->GetData());
-    TagFieldGetStructure(reinterpret_cast<const char*>(lpcRec + 0x28),
-                         lpDataBuf, static_cast<s32>(luDataSize), lpcPattern);
 }
 
 }
+
+#undef CGS_ARTIST_FILE

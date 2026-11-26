@@ -203,7 +203,7 @@ namespace CgsNetwork
         const NetworkPlayerID lHostID = mpPlayerManager->GetHostPlayerID();
         if (lHostID != lPlayerID && lHostID != MessageWithPlayerIDs::KI_INVALID_PLAYER_ID)
         {
-            const bool lbIAmHost = (lHostID == mpPlayerManager->GetLocalPlayerID());
+            bool lbIAmHost = mpPlayerManager->IsLocalPlayer(lHostID);
             PrepareSyncTimeManagers(lbIAmHost, lHostID);
         }
 

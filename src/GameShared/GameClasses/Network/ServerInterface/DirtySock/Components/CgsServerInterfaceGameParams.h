@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "../CgsServerInterfaceStructureInterface.h"
 #include "CgsServerInterfaceGameFlags.h"   // KU_GAME_FLAGS_PERSISTENT (SetFixedGame)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::StrnCpy
 
 // ===========================================================================
 // CgsNetwork::ServerInterfaceGameParamsBase
@@ -72,12 +73,12 @@ namespace CgsNetwork
     public:
         // Constructor and virtual destructor implicit (DWARF: defined at the class line h:55).
 
-        // CgsServerInterfaceGameParams.h:282
-        void SetName(const char* lpcName);
-        // CgsServerInterfaceGameParams.h:289
-        void SetPassword(const char* lpcPassword);
-        // CgsServerInterfaceGameParams.h:296
-        void SetSession(const char* lpcSession);
+        // Header-inline per DWARF (CgsServerInterfaceGameParams.h:282/289/296); ARTIST keeps
+        // the out-of-line COMDAT copies its callers call (SetName 0x825411E8, SetPassword
+        // 0x825809F0, SetSession 0x825412E8), each a StrnCpy.
+        void SetName(const char* lpcName)         { CgsCore::StrnCpy(macName, lpcName, KI_GAMEPARAMS_NAME_LENGTH); }
+        void SetPassword(const char* lpcPassword) { CgsCore::StrnCpy(macPassword, lpcPassword, KI_GAMEPARAMS_PASSWORD_LENGTH); }
+        void SetSession(const char* lpcSession)   { CgsCore::StrnCpy(macSession, lpcSession, KI_GAMEPARAMS_SESSION_LENGTH); }
 
         // The session-ID string set by SetSession. ADDITIVE GROW (BrnNetworkBuddyManagerX360 TU):
         // BuddyManagerX360::IsUserInGameSession reads the current game's session ID directly off

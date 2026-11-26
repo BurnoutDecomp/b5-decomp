@@ -42,52 +42,12 @@ namespace CgsNetwork
 {
     struct PlayerManagerDebugComponent : public CgsDev::DebugComponent
     {
-        // The graph scale the bandwidth bars start with (kbps at full width) and the bandwidth
-        // budget the bars are coloured against (console .rdata floats).
-        static const f32 KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH;
-        static const f32 KF_DEFAULT_MAX_BANDWIDTH;
-
-        // The lifecycle is inlined into PlayerManager's Construct / Prepare / Release / Destruct.
-        void Construct(PlayerManager* lpPlayerManager)
-        {
-            CgsDev::DebugComponent::Construct();
-            mpPlayerManager = lpPlayerManager;
-            Register();
-            mbDrawBandwidthUsage          = false;
-            mbShowUsedRegisteredMessages  = false;
-            miAverageType                 = 0;
-            mfMaxBandwidthForGraph        = KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH;
-            mfMaxBandwidth                = KF_DEFAULT_MAX_BANDWIDTH;
-        }
-
-        void Prepare()
-        {
-            mfMaxBandwidthForGraph        = KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH;
-            mfMaxBandwidth                = KF_DEFAULT_MAX_BANDWIDTH;
-            mbDrawBandwidthUsage          = false;
-            mbShowUsedRegisteredMessages  = false;
-            miAverageType                 = 0;
-        }
-
-        void Release()
-        {
-            mfMaxBandwidthForGraph        = KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH;
-            mfMaxBandwidth                = KF_DEFAULT_MAX_BANDWIDTH;
-            mbDrawBandwidthUsage          = false;
-            mbShowUsedRegisteredMessages  = false;
-            miAverageType                 = 0;
-        }
-
-        void Destruct()
-        {
-            mfMaxBandwidthForGraph        = KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH;
-            mfMaxBandwidth                = KF_DEFAULT_MAX_BANDWIDTH;
-            mpPlayerManager               = 0;
-            mbDrawBandwidthUsage          = false;
-            mbShowUsedRegisteredMessages  = false;
-            miAverageType                 = 0;
-            CgsDev::DebugComponent::Destruct();
-        }
+        // DWARF CgsNetworkPlayerManagerDebugComponent.cpp:53/78/99/122 (out of line; the unity
+        // TU inlines them into PlayerManager's Construct / Prepare / Release / Destruct).
+        void Construct(PlayerManager* lpPlayerManager);
+        void Prepare();
+        void Release();
+        void Destruct();
 
         // qsort element: one message type and its max byte count. 8-byte stride (matches the asm
         // qsort SizeOfElements == 8 and the (type@0, bytes@4) field reads).

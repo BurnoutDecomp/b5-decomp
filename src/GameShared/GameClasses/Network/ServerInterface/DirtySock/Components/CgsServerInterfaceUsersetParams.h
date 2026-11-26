@@ -50,6 +50,9 @@
 
 #include "types.hpp"
 #include "../CgsServerInterfaceStructureInterface.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::StrnCpy
+
+struct LobbyApiUserSetT;   // DirtySDK lobbyapi.h (C, global scope)
 
 namespace CgsNetwork
 {
@@ -76,16 +79,17 @@ namespace CgsNetwork
         // CgsServerInterfaceUsersetParams.cpp:80 -- emit into a tagfield record. [+0x1C]
         virtual void SerialiseToString(char* lpcRecord, s32 liRecLen) const;
 
-        // CgsServerInterfaceUsersetParams.cpp:126 -- populate from a raw DirtySDK
-        //   lobby userset record (LobbyApiUserSetT*); fields read by byte offset. [+0x20]
-        virtual void SerialiseFromUserset(const void* lpUserset);
+        // CgsServerInterfaceUsersetParams.cpp:126 -- populate from the lobby's userset
+        //   record (DWARF: const LobbyApiUserSetT*). [+0x20]
+        virtual void SerialiseFromUserset(const LobbyApiUserSetT* lpUserset);
 
-        // CgsServerInterfaceUsersetParams.h:192
-        void SetName(const char* lpcName);
-        // CgsServerInterfaceUsersetParams.h:199
-        void SetPassword(const char* lpcPassword);
-        // CgsServerInterfaceUsersetParams.h:206
-        void SetDescription(const char* lpcDescription);
+        // Header-inline per DWARF (CgsServerInterfaceUsersetParams.h:192/199/206/213); ARTIST
+        // keeps the out-of-line COMDAT copies its callers call (SetName 0x82541598,
+        // SetPassword 0x8286F178, SetDescription 0x8286F278), each a StrnCpy.
+        void SetName(const char* lpcName)               { CgsCore::StrnCpy(macName, lpcName, KI_USERSETPARAMS_NAME_LENGTH); }
+        void SetPassword(const char* lpcPassword)       { CgsCore::StrnCpy(macPassword, lpcPassword, KI_USERSETPARAMS_PASSWORD_LENGTH); }
+        void SetDescription(const char* lpcDescription) { CgsCore::StrnCpy(macDescription, lpcDescription, KI_USERSETPARAMS_DESCRIPTION_LENGTH); }
+        void SetType(s32 liType)                        { miType = liType; }
 
         // Header-inline: the matchmaking userset actions inline them as a plain store /
         // a bit twiddle of muUsersetFlags.

@@ -360,7 +360,7 @@ namespace BrnNetwork
     // and a queue of forced updates jumps the round-robin.
     bool BrnNetworkPlayer::IsOurTurnToSend()
     {
-        if (mbNetworkPlayerPaused)
+        if (HasConnectionFailed())
         {
             return false;
         }
