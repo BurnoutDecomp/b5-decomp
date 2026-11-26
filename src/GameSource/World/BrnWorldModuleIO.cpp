@@ -123,14 +123,9 @@ void UpdateInputBuffer::Construct()
     // the zero-fill; named here to keep the X360 store order visible).
     mWorldEntityRequestInterface.mbInvalidateCollisionWorld = false;
     mWorldEntityRequestInterface.mbValidateCollisionWorld   = false;
-    // +320276 the replay status: flag word, the six reel head bytes, the two current-reel
-    // indices (-1) and the trailing debug alpha.
-    mReplayStatusInterface.mxStatusFlags = 0;
-    for (s32 liReel = 0; liReel < 6; ++liReel)
-        mReplayStatusInterface.maReels[liReel].macName[0] = '\0';
-    mReplayStatusInterface.miCurrentRecordReel   = -1;      // +321824
-    mReplayStatusInterface.miCurrentPlaybackReel = -1;      // +321828
-    mReplayStatusInterface.mfPlaybackTimeRemaining       = 0.0f;    // +321832
+    // +320276 the replay status: flag word, the six reels' in-use flags, the two current-reel
+    // indices (-1) and the trailing float (header-inline StatusInterface::Construct).
+    mReplayStatusInterface.Construct();
     mAudioCarDataLoadedQueue.Construct();                   // +321840  AudioCarDataLoadedEvent<16>
     mRaceRouteRequestQueue.Construct();                     // +322240  RaceRouteRequest<1>
     mOnlineScoringInterface.Construct();                    // +322384  (+32 block seeded to -1)

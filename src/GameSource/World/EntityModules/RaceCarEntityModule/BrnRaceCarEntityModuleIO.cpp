@@ -42,6 +42,42 @@ OutputBuffer_Prepare::GetResourceRequestInterface()
 // ---- InputBuffer_PreScene ---------------------------------------------------
 
 // X360 0x8279D060 (W, :164) -- mutable game-action queue accessor.
+// X360 0x822EA3C0 -- DWARF BrnRaceCarEntityModuleIO.cpp:56 (local leActiveRaceCarIndex :58).
+// Console order: the IOBuffer status, TimerStatusInterface::Clear(+0x5C), Camera::Construct
+// (+0x90), mPlayerVehicleControls zeroed as a block (seven `std 0` + one `stw 0` from +0x1F0,
+// 0x822EA3EC..0x822EA40C: 60 bytes, mbBoostBounce included, so not PlayerVehicleControls::
+// Construct, which leaves it), VariableEventQueue<13312,16>::Construct(+0x22C), the payback
+// pair (3 == E_PAYBACK_TYPE_SIX_AXIS_STEERING, -1), the header-inline
+// StatusInterface::Construct(+0x3644), EventQueue<AudioCarDataLoadedEvent,16>::Construct
+// (+0x3C60), then the per-active-race-car clear through BurnoutConstants.h's checked operator++.
+void
+InputBuffer_PreScene::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+    mTimerStatusInterface.Clear();
+    mCameraInput.Construct();
+    std::memset(&mPlayerVehicleControls, 0, sizeof(mPlayerVehicleControls));
+    mGameActionQueue.Construct();
+    meActivePaybackType      = BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING;   // == 3
+    meActivePaybackAggressor = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    mReplayStatusInterface.Construct();
+    mAudioCarLoadedDataQueue.Construct();
+    for (EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leActiveRaceCarIndex++)
+    {
+        mabReceivedNetworkDriverControls[leActiveRaceCarIndex] = false;
+        mabRaceCarColourIndexValid[leActiveRaceCarIndex]       = false;
+        mau16RaceCarColourIndex[leActiveRaceCarIndex]          = 0;
+        mabRaceCarPaintFinishIndexValid[leActiveRaceCarIndex]  = false;
+        mau16RaceCarPaintFinishIndex[leActiveRaceCarIndex]     = 0;
+        mabLostContactThisFrame[leActiveRaceCarIndex]          = false;
+        mabRegainedContactThisFrame[leActiveRaceCarIndex]      = false;
+        mabCarSelectStatus[leActiveRaceCarIndex]               = false;
+        mabCarSelectStatusValid[leActiveRaceCarIndex]          = false;
+    }
+}
+
 InputBuffer_PreScene::GameActionQueue*
 InputBuffer_PreScene::GetGameActionQueue()
 {
@@ -1131,8 +1167,8 @@ InputBuffer_PrePhysics::GetTakedownEventQueue() const
 void
 InputBuffer_PrePhysics::SetScoringInterface(const ScoringInterface* lpScoringInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    std::memcpy(&mScoringInterface, lpScoringInterface, sizeof(mScoringInterface));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 434));
+    XMemCpy(&mScoringInterface, lpScoringInterface, sizeof(mScoringInterface));   // ARTIST 0x8279DCEC (0xAB0 bytes)
 }
 
 // X360 0x8279DCF8 (W, :437) -- copy the frame's online-scoring output block into the

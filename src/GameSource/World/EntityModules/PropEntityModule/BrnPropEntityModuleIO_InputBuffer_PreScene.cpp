@@ -44,7 +44,7 @@ namespace PropEntityIO
 void
 InputBuffer_PreScene::SetReplayStatusInterface(const BrnReplays::ReplayIO::StatusInterface* lpReplayStatusInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 462));
     mReplayStatusInterface = *lpReplayStatusInterface;
 }
 
@@ -68,11 +68,11 @@ InputBuffer_PreScene::SetReplayStatusInterface(const BrnReplays::ReplayIO::Statu
 //     mbPlayerCrashing = false                -> stb r30, 0x793
 //     mPlayerPos / maRaceCarVelocity[0..7]    -> nine `stvx128 v0(zero)` at 0x6F0 and
 //                                                0x700..0x770
-// and then the unrecovered-payload initialisation (a word at +0xCC, six bytes at
-// +0x1D0 + i*0x101, and {-1,-1,<float>} at +0x6D8/+0x6DC/+0x6E0) which this slice does
-// NOT reproduce -- those members are the opaque span (see the header's FLAG), so there
-// is nothing to write them BY NAME and inventing offset pokes into the span is exactly
-// the fabrication the project forbids. Recorded here so the gap is explicit.
+// then the X360-only mReplayStatusInterface.Construct() (header-inline, 0x822EFB30..0x822EFB88:
+// the flags word at +0x0CC, the six reels' in-use flags at +0x1D0 + i*0x101, and the
+// -1, -1, 0.0 tail at +0x6D8/+0x6DC/+0x6E0). Statement order from DWARF
+// BrnPropEntityModuleIO.cpp:75..: each queue's Construct then Clear, the velocity loop (local
+// liRaceCarIndex :98) before mPlayerPos.SetZero().
 // (mbPlayerWrecked is NOT written by the console's Construct either -- also faithful.)
 void
 InputBuffer_PreScene::Construct()
@@ -80,8 +80,11 @@ InputBuffer_PreScene::Construct()
     CgsModule::IOBuffer::Construct();
 
     mPropGraphicsLoadedQueue.Construct();
+    mPropGraphicsLoadedQueue.Clear();
     mPropInstancesNeededForZoneQueue.Construct();
+    mPropInstancesNeededForZoneQueue.Clear();
     mPropGraphicsUnloadedQueue.Construct();
+    mPropGraphicsUnloadedQueue.Clear();
 
     mpabHitPropBitArray      = 0;
     mbSendingPropProgression = false;
@@ -94,11 +97,13 @@ InputBuffer_PreScene::Construct()
 
     mbPlayerCrashing         = false;
 
-    mPlayerPos.SetZero();
-    for (s32 liCar = 0; liCar < 8; ++liCar)
+    for (s32 liRaceCarIndex = 0; liRaceCarIndex < 8; ++liRaceCarIndex)
     {
-        maRaceCarVelocity[liCar].SetZero();
+        maRaceCarVelocity[liRaceCarIndex].SetZero();
     }
+    mPlayerPos.SetZero();
+
+    mReplayStatusInterface.Construct();
 }
 
 // X360 0x822B90A8 (`sub_822B90A8`, unnamed in IDA): read-lock handle, returns this + 0x4C.

@@ -44,8 +44,8 @@ namespace AIModuleIO
     // name, exactly as the console inlines them). TrafficAIInterface::Construct (DWARF :137) is
     // bodied in BrnTrafficAIInterfaces.cpp from this very sequence (cross-witnessed by
     // BrnTrafficIO::OutputBuffer_PostScene::Construct @0x82761830, which inlines the same four
-    // stores). PlayerVehicleControls::Construct (BrnPlayerVehicleControls.h:63) has no body in
-    // the tree and the console writes 7 of its 8 bools, so those stores are spelled by name.
+    // stores). PlayerVehicleControls::Construct (BrnPlayerVehicleControls.h:63) is the 13 floats
+    // and 7 of the 8 bools (header-inline, no ARTIST copy).
     // ---------------------------------------------------------------------------------------------
     void InputBuffer::Construct()
     {
@@ -72,26 +72,7 @@ namespace AIModuleIO
         mSceneResultQueue.Construct();
         mTakedownEventQueue.Construct();
 
-        mPlayerVehicleControls.mfXAxis1       = 0.0f;
-        mPlayerVehicleControls.mfXAxis0       = 0.0f;
-        mPlayerVehicleControls.mfYAxis1       = 0.0f;
-        mPlayerVehicleControls.mfYAxis0       = 0.0f;
-        mPlayerVehicleControls.mfXSensor      = 0.0f;
-        mPlayerVehicleControls.mfYSensor      = 0.0f;
-        mPlayerVehicleControls.mfZSensor      = 0.0f;
-        mPlayerVehicleControls.mfGSensor      = 0.0f;
-        mPlayerVehicleControls.mfAcceleration = 0.0f;
-        mPlayerVehicleControls.mfBraking      = 0.0f;
-        mPlayerVehicleControls.mfHandBrake    = 0.0f;
-        mPlayerVehicleControls.mfSteering     = 0.0f;
-        mPlayerVehicleControls.mfSpin         = 0.0f;
-        mPlayerVehicleControls.mbHorn         = false;
-        mPlayerVehicleControls.mbChangeView   = false;
-        mPlayerVehicleControls.mbStart        = false;
-        mPlayerVehicleControls.mbReset        = false;
-        mPlayerVehicleControls.mbToggle       = false;
-        mPlayerVehicleControls.mbBoost        = false;
-        mPlayerVehicleControls.mbIsWheel      = false;
+        mPlayerVehicleControls.Construct();
 
         mRaceRouteRequestQueue.Construct();
     }

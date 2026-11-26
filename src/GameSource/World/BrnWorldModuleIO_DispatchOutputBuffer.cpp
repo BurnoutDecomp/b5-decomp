@@ -78,7 +78,7 @@ Vector4 DispatchOutputBuffer::GetFogScattering() const
 // the attested sibling GetFogScattering @0x827BC668 read-lock shape.
 Vector4 DispatchOutputBuffer::GetFogColourPlusWhiteLevel() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 466));
     return mvFogColourPlusWhiteLevel;
 }
 

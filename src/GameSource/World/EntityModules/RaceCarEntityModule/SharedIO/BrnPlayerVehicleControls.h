@@ -39,6 +39,31 @@ namespace BrnWorld
         bool mbIsWheel;
         bool mbBoostBounce;
 
-        void Construct();   // BrnPlayerVehicleControls.h:63 (declare-only; body in own TU)
+        // DWARF h:63. No out-of-line copy in ARTIST: AIModuleIO::InputBuffer::Construct inlines
+        // it (0x8278AC5C..: thirteen `stfs 0.0` then seven `stb 0` in member order;
+        // mbBoostBounce, the last member, is not written).
+        void Construct()
+        {
+            mfXAxis1       = 0.0f;
+            mfXAxis0       = 0.0f;
+            mfYAxis1       = 0.0f;
+            mfYAxis0       = 0.0f;
+            mfXSensor      = 0.0f;
+            mfYSensor      = 0.0f;
+            mfZSensor      = 0.0f;
+            mfGSensor      = 0.0f;
+            mfAcceleration = 0.0f;
+            mfBraking      = 0.0f;
+            mfHandBrake    = 0.0f;
+            mfSteering     = 0.0f;
+            mfSpin         = 0.0f;
+            mbHorn         = false;
+            mbChangeView   = false;
+            mbStart        = false;
+            mbReset        = false;
+            mbToggle       = false;
+            mbBoost        = false;
+            mbIsWheel      = false;
+        }
     };
 }

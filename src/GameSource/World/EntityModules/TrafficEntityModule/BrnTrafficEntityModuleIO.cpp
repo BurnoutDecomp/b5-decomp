@@ -804,8 +804,9 @@ namespace BrnTrafficIO
             lpData->miMultiplier      = static_cast<s16>(liScoreMultiplier);
             lpData->muVehicleIndex    = luVehicleIndex;
             lpData->miScore           = static_cast<s16>(liVehicleScore);
-            CGS_ASSERT(static_cast<s32>(lpData->miScore) == liVehicleScore,
-                       "(int32_t) lpData->miScore == liVehicleScore");
+            CGS_ASSERT_AT(static_cast<s32>(lpData->miScore) == liVehicleScore,
+                          "(int32_t) lpData->miScore == liVehicleScore",
+                          CGS_ARTIST_FILE_BRNTRAFFICENTITYMODULEIO, 550);
         }
     }
 

@@ -302,28 +302,29 @@ void RCEntityGlobalRaceCarOutputInterface::SetRaceCarData(
     CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 1395);
     CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 1396);
 
-    const u32 luIndex = static_cast<u32>(leGlobalRaceCarIndex);
-
-    maRaceCarPositions[luIndex]      = lPosition;            // 16*idx          @+0
-    maRaceCarAts[luIndex]            = lAt;                  // 16*(idx+35)     @+0x230
-    maRaceCarWorldRegions[luIndex]   = lWorldRegion;         // 8*(idx+140)     @+0x460
-    maRivalIds[luIndex]              = lRivalId;             // 8*(idx+175)     @+0x578
-    maCarModelIds[luIndex]           = lCarModelId;          // 8*(idx+210)     @+0x690
-    mafRaceCarSpeeds[luIndex]        = lfSpeed;              // 4*(idx+490)     @+0x7A8
-    maeActiveRaceCarIndices[luIndex] = leActiveRaceCarIndex; // 4*(idx+525)     @+0x834
-    maiRivalIndices[luIndex]         = liRivalIndex;         // idx+0x8C0       @+0x8C0
-    mauAISectionIndices[luIndex]     = lu16AISection;        // 2*(idx+1138)    @+0x8E4
+    // Indexed by the enum itself and the ids stored before the world region, as in the
+    // reference body (LegacySrc BrnRaceCarEntityModuleOutputInterface.h:913..921): ARTIST
+    // stores lRivalId/lCarModelId (stdx 0x822B424C/58) before lWorldRegion (0x822B426C).
+    maRaceCarPositions[leGlobalRaceCarIndex]      = lPosition;            // 16*idx          @+0
+    maRaceCarAts[leGlobalRaceCarIndex]            = lAt;                  // 16*(idx+35)     @+0x230
+    maRivalIds[leGlobalRaceCarIndex]              = lRivalId;             // 8*(idx+175)     @+0x578
+    maCarModelIds[leGlobalRaceCarIndex]           = lCarModelId;          // 8*(idx+210)     @+0x690
+    maRaceCarWorldRegions[leGlobalRaceCarIndex]   = lWorldRegion;         // 8*(idx+140)     @+0x460
+    mafRaceCarSpeeds[leGlobalRaceCarIndex]        = lfSpeed;              // 4*(idx+490)     @+0x7A8
+    maeActiveRaceCarIndices[leGlobalRaceCarIndex] = leActiveRaceCarIndex; // 4*(idx+525)     @+0x834
+    maiRivalIndices[leGlobalRaceCarIndex]         = liRivalIndex;         // idx+0x8C0       @+0x8C0
+    mauAISectionIndices[leGlobalRaceCarIndex]     = lu16AISection;        // 2*(idx+1138)    @+0x8E4
 
     // Unconditional: mark this global slot occupied.
-    mGlobalRaceCarIndices.SetBit(luIndex);                  // @+0x930
+    mGlobalRaceCarIndices.SetBit(leGlobalRaceCarIndex);                  // @+0x930
 
     // Conditional per-flag bit sets (the asm tests each bool, sets only when true).
-    if (lbIsPlayer)        { mIsPlayerFlags.SetBit(luIndex); }        // @+0x938
-    if (lbIsRivalAI)       { mIsRivalAIFlags.SetBit(luIndex); }       // @+0x940
-    if (lbIsNetwork)       { mIsNetworkFlags.SetBit(luIndex); }       // @+0x948
-    if (lbIsInCurrentMode) { mIsInCurrentModeFlags.SetBit(luIndex); } // @+0x950
-    if (lbIsDispersing)    { mIsDispersingFlags.SetBit(luIndex); }    // @+0x958
-    if (lbIsInRange)       { mIsInRangeFlags.SetBit(luIndex); }       // @+0x960
+    if (lbIsPlayer)        { mIsPlayerFlags.SetBit(leGlobalRaceCarIndex); }        // @+0x938
+    if (lbIsRivalAI)       { mIsRivalAIFlags.SetBit(leGlobalRaceCarIndex); }       // @+0x940
+    if (lbIsNetwork)       { mIsNetworkFlags.SetBit(leGlobalRaceCarIndex); }       // @+0x948
+    if (lbIsInCurrentMode) { mIsInCurrentModeFlags.SetBit(leGlobalRaceCarIndex); } // @+0x950
+    if (lbIsDispersing)    { mIsDispersingFlags.SetBit(leGlobalRaceCarIndex); }    // @+0x958
+    if (lbIsInRange)       { mIsInRangeFlags.SetBit(leGlobalRaceCarIndex); }       // @+0x960
 }
 
 }

@@ -46,6 +46,23 @@ namespace BrnReplays
             s32  miCurrentRecordReel;    // @0x60C
             s32  miCurrentPlaybackReel;  // @0x610
             f32  mfPlaybackTimeRemaining; // @0x614  (X360-only trailing seconds)
+            // DWARF h:52, defined in the class: neither ARTIST nor the PS3 build has an
+            // out-of-line copy, and ARTIST inlines it into six IO-buffer Constructs (e.g.
+            // PropEntityIO::InputBuffer_PreScene::Construct 0x822EFB30..0x822EFB88,
+            // ReplayIO::OutputBuffer_PreSim::Construct 0x82652F64..0x82652FAC): the flags word,
+            // the six reels' in-use flags (a counted loop, stride 0x101 from +0x104), then the
+            // trailing float 0.0 and both current reels -1.
+            void Construct()
+            {
+                mxStatusFlags = 0;
+                for (s32 liReel = 0; liReel < 6; ++liReel)
+                {
+                    maReels[liReel].mbUsed = false;
+                }
+                miCurrentRecordReel     = -1;
+                miCurrentPlaybackReel   = -1;
+                mfPlaybackTimeRemaining = 0.0f;
+            }
 
             // DWARF h:70. The saving flag is bit 4 of the status word: ARTIST inlines it as
             // `rlwinm r11, r11, 28, 31, 31` (ReplayCredits::UpdateRunning @0x824BA3C0).

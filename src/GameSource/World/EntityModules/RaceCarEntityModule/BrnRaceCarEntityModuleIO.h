@@ -179,82 +179,8 @@ namespace RaceCarEntityModuleIO
         typedef BrnReplays::ReplayIO::StatusInterface           ReplayStatusInterface;     // :106
         typedef RaceCarEntityModuleIO::AudioCarLoadedDataQueue  AudioCarLoadedDataQueue;   // OutputInterface.h
 
-        // X360 0x822EA3C0 -- IOBuffer status, TimerStatusInterface::Clear(+92),
-        // Camera::Construct(+144), the seven-slot 0x700000000 seed, VariableEventQueue<13312,16>
-        // ::Construct(+556) [== mGameActionQueue], the payback/replay scalars, then
-        // EventQueue<AudioCarDataLoadedEvent,16>::Construct(+15456) [== mAudioCarLoadedDataQueue]
-        // and the eight-slot per-car clear.
-        // PARTIAL SLICE: the three members whose committed types expose Construct/Clear run the
-        // REAL call; the rest belong to their own TUs [marked deviation]. Both queues must be
-        // Constructed: RaceCarAudioStreamer::Update reads mAudioCarLoadedDataQueue every frame
-        // (an un-Constructed queue fires "mpEvents != NULL" + "Base event queue overflow"), and
-        // PreSceneUpdate reads the timer status interface for the frame's sim step.
-        void Construct()
-        {
-            CgsModule::IOBuffer::Construct();
-            mTimerStatusInterface.Clear();
-            // The console's VariableEventQueue<13312,16>::Construct(+556). REAL as of the
-            // reset-player-car wave (the member is the live queue now, not a 256-byte blob):
-            // without it the first game action delivered by BridgeActionsToRaceCarModule fires
-            // the "Not Constructed" pair (CgsVariableEventQueue.h:454 then :728) -- the exact
-            // pair the world input buffers fired one wave ago.
-            mGameActionQueue.Construct();
-            mAudioCarLoadedDataQueue.Construct();
-            // ⭐⭐ 2026-08-15 (IO-buffer zero-fill removal audit) -- THE MISSING STORES.
-            // Everything below is in the console Construct @0x822EA3C0 and was omitted here;
-            // it only ever worked because the old PC CreateIOBuffer<T> value-initialised
-            // (zero-filled) the whole buffer. With default-init these members arrive holding
-            // the previous IO-stack tenant's bytes, and the per-car "valid"/"this frame"
-            // latches below are pure read-if-set flags -- a stale 1 makes the pre-scene pass
-            // act on a colour/paint/select/contact event that never happened.
-            //   *(this+0x363C) = 3   -- the EPaybackType sentinel: literal 3 IS the named
-            //                           enumerator E_PAYBACK_TYPE_SIX_AXIS_STEERING
-            //                           (BrnNetworkSharedIO.h:32), the last real payback type and
-            //                           the value the world twin stores too (BrnWorldModuleIO.cpp).
-            //                           (It is EPaybackType, NOT EDirtyTrickStatus -- an earlier
-            //                           note here named the wrong enum.)
-            //   *(this+0x3640) = -1
-            //   the replay-status seed at +0x3644 (flag word, six reel head bytes,
-            //   the two current-reel indices = -1, the trailing debug alpha = 0.0)
-            //   the eight-iteration per-active-race-car clear over the nine leading arrays
-            //   (stores at +34/+42/+2/+50/+18/+58/+66/+74/+82, 0x822EA480..0x822EA4A4)
-            meActivePaybackType      = BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING;   // == 3
-            meActivePaybackAggressor = E_ACTIVE_RACE_CAR_INDEX_INVALID;
-            mReplayStatusInterface.mxStatusFlags = 0;
-            for (s32 liReel = 0; liReel < 6; ++liReel)
-                mReplayStatusInterface.maReels[liReel].macName[0] = '\0';
-            mReplayStatusInterface.miCurrentRecordReel   = -1;
-            mReplayStatusInterface.miCurrentPlaybackReel = -1;
-            mReplayStatusInterface.mfPlaybackTimeRemaining       = 0.0f;
-            // The range-guarded EActiveRaceCarIndex operator++ is what bakes the
-            // "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" assert (BurnoutConstants.h:39)
-            // the X360 body carries -- same shape as the world twin's trailing loop.
-            for (EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_0;
-                 leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
-                 leIndex++)
-            {
-                mabReceivedNetworkDriverControls[leIndex] = false;
-                mabRaceCarColourIndexValid[leIndex]       = false;
-                mau16RaceCarColourIndex[leIndex]          = 0;
-                mabRaceCarPaintFinishIndexValid[leIndex]  = false;
-                mau16RaceCarPaintFinishIndex[leIndex]     = 0;
-                mabLostContactThisFrame[leIndex]          = false;
-                mabRegainedContactThisFrame[leIndex]      = false;
-                mabCarSelectStatus[leIndex]               = false;
-                mabCarSelectStatusValid[leIndex]          = false;
-            }
-            // [FLAG] still NOT emitted (their own TUs own the bring-up): the console's
-            // Camera::Construct(+144) on mCameraInput, and the 60-byte mPlayerVehicleControls
-            // seed at +496 (BrnWorld::PlayerVehicleControls::Construct is declared but has NO
-            // body in this tree yet -- calling it would be an unresolved external).
-            // ⚠️ CORRECTED 2026-08-15: that seed is NOT a zero-fill. X360 0x822EA3C0 runs a
-            // 7-iteration loop storing the 64-bit literal 0x700000000 at +496 and then one
-            // trailing 32-bit 0 -- i.e. the 60 bytes come out as the dword pattern
-            // 7,0,7,0,7,0,7,0,7,0,7,0,7,0,0, seven `7`s interleaved with zeros. Whatever
-            // PlayerVehicleControls' first-of-each-pair field is, its idle value is 7, not 0,
-            // so a memset here would be actively wrong -- which is exactly why this stays a
-            // FLAG until PlayerVehicleControls::Construct is bodied.
-        }
+        // X360 0x822EA3C0; DWARF BrnRaceCarEntityModuleIO.cpp:56 (out of line, bodied there).
+        void Construct();
         const TimerStatusInterface*    GetTimerStatusInterface() const;                    // :154
         void                           SetTimerStatusInterface(const TimerStatusInterface*); // :155
         const BrnDirector::Camera::Camera* GetCameraInput() const;                         // :157

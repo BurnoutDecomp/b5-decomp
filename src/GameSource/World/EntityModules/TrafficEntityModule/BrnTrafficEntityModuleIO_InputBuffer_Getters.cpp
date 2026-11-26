@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h"
+#define CGS_ARTIST_FILE_REL "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"   // SetRaceCarToTrafficInterface 0x827ACEB0 (ARTIST emits it from the world-module bridge TU)
 // BrnTraffic::BrnTrafficIO input-buffer GETTERS, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // Companions to the committed setters (BrnTrafficEntityModuleIO_InputBuffer_PostPhysics.cpp) --
 // each takes the address of its embedded member. Const (read) getters test the IOBuffer read-lock
@@ -71,7 +72,7 @@ namespace BrnTrafficIO
     // WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene.
     void InputBuffer_PostScene::SetRaceCarToTrafficInterface(const RaceCarToTrafficInterface* lpRaceCarToTrafficInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_REL, 239));
         mRaceCarToTrafficInterface = *lpRaceCarToTrafficInterface;
     }
 

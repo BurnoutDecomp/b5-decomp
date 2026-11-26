@@ -1,7 +1,9 @@
 #define CGS_ARTIST_ABS_BRNAIDRIVER_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIDriver.h"
 #define CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDriver.cpp"
 #include "GameSource/World/AI/BrnAIDriver.h"
-#include "GameSource/World/AI/BrnAIDriver_Constants.h"     // the file-scope KF_ tunables (both partfiles)
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"   // CgsCore::KF_MPH_TO_MPS (the mph tunables)
+#include "rw/math/fpu/trig.h"                             // rw::math::fpu::DegToRad (the angle tunables)
+#include "rw/math/fpu/scalar_operation.h"                 // rw::math::fpu::Cos
 #include "GameSource/World/AI/BrnAICar.h"                  // AICar (named members + accessors)
 #include "GameSource/World/AI/BrnAIUtils.h"                // StepTo / Find{Signed,Unsigned}AngleBetween2DVectors
 #include "GameSource/World/AI/BrnAIAggression.h"           // AIAggression (the embedded sub-machine)
@@ -33,12 +35,115 @@
 //   * StepTo and Find{Signed,Unsigned}AngleBetween2DVectors are declared in BrnAIUtils.h and
 //     bodied in BrnAIUtils.cpp / BrnAIUtils_Angles.cpp.
 //
-// TUNABLES: BrnAIDriver_Constants.h. Every KF_ there is a CONSOLE value -- the rodata ones read
-// straight from the image, the .bss ones evaluated from the unity-TU static initialisers at
-// 0x82C67F00..0x82C69500 (see that header's banner). No placeholder tunables remain.
+// TUNABLES: the DWARF file-scope set of BrnAIDriver.cpp (:39..:161), defined below in its order.
 
 namespace BrnAI
 {
+    // ====================================================================================
+    // File-scope tunables, DWARF BrnAIDriver.cpp:39..:161 (names, order, const/volatile). ARTIST
+    // compiled this file second in BrnWorldAIUnity (after BrnAICar.cpp), and keeps three kinds:
+    //   * statically initialised consts in the TU's .rdata, in definition order from 0x820C41BC
+    //     (:44 0.75, :51 4, :52 8, :56 0.85, :57 0.95, :58 0.75, :63 0.75, :68 25, :69 50, :76 8,
+    //     :77 3, :82 1.5, :85 16, :86 75, :90 2, :91 5, :92 0.75, :96 40000, :103 0, :110 10,
+    //     :116 1.1, :117 10, :119 0.9, .., :136 3 (0x820C421C), :139 1 (0x820C4220), :140 0.1,
+    //     :141 0.02, :142 0.03, :152 5 (0x820C4230), :154 3). Unreferenced ones are not emitted,
+    //     so the DWARF names with no slot (:45, :61, :65, :75, :113, :123/:133, :159..:161) have
+    //     no recoverable value and are left out. Reads of a non-volatile one go to the TU's pooled
+    //     copy of its value; the two volatiles are read from their own slots (0x820C41D4,
+    //     0x820C420C, 0x820C4214).
+    //   * the three braking angles, `DegToRad(n)` folded by the compiler into .data
+    //     (0x82F3038C/90/94 = 30, 45, 90 degrees in radians);
+    //   * dynamically initialised ones, written by the CRT init bank in declaration order
+    //     (0x82C687C0..0x82C68B08) into .bss: `mph * CgsCore::KF_MPH_TO_MPS`, the range
+    //     KF_MAX_BRAKING_ANGLE - KF_MIN_BRAKING_ANGLE (0x82C68820), the volatile DegToRad(4)
+    //     (0x82C68840 stores the folded 0.0698132 at 0x8300D7AC) and three Cos(DegToRad(n))
+    //     (XMVectorCos calls 0x82C68918/0x82C68968/0x82C68A18). Their readers load them from
+    //     storage (e.g. UpdateStuck 0x827664C0 lfs 0x8300D818).
+    // ====================================================================================
+    const f32       KF_MIN_BRAKING_ANGLE         = rw::math::fpu::DegToRad(30.0f);   // :39 .data 0x82F3038C
+    const f32       KF_SIGNIFICANT_BRAKING_ANGLE = rw::math::fpu::DegToRad(45.0f);   // :40 .data 0x82F30390
+    const f32       KF_MAX_BRAKING_ANGLE         = rw::math::fpu::DegToRad(90.0f);   // :41 .data 0x82F30394
+
+    const f32       KF_AI_MAX_BRAKING_SPEED_PROPORTION = 0.75f;                                  // :44
+    const f32       KF_AI_MIN_BRAKING_SPEED            = 60.0f * CgsCore::KF_MPH_TO_MPS;         // :46 bss 0x8300D748
+
+    const f32       KF_BOOST_TO_CLOSE_SPEED_GAP = 5.0f * CgsCore::KF_MPH_TO_MPS;                 // :48 bss 0x8300DB20
+
+    const f32       K_PROXIMITY_CLOSE           = 4.0f;                                          // :51
+    const f32       K_PROXIMITY_FAR             = 8.0f;                                          // :52
+    const f32       K_PROXIMITY_SPEED_REDUCTION = 10.0f * CgsCore::KF_MPH_TO_MPS;                // :53 bss 0x8300DC34
+
+    const f32       K_MIN_HARD_SHOULDER            = 0.85f;                                      // :56
+    const f32       K_MAX_HARD_SHOULDER            = 0.95f;                                      // :57
+    const f32       KF_AI_HARD_SHOULDER_PROPORTION = 0.75f;                                      // :58
+
+    const f32       KF_BRAKING_ANGLE_RANGE = KF_MAX_BRAKING_ANGLE - KF_MIN_BRAKING_ANGLE;         // :60 bss 0x8300DC38
+
+    volatile const f32       KF_BRAKE_DURING_DRIFT = 0.75f;                                      // :63 rdata 0x820C41D4
+
+    const f32       K_ROAD_RAGE_SPREAD_HNG = 25.0f;                                              // :68
+    const f32       K_NORMAL_SPREAD_HNG    = 50.0f;                                              // :69
+
+    volatile const f32       KF_MAX_DRIFT_UNNECESSARY_ANGLE = rw::math::fpu::DegToRad(4.0f);     // :72 bss 0x8300D7AC
+
+    const f32       KF_BE_KIND_AFTER_CRASH_DELAY     = 8.0f;                                     // :76
+    const f32       KF_BE_KIND_AFTER_AI_DRIVEN_DELAY = 3.0f;                                     // :77
+
+    const f32       KF_BRAKING_ANTICIPATION_TIME   = 1.5f;                                       // :82
+    const f32       KF_BRAKING_MIN_LOOK_AHEAD_DIST = 16.0f;                                      // :85
+    const f32       KF_BRAKING_MAX_LOOK_AHEAD_DIST = 75.0f;                                      // :86
+
+    const f32       KF_MAX_SPEED_FOR_BEING_STUCK   = 10.0f * CgsCore::KF_MPH_TO_MPS;             // :89 bss 0x8300D818
+    const f32       KF_AI_TIME_TO_START_TURNING    = 2.0f;                                       // :90
+    const f32       KF_AI_TIME_FOR_BEING_STUCK     = 5.0f;                                       // :91
+    const f32       KF_PLAYER_TIME_FOR_BEING_STUCK = 0.75f;                                      // :92
+
+    const f32       KF_MAX_DIST_SQUARED_FOR_AI_AVOIDANCE = 40000.0f;                             // :96
+
+    const f32       KF_BRAKING_START_DIFF = 20.0f * CgsCore::KF_MPH_TO_MPS;                      // :99 bss 0x8300D96C
+    const f32       KF_BRAKING_MAX_DIFF   = 40.0f * CgsCore::KF_MPH_TO_MPS;                      // :100 bss 0x8300DB0C
+
+    const f32       KF_ACCELERATION_START_DIFF = 0.0f;                                           // :103 rdata 0x820C4204
+    const f32       KF_ACCELERATION_MAX_DIFF   = 20.0f * CgsCore::KF_MPH_TO_MPS;                 // :104 bss 0x8300D9A8
+
+    const f32       KF_BOOST_UP_TO_DESIRED_SPEED_OFFSET = 50.0f * CgsCore::KF_MPH_TO_MPS;        // :107 bss 0x8300DB24
+
+    const f32       KF_RACE_STUCK_FREE_TIME = 10.0f;                                             // :110
+
+    volatile const f32       KF_TIME_LOOK_AHEAD_FOR_DRIFT = 1.1f;                                // :116 rdata 0x820C420C
+    const f32       KF_MIN_DISTANT_LOOK_AHEAD_FOR_DRIFT   = 10.0f;                               // :117
+
+    volatile const f32       K_DRIFT_TRIGGER = 0.9f;                                             // :119 rdata 0x820C4214
+    const f32       K_MIN_DRIFT_SPEED        = 30.0f * CgsCore::KF_MPH_TO_MPS;                   // :120 bss 0x8300DBE4
+
+    const f32       KF_TRIGGER_TURN = rw::math::fpu::Cos(rw::math::fpu::DegToRad(60.0f));       // :127 bss 0x8300D74C
+
+    const f32       KF_QUICKTURN_DROP_OUT         = rw::math::fpu::Cos(rw::math::fpu::DegToRad(30.0f));   // :129 bss 0x8300DC00
+    const f32       KF_QUICKTURN_SLOWNESS_DROPOUT = 10.0f * CgsCore::KF_MPH_TO_MPS;              // :130 bss 0x8300D6FC
+    const f32       KF_QUICKTURN_SLOWNESS_DROPIN  = 30.0f * CgsCore::KF_MPH_TO_MPS;              // :131 bss 0x8300D960
+
+    const f32       KF_SLOW_TURN_SPEED                 = 20.0f * CgsCore::KF_MPH_TO_MPS;         // :134 bss 0x8300D718
+    const f32       KF_SLOW_TURN_DROP_OUT              = rw::math::fpu::Cos(rw::math::fpu::DegToRad(20.0f));  // :135 bss 0x8300D710
+    const f32       KF_SLOW_TURN_DIRECTION_CHANGE_TIME = 3.0f;                                   // :136 rdata 0x820C421C
+
+    const f32       KF_AI_STEERING_STEP                   = 1.0f;                                // :139
+    const f32       KF_PLAYER_STEERING_STEP               = 0.1f;                                // :140
+    const f32       KF_PLAYER_ROLLING_START_STEERING_STEP = 0.02f;                               // :141
+    const f32       KF_PLAYER_DRIVE_THRU_STEERING_STEP    = 0.03f;                               // :142
+
+    const f32       KF_STOP_BRAKE_SPEED = 5.0f * CgsCore::KF_MPH_TO_MPS;                         // :144 bss 0x8300D984
+
+    const f32       KF_NO_BOOST_SPEED     = 40.0f * CgsCore::KF_MPH_TO_MPS;                      // :147 bss 0x8300D81C
+    const f32       KF_ALWAYS_BOOST_SPEED = 130.0f * CgsCore::KF_MPH_TO_MPS;                     // :148 bss 0x8300D750
+    const f32       KF_FORCED_BOOST_SPEED = 150.0f * CgsCore::KF_MPH_TO_MPS;                     // :149 bss 0x8300D7A4
+
+    const f32       KF_PRE_AGGRESSION_DELAY = 5.0f;                                              // :152
+
+    const f32       KF_MINIMUM_BOOST_TIME = 3.0f;                                                // :154
+
+    const f32       KF_BEHIND_SHUNT_MARKED_MAN_MIN_SPEED  = 90.0f * CgsCore::KF_MPH_TO_MPS;      // :156 bss 0x8300D774
+    const f32       KF_BEHIND_SHUNT_MIN_SPEED_DIFFERENCE  = 10.0f * CgsCore::KF_MPH_TO_MPS;      // :157 bss 0x8300D934
+
     static inline f32 NativeVmxMadd(f32 a, f32 b, f32 c)
     {
         const __vector4 va = { a, a, a, a };
@@ -330,7 +435,7 @@ namespace BrnAI
             if (lpCar->IsCrashing())                       // *(car+0x1542)
             {
                 UpdateBehaviour(lfTimeStep, lpPlayerCar);
-                mfInvulnerableTime = KF_INVULNERABLE_AFTER_CRASH_TIME;  // 0x1D0C (flt_820C41F4)
+                mfInvulnerableTime = 2.0f;  // 0x1D0C (flt_820C41F4)
             }
             else
             {
@@ -554,8 +659,8 @@ namespace BrnAI
         else
             lHeadingRaw = To2D(mpCar->GetDirection());
 
-        if (!(std::fabs(lHeadingRaw.mV.x) > KF_STEERING_VECTOR_EPSILON) &&
-            !(std::fabs(lHeadingRaw.mV.y) > KF_STEERING_VECTOR_EPSILON))
+        if (!(std::fabs(lHeadingRaw.mV.x) > 1.1920928955078125e-07f) &&
+            !(std::fabs(lHeadingRaw.mV.y) > 1.1920928955078125e-07f))
         {
             lHeadingRaw = Vector2(1.0f, 0.0f);
         }
@@ -574,8 +679,8 @@ namespace BrnAI
         // degenerate delta SKIPS the normalise AND the angle call entirely: the asm branches to
         // 0x8277D080 with f30 still holding flt_82001CC0 == 0.0, so the PID records a ZERO error.
         const bool lbDeltaDegenerate =
-            !(std::fabs(lDelta.mV.x) > KF_STEERING_VECTOR_EPSILON) &&
-            !(std::fabs(lDelta.mV.y) > KF_STEERING_VECTOR_EPSILON);
+            !(std::fabs(lDelta.mV.x) > 1.1920928955078125e-07f) &&
+            !(std::fabs(lDelta.mV.y) > 1.1920928955078125e-07f);
 
         f32 lfAngleToTarget = 0.0f;
         if (!lbDeltaDegenerate)
@@ -683,7 +788,7 @@ namespace BrnAI
             case 9:
                 CalculateSteeringAngle(lfTimeStep);
                 mbUseForcedSpeed = 0;          // 0x1D66
-                mfBrake          = KF_POST_RACE_BRAKE;   // 0x1D2C (flt_820C4300 == 0.2)
+                mfBrake          = 0.2f;   // 0x1D2C (flt_820C4300 == 0.2)
                 break;
 
             default:
@@ -829,7 +934,7 @@ namespace BrnAI
         {
             if (CheckForBoosting())
             {
-                mfBoostTimeRemaining = KF_FORCED_BOOST_TIME;  // flt_820C4154 == 3.0 s
+                mfBoostTimeRemaining = KF_MINIMUM_BOOST_TIME;  // flt_820C4154 == 3.0 s
                 mbBoosting = 1;
             }
             else
@@ -913,12 +1018,12 @@ namespace BrnAI
         const f32 lfProxRef  = GetRacingLine().mfImmediateDistanceToTrafficImpact;
         const f32 lfSpeedRef = GetRacingLine().mfImmmediateApproachSpeedOfTrafficAhead;
 
-        const f32 lfT = Saturate((lfProxRef - KF_PROXIMITY_CLOSE)      // flt_820C41C0 == 4.0
-                                 * KF_PROXIMITY_FAR_RECIP);            // flt_82003F40 == 0.25
+        const f32 lfT = Saturate((lfProxRef - K_PROXIMITY_CLOSE)       // pooled 4.0 0x820C41C0
+                                 / (K_PROXIMITY_FAR - K_PROXIMITY_CLOSE));   // folded: * 0.25 (0x82003F40)
 
         const f32 lfSpeed = mpCar->GetSpeed();
         f32 lfV = (lfSpeed - lfSpeedRef) - K_PROXIMITY_SPEED_REDUCTION;   // flt_8300DC34 == 10 mph
-        const f32 lfFloor = lfMinSpeed * KF_PROXIMITY_MIN_SPEED_SCALE;    // flt_820C4168 == 0.5
+        const f32 lfFloor = lfMinSpeed * 0.5f;    // flt_820C4168 == 0.5
         if (lfV < lfFloor)
             lfV = lfFloor;
 
@@ -1040,7 +1145,7 @@ namespace BrnAI
 
         if (mpCar->meRelativeLocation < 2)          // car+0x14D4 (behind player: 0 or 1)
         {
-            if (mfDistanceToPlayer > KF_INVULNERABLE_BEHIND_DISTANCE)   // flt_820C3FA8 == 30.0
+            if (mfDistanceToPlayer > 30.0f)   // flt_820C3FA8 == 30.0
                 return true;
             if (mfInvulnerableTime > 0.0f)              // 0x1D0C (flt_82001CC0 == 0.0)
                 return true;
@@ -1072,7 +1177,6 @@ namespace BrnAI
 
 // FOLDED FROM BrnAIDriver_Update.cpp
 #include "GameSource/World/AI/BrnAIDriver.h"
-#include "GameSource/World/AI/BrnAIDriver_Constants.h"     // the file-scope KF_ tunables
 #include "GameSource/World/AI/BrnAICar.h"                  // AICar (named members + accessors)
 #include "GameSource/World/AI/BrnAIUtils.h"                // Find{Signed,Unsigned}AngleBetween2DVectors
 #include "GameSource/World/AI/BrnAIAggression.h"           // AIAggression (the embedded sub-machine)
@@ -1100,7 +1204,7 @@ namespace BrnAI
 // UpdateSteeringAngle / CalculateSteeringAngle / CalculateCarControls / ComputeRouteDirection /
 // GetTargetPosition / AttemptToDriveAtDesiredSpeed / CorneringTopSpeed / ProximitySpeed /
 // ChooseRaceSteeringFan / SetDrivingFanBiases / IsInvulnerable / IsOnStartLine). This file bodies
-// everything that spine calls. Both files share BrnAIDriver_Constants.h; nothing here duplicates a
+// everything that spine calls. The DWARF tunables are defined at the top of the file; nothing here duplicates a
 // symbol from the other (one body per symbol -- LNK2005 checked).
 //
 // THE KEYSTONE'S CALLEE ORDER -- BrnAI::AIDriver::Update @0x8279AEB0, with the asm address of each
@@ -1231,11 +1335,11 @@ namespace BrnAI
         // `dword_8300DCA0 & 1/2` bits are the one-shot guards). Const data on the host.
         Vector2 MakeHalfExtentX()
         {
-            return Vector2(KF_NEARBY_VEHICLE_HALF_EXTENT, 0.0f);
+            return Vector2(2.0f, 0.0f);
         }
         Vector2 MakeHalfExtentY()
         {
-            return Vector2(0.0f, KF_NEARBY_VEHICLE_HALF_EXTENT);
+            return Vector2(0.0f, 2.0f);
         }
 
         // Fill one NearbyVehicle's four HNG boundary lines from a closed 4-corner quad, in the
@@ -1317,8 +1421,8 @@ namespace BrnAI
         {
             // climb, capped at 6 s (fsel f0, (sum - 6.0), 6.0, sum)
             const f32 lfNew = mfPlayerSlowSpeedTime + lfTimeStep;
-            mfPlayerSlowSpeedTime = (lfNew - KF_PLAYER_SLOW_SPEED_TIME_CAP >= 0.0f)
-                                        ? KF_PLAYER_SLOW_SPEED_TIME_CAP
+            mfPlayerSlowSpeedTime = (lfNew - 6.0f >= 0.0f)
+                                        ? 6.0f
                                         : lfNew;
         }
 
@@ -1379,7 +1483,7 @@ namespace BrnAI
 
         if (IsPlayerProtected(lpPlayerCar))
         {
-            if (mpCar->mfBuzzDistanceToPlayer < KF_AGGRESSIVE_FAN_BUZZ_DISTANCE)  // flt_820C4150 == 10
+            if (mpCar->mfBuzzDistanceToPlayer < 10.0f)  // flt_820C4150 == 10
                 return 0;
             if (mpCar->meRelativeLocation == E_RELATIVE_BEHIND_APPROACHING)       // lwz 0x14D4 == 0
                 return 0;
@@ -1392,21 +1496,21 @@ namespace BrnAI
             bool lbSpurt = false;
             // 0x82766220 `fcmpu slowTime, 6.0 ; blt -> skip`: taken only on an ordered <, so a
             // NaN slow-speed time is considered (FX-AINAN2; `>=` skipped it).
-            if (!(mfPlayerSlowSpeedTime < KF_AGGRESSIVE_FAN_SLOW_PLAYER_TIME))        // flt_820C4250 == 6.0
+            if (!(mfPlayerSlowSpeedTime < 6.0f))        // flt_820C4250 == 6.0
             {
                 const f32 lfMySpeed = mpCar->GetSpeed();
-                if (lfMySpeed > lpPlayerCar->GetSpeed() + KF_AGGRESSIVE_FAN_SPEED_ADVANTAGE)  // flt_8300D934 == 10 mph
+                if (lfMySpeed > lpPlayerCar->GetSpeed() + KF_BEHIND_SHUNT_MIN_SPEED_DIFFERENCE)  // flt_8300D934 == 10 mph
                     lbSpurt = true;
             }
             if (!lbSpurt
                 && mpCar->GetRouteFindingStyle() == static_cast<ERouteFindingStyle>(6)
-                && lpPlayerCar->GetSpeed() < KF_AGGRESSIVE_FAN_MARKED_MAN_PLAYER_SPEED)       // flt_8300D774 == 90 mph
+                && lpPlayerCar->GetSpeed() < KF_BEHIND_SHUNT_MARKED_MAN_MIN_SPEED)       // flt_8300D774 == 90 mph
             {
                 lbSpurt = true;
             }
             if (lbSpurt)
             {
-                if (mpCar->mfBuzzDistanceToPlayer < KF_AGGRESSIVE_FAN_BUZZ_DISTANCE)
+                if (mpCar->mfBuzzDistanceToPlayer < 10.0f)
                     return 7;
                 return 2;
             }
@@ -1420,15 +1524,15 @@ namespace BrnAI
         }
 
         const f32 lfDistance = mpCar->mfBuzzDistanceToPlayer;
-        if (!(lfDistance > KF_AGGRESSIVE_FAN_MIN_DISTANCE))                          // flt_820C488C == 5
+        if (!(lfDistance > 5.0f))                          // flt_820C488C == 5
             return 0;
         if (mpCar->GetRouteFindingStyle() == static_cast<ERouteFindingStyle>(6))
             return 0;
-        if (lfDistance > KF_AGGRESSIVE_FAN_MAX_DISTANCE)                             // flt_820C3FAC == 100
+        if (lfDistance > 100.0f)                             // flt_820C3FAC == 100
             return 0;
 
         const s32 liOpponent = static_cast<s32>(mpCar->miOpponentIndex);
-        if (lfDistance > KF_AGGRESSIVE_FAN_MID_DISTANCE)                             // flt_820C4238 == 15
+        if (lfDistance > 15.0f)                             // flt_820C4238 == 15
             return ((liOpponent % 3) == 0) ? 0 : 5;                                  // andi. r3, r11, 5
         return ((liOpponent % 2) == 0) ? 0 : 6;                                      // rlwinm r3, r11, 0,29,30
     }
@@ -1605,7 +1709,7 @@ namespace BrnAI
         mfDesiredSpeed = rw::math::fpu::Min(mfDesiredSpeed, lfProximityTopSpeed);
 
         const f32 lfSteeringFan = mSteeringFan.GetSpeedRatio();     // @0x82779B90 (r3 = this + 0x710)
-        mfDesiredSpeed = (lfSteeringFan * KF_SPEED_RATIO_SCALE + KF_SPEED_RATIO_BASE) * mfDesiredSpeed;
+        mfDesiredSpeed = (lfSteeringFan * 0.75f + 0.25f) * mfDesiredSpeed;
     }
 
     // ================================================================================
@@ -1622,8 +1726,8 @@ namespace BrnAI
         const f32 lfRoadPercentage =
             mRacingLineGenerator.GetRoadPositionAsPercentage(&GetRacingLine(), mpCar);
 
-        const f32 lfRamp = SaturateU((lfRoadPercentage - KF_HARD_SHOULDER_START)   // flt_820C7EC8
-                                     * KF_HARD_SHOULDER_RAMP);                     // flt_820C822C
+        const f32 lfRamp = SaturateU((lfRoadPercentage - K_MIN_HARD_SHOULDER)   // 0.85 (0x820C7EC8)
+                                     / (K_MAX_HARD_SHOULDER - K_MIN_HARD_SHOULDER));   // folded: * 10.000004 (0x820C822C)
         return lfRamp * lfDelta + lfInputSpeed;                                    // fmadds
     }
 
@@ -1723,7 +1827,7 @@ namespace BrnAI
 
         const f32 lfAngle = DetermineDriftSteeringAngle(E_DRIFT_DIRECTION_SELECTION_CAR_MOVING);
         mfAngleForDrift = lfAngle;                                  // stfs 0x1D4C
-        return std::fabs(lfAngle) > KF_DRIFT_TRIGGER_ANGLE;         // 0.89999998
+        return std::fabs(lfAngle) > K_DRIFT_TRIGGER;         // 0.89999998
     }
 
     // ================================================================================
@@ -1754,15 +1858,15 @@ namespace BrnAI
         if (leSelection == E_DRIFT_DIRECTION_SELECTION_CAR_MOVING)  // cmpwi r4,0
         {
             lFrom = To2DU(mpCar->GetVelocity());                // @0x8276B570
-            if (!(std::fabs(lFrom.mV.x) > KF_STEERING_VECTOR_EPSILON) &&
-                !(std::fabs(lFrom.mV.y) > KF_STEERING_VECTOR_EPSILON))
+            if (!(std::fabs(lFrom.mV.x) > 1.1920928955078125e-07f) &&
+                !(std::fabs(lFrom.mV.y) > 1.1920928955078125e-07f))
                 lFrom = To2DU(mpCar->GetDirection());           // b 0x827932F8 -> @0x8276B488
         }
         else
             lFrom = To2DU(mpCar->GetDirection());               // @0x8276B488
 
-        if (!(std::fabs(lFrom.mV.x) > KF_STEERING_VECTOR_EPSILON) &&
-            !(std::fabs(lFrom.mV.y) > KF_STEERING_VECTOR_EPSILON))
+        if (!(std::fabs(lFrom.mV.x) > 1.1920928955078125e-07f) &&
+            !(std::fabs(lFrom.mV.y) > 1.1920928955078125e-07f))
             return 0.0f;                                            // bne loc_827931F4 @0x827933AC
         lFrom = Normalize2DU(lFrom);
 
@@ -1781,9 +1885,9 @@ namespace BrnAI
     // ================================================================================
     bool AIDriver::FindFinalDriftDirection(Vector2& lrOutDirection)
     {
-        f32 lfLookAhead = mpCar->GetSpeed() * KF_DRIFT_LOOK_AHEAD_SPEED_SCALE;   // * 1.1
-        if (lfLookAhead < KF_DRIFT_LOOK_AHEAD_MIN)                                   // flt_820C4150 == 10
-            lfLookAhead = KF_DRIFT_LOOK_AHEAD_MIN;
+        f32 lfLookAhead = mpCar->GetSpeed() * KF_TIME_LOOK_AHEAD_FOR_DRIFT;   // * 1.1
+        if (lfLookAhead < KF_MIN_DISTANT_LOOK_AHEAD_FOR_DRIFT)                                   // flt_820C4150 == 10
+            lfLookAhead = KF_MIN_DISTANT_LOOK_AHEAD_FOR_DRIFT;
 
         // DWARF/X360 argument order (CachePointAhead @0x82791424..44 is the attesting call site):
         // (lpRacingLine r4, lfDistanceAhead f1, lFrom2D v1, lrOutPosition r6, lrOutDirection r7).
@@ -1852,7 +1956,7 @@ namespace BrnAI
 
         // 0x8277C90C `fcmpu ratio, flt_820C41D4 (0.75) ; bge` -> the full-throttle arm; bge is taken
         // on >= AND on unordered (FX-AINAN2; `>=` sent a NaN ratio to full brake).
-        if (!(mSteeringFan.GetSpeedRatio() < KF_DRIFT_SPEED_RATIO_THRESHOLD))  // flt_820C41D4 == 0.75
+        if (!(mSteeringFan.GetSpeedRatio() < KF_BRAKE_DURING_DRIFT))  // flt_820C41D4 == 0.75
         {
             mfBrake       = 0.0f;    // 0x1D2C
             mfAccelerator = 1.0f;    // 0x1D28
@@ -1933,7 +2037,7 @@ namespace BrnAI
             lfSelector = FindSignedAngleBetween2DVectors(lFacing, lVectorToTarget);
         }
 
-        return (lfSelector >= 0.0f) ? KF_QUICK_TURN_STEERING_LOCK : -KF_QUICK_TURN_STEERING_LOCK;
+        return (lfSelector >= 0.0f) ? 1.0f : -1.0f;
     }
 
     // ================================================================================
@@ -2045,7 +2149,7 @@ namespace BrnAI
         const f32 lfSteer = -((lfDot >= 0.0f) ? 1.0f : -1.0f);
         UpdateSteeringAngle(lfSteer);
 
-        const s32 liPhase = static_cast<s32>(lpCar->mfBehaviourTimer * KF_SLOW_TURN_PHASE_RATE);
+        const s32 liPhase = static_cast<s32>(lpCar->mfBehaviourTimer * 0.33333334f);
         if ((liPhase % 2) == 0)
         {
             const f32 lfT = SaturateU(lpCar->GetSpeed() / KF_SLOW_TURN_SPEED);      // flt_8300D718
@@ -2228,8 +2332,8 @@ namespace BrnAI
             return;
         }
 
-        mfMinDistanceToLookAheadForDrift = KF_DEFAULT_MIN_DIST_LOOK_AHEAD_FOR_DRIFT;   // stfs 0x1D40
-        mfTimeToLookAheadForDrift        = KF_DEFAULT_TIME_TO_LOOK_AHEAD_FOR_DRIFT;    // stfs 0x1D3C
+        mfMinDistanceToLookAheadForDrift = KF_MIN_DISTANT_LOOK_AHEAD_FOR_DRIFT;   // stfs 0x1D40
+        mfTimeToLookAheadForDrift        = KF_TIME_LOOK_AHEAD_FOR_DRIFT;    // stfs 0x1D3C
     }
 
     // ================================================================================
@@ -2258,8 +2362,8 @@ namespace BrnAI
         }
 
         // DWARF: non-const float32_t[3] lafPIDCoefficients (cpp:2817) / lafDriftPIDCoefficients (:2818).
-        f32 lafPIDCoefficients[3]      = { KF_PID_NORMAL_P, KF_PID_NORMAL_I, KF_PID_NORMAL_D };
-        f32 lafDriftPIDCoefficients[3] = { KF_PID_DRIFT_P,  KF_PID_DRIFT_I,  KF_PID_DRIFT_D  };
+        f32 lafPIDCoefficients[3]      = { 1.5f, 0.0f, 0.5f };
+        f32 lafDriftPIDCoefficients[3] = { 2.0f,  0.0f,  1.0f  };
 
         mPIDController.Prepare(lafPIDCoefficients);           // r3 = this + 0x1B34
         mPIDControllerDrift.Prepare(lafDriftPIDCoefficients); // r3 = this + 0x1B98
@@ -2416,7 +2520,7 @@ namespace BrnAI
         const Vector3 lOtherPosition = lpCar->GetPosition();
         const Vector3 lSeparation    = lOtherPosition - lMyPosition;
 
-        if (rw::math::vpu::Dot(lSeparation, lSeparation) > KF_NEARBY_AI_MAX_DISTANCE_SQ)  // flt_8201C220
+        if (rw::math::vpu::Dot(lSeparation, lSeparation) > 40000.0f)  // flt_8201C220
             return false;
 
         const Vector3 lUseful = mpCar->GetUsefulDirection();

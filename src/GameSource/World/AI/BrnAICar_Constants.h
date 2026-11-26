@@ -9,7 +9,7 @@
 // as functions. Earlier waves therefore shipped this whole family as `0.0f` placeholders; a
 // zero desired speed is why a Road Rage rival computed `desired 0.000000` and stood still.
 //
-// THE WRITERS ARE IN THE IMAGE. They are the same CRT init bank BrnAIDriver_Constants.h names:
+// THE WRITERS ARE IN THE IMAGE. They are the same CRT init bank BrnAIDriver.cpp's DWARF tunables come from:
 // a run of ~100 tiny leaf routines at 0x82C67F00 .. 0x82C69500, each of the shape
 //     lis/lfs f0, <mph rodata> ; fmuls f0, f0, flt_82F31928 ; lis ; stfs f0, <0x8300Dxxx> ; blr
 // with flt_82F31928 == 0.44704 (the mph -> m/s factor). Every value below was EVALUATED from

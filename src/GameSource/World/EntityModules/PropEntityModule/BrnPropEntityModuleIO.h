@@ -807,15 +807,13 @@ namespace PropEntityIO
         PropGraphicsLoadedQueue         mPropGraphicsLoadedQueue;          // :475  console +0x04C
         PropGraphicsUnloadedQueue       mPropGraphicsUnloadedQueue;        // :476  console +0x08C
 
-        // FLAG (unrecovered members): the console span +0x0CC..+0x6EF holds members this
-        // slice does not recover. Construct touches three of them -- a word at +0x0CC, six
-        // byte flags at +0x1D0 + i*0x101, and a {-1, -1, float} triple at +0x6D8/+0x6DC/
-        // +0x6E0 -- but nothing in the prop module reads them, so they are left as one
-        // opaque span rather than guessed at. THE SIZE IS THE CONSOLE SPAN, NOT A HOST
-        // OFFSET CLAIM: it only reserves "at least this much unknown payload"; every
-        // member around it is reached by name and the host lays them out wherever it
-        // likes. GROW it into named members when their producer lands.
-        u8 maUnrecoveredPayload[0x6F0 - 0x0CC];
+        // X360-only (a merge-window delta: the PS3 DWARF has neither the member nor its setter).
+        // The frame's replay status, latched by SetReplayStatusInterface @0x827A1578, which
+        // copies into this+0xCC (`addi r3, r28, 0xCC` 0x827A1618 before the operator= call).
+        // StatusInterface is 0x618 bytes, so it spans +0x0CC..+0x6E3: Construct @0x822EFAA0's
+        // stores at +0x0CC (mxStatusFlags), +0x1D0 + i*0x101 (the six reels' flags) and
+        // +0x6D8/+0x6DC/+0x6E0 (the current reels and the trailing float) are its members.
+        BrnReplays::ReplayIO::StatusInterface mReplayStatusInterface;
 
         Vector3 mPlayerPos;                          // :477  console +0x6F0
         // :478. Console +0x700..+0x77F; Construct zeroes all eight with `stvx128` at
@@ -834,21 +832,6 @@ namespace PropEntityIO
         bool mbResetProps;                           // :488  console +0x792
         bool mbPlayerCrashing;                       // :489  console +0x793
         bool mbPlayerWrecked;                        // :490  console +0x794
-
-        // ---- ADDITIVE GROW 2026-08-11 (WorldBridgeInputToEntityModules mount) ----------
-        // The frame's replay status, latched by SetReplayStatusInterface @0x827A1578.
-        // [FLAG unrecovered console offset] 0x827A1578 is a HOLE in the .ida-exports dump
-        // (the bridge's xref table names it, but no per-function json was emitted), so the
-        // member's console byte offset inside this buffer is NOT recovered -- it is placed
-        // at the tail here so the +0x780..+0x792 block above, whose offsets the bridge's
-        // own inlined stores DO pin, is left undisturbed. It is reached only by name.
-        // Held BY VALUE with an operator= copy, matching both of this setter's siblings:
-        // the RaceCar twin (InputBuffer_PreScene::SetReplayStatusInterface @0x8279D258,
-        // called by the bridge on the line immediately before this one, with the SAME
-        // source pointer) and the producing side (BrnWorldIO::UpdateInputBuffer::
-        // SetReplayStatusInterface @0x823B4DF0). The PS3 DWARF for this buffer has neither
-        // the member nor the method -- it is a merge-window delta, X360-only.
-        BrnReplays::ReplayIO::StatusInterface mReplayStatusInterface;
     };
 
     // ========================================================================
