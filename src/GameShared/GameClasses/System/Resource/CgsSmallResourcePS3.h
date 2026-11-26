@@ -82,8 +82,12 @@ namespace CgsResource
         // <4>; the X360 build reads slot 4 -- same documented delta as ResourceDescriptor=<5>).
         void CreateFromRWResource(const rw::BaseResources<5>& lrResource);    // :233
         void ConvertToRWResource(rw::Resource& lrResource);                 // :246
-        SmallMemoryResource         GetMemoryResource() const;             // :258
-        SmallMemoryResource&        GetMemoryResource();                   // :264
+        // Header-inline (DWARF CgsSmallResourcePS3.h:258/264; ARTIST has no out-of-line
+        // copy). The const one returns the lane by value: every ARTIST const ResourcePtr
+        // accessor (e.g. operator-> const @0x8246E2F8, line 563) tests that value with a
+        // signed cmpwi where the non-const ones (by reference) use cmplwi.
+        SmallMemoryResource GetMemoryResource() const { return m_baseResources[E_MEMTYPE_MAINMEMORY]; }
+        SmallMemoryResource& GetMemoryResource() { return m_baseResources[E_MEMTYPE_MAINMEMORY]; }
         SmallGraphicsSystemResource GetGraphicsSystemResource() const;     // :270
         SmallGraphicsSystemResource& GetGraphicsSystemResource();          // :276
         SmallGraphicsLocalResource  GetGraphicsLocalResource() const;      // :282

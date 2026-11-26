@@ -549,10 +549,10 @@ namespace CgsResource
 
 
 
-        CGS_ASSERT_STREAM_AT(mResourceMemory.m_baseResources[0],
+        CGS_ASSERT_STREAM_AT(mResourceMemory.GetMemoryResource(),
             "Can not instance resource pointer - it has no main memory resource\n",
             CGS_RESOURCE_PTR_ASSERT_FILE, 544);
-        return static_cast<Type*>(mResourceMemory.m_baseResources[0]);
+        return static_cast<Type*>(mResourceMemory.GetMemoryResource());
     }
 
 
@@ -568,10 +568,10 @@ namespace CgsResource
 
 
 
-        CGS_ASSERT_STREAM_AT(mResourceMemory.m_baseResources[0],
+        CGS_ASSERT_STREAM_AT(mResourceMemory.GetMemoryResource(),
             "Can not instance resource pointer - it has no main memory resource\n",
             CGS_RESOURCE_PTR_ASSERT_FILE, 563);
-        return static_cast<const Type*>(mResourceMemory.m_baseResources[0]);
+        return static_cast<const Type*>(mResourceMemory.GetMemoryResource());
     }
 
 
@@ -586,10 +586,10 @@ namespace CgsResource
 
 
 
-        CGS_ASSERT_STREAM_AT(mResourceMemory.m_baseResources[0],
+        CGS_ASSERT_STREAM_AT(mResourceMemory.GetMemoryResource(),
             "Can not instance resource pointer - it has no main memory resource\n",
             CGS_RESOURCE_PTR_ASSERT_FILE, 581);
-        return static_cast<Type*>(mResourceMemory.m_baseResources[0]);
+        return static_cast<Type*>(mResourceMemory.GetMemoryResource());
     }
 
 
@@ -604,10 +604,10 @@ namespace CgsResource
 
 
 
-        CGS_ASSERT_STREAM_AT(mResourceMemory.m_baseResources[0],
+        CGS_ASSERT_STREAM_AT(mResourceMemory.GetMemoryResource(),
             "Can not instance resource pointer - it has no main memory resource\n",
             CGS_RESOURCE_PTR_ASSERT_FILE, 599);
-        return static_cast<const Type*>(mResourceMemory.m_baseResources[0]);
+        return static_cast<const Type*>(mResourceMemory.GetMemoryResource());
     }
 
 
@@ -623,8 +623,8 @@ namespace CgsResource
 
 
 
-        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not dereference resource pointer - it has no main memory resource\n");
-        return *static_cast<Type*>(mResourceMemory.m_baseResources[0]);
+        CGS_ASSERT_STREAM(mResourceMemory.GetMemoryResource(), "Can not dereference resource pointer - it has no main memory resource\n");
+        return *static_cast<Type*>(mResourceMemory.GetMemoryResource());
     }
 
 
@@ -735,8 +735,8 @@ namespace CgsResource
     inline const Type&
     ResourcePtr<Type>::operator*() const
     {
-        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not dereference resource pointer - it has no main memory resource\n");
-        return *static_cast<const Type*>(mResourceMemory.m_baseResources[0]);
+        CGS_ASSERT_STREAM(mResourceMemory.GetMemoryResource(), "Can not dereference resource pointer - it has no main memory resource\n");
+        return *static_cast<const Type*>(mResourceMemory.GetMemoryResource());
     }
 }
 #endif
