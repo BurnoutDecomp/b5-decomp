@@ -252,14 +252,10 @@ namespace CgsDev
         char* GetBuffer() { return macCharBuffer; }
 
         // 0x82815EB8 - clear the inline buffer to the empty string and reset the formatting mode
-        // to decimal (X360 CgsDev::SimpleStrStream::Reset: `*(this+4)=0` meCurrentPrintMode,
-        // `*(this+8)=0` macCharBuffer[0]). Called between the three score cells of each debug-HUD
-        // table row.
-        virtual void Reset()
-        {
-            meCurrentPrintMode = E_PRINTMODE_DECIMAL;
-            macCharBuffer[0] = '\0';
-        }
+        // to decimal. Defined in CgsStrStream.cpp (its DWARF home; ARTIST's debug callers call it,
+        // e.g. BrnAI::BuzzBy::DrawBuzzTimer 0x82766E54). Called between the three score cells of
+        // each debug-HUD table row.
+        virtual void Reset();
 
     protected:
         virtual void Append(const char* lpcText);
@@ -268,4 +264,33 @@ namespace CgsDev
         static const s32 KI_BUFFER_SIZE = 256;   // DWARF CgsStrStream.h:306
         char macCharBuffer[KI_BUFFER_SIZE];
     };
+
+    // DWARF CgsStrStream.h:487, header-inline: ARTIST inlines it in its debug callers (the base's
+    // vtable store and Reset call, then SimpleStrStream's vtable and its Reset's two stores:
+    // BrnAI::BuzzBy::DrawBuzzTimer 0x82766E18..0x82766E48); out-of-line copy 0x8229F610.
+    inline SimpleStrStream::SimpleStrStream()
+    {
+        macCharBuffer[0] = '\0';
+        meCurrentPrintMode = E_PRINTMODE_DECIMAL;
+    }
+
+    // DWARF CgsStrStream.h:962, header-inline (out-of-line copy 0x8229F6C8): the base's null check
+    // and virtual Append.
+    inline StrStreamBase& SimpleStrStream::operator<<(const char* lpcText)
+    {
+        return StrStreamBase::operator<<(lpcText);
+    }
+
+    // DWARF CgsStrStream.h:969, header-inline (ARTIST has no out-of-line copy; BuzzBy::DrawBuzzTimer
+    // 0x82766E80 calls the base's operator<<(s32) 0x821F0E50 directly).
+    inline StrStreamBase& SimpleStrStream::operator<<(s32 liValue)
+    {
+        return StrStreamBase::operator<<(liValue);
+    }
+
+    // DWARF CgsStrStream.h:1025, header-inline (no ARTIST out-of-line copy): the base's formatting.
+    inline StrStreamBase& SimpleStrStream::operator<<(f32 lfValue)
+    {
+        return StrStreamBase::operator<<(lfValue);
+    }
 }

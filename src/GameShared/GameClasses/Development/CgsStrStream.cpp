@@ -64,34 +64,18 @@ namespace CgsDev
         std::strncat(mpcBuffer, lpcText, miBufferSize - std::strlen(mpcBuffer));
     }
 
-    // @ 0x827DB6E8-loop init. Resets the inline buffer to the empty string (the X360 `stb 0,8(this)`).
-    // The StrStreamBase() base ctor already set meCurrentPrintMode = E_PRINTMODE_DECIMAL.
-    SimpleStrStream::SimpleStrStream()
+    // SimpleStrStream() and operator<<(const char*) are header-inline (CgsStrStream.h:487 / :962).
+
+    // ARTIST 0x82815EB8 (DWARF home CgsStrStream.cpp): the decimal mode, then the empty buffer.
+    void SimpleStrStream::Reset()
     {
+        meCurrentPrintMode = E_PRINTMODE_DECIMAL;
         macCharBuffer[0] = '\0';
     }
 
-    // 0x8229F6C8 - inline-buffer sink. The X360 substitutes the literal "<NULLSTRING>" for a null
-    // pointer (`if (!a2) a2 = "<NULLSTRING>";`) before appending, then forwards to the virtual char*
-    // sink. The sink at 0x82815EC8 uses strncat with count 256 minus the used length.
-    StrStreamBase& SimpleStrStream::operator<<(const char* lpcText)
-    {
-        return StrStreamBase::operator<<(lpcText);
-    }
-
+    // The sink at 0x82815EC8 uses strncat with count 256 minus the used length.
     void SimpleStrStream::Append(const char* lpcText)
     {
         std::strncat(macCharBuffer, lpcText, KI_BUFFER_SIZE - std::strlen(macCharBuffer));
-    }
-
-    StrStreamBase& SimpleStrStream::operator<<(s32 liValue)
-    {
-        return StrStreamBase::operator<<(liValue);
-    }
-
-    // Decimal mode prints two decimals; the hex modes take the base formatting.
-    StrStreamBase& SimpleStrStream::operator<<(f32 lfValue)
-    {
-        return StrStreamBase::operator<<(lfValue);
     }
 }
