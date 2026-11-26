@@ -94,9 +94,7 @@ void ICEWrapper::EditorOff()
 // ---------------------------------------------------------------------------
 void ICEWrapper::ReconstructCameraMover(const ICE::IResourceManager* lpResourceManager)
 {
-    ICE::ICETake* lpCameraTake = mICEManager.GetCameraTake();
-
-    mCameraMover.Construct(1, &mICECameraAnchor, &mICECamera, lpCameraTake, 0, lpResourceManager);
+    mCameraMover.Construct(1, &mICECameraAnchor, &mICECamera, mICEManager.GetCameraTake(), 0, lpResourceManager);
 }
 
 } // namespace BrnDirector

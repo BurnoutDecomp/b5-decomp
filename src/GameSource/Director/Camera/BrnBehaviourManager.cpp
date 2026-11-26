@@ -308,14 +308,14 @@ namespace Camera
 
         CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
                    CGS_ASSERT_MESSAGE_AT("mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", CGS_ARTIST_FILE, 928));      // :928
-        CGS_ASSERT(mBehaviourRefCounts[luAllocationKey] == 0,
+        CGS_ASSERT(mBehaviourRefCounts[lBehaviourHelperIndex] == 0,
                    CGS_ASSERT_MESSAGE_AT("mBehaviourRefCounts[lBehaviourHelperIndex] == 0", CGS_ARTIST_FILE, 929));                    // :929
-        CGS_ASSERT(!mBehaviourNeedsReleasingFlags.IsBitSet(luAllocationKey),
+        CGS_ASSERT(mBehaviourNeedsReleasingFlags.IsBitSet(lBehaviourHelperIndex) == false,
                    CGS_ASSERT_MESSAGE_AT("mBehaviourNeedsReleasingFlags.IsBitSet(lBehaviourHelperIndex) == false", CGS_ARTIST_FILE, 930)); // :930
-        CGS_ASSERT(!mBehaviourUsedByHandleFlags.IsBitSet(luAllocationKey),
+        CGS_ASSERT(mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == false,
                    CGS_ASSERT_MESSAGE_AT("mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == false", CGS_ARTIST_FILE, 931));   // :931
 
-        mBehaviourUsedByHandleFlags.SetBit(luAllocationKey);
+        mBehaviourUsedByHandleFlags.SetBit(lBehaviourHelperIndex);
     }
 
     void BehaviourManager::UnSetBehaviourUsedByHandle(u32 luAllocationKey)
@@ -324,15 +324,15 @@ namespace Camera
 
         CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
                    CGS_ASSERT_MESSAGE_AT("mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", CGS_ARTIST_FILE, 942));      // :942
-        CGS_ASSERT(mBehaviourUsedByHandleFlags.IsBitSet(luAllocationKey),
+        CGS_ASSERT(mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true,
                    CGS_ASSERT_MESSAGE_AT("mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true", CGS_ARTIST_FILE, 943));    // :943
 
-        mBehaviourUsedByHandleFlags.UnSetBit(luAllocationKey);
+        mBehaviourUsedByHandleFlags.UnSetBit(lBehaviourHelperIndex);
 
         // No references left either -> queue the behaviour for release.
-        if (mBehaviourRefCounts[luAllocationKey] == 0)
+        if (mBehaviourRefCounts[lBehaviourHelperIndex] == 0)
         {
-            mBehaviourNeedsReleasingFlags.SetBit(luAllocationKey);
+            mBehaviourNeedsReleasingFlags.SetBit(lBehaviourHelperIndex);
         }
     }
 
@@ -1041,8 +1041,8 @@ namespace Camera
     void BehaviourManager::SetBehaviourUpdatesDuringPause(BehaviourHelperIndex lHelper,
                                                           bool lbUpdatesDuringPause)
     {
-        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lHelper),
-                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)");
+        CGS_ASSERT_AT(mBehaviourHelperPool.IsObjectAllocated(lHelper),
+                      "mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)", CGS_ARTIST_FILE, 1100);   // h:1100, 0x822083C8
 
         const u32 luHelper = static_cast<u32>(static_cast<s32>(lHelper));
         if (lbUpdatesDuringPause)

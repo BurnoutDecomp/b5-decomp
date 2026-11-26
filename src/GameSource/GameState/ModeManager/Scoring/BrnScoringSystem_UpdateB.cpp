@@ -677,7 +677,7 @@ namespace BrnGameState
                 {
                     GameStateModuleIO::ChainableMultiplierInfo* lpInfo =
                         laChainableMultipliers.Grow();
-                    CGS_ASSERT(lpInfo != NULL, CGS_ASSERT_MESSAGE_AT("lpChainableMultiplierInfo", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 1547));
+                    CGS_ASSERT_AT(lpInfo, "lpChainableMultiplierInfo", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 1547);
 
                     lpInfo->mMultiplierInfo = lpScore->GetStuntMultiplierInfo();
                     lpInfo->miRaceCarIndex = leCar;

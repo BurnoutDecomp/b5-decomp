@@ -137,7 +137,7 @@ bool CameraState::HasChanged(EFlag leFlag) const
 
     const bool lbPrevious = mPreviousFlags.IsBitSet(luIndex);    // second qword read @ this+16
 
-    return lbPrevious != lbCurrent;
+    return lbCurrent != lbPrevious;
 }
 
 // ----------------------------------------------------------------------------

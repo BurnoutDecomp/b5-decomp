@@ -1151,8 +1151,8 @@ namespace BrnGameState
         mbTooManyHighScoresToBuffer = false;
         mNewHighScoreBuffer.Clear();
         mfUnbufferTimer             = 0.0f;
-        meActiveRoadRuleType        = BrnStreetData::E_SCORE_TYPE_COUNT;
-        mbFirstDownload             = true;
+        mbFirstDownload             = true;                                // stb +0x1CC5 after stw +0x1CC0
+        meActiveRoadRuleType        = BrnStreetData::E_SCORE_TYPE_COUNT;   // (ARTIST 0x82335DD0/D4)
 
         memset( maChallengeData, 0, sizeof( maChallengeData ) );
         memset( maNetworkChallengeData, 0, sizeof( maNetworkChallengeData ) );
