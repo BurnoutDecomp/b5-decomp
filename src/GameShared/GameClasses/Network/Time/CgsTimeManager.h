@@ -160,4 +160,12 @@ namespace CgsNetwork
     {
         return muFrameCount;
     }
+
+    // Header inline (DWARF CgsTimeManager.h:126): ARTIST holds no copy and expands the
+    // `% 0xFFFF` (mulhwu 0x80008001) at every caller, e.g. LiveRevengeManager::
+    // RemotePlayerFinalised 0x8256032C.
+    inline u16 TimeManager::GetU16FrameCount() const
+    {
+        return static_cast<u16>(muFrameCount % KU_FRAME_WRAP_MODULUS);
+    }
 } // namespace CgsNetwork

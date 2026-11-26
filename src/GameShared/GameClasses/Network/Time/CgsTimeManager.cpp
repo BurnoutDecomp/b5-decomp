@@ -274,16 +274,7 @@ namespace CgsNetwork
              + static_cast<s32>(KU_FRAME_WRAP_MODULUS) * liWrapsSinceStart;
     }
 
-    // ---- GetU16FrameCount -----------------------------------------------------------
-    // The running network frame counter reduced into the 16-bit wire window. The X360
-    // call sites inline this `muFrameCount % 0xFFFF` reduction (the 0x80008001
-    // reciprocal-multiply idiom); it is provided here as the named helper the other
-    // frame queries and the GetCurrentFrameNumber() consumer alias share.
-    u16
-    TimeManager::GetU16FrameCount() const
-    {
-        return static_cast<u16>(muFrameCount % KU_FRAME_WRAP_MODULUS);
-    }
+    // GetU16FrameCount is a header inline (CgsTimeManager.h): ARTIST holds no copy.
 
     // ---- NextFrame @0x825813F0 ------------------------------------------------------
     // Advance both clocks by this frame's timer step and bump the running frame counter.
