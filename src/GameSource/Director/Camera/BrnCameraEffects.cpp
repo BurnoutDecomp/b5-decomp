@@ -31,9 +31,7 @@ namespace Camera
         mfCarsBlurAmount = 0.0f;
         mfWorldBlurAmount = 0.0f;
         mbIsActive = false;
-        mbIsExpensiveMotionBlur = false;
-        mPadA[0] = 0;
-        mPadA[1] = 0;
+        mbIsExpensiveMotionBlur = false;   // ARTIST 0x821F84E8 leaves the two tail pad bytes alone
     }
 
     // ------------------------------------------------------------------------

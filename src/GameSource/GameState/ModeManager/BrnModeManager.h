@@ -403,7 +403,16 @@ public:
     {
         return mChallengeManager.GetChallengeStyle();
     }
-    bool IsOnlineGameMode() const;                                 // DWARF :432 / X360 0x82311410  (BODIED)
+    // DWARF h:432, header-inline: GameStateModule::IsSimPaused 0x82356990 and three more callers
+    // inline it; ARTIST keeps the copy 0x82311410 for TriggerQueryManager::PostWorldUpdate.
+    bool IsOnlineGameMode() const
+    {
+        if (mpCurrentGameMode != 0)
+        {
+            return mpCurrentGameMode->IsOnline();   // mode+0xAC
+        }
+        return false;
+    }
     f32  GetCountdownTimeForMode() const;                          // DWARF :448 / X360 0x82327D10
     bool IsOnlineModeWithInstantIntro() const;                     // (mode == 15 || 16) && mbInstantIntroSplash
     void OnDriveThruRepairAvailable();                             // FLAG: X360 vtbl+0x64 hook; name is conservative (DriveThruManager TU)

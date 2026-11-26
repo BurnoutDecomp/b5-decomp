@@ -87,16 +87,6 @@ CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, mbWonRound) =
 // Small predicates (X360-inlined field reads de-inlined to named accessors).
 // ----------------------------------------------------------------------------
 
-// X360 0x82311410.
-bool ModeManager::IsOnlineGameMode() const
-{
-    // v1 = mpCurrentGameMode; if (v1) return v1->IsOnline(); else return 0;
-    if (mpCurrentGameMode != 0)
-    {
-        return mpCurrentGameMode->IsOnline();   // X360 mode+0xAC (the cached online flag)
-    }
-    return false;
-}
 
 // X360 0x823113D0. True when the current mode is in one of its post-event states (3/5/4).
 bool ModeManager::IsInPostEvent() const

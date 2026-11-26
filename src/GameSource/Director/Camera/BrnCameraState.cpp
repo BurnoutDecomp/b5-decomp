@@ -112,12 +112,6 @@ void CameraState::SetFlag(EFlag leFlag, bool lbValue)
 // Bound assert (CgsBitArray.h:241), then ANDC-clear bit luIndex in the current set:
 //   ldx q,(this+8); andc q, q, (1<<(luIndex&63)); stdx q,(this+8)
 // ----------------------------------------------------------------------------
-void CameraState::ClearFlag(EFlag leFlag)
-{
-    const u32 luIndex = static_cast<u32>(leFlag);
-    CgsContainers::BitArray<KU_NUM_FLAGS>& lrCurrentFlags = mCurrentFlags;
-    lrCurrentFlags.UnSetBit(luIndex);                   // ldx/andc/stdx @ this+8
-}
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::CameraState::HasChanged @0x8227D380

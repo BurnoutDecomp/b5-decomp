@@ -309,6 +309,16 @@ struct CameraEffects
         mbHasStartHookNameString   = true;
         mfStartHookNameBlendAmount = lfBlendAmount;
     }
+
+    // DWARF BrnCameraEffects.h:166 / :182 / :264, header-inline (StopCurrentEffect 0x82205BB8
+    // works on the camera's effects block through them: the stop-name Set keeps `this` in r31).
+    void ClearStartHookNameString() { mbHasStartHookNameString = false; }
+    void SetStopHookNameString(const char* lpcName)
+    {
+        mStopHookNameString.Set(lpcName);
+        mbHasStopHookNameString = true;
+    }
+    void SetRequestedPostFX(u32 luPostFX) { muRequestedPostFxId = luPostFX; }
 };
 
 } // namespace Camera

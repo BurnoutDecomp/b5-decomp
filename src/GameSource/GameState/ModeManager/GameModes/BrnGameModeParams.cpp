@@ -207,21 +207,25 @@ s32 GameModeParams::GetStartLocationCount() const
 // -----------------------------------------------------------------------------
 // GetStartPosition - spawn position for the start-grid slot liStartLocationIndex.
 // -----------------------------------------------------------------------------
-Vector3 GameModeParams::GetStartPosition(s32 liStartLocationIndex) const
+Vector3 GameModeParams::GetStartPosition(s32 liOpponentIndex) const
 {
-    CGS_ASSERT(static_cast<u32>(liStartLocationIndex) < KU_MAX_ACTIVE_RACE_CARS,
+    // The assert text names the signed test (BrnWorld::KI_MAX_ACTIVE_RACE_CARS is an int32_t 8):
+    // ARTIST cmpwi 0 ; blt ; cmpwi 8.
+    CGS_ASSERT(liOpponentIndex >= 0 && liOpponentIndex < static_cast<s32>(KU_MAX_ACTIVE_RACE_CARS),
                CGS_ASSERT_MESSAGE_AT("liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 1177));
-    return maStartLocations.Ge(static_cast<u32>(liStartLocationIndex)).mPosition;
+    return maStartLocations.Ge(static_cast<u32>(liOpponentIndex)).mPosition;
 }
 
 // -----------------------------------------------------------------------------
 // GetStartDirection - facing for the start-grid slot liStartLocationIndex.
 // -----------------------------------------------------------------------------
-Vector3 GameModeParams::GetStartDirection(s32 liStartLocationIndex) const
+Vector3 GameModeParams::GetStartDirection(s32 liOpponentIndex) const
 {
-    CGS_ASSERT(static_cast<u32>(liStartLocationIndex) < KU_MAX_ACTIVE_RACE_CARS,
+    // The assert text names the signed test (BrnWorld::KI_MAX_ACTIVE_RACE_CARS is an int32_t 8):
+    // ARTIST cmpwi 0 ; blt ; cmpwi 8.
+    CGS_ASSERT(liOpponentIndex >= 0 && liOpponentIndex < static_cast<s32>(KU_MAX_ACTIVE_RACE_CARS),
                CGS_ASSERT_MESSAGE_AT("liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 1185));
-    return maStartLocations.Ge(static_cast<u32>(liStartLocationIndex)).mDirection;
+    return maStartLocations.Ge(static_cast<u32>(liOpponentIndex)).mDirection;
 }
 
 // -----------------------------------------------------------------------------

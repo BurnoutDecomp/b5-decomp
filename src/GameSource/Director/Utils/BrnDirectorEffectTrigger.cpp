@@ -159,7 +159,7 @@ void EffectInterface::RegisterStartingBackgroundEffectWithName(const HookNameStr
 // current -- the console falls into the same clear).
 void EffectInterface::RegisterStoppingEffectWithName(const HookNameStringWrapper& lrName)
 {
-    if (!mbHasCurrentEffectName || mCurrentEffectName == lrName.mHookNameString)
+    if (!mbHasCurrentEffectName || lrName == mCurrentEffectName)   // byte loop walks lrName first (0x821F1874)
         mbHasCurrentEffectName = false;
 }
 
@@ -168,7 +168,7 @@ void EffectInterface::RegisterStoppingEffectWithName(const HookNameStringWrapper
 // background pair -- while clearing the BACKGROUND has-flag (+0xD38); reproduced as-is.
 void EffectInterface::RegisterStoppingBackgroundEffectWithName(const HookNameStringWrapper& lrName)
 {
-    if (!mbHasCurrentEffectName || mCurrentEffectName == lrName.mHookNameString)
+    if (!mbHasCurrentEffectName || lrName == mCurrentEffectName)   // byte loop walks lrName first (0x821F1874)
         mbHasCurrentBackgroundEffectName = false;
 }
 
@@ -254,31 +254,24 @@ void EnsureEffectIsPlaying(Camera& lrCamera, const EffectInterface& lrSource,
 // ============================================================================
 void StopCurrentEffect(Camera& lrCamera, const EffectInterface& lrSource)
 {
-    CameraEffects& lrEffects = lrCamera.GetEffects();
-
-    lrEffects.mbHasStartHookNameString = false;   // +0xB7
-    lrEffects.muRequestedPostFxId      = 0;       // +0x7C
+    lrCamera.GetEffects().ClearStartHookNameString();   // +0xB7
+    lrCamera.GetEffects().SetRequestedPostFX(0);       // +0x7C
 
     if (lrSource.HasCurrentEffectName())
     {
         // Ask for the live hook to be stopped by name.
-        lrEffects.mStopHookNameString.Set(lrSource.GetCurrentEffectName());
-        lrEffects.mbHasStopHookNameString = true;
+        lrCamera.GetEffects().SetStopHookNameString(lrSource.GetCurrentEffectName());
         return;
     }
 
     // Nothing is playing by name: if an effect ID is live and it is not already the null one,
     // request the null effect id.
-    bool lbRequestNullEffectId = false;
-    if (lrSource.HasCurrentEffectId() &&
-        lrSource.GetCurrentEffectId() != lrSource.GetNullEffectId())
-    {
-        lbRequestNullEffectId = true;
-    }
+    const bool lbRequestNullEffectId =
+        lrSource.HasCurrentEffectId() && lrSource.GetCurrentEffectId() != lrSource.GetNullEffectId();
 
     if (lbRequestNullEffectId)
     {
-        lrEffects.muRequestedPostFxId = lrSource.GetNullEffectId();
+        lrCamera.GetEffects().SetRequestedPostFX(lrSource.GetNullEffectId());
     }
 }
 

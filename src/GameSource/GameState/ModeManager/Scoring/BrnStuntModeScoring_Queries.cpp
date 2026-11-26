@@ -173,23 +173,9 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     bool StuntModeScoring::HasAnyPendingScore() const
     {
-        const f32 lfGuaranteed = mfPendingGuaranteedScore;   // +0x1C (tested first)
-        const bool lbGuaranteedIsZero =
-            (lfGuaranteed <= KF_SCORE_EPSILON) && (lfGuaranteed >= -KF_SCORE_EPSILON);
-        if (!lbGuaranteedIsZero)
-        {
-            return true;
-        }
-
-        const f32 lfNonGuaranteed = mfPendingNonGuaranteedScore;  // +0x18 (tested second)
-        const bool lbNonGuaranteedIsZero =
-            (lfNonGuaranteed <= KF_SCORE_EPSILON) && (lfNonGuaranteed >= -KF_SCORE_EPSILON);
-        if (!lbNonGuaranteedIsZero)
-        {
-            return true;
-        }
-
-        return false;
+        // DWARF: two rw::math::fpu::IsZero calls (+0x1C first, then +0x18).
+        return !(rw::math::fpu::IsZero(mfPendingGuaranteedScore) &&
+                 rw::math::fpu::IsZero(mfPendingNonGuaranteedScore));
     }
 
     // ------------------------------------------------------------------------

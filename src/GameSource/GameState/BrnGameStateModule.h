@@ -284,7 +284,9 @@ public:
 
     GameStateModuleIO::EGameModeType GetCurrentGameModeType() const;
 
-    void ToggleShowtimeBehaviour();
+    // DWARF h:1300, header-inline: no console copy; GameStateDebugComponent::ToggleShowtimeCallback
+    // 0x823578F8 stores the flag in place.
+    void ToggleShowtimeBehaviour() { mbToggleShowtimeBehaviour = true; }
 
     AchievementManagerBase* GetAchievementManager();
 

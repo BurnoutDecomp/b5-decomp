@@ -1373,14 +1373,16 @@ bool GameStateModule::IsSimPaused(bool lbCheckGameMode, bool lbStrictMask) const
     s32 liPauseFlags = miSimPauseFlags;
     if (lbCheckGameMode)
     {
-        const GameMode* lpCurrentGameMode = mModeManager.GetCurrentGameMode();
-        if (lpCurrentGameMode != 0 && lpCurrentGameMode->IsOnline())
+        if (mModeManager.IsOnlineGameMode())
         {
             if (lbStrictMask)
             {
-                return (liPauseFlags & ~0x2C) != 0;   // X360 mask 0xFFFFFFD3 -- clear bits {2,3,5}
+                liPauseFlags &= ~0x2C;   // X360 mask 0xFFFFFFD3 -- clear bits {2,3,5} (in place, 0x823569C0)
             }
-            liPauseFlags &= ~0x2E;                     // X360 mask 0xFFFFFFD1 -- clear bits {1,2,3,5}
+            else
+            {
+                liPauseFlags &= ~0x2E;   // X360 mask 0xFFFFFFD1 -- clear bits {1,2,3,5}
+            }
         }
     }
     return liPauseFlags != 0;

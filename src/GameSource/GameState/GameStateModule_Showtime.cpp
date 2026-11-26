@@ -392,17 +392,6 @@ namespace
     }
 
     // =============================================================================================
-    // GameStateModule::ToggleShowtimeBehaviour  (DWARF BrnGameStateModule.h:651)
-    //
-    // No out-of-line console symbol: its one caller, GameStateDebugComponent::ToggleShowtimeCallback
-    // @0x823578F8, inlines it as `*(module + 284512) = 1`. UpdateShowtimeMode below consumes it.
-    // =============================================================================================
-    void GameStateModule::ToggleShowtimeBehaviour()
-    {
-        mbToggleShowtimeBehaviour = true;
-    }
-
-    // =============================================================================================
     // GameStateModule::UpdateShowtimeMode  @0x82380EF8  (163 insns; DWARF BrnGameStateModule.h:691,
     // source BrnGameStateModule.cpp:1484..1611)  [FX-SHOWTIME2 2026-09-24]
     //

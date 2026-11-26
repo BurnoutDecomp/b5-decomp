@@ -100,8 +100,13 @@ public:
     // UnSetBit on the current set. @0x82204368.
     void SetFlag(EFlag leFlag, bool lbValue);
 
-    // Clear flag luIndex (UnSetBit on the current set). @0x822044B0.
-    void ClearFlag(EFlag leFlag);
+    // Clear flag luIndex (UnSetBit on the current set). DWARF BrnCameraState.h:118, header-inline:
+    // Behaviour::Fail 0x82206428 and CollisionPolicy::Fail clear the bit in place; ARTIST keeps
+    // the out-of-line copy @0x822044B0 for BehaviourGameplayExternal::Update.
+    void ClearFlag(EFlag leFlag)
+    {
+        mCurrentFlags.UnSetBit(static_cast<u32>(leFlag));
+    }
 
     // True iff flag luIndex's current bit differs from its previous-frame bit. @0x8227D380.
     bool HasChanged(EFlag leFlag) const;
