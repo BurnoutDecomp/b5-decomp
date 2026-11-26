@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwcore for size (record-form cr0
+// tests, as in the rwcore filesys sources).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::core::debug::host -- low-level host file I/O shims used by the debug script host.
 //

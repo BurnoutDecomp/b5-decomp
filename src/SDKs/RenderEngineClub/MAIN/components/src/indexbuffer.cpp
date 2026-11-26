@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled the renderengine core (0x82B60000..0x82B64xxx) for
+// size (record-form cr0 tests), like the state objects' resource descriptors;
+// IndexBuffer::Initialize 0x82B62100 matches only so.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
 #include "rw/rwcore_structs.h"
 #include <cstring>
@@ -67,13 +73,10 @@ void IndexBuffer::Xbox2CheckPhysicalMemoryFlags()
 {
     if (Address)
     {
-        const DWORD flags = XQueryMemoryProtect(reinterpret_cast<void*>(Address));
-        u32 common = Common;
-        if (flags & (PAGE_NOCACHE | PAGE_WRITECOMBINE))
-            common &= ~D3DCOMMON_CPU_CACHED_MEMORY;
+        if (XQueryMemoryProtect(reinterpret_cast<void*>(Address)) & (PAGE_NOCACHE | PAGE_WRITECOMBINE))
+            Common &= ~D3DCOMMON_CPU_CACHED_MEMORY;
         else
-            common |= D3DCOMMON_CPU_CACHED_MEMORY;
-        Common = common;
+            Common |= D3DCOMMON_CPU_CACHED_MEMORY;
     }
 }
 }

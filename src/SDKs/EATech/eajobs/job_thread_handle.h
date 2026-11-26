@@ -35,7 +35,7 @@ namespace Jobs
         JobThreadId         GetId() const;
         JobThreadParameters GetParameters() const;
         bool                Valid() const;
-        u32                 Handle() const;
+        u32                 Handle() const; // job_thread_handle.h:37 (job_thread_handle.cpp)
 
     private:
         Detail::SchedulerBackend* mSchedulerBackend; // +0x0

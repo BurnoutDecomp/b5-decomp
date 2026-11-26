@@ -1,4 +1,10 @@
+// XDK size optimization: ARTIST compiled the EA job manager for size (record-form cr0
+// tests), as job_thread.cpp and job_instance_handle.cpp already note.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "SDKs/EATech/eajobs/job.h" // EA::Jobs::Job (+ Dependency), BucketListNode, Event
+#include "SDKs/EATech/eajobs/job_scheduler.h" // JobScheduler::mSchedulers (INTERNAL_AddNotReady)
 
 #include <cstring> // std::memcpy (Clear's 44-byte EntryPoint default block)
 
@@ -29,20 +35,6 @@ namespace EA
 namespace Jobs
 {
     // Offsets quoted here and in job.h use the native four-byte pointer layout.
-
-    // Reassemble the 64-bit "handle key" the X360 reads with `ld 0x48(handle)`: the
-    // qword at JobInstanceHandle+0x8 is { mSchedulerBackend (4B, high), mIndex (2B),
-    // mPadding (2B, low) } on the big-endian target. Built from named members so no
-    // reinterpret over the struct layout is needed (mirrors job_instance_handle.cpp's
-    // PackHandleQword, kept file-local to this TU).
-    static u64 PackHandleQword(const JobInstanceHandle& rHandle)
-    {
-        const u64 luBackend = static_cast<u64>(
-            reinterpret_cast<uintptr_t>(rHandle.mSchedulerBackend));
-        return (luBackend << 32)
-             | (static_cast<u64>(rHandle.mIndex)   << 16)
-             |  static_cast<u64>(rHandle.mPadding);
-    }
 
     // EntryPoint default-settings block. Clear() @ 0x82BCA110 memcpy's a 44-byte
     // default over mEntryPoint (Job+4): priority 128 (JOB_PRIORITY_DEFAULT, the
@@ -191,12 +183,9 @@ namespace Jobs
     {
         // Guard: only ask the backend while a backend is attached AND the handle still
         // names a live instance (index or submission id set); otherwise treat as done.
-        if (mJobInstanceHandle.mSchedulerBackend != 0
-            && (mJobInstanceHandle.mIndex != 0 || mJobInstanceHandle.mSubmissionId != 0))
+        if (mJobInstanceHandle.Valid())
         {
-            return mJobInstanceHandle.mSchedulerBackend->IsJobComplete(
-                       mJobInstanceHandle.mSubmissionId,
-                       PackHandleQword(mJobInstanceHandle)) != 0;
+            return mJobInstanceHandle.mSchedulerBackend->IsDone(mJobInstanceHandle);
         }
         return true;
     }
@@ -205,13 +194,10 @@ namespace Jobs
     void Job::SleepOn()
     {
         // Same liveness guard as IsDone; on a live instance, tail-call the backend's
-        // BLOCKING sleep-on-instance slot (+0x3C) -- NOT IsJobComplete (+0x30).
-        if (mJobInstanceHandle.mSchedulerBackend != 0
-            && (mJobInstanceHandle.mIndex != 0 || mJobInstanceHandle.mSubmissionId != 0))
+        // BLOCKING sleep-on-instance slot (+0x3C) -- NOT IsDone (+0x30).
+        if (mJobInstanceHandle.Valid())
         {
-            mJobInstanceHandle.mSchedulerBackend->SleepOn(
-                mJobInstanceHandle.mSubmissionId,
-                PackHandleQword(mJobInstanceHandle));
+            mJobInstanceHandle.mSchedulerBackend->SleepOn(mJobInstanceHandle);
         }
     }
 
@@ -220,8 +206,7 @@ namespace Jobs
     {
         // Liveness guard read off mJobInstanceHandle (the +0x40 handle), then forward
         // to JobInstanceHandle::WaitOn, preserving r4/r5/r6 through the tail call.
-        if (mJobInstanceHandle.mSchedulerBackend != 0
-            && (mJobInstanceHandle.mIndex != 0 || mJobInstanceHandle.mSubmissionId != 0))
+        if (mJobInstanceHandle.Valid())
         {
             mJobInstanceHandle.WaitOn(pCallback, pContext, lSleepMs);
         }
@@ -229,16 +214,16 @@ namespace Jobs
 
     // @ 0x82BCA3D8 -- (scheduler-internal) record THIS job's instance handle from the
     // backend slot just selected for it, and seed mStartEvent's barrier.
-    JobInstanceHandle* Job::INTERNAL_AddNotReady(Detail::SchedulerBackend** pBackends)
+    void Job::INTERNAL_AddNotReady(JobScheduler& rScheduler)
     {
         // The backend is chosen by the job's environment word: the X360 indexes
         // (4 * mEntryPoint.mEnvironment) into the backend array, then dispatches that
-        // backend's vtable slot +0x28 (CreateNotReadyInstance) with an out-handle stack
+        // backend's vtable slot +0x28 (AddNotReady) with an out-handle stack
         // temp, the entry point and the param block.
         JobEnvironment leEnvironment = mEntryPoint.GetEnvironment();
-        Detail::SchedulerBackend* lpBackend = pBackends[leEnvironment];
+        Detail::SchedulerBackend* lpBackend = rScheduler.mSchedulers[leEnvironment];
 
-        JobInstanceHandle lNewHandle = lpBackend->CreateNotReadyInstance(&mEntryPoint, mParams);
+        JobInstanceHandle lNewHandle = lpBackend->AddNotReady(&mEntryPoint, mParams);
 
         // Store the 16-byte handle into mJobInstanceHandle (the two `std` stores into
         // this+0x40 / this+0x48).
@@ -248,12 +233,11 @@ namespace Jobs
         // mStartEvent (+0x340). The X360 AddBarrier(&temp, &mJobInstanceHandle) makes a
         // fresh handle wait on this job's instance; its returned 16 bytes seed mStartEvent.
         mStartEvent=mJobInstanceHandle.AddBarrier();
-        return &mJobInstanceHandle;
     }
 
     // @ 0x82BCB2F0 -- (scheduler-internal) push every dependency-edge barrier and every
     // begin/end event into the backend so the submitted instance fires them.
-    void Job::INTERNAL_SubmitEventsAndDeps()
+    void Job::INTERNAL_SubmitEventsAndDeps(JobScheduler& /*rScheduler*/)
     {
         // ---- Dependencies -------------------------------------------------------
         // total = mDependencies.mSize + (mDependencies.mNext ? mNext->ListSize() : 0);
@@ -303,27 +287,23 @@ namespace Jobs
                     const Job* lpDepJob = lrDependency.mJob;
                     Detail::SchedulerBackend* lpBackend =
                         lpDepJob->mJobInstanceHandle.mSchedulerBackend;
-                    lpBackend->SubmitEvent(
-                        lpDepJob->mJobInstanceHandle.mSubmissionId,
-                        PackHandleQword(lpDepJob->mJobInstanceHandle),
-                        &lBarrier,
+                    lpBackend->AddEvent(
+                        lpDepJob->mJobInstanceHandle,
+                        lBarrier,
                         lrDependency.mTrigger);
                 }
 
                 // The dependency may ALSO carry a direct job-instance handle (mJob == 0
                 // form): submit it when the handle names a live instance.
-                if (lrDependency.mJobInstanceHandle.mSchedulerBackend != 0
-                    && (lrDependency.mJobInstanceHandle.mIndex != 0
-                        || lrDependency.mJobInstanceHandle.mSubmissionId != 0))
+                if (lrDependency.mJobInstanceHandle.Valid())
                 {
                     Event lBarrier=mJobInstanceHandle.AddBarrier();
 
                     Detail::SchedulerBackend* lpBackend =
                         lrDependency.mJobInstanceHandle.mSchedulerBackend;
-                    lpBackend->SubmitEvent(
-                        lrDependency.mJobInstanceHandle.mSubmissionId,
-                        PackHandleQword(lrDependency.mJobInstanceHandle),
-                        &lBarrier,
+                    lpBackend->AddEvent(
+                        lrDependency.mJobInstanceHandle,
+                        lBarrier,
                         lrDependency.mTrigger);
                 }
             }
@@ -361,11 +341,10 @@ namespace Jobs
 
                 Detail::SchedulerBackend* lpBackend =
                     mJobInstanceHandle.mSchedulerBackend;
-                lpBackend->SubmitEvent(
-                    mJobInstanceHandle.mSubmissionId,
-                    PackHandleQword(mJobInstanceHandle),
-                    &lpNode->mBucket[liIndex],
-                    liPhase);
+                lpBackend->AddEvent(
+                    mJobInstanceHandle,
+                    lpNode->mBucket[liIndex],
+                    static_cast<Event::When>(liPhase));
             }
         }
     }

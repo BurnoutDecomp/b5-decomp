@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwcore for size (record-form cr0
+// tests, as in the rwcore filesys sources);
+// debug::Manager::CreateInstance 0x82BBD380 matches only so.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::core::debug::Manager -- bring-up of the RenderWare core debug subsystem.
 //

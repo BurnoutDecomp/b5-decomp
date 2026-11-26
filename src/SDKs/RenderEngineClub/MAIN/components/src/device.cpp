@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled the renderengine core (0x82B60000..0x82B64xxx) for
+// size (record-form cr0 tests), like the state objects' resource descriptors;
+// Device::UnSetResource 0x82B61F08 / 0x82B62088 and Device::LockFrontBuffer 0x82B63398 match only so.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/pixelbuffer.h"

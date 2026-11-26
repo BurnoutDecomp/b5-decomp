@@ -2,6 +2,7 @@
 #define EA_JOBS_JOB_TYPES_H
 
 #include "types.hpp"
+#include "SDKs/EATech/eajobs/event.h" // EA::Jobs::Event::When (AddEvent's phase parameter)
 
 // SDKs/EATech/eajobs/job_types.h
 //
@@ -63,7 +64,7 @@ namespace Jobs
     struct JobThreadParameters;
     struct JobMetrics;
     typedef void ProfilerCallback(const JobMetrics* pMetrics, int iCount, void* pContext);
-    struct EntryPoint;   // entry_point.h -- CreateNotReadyInstance's entry argument
+    struct EntryPoint;   // entry_point.h -- AddNotReady's entry argument
     struct Event;
 
     // job_types.h -- a single 32-bit job argument word. Jobs receive four of them
@@ -104,7 +105,16 @@ namespace Jobs
         typedef WaitOnCallback* WaitOnYieldCallbackArg;
 
         // SchedulerBackend -- the polymorphic owner of submitted job-instance slots.
-        // ARTIST base 82182408 and LocalBackend 82182500 have these 22 slots.
+        // ARTIST base 82182408 and LocalBackend 82182500 have these 22 slots. The
+        // thread and instance handles travel BY VALUE: PS3 DecFIGS mangles
+        // LocalBackend::WaitForEnd(JobThreadHandle), GetThreadId(JobThreadHandle) const,
+        // AddBarrier(JobInstanceHandle), GetEnabler(JobInstanceHandle, unsigned int*&,
+        // unsigned int&) const, IsDone(JobInstanceHandle) const, AddEvent(
+        // JobInstanceHandle, const Event&, Event::When), SleepOn(JobInstanceHandle) and
+        // GetAllowSleepOn(JobInstanceHandle) const; ARTIST spills the 8-byte thread
+        // handle and reads its index word (WaitForEnd 0x82BCA744 `std r4,0x78(r1)`,
+        // `lwz r11,0x7c(r1)`) and passes the 16-byte instance handle in two GPRs
+        // (JobInstanceHandle::AddBarrier 0x82BC9A6C/70 `ld r5,0` / `ld r6,8`).
         class SchedulerBackend
         {
         public:
@@ -113,22 +123,22 @@ namespace Jobs
             virtual int GetNumThreads() const = 0;                              //08
             virtual JobThreadHandle GetThreadHandle(u32 uIndex) const = 0;      //0C
             virtual JobThreadHandle AddThread(const JobThreadParameters&) = 0;  //10
-            virtual void RequestEnd(u64 uHandle) = 0;                           //14
-            virtual void WaitForEnd(u64 uHandle) = 0;                           //18
+            virtual void RequestEnd(JobThreadHandle hThread) = 0;               //14
+            virtual void WaitForEnd(JobThreadHandle hThread) = 0;               //18
             virtual void WakeThreads();                                        //1C
-            virtual u64 GetThreadId(u64 uHandle) const = 0;                      //20
-            virtual JobThreadParameters GetThreadParameters(u64 uHandle) const = 0; //24
-            virtual JobInstanceHandle CreateNotReadyInstance(const EntryPoint*, const Param*) = 0; //28
-            virtual void GetEnabler(u64,u64,u32*&,u32&) = 0;                     //2C
-            virtual int IsJobComplete(u64,u64) = 0;                             //30
-            virtual int SubmitEvent(u64,u64,const void*,int) = 0;               //34
-            virtual Event AddBarrier(u64,u64) = 0;                              //38
-            virtual int SleepOn(u64,u64) = 0;                                   //3C
-            virtual int GetAllowSleepOn(u64,u64) = 0;                           //40
+            virtual u64 GetThreadId(JobThreadHandle hThread) const = 0;          //20
+            virtual JobThreadParameters GetThreadParameters(JobThreadHandle hThread) const = 0; //24
+            virtual JobInstanceHandle AddNotReady(const EntryPoint*, const Param*) = 0; //28
+            virtual void GetEnabler(JobInstanceHandle,u32*&,u32&) const = 0;     //2C
+            virtual bool IsDone(JobInstanceHandle) const = 0;            //30
+            virtual int AddEvent(JobInstanceHandle,const Event&,Event::When) = 0; //34
+            virtual Event AddBarrier(JobInstanceHandle) = 0;                    //38
+            virtual int SleepOn(JobInstanceHandle) = 0;                         //3C
+            virtual int GetAllowSleepOn(JobInstanceHandle) const = 0;           //40
             virtual void SetProfilingCallback(ProfilerCallback*);              //44
             virtual void SetProfilingContext(void*);                            //48
             virtual void FlushProfile();                                       //4C
-            virtual bool ExecuteReadyJobs(int);                                //50
+            virtual bool RunSingleJob(int);                                //50
             virtual u32 GetSleepTimeoutMs() = 0;                                //54
         };
 
@@ -146,6 +156,12 @@ namespace Jobs
     {
         JobInstanceHandle();
         JobInstanceHandle(Detail::SchedulerBackend* pBackend, u16 uIndex, u64 uSubmissionId);
+
+        // job_instance_handle.h:24 -- a backend is attached and the handle names an
+        // instance. Defined in job_instance_handle.cpp; ARTIST inlines it as a bool
+        // (li 1 / li 0, then `clrlwi.`) at every caller inside the job manager's bulk
+        // TU (Job::IsDone 0x82BCA2E8..0x82BCA31C) and keeps no out-of-line copy.
+        bool Valid() const;
 
         // @ 0x82BC9A50 -- return a barrier event for THIS instance. Signaling
         // its final outstanding barrier makes the instance ready.

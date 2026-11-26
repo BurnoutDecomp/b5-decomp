@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwcore for size (record-form cr0
+// tests, as in the rwcore filesys sources).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "rw/core/debug/DebugCriticalSection.h"
 
 // rw::core::debug::detail::DebugCriticalSection - store-for-store ports of the X360 wrappers.

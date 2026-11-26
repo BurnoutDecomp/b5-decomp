@@ -1,3 +1,10 @@
+// XDK size optimization: ARTIST compiled the renderengine core (0x82B60000..0x82B64xxx) for
+// size (record-form cr0 tests), like the state objects' resource descriptors;
+// Xbox2SetTextureHeader 0x82B60B98, Texture::Destruct 0x82B62D50 (`cmpwi r3,0`) and five more
+// Texture functions match only so.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "rw/rwcore_structs.h"

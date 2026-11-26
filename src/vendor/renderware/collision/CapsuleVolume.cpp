@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwcollision for size (record-form cr0
+// tests, as in the rwcore filesys sources).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "vendor/renderware/collision/CapsuleVolume.hpp"
 #include "rw/math/vpu/matrix44affine_operation.h"
 

@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled the EA job manager for size (record-form cr0
+// tests), as job_thread.cpp and job_instance_handle.cpp already note.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "SDKs/EATech/eajobs/detail.h"
 
 #include "SDKs/EATech/eajobs/jobs.h"             // EA::Jobs::TicksToSeconds
@@ -50,7 +55,7 @@ namespace Detail
     static const f32 KF_WAIT_BUDGET_SECONDS = 8.0f;
 
     // @ 0x82BC9B60
-    int WaitOnYieldHelper(WaitOnYieldCallback pCallback,
+    bool WaitOnYieldHelper(WaitOnYieldCallback pCallback,
                           void*               pContext,
                           s32                 lSleepMs,
                           u64                 uStartTicks,
@@ -60,7 +65,7 @@ namespace Detail
         {
             // If the user predicate says stop (returns 0), bail immediately.
             if (pCallback(pContext) == WAIT_ON_CANCEL)
-                return 0;
+                return false;
         }
 
         if (lSleepMs >= 0)
@@ -72,7 +77,7 @@ namespace Detail
 
         // Done flag already set -> keep waiting (the caller's loop will observe it).
         if (*pbDone)
-            return 1;
+            return true;
 
         LARGE_INTEGER lCounter;
         QueryPerformanceCounter(&lCounter);
@@ -84,13 +89,13 @@ namespace Detail
 
         // Within budget -> keep waiting.
         if (lfSeconds <= KF_WAIT_BUDGET_SECONDS)
-            return 1;
+            return true;
 
         // Over budget: no watchdog -> keep waiting; else the watchdog decides.
         if (!spWaitWatchdog)
-            return 1;
+            return true;
 
-        return (spWaitWatchdog() != 0) ? 1 : 0;
+        return spWaitWatchdog() != 0;
     }
 }
 }

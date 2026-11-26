@@ -55,20 +55,16 @@ namespace Jobs
         void SchedulerBackend::FlushProfile() {}
 
         // ARTIST base slot50 resolves to li r3,0;blr82B0F1B8.
-        bool SchedulerBackend::ExecuteReadyJobs(int) { return false; }
+        bool SchedulerBackend::RunSingleJob(int) { return false; }
 
     }
 
-    // Reassemble the 64-bit value the X360 reads with `ld 8(handle)`: on the
-    // big-endian X360 the qword at +0x8 is { mSchedulerBackend@+0x8 (4B, high),
-    // mIndex@+0xC (2B), mPadding@+0xE (2B, low) }. Built from named members.
-    static u64 PackHandleQword(const JobInstanceHandle& rHandle)
+
+    // Inlined everywhere in ARTIST (no out-of-line copy): backend, then index, then
+    // submission id (JobInstanceHandle::WaitOn 0x82BCA49C..0x82BCA4CC).
+    bool JobInstanceHandle::Valid() const
     {
-        const u64 luBackend = static_cast<u64>(
-            reinterpret_cast<uintptr_t>(rHandle.mSchedulerBackend));
-        return (luBackend << 32)
-             | (static_cast<u64>(rHandle.mIndex)   << 16)
-             |  static_cast<u64>(rHandle.mPadding);
+        return mSchedulerBackend != 0 && (mIndex != 0 || mSubmissionId != 0);
     }
 
     // @ 0x82BC9A50
@@ -76,7 +72,7 @@ namespace Jobs
     {
         // ARTIST82BC9A50: r3 is the Event return buffer, r4 is this.
         // DWARF confirms Event AddBarrier(), with no explicit argument.
-        return mSchedulerBackend->AddBarrier(mSubmissionId, PackHandleQword(*this));
+        return mSchedulerBackend->AddBarrier(*this);
     }
 
     // @ 0x82BCA470
@@ -88,27 +84,23 @@ namespace Jobs
         LARGE_INTEGER lStart;
         QueryPerformanceCounter(&lStart);
 
-        int liResult = 0;
+        bool lbContinue = false;
         do
         {
-            // Loop predicate (asm): keep going only while a backend is attached AND
-            // the handle still names a live instance (index or submission id set).
-            const bool lbPending =
-                (mSchedulerBackend != 0) && (mIndex != 0 || mSubmissionId != 0);
-            if (!lbPending)
+            // Loop predicate (asm): keep going only while the handle is valid.
+            if (!Valid())
                 break;
 
-            // Ask the backend whether the instance has finished. Nonzero == done.
-            liResult = mSchedulerBackend->IsJobComplete(mSubmissionId, PackHandleQword(*this));
-            if (liResult)
+            // Ask the backend whether the instance has finished.
+            if (mSchedulerBackend->IsDone(*this))
                 break;
 
             // One yield pass: optional user predicate, optional sleep, elapsed-time
-            // budget. Returns nonzero to keep waiting, 0 to give up.
-            liResult = Detail::WaitOnYieldHelper(pYieldCallback, pYieldContext,
+            // budget. Returns true to keep waiting, false to give up.
+            lbContinue = Detail::WaitOnYieldHelper(pYieldCallback, pYieldContext,
                 lYieldSleepMs, static_cast<u64>(lStart.QuadPart), &lbDone);
         }
-        while (liResult);
+        while (lbContinue);
 
     }
 }

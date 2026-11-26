@@ -40,7 +40,7 @@ namespace LocalBackend
 {
     // The backend JobThread::Run drives. The X360 stores the owning LocalBackend* in
     // the worker's +0x04 slot and dispatches its combined-vtable worker entry points
-    // BY NAME -- slot +0x50 (ExecuteReadyJobs, run any ready jobs for an affinity) and
+    // BY NAME -- slot +0x50 (RunSingleJob, run any ready jobs for an affinity) and
     // slot +0x54 (GetSleepTimeoutMs, the wait before the next wake). LocalBackend has
     // ONE vptr (off_82182500, implementing Detail::SchedulerBackend including its
     // worker slots), so the worker calls those virtuals directly on the concrete

@@ -5,7 +5,7 @@
 
 #include "SDKs/EATech/eajobs/event.h"        // EA::Jobs::Event + Detail::BucketListNode<Event,16>
 #include "SDKs/EATech/eajobs/job_types.h"    // EA::Jobs::JobInstanceHandle / JobPriority / JobAffinity / Detail::SchedulerBackend
-#include "SDKs/EATech/eajobs/entry_point.h"  // EA::Jobs::EntryPoint (CreateNotReadyInstance entry argument)
+#include "SDKs/EATech/eajobs/entry_point.h"  // EA::Jobs::EntryPoint (AddNotReady entry argument)
 #include "SDKs/EATech/eajobs/reference_count.h" // EA::Jobs::Detail::ReferenceCount (the +0x270 word)
 #include "SDKs/EATech/eajobs/job_thread.h"   // EA::Jobs::LocalBackend::JobThread (32 embedded worker threads)
 #include "SDKs/EATech/eajobs/job_thread_handle.h" // EA::Jobs::JobThreadHandle (AddThread / GetThreadHandle out-struct)
@@ -84,9 +84,9 @@ namespace LocalBackend
         void Clear();
 
         // Run the submitted job: play the begin events, invoke the job code, play the
-        // end events. (LocalBackend::ExecuteReadyJobs @ 0x82BCC490 calls it once a slot
+        // end events. (LocalBackend::RunSingleJob @ 0x82BCC490 calls it once a slot
         // is claimed; the body lives in the out-of-group JobInstance object TU --
-        // declared here so ExecuteReadyJobs links.)
+        // declared here so RunSingleJob links.)
         void Run();
 
         // @ 0x82BCAAE8 -- if this slot owns a semaphore, wait one permit on it then
@@ -216,9 +216,9 @@ namespace LocalBackend
     // -1 (all ones) marks a never-used / reclaimed slot.
     //
     // VTABLE: the X360 stamps a SINGLE combined vtable (off_82182500) at +0x0 -- the
-    // Detail::SchedulerBackend vtable (slots +0x28 CreateNotReadyInstance / +0x30
-    // IsJobComplete / +0x34 SubmitEvent / +0x38 AddBarrier / +0x3C SleepOn), including
-    // the worker slots (+0x50 ExecuteReadyJobs / +0x54 GetSleepTimeoutMs)
+    // Detail::SchedulerBackend vtable (slots +0x28 AddNotReady / +0x30
+    // IsDone / +0x34 AddEvent / +0x38 AddBarrier / +0x3C SleepOn), including
+    // the worker slots (+0x50 RunSingleJob / +0x54 GetSleepTimeoutMs)
     // and wake hook (+0x1C WakeThreads). The dtor restores the base vtable
     // off_82182408 on the way out, proving LocalBackend IS a concrete SchedulerBackend
     // -- so it overrides every pure virtual (no second base, ONE vptr at +0x0). The
@@ -248,46 +248,46 @@ namespace LocalBackend
 
         // -- Detail::SchedulerBackend overrides (vtable +0x28/+0x30/+0x34/+0x38/+0x3C) --
 
-        // @ 0x82BCC010 (vtable +0x28) CreateNotReadyInstance: claim a free queue slot for
+        // @ 0x82BCC010 (vtable +0x28) AddNotReady: claim a free queue slot for
         // a freshly-submitted job, Initialize its JobInstance, and write the new
         // JobInstanceHandle (submission id / backend / index) into pOutHandle. If no slot
         // frees within the ~12s watchdog budget and the global abort predicate fires,
-        // writes a null handle instead. (Backend-internal name: AddNotReady.)
-        virtual JobInstanceHandle CreateNotReadyInstance(const EntryPoint* pEntryPoint, const Param* pParams);
+        // writes a null handle instead.
+        virtual JobInstanceHandle AddNotReady(const EntryPoint* pEntryPoint, const Param* pParams);
 
-        // @ 0x82BC9D88 (vtable +0x30) IsJobComplete: nonzero if the slot keyed by
-        // (uSubmissionId, uHandleQword) is free/done, reclaimed (-1), or no longer holds
-        // this submission. (Backend-internal name: IsDone.)
-        virtual int IsJobComplete(u64 uSubmissionId, u64 uHandleQword);
+        // @ 0x82BC9D88 (vtable +0x30) IsDone: nonzero if the slot hInstance names
+        // is free/done, reclaimed (-1), or no longer holds this submission.
+        //
+        // bool: Job::IsDone 0x82BCA33C tail-calls it; WaitOn tests r3 with `clrlwi.`.
+        virtual bool IsDone(JobInstanceHandle hInstance) const;
 
-        // @ 0x82BCC1D8 (vtable +0x34) SubmitEvent: register pPayload (an Event) on phase
-        // iWhen of the slot keyed by (uSubmissionId, uHandleQword). If the slot is still
-        // live and the phase has NOT played, append the event to that phase's list (under
-        // the slot's event-list try-lock); otherwise run the event immediately.
-        // (Backend-internal name: AddEvent.)
-        virtual int SubmitEvent(u64 uSubmissionId, u64 uHandleQword,
-                                const void* pPayload, int iWhen);
+        // @ 0x82BCC1D8 (vtable +0x34) AddEvent: register rEvent on phase eWhen of the
+        // slot hInstance names. If the slot is still live and the phase has NOT played,
+        // append the event to that phase's list (under the slot's event-list try-lock);
+        // otherwise run the event immediately.
+        virtual int AddEvent(JobInstanceHandle hInstance, const Event& rEvent,
+                                Event::When eWhen);
 
         // ARTIST82BCA7B8, vtable+38: return an enabling Event by value.
-        virtual Event AddBarrier(u64 uSubmissionId, u64 uHandleQword);
+        virtual Event AddBarrier(JobInstanceHandle hInstance);
         // ARTIST82BC9CB8: expose the ready-word address and value.
-        void GetEnabler(u64 uSubmissionId, u64 uHandleQword, u32*& pLocation, u32& uValue);
+        void GetEnabler(JobInstanceHandle hInstance, u32*& pLocation, u32& uValue) const;
         // ARTIST82BCA878 is the distinct vtable+40 sleepability query.
-        int GetAllowSleepOn(u64 uSubmissionId, u64 uHandleQword);
+        int GetAllowSleepOn(JobInstanceHandle hInstance) const;
 
-        // @ 0x82BCBA80 (vtable +0x3C) SleepOn: BLOCKING wait on the slot keyed by
-        // (uSubmissionId, uHandleQword). Takes a live-reference on the slot, re-checks
-        // completion, and if still pending waits on (then re-posts) its semaphore.
-        virtual int SleepOn(u64 uSubmissionId, u64 uHandleQword);
+        // @ 0x82BCBA80 (vtable +0x3C) SleepOn: BLOCKING wait on the slot hInstance names.
+        // Takes a live-reference on the slot, re-checks completion, and if still pending
+        // waits on (then re-posts) its semaphore.
+        virtual int SleepOn(JobInstanceHandle hInstance);
 
         // -- JobThread worker entry points (LocalBackend vtable +0x50 / +0x54) --
 
-        // @ 0x82BCC490 (vtable +0x50) ExecuteReadyJobs: pick the highest-priority ready
+        // @ 0x82BCC490 (vtable +0x50) RunSingleJob: pick the highest-priority ready
         // slot whose affinity matches iAffinity, atomically claim it, run its
         // JobInstance, then publish completion (post its semaphore / decrement its ref)
         // and wake the workers. Returns 1 if a job ran, 0 if there was nothing to do.
-        // (Backend-internal name: RunSingleJob; X360 takes the affinity as an u8 mask.)
-        virtual bool ExecuteReadyJobs(int iAffinity);
+        // (X360 takes the affinity as an u8 mask.)
+        virtual bool RunSingleJob(int iAffinity);
 
         // @ 0x82BCBE60 (vtable +0x54) GetSleepTimeoutMs: the ms a worker waits on its
         // wake event before the next execute pass.
@@ -312,17 +312,17 @@ namespace LocalBackend
         int GetNumJobsInFlight() const;
 
         // @ 0x82BCA738 -- join worker thread iIndex.
-        void RequestEnd(u64 uHandle);
-        void WaitForEnd(u64 uHandle);
+        void RequestEnd(JobThreadHandle hThread);
+        void WaitForEnd(JobThreadHandle hThread);
 
         // @ 0x82BC9E20 -- pack (pBackend, uHandle) into the JobThreadHandle out-struct.
         JobThreadHandle GetThreadHandle(u32 uHandle) const;
 
         // @ 0x82BC9E30 -- the OS thread id of worker iIndex.
-        u64 GetThreadId(u64 uHandle) const;
+        u64 GetThreadId(JobThreadHandle hThread) const;
 
         // @ 0x82BCA770 -- copy worker iIndex's 24-byte JobThreadParameters into pOut.
-        JobThreadParameters GetThreadParameters(u64 uHandle) const;
+        JobThreadParameters GetThreadParameters(JobThreadHandle hThread) const;
 
         // @ 0x82BC9CB8 -- read the slot keyed by uHandleQword: write its packed
         // priority-queue entry pointer to *ppEntry and the masked (low-61-bit) state word

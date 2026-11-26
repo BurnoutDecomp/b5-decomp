@@ -29,8 +29,9 @@ namespace Detail
     //   lSleepMs    : if >= 0, sleep this many ms (via EA::Thread::ThreadSleep).
     //   uStartTicks : the QPC tick stamp the wait started at (elapsed budget base).
     //   pbDone      : the done flag; if already set, keep waiting (true).
-    // Returns nonzero to continue yielding, 0 to give up.
-    int WaitOnYieldHelper(WaitOnYieldCallback pCallback,
+    // Returns true to continue yielding, false to give up (a bool: JobInstanceHandle::WaitOn
+    // 0x82BCA510 tests the result with `clrlwi. r11,r3,24`).
+    bool WaitOnYieldHelper(WaitOnYieldCallback pCallback,
                           void*               pContext,
                           s32                 lSleepMs,
                           u64                 uStartTicks,

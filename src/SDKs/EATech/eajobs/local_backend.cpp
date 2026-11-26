@@ -1,3 +1,10 @@
+// XDK size optimization: ARTIST compiled the EA job manager for size (record-form cr0
+// tests), as job_thread.cpp and job_instance_handle.cpp already note;
+// JobInstance::SleepOn 0x82BCAAE8 (`cmplwi r11,0`), LocalBackend::WakeThreads 0x82BCA910 and
+// ~AutoTryLockEventList 0x82BC9C68 match only so.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "SDKs/EATech/eajobs/local_backend.h"
 
 #include "eathread/eathread_semaphore.h"
@@ -286,20 +293,11 @@ namespace LocalBackend
     // ========================================================================
 
     // dword_8327F284 -- the process-wide "should the job manager give up waiting?"
-    // watchdog predicate. CreateNotReadyInstance consults it only after the ~12s GC
+    // watchdog predicate. AddNotReady consults it only after the ~12s GC
     // budget elapses (the X360 indirect-calls it through this file static, treating a
     // null pointer as "no watchdog installed"). Defaults to null.
     typedef int (*GlobalAbortPredicate)();
     static GlobalAbortPredicate spGlobalAbortPredicate = 0;
-
-    // Decode helpers for the packed 64-bit priority-queue slot word. The X360 builds
-    // and tests these with rotate/clear-bit immediates; expressed here as named ops on
-    // the recovered field widths (all masks are asm immediates).
-    static inline u32 SlotIndexFromHandle(u64 uHandleQword)
-    {
-        // HIWORD(handle) -- the slot index sits in the high 16 bits of the low word.
-        return static_cast<u32>(static_cast<u16>(uHandleQword >> 16));
-    }
 
     // ARTIST82BCBCB8: exact native fields, including natural alignment before
     // the submission counter after the32worker array ends at594hex.
@@ -420,8 +418,8 @@ namespace LocalBackend
         // off_82182408 into vtable +0x0 -- the X360's final `stw off_82182408,0(this)`.)
     }
 
-    // @ 0x82BCC010 (vtable +0x28) -- CreateNotReadyInstance / AddNotReady.
-    JobInstanceHandle LocalBackend::CreateNotReadyInstance(const EntryPoint* pEntryPoint, const Param* pParams)
+    // @ 0x82BCC010 (vtable +0x28) -- AddNotReady / AddNotReady.
+    JobInstanceHandle LocalBackend::AddNotReady(const EntryPoint* pEntryPoint, const Param* pParams)
     {
         // Atomically take the next submission id (X360 increments the +0x598 counter
         // under the masked reservation and keeps the post-increment value).
@@ -486,10 +484,11 @@ namespace LocalBackend
         }
     }
 
-    // @ 0x82BC9D88 (vtable +0x30) -- IsJobComplete / IsDone.
-    int LocalBackend::IsJobComplete(u64 uSubmissionId, u64 uHandleQword)
+    // @ 0x82BC9D88 (vtable +0x30) -- IsDone / IsDone.
+    bool LocalBackend::IsDone(JobInstanceHandle hInstance) const
     {
-        u32 luIndex = SlotIndexFromHandle(uHandleQword);
+        const u64 uSubmissionId = hInstance.mSubmissionId;
+        u32 luIndex = hInstance.mIndex;
         u64 luEntry = mpPriorityQueue[luIndex];
 
         // The slot must still hold this submission (low 47 bits) or it is done.
@@ -510,12 +509,13 @@ namespace LocalBackend
         return 0;
     }
 
-    // @ 0x82BCC1D8 (vtable +0x34) -- SubmitEvent / AddEvent.
-    int LocalBackend::SubmitEvent(u64 uSubmissionId, u64 uHandleQword,
-                                  const void* pPayload, int iWhen)
+    // @ 0x82BCC1D8 (vtable +0x34) -- AddEvent / AddEvent.
+    int LocalBackend::AddEvent(JobInstanceHandle hInstance, const Event& rEvent,
+                                  Event::When iWhen)
     {
-        Event* lpEvent = const_cast<Event*>(static_cast<const Event*>(pPayload));
-        u32 luIndex    = SlotIndexFromHandle(uHandleQword);
+        const Event* lpEvent = &rEvent;
+        const u64 uSubmissionId = hInstance.mSubmissionId;
+        u32 luIndex    = hInstance.mIndex;
         u64 luEntry    = mpPriorityQueue[luIndex];
 
         JobInstance* lpInstance =
@@ -568,33 +568,34 @@ namespace LocalBackend
 
     // @ 0x82BCA7B8 (vtable +0x38): increment this instance's prerequisite count
     // and return the event which enables its packed queue word on the final signal.
-    Event LocalBackend::AddBarrier(u64 uSubmissionId,u64 uHandleQword)
+    Event LocalBackend::AddBarrier(JobInstanceHandle hInstance)
     {
-        const u32 index=SlotIndexFromHandle(uHandleQword);
-        JobInstance* instance=(uSubmissionId==(static_cast<u64>(mpPriorityQueue[index])&0x7FFFFFFFFFFFull))
+        const u32 index=hInstance.mIndex;
+        JobInstance* instance=(hInstance.mSubmissionId==(static_cast<u64>(mpPriorityQueue[index])&0x7FFFFFFFFFFFull))
             ? &mpJobInstances[index] : 0;
         u32* location=0;u32 value=0;
-        GetEnabler(uSubmissionId,uHandleQword,location,value);
+        GetEnabler(hInstance,location,value);
         ++instance->mStatus;
         return Event(Event::EVENT_TYPE_WRITE,value,location,&instance->mStatus);
     }
 
-    void LocalBackend::GetEnabler(u64,u64 uHandleQword,u32*& pLocation,u32& uValue)
+    void LocalBackend::GetEnabler(JobInstanceHandle hInstance,u32*& pLocation,u32& uValue) const
     {
-        u64& slot=mpPriorityQueue[SlotIndexFromHandle(uHandleQword)];
+        u64& slot=mpPriorityQueue[hInstance.mIndex];
         // Native big-endian queue entries expose their first (high) word.
         pLocation = reinterpret_cast<u32*>(&slot);
         uValue=static_cast<u32>(static_cast<u64>(slot)>>32)&0x1FFFFFFFu;
     }
 
     // @ 0x82BCA878 (vtable +0x40), 0 == not sleepable. The leading
-    // `(*(*this + 48))(this)` in the asm is THIS object's vtable +0x30 == IsJobComplete.
-    int LocalBackend::GetAllowSleepOn(u64 uSubmissionId, u64 uHandleQword)
+    // `(*(*this + 48))(this)` in the asm is THIS object's vtable +0x30 == IsDone.
+    int LocalBackend::GetAllowSleepOn(JobInstanceHandle hInstance) const
     {
-        u32 luIndex = SlotIndexFromHandle(uHandleQword);
+        const u64 uSubmissionId = hInstance.mSubmissionId;
+        u32 luIndex = hInstance.mIndex;
 
         // Already complete -> not sleepable (asm: bctrl through vtable +0x30).
-        if (IsJobComplete(uSubmissionId, uHandleQword))
+        if (IsDone(hInstance))
             return 0;
 
         u64 luEntry = mpPriorityQueue[luIndex];
@@ -611,13 +612,14 @@ namespace LocalBackend
     }
 
     // @ 0x82BCBA80 (vtable +0x3C) -- SleepOn.
-    int LocalBackend::SleepOn(u64 uSubmissionId, u64 uHandleQword)
+    int LocalBackend::SleepOn(JobInstanceHandle hInstance)
     {
-        int liResult = IsJobComplete(uSubmissionId, uHandleQword);
+        int liResult = IsDone(hInstance);
         if (liResult)
             return liResult;
 
-        u32 luIndex = SlotIndexFromHandle(uHandleQword);
+        const u64 uSubmissionId = hInstance.mSubmissionId;
+        u32 luIndex = hInstance.mIndex;
         u64 luEntry = mpPriorityQueue[luIndex];
         JobInstance* lpInstance =
             (uSubmissionId == (luEntry & 0x7FFFFFFFFFFFull))
@@ -631,7 +633,7 @@ namespace LocalBackend
         if (lbRef)
         {
             // Re-check completion; only block if still pending.
-            liResult = IsJobComplete(uSubmissionId, uHandleQword);
+            liResult = IsDone(hInstance);
             if (!liResult)
             {
                 lpInstance->SleepOn();
@@ -642,8 +644,8 @@ namespace LocalBackend
         return liResult;
     }
 
-    // @ 0x82BCC490 (vtable +0x50) -- ExecuteReadyJobs / RunSingleJob.
-    bool LocalBackend::ExecuteReadyJobs(int iAffinity)
+    // @ 0x82BCC490 (vtable +0x50) -- RunSingleJob / RunSingleJob.
+    bool LocalBackend::RunSingleJob(int iAffinity)
     {
         u8 uAffinityMask = static_cast<u8>(iAffinity);
         s32 liCount = mNumSlots;
@@ -755,9 +757,10 @@ namespace LocalBackend
 
     int LocalBackend::GetNumThreads() const
     {
-        int count = 0;
+        // ARTIST 0x82BC9D5C starts from all 32 workers and drops each idle one.
+        int count = KI_NUM_THREADS;
         for (int index = 0; index < KI_NUM_THREADS; ++index)
-            if (mThreads[index].mbStarted) ++count;
+            if (!mThreads[index].mbStarted) --count;
         return count;
     }
 
@@ -782,17 +785,17 @@ namespace LocalBackend
     }
 
     // ARTIST82BCBA40: the low word selects a worker; wake it after publishing quit.
-    void LocalBackend::RequestEnd(u64 uHandle)
+    void LocalBackend::RequestEnd(JobThreadHandle hThread)
     {
-        JobThread& worker = mThreads[static_cast<u32>(uHandle)];
+        JobThread& worker = mThreads[hThread.Handle()];
         worker.mbQuit = true;
         ::SetEvent(worker.mhEvent);
     }
 
     // ARTIST82BCA738.
-    void LocalBackend::WaitForEnd(u64 uHandle)
+    void LocalBackend::WaitForEnd(JobThreadHandle hThread)
     {
-        mThreads[static_cast<u32>(uHandle)].WaitForEnd();
+        mThreads[hThread.Handle()].WaitForEnd();
     }
 
     // ARTIST82BC9E20: hidden return buffer precedes this and the handle word.
@@ -802,16 +805,16 @@ namespace LocalBackend
     }
 
     // ARTIST82BC9E30: zero-extend the worker's native thread HANDLE.
-    u64 LocalBackend::GetThreadId(u64 uHandle) const
+    u64 LocalBackend::GetThreadId(JobThreadHandle hThread) const
     {
         return static_cast<u64>(reinterpret_cast<uintptr_t>(
-            mThreads[static_cast<u32>(uHandle)].mThread.GetId()));
+            mThreads[hThread.Handle()].mThread.GetId()));
     }
 
     // ARTIST82BCA770: the24-byte structure is returned in the hidden buffer.
-    JobThreadParameters LocalBackend::GetThreadParameters(u64 uHandle) const
+    JobThreadParameters LocalBackend::GetThreadParameters(JobThreadHandle hThread) const
     {
-        return mThreads[static_cast<u32>(uHandle)].mParameters;
+        return mThreads[hThread.Handle()].mParameters;
     }
 
     // @ 0x82BC9CB8 -- GetEnabler.

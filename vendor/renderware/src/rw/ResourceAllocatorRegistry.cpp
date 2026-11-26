@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwcore for size (record-form cr0
+// tests, as in the rwcore filesys sources);
+// ResourceAllocatorRegistry::GetDefaultAllocator 0x82BBD1E0 matches only so.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::ResourceAllocatorRegistry -- accessors for the process-wide default resource
 // allocator slot.

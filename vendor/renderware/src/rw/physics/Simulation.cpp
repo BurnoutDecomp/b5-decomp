@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwphysics for size (record-form cr0
+// tests, as in the rwcore filesys sources).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::physics::Simulation -- definition home for the RenderWare physics simulation object.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the asm is authoritative.

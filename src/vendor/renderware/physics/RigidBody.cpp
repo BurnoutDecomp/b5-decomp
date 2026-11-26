@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwphysics for size (record-form cr0
+// tests, as in the rwcore filesys sources).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "rw/physics/rigidbody.h"
 #include "rw/physics/simulation.h"   // the owning Simulation's parameters
 #include "JointFrames.hpp"           // rw::math::vpu::QuaternionFromMatrix33 (its current home) -- SetTransform

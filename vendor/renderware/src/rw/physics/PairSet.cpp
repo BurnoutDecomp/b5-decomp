@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwphysics for size (record-form cr0
+// tests, as in the rwcore filesys sources);
+// PairSet::ClearAll 0x82BC6DC0 tests its anchor with `cmplwi r11,0` and matches only so.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::physics::PairSet -- definition home for the RenderWare physics pair-set pool.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC). DecFIGS pairset.h

@@ -1,3 +1,10 @@
+// XDK size optimization: ARTIST compiled the renderengine core (0x82B60000..0x82B64xxx) for
+// size (record-form cr0 tests), like the state objects' resource descriptors;
+// UnbindVertexStreams 0x82B61FE0 and VertexBuffer::Destruct/Release/GetResourceDescriptor match
+// only so.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "rw/rwcore_structs.h"
@@ -42,7 +49,8 @@ VertexBuffer* VertexBuffer::Initialize(const rw::Resource& resource, const Param
     buffer->BaseFlush = D3DFLUSH_INITIAL_VALUE;
     buffer->Format.dword[0] |= 3;
     buffer->m_bufferSize = parameters.bufferSize;
-    buffer->m_type = parameters.type & 0xFF;
+    // ARTIST 0x82B62F40..44 loads the whole type word and narrows it (lwz; clrlwi 24).
+    buffer->m_type = static_cast<u8>(parameters.type);
     XGSetVertexBufferHeader(parameters.bufferSize, 0, D3DPOOL_MANAGED,
         reinterpret_cast<u32>(resource.m_baseResources[2]), buffer);
     buffer->Xbox2CheckPhysicalMemoryFlags();
@@ -71,13 +79,10 @@ void VertexBuffer::Xbox2CheckPhysicalMemoryFlags()
     void* const base = reinterpret_cast<void*>(Format.dword[0] & ~3u);
     if (base)
     {
-        const DWORD flags = XQueryMemoryProtect(base);
-        u32 common = Common;
-        if (flags & (PAGE_NOCACHE | PAGE_WRITECOMBINE))
-            common &= ~D3DCOMMON_CPU_CACHED_MEMORY;
+        if (XQueryMemoryProtect(base) & (PAGE_NOCACHE | PAGE_WRITECOMBINE))
+            Common &= ~D3DCOMMON_CPU_CACHED_MEMORY;
         else
-            common |= D3DCOMMON_CPU_CACHED_MEMORY;
-        Common = common;
+            Common |= D3DCOMMON_CPU_CACHED_MEMORY;
     }
 }
 

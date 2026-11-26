@@ -88,6 +88,9 @@ namespace Jobs
         void   SetJobThreadSleepTimeoutMS(JobEnvironment leEnvironment, size_t luTimeoutMS);
 
     private:
+        // Job::INTERNAL_AddNotReady 0x82BCA400 reads mSchedulers[environment] itself.
+        friend struct Job;
+
         // Non-copyable (DWARF declares the copy ctor / operator= private).
         JobScheduler(const JobScheduler&);
         JobScheduler& operator=(const JobScheduler&);

@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwcollision for size (record-form cr0
+// tests, as in the rwcore filesys sources).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // Native ARTIST separating-axis family. Geometry values use the genuine
 // Vector3/VecFloat ABI. VMX expressions retain their emitted rounding order;
 // raw-estimate normalizations intentionally remain raw estimates.

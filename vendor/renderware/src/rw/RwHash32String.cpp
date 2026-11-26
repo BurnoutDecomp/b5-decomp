@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwcore for size (record-form cr0
+// tests, as in the rwcore filesys sources);
+// rw::operator- 0x82B63E50 matches only so.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "rw/RwHash32String.h"
 
 #include <cstring>  // memcpy (the X360 operator- opens with memcpy(result, lhs, 40))

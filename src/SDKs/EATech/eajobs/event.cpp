@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled the EA job manager for size (record-form cr0
+// tests), as job_thread.cpp and job_instance_handle.cpp already note.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "SDKs/EATech/eajobs/event.h"
 #include "SDKs/EATech/eajobs/jobs.h"
 

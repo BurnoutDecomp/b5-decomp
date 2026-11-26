@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwphysics for size (record-form cr0
+// tests, as in the rwcore filesys sources).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::physics::SimulationWorkspace::GetResourceDescriptor -- build-time sizer for the
 // physics-step scratch workspace.

@@ -268,13 +268,12 @@ namespace Thread
     // wrapper if present, else dispatches the raw function pointer.
     struct IRunnable
     {
-        // Polymorphic base destructor. Defined OUT-OF-LINE in BrnEAThreadX360.cpp so
-        // the interface owns a real .cpp definition home -- the X360 base
-        // scalar-deleting destructor @ 0x82BC9930 (stores the IRunnable vtable
-        // off_821823FC into *this, then for the deleting variant conditionally
-        // operator-delete's). The body is empty (no members, no base); the vtable
-        // store + delete-tail is what the compiler emits.
-        virtual ~IRunnable();
+        // Polymorphic base destructor, header-inline as in EAThread's
+        // eathread_thread.h (`virtual ~IRunnable() { }`): ARTIST's
+        // JobThread::~JobThread 0x82BC9EA8..0x82BC9EB0 inlines it as the bare
+        // IRunnable vtable store (off_821823FC); the scalar deleting destructor
+        // 0x82BC9930 is the COMDAT the compiler emits beside the vtable.
+        virtual ~IRunnable() {}
         virtual intptr_t Run(void* pContext = 0) = 0;
     };
 

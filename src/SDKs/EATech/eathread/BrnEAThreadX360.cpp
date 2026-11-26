@@ -390,16 +390,6 @@ namespace Thread
         }
     }
 
-    // 0x82BC9930 -- IRunnable base scalar-deleting destructor. The X360 thunk stores
-    // the IRunnable vtable (off_821823FC) into *this (stw r11, 0(r31)), then for the
-    // deleting variant conditionally operator-delete's (clrlwi. r10, r4, 31; beq skip;
-    // bl operator_delete) and returns this. IRunnable is an abstract base with no
-    // members and no base subobject, so the body is empty: defining it out-of-line
-    // emits exactly the vtable store + conditional operator-delete tail.
-    IRunnable::~IRunnable()
-    {
-    }
-
     // ARTIST82B42DD0. An initially absent record waits for publication; an
     // already-present record with a null handle takes the ended path directly.
     Thread::Status Thread::WaitForEnd(const u32& timeoutAbsolute, intptr_t* pThreadReturnValue)

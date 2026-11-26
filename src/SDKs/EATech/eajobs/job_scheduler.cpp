@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled the EA job manager for size (record-form cr0
+// tests), as job_thread.cpp and job_instance_handle.cpp already note;
+// ~JobScheduler 0x82BCA5E0 matches only so.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "SDKs/EATech/eajobs/job_scheduler.h"
 #include "SDKs/EATech/eajobs/job.h"           // EA::Jobs::Job (INTERNAL_AddNotReady / SubmitEventsAndDeps / dependency walk)
 #include "SDKs/EATech/eajobs/event.h"         // EA::Jobs::Event::Run (mStartEvent kick)
@@ -126,17 +132,15 @@ namespace Jobs
     //   lwz  r11, 0x10(r11)     ; r11 = vtable[+0x10]  == the AddThread slot
     //   mtctr r11 ; bctrl       ; call(r3 = &lHandle (sret), r5 = &lrParameters)
     // The combined LocalBackend vtable's worker slots are WakeThreads +0x1C /
-    // ExecuteReadyJobs +0x50 / GetSleepTimeoutMs +0x54 (see local_backend.h), so +0x10
+    // RunSingleJob +0x50 / GetSleepTimeoutMs +0x54 (see local_backend.h), so +0x10
     // is a distinct earlier slot: the SchedulerBackend AddThread entry. The only
     // concrete backend is LocalBackend, whose AddThread implementation at
     // 0x82BCA6C0 receives the native hidden return buffer through this dispatch.
     JobThreadHandle JobScheduler::AddThread(const JobThreadParameters& lrParameters)
     {
-        JobThreadHandle lHandle;
-
+        // ARTIST 0x82BCA628 hands the caller's return buffer straight to the backend.
         mLock.Lock();
-        Detail::SchedulerBackend* lpBackend = mSchedulers[lrParameters.environment];
-        lHandle = lpBackend->AddThread(lrParameters);
+        JobThreadHandle lHandle = mSchedulers[lrParameters.environment]->AddThread(lrParameters);
         mLock.Unlock();
 
         return lHandle;
@@ -155,12 +159,12 @@ namespace Jobs
         {
             for (int liIndex = 0; liIndex < liCount; ++liIndex)
             {
-                lpaJobs[liIndex].INTERNAL_AddNotReady(mSchedulers);
+                lpaJobs[liIndex].INTERNAL_AddNotReady(*this);
             }
 
             for (int liIndex = 0; liIndex < liCount; ++liIndex)
             {
-                lpaJobs[liIndex].INTERNAL_SubmitEventsAndDeps();
+                lpaJobs[liIndex].INTERNAL_SubmitEventsAndDeps(*this);
             }
 
             for (int liIndex = 0; liIndex < liCount; ++liIndex)
@@ -185,7 +189,7 @@ namespace Jobs
 
         int liWritten = 1;
         lapWorkList[0] = lpRoot;
-        lpRoot->INTERNAL_AddNotReady(mSchedulers);
+        lpRoot->INTERNAL_AddNotReady(*this);
         lpRoot->mSeen = true;
 
         int liRead = 0;
@@ -200,7 +204,7 @@ namespace Jobs
                 if (!lpDependency->mSeen)
                 {
                     lpDependency->mSeen = true;
-                    lpDependency->INTERNAL_AddNotReady(mSchedulers);
+                    lpDependency->INTERNAL_AddNotReady(*this);
                     lapWorkList[liWritten] = lpDependency;
                     ++liWritten;
                 }
@@ -213,7 +217,7 @@ namespace Jobs
                 if (!lpDependent->mSeen)
                 {
                     lpDependent->mSeen = true;
-                    lpDependent->INTERNAL_AddNotReady(mSchedulers);
+                    lpDependent->INTERNAL_AddNotReady(*this);
                     lapWorkList[liWritten] = lpDependent;
                     ++liWritten;
                 }
@@ -227,7 +231,7 @@ namespace Jobs
         {
             for (int liIndex = 0; liIndex < liRead; ++liIndex)
             {
-                lapWorkList[liIndex]->INTERNAL_SubmitEventsAndDeps();
+                lapWorkList[liIndex]->INTERNAL_SubmitEventsAndDeps(*this);
             }
 
             for (int liIndex = 0; liIndex < liRead; ++liIndex)

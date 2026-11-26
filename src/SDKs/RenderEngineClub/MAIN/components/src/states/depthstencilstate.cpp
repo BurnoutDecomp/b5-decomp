@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled the renderengine core (0x82B60000..0x82B64xxx) for
+// size (record-form cr0 tests), like the state objects' resource descriptors.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/depthstencilstate.h"
 
 namespace renderengine

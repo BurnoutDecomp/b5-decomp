@@ -66,8 +66,8 @@ namespace LocalBackend
     {
         while (!mbQuit)
         {
-            // ExecuteReadyJobs returns 0 when there was nothing to run -> sleep.
-            if (!mpBackend->ExecuteReadyJobs(static_cast<int>(mParameters.affinity)))
+            // RunSingleJob returns 0 when there was nothing to run -> sleep.
+            if (!mpBackend->RunSingleJob(static_cast<int>(mParameters.affinity)))
             {
                 const u32 luTimeoutMs = mpBackend->GetSleepTimeoutMs();
                 WaitForSingleObject(mhEvent, luTimeoutMs);

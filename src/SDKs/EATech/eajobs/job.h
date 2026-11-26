@@ -122,10 +122,13 @@ namespace Jobs
 
         // job.h:110 -- (scheduler-internal) record THIS job's instance handle from the
         // backend's just-submitted slot and seed mStartEvent's barrier. X360 0x82BCA3D8.
-        JobInstanceHandle* INTERNAL_AddNotReady(Detail::SchedulerBackend** pBackends);
+        // DWARF job.h:212 -- void, takes the scheduler (ARTIST indexes its backend array
+        // straight from r4: 0x82BCA400 `lwzx r4,r11,r4`).
+        void INTERNAL_AddNotReady(JobScheduler& rScheduler);
         // job.h:112 -- (scheduler-internal) push every dependency-edge barrier and every
         // begin/end event into the backend so the instance fires them. X360 0x82BCB2F0.
-        void INTERNAL_SubmitEventsAndDeps();
+        // DWARF job.h:215 -- takes the scheduler too (JobScheduler::AddJobs passes it in r4).
+        void INTERNAL_SubmitEventsAndDeps(JobScheduler& rScheduler);
 
         // Accessors (declaration-only; bodies live in the vendor job TU).
         const EntryPoint& GetEntryPoint() const { return mEntryPoint; }

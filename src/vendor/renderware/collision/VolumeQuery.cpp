@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled RenderWare's rwcollision for size (record-form cr0
+// tests, as in the rwcore filesys sources);
+// VolumeVolumeQuery::Initialize 0x82BB3980 matches only so.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "vendor/renderware/collision/VolumeQuery.hpp"
 
 #include "vendor/renderware/collision/AABBox.hpp"
