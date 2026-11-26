@@ -2073,23 +2073,23 @@ namespace
         const f32 lfPointY = lrPoint.GetY();
         const f32 lfPointZ = lrPoint.GetZ();
         return Vector4(
-            lfPointX * lrMatrix.xAxis.GetX() + lfPointY * lrMatrix.yAxis.GetX() +
-                lfPointZ * lrMatrix.zAxis.GetX() + lrMatrix.wAxis.GetX(),
-            lfPointX * lrMatrix.xAxis.GetY() + lfPointY * lrMatrix.yAxis.GetY() +
-                lfPointZ * lrMatrix.zAxis.GetY() + lrMatrix.wAxis.GetY(),
-            lfPointX * lrMatrix.xAxis.GetZ() + lfPointY * lrMatrix.yAxis.GetZ() +
-                lfPointZ * lrMatrix.zAxis.GetZ() + lrMatrix.wAxis.GetZ(),
-            lfPointX * lrMatrix.xAxis.GetW() + lfPointY * lrMatrix.yAxis.GetW() +
-                lfPointZ * lrMatrix.zAxis.GetW() + lrMatrix.wAxis.GetW());
+            lfPointX * lrMatrix.xAxis.GetX().GetFloat() + lfPointY * lrMatrix.yAxis.GetX().GetFloat() +
+                lfPointZ * lrMatrix.zAxis.GetX().GetFloat() + lrMatrix.wAxis.GetX().GetFloat(),
+            lfPointX * lrMatrix.xAxis.GetY().GetFloat() + lfPointY * lrMatrix.yAxis.GetY().GetFloat() +
+                lfPointZ * lrMatrix.zAxis.GetY().GetFloat() + lrMatrix.wAxis.GetY().GetFloat(),
+            lfPointX * lrMatrix.xAxis.GetZ().GetFloat() + lfPointY * lrMatrix.yAxis.GetZ().GetFloat() +
+                lfPointZ * lrMatrix.zAxis.GetZ().GetFloat() + lrMatrix.wAxis.GetZ().GetFloat(),
+            lfPointX * lrMatrix.xAxis.GetW().GetFloat() + lfPointY * lrMatrix.yAxis.GetW().GetFloat() +
+                lfPointZ * lrMatrix.zAxis.GetW().GetFloat() + lrMatrix.wAxis.GetW().GetFloat());
     }
 
     // Clip space -> the reference screen: ((clip / w) + 1) * 0.5 * (1280, 720).
     Vector3 ClipToScreen(const Vector4& lrClip)
     {
-        const f32 lfInvW = 1.0f / lrClip.GetW();
+        const f32 lfInvW = 1.0f / lrClip.GetW().GetFloat();
         return Vector3(
-            (lrClip.GetX() * lfInvW + 1.0f) * 0.5f * static_cast<f32>(KU_IMPRESSION_SCREEN_WIDTH),
-            (lrClip.GetY() * lfInvW + 1.0f) * 0.5f * static_cast<f32>(KU_IMPRESSION_SCREEN_HEIGHT),
+            (lrClip.GetX().GetFloat() * lfInvW + 1.0f) * 0.5f * static_cast<f32>(KU_IMPRESSION_SCREEN_WIDTH),
+            (lrClip.GetY().GetFloat() * lfInvW + 1.0f) * 0.5f * static_cast<f32>(KU_IMPRESSION_SCREEN_HEIGHT),
             0.0f);
     }
 }

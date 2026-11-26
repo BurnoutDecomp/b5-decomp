@@ -121,18 +121,18 @@ namespace BrnGui
 
 
 
-
-
     private:
         // @ 0x824E8528 -- pack a normalised colour (x, y, z = R, G, B in 0..1) into 0x00RRGGBB:
-        // each channel scaled by 255.0 and truncated to uint32_t (fctidz); w is not used.
+        // each channel scaled by 255.0 and truncated to uint32_t (fctidz); w is not used. The channels are
+        // read with VecFloatRef::GetFloat (DWARF's inlined copies call it, BrnGuiSharedComponentUnity :2772;
+        // ARTIST multiplies on the FPU, lfs/fmuls), not through the VecFloat operator set.
         uint32_t GetUint32ColourFromVector4(const rw::math::vpu::Vector4* lpv4Colour)
         {
             CGS_ASSERT(lpv4Colour != 0, "lpv4Colour");   // h:131 (ARTIST 0x824E854C)
 
-            const uint32_t luRed   = static_cast<uint32_t>(lpv4Colour->GetX() * 255.0f);
-            const uint32_t luGreen = static_cast<uint32_t>(lpv4Colour->GetY() * 255.0f);
-            const uint32_t luBlue  = static_cast<uint32_t>(lpv4Colour->GetZ() * 255.0f);
+            const uint32_t luRed   = static_cast<uint32_t>(lpv4Colour->GetX().GetFloat() * 255.0f);
+            const uint32_t luGreen = static_cast<uint32_t>(lpv4Colour->GetY().GetFloat() * 255.0f);
+            const uint32_t luBlue  = static_cast<uint32_t>(lpv4Colour->GetZ().GetFloat() * 255.0f);
 
             return ((luRed << 8) | luGreen) << 8 | luBlue;
         }

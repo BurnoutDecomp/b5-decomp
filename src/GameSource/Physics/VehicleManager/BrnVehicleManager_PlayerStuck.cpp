@@ -655,10 +655,10 @@ namespace
             const f32      lfT     = lrHit.mfBestT;
 
             // vsubfp v13, end, start ; vmaddfp v1, v13, v0(start), v12(t) -- all four lanes.
-            const Vector3 lvPosition(Vector4( ((lrEnd.GetComponent(0) - lrStart.GetComponent(0)) * lfT) + lrStart.GetComponent(0),
-                                         ((lrEnd.GetComponent(1) - lrStart.GetComponent(1)) * lfT) + lrStart.GetComponent(1),
-                                         ((lrEnd.GetComponent(2) - lrStart.GetComponent(2)) * lfT) + lrStart.GetComponent(2),
-                                         ((lrEnd.GetComponent(3) - lrStart.GetComponent(3)) * lfT) + lrStart.GetComponent(3) ).mV);
+            const Vector3 lvPosition(Vector4( ((lrEnd.GetComponent(0).GetFloat() - lrStart.GetComponent(0).GetFloat()) * lfT) + lrStart.GetComponent(0).GetFloat(),
+                                         ((lrEnd.GetComponent(1).GetFloat() - lrStart.GetComponent(1).GetFloat()) * lfT) + lrStart.GetComponent(1).GetFloat(),
+                                         ((lrEnd.GetComponent(2).GetFloat() - lrStart.GetComponent(2).GetFloat()) * lfT) + lrStart.GetComponent(2).GetFloat(),
+                                         ((lrEnd.GetComponent(3).GetFloat() - lrStart.GetComponent(3).GetFloat()) * lfT) + lrStart.GetComponent(3).GetFloat() ).mV);
             const Vector3 lvNormal(Vector4( lrHit.mNormal.GetComponent(0), lrHit.mNormal.GetComponent(1),
                                          lrHit.mNormal.GetComponent(2), lrHit.mNormal.GetComponent(3) ).mV);
 

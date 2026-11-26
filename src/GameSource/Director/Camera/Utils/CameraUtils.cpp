@@ -1443,7 +1443,7 @@ Matrix44Affine CreateAdjustedLookAt(Matrix44Affine lLookAt,
     const f32 lfPlaneWidthAtUnitDepth = 2.0f * rw::math::fpu::Tan(lvFOV * KF_HALF_DEGS_TO_RADS);
 
     const Vector3 lOffsetTarget(lScreenOffset.mV.x * lfPlaneWidthAtUnitDepth,
-                                lScreenOffset.mV.y * (lfPlaneWidthAtUnitDepth / lvAspect), 1.0f);
+                                lScreenOffset.mV.y * (lfPlaneWidthAtUnitDepth / lvAspect.GetFloat()), 1.0f);
 
     const Vector3 lOrigin(0.0f, 0.0f, 0.0f);
 

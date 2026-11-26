@@ -6,6 +6,9 @@
 // (Max); the Xenon body is the same select through the XDK __fsel intrinsic.
 
 #include "SDKs/EATech/include/rw/math/vpu/scalar.h"
+// LegacySrc rwmath 1.02.00 ps3/ppu/scalar_operation_platform_inline.h:6: the platform scalar header
+// brings in the VecFloat operator set.
+#include "SDKs/EATech/include/rw/math/vpu/vec_float_operation.h"
 #include <ppcintrinsics.h>
 
 namespace rw
