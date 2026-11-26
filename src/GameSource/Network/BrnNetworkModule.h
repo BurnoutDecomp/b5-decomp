@@ -182,29 +182,112 @@ namespace BrnNetwork
             GetOutputGuiEventQueue()->AddGuiEvent(lEvent);
         }
 
-        BrnNetworkModuleIO::GameStateToNetworkInterface* GetGameStateToNetworkInterface();
+        // DecFIGS BrnNetworkModule.h:493 (header inline).
+        BrnNetworkModuleIO::GameStateToNetworkInterface* GetGameStateToNetworkInterface()
+        {
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+                "Can not use this function unless module is updating\n",
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 495));
+            return &mGameStateToNetworkInterface;
+        }
 
         // Convenience forwards onto the GameState->Network mapping table (the network managers call
         // them directly). Declared-only; bodies land with the mapping-table TU.
-        EActiveRaceCarIndex GetActiveRaceCarIndex(NetworkPlayerID lNetworkPlayerID);
-        NetworkPlayerID     GetNetworkPlayerID(EActiveRaceCarIndex leActiveRaceCarIndex);
+        // DecFIGS BrnNetworkModule.h:545 (header inline; ARTIST keeps no copy).
+        EActiveRaceCarIndex GetActiveRaceCarIndex(NetworkPlayerID lNetworkPlayerID)
+        {
+            return mGameStateToNetworkInterface.GetActiveRaceCarIndex(lNetworkPlayerID);
+        }
+        NetworkPlayerID GetNetworkPlayerID(EActiveRaceCarIndex leActiveRaceCarIndex)
+        {
+            return mGameStateToNetworkInterface.GetNetworkPlayerID(leActiveRaceCarIndex);
+        }
 
-        BrnPhysics::Vehicle::VehicleDriverInputInterface*                 GetVehicleDriverInputInterface();
-        BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface*           GetTrafficInputInterface();
-        const BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface*    GetTrafficOutputInterface() const;
-        BrnWorld::CrashIO::NetworkInputInterface*                         GetCrashInputInterface();
-        const BrnWorld::CrashIO::NetworkOutputInterface*                  GetCrashOutputInterface() const;
-        BrnNetworkModuleIO::NetworkToGameStateInterface*                  GetNetworkToGameStateInterface();
-        BrnWorld::PlayerVehicleControls*                                  GetPlayerVehicleControls();
-        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* GetActiveRaceCarInterface() const;
-        const CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>*      GetTakedownEventInputQueue() const;
+        // DecFIGS BrnNetworkModule.h:374 (header inline).
+        BrnPhysics::Vehicle::VehicleDriverInputInterface* GetVehicleDriverInputInterface()
+        {
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+                "Can not use this function unless module is updating\n",
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 376));
+            return &mVehicleDriverInputInterface;
+        }
+        // DecFIGS BrnNetworkModule.h:390 (header inline).
+        BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface* GetTrafficInputInterface()
+        {
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+                "Can not use this function unless module is updating\n",
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 392));
+            return &mTrafficNetworkInputInterface;
+        }
+        // DecFIGS BrnNetworkModule.h:398 (header inline).
+        const BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface* GetTrafficOutputInterface() const
+        {
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+                "Can not use this function unless module is updating\n",
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 400));
+            return &mTrafficNetworkOutputInterface;
+        }
+        // DecFIGS BrnNetworkModule.h:406 (header inline).
+        BrnWorld::CrashIO::NetworkInputInterface* GetCrashInputInterface()
+        {
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+                "Can not use this function unless module is updating\n",
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 408));
+            return &mCrashNetworkInputInterface;
+        }
+        // DecFIGS BrnNetworkModule.h:414 (header inline).
+        const BrnWorld::CrashIO::NetworkOutputInterface* GetCrashOutputInterface() const
+        {
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+                "Can not use this function unless module is updating\n",
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 416));
+            return &mCrashNetworkOutputInterface;
+        }
+        // DecFIGS BrnNetworkModule.h:485 (header inline).
+        BrnNetworkModuleIO::NetworkToGameStateInterface* GetNetworkToGameStateInterface()
+        {
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+                "Can not use this function unless module is updating\n",
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 487));
+            return &mNetworkToGameStateInterface;
+        }
+        // DecFIGS BrnNetworkModule.h:429 (header inline).
+        BrnWorld::PlayerVehicleControls* GetPlayerVehicleControls()
+        {
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+                "Can not use this function unless module is updating\n",
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 431));
+            return &mPlayerVehicleControls;
+        }
+        // DecFIGS BrnNetworkModule.h:358 (header inline).
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* GetActiveRaceCarInterface() const
+        {
+            CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+            return &mActiveRaceCarInterface;
+        }
+        // DecFIGS BrnNetworkModule.h:310 (header inline).
+        const CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>* GetTakedownEventInputQueue() const
+        {
+            CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+            return &mTakedownEventInputQueue;
+        }
+        // DecFIGS BrnNetworkModule.h:456 places it in the header; kept out of line (see the .cpp).
         CgsModule::VariableEventQueue<18432, 16>*                         GetInputGuiEventQueue();
 
         // Returns the tree-wide pointer-only name BrnNetworkModuleIO::NetworkEventQueue (declared in
         // BrnNetworkModuleIO.h); the member itself is the real VariableEventQueue<14000,16>.
-        BrnNetworkModuleIO::NetworkEventQueue*                            GetNetworkEventQueue();
+        // DecFIGS BrnNetworkModule.h:528 (header inline).
+        BrnNetworkModuleIO::NetworkEventQueue* GetNetworkEventQueue()
+        {
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+                "Can not use this function unless module is updating\n",
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 530));
+            return &mNetworkEventQueue;
+        }
 
+        // DecFIGS BrnNetworkModule.h:512 places it in the header; kept out of line (see the .cpp).
         bool IsSendUpdateMessageToBeShown() const;
+        // DecFIGS BrnNetworkModule.h:520 places it in the header; kept out of line (see the .cpp).
         bool IsRecvUpdateMessageToBeShown() const;
 
     private:

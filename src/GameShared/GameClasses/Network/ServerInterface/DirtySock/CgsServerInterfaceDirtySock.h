@@ -206,8 +206,15 @@ namespace CgsNetwork
         virtual void Resume();
         virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
 
-        // CgsServerInterfaceDirtySock.h:717 -- THIS TU. Returns mpacMessageBuffer.
-        char* GetMessageBuffer() const;
+        // CgsServerInterfaceDirtySock.h:717, assert h:719: header inline. ARTIST inlines it at
+        // most posts and keeps a copy (0x82580B48) for the three callers it does not inline.
+        char* GetMessageBuffer() const
+        {
+            CGS_ASSERT_AT(mpacMessageBuffer != 0, "mpacMessageBuffer",
+                          "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.h",
+                          719);
+            return mpacMessageBuffer;
+        }
         // CgsServerInterfaceDirtySock.h:724
         s32 GetMessageBufferLength() const;
 
@@ -401,14 +408,6 @@ namespace CgsNetwork
         friend class ServerInterfaceServerInfo;
         friend class ServerInterfaceGames;
 
-        // The client-config query expands the same checked accessor as its standalone callers.
-        char* GetCheckedMessageBuffer() const
-        {
-            CGS_ASSERT_AT(mpacMessageBuffer != 0, "mpacMessageBuffer",
-                          "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.h",
-                          719);
-            return mpacMessageBuffer;
-        }
 
         void AllocateDirtySock();
         void FreeDirtySock();

@@ -537,7 +537,7 @@ void PlayerManager::AddPlayer(const CgsSystem::TimerStatus* lpTimerStatus, const
 
     if (liConnectionIndex == 0)
     {
-        *CgsDev::Log::gpDebugPrint << "CgsNetwork::PlayerManager::AddPlayer"
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "CgsNetwork::PlayerManager::AddPlayer"
                                    << ": setting hostID to " << lPlayerID << "\n";
         mHostPlayerID = lPlayerID;
     }
@@ -1086,7 +1086,7 @@ void PlayerManager::AcceptMessage(Message* lpMessage)
 
     if (lpAckMsg == 0)
     {
-        *CgsDev::Log::gpDebugPrint << "WARNING: run out of acks to use...\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: run out of acks to use...\n";
         return;
     }
 
@@ -1117,7 +1117,7 @@ void PlayerManager::ThrowAwayMessage(Message* lpMessage)
 
     if (lpNackMsg == 0)
     {
-        *CgsDev::Log::gpDebugPrint << "WARNING: run out of nacks to use...\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: run out of nacks to use...\n";
         return;
     }
 
@@ -1130,10 +1130,10 @@ void PlayerManager::ThrowAwayMessage(Message* lpMessage)
 
     lpNackMsg->PrepareNack(lpMessage, lSendPlayerID, lRecvPlayerID);
 
-    *CgsDev::Log::gpDebugPrint << "Sending a nack for msg type " << static_cast<s32>(lpMessage->GetType())
+    CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Sending a nack for msg type " << static_cast<s32>(lpMessage->GetType())
                                << " frame " << static_cast<s32>(lpMessage->mu16Frame)
                                << " to player calling themselves index " << lSendPlayerID << "\n";
-    *CgsDev::Log::gpDebugPrint << "We are calling ourselves " << lRecvPlayerID << "\n";
+    CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "We are calling ourselves " << lRecvPlayerID << "\n";
 }
 
 // ---- CheckForNack --------------------------------------------------------------------
@@ -1191,7 +1191,7 @@ void PlayerManager::ReceiveMessages()
 
     if (s_iNumMessagesReceivedThisFrame > KI_MANY_MESSAGES_RECEIVED_THIS_FRAME)
     {
-        *CgsDev::Log::gpDebugPrint << "We received " << s_iNumMessagesReceivedThisFrame
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "We received " << s_iNumMessagesReceivedThisFrame
                                    << " messages this frame, which is rather high\n";
     }
     s_iNumMessagesReceivedThisFrame = 0;
@@ -1243,7 +1243,7 @@ void PlayerManager::ReceiveMessages()
                             : lpu8MsgData + sizeof(CompressionAndEncryptionUtils::PackedPacketHeader);
                     static const char* const KPAC_CONNECTION_TYPE_STRING[2] = { "Peer-peer", "GameServer" };
 
-                    CgsDev::StrStreamBase& lLog = *CgsDev::Log::gpDebugPrint;
+                    CgsDev::StrStreamBase& lLog = CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput;
                     lLog << "Player ID in message doesn't match ID of player received from!\n";
                     lLog << "==============================================================\n\n";
                     lLog << "Message contains:\n";

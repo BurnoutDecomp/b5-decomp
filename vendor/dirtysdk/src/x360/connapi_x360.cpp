@@ -203,7 +203,7 @@ extern "C" ConnApiRefT* ConnApiCreate(s32 gamePort, s32 maxClients,
     if (!ref->pProtoMangle)
     {
         NetPrintfCode("connapi: unable to create protomangle ref\n");
-        DirtyMemFree(ref, 0x636f6e6e, memGroup);
+        DirtyMemFree(ref, 0x636f6e6e, ref->iMemGroup);   // ARTIST 0x82B16208 lwz r5,8(r31)
         return 0;
     }
     ref->uSessionFlags = ProtoMangleStatus(ref->pProtoMangle, 0x73666c67, 0, 0);

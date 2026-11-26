@@ -566,7 +566,7 @@ namespace CgsNetwork
     {
         ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "DirtySock: CreateGame\n";
 
-        char* lpcBuffer = mpServerInterface->GetCheckedMessageBuffer();
+        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
 
         lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
         lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
@@ -611,7 +611,7 @@ namespace CgsNetwork
     {
         ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "DirtySock: JoinGame\n";
 
-        char* lpcBuffer = mpServerInterface->GetCheckedMessageBuffer();
+        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
 
         lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
         lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
@@ -624,7 +624,7 @@ namespace CgsNetwork
     {
         ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "DirtySock: QuickJoinGame\n";
 
-        char* lpcBuffer = mpServerInterface->GetCheckedMessageBuffer();
+        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
 
         TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "MODE", 0);
         lpQuickJoinParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
@@ -655,7 +655,7 @@ namespace CgsNetwork
         if (meCurrentAction == E_ACTION_CANCEL_SEARCH_FOR_GAMES)
             return;
 
-        char* lpcBuffer = mpServerInterface->GetCheckedMessageBuffer();
+        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
 
         lpcBuffer[0] = 0;
         TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "CANCEL", 1);
@@ -773,7 +773,7 @@ namespace CgsNetwork
         LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_USERINFO,
                        &lUser, sizeof(lUser));
 
-        char* lpcBuffer = mpServerInterface->GetCheckedMessageBuffer();
+        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
         CGS_ASSERT_AT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()", CGS_ARTIST_SERVER_GAMES_FILE, 2038);
 
         // When the game has a server-auth string, it must be present.

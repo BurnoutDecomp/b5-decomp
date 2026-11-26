@@ -454,126 +454,32 @@ namespace BrnNetwork
         BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
     }
 
-    // Header-inline on the console (no out-of-line symbol): the callers read the module's own
-    // mGameStateToNetworkInterface (+818064) directly, with no updating assert, and call the
-    // mapping-table lookups on it.
-    EActiveRaceCarIndex BrnNetworkModule::GetActiveRaceCarIndex(NetworkPlayerID lNetworkPlayerID)
-    {
-        return mGameStateToNetworkInterface.GetActiveRaceCarIndex(lNetworkPlayerID);
-    }
-
-    NetworkPlayerID BrnNetworkModule::GetNetworkPlayerID(EActiveRaceCarIndex leActiveRaceCarIndex)
-    {
-        return mGameStateToNetworkInterface.GetNetworkPlayerID(leActiveRaceCarIndex);
-    }
-
-    // -> &mActiveRaceCarInterface (+789840).
-    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
-    BrnNetworkModule::GetActiveRaceCarInterface() const
-    {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
-        return &mActiveRaceCarInterface;
-    }
-
-    // -> &mVehicleDriverInputInterface (+614704).
-    BrnPhysics::Vehicle::VehicleDriverInputInterface* BrnNetworkModule::GetVehicleDriverInputInterface()
-    {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
-        return &mVehicleDriverInputInterface;
-    }
-
-    // -> &mTrafficNetworkInputInterface (+800320).
-    BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface* BrnNetworkModule::GetTrafficInputInterface()
-    {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Can not use this function unless module is updating\n",
-            CGS_ARTIST_FILE_BRNNETWORKMODULE, 392 /* ARTIST 0x82542898 */));
-        return &mTrafficNetworkInputInterface;
-    }
-
-    // -> &mTrafficNetworkOutputInterface (+800432).
-    const BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface* BrnNetworkModule::GetTrafficOutputInterface() const
-    {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Can not use this function unless module is updating\n",
-            CGS_ARTIST_FILE_BRNNETWORKMODULE, 400 /* ARTIST 0x82542940 */));
-        return &mTrafficNetworkOutputInterface;
-    }
-
-    // -> &mCrashNetworkInputInterface (+800576).
-    BrnWorld::CrashIO::NetworkInputInterface* BrnNetworkModule::GetCrashInputInterface()
-    {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT("Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 408));
-        return &mCrashNetworkInputInterface;
-    }
-
-    // -> &mCrashNetworkOutputInterface (+816080).
-    const BrnWorld::CrashIO::NetworkOutputInterface* BrnNetworkModule::GetCrashOutputInterface() const
-    {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Can not use this function unless module is updating\n",
-            CGS_ARTIST_FILE_BRNNETWORKMODULE, 416 /* ARTIST 0x82542A90 */));
-        return &mCrashNetworkOutputInterface;
-    }
-
-    // -> &mGameStateToNetworkInterface (+818064).
-    BrnNetworkModuleIO::GameStateToNetworkInterface* BrnNetworkModule::GetGameStateToNetworkInterface()
-    {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Can not use this function unless module is updating\n",
-            CGS_ARTIST_FILE_BRNNETWORKMODULE, 495 /* ARTIST 0x82542D28 */));
-        return &mGameStateToNetworkInterface;
-    }
-
-    // -> &mNetworkToGameStateInterface (+818608).
-    BrnNetworkModuleIO::NetworkToGameStateInterface* BrnNetworkModule::GetNetworkToGameStateInterface()
-    {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Can not use this function unless module is updating\n",
-            CGS_ARTIST_FILE_BRNNETWORKMODULE, 487 /* ARTIST 0x82542C80 */));
-        return &mNetworkToGameStateInterface;
-    }
-
-    // -> &mPlayerVehicleControls (+827880).
-    BrnWorld::PlayerVehicleControls* BrnNetworkModule::GetPlayerVehicleControls()
-    {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT("Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 431));
-        return &mPlayerVehicleControls;
-    }
-
-    // -> &mTakedownEventInputQueue (+829496).
-    const CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>* BrnNetworkModule::GetTakedownEventInputQueue() const
-    {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
-        return &mTakedownEventInputQueue;
-    }
-
-    // -> &mInputGuiEventQueue (+829832).
+    // The other member accessors are header inline, as DecFIGS places them (BrnNetworkModule.h:
+    // 310..545). These three stay out of line for now: their only ARTIST callers
+    // (BrnNetworkPlayer::HandleSendingUpdateMessage, TellNetworkCarAboutRecievedUpdateMessage,
+    // ProcessAfterSimulation) call the copies 0x825818F8 / 0x825819A0 / 0x82581850, while our
+    // larger reconstructions of those callers would inline them and drop the exact copies.
     CgsModule::VariableEventQueue<18432, 16>* BrnNetworkModule::GetInputGuiEventQueue()
     {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT("Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 458));
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Can not use this function unless module is updating\n",
+            CGS_ARTIST_FILE_BRNNETWORKMODULE, 458));
         return &mInputGuiEventQueue;
     }
 
-    // ARTIST 0x82542DE4 returns the NetworkEventQueue at +852392.
-    BrnNetworkModuleIO::NetworkEventQueue* BrnNetworkModule::GetNetworkEventQueue()
-    {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
-            "Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 530));
-        return &mNetworkEventQueue;
-    }
-
-    // -> mbOutputSendUpdateMessages (+614664).
     bool BrnNetworkModule::IsSendUpdateMessageToBeShown() const
     {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT("Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 514));
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Can not use this function unless module is updating\n",
+            CGS_ARTIST_FILE_BRNNETWORKMODULE, 514));
         return mbOutputSendUpdateMessages;
     }
 
-    // -> mbOutputRecvUpdateMessages (+614665).
     bool BrnNetworkModule::IsRecvUpdateMessageToBeShown() const
     {
-        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT("Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 522));
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Can not use this function unless module is updating\n",
+            CGS_ARTIST_FILE_BRNNETWORKMODULE, 522));
         return mbOutputRecvUpdateMessages;
     }
 

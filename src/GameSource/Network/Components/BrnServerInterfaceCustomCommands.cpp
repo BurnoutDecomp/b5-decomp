@@ -672,7 +672,7 @@ void ServerInterfaceCustomCommands::UploadFreeBurnLobbyStats(
 {
     if (!static_cast<CgsNetwork::ServerInterfaceConnection*>(mpServerInterface->GetConnectionComponent())->IsLoggedIn())
     {
-        *CgsDev::Log::gpDebugPrint
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
             << "WARNING: Trying to upload freeburn stats whilst not connect, these have now been lost. ";
         return;
     }
@@ -760,7 +760,7 @@ int ServerInterfaceCustomCommands::ConvertEventScoreUploadError(int liMessageKin
         char lacKind[8];
         std::memcpy(lacKind, &liMessageKind, 4);
         lacKind[4] = 0;
-        *CgsDev::Log::gpDebugPrint << "Server doesn't recognise: " << lacKind << "\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Server doesn't recognise: " << lacKind << "\n";
         return 140;
     }
     if (liMessageCode == KI_CODE_TIMEOUT)      // 'time'

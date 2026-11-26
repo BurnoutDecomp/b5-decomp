@@ -64,10 +64,8 @@ namespace CgsNetwork
     {
     }
 
-    char* ServerInterfaceDirtySock::GetMessageBuffer() const
-    {
-        return GetCheckedMessageBuffer();
-    }
+    // GetMessageBuffer is header inline (CgsServerInterfaceDirtySock.h:717); its copy is
+    // emitted wherever a caller does not inline it.
 }
 
 // ---------------------------------------------------------------------------

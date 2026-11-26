@@ -184,15 +184,15 @@ bool ServerInterfaceServerInfo::IsNewsUpdated() const
 
 u32 ServerInterfaceServerInfo::GetTimeStampFromClientConfig(const char* lpcKey)
 {
-    CGS_ASSERT_AT(mpServerInterface->GetCheckedMessageBuffer() != 0,
+    CGS_ASSERT_AT(mpServerInterface->GetMessageBuffer() != 0,
                   "mpServerInterface->GetMessageBuffer()", CGS_ARTIST_FILE, 594);
 
-    mpServerInterface->GetCheckedMessageBuffer()[0] = 0;
-    GetStringFromClientConfig(lpcKey, mpServerInterface->GetCheckedMessageBuffer(), KI_MESSAGE_BUFFER_SIZE);
+    mpServerInterface->GetMessageBuffer()[0] = 0;
+    GetStringFromClientConfig(lpcKey, mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_SIZE);
     u32 luTimestamp = 0;
-    if (strnicmp(mpServerInterface->GetCheckedMessageBuffer(), "0", KI_MESSAGE_BUFFER_SIZE) != 0)
+    if (strnicmp(mpServerInterface->GetMessageBuffer(), "0", KI_MESSAGE_BUFFER_SIZE) != 0)
     {
-        luTimestamp = TagFieldGetEpoch(mpServerInterface->GetCheckedMessageBuffer(), 0);
+        luTimestamp = TagFieldGetEpoch(mpServerInterface->GetMessageBuffer(), 0);
     }
     return luTimestamp;
 }

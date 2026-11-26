@@ -353,7 +353,7 @@ bool NetworkPlayer::Prepare(NetworkAdapter* lpNetworkAdapter,
                             CgsSystem::EFrameRate leRemoteConsoleFrameRate,
                             NetworkPlayerID liPlayerID)
 {
-    *CgsDev::Log::gpDebugPrint << "Preparing player " << liPlayerID << "\n";
+    CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Preparing player " << liPlayerID << "\n";
 
     CGS_ASSERT(leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ||
                leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
@@ -375,7 +375,7 @@ bool NetworkPlayer::Prepare(NetworkAdapter* lpNetworkAdapter,
         ++liNameLength;
     if (liNameLength >= 16)
     {
-        *CgsDev::Log::gpDebugPrint << "String too long: " << (lpcName ? lpcName : "<NULLSTRING>");
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "String too long: " << (lpcName ? lpcName : "<NULLSTRING>");
         CGS_ASSERT(false, "String too long");
     }
     std::strncpy(macName, lpcName, 16);
@@ -562,7 +562,7 @@ void NetworkPlayer::SendMessages()
             // Unreliable: ship it new this frame. Warn if we are sending it out of turn.
             if (!lbCanSendToPlayer)
             {
-                *CgsDev::Log::gpDebugPrint
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
                     << "NETWORK PERFORMANCE WARNING: Unreliable message "
                     << static_cast<s32>(lpMsg->GetType())
                     << " sent to player " << liPlayerID << " out of turn\n";
@@ -601,7 +601,7 @@ void NetworkPlayer::SendMessages()
             if (!lbCanSendToPlayer)
             {
                 const char* lpcAction = lbFirstSend ? " sent" : " resent";
-                *CgsDev::Log::gpDebugPrint
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
                     << "NETWORK PERFORMANCE WARNING: Reliable message "
                     << static_cast<s32>(lpEntry->mpMsg->GetType())
                     << lpcAction << " to player " << liPlayerID << " out of turn\n";
@@ -640,7 +640,7 @@ void NetworkPlayer::SendMessages()
             SignalMessage* lpAck = mpPlayerManager->GetAck(liAck);
             lapSignalMessages[liNumSignalMessages++] = lpAck;
 
-            *CgsDev::Log::gpDebugPrint
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
                 << " Sending Ack for message type " << static_cast<s32>(lpAck->GetType())
                 << " for player " << liPlayerID
                 << " on frame " << static_cast<s32>(mu16CurrentFrame) << "\n";
@@ -749,7 +749,7 @@ void NetworkPlayer::UpdateMessagesReceived()
         CGS_ASSERT(lData.miValidCountdown == 0, CGS_ASSERT_MESSAGE_AT(
             "maRecvMessageData[liIndex].miValidCountdown == 0",
             __FILE__, 1235 /* ARTIST 0x82873000 */));
-        *CgsDev::Log::gpDebugPrint << "Removing message received data for message type "
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Removing message received data for message type "
                                    << lData.meType << " with frame "
                                    << static_cast<s32>(lData.mu16Frame) << "\n";
         lData.mu16Frame        = 0xFFFF;
@@ -910,7 +910,7 @@ void NetworkPlayer::OnMessageUnpackedCallback(Message* lpMsg, void* lpUserData)
     const u8 lu8MyGameID = lpNetPlayer->mpPlayerManager->GetGameID();
     if (lu8GameID != lu8MyGameID)
     {
-        *CgsDev::Log::gpDebugPrint << "My game ID " << static_cast<s32>(lu8MyGameID)
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "My game ID " << static_cast<s32>(lu8MyGameID)
                                    << ", msg game ID " << static_cast<s32>(lu8GameID)
                                    << ", player ID " << lpNetPlayer->mPlayerID << "\n";
         lpNetPlayer->mpPlayerManager->ThrowAwayMessage(lpMsg);

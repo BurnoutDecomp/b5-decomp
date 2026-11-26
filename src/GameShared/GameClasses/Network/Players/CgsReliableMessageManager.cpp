@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Players/CgsReliableMessageManager.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"              // GetFrameDiffWrapped16 / UInt16IsLargerWrapped / IsReliable / OldMessagesAreValid
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessageWithPlayerIDs.h" // MessageWithPlayerIDs::GetSendingPlayerID
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                    // CgsMemory::HeapMalloc::Free
@@ -133,7 +134,7 @@ bool ReliableMessageManager::MessageIsDuplicate(Message* lpMessage)
             && lReliableMessageRcvdData.mu16FrameSent == lpMessage->mu16Frame
             && lReliableMessageRcvdData.miType == liType)
         {
-            *CgsDev::Log::gpDebugPrint << "Dup reliable message frame " << liFrame
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Dup reliable message frame " << liFrame
                                        << " type " << liType << "\n";
             return true;
         }
@@ -146,7 +147,7 @@ bool ReliableMessageManager::MessageIsDuplicate(Message* lpMessage)
                 && lReliableMessageRcvdData.miType == liType
                 && UInt16IsLargerWrapped(lReliableMessageRcvdData.mu16FrameSent, lpMessage->mu16Frame))
             {
-                *CgsDev::Log::gpDebugPrint << "Old reliable message frame " << liFrame
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Old reliable message frame " << liFrame
                                            << " type " << liType << "\n";
                 return true;
             }
@@ -350,7 +351,7 @@ void ReliableMessageManager::RemoveBufferedReliableMessage(SignalMessage* lpAckO
 // cursor.
 void ReliableMessageManager::ClearPlayersSendReliableMessages(NetworkPlayerID lPlayerID)
 {
-    *CgsDev::Log::gpDebugPrint << "Clear buffered reliable messages to " << lPlayerID << "\n";
+    CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Clear buffered reliable messages to " << lPlayerID << "\n";
 
     miReliableMessageSendIndex = 0;
 
@@ -403,7 +404,7 @@ void ReliableMessageManager::CheckForReliableMessageTimeout()
 
         if (lpSendMessageData->mpMsg->IsMessageValid())
         {
-            *CgsDev::Log::gpDebugPrint
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
                 << "Tried to discard buffered reliable message, but it is marked as valid ("
                 << static_cast<s32>(lpSendMessageData->mu16FrameLastSent) << " - "
                 << static_cast<s32>(lpSendMessageData->mu16FrameFirstSent) << "> "
@@ -411,7 +412,7 @@ void ReliableMessageManager::CheckForReliableMessageTimeout()
         }
         else
         {
-            *CgsDev::Log::gpDebugPrint
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
                 << "Triggered discard of buffered reliable message ("
                 << static_cast<s32>(lpSendMessageData->mu16FrameLastSent) << " - "
                 << static_cast<s32>(lpSendMessageData->mu16FrameFirstSent) << "> "
@@ -446,7 +447,7 @@ void ReliableMessageManager::UpdateReliableMessagesReceived()
         CGS_ASSERT(lData.miValidCountdown == 0, CGS_ASSERT_MESSAGE_AT(
             "maReliableMessagesRcvdData[i].miValidCountdown == 0",
             __FILE__, 721 /* ARTIST 0x82875250 */));
-        *CgsDev::Log::gpDebugPrint << "Removing reliable message received data for message type "
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Removing reliable message received data for message type "
                                    << lData.miType << " from player " << lData.mPlayerID
                                    << " with frame " << static_cast<s32>(lData.mu16FrameSent)
                                    << "\n";
@@ -474,17 +475,17 @@ void ReliableMessageManager::FakeNackMessage(Message* lpMessage, NetworkPlayerID
     lNackMessage.Construct();
     lNackMessage.PrepareNack(lpMessage, lSendingPlayerID, lRecvingPlayerID);
 
-    *CgsDev::Log::gpDebugPrint << "Pretending a nack for msg type "
+    CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Pretending a nack for msg type "
                                << static_cast<s32>(lpMessage->mi8Type) << " frame "
                                << static_cast<s32>(lpMessage->mu16Frame)
                                << " to player calling themselves index " << lSendingPlayerID
                                << "\n";
-    *CgsDev::Log::gpDebugPrint << "We are calling ourselves " << lRecvingPlayerID << "\n";
+    CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "We are calling ourselves " << lRecvingPlayerID << "\n";
 
     NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lRecvingPlayerID);
     if (lpNetworkPlayer != 0)
     {
-        *CgsDev::Log::gpDebugPrint << "Telling player " << lRecvingPlayerID
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Telling player " << lRecvingPlayerID
                                    << " about non-delivered message\n";
         lpNetworkPlayer->ReceiveAckOrNack(&lNackMessage, lbAck);
     }
