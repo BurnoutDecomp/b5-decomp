@@ -96,9 +96,13 @@ namespace CgsSceneManager
         // field at bit 10 (`extrwi r,r,14,8` -- 14 bits starting at the big-endian bit 8 == the
         // low-endian field [10..23]). e.g. inlined into BrnWorld::RaceCarCrash::GetOwner
         // @ 0x827B1538.
-        u32 GetEntityIDEntityIndex() const
+        //
+        // DWARF CgsVolumeInstanceId.h:109 returns uint16_t; like GetEntityIDOwner below it reads
+        // the 32-bit entity word first (`ld; rldicl r,r,32,32; rlwinm r,r,22,18,31`,
+        // RaceCarCrash::GetOwner 0x827B154C..0x827B1554), i.e. EntityId::GetEntityIndex on it.
+        u16 GetEntityIDEntityIndex() const
         {
-            return static_cast<u32>(muId >> (32 + KU_ENTITY_INDEX_BASE)) & 0x3FFFu;
+            return EntityId(static_cast<u32>(muId >> KU_ENTITY_ID_START_INDEX)).GetEntityIndex();
         }
 
         // ---- the OWNER byte of the embedded entity word (bits [56..63] of muId) ------------
