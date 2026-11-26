@@ -187,9 +187,10 @@ namespace Gen
     inline void* speechdata::OnlineVoiceOvers(u32 luIndex)
     {
         Private* lpArrayHeader = reinterpret_cast<Private*>(mpAttributeData);
-        if (luIndex >= lpArrayHeader->GetLength())
+        if (luIndex < lpArrayHeader->GetLength())
+            return reinterpret_cast<u8*>(lpArrayHeader) + 8 + 24 * luIndex;
+        else
             return DefaultDataArea(0x18u);
-        return reinterpret_cast<u8*>(lpArrayHeader) + 8 + 24 * luIndex;
     }
 
     // ---- SOUND-C bodies ----------------------------------------------------------

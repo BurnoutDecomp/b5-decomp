@@ -140,10 +140,11 @@ namespace Gen
         {
             const Private* lpHeader = reinterpret_cast<const Private*>(
                 LayoutBytes() + luHeaderOffset);
-            if (luIndex >= lpHeader->GetLength())
-                return *static_cast<const s32*>(DefaultDataArea(sizeof(s32)));
-            return reinterpret_cast<const s32*>(
+            if (luIndex < lpHeader->GetLength())
+                return reinterpret_cast<const s32*>(
                 LayoutBytes() + luElementsOffset)[luIndex];
+            else
+                return *static_cast<const s32*>(DefaultDataArea(sizeof(s32)));
         }
     };
 

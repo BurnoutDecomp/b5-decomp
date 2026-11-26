@@ -308,9 +308,10 @@ namespace Gen
             const u8* lpLayout = LayoutBytes();
             const Private* lpHeader =
                 reinterpret_cast<const Private*>(lpLayout + luHeaderOffset);
-            if (luIndex >= lpHeader->GetLength())
+            if (luIndex < lpHeader->GetLength())
+                return reinterpret_cast<const s32*>(lpLayout + luElementsOffset)[luIndex];
+            else
                 return *static_cast<const s32*>(DefaultDataArea(4u));
-            return reinterpret_cast<const s32*>(lpLayout + luElementsOffset)[luIndex];
         }
     };
 

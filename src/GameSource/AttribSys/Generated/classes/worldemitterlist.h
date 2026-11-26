@@ -101,10 +101,10 @@ namespace Gen
     {
         const _LayoutStruct* lpLayout = static_cast<const _LayoutStruct*>(GetLayoutPointer());   // Instance::mpAttributeData (+4)
 
-        if (uiIndex >= lpLayout->_Array_mWorldEmitters.GetLength())
+        if (uiIndex < lpLayout->_Array_mWorldEmitters.GetLength())
+            return lpLayout->mWorldEmitters[uiIndex];
+        else
             return *static_cast<const RefSpec*>(DefaultDataArea(0x18u));
-
-        return lpLayout->mWorldEmitters[uiIndex];
     }
 }
 }

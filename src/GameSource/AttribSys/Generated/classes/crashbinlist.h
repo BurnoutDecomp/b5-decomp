@@ -37,9 +37,10 @@ namespace Gen
         const void* GetCrashBinRefData(u32 luIndex) const
         {
             const u8* lpData = static_cast<const u8*>(mpAttributeData);
-            if (luIndex >= reinterpret_cast<const Private*>(lpData)->GetLength())
+            if (luIndex < reinterpret_cast<const Private*>(lpData)->GetLength())
+                return lpData + 8u + luIndex * 24u;
+            else
                 return DefaultDataArea(0x18u);
-            return lpData + 8u + luIndex * 24u;
         }
 
         u64 GetCrashBinCollectionKey(u32 luIndex) const

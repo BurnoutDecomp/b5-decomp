@@ -72,9 +72,10 @@ namespace Gen
         const void* GetCrashBinRefData(u32 luIndex) const
         {
             const void* lpArrayData = mpAttributeData;
-            if (luIndex >= static_cast<const Private*>(lpArrayData)->GetLength())
+            if (luIndex < static_cast<const Private*>(lpArrayData)->GetLength())
+                return reinterpret_cast<const u8*>(lpArrayData) + 8 + luIndex * 24;
+            else
                 return DefaultDataArea(0x18u);
-            return reinterpret_cast<const u8*>(lpArrayData) + 8 + luIndex * 24;
         }
 
         u64 GetCrashBinCollectionKey(u32 luIndex) const

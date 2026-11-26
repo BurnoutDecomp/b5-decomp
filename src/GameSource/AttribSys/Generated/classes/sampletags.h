@@ -61,9 +61,10 @@ namespace Gen
     inline void* sampletags::FirstIndices(unsigned int luIndex)
     {
         u8* lpData = static_cast<u8*>(GetLayoutPointer());
-        if (luIndex >= reinterpret_cast<const Private*>(lpData + 0xD0)->GetLength())
+        if (luIndex < reinterpret_cast<const Private*>(lpData + 0xD0)->GetLength())
+            return lpData + 2 * (luIndex + 108);
+        else
             return DefaultDataArea(2u);
-        return lpData + 2 * (luIndex + 108);
     }
 
     // X360 @0x82682B28: length = GetLength(mpAttributeData+0x88); in range -> element at
@@ -72,9 +73,10 @@ namespace Gen
     inline const s16& sampletags::LastIndices(unsigned int luIndex) const
     {
         u8* lpData = static_cast<u8*>(mpAttributeData);
-        if (luIndex >= reinterpret_cast<const Private*>(lpData + 0x88)->GetLength())
+        if (luIndex < reinterpret_cast<const Private*>(lpData + 0x88)->GetLength())
+            return *reinterpret_cast<const s16*>(lpData + (luIndex + 0x48) * 2);
+        else
             return *static_cast<const s16*>(DefaultDataArea(2u));
-        return *reinterpret_cast<const s16*>(lpData + (luIndex + 0x48) * 2);
     }
 
     // X360 @0x82682B88: length = GetLength(mpAttributeData+0); in range -> mpAttributeData
@@ -82,9 +84,10 @@ namespace Gen
     inline void* sampletags::Volumes(unsigned int luIndex) const
     {
         u8* lpData = static_cast<u8*>(mpAttributeData);
-        if (luIndex >= reinterpret_cast<const Private*>(lpData)->GetLength())
+        if (luIndex < reinterpret_cast<const Private*>(lpData)->GetLength())
+            return lpData + 4 * (luIndex + 2);
+        else
             return DefaultDataArea(4u);
-        return lpData + 4 * (luIndex + 2);
     }
 }
 }

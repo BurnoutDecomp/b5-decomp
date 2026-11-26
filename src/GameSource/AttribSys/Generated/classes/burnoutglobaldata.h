@@ -107,9 +107,10 @@ namespace Gen
     inline void* burnoutglobaldata::mPassbyBins(u32 luIndex)
     {
         u8* lpData = static_cast<u8*>(mpAttributeData);
-        if (luIndex >= reinterpret_cast<const Private*>(lpData + 0x288)->GetLength())
+        if (luIndex < reinterpret_cast<const Private*>(lpData + 0x288)->GetLength())
+            return lpData + 0x290 + luIndex * 0x18u;
+        else
             return DefaultDataArea(0x18u);
-        return lpData + 0x290 + luIndex * 0x18u;
     }
 
     // X360 @0x82682120: ReverbSettings. length = GetLength(mpAttributeData+0x178);
@@ -117,9 +118,10 @@ namespace Gen
     inline const RefSpec& burnoutglobaldata::ReverbSettings(u32 luIndex) const
     {
         u8* lpData = static_cast<u8*>(mpAttributeData);
-        if (luIndex >= reinterpret_cast<const Private*>(lpData + 0x178)->GetLength())
+        if (luIndex < reinterpret_cast<const Private*>(lpData + 0x178)->GetLength())
+            return *reinterpret_cast<const RefSpec*>(lpData + (luIndex + 16u) * 0x18u);
+        else
             return *static_cast<const RefSpec*>(DefaultDataArea(0x18u));
-        return *reinterpret_cast<const RefSpec*>(lpData + (luIndex + 16u) * 0x18u);
     }
 
     // X360 @0x82682188: ShiftPatterns. length = GetLength(mpAttributeData);
@@ -127,9 +129,10 @@ namespace Gen
     inline void* burnoutglobaldata::ShiftPatterns(u32 luIndex)
     {
         u8* lpData = static_cast<u8*>(mpAttributeData);
-        if (luIndex >= reinterpret_cast<const Private*>(lpData)->GetLength())
+        if (luIndex < reinterpret_cast<const Private*>(lpData)->GetLength())
+            return lpData + luIndex * 0x18u + 8;
+        else
             return DefaultDataArea(0x18u);
-        return lpData + luIndex * 0x18u + 8;
     }
 
     inline RefSpec burnoutglobaldata::PresentationActions() const

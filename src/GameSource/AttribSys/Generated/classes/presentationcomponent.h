@@ -70,45 +70,50 @@ namespace Gen
         u64 MessageIds(u32 luIndex) const
         {
             const u8* lpData = static_cast<const u8*>(mpAttributeData);
-            if (luIndex >= reinterpret_cast<const Private*>(lpData)->GetLength())
+            if (luIndex < reinterpret_cast<const Private*>(lpData)->GetLength())
+                return *reinterpret_cast<const u64*>(lpData + 0x8u + luIndex * 8u);
+            else
                 return *static_cast<const u64*>(DefaultDataArea(8u));
-            return *reinterpret_cast<const u64*>(lpData + 0x8u + luIndex * 8u);
         }
 
         // First splice index of the row's round-robin range.
         u16 SpliceIndices(u32 luIndex) const
         {
             const u8* lpData = static_cast<const u8*>(mpAttributeData);
-            if (luIndex >= reinterpret_cast<const Private*>(lpData + 0x80Cu)->GetLength())
+            if (luIndex < reinterpret_cast<const Private*>(lpData + 0x80Cu)->GetLength())
+                return *reinterpret_cast<const u16*>(lpData + 0x814u + luIndex * 2u);
+            else
                 return *static_cast<const u16*>(DefaultDataArea(2u));
-            return *reinterpret_cast<const u16*>(lpData + 0x814u + luIndex * 2u);
         }
 
         // Last splice index of the row's round-robin range (inclusive).
         u16 LastSpliceIndices(u32 luIndex) const
         {
             const u8* lpData = static_cast<const u8*>(mpAttributeData);
-            if (luIndex >= reinterpret_cast<const Private*>(lpData + 0xA14u)->GetLength())
+            if (luIndex < reinterpret_cast<const Private*>(lpData + 0xA14u)->GetLength())
+                return *reinterpret_cast<const u16*>(lpData + 0xA1Cu + luIndex * 2u);
+            else
                 return *static_cast<const u16*>(DefaultDataArea(2u));
-            return *reinterpret_cast<const u16*>(lpData + 0xA1Cu + luIndex * 2u);
         }
 
         // Dynamic-mixer output slot the row's voice plays on.
         u8 MixerOutputs(u32 luIndex) const
         {
             const u8* lpData = static_cast<const u8*>(mpAttributeData);
-            if (luIndex >= reinterpret_cast<const Private*>(lpData + 0xC1Cu)->GetLength())
+            if (luIndex < reinterpret_cast<const Private*>(lpData + 0xC1Cu)->GetLength())
+                return *(lpData + 0xC24u + luIndex);
+            else
                 return *static_cast<const u8*>(DefaultDataArea(1u));
-            return *(lpData + 0xC24u + luIndex);
         }
 
         // Choke group: a non-zero group steals any voice already playing it.
         u8 ChokeGroups(u32 luIndex) const
         {
             const u8* lpData = static_cast<const u8*>(mpAttributeData);
-            if (luIndex >= reinterpret_cast<const Private*>(lpData + 0xD24u)->GetLength())
+            if (luIndex < reinterpret_cast<const Private*>(lpData + 0xD24u)->GetLength())
+                return *(lpData + 0xD2Cu + luIndex);
+            else
                 return *static_cast<const u8*>(DefaultDataArea(1u));
-            return *(lpData + 0xD2Cu + luIndex);
         }
     };
 

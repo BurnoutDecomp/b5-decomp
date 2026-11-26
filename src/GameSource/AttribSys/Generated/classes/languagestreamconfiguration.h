@@ -61,9 +61,10 @@ namespace Gen
     inline const void* languagestreamconfiguration::GetContentSpecsData(u32 luIndex) const
     {
         void* lpArrayData = mpAttributeData;
-        if (luIndex >= static_cast<const Private*>(lpArrayData)->GetLength())
+        if (luIndex < static_cast<const Private*>(lpArrayData)->GetLength())
+            return reinterpret_cast<u8*>(lpArrayData) + 4 * (luIndex + 2);
+        else
             return DefaultDataArea(4u);
-        return reinterpret_cast<u8*>(lpArrayData) + 4 * (luIndex + 2);
     }
 }
 }
