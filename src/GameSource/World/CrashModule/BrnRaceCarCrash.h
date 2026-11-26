@@ -139,12 +139,11 @@ namespace BrnWorld
         // +0x14. How many 1-second cleanup extensions this crash has already been granted
         // (capped by CrashModule::miNumCrashExtensions). SIGNED: the asm reads it with
         // `lbz ; extsb` before a signed compare.
-        s8 mi8NumCleanupExtensions;                                   // +0x14
+        s8 miNumTimeExtensionsDone;                                   // +0x14
 
-        // +0x15. Construct zeroes it; nothing on the reconstructed race-car crash path reads it.
-        // FLAG (name not recovered) -- kept as an explicitly-named reserved byte rather than
-        // folded into padding, because Construct's `stb r11, 0x15(this)` proves it is a member.
-        u8 mu8Reserved15;                                             // +0x15
+        // +0x15. DWARF BrnCrashModule.h:94 `bool mbHasBeenSkipped` (and :93 names +0x14
+        // miNumTimeExtensionsDone). Construct zeroes it (`stb r11, 0x15(this)`).
+        bool mbHasBeenSkipped;                                        // +0x15
         u8 maPad16[2];                                                // +0x16 -> sizeof 24
     };
 }

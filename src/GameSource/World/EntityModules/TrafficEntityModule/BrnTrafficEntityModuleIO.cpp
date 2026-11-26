@@ -695,8 +695,7 @@ namespace BrnTrafficIO
         CgsModule::IOBuffer::Construct();                            // stb 1, 0(this)
         mSceneInputInterface.Construct();                            // +0x10
         mTrafficToRaceCarInterface_PreScene.Construct();             // the +0xC7E60 zero run
-        mTriggerManagementInputInterface.GetAddTriggerEventQueue().Construct();     // +0xC8080
-        mTriggerManagementInputInterface.GetRemoveTriggerEventQueue().Construct();  // +0xE8090
+        mTriggerManagementInputInterface.Construct();                // +0xC8080 / +0xE8090
         mPotentialScorees.Construct();                                              // +0xE8720 count word
     }
 
@@ -969,8 +968,11 @@ namespace BrnTrafficIO
     {
         CgsModule::IOBuffer::Construct();   // stb 1, 0(this)
 
-        maTrafficEntityIds.Clear();         // stw 0, 0xA48(this)  -- off the -1 sentinel
-        mCameraPosition.SetZero();          // stvx {0,0,0,0}, this+16
+        // DWARF (BrnTrafficEntityModuleIO.cpp, InputBuffer_PreDispatch::Construct) inlines
+        // Array<EntityId,650>::Construct and the Vector3(x, y, z) constructor: ARTIST builds
+        // the zero vector in memory (three stfs 0.0f + stw 0 of W, 0x8275CEF8..0x8275CF10).
+        maTrafficEntityIds.Construct();     // stw 0, 0xA48(this)
+        mCameraPosition = Vector3(0.0f, 0.0f, 0.0f);
     }
 
     // DWARF :442. The console inlines it (no exported symbol); "clear" for this

@@ -115,24 +115,19 @@ unsigned int* FindKeyframeInds( unsigned int* lruIndex1,
 // The X360 reuses the seconds out slot (r5) as the running total before peeling
 // it down; reproduced exactly.
 // ---------------------------------------------------------------------------
-unsigned int* HH_MM_SS( unsigned int* lruHours,
-                        unsigned int* lruMinutes,
-                        unsigned int* lpuSeconds,
-                        double        lfTimeSeconds )
+void HH_MM_SS( u32& luHH, u32& luMM, u32& luSS, f32 lfSeconds )
 {
-    if ( lfTimeSeconds < 0.0 )
-        lfTimeSeconds = lfTimeSeconds + 86400.0;
+    if ( lfSeconds < 0.0f )
+    {
+        lfSeconds += 86400.0f;   // 0x820CAA74
+    }
 
-    const unsigned int luTotal = static_cast<unsigned int>( lfTimeSeconds );
-
-    *lpuSeconds = luTotal;
-    *lruMinutes = luTotal / 0x3C;
-    *lpuSeconds %= 0x3Cu;
-    *lruHours   = *lruMinutes / 0x3C;
-    *lruMinutes %= 0x3Cu;
-    *lruHours   %= 0x18u;
-
-    return lruHours;
+    luSS = static_cast<u32>( lfSeconds );
+    luMM = luSS / 60;
+    luSS %= 60;
+    luHH = luMM / 60;
+    luMM %= 60;
+    luHH %= 24;
 }
 
 // ---------------------------------------------------------------------------

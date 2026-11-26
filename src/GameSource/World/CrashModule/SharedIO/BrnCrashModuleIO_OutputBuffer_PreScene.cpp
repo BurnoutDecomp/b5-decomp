@@ -128,7 +128,7 @@ namespace CrashIO
 
         mTrafficOutputInterface.Construct();
         mVehicleInputInterface.Construct();
-        mRaceCarOutputInterface.GetRaceCarCrashCompleteEventQueue()->Construct();
+        mRaceCarOutputInterface.Construct();
     }
 
 }

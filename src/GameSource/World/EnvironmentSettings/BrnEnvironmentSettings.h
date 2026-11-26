@@ -78,10 +78,10 @@ unsigned int* FindKeyframeInds( unsigned int* lruIndex1,
 //
 // Register parameter order matches the X360 ABI (r3..r5 + f1):
 //   r3 lruHours, r4 lruMinutes, r5 lpuSeconds, f1 lfTimeSeconds.
-unsigned int* HH_MM_SS( unsigned int* lruHours,
-                        unsigned int* lruMinutes,
-                        unsigned int* lpuSeconds,
-                        double        lfTimeSeconds );
+// DWARF BrnEnvironmentManager.h:158 / _compile/BrnWorldUnity.cpp:3570:
+// `void HH_MM_SS(uint32_t& luHH, uint32_t& luMM, uint32_t& luSS, float32_t lfSeconds)`
+// (ARTIST 0x827B0584/0x827B0594 compare and add in single precision: lfs + fadds).
+void HH_MM_SS( u32& luHH, u32& luMM, u32& luSS, f32 lfSeconds );
 
 // ---------------------------------------------------------------------------
 // Text-file environment-description parser helpers (BrnEnvironmentData.cpp in the

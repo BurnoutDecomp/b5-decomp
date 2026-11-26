@@ -29,10 +29,10 @@ namespace BrnWorld
     // reuse it instead of open-coding the shift/mask.
     s32 RaceCarCrash::GetOwner() const
     {
-        const u32 luIndex = mRaceCarVolumeInstanceId.GetEntityIDEntityIndex();
-        CGS_ASSERT_AT(luIndex < 8u,
+        // ARTIST reads the id again for the return (0x827B1580..0x827B1588): no local.
+        CGS_ASSERT_AT(mRaceCarVolumeInstanceId.GetEntityIDEntityIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                    "mRaceCarVolumeInstanceId.GetEntityIDEntityIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE, 174);
-        return static_cast<s32>(luIndex);
+        return static_cast<s32>(mRaceCarVolumeInstanceId.GetEntityIDEntityIndex());
     }
 
     // SetSecondsBeforeCleanup @ 0x827B15A0
@@ -63,8 +63,8 @@ namespace BrnWorld
     //   0x827B1500  lfs  f0, 0x1CC0(r11 == 0x8200)-- flt_82001CC0; READ FROM THE IMAGE == 0.0f
     //   0x827B1508  stfs f0, 8(this)              -- mfTimeCrashing   = 0.0f
     //   0x827B150C  stfs f0, 0x10(this)           -- mfTimeStationary = 0.0f
-    //   0x827B1510  stb  r11(0), 0x14(this)       -- mi8NumCleanupExtensions = 0
-    //   0x827B1514  stb  r11(0), 0x15(this)       -- mu8Reserved15 = 0
+    //   0x827B1510  stb  r11(0), 0x14(this)       -- miNumTimeExtensionsDone = 0
+    //   0x827B1514  stb  r11(0), 0x15(this)       -- mbHasBeenSkipped = 0
     //
     // The store ORDER is the compiler's, not the source's; what is load-bearing is the set of
     // fields and their values. Note the countdown is stored through the raw member here, NOT via
@@ -77,14 +77,16 @@ namespace BrnWorld
         // 1u == BrnWorld::E_ENTITYTYPE_RACECAR (the enum has no home in this tree; every other
         // consumer spells it the same way -- see BrnVehicleManager.h:2655).
         CGS_ASSERT(lRaceCarVolumeInstanceId.GetEntityIDOwner() == 1u,
-                   "lVolumeInstanceID.GetEntityIDOwner() == E_ENTITYTYPE_RACECAR");
+                   CGS_ASSERT_MESSAGE_AT("lVolumeInstanceID.GetEntityIDOwner() == E_ENTITYTYPE_RACECAR", CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE, 79));   // ARTIST li r5,0x4F
 
-        mfSecondsBeforeCleanup   = lfSeconds;
+        // Member declaration order (DWARF BrnCrashModule.h:89..:94): ARTIST's stores group the
+        // floats before the two byte stores (0x827B14F8..0x827B1514).
         mRaceCarVolumeInstanceId = lRaceCarVolumeInstanceId;
         mfTimeCrashing           = 0.0f;
+        mfSecondsBeforeCleanup   = lfSeconds;
         mfTimeStationary         = 0.0f;
-        mi8NumCleanupExtensions  = 0;
-        mu8Reserved15            = 0;
+        miNumTimeExtensionsDone  = 0;
+        mbHasBeenSkipped         = false;
     }
 
     // ============================================================================================
@@ -207,12 +209,12 @@ namespace BrnWorld
                 // 0x827BF28C..0x827BF2D0 -- the extension. flt_82001C98 == 1.0f (image-read),
                 // used BOTH as the compare bound and as the granted duration (see the banner).
                 if (lbCrossedCleanupEdge &&
-                    static_cast<s32>(mi8NumCleanupExtensions) < liMaxCrashExtensions &&
+                    static_cast<s32>(miNumTimeExtensionsDone) < liMaxCrashExtensions &&
                     mfTimeStationary < 1.0f)
                 {
                     SetSecondsBeforeCleanup(1.0f);
                     lbGrantedExtension = true;
-                    ++mi8NumCleanupExtensions;
+                    ++miNumTimeExtensionsDone;
                 }
 
             }
@@ -232,8 +234,8 @@ namespace BrnWorld
         // Construct/Tick store offsets quoted in the header.
         CGS_STATIC_ASSERT((offsetof(RaceCarCrash, mfTimeCrashing)           == 0x8),  "mfTimeCrashing @0x8 (Construct stfs 8)");
         CGS_STATIC_ASSERT((offsetof(RaceCarCrash, mfTimeStationary)         == 0x10), "mfTimeStationary @0x10 (Construct stfs 0x10)");
-        CGS_STATIC_ASSERT((offsetof(RaceCarCrash, mi8NumCleanupExtensions)  == 0x14), "mi8NumCleanupExtensions @0x14 (Construct stb 0x14)");
-        CGS_STATIC_ASSERT((offsetof(RaceCarCrash, mu8Reserved15)            == 0x15), "mu8Reserved15 @0x15 (Construct stb 0x15)");
+        CGS_STATIC_ASSERT((offsetof(RaceCarCrash, miNumTimeExtensionsDone)  == 0x14), "miNumTimeExtensionsDone @0x14 (Construct stb 0x14)");
+        CGS_STATIC_ASSERT((offsetof(RaceCarCrash, mbHasBeenSkipped)            == 0x15), "mbHasBeenSkipped @0x15 (Construct stb 0x15)");
         // sizeof pin: the Array<RaceCarCrash,8> stride asm (index*24, count word @ +0xC0 == 8*24)
         // proves the element is 24 bytes wide (see BrnRaceCarCrash.h SIZE banner).
         CGS_STATIC_ASSERT((sizeof(RaceCarCrash) == 24), "sizeof RaceCarCrash == 24 (Array<,8> stride)");

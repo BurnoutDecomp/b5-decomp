@@ -55,6 +55,18 @@ namespace BrnReplays
 
             // ---- ledger methods owned by this TU ----
 
+            // DWARF BrnReplayRequestInterface.h:50, defined in the header: ARTIST has no
+            // out-of-line copy and its owners run this 11-slot null loop inline
+            // (EffectsIO::OutputBuffer::Construct 0x822881F8..0x82288210, `li r10,0xB ; mtctr ;
+            // stw r9,0(r11) ; addi r11,r11,4 ; bdnz`).
+            void Construct()
+            {
+                for (s32 liSerialiser = 0; liSerialiser < KI_MAX_SERIALISERS; liSerialiser++)
+                {
+                    mapSerialisers[liSerialiser] = 0;
+                }
+            }
+
             // Append @ 0x823A6868 -- merges another request interface's registered
             // serialiser slots into this one: for each slot, asserts that the two
             // interfaces do not both have a serialiser registered ("only one of each

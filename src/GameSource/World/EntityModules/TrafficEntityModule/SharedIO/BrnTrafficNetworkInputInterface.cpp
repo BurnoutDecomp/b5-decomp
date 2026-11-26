@@ -40,16 +40,7 @@ namespace BrnTrafficIO
         mActivateHullQueue.AddEventSafe(lEvent);
     }
 
-    // GetActivateHullQueue / SetDiverged / HasDiverged (DWARF h:88/:92/:95) are header inline:
-    // ARTIST has no out-of-line copy and InputBuffer_PreScene::SetTrafficNetworkInputInterface
-    // 0x827ACD28 inlines the queue and mbDiverged (+0x6C) accesses.
-    // No out-of-line console copy: the network module's Construct and the network output buffer's
-    // Construct both inline it as the queue's Construct followed by a zero byte store just past the
-    // queue (mbDiverged).
-    void TrafficNetworkInputInterface::Construct()
-    {
-        mActivateHullQueue.Construct();
-        mbDiverged = false;
-    }
+    // Construct / GetActivateHullQueue / SetDiverged / HasDiverged (DWARF h:76/:88/:92/:95) are
+    // header inline: ARTIST has no out-of-line copy of any of them.
 }
 }

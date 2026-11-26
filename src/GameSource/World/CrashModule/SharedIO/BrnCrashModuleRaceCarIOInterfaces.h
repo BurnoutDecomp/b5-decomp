@@ -63,6 +63,19 @@ namespace CrashIO
     {
         typedef CgsModule::EventQueue<RaceCarCrashCompleteEvent, 10> RaceCarCrashCompleteEventQueue;
 
+        // DWARF BrnCrashModuleRaceCarIOInterfaces.h:73 / :77, defined in the header (no ARTIST
+        // copy): CrashIO::OutputBuffer_PreScene::Construct runs the queue's Construct then
+        // clears its count (0x827CEA30 / 0x827CEA38 `stw 0, 8(queue)`).
+        void Construct()
+        {
+            mRaceCarCrashCompleteEventQueue.Construct();
+            Clear();
+        }
+        void Clear()
+        {
+            mRaceCarCrashCompleteEventQueue.Clear();
+        }
+
         const RaceCarCrashCompleteEventQueue* GetRaceCarCrashCompleteEventQueue() const
         {
             return &mRaceCarCrashCompleteEventQueue;

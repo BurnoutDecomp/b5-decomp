@@ -82,10 +82,9 @@ void UpdateInputBuffer::Construct()
     mGameActionQueue.Construct();                           // +147572  VEQ<13312,16>
     mTimerStatusInterface.Clear();                          // +160900  TimerStatusInterface::Clear
     mTakedownEventQueue.Construct();                        // +160952  TakedownEvent<8>
-    // +161288 VEQ<131072,16>::Construct and +292376 InRemoveTriggerEvent<256>::Construct are
-    // the committed aggregate's own two embedded queues (see the typedef note in the header).
-    mTriggerManagementInputInterface.GetAddTriggerEventQueue().Construct();
-    mTriggerManagementInputInterface.GetRemoveTriggerEventQueue().Construct();
+    // +161288 VEQ<131072,16>::Construct and +292376 InRemoveTriggerEvent<256>::Construct:
+    // the aggregate's header-inline Construct (DWARF BrnTriggerEntityModuleInputInterface.h:115).
+    mTriggerManagementInputInterface.Construct();
     mTriggerQueryInputInterface.Construct();                // +293412  VEQ<4096,16>
     // +297524: the X360 stores the literal 3 == the "no dirty trick" EPaybackType sentinel
     // (the same value BrnGameState::PaybackManager::KE_NO_DIRTY_TRICK carries).

@@ -63,7 +63,8 @@ void WorldDebugComponent::Construct(WorldModule* lpWorldModule)
     mbVehicleGunIsPrimed = false;
     mVehiclePosition.SetZero();
     mVehicleDirection.SetZero();
-    mbAIDrivesPlayer = false;
+    // mbAIDrivesPlayer (+0x44) is not written here: ARTIST's Construct ends with the two vector
+    // stores (0x827B1898/0x827B18A0).
 }
 
 // @0x827DD1F0.

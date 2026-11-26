@@ -124,6 +124,15 @@ namespace TriggerEntityModuleIO
         typedef CgsModule::VariableEventQueue<131072, 16>           AddTriggerQueue;
         typedef CgsModule::EventQueue<InRemoveTriggerEvent, 256>    RemoveTriggerQueue;
 
+        // DWARF BrnTriggerEntityModuleInputInterface.h:115, header-inline (no ARTIST copy): the
+        // owners' Construct calls keep &interface in a register and construct both queues off it
+        // (TriggerEntityModuleIO::InputBuffer_PreScene::Construct 0x822EED5C..0x822EED74).
+        void Construct()
+        {
+            mAddTriggerEventQueue.Construct();
+            mRemoveTriggerEventQueue.Construct();
+        }
+
         const AddTriggerQueue& GetAddTriggerEventQueue() const { return mAddTriggerEventQueue; }
         AddTriggerQueue&       GetAddTriggerEventQueue()       { return mAddTriggerEventQueue; }
 

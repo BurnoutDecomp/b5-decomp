@@ -182,7 +182,13 @@ namespace CrashIO
         typedef CgsModule::EventQueue<CleanupTrafficEvent, 160>         CleanupTrafficEventQueue;   // DWARF :387
         typedef CgsModule::EventQueue<NetworkTrafficCrashingEvent, 160> CrashNetworkTrafficQueue;   // DWARF :395
 
-        void Construct();
+        // DWARF :211, defined in the header: no ARTIST copy; CrashIO::OutputBuffer_PreScene::
+        // Construct inlines the two queue Constructs off the interface's address (0x827CEA04..18).
+        void Construct()
+        {
+            mCleanupTrafficEventQueue.Construct();
+            mStartCrashingNetworkTrafficQueue.Construct();
+        }
         void AddTrafficToCleanup(CgsSceneManager::VolumeInstanceId lVolumeInstanceId);
 
         // DWARF-declared (crash parity FX-NETCRASH 2026-09-24, G64-D2; it was declared with no

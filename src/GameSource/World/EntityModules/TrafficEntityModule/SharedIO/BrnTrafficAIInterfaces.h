@@ -68,7 +68,16 @@ namespace BrnTrafficIO
     struct TrafficAIInterface
     {
     public:
-        void                   Construct();                                          // :137
+        // DWARF :137. Header-inline: ARTIST has no out-of-line copy and inlines it into both
+        // owners' Constructs (BrnTrafficIO::OutputBuffer_PostScene::Construct 0x82761858..0x82761884,
+        // AIModuleIO::InputBuffer::Construct 0x8278ABA8..0x8278ABCC).
+        void                   Construct()
+        {
+            mu16EntityCount = 0;
+            mUpdateRivalQueue.Construct();
+            mAddedRivals.Construct();
+            mRemovedRivals.Construct();
+        }
         void                   AddTrafficEntity(const TrafficAIEntity& lrEntity);    // :142
         // (inline 2026-09-03, aiwave lane A3 request: no X360 out-of-line symbol -- the console reads the
         //  two fields inline; the :267 assert is the console's own bound check on the index.)

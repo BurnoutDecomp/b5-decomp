@@ -6,6 +6,7 @@
 #include "GameSource/World/EnvironmentManager/BrnEnvironmentManager.h"
 #include "GameSource/World/EnvironmentSettings/BrnEnvironmentSettings.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "SharedClasses/World/BrnEnvironmentDictionary.h"
@@ -60,10 +61,10 @@ namespace
 void DebugComponent::Construct(EnvironmentManager* lpEnvironmentManager)
 {
     CgsDev::DebugComponent::Construct();
-    CGS_ASSERT(lpEnvironmentManager != 0, "lpEnvironmentManager != NULL");
+    CGS_ASSERT(lpEnvironmentManager != 0, CGS_ASSERT_MESSAGE_AT("lpEnvironmentManager != NULL", __FILE__, 53));   // ARTIST li r5,0x35 (0x827C7698)
 
     mpEnvironmentManager = lpEnvironmentManager;
-    HH_MM_SS(&muTimeOfDay_HH, &muTimeOfDay_MM, &muTimeOfDay_SS, 46800.0f);
+    HH_MM_SS(muTimeOfDay_HH, muTimeOfDay_MM, muTimeOfDay_SS, 46800.0f);
 
     mbUpdateValuesFromTool = false;
     mbPrintDebugInfo = false;
@@ -368,7 +369,7 @@ void DebugComponent::ManagerToDebug()
     const LightingData& lrLighting = lrManager.mLighting;
     const CloudsData& lrClouds = lrManager.mClouds;
 
-    HH_MM_SS(&muTimeOfDay_HH, &muTimeOfDay_MM, &muTimeOfDay_SS, lrManager.mfTimeOfDay);
+    HH_MM_SS(muTimeOfDay_HH, muTimeOfDay_MM, muTimeOfDay_SS, lrManager.mfTimeOfDay);
     mfTimeOfDayDelta = std::fabs(lrManager.mfTimeOfDayDelta);
     mfCloudDelta = lrManager.mfCloudDelta;
 
@@ -453,9 +454,9 @@ void DebugComponent::ManagerToDebug()
     // The zero hour is the component's one-shot initialization sentinel.
     if (muSunElevTodLBoundHH == 0)
     {
-        HH_MM_SS(&muSunElevTodLBoundHH, &muSunElevTodLBoundMM, &muSunElevTodLBoundSS,
+        HH_MM_SS(muSunElevTodLBoundHH, muSunElevTodLBoundMM, muSunElevTodLBoundSS,
                  lrManager.mfSunElevTodLBound);
-        HH_MM_SS(&muSunElevTodUBoundHH, &muSunElevTodUBoundMM, &muSunElevTodUBoundSS,
+        HH_MM_SS(muSunElevTodUBoundHH, muSunElevTodUBoundMM, muSunElevTodUBoundSS,
                  lrManager.mfSunElevTodUBound);
     }
 }

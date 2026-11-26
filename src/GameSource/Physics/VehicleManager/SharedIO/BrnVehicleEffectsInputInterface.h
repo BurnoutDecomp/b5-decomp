@@ -44,6 +44,17 @@ namespace Vehicle
         {
             mAirRamQueue.Construct();
             mSpinQueue.Construct();
+            Clear();
+        }
+
+        // DWARF :94; LegacySrc BrnVehicleEffectsInputInterface.h has Construct end with it. ARTIST's
+        // owners clear both queue counts after the two queue Constructs (RaceCarEntityModuleIO::
+        // OutputBuffer_PrePhysics::Construct 0x822EA804/0x822EA808, BrnTrafficIO::
+        // OutputBuffer_PrePhysics::Construct 0x827618E4/0x827618E8).
+        void Clear()
+        {
+            mAirRamQueue.Clear();
+            mSpinQueue.Clear();
         }
 
         // DWARF :88. ADDED 2026-08-10 (pre-physics bridge wave). No out-of-line symbol -- the

@@ -1,6 +1,5 @@
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_OutputBuffer.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
-#include <cstring>                                    // std::memset (the replay slots)
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h"
 // BrnEffects::EffectsIO::OutputBuffer member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. The per-frame buffer the effects module publishes to request
@@ -15,20 +14,19 @@ namespace BrnEffects
 namespace EffectsIO
 {
 
-// ---- Construct (DWARF :308) -----------------------------------------------------------
-// The CreateIOBuffer<EffectsIO::OutputBuffer> instantiation is an X360 export hole, so the
-// body is the type's own, in the shape every sibling output buffer takes (sound
-// RootOutputBuffer, world UpdateOutputBuffer): status = 1, the two request queues
-// Construct + Clear (RequestInterface<N>::Construct does both), and the replay request
-// interface's eleven serialiser slots zeroed (the sound module's memset of the same
-// interface -- there is no ReplayIO::RequestInterface::Construct).
+// ---- Construct (DWARF :308, X360 0x822881B0) ---------------------------------------------
+// Status = 1, the two request queues Construct + Clear (RequestInterface<N>::Construct does
+// both), and the replay request interface's Construct (its eleven serialiser slots nulled).
 void OutputBuffer::Construct()
 {
+    // ARTIST 0x822881C8..0x82288210: the vault (AttribSys<2048>) queue's Construct + Clear
+    // first (DWARF lists AttribSysRequestInterface<2048>::Construct/Clear inlined here), then
+    // the resource queue, then the replay request interface's inline Construct.
     CgsModule::IOBuffer::Construct();
-    mResourceRequestInterface.Construct();
     mVaultRequestInterface.mRequestQueue.Construct();
     mVaultRequestInterface.mRequestQueue.Clear();
-    std::memset(&mReplayRequestInterface, 0, sizeof(mReplayRequestInterface));
+    mResourceRequestInterface.Construct();
+    mReplayRequestInterface.Construct();
 }
 
 // ============================== getters (read-lock, status bit 4) ==============================

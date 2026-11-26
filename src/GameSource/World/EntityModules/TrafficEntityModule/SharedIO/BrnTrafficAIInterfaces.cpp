@@ -28,14 +28,6 @@ namespace BrnTraffic
 {
 namespace BrnTrafficIO
 {
-    void TrafficAIInterface::Construct()
-    {
-        mu16EntityCount = 0;
-        mUpdateRivalQueue.Construct();
-        mAddedRivals.Construct();
-        mRemovedRivals.Construct();
-    }
-
     // ------------------------------------------------------------------------
     // TrafficAIInterface::AddTrafficEntity.
     //

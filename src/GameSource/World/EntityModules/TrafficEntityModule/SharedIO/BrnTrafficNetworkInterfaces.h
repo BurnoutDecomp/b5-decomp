@@ -29,7 +29,13 @@ namespace BrnTrafficIO
     public:
         typedef CgsModule::EventQueue<ActivateHullEvent, 8> ActivateHullQueue;   // DWARF :60
 
-        void Construct();                                                        // :76
+        // :76, header inline too: ARTIST has no copy; BrnTrafficIO::InputBuffer_PreScene::Construct
+        // runs the queue's Construct then `stb 0, 0x6C` (0x82761558..0x82761564).
+        void Construct()                                                         // :76
+        {
+            mActivateHullQueue.Construct();
+            mbDiverged = false;
+        }
         // Validate the request (race-car index in [0,8), hull < KU_INVALID_HULL), pack an
         // ActivateHullEvent and AddEventSafe it onto the queue (X360 0x82558AB8).
         void ActivateHull(EActiveRaceCarIndex leActiveRaceCarIndex,

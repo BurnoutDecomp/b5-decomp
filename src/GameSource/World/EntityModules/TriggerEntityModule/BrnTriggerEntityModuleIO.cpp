@@ -39,8 +39,7 @@ namespace TriggerEntityModuleIO
     void InputBuffer_PreScene::Construct()
     {
         IOBuffer::Construct();
-        mInputInterface.GetAddTriggerEventQueue().Construct();
-        mInputInterface.GetRemoveTriggerEventQueue().Construct();
+        mInputInterface.Construct();
     }
 
     // X360 0x822DA168 -- post-scene INPUT: status byte + the trigger-query queue (this+4).
