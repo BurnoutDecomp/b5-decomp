@@ -388,16 +388,17 @@ public:
     }
     u8  GetEffectState() const { return mxEffectState; }  // @+7
 
-    // X360 @0x8270F928 asserts, then returns the index byte zero-extended (lbz with no extsb
-    // @0x8270F99C): after SetNotPhysical stores -1 the binary hands back 255, not -1.
+    // X360 @0x8270F928: DWARF h:387 `int8_t GetPhysicalPartsIndex() const`. The callee returns
+    // the byte as loaded (lbz @0x8270F99C) and the caller sign-extends it
+    // (GetTrafficPhysicsInfoForVehicl 0x827145C4 extsb), the XDK's convention for a char return.
     // Its asserts carry the original header's lines h:1091/h:1092 (li r5,0x443/0x444).
-    s32 GetPhysicalPartsIndex() const
+    s8 GetPhysicalPartsIndex() const
     {
         CGS_ASSERT(IsPhysical(), CGS_ASSERT_MESSAGE_AT("IsPhysical()",
             CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1091));
         CGS_ASSERT(miPhysicalPartsIndex >= 0, CGS_ASSERT_MESSAGE_AT("miPhysicalPartsIndex >= 0",
             CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1092));
-        return static_cast<u8>(miPhysicalPartsIndex);
+        return miPhysicalPartsIndex;
     }
 
     // Never called; defined in the .cpp so offsetof() reaches the private members below.

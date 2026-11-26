@@ -159,7 +159,13 @@ namespace BrnAI
         // the manager .cpp compiles against named calls instead of raw `*(car+offset)` loads.
         // HasValidRoute(): X360 inlined as (mRoute.GetStatus() != E_STATUS_UNINITIALISED &&
         //   mRoute.GetNodeCount() > 0) -- reads Route::meStatus @+0x1408 and miNodeCount @+0x1400.
-        bool             HasValidRoute() const;              // DWARF BrnAICar.h:262
+        // Header-inline (DWARF BrnAICar.h:262; PS3 lists it only among the unity CU's inline
+        // instances, ARTIST has no copy and inlines it at every site, e.g. Update 0x827995D8).
+        bool             HasValidRoute() const
+        {
+            return GetRoute()->GetStatus() != Route::E_STATUS_UNINITIALISED &&
+                   GetRoute()->GetNodeCount() > 0;
+        }
         const RouteNode* GetNextRouteNode() const;           // DWARF BrnAICar.h:182 (Route::GetNode(miNextRouteNodeIndex), bounds-checked)
         s32              GetNextRouteNodeIndex() const { return miNextRouteNodeIndex; }  // DWARF BrnAICar.h:185 (== miNextRouteNodeIndex @+0x1524)
         f32              GetMaxPlayerSpeed() const;           // DWARF BrnAICar.h:287 (== mfMaxPlayerSpeed @+0x1504)

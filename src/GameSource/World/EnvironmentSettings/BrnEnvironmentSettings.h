@@ -111,8 +111,9 @@ bool ConsumeFieldValue( float& lrfValue, FILE* lpFile );
 template< typename T >
 bool ConsumeFieldValue( T& lrData, const char* lpFieldName, FILE* lpFile );
 
-// @ 0x82675B10 -- parse an "HHMM" integer time string into seconds-of-day.
-void ParseTimeOfDay( float* lpfSeconds, const char* lpTimeStr );
+// @ 0x82675B10 -- parse an "HHMM" integer time string into seconds-of-day
+// (DWARF SharedClasses/World/BrnEnvironmentData.cpp:282 `bool ParseTimeOfDay(float&, const char*)`).
+bool ParseTimeOfDay( float& lfSeconds, const char* lpcTimeOfDay );
 
 // @ 0x8267CD70 -- parse a whole environment file (10-arg inlined form; the
 //   colour-cube name array + weight array are separate register args in the X360,

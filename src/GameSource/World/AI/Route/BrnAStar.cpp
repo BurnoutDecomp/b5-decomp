@@ -174,27 +174,29 @@ AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostW
     CGS_ASSERT_AT(!(lfCostWeight < 0.0f) && !(lfCostWeight > 1.0f),
                "lfCostWeight >= 0.0f && lfCostWeight <= 1.0f", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 128);
 
+    // DWARF locals (:130..:133) at function scope; the node index starts at 0 with the best
+    // node (ARTIST li r26,0 / li r29,0 at 0x82767804/08, ahead of the open-count test).
     AStarNode* lpBestNode = 0;
-    f32        lfBestScore = FLT_MAX;          // FLT_MAX (flt_8204F664)
+    f32        lfMinFunction = FLT_MAX;          // FLT_MAX (flt_8204F664)
     u16        luBestOpenNodeIndex = KU_INVALID_NODE_INDEX;
+    u16        luNodeIndex = 0;
 
     if (muOpenNodeCount)
     {
-        u16 luOpenIndex = 0;
         do
         {
-            AStarNode* lpNode = GetNode(mauOpenNodes[luOpenIndex]);
-            const f32 lfScore = (lpNode->GetCost() * lfCostWeight) + lpNode->GetHeuristic();
+            AStarNode* lpNode = GetNode(mauOpenNodes[luNodeIndex]);
+            const f32 lfFunction = (lpNode->GetCost() * lfCostWeight) + lpNode->GetHeuristic();
             CGS_ASSERT_AT(lpNode->IsOpen(), "lpNode->IsOpen()", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 141);
-            if (lfScore < lfBestScore)
+            if (lfFunction < lfMinFunction)
             {
                 lpBestNode = lpNode;
-                lfBestScore = lfScore;
-                luBestOpenNodeIndex = luOpenIndex;
+                lfMinFunction = lfFunction;
+                luBestOpenNodeIndex = luNodeIndex;
             }
-            ++luOpenIndex;
+            ++luNodeIndex;
         }
-        while (luOpenIndex < muOpenNodeCount);
+        while (luNodeIndex < muOpenNodeCount);
 
         if (lpBestNode)
         {

@@ -1566,12 +1566,23 @@ namespace BrnWorld
     // ========================================================================
     void ShadowMap::ObjectCSMSelect(f32 lfDistance) const
     {
-        const f32 lfMid = (maTsmBBInfo[1].mfFarClip + maTsmBBInfo[1].mfNearClip) * 0.5f;   // flt_82001DA0
-        const u32 luSelect = (lfDistance >= lfMid) ? 1u : 0u;
+        // DWARF locals luCSMIndex (:1815) and lfThresh (:1816). The index is set on both arms
+        // (ARTIST li r11,0 before the compare, then blt over li r11,1; an initialised local
+        // hoists the li above the threshold loads instead).
+        u32 luCSMIndex;
+        const f32 lfThresh = (maTsmBBInfo[1].mfFarClip + maTsmBBInfo[1].mfNearClip) * 0.5f;   // flt_82001DA0
+        if (lfDistance < lfThresh)
+        {
+            luCSMIndex = 0;
+        }
+        else
+        {
+            luCSMIndex = 1;
+        }
 
         CgsGraphics::mShaderConstantTable.SetShaderConstantData(
-            17u, MakeShadowVector4( static_cast<f32>(luSelect), static_cast<f32>(luSelect + 1u),
-                          maTsmBBInfo[luSelect].mfFarClip, 0.0f ));
+            17u, MakeShadowVector4( static_cast<f32>(luCSMIndex), static_cast<f32>(luCSMIndex + 1u),
+                          maTsmBBInfo[luCSMIndex].mfFarClip, 0.0f ));
     }
 
     // ========================================================================

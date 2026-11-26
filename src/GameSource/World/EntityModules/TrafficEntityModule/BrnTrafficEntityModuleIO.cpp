@@ -386,19 +386,14 @@ namespace BrnTrafficIO
     // (&mTrafficNetworkInputInterface, whose mActivateHullQueue is at offset 0). `stw 0,8(r31)`
     // zeroes the queue's miLength (BaseEventQueue::miLength @+8) == Clear(); then Append merges the
     // source queue; then `lbz/stb 0x6C` copies mbDiverged (@ +0x6C, right after the 108-byte
-    // EventQueue<ActivateHullEvent,8>). DWARF :160. SetTrafficNetworkInputInterface is a member of
-    // InputBuffer_PreScene (not of the interface), so it reaches the queue via the const accessor +
-    // const_cast, matching the inlined X360 direct-member touches.
+    // EventQueue<ActivateHullEvent,8>). DWARF :160.
     void InputBuffer_PreScene::SetTrafficNetworkInputInterface(
         const TrafficNetworkInputInterface* lpTrafficNetworkInputInterface)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 164));
-        TrafficNetworkInputInterface::ActivateHullQueue& lrQueue =
-            const_cast<TrafficNetworkInputInterface::ActivateHullQueue&>(
-                mTrafficNetworkInputInterface.GetActivateHullQueue());
-        lrQueue.Clear();
-        lrQueue.Append(lpTrafficNetworkInputInterface->GetActivateHullQueue());
-        mTrafficNetworkInputInterface.SetDiverged(lpTrafficNetworkInputInterface->HasDiverged());
+        // The interface's implicit copy assignment (DWARF BrnWorldBridgesUnity lists its
+        // operator= inlined): EventQueue::operator= (Clear + Append), then mbDiverged.
+        mTrafficNetworkInputInterface = *lpTrafficNetworkInputInterface;
     }
 
     // ========================================================================

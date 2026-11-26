@@ -23,11 +23,11 @@ namespace BrnTrafficIO
 // The element address it writes is base + count*80 + 0x10, which is &maActiveEntityList[count].
 void TrafficSoundOutputInterface::AddTrafficEntity(const TrafficSoundEntity& lrEntity)
 {
-    const u16 lu16Next = static_cast<u16>(mu16EntityCount + 1);
-    if (lu16Next < KU_MAX_ENTITIES)
+    // ARTIST compares the untruncated count + 1 (addi, no clrlwi) and stores the new count
+    // before the copy into the old slot (sth 0x827107BC): a post-increment index.
+    if (mu16EntityCount + 1 < KU_MAX_ENTITIES)
     {
-        maActiveEntityList[mu16EntityCount] = lrEntity;
-        mu16EntityCount = lu16Next;
+        maActiveEntityList[mu16EntityCount++] = lrEntity;
     }
 }
 

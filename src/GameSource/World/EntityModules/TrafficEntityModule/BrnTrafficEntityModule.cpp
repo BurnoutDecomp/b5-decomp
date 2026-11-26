@@ -132,8 +132,9 @@ static const char KAC_ARTIST_ASSERT_SOURCE[] =
 static const char KAC_ARTIST_ASSERT_HEADER[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\SharedIO/BrnTrafficToRaceCarInterface.h";
 
-static const char KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModule.h";
+// BrnTrafficEntityModule.h's asserts use the header's own literal BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE:
+// ARTIST keeps one pooled copy of the path, shared with the inlined header accessors (e.g.
+// GetTrafficPhysicsInfoForVehicl 0x82714514: one r27 for GetVehicle h:2459 and h:2500..2510).
 
 namespace BrnTraffic
 {
@@ -175,7 +176,7 @@ namespace BrnTraffic
     Vehicle* TrafficEntityModule::GetTrailerVehicle(s32 liIndex)
     {
         CGS_ASSERT_AT(liIndex >= 0 && static_cast<u32>(liIndex) < KU_MAX_TRAILER_TRAFFIC,
-                   "Out of range trailer vehicle", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2451);
+                   "Out of range trailer vehicle", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2451);
         return &maVehicles[KU_TRAILER_TRAFFIC_OFFSET + static_cast<u32>(liIndex)];
     }
 
@@ -227,7 +228,7 @@ namespace BrnTraffic
     // static capacity bound. Tighten it to the data bound when LoadData's ladder is bodied.
     const VehicleTypeRuntime* TrafficEntityModule::GetVehicleTypeRuntime(u32 luVehicleType) const
     {
-        CGS_ASSERT_AT(luVehicleType < KU_MAX_VEHICLE_TYPES, "Out-of-range vehicle type", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2561);
+        CGS_ASSERT_AT(luVehicleType < KU_MAX_VEHICLE_TYPES, "Out-of-range vehicle type", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2561);
         return &maVehicleTypeRuntime[luVehicleType];
     }
 
@@ -1811,7 +1812,7 @@ bool TrafficEntityModule::IsDecisionFrame()
         return true;
     }
 
-    CGS_ASSERT_AT(meState == E_STATE_RUNNING, "meState == E_STATE_RUNNING", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2113);
+    CGS_ASSERT_AT(meState == E_STATE_RUNNING, "meState == E_STATE_RUNNING", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2113);
     return mbDecisionFrame;
 }
 
@@ -1828,7 +1829,7 @@ bool TrafficEntityModule::IsDecisionFrame()
 const Hull* TrafficEntityModule::GetHull(u32 luIndex) const
 {
     CGS_ASSERT_AT(luIndex < mpData->muNumHulls, "luIndex < (mpData->muNumHulls)",
-        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2229);
+        BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2229);
     return mpData->mpapHulls[luIndex];
 }
 
@@ -1842,11 +1843,11 @@ const Hull* TrafficEntityModule::GetHull(u32 luIndex) const
 HullRuntime* TrafficEntityModule::GetHullRuntime(u32 luHull)
 {
     CGS_ASSERT_AT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)",
-        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2246);
+        BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2246);
 
     const u8 luHullRuntime = mauHullRuntimeDataIndices[luHull];
     CGS_ASSERT_AT(luHullRuntime != KU_INVALID_HULL_RUNTIME, "luHullRuntime != KU_INVALID_HULL_RUNTIME",
-        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2249);
+        BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2249);
 
     return &maHullRuntimeData[luHullRuntime];
 }
@@ -1858,7 +1859,7 @@ HullRuntime* TrafficEntityModule::GetHullRuntime(u32 luHull)
 HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull)
 {
     CGS_ASSERT_AT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)",
-        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2288);
+        BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2288);
 
     const u8 luHullRuntime = mauHullRuntimeDataIndices[luHull];
     if (luHullRuntime == KU_INVALID_HULL_RUNTIME)
@@ -1872,11 +1873,11 @@ HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull)
 const HullRuntime* TrafficEntityModule::GetHullRuntime(u32 luHull) const
 {
     CGS_ASSERT_AT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)",
-        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2267);
+        BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2267);
 
     const u8 luHullRuntime = mauHullRuntimeDataIndices[luHull];
     CGS_ASSERT_AT(luHullRuntime != KU_INVALID_HULL_RUNTIME, "luHullRuntime != KU_INVALID_HULL_RUNTIME",
-        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2270);
+        BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2270);
 
     return &maHullRuntimeData[luHullRuntime];
 }
@@ -1884,7 +1885,7 @@ const HullRuntime* TrafficEntityModule::GetHullRuntime(u32 luHull) const
 const HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull) const
 {
     CGS_ASSERT_AT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)",
-        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2313);
+        BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2313);
 
     const u8 luHullRuntime = mauHullRuntimeDataIndices[luHull];
     if (luHullRuntime == KU_INVALID_HULL_RUNTIME)
@@ -1907,8 +1908,8 @@ const HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull) const
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::SetVehicleTransform(u32 luIndex, const Matrix44Affine& lTransform)
 {
-    CGS_ASSERT_AT(luIndex < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2491);
-    CGS_ASSERT_AT(rw::math::vpu::IsValid(lTransform), "RwMath::IsValid( lTransform )", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2492);
+    CGS_ASSERT_AT(luIndex < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2491);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lTransform), "RwMath::IsValid( lTransform )", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2492);
 
     maVehicleTransforms[luIndex] = lTransform;
 }
@@ -8363,7 +8364,7 @@ void TrafficEntityModule::UpdateParams_CalcDesiredSpeed(
         const Hull* lpHull,
         const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrAvoidSet)
 {
-    CGS_ASSERT_AT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2350);
+    CGS_ASSERT_AT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2350);
     (void)lpHull;
 
     Param* lpParam = &maParams[luParam];
@@ -8985,7 +8986,7 @@ void TrafficEntityModule::UpdateParams_HandleLaneChanges(u32 luParam,
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::EatParamsNextPlan(u32 luParam)
 {
-    CGS_ASSERT_AT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2350);
+    CGS_ASSERT_AT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2350);
 
     Param* lpParam = &maParams[luParam];
 
@@ -9195,7 +9196,7 @@ void TrafficEntityModule::DEBUG_AddFuzzyLogicData(u32 luParam, VecFloat* lpafFuz
 
     CGS_ASSERT_AT(lpDebugData != 0, "lpDebugData", KAC_ARTIST_ASSERT_SOURCE, 6739);
     lpDebugData->muVehicle = luParam;
-    CGS_ASSERT_AT(luParam < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2483);
+    CGS_ASSERT_AT(luParam < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2483);
     Vector3 lRenderPosition = maVehicleTransforms[luParam].Pos();
     lRenderPosition.mV.y += 2.5f;
     lpDebugData->mRenderPosition = lRenderPosition;
@@ -11355,21 +11356,19 @@ namespace BrnTraffic
     // Six baked asserts, at the console's own file/lines (BrnTrafficEntityModule.h
     // :2500 / :2501 / :2504 / :2505 / :2506 / :2510, plus the inlined GetVehicle :2459 twice
     // and the BitArray.h:203 index message).
-    // ⚠️ GetPhysicalPartsIndex is ZERO-extended in this tree (BrnTrafficVehicle.h:291, matching
-    // the console's `lbz` with no extsb) while THIS caller sign-extends it (0x827145C4 extsb).
-    // A -1 index therefore reads 255 here and trips the < 25 assert instead of the >= 0 one.
-    // Same set of asserts fires either way; do not "fix" it by comparing against -1.
+    // GetPhysicalPartsIndex returns int8_t (DWARF BrnTrafficVehicle.h:387): the callee hands back
+    // the loaded byte and this caller sign-extends it (0x827145C4 extsb).
     TrafficPhysicsInfo* TrafficEntityModule::GetTrafficPhysicsInfoForVehicl(u32 luVehicle)
     {
-        CGS_ASSERT_AT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2500);
-        CGS_ASSERT_AT(GetVehicle(luVehicle)->IsPhysical(), "GetVehicle( luVehicle )->IsPhysical()", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2501);
+        CGS_ASSERT_AT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2500);
+        CGS_ASSERT_AT(GetVehicle(luVehicle)->IsPhysical(), "GetVehicle( luVehicle )->IsPhysical()", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2501);
 
         const s32 liPartsIndex = GetVehicle(luVehicle)->GetPhysicalPartsIndex();
-        CGS_ASSERT_AT(liPartsIndex >= 0, "liPartsIndex >= 0", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2504);
+        CGS_ASSERT_AT(liPartsIndex >= 0, "liPartsIndex >= 0", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2504);
         CGS_ASSERT_AT(liPartsIndex < static_cast<s32>(KU_MAX_PHYSICAL_TRAFFIC_VEHICLES),
-                   "liPartsIndex < (int32_t)KU_MAX_PHYSICAL_TRAFFIC_VEHICLES", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2505);
+                   "liPartsIndex < (int32_t)KU_MAX_PHYSICAL_TRAFFIC_VEHICLES", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2505);
         CGS_ASSERT_AT(maTrafficPhysicsInfoListBits.IsBitSet(static_cast<u32>(liPartsIndex)),
-                   "maTrafficPhysicsInfoListBits.IsBitSet( liPartsIndex )", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2506);
+                   "maTrafficPhysicsInfoListBits.IsBitSet( liPartsIndex )", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2506);
 
         TrafficPhysicsInfo* lpPhysicsInfo = &maTrafficPhysicsInfoList[liPartsIndex];
 
@@ -11377,7 +11376,7 @@ namespace BrnTraffic
         // SIGN-extended, against luVehicle. The assert text names the DWARF's miVehicleIndex.
         CGS_ASSERT_AT(static_cast<s32>(static_cast<s16>(lpPhysicsInfo->muOwningVehicleIndex))
                        == static_cast<s32>(luVehicle),
-                   "lpPhysicsInfo->miVehicleIndex == (int32_t)luVehicle", KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2510);
+                   "lpPhysicsInfo->miVehicleIndex == (int32_t)luVehicle", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2510);
         return lpPhysicsInfo;
     }
 

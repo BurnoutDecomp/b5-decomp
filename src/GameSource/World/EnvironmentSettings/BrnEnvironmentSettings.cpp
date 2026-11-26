@@ -674,19 +674,23 @@ bool ConsumeFieldValue( T& lrData, const char* lpFieldName, FILE* lpFile )
 // Parses an "HHMM" clock integer (e.g. 1430 -> 14:30) from lpTimeStr via atoi.
 // The hundreds are hours, the last two digits are minutes. If the value is a
 // valid wall-clock time (hours < 24, minutes < 60) it is written to *lpfSeconds
-// as seconds-of-day: (hours * 60 + minutes) * 60. Out-of-range input leaves
-// *lpfSeconds untouched.
-void ParseTimeOfDay( float* lpfSeconds, const char* lpTimeStr )
+// as seconds-of-day: (hours * 60 + minutes) * 60, and returns true (ARTIST li r3,1 at
+// 0x82675B68). Out-of-range input leaves lfSeconds untouched and returns false. DWARF
+// (BrnEnvironmentData.cpp:282..287): `bool (float&, const char*)`, locals luTimeOfDay,
+// luHours, luMinutes.
+bool ParseTimeOfDay( float& lfSeconds, const char* lpcTimeOfDay )
 {
-    const unsigned int luValue   = static_cast<unsigned int>( atoi( lpTimeStr ) );
-    const unsigned int luHours   = luValue / 100u;
-    const unsigned int luMinutes = luValue % 100u;
+    const uint32_t luTimeOfDay = static_cast<uint32_t>( atoi( lpcTimeOfDay ) );
+    const uint32_t luHours     = luTimeOfDay / 100u;
+    const uint32_t luMinutes   = luTimeOfDay % 100u;
 
     if ( luHours < 24u && luMinutes < 60u )
     {
-        *lpfSeconds = ( static_cast<float>( luHours ) * 60.0f
-                        + static_cast<float>( luMinutes ) ) * 60.0f;
+        lfSeconds = ( static_cast<float>( luHours ) * 60.0f
+                      + static_cast<float>( luMinutes ) ) * 60.0f;
+        return true;
     }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -764,7 +768,7 @@ bool ParseEnvironmentFile( float&                     lrfTimeOfDay,
         {
             char lacTimeStr[192];
             ConsumeFieldValue( lacTimeStr, lpFile );
-            ParseTimeOfDay( &lrfTimeOfDay, lacTimeStr );
+            ParseTimeOfDay( lrfTimeOfDay, lacTimeStr );
             ConsumeEOL( lpFile );
         }
         else if ( strcmp( lpcName, "ColourCube" ) == 0 )

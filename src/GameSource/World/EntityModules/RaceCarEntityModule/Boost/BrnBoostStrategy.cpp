@@ -78,7 +78,6 @@ bool BoostStrategy::Prepare()
     mbCrashing = false;
     mbWrecking = false;
     mbInfiniteBoost = false;
-    mStartPosition.SetZero();
     mfSpeed = 0.0f;
     mbBoosting = false;
     mfDriftingDistance = 0.0f;
@@ -111,6 +110,9 @@ bool BoostStrategy::Prepare()
     mbIsBoostFull = false;
     meTailgatedCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     mePreviousOncomingState = E_ONCOMING_STATE_FALSE;
+    // Last: ARTIST materialises the oncoming state's 1 (li r8) before the vector store's
+    // 0x110 offset (li r7) at 0x822A5C58/5C, the allocation order of a final statement.
+    mStartPosition.SetZero();
     return true;
 }
 

@@ -1109,17 +1109,7 @@ namespace BrnAI
         CheckForFreeRoamSwapToPursuit();                                                    // 0x82799648
     }
 
-    // ==================================================================================
-    // HasValidRoute -- DWARF BrnAICar.h:262. X360-inlined at every site as
-    //   (mRoute.meStatus != E_STATUS_UNINITIALISED && mRoute.miNodeCount > 0)
-    // (e.g. Update @0x827995D8: lwz 0x1408 / lwz 0x1400 / cmpwi ,0 / bgt). No standalone symbol.
-    // ==================================================================================
-    bool AICar::HasValidRoute() const
-    {
-        const Route* lpThisRoute = GetRoute();
-        return lpThisRoute->GetStatus() != Route::E_STATUS_UNINITIALISED &&
-               lpThisRoute->GetNodeCount() > 0;
-    }
+    // HasValidRoute (DWARF BrnAICar.h:262) is header-inline: see BrnAICar.h.
 
     // ==================================================================================
     // GetPosition @0x8276B1F0 / GetDirection @0x8276B488 / GetRight @0x8276B998

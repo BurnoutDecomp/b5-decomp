@@ -340,17 +340,15 @@ const TrafficNetworkInputInterface* UpdateInputBuffer::GetTrafficNetworkInterfac
 }
 
 // (:285 W) -- update the traffic-network interface (member +301644): zero
-// the activate-hull queue length, append the source queue, copy mbDiverged. The interface
-// exposes its queue only through the const getter, so the merge goes through it (the
-// traffic pre-scene buffer's SetTrafficNetworkInputInterface does the same).
+// the activate-hull queue length, append the source queue, copy mbDiverged: one assignment of
+// the whole interface (the traffic pre-scene buffer's SetTrafficNetworkInputInterface does the same).
 void UpdateInputBuffer::SetTrafficNetworkInterface(const TrafficNetworkInputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 285));
-    TrafficNetworkInputInterface::ActivateHullQueue& lrQueue =
-        const_cast<TrafficNetworkInputInterface::ActivateHullQueue&>(mTrafficNetworkInterface.GetActivateHullQueue());
-    lrQueue.Clear();
-    lrQueue.Append(lpInterface->GetActivateHullQueue());
-    mTrafficNetworkInterface.SetDiverged(lpInterface->HasDiverged());
+    // The interface's implicit copy assignment (DWARF lists TrafficNetworkInputInterface::operator=
+    // inlined here): the queue's EventQueue::operator= (Clear + Append, CgsEventQueue.h:194),
+    // then mbDiverged (ARTIST 0x823C8E54..0x823C8E60).
+    mTrafficNetworkInterface = *lpInterface;
 }
 
 // X360 0x827A3BA0 (:287 R, GetCrashNetworkIn) -- const crash-network accessor (+301760).
