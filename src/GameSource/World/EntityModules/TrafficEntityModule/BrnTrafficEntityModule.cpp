@@ -10149,29 +10149,26 @@ namespace
 // ----------------------------------------------------------------------------
 u32 TrafficEntityModule::TryAllocateTrailerId()
 {
-    const s32 liNumFreeTrailers = mFreeTrailerStack.GetLength();
-    if (liNumFreeTrailers == 0)
+    // DWARF (_compile/BrnTrafficUnity.cpp): Stack<uint16_t,1>::IsEmpty guards a block holding
+    // `uint32_t luFreeTrailer` (:9000) and the streamed assert (:9001); ARTIST 0x827234FC inlines
+    // IsEmpty (CgsStack.h:177) and branches to the invalid return at the end.
+    if (!mFreeTrailerStack.IsEmpty())
     {
-        return KU_INVALID_VEHICLE;
+        // Reset seeds this one-entry stack with the full vehicle index KU_TRAILER_TRAFFIC_OFFSET
+        // (599 on the X360), not the trailer's relative index 0.
+        u32 luFreeTrailer = mFreeTrailerStack.Peek();
+
+        CGS_ASSERT_STREAM_AT(GetVehicleSpecies(luFreeTrailer) == Vehicle::E_SPECIES_TRAILER,
+                             "Invalid vehicle id in free trailer list: " << luFreeTrailer,
+                             KAC_ARTIST_ASSERT_SOURCE, 9127);
+        CGS_ASSERT_AT(!GetVehicle(luFreeTrailer)->IsAlive(),
+                      "!GetVehicle( luFreeTrailer )->IsAlive()", KAC_ARTIST_ASSERT_SOURCE, 9131);
+
+        mFreeTrailerStack.Pop();
+        return luFreeTrailer;
     }
 
-    // Reset seeds this one-entry stack with the full vehicle index KU_TRAILER_TRAFFIC_OFFSET
-    // (599 on the X360), not the trailer's relative index 0.
-    const u32 luFreeTrailer = mFreeTrailerStack.Peek();
-
-    if (GetVehicleSpecies(luFreeTrailer) != Vehicle::E_SPECIES_TRAILER)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-        lStream << "Invalid vehicle id in free trailer list: " << luFreeTrailer;
-        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, __LINE__);
-        CgsDev::Assert::EndAssert();
-    }
-    CGS_ASSERT(!GetVehicle(luFreeTrailer)->IsAlive(),
-               "!GetVehicle( luFreeTrailer )->IsAlive()");
-
-    mFreeTrailerStack.Pop();
-    return luFreeTrailer;
+    return KU_INVALID_VEHICLE;
 }
 
 void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
@@ -15256,7 +15253,7 @@ namespace
 // -------------------------------------------------------------------------------------------------
 void TrafficEntityModule::HandleContactPoints(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
 {
-    CGS_ASSERT(lpInput != 0, "lpInput != NULL");                                    // .cpp 6527
+    CGS_ASSERT_AT(lpInput != 0, "lpInput != NULL", KAC_ARTIST_ASSERT_SOURCE, 6527);
 
     for (u32 luPhysInfoBit = 0; luPhysInfoBit < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES; ++luPhysInfoBit)
     {
@@ -15275,13 +15272,13 @@ void TrafficEntityModule::HandleContactPoints(const BrnTrafficIO::InputBuffer_Po
 
     const BrnTrafficIO::InputBuffer_PostPhysics::ContactSpyInterface* const lpContactSpyInterface =
         lpInput->GetContactSpyInterface();
-    CGS_ASSERT(lpContactSpyInterface != 0, "lpContactSpyInterface");                // .cpp 6552
+    CGS_ASSERT_AT(lpContactSpyInterface != 0, "lpContactSpyInterface", KAC_ARTIST_ASSERT_SOURCE, 6552);
 
     if (lpContactSpyInterface->IsValid())
     {
         const BrnPhysics::ContactSpy::ContactSpyData::TrafficContactQueue* const lpTrafficContacts =
             lpContactSpyInterface->GetTrafficContacts();
-        CGS_ASSERT(lpTrafficContacts != 0, "lpTrafficContacts");                    // .cpp 6557
+        CGS_ASSERT_AT(lpTrafficContacts != 0, "lpTrafficContacts", KAC_ARTIST_ASSERT_SOURCE, 6557);
 
         // [DIAG] NOT IN THE X360 BINARY -- see KI_CONTACT_SIDE_DIAG_CAP.
 
@@ -18674,27 +18671,31 @@ void TrafficEntityModule::CleanUpCrashedVehicles( const BrnTrafficIO::InputBuffe
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::HandleCrashingNetworkTraffic( const BrnTrafficIO::InputBuffer_PostScene* lpInput )
 {
-    CGS_ASSERT( lpInput != NULL, "lpInput != NULL" );
-    CGS_ASSERT( mbIsOnlineGameMode, "IsPlayingOnlineGameMode()" );
+    // DWARF locals (_compile/BrnTrafficUnity.cpp): lpCrashingNetworkTraffic (:5206) and one
+    // liEvent (:5207) for both loops; {luVehicle, liTestIndex} (:5214/:5215), {luVehicle} (:5230).
+    // ARTIST lines 0x82715EEC.. (5307, 5308, 5326, 5337).
+    CGS_ASSERT_AT( lpInput != NULL, "lpInput != NULL", KAC_ARTIST_ASSERT_SOURCE, 5307 );
+    CGS_ASSERT_AT( IsPlayingOnlineGameMode(), "IsPlayingOnlineGameMode()", KAC_ARTIST_ASSERT_SOURCE, 5308 );
 
-    const BrnWorld::CrashIO::TrafficOutputInterface::CrashNetworkTrafficQueue& lrQueue =
-        lpInput->GetCrashTrafficOutputInterface()->GetStartCrashingNetworkTrafficQueue();
+    const BrnWorld::CrashIO::TrafficOutputInterface::CrashNetworkTrafficQueue* lpCrashingNetworkTraffic =
+        &lpInput->GetCrashTrafficOutputInterface()->GetStartCrashingNetworkTrafficQueue();
+    s32 liEvent;
 
-    for ( s32 liEvent = 0; liEvent < lrQueue.GetLength(); ++liEvent )
+    for ( liEvent = 0; liEvent < lpCrashingNetworkTraffic->GetLength(); ++liEvent )
     {
-        const u16 lu16Vehicle = lrQueue.GetEvent( liEvent ).muVehicleId;
+        u32 luVehicle = lpCrashingNetworkTraffic->GetEvent( liEvent ).muVehicleId;
 
-        for ( s32 liOther = liEvent + 1; liOther < lrQueue.GetLength(); ++liOther )
+        for ( s32 liTestIndex = liEvent + 1; liTestIndex < lpCrashingNetworkTraffic->GetLength(); ++liTestIndex )
         {
-            CGS_ASSERT( lu16Vehicle != lrQueue.GetEvent( liOther ).muVehicleId,
-                        "Duplicate crash body message in input buffer" );
+            CGS_ASSERT_AT( luVehicle != lpCrashingNetworkTraffic->GetEvent( liTestIndex ).muVehicleId,
+                           "Duplicate crash body message in input buffer", KAC_ARTIST_ASSERT_SOURCE, 5326 );
         }
     }
 
-    for ( s32 liEvent = 0; liEvent < lrQueue.GetLength(); ++liEvent )
+    for ( liEvent = 0; liEvent < lpCrashingNetworkTraffic->GetLength(); ++liEvent )
     {
-        const u32 luVehicle = lrQueue.GetEvent( liEvent ).muVehicleId;
-        CGS_ASSERT( luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC" );
+        u32 luVehicle = lpCrashingNetworkTraffic->GetEvent( liEvent ).muVehicleId;
+        CGS_ASSERT_AT( luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC", KAC_ARTIST_ASSERT_SOURCE, 5337 );
 
         maNewCrashedNetworkVehicles.Append( static_cast<u16>( luVehicle ) );
     }

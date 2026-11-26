@@ -36,6 +36,9 @@
 // VISIBILITY: the touched members are public here so the de-inlined bodies can read/write them by
 // name. The real class keeps them private behind inlined-away accessors.
 
+#ifndef CGS_ARTIST_ABS_BRNAIDRIVER_H_FILE
+#define CGS_ARTIST_ABS_BRNAIDRIVER_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIDriver.h"
+#endif
 #include <cstddef>            // offsetof (layout pinning)
 
 #include "types.hpp"          // f32, s32, u8, u16, ...
@@ -84,6 +87,12 @@ namespace BrnAI
         E_DRIFT_STATE_EXIT_DRIFTING  = 3,
         E_DRIFT_STATE_COUNT          = 4,
     };
+
+    // DWARF BrnAIDriver.h:67 / :70 (PS3 values 30 / 100 in _compile/BrnWorldAIUnity.cpp; the AI
+    // unity's .rdata 0x820C3FA8 / 0x820C3FAC). The inline IsInvulnerable below reads :67
+    // (ARTIST 0x827657C0).
+    const f32 KF_AI_VULNERABILITY_RADIUS_BEHIND = 30.0f;
+    const f32 KF_AI_PASSTHROUGH_RADIUS          = 100.0f;
 
     // DWARF BrnAIDriver.h:88 -- one entry of the driver's avoidance list. 0x70 bytes on both
     // console and host (pointer-free; the BoundaryLine array is 16-byte aligned).
@@ -320,6 +329,31 @@ namespace BrnAI
         // static_asserts live at namespace scope below.
         static void _AssertLayout();
     };
+
+}
+
+// The inline bodies below read the car; BrnAICar.h does not include this header.
+#include "GameSource/World/AI/BrnAICar.h"
+
+namespace BrnAI
+{
+    // Header-inline (DWARF h:331; its assert is on BrnAIDriver.h:930). ARTIST keeps one
+    // out-of-line copy, 0x82765740, which DrawAIStatesOnCar and ProcessAIVehicleInputs call.
+    // Behind the player (meRelativeLocation 0/1) the car is invulnerable beyond the radius or
+    // while its timer runs; ahead of the player only while the timer runs.
+    inline bool AIDriver::IsInvulnerable() const
+    {
+        CGS_ASSERT_AT(mpCar != 0, "mpCar != NULL", CGS_ARTIST_ABS_BRNAIDRIVER_H_FILE, 930);
+
+        // ARTIST tests ==1 then ==0 (0x82765788 / 0x82765790) and returns one || per arm.
+        if (mpCar->meRelativeLocation == E_RELATIVE_BEHIND_SEPARATING ||
+            mpCar->meRelativeLocation == E_RELATIVE_BEHIND_APPROACHING)
+        {
+            return mfDistanceToPlayer > KF_AI_VULNERABILITY_RADIUS_BEHIND || mfInvulnerableTime > 0.0f;
+        }
+
+        return mfInvulnerableTime > 0.0f;               // ahead of player: timer only
+    }
 
     CGS_STATIC_ASSERT((sizeof(AIDriver) == 0x1D70), "AIDriver native stride");
     // Pin every guest offset -- the compile gate fails if the layout ever drifts.

@@ -345,22 +345,14 @@ f32 AIAggression::CalcSpeedMatchSpeed(f32 lfTimeStep, f32 lfTargetSpeed)
 // flt_820C41F4 (2.0) exit, and only `blt` @0x8277E030 against flt_820C3FA8 (30.0) accepts.
 bool AIAggression::CanSlam()
 {
-    const f32 lfLeadingSeparation = GetLeadingSeparation(mpCar, mpTargetCar);
+    // DWARF local lfLongitudinalSeparation (:2058) is the only one; ARTIST's single result path
+    // (li 1 / li 0, clrlwi 0x8277E02C..0x8277E038) is the one && expression.
+    f32 lfLongitudinalSeparation = GetLeadingSeparation(mpCar, mpTargetCar);
 
-    if (mpCar->miProximityIndex <= 0)
-    {
-        return false;
-    }
-    if (!(lfLeadingSeparation > KF_SLAM_LONGITUDINAL_OVERLAP_BEHIND))
-    {
-        return false;
-    }
-    if (!(lfLeadingSeparation < KF_SLAM_LONGITUDINAL_OVERLAP_AHEAD))
-    {
-        return false;
-    }
-
-    return CalcSeparationAcrossToTarget() < KF_MAX_LATERAL_SLAM_DIST;
+    return mpCar->miProximityIndex > 0
+        && lfLongitudinalSeparation > KF_SLAM_LONGITUDINAL_OVERLAP_BEHIND
+        && lfLongitudinalSeparation < KF_SLAM_LONGITUDINAL_OVERLAP_AHEAD
+        && CalcSeparationAcrossToTarget() < KF_MAX_LATERAL_SLAM_DIST;
 }
 
 // BrnAI::AIAggression::CarIsTooSlow @0x82766948.

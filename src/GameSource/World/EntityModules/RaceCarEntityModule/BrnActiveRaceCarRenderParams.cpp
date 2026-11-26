@@ -231,8 +231,7 @@ ActiveRaceCar::RenderParams::GetCrackedGlassScaleFactorsN(s32 n) const
             CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 393));
         CgsDev::Assert::EndAssert();
     }
-    return rw::math::fpu::Vector2Template<float>(mavCrackedGlassScaleFactors[n].x,
-                                                  mavCrackedGlassScaleFactors[n].y);
+    return mavCrackedGlassScaleFactors[n];
 }
 
 // ARTIST 0x822B83A0 loads the two input floats from r5+0/+4.
@@ -246,8 +245,7 @@ void ActiveRaceCar::RenderParams::SetCrackedGlassScaleFactorsN(
             CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 372));
         CgsDev::Assert::EndAssert();
     }
-    mavCrackedGlassScaleFactors[n].x = lrScale.X();
-    mavCrackedGlassScaleFactors[n].y = lrScale.Y();
+    mavCrackedGlassScaleFactors[n] = lrScale;   // ARTIST 0x822B83E8: one element address, two float copies
 }
 
 // ----------------------------------------------------------------------------

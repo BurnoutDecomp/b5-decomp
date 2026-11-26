@@ -1,6 +1,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/vector3_operation.h"   // IsZero / IsValid / Normalize / Cross (ParamTransform)
+#include "SDKs/EATech/include/rw/math/vpu/constants.h"   // GetVecFloat_Zero (UpdateLerpedPosition)
 
 // Param::Construct / Param::Initialise reach these; all four are leaf headers.
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"        // KU_UNKNOWN_STOPLINE / KU_UNKNOWN_NEIGHBOUR
@@ -457,27 +458,20 @@ VecFloat ParamTransform::GetSpeed() const
 //   mLerpedPosAndSpeed = { (lPos - lDir*lfSpeed*KF_INIT_LERP_STEP).xyz, plus = lfSpeed } (@0x30)
 void ParamTransform::Initialise(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecFloat lfSpeed)
 {
-    CGS_ASSERT(rw::math::vpu::IsValid(lPos),   "RwMath::IsValid( lPos )");
-    CGS_ASSERT(rw::math::vpu::IsValid(lDir),   "RwMath::IsValid( lDir )");
-    CGS_ASSERT(rw::math::vpu::IsValid(lRight), "RwMath::IsValid( lRight )");
-    CGS_ASSERT(lfSpeed.GetFloat() == lfSpeed.GetFloat(), "RwMath::IsValid( lfSpeed )");
+    // DWARF BrnTrafficParam.h:663..666 asserts (ARTIST li r5 0x297..0x29A); an all-vector body:
+    // the 0.1 step is a scalar operand ({ 0.1, 0, 0, 0 } splat, flt_82004014 at 0x82712DBC) and the
+    // acceleration lane is zeroed from vspltisw (GetVecFloat_Zero, 0x82712DB4).
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lPos),    "RwMath::IsValid( lPos )",    KAC_ARTIST_ASSERT_FILE, 663);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lDir),    "RwMath::IsValid( lDir )",    KAC_ARTIST_ASSERT_FILE, 664);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lRight),  "RwMath::IsValid( lRight )",  KAC_ARTIST_ASSERT_FILE, 665);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lfSpeed), "RwMath::IsValid( lfSpeed )", KAC_ARTIST_ASSERT_FILE, 666);
 
-    // flt_82004014 = 0.1f (rodata 3D CC CC CD @0x82004014).
-    const f32 KF_INIT_LERP_STEP = 0.1f;
-
-    mPos   = lPos;
-    mRight = lRight;
-
+    mPos = lPos;
     mDirAndAccel.SetVector3(lDir);
-    mDirAndAccel.SetPlus(0.0f);
-
-    const f32 lfSpeedScalar = lfSpeed.GetFloat();
-    const f32 lfStep        = lfSpeedScalar * KF_INIT_LERP_STEP;
-    const Vector3 lLerpedPos(lPos.GetX().GetFloat() - lDir.GetX().GetFloat() * lfStep,
-                             lPos.GetY().GetFloat() - lDir.GetY().GetFloat() * lfStep,
-                             lPos.GetZ().GetFloat() - lDir.GetZ().GetFloat() * lfStep);
-    mLerpedPosAndSpeed.SetVector3(lLerpedPos);
-    mLerpedPosAndSpeed.SetPlus(lfSpeedScalar);
+    mDirAndAccel.SetPlus(rw::math::vpu::GetVecFloat_Zero());
+    mRight = lRight;
+    mLerpedPosAndSpeed.SetVector3(lPos - lDir * lfSpeed * 0.1f);
+    mLerpedPosAndSpeed.SetPlus(lfSpeed);
 }
 
 // 0x82751AF8 -- the pool-wide reset, run 400 times from Reset @0x8272CDA0. The asm loads the
@@ -529,21 +523,24 @@ void ParamTransform::UpdateLerpedPosition(VecFloat lfSimTimeStep)
 {
     CGS_ASSERT_AT(rw::math::vpu::IsValid(mLerpedPosAndSpeed.GetVector3()),
                "RwMath::IsValid( mLerpedPosAndSpeed.GetVector3() )", KAC_ARTIST_ASSERT_FILE, 633);
-    CGS_ASSERT_AT(mLerpedPosAndSpeed.GetPlus() == mLerpedPosAndSpeed.GetPlus(),
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(mLerpedPosAndSpeed.GetPlus()),
                "RwMath::IsValid( mLerpedPosAndSpeed.GetPlus() )", KAC_ARTIST_ASSERT_FILE, 634);
     CGS_ASSERT_AT(rw::math::vpu::IsValid(mDirAndAccel.GetVector3()),
                "RwMath::IsValid( mDirAndAccel.GetVector3() )", KAC_ARTIST_ASSERT_FILE, 635);
-    CGS_ASSERT_AT(mDirAndAccel.GetPlus() == mDirAndAccel.GetPlus(),
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(mDirAndAccel.GetPlus()),
                "RwMath::IsValid( mDirAndAccel.GetPlus() )", KAC_ARTIST_ASSERT_FILE, 636);
-    CGS_ASSERT_AT(lfSimTimeStep.GetFloat() == lfSimTimeStep.GetFloat(), "RwMath::IsValid( lfSimTimeStep )", KAC_ARTIST_ASSERT_FILE, 637);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lfSimTimeStep), "RwMath::IsValid( lfSimTimeStep )", KAC_ARTIST_ASSERT_FILE, 637);
 
-    const f32 lfStep     = lfSimTimeStep.GetFloat();
-    const f32 lfAccelled = mLerpedPosAndSpeed.GetPlus() + mDirAndAccel.GetPlus() * lfStep;
-    const f32 lfSpeed    = (lfAccelled > 0.0f) ? lfAccelled : 0.0f;   // asm: vmaxfp vs zero
+    // DWARF locals BrnTrafficParam.h:639..643 (_compile/BrnTrafficUnity.cpp), all-vector as the
+    // rwmath VecFloat operators (D16) and Max<VecFloat> against GetVecFloat_Zero compute them.
+    const Vector3  lOldPos     = mLerpedPosAndSpeed.GetVector3();
+    const VecFloat lfOldSpeed  = mLerpedPosAndSpeed.GetPlus();
+    const VecFloat lfNewSpeed0 = lfOldSpeed + mDirAndAccel.GetPlus() * lfSimTimeStep;
+    const VecFloat lfNewSpeed  = rw::math::vpu::Max(lfNewSpeed0, rw::math::vpu::GetVecFloat_Zero());
+    const Vector3  lNewPos     = lOldPos + mDirAndAccel.GetVector3() * lfNewSpeed * lfSimTimeStep;
 
-    mLerpedPosAndSpeed.SetVector3(mLerpedPosAndSpeed.GetVector3()
-                                 + mDirAndAccel.GetVector3() * (lfSpeed * lfStep));
-    mLerpedPosAndSpeed.SetPlus(lfSpeed);
+    mLerpedPosAndSpeed.SetVector3(lNewPos);
+    mLerpedPosAndSpeed.SetPlus(lfNewSpeed);
 }
 
 // 0x82712E28 -- per-decision-frame restamp. The previous deterministic position becomes the

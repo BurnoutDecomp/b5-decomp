@@ -1171,21 +1171,7 @@ namespace BrnAI
     // tests meRelativeLocation for exact ==1 / ==0 (both branch to the distance arm), which is the
     // Hex-Rays `< 2u` form.
     // ====================================================================================
-    bool AIDriver::IsInvulnerable() const
-    {
-        CGS_ASSERT_AT(mpCar != 0, "mpCar != NULL", CGS_ARTIST_ABS_BRNAIDRIVER_H_FILE, 930);
-
-        if (mpCar->meRelativeLocation < 2)          // car+0x14D4 (behind player: 0 or 1)
-        {
-            if (mfDistanceToPlayer > 30.0f)   // flt_820C3FA8 == 30.0
-                return true;
-            if (mfInvulnerableTime > 0.0f)              // 0x1D0C (flt_82001CC0 == 0.0)
-                return true;
-            return false;
-        }
-
-        return mfInvulnerableTime > 0.0f;               // ahead of player: timer only
-    }
+    // IsInvulnerable @0x82765740 is header-inline (BrnAIDriver.h, DWARF h:331 / assert :930).
 
     // ====================================================================================
     // IsOnStartLine @0x82765800

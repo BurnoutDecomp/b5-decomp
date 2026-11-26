@@ -631,12 +631,9 @@ public:
         void            DEBUG_OverrideScratchAmount(f32 lfScratchAmount);
 
     private:
-        // Packed 8-byte storage for one cracked-glass scale pair. The console array
-        // strides by 8 bytes (asm: `8*(n+651)`), so this is NOT the 16-byte
-        // rw::math::vpu::Vector2; the accessors convert to/from Vector2 by value.
-        // (DWARF types it SmoothStep::Vector2 -- the smooth-step helper's own 2-float
-        // pair, whose own home is not reconstructed; the storage shape is what matters.)
-        struct GlassScale { f32 x; f32 y; };
+        // The cracked-glass scale pairs are 8-byte FPU pairs (asm: `8*(n+651)`), not the 16-byte
+        // rw::math::vpu::Vector2: DWARF types them SmoothStep::Vector2, the same
+        // rw::math::fpu::Vector2Template<float> the accessors take and return.
 
         // ---- the DWARF layout, in order (X360 byte offsets in the comments) --
         Matrix44Affine mBodyTransform;                   // +0x000 (0)
@@ -675,7 +672,7 @@ public:
         u8             mu8Pad1417_;                      // +0x1417 (5143)  align to f32
         f32            mafCrackedGlassFractureAmount[8]; // +0x1418 (5144)
         f32            mafCrackedGlassEqualisationFactor[8]; // +0x1438 (5176)
-        GlassScale     mavCrackedGlassScaleFactors[8];   // +0x1458 (5208) .. +0x1498 (5272)
+        rw::math::fpu::Vector2Template<float> mavCrackedGlassScaleFactors[8];   // +0x1458 (5208) .. +0x1498 (5272); DWARF h:508 SmoothStep::Vector2[8]
     };                                                   // sizeof == 5280 (16-aligned)
 
 public:

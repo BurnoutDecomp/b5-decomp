@@ -510,11 +510,9 @@ namespace BrnAI
     // ------------------------------------------------------------------------
     void BuzzBy::DrawBuzzTimer()
     {
-        static const f32  KF_X          = 80.0f;
-        static const f32  KF_TEXT_SCALE = 16.0f;
-        static const u32  KU_COLOUR     = 0xFF8080C8u;
-        static const u32  KU_LIST_COLOUR = 0xFFC88080u;
-
+        // DWARF (BrnAIBuzzBy.cpp:302/:303) has no locals but lStrStream / lDebugInterface: the
+        // position, size and colours are literals (ARTIST 0x82766ECC/0x82766ED4 read the global
+        // __real 16.0 / 80.0, 0x82004000 / 0x82004A18).
         CgsDev::SimpleStrStream lStream;
         CgsDev::DebugInterface  lDebugInterface;
         lStream.Reset();
@@ -522,17 +520,17 @@ namespace BrnAI
         if (mbIsInGameMode || mbIsInJunkyard)
         {
             lStream << "In game mode or JYard";
-            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), KF_X, 80.0f, KF_TEXT_SCALE, KU_COLOUR);
+            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), 80.0f, 80.0f, 16.0f, 0xFF8080C8u);
         }
         else
         {
             lStream << miCarsAwaitingCollection << " for collection, ";
             lStream << "Free burn time " << static_cast<s32>(mfTimeInFreeRoam);
-            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), KF_X, 80.0f, KF_TEXT_SCALE, KU_COLOUR);
+            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), 80.0f, 80.0f, 16.0f, 0xFF8080C8u);
 
             lStream.Reset();
             lStream << "Num cars in buzz list " << miNumActiveCars;
-            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), KF_X, 100.0f, KF_TEXT_SCALE, KU_LIST_COLOUR);
+            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), 80.0f, 100.0f, 16.0f, 0xFFC88080u);
         }
     }
 

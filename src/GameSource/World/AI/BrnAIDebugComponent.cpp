@@ -760,11 +760,14 @@ namespace
         return 0x7FFF;
     }
 
-    // Where the section-under-car and drift read-outs are drawn.
-    const Vector2 KV2_HUD_TEXT_POSITION(400.0f, 500.0f);
-
-    const f32 KF_DRIFT_DEBUG_TEXT_SCALE = 20.0f;
 }
+
+// DWARF BrnAIDebugComponent.cpp:182/:183: non-const namespace globals. K_DRIFT_TEXT_POSITION is
+// dynamically initialised into .bss 0x8300D760 (CRT 0x82C69148: 400 from 0x8200889C, 500 from
+// 0x820C478C); KF_DRIFT_TEXT_SIZE is .data 0x82F30238 (20.0), read from storage by RenderHUD's
+// inlined DrawDriftingDebug (0x8277E52C).
+Vector2 K_DRIFT_TEXT_POSITION(400.0f, 500.0f);
+f32 KF_DRIFT_TEXT_SIZE = 20.0f;   // DWARF float32_t
 
 // The index of the AI section under the player car (or "Invalid"), the drift state of the current
 // AI car, the AI state table and the buzz-by timer.
@@ -775,14 +778,14 @@ void AIDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
         const AICar* lpPlayerCar = mpAIModule->GetAICar(mpAIModule->mePlayerGlobalRaceCarIndex);
         if (lpPlayerCar->muBestSectionIndex == 0x7FFF)
         {
-            lpDisplay->DrawText("Invalid", KV2_HUD_TEXT_POSITION, 40.0f, 0xFFFFFFFFu, false);
+            lpDisplay->DrawText("Invalid", K_DRIFT_TEXT_POSITION, 40.0f, 0xFFFFFFFFu, false);
         }
         else
         {
             CgsDev::SimpleStrStream lStream;
             lStream.Reset();
             lStream << static_cast<s32>(lpPlayerCar->muBestSectionIndex);
-            lpDisplay->DrawText(lStream.GetBuffer(), KV2_HUD_TEXT_POSITION, 40.0f, 0xFFFFFFFFu, false);
+            lpDisplay->DrawText(lStream.GetBuffer(), K_DRIFT_TEXT_POSITION, 40.0f, 0xFFFFFFFFu, false);
         }
     }
 
@@ -808,8 +811,8 @@ void AIDebugComponent::DrawDriftingDebug(CgsDev::Debug2DImmediateRender* lpDispl
     const AICar& lrCar = mpAIModule->maAICars[miCurrentAICar];
     if (lrCar.meCarState == E_AI_CAR_STATE_IN_RANGE)
     {
-        lpDisplay->DrawText(KAAC_DRIFT_STATE_NAMES[lrCar.GetDriver()->GetDriftState()], KV2_HUD_TEXT_POSITION,
-                            KF_DRIFT_DEBUG_TEXT_SCALE, 0xFFFFFFFFu, false);
+        lpDisplay->DrawText(KAAC_DRIFT_STATE_NAMES[lrCar.GetDriver()->GetDriftState()], K_DRIFT_TEXT_POSITION,
+                            KF_DRIFT_TEXT_SIZE, 0xFFFFFFFFu, false);
     }
 }
 
