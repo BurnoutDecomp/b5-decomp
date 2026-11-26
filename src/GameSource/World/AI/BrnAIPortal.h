@@ -45,16 +45,18 @@ namespace BrnAI
         // data carries 64-bit slots, so nothing may narrow the base to 32 bits.
         void          FixUp(const void* lpBaseData);                   // :240
         void          FixDown(const void* lpBaseData);                 // :236
-        u8            GetNumBoundryLines() const;                      // :243
+        // The plain accessors are header-inline (DWARF AISectionsData.h:171..198; ARTIST has no
+        // out-of-line copy and loads the member at each site, e.g. lhz 0x10(portal) for the link).
+        u8            GetNumBoundryLines() const { return mu8NumBoundaryLines; }   // :243
         // Inlined at ARTIST 82783E68 / 82783E98 (three floats, zero fourth lane).
         Vector3       GetPosition() const { { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = {mPositionX, mPositionY, mPositionZ, 0.0f}; const Vector3 lResult(lResultIntrinsic); return lResult; } }
         Vector2       GetPosition2D() const;                          // :253
-        f32           GetPositionX() const;                            // :256
-        f32           GetPositionY() const;                            // :259
-        f32           GetPositionZ() const;                            // :262
+        f32           GetPositionX() const { return mPositionX; }      // :256
+        f32           GetPositionY() const { return mPositionY; }      // :259
+        f32           GetPositionZ() const { return mPositionZ; }      // :262
         void          SetPosition(Vector3 lPosition);                  // :266
         void          SetNumBoundaryLines(u8 lu8NumBoundaryLines);     // :270
-        u16           GetLinkSectionIndex() const;                     // :273
+        u16           GetLinkSectionIndex() const { return mu16LinkSection; }   // :273
 
     private:
         f32           mPositionX;          // +0x00  :276

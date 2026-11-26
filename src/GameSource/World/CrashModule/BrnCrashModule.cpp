@@ -457,9 +457,12 @@ void CrashModule::Reset()
 
     mRecycledTrafficQueue.Clear();
 
-    for (s32 liPlayer = 0; liPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liPlayer)
+    // DWARF :671 `EActiveRaceCarIndex leActiveRaceCarIndex`, stepped with BurnoutConstants.h's
+    // checked postfix ++ (its :39 assert is in ARTIST's loop, 0x827BF3C4..DC).
+    for (EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leActiveRaceCarIndex++)
     {
-        maCrashingTrafficForPlayers[liPlayer].Clear();
+        maCrashingTrafficForPlayers[leActiveRaceCarIndex].Clear();
     }
 }
 
@@ -1355,18 +1358,20 @@ void CrashModule::PostPhysicsUpdate( CgsModule::IOBufferStack* /*lpInputBufferSt
                                      CrashIO::OutputBuffer_PostPhysics* lpOutput,
                                      BrnUpdateSet lUpdateSet )
 {
+    // DWARF (_compile/BrnWorldUnity.cpp): local `bool lbSimPaused` (BrnCrashModule.cpp:602), the
+    // recycled queue copied with EventQueue::operator=, GetTrafficInputInterface() per bit copy.
+    const bool lbSimPaused = ( lUpdateSet & 1 ) != 0;
+
     lpOutput->LockForWrite();
     lpInput->LockForRead();
 
-    if( ( lUpdateSet & 1 ) == 0 )
+    if( !lbSimPaused )
     {
         ProcessCrashedRaceCarEvents( lpInput, lpOutput );
 
-        mRecycledTrafficQueue.Clear();
-        mRecycledTrafficQueue.Append(*lpInput->GetVehicleManagerOutputInterface()->GetRemovedTrafficEventQueue());
-        const CrashIO::TrafficInputInterface* traffic = lpInput->GetTrafficInputInterface();
-        mTrafficRenderedLastFrame = *traffic->GetRenderingBits();
-        mTrafficFarFromCameraLastFrame = *traffic->GetFarFromCameraBits();
+        mRecycledTrafficQueue = *lpInput->GetVehicleManagerOutputInterface()->GetRemovedTrafficEventQueue();
+        mTrafficRenderedLastFrame = *lpInput->GetTrafficInputInterface()->GetRenderingBits();
+        mTrafficFarFromCameraLastFrame = *lpInput->GetTrafficInputInterface()->GetFarFromCameraBits();
         ProcessSlammedTrafficEvents(lpInput);
         HandleNewCrashingTraffic(lpInput);
         HandleRecoveredSlammedTraffic(lpInput);
@@ -1378,11 +1383,10 @@ void CrashModule::PostPhysicsUpdate( CgsModule::IOBufferStack* /*lpInputBufferSt
 
         if( mbNeedToSendEndingMessage )
         {
-            // ARTIST 827D3CD0..827D3CE8: publish the empty signal, then consume the latch.
-            BrnGameState::GameStateModuleIO::PlayerCrashEndingEvent lEvent;
-            lpOutput->GetGameEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent),
-                BrnGameState::GameStateModuleIO::E_EVENT_PLAYER_CRASH_ENDING, sizeof(lEvent));
+            // ARTIST 827D3CD0..827D3CE8: publish the empty signal (DWARF :640 lEndSoonEvent), then
+            // consume the latch.
+            BrnGameState::GameStateModuleIO::PlayerCrashEndingEvent lEndSoonEvent;
+            lpOutput->GetGameEventQueue()->AddGameEvent( lEndSoonEvent );
             mbNeedToSendEndingMessage = false;
         }
     }

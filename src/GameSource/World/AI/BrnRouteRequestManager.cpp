@@ -181,22 +181,20 @@ AStarDistanceFunction RouteRequestManager::ChooseDistanceFunction(
 // (the section the car came from). Used to block U-turns on a standard race route.
 u16 RouteRequestManager::ComputeSectionBehind(const AICar* lpAICar, const AISectionsData* lpAISectionData)
 {
-    const u16 luBestSectionIndex = lpAICar->GetBestSectionIndex();
-    const AISection* lpBestSection = lpAISectionData->GetAISection(luBestSectionIndex);
+    // DWARF locals lpBestSection (:569), luBlockSectionIndex (:570), luPortalToBlockedSection (:571).
+    // 0x82789304..0x82789334: the two Flatten arguments are temporaries of the one call, the
+    // direction (Flatten(-GetDirection()), the `vspltisw -1 ; vslw ; vxor` negate) formed first
+    // as the XDK evaluates arguments right to left, each in its own stack slot (+0x50 / +0x60).
+    // Looking BACKWARDS along the car's heading, the "forward" portal is the one behind the car.
+    const AISection* lpBestSection = lpAISectionData->GetAISection(lpAICar->GetBestSectionIndex());
 
-    // 0x82789304..0x82789334: v2 = Flatten(-GetDirection()) (the `vspltisw -1 ; vslw ; vxor`
-    // trio flips the sign bits = negate), v1 = Flatten(GetPosition()). Looking BACKWARDS along
-    // the car's heading, the "forward" portal is the one behind the car.
-    const Vector3 lDirection = lpAICar->GetDirection();
-    const Vector3 lNegatedDirection = rw::math::vpu::Negate(lDirection);
-    const Vector2 lCarDirection2D = BrnMath::Flatten(lNegatedDirection);
-    const Vector2 lCarPosition2D  = BrnMath::Flatten(lpAICar->GetPosition());
-
-    const u8 lu8ForwardPortalIndex =
+    const u8 luPortalToBlockedSection =
         RacingLineGenerator::GetForwardPortalIndex(lpAISectionData, lpBestSection,
-                                                   lCarPosition2D, lCarDirection2D);
+                                                   BrnMath::Flatten(lpAICar->GetPosition()),
+                                                   BrnMath::Flatten(rw::math::vpu::Negate(lpAICar->GetDirection())));
 
-    return lpBestSection->GetPortal(lu8ForwardPortalIndex)->GetLinkSectionIndex();
+    const u16 luBlockSectionIndex = lpBestSection->GetPortal(luPortalToBlockedSection)->GetLinkSectionIndex();
+    return luBlockSectionIndex;
 }
 
 // X360 @0x82791490. The full race route to the car's destination section. Skips entirely when the

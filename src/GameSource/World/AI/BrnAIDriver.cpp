@@ -1468,10 +1468,11 @@ namespace BrnAI
 
         if (lpCar->GetRouteFindingStyle() != static_cast<ERouteFindingStyle>(0) || liBehaviour != 6)
         {
-            if (!(lfSpeed < KF_MAX_SPEED_FOR_BEING_STUCK))                 // flt_8300D818 == 10 mph
-                mfStuckTime = 0.0f;                                        // 0x1D04
-            else
+            // The accumulate arm comes first (ARTIST 0x827664CC bge -> the reset placed after it).
+            if (lfSpeed < KF_MAX_SPEED_FOR_BEING_STUCK)                    // flt_8300D818 == 10 mph
                 mfStuckTime = mfStuckTime + lfTimeStep;
+            else
+                mfStuckTime = 0.0f;                                        // 0x1D04
         }
     }
 
@@ -1593,18 +1594,18 @@ namespace BrnAI
 
         mfTopSpeed = mpCar->GetDesiredSpeed();            // lfs 0x14E8(car) -> stfs 0x1D14
 
-        const f32 lfHardShoulder = HardShoulderSpeed(mfTopSpeed);
-        const f32 lfProximity    = ProximitySpeed(mfTopSpeed);
-        const f32 lfCornering    = CorneringTopSpeed(mfTopSpeed);
+        // DWARF (_compile/BrnWorldAIUnity.cpp) locals :2488/:2491/:2494/:2500 and two
+        // rw::math::fpu::Min<float> calls (fsel 0x82793514 / 0x82793520; the console stores
+        // mfDesiredSpeed after each, 0x82793518 / 0x82793524).
+        const f32 lfHardShoulderTopSpeed = HardShoulderSpeed(mfTopSpeed);
+        const f32 lfProximityTopSpeed    = ProximitySpeed(mfTopSpeed);
+        const f32 lfCorneringTopSpeed    = CorneringTopSpeed(mfTopSpeed);
 
-        f32 lfDesired = ((lfCornering - lfHardShoulder) >= 0.0f) ? lfHardShoulder : lfCornering;
-        mfDesiredSpeed = lfDesired;                           // stfs 0x1D10 (the console stores twice)
+        mfDesiredSpeed = rw::math::fpu::Min(lfCorneringTopSpeed, lfHardShoulderTopSpeed);
+        mfDesiredSpeed = rw::math::fpu::Min(mfDesiredSpeed, lfProximityTopSpeed);
 
-        lfDesired = ((lfDesired - lfProximity) >= 0.0f) ? lfProximity : lfDesired;
-        mfDesiredSpeed = lfDesired;
-
-        const f32 lfRatio = mSteeringFan.GetSpeedRatio();     // @0x82779B90 (r3 = this + 0x710)
-        mfDesiredSpeed = (lfRatio * KF_SPEED_RATIO_SCALE + KF_SPEED_RATIO_BASE) * lfDesired;
+        const f32 lfSteeringFan = mSteeringFan.GetSpeedRatio();     // @0x82779B90 (r3 = this + 0x710)
+        mfDesiredSpeed = (lfSteeringFan * KF_SPEED_RATIO_SCALE + KF_SPEED_RATIO_BASE) * mfDesiredSpeed;
     }
 
     // ================================================================================

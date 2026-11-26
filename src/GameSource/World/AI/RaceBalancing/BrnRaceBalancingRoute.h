@@ -88,9 +88,10 @@ public:
     f32  GetTotalTime(GraphType leGraphType) const;
     bool IsValid() const;
 
-    // @0x827697A0 -- bodied in this TU.
-    f32  GetAISectionSpeed(const AISection* lpAISection,
-                           const AISectionsData* lpAISectionsData, f32 lfSpeedRatio);
+    // @0x827697A0 -- bodied in this TU. Static: ARTIST takes the section in r3 and the data in r4
+    // (DWARF h:97 declares it without const and the body never reads a member).
+    static f32 GetAISectionSpeed(const AISection* lpAISection,
+                                 const AISectionsData* lpAISectionsData, f32 lfSpeedRatio);
     s32  GetCurrentCheckpointIndex() const;
     f32  GetDistance() const;
 

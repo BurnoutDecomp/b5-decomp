@@ -259,10 +259,8 @@ f32 RaceBalancingManager::ComputeParSpeed(GraphType leGraphType, const AICar* lp
     // Curve-sampled speed ratio for this completion fraction.
     const f32 lfSpeedRatio = lrGraph.ComputeSpeedRatio(leGraphType, lfRaceCompletionRatio);
 
-    // Convert the ratio into a section speed. GetAISectionSpeed is declared non-const on
-    // RaceBalancingRoute (X360 ignored const-correctness here); cast to match its signature.
-    return const_cast<RaceBalancingRoute&>(lrRoute).GetAISectionSpeed(lpAISection, lpAISectionsData,
-                                                                      lfSpeedRatio);
+    // Convert the ratio into a section speed (RaceBalancingRoute::GetAISectionSpeed is static).
+    return RaceBalancingRoute::GetAISectionSpeed(lpAISection, lpAISectionsData, lfSpeedRatio);
 }
 
 // ===========================================================================================

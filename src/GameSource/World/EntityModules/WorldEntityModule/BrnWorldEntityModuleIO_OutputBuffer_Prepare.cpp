@@ -64,7 +64,9 @@ namespace WorldEntityIO
     SceneInputInterface*
     OutputBuffer_Prepare::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for writing\n",
+            CGS_ARTIST_FILE, 76));
         return &mSceneInputInterface;
     }
 

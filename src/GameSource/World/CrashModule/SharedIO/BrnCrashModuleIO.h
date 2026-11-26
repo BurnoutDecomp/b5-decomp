@@ -32,6 +32,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"     // BrnPhysics::Vehicle::VehicleInputInterface (OutputBuffer_PreScene +0x670)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h" // BrnPhysics::Vehicle::VehicleDriverInputInterface (InputBuffer_PreScene +0x3CD0)
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"             // CgsSystem::TimerStatusInterface
+#include "GameSource/GameState/BrnGameEvents.h"                                     // BrnGameState::GameStateModuleIO::GameEventQueue (OutputBuffer_PostPhysics)
 // [crash exit 2026-08-25] InputBuffer_PreScene now holds the REAL RCEntityActiveRaceCarOutputInterface
 // by value (it used to be a console-sized opaque blob), so its home header is a hard dependency.
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
@@ -49,7 +50,9 @@ namespace CrashIO
     // carries a pointer), so only the +0x10 offset is pinned; the queue follows it by name.
     struct OutputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
-        typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
+        // DWARF :193 `typedef GameEventQueue GameEventQueue` -- the game-state module's queue (a
+        // VariableEventQueue<1536,16>, at +0x7A0); PostPhysicsUpdate posts with AddGameEvent.
+        typedef BrnGameState::GameStateModuleIO::GameEventQueue GameEventQueue;
 
         // 0x827BB9C0 -- write-lock tripwire ("Not locked for writing"); return &mNetworkOutputInterface
         // (X360 returns this + 0x10).

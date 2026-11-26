@@ -44,7 +44,9 @@ namespace AIModuleIO
     // LockForWrite()s the buffer and posts its LoadBundle/AcquireResource through this twin.
     BrnResource::GameDataIO::RequestInterface<4096>* OutputBuffer::GetAIResourceRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for writing\n",
+            CGS_ARTIST_FILE_BRNAIMODULEIO, 416));
         return &mAIResourceRequestInterface;
     }
 

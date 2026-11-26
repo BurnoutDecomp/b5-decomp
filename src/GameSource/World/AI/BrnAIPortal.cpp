@@ -27,13 +27,9 @@ namespace BrnAI
     // GetPositionY to lift the corner mean to the portal's height; the X360 inlines the
     // `lfs f0, 4(portal)` read, so these have no standalone symbol -- de-inlined here to the
     // named members because Portal keeps them private.
-    f32 Portal::GetPositionX() const { return mPositionX; }
-    f32 Portal::GetPositionY() const { return mPositionY; }
-    f32 Portal::GetPositionZ() const { return mPositionZ; }
 
     // DecFIGS AISectionsData.h:243; ARTIST DrawPortalGeometry @0x827744C0
     // inlines the unsigned byte read at portal+0x12 for its boundary loop.
-    u8 Portal::GetNumBoundryLines() const { return mu8NumBoundaryLines; }
 
     // ------------------------------------------------------------------------------
     // Portal::FixUp / FixDown -- load-time relocation of the one pointer slot.
@@ -70,6 +66,5 @@ namespace BrnAI
     }
     // GetLinkSectionIndex (DWARF BrnAIPortal.h:273): the console inlines the `lhz 0x10(portal)` read
     // (AStar::Compute / RouteRequestManager); no out-of-line export. Conductor, 2026-09-03.
-    u16 Portal::GetLinkSectionIndex() const { return mu16LinkSection; }
 
 }

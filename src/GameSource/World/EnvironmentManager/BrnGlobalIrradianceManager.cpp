@@ -378,16 +378,15 @@ GlobalIrradianceManager::ComputeIrradiance( const Vector3& lKeyLightDirection,
 // BrnWorld::EnvironmentSettings::EnvironmentManager::GenerateShaderConstants (three times, once
 // per channel, at 0x827D0630 / 0x827D0680 / 0x827D06C4).
 // ---------------------------------------------------------------------------------------------
-Matrix44&
-GlobalIrradianceManager::GetIrradianceMatrix( Matrix44& lrOutMatrix, u8 lu8Colour ) const
+Matrix44
+GlobalIrradianceManager::GetIrradianceMatrix( u8 lu8Colour ) const
 {
     // X360: if (lu8Colour >= 3u) Begin/Fire/EndAssert("lu8Colour < 3", "...h", 100);
     CGS_ASSERT_AT( lu8Colour < E_NUM_COLOURS, "lu8Colour < 3" , CGS_ARTIST_BRNGLOBALIRRADIANCEMANAGER_H_FILE, 100);
 
     // r11 = (lu8Colour << 6) + this  ->  &maIrradianceMatrix[lu8Colour]
     // four lvx128/stvx128 == copy the 64-byte Matrix44 row-for-row.
-    lrOutMatrix = maIrradianceMatrix[lu8Colour];
-    return lrOutMatrix;
+    return maIrradianceMatrix[lu8Colour];
 }
 
 }

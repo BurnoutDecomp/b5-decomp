@@ -68,7 +68,9 @@ namespace WorldEntityIO
     // forwards the sound world-load events into the world update output).
     const OutputBuffer_PreScene::SoundWorldLoadInterface* OutputBuffer_PreScene::GetSoundWorldLoadInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for reading\n",
+            CGS_ARTIST_FILE, 135));
         return &mSoundWorldLoadInterface;
     }
 

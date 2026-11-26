@@ -711,12 +711,12 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
     // 0x8274C6B4 `lwz r3,0(r27)` with r27 == this + 0x729FC.
     CgsDev::PerfMonCpu::StartMonitor( miPerfMon_PrePhysicsUpdate );
 
+    // 0x8274C6C0 `clrlwi r29,r29,31`, before the locks -- the local the DWARF names lbSimPaused (:2641).
+    const bool lbSimPaused = ( ( lUpdateSet & KU_UPDATESET_SIM_PAUSED ) != 0 );
+
     // 0x8274C6C4 / 0x8274C6CC -- write lock the OUTPUT, then read lock the INPUT.
     lpOutput->LockForWrite();
     lpInput->LockForRead();
-
-    // 0x8274C6C0 `clrlwi r29,r29,31` -- the local the DWARF names lbSimPaused (:2641).
-    const bool lbSimPaused = ( ( lUpdateSet & KU_UPDATESET_SIM_PAUSED ) != 0 );
 
     // 0x8274C6E0 republishes mbPlayingShowtimeMode (DWARF :716) into the output buffer's
     // mbPlayingShowtime (console +0x24720, BrnTrafficEntityModuleIO.h:795). Both ends by name.
@@ -732,8 +732,12 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
         // meStartingUpState (DWARF :608). Cases 0/1/2 are empty; the default asserts.
         switch ( meStartingUpState )
         {
+        // Three separate empty arms: ARTIST tests 0, 1 and < 3 one by one (0x8274C81C..0x8274C82C)
+        // where one shared label compiles to a single range test.
         case E_STARTINGUPSTATE_WAITING_FOR_PLAYER:
+            break;
         case E_STARTINGUPSTATE_POPULATING:
+            break;
         case E_STARTINGUPSTATE_WAITING_FOR_STREAMING:
             break;
         default:
@@ -743,14 +747,8 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
         break;
 
     case E_STATE_RUNNING:
-        // 0x8274C760.
-        if ( lbSimPaused )
-        {
-            // 0x8274C80C: a paused frame runs the crashed-vehicle clean-up and nothing else.
-            // LANDED (was a gate) -- body in _wT3_02.cpp.
-            CleanUpCrashedVehiclePhysics( lpOutput );
-        }
-        else
+        // 0x8274C760: the running arm first, the paused clean-up placed after it (0x8274C80C).
+        if ( !lbSimPaused )
         {
             HandlePropModuleRequests( lpInput, lpOutput );   // 0x8274C778
 
@@ -813,6 +811,11 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
             // AvoidOncomingTraffic rows (kfBias -100 / -400) never saw a traffic car.
             StoreAISceneResultsForNextFrame( lpInput );
         }
+        else
+        {
+            // 0x8274C80C: a paused frame runs the crashed-vehicle clean-up and nothing else.
+            CleanUpCrashedVehiclePhysics( lpOutput );
+        }
         break;
 
     case E_STATE_TEARING_DOWN:
@@ -831,14 +834,14 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
         case E_TEARINGDOWNSTATE_WAITING_TO_RESET:
             break;
         default:
-            CGS_ASSERT( false, "Invalid tearing down state" );  // baked line 0xA8A == 2698
+            CGS_ASSERT_AT( false, "Invalid tearing down state", KAC_ARTIST_ASSERT_SOURCE, 2698 );
             break;
         }
         break;
 
     default:
         // 0x8274C700.
-        CGS_ASSERT( false, "Invalid state in traffic system" ); // baked line 0xA93 == 2707
+        CGS_ASSERT_AT( false, "Invalid state in traffic system", KAC_ARTIST_ASSERT_SOURCE, 2707 );
         break;
     }
 

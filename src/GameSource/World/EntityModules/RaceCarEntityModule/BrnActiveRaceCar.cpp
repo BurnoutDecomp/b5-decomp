@@ -3227,9 +3227,8 @@ void ActiveRaceCar::UpdateCullingGroup(
     mCullingGrouptoChangeTo = static_cast<s32>(lCullingGroup);        // 0x790
     mbChangeCullingGroup    = true;                                   // 0x78F
 
-    // (`lpSceneInterface != 0` is the same PC-safety guard the two callers already carry; the
-    //  console's test here is the mbAddedForCollision byte alone.)
-    if (lbWasAddedForCollision && lpSceneInterface != 0)
+    // The console's test is the mbAddedForCollision byte alone (no PC null guard).
+    if (lbWasAddedForCollision)
     {
         lpSceneInterface->SetVolumeInstanceCullingGroup(mHandlingBodyVolumeId,
                                                         static_cast<s32>(lCullingGroup));

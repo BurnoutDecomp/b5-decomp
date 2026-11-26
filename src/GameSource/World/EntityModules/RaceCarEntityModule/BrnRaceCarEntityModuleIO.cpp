@@ -1253,7 +1253,10 @@ void
 InputBuffer_PostPhysics::SetDeformationOutputInterfaceForEntityModules(
         const DeformationOutputInterfaceForEntityModules* lpDeformationOutputInterfaceForEntityModules)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    // ARTIST 0x827A99B0 (export hole): streamed write-lock assert at header line 532.
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        "Not locked for writing\n",
+        CGS_ARTIST_FILE, 532));
     mDeformationOutputInterfaceForEntityModules = *lpDeformationOutputInterfaceForEntityModules;
 }
 

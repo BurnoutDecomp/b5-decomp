@@ -667,12 +667,9 @@ void EnvironmentManager::GenerateShaderConstants(
     // 0x827D0624-0x827D06C4. Three calls, colour channel 0/1/2, each into a 64-byte stack matrix
     // that is then copied out four rows at a time. The console alternates between two stack buffers
     // (var_120 for R and B, var_E0 for G) -- pure temporary reuse, no aliasing.
-    {
-        Matrix44 lIrradianceMatrix;
-        lOutputIrradianceMatrixR = mGlobalIrradianceManager.GetIrradianceMatrix(lIrradianceMatrix, 0u);
-        lOutputIrradianceMatrixG = mGlobalIrradianceManager.GetIrradianceMatrix(lIrradianceMatrix, 1u);
-        lOutputIrradianceMatrixB = mGlobalIrradianceManager.GetIrradianceMatrix(lIrradianceMatrix, 2u);
-    }
+    lOutputIrradianceMatrixR = mGlobalIrradianceManager.GetIrradianceMatrix(0u);
+    lOutputIrradianceMatrixG = mGlobalIrradianceManager.GetIrradianceMatrix(1u);
+    lOutputIrradianceMatrixB = mGlobalIrradianceManager.GetIrradianceMatrix(2u);
 
     // 0x827D070C. `lvx128 v0, r31, 0x7C0` == mGlobalIrradianceManager + 0xC0 == its average colour
     // (DWARF BrnGlobalIrradianceManager.h:91 mAverageIrradianceColour, accessor at :60).

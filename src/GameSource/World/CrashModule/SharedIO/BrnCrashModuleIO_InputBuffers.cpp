@@ -72,7 +72,9 @@ namespace CrashIO
     const InputBuffer_PreScene::VehicleDriverInterface*
     InputBuffer_PreScene::GetVehicleDriverInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for reading\n",
+            CGS_ARTIST_FILE, 81));
         return &mVehicleDriverInterface;
     }
 
@@ -84,7 +86,9 @@ namespace CrashIO
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
     InputBuffer_PreScene::GetActiveRaceCarInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for reading\n",
+            CGS_ARTIST_FILE, 84));
         return &mActiveRaceCarInterface;
     }
 
@@ -145,9 +149,12 @@ namespace CrashIO
         mGameActionQueue = *lpQueue;
     }
 
+    // 0x827BB528 (DWARF :87, export name truncated) -- read-lock tripwire; returns +0x7A70.
     const InputBuffer_PreScene::GameActionQueue* InputBuffer_PreScene::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for reading\n",
+            CGS_ARTIST_FILE, 87));
         return &mGameActionQueue;
     }
 
@@ -211,7 +218,9 @@ namespace CrashIO
     const InputBuffer_PostPhysics::VehicleOutputInterface*
     InputBuffer_PostPhysics::GetVehicleOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for reading\n",
+            CGS_ARTIST_FILE, 171));
         return &mVehicleOutputInterface;
     }
 
@@ -221,7 +230,9 @@ namespace CrashIO
     const InputBuffer_PostPhysics::VehicleManagerOutputInterface*
     InputBuffer_PostPhysics::GetVehicleManagerOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for reading\n",
+            CGS_ARTIST_FILE, 174));
         return &mVehicleManagerOutputInterface;
     }
 

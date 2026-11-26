@@ -74,11 +74,9 @@ public:
                             const Vector3& lTopFillColour,
                             const Vector3& lBottomFillColour );
 
-    // GetIrradianceMatrix @ 0x827B0500. DWARF :57 declares it `Matrix44 GetIrradianceMatrix(uint8_t) const`
-    // (by value); the X360 asm passes the sret buffer in r3, `this` in r4 and the channel in r5 and
-    // returns the buffer pointer, which is what this signature models. KEPT VERBATIM from the
-    // committed reconstruction (only the member it reads was renamed to the DWARF spelling).
-    Matrix44& GetIrradianceMatrix( Matrix44& lrOutMatrix, u8 lu8Colour ) const;
+    // GetIrradianceMatrix @ 0x827B0500. DWARF :57 `Matrix44 GetIrradianceMatrix(uint8_t) const`, by
+    // value: the X360 asm takes the return buffer in r3, `this` in r4 and the channel in r5.
+    Matrix44 GetIrradianceMatrix( u8 lu8Colour ) const;
 
     // GetAverageIrradianceColour. DWARF :60. INLINED by the X360 compiler -- it has no
     // exported body; the read is recovered from its only caller,
