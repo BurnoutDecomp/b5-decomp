@@ -67,12 +67,6 @@ CgsSound::Logic::EffectControl* HybridEngineControl::CreateObject(u32 luType)
         return new (sTypeInfo.typeName, true) HybridEngineControl();
 }
 
-// ---------------------------------------------------------------------------
-// ~HybridEngineControl  @ 0x826CC7F0  (anchor for the X360 `scalar deleting destructor').
-// The X360 chains HybridExhaustControl::~HybridExhaustControl; HybridEngineControl adds
-// no member teardown of its own, so this leaf body is empty. The (a2 & 1) allocator-free
-// tail is re-synthesised by the host toolchain (off_82FFB954 not homed here).
-// ---------------------------------------------------------------------------
 // ARTIST 0x82F2F5B8: {0x10060, "HybridEngineControl", HybridExhaustControl, CreateObject}, registered by
 // its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> HybridEngineControl::sTypeInfo(
@@ -91,10 +85,6 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* HybridEngineCont
 const char* HybridEngineControl::GetTypeName() const
 {
     return sTypeInfo.typeName;
-}
-
-HybridEngineControl::~HybridEngineControl()
-{
 }
 
 bool HybridEngineControl::Attach()

@@ -16,7 +16,10 @@ class GenericRwacMasterVoice : public MasterVoice, public GenericRwacVoice
 public:
     GenericRwacMasterVoice(GenericRwacFactory& arFactory,
                            const VoiceSpec& akrSpec, u32 au32Ident);
-    virtual ~GenericRwacMasterVoice();
+    // No user-declared destructor: DWARF lists ~GenericRwacMasterVoice without a declaration line and
+    // places its body on the class's closing line (CgsGenericRwacMasterVoice.h:40), the compiler's implicit
+    // one; ARTIST's scalar deleting destructor 0x826E9928 calls the base destructor without
+    // restoring the vftable pointer(s).
 
     virtual f32 GetCpuTicks();
     virtual void DisplayVoiceCpu(f32* /*lpfX*/, f32* /*lpfY*/, f32 /*lfScale*/, bool /*lbDetail*/) {}

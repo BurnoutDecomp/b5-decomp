@@ -14,10 +14,6 @@ GenericRwacMasterVoice::GenericRwacMasterVoice(
 {
 }
 
-GenericRwacMasterVoice::~GenericRwacMasterVoice()
-{
-}
-
 f32 GenericRwacMasterVoice::GetCpuTicks()
 {
     return GenericRwacVoice::GetCpuTicks();

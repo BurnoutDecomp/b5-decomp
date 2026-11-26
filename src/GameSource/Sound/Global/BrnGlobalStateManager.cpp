@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h" // K_DefaultSendName
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GenericRwacFactory::SK_NAME (ARTIST reads the static, 0x83008650)
 
 // =============================================================================
 // BrnSound::Logic::GlobalStateManager -- out-of-line bodies.
@@ -201,7 +202,7 @@ bool GlobalStateManager::Prepare()
 
         CgsSound::Logic::Module* lpModule = GetLogicModule();
         const u32 luFactoryName = static_cast<u32>(
-            CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+            CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
         maSubmixVoices[0].Construct(
             lpModule, lpModule->GetUniqueId(), luFactoryName,
             static_cast<u32>(CgsSound::Playback::Name::MakeHash(

@@ -158,7 +158,7 @@ bool EmitterEffect::Attach()
             CgsSound::Logic::VoiceWrapper::CreateParams lParams;
             lParams.mpLogicModule = lpLogicModule;
             lParams.mFactoryName = static_cast<u32>(
-                CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+                CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
             lParams.mVoiceSpecName = static_cast<u32>(
                 CgsSound::Playback::Name::MakeHash("PositionalVoiceSpec"));
             lParams.mContentSpecName = static_cast<u32>(

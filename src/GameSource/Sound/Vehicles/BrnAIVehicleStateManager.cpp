@@ -326,7 +326,7 @@ bool AIVehicleStateManager::PrepareAIEngineLoading()
     {
         meAIEngineLoadingState = E_AI_ENGINE_LOADING_CREATING_CONTENT_SPECS;
         const u32 luFactoryName = static_cast<u32>(
-            CgsSound::Playback::GenericRwacFactorySkName().GetValue() );   // dword_83008650
+            CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue() );   // dword_83008650
         for ( s32 liEngine = 0; liEngine < KI_NUMBER_OF_AUDIO_AI_ENGINES; ++liEngine )
         {
             Attrib::Gen::vehicleengine lAttribs(

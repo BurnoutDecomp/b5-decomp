@@ -307,15 +307,16 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void VehicleManager::SetPlayerCarToShowtimeMode(bool lbInShowtime)
     {
-        const s32 liPlayerIndex = static_cast<s32>(mePlayerActiveRaceCarIndex);
-        CGS_ASSERT(liPlayerIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(liPlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        // DWARF declares it at BrnVehicleManager.h:473 and ARTIST's asserts sit on h:1708/1709 (the
+        // header's inline definitions): the member is read afresh for each test and for the index.
+        CGS_ASSERT_AT(mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                      "mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 1708);
+        CGS_ASSERT_AT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                      "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 1709);
 
-        RaceCarPhysics* const lpPlayerCar =
-            &maRaceCarVehicles[liPlayerIndex];
-        lpPlayerCar->SetPlayerVehicleInShowtime(lbInShowtime,
-                                                mfPlayerStatStrength,
-                                                mfPlayerStatDamageLimit);
+        maRaceCarVehicles[mePlayerActiveRaceCarIndex].SetPlayerVehicleInShowtime(lbInShowtime,
+                                                                                mfPlayerStatStrength,
+                                                                                mfPlayerStatDamageLimit);
 
         VehiclePhysics::msbInShowtime = lbInShowtime;   // asm: stb r29, byte_82FB7DF2
     }
@@ -493,9 +494,13 @@ namespace Vehicle
     void VehicleManager::OnPrepareGameMode(
             const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPrepareModeAction)
     {
-        CGS_ASSERT(lpPrepareModeAction != NULL, "lpPrepareModeAction != NULL");            // :10009
+        CGS_ASSERT(lpPrepareModeAction != NULL,
+            CGS_ASSERT_MESSAGE_AT(
+                "lpPrepareModeAction != NULL", KAC_ARTIST_ASSERT_FILE, 10009 /* ARTIST 0x825B579C */));
         CGS_ASSERT(lpPrepareModeAction->GetGameModeParams() != NULL,
-                   "lpPrepareModeAction->GetGameModeParams() != NULL");                    // :10010
+            CGS_ASSERT_MESSAGE_AT(
+                "lpPrepareModeAction->GetGameModeParams() != NULL", KAC_ARTIST_ASSERT_FILE,
+                10010 /* ARTIST 0x825B57C0 */));
 
         const BrnGameState::GameStateModuleIO::EGameModeType leGameModeType =
             lpPrepareModeAction->GetGameModeParams()->GetGameModeType();                   // lwz 0x178

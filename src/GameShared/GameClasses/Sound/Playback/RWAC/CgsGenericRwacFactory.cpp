@@ -787,13 +787,6 @@ Registry* GetRwacFactoryRegistry(Factory* lpRwacFactory)
 
 const Name GenericRwacFactory::SK_NAME("~GenericRwacFactory::SK_NAME~");
 
-// Host accessor for the module-side callers (CgsSoundPlaybackModule.h), which read the
-// factory name without including this factory's header.
-const Name& GenericRwacFactorySkName()
-{
-    return GenericRwacFactory::SK_NAME;
-}
-
 } // namespace Playback
 } // namespace CgsSound
 

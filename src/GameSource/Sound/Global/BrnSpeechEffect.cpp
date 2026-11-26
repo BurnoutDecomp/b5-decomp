@@ -20,6 +20,7 @@
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 
 #include <cstdlib>   // getenv -- [DIAG] only
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GenericRwacFactory::SK_NAME (ARTIST reads the static, 0x83008650)
 
 namespace BrnSound
 {
@@ -155,7 +156,7 @@ bool SpeechEffect::Attach()
     mCreateParams.Clear();
     mCreateParams.mpLogicModule = lpModule;
     mCreateParams.mFactoryName = static_cast<u32>(
-        CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+        CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
     mCreateParams.mVoiceSpecName = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("MusicVoiceSpec"));
     mCreateParams.mSlotName = static_cast<u32>(

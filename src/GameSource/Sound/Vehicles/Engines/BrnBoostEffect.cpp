@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstring>
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h" // PlayerVoice::SK_PLAYER_SLOT_NAME (ARTIST reads the static, 0x830080A8)
 
 // ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
 #define BRN_BOOSTEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnBoostEffect.cpp"
@@ -342,11 +343,11 @@ void BoostEffect::UpdateBoostStream()
         mParams.Clear();
         mParams.mpLogicModule = GetLogicModule();
         mParams.mFactoryName = static_cast<u32>(
-            CgsSound::Playback::Name::MakeHash("~GenericRwacFactory::SK_NAME~"));
+            CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
         mParams.mVoiceSpecName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("MusicVoiceSpec"));
         mParams.mContentSpecName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("BoostUrban"));
         mParams.mSlotName = static_cast<u32>(
-            CgsSound::Playback::Name::MakeHash("~PlayerVoice::SK_PLAYER_SLOT_NAME~"));
+            CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
         mParams.mSendName = KU_SEND01;
         mParams.mSubMixVoiceID = 1;
         mParams.miSendIndex = 0;

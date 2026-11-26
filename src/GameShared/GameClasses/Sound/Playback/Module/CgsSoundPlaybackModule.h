@@ -93,10 +93,6 @@ namespace Playback
 class AemsFactory;
 Registry* GetRwacFactoryRegistry(Factory* lpRwacFactory);  // X360 +0x401C
 
-// GenericRwacFactory::SK_NAME, by name -- the reserved factory name the init-submix
-// path asserts the request matches. Bodied in the GenericRwacFactory TU.
-const Name& GenericRwacFactorySkName();
-
 // CgsCommon.h. K_INIT_SND9_SUBMIX_IDENT -- the reserved slot name that flags the
 // init-submix path in Module::C. The asm compares the requested slot name against
 // -0x10 (cmpwi r24,-0x10); as a u32 that is 0xFFFFFFF0.

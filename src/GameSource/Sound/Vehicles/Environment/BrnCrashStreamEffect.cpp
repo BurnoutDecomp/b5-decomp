@@ -15,6 +15,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GenericRwacFactory::SK_NAME (ARTIST reads the static, 0x83008650)
 
 // ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
 #define BRN_CRASHSTREAMEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Environment/BrnCrashStreamEffect.cpp"
@@ -124,7 +125,7 @@ bool CrashStreamEffect::Prepare(CgsSound::Logic::State* apState)
             CgsSound::Playback::Name::MakeHash("SubmixVoiceSpec"));
         CgsSound::Logic::Module* lpModule = mpLogicModule;
         const u32 luFactoryName = static_cast<u32>(
-            CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+            CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
         mSubmix.Construct(lpModule, lpModule->GetUniqueId(), luFactoryName, luSpecName);
     }
         // fall through
@@ -219,7 +220,7 @@ void CrashStreamEffect::UpdateParams(f32 /*afTimeStep*/)
     mParams.miSendIndex = 0;
     mParams.mpLogicModule = mpLogicModule;
     mParams.mFactoryName = static_cast<u32>(
-        CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+        CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
     mParams.mSlotName = static_cast<u32>(
         CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
     mParams.mContentSpecName = static_cast<u32>(GetContentSpecToPlay(lbShowTime).GetValue());

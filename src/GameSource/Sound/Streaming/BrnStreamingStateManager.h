@@ -83,7 +83,10 @@ public:
     // StreamingStateManager @ 0x826FBFE0. Forwards to the BrnStateManager base ctor
     // and zero-inits the per-stream voice/parameter table.
     StreamingStateManager();
-    virtual ~StreamingStateManager();
+    // No user-declared destructor: DWARF lists ~StreamingStateManager without a declaration line and
+    // places its body on the class's closing line (BrnStreamingStateManager.h:107), the compiler's implicit
+    // one; ARTIST's scalar deleting destructor 0x826FC1B0 calls the base destructor without
+    // restoring the vftable pointer(s).
 
     // ---- RTTI hooks (the per-class descriptor + factory). STATIC GetStaticTypeInfo
     // / CreateObject so &CreateObject is storable in ClassTypeInfo<StateManager>::

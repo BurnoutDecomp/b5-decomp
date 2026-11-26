@@ -678,10 +678,6 @@ TrafficInAir::TrafficInAir()
 {
 }
 
-TrafficInAir::~TrafficInAir()
-{
-}
-
 // ARTIST 0x82F2F710: {0x30030, "TrafficInAir", InAirEffect, CreateObject}, registered by
 // its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> TrafficInAir::sTypeInfo(

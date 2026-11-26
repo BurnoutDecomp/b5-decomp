@@ -15,6 +15,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameSource/GameState/BrnGameEvents.h"   // GameStateModuleIO::VehicleImpactEvent (game event 31)
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GenericRwacFactory::SK_NAME (ARTIST reads the static, 0x83008650)
 
 // BrnSound::Module::SoundLogicModule -- accessor bodies recovered from
 // BURNOUT_X360_ARTIST.XEX. See BrnSoundLogicModule.h for the layout/slice notes.
@@ -328,7 +329,7 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
         if (!mMasterVoice.GetVoiceObject())
         {
             const u32 luFactoryName = static_cast<u32>(
-                CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+                CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
             mSubmixVoice.Construct(
                 this, CgsSound::Playback::KU_INIT_SND9_SUBMIX_IDENT, luFactoryName,
                 static_cast<u32>(CgsSound::Playback::Name::MakeHash("SubmixVoiceSpec")));

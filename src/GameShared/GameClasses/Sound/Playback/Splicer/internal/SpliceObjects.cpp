@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // RwacSystemLock, GetDefaultRwacSystem
 #include "rw/audio/core/plugins/SndPlayer1.h"
 
+#include "rw/math/fpu/scalar_operation.h"
 #include <math.h>   // cos, fabsf
 #include <new>
 #include <stdlib.h> // rand
@@ -159,23 +160,23 @@ bool SpliceSample::IsPlaying()
 // attack window (0 .. mfEnvAttack) the volume ramps in; past mfEnvDecay it ramps out and
 // is clamped at 0. A zero attack/decay time (within FLT_EPSILON) disables that phase.
 // ============================================================================
-void SpliceSample::GetEnvelopeVolume( f32& arfVol )
+// DWARF (unity dump): parameter volumeenvelope, GetData(), rw::math::fpu::IsZero twice, an lCosine
+// local per arm (cpp:595/603) from rw::math::fpu::Cos. ARTIST re-reads mpData for the decay phase
+// (0x8268B0BC). Left: the attack/decay multiplies' operand order (fmuls f0,f13,f0 on ARTIST).
+void SpliceSample::GetEnvelopeVolume( f32& volumeenvelope )
 {
-    SPLICE_SampleRef* lpData = mpData;
-
-    if ( !IsApproxZero( lpData->mfEnvAttack ) && mtTimeIntoPlayback < lpData->mfEnvAttack )
+    if ( !rw::math::fpu::IsZero( GetData()->mfEnvAttack ) && mtTimeIntoPlayback < GetData()->mfEnvAttack )
     {
-        // Attack ramp.
-        arfVol = arfVol * ( 1.0f - (f32)cos( mtTimeIntoPlayback / lpData->mfEnvAttack ) );
+        f32 lCosine = rw::math::fpu::Cos( mtTimeIntoPlayback / GetData()->mfEnvAttack );
+        volumeenvelope = ( 1.0f - lCosine ) * volumeenvelope;
     }
-    else if ( !IsApproxZero( lpData->mfEnvDecay ) && mtTimeIntoPlayback > lpData->mfEnvDecay )
+    else if ( !rw::math::fpu::IsZero( GetData()->mfEnvDecay ) && mtTimeIntoPlayback > GetData()->mfEnvDecay )
     {
-        // Decay ramp, clamped to >= 0.
-        f32 lfPhase = ( mtTimeIntoPlayback - lpData->mfEnvDecay )
-                    / ( lpData->mfEnvLength - lpData->mfEnvDecay );
-        arfVol = arfVol * ( 1.0f - (f32)cos( 1.0f - lfPhase ) );
-        if ( arfVol < 0.0f )
-            arfVol = 0.0f;
+        f32 lCosine = rw::math::fpu::Cos( 1.0f - ( mtTimeIntoPlayback - GetData()->mfEnvDecay )
+                                                 / ( GetData()->mfEnvLength - GetData()->mfEnvDecay ) );
+        volumeenvelope = ( 1.0f - lCosine ) * volumeenvelope;
+        if ( volumeenvelope < 0.0f )
+            volumeenvelope = 0.0f;
     }
 }
 

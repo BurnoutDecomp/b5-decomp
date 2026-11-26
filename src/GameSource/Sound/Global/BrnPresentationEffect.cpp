@@ -13,6 +13,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
 #include <cstring>
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GenericRwacFactory::SK_NAME (ARTIST reads the static, 0x83008650)
 
 // =============================================================================
 // BrnSound::Logic::PresentationEffect -- out-of-line bodies.
@@ -190,7 +191,7 @@ void PresentationEffect::PlayStream(CgsSound::Logic::Command::QueueElement auCon
     // order. Its constructor's cleared post-init/content/reverb fields remain intact.
     mStreamParams.mpLogicModule = lpModule;
     mStreamParams.mFactoryName = static_cast<u32>(
-        CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+        CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
     mStreamParams.mVoiceSpecName = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("MusicVoiceSpec"));
     mStreamParams.mContentSpecName = auContentSpec;
@@ -250,7 +251,7 @@ void PresentationEffect::Play(const PresentationEntry& arEntry)
     if (arEntry.mu16Splice == PresentationEntry::KU16_SPECIAL_SPLICE_WAVE)
     {
         lParams.mFactoryName = static_cast<u32>(
-            CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+            CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
         lParams.mVoiceSpecName = static_cast<u32>(
             CgsSound::Playback::Name::MakeHash("StereoWavVoiceSpec"));
         lParams.mContentSpecName = arEntry.mu32ContentSpec;

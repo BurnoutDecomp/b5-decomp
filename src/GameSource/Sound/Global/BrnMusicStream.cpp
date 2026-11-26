@@ -4,6 +4,8 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GenericRwacFactory::SK_NAME
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"                // PlayerVoice::SK_PLAYER_SLOT_NAME
 #include <cmath>
 
 namespace BrnSound
@@ -39,15 +41,19 @@ bool MusicStream::Prepare(u32 auPriority)
     return true;
 }
 
-// ARTIST 0x8269CB88: create parameters are populated when a song is queued.
+// ARTIST 0x8269CB88: create parameters are populated when a song is queued. The original lives in
+// BrnMusicEffect.cpp (its assert names that unity path, string 0x820ACDA8, line 323) and reads the
+// two interned names from their statics (GenericRwacFactory::SK_NAME 0x83008650,
+// PlayerVoice::SK_PLAYER_SLOT_NAME 0x830080A8).
 void MusicStream::Queue(CgsSound::Playback::Name aContentSpec,
                         CgsSound::Logic::Module* apModule, u8 auOutputSlot)
 {
-    CGS_ASSERT(apModule != 0, "lpLogicModule");
+    CGS_ASSERT_AT(apModule != 0, "lpLogicModule",
+                  "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Global/BrnMusicEffect.cpp", 323);
     mCreateParams.mpLogicModule = apModule;
-    mCreateParams.mFactoryName = static_cast<u32>(CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+    mCreateParams.mFactoryName = static_cast<u32>(CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
     mCreateParams.mVoiceSpecName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("MusicFiltVoiceSpec"));
-    mCreateParams.mSlotName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("~PlayerVoice::SK_PLAYER_SLOT_NAME~"));
+    mCreateParams.mSlotName = static_cast<u32>(CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
     mCreateParams.mContentSpecName = static_cast<u32>(aContentSpec.GetValue());
     mCreateParams.mSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
     mCreateParams.miSendIndex = 0;

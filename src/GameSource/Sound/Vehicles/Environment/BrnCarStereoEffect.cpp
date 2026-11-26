@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
 #include "SharedClasses/DataLists/VehicleListEntry.h"
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GenericRwacFactory::SK_NAME (ARTIST reads the static, 0x83008650)
 
 // ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
 #define BRN_CARSTEREOEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Environment/BrnCarStereoEffect.cpp"
@@ -125,7 +126,7 @@ bool CarStereoEffect::Attach()
     lParams.mpLogicModule = CgsSound::Logic::EffectBase::mpLogicModule;
     lParams.mpOnPostInit = 0;
     lParams.mFactoryName = static_cast<u32>(
-        CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+        CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
     lParams.mVoiceSpecName = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("PositionalVoiceSpec"));
     lParams.mpContent = 0;

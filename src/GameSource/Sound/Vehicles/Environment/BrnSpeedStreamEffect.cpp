@@ -7,6 +7,7 @@
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GenericRwacFactory::SK_NAME (ARTIST reads the static, 0x83008650)
 
 // ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
 #define BRN_SPEEDSTREAMEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Environment/BrnSpeedStreamEffect.cpp"
@@ -103,7 +104,7 @@ void SpeedStreamEffect::UpdateParams(f32 /*afTimeStep*/)
     {
         mParams.mpLogicModule = lpModule;
         mParams.mFactoryName = static_cast<u32>(
-            CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+            CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
         mParams.mVoiceSpecName = static_cast<u32>(
             CgsSound::Playback::Name::MakeHash("MusicVoiceSpec"));
         mParams.mSlotName = static_cast<u32>(

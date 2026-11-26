@@ -37,7 +37,10 @@ namespace Engines
 struct HybridEngineControl : public HybridExhaustControl
 {
     HybridEngineControl() : mpHybridExhaustControl(0) {}
-    virtual ~HybridEngineControl();     // anchor for the scalar deleting destructor @ 0x826CC7F0
+    // No user-declared destructor: DWARF lists ~HybridEngineControl without a declaration line and
+    // places its body on the class's closing line (h:187), the compiler's implicit one. ARTIST's
+    // scalar deleting destructor 0x826CC7F0 calls ~HybridExhaustControl without restoring the
+    // vftable pointers, as an implicit destructor does.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();

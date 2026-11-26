@@ -11,6 +11,9 @@
 
 #include <cstddef> // size_t
 
+// This header's path as ARTIST's copies of its inline functions assert it (string 0x820AAAAC).
+#define CGS_ARTIST_CGSCONTENT_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsContent.h"
+
 namespace CgsSound
 {
 namespace Playback
@@ -151,18 +154,25 @@ namespace Playback
         void SetContentState(EContentState leContentState)
         {
             CGS_ASSERT(!(leContentState & E_CONTENT_STATE_CHANGED), CGS_ASSERT_MESSAGE_AT(
-                       "!(leContentState & E_CONTENT_STATE_CHANGED)", "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsContent.h", 462));
+                       "!(leContentState & E_CONTENT_STATE_CHANGED)", CGS_ARTIST_CGSCONTENT_H_FILE, 462));
             if (GetContentState() != leContentState)
                 mu8ContentState = static_cast<u8>(leContentState | E_CONTENT_STATE_CHANGED);
         }
 
-        // @ 0x82680CC8. Enter the remove lifecycle and ask the concrete content
-        // implementation to begin unloading.
-        bool BeginRemove()
+        // DWARF CgsContent.h:393 (non-const). ARTIST materialises it in BeginRemove
+        // (0x82680CE0 subfic/subfe/clrlwi: the load count is above one).
+        bool IsAttached()
         {
-            CGS_ASSERT(mu16LoadCount <= 1, "!IsAttached()");
+            return mu16LoadCount > 1;
+        }
+
+        // @ 0x82680CC8, DWARF CgsContent.h:536 (void). Enter the remove lifecycle and ask the
+        // concrete content implementation to begin unloading.
+        void BeginRemove()
+        {
+            CGS_ASSERT_AT(!IsAttached(), "!IsAttached()", CGS_ARTIST_CGSCONTENT_H_FILE, 538);
             mu8RemoveState = E_CONTENT_REMOVE_REMOVING;
-            return DoUnload();
+            DoUnload();
         }
 
         // DWARF CgsContent.h:431. The X360 inlines this masked byte read at

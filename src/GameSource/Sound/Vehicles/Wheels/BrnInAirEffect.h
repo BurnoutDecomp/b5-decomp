@@ -111,7 +111,10 @@ protected:
 struct TrafficInAir : public InAirEffect
 {
     TrafficInAir();
-    virtual ~TrafficInAir();
+    // No user-declared destructor: DWARF lists ~TrafficInAir without a declaration line and
+    // places its body on the class's closing line (BrnInAirEffect.h:273), the compiler's implicit
+    // one; ARTIST's scalar deleting destructor 0x826FDD18 calls the base destructor without
+    // restoring the vftable pointer(s).
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F710)
 
     static CgsSound::Logic::EffectObject* CreateObject(u32 luType);

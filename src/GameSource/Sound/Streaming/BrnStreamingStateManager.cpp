@@ -105,20 +105,6 @@ StreamingStateManager::StreamingStateManager()
 }
 
 // ---------------------------------------------------------------------------
-// StreamingStateManager::~StreamingStateManager()  (the X360 `vector deleting destructor`)
-//
-// FLAG (minimal): the matching dtor was not individually exported. The base
-// BrnStateManager / CgsSound::Logic::StateManager virtual destructor tears down the
-// base content pool, re-installs the MemBase vtable and routes storage back to the
-// sound allocator (off_82FFB954) -- all re-synthesised by the host toolchain from
-// this virtual destructor. No leaf member teardown is modelled (the deferred
-// streaming-voice state owns no recovered resources in this slice).
-// ---------------------------------------------------------------------------
-StreamingStateManager::~StreamingStateManager()
-{
-}
-
-// ---------------------------------------------------------------------------
 // StreamingStateManager::CreateObject(u32)  @ 0x82700B68   (the factory hook)
 //
 //   if ( a1 ) { if ( MemBase::operator new(552, "StreamingStateManager", 1) ) return new'd ctor; }

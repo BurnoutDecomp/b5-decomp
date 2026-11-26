@@ -6,6 +6,8 @@
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnDualGinsuEffect.cpp"
 #include <algorithm>
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GenericRwacFactory::SK_NAME (ARTIST reads the static, 0x83008650)
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h" // PlayerVoice::SK_PLAYER_SLOT_NAME (ARTIST reads the static, 0x830080A8)
 
 // ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
 #define BRN_DUALGINSUEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnDualGinsuEffect.cpp"
@@ -163,14 +165,14 @@ bool DualGinsuExhaustEffect::Attach()
         CgsSound::Logic::VoiceWrapper::CreateParams lParams;
         lParams.mpLogicModule = GetLogicModule();
         lParams.mFactoryName = static_cast<u32>(
-            CgsSound::Playback::Name::MakeHash("~GenericRwacFactory::SK_NAME~"));
+            CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
         lParams.mVoiceSpecName = static_cast<u32>(
             CgsSound::Playback::Name::MakeHash("LoopVoiceSpec"));
         lParams.mContentSpecName = static_cast<u32>(
             CgsSound::Playback::Name::MakeHash(
                 "gamedb://burnout5/Burnout/Sound/GlobalWaves/ReverseWhine.wav.WaveFile?ID=584565"));
         lParams.mSlotName = static_cast<u32>(
-            CgsSound::Playback::Name::MakeHash("~PlayerVoice::SK_PLAYER_SLOT_NAME~"));
+            CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
         lParams.mSendName = static_cast<u32>(
             CgsSound::Playback::Name::MakeHash("Send01"));
         lParams.mSubMixVoiceID = mSubmixIdent;
