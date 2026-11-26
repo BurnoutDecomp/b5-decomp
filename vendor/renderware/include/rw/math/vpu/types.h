@@ -128,6 +128,16 @@ namespace vpu
 
         Matrix44Affine(Vector3 lxAxis, Vector3 lyAxis, Vector3 lzAxis, Vector3 lwAxis)
             : xAxis(lxAxis), yAxis(lyAxis), zAxis(lzAxis), wAxis(lwAxis) {}
+        // DecFIGS matrix44affine_type_inline.h:424 (rwmath 1.02.00 same line): the four raw
+        // rows, each stored into its axis's register.
+        Matrix44Affine(VectorIntrinsicInParam row0, VectorIntrinsicInParam row1,
+                       VectorIntrinsicInParam row2, VectorIntrinsicInParam row3)
+        {
+            xAxis.mV = row0;
+            yAxis.mV = row1;
+            zAxis.mV = row2;
+            wAxis.mV = row3;
+        }
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
         void SetIdentity()
         {

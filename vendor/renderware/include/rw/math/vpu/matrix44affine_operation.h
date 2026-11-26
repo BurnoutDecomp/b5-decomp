@@ -124,6 +124,11 @@ namespace vpu
 
     // DecFIGS matrix44affine_operation_platform_inline.h:17,20 specifies
     // Vector3 first. The ARTIST kernels keep the full fused vector rows.
+    // Splat first: rw::collision::CapsuleVolume::GetBBox 0x82BAFA08..0x82BAFA24 is exact only so.
+    // OPEN (msgs/sdk-r6-rwmath-transform.txt): ARTIST's game code inlines the ROW-first order of
+    // the SDK's PPU body (Brn3DUserSpaceEffectControl::AttachEmitterPosition 0x82696C08
+    // `vmaddfp v0,v0(row),v13,v6(xSplat)`), so the rwcollision library and the game appear to
+    // have been built against different rwmath bodies.
     inline Vector3 TransformVector(Vector3::InParam vector, Matrix44Affine::InParam matrix)
     {
         const VectorIntrinsic x = __vspltw(vector.mV, 0);
@@ -465,31 +470,40 @@ namespace vpu
     // -- inverse ------------------------------------------------------------------------
 
     // InverseOfMatrixWithOrthonormal3x3(m): the affine inverse when the upper 3x3 is
-    // orthonormal (a pure rotation). The inverse rotation is the transpose of the 3x3,
-    // and the inverse translation is the transpose applied to the negated position:
-    //   invR = transpose(R)            (col k of R becomes row k of invR)
-    //   invT = invR * (-Pos)  i.e. invT.k = -(Pos . R.row_k)  (lane k = -Pos dot axis k)
-    // X360 shape: the transpose is built by vmrglw/vmrghw lane merges; the inverse
-    // translation is `vsubfp v,0,Pos` then a vmaddfp cascade of the transposed rows
-    // against the negated-position broadcasts. The translation lanes computed there
-    // are exactly -(Pos . xAxis), -(Pos . yAxis), -(Pos . zAxis).
-    inline Matrix44Affine InverseOfMatrixWithOrthonormal3x3(const Matrix44Affine& lrMatrix)
+    // orthonormal (a pure rotation): the transposed 3x3 and the transpose applied to the
+    // negated position. DecFIGS matrix44affine_operation_platform_inline.h:200; the SDK body
+    // (rwmath 1.02.00 detail/ps3/ppu/matrix44affine_operation_platform_inline.h) builds the
+    // transpose with vmrghw/vmrglw against a zero register and accumulates the translation Z
+    // first. ARTIST inlines it in Brn3DUserSpaceEffectControl::AttachEmitterPosition
+    // (0x82696BA0..0x82696C04): vspltisw 0, vsubfp(zero, w), the four tempT merges, the three
+    // transposed rows, then `vmulfp128 v13,v10(Z),v12(T2)`, `vmaddfp v13,v9(Y),...,v11(T1)`,
+    // `vmaddfp v13,v3(X),...,v0(T0)`: splat first, and the first step a vmulfp (the XDK does not
+    // fold the PPU form's vmaddfp against the +0 seed).
+    inline Matrix44Affine InverseOfMatrixWithOrthonormal3x3(Matrix44Affine::InParam in)
     {
-        Matrix44Affine lInverse;
+        VectorIntrinsic zero = __vspltisw(0);
 
-        // Inverse rotation = transpose of the upper 3x3 (rows become columns).
-        lInverse.xAxis.mV.x = lrMatrix.xAxis.mV.x; lInverse.xAxis.mV.y = lrMatrix.yAxis.mV.x; lInverse.xAxis.mV.z = lrMatrix.zAxis.mV.x; lInverse.xAxis.mV.w = 0.0f;
-        lInverse.yAxis.mV.x = lrMatrix.xAxis.mV.y; lInverse.yAxis.mV.y = lrMatrix.yAxis.mV.y; lInverse.yAxis.mV.z = lrMatrix.zAxis.mV.y; lInverse.yAxis.mV.w = 0.0f;
-        lInverse.zAxis.mV.x = lrMatrix.xAxis.mV.z; lInverse.zAxis.mV.y = lrMatrix.yAxis.mV.z; lInverse.zAxis.mV.z = lrMatrix.zAxis.mV.z; lInverse.zAxis.mV.w = 0.0f;
+        VectorIntrinsic negatePos = __vsubfp(zero, in.wAxis.mV);
 
-        // Inverse translation = transpose applied to the negated position, i.e. each
-        // lane is the negative dot of the original position with the matching axis row.
-        const Vector3& lrPos = lrMatrix.wAxis;
-        lInverse.wAxis.mV.x = -(lrPos.mV.x * lrMatrix.xAxis.mV.x + lrPos.mV.y * lrMatrix.xAxis.mV.y + lrPos.mV.z * lrMatrix.xAxis.mV.z);
-        lInverse.wAxis.mV.y = -(lrPos.mV.x * lrMatrix.yAxis.mV.x + lrPos.mV.y * lrMatrix.yAxis.mV.y + lrPos.mV.z * lrMatrix.yAxis.mV.z);
-        lInverse.wAxis.mV.z = -(lrPos.mV.x * lrMatrix.zAxis.mV.x + lrPos.mV.y * lrMatrix.zAxis.mV.y + lrPos.mV.z * lrMatrix.zAxis.mV.z);
-        lInverse.wAxis.mV.w = 0.0f;
-        return lInverse;
+        VectorIntrinsic tempT[4];
+        tempT[2] = __vmrghw(in.xAxis.mV, in.zAxis.mV);
+        tempT[3] = __vmrghw(in.yAxis.mV, zero);
+        tempT[0] = __vmrglw(in.xAxis.mV, in.zAxis.mV);
+        tempT[1] = __vmrglw(in.yAxis.mV, zero);
+
+        VectorIntrinsic transposedTransform[4];
+        transposedTransform[0] = __vmrghw(tempT[2], tempT[3]);
+        transposedTransform[1] = __vmrglw(tempT[2], tempT[3]);
+        transposedTransform[2] = __vmrghw(tempT[0], tempT[1]);
+
+        VectorIntrinsic Z = __vspltw(negatePos, 2);
+        VectorIntrinsic Y = __vspltw(negatePos, 1);
+        VectorIntrinsic X = __vspltw(negatePos, 0);
+
+        transposedTransform[3] = __vmulfp(Z, transposedTransform[2]);
+        transposedTransform[3] = __vmaddfp(Y, transposedTransform[1], transposedTransform[3]);
+        transposedTransform[3] = __vmaddfp(X, transposedTransform[0], transposedTransform[3]);
+        return Matrix44Affine(transposedTransform[0], transposedTransform[1], transposedTransform[2], transposedTransform[3]);
     }
 
     // Inverse(m): the GENERAL affine inverse -- the adjugate of the upper 3x3 over its
