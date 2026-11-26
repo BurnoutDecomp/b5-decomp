@@ -2098,10 +2098,9 @@ namespace BrnAI
     //  2026-09-03: the canonical body is SharedClasses/AI/AISectionsResourceType.cpp:74, mounted -- LNK2005.)
     // ---- the four declared-only accessors the route / drive lanes link against (conductor, 2026-09-03).
     // DWARF BrnAICar.h :185 / :371 / :275 / :326; each is the console's inlined member read (no export).
-    s32         AICar::GetNextRouteNodeIndex() const { return miNextRouteNodeIndex; }
-    s8          AICar::GetOpponentIndex() const      { return miOpponentIndex; }
-    EAICarState AICar::GetState() const              { return meCarState; }
-    bool        AICar::IsPlayerCar() const           { return mbIsPlayer; }
+    // (GetNextRouteNodeIndex / GetOpponentIndex / GetState / IsPlayerCar are header-inline in
+    //  BrnAICar.h: neither ARTIST nor the PS3 build has an out-of-line copy, every caller inlines
+    //  the member read, e.g. RaceBalancingManager::OnOpponentReachedCheckpoint 0x82789DAC/0x82789DD8.)
 
     // ---- three more declared-only accessors (DWARF :182 / :287 / :332), RaceBalancingManager links against them.
     // GetNextRouteNode: Route::GetNode(miNextRouteNodeIndex), null when out of range (the console's

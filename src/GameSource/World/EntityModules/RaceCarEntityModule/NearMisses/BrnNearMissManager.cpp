@@ -74,11 +74,10 @@ bool BrnWorld::NearMissManager::Prepare()
 // choice to inline one and call the other is a codegen detail with no observable difference.
 bool BrnWorld::NearMissManager::HasThereBeenARecentNearMiss() const
 {
-    if (mTrafficNearMissData.HasThereBeenARecentNearMiss())
-    {
-        return true;
-    }
-    return mRaceCarNearMissData.HasThereBeenARecentNearMiss();
+    // One `||` expression: ARTIST jumps straight to the `li 1` on the traffic side and
+    // re-normalises the race-car call's bool (clrlwi/cmplwi/li/beq/li, 0x822CD344..58).
+    return mTrafficNearMissData.HasThereBeenARecentNearMiss() ||
+           mRaceCarNearMissData.HasThereBeenARecentNearMiss();
 }
 
 // BrnWorld::NearMissManager::AddNearRaceCar @ 0x822ED198. Log a race-car section/entity id into

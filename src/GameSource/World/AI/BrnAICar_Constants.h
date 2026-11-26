@@ -89,22 +89,14 @@ namespace BrnAI
     extern f32 gfMarkedManMinOvertakeSpeed;   // ARTIST 0x8300D6F0
     extern f32 gfMarkedManMinAggression;      // ARTIST 0x82F30170
     extern f32 gfMarkedManMaxAggression;      // ARTIST 0x82F30174
-    const f32 KF_MAX_OVERTAKE_SPEED_DEFAULT_HI    = 84.9375992f; // 0x8300D7A0 = init 0x82C68D00, flt_82022E60 (190) * 0.44704
-    const f32 KF_MAX_OVERTAKE_SPEED_DEFAULT_LO    = 71.5263977f; // 0x8300D970 = init 0x82C68D20, flt_820C482C (160) * 0.44704
 
     // Shared "speed match disabled / no passing" speed.
-    const f32 KF_NO_PASSING_SPEED           = 26.8223991f;  // 0x8300D6F4 = init 0x82C68B40, flt_820C4158 ( 60) *  0.44704
 
     // GetSpeedMatchSpeed @0x8277E058 -- OVERTAKE_FAST (case 4)
-    const f32 KF_OVERTAKE_FAST_MIN_SPEED    = 53.6447983f;  // 0x8300D71C = init 0x82C68D80, flt_82004A28 (120) *  0.44704
-    const f32 KF_OVERTAKE_FAST_SPEED_BIAS   =  8.94079971f; // 0x8300DBE0 = init 0x82C68CC0, flt_820C4890 ( 20) *  0.44704
 
     // GetSpeedMatchSpeed -- SLOW_TO_CLIP (case 3)
-    const f32 KF_SLOW_TO_CLIP_SPEED_DROP    =  4.47039986f; // 0x8300D7F0 = init 0x82C68C60, flt_820C4150 ( 10) *  0.44704
-    const f32 KF_SLOW_TO_CLIP_FALLBACK      =  8.94079971f; // 0x8300D754 = init 0x82C68C40, flt_820C4890 ( 20) *  0.44704
 
     // GetSpeedMatchSpeed -- SLOWER (case 2)
-    const f32 KF_SLOWER_BEHIND_SPEED        = 17.8815994f;  // 0x8300D784 = init 0x82C68B60, flt_82004D0C ( 40) *  0.44704
 
     // GetSpeedMatchSpeed -- default (aggressive fall-back) branch
     const f32 KF_AGG_FALLBACK_POS_MAGNITUDE = 13.4111996f;  // 0x8300D830 = init 0x82C68EA0, flt_820C3FA8 ( 30) *  0.44704
@@ -114,8 +106,6 @@ namespace BrnAI
     const f32 KF_AGG_FALLBACK_BASE_DEFAULT  = 22.3519993f;  // 0x8300D7D0 = init 0x82C68E20, flt_820C4244 ( 50) *  0.44704
 
     // SetSlowOvertakingSpeed @0x8277DB38
-    const f32 KF_SLOW_OVERTAKE_SPEED_BIAS   =  2.23519993f; // 0x8300D758 = init 0x82C68CE0, flt_820C488C (  5) *  0.44704
-    const f32 KF_SLOW_OVERTAKE_CAP_BIAS     =  8.94079971f; // 0x8300D778 = init 0x82C68DA0, flt_820C4890 ( 20) *  0.44704
 
     // SetSlowFallbackSpeed @0x82770AB8 -- lerp(LO, HI, mpCar->mfRelativeSpeedForMatch).
     // HI < LO here: the fall-back offset shrinks from 20 mph to 2 mph as the factor rises.
@@ -123,7 +113,6 @@ namespace BrnAI
     const f32 KF_SLOW_FALLBACK_RELSPEED_LO  =  8.94079971f; // 0x8300D728 = init 0x82C68B80, flt_820C4890 ( 20) *  0.44704
 
     // UpdateAggressionStateClipOff
-    const f32 KF_CLIP_OFF_MIN_SPEED         = 35.7631989f;  // 0x8300D720 = init 0x82C68C80, flt_82004A18 ( 80) *  0.44704
 
     // AIAggression::Prepare -- the seeded mfNonSpeedMatchedSpeed.
     const f32 KF_NON_SPEED_MATCHED_SPEED_DEFAULT = 35.7631989f; // 0x8300DC64 = init 0x82C68CA0, flt_82004A18 (80) * 0.44704

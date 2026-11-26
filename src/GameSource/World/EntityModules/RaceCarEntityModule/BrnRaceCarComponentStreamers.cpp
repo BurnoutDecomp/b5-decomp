@@ -484,12 +484,14 @@ void RaceCarAudioStreamer::OnAssetLoaded( s32 liActiveRaceCar, const BrnResource
         BrnSound::Debug::DebugComponent::mLogCombined << "  receive  RaceCarAudioStreamer::OnAssetLoaded"
             << liActiveRaceCar << "\n";
     (void)lpEvent;
+    // DWARF local lpEntry (cpp:426), taken before the streamer call: ARTIST forms its address
+    // ahead of bl RaceCarStreamer::OnAudioLoaded (0x822C0B04..0x822C0B20).
+    RaceCarStreamingSound* lpEntry = &maEntries[liActiveRaceCar];
     mpStreamer->OnAudioLoaded( liActiveRaceCar );
 
-    RaceCarStreamingSound& lEntry = maEntries[liActiveRaceCar];
-    CGS_ASSERT_AT( lEntry.meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACHED,
+    CGS_ASSERT_AT( lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACHED,
                 "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACHED" , KAC_ARTIST_ASSERT_FILE, 430);
-    lEntry.meState = RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADEDANDATTACHED;
+    lpEntry->meState = RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADEDANDATTACHED;
 }
 
 void RaceCarAudioStreamer::OnAssetUnloading( s32 liActiveRaceCar )
