@@ -116,10 +116,10 @@ StateManager::StateManager()
 Content* StateManager::GetContent(const CgsSound::Playback::Name& arName)
 {
     // DWARF CgsStateManager.h:495 local liCount. ARTIST 0x826AC9F8 indexes the pool again for
-    // the result (a second operator[] call) and compares the argument first.
+    // the result (a second operator[] call); Name::operator== compares the argument first.
     for (s32 liCount = 0; liCount < KI_NUM_CONTENT_SLOTS; ++liCount)
     {
-        if (mContentPool.IsObjectAllocated(liCount) && arName == mContentPool[liCount].mName)
+        if (mContentPool.IsObjectAllocated(liCount) && mContentPool[liCount].mName == arName)
             return &mContentPool[liCount].mContent;
     }
     return 0;

@@ -186,7 +186,7 @@ f32 Voice::GetGain(const s32* lpSendName) const
 void Voice::SetGain(u32 luSendIndex, f32 lfGain, const u32* lpSendName)
 {
     Playback::Send& lrSend = mVoiceHandle->GetSend(luSendIndex);
-    CGS_ASSERT_AT(Playback::Name(static_cast<uintptr_t>(*lpSendName)) == lrSend.GetName(),
+    CGS_ASSERT_AT(lrSend.GetName() == Playback::Name(static_cast<uintptr_t>(*lpSendName)),
         "lSend.GetName() == lSendName", CGS_VOICE_ARTIST_H, 180);
     lrSend.Set(lfGain);
 }

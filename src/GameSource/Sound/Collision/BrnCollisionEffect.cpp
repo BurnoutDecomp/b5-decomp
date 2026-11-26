@@ -69,8 +69,8 @@ s32 KI_DEBUG_DUCKING = 0;                   // 0x82FFB8E0
 CollisionEffect::CollisionEffect()
     : mpCollisionControl(0)         // stw 0, 0x38
     , mePrepareState(E_PREPARE_STATE_CONSTRUCT_VOICE) // stw 0, 0x3C
-    , mbFirstUpdate(false)                // +0x40: the X360 ctor leaves it; Attach sets it
-    , mbUseAzimuth(false)                 // +0x41: the X360 ctor leaves it; Attach sets it
+    // mbFirstUpdate (+0x40) / mbUseAzimuth (+0x41): not initialised here; ARTIST 0x826AFD20
+    // stores neither, Attach 0x826F8218 sets both.
     , mfIntensity(0.0f)                   // stfs 0.0, 0x50
     , meNicotineVolumeSlider(5)           // stw 5, 0x54
     , meNicotinePitchSlider(5)            // stw 5, 0x58

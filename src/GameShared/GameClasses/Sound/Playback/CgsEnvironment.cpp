@@ -188,16 +188,17 @@ Registry* Environment::GetRegistry()
 // callers attest this exact contract at their Environment::Ge call sites.
 Handle<Factory> Environment::GetFactory(Name aName)
 {
+    // ARTIST sub_826BFA10: each live slot is reached through Handle::operator-> (its
+    // "mpObject" assert, CgsHandle.h:287) and the match is returned as a copy.
     for (u32 lu32I = 0; lu32I < mu32FactoryCount; ++lu32I)
     {
-        Factory* lpFactory = mphFactory[lu32I].GetObject();
-        if (lpFactory && lpFactory->GetName() == aName)
+        if (mphFactory[lu32I] && aName == mphFactory[lu32I]->GetName())
         {
             return mphFactory[lu32I];
         }
     }
 
-    return Handle<Factory>(0);
+    return Handle<Factory>();
 }
 
 // @ 0x826BFAF0. Look a voice up by ident. The X360 `*(voice + 0x0C)` is
@@ -207,22 +208,16 @@ Handle<Factory> Environment::GetFactory(Name aName)
 // match, or an empty handle.
 Handle<Voice> Environment::GetVoice(u32 au32Id)
 {
-    if (mu32VoiceCount)
+    // ARTIST 0x826BFAF0: each live slot through Handle::operator-> ("mpObject",
+    // CgsHandle.h:287); the match is returned as a copy (0x826BFB98: store + acquire).
+    for (u32 lu32I = 0; lu32I < mu32VoiceCount; ++lu32I)
     {
-        for (u32 lu32I = 0; lu32I < mu32VoiceCount; ++lu32I)
+        if (mphVoice[lu32I] && au32Id == mphVoice[lu32I]->GetIdent())
         {
-            Voice* lpVoice = mphVoice[lu32I].GetObject();
-            if (lpVoice)
-            {
-                CGS_ASSERT(lpVoice, "mpObject");
-                if (au32Id == lpVoice->GetIdent())
-                {
-                    return mphVoice[lu32I];   // ARTIST 0x826BFB98: the copy's store + acquire
-                }
-            }
+            return mphVoice[lu32I];
         }
     }
-    return Handle<Voice>(0);
+    return Handle<Voice>();
 }
 
 // @ 0x826BFE50. Walk the voice table for the tagged factory's player voice whose
@@ -239,51 +234,32 @@ Handle<Voice> Environment::GetVoice(u32 au32Id)
 // expresses that same adjustment through the concrete player wrapper so pointer
 // width and multiple-inheritance layout remain native.
 Handle<Voice> Environment::GetRwacVoiceByPlugin(
-    const rw::audio::core::PlugIn* apPlugin)
+    const rw::audio::core::PlugIn* lpPlugin)
 {
-    if (mu32VoiceCount == 0)
+    // DWARF BrnSoundUnity locals: luVoice (CgsEnvironment.cpp:353), the block's
+    // Handle<GenericRwacPlayerVoice> lRwacVoice (:361), lu32PlugInCount (:363) and
+    // lu32PlugIn (:364). ARTIST 0x826BFE50: the candidate's handle is copied through the
+    // CgsHandle.h:239 view (acquire + the operator-> assert merged, 0x826BFF4C..80) and
+    // released on every exit; the match is returned as a copy of the table slot.
+    for (u32 luVoice = 0; luVoice < mu32VoiceCount; ++luVoice)
     {
-        return Handle<Voice>(0);
-    }
-
-    for (u32 lu32I = 0; lu32I < mu32VoiceCount; ++lu32I)
-    {
-        Voice* lpVoice = mphVoice[lu32I].GetObject();
-        if (!lpVoice) { continue; }
-
-        // Factory-name match (asm: voice+8 -> factory, +8 -> mName vs dword_83008650).
-        if (lpVoice->GetFactory().GetName() != GenericRwacFactory::SK_NAME) { continue; }
-
-        CGS_ASSERT(lpVoice, "mpObject");
-        if (lpVoice->FindNamedSlot(PlayerVoice::SK_PLAYER_SLOT_NAME) == 0)
+        if (mphVoice[luVoice] &&
+            GenericRwacFactory::SK_NAME == mphVoice[luVoice]->GetFactory().GetName() &&
+            mphVoice[luVoice]->FindNamedSlot(PlayerVoice::SK_PLAYER_SLOT_NAME))
         {
-            continue;
-        }
-
-        CGS_ASSERT(lpVoice, "mpObject");
-        Handle<Voice> lhVoice(lpVoice);   // the candidate's reference for the plug-in walk
-
-        GenericRwacPlayerVoice* lpPlayerVoice =
-            static_cast<GenericRwacPlayerVoice*>(lpVoice);
-        GenericRwacVoice& lrRwacVoice = *lpPlayerVoice;
-        const u32 lu32PluginCount = lrRwacVoice.GetPluginCount();
-        bool lbMatched = false;
-        for (u32 lu32P = 0; lu32P < lu32PluginCount; ++lu32P)
-        {
-            if (lrRwacVoice.GetPlugin(lu32P) == apPlugin)
+            Handle<GenericRwacPlayerVoice> lRwacVoice = mphVoice[luVoice];
+            const u32 lu32PlugInCount = lRwacVoice->GetPluginCount();
+            for (u32 lu32PlugIn = 0; lu32PlugIn < lu32PlugInCount; ++lu32PlugIn)
             {
-                lbMatched = true;
-                break;
+                if (lRwacVoice->GetPlugin(lu32PlugIn) == lpPlugin)
+                {
+                    return mphVoice[luVoice];
+                }
             }
         }
-
-        if (lbMatched)
-        {
-            return lhVoice;
-        }
     }
 
-    return Handle<Voice>(0);
+    return Handle<Voice>();
 }
 
 // @ 0x82680F50. Start the DAC plug-in: lock the audio-core System, fire the start
@@ -497,26 +473,25 @@ void Environment::UpdateContent(f32 af32TimeStep)
 {
     CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miContentUpdate);
 
+    // ARTIST 0x826C00B8: each live slot through Handle::operator* ("mpObject",
+    // CgsHandle.h:305); a removed content's slot is assigned the empty handle (the inlined
+    // operator=: release, store null, 0x826C016C..0x826C0180).
     muActiveContent = 0;
-    for (u32 lu = 0; lu < mu32ContentCount; ++lu)
+    for (u32 lu32I = 0; lu32I < mu32ContentCount; ++lu32I)
     {
-        Content* lpContent = mphContent[lu].GetObject();
-        if (!lpContent)
-            continue;
-
-        lpContent->Update(af32TimeStep);
-
-        if (lpContent->HasContentStateChanged())
-            lpContent->AcknowledgeContentStateChange();   // drop E_CONTENT_STATE_CHANGED
-
-        if (lpContent->mu8RemoveState == E_CONTENT_REMOVE_REMOVED)
+        if (mphContent[lu32I])
         {
-            if (mphContent[lu].GetObject())
-                mphContent[lu].GetObject()->Release();
-            mphContent[lu].SetObject(0);
-        }
+            Content& lrContent = *mphContent[lu32I];
+            lrContent.Update(af32TimeStep);
 
-        ++muActiveContent;
+            if (lrContent.HasContentStateChanged())
+                lrContent.AcknowledgeContentStateChange();   // drop E_CONTENT_STATE_CHANGED
+
+            if (lrContent.mu8RemoveState == E_CONTENT_REMOVE_REMOVED)
+                mphContent[lu32I] = Handle<Content>();
+
+            ++muActiveContent;
+        }
     }
 
     CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miContentUpdate);
@@ -543,26 +518,24 @@ void Environment::UpdateVoices(rw::audio::core::System* apSystem, f32 af32TimeSt
     for (u32 lu = 0; lu < 5; ++lu)
         mafVoiceTypeTickTotals[lu] = 0.0f;
 
-    for (u32 lu = 0; lu < mu32VoiceCount; ++lu)
+    // ARTIST 0x826C01B8: each live slot through Handle::operator* (CgsHandle.h:305); a
+    // removed voice's slot is assigned the empty handle (Object::Release inlined in the loop,
+    // 0x826C02E4..0x826C033C).
+    for (u32 lu32I = 0; lu32I < mu32VoiceCount; ++lu32I)
     {
-        Voice* lpVoice = mphVoice[lu].GetObject();
-        if (!lpVoice)
-            continue;
-
-        lpVoice->Update(apSystem, af32TimeStep);
-        ++muActiveVoices;
-
-        mafVoiceTypeTickTotals[lpVoice->GetProfileVoiceType()] += lpVoice->GetCpuTicks();
-
-        if (lpVoice->HasPlaybackStateChanged())
-            lpVoice->AcknowledgePlaybackStateChange();   // drop the CHANGED bit
-
-        if (lpVoice->GetRemoveState() == E_VOICE_REMOVE_REMOVED)
+        if (mphVoice[lu32I])
         {
-            Voice* lpDeadVoice = mphVoice[lu].GetObject();
-            if (lpDeadVoice)
-                lpDeadVoice->Release();
-            mphVoice[lu].SetObject(0);
+            Voice& lrVoice = *mphVoice[lu32I];
+            lrVoice.Update(apSystem, af32TimeStep);
+            ++muActiveVoices;
+
+            mafVoiceTypeTickTotals[lrVoice.GetProfileVoiceType()] += lrVoice.GetCpuTicks();
+
+            if (lrVoice.HasPlaybackStateChanged())
+                lrVoice.AcknowledgePlaybackStateChange();   // drop the CHANGED bit
+
+            if (lrVoice.GetRemoveState() == E_VOICE_REMOVE_REMOVED)
+                mphVoice[lu32I] = Handle<Voice>();
         }
     }
 
@@ -576,11 +549,12 @@ void Environment::UpdateVoices(rw::audio::core::System* apSystem, f32 af32TimeSt
 // =============================================================================
 void Environment::UpdateFactories(f32 af32TimeStep)
 {
-    for (u32 lu = 0; lu < mu32FactoryCount; ++lu)
+    // DWARF local lu32I (CgsEnvironment.cpp:506); ARTIST 0x826A2200 reaches each live slot
+    // through Handle::operator-> ("mpObject", CgsHandle.h:287).
+    for (u32 lu32I = 0; lu32I < mu32FactoryCount; ++lu32I)
     {
-        Factory* lpFactory = mphFactory[lu].GetObject();
-        if (lpFactory)
-            lpFactory->Update(af32TimeStep);   // the public front (DWARF h:310) -> the console vtbl+16 DoUpdate dispatch
+        if (mphFactory[lu32I])
+            mphFactory[lu32I]->Update(af32TimeStep);   // the public front (DWARF h:310) -> the console vtbl+16 DoUpdate dispatch
     }
 }
 

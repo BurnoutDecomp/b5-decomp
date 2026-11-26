@@ -508,7 +508,7 @@ void Voice::SetParameter(s32 as32Index, f32 af32Value, Name akParamName)
     InputParameter& lrParam = GetInputParameter(static_cast<u32>(as32Index));
 
     // *a5 == *result : the caller's name must equal the resolved parameter's name.
-    CGS_ASSERT_AT(akParamName == lrParam.GetName(),
+    CGS_ASSERT_AT(lrParam.GetName() == akParamName,
         "lParam.GetName() == lParamName",
             CGS_ARTIST_FILE, 1288 /* ARTIST 0x826ACD78 */);
 

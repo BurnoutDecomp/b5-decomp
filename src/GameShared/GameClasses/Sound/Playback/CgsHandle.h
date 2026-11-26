@@ -100,7 +100,9 @@ public:
     // CgsHandle.h:251 / 259. Validity -- the owned-pointer test (the X360
     // inlines the null compare at every site). Made header-inline phase B5.
     bool operator!() const     { return mpObject == 0; }
-    operator bool() const      { return mpObject != 0; }
+    // The constant-first comparison: ARTIST materialises the result with `addi rT,rX,0`
+    // before cntlzw (AemsFactory::DoCreateVoice 0x826E9B78, `return lhVoiceOut;`).
+    operator bool() const      { return 0 != mpObject; }
 
     // CgsHandle.h:268 / 277. Equality. Declared-only.
     bool operator==(const Handle& lkrOther) const;

@@ -150,24 +150,20 @@ const Name& AemsFactorySkName()
 // ARTIST @0x826E9AC8. AEMS only accepts player voices. The constructed voice
 // immediately queues its CSIS class binding and delegates the render graph to
 // the retained GenericRwacFactory.
-bool AemsFactory::DoCreateVoice(const VoiceSpec& akrSpec,
-                                Handle<Voice>& arHandleOut,
-                                u32 au32Ident)
+bool AemsFactory::DoCreateVoice(const VoiceSpec& lVoiceSpec,
+                                Handle<Voice>& lhVoiceOut,
+                                u32 luIdent)
 {
-    arHandleOut.SetObject(0);
-    CGS_ASSERT(akrSpec.mu8VoiceType == E_PLAYER_VOICE,
-               "E_PLAYER_VOICE == akrSpec.GetVoiceType()");
-    if (akrSpec.mu8VoiceType != E_PLAYER_VOICE)
-        return false;
-
-    AemsPlayerVoice* lpVoice = new (*this, akrSpec)
-        AemsPlayerVoice(*this, akrSpec, au32Ident);
-    if (!lpVoice || !lpVoice->IsCreated())
-        return false;
-
-    lpVoice->Acquire();
-    arHandleOut.SetObject(lpVoice);
-    return true;
+    // ARTIST 0x826E9AC8: the assert (CgsAemsFactory.cpp:112, file string 0x820AD860), then the
+    // new voice assigned to the out-handle through a Handle<AemsPlayerVoice> temporary (its
+    // acquire and operator='s merge into the `+2` at 0x826E9B48; the old out-object released,
+    // the temporary destroyed), and the handle's validity returned.
+    CGS_ASSERT_AT(E_PLAYER_VOICE == lVoiceSpec.mu8VoiceType,
+                  "E_PLAYER_VOICE == lVoiceSpec.GetVoiceType()",
+                  "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/AEMS/CgsAemsFactory.cpp", 112);
+    lhVoiceOut = Handle<AemsPlayerVoice>(new (*this, lVoiceSpec)
+                                             AemsPlayerVoice(*this, lVoiceSpec, luIdent));
+    return lhVoiceOut;
 }
 
 // ARTIST @0x826E9B98. The AEMS factory owns exactly two concrete content

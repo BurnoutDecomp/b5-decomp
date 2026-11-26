@@ -58,10 +58,13 @@ public:
     // the value verbatim (no interning -- the value is already an interned Ident).
     explicit Name(uintptr_t luValue) : mHash(static_cast<u32>(luValue)) {}
 
-    // CgsCommon.h. Value-equality on the interned hash. FLAG: ADDITIVE home-grow for
-    // the Module CreateVoice init-submix path, which asserts the requested factory
-    // name equals GenericRwacFactory::SK_NAME (the X360 compares the two hash words).
-    bool operator==(const Name& lkrOther) const { return mHash == lkrOther.mHash; }
+    // CgsCommon.h:179. Value-equality on the interned hash. The argument's hash is the
+    // first compare operand: ARTIST's asserts spell the receiver first and compare the
+    // argument first ("lSend.GetName() == lSendName" Logic::Voice::SetGain 0x82694324,
+    // "lParam.GetName() == lParamName" Playback::Voice::SetParameter 0x826ACD38,
+    // "GenericRwacFactory::SK_NAME == lFactoryName" Module::CreateVoice 0x826D7C2C,
+    // "SplicerContent::SK_CONTENT_TYPE == lContentType..." SplicerFactory::DoCreateContent 0x826E9CB8).
+    bool operator==(const Name& lkrOther) const { return lkrOther.mHash == mHash; }
 
     // CgsCommon.h. Value-inequality on the interned hash. FLAG: ADDITIVE home-grow
     // for the Playback::Voice name-lookup loops (FindNamedSlot/Send/... and the
