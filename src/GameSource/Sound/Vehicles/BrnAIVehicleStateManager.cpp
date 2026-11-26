@@ -41,8 +41,7 @@
 //   sTypeInfo registration                          @ 0x82C61D98 (CRT init bank)
 // =============================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Sound/Vehicles/BrnAIVehicleStateManager.h";
+#define KAC_ARTIST_ASSERT_FILE "..\\..\\..\\GameSource\\Sound/Vehicles/BrnAIVehicleStateManager.h"
 
 namespace BrnSound
 {
@@ -695,3 +694,5 @@ const CgsSound::Logic::Content* AIVehicleStateManager::GetDecelGinsuContent( s32
 
 } // namespace Vehicles
 } // namespace BrnSound
+
+#undef KAC_ARTIST_ASSERT_FILE

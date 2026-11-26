@@ -508,3 +508,5 @@ State::~State()
 
 } // namespace Logic
 } // namespace CgsSound
+
+#undef KAC_ARTIST_ASSERT_FILE

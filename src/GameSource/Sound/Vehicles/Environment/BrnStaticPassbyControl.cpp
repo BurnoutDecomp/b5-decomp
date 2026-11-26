@@ -23,9 +23,9 @@
 // CgsArray.h).
 // =============================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-    "../Sound/Vehicles/Environment/BrnStaticPassbyControl.cpp";
+#define KAC_ARTIST_ASSERT_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\" \
+    "../Sound/Vehicles/Environment/BrnStaticPassbyControl.cpp"
 
 namespace BrnSound
 {
@@ -253,3 +253,5 @@ void StaticPassbyControl::UpdateHistory(f32 afTimeStep)
 } // namespace Environment
 } // namespace Vehicles
 } // namespace BrnSound
+
+#undef KAC_ARTIST_ASSERT_FILE

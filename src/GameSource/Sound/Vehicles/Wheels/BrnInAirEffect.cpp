@@ -21,7 +21,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h"
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 
-#include <algorithm>
+#include "rw/math/fpu/scalar_operation.h"  // rw::math::fpu::Min / Max / Clamp
 
 namespace BrnSound
 {
@@ -511,9 +511,9 @@ void InAirEffect::UpdateSuspensionSqueeks(f32)
         if (lrStatus.meSuspensionLatchedState == SuspensionStatus::E_NONE &&
             lfAverage > mfSuspensionSensitivity)
         {
-            const f32 lfClamped = std::max(
+            const f32 lfClamped = rw::math::fpu::Max(
                 KF_COMPRESSION_MIN_RATE,
-                std::min(KF_COMPRESSION_MAX_RATE, lfAverage));
+                rw::math::fpu::Min(KF_COMPRESSION_MAX_RATE, lfAverage));
             const f32 lfFraction =
                 (lfClamped - KF_COMPRESSION_MIN_RATE) /
                 (KF_COMPRESSION_MAX_RATE - KF_COMPRESSION_MIN_RATE);

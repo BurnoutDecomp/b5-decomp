@@ -21,8 +21,7 @@
 // The descriptor values and CRT registration thunk are pinned by ARTIST_CRT_ORDER.json.
 // =============================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Sound/Streaming/BrnStreamingStateManager.h";
+#define KAC_ARTIST_ASSERT_FILE "..\\..\\..\\GameSource\\Sound/Streaming/BrnStreamingStateManager.h"
 
 namespace BrnSound
 {
@@ -541,3 +540,5 @@ void StreamingStateManager::UpdateParams(f32 af32GameDt)
 } // namespace Streaming
 } // namespace Logic
 } // namespace BrnSound
+
+#undef KAC_ARTIST_ASSERT_FILE

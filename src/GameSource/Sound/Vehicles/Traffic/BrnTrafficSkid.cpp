@@ -334,3 +334,5 @@ f32 TrafficSkid::CalculateDriftParameter( const BrnPhysics::Vehicle::PhysicalTra
 } // namespace Traffic
 } // namespace Logic
 } // namespace BrnSound
+
+#undef KAC_ARTIST_ASSERT_FILE

@@ -306,6 +306,7 @@ static const f32 KF_STAGE_LENGTH_SCALE = 0.001f;
 static const f32 KF_MIN_STAGE_LENGTH   = 0.0099999998f;
 static const char KAC_SOUND_UTILS_ASSERT_FILE[] =
     "..\\..\\..\\GameShared\\GameClasses\\Sound/CgsSoundUtils.cpp";
+#define KAC_SOUND_UTILS_H_ASSERT_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/CgsSoundUtils.h"
 
 // -------------------------------------------------------------------------------------------
 // PathLine<2> -- explicit specializations.
@@ -655,30 +656,29 @@ template <typename LookupType, u32 tuNOldest>
 StoredType SelectionHistory<tuSize, StoredType, TimeStampType, tuModulo>::FindRandomOldest(
     const LookupType* lpaItems, u16 luNumOfItems)
 {
-    CGS_ASSERT(luNumOfItems < tuNOldest, "luNumOfItems < NOldest");
+    // The original defines this template in CgsSoundUtils.h (DWARF h:712..728); its asserts carry
+    // that header's path and lines (string 0x820B33D0, li r5 0x2CA / 0x2CF).
+    CGS_ASSERT_AT(luNumOfItems < tuNOldest, "luNumOfItems < NOldest", KAC_SOUND_UTILS_H_ASSERT_FILE, 714);
 
-    // Seed every scratch slot with the max-timestamp / out-of-range sentinel (loop @0x82702898).
-    FindResult laResults[tuNOldest];
-    for (u32 lu = 0; lu < tuNOldest; ++lu)
-    {
-        laResults[lu].mTimeStamp = static_cast<TimeStampType>(0xFFFFu);  // sth 0xFFFF
-        laResults[lu].mIndex     = static_cast<StoredType>(KU_SIZE);     // sth 0x200 (512)
-    }
+    // DWARF h:716: the FindResult constructor seeds every slot (loop @0x82702898).
+    FindResult laOldest[tuNOldest];
 
     // Fill the first luNumOfItems entries from the candidate selections (loop @0x827028C4).
-    for (u16 lu = 0; lu < luNumOfItems; ++lu)
+    for (u16 i = 0; i < luNumOfItems; ++i)   // DWARF h:717
     {
-        CGS_ASSERT(lpaItems[lu] < KU_SIZE, "lpaItems[ i ] < KU_SIZE");
-        laResults[lu].mIndex     = static_cast<StoredType>(lpaItems[lu]);
-        laResults[lu].mTimeStamp = maHistory[lpaItems[lu]].mTimeStamp;
+        CGS_ASSERT_AT(lpaItems[i] < KU_SIZE, "lpaItems[ i ] < KU_SIZE", KAC_SOUND_UTILS_H_ASSERT_FILE, 719);
+        laOldest[i].mIndex     = static_cast<StoredType>(lpaItems[i]);
+        laOldest[i].mTimeStamp = maHistory[lpaItems[i]].mTimeStamp;
     }
 
     // Oldest-first ordering: ascending timestamp (std::_Sort @0x82702948).
-    std::sort(laResults, laResults + luNumOfItems, &SelectionHistory::LessThanTimeStamp);
+    std::sort(laOldest, laOldest + luNumOfItems, &SelectionHistory::LessThanTimeStamp);
 
-    // Random pick from the oldest (n/2 + 1) half.
-    const u32 luPick = mRandom.RandomUInt(0, static_cast<u32>(luNumOfItems) >> 1);
-    return laResults[luPick].mIndex;
+    // Random pick from the oldest (n/2 + 1) half. DWARF h:727/728 uint16_t locals: ARTIST masks the
+    // index to 16 bits before scaling it (rlwinm 2,14,29 @0x827029BC).
+    u16 luRandomIndex = static_cast<u16>(mRandom.RandomUInt(0, static_cast<u32>(luNumOfItems) >> 1));
+    u16 luRandomOldest = laOldest[luRandomIndex].mIndex;
+    return luRandomOldest;
 }
 
 // X360-attested member-template instantiation: FindRandomOldest<unsigned short, 32>.

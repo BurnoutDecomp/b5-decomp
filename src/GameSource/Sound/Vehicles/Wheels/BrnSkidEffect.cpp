@@ -10,7 +10,7 @@
 #include "GameSource/Sound/Vehicles/Wheels/BrnWheelControl.h"
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 
-#include <algorithm>
+#include "rw/math/fpu/scalar_operation.h"  // rw::math::fpu::Min / Max / Clamp
 #include <cmath>
 
 namespace BrnSound
@@ -188,7 +188,7 @@ void SkidEffect::UpdateParams(f32)
 
     const f32 lfYaw = lrPhysics.mYaw.GetCurrent();
     const f32 lfDrift = lpRaw->mfAbsDriftScale * 1024.0f;
-    const f32 lfSpeed = std::max(lpRaw->mfSpeedMPH - 256.0f, 0.0f);
+    const f32 lfSpeed = rw::math::fpu::Max(lpRaw->mfSpeedMPH - 256.0f, 0.0f);
 
     mSkidsVoice.SetParameter(17, lfYaw, &KAU_SKID_PARAMETERS[17]);
     mSkidsVoice.SetParameter(18, lfDrift, &KAU_SKID_PARAMETERS[18]);
@@ -223,10 +223,10 @@ void SkidEffect::UpdateParams(f32)
                   << "[Lat: " << lfLateral << "]\t";
         }
 
-        lfBrakeMax = std::max(lfBrakeMax, lfBrake);
-        lfPeelMax = std::max(lfPeelMax, lfPeel);
-        lfLateralMax = std::max(lfLateralMax, lfLateral);
-        lfOverallMax = std::max(lfOverallMax, std::max(lfBrake, std::max(lfPeel, lfLateral)));
+        lfBrakeMax = rw::math::fpu::Max(lfBrakeMax, lfBrake);
+        lfPeelMax = rw::math::fpu::Max(lfPeelMax, lfPeel);
+        lfLateralMax = rw::math::fpu::Max(lfLateralMax, lfLateral);
+        lfOverallMax = rw::math::fpu::Max(lfOverallMax, rw::math::fpu::Max(lfBrake, rw::math::fpu::Max(lfPeel, lfLateral)));
 
         const s32 liBase = (liSide == WheelControl::E_LEFT_HAND_SIDE) ? 6 : 11;
         mSkidsVoice.SetParameter(liBase + 1, lfBrake, &KAU_SKID_PARAMETERS[liBase + 1]);

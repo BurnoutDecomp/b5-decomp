@@ -8,7 +8,7 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnEngineControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnHybridExhaustControl.h"
 
-#include <algorithm>
+#include "rw/math/fpu/scalar_operation.h"  // rw::math::fpu::Min / Max / Clamp
 #include <cstdio>
 #include <cstring>
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
@@ -205,7 +205,7 @@ void TurboEffect::UpdateParams(f32 afTimeStep)
 
     case E_TURBO_SPOOLING:
         SetMixerInputValue(2, 0x7FFF);
-        mfTurboSpool = std::min(KF_Q15_MAX,
+        mfTurboSpool = rw::math::fpu::Min(KF_Q15_MAX,
             mfTurboSpool + lfDeltaRpm * KF_TURBO_SPOOL_RATE * afTimeStep);
         if (mfTurboSpool > 32766.0f)
         {

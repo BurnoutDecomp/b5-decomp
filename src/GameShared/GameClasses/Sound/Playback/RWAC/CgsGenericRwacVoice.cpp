@@ -10,7 +10,7 @@
 #include "rw/audio/core/Voice.h"
 #include "rw/audio/core/Send.h"
 
-#include <algorithm>
+#include "rw/math/fpu/scalar_operation.h"  // rw::math::fpu::Min / Max / Clamp
 #include <cstdlib>
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -130,8 +130,8 @@ void GenericRwacVoice::Update(rw::audio::core::System* apSystem, Voice& arVoice)
                 arVoice.GetInputParameter(lrMap.mu8ParameterIndex);
             if (lrInput.HasChanged() || lbForce)
             {
-                const f32 lfValue = std::max(lrInput.GetMin(),
-                    std::min(lrInput.GetMax(), lrInput.GetValueRaw()));
+                // rw::math::fpu::Clamp: ARTIST fsel(min - value) then fsel(max - v') (0x826C62F0..F8).
+                const f32 lfValue = rw::math::fpu::Clamp(lrInput.GetValueRaw(), lrInput.GetMin(), lrInput.GetMax());
                 // [DIAG] NOT IN THE X360 BINARY -- BRN_RWAC_PARAM_DIAG=1. The clamp above is
                 // silent: a schema whose maximum is below the value the game computed turns a
                 // live parameter into a constant, with no symptom anywhere else. Print what

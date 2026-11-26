@@ -23,8 +23,7 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"    // IOBuffer Lock/Unlock
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"   // Io::MessageHeader (Notify dispatch)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsSoundLogicModule.h";
+#define KAC_ARTIST_ASSERT_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsSoundLogicModule.h"
 
 // ARTIST 0x820B3168: this unit's own __FILE__, a literal.
 #define KAC_ARTIST_ASSERT_CPP_FILE \
@@ -338,3 +337,5 @@ Module::EModuleReleaseStage operator++(Module::EModuleReleaseStage& leEnumIndex,
 
 } // namespace Logic
 } // namespace CgsSound
+
+#undef KAC_ARTIST_ASSERT_FILE

@@ -468,9 +468,12 @@ public:
     };
 
     // DWARF CgsSoundUtils.h:774. Scratch pair used by the oldest-N search + std::sort.
+    // The constructor (DWARF h:778) seeds the "never selected" sentinel: the array construction
+    // loop inlined in FindRandomOldest stores 0xFFFF / 0x200 (ARTIST 0x82702884..0x827028A0;
+    // PS3 GetRandomSampleID<crashbin> 0x8F6760 the same -1 / 512).
     struct FindResult
     {
-        FindResult() : mTimeStamp(0), mIndex(0) {}
+        FindResult() : mTimeStamp(static_cast<TimeStampType>(-1)), mIndex(KU_SIZE) {}
         TimeStampType mTimeStamp;   // CgsSoundUtils.h:775
         StoredType    mIndex;       // CgsSoundUtils.h:776
     };

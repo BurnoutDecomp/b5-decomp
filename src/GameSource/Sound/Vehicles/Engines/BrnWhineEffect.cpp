@@ -7,7 +7,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 
-#include <algorithm>
+#include "rw/math/fpu/scalar_operation.h"  // rw::math::fpu::Min / Max / Clamp
 #include <cstdio>
 #include <cstring>
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
@@ -164,7 +164,7 @@ void WhineEffect::ProcessUpdate()
     mWhineVoice.SetGain(0, 1.0f, &KU_SEND01);
     mWhineVoice.SetParameter(4, 1.0f, &KU_AEMS_PARAMETERS[4]);
 
-    const f32 lfWhineFrequency = std::max(
+    const f32 lfWhineFrequency = rw::math::fpu::Max(
         mpPhysicsControl->GetPhysicsData().mSpeedMPH.GetCurrent() / 180.0f - 1.0f,
         0.0f) * 32767.0f;
     mWhineVoice.SetParameter(0, lfWhineFrequency, &KU_AEMS_PARAMETERS[0]);

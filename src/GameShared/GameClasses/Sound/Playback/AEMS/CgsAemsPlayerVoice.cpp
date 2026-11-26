@@ -8,7 +8,7 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 #include "rw/audio/core/Voice.h"
 
-#include <algorithm>
+#include "rw/math/fpu/scalar_operation.h"  // rw::math::fpu::Min / Max / Clamp
 #include <cstring>
 #include <new>
 #include <vector>
@@ -176,8 +176,8 @@ bool AemsPlayerVoice::Play(u32 /*au32Param*/)
     for (u32 luIndex = 0; luIndex < mu32AemsInputParameterCount; ++luIndex)
     {
         const InputParameter& lrInput = GetInputParameter(luIndex);
-        const f32 lfClamped = std::min(
-            std::max(lrInput.GetValueRaw(), lrInput.GetMin()), lrInput.GetMax());
+        // rw::math::fpu::Clamp: ARTIST fsel(min - value) then fsel(max - v') (0x826DAE9C / 0x826DAD64).
+        const f32 lfClamped = rw::math::fpu::Clamp(lrInput.GetValueRaw(), lrInput.GetMin(), lrInput.GetMax());
         mpAemsParameters[mu32UserParameterStart + luIndex] =
             static_cast<s32>(lfClamped);
     }
@@ -201,8 +201,8 @@ bool AemsPlayerVoice::Update(f32 /*af32Dt*/)
         if (!lrInput.HasChanged())
             continue;
         lbChanged = true;
-        const f32 lfClamped = std::min(
-            std::max(lrInput.GetValueRaw(), lrInput.GetMin()), lrInput.GetMax());
+        // rw::math::fpu::Clamp: ARTIST fsel(min - value) then fsel(max - v') (0x826DAE9C / 0x826DAD64).
+        const f32 lfClamped = rw::math::fpu::Clamp(lrInput.GetValueRaw(), lrInput.GetMin(), lrInput.GetMax());
         mpAemsParameters[mu32UserParameterStart + luIndex] =
             static_cast<s32>(lfClamped);
     }

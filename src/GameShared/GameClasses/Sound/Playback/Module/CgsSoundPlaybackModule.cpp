@@ -47,28 +47,6 @@ namespace Module
 
 namespace
 {
-    // The console's `rw::IResourceAllocator::AllocateMemoryResource` @0x823FF7D0 is an
-    // INLINE that builds a five-entry serialised descriptor and tail-calls the
-    // allocator's DoAllocate slot; the PC rwcore models the narrower <4> alias, so the
-    // descriptor is built as <5> and reinterpret_cast down at the call -- the same
-    // idiom CgsDebugManager.cpp / CgsPhysicsSimulationModule.cpp already use. The name
-    // rides through DoAllocate's second parameter.
-    void* AllocateMemoryResource(rw::IResourceAllocator* lpAllocator, u32 luSize,
-                                 u32 luAlignment, const char* lpcName)
-    {
-        rw::BaseResourceDescriptors<5> lDescriptor;
-        for (u32 luEntry = 0u; luEntry < 5u; ++luEntry)
-        {
-            lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
-        }
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
-
-        rw::Resource lResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), lpcName);
-        return lResource.m_baseResources[0];
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +287,7 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         {
             void* lpBuffer;
             if (mbStreamsUsingMainAllocator)
-                lpBuffer = AllocateMemoryResource(apAllocator, muStreamBufferSize, 16,
+                lpBuffer = apAllocator->AllocateMemoryResource(muStreamBufferSize, 16,
                                                   "SndPlayer1_CgsStreamMod Stream Buffer");
             else
                 lpBuffer = apLinearMalloc->Malloc(muStreamBufferSize);

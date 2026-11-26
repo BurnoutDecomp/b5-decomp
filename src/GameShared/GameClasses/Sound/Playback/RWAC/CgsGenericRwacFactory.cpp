@@ -181,26 +181,6 @@ namespace
     const Name skInternalSendFeature("~InternalSendFeature~");
     const Name skInternalDacFeature("~InternalDacFeature~");
 
-    // The console's `rw::IResourceAllocator::AllocateMemoryResource` five-pair
-    // descriptor inline -- (bytes, align) + four (0, 1) pairs through the
-    // allocator's DoAllocate with the tag riding second (the identical idiom the
-    // Module Prepare TU carries; TU-local copy, the established convention).
-    void* AllocateMemoryResource(rw::IResourceAllocator* lpAllocator, size_t luSize,
-                                 u32 luAlignment, const char* lpcName)
-    {
-        rw::BaseResourceDescriptors<5> lDescriptor;
-        for (u32 luEntry = 0u; luEntry < 5u; ++luEntry)
-        {
-            lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
-        }
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(luSize);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
-
-        rw::Resource lResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), lpcName);
-        return lResource.m_baseResources[0];
-    }
 }
 
 // @ 0x826C7AD0. The console lowers the 16-byte spec BY VALUE in r5:r6 (unlike the
@@ -230,7 +210,7 @@ Handle<GenericRwacFactory> GenericRwacFactory::Create(Environment& arEnvironment
 
     // The five-pair request through the ENVIRONMENT's allocator (console
     // Environment+0x30, vtable +0x10), tag "GenericRwacFactory".
-    void* lpMemory = AllocateMemoryResource(arEnvironment.GetAllocator(), luBytes,
+    void* lpMemory = arEnvironment.GetAllocator()->AllocateMemoryResource(luBytes,
                                             4, "GenericRwacFactory");
     if (lpMemory == 0)
     {

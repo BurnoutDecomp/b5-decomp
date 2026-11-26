@@ -113,8 +113,6 @@ namespace
         return TruncToInt(afValue + (afValue > KF_ZERO ? KF_HALF : -KF_HALF));
     }
 
-    inline size_t AlignUp8(size_t auValue) { return (auValue + 7u) & ~static_cast<size_t>(7u); }
-
     // Serialized-blob readers. The blob is byte-swapped IN PLACE to native order the first
     // time it is bound (see AdjustEndianness), so after that these are native reads.
     inline s32 ReadNativeI32(const u8 *apBytes)
@@ -562,7 +560,7 @@ PlugInDescRunTime GinsuPlayer::sPlugInDescRunTime = {
 // -------------------------------------------------------------------------------------
 size_t GinsuPlayer::TableStorageOffset()
 {
-    return AlignUp8(sizeof(GinsuPlayer));
+    return (sizeof(GinsuPlayer) + 7u) & ~static_cast<size_t>(7u);
 }
 
 // -------------------------------------------------------------------------------------

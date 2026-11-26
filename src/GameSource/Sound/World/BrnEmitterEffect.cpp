@@ -13,7 +13,7 @@
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"      // CgsSound::Utils::Curve (ProcessUpdate fall-off)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] BRN_EMITTER_DIAG
 
-#include <algorithm>
+#include "rw/math/fpu/scalar_operation.h"  // rw::math::fpu::Min / Max / Clamp
 #include <cmath>
 #include <cstdlib>
 
@@ -212,7 +212,8 @@ void EmitterEffect::ProcessUpdate()
         lpModule->GetFrameInformation().mPlayerTransform.Pos();
     const f32 lfInvRadius = 1.0f / lrEntity.GetRadius();
     const f32 lfDistance = rw::math::vpu::Length(lListener - lrEntity.GetPos());
-    const f32 lfFraction = std::max(0.0f, std::min(1.0f, lfDistance * lfInvRadius));
+    // rw::math::fpu::Clamp: ARTIST fsel(0 - x) then fsel(1 - x') (0x826E6CFC..D04).
+    const f32 lfFraction = rw::math::fpu::Clamp(lfDistance * lfInvRadius, 0.0f, 1.0f);
 
     const f32 lfVolume = GetRWACMixerOutputValue(0, 0);
     const f32 lfReverb = GetRWACMixerOutputValue(4, 0);

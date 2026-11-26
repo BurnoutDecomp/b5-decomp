@@ -43,23 +43,6 @@ namespace
     // sub_82C65938 = Name::MakeHash("~SplicerFactory::SK_NAME~")).
     const Name skSplicerFactoryName("~SplicerFactory::SK_NAME~");
 
-    // The five-pair allocator-descriptor inline (the RWAC/AEMS TU-local convention).
-    void* AllocateMemoryResource(rw::IResourceAllocator* lpAllocator, size_t luSize,
-                                 u32 luAlignment, const char* lpcName)
-    {
-        rw::BaseResourceDescriptors<5> lDescriptor;
-        for (u32 luEntry = 0u; luEntry < 5u; ++luEntry)
-        {
-            lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
-        }
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(luSize);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
-
-        rw::Resource lResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), lpcName);
-        return lResource.m_baseResources[0];
-    }
 }
 
 // @ 0x826DB130. The ref-spec create: console carve 4*(entityCount+0x1C0)+data+
@@ -77,7 +60,7 @@ Handle<SplicerFactory> SplicerFactory::Create(Environment& arEnvironment,
                          + akrSpec.mu32StringTableSize
                          + sizeof(SpliceManager);
 
-    void* lpMemory = AllocateMemoryResource(arEnvironment.GetAllocator(), luBytes,
+    void* lpMemory = arEnvironment.GetAllocator()->AllocateMemoryResource(luBytes,
                                             4, "SplicerFactory");
     if (lpMemory == 0)
     {

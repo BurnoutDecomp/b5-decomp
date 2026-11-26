@@ -39,8 +39,7 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsEnvironment.cpp";
+#define KAC_ARTIST_ASSERT_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsEnvironment.cpp"
 
 namespace CgsSound
 {
@@ -619,3 +618,5 @@ void Environment::Update(f32 af32TimeStep)
 
 } // namespace Playback
 } // namespace CgsSound
+
+#undef KAC_ARTIST_ASSERT_FILE

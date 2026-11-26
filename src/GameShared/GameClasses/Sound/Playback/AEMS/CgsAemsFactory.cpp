@@ -53,23 +53,6 @@ namespace
     const Name skAemsContentType("~AemsContent::SK_CONTENT_TYPE~");
     const Name skCsisContentType("~CsisContent::SK_CONTENT_TYPE~");
 
-    // The five-pair allocator-descriptor inline (the RWAC/Module TU-local convention).
-    void* AllocateMemoryResource(rw::IResourceAllocator* lpAllocator, size_t luSize,
-                                 u32 luAlignment, const char* lpcName)
-    {
-        rw::BaseResourceDescriptors<5> lDescriptor;
-        for (u32 luEntry = 0u; luEntry < 5u; ++luEntry)
-        {
-            lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
-        }
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(luSize);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
-
-        rw::Resource lResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), lpcName);
-        return lResource.m_baseResources[0];
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +73,7 @@ Handle<AemsFactory> AemsFactory::Create(Environment& arEnvironment,
                          + akrSpec.mu32DataSize
                          + akrSpec.mu32StringTableSize;
 
-    void* lpMemory = AllocateMemoryResource(arEnvironment.GetAllocator(), luBytes,
+    void* lpMemory = arEnvironment.GetAllocator()->AllocateMemoryResource(luBytes,
                                             4, "AemsFactory");
     if (lpMemory == 0)
     {
