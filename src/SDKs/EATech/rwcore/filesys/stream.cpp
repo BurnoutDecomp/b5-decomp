@@ -148,103 +148,96 @@ namespace rw
             // parse cursor advanced. Returns 0 (more to parse), 1 (buffer drained, no chunk),
             // or 2 (end-of-stream flush).
             // -----------------------------------------------------------------------------
+            // ChunkNode's class allocation: Manager::Allocate (inlined, 0x82BBF294).
+            void* ChunkNode::operator new(size_t luSize)
+            {
+                return Manager::Allocate(luSize);
+            }
+
             s32 Stream::parsechunks()
             {
-                s32 liRegion = 1;
-                s32 liResult = (mpParsePtr >= mpDataEndPtr) ? 1 : 0;
+                // Stop reason (DecFIGS Stream::ParseStopReason): 0 continue, 1 need more data,
+                // 2 end chunk found. Parse result (ParseReturnValue): 0 more data needed,
+                // 1 chunk, 2 chunk ending the request.
+                s32 liTap = 1;
+                s32 liParse = 0;
+                s32 liStop = 0;
+                if (mpParsePtr >= mpDataEndPtr)
+                    liStop = 1;
                 Request* lpReq = mpReqCurrent;
 
-                if (mpParsePtr < mpDataEndPtr)
+                while (liStop == 0 && lpReq->miState != 4)
                 {
-                    while (lpReq->miState != 4)
+                    ChunkHandler* lpH = mFilters.mpHead;
+                    u32 luConsumed = 0;
+                    for (; lpH; lpH = lpH->mpNext)
                     {
-                        u32 luConsumed = 0;
-                        s32 liParse = 0;
-                        for (ChunkHandler* lpH = mFilters.mpHead; lpH; lpH = lpH->mpNext)
+                        liParse = lpReq->mpfnParse(
+                            mpParsePtr,
+                            static_cast<u32>(mpDataEndPtr - mpParsePtr),
+                            static_cast<u32>(lpReq->miId),
+                            lpReq->mpParseContext,
+                            lpH->muField04,
+                            lpH->muField08,
+                            &luConsumed);
+                        if (liParse)
                         {
-                            liParse = lpReq->mpfnParse(
-                                mpParsePtr,
-                                static_cast<u32>(mpDataEndPtr - mpParsePtr),
-                                static_cast<u32>(lpReq->miId),
-                                lpReq->mpParseContext,
-                                lpH->muField04,
-                                lpH->muField08,
-                                &luConsumed);
-                            if (liParse)
-                            {
-                                liRegion = lpH->miRegionIndex;
-                                break;
-                            }
-                        }
-
-                        if (!liParse)
-                        {
-                            // No handler matched: flush the remaining bytes as one final chunk
-                            // only when the stream has reached its end.
-                            if (!mpReqCurrent->mbAtEnd)
-                            {
-                                liResult = 1;
-                                break;
-                            }
-                            liRegion = 1;
-                            liParse  = 2;
-                            luConsumed = static_cast<u32>(mpDataEndPtr - mpParsePtr);
-                            if (!luConsumed)
-                                return 2;
-                        }
-
-                        mLock.Lock();
-                        if (lpReq->miState == 4)
-                        {
-                            mLock.Unlock();
-                            liResult = 1;
+                            liTap = lpH->miRegionIndex;
                             break;
                         }
-
-                        // ARTIST 0x82BBF2A4 allocates the native 24-byte chunk node.
-                        ChunkNode* lpNode = static_cast<ChunkNode*>(Manager::Allocate(sizeof(ChunkNode)));
-                        if (lpNode)
-                        {
-                            lpNode->mpNext          = 0;
-                            lpNode->mChunk.miState  = 0;
-                            lpNode->mChunk.miKey    = liRegion;
-                            lpNode->mChunk.mpData   = mpParsePtr;
-                            lpNode->mChunk.miRequestId = lpReq->miId;
-                            lpNode->mChunk.muSize   = luConsumed;
-                        }
-
-                        // ARTIST 0x82BBF2F4 appends through the chunk list's links and count.
-                        mChunks.Append(lpNode);
-
-                        // Charge the chunk to its region and the owning request.
-                        TapStruct* lpRegion = mTaps.mpHead;
-                        for (s32 li = liRegion - 1; li; --li)
-                            lpRegion = lpRegion->mpNext;
-                        lpRegion->miUsage += static_cast<s32>(luConsumed);
-                        lpReq->muBufferedBytes += luConsumed;
-                        if (lpRegion->miUsage == static_cast<s32>(luConsumed))
-                            lpRegion->mpCurrentChunk = lpNode;
-
-                        // Advance the parse cursor and buffered-byte total; clear "need more"
-                        // once usage climbs back above the low-water mark.
-                        s32 liOldUsage = miBufferUsage;
-                        mpParsePtr += luConsumed;
-                        s32 liThreshold = miThreshold;
-                        s32 liNewUsage = liOldUsage + static_cast<s32>(luConsumed);
-                        miBufferUsage = liNewUsage;
-                        if (liOldUsage < liThreshold && liNewUsage >= liThreshold)
-                            mbNeedMore = 0;
-
-                        lpNode->mChunk.miState = 0;
-                        mLock.Unlock();
-
-                        if (liParse == 2)
-                            liResult = 2;
-                        if (liResult)
-                            break;
                     }
+
+                    if (!liParse)
+                    {
+                        // No handler matched: flush the remaining bytes as one final chunk
+                        // only when the stream has reached its end.
+                        if (!mpReqCurrent->mbAtEnd)
+                        {
+                            liStop = 1;
+                            break;
+                        }
+                        liTap = 1;
+                        liParse = 2;
+                        luConsumed = static_cast<u32>(mpDataEndPtr - mpParsePtr);
+                        if (!luConsumed)
+                            return 2;
+                    }
+
+                    mLock.Lock();
+                    if (lpReq->miState == 4)
+                    {
+                        mLock.Unlock();
+                        liStop = 1;
+                        break;
+                    }
+
+                    ChunkNode* lpNode = new ChunkNode(lpReq->miId, luConsumed, mpParsePtr, liTap);
+                    mChunks.Append(lpNode);
+
+                    // Charge the chunk to its tap and the owning request.
+                    TapStruct* lpTap = mTaps.GetNode(liTap - 1);
+                    lpTap->miUsage += static_cast<s32>(luConsumed);
+                    lpReq->muBufferedBytes += luConsumed;
+                    if (lpTap->miUsage == static_cast<s32>(luConsumed))
+                        lpTap->mpCurrentChunk = lpNode;
+
+                    // Advance the parse cursor and buffered-byte total; clear "need more"
+                    // once usage climbs back above the low-water mark.
+                    s32 liOldUsage = miBufferUsage;
+                    mpParsePtr += luConsumed;
+                    s32 liThreshold = miThreshold;
+                    s32 liNewUsage = liOldUsage + static_cast<s32>(luConsumed);
+                    miBufferUsage = liNewUsage;
+                    if (liOldUsage < liThreshold && liNewUsage >= liThreshold)
+                        mbNeedMore = 0;
+
+                    lpNode->mChunk.miState = 0;
+                    mLock.Unlock();
+
+                    if (liParse == 2)
+                        liStop = 2;
                 }
-                return liResult;
+                return liStop;
             }
 
             // -----------------------------------------------------------------------------
@@ -371,6 +364,20 @@ namespace rw
             }
 
             // -----------------------------------------------------------------------------
+            // inbetween -- is lpPos inside the ring-buffer window [lpStart, lpEnd) (which wraps
+            // when lpStart > lpEnd)? DecFIGS rw::core::filesys::inbetween(const unsigned char*,
+            // const unsigned char*, const unsigned char*) (PS3 0xE46820); ARTIST has no
+            // out-of-line copy and inlines it into restartstream (0x82BC07C4..0x82BC0810).
+            // -----------------------------------------------------------------------------
+            static bool inbetween(const u8* lpStart, const u8* lpEnd, const u8* lpPos)
+            {
+                if (lpStart <= lpEnd)
+                    return lpPos >= lpStart && lpPos < lpEnd;
+                else
+                    return lpPos >= lpStart || lpPos < lpEnd;
+            }
+
+            // -----------------------------------------------------------------------------
             // Stream::restartstream @0x82BC06D0 -- reclaim released chunks, evict requests
             // whose data has already streamed past, compact the ring buffer if that frees
             // enough room, then issue the next read (or copy the next slice from a mapped
@@ -380,148 +387,107 @@ namespace rw
             {
                 mLock.Lock();
 
-                // Phase 1: free chunks that have been released (state >= 2), advancing the
-                // fill pointer as the buffer front empties.
-                ChunkNode* lpChunk = mChunks.mpHead;
-                if (lpChunk)
+                // Phase 1: free chunks that have been released (state other than 0/1: ARTIST
+                // tests both values, 0x82BC0714/0x82BC071C), advancing the fill pointer as the
+                // buffer front empties. The list ops are ListSingle's inlines (Pop, GetHead).
+                ChunkNode* lpChunk = mChunks.GetHead();
+                while (lpChunk)
                 {
-                    while (lpChunk->mChunk.miState >= 2)
+                    if (lpChunk->mChunk.miState == 0 || lpChunk->mChunk.miState == 1)
                     {
-                        ChunkNode* lpHead = mChunks.mpHead;
-                        if (lpHead)
-                        {
-                            if (lpHead == mChunks.mpTail)
-                            {
-                                mChunks.mpHead = 0;
-                                mChunks.mpTail = 0;
-                            }
-                            else
-                            {
-                                mChunks.mpHead = lpHead->mpNext;
-                            }
-                            mChunks.muCount--;
-                            lpHead->mpNext = 0;
-                        }
-                        if (!mChunks.mpHead)
-                        {
-                            uintptr_t luAligned =
-                                reinterpret_cast<uintptr_t>(lpChunk->mChunk.mpData + lpChunk->mChunk.muSize)
-                                & ~static_cast<uintptr_t>(0xF);
-                            mpFillPtr = reinterpret_cast<u8*>(luAligned);
-                        }
-                        lpChunk->mpNext = 0;
-                        Manager::Free(lpChunk);
-                        lpChunk = mChunks.mpHead;
-                        if (!lpChunk)
-                            break;
-                    }
-                    if (lpChunk)
                         mpFillPtr = lpChunk->mChunk.mpData;
+                        break;
+                    }
+                    mChunks.Pop();
+                    if (!mChunks.GetHead())
+                    {
+                        mpFillPtr = reinterpret_cast<u8*>(
+                            reinterpret_cast<uintptr_t>(lpChunk->mChunk.mpData + lpChunk->mChunk.muSize)
+                            & ~static_cast<uintptr_t>(0xF));
+                    }
+                    lpChunk->mpNext = 0;
+                    Manager::Free(lpChunk);
+                    lpChunk = mChunks.GetHead();
                 }
 
                 // Phase 2: evict head requests whose target buffer position no longer lies in
-                // the live [fill, end) window (handling ring wrap).
-                while (true)
+                // the live [fill, end) window (DecFIGS: rw::core::filesys::inbetween).
+                Request* lpFirstReq = mpReqHead;
+                while (lpFirstReq->mpNext)
                 {
-                    Request* lpNextReq = mpReqHead->mpNext;
-                    if (!lpNextReq || lpNextReq->miState == 1)
+                    Request* lpNextReq = lpFirstReq->mpNext;
+                    if (lpNextReq->miState == 1)
                         break;
-
-                    uintptr_t luFill = reinterpret_cast<uintptr_t>(mpFillPtr);
-                    uintptr_t luEnd  = reinterpret_cast<uintptr_t>(mpDataEndPtr);
-                    uintptr_t luPos  = reinterpret_cast<uintptr_t>(lpNextReq->mpBufferPos) - 1;
-
-                    bool lbKeep;
-                    if (luFill > luEnd)
-                    {
-                        if (luPos >= luFill)        lbKeep = true;
-                        else if (luPos >= luEnd)     lbKeep = false;
-                        else                         lbKeep = true;
-                    }
-                    else
-                    {
-                        if (luPos < luFill)          lbKeep = false;
-                        else if (luPos < luEnd)      lbKeep = true;
-                        else                         lbKeep = false;
-                    }
-
-                    if (lbKeep)
+                    if (inbetween(mpFillPtr, mpDataEndPtr, lpNextReq->mpBufferPos - 1))
                         break;
-                    freerequest(mpReqHead);
+                    freerequest(lpFirstReq);
+                    lpFirstReq = mpReqHead;
                 }
 
                 mLock.Unlock();
 
                 // Phase 3: work out how much contiguous room is free, compacting the buffer if
-                // that recovers a granule.
-                u8* lpFill = mpFillPtr;
-                u8* lpEnd  = mpDataEndPtr;
+                // that recovers a granule; with too little room the engine stops (state 2).
+                // The members are read in place, as the PS3 DecFIGS body 0xE4C1AC reads them
+                // (ARTIST zero-extends the reloaded bufferstart for memcpy, 0x82BC08CC).
                 s32 liSpace;
-                if (lpFill > lpEnd)
+                if (mpFillPtr > mpDataEndPtr)
                 {
-                    liSpace = static_cast<s32>(lpFill - lpEnd) - 17;
+                    liSpace = static_cast<s32>(mpFillPtr - mpDataEndPtr) - 17;
                 }
                 else
                 {
-                    liSpace = static_cast<s32>(mpBufferTop - lpEnd) - 16;
+                    liSpace = static_cast<s32>(mpBufferTop - mpDataEndPtr) - 16;
                     if (liSpace < miReadGranularity)
                     {
-                        s32 liKeep = static_cast<s32>(lpEnd - mpParsePtr);
-                        if ((static_cast<s32>(lpFill - mpWritePtr) - 17) >= liKeep)
+                        s32 liSize = static_cast<s32>(mpDataEndPtr - mpParsePtr);
+                        if (static_cast<s32>(mpFillPtr - mpWritePtr) - 17 >= liSize)
                         {
-                            u8* lpDst;
-                            s32 liRem = liKeep % 16;
-                            if (liRem == 0 || mpReqCurrent->miRequestType == 1)
-                                lpDst = mpBufferBase;
+                            if ((liSize % 16) != 0 && mpReqCurrent->miRequestType != 1)
+                                mpWritePtr = mpBufferBase - (liSize % 16) + 16;
                             else
-                                lpDst = mpBufferBase - liRem + 16;
+                                mpWritePtr = mpBufferBase;
 
-                            mpWritePtr = lpDst;
-                            ::memcpy(lpDst, mpParsePtr, static_cast<size_t>(liKeep));
-                            u8* lpNewEnd = lpDst + liKeep;
-                            mpParsePtr   = lpDst;
-                            mpDataEndPtr = lpNewEnd;
-                            liSpace = static_cast<s32>(lpFill - lpNewEnd) - 17;
+                            ::memcpy(mpWritePtr, mpParsePtr, static_cast<size_t>(liSize));
+                            mpParsePtr   = mpWritePtr;
+                            mpDataEndPtr = mpWritePtr + liSize;
+                            liSpace = static_cast<s32>(mpFillPtr - mpDataEndPtr) - 17;
                         }
                     }
                 }
 
-                if (liSpace >= miReadGranularity)
+                if (liSpace < miReadGranularity)
                 {
-                    Request* lpReq = mpReqCurrent;
-                    if (lpReq->miRequestType == 1)
-                    {
-                        // Mapped request: copy the next slice straight from memory.
-                        const s64 li64ReadPos = mi64ReadPos;
-                        if (li64ReadPos + liSpace > lpReq->mi64Size)
-                            mi64ChunkBytes = lpReq->mi64Size - li64ReadPos;
-                        else
-                            mi64ChunkBytes = liSpace;
+                    miState = 2;
+                    return;
+                }
 
-                        ::memcpy(mpDataEndPtr, lpReq->mpMappedData,
-                                 static_cast<size_t>(mi64ChunkBytes));
-                        lpReq->mpMappedData += static_cast<s32>(mi64ChunkBytes);
-                        readcallback();
-                    }
+                Request* lpReq = mpReqCurrent;
+                if (lpReq->miRequestType == 1)
+                {
+                    // Mapped request: copy the next slice straight from memory.
+                    if (mi64ReadPos + liSpace > lpReq->mi64Size)
+                        mi64ChunkBytes = lpReq->mi64Size - mi64ReadPos;
                     else
-                    {
-                        // Async request: issue a granule-sized read at the aligned position.
-                        mi64ChunkBytes = miReadGranularity;
-                        mAsyncOp.Read(
-                            mpHandle,
-                            mpDataEndPtr,
-                            mi64ReadPos & ~static_cast<s64>(3),
-                            mi64ChunkBytes,
-                            &Stream::filereadcallback,
-                            this,
-                            liPriority);
-                    }
+                        mi64ChunkBytes = liSpace;
+
+                    ::memcpy(mpDataEndPtr, lpReq->mpMappedData, static_cast<size_t>(mi64ChunkBytes));
+                    lpReq->mpMappedData += static_cast<s32>(mi64ChunkBytes);
+                    readcallback();
                 }
                 else
                 {
-                    miState = 2;
+                    // Async request: issue a granule-sized read at the aligned position.
+                    mi64ChunkBytes = miReadGranularity;
+                    mAsyncOp.Read(
+                        mpHandle,
+                        mpDataEndPtr,
+                        mi64ReadPos & ~static_cast<s64>(3),
+                        mi64ChunkBytes,
+                        &Stream::filereadcallback,
+                        this,
+                        liPriority);
                 }
-
             }
 
             // -----------------------------------------------------------------------------

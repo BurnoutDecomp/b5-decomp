@@ -48,6 +48,53 @@ namespace rw
                             mpTail = lpNode;
                     }
 
+                    // Unlink and return the head node (null when empty), clearing its link
+                    // (DecFIGS list_inlines.h:51 `T* Pop()`, body as LegacySrc's rwcore
+                    // list_inlines.h; no out-of-line copy in ARTIST: inlined into
+                    // Device::ThreadEntry 0x82BBF420 and Stream::restartstream 0x82BC0724).
+                    T* Pop()
+                    {
+                        T* lpHeadNode = mpHead;
+
+                        if (mpHead != 0)
+                        {
+                            if (mpHead == mpTail)
+                            {
+                                mpHead = 0;
+                                mpTail = 0;
+                            }
+                            else
+                            {
+                                mpHead = mpHead->mpNext;
+                            }
+
+                            --muCount;
+
+                            if (lpHeadNode != 0)
+                                lpHeadNode->mpNext = 0;
+                        }
+
+                        return lpHeadNode;
+                    }
+
+                    // The node luIndex links after the head (DecFIGS list_inlines.h:78, body as
+                    // LegacySrc's; inlined into Stream::parsechunks 0x82BBF320..0x82BBF334).
+                    T* GetNode(unsigned int luIndex)
+                    {
+                        T* lpRetNode = mpHead;
+
+                        while (luIndex-- != 0)
+                            lpRetNode = lpRetNode->mpNext;
+
+                        return lpRetNode;
+                    }
+
+                    // DecFIGS list.h:86.
+                    T* GetHead() const
+                    {
+                        return mpHead;
+                    }
+
                     // Insert lpNode after lpAfter (lpAfter == null -> push front), keeping
                     // mpTail current and bumping the count. ARTIST 0x82BBDE70 lays the
                     // push-front arm first, as rwcore list_inlines.h orders it.

@@ -130,14 +130,10 @@ namespace rw
                 }
                 else
                 {
-                    // Begin(thread, ThreadEntry, this, &mgr->params, wrapper), then wait in 1 ms
-                    // sleeps for the worker to report. ARTIST reads the manager (r30, 0x82BBF650)
-                    // before it calls the wrapper getter sub_82B42D88.
-                    EA::Thread::ThreadParameters* lpParams = &gpFileSysManager->mThreadParameters;
-                    EA::Thread::RunnableFunctionUserWrapper lpWrapper =
-                        EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper();  // sub_82B42D88
-
-                    mThread.Begin(&Device::ThreadEntry, this, lpParams, lpWrapper);
+                    // Begin(ThreadEntry, this, &mgr->params), then wait in 1 ms sleeps for the
+                    // worker to report. The wrapper is Begin's default argument
+                    // (GetGlobalRunnableFunctionUserWrapper, bl 0x82B42D88 at 0x82BBF654).
+                    mThread.Begin(&Device::ThreadEntry, this, &Manager::GetInstance()->mThreadParameters);
 
                     while (!mbThreadRunning)
                     {
@@ -290,22 +286,7 @@ namespace rw
 
                 do
                 {
-                    AsyncOp* lpOp = lpThis->mOpList.mpHead; // v4 = *v3
-                    if (lpOp)
-                    {
-                        // Inline head unlink (NOT AsyncOpList::Remove): the asm folds it.
-                        if (lpOp == lpThis->mOpList.mpTail)
-                        {
-                            lpThis->mOpList.mpHead = 0;
-                            lpThis->mOpList.mpTail = 0;
-                        }
-                        else
-                        {
-                            lpThis->mOpList.mpHead = lpOp->mpNext;
-                        }
-                        --lpThis->mOpList.muCount;
-                        lpOp->mpNext = 0;            // *v4 = 0
-                    }
+                    AsyncOp* lpOp = lpThis->mOpList.Pop();
 
                     if (lpOp)
                     {
@@ -518,7 +499,7 @@ namespace rw
                     ::MemoryBarrier();                                  // lwsync
                     if (lpOp->mStatus != AsyncOp::OPSTATUS_PENDING)
                         break;
-                    if (!(EA::Thread::GetThreadTime() < lTimeoutAbsolute))
+                    if (lTimeoutAbsolute <= EA::Thread::GetThreadTime())   // PS3 0xE46590: timeout <= now
                         break;
                     mCompletion.Wait(&mCompletionLock, &lTimeoutAbsolute);
                 }

@@ -79,10 +79,27 @@ namespace rw
             // A buffered chunk record. The engine keeps a singly-linked list of these
             // (mpChunkHead/Tail); GetChunk/CancelRequest walk them and ReleaseChunk/
             // restartstream free them. Allocated through Manager::Allocate (X360: 24 bytes).
+            //
+            // parsechunks creates one with a new-expression: ARTIST tests the allocation for
+            // null before the stores (0x82BBF2BC) and loads every field value before the first
+            // store (0x82BBF2C4..0x82BBF2D0), i.e. constructor arguments, while the PS3 body
+            // (0xE491C4) stores into Manager::Allocate's block untested (a class operator new).
             struct ChunkNode
             {
                 ChunkNode* mpNext;   // +0x00
                 Chunk      mChunk;   // +0x04 ..
+
+                ChunkNode(s32 liRequestId, u32 luSize, u8* lpData, s32 liKey)
+                {
+                    mpNext = 0;
+                    mChunk.miState = 0;
+                    mChunk.miKey = liKey;
+                    mChunk.mpData = lpData;
+                    mChunk.miRequestId = liRequestId;
+                    mChunk.muSize = luSize;
+                }
+
+                static void* operator new(size_t luSize);
             };
 
             // A registered chunk-type handler. parsechunks walks the engine's handler list
