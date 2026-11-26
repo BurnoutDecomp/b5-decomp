@@ -110,18 +110,17 @@ int VP6_DecodeBool128(BOOL_CODER* br)
 
     if (luValue >= luBigSplit)
     {
-        luRange = luRange - luSplit;
-        luValue = luValue - luBigSplit;
+        luRange = (luRange - luSplit) << 1;
+        luValue = (luValue - luBigSplit) << 1;
         liBit = 1;
     }
     else
     {
-        luRange = luSplit;
+        luRange = luSplit << 1;
+        luValue = luValue << 1;
         liBit = 0;
     }
 
-    luRange <<= 1;
-    luValue <<= 1;
     if (--liCount == 0)
     {
         liCount = 8;

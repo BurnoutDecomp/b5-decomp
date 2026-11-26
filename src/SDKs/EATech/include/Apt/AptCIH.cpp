@@ -132,11 +132,9 @@ AptCIH::AptCIH(AptCharacter* pCharacter, AptCIH* pParent)
 // DestroyGCPointers, which the GC runs first.)
 AptCIH::~AptCIH()
 {
+    // ARTIST frees the asset string without clearing the slot (0x82AE72A0..0x82AE72B8).
     if (mpAssetString)
-    {
         gpNonGCPoolManager->Deallocate(mpAssetString, 4);
-        mpAssetString = 0;
-    }
 }
 
 // RegisterReferences @0x7E9C78 -- GC mark: the parent link + the char inst's

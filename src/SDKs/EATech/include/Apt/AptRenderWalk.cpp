@@ -548,7 +548,7 @@ static void AptRenderInternal(int nElapsedMs, int nLayerMask)
     {
         AptRenderTreeManager* lpMgr =
             reinterpret_cast<AptRenderTreeManager*>(lpTarget->mppRenderRootAnchor);
-        AptRenderItem* lpRoot = lpMgr->Render_GetRoot(ppHead, nTick);
+        AptRenderItem* lpRoot = lpMgr->Render_GetRoot(nTick);
 
         if (lpRoot != 0)
             AptDecoupleTreeTraversal(lpRoot, nTick, GetRenderContext(), NormalOp(), 0, nLayerMask, 1);

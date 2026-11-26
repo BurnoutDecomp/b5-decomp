@@ -34,29 +34,30 @@ namespace
         0xD6, 0xD8, 0xD9, 0xDA, 0xDB, 0xDD, 0xDE, 0xDF, 0xE1, 0xE2, 0xE3, 0xE5, 0xE6, 0xE7, 0xE8, 0xEA,
         0xEB, 0xEC, 0xEE, 0xEF, 0xF0, 0xF2, 0xF3, 0xF5, 0xF6, 0xF7, 0xF9, 0xFA, 0xFB, 0xFD, 0xFE, 0xFF
     };
+}
 
-    // ARTIST 0x82B731A0.
-    s32 DetuneToLinear(s32 aiCents)
+// ARTIST 0x82B731A0: the library's own iSNDdetunetolinear (the name ARTIST calls from
+// iSNDcalcpitch 0x82B7329C).
+extern "C" s32 iSNDdetunetolinear(s32 aiCents)
+{
+    s32 liScale = 4096;   // signed: halved with srawi (0x82B731E8)
+    while (aiCents >= 1200)
     {
-        u32 luScale = 4096;
-        while (aiCents >= 1200)
-        {
-            aiCents -= 1200;
-            luScale <<= 1;
-        }
-        while (aiCents <= -1200)
-        {
-            aiCents += 1200;
-            luScale >>= 1;
-        }
-
-        s32 liIndex = (13981 * aiCents) >> 16;
-        if (liIndex < -255)
-            liIndex = -255;
-        if (liIndex < 0)
-            return static_cast<s32>((256 + kauDetuneFraction[256 + liIndex]) * luScale) >> 9;
-        return static_cast<s32>((256 + kauDetuneFraction[liIndex]) * luScale) >> 8;
+        aiCents -= 1200;
+        liScale <<= 1;
     }
+    while (aiCents <= -1200)
+    {
+        aiCents += 1200;
+        liScale >>= 1;
+    }
+
+    s32 liIndex = (13981 * aiCents) >> 16;
+    if (liIndex < -255)
+        liIndex = -255;
+    if (liIndex < 0)
+        return ((256 + kauDetuneFraction[256 + liIndex]) * liScale) >> 9;
+    return ((256 + kauDetuneFraction[liIndex]) * liScale) >> 8;
 }
 
 // ARTIST 0x82B73240.
@@ -72,7 +73,7 @@ extern "C" s32 iSNDcalcpitch(s32 aiVoice)
             const s32 liPattern = lrChannel.mpcPitchPattern[lrChannel.mucPitchPatternIndex] - 64;
             liCents += (liPattern * lrChannel.miPitchPatternDepth) >> 6;
         }
-        liResult = DetuneToLinear(liCents);
+        liResult = iSNDdetunetolinear(liCents);
         lrChannel.muCachedPitch = static_cast<u16>(liResult);
     }
 

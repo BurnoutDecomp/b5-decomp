@@ -39,7 +39,7 @@ void AptSharedPtr<AptFile>::Dispose(AptFile* pData)
     {
         int count = AptSharedPtrDecRef(pData);
         if (!count)
-            count = AptSharedPtrDelete(pData);
+            AptSharedPtrDelete(pData);
     }
 
     AptSharedPtrDisposeDebugHook(0, 0, 0);
@@ -170,7 +170,7 @@ int AptSharedPtrDecRef(AptFile* pData)
     return static_cast<int>(_InterlockedDecrement(reinterpret_cast<volatile long*>(&pData->mnRefCount)));
 }
 
-int AptSharedPtrDelete(AptFile* pData)
+void AptSharedPtrDelete(AptFile* pData)
 {
     if (pData)
     {
@@ -178,5 +178,4 @@ int AptSharedPtrDelete(AptFile* pData)
         // ARTIST frees the 0x1C-byte AptFile allocated by Load.
         gpNonGCPoolManager->Deallocate(pData, sizeof(AptFile));
     }
-    return 0;
 }

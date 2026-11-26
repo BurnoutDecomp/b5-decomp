@@ -21,6 +21,8 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"
+#include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager (the cells' class operator new)
+#include "SDKs/EATech/Apt/DogmaAllocator.h"       // DOGMA_PoolManager::Allocate
 
 struct AptCharacter;
 struct AptCIH;
@@ -52,6 +54,12 @@ struct AptRenderTreeManager
         AptRenderItem*         mpItem;   // +0x00  (*v)
         _AptRenderItemRootList* mpNext;  // +0x04  (v[1])
 
+        // Cells come from the shared Apt pool through a new-expression: Create 0x82AE1B98 and
+        // InsertNewRoot 0x82AE1B14 call DOGMA_PoolManager::Allocate(off_8324D808, 8), then
+        // zero both slots only on a non-null block and otherwise yield null (0x82AE1BB4).
+        _AptRenderItemRootList() : mpItem(0), mpNext(0) {}
+        static void* operator new(size_t size) { return gpNonGCPoolManager->Allocate(size); }
+
         // Create @0x82AE1B78  (the X360 ctor-shaped factory; Hex-Rays
         // "_AptRenderItemRootLi") -- pool-allocate a fresh anchor cell from the shared
         // Apt pool (zeroing both slots; null block -> the cell pointer is left null but
@@ -81,8 +89,9 @@ struct AptRenderTreeManager
         // InsertNewRoot @ 0x82AE1AC8 -- append a new chain cell for pItem at the
         // tail (allocating it from the shared Apt pool) and atomically take a
         // reference on pItem, unless this anchor's first slot already holds pItem
-        // (then it is a no-op). Returns this anchor cell (the X360 returns r3).
-        _AptRenderItemRootList* InsertNewRoot(AptRenderItem* pItem);
+        // (then it is a no-op). void: Update_SetRootItem 0x82AE55B8 ignores r3, and the
+        // body leaves the allocation in it.
+        void InsertNewRoot(AptRenderItem* pItem);
     };
 
     // The manager's storage IS the per-target render-root head-cell slot: the
@@ -90,7 +99,7 @@ struct AptRenderTreeManager
     // AptCurrentRenderTreeManager in the .cpp), so this leading member is the
     // head-cell pointer the Render_GetRoot / Update_SetRootItem walks address.
     // The Update_* facade below is otherwise stateless.
-    void* mpRootList;
+    _AptRenderItemRootList* mpRootList;
 
     // ---- UPDATE side (called by AptCharacterInst / AptCIH) -----------------
     // @0x814254 -- create the render item for a character.
@@ -158,9 +167,10 @@ struct AptRenderTreeManager
     AptRenderItem* Render_GetMaskInvisible   (AptRenderItem* pItem, int nTick);  // @0x82ADB6E8
     AptRenderItem* Render_GetSiblingInvisible(AptRenderItem* pItem, int nTick);  // @0x82ADB668
 
-    // Render_GetRoot @0x82AE55D0 -- prune expired root cells from *ppHeadCellSlot
+    // Render_GetRoot @0x82AE55D0 -- prune expired root cells from the head slot
     // (via _AptRenderItemRootList::Get), then (if the surviving root is renderable
     // for nTick) refresh that cell's item to its current render revision, releasing
-    // the prior item. Returns the current root render item (or null).
-    AptRenderItem* Render_GetRoot(_AptRenderItemRootList** ppHeadCellSlot, int nTick);
+    // the prior item. Returns the current root render item (or null). A member on the
+    // head slot: ARTIST keeps r3 (this) in r30 and reloads the head through it.
+    AptRenderItem* Render_GetRoot(int nTick);
 };

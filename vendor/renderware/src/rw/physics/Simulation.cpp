@@ -589,8 +589,8 @@ void Simulation::JointBatchBuild()
     {
         if (((lpNode->m_bodyA->mState | lpNode->m_bodyB->mState) & ACTIVE_BODY) != 0)
         {
-            const u32 luSlot = m_JT_Count++;
-            reinterpret_cast<JointJacobian*>(lpArray + luSlot * luStride)->Build(*lpNode, this);
+            // the slot is scaled before the count is stored back (mulli before addi, 0x82BC6A8C)
+            reinterpret_cast<JointJacobian*>(lpArray + m_JT_Count++ * luStride)->Build(*lpNode, this);
         }
         lpNode = lpNode->m_right;
     }
@@ -613,8 +613,8 @@ void Simulation::DriveBatchBuild()
     {
         if (((lpNode->m_bodyA->mState | lpNode->m_bodyB->mState) & ACTIVE_BODY) != 0)
         {
-            const u32 luSlot = m_DR_Count++;
-            reinterpret_cast<DriveJacobian*>(lpArray + luSlot * luStride)->Build(*lpNode, this);
+            // the slot is scaled before the count is stored back (mulli before addi, 0x82BC6A8C)
+            reinterpret_cast<DriveJacobian*>(lpArray + m_DR_Count++ * luStride)->Build(*lpNode, this);
         }
         lpNode = lpNode->m_right;
     }

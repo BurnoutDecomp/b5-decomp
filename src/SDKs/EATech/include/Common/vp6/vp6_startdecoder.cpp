@@ -164,7 +164,7 @@ int VP6_DecodeFrameToYUV(xPB_INST pbi, char* VideoBufferPtr, unsigned int /*Byte
 }
 
 // Completion job: hand the finished picture to the caller's callback, then release the frame.
-void DecodeCallBackJob(EA::Jobs::Param, EA::Jobs::Param lData, EA::Jobs::Param, EA::Jobs::Param)
+int DecodeCallBackJob(EA::Jobs::Param, EA::Jobs::Param lData, EA::Jobs::Param, EA::Jobs::Param)
 {
     VP6_CALLBACK_JOB_DATA* lpData = static_cast<VP6_CALLBACK_JOB_DATA*>(lData.mpValue);
     YUV_BUFFER_CONFIG lYuvConfig;
@@ -176,7 +176,9 @@ void DecodeCallBackJob(EA::Jobs::Param, EA::Jobs::Param lData, EA::Jobs::Param, 
                      lpData->Context, lpData->Param0, lpData->Param1);
 
     lpData->pbi->FrameReleasedSemaphore->Post(1);
+    return 0;   // ARTIST 0x82B58318 `li r3,0`
 }
+
 
 // Decode job.
 void XenonDecodeJob(EA::Jobs::Param, EA::Jobs::Param lData, EA::Jobs::Param, EA::Jobs::Param)

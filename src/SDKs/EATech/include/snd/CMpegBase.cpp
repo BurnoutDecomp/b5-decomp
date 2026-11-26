@@ -102,14 +102,9 @@ CMpegBase::~CMpegBase()
 // ----------------------------------------------------------------------------
 u32 CMpegBase::GetBits(s32 aiNumBits)
 {
-    // HOST DIVERGENCE GUARD (wave O, mirrors the wave-M fix in the rw::audio::core
-    // twins): for aiNumBits == 0 the X360 tail is `srw r3, r11, r10` with r10 = 32,
-    // and PPC srw takes a 6-bit shift count, so the console returns 0 (and leaves
-    // the accumulator state untouched, as the guard does). On x64 `luBits >> 32` is
-    // UB and MSVC masks the count to 0, returning the raw accumulator instead.
-    // aiNumBits == 0 is reachable in real MP3 data (a scalefactor slen of 0).
-    if (aiNumBits == 0)
-        return 0;
+    // No zero-count guard on the console (0x82B73378 enters the refill loop test): for
+    // aiNumBits == 0 the tail `srw r3, r11, r10` shifts by 32, which PPC srw turns into 0.
+    // The guard the PC tree needs (x64 masks the count) is a host adaptation.
 
     while (miBitsAvailable < aiNumBits)
     {

@@ -117,33 +117,38 @@ void BuildScanOrder(PB_INSTANCE* pbi, const unsigned char* ScanBands)
 // Token frequencies (in 1/256) of the DCT token tree from its eleven node probabilities.
 void BoolTreeToHuffCodes(const unsigned char* BoolTreeProbs, unsigned int* HuffProbs)
 {
-    const unsigned char* p = BoolTreeProbs;
+    // Two running unsigned node probabilities (ARTIST keeps them in r11 / r10 across the
+    // stores and shifts with srwi; the leading products are unsigned too, 0x82B59B64).
+    unsigned int Prob;
+    unsigned int Prob1;
 
-    HuffProbs[11] = (p[0] * p[1]) >> 8;
-    HuffProbs[0] = ((255 - p[1]) * p[0]) >> 8;
-    HuffProbs[1] = (p[2] * (255 - p[0])) >> 8;
+    HuffProbs[11] = ((unsigned int)BoolTreeProbs[0] * (unsigned int)BoolTreeProbs[1]) >> 8;
+    HuffProbs[0]  = ((unsigned int)BoolTreeProbs[0] * (255 - (unsigned int)BoolTreeProbs[1])) >> 8;
 
-    const unsigned int luNode2 = ((255 - p[2]) * (255 - p[0])) >> 8;
-    const unsigned int luNode3 = (p[3] * luNode2) >> 8;
-    HuffProbs[2] = (p[4] * luNode3) >> 8;
+    Prob = 255 - BoolTreeProbs[0];
+    HuffProbs[1] = (BoolTreeProbs[2] * Prob) >> 8;
 
-    const unsigned int luNode4 = ((255 - p[4]) * luNode3) >> 8;
-    HuffProbs[3] = (p[5] * luNode4) >> 8;
-    HuffProbs[4] = ((255 - p[5]) * luNode4) >> 8;
+    Prob  = ((255 - BoolTreeProbs[2]) * Prob) >> 8;
+    Prob1 = (BoolTreeProbs[3] * Prob) >> 8;
+    HuffProbs[2] = (BoolTreeProbs[4] * Prob1) >> 8;
 
-    const unsigned int luNode5 = ((255 - p[3]) * luNode2) >> 8;
-    const unsigned int luNode6 = (p[6] * luNode5) >> 8;
-    HuffProbs[5] = (p[7] * luNode6) >> 8;
-    HuffProbs[6] = ((255 - p[7]) * luNode6) >> 8;
+    Prob1 = ((255 - BoolTreeProbs[4]) * Prob1) >> 8;
+    HuffProbs[3] = (BoolTreeProbs[5] * Prob1) >> 8;
+    HuffProbs[4] = ((255 - BoolTreeProbs[5]) * Prob1) >> 8;
 
-    const unsigned int luNode7 = ((255 - p[6]) * luNode5) >> 8;
-    const unsigned int luNode8 = (p[8] * luNode7) >> 8;
-    HuffProbs[7] = (p[9] * luNode8) >> 8;
-    HuffProbs[8] = ((255 - p[9]) * luNode8) >> 8;
+    Prob  = ((255 - BoolTreeProbs[3]) * Prob) >> 8;
+    Prob1 = (BoolTreeProbs[6] * Prob) >> 8;
+    HuffProbs[5] = (BoolTreeProbs[7] * Prob1) >> 8;
+    HuffProbs[6] = ((255 - BoolTreeProbs[7]) * Prob1) >> 8;
 
-    const unsigned int luNode9 = ((255 - p[8]) * luNode7) >> 8;
-    HuffProbs[9] = (p[10] * luNode9) >> 8;
-    HuffProbs[10] = ((255 - p[10]) * luNode9) >> 8;
+    Prob  = ((255 - BoolTreeProbs[6]) * Prob) >> 8;
+    Prob1 = (BoolTreeProbs[8] * Prob) >> 8;
+    HuffProbs[7] = (BoolTreeProbs[9] * Prob1) >> 8;
+    HuffProbs[8] = ((255 - BoolTreeProbs[9]) * Prob1) >> 8;
+
+    Prob = ((255 - BoolTreeProbs[8]) * Prob) >> 8;
+    HuffProbs[9]  = (BoolTreeProbs[10] * Prob) >> 8;
+    HuffProbs[10] = ((255 - BoolTreeProbs[10]) * Prob) >> 8;
 }
 
 // Run frequencies (in 1/256) of the zero-run tree from its node probabilities.

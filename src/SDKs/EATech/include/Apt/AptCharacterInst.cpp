@@ -279,16 +279,14 @@ void AptCharacterInst::SetCharacter(AptCharacter* pCharacter)
 }
 
 // ---- const reads (through the render item) --------------------------------
-// NULL-SAFE (host): the console always has a render item; on x64 mpRenderItem is
-// legitimately null when the inst was built before an Apt target was active (the
-// ctor's gpAptTarget guard, faithful to the X360 ctor), when the pool is exhausted,
-// or for a character type Manager_CreateItem does not build (e.g. button). These
-// return safe defaults instead of dereferencing null.
-const AptCharacter* AptCharacterInst::GetCharacterConst() const { return mpRenderItem ? mpRenderItem->GetCharacterConst() : 0; }
-bool AptCharacterInst::GetIsVisible() const     { return mpRenderItem ? mpRenderItem->GetIsVisible() : false; }
-bool AptCharacterInst::GetIsMask() const        { return mpRenderItem ? mpRenderItem->GetIsMask() : false; }
-bool AptCharacterInst::GetHasMask() const       { return mpRenderItem ? mpRenderItem->GetHasMask() : false; }
-const AptMatrix* AptCharacterInst::GetPositionMatrixConst() const { return mpRenderItem ? mpRenderItem->GetPositionMatrixConst() : 0; }
+// The console reads straight through mpRenderItem with no null test (GetCharacterConst
+// 0x82AD57B0, GetIsVisible 0x82AD5800, GetHasMask 0x82AD57D0, GetPositionMatrixConst
+// 0x82ADC2B0); the null-safe defaults were a PC-host adaptation.
+const AptCharacter* AptCharacterInst::GetCharacterConst() const { return mpRenderItem->GetCharacterConst(); }
+bool AptCharacterInst::GetIsVisible() const     { return mpRenderItem->GetIsVisible(); }
+bool AptCharacterInst::GetIsMask() const        { return mpRenderItem->GetIsMask(); }
+bool AptCharacterInst::GetHasMask() const       { return mpRenderItem->GetHasMask(); }
+const AptMatrix* AptCharacterInst::GetPositionMatrixConst() const { return mpRenderItem->GetPositionMatrixConst(); }
 const AptCXForm* AptCharacterInst::GetColorMatrixConst() const    { return mpRenderItem->GetColorMatrixConst(); }
 
 // ---- writes (through the writable render item) ----------------------------

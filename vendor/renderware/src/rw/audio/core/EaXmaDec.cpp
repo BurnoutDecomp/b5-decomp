@@ -360,18 +360,19 @@ void EaXmaDec::LeftShiftInBits(u32 *puAccum, const u8 *pStream, s32 iBitPos, s32
 // -------------------------------------------------------------------------------------
 void EaXmaDec::ParseToNextFrame(const u8 **ppCursor, s32 *piBitOffset)
 {
-    const s32 iBitOffset = *piBitOffset;
+    // The bit offset is read through the pointer at each use (ARTIST adds it as the first
+    // operand, 0x82B8FBD0 / 0x82B8FBE8, and re-reads it after the cursor store, 0x82B8FBFC).
     s32 iTailBits = 0;
-    if (iBitOffset > 0x3FD1)
-        iTailBits = iBitOffset - 0x3FD1;
+    if (*piBitOffset > 0x3FD1)
+        iTailBits = *piBitOffset - 0x3FD1;
 
     const s32 iFirstBits = 15 - iTailBits;
     const u8 *pStream = *ppCursor;
     u32 uFrameLen = 0;
-    LeftShiftInBits(&uFrameLen, pStream, iBitOffset + 32, iFirstBits);
-    LeftShiftInBits(&uFrameLen, pStream, iFirstBits + iBitOffset + 64, iTailBits);
+    LeftShiftInBits(&uFrameLen, pStream, *piBitOffset + 32, iFirstBits);
+    LeftShiftInBits(&uFrameLen, pStream, *piBitOffset + iFirstBits + 64, iTailBits);
 
-    u32 uNext = uFrameLen + iBitOffset;
+    u32 uNext = *piBitOffset + uFrameLen;
     if (uNext >= 0x3FE0u)
     {
         *ppCursor = pStream + 2048;

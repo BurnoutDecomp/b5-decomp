@@ -49,7 +49,7 @@ struct AptFile;
 // ---------------------------------------------------------------------------
 int AptSharedPtrIncRef(AptFile* pData);
 int AptSharedPtrDecRef(AptFile* pData);
-int AptSharedPtrDelete(AptFile* pData);
+void AptSharedPtrDelete(AptFile* pData);   // void: 0x82AFAE70 leaves Deallocate's r3
 
 inline void AptSharedPtrDisposeDebugHook(const void* /*a1*/, int /*a2*/, const char* /*a3*/) {}
 
