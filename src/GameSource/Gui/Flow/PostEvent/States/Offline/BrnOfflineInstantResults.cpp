@@ -1689,13 +1689,13 @@ namespace BrnGui
         {
             if (std::strcmp(mFinishedText.GetName(), lpacName) == 0)
             {
-                mFinishedText.SetText(mFinishedText.GetText());
+                mFinishedText.RefreshText();
                 return;
             }
 
             if (std::strcmp(mTargetResultText.GetName(), lpacName) == 0)
             {
-                mTargetResultText.SetText(mTargetResultText.GetText());
+                mTargetResultText.RefreshText();
                 return;
             }
 

@@ -585,15 +585,15 @@ namespace BrnGui
                     // TextField::SetText(field, field+0xA4) -- i.e. its own macText).
                     if (std::strcmp(lpTrigger->mpacComponentName, mMonthTextField.GetName()) == 0)
                     {
-                        mMonthTextField.SetText(mMonthTextField.GetText());
+                        mMonthTextField.RefreshText();
                     }
                     else if (std::strcmp(lpTrigger->mpacComponentName, mDayTextField.GetName()) == 0)
                     {
-                        mDayTextField.SetText(mDayTextField.GetText());
+                        mDayTextField.RefreshText();
                     }
                     else if (std::strcmp(lpTrigger->mpacComponentName, mYearTextField.GetName()) == 0)
                     {
-                        mYearTextField.SetText(mYearTextField.GetText());
+                        mYearTextField.RefreshText();
                     }
                     else
                     {

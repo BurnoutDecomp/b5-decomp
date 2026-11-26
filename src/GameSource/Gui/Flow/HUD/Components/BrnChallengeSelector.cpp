@@ -109,7 +109,7 @@ void ChallengeSelector::HandleLoadNotification(const char* lpacName)
     {
         if (std::strcmp(lpacName, mTextfield.GetName()) == 0)
         {
-            mTextfield.SetText(mTextfield.GetText());
+            mTextfield.RefreshText();
         }
     }
     else if (mbVisible)

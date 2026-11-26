@@ -1388,7 +1388,7 @@ void CrashNavIconRenderer::CalculateUVsForIndex(s32 liIndex,
 // ---------------------------------------------------------------------------
 GuiEventDrawEventIcons::EIconDisplayType CrashNavIconRenderer::GetActiveIconType() const
 {
-    if (mbOldTypeFading)
+    if (mbOldTypeFading == true)   // cmplwi 1 @0x82456C78
         return meFadingIconDisplayType;
     return meIconDisplayType;
 }

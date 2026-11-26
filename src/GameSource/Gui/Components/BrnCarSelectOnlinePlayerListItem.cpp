@@ -66,11 +66,11 @@ namespace BrnGui
     {
         if (std::strcmp(mGamertagTextfield.GetName(), lpacName) == 0)
         {
-            mGamertagTextfield.SetText(mGamertagTextfield.GetText());
+            mGamertagTextfield.RefreshText();
         }
         else if (std::strcmp(mCarTextfield.GetName(), lpacName) == 0)
         {
-            mCarTextfield.SetText(mCarTextfield.GetText());
+            mCarTextfield.RefreshText();
         }
         else if (std::strcmp(GetName(), lpacName) == 0)
         {

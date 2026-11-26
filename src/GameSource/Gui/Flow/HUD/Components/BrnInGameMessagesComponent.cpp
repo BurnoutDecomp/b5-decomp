@@ -262,12 +262,12 @@ namespace
     // the arg; reproduced as the full 64-bit hashes. Touches no members.
     bool InGameMessagesComponent::IsMessageUpdatable(CgsID lMessageId) const
     {
-        if (lMessageId == 0xB9390CF6BDFC2D84ULL)
+        // One condition, two returns (ARTIST: the three compares branch to a shared li r3,1).
+        if (lMessageId == 0xB9390CF6BDFC2D84ULL || lMessageId == 0xB9390CF6BDFC65B5ULL ||
+            lMessageId == 0xB9390CEDADB37000ULL)
+        {
             return true;
-        if (lMessageId == 0xB9390CF6BDFC65B5ULL)
-            return true;
-        if (lMessageId == 0xB9390CEDADB37000ULL)
-            return true;
+        }
         return false;
     }
 

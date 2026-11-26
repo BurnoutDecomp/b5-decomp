@@ -65,7 +65,7 @@ bool OnlineLoadingPlayer::HandleLoadNotification(const char* lpacNotification)
     // Gamertag clip loaded: re-push the stored text (guest reads mGamertag.macText at
     // field+0xA4 and feeds it back through SetText).
     if (std::strcmp(lpacNotification, mGamertag.GetName()) == 0)
-        mGamertag.SetText(mGamertag.GetText());
+        mGamertag.RefreshText();
 
     // Crown clip loaded: re-assert the crown icon to its current state -- "crown" when
     // set / "invisible" when clear (X360 0x82419E7C..0x82419EC8; bool normalise inlined).

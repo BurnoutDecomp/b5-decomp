@@ -679,16 +679,21 @@ namespace BrnGui
                    "E_LICENSE_FIRST_RESOURCE_LOADED == meCurrentLicenseState", CGS_ARTIST_FILE, 745);   // cpp:745
 
         mbForceCentred = lbForceCentred;
-        SetState(lbForceCentred ? "upgradedTransIn" : "transIn");
+        // One SetState per arm ("transIn" first, cross-jumped into one bl @0x82440D04).
+        if (!lbForceCentred)
+            SetState("transIn");
+        else
+            SetState("upgradedTransIn");
 
-        mPlayerNameTextField.SetText(mPlayerNameTextField.GetText());
-        mNextRankTextField.SetText(mNextRankTextField.GetText());
+        // TextField::RefreshText (DWARF BrnTextField.h:215; `addi r4, r3, 0xA4` @0x82440D0C).
+        mPlayerNameTextField.RefreshText();
+        mNextRankTextField.RefreshText();
         UpdateDirt();
 
         mbHiding = false;
 
         bool lbOneWinFromUpgrade = false;
-        if (!mbElite)
+        if (mbElite != true)   // cmplwi 1; beq @0x82440D30
         {
             // X360: the GuiCache::GetWorldDataController assert (BrnGuiCache.h:2324) is
             // inlined here, then GetRequiredWinsInRank(miCurrentRank).
@@ -696,9 +701,10 @@ namespace BrnGui
                 lbOneWinFromUpgrade = true;
         }
 
-        meCurrentLicenseState = (lbOneWinFromUpgrade && mbShowUpgradePending)
-                                    ? E_LICENSE_SHOWING_UPGRADE_PENDING
-                                    : E_LICENSE_SHOWING_NORMAL;
+        if (lbOneWinFromUpgrade == true && mbShowUpgradePending == true)
+            meCurrentLicenseState = E_LICENSE_SHOWING_UPGRADE_PENDING;
+        else
+            meCurrentLicenseState = E_LICENSE_SHOWING_NORMAL;
 
         CGS_ASSERT_AT(mpProfile != 0, "mpProfile", CGS_ARTIST_FILE, 787);   // cpp:787
 
@@ -896,9 +902,9 @@ namespace BrnGui
         if (lbVisible == true)
         {
             TextField& lrPlayerName = mPlayerNameTextField;
-            lrPlayerName.SetText(lrPlayerName.GetText());
+            lrPlayerName.RefreshText();
             TextField& lrNextRank = mNextRankTextField;
-            lrNextRank.SetText(lrNextRank.GetText());
+            lrNextRank.RefreshText();
 
             if (mbFinishedGame || mbElite)
             {

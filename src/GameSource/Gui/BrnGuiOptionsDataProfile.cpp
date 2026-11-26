@@ -92,22 +92,22 @@ bool OptionsDataProfile::ValidateProfile()
 
     const s32 liVersion = miVersionNumber;   // lwz r29, 0(r3)
 
-    if (liVersion == KI_VERSION_NUMBER)
+    // The mismatch arm returns inside the if (ARTIST beq to the shared `return true` tail).
+    if (liVersion != KI_VERSION_NUMBER)
     {
-        return true;
+        if ((Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *Log::gpDebugPrint
+                << "Options Data Profile version mismatch, expected "
+                << KI_VERSION_NUMBER
+                << ", got "
+                << liVersion
+                << "\n";
+        }
+        return false;
     }
 
-    if ((Message::gxMessageFilterFlags & 1) != 0)
-    {
-        *Log::gpDebugPrint
-            << "Options Data Profile version mismatch, expected "
-            << KI_VERSION_NUMBER
-            << ", got "
-            << liVersion
-            << "\n";
-    }
-
-    return false;
+    return true;
 }
 
 // ---------------------------------------------------------------------------

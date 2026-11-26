@@ -291,7 +291,7 @@ namespace BrnGui
             {
                 for (u32 luField = 0; luField < KU_NUM_STAT_TEXTFIELDS; ++luField)
                 {
-                    maStatTextfields[luField].SetText(maStatTextfields[luField].GetText());
+                    maStatTextfields[luField].RefreshText();
                 }
             }
             lbReturnValue = true;

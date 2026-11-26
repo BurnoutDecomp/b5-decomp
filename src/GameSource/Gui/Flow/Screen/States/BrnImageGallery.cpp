@@ -1033,14 +1033,16 @@ namespace BrnGui
     // The help-bar buttons: none without images, else the lock or unlock set.
     void ImageGalleryState::SetupButtons()
     {
+        // ARTIST tests the empty category first (cmpwi 0; bgt @0x824848D8) and the unlocked
+        // state first (cmplwi 0; bne -> "imageX360Unlock").
         const char* lpacState;
-        if (maiPhotoCountPerCategory[GetCurrentCategory()] > 0)
+        if (maiPhotoCountPerCategory[GetCurrentCategory()] <= 0)
         {
-            lpacState = mbIsCurrentLocked ? "imageX360Unlock" : "imageX360Lock";
+            lpacState = "noImage";
         }
         else
         {
-            lpacState = "noImage";
+            lpacState = !mbIsCurrentLocked ? "imageX360Lock" : "imageX360Unlock";
         }
         mButtonAnimator.AddOutputAptViewState("apt_Transition", lpacState, false);
     }

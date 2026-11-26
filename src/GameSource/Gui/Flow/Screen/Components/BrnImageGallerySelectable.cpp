@@ -67,13 +67,13 @@ bool ImageGallerySelectable::HandleLoadNotifications(const char* lpacComponentNa
 {
     if (std::strcmp(mCategoryText.GetName(), lpacComponentName) == 0)
     {
-        mCategoryText.SetText(mCategoryText.GetText());
+        mCategoryText.RefreshText();
         return true;
     }
 
     if (std::strcmp(mCollectedText.GetName(), lpacComponentName) == 0)
     {
-        mCollectedText.SetText(mCollectedText.GetText());
+        mCollectedText.RefreshText();
         return true;
     }
 

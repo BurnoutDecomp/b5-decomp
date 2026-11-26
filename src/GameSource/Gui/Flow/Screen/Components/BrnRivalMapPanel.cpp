@@ -55,12 +55,12 @@ namespace BrnGui
 
     // The named apt states this panel pushes (all through sub_824E2B90 ==
     // IconComponent::SetState(const char*)).
-    static const char KAC_STATE_PLAYER[]           = "player";
-    static const char KAC_STATE_RIVAL[]            = "rival";
-    static const char KAC_STATE_TRANS_IN_PLAYER[]  = "transInPlayer";
-    static const char KAC_STATE_TRANS_IN_RIVAL[]   = "transInRival";
-    static const char KAC_STATE_TRANS_OUT_PLAYER[] = "transOutPlayer";
-    static const char KAC_STATE_TRANS_OUT_RIVAL[]  = "transOutRival";
+    static const char* const KAC_STATE_PLAYER             = "player";
+    static const char* const KAC_STATE_RIVAL              = "rival";
+    static const char* const KAC_STATE_TRANS_IN_PLAYER    = "transInPlayer";
+    static const char* const KAC_STATE_TRANS_IN_RIVAL     = "transInRival";
+    static const char* const KAC_STATE_TRANS_OUT_PLAYER   = "transOutPlayer";
+    static const char* const KAC_STATE_TRANS_OUT_RIVAL    = "transOutRival";
 
     // The build's shared empty-string literal (X360 &unk_820046A7).
     static const char KAC_EMPTY_STRING[] = "";
@@ -387,15 +387,18 @@ namespace BrnGui
                    CGS_ASSERT_MESSAGE_AT("(0 <= leRivalType) && (E_RIVAL_TYPE_COUNT > leRivalType)", CGS_ARTIST_FILE, 325 /* ARTIST 0x82417944 */));   // cpp:325
 
         // Already showing this exact rival type -> nothing to animate.
-        if (mbActive && meCurrentRivalType == static_cast<s32>(leRivalType))
+        if (mbActive && static_cast<s32>(leRivalType) == meCurrentRivalType)   // cmpw r30(type), r11
         {
             return;
         }
 
         // Type 0 (the offline PLAYER) is the only "player" flavour; every other type animates
         // in as a rival (`cmpwi r30, 0` @0x82417964).
-        SetState((leRivalType != E_RIVAL_TYPE_OFFLINE_PLAYER) ? KAC_STATE_TRANS_IN_RIVAL
-                                                              : KAC_STATE_TRANS_IN_PLAYER);
+        // One SetState per arm (the calls cross-jump into one bl @0x82417984).
+        if (leRivalType == E_RIVAL_TYPE_OFFLINE_PLAYER)
+            SetState(KAC_STATE_TRANS_IN_PLAYER);
+        else
+            SetState(KAC_STATE_TRANS_IN_RIVAL);
         meCurrentRivalType = static_cast<s32>(leRivalType);   // stw 0x5D8
         mbActive           = true;                            // stb 1, 0x7A1
     }
@@ -405,8 +408,12 @@ namespace BrnGui
     {
         // The OUT animation is chosen from the type currently showing (unconditional -- there
         // is no active-flag gate on this side).
-        SetState((meCurrentRivalType != E_RIVAL_TYPE_OFFLINE_PLAYER) ? KAC_STATE_TRANS_OUT_RIVAL
-                                                                    : KAC_STATE_TRANS_OUT_PLAYER);
+        // The player test first (cmpwi 0; bne -> rival @0x824179CC); one SetState per arm
+        // (the calls cross-jump into one bl, so no `mr r3` is needed).
+        if (meCurrentRivalType == E_RIVAL_TYPE_OFFLINE_PLAYER)
+            SetState(KAC_STATE_TRANS_OUT_PLAYER);
+        else
+            SetState(KAC_STATE_TRANS_OUT_RIVAL);
         meCurrentRivalType = E_RIVAL_TYPE_COUNT;   // stw 4, 0x5D8
         mbActive           = false;                // stb 0, 0x7A1
     }

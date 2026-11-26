@@ -493,9 +493,10 @@ void HudMessageDirector::Update(CgsGui::ModelIO::InputBuffer* lpModelInputBuffer
     // ---- 1. the deferred ("wait until the gameplay HUD is up") message ---------------
     // The X360 reads the gate byte twice off the cache (`lwz r11, 0x4818(r31)` then
     // `lbz r11, 0x407C(r11)`), so it is re-read after the send arm.
-    if (mpGuiCache->mbGameplayHudActive
+    // The bools compare with true (cmplwi 1 @0x82516124 / 0x8251613C / 0x82516164 / 0x82516178).
+    if (mpGuiCache->mbGameplayHudActive == true
         && !mbLastFrameHudMessageState
-        && mbMessagePending
+        && mbMessagePending == true
         && mpController != 0)
     {
         // `li r5, 0; addi r4, r31, 0x4820` -- the CACHED message, not forced.
@@ -504,7 +505,7 @@ void HudMessageDirector::Update(CgsGui::ModelIO::InputBuffer* lpModelInputBuffer
 
     mbLastFrameHudMessageState = mpGuiCache->mbGameplayHudActive;
 
-    if (mbMessagePending && mpGuiCache->mbGameplayHudActive)
+    if (mbMessagePending == true && mpGuiCache->mbGameplayHudActive == true)
     {
         // `li r5, 0x348` -- the X360 sizeof(GuiHudMessage). The host record is wider, so
         // the wipe rides sizeof (semantic parity: clear the WHOLE cached message).

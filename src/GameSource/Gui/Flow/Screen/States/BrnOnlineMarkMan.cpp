@@ -330,7 +330,7 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
                 if (lpTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD &&
                     std::strcmp(lpTrigger->mpacComponentName, mTimeField.GetName()) == 0)
                 {
-                    mTimeField.SetText(mTimeField.GetText());
+                    mTimeField.RefreshText();
                 }
             }
             else if (liEventId == KI_EVENT_CONNECTION_LOST)

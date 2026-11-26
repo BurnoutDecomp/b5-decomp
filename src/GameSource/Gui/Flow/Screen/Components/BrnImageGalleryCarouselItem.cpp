@@ -63,7 +63,7 @@ namespace BrnGui
         if (std::strcmp(lpacComponentName, mGamertag.GetName()) == 0)
         {
             // The gamertag field just loaded: re-push its stored text.
-            mGamertag.SetText(mGamertag.GetText());
+            mGamertag.RefreshText();
             return true;
         }
 

@@ -341,7 +341,7 @@ void OnlineYouWin::UpdatePermanent()
             if (lpTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD &&
                 std::strcmp(lpTrigger->mpacComponentName, mTimeUntillClickTextfield.GetName()) == 0)
             {
-                mTimeUntillClickTextfield.SetText(mTimeUntillClickTextfield.GetText());
+                mTimeUntillClickTextfield.RefreshText();
                 return;
             }
         }
