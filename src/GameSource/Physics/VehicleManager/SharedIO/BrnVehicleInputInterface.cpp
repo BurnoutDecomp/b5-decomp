@@ -3,6 +3,7 @@
 #define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#define KAC_BRNVEHICLEINPUTINTERFACE_H "..\\..\\..\\GameSource\\Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"  // ARTIST header asserts
 #include "rw/math/vpu/vector3_operation.h"          // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"   // rw::math::vpu::IsValid(Matrix44Affine)
 #include "GameSource/World/BrnEntityTypes.h"
@@ -111,15 +112,15 @@ namespace Vehicle
             bool             lbIsCab,
             CgsID            lCgsID)
     {
-        CGS_ASSERT(leTrafficType < E_TRAFFIC_TYPE_COUNT,
-                   "leTrafficType < BrnPhysics::Vehicle::E_TRAFFIC_TYPE_COUNT");     // .h:483
-        CGS_ASSERT(rw::math::vpu::IsValid(lInitialTransform),
-                   "rw::math::IsValid( lInitialTransform )");                        // .h:484
-        CGS_ASSERT(rw::math::vpu::IsValid(lInitialVelocity),
-                   "rw::math::IsValid( lInitialVelocity )");                         // .h:485
-        CGS_ASSERT(rw::math::vpu::IsValid(lAngularVelocity),
-                   "rw::math::IsValid( lAngularVelocity )");                         // .h:486
-
+        // Header-inline on the original: ARTIST asserts on BrnVehicleInputInterface.h:483..486.
+        CGS_ASSERT_AT(leTrafficType < E_TRAFFIC_TYPE_COUNT,
+                   "leTrafficType < BrnPhysics::Vehicle::E_TRAFFIC_TYPE_COUNT", KAC_BRNVEHICLEINPUTINTERFACE_H, 483);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lInitialTransform),
+                   "rw::math::IsValid( lInitialTransform )", KAC_BRNVEHICLEINPUTINTERFACE_H, 484);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lInitialVelocity),
+                   "rw::math::IsValid( lInitialVelocity )", KAC_BRNVEHICLEINPUTINTERFACE_H, 485);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lAngularVelocity),
+                   "rw::math::IsValid( lAngularVelocity )", KAC_BRNVEHICLEINPUTINTERFACE_H, 486);
         CreatePhysicalTrafficEvent lEvent;
         lEvent.mVolumeInstanceID  = lVolumeInstanceId;
         lEvent.mCrasherID         = lCrasherId;

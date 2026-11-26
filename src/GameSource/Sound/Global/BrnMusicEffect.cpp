@@ -646,14 +646,14 @@ void MusicEffect::UpdatePreviewTrack(bool abCustomSoundtrack)
     {
         Module::SoundLogicModule* lpModule =
             static_cast<Module::SoundLogicModule*>(mpLogicModule);
-        CGS_ASSERT(lpModule, "lpLogicModule");   // BrnMusicEffect.cpp:1755
+        CGS_ASSERT_AT(lpModule, "lpLogicModule", BRN_MUSICEFFECT_CPP_FILE, 1755);
 
         Attrib::Gen::songlist lSongList(lpModule->GetGlobalData().SongList(), 0);
         Attrib::Gen::song lSong(lSongList.Songs(static_cast<u32>(liPreviewSong)), 0);
 
-        const char* lpcStream = lSong.Stream();
-        const u32 luContentSpec = lpcStream
-            ? static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpcStream)) : 0u;
+        // ARTIST 0x826F7140..0x826F714C hashes the song's stream name unconditionally.
+        const u32 luContentSpec = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lSong.Stream()));
+
 
         // ⚠️ THE OUTPUT SLOT IS THE PREVIEW FLAG, INVERTED. X360 0x826F7150..0x826F7170
         // reads mEaTraxData.mbPlayFromEATraxSlider, turns it into 0 or -1, clears bit 3 (`rlwinm r11,r11,0,

@@ -165,7 +165,7 @@ bool AemsPlayerVoice::DoRemove()
         Stop();
         mbRemoving = true;
     }
-    return mpFirstPlayer == 0;
+    return 0 == mpFirstPlayer;   // constant first: ARTIST's addi rX,rX,0 before cntlzw (0x826DAFC8)
 }
 
 bool AemsPlayerVoice::Play(u32 /*au32Param*/)

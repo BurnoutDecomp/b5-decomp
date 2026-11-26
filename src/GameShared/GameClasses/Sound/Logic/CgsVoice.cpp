@@ -176,7 +176,7 @@ bool Voice::IsReady() const
 {
     bool lbResult = false;
     if (mVoiceHandle)
-        lbResult = mVoiceHandle->GetPlaybackState() != Playback::E_PLAYBACK_STATE_INVALID;
+        lbResult = Playback::E_PLAYBACK_STATE_INVALID != mVoiceHandle->GetPlaybackState();   // ARTIST addi 0x826943D4
     return lbResult;
 }
 

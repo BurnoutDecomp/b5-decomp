@@ -6472,7 +6472,7 @@ void PropManager::UpdateTriangleCache(
     CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update)
 {
     // BrnPropManager.cpp:2283 -- non-gating tripwire (the asm falls through).
-    CGS_ASSERT(lpSceneInputBuffer_Update != NULL, "lpSceneInputBuffer_Update != NULL");
+    CGS_ASSERT_AT(lpSceneInputBuffer_Update != NULL, "lpSceneInputBuffer_Update != NULL", CGS_ARTIST_FILE, 2283);
 
     // The bound is re-read every iteration (lwz 0x688 at both 0x826119EC and 0x82611B4C).
     for (s32 liEvent = 0; liEvent < mUpdatedProps.GetLength(); ++liEvent)
@@ -6494,8 +6494,8 @@ void PropManager::UpdateTriangleCache(
         }
 
         // BrnPropManager.cpp:2302 -- non-gating tripwire.
-        CGS_ASSERT(rw::math::vpu::IsValid(lrEvent.mTransform.Pos()),
-                   "RwMathVPU::IsValid( lEvent.mTransform.Pos() )");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lrEvent.mTransform.Pos()),
+                   "RwMathVPU::IsValid( lEvent.mTransform.Pos() )", CGS_ARTIST_FILE, 2302);
 
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdateInterface =
             lpSceneInputBuffer_Update->GetInSceneUpdateInterface();
