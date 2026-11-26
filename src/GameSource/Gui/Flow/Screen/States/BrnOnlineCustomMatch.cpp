@@ -198,35 +198,33 @@ namespace BrnGui
     // ================================================================================
     void OnlineCustomMatch::ShowParamSelection()
     {
-        mMessageAnimation.AddOutputAptViewState("apt_Transition",
-                                                KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
-                                                false);
-        mMessageButtonsAnimation.AddOutputAptViewState("apt_Transition",
-                                                       KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
-                                                       false);
-        mFoundGamesAnimation.AddOutputAptViewState("apt_Transition",
-                                                   KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
-                                                   false);
-        mButtonPromptAnimation.AddOutputAptViewState("apt_Transition",
-                                                     KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
-                                                     false);
-        mSearchParamsAnimation.AddOutputAptViewState("apt_Transition",
-                                                     KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
-                                                     false);
+        // DWARF (BrnGuiOnlineScreenUnity): five inlined AnimationComponent::Run calls, the last
+        // inside the scope of the cpp:1047..1049 locals.
+        mMessageAnimation.Run(KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE]);
+        mMessageButtonsAnimation.Run(KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE]);
+        mFoundGamesAnimation.Run(KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE]);
+        mButtonPromptAnimation.Run(KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE]);
+
+        // DWARF locals cpp:1047..1049: a five-slot string array (ARTIST's frame is 0x90, which
+        // that size gives), its index and the entry count.
+        const char* lapcStringIDs[5];
+        int32_t     liIndex;
+        int32_t     liEntries;
+
+        mSearchParamsAnimation.Run(KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE]);
 
         // Two live rows, no wrap (X360 `li r4, 2` / `li r5, 0`).
         mSearchParms.SetupGroup(2, 0);
 
         // Row 0 -- the game-mode filter. Its option captions are the display strings of the
-        // mode-mapping table (the compiler unrolled this copy into three lwz/stw pairs).
-        const s32   KI_NUM_GAME_MODE_OPTIONS = 3;   // X360 `li r5, 3` == the table's extent
-        const char* lapcGameModeOptions[KI_NUM_GAME_MODE_OPTIONS];
-        for (s32 li = 0; li < KI_NUM_GAME_MODE_OPTIONS; ++li)
+        // mode-mapping table (the compiler unrolled this copy into three lwz/stw pairs; X360
+        // `li r5, 3` is the table's extent).
+        liEntries = sizeof(KA_GAME_MODE_SEARCH_OPTION_STRING_IDS) / sizeof(KA_GAME_MODE_SEARCH_OPTION_STRING_IDS[0]);
+        for (liIndex = 0; liIndex < liEntries; ++liIndex)
         {
-            lapcGameModeOptions[li] = KA_GAME_MODE_SEARCH_OPTION_STRING_IDS[li].mpcStringID;
+            lapcStringIDs[liIndex] = KA_GAME_MODE_SEARCH_OPTION_STRING_IDS[liIndex].mpcStringID;
         }
-        mSearchParms.SetupToggle(0, KI_NUM_GAME_MODE_OPTIONS, true, KAC_GAME_MODE_STRING_ID,
-                                 lapcGameModeOptions, 0);
+        mSearchParms.SetupToggle(0, liEntries, true, KAC_GAME_MODE_STRING_ID, lapcStringIDs, 0);
 
         // Row 1 -- the opponents filter (any / friends+rivals / friends / rivals). The option
         // table is const in this class but SetupToggle's owning header takes a plain

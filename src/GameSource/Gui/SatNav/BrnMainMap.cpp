@@ -80,8 +80,8 @@ namespace BrnGui
 
     namespace
     {
-        // BrnMainMap.cpp:96 -- the console's own guard constant (flt_820068C0 = 1000000.0f).
-        const f32 KF_MAX_WORLD_RECT_MAGNITUDE = 1000000.0f;
+        // The world-rect guard is the literal 1000000.0f of the asserts' own text (pool
+        // __real 0x820068C0), not a named constant.
         // The vperm/vaddfp rect-centre halving constant in Prepare (flt_82001DA0 = 0.5f).
         const f32 KF_RECT_CENTRE_SCALE = 0.5f;
         // flt_82F25AD4 = 0x3FE38E39 = 1.7777778f, the 16:9 aspect SetZoom folds into the
@@ -225,7 +225,7 @@ namespace BrnGui
         // cpp:96 -- the console's own sanity check on the world rect it just installed. The
         // vendor Magnitude (vector4_operation_inline.h) carries the console's exact semantics
         // including the vsel zero-dot guard (sqrt(0) == 0).
-        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < 1000000.0f,
                    "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 96);
 
         mbIsZooming  = false;
@@ -372,68 +372,59 @@ namespace BrnGui
     // 1.7777778f, read from the image; the identical constant is what Update passes to
     // ApplyZoom, so it is the aspect ratio, not a magic scale.
     // -------------------------------------------------------------------------
-    void MainMapComponent::SetZoom(ZoomFactor leZoomFactor, f32 lfCustomZoom, bool lbApplyNow)
+    void MainMapComponent::SetZoom(ZoomFactor leZoomFactor, f32 lfZoomLevelForCustom, bool lbFullyZoomInNow)
     {
         // X360 `stw r4, 0x668(r31)` -- unconditionally, before the CUSTOM test.
         meCurrentZoomFactor = leZoomFactor;
 
         if (leZoomFactor == E_ZOOMFACTOR_CUSTOM)
         {
-            // `lfsx f0, (r4<<2), flt_82F259DC` == mfZoomScalFactors[E_ZOOMFACTOR_CUSTOM].
-            const f32 lfExistingZoom = mfZoomScalFactors[leZoomFactor];
-
-            const char* lpacLabel = 0;
-            if (lfCustomZoom < lfExistingZoom)
+            // DWARF (BrnGuiCustomRendererUnity) names one lAudioTrigger per arm (cpp:438 and
+            // cpp:444): two Construct/OutputGuiEvent pairs, which the XDK merges into one call.
+            if (lfZoomLevelForCustom < mfZoomScalFactors[leZoomFactor])
             {
-                lpacLabel = "CodeMapZoomIn";     // a SMALLER world scale == closer in
+                GuiAudioTriggerEvent lAudioTrigger;
+                lAudioTrigger.Construct(KI_AUDIO_ACTION_MENU_CUE, "", "CodeMapZoomIn", "");
+                mpStateInterface->OutputGuiEvent(lAudioTrigger);
             }
-            else if (lfCustomZoom > lfExistingZoom)
+            else if (lfZoomLevelForCustom > mfZoomScalFactors[leZoomFactor])
             {
-                lpacLabel = "CodeMapZoomOut";
-            }
-
-            if (lpacLabel != 0)
-            {
-                GuiAudioTriggerEvent lZoomCue;
-                lZoomCue.Construct(KI_AUDIO_ACTION_MENU_CUE, "", lpacLabel, "");
-                mpStateInterface->OutputGuiEvent(lZoomCue);
+                GuiAudioTriggerEvent lAudioTrigger;
+                lAudioTrigger.Construct(KI_AUDIO_ACTION_MENU_CUE, "", "CodeMapZoomOut", "");
+                mpStateInterface->OutputGuiEvent(lAudioTrigger);
             }
 
             // `lwz r11, 0x668(r31)` -- the console re-reads the member rather than reusing
             // r4, so the index is meCurrentZoomFactor, which it has just written.
-            mfZoomScalFactors[meCurrentZoomFactor] = lfCustomZoom;
+            mfZoomScalFactors[meCurrentZoomFactor] = lfZoomLevelForCustom;
         }
 
-        const ZoomFactor leActiveZoom = meCurrentZoomFactor;
-
-        if (!lbApplyNow)
+        // The apply arm is the fall-through (ARTIST 0x82469ADC `beq` to the desired-only tail
+        // placed last).
+        if (lbFullyZoomInNow)
         {
-            // The 0x82469C50 tail: desired only, no rect rebuild.
-            mfDesiredWorldZoomFactor = mfZoomScalFactors[leActiveZoom];
-            return;
+            // DWARF local lfZoomScaleFactor (cpp:454).
+            f32 lfZoomScaleFactor = mfZoomScalFactors[meCurrentZoomFactor];
+
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 456);
+
+            // DWARF: vpu::operator* (Vector4, VecFloat from the scalar), then Vector4::operator[]
+            // and VecFloatRefIndex::operator*= (the swizzle-table store, ARTIST 0x82469BB0).
+            // The rect is built from the still-current scale.
+            mv4WorldRect = mv4ViewRect * mfWorldZoomScaleFactor;
+            mv4WorldRect[2] *= KF_WORLD_RECT_ASPECT;
+
+            CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < 1000000.0f,
+                       "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 461);
+
+            // `stfs f31, 0x664` then `stfs f31, 0x660` -- desired first, then live.
+            mfDesiredWorldZoomFactor = lfZoomScaleFactor;
+            mfWorldZoomScaleFactor   = lfZoomScaleFactor;
         }
-
-        const f32 lfZoom = mfZoomScalFactors[leActiveZoom];
-
-        // cpp:456 -- the console's own cache assert (it derefs nothing here, but the check
-        // is part of the body and is reproduced faithfully).
-        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 456);
-
-        // mv4WorldRect = mv4ViewRect * <the still-current scale>, then the z lane alone
-        // scaled by the 16:9 aspect (see the vperm note in the banner).
-        const Vector4 lv4Scale(mfWorldZoomScaleFactor, mfWorldZoomScaleFactor,
-                               mfWorldZoomScaleFactor, mfWorldZoomScaleFactor);
-        const Vector4 lv4Aspect(KF_WORLD_RECT_ASPECT, KF_WORLD_RECT_ASPECT, KF_WORLD_RECT_ASPECT, KF_WORLD_RECT_ASPECT);
-        const __vector4 lvScaledRect = __vmulfp(mv4ViewRect.mV, lv4Scale.mV);
-        mv4WorldRect.mV = __vrlimi(lvScaledRect, __vmulfp(lvScaledRect, lv4Aspect.mV), 2, 0);
-
-        // cpp:461 -- same guard Construct fires, on the rect this function just installed.
-        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
-                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 461);
-
-        // `stfs f31, 0x664` then `stfs f31, 0x660` -- desired first, then live.
-        mfDesiredWorldZoomFactor = lfZoom;
-        mfWorldZoomScaleFactor   = lfZoom;
+        else
+        {
+            mfDesiredWorldZoomFactor = mfZoomScalFactors[meCurrentZoomFactor];
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -564,7 +555,7 @@ namespace BrnGui
         mv4WorldRect.mV.w = mv4WorldRect.mV.y + lfHeight;
 
         // cpp:376 -- the same guard Construct / SetZoom fire, on the rect just installed.
-        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < 1000000.0f,
                    "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 376);
 
         Vector2 lv2NewCentre;
@@ -660,10 +651,10 @@ namespace BrnGui
 
         // cpp:405 -- a TWO-lane magnitude (the asm splats lanes 0 and 1 of the squared
         // register and adds them; z/w are never read), hence the Vector2 overload.
-        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv2DesiredCentre) < KF_MAX_WORLD_RECT_MAGNITUDE,
+        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv2DesiredCentre) < 1000000.0f,
                    "RwMathVPU::Magnitude(mv2DesiredCentre) < 1000000.0f", CGS_ARTIST_FILE, 405);
         // cpp:406 -- the four-lane one, on the rect just installed.
-        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < 1000000.0f,
                    "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 406);
 
         // See the [FLAG dead-value] note above: the console computes all three of these and
@@ -790,7 +781,7 @@ namespace BrnGui
                 mv4WorldRect.mV = __vrlimi(lvScaledRect, __vmulfp(lvScaledRect, lv4Aspect.mV), 2, 0);
 
                 // cpp:579 -- the shared four-lane guard on the rect just installed.
-                CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+                CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < 1000000.0f,
                            "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 579);
 
                 // The settled arm's chase divisor is 1.0f, i.e. the centre lands on the
@@ -889,7 +880,7 @@ namespace BrnGui
         mv4WorldRect.mV = __vrlimi(lvScaledRect, __vmulfp(lvScaledRect, lv4Aspect.mV), 2, 0);
 
         // cpp:645
-        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < 1000000.0f,
                    "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 645);
 
         return lv2Result;

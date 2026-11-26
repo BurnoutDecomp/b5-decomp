@@ -353,16 +353,17 @@ namespace BrnGui
         lpItem->Clear();                                 // row slot 6
 
         // The console branches on liNumOptions (`if (a3)`), not on the wrap flag: a row with
-        // no options is set INACTIVE and cleared whatever lbActive says.
-        if (liNumOptions != 0)
-        {
-            lpItem->SetActive(true);                     // row slot 0
-            lpItem->SetupMenuToggle(liNumOptions, lbActive, lpacText, lppacOptions, lpu64Ids);
-        }
-        else
+        // no options is set INACTIVE and cleared whatever lbActive says. The inactive arm is
+        // the one tested first: ARTIST <3> 0x82428438 `bne` to the active arm placed last.
+        if (liNumOptions == 0)
         {
             lpItem->SetActive(false);                    // row slot 0
             lpItem->SetupMenuToggle(0, false, 0, 0, 0);
+        }
+        else
+        {
+            lpItem->SetActive(true);                     // row slot 0
+            lpItem->SetupMenuToggle(liNumOptions, lbActive, lpacText, lppacOptions, lpu64Ids);
         }
     }
 
