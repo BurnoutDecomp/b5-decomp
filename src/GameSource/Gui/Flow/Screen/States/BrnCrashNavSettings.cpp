@@ -134,7 +134,7 @@ namespace BrnGui
 
         // off_82F26EFC .. off_82F26F18 (.rdata, exactly seven pointers): the localisation
         // keys ShowMenu pushes into the seven rows.
-        const char* const KAPC_MENU_TEXT[CrashNavSettings::KI_NUM_MENU_ITEMS] =
+        const char* KAPC_MENU_TEXT[CrashNavSettings::KI_NUM_MENU_ITEMS] =
         {
             "$SettingMenu_1", "$SettingMenu_2", "$SettingMenu_3", "$SettingMenu_4",
             "$SettingMenu_5", "$SettingMenu_6", "$SettingMenu_7"

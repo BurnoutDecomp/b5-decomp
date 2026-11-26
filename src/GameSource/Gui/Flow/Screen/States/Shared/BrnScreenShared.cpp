@@ -16,7 +16,7 @@ namespace BrnGui
     // console game mode); the offline modes 0..9 are null, the online modes carry the
     // splash overlay ids, and the next rodata table starts right after slot 17.
     // -------------------------------------------------------------------------------
-    const char* const KAC_SPLASH_SCREEN_IDS[18] =
+    const char* KAC_SPLASH_SCREEN_IDS[18] =
     {
         0, 0, 0, 0, 0,            // [0]..[4]  offline modes
         0, 0, 0, 0, 0,            // [5]..[9]  offline modes

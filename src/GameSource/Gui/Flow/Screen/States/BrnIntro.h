@@ -110,7 +110,7 @@ namespace BrnGui
         static const s32 miNumEventsObserved;                       // == 8
 
         static const char KAC_SCREENANIM_NAME[15];
-        static const char* const KAPC_SCREEN_FRAMENAMES[E_INTROSTATE_COUNT];  // @0x82F272F0
+        static const char* KAPC_SCREEN_FRAMENAMES[E_INTROSTATE_COUNT];  // @0x82F272F0
         static const char KAC_LICENSECOMP_NAME[12];
         static const char KAC_PHOTOBOOTHCOMP_NAME[15];
         static const char KAC_BUTTONPROMPTCOMP_NAME[10];

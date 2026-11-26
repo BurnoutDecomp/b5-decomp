@@ -70,8 +70,15 @@ namespace BrnGui
         void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
 
         // Return the singleton instance pointer, asserting it is non-null (the assert is
-        // non-fatal; the pointer is returned either way).
-        static GuiDebugComponent* GetSingletonPtr();
+        // non-fatal; the pointer is returned either way). DWARF BrnGuiDebugComponent.h:117:
+        // defined in the header; ARTIST's copy 0x824ECC40 asserts at h:119 under the header's
+        // full original path and reloads mspSingletonThis for the return.
+        static GuiDebugComponent* GetSingletonPtr()
+        {
+            CGS_ASSERT_AT(mspSingletonThis, "mspSingletonThis",
+                          "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\BrnGuiDebugComponent.h", 119);
+            return mspSingletonThis;
+        }
 
     protected:
         const char* GetName() const ;

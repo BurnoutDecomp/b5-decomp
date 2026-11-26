@@ -38,7 +38,7 @@ namespace BrnGui
     const char GuiNetworkPlayerStats::KAC_APT_STATE[10]                        = "apt_state";
     const char GuiNetworkPlayerStats::KAC_PLAYER_IMAGE_INDEX[17]               = "PlayerImageIndex";
 
-    const char* const GuiNetworkPlayerStats::KAPC_STATE_ID[E_STATE_COUNT] =
+    const char* GuiNetworkPlayerStats::KAPC_STATE_ID[E_STATE_COUNT] =
     {
         "visible",     // E_STATE_VISIBLE   (off_82F25028[0] -> 0x82049C28, X360-attested)
         "invisible",   // E_STATE_INVISIBLE (off_82F2502C  -> 0x8204B4F8, X360-attested)
@@ -252,7 +252,7 @@ namespace BrnGui
         const u32 KU_WORLD_RANK_PRINT_SIZE = 10;
     }
 
-    const char* const GuiNetworkPlayerStats::KAPC_STAT_DESCRIPTION_STRING_ID[KI_MAX_STAT_ROWS] =
+    const char* GuiNetworkPlayerStats::KAPC_STAT_DESCRIPTION_STRING_ID[KI_MAX_STAT_ROWS] =
     {
         "$ONLINE_STAT_FREEBURN_CHALLENGES",
         "$ONLINE_STAT_NUM_TAKEDOWNS",

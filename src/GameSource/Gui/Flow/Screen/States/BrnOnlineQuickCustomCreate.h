@@ -75,8 +75,8 @@ namespace BrnGui
 
         static const char        KAC_NEW_NEWS_ANIMATION_COMPONENT[18];   // "NewNewsTransition"
         static const char        KAC_MAIN_MENU_COMPONENT[9];             // "MenuItem"
-        static const char* const KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT];
-        static const char* const KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT];
+        static const char* KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT];
+        static const char* KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT];
 
         // ---- data members (declaration order; console offsets in the comments) -------
         GuiCache*          mpGuiCache;           // +0x38

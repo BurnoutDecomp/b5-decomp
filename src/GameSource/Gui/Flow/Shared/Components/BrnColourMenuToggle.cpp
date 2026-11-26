@@ -24,7 +24,7 @@ namespace BrnGui
     // "pattern" guesses are confirmed byte-for-byte:
     //   0x82F27474 "ItemColourM2"  0x82F27478 "ItemColourM1"  0x82F2747C "ItemColour"
     //   0x82F27480 "ItemColourP1"  0x82F27484 "ItemColourP2"
-    const char* const ColourMenuToggle::KAC_ITEM_COLOUR_COMPONENT[ColourMenuToggle::KI_NUM_ITEMS] =
+    const char* ColourMenuToggle::KAC_ITEM_COLOUR_COMPONENT[ColourMenuToggle::KI_NUM_ITEMS] =
     {
         "ItemColourM2",   // [0]
         "ItemColourM1",   // [1]
@@ -44,7 +44,7 @@ namespace BrnGui
     // See the long note on BrnGui::MenuToggle::KAC_STATE_NAMES for the mechanism: the value is
     // the argument of the movie's own gotoAndPlay(), B5MENUITEMCOLOURPICKER.bundle labels its
     // bands `selected`/`unselected`, and an unresolvable label leaves the clip on `invisible`.
-    const char* const ColourMenuToggle::KAC_STATE_NAMES[ColourMenuToggle::E_MENUTOGGLESTATES_COUNT] =
+    const char* ColourMenuToggle::KAC_STATE_NAMES[ColourMenuToggle::E_MENUTOGGLESTATES_COUNT] =
     {
         "Invisible",     // [0] E_MENUTOGGLESTATES_UNUSED (aliases INVISIBLE's string)
         "Invisible",     // [1] E_MENUTOGGLESTATES_INVISIBLE

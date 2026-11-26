@@ -164,10 +164,10 @@ namespace BrnGui
         // @ 0x82F26C94 (7 string pointers): launched-result -> overlay message string id
         // (entry 0 is the pooled empty string; results 1..6 are the ONLINE_LAUNCHED_FAILED_*
         // ids). HandleLaunchedEvent indexes it with the non-zero result word.
-        static const char* const KPC_LAUNCH_FAILED_STRINGIDS[7];
+        static const char* KPC_LAUNCH_FAILED_STRINGIDS[7];
         // @ 0x82F26CB0 (17 string pointers, EGameModeType-indexed; only the online modes
         // 10..14 are populated). Consumed by HandleLaunchingEvent.
-        static const char* const KPAC_MODE_STRINGS[18];
+        static const char* KPAC_MODE_STRINGS[18];
 
     protected:
         // ---- members over the CgsGui::State base (X360 offsets are documentary) ----

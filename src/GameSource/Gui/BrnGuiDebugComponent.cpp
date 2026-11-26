@@ -448,12 +448,7 @@ const char* GuiDebugComponent::GetPath() const
 }
 
 // @ 0x824ECC40
-GuiDebugComponent* GuiDebugComponent::GetSingletonPtr()
-{
-    GuiDebugComponent* lpSingleton = mspSingletonThis;
-    CGS_ASSERT( lpSingleton != 0, "mspSingletonThis" );
-    return lpSingleton;
-}
+// GetSingletonPtr is header-inline (BrnGuiDebugComponent.h).
 
 void GuiDebugComponent::OnActivate()
 {

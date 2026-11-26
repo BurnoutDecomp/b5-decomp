@@ -30,11 +30,11 @@ namespace BrnGui
 {
     // The per-category picture frames and their invisible twins (two adjacent four-entry
     // string tables in the image, indexed by EGuiImageCategories).
-    const char* const ImageGalleryCarouselItem::KAPC_CAROUSEL_FRAMES[4] =
+    const char* ImageGalleryCarouselItem::KAPC_CAROUSEL_FRAMES[4] =
     {
         "takedown", "mugshot", "rulebreaker", "finish",
     };
-    const char* const ImageGalleryCarouselItem::KAPC_CAROUSEL_INVISIBLE_FRAMES[4] =
+    const char* ImageGalleryCarouselItem::KAPC_CAROUSEL_INVISIBLE_FRAMES[4] =
     {
         "takedownInvisible", "mugshotInvisible", "rulebreakerInvisible", "finishInvisible",
     };

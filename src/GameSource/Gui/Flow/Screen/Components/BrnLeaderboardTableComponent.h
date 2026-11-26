@@ -76,7 +76,7 @@ namespace BrnGui
         static const char KAC_COLUMN_NAME_TEMPLATE[10];
         // The per-column position apt view-state names ("apt_Pos_<n>"); all
         // ten entries of the .data pointer table read back from the image.
-        static const char* const KAPC_COLUMN_STRINGS[KI_MAX_COLUMNS];
+        static const char* KAPC_COLUMN_STRINGS[KI_MAX_COLUMNS];
 
         LeaderboardColumnComponent  maColumns[KI_MAX_COLUMNS];  // +0x8C   DWARF h:93
         s32                         miColumnsUsed;              // +0x62C  DWARF h:96

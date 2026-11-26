@@ -415,19 +415,10 @@ void FriendsListComponent::RequestRefreshedData()
 
     meDataCollectionState = 0;                                             // @0x82439288
 
-    struct RefreshRequest                                        // wrapper {1,97,12} + pad byte
     {
-        s32 miOutEventSize;
-        s32 miOutEventType;
-        s32 miOutEventOffset;
-        s32 miPayload;
-    } lRequest;
-    lRequest.miOutEventSize   = 1;                               // payload width
-    lRequest.miOutEventType   = 97;                              // 0x61
-    lRequest.miOutEventOffset = 12;
-    lRequest.miPayload        = 0;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lRequest), 40, 16);          // @0x824392A4
+        GuiEventOnlineGetBuddyCount lBuddyCount;                 // DWARF cpp:2364
+        mpStateInterface->OutputGuiEvent(lBuddyCount);           // @0x824392A4
+    }
 }
 
 // @0x824392B8 SetTotalFriends -----------------------------------------------------------
@@ -441,19 +432,8 @@ void FriendsListComponent::SetTotalFriends(s32 liCount)
     miTotalOptions = static_cast<u32>(liCount);                    // @0x82439308
     meDataCollectionState = 1;                                             // @0x8243931C
 
-    struct TallyRequest                                          // wrapper {1,98,12}
-    {
-        s32 miOutEventSize;
-        s32 miOutEventType;
-        s32 miOutEventOffset;
-        s32 miPayload;
-    } lRequest;
-    lRequest.miOutEventSize   = 1;
-    lRequest.miOutEventType   = 98;                              // 0x62
-    lRequest.miOutEventOffset = 12;
-    lRequest.miPayload        = 0;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lRequest), 40, 16);          // @0x82439330
+    GuiEventOnlineGetBuddies lBuddiesRequest;                    // DWARF cpp:2420
+    mpStateInterface->OutputGuiEvent(lBuddiesRequest);           // @0x82439330
 }
 
 // @0x8242B830 BuildChallengeList ----------------------------------------------------------

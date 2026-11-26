@@ -51,8 +51,8 @@ namespace BrnGui
         // The clip frame labels this component drives (XEX .data table @0x82F249BC;
         // slots 1/3 are not consumed by this TU's bodies but belong to the same
         // 5-entry table) and the per-position localisation keys (@0x82F24A8C).
-        static const char* const KAC_APTSTATE_NAMES[5];
-        static const char* const KAC_POSITION_NAMES[9];
+        static const char* KAC_APTSTATE_NAMES[5];
+        static const char* KAC_POSITION_NAMES[9];
 
         TextField mRacePositionTextField;            // X360 +0x8C  ("Text_txt")
         bool      mbVisible;        // X360 +0x1B4

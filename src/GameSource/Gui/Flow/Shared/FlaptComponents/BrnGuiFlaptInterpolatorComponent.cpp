@@ -87,9 +87,9 @@ namespace BrnGui
         CGS_ASSERT(mAptRef.mpMovieClipInst != 0, CGS_ASSERT_MESSAGE_AT("mMovieClipRef.IsValid()", CGS_ARTIST_FILE, 99 /* ARTIST 0x8241D124 */));
 
         // Locate the named child under the base clip's parent and adopt it as the
-        // controlled clip.
-        BrnFlapt::MovieClipRef lParent;
-        lParent = mAptRef.GetParent();
+        // controlled clip. DWARF cpp:102 local lParent, initialised from GetParent (ARTIST
+        // builds it in place at 0x50 and passes that address, 0x8241D130..0x8241D13C).
+        BrnFlapt::MovieClipRef lParent = mAptRef.GetParent();
         mControlledMovieClip = lParent.FindChildMovieClip(lpControlledMovieClipName);
 
         // Record the tween endpoints (X360: stvx128 of the four vector args).

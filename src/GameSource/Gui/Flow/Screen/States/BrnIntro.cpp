@@ -129,7 +129,7 @@ namespace BrnGui
 
     // @0x82F272F0 (.data) -- the "apt_Transition" frame label SetupComponents pushes at
     // mScreenAnim, indexed by meIntroState. Slots 0..6 are the empty string @0x820046A7.
-    const char* const Intro::KAPC_SCREEN_FRAMENAMES[Intro::E_INTROSTATE_COUNT] =
+    const char* Intro::KAPC_SCREEN_FRAMENAMES[Intro::E_INTROSTATE_COUNT] =
     {
         "", "", "", "", "", "", "",
         "WelcomeText1",   // [7] WELCOMETEXT
@@ -180,7 +180,7 @@ namespace BrnGui
         const s32 KI_NUM_MONTH_STRINGIDS = 12;
 
         // @0x82F27E8C (.data) -- the localisation ids for the licence-issued month.
-        const char* const KAPC_MONTH_STRINGIDS[KI_NUM_MONTH_STRINGIDS] =
+        const char* KAPC_MONTH_STRINGIDS[KI_NUM_MONTH_STRINGIDS] =
         {
             "MONTH_SHORT_01", "MONTH_SHORT_02", "MONTH_SHORT_03", "MONTH_SHORT_04",
             "MONTH_SHORT_05", "MONTH_SHORT_06", "MONTH_SHORT_07", "MONTH_SHORT_08",

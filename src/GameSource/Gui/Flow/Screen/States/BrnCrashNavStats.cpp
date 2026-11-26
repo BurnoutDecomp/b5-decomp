@@ -46,7 +46,7 @@ namespace BrnGui
     // index 24 is "nem_cpt" (nemesis) against mGreatestRivalId, 34/35 are "timeRR_cpt"/
     // "crashRR_cpt" against mRoadsRuledTime/mRoadsRuledCrash. Two independently recovered
     // tables agreeing 36 times is what pins both.
-    const char* const CrashNavStats::KAPC_STAT_TEXTFIELD_NAMES[CrashNavStats::KU_NUM_STAT_TEXTFIELDS] =
+    const char* CrashNavStats::KAPC_STAT_TEXTFIELD_NAMES[CrashNavStats::KU_NUM_STAT_TEXTFIELDS] =
     {
         "distOff_cpt",    "distOn_cpt",       "totTime_cpt",    "carsWon_cpt",
         "carsTotal_cpt",  "allMedal_cpt",     "allMedalTot_cpt", "eventMedal_cpt",

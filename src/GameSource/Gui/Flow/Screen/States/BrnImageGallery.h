@@ -113,7 +113,7 @@ namespace BrnGui
         static const s32                    miNumEventsObserved;
         static const CgsGui::sResourceTuple maResourcesToLoad[1];
         static const u32                    muNumResourcesToLoad;
-        static const char* const            KAPC_MENU_TITLES[4];
+        static const char* KAPC_MENU_TITLES[4];
         static const char                   KAC_CAROUSEL_ANIMATOR_NAME[23];
         static const char                   KAC_CAROUSEL_ITEM_LEFT_NAME[20];
         static const char                   KAC_CAROUSEL_ITEM_MIDDLE_NAME[19];

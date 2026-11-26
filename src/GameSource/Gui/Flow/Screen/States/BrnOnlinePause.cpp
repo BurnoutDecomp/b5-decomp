@@ -31,7 +31,7 @@ namespace BrnGui
     const char OnlinePause::KAC_PAUSE_OPTIONS_COMPONENT[7] = "Option";
 
     // The menu rows, top to bottom (indexed by the highlighted row).
-    const char* const OnlinePause::KAPC_PAUSE_OPTION_STRING_IDS[OnlinePause::KI_NUM_COMPONENTS_TO_LOAD] =
+    const char* OnlinePause::KAPC_PAUSE_OPTION_STRING_IDS[OnlinePause::KI_NUM_COMPONENTS_TO_LOAD] =
     {
         "$ONLINE_PAUSE_OPTION_CONTINUE",
         "$ONLINE_PAUSE_OPTION_QUIT",

@@ -134,10 +134,10 @@ namespace BrnGui
         static const char KAC_TOS_TEXT_STRING_ID[10];               // "~TOS_TEXT"
         static const char KAC_CREATE_ACCOUNT_TITLE_STRING_ID[35];   // "$ONLINE_LOGIN_CREATE_ACCOUNT_TITLE"
         static const char* KAPC_LOGIN_QUESTION_STRING_ID[7];  // @0x82F26D94 (by ELoginQuestion)
-        static const char* const KAPC_TOS_BUTTON_STRING_ID[2];      // @0x82F26E40
-        static const char* const KAPC_YES_NO_BUTTON_STRING_ID[2];   // @0x82F26E48
-        static const char* const KAPC_RETRY_CANCEL_BUTTON_STRING_ID[2];  // @0x82F26E50
-        static const char* const KAPC_SUBMIT_CANCEL_BUTTON_STRING_ID[2]; // @0x82F26E58
+        static const char* KAPC_TOS_BUTTON_STRING_ID[2];      // @0x82F26E40
+        static const char* KAPC_YES_NO_BUTTON_STRING_ID[2];   // @0x82F26E48
+        static const char* KAPC_RETRY_CANCEL_BUTTON_STRING_ID[2];  // @0x82F26E50
+        static const char* KAPC_SUBMIT_CANCEL_BUTTON_STRING_ID[2]; // @0x82F26E58
         static const char* KAPC_OK_BUTTON_STRING_ID[1];             // @0x82F26E60
     protected:
         static const char* KAPC_ANIMATION_STATES[4];                   // @0x82F26E64 {"Visible","Invisible","Visible_tos","Visible_no_back"}

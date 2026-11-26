@@ -2485,12 +2485,12 @@ namespace BrnGui
     // the .data slots are initialised on disk, no thunk); the char[] literals are the
     // DWARF-sized strings the header records.
     // =====================================================================================
-    const char* const OnlineCustomMatch::KAPC_ANIMATION_STATES[3] =                  // @0x82F266B0
+    const char* OnlineCustomMatch::KAPC_ANIMATION_STATES[3] =                  // @0x82F266B0
     {
         "Visible", "Invisible", "Refresh"
     };
 
-    const char* const OnlineCustomMatch::KAPC_GAME_MODE_STRING_IDS[8] =              // @0x82F266BC
+    const char* OnlineCustomMatch::KAPC_GAME_MODE_STRING_IDS[8] =              // @0x82F266BC
     {
         "$ONLINE_GAME_OPTION_MODE_RACE",                  // 0  (mode 10)
         "$ONLINE_GAME_OPTION_MODE_ROAD_RAGE",             // 1  (mode 11)
@@ -2502,7 +2502,7 @@ namespace BrnGui
         "$ONLINE_GAME_OPTION_MODE_STUNT_COOP",            // 7  (mode 17)
     };
 
-    const char* const OnlineCustomMatch::KAPC_OPPONENT_OPTION_STRING_IDS[4] =        // @0x82F266DC
+    const char* OnlineCustomMatch::KAPC_OPPONENT_OPTION_STRING_IDS[4] =        // @0x82F266DC
     {
         "$ONLINE_GAME_SEARCH_OPTION_ANY",
         "$ONLINE_GAME_SEARCH_OPTION_FRIENDS_AND_RIVALS",
@@ -2510,12 +2510,12 @@ namespace BrnGui
         "$ONLINE_GAME_SEARCH_OPTION_RIVALS",
     };
 
-    const char* const OnlineCustomMatch::KAPC_YES_NO_BUTTON_STRING_ID[2] =           // @0x82F266A4
+    const char* OnlineCustomMatch::KAPC_YES_NO_BUTTON_STRING_ID[2] =           // @0x82F266A4
     {
         "$GENERAL_OPTION_YES", "$GENERAL_OPTION_NO"
     };
 
-    const char* const OnlineCustomMatch::KAPC_OK_BUTTON_STRING_ID[1] =               // @0x82F266AC
+    const char* OnlineCustomMatch::KAPC_OK_BUTTON_STRING_ID[1] =               // @0x82F266AC
     {
         "$GENERAL_OPTION_OK"
     };

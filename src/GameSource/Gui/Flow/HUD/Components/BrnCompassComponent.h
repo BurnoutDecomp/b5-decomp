@@ -136,7 +136,7 @@ namespace BrnGui
         // BrnCompassComponent.h:105 -- per-route-state animator frame names, indexed by
         // EPlayerRouteState. An attested class static; all three entries are recovered
         // in the .cpp (p0 wave 2026-09-08) -- "onTrack" / "offTrack" / "neither".
-        static const char* const KAPC_PLAYER_ROUTE_STATES[E_PLAYER_ROUTE_COUNT];
+        static const char* KAPC_PLAYER_ROUTE_STATES[E_PLAYER_ROUTE_COUNT];
 
         // BrnCompassComponent.h:44
         typedef FlaptAnimatorComponent MarkerAnimatorType;

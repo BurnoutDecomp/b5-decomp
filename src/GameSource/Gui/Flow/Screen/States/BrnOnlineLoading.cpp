@@ -62,7 +62,7 @@ namespace BrnGui
     const char OnlineLoading::KAC_ROUTE_INFO_NAME[10]          = "RouteInfo";
     const char OnlineLoading::KAC_ANIMATION_COMPONENT_NAME[15] = "PlayersHeading";
 
-    const char* const OnlineLoading::KAPC_ANIMATION_STATES[2] = { "visible", "invisible" };
+    const char* OnlineLoading::KAPC_ANIMATION_STATES[2] = { "visible", "invisible" };
 
     namespace
     {

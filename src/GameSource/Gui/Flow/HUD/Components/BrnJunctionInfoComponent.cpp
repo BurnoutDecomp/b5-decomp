@@ -99,7 +99,7 @@ namespace BrnGui
     // GameModeIcon animator to (DWARF static KAPC_GAMEMODE_ICON_FRAMENAMES; the X360 body
     // indexes it as off_82F24ECC[mode] with the mode-5 arm special-cased). Contents
     // RECOVERED from the image 2026-08-25 (11 pointers at 0x82F24ECC; scratch h1_dump2.txt).
-    const char* const JunctionInfoComponent::KAPC_GAMEMODE_ICON_FRAMENAMES[11] =
+    const char* JunctionInfoComponent::KAPC_GAMEMODE_ICON_FRAMENAMES[11] =
     {
         "race",           // 0  E_MODE_OFFLINE_RACE
         "default",        // 1  (faceoff)

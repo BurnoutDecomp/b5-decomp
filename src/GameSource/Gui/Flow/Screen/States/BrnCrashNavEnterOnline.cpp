@@ -82,19 +82,19 @@ namespace BrnGui
     // ---- the option-pair tables the two-row button menu is dressed from ---------------
     // Each is consumed by a two-entry pointer walk whose bound is the NEXT table's
     // address, so the tables are adjacent in .rdata and their lengths are exact.
-    const char* const CrashNavEnterOnlineBase::KAPC_TOS_BUTTON_STRING_ID[2] =           // @0x82F26E40
+    const char* CrashNavEnterOnlineBase::KAPC_TOS_BUTTON_STRING_ID[2] =           // @0x82F26E40
     {
         "$GENERAL_OPTION_ACCEPT", "$GENERAL_OPTION_DECLINE"
     };
-    const char* const CrashNavEnterOnlineBase::KAPC_YES_NO_BUTTON_STRING_ID[2] =        // @0x82F26E48
+    const char* CrashNavEnterOnlineBase::KAPC_YES_NO_BUTTON_STRING_ID[2] =        // @0x82F26E48
     {
         "$GENERAL_OPTION_YES", "$GENERAL_OPTION_NO"
     };
-    const char* const CrashNavEnterOnlineBase::KAPC_RETRY_CANCEL_BUTTON_STRING_ID[2] =  // @0x82F26E50
+    const char* CrashNavEnterOnlineBase::KAPC_RETRY_CANCEL_BUTTON_STRING_ID[2] =  // @0x82F26E50
     {
         "$GENERAL_OPTION_RETRY", "$GENERAL_OPTION_CANCEL"
     };
-    const char* const CrashNavEnterOnlineBase::KAPC_SUBMIT_CANCEL_BUTTON_STRING_ID[2] = // @0x82F26E58
+    const char* CrashNavEnterOnlineBase::KAPC_SUBMIT_CANCEL_BUTTON_STRING_ID[2] = // @0x82F26E58
     {
         "$GENERAL_OPTION_SUBMIT", "$GENERAL_OPTION_CANCEL"
     };

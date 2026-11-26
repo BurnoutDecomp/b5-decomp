@@ -132,7 +132,7 @@ namespace BrnGui
 
         static const char KAC_EVENT_NAME_TEXTFIELD_NAME[10];            // @0x82065CD0 "EventName"
         static const char KAC_MODE_TYPE_TEXTFIELD_NAME[9];              // "RaceType"
-        static const char* const KAAC_EVENT_DESC_TEXTFIELD_NAMES[5];    // @0x82F26BEC "DescriptionText1".."DescriptionText5"
+        static const char* KAAC_EVENT_DESC_TEXTFIELD_NAMES[5];    // @0x82F26BEC "DescriptionText1".."DescriptionText5"
         static const char KAC_LARGE_EVENT_ICON_NAME[9];                 // "destIcon"
         static const char KAC_STATE_ANIMATOR_NAME[14];                  // "flyByAnim_cpt"
         static const char KAC_STATE_COMPONENT_NAME[12];                 // @0x82065D04 "flyByHud_mc"

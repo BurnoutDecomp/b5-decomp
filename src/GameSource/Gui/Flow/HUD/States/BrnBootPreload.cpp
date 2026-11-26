@@ -151,8 +151,7 @@ namespace BrnGui
     void BootPreload::OnEnter()
     {
         meUpdateStage = E_PRELOAD_WAIT_CACHE;
-        if (mpStateInterface != 0)
-            mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
+        mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);   // unguarded @0x82473A3C
         mpGuiCache = 0;
     }
 

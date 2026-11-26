@@ -55,7 +55,7 @@ namespace BrnGui
 
         // DWARF h:100 -- the per-state apt state names (X360 .data @0x82F27430;
         // strings recovered from the decrypted XEX; UNUSED shares "Invisible").
-        static const char* const KAC_STATE_NAMES[E_MENUITEMSTATES_COUNT];
+        static const char* KAC_STATE_NAMES[E_MENUITEMSTATES_COUNT];
 
         char macItemText[KU_MAX_NAME_LENGTH];   // DWARF h:97 (X360 +0xA4)
         bool mbUpdateText;                      // DWARF h:98 (X360 +0xE4)

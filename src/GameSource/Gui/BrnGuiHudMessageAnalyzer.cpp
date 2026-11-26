@@ -2579,7 +2579,7 @@ const char* const KAPC_TAKEDOWN_TYPES[13] =
 
 // @0x82F278BC -- chained-takedown message ids ("row" == chain length; index chain-2).
 // ConstructTakedownMessage clamps chain overflow (chain-2 >= 9) to the last row.
-const char* const KAPC_TAKEDOWN_CHAIN[9] =
+const char* KAPC_TAKEDOWN_CHAIN[9] =
 {
     "TDGdRow2", "TDGdRow3", "TDGdRow4", "TDGdRow5", "TDGdRow6",
     "TDGdRow7", "TDGdRow8", "TDGdRow9", "TDGdRow10",

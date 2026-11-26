@@ -49,7 +49,7 @@ namespace BrnGui
     // ESignColour (the asm tags index 0 == "Green"); SetColour goto-and-plays the
     // "bg" child clip on this label. Recovered from the ESignColour names + the X360
     // "Green" hint (label strings, not byte-uncertain data).
-    static const char* const KAPC_SIGN_COLOURS[FlaptRoadSignIconComponent::E_SIGN_COLOUR_COUNT] =
+    static const char* KAPC_SIGN_COLOURS[FlaptRoadSignIconComponent::E_SIGN_COLOUR_COUNT] =
     {
         "Green",   // E_SIGN_COLOUR_GREEN
         "Red",     // E_SIGN_COLOUR_RED

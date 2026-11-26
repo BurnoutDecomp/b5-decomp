@@ -91,15 +91,15 @@ namespace BrnGui
         };
         const char* const maIconStates[3] = { "Red", "Blue", "Invisible" };
         const u32 KAU_TEAM_COLOURS[9] = { 0x00000000u, 0x00FF1000u, 0x000094FFu, 0x00FFFC00u, 0x00FD75FFu, 0x0060E924u, 0x00F47F18u, 0x00973AE1u, 0x001BF9E2u };
-        const char* const KAPC_ANIMATION_STATES[6] =
+        const char* KAPC_ANIMATION_STATES[6] =
         { "instant", "current", "final", "StuntRun_Instant", "StuntRun_Current", "StuntRun_Current" };
         const char* const KAPC_TEAM_NAMES[9] =
         { "", "$TEAM_RED", "$TEAM_BLUE", "$TEAM_YELLOW", "$TEAM_PINK", "$TEAM_GREEN", "$TEAM_ORANGE", "$TEAM_PURPLE", "$TEAM_CYAN" };
-        const char* const KAPC_BUTTON_ANIMATION_STATES[4] =
+        const char* KAPC_BUTTON_ANIMATION_STATES[4] =
         { "visible_no_continue", "visible_continue", "visible_all", "invisible" };
-        const char* const KAC_POSITION_NAMES[9] =
+        const char* KAC_POSITION_NAMES[9] =
         { "EVENT_POSITION_INVALID", "$EVENT_POSITION_FIRST", "$EVENT_POSITION_SECOND", "$EVENT_POSITION_THIRD", "$EVENT_POSITION_FOURTH", "$EVENT_POSITION_FIFTH", "$EVENT_POSITION_SIXTH", "$EVENT_POSITION_SEVENTH", "$EVENT_POSITION_EIGHTH" };
-        const char* const KAPC_FINISH_STAT_STRINGID[8] =
+        const char* KAPC_FINISH_STAT_STRINGID[8] =
         { "$FINISH_STAT_0", "$FINISH_STAT_1", "$FINISH_STAT_2", "$FINISH_STAT_3", "$FINISH_STAT_4", "$FINISH_STAT_5", "$FINISH_STAT_6", "$FINISH_STAT_7" };
         const f32 KF_STANDINGS_UPDATE_TIMEOUT = 2.0f;       // 8205FB74
         const f32 KF_UNORDERED_RESULTS_TIMEOUT = 15.0f;     // 8205EED0
@@ -608,13 +608,23 @@ namespace BrnGui
     // ARTIST82484118. The visible round number is the original zero-based index plus1.
     void OnlineInstantResultsState::SetRoundText()
     {
-        const char* lpcSource = meCurrentState < E_ONLINE_INSTANT_RESULTS_STANDINGSUPDATE
-            ? "ONLINE_RESULTS_ROUND_NUMBER" : (mpGuiCache->miOnlineRoundIndex != 0
-                ? "ONLINE_RESULTS_AFTER_ROUNDS" : "ONLINE_RESULTS_AFTER_ROUND");
+        // ARTIST 0x8248413C..0x82484170 lays the standings arms out first.
+        const char* lpcSource;
+        if (meCurrentState >= E_ONLINE_INSTANT_RESULTS_STANDINGSUPDATE)
+        {
+            if (mpGuiCache->miOnlineRoundIndex == 0)
+                lpcSource = "ONLINE_RESULTS_AFTER_ROUND";
+            else
+                lpcSource = "ONLINE_RESULTS_AFTER_ROUNDS";
+        }
+        else
+        {
+            lpcSource = "ONLINE_RESULTS_ROUND_NUMBER";
+        }
         char lacRound[64];
         CgsCore::SPrintf(lacRound, 64, "%d", mpGuiCache->miOnlineRoundIndex + 1);
         mpStateInterface->GetLanguageManager()->FormatAndAddText(
-            "CURRENT_ROUND", lpcSource, CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
+            "$CURRENT_ROUND" + 1, lpcSource, CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
             1, lacRound, CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
         mCurrentRound.SetText("$CURRENT_ROUND");
     }

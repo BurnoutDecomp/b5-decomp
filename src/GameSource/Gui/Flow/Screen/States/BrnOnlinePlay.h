@@ -153,8 +153,8 @@ namespace BrnGui
         // 7 entries), and the picked-option -> state-event name table SelectOnlineMenuOption
         // indexes (X360 off_82F26800). Both tables fully dumped from the ARTIST rodata
         // (headless IDA, 2026-08-04) -- every entry is XEX-attested; see the .cpp definitions.
-        static const char* const KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT];              // @0x82F267E4
-        static const char* const KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT];// @0x82F26800
+        static const char* KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT];              // @0x82F267E4
+        static const char* KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT];// @0x82F26800
 
         // ---- data members (DWARF names + order; guest 32-bit offsets documentary) ------
         // The "new news" transition animation component (console +0x38).

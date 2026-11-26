@@ -126,7 +126,7 @@ namespace BrnGui
     const char PreRaceFlyByState::macSatNavIconBaseName[11]         = "SatNavIcon";
 
     // @0x82F26BEC -- the five description text-field component names.
-    const char* const PreRaceFlyByState::KAAC_EVENT_DESC_TEXTFIELD_NAMES[5] =
+    const char* PreRaceFlyByState::KAAC_EVENT_DESC_TEXTFIELD_NAMES[5] =
     {
         "DescriptionText1",
         "DescriptionText2",
@@ -1078,7 +1078,7 @@ namespace BrnGui
         // the DWARF name here but stays file-local because its home does not exist yet.
         // DELETE-WHEN GameSource/Gui/BrnGuiShared.cpp lands (declare it in BrnGuiShared.h and
         // index the shared one).
-        const char* const KAPC_GAMEMODE_STRINGIDS[GSM::E_MODE_OFFLINE_COUNT] =
+        const char* KAPC_GAMEMODE_STRINGIDS[GSM::E_MODE_OFFLINE_COUNT] =
         {
             "GAMEMODE_RACE",          // 0  E_MODE_OFFLINE_RACE
             "GAMEMODE_FACEOFF",       // 1  E_MODE_FACE_OFF
@@ -1893,7 +1893,7 @@ namespace
     // It carries the DWARF name here but stays file-local because its home does not exist
     // yet. DELETE-WHEN GameSource/Gui/BrnGuiShared.cpp lands (declare it in BrnGuiShared.h
     // and index the shared one).
-    const char* const KAPC_COMPASS_POINT_STRINGIDS[E_COMPASS_POINTS_COUNT] =
+    const char* KAPC_COMPASS_POINT_STRINGIDS[E_COMPASS_POINTS_COUNT] =
     {
         "DIRECTION_N",  "DIRECTION_NW", "DIRECTION_W",  "DIRECTION_SW",
         "DIRECTION_S",  "DIRECTION_SE", "DIRECTION_E",  "DIRECTION_NE",

@@ -52,14 +52,14 @@ namespace BrnGui
     const char OnlineQuickCustomCreate::KAC_NEW_NEWS_ANIMATION_COMPONENT[18] = "NewNewsTransition";
     const char OnlineQuickCustomCreate::KAC_MAIN_MENU_COMPONENT[9]           = "MenuItem";
 
-    const char* const OnlineQuickCustomCreate::KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
+    const char* OnlineQuickCustomCreate::KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
     {
         "$ONLINE_MAIN_MENU_OPTION_QUICK_MATCH",
         "$ONLINE_MAIN_MENU_OPTION_CUSTOM_MATCH",
         "$ONLINE_MAIN_MENU_OPTION_CREATE_MATCH"
     };
 
-    const char* const OnlineQuickCustomCreate::KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
+    const char* OnlineQuickCustomCreate::KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
     {
         "TO_QWK_MAT", "TO_CUST_MAT", "TO_GAME_OPT"
     };

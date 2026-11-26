@@ -1806,7 +1806,7 @@ namespace BrnGui
     {
         // @0x82F26EC0 -- the apt view-state name per EVisibleAnimationStates, dumped
         // big-endian (scratchpad/waveJ/crashnav_consts.txt). DWARF BrnCrashNavMap.cpp:93.
-        const char* const KAPC_VISIBLE_ANIMATION_STATES[CrashNavMap::E_VISIBLE_ANIMATION_STATES_COUNT] =
+        const char* KAPC_VISIBLE_ANIMATION_STATES[CrashNavMap::E_VISIBLE_ANIMATION_STATES_COUNT] =
         {
             "visible",     // E_VISIBLE_ANIMATION_STATES_VISIBLE
             "invisible",   // E_VISIBLE_ANIMATION_STATES_INVISIBLE
@@ -1814,7 +1814,7 @@ namespace BrnGui
 
         // @0x82F26EC8 -- the apt view-state name per EButtonPromptAnimationStates, dumped
         // big-endian (same dump). DWARF BrnCrashNavMap.cpp:99.
-        const char* const KAPC_BUTTON_PROMPT_ANIMATION_STATES[CrashNavMap::E_BUTTON_PROMPT_ANIMATION_STATES_COUNT] =
+        const char* KAPC_BUTTON_PROMPT_ANIMATION_STATES[CrashNavMap::E_BUTTON_PROMPT_ANIMATION_STATES_COUNT] =
         {
             "OfflineNone",                 //  0 OFFLINE_NONE_SELECTED
             "OfflineEvent",                //  1 OFFLINE_EVENT

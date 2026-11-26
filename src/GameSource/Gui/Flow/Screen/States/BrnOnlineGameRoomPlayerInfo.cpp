@@ -113,12 +113,12 @@ namespace BrnGui
 
     // ---- string-id tables (X360 @0x82F26704..0x82F26788, dumped as one window so
     //      every boundary is observed) -----------------------------------------------
-    const char* const OnlineGameRoomPlayerInfo::KAPC_CHALLENGE_TOGGLE_ITEM_STRING_IDS[7] =
+    const char* OnlineGameRoomPlayerInfo::KAPC_CHALLENGE_TOGGLE_ITEM_STRING_IDS[7] =
     { "2", "3", "4", "5", "6", "7", "8" };   // @0x82F26704 (player-count toggle items)
 
     // @0x82F26720 [14]. Indexed by GuiEventPerformOnlinePauseOption::EPauseOptions in
     // ShowPauseOptions / ShowSecurityOptions (ids 0..13; 10..12 are the security rows).
-    const char* const OnlineGameRoomPlayerInfo::KPAC_PAUSE_OPTIONS_STRING_ID[14] =
+    const char* OnlineGameRoomPlayerInfo::KPAC_PAUSE_OPTIONS_STRING_ID[14] =
     {
         "$ONLINE_LOBBY_OPTION_LAUNCH",          // 0
         "$ONLINE_LOBBY_OPTION_CREATE_EVENT",    // 1
@@ -138,7 +138,7 @@ namespace BrnGui
 
     // @0x82F26758 [7]. Indexed by the launched-event result in HandleLaunchedEvent
     // (result 0 == success never indexes; entry 0 is the empty-string sentinel).
-    const char* const OnlineGameRoomPlayerInfo::KPC_LAUNCH_FAILED_STRINGIDS[7] =
+    const char* OnlineGameRoomPlayerInfo::KPC_LAUNCH_FAILED_STRINGIDS[7] =
     {
         "",
         "ONLINE_LAUNCHED_FAILED_PLAYERS",
@@ -151,7 +151,7 @@ namespace BrnGui
 
     // @0x82F26774 [5]. Indexed by the left-game kick reason in HandleLeftGameEvent
     // (reason asserted <= 4; entries 0 and 2 share the "OnKicked" literal on X360).
-    const char* const OnlineGameRoomPlayerInfo::KAPC_KICKED_POPUP[5] =
+    const char* OnlineGameRoomPlayerInfo::KAPC_KICKED_POPUP[5] =
     {
         "OnKicked", "OnKickedGame", "OnKicked", "OnKickedComm", "OnKickedLost",
     };
@@ -175,7 +175,7 @@ namespace BrnGui
     // Game-mode string ids for the launch overlay's mode parameter, indexed by the game
     // mode (HandleLaunchingEvent). Eighteen slots; only the online modes carry a string,
     // the offline modes and the free-burn lobby / showtime slots are null in the image.
-    const char* const OnlineGameRoomPlayerInfo::KPAC_MODE_STRINGS[18] =
+    const char* OnlineGameRoomPlayerInfo::KPAC_MODE_STRINGS[18] =
     {
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         "ONLINE_GAME_OPTION_MODE_RACE",

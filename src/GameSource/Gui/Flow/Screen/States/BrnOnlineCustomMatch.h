@@ -119,7 +119,7 @@ namespace BrnGui
         static const char KAC_FOUND_GAMES_ANIMATION_COMPONENT[21];     // "FoundGamesTransition"
         static const char KAC_BUTTON_PROMPT_ANIMATION_COMPONENT[24];   // "ButtonPromptsTransition"
 
-        static const char* const KAPC_ANIMATION_STATES[3];       // @0x82F266B0 == { "Visible", "Invisible", "Refresh" }
+        static const char* KAPC_ANIMATION_STATES[3];       // @0x82F266B0 == { "Visible", "Invisible", "Refresh" }
 
         static const char KAC_NO_GAMES_FOUND_STRING_ID[29];      // "$ONLINE_GAME_SEARCH_NO_GAMES"
         static const char KAC_RANKED_TITLE_STRING_ID[27];        // DWARF char[27]; used only by the foreign Update/OnLeave
@@ -132,17 +132,17 @@ namespace BrnGui
         static const char KAC_NUM_PLAYERS_STRING_ID[31];         // "ONLINE_GAME_SEARCH_NUM_PLAYERS"
         static const char KAC_NO_PREVIOUS_GAME_MODE_STRING_ID[33]; // "$ONLINE_GAME_SEARCH_NO_PREV_MODE"
 
-        static const char* const KPAC_RANKED_OPTION_STRING_IDS[2]; // @0x82F2669C (foreign Update/OnLeave)
-        static const char* const KAPC_YES_NO_BUTTON_STRING_ID[2];  // @0x82F266A4 == { "$GENERAL_OPTION_YES", "$GENERAL_OPTION_NO" }
-        static const char* const KAPC_OK_BUTTON_STRING_ID[1];      // @0x82F266AC == { "$GENERAL_OPTION_OK" }
+        static const char* KPAC_RANKED_OPTION_STRING_IDS[2]; // @0x82F2669C (foreign Update/OnLeave)
+        static const char* KAPC_YES_NO_BUTTON_STRING_ID[2];  // @0x82F266A4 == { "$GENERAL_OPTION_YES", "$GENERAL_OPTION_NO" }
+        static const char* KAPC_OK_BUTTON_STRING_ID[1];      // @0x82F266AC == { "$GENERAL_OPTION_OK" }
 
         static const StringGameModeMapping KA_GAME_MODE_SEARCH_OPTION_STRING_IDS[3]; // @0x8205E964 (values in the .cpp)
 
         // DWARF declares [7]; the X360 body accepts modes 10..17 (`cmpwi 0xA / 0x12`), i.e.
         // EIGHT reachable rodata slots @0x82F266BC -- slot 6 (mode 16) really is the literal
         // "Invalid game mode" (shipped quirk, kept).
-        static const char* const KAPC_GAME_MODE_STRING_IDS[8];
-        static const char* const KAPC_OPPONENT_OPTION_STRING_IDS[4]; // @0x82F266DC
+        static const char* KAPC_GAME_MODE_STRING_IDS[8];
+        static const char* KAPC_OPPONENT_OPTION_STRING_IDS[4]; // @0x82F266DC
 
         static const char macTableName[11];                      // "FoundGames"
         static const s8   miTableNumRows;                        // == 5

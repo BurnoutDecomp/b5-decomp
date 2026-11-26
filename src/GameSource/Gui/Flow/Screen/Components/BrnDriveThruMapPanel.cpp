@@ -35,7 +35,7 @@ namespace BrnGui
     // 0x820494C0 "DriveThruLoc"; the next pointer, 0x82F25170 "RivalName", is the FIRST
     // entry of the RivalMapPanel table and is the loop's exclusive upper bound, not a
     // member). (DWARF KAPC_TEXTFIELD_NAMES, BrnDriveThruMapPanel.cpp:31.)
-    static const char* const KAPC_TEXTFIELD_NAMES[DriveThruMapPanel::E_TEXTFIELD_COUNT] =
+    static const char* KAPC_TEXTFIELD_NAMES[DriveThruMapPanel::E_TEXTFIELD_COUNT] =
     {
         "DriveThruName",
         "DriveThruLoc",

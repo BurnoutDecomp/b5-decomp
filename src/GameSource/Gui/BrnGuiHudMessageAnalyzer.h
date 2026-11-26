@@ -605,7 +605,7 @@ namespace BrnGui
     //  TU is split across partfiles.
     // ------------------------------------------------------------------------
     extern const char* const KAPC_TAKEDOWN_TYPES[13];                 // cpp:26 (0x8206F59C)
-    extern const char* const KAPC_TAKEDOWN_CHAIN[9];                  // cpp:60 (0x82F278BC; overflow clamps to [8])
+    extern const char* KAPC_TAKEDOWN_CHAIN[9];                  // cpp:60 (0x82F278BC; overflow clamps to [8])
     extern const char* const KAPC_PAYBACK_TAKEDOWN_BD_MESSAGES[3];    // cpp:125 (0x8206F618; X360 is 3-entry, not the PS3-DWARF 4)
     extern const char* const KAPC_PAYBACK_TAKEDOWN_GD_MESSAGES[3];    // cpp:137 (0x8206F624; X360 is 3-entry)
     extern const char* const KAPC_FINISH_POSITION_MESSAGES[12];       // cpp:149 (0x82F277E0; 8 uppercase + 4 lowercase slots)

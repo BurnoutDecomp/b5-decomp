@@ -16,7 +16,7 @@ namespace BrnGui
 
 // X360 .data @0x82F27430 (XEX-recovered pointers/strings). The UNUSED entry
 // aliases the same "Invisible" string as INVISIBLE on the console.
-const char* const MenuItem::KAC_STATE_NAMES[MenuItem::E_MENUITEMSTATES_COUNT] =
+const char* MenuItem::KAC_STATE_NAMES[MenuItem::E_MENUITEMSTATES_COUNT] =
 {
     "Invisible",    // E_MENUITEMSTATES_UNUSED (aliases INVISIBLE's string)
     "Invisible",    // E_MENUITEMSTATES_INVISIBLE

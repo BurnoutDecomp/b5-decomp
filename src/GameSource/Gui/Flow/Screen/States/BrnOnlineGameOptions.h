@@ -116,9 +116,9 @@ namespace BrnGui
         static const char KAC_RECENT_OPTIONS_STRING_ID[27];      // "$ONLINE_GAME_OPTION_RECENT"
         static const char KPC_SLOT_STRING_FORMAT_ID[24];         // "ONLINE_GAME_OPTION_SLOT"
         static const char KPC_SLOT_STRING_ID[28];                // "$ONLINE_GAME_OPTION_SLOT_%d"
-        static const char* const KPC_ARROW_ANIMATION_STATES[3];        // @0x82F2683C
-        static const char* const KPC_LOAD_HEADER_ANIMATION_STATES[3];  // @0x82F26848
-        static const char* const KPC_MAP_BORDER_ANIMATION_STATES[2];   // @0x82F26854
+        static const char* KPC_ARROW_ANIMATION_STATES[3];        // @0x82F2683C
+        static const char* KPC_LOAD_HEADER_ANIMATION_STATES[3];  // @0x82F26848
+        static const char* KPC_MAP_BORDER_ANIMATION_STATES[2];   // @0x82F26854
         static const CreateMatchOptions::EOption KAE_COMMON_OPTIONS[2];                // @0x8205F14C
         static const CreateMatchOptions::EOption KAE_RACE_MODE_OPTIONS[5];             // @0x8205F154
         static const CreateMatchOptions::EOption KAE_ROAD_RAGE_MODE_OPTIONS[6];        // @0x8205F168

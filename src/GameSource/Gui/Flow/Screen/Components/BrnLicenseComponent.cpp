@@ -133,7 +133,7 @@ namespace BrnGui
         // @0x82F27E8C -- the same month string-id table BrnIntro.cpp carries (SetPlayerInfo
         // indexes it for the 100%-completion date).
         const s32 KI_NUM_MONTH_STRINGIDS = 12;
-        const char* const KAPC_MONTH_STRINGIDS[KI_NUM_MONTH_STRINGIDS] =
+        const char* KAPC_MONTH_STRINGIDS[KI_NUM_MONTH_STRINGIDS] =
         {
             "MONTH_SHORT_01", "MONTH_SHORT_02", "MONTH_SHORT_03", "MONTH_SHORT_04",
             "MONTH_SHORT_05", "MONTH_SHORT_06", "MONTH_SHORT_07", "MONTH_SHORT_08",

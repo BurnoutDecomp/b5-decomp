@@ -17,11 +17,11 @@ namespace BrnGui
 // The clip frame labels (XEX .data @0x82F249BC -> .rodata strings) and the
 // per-position localisation keys (@0x82F24A8C; slot 0 is the un-prefixed
 // invalid sentinel).
-const char* const PositionIndicator::KAC_APTSTATE_NAMES[5] =
+const char* PositionIndicator::KAC_APTSTATE_NAMES[5] =
 {
     "TransIn", "Showing", "ChangePosition", "TransOut", "Invisible",
 };
-const char* const PositionIndicator::KAC_POSITION_NAMES[9] =
+const char* PositionIndicator::KAC_POSITION_NAMES[9] =
 {
     "EVENT_POSITION_INVALID",
     "$EVENT_POSITION_FIRST",  "$EVENT_POSITION_SECOND", "$EVENT_POSITION_THIRD",

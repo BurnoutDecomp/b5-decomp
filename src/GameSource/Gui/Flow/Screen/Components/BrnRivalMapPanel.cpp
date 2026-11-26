@@ -41,7 +41,7 @@ namespace BrnGui
     // holds four pointers, 0x820494B4/0x820494A8/0x8204949C/0x82049490, which resolve to the
     // strings below. Construct's loop bound is the NEXT table (off_82F25180, the event-filter
     // options), which is what fixes the count at four.
-    static const char* const KAPC_TEXTFIELD_NAMES[RivalMapPanel::E_TEXTFIELD_COUNT] =
+    static const char* KAPC_TEXTFIELD_NAMES[RivalMapPanel::E_TEXTFIELD_COUNT] =
     {
         "RivalName",
         "RivalText1",

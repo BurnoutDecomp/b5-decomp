@@ -151,10 +151,10 @@ namespace BrnGui
         // DWARF cpp:24-:129 -- the frame-label / clip-name / mapping tables
         // (XEX-recovered where consumed; definitions in the .cpp; the icon tables are
         // declared-only pending their consumers).
-        static const char* const KAC_BAR_STATE_NAMES[E_FRIENDLISTBARSTATE_COUNT];        // cpp:24 (@0x82F24EF8)
+        static const char* KAC_BAR_STATE_NAMES[E_FRIENDLISTBARSTATE_COUNT];        // cpp:24 (@0x82F24EF8)
         static const char        macPlayerNameTextFieldName[15];                          // cpp:59
         static const char        macStatusIconName[17];                                   // cpp:60
-        static const char* const KAC_STATUS_ICON_NAMES[E_FRIENDLISTICONSTATE_COUNT];      // cpp:48 (defined below)
+        static const char* KAC_STATUS_ICON_NAMES[E_FRIENDLISTICONSTATE_COUNT];      // cpp:48 (defined below)
         static const char        KAC_INDEX_TEXT_FIELD_NAME[10];                           // cpp:61 (DWARF spells [9]; "index_txt" needs 10 w/ NUL)
         static const char        macBarStateAnimatorName[18];                             // cpp:58
         static const EFriendListIconState KAE_FRIEND_LIST_ICON_STATES[E_FRIENDLISTENTRYSTATE_COUNT];        // cpp:63 (defined below)

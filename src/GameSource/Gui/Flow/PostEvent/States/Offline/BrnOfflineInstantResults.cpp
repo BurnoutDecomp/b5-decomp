@@ -134,11 +134,11 @@ namespace BrnGui
         //
         // Getting one of these wrong shows an EMPTY MOVIE rather than an error, so they were
         // read, never guessed.
-        const char* const KAC_HELPITEM_NAMES[3] =                    // @0x82F26B10, DWARF cpp:117
+        const char* KAC_HELPITEM_NAMES[3] =                    // @0x82F26B10, DWARF cpp:117
         {
             "HelpItem1", "HelpItem2", "HelpItem3"
         };
-        const char* const KAC_RESULTS_FRAMES[6] =                    // @0x82F26B1C, DWARF cpp:132
+        const char* KAC_RESULTS_FRAMES[6] =                    // @0x82F26B1C, DWARF cpp:132
         {
             "WinWithDetails",    // E_RESULTS_DETAILED_WIN      = 0
             "WinWithTargets",    // E_RESULTS_WIN_WITH_TARGETS  = 1
@@ -147,19 +147,19 @@ namespace BrnGui
             "LoseWithTargets",   // E_RESULTS_LOSS_WITH_TARGETS = 4
             "MiscTextNeg",       // E_RESULTS_PLAIN_LOSS        = 5
         };
-        const char* const KAC_SECOND_RESULTS_FRAMES[3] =             // @0x82F26B34, DWARF cpp:142
+        const char* KAC_SECOND_RESULTS_FRAMES[3] =             // @0x82F26B34, DWARF cpp:142
         {
             "transIn", "transOut", "invisible"
         };
-        const char* const KAC_RANK_TEXT_FRAMES[3] =                  // @0x82F26B40, DWARF cpp:149
+        const char* KAC_RANK_TEXT_FRAMES[3] =                  // @0x82F26B40, DWARF cpp:149
         {
             "transIn", "transOut", "invisible"
         };
-        const char* const KAC_CAR_TEXT_FRAMES[5] =                   // @0x82F26B4C, DWARF cpp:156
+        const char* KAC_CAR_TEXT_FRAMES[5] =                   // @0x82F26B4C, DWARF cpp:156
         {
             "transIn", "fadeOutText", "fadeInText", "transOut", "invisible"
         };
-        const char* const KAC_NEW_RIVALS_TEXT_FRAMES[6] =            // @0x82F26B60, DWARF cpp:165
+        const char* KAC_NEW_RIVALS_TEXT_FRAMES[6] =            // @0x82F26B60, DWARF cpp:165
         {
             "transInIntro", "transOutIntro", "transInName",
             "transOutName", "transInOutro", "transOutOutro"
@@ -171,7 +171,7 @@ namespace BrnGui
         // beside it. SetupComponents indexes it with (miPlayerFinishPosition - 1) and asserts
         // that index against the count, which is a third check on the extent.
         const s32 KI_NUM_FINISH_POS_STRINGS = 8;                     // DWARF cpp:189
-        const char* const KAC_FINISH_POS_STRINGIDS[KI_NUM_FINISH_POS_STRINGS] =  // @0x82F26B78
+        const char* KAC_FINISH_POS_STRINGIDS[KI_NUM_FINISH_POS_STRINGS] =  // @0x82F26B78
         {
             "HUDMESSAGE_GAME_FINISH_FIRST",   "HUDMESSAGE_GAME_FINISH_SECOND",
             "HUDMESSAGE_GAME_FINISH_THIRD",   "HUDMESSAGE_GAME_FINISH_FOURTH",
@@ -230,10 +230,9 @@ namespace BrnGui
         const s32 KI_EVENT_COMPRESSED_STILL_IMAGE   = 569;
 
         // ---- what TriggerExitResults posts on its way out --------------------------------
-        // 292 (0x124) is the post-event TEARDOWN. Not a new id: GuiCache::RecEvent case 292
-        // clears mOfflinePostEventData and drops mbSuppressPostEventPresentation, and
+        // GuiEventLeavePostEvent (292, 0x124) is the post-event TEARDOWN: GuiCache::RecEvent
+        // case 292 clears mOfflinePostEventData and drops mbSuppressPostEventPresentation, and
         // BridgeGuiToGameState's case 292 turns it into game event 26.
-        const s32 KI_EVENT_POST_EVENT_TEARDOWN      = 292;
         // The state-output channel every OutputGuiEvent<T> body passes (`li r5, 0x28`).
         const s32 KI_CHANNEL_GUI_OUT                = 40;
         // The FSM this screen hands the HUD flow back to. Spelled exactly as the image's
@@ -1993,19 +1992,10 @@ namespace BrnGui
         // that lands there runs AFTER the AddEvent, as part of building the NEXT record) --
         // it is the sizeof of an empty event struct, not a value. Zeroed here rather than
         // left indeterminate; no consumer reads it.
-        struct PostEventTeardownRecord
         {
-            s32 miOutEventSize;
-            s32 miOutEventType;
-            s32 miOutEventOffset;
-            s32 miPayload;
-        } lTeardown;
-        lTeardown.miOutEventSize   = 1;
-        lTeardown.miOutEventType   = KI_EVENT_POST_EVENT_TEARDOWN;   // 0x124
-        lTeardown.miOutEventOffset = 12;
-        lTeardown.miPayload        = 0;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lTeardown), KI_CHANNEL_GUI_OUT, 16);
+            GuiEventLeavePostEvent lGuiEventLeavePostEvent;          // DWARF cpp:3317
+            mpStateInterface->OutputGuiEvent(lGuiEventLeavePostEvent);
+        }
 
         // ---- 6. hand the HUD flow back to the FreeBurn FSM ------------------------------
         struct RunFsmRecord

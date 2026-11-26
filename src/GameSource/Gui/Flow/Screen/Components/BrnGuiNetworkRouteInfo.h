@@ -93,25 +93,25 @@ namespace BrnGui
         static const s32 KAI_BHR_OPTION_TO_COMPONENT_MAPPING[E_OPTION_COMPONENT_COUNT];
 
         // ---- apt component names ------------------------------------------------------
-        static const char* const KPAC_OPTIONS_ANIMATOR_COMPONENT[E_OPTION_COMPONENT_COUNT];
-        static const char* const KPAC_HEADING_COMPONENT[E_OPTION_COMPONENT_COUNT];
-        static const char* const KPAC_VALUE_COMPONENT[E_OPTION_COMPONENT_COUNT];
+        static const char* KPAC_OPTIONS_ANIMATOR_COMPONENT[E_OPTION_COMPONENT_COUNT];
+        static const char* KPAC_HEADING_COMPONENT[E_OPTION_COMPONENT_COUNT];
+        static const char* KPAC_VALUE_COMPONENT[E_OPTION_COMPONENT_COUNT];
         static const char KAC_APT_STATE[10];
-        static const char* const KPAC_STATE_ID[E_STATE_COUNT];
-        static const char* const KPAC_OPTION_STATE_ID[2];
+        static const char* KPAC_STATE_ID[E_STATE_COUNT];
+        static const char* KPAC_OPTION_STATE_ID[2];
 
         // ---- option text ids ----------------------------------------------------------
         static const char KAC_NUM_ROUNDS_STRING_ID[12];
         static const char KAC_NUM_ROUNDS_FORMAT_STRING_ID[27];
         static const char KAC_NUM_ROUNDS_RR_FORMAT_STRING_ID[30];
-        static const char* const KPAC_HEADING_STRING_IDS[E_OPTION_COMPONENT_COUNT];
-        static const char* const KPAC_VEHICLE_CLASS_STRING_IDS[10];
-        static const char* const KPAC_RED_TEAM_INFINITE_BOOST_STRING_IDS[2];
-        static const char* const KPAC_TRAFFIC_STRING_IDS[2];
-        static const char* const KPAC_TRAFFIC_CHECKING_STRING_IDS[2];
-        static const char* const KPAC_BOOST_TYPE_STRING_IDS[6];
-        static const char* const KPAC_CRASH_LIMIT_STRING_IDS[6];
-        static const char* const KPAC_TIME_LIMIT_STRING_IDS[3];
+        static const char* KPAC_HEADING_STRING_IDS[E_OPTION_COMPONENT_COUNT];
+        static const char* KPAC_VEHICLE_CLASS_STRING_IDS[10];
+        static const char* KPAC_RED_TEAM_INFINITE_BOOST_STRING_IDS[2];
+        static const char* KPAC_TRAFFIC_STRING_IDS[2];
+        static const char* KPAC_TRAFFIC_CHECKING_STRING_IDS[2];
+        static const char* KPAC_BOOST_TYPE_STRING_IDS[6];
+        static const char* KPAC_CRASH_LIMIT_STRING_IDS[6];
+        static const char* KPAC_TIME_LIMIT_STRING_IDS[3];
 
         // ---- the route map ------------------------------------------------------------
         static const Vector2 K_MAP_DISPLAY_RECT;

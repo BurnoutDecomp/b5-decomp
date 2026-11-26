@@ -302,14 +302,14 @@ namespace BrnGui
         static const char* KAPC_PLAYERS_BUTTON_PROMPT_ANIMATION_STATES[2]; // {visible, invisible}
 
         // String-id tables (DWARF cpp:234..303; X360 @0x82F26704.. -- dumped).
-        static const char* const KAPC_CHALLENGE_TOGGLE_ITEM_STRING_IDS[7];  // {"2".."8"} @0x82F26704
-        static const char* const KPAC_PAUSE_OPTIONS_STRING_ID[14];          // @0x82F26720
-        static const char* const KPC_LAUNCH_FAILED_STRINGIDS[7];            // @0x82F26758
-        static const char* const KAPC_KICKED_POPUP[5];                      // @0x82F26774
+        static const char* KAPC_CHALLENGE_TOGGLE_ITEM_STRING_IDS[7];  // {"2".."8"} @0x82F26704
+        static const char* KPAC_PAUSE_OPTIONS_STRING_ID[14];          // @0x82F26720
+        static const char* KPC_LAUNCH_FAILED_STRINGIDS[7];            // @0x82F26758
+        static const char* KAPC_KICKED_POPUP[5];                      // @0x82F26774
 
         // Game-mode string ids for the launch overlay (eighteen slots, indexed by the game
         // mode; values in the .cpp). KPAC_HOST_STATUS_STRING_IDS has no reader here.
-        static const char* const KPAC_MODE_STRINGS[18];
+        static const char* KPAC_MODE_STRINGS[18];
 
         // Tab-title / message string ids (DWARF cpp:212..232; literals in the asm).
         static const char KAC_PLAYER_INFO_STRING_ID[34];      // "$ONLINE_GAME_ROOM_TAB_PLAYER_INFO"

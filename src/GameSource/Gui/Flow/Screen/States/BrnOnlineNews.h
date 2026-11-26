@@ -73,7 +73,7 @@ namespace BrnGui
         static const f32                    KF_AXIS_DEAD_ZONE;
         static const char                   KAC_TOGGLE_TEXT_COMPONENT[11];   // "ToggleText"
         static const char                   KAC_NEWS_TEXT_COMPONENT[9];      // "NewsText"
-        static const char* const            KPAC_TOGGLE_TEXT_STRING_ID[E_TOGGLE_ITEM_COUNT];
+        static const char* KPAC_TOGGLE_TEXT_STRING_ID[E_TOGGLE_ITEM_COUNT];
         static const char* const            KPAC_NEWS_TEXT_STRING_ID[E_TOGGLE_ITEM_COUNT][E_DOWNLOAD_STATE_COUNT];
 
         // ---- data members (declaration order; console offsets in the comments) -------

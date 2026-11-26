@@ -60,15 +60,15 @@ namespace BrnGui
     const char OnlineQuickMatch::KAC_NO_GAMES_FOUND_STRING_ID[29]            = "$ONLINE_GAME_SEARCH_NO_GAMES";
     const char OnlineQuickMatch::KAC_SEARCHING_STRING_ID[30]                 = "$ONLINE_GAME_SEARCH_SEARCHING";
 
-    const char* const OnlineQuickMatch::KAPC_ANIMATION_STATES[2] =
+    const char* OnlineQuickMatch::KAPC_ANIMATION_STATES[2] =
     {
         "Visible", "Invisible"
     };
-    const char* const OnlineQuickMatch::KAPC_YES_NO_BUTTON_STRING_ID[2] =
+    const char* OnlineQuickMatch::KAPC_YES_NO_BUTTON_STRING_ID[2] =
     {
         "$GENERAL_OPTION_YES", "$GENERAL_OPTION_NO"
     };
-    const char* const OnlineQuickMatch::KAPC_OK_BUTTON_STRING_ID[1] =
+    const char* OnlineQuickMatch::KAPC_OK_BUTTON_STRING_ID[1] =
     {
         "$GENERAL_OPTION_OK"
     };

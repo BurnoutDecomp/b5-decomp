@@ -102,7 +102,7 @@ namespace BrnGui
         // BrnJunctionInfoComponent.cpp since 2026-08-25: the wave58 "serialised label data
         // not in the function export" park was recoverable-after-all -- the 11 pointers at
         // 0x82F24ECC read cleanly off the image (headless idat; scratch h1_dump2.txt).
-        static const char* const KAPC_GAMEMODE_ICON_FRAMENAMES[11];
+        static const char* KAPC_GAMEMODE_ICON_FRAMENAMES[11];
         static const char* const KAC_CURRENT_BURNING_ROUTE_ICON_FRAMENAME;
     };
 }

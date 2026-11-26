@@ -66,7 +66,7 @@ namespace BrnGui
 
 
         // The two localisation keys ShowMenu pushes into the rows, in highlight order.
-        const char* const KAPC_PROFILE_MENU_TEXT[CrashNavProfile::KI_NUM_MENU_ITEMS] =
+        const char* KAPC_PROFILE_MENU_TEXT[CrashNavProfile::KI_NUM_MENU_ITEMS] =
         {
             "$PROFILE_MENU_SAVE", "$PROFILE_MENU_LOAD"
         };

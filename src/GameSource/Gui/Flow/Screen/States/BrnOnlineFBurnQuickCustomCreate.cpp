@@ -11,7 +11,7 @@
 
 namespace BrnGui
 {
-    const char* const OnlineFBurnQuickCustomCreate::KAPC_MAIN_MENU_FBURN_STATE_ACTIONS_TEXT
+    const char* OnlineFBurnQuickCustomCreate::KAPC_MAIN_MENU_FBURN_STATE_ACTIONS_TEXT
         [E_MAIN_MENU_OPTIONS_COUNT] =
     {
         "TO_QWK_MAT",    // E_MAIN_MENU_OPTIONS_QUICK_MATCH

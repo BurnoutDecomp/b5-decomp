@@ -127,7 +127,7 @@ const s32 OnlinePlay::miNumResourcesToLoad = 3;
 // chased to its string in the ARTIST rodata (headless IDA dump, 2026-08-04). The table is
 // bounded on both sides by foreign objects (the OnlinePause option keys before it, the
 // actions table at +0x1C after it), confirming exactly 7 entries.
-const char* const OnlinePlay::KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
+const char* OnlinePlay::KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
 {
     "$ONLINE_MAIN_MENU_OPTION_FREEBURN",         // [0] @0x82F267E4 -> 0x8205CB3C (XEX-attested)
     "$ONLINE_MAIN_MENU_OPTION_IMAGE_GALLERY",    // [1] -> 0x8205CB14 (XEX-attested)
@@ -145,7 +145,7 @@ const char* const OnlinePlay::KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
 // 0x82F26800 are this TU's ShowMainMenuOptions (loop bound) + SelectOnlineMenuOption (index);
 // TO_IMG_GAL / TO_VIW_CHL / TO_SCOREB / TO_NEWS are additionally shared by a second screen's
 // action table @0x82F272B0.., corroborating the exact spellings.
-const char* const OnlinePlay::KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
+const char* OnlinePlay::KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
 {
     "TO_FBURN",     // [0] FREEBURN        @0x82F26800 -> 0x8205CA50 (XEX-attested)
     "TO_IMG_GAL",   // [1] IMAGE_GALLERY   -> 0x8205CA44 (XEX-attested)

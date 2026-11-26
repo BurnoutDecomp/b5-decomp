@@ -183,7 +183,7 @@ namespace BrnGui
         // @0x82F26C80 -> "CarName" (the livery selector's apt component name).
         static const char* mpacCarSelectorName;
         // @0x82F26C84 (two adjacent pointers) -- the two toggle TITLES.
-        static const char* const KAPC_OPTIONS[E_OPTIONTOGGLE_COUNT];
+        static const char* KAPC_OPTIONS[E_OPTIONTOGGLE_COUNT];
 
         static const char KAC_OPTION_NAME[13];               // "optionToggle"
         static const char KAC_PAINT_COLOUR_OPTION_NAME[19];  // "colourOptionToggle"

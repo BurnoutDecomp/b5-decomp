@@ -99,9 +99,8 @@ namespace BrnGui
         const s32 KI_EVENT_SHOWTIME_SWITCH      = 269;
         const s32 KI_EVENT_STOP_MODE            = 322;
 
-        // 292 (0x124) is the post-event TEARDOWN, the same id the offline results screen
-        // posts on its way out. GuiCache::RecEvent case 292 clears mOfflinePostEventData.
-        const s32 KI_EVENT_POST_EVENT_TEARDOWN  = 292;
+        // GuiEventLeavePostEvent (292, 0x124) is the post-event TEARDOWN, the same event the
+        // offline results screen posts on its way out.
         // The state-output channel every OutputGuiEvent<T> body passes (`li r5, 0x28`).
         const s32 KI_CHANNEL_GUI_OUT            = 40;
 
@@ -134,7 +133,7 @@ namespace BrnGui
         // off_82F26BD4 .. unk_82F26BE0 -- three const char* read out of the image
         // (0x82065268 / 0x8206525C / 0x82065250). The loop bound IS the end address, so the
         // extent is the data's own, not a guess: (0x82F26BE0 - 0x82F26BD4) / 4 == 3.
-        const char* const KAC_HELPITEM_NAMES[ShowtimeInstantResultsState::KI_HELPITEMS] =
+        const char* KAC_HELPITEM_NAMES[ShowtimeInstantResultsState::KI_HELPITEMS] =
         {
             "HelpItem1", "HelpItem2", "HelpItem3",
         };
@@ -745,22 +744,9 @@ namespace BrnGui
     {
         SendStateEvent("ADVANCE");
 
-        // {1, 292, 12} on channel 40. The one payload word at +12 is never written by the
-        // console either -- it is the sizeof of an empty event struct, not a value. Zeroed
-        // here rather than left indeterminate; no consumer reads it.
-        struct PostEventTeardownRecord
-        {
-            s32 miOutEventSize;
-            s32 miOutEventType;
-            s32 miOutEventOffset;
-            s32 miPayload;
-        } lTeardown;
-        lTeardown.miOutEventSize   = 1;
-        lTeardown.miOutEventType   = KI_EVENT_POST_EVENT_TEARDOWN;   // 0x124
-        lTeardown.miOutEventOffset = 12;
-        lTeardown.miPayload        = 0;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lTeardown), KI_CHANNEL_GUI_OUT, 16);
+        // {1, 292, 12} on channel 40: the empty event's wrapper (DWARF cpp:937 local).
+        GuiEventLeavePostEvent lGuiEventLeavePostEvent;
+        mpStateInterface->OutputGuiEvent(lGuiEventLeavePostEvent);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -877,20 +863,10 @@ namespace BrnGui
 
                 SendStateEvent("ADVANCE");
 
-                struct ShowtimeFinishedRecord
                 {
-                    s32 miOutEventSize;
-                    s32 miOutEventType;
-                    s32 miOutEventOffset;
-                    s32 miPayload;
-                } lFinished;
-                lFinished.miOutEventSize   = 1;
-                lFinished.miOutEventType   = KI_EVENT_POST_EVENT_TEARDOWN;
-                lFinished.miOutEventOffset = 12;
-                lFinished.miPayload        = 0;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lFinished),
-                    KI_CHANNEL_GUI_OUT, 16);
+                    GuiEventLeavePostEvent lGuiEventLeavePostEvent;
+                    mpStateInterface->OutputGuiEvent(lGuiEventLeavePostEvent);
+                }
                 break;
             }
 

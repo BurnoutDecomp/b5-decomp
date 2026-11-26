@@ -70,7 +70,7 @@ namespace BrnGui
         static const char                   KAC_PLAYER_TEMPLATE[13];            // "Player_%i_mc"
         static const char                   KAC_ROUTE_INFO_NAME[10];            // "RouteInfo"
         static const char                   KAC_ANIMATION_COMPONENT_NAME[15];   // "PlayersHeading"
-        static const char* const            KAPC_ANIMATION_STATES[2];           // { "visible", "invisible" }
+        static const char* KAPC_ANIMATION_STATES[2];           // { "visible", "invisible" }
 
         // ---- data members (declaration order; console offsets in the comments) -------
         TextField                      mTitleText;                     // +0x38   "Title_mc"

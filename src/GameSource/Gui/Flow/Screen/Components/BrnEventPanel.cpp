@@ -71,7 +71,7 @@ namespace BrnGui
     // The six child text fields' apt clip names. IMAGE-CITED: the table Construct walks lives
     // at VA 0x82F251B0 and its loop bound is the NEXT table (off_82F251C8, the "Star0".."Star3"
     // names), which is what fixes the count at six.
-    static const char* const KAPC_TEXTFIELD_NAMES[EventPanel::E_TEXTFIELD_COUNT] =
+    static const char* KAPC_TEXTFIELD_NAMES[EventPanel::E_TEXTFIELD_COUNT] =
     {
         "EventName", "EventStart", "GoalTitle", "GoalText", "AdditionalTitle", "AdditionalBody",
     };

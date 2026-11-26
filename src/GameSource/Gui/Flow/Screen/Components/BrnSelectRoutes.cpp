@@ -805,34 +805,8 @@ namespace BrnGui
     }
 
 
-    // These header-inline owners are attested by OnlineSelectRoute's native callers.
-    s32 SelectRoutes::GetNumberCheckpoints(s32 liRoundNumber) const
-    {
-        return maiNumCheckpoints[liRoundNumber];
-    }
-
-    u32 SelectRoutes::GetStartLightTriggerID(s32 liRoundNumber) const
-    {
-        return maCheckpointData[0].maStartLightTriggerID[liRoundNumber];
-    }
-
-    s32 SelectRoutes::GetCurrentRound() const
-    {
-        return miCurrentRound;
-    }
-
-    void SelectRoutes::SetCurrentRound(s32 liRoundNumber)
-    {
-        CGS_ASSERT(liRoundNumber >= 0, "liRound >= 0");
-        CGS_ASSERT(static_cast<u32>(liRoundNumber) < KI_MAX_ROUNDS,
-                   "((uint32_t)liRound) < BrnGameState::GameStateModuleIO::KU_MAX_ONLINE_ROUNDS_IN_MODE");
-        miCurrentRound = liRoundNumber;
-    }
-
-    SelectRoutes::EMenuItemType SelectRoutes::GetCurrentMenuItemType() const
-    {
-        return GetMenuItemType(GetCurrentlySelectedCheckpointIndex());
-    }
+    // GetNumberCheckpoints / GetStartLightTriggerID / SetCurrentRound / GetCurrentRound /
+    // GetCurrentMenuItemType are header-inline (BrnSelectRoutes.h).
 
     // ARTIST 8243B040. State queues carry the controller payload without GuiEvent's
     // explicit PC queue header. Keep this boundary separate from the event producer.

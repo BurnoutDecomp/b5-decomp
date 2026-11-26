@@ -50,7 +50,7 @@ namespace BrnGui
 
         static const s32         KI_NUM_COMPONENTS_TO_LOAD = 3;
         static const char        KAC_PAUSE_OPTIONS_COMPONENT[7];
-        static const char* const KAPC_PAUSE_OPTION_STRING_IDS[KI_NUM_COMPONENTS_TO_LOAD];
+        static const char* KAPC_PAUSE_OPTION_STRING_IDS[KI_NUM_COMPONENTS_TO_LOAD];
 
         MenuComponent mPauseOptions;   // console +0x38
         GuiCache*     mpGuiCache;      // console +0x10F8

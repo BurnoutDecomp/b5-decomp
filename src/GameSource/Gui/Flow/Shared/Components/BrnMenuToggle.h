@@ -133,6 +133,6 @@ namespace BrnGui
         // off_82F27460 -- the per-state apt view-state names, indexed by MenuToggleStates.
         // Shared vocabulary with BrnGui::MenuItem / BrnGui::ColourMenuToggle; entry [0]
         // (UNUSED) aliases INVISIBLE exactly as those two do.
-        static const char* const KAC_STATE_NAMES[E_MENUTOGGLESTATES_COUNT];
+        static const char* KAC_STATE_NAMES[E_MENUTOGGLESTATES_COUNT];
     };
 }

@@ -40,7 +40,7 @@ namespace BrnGui
     private:
         // The per-cell apt view-state names ("apt_Cell_<n>"); all eight
         // entries of the .data pointer table read back from the image.
-        static const char* const KAPC_CELL_STRINGS[KI_MAX_CELLS];
+        static const char* KAPC_CELL_STRINGS[KI_MAX_CELLS];
 
         s8 miCellCount;   // DWARF h:76 (X360 +0x8C, right after the GuiComponent base)
     };

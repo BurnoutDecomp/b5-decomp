@@ -18,7 +18,7 @@ namespace BrnGui
 
 // The bar-state frame labels (XEX .data @0x82F24EF8) and the two per-entry-state
 // bar mappings (XEX .rodata: SELECTED @0x8204C278, UNSELECTED @0x8204C2F8).
-const char* const FriendsListEntry::KAC_BAR_STATE_NAMES[FriendsListEntry::E_FRIENDLISTBARSTATE_COUNT] =
+const char* FriendsListEntry::KAC_BAR_STATE_NAMES[FriendsListEntry::E_FRIENDLISTBARSTATE_COUNT] =
 {
     "unselected",           "unselectedSCut",   "unselectedFBC",  "unselectedFBCDone",
     "unselectedEasy",       "unselectedMed",    "unselectedHard", "unselectedVHard",
@@ -41,7 +41,7 @@ const char FriendsListEntry::macBarStateAnimatorName[18]    = "entryAnimator_cpt
 // EFriendListEntryState enum semantics -- the SetEntryStatus asm proves the
 // indexing and the {RECEIVED, SENT_JOINABLE, JOINABLE} branch constants, not the
 // individual cell values.
-const char* const FriendsListEntry::KAC_STATUS_ICON_NAMES[FriendsListEntry::E_FRIENDLISTICONSTATE_COUNT] =
+const char* FriendsListEntry::KAC_STATUS_ICON_NAMES[FriendsListEntry::E_FRIENDLISTICONSTATE_COUNT] =
 {
     "invisible",        // E_FRIENDLISTICONSTATE_INVISIBLE     (X360-attested)
     "received",         // E_FRIENDLISTICONSTATE_RECEIVED      (reconstructed)

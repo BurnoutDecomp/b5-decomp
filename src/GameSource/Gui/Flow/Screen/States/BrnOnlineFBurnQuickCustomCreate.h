@@ -16,6 +16,6 @@ namespace BrnGui
 
         // DWARF cpp:27 -- the option -> state-event table (XEX .data @0x82F26904:
         // "TO_QWK_MAT" / "TO_CUST_MAT" / "ADVANCE").
-        static const char* const KAPC_MAIN_MENU_FBURN_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT];
+        static const char* KAPC_MAIN_MENU_FBURN_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTIONS_COUNT];
     };
 }

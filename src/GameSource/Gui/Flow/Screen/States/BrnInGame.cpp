@@ -296,7 +296,7 @@ namespace BrnGui
 
     // @ 0x82F272A4 (.data, read from the image): option -> screen-flow state-event
     // string (DWARF BrnInGame.cpp:66).
-    const char* const InGame::KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[13] =
+    const char* InGame::KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[13] =
     {
         "TO_FBURN_QK",    // E_MAIN_MENU_OPTIONS_FREEBURN_PLAY_NOW
         "TO_FBURN_CU",    // E_MAIN_MENU_OPTIONS_FREEBURN_CUSTOM_MATCH

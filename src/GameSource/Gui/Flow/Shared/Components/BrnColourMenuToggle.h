@@ -162,9 +162,9 @@ namespace BrnGui
         s32       miLoadedItems;                // +0x61E6
 
         // The five child colour-selection component names (off_82F27474). Defined in the .cpp.
-        static const char* const KAC_ITEM_COLOUR_COMPONENT[KI_NUM_ITEMS];
+        static const char* KAC_ITEM_COLOUR_COMPONENT[KI_NUM_ITEMS];
 
         // The per-state apt view-state names (off_82F27488). Defined in the .cpp.
-        static const char* const KAC_STATE_NAMES[E_MENUTOGGLESTATES_COUNT];
+        static const char* KAC_STATE_NAMES[E_MENUTOGGLESTATES_COUNT];
     };
 }

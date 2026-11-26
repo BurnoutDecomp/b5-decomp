@@ -43,7 +43,7 @@ namespace BrnGui
     // on, which is `invisible`. No assert, no log line, no drawn row. The sibling
     // BrnGui::MenuItem table (@0x82F27430) and BrnGui::TableRow (@0x82F27444) already carried the
     // right vocabulary, which is exactly why every other menu row on this build draws.
-    const char* const MenuToggle::KAC_STATE_NAMES[MenuToggle::E_MENUTOGGLESTATES_COUNT] =
+    const char* MenuToggle::KAC_STATE_NAMES[MenuToggle::E_MENUTOGGLESTATES_COUNT] =
     {
         "Invisible",     // [0] E_MENUTOGGLESTATES_UNUSED (aliases INVISIBLE's string)
         "Invisible",     // [1] E_MENUTOGGLESTATES_INVISIBLE

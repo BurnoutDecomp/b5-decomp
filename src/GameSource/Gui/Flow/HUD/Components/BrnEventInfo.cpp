@@ -349,7 +349,7 @@ namespace BrnGui
 // and mode 10 OnlineRace both ride the "Race" frame, the four traffic-ish modes share
 // "TrafficAttack", etc). Slot 15 (E_MODE_ONLINE_FREE_BURN_LOBBY) is "Invisible" and is
 // NEVER read: MoveAnimation short-circuits mode 15 onto its own two labels.
-const char* const EventInfoComponent::KAC_MODE_FRAME_NAMES[EventInfoComponent::KI_MODE_FRAME_NAME_COUNT] =
+const char* EventInfoComponent::KAC_MODE_FRAME_NAMES[EventInfoComponent::KI_MODE_FRAME_NAME_COUNT] =
 {
     "Race",             //  0  E_MODE_OFFLINE_RACE
     "Race",             //  1  E_MODE_FACE_OFF
@@ -374,7 +374,7 @@ const char* const EventInfoComponent::KAC_MODE_FRAME_NAMES[EventInfoComponent::K
 // off_82F24B4C [7] -- the generic text-field slots PrepareComponentsForGameMode binds
 // out of mEventMovieClip on EVERY mode. The 7th entry is the X360-only slot the
 // DWARF/PS3 build lacks (UpdateStuntAttack's online add-score delta lives in it).
-const char* const EventInfoComponent::KAPC_TEXTFIELD_NAMES[EventInfoComponent::KI_TEXTFIELD_COUNT] =
+const char* EventInfoComponent::KAPC_TEXTFIELD_NAMES[EventInfoComponent::KI_TEXTFIELD_COUNT] =
 {
     "textField_1_mc",
     "textField_2_mc",
@@ -843,7 +843,7 @@ const char* const EventInfoComponent::KAPC_EVENT_STATE_NAMES[6] =
 // pins the stride and the base. Entries 0..14 line up with BrnGameState::EStuntType;
 // 15..17 are this table's own extra rows (the scorer's enum spells 15..18 as its
 // error/rating sentinels, which is a DIFFERENT list -- see the header note).
-const char* const EventInfoComponent::KAC_STUNT_TYPE_STRING_IDS[18] =
+const char* EventInfoComponent::KAC_STUNT_TYPE_STRING_IDS[18] =
 {
     "HUD_INFO_STUNT_SPIN",         //  0  E_STUNT_TYPE_SPIN
     "HUD_INFO_STUNT_ROLL",         //  1  E_STUNT_TYPE_BARREL_ROLL
@@ -867,7 +867,7 @@ const char* const EventInfoComponent::KAC_STUNT_TYPE_STRING_IDS[18] =
 
 // off_82F24BD4 [5] -- the combo-timeout wedge frames the score animator runs as the
 // combo window drains. KI_NUM_TIMEOUT_WEDGE_FRAMES == 5 (`cmpwi r29, 5` @0x8242A080).
-const char* const EventInfoComponent::KAPC_TIMEOUT_WEDGE_FRAME_NAMES[5] =
+const char* EventInfoComponent::KAPC_TIMEOUT_WEDGE_FRAME_NAMES[5] =
 {
     "startpulse",
     "startpulse_wedge2",

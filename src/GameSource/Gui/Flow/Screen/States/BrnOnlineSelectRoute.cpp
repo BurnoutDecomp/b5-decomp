@@ -131,7 +131,7 @@ namespace
         { OnlineSelectRoute::E_MAIN_MENU_OPTION_FINISHED, "$CAPS_BUTTON_FINISHED" },
     };
 
-    const char* const KAPC_ANIMATION_STATES[3] =
+    const char* KAPC_ANIMATION_STATES[3] =
     {
         "active", "inactive", "active_eventOnly"
     };
@@ -353,7 +353,7 @@ namespace
             char lacFormattedValue[64];
             CgsCore::SPrintf(lacFormattedValue, sizeof(lacFormattedValue), "%f", ldDistance);
             mpStateInterface->GetLanguageManager()->FormatAndAddText(
-                "ONLINE_SELECT_ROUTE_DISTANCE_VALUE", "%1",
+                "$ONLINE_SELECT_ROUTE_DISTANCE_VALUE" + 1, "%1",
                 CgsLanguage::LanguageManager::E_FORMAT_TEXT, 1,
                 lacFormattedValue, CgsLanguage::LanguageManager::E_FORMAT_LARGE_DISTANCE);
 
@@ -370,7 +370,7 @@ namespace
             CgsCore::SPrintf(lacFormattedValue, sizeof(lacFormattedValue), "%f",
                              static_cast<double>(lfRoundedSeconds));
             mpStateInterface->GetLanguageManager()->FormatAndAddText(
-                "ONLINE_SELECT_ROUTE_TIME_VALUE", "%1",
+                "$ONLINE_SELECT_ROUTE_TIME_VALUE" + 1, "%1",
                 CgsLanguage::LanguageManager::E_FORMAT_TEXT, 1,
                 lacFormattedValue, CgsLanguage::LanguageManager::E_FORMAT_MINUTES_SECONDS);
             mTimeValue.SetText("$ONLINE_SELECT_ROUTE_TIME_VALUE");
@@ -1100,33 +1100,32 @@ namespace
 
     void OnlineSelectRoute::DisplayCurrentRound()
     {
-        char lacCurrentRound[64];
-        char lacCurrentRoundEnd[64];
-        char lacTotalRounds[64];
-        const s32 liRound = mSelectRoutes.GetCurrentRound();
+        // DWARF cpp:2344: one char[3][64] local; ARTIST reads the round per use (0x82486480 /
+        // 0x82486498) and fills the buffers in order (0x70 / 0xB0 / 0xF0).
+        char laacFormatBuffer[3][64];
 
         if (mpGuiCache->GetOnlineGameMode() ==
             BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)
         {
-            CgsCore::SPrintf(lacCurrentRound, sizeof(lacCurrentRound), "%d", liRound + 1);
-            CgsCore::SPrintf(lacCurrentRoundEnd, sizeof(lacCurrentRoundEnd), "%d", liRound + 2);
-            CgsCore::SPrintf(lacTotalRounds, sizeof(lacTotalRounds), "%d", mpGuiCache->GetOnlineGameModeOptions()->miNumRounds);
+            CgsCore::SPrintf(laacFormatBuffer[0], sizeof(laacFormatBuffer[0]), "%d", mSelectRoutes.GetCurrentRound() + 1);
+            CgsCore::SPrintf(laacFormatBuffer[1], sizeof(laacFormatBuffer[1]), "%d", mSelectRoutes.GetCurrentRound() + 2);
+            CgsCore::SPrintf(laacFormatBuffer[2], sizeof(laacFormatBuffer[2]), "%d", mpGuiCache->GetOnlineGameModeOptions()->miNumRounds);
             mpStateInterface->GetLanguageManager()->FormatAndAddText(
-                "ONLINE_CURRENT_ROUND", "ONLINE_ROUTE_NUM_ROUNDS_RR",
+                "$ONLINE_CURRENT_ROUND" + 1, "ONLINE_ROUTE_NUM_ROUNDS_RR",
                 CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 3,
-                lacCurrentRound, CgsLanguage::LanguageManager::E_FORMAT_INTEGER,
-                lacCurrentRoundEnd, CgsLanguage::LanguageManager::E_FORMAT_INTEGER,
-                lacTotalRounds, CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
+                laacFormatBuffer[0], CgsLanguage::LanguageManager::E_FORMAT_INTEGER,
+                laacFormatBuffer[1], CgsLanguage::LanguageManager::E_FORMAT_INTEGER,
+                laacFormatBuffer[2], CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
         }
         else
         {
-            CgsCore::SPrintf(lacCurrentRound, sizeof(lacCurrentRound), "%d", liRound + 1);
-            CgsCore::SPrintf(lacTotalRounds, sizeof(lacTotalRounds), "%d", mpGuiCache->GetOnlineGameModeOptions()->miNumRounds);
+            CgsCore::SPrintf(laacFormatBuffer[0], sizeof(laacFormatBuffer[0]), "%d", mSelectRoutes.GetCurrentRound() + 1);
+            CgsCore::SPrintf(laacFormatBuffer[1], sizeof(laacFormatBuffer[1]), "%d", mpGuiCache->GetOnlineGameModeOptions()->miNumRounds);
             mpStateInterface->GetLanguageManager()->FormatAndAddText(
-                "ONLINE_CURRENT_ROUND", "ONLINE_ROUTE_NUM_ROUNDS",
+                "$ONLINE_CURRENT_ROUND" + 1, "ONLINE_ROUTE_NUM_ROUNDS",
                 CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 2,
-                lacCurrentRound, CgsLanguage::LanguageManager::E_FORMAT_INTEGER,
-                lacTotalRounds, CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
+                laacFormatBuffer[0], CgsLanguage::LanguageManager::E_FORMAT_INTEGER,
+                laacFormatBuffer[1], CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
         }
         mCurrentRoundDisplay.SetText("$ONLINE_CURRENT_ROUND");
     }
@@ -1135,8 +1134,10 @@ namespace
     {
         char lacEventName[64];
         CgsCore::SPrintf(lacEventName, sizeof(lacEventName), "EV_%d_O", muCurrentPresetEventID);
+        // ARTIST formats under the '$'-prefixed id's own text past the '$' (the one literal
+        // 0x8205F484 in r30, `addi r27,r30,1` @0x824866B4) and sets the field to the whole id.
         mpStateInterface->GetLanguageManager()->FormatAndAddText(
-            "ONLINE_SELECT_ROUTE_EVENT_NAME_VALUE", "%1",
+            "$ONLINE_SELECT_ROUTE_EVENT_NAME_VALUE" + 1, "%1",
             CgsLanguage::LanguageManager::E_FORMAT_TEXT, 1,
             lacEventName, CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
         mEventNameValue.SetText("$ONLINE_SELECT_ROUTE_EVENT_NAME_VALUE");

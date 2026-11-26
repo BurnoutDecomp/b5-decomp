@@ -73,9 +73,11 @@ namespace BrnGui
         static const char KAC_MESSAGE_BUTTONS_ANIMATION_COMPONENT[24];// "ButtonPromptsTransition"
         static const char KAC_NO_GAMES_FOUND_STRING_ID[29];           // "$ONLINE_GAME_SEARCH_NO_GAMES"
         static const char KAC_SEARCHING_STRING_ID[30];                // "$ONLINE_GAME_SEARCH_SEARCHING"
-        static const char* const KAPC_ANIMATION_STATES[2];            // { "Visible", "Invisible" }
-        static const char* const KAPC_YES_NO_BUTTON_STRING_ID[2];
-        static const char* const KAPC_OK_BUTTON_STRING_ID[1];
+        // DWARF `const char *[2]`: non-const pointers in .data, loaded per use (ARTIST
+        // ShowNoGamesFound `lwz r5,0x68B0(r29)` @0x8248DC20).
+        static const char* KAPC_ANIMATION_STATES[2];                  // { "Visible", "Invisible" }
+        static const char* KAPC_YES_NO_BUTTON_STRING_ID[2];
+        static const char* KAPC_OK_BUTTON_STRING_ID[1];
 
         // ---- data members (declaration order; console offsets in the comments) -------
         ESubState          meSubState;                  // +0x38

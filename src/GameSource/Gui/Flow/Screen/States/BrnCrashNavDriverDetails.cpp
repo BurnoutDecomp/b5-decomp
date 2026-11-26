@@ -105,7 +105,7 @@ namespace
 
     // ---- the menu rows the licence/records/discover tabs drive (@0x82F2701C) ------
     const s32 KI_NUM_MENU_ROWS = 3;
-    const char* const KAPC_MENU_TEXT[KI_NUM_MENU_ROWS] =
+    const char* KAPC_MENU_TEXT[KI_NUM_MENU_ROWS] =
     {
         "$DDETAILS_LICENSE", "$DDETAILS_RECORDS", "$DDETAILS_DISCOVER",
     };
@@ -117,7 +117,7 @@ namespace
     const char* const KPC_STATS_PANEL_DISCOVER = "Discover";
 
     // ---- apt component names (@0x82F271B8 and the three district tables) ----------
-    const char* const KAPC_STAT_TEXTFIELD_NAMES[CrashNavDriverDetails::KI_NUM_STAT_TEXTFIELDS] =
+    const char* KAPC_STAT_TEXTFIELD_NAMES[CrashNavDriverDetails::KI_NUM_STAT_TEXTFIELDS] =
     {
         "hoursPlayed_cpt",        "percentageComplete_cpt", "totalMileage_cpt",
         "carsWon_cpt",            "carsToShutdown_cpt",     "roadsRuledAmount_cpt",
@@ -132,11 +132,11 @@ namespace
         "gasStationsFound_cpt",   "paintShopsFound_cpt",    "carParksFound_cpt",
     };
 
-    const char* const KAPC_DISTRICT_BILLBOARD_TEXTFIELD_NAMES[CrashNavDriverDetails::KI_NUM_DISTRICTS] =
+    const char* KAPC_DISTRICT_BILLBOARD_TEXTFIELD_NAMES[CrashNavDriverDetails::KI_NUM_DISTRICTS] =
         { "bbPBH_cpt",  "bbSL_cpt",  "bbHT_cpt",  "bbWM_cpt",  "bbDTP_cpt"  };
-    const char* const KAPC_DISTRICT_JUMPS_TEXTFIELD_NAMES[CrashNavDriverDetails::KI_NUM_DISTRICTS] =
+    const char* KAPC_DISTRICT_JUMPS_TEXTFIELD_NAMES[CrashNavDriverDetails::KI_NUM_DISTRICTS] =
         { "jmpPBH_cpt", "jmpSL_cpt", "jmpHT_cpt", "jmpWM_cpt", "jmpDTP_cpt" };
-    const char* const KAPC_DISTRICT_SMASHES_TEXTFIELD_NAMES[CrashNavDriverDetails::KI_NUM_DISTRICTS] =
+    const char* KAPC_DISTRICT_SMASHES_TEXTFIELD_NAMES[CrashNavDriverDetails::KI_NUM_DISTRICTS] =
         { "smhPBH_cpt", "smhSL_cpt", "smhHT_cpt", "smhWM_cpt", "smhDTP_cpt" };
 
     const char KAC_MENU_COMPONENT[]         = "MenuItem";                 // DWARF cpp:56

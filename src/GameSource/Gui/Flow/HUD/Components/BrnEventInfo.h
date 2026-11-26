@@ -186,11 +186,11 @@ namespace BrnGui
         //   KAPC_TIMEOUT_WEDGE_FRAME_NAMES @0x82F24BD4 [5] =
         //     "startpulse","startpulse_wedge2","startpulse_wedge3","startpulse_wedge4",
         //     "startpulse_wedge5"
-        static const char* const KAC_MODE_FRAME_NAMES[KI_MODE_FRAME_NAME_COUNT];        // :129
-        static const char* const KAPC_TEXTFIELD_NAMES[KI_TEXTFIELD_COUNT];              // :163
+        static const char* KAC_MODE_FRAME_NAMES[KI_MODE_FRAME_NAME_COUNT];        // :129
+        static const char* KAPC_TEXTFIELD_NAMES[KI_TEXTFIELD_COUNT];              // :163
         static const char* const KAPC_EVENT_STATE_NAMES[KI_EVENT_STATE_NAME_COUNT];     // (X360-only symbol, off_82F24B68)
-        static const char* const KAC_STUNT_TYPE_STRING_IDS[KI_STUNT_TYPE_STRING_ID_COUNT]; // :194 (DWARF says [15]; X360 is [18])
-        static const char* const KAPC_TIMEOUT_WEDGE_FRAME_NAMES[KI_NUM_TIMEOUT_WEDGE_FRAMES]; // :257
+        static const char* KAC_STUNT_TYPE_STRING_IDS[KI_STUNT_TYPE_STRING_ID_COUNT]; // :194 (DWARF says [15]; X360 is [18])
+        static const char* KAPC_TIMEOUT_WEDGE_FRAME_NAMES[KI_NUM_TIMEOUT_WEDGE_FRAMES]; // :257
 
         // ---- methods (DWARF order) ------------------------------------------
         // @0x82412CA8 (DWARF :276) -- reset every per-event scalar. Zero callees; the

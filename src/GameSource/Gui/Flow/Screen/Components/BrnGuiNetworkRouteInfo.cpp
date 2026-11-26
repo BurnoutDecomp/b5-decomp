@@ -99,20 +99,20 @@ namespace BrnGui
     };
 
     // ---- class statics --------------------------------------------------------------------
-    const char* const GuiNetworkRouteInfo::KPAC_OPTIONS_ANIMATOR_COMPONENT[E_OPTION_COMPONENT_COUNT] =
+    const char* GuiNetworkRouteInfo::KPAC_OPTIONS_ANIMATOR_COMPONENT[E_OPTION_COMPONENT_COUNT] =
     {
         "GameOptions_1_anim", "GameOptions_2_anim", "GameOptions_3_anim",
         "GameOptions_4_anim", "GameOptions_5_anim", "GameOptions_6_anim",
         "GameOptions_7_anim", "GameOptions_8_anim", "GameOptions_9_anim",
     };
 
-    const char* const GuiNetworkRouteInfo::KPAC_HEADING_COMPONENT[E_OPTION_COMPONENT_COUNT] =
+    const char* GuiNetworkRouteInfo::KPAC_HEADING_COMPONENT[E_OPTION_COMPONENT_COUNT] =
     {
         "Heading1", "Heading2", "Heading3", "Heading4", "Heading5",
         "Heading6", "Heading7", "Heading8", "Heading9",
     };
 
-    const char* const GuiNetworkRouteInfo::KPAC_VALUE_COMPONENT[E_OPTION_COMPONENT_COUNT] =
+    const char* GuiNetworkRouteInfo::KPAC_VALUE_COMPONENT[E_OPTION_COMPONENT_COUNT] =
     {
         "Value1", "Value2", "Value3", "Value4", "Value5",
         "Value6", "Value7", "Value8", "Value9",
@@ -139,7 +139,7 @@ namespace BrnGui
     const char GuiNetworkRouteInfo::KAC_NUM_ROUNDS_FORMAT_STRING_ID[27]    = "ONLINE_ROUTE_CURRENT_ROUND";
     const char GuiNetworkRouteInfo::KAC_NUM_ROUNDS_RR_FORMAT_STRING_ID[30] = "ONLINE_ROUTE_CURRENT_ROUND_RR";
 
-    const char* const GuiNetworkRouteInfo::KPAC_HEADING_STRING_IDS[E_OPTION_COMPONENT_COUNT] =
+    const char* GuiNetworkRouteInfo::KPAC_HEADING_STRING_IDS[E_OPTION_COMPONENT_COUNT] =
     {
         "$ONLINE_GAME_OPTION_MODE",
         "$ONLINE_GAME_OPTION_TRAFFIC",
@@ -152,7 +152,7 @@ namespace BrnGui
         "$ONLINE_GAME_OPTION_TIME_LIMIT",
     };
 
-    const char* const GuiNetworkRouteInfo::KPAC_VEHICLE_CLASS_STRING_IDS[10] =
+    const char* GuiNetworkRouteInfo::KPAC_VEHICLE_CLASS_STRING_IDS[10] =
     {
         "$ONLINE_GAME_OPTION_VEHICLE_CLASS_1",
         "$ONLINE_GAME_OPTION_VEHICLE_CLASS_5",
@@ -166,25 +166,25 @@ namespace BrnGui
         "$ONLINE_GAME_OPTION_VEHICLE_CLASS_10",
     };
 
-    const char* const GuiNetworkRouteInfo::KPAC_RED_TEAM_INFINITE_BOOST_STRING_IDS[2] =
+    const char* GuiNetworkRouteInfo::KPAC_RED_TEAM_INFINITE_BOOST_STRING_IDS[2] =
     {
         "$ONLINE_GAME_OPTION_INFINITE_BOOST",
         "$ONLINE_GAME_OPTION_NORMAL_BOOST",
     };
 
-    const char* const GuiNetworkRouteInfo::KPAC_TRAFFIC_STRING_IDS[2] =
+    const char* GuiNetworkRouteInfo::KPAC_TRAFFIC_STRING_IDS[2] =
     {
         "$GENERAL_OPTION_ON",
         "$GENERAL_OPTION_OFF",
     };
 
-    const char* const GuiNetworkRouteInfo::KPAC_TRAFFIC_CHECKING_STRING_IDS[2] =
+    const char* GuiNetworkRouteInfo::KPAC_TRAFFIC_CHECKING_STRING_IDS[2] =
     {
         "$GENERAL_OPTION_ON",
         "$GENERAL_OPTION_OFF",
     };
 
-    const char* const GuiNetworkRouteInfo::KPAC_BOOST_TYPE_STRING_IDS[6] =
+    const char* GuiNetworkRouteInfo::KPAC_BOOST_TYPE_STRING_IDS[6] =
     {
         "$ONLINE_GAME_OPTION_BOOST_B1",
         "$ONLINE_GAME_OPTION_BOOST_B2",
@@ -194,7 +194,7 @@ namespace BrnGui
         "$ONLINE_GAME_OPTION_BOOST_I",
     };
 
-    const char* const GuiNetworkRouteInfo::KPAC_CRASH_LIMIT_STRING_IDS[6] =
+    const char* GuiNetworkRouteInfo::KPAC_CRASH_LIMIT_STRING_IDS[6] =
     {
         "$ONLINE_GAME_OPTION_CR_LIMIT_1",
         "$ONLINE_GAME_OPTION_CR_LIMIT_2",
@@ -204,15 +204,15 @@ namespace BrnGui
         "$ONLINE_GAME_OPTION_CR_LIMIT_N",
     };
 
-    const char* const GuiNetworkRouteInfo::KPAC_TIME_LIMIT_STRING_IDS[3] =
+    const char* GuiNetworkRouteInfo::KPAC_TIME_LIMIT_STRING_IDS[3] =
     {
         "$ONLINE_GAME_OPTION_TIME_LIMIT_10",
         "$ONLINE_GAME_OPTION_TIME_LIMIT_20",
         "$ONLINE_GAME_OPTION_TIME_LIMIT_30",
     };
 
-    const char* const GuiNetworkRouteInfo::KPAC_STATE_ID[E_STATE_COUNT]  = { "visible", "invisible" };
-    const char* const GuiNetworkRouteInfo::KPAC_OPTION_STATE_ID[2]       = { "visible", "invisible" };
+    const char* GuiNetworkRouteInfo::KPAC_STATE_ID[E_STATE_COUNT]  = { "visible", "invisible" };
+    const char* GuiNetworkRouteInfo::KPAC_OPTION_STATE_ID[2]       = { "visible", "invisible" };
 
     const s32 GuiNetworkRouteInfo::KI_NUM_COMPONENTS_TO_LOAD = 11; // ARTIST 0x8204C7A0
     const char GuiNetworkRouteInfo::macCrashNavBoroughName[11] = "Borough_mc";
@@ -280,8 +280,9 @@ namespace BrnGui
     // ------------------------------------------------------------ Destruct
     void GuiNetworkRouteInfo::Destruct()
     {
-        miNumComponentsLoaded = 0;
+        // meState first, as the DecFIGS PS3 body (0x3C744C) and ARTIST's scheduling (0x824170F0) show.
         meState               = E_STATE_INVISIBLE;
+        miNumComponentsLoaded = 0;
         mpGuiCache            = 0;
         mbReceivedInfo        = false;
 

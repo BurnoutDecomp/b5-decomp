@@ -57,7 +57,7 @@ namespace BrnGui
     const char OnlineNews::KAC_TOGGLE_TEXT_COMPONENT[11] = "ToggleText";
     const char OnlineNews::KAC_NEWS_TEXT_COMPONENT[9]    = "NewsText";
 
-    const char* const OnlineNews::KPAC_TOGGLE_TEXT_STRING_ID[E_TOGGLE_ITEM_COUNT] =
+    const char* OnlineNews::KPAC_TOGGLE_TEXT_STRING_ID[E_TOGGLE_ITEM_COUNT] =
     {
         "$ONLINE_NEWS_TOGGLE_NEWS", "$ONLINE_NEWS_TOGGLE_TOS"
     };

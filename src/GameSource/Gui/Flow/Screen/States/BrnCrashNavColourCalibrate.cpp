@@ -700,9 +700,9 @@ namespace BrnGui
     // on this path (the console has none here).
     void CrashNavColourCalibrate::SaveSettings()
     {
-        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
-        lpProfile->SetBrightness(mBrightnessSetting);
-        lpProfile->SetContrast(mContrastSetting);
+        // ARTIST re-reads mpGuiCache for each setter (0x824CEC10 / 0x824CEC20).
+        mpGuiCache->GetMenuOptionsData()->SetBrightness(mBrightnessSetting);
+        mpGuiCache->GetMenuOptionsData()->SetContrast(mContrastSetting);
 
         GuiCommandWire16<KI_EVENT_SAVE_PROFILE_REQUEST> lSaveRequest(1);
         mpStateInterface->OutputGuiEvent(lSaveRequest);

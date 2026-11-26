@@ -20,6 +20,8 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h"    // BrnGui::AnimationComponent
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"         // BrnGui::MenuComponent
 #include "SharedClasses/World/BrnWorldRegion.h"                             // BrnWorld::ECounty
+#include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT_AT (header-inline SetCurrentRound)
+#define CGS_ARTIST_BRNSELECTROUTES_H_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnSelectRoutes.h"
 
 namespace CgsModule { struct Event; }
 
@@ -139,4 +141,42 @@ namespace BrnGui
         s32                miStartItem;                            // +0x1910
         s32                maiNumCheckpoints[KI_MAX_ROUNDS];       // +0x1914
     };
+
+    // Header-inline accessors: DWARF places their definitions in BrnSelectRoutes.h (lines
+    // cited per function) and ARTIST has no out-of-line copy of any of them; SetCurrentRound's
+    // asserts name the header (OnlineSelectRoute::SelectRound 0x82493610 / 0x82493634).
+
+    // DWARF h:277.
+    inline s32 SelectRoutes::GetNumberCheckpoints(s32 liRoundNumber) const
+    {
+        return maiNumCheckpoints[liRoundNumber];
+    }
+
+    // DWARF h:320.
+    inline u32 SelectRoutes::GetStartLightTriggerID(s32 liRoundNumber) const
+    {
+        return maCheckpointData[0].maStartLightTriggerID[liRoundNumber];
+    }
+
+    // DWARF h:338.
+    inline void SelectRoutes::SetCurrentRound(s32 liRoundNumber)
+    {
+        CGS_ASSERT_AT(liRoundNumber >= 0, "liRound >= 0", CGS_ARTIST_BRNSELECTROUTES_H_FILE, 340);
+        CGS_ASSERT_AT(static_cast<u32>(liRoundNumber) < KI_MAX_ROUNDS,
+                      "((uint32_t)liRound) < BrnGameState::GameStateModuleIO::KU_MAX_ONLINE_ROUNDS_IN_MODE",
+                      CGS_ARTIST_BRNSELECTROUTES_H_FILE, 341);
+        miCurrentRound = liRoundNumber;
+    }
+
+    // DWARF h:347.
+    inline s32 SelectRoutes::GetCurrentRound() const
+    {
+        return miCurrentRound;
+    }
+
+    // DWARF h:438.
+    inline SelectRoutes::EMenuItemType SelectRoutes::GetCurrentMenuItemType() const
+    {
+        return GetMenuItemType(GetCurrentlySelectedCheckpointIndex());
+    }
 }

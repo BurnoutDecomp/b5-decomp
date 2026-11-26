@@ -63,7 +63,7 @@ namespace BrnGui
     const char OnlineGameOptionsSummary::KAC_DOWN_ARROW_COMPONENT[15]   = "ArrowDown_anim";
     const char OnlineGameOptionsSummary::KAC_HELP_BAR_COMPONENT[7]      = "Button";
 
-    const char* const OnlineGameOptionsSummary::KPC_ARROW_ANIMATION_STATES[3] =
+    const char* OnlineGameOptionsSummary::KPC_ARROW_ANIMATION_STATES[3] =
     {
         "invisible", "visible", "animate"
     };
@@ -71,7 +71,7 @@ namespace BrnGui
     const char OnlineGameOptionsSummary::KAC_SUMMARY_TITLE_STRING_ID[34]      = "$PAGE_HEADING_GAME_OPTION_SUMMARY";
     const char OnlineGameOptionsSummary::KAC_SAVE_OPTIONS_TITLE_STRING_ID[32] = "$PAGE_HEADING_SAVE_GAME_OPTIONS";
 
-    const char* const OnlineGameOptionsSummary::KPC_MAIN_MENU_OPTION_STRING_IDS[KI_NUM_MAIN_MENU_OPTIONS] =
+    const char* OnlineGameOptionsSummary::KPC_MAIN_MENU_OPTION_STRING_IDS[KI_NUM_MAIN_MENU_OPTIONS] =
     {
         "$ONLINE_GAME_OPTION_DONE", "$ONLINE_GAME_OPTION_SAVE_DONE"
     };

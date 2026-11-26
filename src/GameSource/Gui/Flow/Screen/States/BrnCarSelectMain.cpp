@@ -67,6 +67,15 @@ namespace BrnGui
         GuiEventTriggerCarSelect() {}
     };
 
+    namespace
+    {
+        // DWARF BrnGuiEventTypeDefs.h:824: the cache-ready event UpdateGuiCache receives.
+        struct GuiEventCache : public CgsGui::GuiEvent<64>
+        {
+            GuiCache* mpCachePointer;   // h:826
+        };
+    }
+
     // ---- Construct @ 0x824BBC20 ---------------------------------------------------
     void CarSelectMain::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
@@ -125,15 +134,14 @@ namespace BrnGui
     // The trailing event-id s32 is the DWARF declaration shape (cpp:544); the dispatcher
     // (ProcesssIncomingEvents, event 64) passes it like the other handlers and this body
     // ignores it.
-    void CarSelectMain::UpdateGuiCache(const CgsModule::Event* lpCacheEvent, s32 /*liEventType*/)
+    void CarSelectMain::UpdateGuiCache(const CgsModule::Event* lpEvent, s32 /*liEventType*/)
     {
-        // The cache-ready GUI event carries the acquired GuiCache pointer as its leading word.
-        // External event blob: its layout is fixed by the event, not a reconstructable C++ class,
-        // so the leading pointer is read positionally (X360 lwz r11,0(a2)).
-        GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpCacheEvent);
-        CGS_ASSERT_AT(lpCache != 0, "lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 553);   // cpp:553
+        // ARTIST reads the event's mpCachePointer for the assert (0x824B54C4) and again for the
+        // store (0x824B54F0).
+        const GuiEventCache* lpCacheEvent = static_cast<const GuiEventCache*>(lpEvent);
+        CGS_ASSERT_AT(lpCacheEvent->mpCachePointer, "lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 553);   // cpp:553
 
-        mpGuiCache = lpCache;
+        mpGuiCache = lpCacheEvent->mpCachePointer;
 
         // (PC-BUILD GUARD RETIRED 2026-08-02: GuiModule::Construct now binds the module's own
         // WorldDataController into the cache and its acquire machine binds the vehicle list, so
@@ -424,7 +432,7 @@ namespace BrnGui
     // @0x82F26C94 -- launched-result -> overlay message string id. Entry 0 is the pooled
     // empty string (@0x820046A7); results 1..6 are the failure reasons HandleLaunchedEvent
     // feeds to the "CNOnlLchFail" overlay as message param 2.
-    const char* const CarSelectMain::KPC_LAUNCH_FAILED_STRINGIDS[7] =
+    const char* CarSelectMain::KPC_LAUNCH_FAILED_STRINGIDS[7] =
     {
         "",
         "ONLINE_LAUNCHED_FAILED_PLAYERS",
@@ -444,7 +452,7 @@ namespace BrnGui
     // entry, and the table ends at [18] @0x82F26CF8 = 0x00000095, which is not a pointer.
     // HandleLaunchingEvent @0x824C9008 indexes this by EGameModeType, so declaring it [17]
     // lost a real mode string with no diagnostic.
-    const char* const CarSelectMain::KPAC_MODE_STRINGS[18] =
+    const char* CarSelectMain::KPAC_MODE_STRINGS[18] =
     {
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,                     // 0..9   offline modes
         "ONLINE_GAME_OPTION_MODE_RACE",                   // 10  E_MODE_ONLINE_RACE

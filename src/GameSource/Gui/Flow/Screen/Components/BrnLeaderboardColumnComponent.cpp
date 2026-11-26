@@ -20,7 +20,7 @@
 
 namespace BrnGui
 {
-    const char* const LeaderboardColumnComponent::KAPC_CELL_STRINGS[KI_MAX_CELLS] =
+    const char* LeaderboardColumnComponent::KAPC_CELL_STRINGS[KI_MAX_CELLS] =
     {
         "apt_Cell_0", "apt_Cell_1", "apt_Cell_2", "apt_Cell_3",
         "apt_Cell_4", "apt_Cell_5", "apt_Cell_6", "apt_Cell_7",

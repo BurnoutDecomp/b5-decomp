@@ -77,10 +77,10 @@ namespace BrnGui
         static const char                   KAC_UP_ARROW_COMPONENT[13];            // "ArrowUp_anim"
         static const char                   KAC_DOWN_ARROW_COMPONENT[15];          // "ArrowDown_anim"
         static const char                   KAC_HELP_BAR_COMPONENT[7];             // "Button"
-        static const char* const            KPC_ARROW_ANIMATION_STATES[3];         // invisible / visible / animate
+        static const char* KPC_ARROW_ANIMATION_STATES[3];         // invisible / visible / animate
         static const char                   KAC_SUMMARY_TITLE_STRING_ID[34];
         static const char                   KAC_SAVE_OPTIONS_TITLE_STRING_ID[32];
-        static const char* const            KPC_MAIN_MENU_OPTION_STRING_IDS[KI_NUM_MAIN_MENU_OPTIONS];
+        static const char* KPC_MAIN_MENU_OPTION_STRING_IDS[KI_NUM_MAIN_MENU_OPTIONS];
         static const char                   KPC_EMPTY_SLOT_STRING_IDS[30];         // "ONLINE_GAME_OPTION_EMPTY_SLOT"
         static const char                   KPC_SLOT_STRING_FORMAT_ID[24];         // "ONLINE_GAME_OPTION_SLOT"
         static const char                   KPC_SLOT_STRING_ID[28];                // "$ONLINE_GAME_OPTION_SLOT_%d"

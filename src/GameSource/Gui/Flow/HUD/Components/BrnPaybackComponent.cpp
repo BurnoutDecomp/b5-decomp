@@ -47,7 +47,7 @@ static const f32 KF_TIME_TO_DELAY_SHOWING_ICON   = 1.5f;
 // holds THREE entries, read out of the image: "SlashDown", "LockDown", "PowerDown"; the next
 // word is already the help item's "PaybackButton". Three matches SetDisplayedIcon's `< 3` bound.
 static const s32 KI_NUM_AWARD_STRINGS = 3;
-static const char* const KAPC_AWARD_STRINGS[KI_NUM_AWARD_STRINGS] =
+static const char* KAPC_AWARD_STRINGS[KI_NUM_AWARD_STRINGS] =
 {
     "SlashDown",     // E_AT_SLASHDOWN
     "LockDown",      // E_AT_LOCKDOWN

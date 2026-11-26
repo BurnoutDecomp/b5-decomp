@@ -113,7 +113,7 @@ namespace BrnGui
 
         // DWARF BrnInGame.cpp:66 - option -> screen-flow state-event string
         // (SelectOnlineMenuOption indexes it). @ 0x82F272A4 (.data).
-        static const char* const KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[13];
+        static const char* KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[13];
 
         GuiCache*        mpGuiCache;                      // DWARF h:77; X360 +0x38 (the 64-event fills it)
         BrnProgression::Profile* mpProfile;               // DWARF h:78; X360 +0x3C (the 350-event fills it)

@@ -794,6 +794,18 @@ namespace BrnGui
     // 0x824CE20C).
     typedef CgsGui::GuiEvent<124> GuiEventOnlineRequestAccountSettings;
 
+    // DWARF BrnGuiEventTypeDefs.h:570/574 `typedef GuiEvent<98> GuiEventOnlineGetBuddyCount`,
+    // `typedef GuiEvent<99> GuiEventOnlineGetBuddies` (PS3 ids); one lower on the X360:
+    // FriendsListComponent::RequestRefreshedData posts {1, 97, 12} (ARTIST 0x8243929C) and
+    // SetTotalFriends {1, 98, 12} (0x82439328).
+    typedef CgsGui::GuiEvent<97> GuiEventOnlineGetBuddyCount;
+    typedef CgsGui::GuiEvent<98> GuiEventOnlineGetBuddies;
+
+    // DWARF CgsGuiEvent.h dump: `typedef GuiEvent<290> GuiEventLeavePostEvent` (PS3 id); 292 on
+    // the X360 (ShowtimeInstantResultsState::TriggerExitResults posts {1, 292, 12} @0x824C6474,
+    // the DWARF local lGuiEventLeavePostEvent at BrnShowtimeInstantResults.cpp:937).
+    typedef CgsGui::GuiEvent<292> GuiEventLeavePostEvent;
+
     class GuiPlayerInfoResponse : public CgsGui::GuiEvent<406>
     {
     public:

@@ -30,7 +30,7 @@ namespace BrnGui
 {
     const char LeaderboardTableComponent::KAC_COLUMN_NAME_TEMPLATE[10] = "Column_%d";
 
-    const char* const LeaderboardTableComponent::KAPC_COLUMN_STRINGS[KI_MAX_COLUMNS] =
+    const char* LeaderboardTableComponent::KAPC_COLUMN_STRINGS[KI_MAX_COLUMNS] =
     {
         "apt_Pos_0", "apt_Pos_1", "apt_Pos_2", "apt_Pos_3", "apt_Pos_4",
         "apt_Pos_5", "apt_Pos_6", "apt_Pos_7", "apt_Pos_8", "apt_Pos_9",

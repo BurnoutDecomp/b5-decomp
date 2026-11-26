@@ -37,11 +37,11 @@ namespace BrnGui
     const char OnlineGameOptions::KPC_SLOT_STRING_ID[28]                 = "$ONLINE_GAME_OPTION_SLOT_%d";
 
     // ---- animation state tables ------------------------------------------------------
-    const char* const OnlineGameOptions::KPC_ARROW_ANIMATION_STATES[3] =         // @0x82F2683C
+    const char* OnlineGameOptions::KPC_ARROW_ANIMATION_STATES[3] =         // @0x82F2683C
         { "invisible", "visible", "animate" };
-    const char* const OnlineGameOptions::KPC_LOAD_HEADER_ANIMATION_STATES[3] =   // @0x82F26848
+    const char* OnlineGameOptions::KPC_LOAD_HEADER_ANIMATION_STATES[3] =   // @0x82F26848
         { "invisible", "withoutbuttons", "withbuttons" };
-    const char* const OnlineGameOptions::KPC_MAP_BORDER_ANIMATION_STATES[2] =    // @0x82F26854
+    const char* OnlineGameOptions::KPC_MAP_BORDER_ANIMATION_STATES[2] =    // @0x82F26854
         { "invisible", "visible" };
 
     // ---- create-match option lists (s32 ids, each E_OPTION_TERMINATOR-terminated) -----

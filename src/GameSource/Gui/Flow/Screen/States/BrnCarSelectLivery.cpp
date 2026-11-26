@@ -128,7 +128,7 @@ namespace BrnGui
 
     // @0x82F26C84 / @0x82F26C88 -- the adjacent pointer pair SetupComponents hands to the two
     // SetupToggle calls as the row TITLES (the DWARF's KAPC_OPTIONS[2], cpp:69).
-    const char* const CarSelectLivery::KAPC_OPTIONS[CarSelectLivery::E_OPTIONTOGGLE_COUNT] =
+    const char* CarSelectLivery::KAPC_OPTIONS[CarSelectLivery::E_OPTIONTOGGLE_COUNT] =
     {
         "$CAR_MOD_LIVERY",         // [0] E_OPTIONTOGGLE_LIVERY
         "$CAR_MOD_PAINT_FINISH",   // [1] E_OPTIONTOGGLE_PAINT_FINISH
@@ -1174,7 +1174,7 @@ namespace BrnGui
         struct GuiPlayerInfoResponsePayload : public CgsModule::Event
         {
             u8  maHead[0x38];        // +0x00 (the car id at +0x20 -- taken by the base)
-            u8  mbCarNeedsRepair;    // +0x38 -- BYTE: the X360 uses lbz r11, 0x38(r30)
+            bool mbCarNeedsRepair;   // +0x38 -- BYTE: the X360 uses lbz r11, 0x38(r30)
                                      // @0x824C87B0 and stores it back with stbx. On the
                                      // big-endian console an lbz here would read the HIGH
                                      // byte of an s32, so the producer field really is a
@@ -1478,7 +1478,8 @@ namespace BrnGui
         const GuiPlayerInfoResponsePayload* lpPayload =
             reinterpret_cast<const GuiPlayerInfoResponsePayload*>(lpEvent);
 
-        mbDisableCarModifyInteraction = (lpPayload->mbCarNeedsRepair != 0);
+        // A bool copy: ARTIST stores the loaded byte and tests it (0x824C87B0..0x824C87C0).
+        mbDisableCarModifyInteraction = lpPayload->mbCarNeedsRepair;
         if (mbDisableCarModifyInteraction)
         {
             mbFadeScreenPending = true;

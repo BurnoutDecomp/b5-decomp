@@ -59,8 +59,8 @@ namespace BrnGui
 
         // The per-category frame labels (defined in this TU's .cpp from the image) and the
         // three child names the Construct asm passes.
-        static const char* const KAPC_CAROUSEL_FRAMES[4];            // cpp:23
-        static const char* const KAPC_CAROUSEL_INVISIBLE_FRAMES[4];  // cpp:34
+        static const char* KAPC_CAROUSEL_FRAMES[4];            // cpp:23
+        static const char* KAPC_CAROUSEL_INVISIBLE_FRAMES[4];  // cpp:34
         static const char        KAC_GAMERTAG_NAME[12];              // cpp:45 "gamertag_mc"
         static const char        KAC_LOCK_ICON_NAME[12];             // cpp:46 "lockIcon_mc"
         static const char        KAC_LOADING_ICON_NAME[16];          // cpp:47 "ImageLoading_mc"

@@ -65,8 +65,11 @@ void GuiEventRoadRuleUpcomingRoads::Construct()
 {
     for ( s32 liSide = 0; liSide < E_ROAD_COUNT; ++liSide )
     {
-        maaeLeaderTypes[liSide][0]   = E_ROADRULELEADERTYPE_AI;
-        maaeLeaderTypes[liSide][1]   = E_ROADRULELEADERTYPE_AI;
+        // DWARF BrnGuiEventTypeDefs.cpp:323 liType; the DecFIGS PS3 body (0x5386E0) loops it.
+        for ( s32 liType = 0; liType < BrnStreetData::E_SCORE_TYPE_COUNT; ++liType )
+        {
+            maaeLeaderTypes[liSide][liType] = E_ROADRULELEADERTYPE_AI;
+        }
         mRoadIds[liSide]             = 0;
         meRoadStates[liSide]         = E_ROADSTATE_NORMAL;
         maiTurningRoadIndices[liSide] = BrnStreetData::KI_INVALID_ROAD_INDEX;

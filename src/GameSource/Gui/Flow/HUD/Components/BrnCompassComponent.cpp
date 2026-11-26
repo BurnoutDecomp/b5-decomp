@@ -61,7 +61,7 @@ namespace BrnGui
     // real (ShowPositionOnCompass calls it), so an empty label would have been a live
     // lookup miss on every off-course frame.
     // --------------------------------------------------------------------------
-    const char* const CompassComponent::KAPC_PLAYER_ROUTE_STATES[E_PLAYER_ROUTE_COUNT] =
+    const char* CompassComponent::KAPC_PLAYER_ROUTE_STATES[E_PLAYER_ROUTE_COUNT] =
     {
         "onTrack",    // [0] E_PLAYER_ROUTE_ON_COURSE
         "offTrack",   // [1] E_PLAYER_ROUTE_OFF_COURSE

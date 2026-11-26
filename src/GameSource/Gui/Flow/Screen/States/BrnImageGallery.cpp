@@ -46,7 +46,7 @@ namespace BrnGui
     const u32 ImageGalleryState::muNumResourcesToLoad = 1;
 
     // The category tab titles (indexed by EGuiImageCategories).
-    const char* const ImageGalleryState::KAPC_MENU_TITLES[4] =
+    const char* ImageGalleryState::KAPC_MENU_TITLES[4] =
     {
         "$IMAGE_GALLERY_FREEBURN",
         "$IMAGE_GALLERY_EVENT_MUGSHOTS",

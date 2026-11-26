@@ -348,7 +348,7 @@ namespace BrnGui
     namespace
     {
         // The challenge target-type captions, indexed by the challenge data type (24 entries).
-        const char* const KAPC_FREEBURN_CHALLENGE_TYPE_STRINGS[24] =
+        const char* KAPC_FREEBURN_CHALLENGE_TYPE_STRINGS[24] =
         {
             "$BURNOUT_SKILLS_CRASHES",         "$BURNOUT_SKILLS_NEAR_MISSES",
             "$BURNOUT_SKILLS_ONCOMING",        "$BURNOUT_SKILLS_DRIFT",
@@ -368,7 +368,7 @@ namespace BrnGui
                              sizeof(KAPC_FREEBURN_CHALLENGE_TYPE_STRINGS[0]));
 
         // The Burnout Skillz page captions, indexed by the skill being shown (12 entries).
-        const char* const KAPC_BURNOUT_SKILLS_TITLE_STRINGS[12] =
+        const char* KAPC_BURNOUT_SKILLS_TITLE_STRINGS[12] =
         {
             "$BURNOUT_SKILLS_TIME_IN_AIR",   "$BURNOUT_SKILLS_BARREL_ROLLS",
             "$BURNOUT_SKILLS_BOOST_CHAIN",   "$BURNOUT_SKILLS_DRIFT",
