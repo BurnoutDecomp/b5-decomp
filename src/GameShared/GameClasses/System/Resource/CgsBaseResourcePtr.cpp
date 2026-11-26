@@ -36,17 +36,7 @@ namespace CgsResource
         Propogate();
     }
 
-    // ARTIST8227D298 compares only the three cached resource words.
-    bool BaseResourcePtr::IsEqual(const void* lpOther) const
-    {
-        void* const* lpResources = static_cast<void* const*>(lpOther);
-        for (u32 luIndex = 0; luIndex < 3; ++luIndex)
-        {
-            if (mResourceMemory.m_baseResources[luIndex] != lpResources[luIndex])
-                return false;
-        }
-        return true;
-    }
+    // BaseResourcePtr::IsEqual (ARTIST 0x8227D298) is header-inline: CgsResourcePtr.h.
 
     void BaseResourcePtr::RemoveFromCurrentList()
     {

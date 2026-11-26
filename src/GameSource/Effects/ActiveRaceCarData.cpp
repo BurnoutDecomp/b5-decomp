@@ -212,7 +212,7 @@ void ActiveRaceCarData::Initialise(CgsID lID,
 void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
                                     const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>& lrPhysicsResource)
 {
-    if (CgsResource::NULLResourcePtr.IsEqual(&lrPhysicsResource))
+    if (lrPhysicsResource == CgsResource::NULLResourcePtr)
     {
         return;
     }

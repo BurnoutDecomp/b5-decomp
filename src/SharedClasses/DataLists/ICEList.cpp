@@ -9,26 +9,11 @@
 // X360 export; bodies recovered from the DecFIGS DWARF + the sibling ChallengeList
 // pattern).
 //
-// The two lookup methods each loop the KI_MAX_ICE_LISTS slots and STOP at the first
-// slot whose ResourcePtr is the null image (the lists are packed from 0 by
-// AddListResource, so the first empty slot is the end of the loaded set). In the
-// binary that test is an inline 3-word compare of the ResourcePtr against the
-// &dword_82FFB248 image -- the BaseResourcePtr IDENTITY REGION, i.e. mpResourceMemory
-// plus the two mHandle words (an earlier note here said mpResourceMemory/mpNext/mpPrev;
-// that predates the X360-authoritative member reorder in CgsResourcePtr.h and is
-// corrected). The X360 returns 0 the moment a slot equals the image
-// (GetICETakeData/GetICETakeDataFromGuid @ 0x8267BDF0/0x8267BEC0 -> goto LABEL_6),
-// matching the PS3 DecFIGS `if (NULLResourcePtr == slot) break;` (0x814C48/0x8197DC).
-// It is restored as an early `return 0` on the first invalid slot. For a valid slot
-// the X360 inlined the
-// take-dictionary linear scan (Find / GetAt over mpaIndex); those are restored to
-// the logical Dictionary accessors (dict->Find / dict->GetNumEntries / dict->GetAt),
-// which is exact semantic parity.
-//
-// ⭐ MOUNTED 2026-08-01 (ICEList wave). Nothing about this TU was wrong except one
-// unlinkable spelling (see skNullIdentity below); it had simply never been in the exe
-// source list, and its consumers -- GameDataModule::mICEList (X360 member +457664) and
-// DirectorResourceManager::mpICEDictionaryList -- only lit up with the shot-group bank.
+// The two lookup methods each loop the KI_MAX_ICE_LISTS slots and stop at the first slot
+// equal to CgsResource::NULLResourcePtr (the lists are packed from 0 by AddListResource):
+// ResourcePtr::operator!= as DWARF names it, the inlined BaseResourcePtr::IsEqual against this
+// TU's NULLResourcePtr (0x82FFB248). For a valid slot the X360 inlined the take-dictionary
+// scans (Find / GetAt over mpaIndex), written as the Dictionary accessors.
 
 #include "SharedClasses/DataLists/ICEList.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle (sentinel value)
@@ -37,41 +22,10 @@
 namespace BrnResource
 {
 
-namespace
-{
-    // X360 &dword_82FFB248 -- the NULL image both lookup loops compare each slot
-    // against. CORRECTED 2026-08-01 from the recovered disassembly of
-    // GetICETakeData @0x8267BDF0 / GetICETakeDataFromGuid @0x8267BEC0: the compare is
-    //     r10 = &dword_82FFB248; r11 = &slot; r9 = 0
-    //     do { if (*(u32*)r10 != *(u32*)r11) break; r9 += 4; r10 += 4; r11 += 4; }
-    //     while (r9 < 12);
-    // i.e. CgsResource::BaseResourcePtr::IsEqual @0x8227D298 inlined -- a word-for-word
-    // compare of the ResourcePtr IDENTITY REGION (mpResourceMemory + the two mHandle
-    // words), NOT a two-pointer ResourceHandle compare.
-    //
-    // The earlier spelling here was `slot == skInvalidHandle` against a bare
-    // ResourceHandle. That reached ResourcePtr<Type>::operator==(const ResourceHandle&),
-    // which is DECLARED in CgsResourcePtr.h and DEFINED NOWHERE IN THE TREE -- so this TU
-    // could never link, which is why it was never in the exe source list. It is retired in
-    // favour of the identity image the console actually compares against, spelled through
-    // the real (bodied, X360-attested) IsEqual. Sized from the identity region itself, per
-    // the project's never-transcribe-a-console-byte-size rule.
-    //
-    // ⚠️ FLAG (DecFIGS rung 2): the DWARF's call hints for both lookups name
-    // ResourcePtr<Dictionary<ICETakeData>>::operator!=, so the ORIGINAL SOURCE did spell
-    // this as an operator compare (the PS3 form is `if (NULLResourcePtr == slot) break;`).
-    // Both `operator!=`/`operator==` against a ResourceHandle are declaration-only in this
-    // port, and the BaseResourcePtr overloads that ARE inline need CgsResource::
-    // NULLResourcePtr, whose definition has not been recovered either. IsEqual is the same
-    // comparison the compiler emitted, so behaviour is exact; restore the operator spelling
-    // when NULLResourcePtr's home TU lands.
-    struct NullIdentityImage
-    {
-        void*                        mpResourceMemory;
-        CgsResource::ResourceHandle  mHandle;
-    };
-    const NullIdentityImage skNullIdentity = { 0, { 0, 0 } };
-}
+// Both lookups stop at the first slot equal to CgsResource::NULLResourcePtr: ARTIST compares
+// each slot with this TU's NULLResourcePtr (0x82FFB248, internal linkage per DecFIGS
+// CgsResourcePtr.h:149) through the inlined BaseResourcePtr::IsEqual. DWARF (ICEList.cpp:121 /
+// :141) names ResourcePtr<Dictionary<ICETakeData>>::operator!= in both loops.
 
 // ICEList::Construct -- reset every list slot to the invalid handle and zero the
 // counts. Recovered from the DWARF (32x ResourcePtr::operator= loop + count resets),
@@ -102,7 +56,9 @@ void ICEList::Destruct()
 // count into miCount, and advance miListCount.
 void ICEList::AddListResource(const ICETakeDictionaryResourcePtr& lResource)
 {
-    CGS_ASSERT(miListCount < KI_MAX_ICE_LISTS, "No space for more ICE lists\n");
+    // ARTIST 0x8267BD9C: streamed, on the unity path (0x820A88F8) line 79.
+    CGS_ASSERT_STREAM_AT(miListCount < KI_MAX_ICE_LISTS, "No space for more ICE lists\n",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/DataLists/ICEList.cpp", 79);
 
     // X360: CreateFromHandle(&maTakeDictionary[miListCount], &lResource.mHandle) --
     // the inlined form of the public ResourcePtr assignment. Restored as operator=
@@ -125,21 +81,22 @@ const ICE::ICETakeData* ICEList::GetICETakeData(CgsContainers::DictEntry::Dictio
 {
     for ( s32 liIndex = 0; liIndex < KI_MAX_ICE_LISTS; ++liIndex )
     {
-        // X360: the inlined 3-word IsEqual against the null identity image -- the
-        // first empty slot ends the loaded set, so bail out (return null) here.
-        if ( maTakeDictionary[ liIndex ].IsEqual(&skNullIdentity) )
+        // The first empty slot ends the loaded set.
+        if ( maTakeDictionary[ liIndex ] != CgsResource::NULLResourcePtr )
         {
-            return 0;
+            const CgsContainers::Dictionary<ICE::ICETakeData>* lpTakeDictionary =
+                maTakeDictionary[ liIndex ].GetMemoryResource();
+
+            // X360: inlined linear scan over mpaIndex matching the key -> entry mpData.
+            const ICE::ICETakeData* lpTakeData = lpTakeDictionary->Find(lKey);
+            if ( lpTakeData )
+            {
+                return lpTakeData;
+            }
         }
-
-        const CgsContainers::Dictionary<ICE::ICETakeData>* lpTakeDictionary =
-            maTakeDictionary[ liIndex ].GetMemoryResource();
-
-        // X360: inlined linear scan over mpaIndex matching the key -> entry mpData.
-        const ICE::ICETakeData* lpTakeData = lpTakeDictionary->Find(lKey);
-        if ( lpTakeData )
+        else
         {
-            return lpTakeData;
+            break;
         }
     }
 
@@ -153,26 +110,27 @@ const ICE::ICETakeData* ICEList::GetICETakeDataFromGuid(s32 liGuid) const
 {
     for ( s32 liDicIndex = 0; liDicIndex < KI_MAX_ICE_LISTS; ++liDicIndex )
     {
-        // X360: the inlined 3-word IsEqual against the null identity image -- the
-        // first empty slot ends the loaded set, so bail out (return null) here.
-        if ( maTakeDictionary[ liDicIndex ].IsEqual(&skNullIdentity) )
+        // The first empty slot ends the loaded set.
+        if ( maTakeDictionary[ liDicIndex ] != CgsResource::NULLResourcePtr )
         {
-            return 0;
-        }
+            const CgsContainers::Dictionary<ICE::ICETakeData>* lpTakeDictionary =
+                maTakeDictionary[ liDicIndex ].GetMemoryResource();
 
-        const CgsContainers::Dictionary<ICE::ICETakeData>* lpTakeDictionary =
-            maTakeDictionary[ liDicIndex ].GetMemoryResource();
-
-        // X360: iterate all miNumEntries entries (GetAt asserts the index bound);
-        // return the first take whose miGuid == liGuid.
-        const s32 liNumTakes = lpTakeDictionary->GetNumEntries();
-        for ( s32 liTakeIndex = 0; liTakeIndex < liNumTakes; ++liTakeIndex )
-        {
-            const ICE::ICETakeData* lpTakeData = lpTakeDictionary->GetAt(liTakeIndex);
-            if ( lpTakeData->miGuid == liGuid )
+            // X360: iterate all miNumEntries entries (GetAt asserts the index bound; ARTIST
+            // re-reads the count each pass, 0x8267BF8C: DWARF scopes no count local);
+            // return the first take whose miGuid == liGuid.
+            for ( s32 liTakeIndex = 0; liTakeIndex < lpTakeDictionary->GetNumEntries(); ++liTakeIndex )
             {
-                return lpTakeData;
+                const ICE::ICETakeData* lpTakeData = lpTakeDictionary->GetAt(liTakeIndex);
+                if ( lpTakeData->miGuid == liGuid )
+                {
+                    return lpTakeData;
+                }
             }
+        }
+        else
+        {
+            break;
         }
     }
 

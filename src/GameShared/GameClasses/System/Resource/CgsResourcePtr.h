@@ -75,7 +75,7 @@ namespace CgsResource
         void GetResourceHandle(ResourceHandle* lpHandle) const;
         ResourceHandle GetResourceHandle() const;
         void SetResource(const SmallResource* lpResource);
-        bool IsEqual(const void* lpOther) const;
+        bool IsEqual(const SmallResource* lpResource) const;
 
     protected:
         // DWARF h:111; the body (h:255-262 in DecFIGS) hands the handle to
@@ -137,14 +137,14 @@ namespace CgsResource
         mHandle.mpSourceEntry = 0;
     }
 
-
-
-
-
-
-
-
-
+    // DWARF CgsResourcePtr.h:92 (IsEqual(const ResourceHandle::Resource*) const); header-inline
+    // as LegacySrc CgsResourcePtr.h:331 defines it. ARTIST keeps an out-of-line copy (0x8227D298:
+    // rw::operator== inlined, then `!= 0`) and inlines it inside loops (ICEList::GetICETakeData
+    // 0x8267BE10, PFXNodeFader::LookupColourCube 0x82504314).
+    inline bool BaseResourcePtr::IsEqual(const SmallResource* lpResource) const
+    {
+        return ((mResourceMemory == *lpResource) != 0);
+    }
 
 
 

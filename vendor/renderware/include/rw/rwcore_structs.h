@@ -51,8 +51,29 @@ struct BaseResources {
             m_baseResources[luIndex] = 0;
     }
 
+    // DecFIGS resource.h:340 / :349; bodies LegacySrc rw/core/resource/resource.h:340-352.
+    void* const& GetBaseResource(uint32_t i) const { return m_baseResources[i]; }
+    void*& GetBaseResource(uint32_t i) { return m_baseResources[i]; }
+
     void* m_baseResources[Count];
 };
+
+// DecFIGS resource.h:500 declares `RwBool operator==<N>(const BaseResources<N>&, const
+// BaseResources<N>&)`; the body is LegacySrc rw/core/resource/resource.h:499-511. RwBool is
+// RwUInt32 (LegacySrc rw/core/base/detail/hosttype.h:47). ARTIST inlines it into
+// CgsResource::BaseResourcePtr::IsEqual (0x8227D298: the three-word loop, then `!= 0`).
+template <uint32_t Count>
+uint32_t operator==(const BaseResources<Count>& lhs, const BaseResources<Count>& rhs)
+{
+    for (uint32_t i = 0; i < Count; ++i)
+    {
+        if (lhs.GetBaseResource(i) != rhs.GetBaseResource(i))
+        {
+            return 0;
+        }
+    }
+    return (!0);
+}
 
 template <uint32_t Count>
 struct BaseResourceDescriptors {

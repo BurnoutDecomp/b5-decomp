@@ -72,7 +72,7 @@ WorldGraphicsStreamer::GetInstanceList( s32 liIndex )
 {
     CgsResource::ResourcePtr<CgsGraphics::InstanceList>& lrSlot = maInstanceLists[ liIndex ];
 
-    if ( lrSlot.IsEqual( &KS_EMPTY_INSTANCE_LIST_PTR ) )
+    if ( lrSlot == KS_EMPTY_INSTANCE_LIST_PTR )
     {
         return 0;
     }

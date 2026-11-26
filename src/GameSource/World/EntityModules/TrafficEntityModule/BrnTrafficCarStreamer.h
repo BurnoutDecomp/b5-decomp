@@ -330,7 +330,7 @@ TrafficCarStreamer::GetGraphicsSpec( u32 luAssetId ) const
                 "Attempted to use a traffic car asset that is not known about" );
     CGS_ASSERT( IsTrafficAssetLoaded( luAssetId ),
                 "Attempted to get main graphics for a traffic asset which isn't loaded" );
-    CGS_ASSERT( !CgsResource::NULLResourcePtr.IsEqual( &maGraphicsStubs[luAssetId] ),
+    CGS_ASSERT( maGraphicsStubs[luAssetId] != CgsResource::NULLResourcePtr,
                 "Resource ptr for a loaded traffic asset is NULL" );
 
     return maGraphicsStubs[luAssetId]->mpVehicleGraphics;
@@ -347,7 +347,7 @@ TrafficCarStreamer::GetWheelGraphicsSpec( u32 luAssetId ) const
                 "Attempted to use a traffic car asset that is not known about" );
     CGS_ASSERT( IsTrafficAssetLoaded( luAssetId ),
                 "Attempted to get wheel graphics for a traffic asset which isn't loaded" );
-    CGS_ASSERT( !CgsResource::NULLResourcePtr.IsEqual( &maGraphicsStubs[luAssetId] ),
+    CGS_ASSERT( maGraphicsStubs[luAssetId] != CgsResource::NULLResourcePtr,
                 "Resource ptr for a loaded traffic asset is NULL" );
 
     return maGraphicsStubs[luAssetId]->mpWheelGraphics;

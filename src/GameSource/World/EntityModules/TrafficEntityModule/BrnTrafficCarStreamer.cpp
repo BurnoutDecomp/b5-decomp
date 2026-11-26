@@ -363,7 +363,7 @@ void TrafficCarStreamer::OnLoadBegin( s32 liListIndex )
 
     CGS_ASSERT( mauLoadStates[luAsset] == E_LOADSTATE_NOT_LOADED,
                 "Traffic asset was in the wrong state when starting loading" );
-    CGS_ASSERT( CgsResource::NULLResourcePtr.IsEqual( &maGraphicsStubs[luAsset] ),
+    CGS_ASSERT( maGraphicsStubs[luAsset] == CgsResource::NULLResourcePtr,
                 "Loading a traffic asset which already has a resource" );
 
     mauLoadStates[luAsset] = E_LOADSTATE_LOAD_STARTED;
@@ -387,7 +387,7 @@ void TrafficCarStreamer::OnUnloadBegin( s32 liListIndex )
                 "Traffic asset was in the wrong state when starting unloading" );
     CGS_ASSERT( ( maxLoadFlags[luAsset] & E_LOADFLAG_SHOULD_BE_LOADED ) == 0,
                 "Unloading a traffic asset which is currently requested" );
-    CGS_ASSERT( !CgsResource::NULLResourcePtr.IsEqual( &maGraphicsStubs[luAsset] ),
+    CGS_ASSERT( maGraphicsStubs[luAsset] != CgsResource::NULLResourcePtr,
                 "Unloading a traffic asset which has no resource" );
 
     mauLoadStates[luAsset] = E_LOADSTATE_UNLOAD_STARTED;
@@ -418,7 +418,7 @@ void TrafficCarStreamer::OnLoadComplete( const BrnResource::GameDataIO::GameData
 
     CGS_ASSERT_AT( mauLoadStates[luAsset] == E_LOADSTATE_LOAD_STARTED,
                 "Traffic asset was in the wrong state when finished loading" , KAC_ARTIST_ASSERT_FILE, 387);
-    CGS_ASSERT_AT( CgsResource::NULLResourcePtr.IsEqual( &maGraphicsStubs[luAsset] ),
+    CGS_ASSERT_AT( maGraphicsStubs[luAsset] == CgsResource::NULLResourcePtr,
                 "Loading a traffic asset which already has a resource" , KAC_ARTIST_ASSERT_FILE, 388);
 
     mauLoadStates[luAsset] = E_LOADSTATE_LOADED;
@@ -427,7 +427,7 @@ void TrafficCarStreamer::OnLoadComplete( const BrnResource::GameDataIO::GameData
         static_cast< const BrnResource::GameDataIO::GetTrafficVehicleGraphicsResponse* >( lpEvent );
     maGraphicsStubs[luAsset] = lpResponse->GetTrafficVehicleGraphicsObjectHandle();
 
-    CGS_ASSERT_AT( !CgsResource::NULLResourcePtr.IsEqual( &maGraphicsStubs[luAsset] ),
+    CGS_ASSERT_AT( maGraphicsStubs[luAsset] != CgsResource::NULLResourcePtr,
                 "Didn't get a resource back after loading a traffic asset" , KAC_ARTIST_ASSERT_FILE, 395);
 }
 

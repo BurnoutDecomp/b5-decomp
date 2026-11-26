@@ -234,7 +234,7 @@ namespace Playback
         }
         case E_RMLS_LOADING: // 1
             // Wait until mpResource is bound (X360 IsEqual(&NULLResourcePtr, mpResource)==false).
-            if (!CgsResource::NULLResourcePtr.IsEqual(&mpResource))
+            if (mpResource != CgsResource::NULLResourcePtr)
             {
                 lpLoadData->meState = E_RMLS_POST_LOAD; // 2
                 arContent.mu32DataSize = mpResource->GetDataSize();
