@@ -17,7 +17,8 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // LobbyPlayerStatusData (GetOnlinePlayerColourFromARCI)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 // (GuiCache::GetNumEventStarts is homed in the partfile BrnGuiCache_wJ_01.cpp.)
-#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h"
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp"   // this file's assert path (ARTIST 0x82070818)
+#define CGS_ARTIST_CGSARRAY_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h"   // the inlined CgsArray asserts below
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h"
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
@@ -287,7 +288,7 @@ namespace BrnGui
         mpProfile = 0;
 
         // ARTIST Construct 0x82505A68: freeburn is E_MODE_NONE, not race (zero).
-        meGameModeType = -1;
+        meGameModeType = BrnGameState::GameStateModuleIO::E_MODE_NONE;
         mbAreRoadRulesAvailable = false; // 0x82505A3C
         mu8EasyDriveGateState = 0; // ARTIST82505A24
         mu8EATraxChyronActive = 0; // ARTIST82505A54
@@ -822,15 +823,17 @@ namespace BrnGui
     // UnloadResource and report NOT-yet-unloaded; otherwise report unloaded.
     bool StateLoadingHelper::EnsureResourceIsUnloaded(const CgsGui::sResourceTuple& lResource)
     {
-        CGS_ASSERT(lResource.muId < KU_MAX_RESOURCES_TO_WATCH,
-                   "lResourceTuple.muId out of bounds in StateLoadingHelper::EnsureResourceIsUnloaded");
+        CGS_ASSERT_STREAM_AT(lResource.muId < KU_MAX_RESOURCES_TO_WATCH,
+                             "lResourceTuple.muId out of bounds in StateLoadingHelper::EnsureResourceIsUnloaded",
+                             CGS_ARTIST_FILE, 505);
 
-        if (maResources[lResource.muId].meState != E_STATE_UNLOADED)
+        // ARTIST tests for UNLOADED first and returns true in the fall-through (bne @0x824FE308).
+        if (maResources[lResource.muId].meState == E_STATE_UNLOADED)
         {
-            UnloadResource(lResource);
-            return false;
+            return true;
         }
-        return true;
+        UnloadResource(lResource);
+        return false;
     }
 
     // @ 0x824FE330 -- the unload-side mirror of EnsureResourcesAreLoaded. The X360 walks
@@ -886,22 +889,21 @@ namespace BrnGui
     // streams the offending value on the console; folded static.
     bool StateLoadingHelper::AreAllAptComponentsInitialised(GuiFlow leFlow) const
     {
-        CGS_ASSERT(static_cast<u32>(leFlow) <= 2, "Invalid GuiFlow of ");   // cpp:895
+        CGS_ASSERT_STREAM_AT((leFlow >= E_GUIFLOW_FIRST) && (leFlow < E_GUIFLOW_COUNT),
+                             "Invalid GuiFlow of " << leFlow << "\n", CGS_ARTIST_FILE, 895);
 
+        // ARTIST seeds the result true before the scan (`li r3,1` @0x824EDCE8).
+        bool lbAllInitialised = true;
         const ComponentsToWatch& lrWatch = maComponentsToWatch[leFlow];
-        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] which expected apt components are still
-        // unloaded on the SCREEN flow. BRN_SATNAV_DIAG only, every 300th false answer.
-        {
-            static s32 siTick = 0;
-        }
         for (u32 luComponent = 0; luComponent < lrWatch.muNumberOfComponentsToWatch; ++luComponent)
         {
             if (!lrWatch.mabComponentsLoaded[luComponent])
             {
-                return false;
+                lbAllInitialised = false;
+                break;
             }
         }
-        return true;
+        return lbAllInitialised;
     }
 
     // @ 0x824EE058 -- zero the flow layer's per-component loaded flags and its
@@ -909,7 +911,8 @@ namespace BrnGui
     // Flow-range assert as above (cpp:1039).
     void StateLoadingHelper::ClearComponentInitialised(GuiFlow leFlow)
     {
-        CGS_ASSERT(static_cast<u32>(leFlow) <= 2, "Invalid GuiFlow of ");   // cpp:1039
+        CGS_ASSERT_STREAM_AT((leFlow >= E_GUIFLOW_FIRST) && (leFlow < E_GUIFLOW_COUNT),
+                             "Invalid GuiFlow of " << leFlow << "\n", CGS_ARTIST_FILE, 1039);
 
         ComponentsToWatch& lrWatch = maComponentsToWatch[leFlow];
         for (u32 luComponent = 0; luComponent < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH;
@@ -987,18 +990,15 @@ namespace BrnGui
     // exactly as the X360 does).
     void StateLoadingHelper::AppendExpectedAptComponent(GuiFlow leFlow, u32 luComponentNameHash)
     {
-        CGS_ASSERT(static_cast<u32>(leFlow) <= 2, "Invalid GuiFlow of ");   // cpp:784
+        CGS_ASSERT_STREAM_AT((leFlow >= E_GUIFLOW_FIRST) && (leFlow < E_GUIFLOW_COUNT),
+                             "Invalid GuiFlow of " << leFlow << "\n", CGS_ARTIST_FILE, 784);
 
         ComponentsToWatch& lrWatch = maComponentsToWatch[leFlow];
-        CGS_ASSERT(lrWatch.muNumberOfComponentsToWatch
-                       < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
-                   "Component list is full. Consider increasing the size, or are we "
-                   "doing something silly?");   // cpp:789
-
-        const bool lbAlreadyWaiting = IsWaitingAptComponent(leFlow, luComponentNameHash);
-        CGS_ASSERT(!lbAlreadyWaiting,
-                   "Appending a component to the list that already exists");   // cpp:790
-        (void)lbAlreadyWaiting;
+        CGS_ASSERT_STREAM_AT(lrWatch.muNumberOfComponentsToWatch < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
+                             "Component list is full. Consider increasing the size, or are we doing something silly?",
+                             CGS_ARTIST_FILE, 789);
+        CGS_ASSERT_STREAM_AT(!IsWaitingAptComponent(leFlow, luComponentNameHash),
+                             "Appending a component to the list that already exists", CGS_ARTIST_FILE, 790);
 
         lrWatch.mauComponentsToWatchIds[lrWatch.muNumberOfComponentsToWatch] = luComponentNameHash;
         lrWatch.mabComponentsLoaded[lrWatch.muNumberOfComponentsToWatch]     = false;
@@ -1009,7 +1009,8 @@ namespace BrnGui
     // hash. Flow-range assert as above (cpp:867).
     bool StateLoadingHelper::IsWaitingAptComponent(GuiFlow leFlow, u32 luComponentNameHash) const
     {
-        CGS_ASSERT(static_cast<u32>(leFlow) <= 2, "Invalid GuiFlow of ");   // cpp:867
+        CGS_ASSERT_STREAM_AT((leFlow >= E_GUIFLOW_FIRST) && (leFlow < E_GUIFLOW_COUNT),
+                             "Invalid GuiFlow of " << leFlow << "\n", CGS_ARTIST_FILE, 867);
 
         const ComponentsToWatch& lrWatch = maComponentsToWatch[leFlow];
         for (u32 luComponent = 0; luComponent < lrWatch.muNumberOfComponentsToWatch;
@@ -1030,15 +1031,9 @@ namespace BrnGui
     void StateLoadingHelper::MarkAptComponentInitialised(
         const CgsGui::GuiEventAptTriggerPayload* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0,
-                   "Invalid apt trigger event sent to StateLoadingHelper::MarkAptComponentInitialised");
-        if (lpEvent == 0)
-            return;
-
-        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] every ONLOAD name + hash, first 400.
-        {
-            static s32 siSeen = 0;
-        }
+        CGS_ASSERT_STREAM_AT(lpEvent != 0,
+                             "Invalid apt trigger event sent to StateLoadingHelper::MarkAptComponentInitialised",
+                             CGS_ARTIST_FILE, 988);
 
         for (u32 luFlow = 0; luFlow < 3; ++luFlow)
         {
@@ -1061,12 +1056,13 @@ namespace BrnGui
                 continue;
 
             mpaControlledComponents[luControlled]->AttachController(lpEvent->mpComponentRef);
-            const u32 luLast = muControlledComponentCount - 1;
-            if (luControlled != luLast)
+            // ARTIST compares the index with the count itself (cmplw @0x824EE010), so the
+            // last entry is always copied down (onto itself when it is the match).
+            if (luControlled != muControlledComponentCount)
             {
-                mpaControlledComponents[luControlled] = mpaControlledComponents[luLast];
                 muControlledComponentNameHash[luControlled] =
-                    muControlledComponentNameHash[luLast];
+                    muControlledComponentNameHash[muControlledComponentCount - 1];
+                mpaControlledComponents[luControlled] = mpaControlledComponents[muControlledComponentCount - 1];
             }
             --muControlledComponentCount;
             break;
@@ -1078,10 +1074,10 @@ namespace BrnGui
     void StateLoadingHelper::AppendExpectedControlledObject(
         u32 luHashedComponentName, CgsGui::ObjectController* lpObjectController)
     {
-        CGS_ASSERT(luHashedComponentName != 0, "Invalid name hash");
-        CGS_ASSERT(lpObjectController != 0, "Invliad controller object");
-        CGS_ASSERT(muControlledComponentCount < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
-                   "Too many components waiting");
+        CGS_ASSERT_STREAM_AT(luHashedComponentName != 0, "Invalid name hash", CGS_ARTIST_FILE, 926);
+        CGS_ASSERT_STREAM_AT(lpObjectController != 0, "Invliad controller object", CGS_ARTIST_FILE, 927);
+        CGS_ASSERT_STREAM_AT(muControlledComponentCount < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
+                             "Too many components waiting", CGS_ARTIST_FILE, 928);
 
         mpaControlledComponents[muControlledComponentCount]       = lpObjectController;
         muControlledComponentNameHash[muControlledComponentCount] = luHashedComponentName;
@@ -1147,9 +1143,6 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(luId < KU_MAX_RESOURCES_TO_WATCH,
                    "(luId >= 0) && (luId < KU_MAX_RESOURCES_TO_WATCH)", CGS_ARTIST_FILE, 345);
-        if (luId >= KU_MAX_RESOURCES_TO_WATCH)
-            return 0;
-
         CGS_ASSERT_AT(maResources[luId].mpResource != 0, "maResources[luId].mpResource!=NULL", CGS_ARTIST_FILE, 346);
         return maResources[luId].mpResource;
     }
@@ -2600,7 +2593,7 @@ namespace BrnGui
                 mEventDestinationDistrict      = 18;                     // stw  +0x9F50 (E_DISTRICT_INVALID)
                 // word_82F27F00, read from the image rodata at VA 0x82F27F00: FF FF == the
                 // invalid LandmarkIndex sentinel.
-                mEventDestinationLandmarkIndex = 0xFFFFu;                // sth  +0x9F4C
+                mEventDestinationLandmarkIndex = BrnGameState::K_INVALID_LANDMARK; // sth  +0x9F4C
             }
             else
             {
@@ -2609,13 +2602,13 @@ namespace BrnGui
                 // and the invalid pair otherwise.
                 if (lpPrepare->mu8CheckpointCount != 0)
                 {
-                    mEventDestinationLandmarkIndex = lpPrepare->mau16CheckpointLandmark[0]; // sth +0x9F4C
+                    mEventDestinationLandmarkIndex = BrnGameState::LandmarkIndex(lpPrepare->mau16CheckpointLandmark[0]); // sth +0x9F4C
                     mEventDestinationDistrict      = lpPrepare->maiCheckpointDistrict[0];   // stw +0x9F50
                 }
                 else
                 {
                     mEventDestinationDistrict      = 18;      // stw +0x9F50 (E_DISTRICT_INVALID)
-                    mEventDestinationLandmarkIndex = 0xFFFFu; // sth +0x9F4C (word_82F27F00)
+                    mEventDestinationLandmarkIndex = BrnGameState::K_INVALID_LANDMARK; // sth +0x9F4C (word_82F27F00)
                 }
                 // ARTIST 8250ECD8..ECE4 also publishes an empty tracker when count is zero.
                 UpdateTrackerInfo(lpPrepare->mau16CheckpointLandmark,
@@ -3013,31 +3006,9 @@ namespace BrnGui
         return lpChallengeList;
     }
 
-    // @ 0x8240F1C0 -- the checkpoint count for the current event. The X360 only requires a
-    // positive count (asserts 0 < muCheckpointsInEvent) for the checkpoint-carrying race
-    // modes; the nested mode-tests skip the assert entirely when meGameModeType is in
-    // {2,3,4,7,9,12,14,15,16,17}. Value read regardless.
-    u8 GuiCache::GetCheckpointsInEvent() const
-    {
-        const s32 leMode = meGameModeType;
-        // asm nesting: outer {3,9,7,4}, then {14,12,17}, then {2,16}, then {15,16}.
-        const bool lbCheckpointCountRequired =
-            (leMode != 3) && (leMode != 9) && (leMode != 7) && (leMode != 4)
-            && (leMode != 14) && (leMode != 12) && (leMode != 17)
-            && (leMode != 2) && (leMode != 16) && (leMode != 15);
-        CGS_ASSERT(!lbCheckpointCountRequired || (0 < muCheckpointsInEvent),
-                   "0 < muCheckpointsInEvent");
-        return static_cast<u8>(muCheckpointsInEvent);
-    }
+    // GetCheckpointsInEvent is header-inline in BrnGuiCache.h.
 
-    // @ 0x8240F398 -- the distance-to-go for the current event. The X360 builds the assert
-    // text dynamically ("Event Distance=" + the value) before firing; the assert is a no-op
-    // here, so the guard collapses to the branch sense (fires when the distance is negative).
-    f32 GuiCache::GetDistanceInEvent() const
-    {
-        CGS_ASSERT(0.0f <= mfDistanceInEvent, "0.0f <= mfDistanceInEvent (Event Distance)");
-        return mfDistanceInEvent;
-    }
+    // GetDistanceInEvent is header-inline in BrnGuiCache.h.
 }
 
 // ============================================================================
@@ -3165,39 +3136,11 @@ namespace BrnGui
 
 namespace BrnGui
 {
-    // @ 0x82443750
-    const Vector4& GuiCache::GetRaceCarPosition(EActiveRaceCarIndex leActiveRaceCarIndex) const
-    {
-        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_0 <= leActiveRaceCarIndex,
-                   "Invalid EActiveRaceCarIndex : ");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "Invalid EActiveRaceCarIndex : ");
-        CGS_ASSERT(maRaceCarUsed[leActiveRaceCarIndex],
-                   "true == mRaceCarInfo.mabCarsUsed[leActiveRaceCarIndex]");
-        return maRaceCarPositions[leActiveRaceCarIndex];
-    }
+    // GetRaceCarPosition is header-inline in BrnGuiCache.h.
 
-    // @ 0x824438A8
-    bool GuiCache::IsRaceCarCrashing(EActiveRaceCarIndex leActiveRaceCarIndex) const
-    {
-        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_0 <= leActiveRaceCarIndex,
-                   "Invalid EActiveRaceCarIndex : ");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "Invalid EActiveRaceCarIndex : ");
-        CGS_ASSERT(maRaceCarUsed[leActiveRaceCarIndex],
-                   "true == mRaceCarInfo.mabCarsUsed[leActiveRaceCarIndex]");
-        return maRaceCarCrashing[leActiveRaceCarIndex];
-    }
+    // IsRaceCarCrashing is header-inline in BrnGuiCache.h.
 
-    // @ 0x82443A00
-    bool GuiCache::IsActiveRaceCarIndexUsed(EActiveRaceCarIndex leActiveRaceCarIndex) const
-    {
-        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_0 <= leActiveRaceCarIndex,
-                   "Invalid EActiveRaceCarIndex : ");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "Invalid EActiveRaceCarIndex : ");
-        return maRaceCarUsed[leActiveRaceCarIndex];
-    }
+    // IsActiveRaceCarIndexUsed is header-inline in BrnGuiCache.h.
 }
 
 // ============================================================================
@@ -3308,19 +3251,7 @@ namespace BrnGui
         mpMapIconManager = lpMapIconManager;
     }
 
-    // @ 0x824EC4C8 -- has the given race car crossed the finish line. Bounds-checks the
-    // ARCI (>= 0, < 8), then returns maRaceCarFinished[idx] (@0xA138) only when the
-    // per-car position gate maEventPositionValid[idx] (@0xA140) is set, else false.
-    bool GuiCache::HasRaceCarFinished(EActiveRaceCarIndex leActiveRaceCarIndex) const
-    {
-        CGS_ASSERT(leActiveRaceCarIndex >= 0, "Invalid EActiveRaceCarIndex");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "Invalid EActiveRaceCarIndex");
-        if (maEventPositionValid[leActiveRaceCarIndex])
-        {
-            return maRaceCarFinished[leActiveRaceCarIndex];
-        }
-        return false;
-    }
+    // HasRaceCarFinished is header-inline in BrnGuiCache.h.
 }
 
 // ============================================================================
@@ -3768,17 +3699,17 @@ namespace BrnGui
                                                             const u32* lpauComponentNameHashes,
                                                             u32 luCount)
     {
-        CGS_ASSERT(static_cast<u32>(leFlow) <= 2u, "Invalid GuiFlow of ");   // cpp:755
+        CGS_ASSERT_STREAM_AT((leFlow >= E_GUIFLOW_FIRST) && (leFlow < E_GUIFLOW_COUNT),
+                             "Invalid GuiFlow of " << leFlow << "\n", CGS_ARTIST_FILE, 755);
 
         ComponentsToWatch& lrWatch = maComponentsToWatch[leFlow];
 
-        CGS_ASSERT(luCount < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
-                   "Component list is full. Consider increasing the size, or are we doing "
-                   "something silly?");                                       // cpp:760
-        CGS_ASSERT(lrWatch.muNumberOfComponentsToWatch + luCount
-                       <= ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
-                   "Too many components to watch Consider increasing the size, or are we doing "
-                   "something silly?");                                       // cpp:762
+        CGS_ASSERT_STREAM_AT(luCount < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
+                             "Component list is full. Consider increasing the size, or are we doing something silly?",
+                             CGS_ARTIST_FILE, 760);
+        CGS_ASSERT_STREAM_AT(lrWatch.muNumberOfComponentsToWatch + luCount <= ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
+                             "Too many components to watch Consider increasing the size, or are we doing something silly?",
+                             CGS_ARTIST_FILE, 762);
 
         for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
         {
@@ -3950,28 +3881,7 @@ namespace BrnGui
     //  3. The event-destination accessor (MOVED here from the unmounted BrnGuiCache_wB_res.cpp:69)
     // =============================================================================================
 
-    // X360 BrnGui::GuiCache::GetEventDestinationLandmarkIndex @0x8240FA88. Two non-gating
-    // asserts, both sited in the HEADER on the console (BrnGuiCache.h:4055 / :4057):
-    //   * the race-style game-mode gate. The asm's test is `mode >= 2 && mode != 10 && mode != 6
-    //     && mode != 8 && mode != 5` -> fire; i.e. the PASSING set is {0, 1, 5, 6, 8, 10}, which
-    //     is the assert text's OFFLINE_RACE / FACE_OFF / ONLINE_RACE / ELIMINATOR / MARKED_MAN /
-    //     BURNING_ROUTE. Spelled as the positive membership test here.
-    //   * the sentinel gate: the stored index must not be K_INVALID_LANDMARK (word_82F25440,
-    //     the image's 0xFFFF).
-    // Then `*out = mEventDestinationLandmarkIndex` (@0x9F4C, a raw u16 copy).
-    BrnGameState::LandmarkIndex GuiCache::GetEventDestinationLandmarkIndex() const
-    {
-        CGS_ASSERT(
-            (meGameModeType == 0) || (meGameModeType == 1) || (meGameModeType == 10)
-                || (meGameModeType == 6) || (meGameModeType == 8) || (meGameModeType == 5),
-            CGS_ASSERT_MESSAGE_AT("( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_FACE_OFF ) || ( meGameModeType == GsmIO::E_MODE_ONLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_ELIMINATOR ) || ( meGameModeType == GsmIO::E_MODE_MARKED_MAN ) || ( meGameModeType == GsmIO::E_MODE_BURNING_ROUTE )", KAC_ARTIST_ASSERT_FILE, 4055 /* ARTIST 0x8240FAF4 */)
-
-
-);
-        CGS_ASSERT(mEventDestinationLandmarkIndex != 0xFFFFu,
-                   CGS_ASSERT_MESSAGE_AT("mEventDestinationLandmarkIndex != BrnGameState::K_INVALID_LANDMARK", KAC_ARTIST_ASSERT_FILE, 4057 /* ARTIST 0x8240FB34 */));
-        return BrnGameState::LandmarkIndex(mEventDestinationLandmarkIndex);
-    }
+    // GetEventDestinationLandmarkIndex is header-inline in BrnGuiCache.h.
 
     // =============================================================================================
     //  4. The active-landmark latch
@@ -4735,28 +4645,9 @@ namespace BrnGui
 
 namespace BrnGui
 {
-    // @ 0x82443B28 -- maRaceCarConnecting[index] @0xA0EC. asm range-guards a2<0 (h:3886)
-    // and a2>=8 (h:3887), then returns the byte with no validity gate.
-    bool GuiCache::IsActiveRaceCarConnecting(EActiveRaceCarIndex leActiveRaceCarIndex) const
-    {
-        CGS_ASSERT(0 <= leActiveRaceCarIndex, "Invalid EActiveRaceCarIndex");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "Invalid EActiveRaceCarIndex");
-        return maRaceCarConnecting[leActiveRaceCarIndex];
-    }
+    // IsActiveRaceCarConnecting is header-inline in BrnGuiCache.h.
 
-    // @ 0x82443D78 -- maEventPositionOfRaceCar[index] @0xA130 (s8 place), gated on
-    // maEventPositionValid[index] @0xA140: returns the place only when the slot is valid,
-    // else 0. asm range-guards a2<0 (h:3960) and a2>=8 (h:3961).
-    s32 GuiCache::GetEventPositionOfRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex) const
-    {
-        CGS_ASSERT(0 <= leActiveRaceCarIndex, "Invalid EActiveRaceCarIndex");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "Invalid EActiveRaceCarIndex");
-        if (maEventPositionValid[leActiveRaceCarIndex])
-            return maEventPositionOfRaceCar[leActiveRaceCarIndex];
-        return 0;
-    }
+    // GetEventPositionOfRaceCar is header-inline in BrnGuiCache.h.
 
     // @0x824497C0: the original array count and its unconstructed sentinel.
     u32 GuiCache::GetScoringTrafficCount() const
@@ -4832,15 +4723,7 @@ namespace BrnGui
 
 namespace BrnGui
 {
-    // mabRoadRulesActive[liRoadRuleType] (+0xAC44, idx 0..1). The console
-    // brackets the read with two debug asserts (>= 0 and < E_SCORE_TYPE_COUNT == 2), each
-    // building an "Invalid score type : <n>" message that the no-op assert discards.
-    bool GuiCache::IsRoadRuleActive(s32 liRoadRuleType) const
-    {
-        CGS_ASSERT(liRoadRuleType >= 0, "Invalid score type");
-        CGS_ASSERT(liRoadRuleType < 2, "Invalid score type");
-        return mabRoadRulesActive[liRoadRuleType];
-    }
+    // IsRoadRuleActive is header-inline in BrnGuiCache.h.
 
     // @ 0x82472FD0 -- bump the sat-nav zoom level (miSatNavZoomLevel @0x803C / result[8207]),
     // assert it did not overrun E_SAT_NAV_ZOOM_COUNT (2), then clamp the stored value to a max
@@ -4874,7 +4757,7 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "Array used before Construct/Clear was called",
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_CGSARRAY_H_FILE,
                     336));
                 CgsDev::Assert::EndAssert();
             }
@@ -4889,7 +4772,7 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "Array used before Construct/Clear was called",
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_CGSARRAY_H_FILE,
                     336));
                 CgsDev::Assert::EndAssert();
             }
@@ -4909,7 +4792,7 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "Array used before Construct/Clear was called",
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_CGSARRAY_H_FILE,
                     538));
                 CgsDev::Assert::EndAssert();
             }
@@ -4922,7 +4805,7 @@ namespace BrnGui
                                << ", length: " << static_cast<u32>(mEventsCtorSentinel);
                 CgsDev::Assert::FireAssert(
                     CgsDev::Assert::gpcMessageBuffer,
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_CGSARRAY_H_FILE,
                     539));
                 CgsDev::Assert::EndAssert();
             }
@@ -5103,5 +4986,6 @@ namespace BrnGui
 }
 
 #undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_CGSARRAY_H_FILE
 #undef CGS_ARTIST_BRNGUICACHE_FILE
 #undef CGS_ARTIST_BRNGUICACHE_FILE_RELATIVE

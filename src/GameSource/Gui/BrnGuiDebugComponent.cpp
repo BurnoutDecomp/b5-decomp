@@ -321,7 +321,7 @@ void GuiDebugComponent::UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* 
 
             lSharedPayload.mPrepareForModeStart.mPursuedCarId = 0;
             lSharedPayload.mPrepareForModeStart.miCurrentRound = 0;
-            lSharedPayload.mPrepareForModeStart.meGameModeType = 15;
+            lSharedPayload.mPrepareForModeStart.meGameModeType = BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY; // 15
             lSharedPayload.mPrepareForModeStart.muEventJunctionID = 0;
             lSharedPayload.mPrepareForModeStart.muJunctionID = 0;
             // Checkpoint arrays, road-rage threshold, and tail bytes are untouched.

@@ -84,13 +84,13 @@ namespace BrnGui
 
         // (2) audio volumes (type 463) -- payload = { meMusicVolume(+0x08), meSFXVolume(+0x0C) }.
         {
-            GuiEventCrashNavAudioVolumes lEvent;
-            lEvent.miMusicVolume = static_cast<s32>(meMusicVolume);
-            lEvent.miSFXVolume   = static_cast<s32>(meSFXVolume);
-            lpStateInterface->OutputGuiEvent(lEvent);
+            GuiEventAudioSettings lAudioSettingsEvent;   // DWARF BrnCrashNavOptions.h:454
+            lAudioSettingsEvent.miMusicVolume = static_cast<s32>(meMusicVolume);
+            lAudioSettingsEvent.miSfxVolume   = static_cast<s32>(meSFXVolume);
+            lpStateInterface->OutputGuiEvent(lAudioSettingsEvent);
 
             // (3) the X360 pushes the same {music,sfx} record a second time, byte-identical.
-            lpStateInterface->OutputGuiEvent(lEvent);
+            lpStateInterface->OutputGuiEvent(lAudioSettingsEvent);
         }
 
         // (4) controller toggles (type 472) -- payload = { showtime(+0x10), steering(+0x11), force(+0x12) }.
@@ -248,19 +248,15 @@ namespace BrnGui
         meState    = E_STATE_INIT_SETUP;   // `stw r11, 0x38`
         mpGuiCache = 0;                    // `stw r11, 0x3C`
 
-        // The model's entry defaults. The X360 writes EXACTLY these seven fields inline
-        // (this+0x3CE0 = 0, +0x3CE4/+0x3CE8/+0x3CEC = 8, +0x3CF0 = 0, +0x3CF1 = 1,
-        // +0x3CF3 = 1); it does NOT touch mbForceFeedback (+0x3CF2) or mbDefaultGameCamera
-        // (+0x3CF4) here. They are overwritten by SetSettingsFromProfile in UpdateWFInit;
-        // the console seeds them anyway so a cache that never arrives still leaves a
-        // defined model.
-        mOptionsData.SetCameraUserOptions(0);
-        mOptionsData.SetVoipVolume(CrashNavOptionsData::E_OPTION_VOIP_VOLUMES_8);
-        mOptionsData.SetMusicVolume(CrashNavOptionsData::E_OPTION_SOUND_VOLUMES_8);
-        mOptionsData.SetSFXVolume(CrashNavOptionsData::E_OPTION_SOUND_VOLUMES_8);
-        mOptionsData.SetSixAxisShowtime(false);
-        mOptionsData.SetSixAxisSteering(true);
-        mOptionsData.SetTips(true);
+        // The model's entry defaults through the header-inline CrashNavOptionsData::Construct
+        // (DecFIGS OnEnter calls it): ARTIST stores all nine fields, this+0x3CE0 = 0,
+        // +0x3CE4/+0x3CE8/+0x3CEC = 8, then the bools showtime 0, steering 0, force feedback 1,
+        // tips 0, default game camera 1 (stb @0x824BCF50..0x824BCF60). SetSettingsFromProfile
+        // overwrites them in UpdateWFInit.
+        mOptionsData.Construct(0, CrashNavOptionsData::E_OPTION_VOIP_VOLUMES_8,
+                               CrashNavOptionsData::E_OPTION_SOUND_VOLUMES_8,
+                               CrashNavOptionsData::E_OPTION_SOUND_VOLUMES_8,
+                               false, false, true, false, true);
 
         mMenuToggleGroup.Construct(KAC_OPTION_TOGGLE_NAME, mpStateInterface,
                                    E_OPTIONROW_COUNT, 0, KU_INVALID_APT_ID);
@@ -690,12 +686,12 @@ namespace BrnGui
     // Publish the model's CURRENT (uncommitted) volumes so scrubbing is audible.
     void CrashNavOptions::UpdateSoundSettings()
     {
-        CGS_ASSERT(mpStateInterface != 0, CGS_ASSERT_MESSAGE_AT("mpStateInterface", __FILE__, 927 /* ARTIST 0x824CDF38 */));
+        CGS_ASSERT(mpStateInterface != 0, CGS_ASSERT_MESSAGE_AT("mpStateInterface", CGS_ARTIST_FILE, 927 /* ARTIST 0x824CDF38 */));
 
-        GuiEventCrashNavAudioVolumes lEvent;
-        lEvent.miMusicVolume = static_cast<s32>(mOptionsData.GetMusicVolume());
-        lEvent.miSFXVolume   = static_cast<s32>(mOptionsData.GetSFXVolume());
-        mpStateInterface->OutputGuiEvent(lEvent);
+        GuiEventAudioSettings lAudioSettingsEvent;   // DWARF cpp:929
+        lAudioSettingsEvent.miMusicVolume = static_cast<s32>(mOptionsData.GetMusicVolume());
+        lAudioSettingsEvent.miSfxVolume   = static_cast<s32>(mOptionsData.GetSFXVolume());
+        mpStateInterface->OutputGuiEvent(lAudioSettingsEvent);
     }
 
     // ---- RestoreSoundSettings @0x824CDDA0 ------------------------------------------
@@ -705,12 +701,11 @@ namespace BrnGui
         CGS_ASSERT_AT((mpStateInterface != 0) && (mpGuiCache != 0),
                    "( mpStateInterface ) && ( mpGuiCache )", CGS_ARTIST_FILE, 886);   // cpp:886
 
-        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
-
-        GuiEventCrashNavAudioVolumes lEvent;
-        lEvent.miMusicVolume = static_cast<s32>(lpProfile->GetMusicVolume());
-        lEvent.miSFXVolume   = static_cast<s32>(lpProfile->GetSFXVolume());
-        mpStateInterface->OutputGuiEvent(lEvent);
+        // DWARF local lAudioSettingsEvent (cpp:888); GetMenuOptionsData() per read, no profile local.
+        GuiEventAudioSettings lAudioSettingsEvent;
+        lAudioSettingsEvent.miMusicVolume = mpGuiCache->GetMenuOptionsData()->GetMusicVolume();
+        lAudioSettingsEvent.miSfxVolume   = mpGuiCache->GetMenuOptionsData()->GetSFXVolume();
+        mpStateInterface->OutputGuiEvent(lAudioSettingsEvent);
     }
 
     // ---- RestoreVoipSettings @0x824CDE68 -------------------------------------------

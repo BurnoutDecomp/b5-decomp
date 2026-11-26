@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsID.h"     // CgsID (u64) -- mPursuedCarID / mShutdownCarID
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h" // CGS_ASSERT_STREAM_AT (the header-inline race-car accessors)
 #define CGS_ARTIST_BRNGUICACHE_H_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h"   // the header-inline accessors' assert path
 #include "GameShared/GameClasses/Language/CgsSku.h" // actual ESku/ELanguage
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
@@ -779,7 +780,7 @@ namespace BrnGui
         // three): the game-mode word, the active road rule, and the skills-manager pointer
         // (DWARF accessors h:981 GetGameMode / h:1290 GetActiveRoadRule / h:1362
         // GetBurnoutSkillsManager; no standalone X360 symbols).
-        s32 GetGameMode() const                                  { return meGameModeType; }
+        BrnGameState::GameStateModuleIO::EGameModeType GetGameMode() const { return meGameModeType; } // DWARF h:833
 
         // ADDITIVE GROW (CompassComponent::Update, which inlines the raw load of
         // mfPlayerOrientation at +0x4B14 and turns it into the compass heading): the
@@ -958,23 +959,8 @@ namespace BrnGui
         // shipped width (see the member). No standalone X360 symbol (inlined at every read).
         u8 GetNumActiveLandmarks() const                         { return muNumActiveLandmarks; }
 
-        // [gateui r3] @0x82443C50 -- maRaceCarDisconnected[index] @0xA0F4, front-guarded by the
-        // same two range asserts its siblings carry (X360 builds "Invalid EActiveRaceCarIndex : "
-        // + the index; BrnGuiCache.h:3904 / :3905).
-        // FLAG (deliberate host boundary): the console emits this as an OUT-OF-LINE body and the
-        // tree's siblings (IsActiveRaceCarConnecting @0x82443B28, IsRaceCarCrashing @0x824438A8)
-        // are bodied in BrnGuiCache_wB_05/_wB_06.cpp. It is inlined HERE instead so its one
-        // consumer -- HudMessageAnalyzer::HandleEventFinisher, landing this round in
-        // BrnGuiHudMessageAnalyzer_gUI_03.cpp -- does not acquire an unresolved external that
-        // only an as-yet-unmounted GuiCache partfile could satisfy. Behaviour is identical; move
-        // it to _wB_06.cpp next to its twin whenever that partfile is mounted.
-        bool IsActiveRaceCarDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const
-        {
-            CGS_ASSERT(0 <= leActiveRaceCarIndex, "Invalid EActiveRaceCarIndex");
-            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "Invalid EActiveRaceCarIndex");
-            return maRaceCarDisconnected[leActiveRaceCarIndex];
-        }
+        // @0x82443C50 -- maRaceCarDisconnected[index] @0xA0F4 (DWARF h:1187); defined after the class.
+        bool IsActiveRaceCarDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const;
 
         s32 GetActiveRoadRule() const                            { return meActiveRoadRule; }
         // [tut-ticker] the in-game ticker's controller-present read (see the member carve).
@@ -1121,7 +1107,7 @@ namespace BrnGui
         // DWARF h:1203 -- the checkpoint count for the current event (muCheckpointsInEvent).
         // ADDITIVE GROW: real X360 symbol (called by RenderValue @0x82422030);
         // declaration-only (bodied with the GuiCache accessor TUs).
-        u8 GetCheckpointsInEvent() const;
+        u8 GetCheckpointsInEvent() const;   // DWARF h:1129; defined after the class
         const BrnResource::HudMessageController* GetHudMessageController() const;  // X360 @0x82472D00
         const HudMessageDirector*       GetHudMessageDirector() const;        // X360 @0x82472D58
 
@@ -1247,7 +1233,7 @@ namespace BrnGui
 
         // --- race-car info block (ARCI-indexed, mRaceCarInfo SoA @0xA020..) ---
         const Vector4& GetRaceCarPosition(EActiveRaceCarIndex leActiveRaceCarIndex) const; // X360 @0x82443750 (maRaceCarPositions @0xA020)
-        s32  GetEventPositionOfRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex) const;    // X360 @0x82443D78 (maEventPositionOfRaceCar @0xA130, gate @0xA140)
+        u8   GetEventPositionOfRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex) const;    // X360 @0x82443D78 (maEventPositionOfRaceCar @0xA130, gate @0xA140)
         bool HasRaceCarFinished(EActiveRaceCarIndex leActiveRaceCarIndex) const;           // X360 @0x824EC4C8 (maRaceCarFinished @0xA138, gate @0xA140)
         bool IsActiveRaceCarIndexUsed(EActiveRaceCarIndex leActiveRaceCarIndex) const;     // X360 @0x82443A00 (maRaceCarUsed @0xA0E4)
         bool IsActiveRaceCarConnecting(EActiveRaceCarIndex leActiveRaceCarIndex) const;    // X360 @0x82443B28 (maRaceCarConnecting @0xA0EC)
@@ -1889,7 +1875,7 @@ namespace BrnGui
         s32 miSatNavZoomLevel;                           // +0x803C (32828) ZoomSatNavOut @0x82472FD0 (result[8207]); clamp [0,1], assert <= E_SAT_NAV_ZOOM_COUNT
         u8  maEventsStorage[7700];                       // +0x8040 (32832) mEvents preset-event CgsArray storage (GetPresetEvent @0x8241E520 forwards 32832; count is mEventsCtorSentinel @+7700)
         s32 mEventsCtorSentinel;                         // +0x9E54 (40532) mEvents array ctor marker / GetNumPresetEvents count (-1 = not constructed)
-        s32 meGameModeType;                              // +0x9E58 (40536) GsmIO::EGameModeType
+        BrnGameState::GameStateModuleIO::EGameModeType meGameModeType; // +0x9E58 (40536) DWARF h:1729
         // ADDITIVE CARVE (wave J): the two ids the DWARF member run places IMMEDIATELY after
         // meGameModeType (DWARF BrnGuiCache.h:467 muEventID, :470 muJunctionID -- the order
         // is what pins them here), X360-attested as the far words read by
@@ -1941,7 +1927,7 @@ namespace BrnGui
         s8  miOpponentsInEvent;                          // +0x9F44 (40772)
         u8  mPad_9F45[3];                                // +0x9F45..+0x9F47
         f32 mfDistanceInEvent;                           // +0x9F48 (40776) GetDistanceInEvent @0x8240F398 (result[10194], >= 0)
-        u16 mEventDestinationLandmarkIndex;              // +0x9F4C (40780) LandmarkIndex (s16)
+        BrnGameState::LandmarkIndex mEventDestinationLandmarkIndex; // +0x9F4C (40780) DWARF LandmarkIndex
         u8  mPad_9F4E[2];                                // +0x9F4E..+0x9F4F
         // ⛔ THE UNION IS RETIRED (A9 mode-type arm, 2026-08-27). It used to read
         //       union { s32 mEventDestinationDistrict;                      // +0x9F50
@@ -2679,6 +2665,154 @@ namespace BrnGui
                       "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_COUNT != meRoadRuleScoreMode",
                       "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 4210);
         return meRoadRuleScoreMode;
+    }
+
+    // The race-car accessors below are header-inline: ARTIST's asserts name BrnGuiCache.h (lines
+    // cited per assert) and their COMDAT copies sit in the user ranges (AboveCarRenderer,
+    // MapIconManager). Each range assert streams "Invalid EActiveRaceCarIndex : " and the index
+    // (StrStreamBase::operator<<(int32_t) 0x821F0E50).
+
+    // @ 0x82443750 -- maRaceCarPositions @+0xA020 (stride 16), used-gate maRaceCarUsed @+0xA0E4.
+    inline const Vector4& GuiCache::GetRaceCarPosition(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3812 /* ARTIST 0x824437E4 */);
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3813 /* ARTIST 0x8244384C */);
+        CGS_ASSERT_AT(true == maRaceCarUsed[leActiveRaceCarIndex],
+            "true == mRaceCarInfo.mabCarsUsed[leActiveRaceCarIndex]", CGS_ARTIST_BRNGUICACHE_H_FILE, 3814 /* ARTIST 0x82443880 */);
+        return maRaceCarPositions[leActiveRaceCarIndex];
+    }
+
+    // @ 0x824438A8 -- maRaceCarCrashing @+0xA104, used-gate maRaceCarUsed @+0xA0E4.
+    inline bool GuiCache::IsRaceCarCrashing(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3848);
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3849);
+        CGS_ASSERT_AT(true == maRaceCarUsed[leActiveRaceCarIndex],
+            "true == mRaceCarInfo.mabCarsUsed[leActiveRaceCarIndex]", CGS_ARTIST_BRNGUICACHE_H_FILE, 3850 /* ARTIST 0x824439D8 */);
+        return maRaceCarCrashing[leActiveRaceCarIndex];
+    }
+
+    // @ 0x82443A00 -- maRaceCarUsed @+0xA0E4.
+    inline bool GuiCache::IsActiveRaceCarIndexUsed(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3868);
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3869);
+        return maRaceCarUsed[leActiveRaceCarIndex];
+    }
+
+    // @ 0x82443B28 -- maRaceCarConnecting @+0xA0EC.
+    inline bool GuiCache::IsActiveRaceCarConnecting(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3886);
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3887);
+        return maRaceCarConnecting[leActiveRaceCarIndex];
+    }
+
+    // @ 0x82443C50 -- maRaceCarDisconnected @+0xA0F4.
+    inline bool GuiCache::IsActiveRaceCarDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3904);
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3905 /* ARTIST 0x82443D4C */);
+        return maRaceCarDisconnected[leActiveRaceCarIndex];
+    }
+
+    // @ 0x82443D78 -- maEventPositionOfRaceCar @+0xA130, gated on maEventPositionValid @+0xA140.
+    // DWARF h:1202 returns uint8_t (plain lbzx, no extsb @0x82443EA8).
+    inline u8 GuiCache::GetEventPositionOfRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3960);
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3961);
+        if (maEventPositionValid[leActiveRaceCarIndex])
+        {
+            return maEventPositionOfRaceCar[leActiveRaceCarIndex];
+        }
+        return 0;
+    }
+
+    // @ 0x824EC4C8 -- maRaceCarFinished @+0xA138, gated on maEventPositionValid @+0xA140.
+    inline bool GuiCache::HasRaceCarFinished(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3984);
+        CGS_ASSERT_STREAM_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            "Invalid EActiveRaceCarIndex : " << leActiveRaceCarIndex, CGS_ARTIST_BRNGUICACHE_H_FILE, 3985);
+        if (maEventPositionValid[leActiveRaceCarIndex])
+        {
+            return maRaceCarFinished[leActiveRaceCarIndex];
+        }
+        return false;
+    }
+
+    // @ 0x82472E78 -- mabRoadRulesActive @+0xAC44 (E_SCORE_TYPE_COUNT == 2); each assert streams
+    // "Invalid score type : ", the type and "\n" (h:4178 / h:4179).
+    inline bool GuiCache::IsRoadRuleActive(s32 liRoadRuleType) const
+    {
+        CGS_ASSERT_STREAM_AT(liRoadRuleType >= 0,
+            "Invalid score type : " << liRoadRuleType << "\n", CGS_ARTIST_BRNGUICACHE_H_FILE, 4178 /* ARTIST 0x82472F28 */);
+        CGS_ASSERT_STREAM_AT(liRoadRuleType < 2,
+            "Invalid score type : " << liRoadRuleType << "\n", CGS_ARTIST_BRNGUICACHE_H_FILE, 4179 /* ARTIST 0x82472FA4 */);
+        return mabRoadRulesActive[liRoadRuleType];
+    }
+
+    // @ 0x8240F398 -- mfDistanceInEvent @+0x9F48; streams "Event Distance=" and the value
+    // (StrStreamBase::operator<<(float32_t) 0x821F0F40).
+    inline f32 GuiCache::GetDistanceInEvent() const
+    {
+        CGS_ASSERT_STREAM_AT(mfDistanceInEvent >= 0.0f,
+            "Event Distance=" << mfDistanceInEvent, CGS_ARTIST_BRNGUICACHE_H_FILE, 3013);
+        return mfDistanceInEvent;
+    }
+
+    // @ 0x8240F1C0 -- muCheckpointsInEvent @+0x9FB8. The count must be positive except in the
+    // modes without checkpoints: road rage, traffic attack, stunt attack, pursuit (tested in
+    // place) and the GsmIO::IsOnlineStuntRun / IsShowtimeGameMode / IsOnlineFreeBurnLobby
+    // predicates (inlined: their materialised bools are the clrlwi/cmplwi pairs @0x8240F22C,
+    // 0x8240F24C, 0x8240F270). Assert h:2908.
+    inline u8 GuiCache::GetCheckpointsInEvent() const
+    {
+        using namespace BrnGameState::GameStateModuleIO;
+        if (meGameModeType != E_MODE_ROAD_RAGE && meGameModeType != E_MODE_TRAFFIC_ATTACK &&
+            meGameModeType != E_MODE_STUNT_ATTACK && meGameModeType != E_MODE_PURSUIT &&
+            !IsOnlineStuntRun(meGameModeType) && !IsShowtimeGameMode(meGameModeType) &&
+            !IsOnlineFreeBurnLobby(meGameModeType))
+        {
+            CGS_ASSERT_AT(0 < muCheckpointsInEvent, "0 < muCheckpointsInEvent",
+                          CGS_ARTIST_BRNGUICACHE_H_FILE, 2908 /* ARTIST 0x8240F290 */);
+        }
+        return muCheckpointsInEvent;
+    }
+
+    // @ 0x8240FA88 -- asserts h:4055 (race-style modes only) and h:4057; the sentinel test
+    // compares both LandmarkIndex values through operator int32_t (extsh/extsh/cmpw @0x8240FB10),
+    // K_INVALID_LANDMARK read from this unit's copy (0x82F25440).
+    inline BrnGameState::LandmarkIndex GuiCache::GetEventDestinationLandmarkIndex() const
+    {
+        CGS_ASSERT_AT((meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_RACE) ||
+                          (meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_FACE_OFF) ||
+                          (meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_RACE) ||
+                          (meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ELIMINATOR) ||
+                          (meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN) ||
+                          (meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_BURNING_ROUTE),
+                      "( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_FACE_OFF ) || "
+                      "( meGameModeType == GsmIO::E_MODE_ONLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_ELIMINATOR ) || "
+                      "( meGameModeType == GsmIO::E_MODE_MARKED_MAN ) || ( meGameModeType == GsmIO::E_MODE_BURNING_ROUTE )",
+                      CGS_ARTIST_BRNGUICACHE_H_FILE, 4055 /* ARTIST 0x8240FAE8 */);
+        CGS_ASSERT_AT(mEventDestinationLandmarkIndex != BrnGameState::K_INVALID_LANDMARK,
+                      "mEventDestinationLandmarkIndex != BrnGameState::K_INVALID_LANDMARK",
+                      CGS_ARTIST_BRNGUICACHE_H_FILE, 4057 /* ARTIST 0x8240FB28 */);
+        return mEventDestinationLandmarkIndex;
     }
 
     inline void GuiCache::_AssertLayout()

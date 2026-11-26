@@ -2877,7 +2877,7 @@ class GuiEventPrepareForModeStart
 public:
     CgsID mPursuedCarId;                   // +0x00  GameModeParams::mPursuedCarID
     s32   miCurrentRound;                  // +0x08  action->GetCurrentRound()
-    s32   meGameModeType;                  // +0x0C  GameModeParams::GetGameModeType()
+    BrnGameState::GameStateModuleIO::EGameModeType meGameModeType; // +0x0C  GameModeParams::GetGameModeType() (DWARF h:251)
     u32   muEventJunctionID;               // +0x10  GameModeParams::muEventJunctionID
     u32   muJunctionID;                    // +0x14  GameModeParams::muJunctionID
     u16   mau16CheckpointLandmark[16];     // +0x18  CheckpointData[i]+0x00

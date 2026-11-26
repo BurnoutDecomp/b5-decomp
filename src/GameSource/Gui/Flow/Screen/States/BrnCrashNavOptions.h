@@ -43,12 +43,8 @@ namespace BrnGui
         s32 miCameraUserOption;   // +0x0C
     };
 
-    // type 463 (0x1CF), record 20: { music, sfx } pair (CrashNavOptionsData+0x08/0x0C).
-    struct GuiEventCrashNavAudioVolumes : public CgsGui::GuiEvent<463>
-    {
-        s32 miMusicVolume;        // +0x0C
-        s32 miSFXVolume;          // +0x10
-    };
+    // type 463 (0x1CF), record 20: { music, sfx } is GuiEventAudioSettings (DWARF
+    // BrnGuiEventTypeDefs.h:4097-4098, BrnGuiDemangledEventTypes.h here).
 
     // type 472 (0x1D8), record 16: three controller toggles (CrashNavOptionsData+0x10..0x12).
     struct GuiEventCrashNavControllerToggles : public CgsGui::GuiEvent<472>
