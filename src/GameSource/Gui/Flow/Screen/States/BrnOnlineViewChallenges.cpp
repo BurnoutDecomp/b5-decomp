@@ -37,18 +37,18 @@ void OnlineViewChallenges::OnEnter()
     mDownArrowAnimation.Construct("DownArrowAnimation", mpStateInterface, 0);
     meSubState = E_SUBSTATE_LOADING_SCREEN;
     mpGuiCache = 0;
-    GuiEventActivateCrashNav activate;
-    activate.muActivate = 0u;
-    activate.muParam = 0;
-    mpStateInterface->OutputGuiEvent(activate);
-    GuiEventShowHideHud hide = {};
-    Output(mpStateInterface, hide);
-    struct Request : CgsGui::GuiEvent<580>
-    {
-        u8 unused;
-        Request() : unused(0) {}
-    } request;
-    mpStateInterface->OutputGuiEvent(request);
+    // DWARF locals cpp:104 / :109 / :113.
+    GuiEventActivateCrashNav lActivateCrashNav;
+    lActivateCrashNav.muActivate = 0u;
+    lActivateCrashNav.muParam = 0;
+    mpStateInterface->OutputGuiEvent(lActivateCrashNav);
+
+    GuiEventShowHideHud lShowHideHudEvent;
+    lShowHideHudEvent.mbShow = false;
+    mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
+
+    GuiEventFreeburnChallengeRequestEveryPlayerStatus lRequestCompletionStatus;
+    mpStateInterface->OutputGuiEvent(lRequestCompletionStatus);
 }
 
 // ARTIST 0x824A1EC8.
@@ -56,8 +56,11 @@ void OnlineViewChallenges::OnLeave()
 {
     mpStateInterface->UnRegisterForEvents(maiEventToObserve, 5);
     mpStateInterface->PlayAptMovie("", 3);
-    GuiEventTickerClearMessages clear = {};
-    Output(mpStateInterface, clear);
+    // DWARF local cpp:209.
+    GuiEventTickerClearMessages lClearTicker;
+    lClearTicker.mbForceFadeOut = false;
+    lClearTicker.mbDeleteChallengeMessages = false;
+    mpStateInterface->OutputGuiEvent(lClearTicker);
 }
 
 // ARTIST 0x82487A30.

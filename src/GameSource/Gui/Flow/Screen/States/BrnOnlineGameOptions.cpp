@@ -1092,29 +1092,6 @@ namespace BrnGui
             GuiEventNetworkOutputPlayerTextureRecord() {}
         };
 
-        // Id 148 == BrnGui::GuiEventShowHideHud (payload size 1). OnEnter drops the HUD as
-        // the create-match page comes up. NOTE the channel: this screen posts it on the GUI
-        // OUT channel (40), not the internal channel (42) the game-room screen uses.
-        // X360 record size 16.
-        //
-        // HEADER0 IS THE PAYLOAD BYTE COUNT, NOT sizeof(record) - offsetof(payload). On the
-        // 8-byte payload above the two agree, but a lone bool pads this record out to 16,
-        // so the subtraction would publish 4 where the X360 publishes 1: 0x8249C33C
-        // `li r28, 1`, stored as word0 at 0x8249C3EC (this record) and 0x8249C424 (the id-65
-        // twin), with word2 = r29 = 12 and the AddEvent size `li r6, 0x10` == 16. So header0
-        // is taken from the payload MEMBER, the way the wave-H twin does it
-        // (BrnOnlineGameRoomPlayerInfo_wH_07.cpp builds the same id-148 record as (1, 12)).
-        struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
-        {
-            bool mbShowHud;   // payload +0x00
-
-            explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : mbShowHud(lbShowHud)
-            {
-            }
-            GuiEventShowHideHudWire() {}
-        };
-
         // Id 65 == the car-control-change request (BrnGuiDemangledEventTypes.h names it
         // GuiRequestCarControlChangeEvent; that header cannot be included alongside
         // BrnGuiEventTypeDefs.h, so the record is rebuilt here). One payload byte, cleared
@@ -1191,8 +1168,9 @@ namespace BrnGui
         lActivateCrashNav.muParam = 0;
         mpStateInterface->OutputGuiEvent(lActivateCrashNav);      // X360 record size 20
 
-        GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->OutputGuiEvent(lHideHud);               // X360 record size 16
+        GuiEventShowHideHud lShowHideHudEvent;
+        lShowHideHudEvent.mbShow = false;
+        mpStateInterface->OutputGuiEvent(lShowHideHudEvent);               // X360 record size 16
 
         GuiRequestCarControlChangeWire lDisableCarControl(false);
         mpStateInterface->OutputGuiEvent(lDisableCarControl);     // X360 record size 16

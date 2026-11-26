@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"         // CgsResource::ID::HashString
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiEventActivateCrashNav
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventShowHideHud (id 148)
 #include "GameSource/Gui/BrnGuiVideoEvents.h"                             // GuiEventPlayVideo / GuiEventStopVideo
 
 namespace BrnGui
@@ -39,18 +40,6 @@ namespace
     const char* const KPC_NO_MOVIE_NAME = "";
     const s32         KI_MOVIE_LEVEL    = 3;
 
-    // { 1, 148, 12, <one payload byte> }: show (1) or hide (0) the in-game HUD.
-    struct GuiEventShowHideHud : public CgsGui::GuiEvent<148>
-    {
-        u8 mu8Show;    // +0x0C
-
-        explicit GuiEventShowHideHud(bool lbShow)
-            : mu8Show(lbShow ? 1u : 0u)
-        {
-        }
-        GuiEventShowHideHud() {}
-    };
-
     // { 1, 533, 12 }: the "front-end screen closed" record. The console leaves the payload
     // word unwritten.
     struct GuiEventScreenClosed : public CgsGui::GuiEvent<533>
@@ -71,13 +60,14 @@ void Video::OnEnter()
 
     meSubState = E_SUBSTATE_ENTERED;
 
-    GuiEventShowHideHud lHideHud(false);
-    mpStateInterface->OutputInternalState(lHideHud);
+    GuiEventShowHideHud lShowHideHud;
+    lShowHideHud.mbShow = false;
+    mpStateInterface->OutputInternalState(lShowHideHud);
 
-    GuiEventActivateCrashNav lDeactivateCrashNav;
-    lDeactivateCrashNav.muActivate = 0u;
-    lDeactivateCrashNav.muParam = 0;
-    mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
+    GuiEventActivateCrashNav lActivateCrashNav;
+    lActivateCrashNav.muActivate = 0u;
+    lActivateCrashNav.muParam = 0;
+    mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 }
 
 // The skip action stops the movie (a StopVideo built from a freshly prepared video definition).

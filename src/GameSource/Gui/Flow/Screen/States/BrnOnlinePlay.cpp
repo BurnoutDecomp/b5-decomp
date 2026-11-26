@@ -23,6 +23,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface, GuiEventNetworkSuspension
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"               // CgsSystem::HardwareInit::IsHardDiskAvailable
+#include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache, GuiFlow
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayRequest, GuiEventActivateCrashNav
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"                      // OptionsDataProfile::IsThereUnreadNews
@@ -203,20 +204,21 @@ void OnlinePlay::OnEnter()
 
     mpNotifyListenerHandle = XNotifyCreateListener(1);   // +0x2420 (XNOTIFY_SYSTEM areas)
 
-    CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue =
-        mpStateInterface->GetOutputEventQueue();
+    // DWARF locals cpp:143 / :148 / :153: show the local player's picture, put the CrashNav
+    // flow to sleep and take the HUD down.
+    GuiEventNetworkOutputPlayerTexture lOutputPlayerTexture;
+    lOutputPlayerTexture.meOutput          = GuiEventNetworkOutputPlayerTexture::E_OUTPUT_PLAYER_IMAGE;
+    lOutputPlayerTexture.mPlayerIDToOutput = -1;
+    mpStateInterface->OutputGuiEvent(lOutputPlayerTexture);
 
-    // Record A: GuiEvent<264> { header0=8, type=264, header2=12, payload={1,0xFFFFFFFF} } -- channel 40, 20 bytes.
-    u32 lauRecordA[5] = { 8u, 264u, 12u, 1u, 0xFFFFFFFFu };
-    lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecordA), 40, 20);
+    GuiEventActivateCrashNav lActivateCrashNav;
+    lActivateCrashNav.muActivate = 0u;
+    lActivateCrashNav.muParam = 0;
+    mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
-    // Record B: GuiEvent<191> (GuiEventActivateCrashNav shape) { 8, 191, 12, 0, 0 } -- channel 40, 20 bytes.
-    u32 lauRecordB[5] = { 8u, 191u, 12u, 0u, 0u };
-    lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecordB), 40, 20);
-
-    // Record C: GuiEvent<148> { 1, 148, 12, payload=0 } -- channel 40, 16 bytes.
-    u32 lauRecordC[4] = { 1u, 148u, 12u, 0u };
-    lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecordC), 40, 16);
+    GuiEventShowHideHud lShowHideHudEvent;
+    lShowHideHudEvent.mbShow = false;
+    mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
 }
 
 // ------------------------------------------------ OnLeave @ 0x8249BDA8
@@ -232,11 +234,11 @@ void OnlinePlay::OnLeave()
     mMainMenuComponent.Clear();            // component vtable slot 6
     mPlayerStatsDisplay.Destruct();
 
-    // Record: GuiEvent<264> { header0=8, type=264, header2=12, payload={0,0xFFFFFFFF} } -- channel 40, 20 bytes.
-    CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue =
-        mpStateInterface->GetOutputEventQueue();
-    u32 lauRecord[5] = { 8u, 264u, 12u, 0u, 0xFFFFFFFFu };
-    lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecord), 40, 20);
+    // DWARF local cpp:328: stop outputting the player picture.
+    GuiEventNetworkOutputPlayerTexture lOutputPlayerTexture;
+    lOutputPlayerTexture.meOutput          = GuiEventNetworkOutputPlayerTexture::E_OUTPUT_OFF;
+    lOutputPlayerTexture.mPlayerIDToOutput = -1;
+    mpStateInterface->OutputGuiEvent(lOutputPlayerTexture);
 
     if (mpNotifyListenerHandle != 0)
     {
@@ -476,7 +478,7 @@ void OnlinePlay::ShowMainMenuOptions()
 void OnlinePlay::ShowMainMenuScreen()
 {
     // Inlined GuiEventPlayAptMovie (type 18, channel 41, size 20): play this screen's apt movie.
-    mpStateInterface->PlayAptMovie("ON_MAIN", 3);
+    mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[maResourceTuplesToLoad[0].muId], 3);
 
     meSubState = E_SUBSTATE_LOADING_COMPONENTS;   // +0x2414 = 1
 

@@ -1,5 +1,6 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavEnterOnlineMod.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // GuiEventActivateCrashNav (id 191)
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                    // GuiEventShowHideHud (id 148)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 
@@ -22,21 +23,6 @@ namespace BrnGui
 {
 namespace
 {
-    // The "show / hide the in-race HUD" record: { 1, 148, 12, <one payload byte> },
-    // channel 40, 16 bytes. The same record BrnCrashNavEnterOnline_wI_05.cpp and
-    // _wI_07.cpp already build for this class family; kept file-local here for the same
-    // reason they do -- id 148 has no committed type home in this tree.
-    struct GuiEventShowHideHud : public CgsGui::GuiEvent<148>
-    {
-        u8 mu8Show;    // +0x0C payload byte: 0 == hide the HUD
-
-        explicit GuiEventShowHideHud(bool lbShow)
-            : mu8Show(lbShow ? 1u : 0u)
-        {
-        }
-        GuiEventShowHideHud() {}
-    };
-
     const s32 KI_CHANNEL_GUI_OUT = 40;
 }
 
@@ -61,19 +47,16 @@ void CrashNavEnterOnlineFull::OnEnter()
     // The X360 builds it inline (`stw 0, 0x50(r1)` / `stw 0, 0x54(r1)` then the `ld`/`std`
     // pair that copies the zero qword into the payload slot) and posts it on channel 40
     // with size 0x14; spelled through the committed type so the queued bytes are the same.
-    {
-        GuiEventActivateCrashNav lDeactivate;
-        lDeactivate.muActivate = 0u;
-        lDeactivate.muParam = 0;
-        mpStateInterface->OutputGuiEvent(lDeactivate);
-    }
+    GuiEventActivateCrashNav lActivateCrashNav;
+    lActivateCrashNav.muActivate = 0u;
+    lActivateCrashNav.muParam = 0;
+    mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
     // Hide the in-race HUD header: { 1, 148, 12 } with the payload byte clear, channel 40,
     // 16 bytes (`stb 0, 0x5C(r1)` @0x824CB128).
-    {
-        GuiEventShowHideHud lHide(false);
-        mpStateInterface->OutputGuiEvent(lHide);
-    }
+    GuiEventShowHideHud lShowHideHudEvent;
+    lShowHideHudEvent.mbShow = false;
+    mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
 }
 
 // @ 0x824B6628

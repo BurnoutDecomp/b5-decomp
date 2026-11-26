@@ -612,38 +612,40 @@ bool CrashNavDriverDetails::UpdateLoadResources()
 // exists.
 bool CrashNavDriverDetails::UpdateWFInit()
 {
+    bool lbReturnValue = false;   // DWARF local cpp:578
+
     CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 581);   // cpp:581
 
-    bool lbInitialised = false;
-
-    if (mpGuiCache != 0 && mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+    if (mpGuiCache != 0 && mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN) == true)
     {
         ShowMenu();
 
         mbShowLicense = true;
-        mLicenseComponent.SetPosition(mpGuiCache->IsHighDefinition()
-                                          ? KV2_LICENSE_POSITION
-                                          : KV2_LICENSE_POSITION_SD);
-
-        if (mbStatsDataReceived)
+        if (mpGuiCache->IsHighDefinition())
         {
-            // field.SetText(field.GetText()) -- the console's `SetText(field, field+0xA4)`
-            // re-push idiom (the text was formatted before the clip existed).
-            for (s32 liField = 0; liField < KI_NUM_STAT_TEXTFIELDS; ++liField)
-                maStatTextfields[liField].SetText(maStatTextfields[liField].GetText());
+            mLicenseComponent.SetPosition(KV2_LICENSE_POSITION);
+        }
+        else
+        {
+            mLicenseComponent.SetPosition(KV2_LICENSE_POSITION_SD);
+        }
 
-            for (s32 liDistrict = 0; liDistrict < KI_NUM_DISTRICTS; ++liDistrict)
+        if (mbStatsDataReceived == true)
+        {
+            // The text was formatted before the clips existed: re-push it (DWARF inlines
+            // TextField::RefreshText, h:215).
+            for (s32 liCurrentTextfield = 0; liCurrentTextfield < KI_NUM_STAT_TEXTFIELDS; ++liCurrentTextfield)
+                maStatTextfields[liCurrentTextfield].RefreshText();
+
+            for (s32 lCountyIndex = 0; lCountyIndex < KI_NUM_DISTRICTS; ++lCountyIndex)
             {
-                maDistrictBillboardsTextfields[liDistrict].SetText(
-                    maDistrictBillboardsTextfields[liDistrict].GetText());
-                maDistrictJumpsTextfields[liDistrict].SetText(
-                    maDistrictJumpsTextfields[liDistrict].GetText());
-                maDistrictSmashesTextfields[liDistrict].SetText(
-                    maDistrictSmashesTextfields[liDistrict].GetText());
+                maDistrictBillboardsTextfields[lCountyIndex].RefreshText();
+                maDistrictJumpsTextfields[lCountyIndex].RefreshText();
+                maDistrictSmashesTextfields[lCountyIndex].RefreshText();
             }
         }
 
-        lbInitialised = true;
+        lbReturnValue = true;
     }
 
     // ⛔⛔ THE ACHIEVEMENTS TICKER / "PARADISE AWARDS" PROMPT IS **OFF IN ARTIST**. THIS BLANK
@@ -696,7 +698,7 @@ bool CrashNavDriverDetails::UpdateWFInit()
     mAchievementsPrompt.SetItem(KPC_EMPTY_STRING,
                                 ButtonIconComponent::E_PADBUTTON_INVISIBLE,
                                 ButtonIconComponent::E_PADBUTTON_INVISIBLE);
-    return lbInitialised;
+    return lbReturnValue;
 }
 
 // ---------------------------------------------------------- UpdateRunning @0x824B83E0

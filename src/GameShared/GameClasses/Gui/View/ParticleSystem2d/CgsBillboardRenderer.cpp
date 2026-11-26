@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "CgsBillboardRenderer.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/View/ParticleSystem2d/CgsBillboardRenderer.cpp"
 #include <cmath>
 
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsGuiBillboardInfo.h"                 // CgsGui::BillboardInfo
@@ -49,7 +49,7 @@ void BillboardRenderer::SetUVTable(s32 liFramesX, s32 liFramesY, s32 liNumFrames
     if (liNumFrames <= 0)
         liNumFrames = liFramesX * liFramesY;
 
-    CGS_ASSERT(liNumFrames <= KI_MAX_ANIMFRAMES, "liNumFrames<=KI_MAX_ANIMFRAMES"); // :83
+    CGS_ASSERT_AT(liNumFrames <= KI_MAX_ANIMFRAMES, "liNumFrames<=KI_MAX_ANIMFRAMES", CGS_ARTIST_FILE, 83); // :83
 
     if (liNumFrames < 0)
         liNumFrames = 0;
@@ -67,7 +67,7 @@ void BillboardRenderer::SetUVTable(s32 liFramesX, s32 liFramesY, s32 liNumFrames
     const f32 lfInvFramesX = 1.0f / static_cast<f32>(liFramesX);
     const f32 lfInvFramesY = 1.0f / static_cast<f32>(liFramesY);
 
-    CGS_ASSERT(miNumFrames < KI_MAX_ANIMFRAMES, "miNumFrames < KI_MAX_ANIMFRAMES"); // :92
+    CGS_ASSERT_AT(miNumFrames < KI_MAX_ANIMFRAMES, "miNumFrames < KI_MAX_ANIMFRAMES", CGS_ARTIST_FILE, 92); // :92
 
     // Emit four corner UVs (8 floats) per frame, walking the framesX x framesY grid.
     s32  liUVIndex = 0;
@@ -90,7 +90,7 @@ void BillboardRenderer::SetUVTable(s32 liFramesX, s32 liFramesY, s32 liNumFrames
         liUVIndex += 8;
     }
 
-    CGS_ASSERT(liUVIndex == miNumFrames * 8, "liUVIndex == miNumFrames*8"); // :107
+    CGS_ASSERT_AT(liUVIndex == miNumFrames * 8, "liUVIndex == miNumFrames*8", CGS_ARTIST_FILE, 107); // :107
 
     mpUVTable = mafUVTab;
 }
@@ -159,7 +159,7 @@ void BillboardRenderer::Render(
         return;
     }
 
-    CGS_ASSERT(liNumBillboards <= miMaxBillboards, "liNumBillboards<=miMaxBillboards"); // :173
+    CGS_ASSERT_AT(liNumBillboards <= miMaxBillboards, "liNumBillboards<=miMaxBillboards", CGS_ARTIST_FILE, 173); // :173
 
     s32 liRenderedCount = 0;
     for (s32 liIndex = 0; liIndex < liNumBillboards; ++liIndex)
@@ -178,7 +178,7 @@ void BillboardRenderer::Render(
             switch (meAnimMode)
             {
             case E_BLANK:
-                CGS_ASSERT(false, "false"); // :197 (a blank billboard should never reach here)
+                CGS_ASSERT_AT(false, "false", CGS_ARTIST_FILE, 197); // :197 (a blank billboard should never reach here)
                 break;
             case E_REPEAT:
                 liTexFrame %= miNumFrames;
@@ -199,8 +199,8 @@ void BillboardRenderer::Render(
             }
         }
 
-        CGS_ASSERT(liTexFrame >= 0 && liTexFrame < miNumFrames,
-                   "TexFrame >= 0 && TexFrame < miNumFrames"); // :209
+        CGS_ASSERT_AT(liTexFrame >= 0 && liTexFrame < miNumFrames,
+                   "TexFrame >= 0 && TexFrame < miNumFrames", CGS_ARTIST_FILE, 209); // :209
 
         const f32* lpUV = &mpUVTable[8 * liTexFrame];
 
@@ -290,3 +290,5 @@ void BillboardRenderer::Render(
         lpRenderBuffer->EndRendering();
 }
 }
+
+#undef CGS_ARTIST_FILE

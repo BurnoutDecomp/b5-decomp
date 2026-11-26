@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/Model/CgsEventInterpreterModule.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsEventInterpreterModule.cpp"
 #include <cstring>   // memcpy
 
 // CgsGui::EventInterpreterModule -- the 11 X360-attested bodies that live in this TU,
@@ -62,8 +62,8 @@ EventInterpreterModule::EventInterpreterReleaseStage operator++(
 {
     const EventInterpreterModule::EventInterpreterReleaseStage leOldStage = lrStage;
     lrStage = static_cast<EventInterpreterModule::EventInterpreterReleaseStage>(leOldStage + 1);
-    CGS_ASSERT(lrStage <= EventInterpreterModule::E_RELEASE_DONE,
-               "leEnumIndex <= EventInterpreterModule::E_RELEASE_DONE");
+    CGS_ASSERT_AT(lrStage <= EventInterpreterModule::E_RELEASE_DONE,
+               "leEnumIndex <= EventInterpreterModule::E_RELEASE_DONE", CGS_ARTIST_FILE, 154);
     return leOldStage;
 }
 
@@ -167,8 +167,8 @@ s32 EventInterpreterModule::FindObserverInEventObserverList(EventObserver* lpEve
             }
             if (lpSlot->mpObserver == 0)
             {
-                CGS_ASSERT(false,
-                    "Should not reach a null value while searching the event observer list: ");
+                CGS_ASSERT_AT(false,
+                    "Should not reach a null value while searching the event observer list: ", CGS_ARTIST_FILE, 636);
                 break;
             }
             ++liIndex;
@@ -264,7 +264,7 @@ bool EventInterpreterModule::IsEventBlocked(s32 liEvent, EventObserver*& lrpBloc
 // ---------------------------------------------------------------------------------------
 void EventInterpreterModule::SetBlocking(const ObjectEventObserver* lpObjectEventObserver)
 {
-    CGS_ASSERT(lpObjectEventObserver != 0, "lpObjectEventObserver != NULL");
+    CGS_ASSERT_AT(lpObjectEventObserver != 0, "lpObjectEventObserver != NULL", CGS_ARTIST_FILE, 1065);
 
     const s32 liCount = mnNumberPriorityEventObservers;
     for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
@@ -283,7 +283,7 @@ void EventInterpreterModule::SetBlocking(const ObjectEventObserver* lpObjectEven
 // ---------------------------------------------------------------------------------------
 bool EventInterpreterModule::StopPriorityEventBlocking(EventObserver* lpEventObserver)
 {
-    CGS_ASSERT(lpEventObserver != 0, "lpEventObserver != NULL");
+    CGS_ASSERT_AT(lpEventObserver != 0, "lpEventObserver != NULL", CGS_ARTIST_FILE, 997);
 
     const s32 liCount = mnNumberPriorityEventObservers;
     if (liCount <= 0)
@@ -653,8 +653,8 @@ bool EventInterpreterModule::RegisterForEvent(EventObserver* lpEventObserver, s3
     }
 
     lpObjectEventObserver->RegisterForEvent(liEventType);
-    CGS_ASSERT(mnNumberEventObservers <= KI_MAX_OBSERVERS,
-               "mnNumberEventObservers <= KI_MAX_OBSERVERS");
+    CGS_ASSERT_AT(mnNumberEventObservers <= KI_MAX_OBSERVERS,
+               "mnNumberEventObservers <= KI_MAX_OBSERVERS", CGS_ARTIST_FILE, 397);
     return true;
 }
 
@@ -670,8 +670,8 @@ void EventInterpreterModule::UnRegisterForEvent(EventObserver* lpEventObserver, 
 
     if (lpObjectEventObserver == 0)
     {
-        CGS_ASSERT(false,
-            "Trying to remove an object as an observer when object is not in observer list: ");
+        CGS_ASSERT_AT(false,
+            "Trying to remove an object as an observer when object is not in observer list: ", CGS_ARTIST_FILE, 441);
         return;
     }
 
@@ -694,7 +694,7 @@ void EventInterpreterModule::UnRegisterForEvent(EventObserver* lpEventObserver, 
 bool EventInterpreterModule::RegisterPriorityEvent(EventObserver* lpEventObserver, s32 liEventType,
                                                    const s32* lpaEventOverrides, u32 luOverrideCount)
 {
-    CGS_ASSERT(lpEventObserver != 0, "lpEventObserver != NULL");
+    CGS_ASSERT_AT(lpEventObserver != 0, "lpEventObserver != NULL", CGS_ARTIST_FILE, 486);
 
     ObjectEventObserver* lpObjectEventObserver = 0;
     FindObserverInEventObserverList(lpEventObserver, &lpObjectEventObserver);
@@ -719,8 +719,8 @@ bool EventInterpreterModule::RegisterPriorityEvent(EventObserver* lpEventObserve
     }
 
     lpPriorityObserver->RegisterForEvent(liEventType, lpaEventOverrides, luOverrideCount);
-    CGS_ASSERT(mnNumberPriorityEventObservers <= KI_MAX_OBSERVERS,
-               "mnNumberPriorityEventObservers <= KI_MAX_OBSERVERS");
+    CGS_ASSERT_AT(mnNumberPriorityEventObservers <= KI_MAX_OBSERVERS,
+               "mnNumberPriorityEventObservers <= KI_MAX_OBSERVERS", CGS_ARTIST_FILE, 528);
     return true;
 }
 
@@ -818,3 +818,5 @@ bool EventInterpreterModule::UnregisterPriorityEvent(EventObserver* lpEventObser
 }
 
 }
+
+#undef CGS_ARTIST_FILE

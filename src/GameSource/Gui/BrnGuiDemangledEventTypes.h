@@ -481,7 +481,12 @@ namespace BrnGui
     class GuiEventScoreboardResponseTableEvent : public CgsGui::GuiEvent<119> { public: u8 maPayload[2924]; };  // id 119 size 2924 (opaque payload)
     class GuiEventScoreboardResponseVariationEvent : public CgsGui::GuiEvent<118> { public: u8 maPayload[2052]; };  // id 118 size 2052 (opaque payload)
     class GuiEventShowFreeburnChallenge { public: u8 maData[8]; s32 GetEventType() const { return 582; } };  // id 582 size 8 (raw; size not GuiEvent-shaped)
-    class GuiEventShowHideHud { public: u8 maData[1]; s32 GetEventType() const { return 148; } };  // id 148 size 1 (raw; size not GuiEvent-shaped)
+    // DWARF BrnGuiEventTypeDefs.h:1528..1530: GuiEvent<146> on PS3; id 148 on the X360
+    // (OutputInternalState<GuiEventShowHideHud> @0x82493C98 `li r11, 0x94`).
+    struct GuiEventShowHideHud : public CgsGui::GuiEvent<148>
+    {
+        bool mbShow;   // h:1530
+    };
     // GuiEventSpecificPresetRaces is owned by BrnGuiEventTypeDefs.h.
     // ⭐⭐⭐ [pause-stats wave 2026-08-29] GuiEventStatsResponse (id 436, 432 bytes) has been
     // RECOVERED and now lives in GameSource/Gui/Events/BrnGuiEventStatsResponse.h with its real
@@ -507,7 +512,13 @@ namespace BrnGui
     // (:4538 / :4515). Their consumers -- HandleStuntsComplete @0x8251F7E8 and
     // HandleStuntInfo @0x8251F650 -- read named words straight off the queued record.
     class GuiEventSuperJumpFailed { public: u8 maData[1]; s32 GetEventType() const { return 549; } };  // id 549 size 1 (raw; size not GuiEvent-shaped)
-    class GuiEventTickerClearMessages { public: u8 maData[2]; s32 GetEventType() const { return 536; } };  // id 536 size 2 (raw; size not GuiEvent-shaped)
+    // DWARF BrnGuiEventTypeDefs.h:299..302: GuiEvent<521> on PS3; id 536 on the X360
+    // (AddGuiEvent<GuiEventTickerClearMessages> @0x823D2718).
+    struct GuiEventTickerClearMessages : public CgsGui::GuiEvent<536>
+    {
+        bool mbForceFadeOut;              // h:301
+        bool mbDeleteChallengeMessages;   // h:302
+    };
     // ARTIST 0x823A6940 / 0x82436C40: raw 2072-byte payload, types precede strings.
     // DecFIGS names the fields; ARTIST doubles the old 256-byte strings to 512.
     class GuiEventTickerCustomMessage

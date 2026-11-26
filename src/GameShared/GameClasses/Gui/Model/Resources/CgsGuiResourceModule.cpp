@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModule.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/Resources/CgsGuiResourceModule.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Containers/CgsHash.h"    // CgsContainers::CgsHash::CalculateHash
@@ -184,7 +184,7 @@ namespace CgsGui
                 return true;
 
             default:
-                CGS_ASSERT(false, "Unknown release stage");
+                CGS_ASSERT_AT(false, "Unknown release stage", CGS_ARTIST_FILE, 241);
                 return false;
         }
     }
@@ -302,7 +302,7 @@ namespace CgsGui
                 lrBundle.miBundleBank    = miGlobalTexturePoolId;
                 break;
             default:
-                CGS_ASSERT(false, "Unexpected resource type in GuiResourceModule::AddBundleToQueue");
+                CGS_ASSERT_AT(false, "Unexpected resource type in GuiResourceModule::AddBundleToQueue", CGS_ARTIST_FILE, 902);
                 break;
         }
 
@@ -487,7 +487,7 @@ namespace CgsGui
                         lrBundle.meLoadUnload == E_GUI_RESOURCEREQUEST_LOAD &&
                         lpResponse->miEventId == static_cast<s32>(lrBundle.muRequestId))
                     {
-                        CGS_ASSERT(lrBundle.mbLoaded == false, "lBundle.mbLoaded == false");
+                        CGS_ASSERT_AT(lrBundle.mbLoaded == false, "lBundle.mbLoaded == false", CGS_ARTIST_FILE, 329);
                         if (lpResponse->mResourceHandle.mpResourceMemory != 0 ||
                             lpResponse->mResourceHandle.mpSourceEntry != 0)
                         {
@@ -551,8 +551,8 @@ namespace CgsGui
     // ARTIST8285F7A8: process one acquire stage, then unlock the output buffer.
     void GuiResourceModule::Update(InputBuffer* lpInput, OutputBuffer* lpOutput)
     {
-        CGS_ASSERT(lpInput != 0, "lpInput != NULL");
-        CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");
+        CGS_ASSERT_AT(lpInput != 0, "lpInput != NULL", CGS_ARTIST_FILE, 425);
+        CGS_ASSERT_AT(lpOutput != 0, "lpOutput != NULL", CGS_ARTIST_FILE, 426);
 
         lpInput->LockForRead();
         lpOutput->LockForWrite();
@@ -665,7 +665,7 @@ namespace CgsGui
                 {
                     GuiBundleToLoad& lrBundle = maBundlesPending[li];
 
-                    CGS_ASSERT(lrBundle.mbParsed, "lBundle.mbParsed");
+                    CGS_ASSERT_AT(lrBundle.mbParsed, "lBundle.mbParsed", CGS_ARTIST_FILE, 623);
                     if (lrBundle.meLoadUnload != E_GUI_RESOURCEREQUEST_LOAD)
                     {
                         GuiEventUnloadNotification lNotification;
@@ -700,10 +700,12 @@ namespace CgsGui
                 break;
 
             default:
-                CGS_ASSERT(false, "Invalid state in GuiResourceModule::Update");
+                CGS_ASSERT_AT(false, "Invalid state in GuiResourceModule::Update", CGS_ARTIST_FILE, 671);
                 break;
         }
 
         lpOutput->UnlockForWrite();
     }
 }
+
+#undef CGS_ARTIST_FILE

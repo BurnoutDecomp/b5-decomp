@@ -469,7 +469,7 @@ namespace BrnGui
         // DWARF local GuiEventShowHideHud lShowHideHud (cpp:158): take the HUD components down
         // ({1, 148, 12, 0} on channel 42).
         GuiEventShowHideHud lShowHideHud;
-        lShowHideHud.maData[0] = 0;
+        lShowHideHud.mbShow = false;
         mpStateInterface->OutputInternalState(lShowHideHud);
 
         miMostRecentDropInId = 0;

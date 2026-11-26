@@ -14,7 +14,7 @@ namespace CgsGui
     ModelModule::ModelModule()
     {
     }
-
+#define CGS_ARTIST_FILE_CPP "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp"
     // ARTIST82847760; the bool remains in r4 across the Interpreter call.
     void ModelModule::Construct(bool lbHighDef)
     {
@@ -121,7 +121,7 @@ namespace CgsGui
             mePrepareStage = E_PREPARE_START;
             return true;
         default:
-            CGS_ASSERT(false, "Unknown release stage");
+            CGS_ASSERT_AT(false, "Unknown release stage", CGS_ARTIST_FILE_CPP, 210);
             return false;
         }
     }
@@ -300,3 +300,5 @@ namespace CgsGui
 
 #undef CGS_ARTIST_FILE
 #undef CGS_ARTIST_CGSMODELMODULE_FILE
+
+#undef CGS_ARTIST_FILE_CPP

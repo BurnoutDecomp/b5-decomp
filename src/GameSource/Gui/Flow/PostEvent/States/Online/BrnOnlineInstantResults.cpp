@@ -200,8 +200,10 @@ namespace BrnGui
     // winner's quoted name and the value.
     void OnlineInstantResultsState::FillOutTicker()
     {
-        GuiEventTickerClearMessages lClearMessages = { { 0, 0 } };
-        OutputGuiEvent(mpStateInterface, lClearMessages);
+        GuiEventTickerClearMessages lClearTickerMessagesEvent;
+        lClearTickerMessagesEvent.mbForceFadeOut = false;
+        lClearTickerMessagesEvent.mbDeleteChallengeMessages = false;
+        OutputGuiEvent(mpStateInterface, lClearTickerMessagesEvent);
 
         if (meCurrentState != E_ONLINE_INSTANT_RESULTS_STANDINGSUPDATE)
         {
@@ -432,8 +434,10 @@ namespace BrnGui
         for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
             mabDirty[liPlayer] = false;
 
-        GuiEventTickerClearMessages lClear = { { 1, 0 } };
-        OutputGuiEvent(mpStateInterface, lClear);
+        GuiEventTickerClearMessages lClearTickerMessagesEvent;
+        lClearTickerMessagesEvent.mbForceFadeOut = true;
+        lClearTickerMessagesEvent.mbDeleteChallengeMessages = false;
+        OutputGuiEvent(mpStateInterface, lClearTickerMessagesEvent);
         mTitleTextfield.Construct("Title_mc", mpStateInterface, 0);
         mWinnerGamertag.Construct("gamertag_mc", mpStateInterface, 0);
         mCurrentRound.Construct("RoundText", mpStateInterface, 0);
@@ -456,8 +460,10 @@ namespace BrnGui
     // ARTIST82494F30. Keep the original cache write-back and both GUI output routes.
     void OnlineInstantResultsState::OnLeave()
     {
-        GuiEventTickerClearMessages lClear = { { 1, 0 } };
-        OutputGuiEvent(mpStateInterface, lClear);
+        GuiEventTickerClearMessages lClearTickerMessagesEvent;
+        lClearTickerMessagesEvent.mbForceFadeOut = true;
+        lClearTickerMessagesEvent.mbDeleteChallengeMessages = false;
+        OutputGuiEvent(mpStateInterface, lClearTickerMessagesEvent);
         mpGuiCache->RecEvent(reinterpret_cast<const CgsModule::Event*>(&mOnlineFinishingOrder), 317);
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, 12);
         mpStateInterface->PlayAptMovie("", 3);

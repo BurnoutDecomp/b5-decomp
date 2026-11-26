@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameSource/Gui/BrnGuiShared.h"   // gGuiResourceIdentifier / EGuiResourceId
 #include "GameSource/Gui/BrnGuiCache.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"
@@ -122,22 +123,41 @@ void CrashedStuntHudState::Update()
 // ARTIST 0x8247D918 / 0x82475890.
 bool CrashedStuntHudState::UpdateLoading()
 {
-    if (!mpCache) return false;
-    if (mbHudMessages)
+    bool lbReturnValue = false;   // DWARF local
+
+    if (mpCache != 0)
     {
-        mHudMessageComponent.SetController(mpCache->GetHudMessageController());
-        mHudMessageComponent.SetDirector(mpCache->GetHudMessageDirector());
-        mHudMessageComponent.SetGameMode(static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(mpCache->GetGameMode()));
+        if (mbHudMessages)
+        {
+            mHudMessageComponent.SetController(mpCache->GetHudMessageController());
+            mHudMessageComponent.SetDirector(mpCache->GetHudMessageDirector());
+            mHudMessageComponent.SetGameMode(static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(mpCache->GetGameMode()));
+        }
+
+        if (mpCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        {
+            // The movie name comes from the resource-name table (ARTIST `lwz r4, 0x308(r11)` off
+            // gGuiResourceIdentifier).
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_HUD_CRASHED_STUNT], 1);
+            SetExpectedAptComponentList();
+            lbReturnValue = true;
+        }
     }
-    if (!mpCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad)) return false;
-    mpStateInterface->PlayAptMovie("B5CrashedStuntHud", 1);
-    SetExpectedAptComponentList();
-    return true;
+
+    return lbReturnValue;
 }
 bool CrashedStuntHudState::UpdateWFInit()
 {
+    bool lbReturnValue = false;   // DWARF local
+
     CGS_ASSERT_AT(mpCache != 0, "mpCache", CGS_ARTIST_FILE, 272);
-    return mpCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD);
+
+    if (mpCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD))
+    {
+        lbReturnValue = true;
+    }
+
+    return lbReturnValue;
 }
 
 // ARTIST 0x82475910, inline helper sub_824F87C0 hashes and appends each name.

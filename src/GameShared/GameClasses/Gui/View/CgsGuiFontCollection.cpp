@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/View/CgsGuiFontCollection.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiFontCollection.cpp"
 #include "GameShared/GameClasses/Fonts/CgsFont.h"                 // CgsResource::Font (typeface name field)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"           // CGSSTRNLOWER
@@ -84,7 +84,7 @@ namespace CgsGui
     const CgsResource::SafeResourceHandle<CgsResource::Font>& FontCollection::FindFont(const char* lpcFontName) const
     {
         // FindFont asserts (CgsGuiFontCollection.cpp:100).
-        CGS_ASSERT(lpcFontName != 0, "lpcFontName");
+        CGS_ASSERT_AT(lpcFontName != 0, "lpcFontName", CGS_ARTIST_FILE, 100);
 
         // String-too-long guard. The X360 walks to the NUL and asserts the length is
         // < 0x80 (CgsStringUtils.h:55), then strncpy's 128 bytes into a local buffer.
@@ -141,3 +141,5 @@ namespace CgsGui
         return maFonts[0];
     }
 }
+
+#undef CGS_ARTIST_FILE

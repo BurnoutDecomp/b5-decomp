@@ -13,7 +13,7 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                                   // CgsIDCompress (szType -> component CgsID)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"    // CgsResource::GuiGeometryFile / GuiGeometryMesh
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // the 20-byte UV vertex
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAux.cpp"
 #include "SDKs/EATech/Apt/AptInit.h"                                            // Apt bring-up entry points (InitializeApt callees)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                                  // AptCreateTargetInstance / AptChangeTargetInstance
 #include "SDKs/EATech/include/Apt/AptRenderWalk.h"                              // AptRenderTarget (the AptAux::Render walk entry)
@@ -311,7 +311,7 @@ namespace CgsGui
             miState4 = 0;
             return true;
         default:
-            CGS_ASSERT(false, "CgsGUI::AptAux::Prepare() Invalid State!");
+            CGS_ASSERT_AT(false, "CgsGUI::AptAux::Prepare() Invalid State!", CGS_ARTIST_FILE, 247);
             return false;
         }
     }
@@ -336,7 +336,7 @@ namespace CgsGui
             miState0 = 0;
             return true;
         default:
-            CGS_ASSERT(false, "CgsGUI::AptAux::Release() Invalid State!");
+            CGS_ASSERT_AT(false, "CgsGUI::AptAux::Release() Invalid State!", CGS_ARTIST_FILE, 302);
             return false;
         }
     }
@@ -515,7 +515,7 @@ namespace CgsGui
         AptAux* lpAptAux = AptAuxPointer::mpAptAuxInst;
         CGS_ASSERT(lpAptAux != 0, "Invalid AptDataHandler in AptCallbackMemory::Alloc");
         void* lpMemory = lpAptAux->mAptDataHandler.AptAlloc(lnSize);
-        CGS_ASSERT(lpMemory != 0, "lpMemory != NULL");
+        CGS_ASSERT_AT(lpMemory != 0, "lpMemory != NULL", CGS_ARTIST_FILE, 712);
         return lpMemory;
     }
 
@@ -797,7 +797,7 @@ namespace CgsGui
             return;
 
         AptRenderHandler* lpRenderHandler = &lpAptAux->mRenderHandler;
-        CGS_ASSERT(lpRenderHandler != 0, "Invalid render handler in AptCallbackCustom::ControlRender");
+        CGS_ASSERT_AT(lpRenderHandler != 0, "Invalid render handler in AptCallbackCustom::ControlRender", CGS_ARTIST_FILE, 1002);
 
         CGS_ASSERT(lpRenderingUnit != 0, "Invalid geometry in AptCallbackCustom::ControlRender");
         if (lpRenderingUnit == 0)
@@ -864,8 +864,8 @@ namespace CgsGui
         {
             CgsResource::GuiGeometryMesh* lpMesh =
                 lpFile->mppGeometryMeshes[luMesh];
-            CGS_ASSERT(lpMesh->muNumberOfVerticies == 6,
-                       "Flash custom component geometry without exactly 6 vertices");
+            CGS_ASSERT_AT(lpMesh->muNumberOfVerticies == 6,
+                       "Flash custom component geometry without exactly 6 vertices", CGS_ARTIST_FILE, 1039);
             for (s32 liVert = 0; liVert < 6; ++liVert)
             {
                 lpMesh->mppVerticies[liVert]->mv2Tex0UV.x = KAF_QUAD_UV[liVert][0];
@@ -896,3 +896,5 @@ namespace BrnFlapt
         return lpRenderHandler->GetLanguageManager();
     }
 }
+
+#undef CGS_ARTIST_FILE

@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.h"
 #include <cstring>
-
+#define CGS_ARTIST_FILE_CPP "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                    // CgsCore::SPrintf (the playing-movie record)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu (the Update phase brackets)
@@ -174,7 +174,7 @@ namespace CgsGui
             meReleaseStage = E_RELEASESTAGE_START;
             return true;
         default:
-            CGS_ASSERT(false, "Unknown prepare stage");
+            CGS_ASSERT_AT(false, "Unknown prepare stage", CGS_ARTIST_FILE_CPP, 203);
             return false;
         }
     }
@@ -209,7 +209,7 @@ namespace CgsGui
             mePrepareStage = E_PREPARESTAGE_START;
             return true;
         default:
-            CGS_ASSERT(false, "Unknown release stage");
+            CGS_ASSERT_AT(false, "Unknown release stage", CGS_ARTIST_FILE_CPP, 287);
             return false;
         }
     }
@@ -395,8 +395,8 @@ namespace CgsGui
         switch (liEventId)
         {
         case 17:
-            CGS_ASSERT(false,
-                "This should never happen - we have a message for Apt View, seriously that's mental!");
+            CGS_ASSERT_AT(false,
+                "This should never happen - we have a message for Apt View, seriously that's mental!", CGS_ARTIST_FILE_CPP, 393);
             break;
 
         case 18:
@@ -408,8 +408,8 @@ namespace CgsGui
                        "Invalid movie to play in ViewModule::ProcessIncomingAptEvent");
             CGS_ASSERT(static_cast<u32>(lpBody->miLevelNum) <= 8u,
                        "lpPlayMovieEvent->miLevelNum >= 0 && lpPlayMovieEvent->miLevelNum < KI_NUM_MOVIE_LEVELS");
-            CGS_ASSERT(std::strlen(lpBody->mpacMovieName) < 31,
-                       "strlen( lpPlayMovieEvent->mpacMovieName ) < KI_MOVIE_NAME_LEN-1");
+            CGS_ASSERT_AT(std::strlen(lpBody->mpacMovieName) < 31,
+                       "strlen( lpPlayMovieEvent->mpacMovieName ) < KI_MOVIE_NAME_LEN-1", CGS_ARTIST_FILE_CPP, 405);
 
             // Record the movie now playing on the level (GetMovieNameByLevel reads it).
             if (std::strlen(lpBody->mpacMovieName) > 1)
@@ -433,7 +433,7 @@ namespace CgsGui
         }
 
         default:
-            CGS_ASSERT(false, "Unexpected event sent to ViewModule::ProcessIncomingAptEvent");
+            CGS_ASSERT_AT(false, "Unexpected event sent to ViewModule::ProcessIncomingAptEvent", CGS_ARTIST_FILE_CPP, 453);
             break;
         }
     }
@@ -681,7 +681,7 @@ namespace CgsGui
     // render walk with the render-side elapsed milliseconds, then close the buffers.
     void ViewModule::RenderInternal(const ViewIO::InputBuffer* lpInput)
     {
-        CGS_ASSERT(lpInput != 0, "lpViewInput");
+        CGS_ASSERT_AT(lpInput != 0, "lpViewInput", CGS_ARTIST_FILE_CPP, 900);
 
         const s32 liDeltaMs = static_cast<s32>(mfRenderTimeDelta * 1000.0f);
 
@@ -736,8 +736,8 @@ namespace CgsGui
         lpViewInput->LockForRead();
 
         const ViewIO::ImRendererSet& lrRenderers = lpViewInput->GetImRenderers();
-        CGS_ASSERT(lrRenderers.mpIm2dRenderBuffer != 0,
-                   "lpViewInput->GetImRenderers().mpIm2dRenderBuffer");
+        CGS_ASSERT_AT(lrRenderers.mpIm2dRenderBuffer != 0,
+                   "lpViewInput->GetImRenderers().mpIm2dRenderBuffer", CGS_ARTIST_FILE_CPP, 826);
         // The X360 also asserts mpIm3dRenderBufferUntex / mpIm3dRenderBufferRacePosition /
         // mpIm3dRenderBufferMenusAndHud non-null. The 3D immediate buffers are not wired
         // on the PC-minimal path (RenderInternal's 3D bracket is structurally gated on
@@ -807,8 +807,8 @@ namespace CgsGui
             CgsResource::LanguageResource* lpResource =
                 *static_cast<CgsResource::LanguageResource* const*>(
                     lpNotification->mResourceHandle.mpResourceMemory);
-            CGS_ASSERT(lpResource != 0 && lpResource->muSize != 0,
-                       "Language Resource pointer is null in ViewModule::ProcessIncomingLoadNotification");
+            CGS_ASSERT_AT(lpResource != 0 && lpResource->muSize != 0,
+                       "Language Resource pointer is null in ViewModule::ProcessIncomingLoadNotification", CGS_ARTIST_FILE_CPP, 798);
             mLanguageManager.LoadStringTable(*lpResource);
             break;
         }
@@ -857,3 +857,5 @@ namespace CgsGui
 }
 
 #undef CGS_ARTIST_FILE
+
+#undef CGS_ARTIST_FILE_CPP

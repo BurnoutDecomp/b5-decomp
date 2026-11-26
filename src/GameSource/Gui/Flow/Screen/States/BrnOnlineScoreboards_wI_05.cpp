@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface: Register/UnRegister/PlayAptMovie/GetOutputEventQueue
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / AddEvent
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiEventActivateCrashNav (id 191)
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // BrnGui::GuiEventShowHideHud (id 148)
 #include <cstring>                                                        // std::memset
 
 namespace BrnGui
@@ -34,32 +35,10 @@ namespace BrnGui
         // pooled rodata literal @0x820046A7, which the committed twins (BrnCarSelectMain,
         // BrnCarSelectUnlock, BrnBootLegal) all reconstruct as the empty string.
 
-        // ---- out-queue wire record -----------------------------------------------------
-        // Id 148 == BrnGui::GuiEventShowHideHud (payload size 1). Its only home is
-        // BrnGuiDemangledEventTypes.h, which hard-collides with BrnGuiEventTypeDefs.h (this
-        // file needs the latter for GuiEventActivateCrashNav), so the record is carried as a
-        // file-local wire view -- the same accommodation BrnOnlineGameRoomPlayerInfo_wH_00 /
-        // _wH_07 / _wH_08 and BrnCrashNavEnterOnline_wI_07 make.
-        //
-        // OnEnter posts it with the flag CLEAR (X360 `li r11, 0` then `stb r11` into the
-        // payload slot): entering the leaderboards screen takes the HUD down.
-        typedef CgsGui::GuiEvent<148> ShowHideHudHeader;
-        struct GuiEventShowHideHudWire : public ShowHideHudHeader
-        {
-            bool mbShowHud;   // +0x0C
-
-            explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : mbShowHud(lbShowHud)
-            {
-            }
-            GuiEventShowHideHudWire() {}
-        };
-
         // Record-size pins. Both payloads are pointer-free, so the X360's AddEvent size
         // immediates (20 and 16) must survive unchanged on the x64 host; if a host layout
         // ever drifts, it is caught here rather than on the wire.
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
     }
 
     // ---- UpdateSetupComponents @ 0x824918C8 ----------------------------------------
@@ -148,8 +127,9 @@ namespace BrnGui
         mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
         // { 1, 148, 12, 0 } on channel 40, X360 record size 16: take the HUD down.
-        GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->OutputGuiEvent(lHideHud);
+        GuiEventShowHideHud lShowHideHudEvent;
+        lShowHideHudEvent.mbShow = false;
+        mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
 
         BuildAlphabeticalRoadIndexes();
     }

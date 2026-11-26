@@ -85,28 +85,6 @@ namespace
 
     };
 
-    // The { 1, 148, 12, flag } HUD-components command record (BrnInGame.cpp's
-    // GuiCommandEvent16<148> twin: flag 1 = bring the HUD components up, 0 = shut them
-    // down; the X360 zeroes only the flag byte, the pad is modelled zeroed).
-    struct GuiEventHudComponentsCommand : public CgsGui::GuiEvent<148>
-    {
-        u8 mu8Enable;    // +0x0C
-
-        explicit GuiEventHudComponentsCommand(u8 lu8Enable)
-            : mu8Enable(lu8Enable)
-        {
-        }
-        GuiEventHudComponentsCommand() {}
-    };
-
-    // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> wire record (@0x82476E98):
-    // { 8, 188, 16, <pad>, CgsID }, channel 40, 24 bytes (BrnInGame.cpp's wire twin).
-    struct GuiOverlayWaitFinishWire
-    {
-        GuiOverlayWaitFinishRequest mRequest;   // the OutputGuiEvent payload
-
-        GuiOverlayWaitFinishWire() {}
-    };
 }
 
 // ---- statics (the DWARF cpp:26-51 block; values read from the decrypted XEX) ----------
@@ -147,24 +125,27 @@ void PauseScreen::OnEnter()
     mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
     meSubState = E_SUBSTATE_LOADING;
 
-    // { 1, 148, 12, flag=0 } on the internal channel -- HUD components down (the flag=1
-    // twin is InGame::OnEnter's bring-up).
-    GuiEventHudComponentsCommand lHudDown(0);
-    mpStateInterface->OutputInternalState(lHudDown);
+    // DWARF locals cpp:81 / :86 / :91. The HUD goes down on the internal channel (the
+    // mbShow = true twin is InGame::OnEnter's bring-up).
+    GuiEventShowHideHud lShowHideHud;
+    lShowHideHud.mbShow = false;
+    mpStateInterface->OutputInternalState(lShowHideHud);
 
-    // { 8, 191, 12, 0, 0 } -- deactivate the CrashNav (front-end map) flow while the
-    // pause menu owns the screen (HandleControllerInput re-activates it on resume).
-    GuiEventActivateCrashNav lDeactivateCrashNav;
-    lDeactivateCrashNav.muActivate = 0u;
-    lDeactivateCrashNav.muParam = 0;
-    mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
+    // Deactivate the CrashNav (front-end map) flow while the pause menu owns the screen
+    // (HandleControllerInput re-activates it on resume).
+    GuiEventActivateCrashNav lActivateCrashNav;
+    lActivateCrashNav.muActivate = 0u;
+    lActivateCrashNav.muParam = 0;
+    mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
-    // The 24-byte 188 record: hold the flow until the leaving-game overlay fully hides.
-    GuiOverlayWaitFinishWire lWaitFinish;
-    lWaitFinish.mRequest.Construct("CNOnlLvgGame");
-    mpStateInterface->OutputGuiEvent(lWaitFinish.mRequest);
+    // Hold the flow until the leaving-game overlay fully hides.
+    GuiOverlayWaitFinishRequest lFinishOverlayRequest;
+    lFinishOverlayRequest.Construct("CNOnlLvgGame");
+    mpStateInterface->OutputGuiEvent(lFinishOverlayRequest);
 
-    mPauseOptions.Construct(KAC_OPTION_CPT_NAME_BASE, mpStateInterface, 1, 0, -1);
+    // The Apt id goes in as the 32-bit 0xFFFFFFFF zero-extended to the u64 parameter
+    // (ARTIST @0x824CFDCC: `li r8, -1` + `clrldi r8, r8, 32`).
+    mPauseOptions.Construct(KAC_OPTION_CPT_NAME_BASE, mpStateInterface, 1, 0, 0xFFFFFFFFu);
 }
 
 // @ 0x824CFDF0 -- drop the pause movie (the X360 inlines StateInterface::PlayAptMovie's

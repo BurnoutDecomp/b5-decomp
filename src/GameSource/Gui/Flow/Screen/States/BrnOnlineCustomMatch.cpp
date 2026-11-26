@@ -2077,26 +2077,6 @@ namespace BrnGui
         // offset } followed by the payload, published through
         // mpStateInterface->GetOutputEventQueue()->AddEvent(record, channel, sizeof(record)).
 
-        // Id 148 == BrnGui::GuiEventShowHideHud. The homed type in
-        // BrnGuiDemangledEventTypes.h:174 is the RAW one-byte payload view (u8 maData[1])
-        // with no GuiEvent<148> base, so it cannot carry the 12-byte header this call site
-        // stack-builds; the wire form is rebuilt here exactly as
-        // BrnOnlineGameOptions_wI_05.cpp does.
-        //
-        // HEADER0 IS THE PAYLOAD BYTE COUNT, NOT sizeof(record) - offsetof(payload). A lone
-        // bool pads the record out to 16, so the subtraction would publish 4 where the X360
-        // publishes 1: `stw r14(==1), 0x60(r1)` @0x824970A8 with word2 = 12 and the AddEvent
-        // size `li r6, 0x10` == 16.
-        struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
-        {
-            bool mbShowHud;   // payload +0x00
-
-            explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : mbShowHud(lbShowHud)
-            {
-            }
-            GuiEventShowHideHudWire() {}
-        };
     }
 
     // ====================================================================================
@@ -2302,8 +2282,9 @@ namespace BrnGui
         lActivateCrashNav.muParam = 0;
         mpStateInterface->OutputGuiEvent(lActivateCrashNav);   // X360 record size 20
 
-        GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->OutputGuiEvent(lHideHud);            // X360 record size 16
+        GuiEventShowHideHud lShowHideHudEvent;
+        lShowHideHudEvent.mbShow = false;
+        mpStateInterface->OutputGuiEvent(lShowHideHudEvent);            // X360 record size 16
     }
 }
 

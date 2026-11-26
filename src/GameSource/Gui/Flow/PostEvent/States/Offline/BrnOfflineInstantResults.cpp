@@ -672,8 +672,10 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie("", 3);
         mpStateInterface->PlayAptMovie("", 2);
 
-        GuiEventTickerClearMessages lClear = {{0, 0}};
-        mpStateInterface->OutputGuiEvent(lClear);
+        GuiEventTickerClearMessages lClearTickerMessagesEvent;
+        lClearTickerMessagesEvent.mbForceFadeOut = false;
+        lClearTickerMessagesEvent.mbDeleteChallengeMessages = false;
+        mpStateInterface->OutputGuiEvent(lClearTickerMessagesEvent);
 
         mLicense.ReleaseResources();
         mPhotoBoothComponent.ReleaseResources();

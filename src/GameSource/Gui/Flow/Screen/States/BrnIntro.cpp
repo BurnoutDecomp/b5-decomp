@@ -235,12 +235,6 @@ namespace BrnGui
             lpInterface->OutputGuiEvent(lEvent);
         }
 
-        template <s32 N>
-        void PostInternalState16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
-        {
-            GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->OutputInternalState(lEvent);
-        }
 
         // ---- voice-over ------------------------------------------------------------
         // The X360 posts {4, 466, 12, <name hash>} on channel 40, which is exactly
@@ -349,9 +343,10 @@ namespace BrnGui
     {
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        // The internal-channel command 148 the state announces itself with (the record
-        // {1, 148, 12} plus one zero byte, channel 42, 16 bytes).
-        PostInternalState16<148>(mpStateInterface, 0);
+        // DWARF local cpp:136: the HUD goes down on the internal channel.
+        GuiEventShowHideHud lShowHideHud;
+        lShowHideHud.mbShow = false;
+        mpStateInterface->OutputInternalState(lShowHideHud);
 
         mScreenAnim.Construct(KAC_SCREENANIM_NAME, mpStateInterface, 0);
         // X360: LicenseComponent::Construct @0x8241A610 (its own virtual override of

@@ -30,6 +30,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"       // CgsGui::GuiEvent<N> / CgsModule::Event
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"   // StateInterface
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"           // VariableEventQueue
+#include "GameSource/Gui/BrnGuiShared.h"   // gGuiResourceIdentifier / EGuiResourceId
 #include "GameSource/Gui/BrnGuiCache.h"                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"   // OptionsDataProfile (the save path)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"           // GuiOverlayRequest
@@ -278,17 +279,19 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpGuiCache, "NULL != mpGuiCache", CGS_ARTIST_FILE, 245);   // cpp:245
 
-        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        bool lbReturnValue = false;
+
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
-            return false;
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_CRASHNAV_TRAX], KI_APT_DISPLAY_LEVEL);
+
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN,
+                                                   mEATraxMenuComponent.GetName());
+            lbReturnValue = true;
         }
 
-        mpStateInterface->PlayAptMovie("BrnCrashNavTrax", KI_APT_DISPLAY_LEVEL);
-
-        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN,
-                                               mEATraxMenuComponent.GetName());
-        return true;
+        return lbReturnValue;
     }
 
     // ---- UpdateWFInit @0x824D9D58 ---------------------------------------------------
@@ -299,22 +302,23 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpGuiCache, "NULL != mpGuiCache", CGS_ARTIST_FILE, 298);   // cpp:298
 
-        if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+        bool lbReturnValue = false;
+
+        if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
-            return false;
+            lbReturnValue = true;
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+
+            mEATraxMenuComponent.Initialize(mpGuiCache->GetMenuOptionsData()->GetTraxAvailableInFreeBurn(),
+                                            mpGuiCache->GetMenuOptionsData()->GetTraxAvailableInEvents());
+
+            meTraxPlayOrderMode = mpGuiCache->GetMenuOptionsData()->GetTraxPlayOrderMode();
+            OnUpdatePlayOrderMode();
+
+            mEATraxMenuComponent.ResetSettingsChanged();
         }
 
-        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-
-        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
-        mEATraxMenuComponent.Initialize(lpProfile->GetTraxAvailableInFreeBurn(),
-                                        lpProfile->GetTraxAvailableInEvents());
-
-        meTraxPlayOrderMode = lpProfile->GetTraxPlayOrderMode();
-        OnUpdatePlayOrderMode();
-
-        mEATraxMenuComponent.ResetSettingsChanged();
-        return true;
+        return lbReturnValue;
     }
 
     // ---- UpdatePermanent @0x824E03B8 ------------------------------------------------

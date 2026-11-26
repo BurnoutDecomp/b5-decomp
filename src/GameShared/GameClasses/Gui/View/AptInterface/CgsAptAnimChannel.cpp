@@ -70,7 +70,7 @@ namespace CgsGui
 
         if (leInterpolator != AnimChannelData::E_INTERPOLATE_LINEAR)
         {
-            CGS_ASSERT(false, "Invalid interpolator specified");
+            CGS_ASSERT_AT(false, "Invalid interpolator specified", CGS_ARTIST_FILE, 157);
         }
         else
         {

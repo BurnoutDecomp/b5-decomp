@@ -1368,26 +1368,30 @@ namespace BrnGui
         // @0x8247A424..0x8247A440: r4 = &maResourcesToLoad (unk_82F25F88),
         // r5 = muNumResourcesToLoad (dword_82F25F84 == 21). Hex-Rays drops both operands and
         // prints a one-argument call; the asm is authoritative.
-        if (!mpCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
-            return false;
+        bool lbReturnValue = false;
 
-        if (mbSatNav)
-            mSatNavComponent.LoadResources();   // @0x8247A45C (this + 0x6A0)
+        if (mpCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        {
+            if (mbSatNav)
+                mSatNavComponent.LoadResources();   // @0x8247A45C (this + 0x6A0)
 
-        // Mount the HUD apt movie at level 1. The console builds the 20-byte { 8, 18, 12,
-        // name, 1 } record by hand (@0x8247A464..0x8247A4B0, channel 0x29) with the name
-        // taken from off_82F27BE0[0]; that pointer is verified as "B5RaceHud" both by IDA's
-        // own operand comment here and by an image read of 0x82F27BE0. Posted through
-        // StateInterface::PlayAptMovie rather than a hand-rolled record for the reason
-        // BrnFBurnMainHudState.cpp:684 documents: the record's name field is an 8-byte
-        // pointer on x64, so a hardcoded 20-byte post truncates the trailing level number.
-        //
-        // ⚠️ SEAM: the freeburn state mounts the SAME movie at the SAME level. The HUD flow
-        // must have left FBURN_MAIN before RACE_MAIN gets here or the level-1 mount collides.
-        mpStateInterface->PlayAptMovie("B5RaceHud", 1);
+            // Mount the HUD apt movie at level 1. The console builds the 20-byte { 8, 18, 12,
+            // name, 1 } record by hand (@0x8247A464..0x8247A4B0, channel 0x29) with the name
+            // taken from off_82F27BE0[0]; that pointer is verified as "B5RaceHud" both by IDA's
+            // own operand comment here and by an image read of 0x82F27BE0. Posted through
+            // StateInterface::PlayAptMovie rather than a hand-rolled record for the reason
+            // BrnFBurnMainHudState.cpp:684 documents: the record's name field is an 8-byte
+            // pointer on x64, so a hardcoded 20-byte post truncates the trailing level number.
+            //
+            // ⚠️ SEAM: the freeburn state mounts the SAME movie at the SAME level. The HUD flow
+            // must have left FBURN_MAIN before RACE_MAIN gets here or the level-1 mount collides.
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_HUD_RACE], 1);
 
-        SetExpectedAptComponentList();   // @0x8247A4B8 -- installs the "EventHud_Animator" hash
-        return true;
+            SetExpectedAptComponentList();   // @0x8247A4B8 -- installs the "EventHud_Animator" hash
+            lbReturnValue = true;
+        }
+
+        return lbReturnValue;
     }
 
     // =======================================================================

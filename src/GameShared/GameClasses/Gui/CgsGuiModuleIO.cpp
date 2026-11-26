@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
@@ -25,7 +25,7 @@ namespace CgsGuiModuleIO
 {
     int OutputBuffer::SetGuiResourceRequestQueue(const GuiResourceRequestQueueStorage* lpRequestQueue)
     {
-        CGS_ASSERT(lpRequestQueue != 0, "lpRequestQueue != NULL");
+        CGS_ASSERT_AT(lpRequestQueue != 0, "lpRequestQueue != NULL", CGS_ARTIST_FILE, 181);
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return mResourceRequestQueue.Append(*lpRequestQueue) ? 1 : 0;
     }
@@ -52,3 +52,5 @@ namespace CgsGuiModuleIO
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -107,26 +107,12 @@ namespace BrnGui
             GuiCache* mpCachePointer;   // +0x00
         };
 
-        // ---- out-queue wire records ------------------------------------------------------
-        // { 1, 148, 12, <show byte> }, channel 40, 16 bytes: show / hide the HUD.
-        struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
-        {
-            bool mbShowHud;   // +0x0C
-
-            explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : mbShowHud(lbShowHud)
-            {
-            }
-            GuiEventShowHideHudWire() {}
-        };
-
         // { 2072, 537, 12, the ticker message }, channel 40, 2084 bytes.
         typedef CgsGui::GuiEventOut<GuiEventTickerCustomMessage> GuiEventTickerCustomMessageWire;
         // { 2, 536, 12, <two zero bytes> }, channel 40, 16 bytes.
         typedef CgsGui::GuiEventOut<GuiEventTickerClearMessages> GuiEventTickerClearMessagesWire;
 
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventTickerCustomMessageWire) == 2084), "ticker record is 2084 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventTickerClearMessagesWire) == 16), "ticker-clear record is 16 bytes");
     }
@@ -151,8 +137,9 @@ namespace BrnGui
         lDeactivateCrashNav.muParam = 0;
         mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
-        GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->OutputGuiEvent(lHideHud);
+        GuiEventShowHideHud lShowHideHudEvent;
+        lShowHideHudEvent.mbShow = false;
+        mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
 
         mhNotifyListener = XNotifyCreateListener(KU64_NOTIFY_AREA_SYSTEM);
     }
@@ -171,7 +158,9 @@ namespace BrnGui
         meInternalState = E_INTERNALSTATE_LEFT;
         mMainMenuComponent.Clear();
 
-        GuiEventTickerClearMessages lClearTicker = {};
+        GuiEventTickerClearMessages lClearTicker;
+        lClearTicker.mbForceFadeOut = false;
+        lClearTicker.mbDeleteChallengeMessages = false;
         mpStateInterface->OutputGuiEvent(lClearTicker);
 
         if (mhNotifyListener != 0)

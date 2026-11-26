@@ -325,9 +325,9 @@ namespace BrnGui
     // on ("BF_PROCEED"), and park the state machine so Update/HandleIncomingEvents stop.
     void PreRaceFlyByState::TriggerExitState()
     {
-        GuiEventShowHideHud lShowHud;
-        lShowHud.maData[0] = 1;   // show the HUD again
-        mpStateInterface->OutputInternalState(lShowHud);
+        GuiEventShowHideHud lShowHideHud;   // DWARF local cpp:724
+        lShowHideHud.mbShow = true;          // show the HUD again
+        mpStateInterface->OutputInternalState(lShowHideHud);
 
         SendStateEvent("BF_PROCEED");
         meCurrentState = E_PRERACE_INVALID;

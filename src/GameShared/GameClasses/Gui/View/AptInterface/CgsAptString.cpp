@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Fonts/CgsFont.h"                          // CgsResource::Font (GetStringWidth / typeface name)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "SDKs/EATech/include/Apt/Apt.h"                                   // AptAllocateStringParameters layout
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptString.cpp"
 // NOTE: the AptAux / AptRenderHandler types (CgsAptRenderHandler.h) embed a 256-slot OPAQUE pool
 // stand-in named CgsGui::CgsAptString -- including that header here would redefine the REAL
 // CgsAptString this TU owns (an ODR clash). The console reaches the language manager through the
@@ -118,7 +118,7 @@ namespace CgsGui
                                ETextEffects eEffect,
                                f32 lfSizeScale)
     {
-        CGS_ASSERT(lpFonts != 0, "lpFonts");
+        CGS_ASSERT_AT(lpFonts != 0, "lpFonts", CGS_ARTIST_FILE, 94);
         CGS_ASSERT(lpParams != 0, "Invalid AptAllocateStringParameters in CgsAptString::Prepare()");
 
         // Reset the embedded text object (X360 calls TextObject::Construct directly with the
@@ -260,7 +260,7 @@ namespace CgsGui
             lfAlignNudge = -0.5f;
             break;
         default:
-            CGS_ASSERT(false, "Unsupported alignment in CgsAptString::Prepare");
+            CGS_ASSERT_AT(false, "Unsupported alignment in CgsAptString::Prepare", CGS_ARTIST_FILE, 286);
             break;
         }
 
@@ -348,7 +348,7 @@ namespace CgsGui
         if (lpParams->nLineOffset > luNumLines)
         {
             lpLineStart = mTextObject.mpUtf8String;
-            CGS_ASSERT(luNumLines > 0, "luNumLines > 0");
+            CGS_ASSERT_AT(luNumLines > 0, "luNumLines > 0", CGS_ARTIST_FILE, 370);
             mTextObject.GetNumLinesAndStartLine(luNumLines - 1, &lpLineStart);
         }
         mTextObject.mpUtf8String = lpLineStart;
@@ -383,8 +383,8 @@ namespace CgsGui
                                CgsUnicode::CgsUtf8* lpcStringBuffer,
                                bool lbAlreadyLocalised)
     {
-        CGS_ASSERT(lpNewText != 0, "lpNewText");             // cpp:434
-        CGS_ASSERT(lpcStringBuffer != 0, "lpcStringBuffer"); // cpp:435
+        CGS_ASSERT_AT(lpNewText != 0, "lpNewText", CGS_ARTIST_FILE, 434);             // cpp:434
+        CGS_ASSERT_AT(lpcStringBuffer != 0, "lpcStringBuffer", CGS_ARTIST_FILE, 435); // cpp:435
 
         const char lcLead = static_cast<char>(lpNewText[0]);
         if (!lbAlreadyLocalised && (lcLead == '$' || lcLead == '~'))
@@ -417,8 +417,8 @@ namespace CgsGui
                 mTextObject.CalculateAutosizing();
 
             // cpp:470 -- streamed "Invalid string : <text>"; folded static.
-            CGS_ASSERT(CgsUnicode::IsValidUtf8String(mTextObject.mpUtf8String),
-                       "Invalid string : ");
+            CGS_ASSERT_AT(CgsUnicode::IsValidUtf8String(mTextObject.mpUtf8String),
+                       "Invalid string : ", CGS_ARTIST_FILE, 439);
         }
 
         // Unless the source was a '~' key (left pointing at the language string), copy the
@@ -433,7 +433,7 @@ namespace CgsGui
 
         // The font handle must still be a real font (not the empty/default sentinel
         // pair the X360 compares against). cpp:481.
-        CGS_ASSERT(mTextObject.mpFont.mpResourceMemory != 0, "Did not find font");
+        CGS_ASSERT_AT(mTextObject.mpFont.mpResourceMemory != 0, "Did not find font", CGS_ARTIST_FILE, 440);
 
         // Re-measure the new text and re-run autosizing.
         mTextObject.mfStringWidth =
@@ -442,3 +442,5 @@ namespace CgsGui
             mTextObject.CalculateAutosizing();
     }
 }
+
+#undef CGS_ARTIST_FILE

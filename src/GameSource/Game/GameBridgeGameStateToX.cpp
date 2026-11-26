@@ -3531,7 +3531,7 @@ namespace
             case 89:
             {
                 BrnGui::GuiEventShowHideHud lEvent = BrnGui::GuiEventShowHideHud();
-                lEvent.maData[0] = 1;
+                lEvent.mbShow = true;
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }

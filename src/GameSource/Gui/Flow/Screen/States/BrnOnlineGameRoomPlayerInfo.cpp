@@ -316,21 +316,6 @@ namespace BrnGui
             }
         };
 
-        // Id 148 == BrnGui::GuiEventShowHideHud (payload size 1). The car-select-start arm
-        // publishes it on the INTERNAL channel with the flag clear (the X360's
-        // OutputInternalState<GuiEventShowHideHud> @0x82493C98, record size 16).
-        typedef CgsGui::GuiEvent<148> ShowHideHudHeader;
-        struct GuiEventShowHideHudWire : public ShowHideHudHeader
-        {
-            bool mbShowHud;   // +0x0C
-
-            explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : mbShowHud(lbShowHud)
-            {
-            }
-            GuiEventShowHideHudWire() {}
-        };
-
         // Id 188 -- the overlay wait-finish handshake the X360 publishes through
         // OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> @0x82476E98: the 8-byte
         // compressed overlay id sits at the 8-aligned payload slot, X360 record size 24,
@@ -474,8 +459,9 @@ namespace BrnGui
                 case KI_EVENT_CAR_SELECT_START:
                 {
                     // The HUD goes down first whichever way the car select is reached.
-                    GuiEventShowHideHudWire lHideHud(false);
-                    mpStateInterface->OutputInternalState(lHideHud);   // X360 record size 16
+                    GuiEventShowHideHud lShowHideHud;
+                    lShowHideHud.mbShow = false;
+                    mpStateInterface->OutputInternalState(lShowHideHud);   // X360 record size 16
 
                     const s32 leCarSelectType =
                         reinterpret_cast<const CarSelectStartPayload*>(lpEvent)->meCarSelectType;
@@ -2311,9 +2297,6 @@ namespace BrnGui
             }
         };
 
-        // Id 148 == BrnGui::GuiEventShowHideHud (payload size 1). X360 stores 1.
-        typedef CgsGui::GuiEvent<148> ShowHideHudHeader;
-        // GuiEventShowHideHudWire is declared above in this translation unit.
 
 
 
@@ -2453,8 +2436,9 @@ namespace BrnGui
         mpStateInterface->OutputGuiEvent(lScreenFlowCommand);
 
         // 5. Show the HUD again (X360 record size 16, channel 40).
-        GuiEventShowHideHudWire lShowHud(true);
-        mpStateInterface->OutputGuiEvent(lShowHud);
+        GuiEventShowHideHud lShowHideHudEvent;
+        lShowHideHudEvent.mbShow = true;
+        mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
     }
 }
 
@@ -2617,10 +2601,6 @@ namespace BrnGui
             }
         };
 
-        // Id 148 == BrnGui::GuiEventShowHideHud (payload size 1); ShowSettingsScreen posts
-        // it with the flag clear. Same wire view as BrnOnlineGameRoomPlayerInfo_wH_07.cpp.
-        typedef CgsGui::GuiEvent<148> ShowHideHudHeader;
-        // GuiEventShowHideHudWire is declared above in this translation unit.
 
 
 
@@ -2637,7 +2617,6 @@ namespace BrnGui
         CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventAudioSettingsWire>) == 20), "audio settings record is 20 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventVoipSettingsWire>) == 16), "voip settings record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide hud record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate crashnav record is 20 bytes");
     }
@@ -2699,8 +2678,9 @@ namespace BrnGui
         mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
         // Take the HUD down (X360 record { 1, 148, 12, 0 }, size 16, channel 40).
-        GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->OutputGuiEvent(lHideHud);
+        GuiEventShowHideHud lShowHideHudEvent;
+        lShowHideHudEvent.mbShow = false;
+        mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
 
         mHelpItemAccept.Construct(KAC_HELPITEM_ACCEPT, mpStateInterface, 0);
 
@@ -5321,14 +5301,14 @@ namespace BrnGui
             lpStateInterface->OutputGuiEvent(lrEvent);
         }
 
-        // Id 533, payload size 1 -- the screen-flow command the "back to driving" pages
-        // post (the committed BrnOnlinePlay.cpp / wave-H 07 post the same record). FLAG:
-        // no type home; the console builds only the header, and the payload byte it
-        // publishes is the 0 the previous record left in the reused stack slot.
-        struct GuiEventScreenFlowCommandPayload
+        // Id 533 -- the screen-flow command the "back to driving" pages post (the
+        // committed BrnOnlinePlay.cpp / wave-H 07 post the same record). FLAG: an X360-only
+        // event (PS3 ids 518..521 sit at X360 528..536, so 529..533 have no DWARF type);
+        // the console builds only the header and never writes a payload byte
+        // (HideChallengePage @0x82499778: `li r11, 0x215` straight after `stw r29`), so
+        // the event is empty.
+        struct GuiEventScreenFlowCommandPayload : public CgsGui::GuiEvent<533>
         {
-            u8 mu8Payload;
-            s32 GetEventType() const { return 533; }
         };
 
         // Id 580, payload size 1 -- posted as the challenge page opens (the game-state
@@ -5362,7 +5342,7 @@ namespace BrnGui
         void PostShowHideHud(CgsGui::StateInterface* lpStateInterface, bool lbShowHud)
         {
             GuiEventShowHideHud lShowHideHud;
-            lShowHideHud.maData[0] = lbShowHud ? 1 : 0;
+            lShowHideHud.mbShow = lbShowHud;
             OutputGuiEventRecord(lpStateInterface, lShowHideHud);
         }
 
@@ -5376,7 +5356,6 @@ namespace BrnGui
         void PostScreenFlowCommand(CgsGui::StateInterface* lpStateInterface)
         {
             GuiEventScreenFlowCommandPayload lCommand;
-            lCommand.mu8Payload = 0;
             OutputGuiEventRecord(lpStateInterface, lCommand);
         }
 

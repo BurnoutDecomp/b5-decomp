@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/View/CgsParticleSystem2d.h"
 #include <cfloat>
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/View/ParticleSystem2d/CgsParticleSystem2d.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
 #include "rw/math/vpu/vector4_operation.h"  // Clamp/Max/Min/operator*/GetVector4_One
 
@@ -72,7 +72,7 @@ ParticleSystem2d::ParticleSystem2d()
 // re-prime mfLastTime to -FLT_MAX, marking the system unprepared.
 void ParticleSystem2d::Release()
 {
-    CGS_ASSERT(mpAllocator != NULL, "mpAllocator!=NULL");
+    CGS_ASSERT_AT(mpAllocator != NULL, "mpAllocator!=NULL", CGS_ARTIST_FILE, 160);
 
     if (mabIsActive)
     {
@@ -119,3 +119,5 @@ rw::RGBA ParticleSystem2d::GetRGBA(const Vector4& lrColour)
                     PackChannel(lScaled.GetW().GetFloat()));  // a
 }
 }
+
+#undef CGS_ARTIST_FILE

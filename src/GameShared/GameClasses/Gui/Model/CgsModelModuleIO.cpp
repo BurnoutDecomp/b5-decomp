@@ -54,7 +54,7 @@ namespace ModelIO
     // events into mResourceRequestQueue (VariableEventQueue<2048,16>::Append<2048,16>).
     void OutputBuffer::SetGuiResourceRequestQueue(const GuiResourceRequestQueue* lpResourceRequestQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing", CGS_ARTIST_FILE, 219);
         CGS_ASSERT(lpResourceRequestQueue != 0, "lpResourceRequestQueue != NULL");
         mResourceRequestQueue.Append(*lpResourceRequestQueue);
     }

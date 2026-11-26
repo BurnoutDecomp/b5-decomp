@@ -123,13 +123,6 @@ namespace BrnGui
             lpInterface->OutputGuiEvent(lEvent);
         }
 
-        template <s32 N>
-        void PostInternalState16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
-        {
-            GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->OutputInternalState(lEvent);
-        }
-
         // ⛔ `GuiViewStateEvent20` DELETED 2026-09-06 (hud lane). It was the OnEnter
         // "view reset" modelled as a 20-byte { 8, 258, 12, w0, w1 } record with the payload
         // written as TWO X360 32-BIT WORDS -- `GuiViewStateEvent20 lViewReset(0u,
@@ -346,9 +339,11 @@ namespace BrnGui
         mpGuiCache                      = 0;
         mpProfile                       = 0;
 
-        // { 1, 148, 12, flag=1 } on the internal channel -- HUD components up (the
-        // flag=0 twin is ShutDownHudComponents).
-        PostInternalState16<148>(mpStateInterface, 1);
+        // DWARF local cpp:147: the HUD components come up on the internal channel (the
+        // mbShow = false twin is ShutDownHudComponents).
+        GuiEventShowHideHud lShowHideHud;
+        lShowHideHud.mbShow = true;
+        mpStateInterface->OutputInternalState(lShowHideHud);
 
         // The view-channel player-image CLEAR: GuiEventNetworkPlayerImage { null, -1 } on
         // channel 41, i.e. "no picture for any slot" -- NetworkPlayerImageRenderer::RecvEvent
@@ -617,7 +612,7 @@ namespace BrnGui
     // and hand the flow to the main map.
     void InGame::OpenMainMap()
     {
-        PostInternalState16<148>(mpStateInterface, 0);
+        ShutDownHudComponents();
         SendStateEvent("MAP_MAIN");
     }
 
@@ -626,21 +621,24 @@ namespace BrnGui
     {
         if (!mbIsInEventStartLocation)
             return;
-        PostInternalState16<148>(mpStateInterface, 0);
+        ShutDownHudComponents();
         SendStateEvent("MAP_EVENT");
     }
 
     // @ 0x824DA700 -- as OpenMainMap, into the driver-details screen.
     void InGame::OpenDriverDetails()
     {
-        PostInternalState16<148>(mpStateInterface, 0);
+        ShutDownHudComponents();
         SendStateEvent("TO_D_DETAIL");
     }
 
     // @ 0x824D0AB0 -- the {1,148,12,0} internal command (flag=0 == shut down).
     void InGame::ShutDownHudComponents()
     {
-        PostInternalState16<148>(mpStateInterface, 0);
+        // DWARF local cpp:1234.
+        GuiEventShowHideHud lShowHideHud;
+        lShowHideHud.mbShow = false;
+        mpStateInterface->OutputInternalState(lShowHideHud);
     }
 
     // @ 0x824B8EF8 -- the non-network options (gallery / challenges / scoreboards /
@@ -873,7 +871,7 @@ namespace BrnGui
             case 228:  // open-main-map request (state event first on the X360, then the
                        // HUD shutdown command -- kept in that order)
                 SendStateEvent("MAP_MAIN");
-                PostInternalState16<148>(mpStateInterface, 0);
+                ShutDownHudComponents();
                 break;
 
             case 229:

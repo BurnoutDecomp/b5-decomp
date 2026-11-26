@@ -117,24 +117,11 @@ namespace BrnGui
             }
         };
 
-        // { 1, 148, 12, <show byte> }, channel 40, 16 bytes: show / hide the HUD.
-        struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
-        {
-            bool mbShowHud;   // +0x0C
-
-            explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : mbShowHud(lbShowHud)
-            {
-            }
-            GuiEventShowHideHudWire() {}
-        };
-
         CGS_STATIC_ASSERT((sizeof(GuiEventNetworkCreateGame) == 480), "create-game payload is 480 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventNetworkCreateGameWire) == 492), "create-game record is 492 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "wait-finish record is 24 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEvent533Wire>) == 16), "id-533 record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
     }
 
@@ -154,8 +141,9 @@ namespace BrnGui
         lDeactivateCrashNav.muParam = 0;
         mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
-        GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->OutputGuiEvent(lHideHud);
+        GuiEventShowHideHud lShowHideHudEvent;
+        lShowHideHudEvent.mbShow = false;
+        mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
     }
 
     // ================================================================================

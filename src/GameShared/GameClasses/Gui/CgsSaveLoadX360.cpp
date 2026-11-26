@@ -87,12 +87,12 @@ namespace CgsGui
     // heap pointer there.)
     void SaveLoadSystem::CopyImageToBuffer(const void* lpImageFile)
     {
-        CGS_ASSERT(lpImageFile != 0, "lpImageFile");
+        CGS_ASSERT_AT(lpImageFile != 0, "lpImageFile", CGS_ARTIST_FILE, 818);
 
         const ImageFileInfo* lpRecord = reinterpret_cast<const ImageFileInfo*>(lpImageFile);
 
-        CGS_ASSERT(lpRecord->miSize == miExtraFilesSizeBytes,
-                   "lpImageFile->miSize == miExtraFilesSizeBytes");
+        CGS_ASSERT_AT(lpRecord->miSize == miExtraFilesSizeBytes,
+                   "lpImageFile->miSize == miExtraFilesSizeBytes", CGS_ARTIST_FILE, 819);
 
         void* lpDest = GetMugshotBufferFromImageId(lpRecord->miId);
 
@@ -505,7 +505,7 @@ namespace CgsGui
         {
             if (luResult >= 3)                               // cmplwi r4,3; blt -> prompt lane
             {
-                CGS_ASSERT(false, "Should not get here");    // CgsSaveLoadX360.cpp:558
+                CGS_ASSERT_AT(false, "Should not get here", CGS_ARTIST_FILE, 558);    // CgsSaveLoadX360.cpp:558
                 return;
             }
 
@@ -653,7 +653,7 @@ namespace CgsGui
             &mMessageBoxResult,   // pResult, raw 0x240 -> real 0x244
             reinterpret_cast<PXOVERLAPPED>(&mOverlapped));                                 // the stack-passed XOVERLAPPED*
 
-        CGS_ASSERT(luResult == ERROR_IO_PENDING, "lResult == ERROR_IO_PENDING");
+        CGS_ASSERT_AT(luResult == ERROR_IO_PENDING, "lResult == ERROR_IO_PENDING", CGS_ARTIST_FILE, 1352);
     }
 
     // X360 0x8284CAD8. If a pending message-display option member function is armed, hide the

@@ -377,16 +377,18 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 306);   // cpp:306
 
-        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        bool lbReturnValue = false;
+
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
-            return false;
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+            mMenuToggleGroup.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache, true);
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KI_RESOURCE_ID_ACCT],
+                                           KI_APT_DISPLAY_LEVEL);
+            lbReturnValue = true;
         }
 
-        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-        mMenuToggleGroup.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache, true);
-        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KI_RESOURCE_ID_ACCT],
-                                       KI_APT_DISPLAY_LEVEL);
-        return true;
+        return lbReturnValue;
     }
 
     // ---- UpdateWFInit @0x824BFC88 --------------------------------------------------

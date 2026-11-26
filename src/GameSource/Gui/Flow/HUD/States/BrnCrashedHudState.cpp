@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameSource/Gui/BrnGuiShared.h"   // gGuiResourceIdentifier / EGuiResourceId
 #include "GameSource/Gui/BrnGuiCache.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"
@@ -31,16 +32,6 @@ namespace {
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnCrashedHudState.cpp"
     // The ticker records go out on the GUI-out channel, boxed in the 12-byte wrapper header.
     const s32 KI_CHANNEL_GUI_OUT = 40;
-
-    // Clear the ticker's challenge lines: {force fade-out 0, delete challenge messages 1}.
-    void PostTickerClear(CgsGui::StateInterface* lpInterface)
-    {
-        GuiEventTickerClearMessages lClear;
-        lClear.maData[0] = 0;
-        lClear.maData[1] = 1;
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventTickerClearMessages>) == 16), "the ticker-clear record is 16 bytes");
-        lpInterface->OutputGuiEvent(lClear);
-    }
 
     // StartFreeburnChallengeTicker's four positional-parameter slots (64 characters each).
     const s32 KI_TICKER_MAX_PARAMS     = 4;
@@ -233,24 +224,43 @@ void CrashedHudState::UpdateGetCache()
 // ARTIST 0x8247CE98.
 bool CrashedHudState::UpdateLoading()
 {
-    if (!mpCache) return false;
-    if (mbHudMessages)
+    bool lbReturnValue = false;   // DWARF local
+
+    if (mpCache != 0)
     {
-        mHudMessageComponent.SetController(mpCache->GetHudMessageController());
-        mHudMessageComponent.SetDirector(mpCache->GetHudMessageDirector());
-        mHudMessageComponent.SetGameMode(static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(mpCache->GetGameMode()));
+        if (mbHudMessages)
+        {
+            mHudMessageComponent.SetController(mpCache->GetHudMessageController());
+            mHudMessageComponent.SetDirector(mpCache->GetHudMessageDirector());
+            mHudMessageComponent.SetGameMode(static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(mpCache->GetGameMode()));
+        }
+
+        if (mpCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        {
+            // The movie name comes from the resource-name table (ARTIST `lwz r4, 0x304(r11)` off
+            // gGuiResourceIdentifier).
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_HUD_CRASHED], 1);
+            SetExpectedAptComponentList();
+            lbReturnValue = true;
+        }
     }
-    if (!mpCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad)) return false;
-    mpStateInterface->PlayAptMovie("B5CrashedHud", 1);
-    SetExpectedAptComponentList();
-    return true;
+
+    return lbReturnValue;
 }
 
 // ARTIST 0x824753A8 / 0x82475428.
 bool CrashedHudState::UpdateWFInit()
 {
+    bool lbReturnValue = false;   // DWARF local
+
     CGS_ASSERT_AT(mpCache != 0, "mpCache", CGS_ARTIST_FILE, 447);
-    return mpCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD);
+
+    if (mpCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD))
+    {
+        lbReturnValue = true;
+    }
+
+    return lbReturnValue;
 }
 void CrashedHudState::SetExpectedAptComponentList()
 {
@@ -442,8 +452,14 @@ void CrashedHudState::UpdateRunning()
 
             case 578:
             case 579:
-                PostTickerClear(mpStateInterface);
+            {
+                // DWARF local cpp:919.
+                GuiEventTickerClearMessages lClearTicker;
+                lClearTicker.mbForceFadeOut = false;
+                lClearTicker.mbDeleteChallengeMessages = true;
+                mpStateInterface->OutputGuiEvent(lClearTicker);
                 break;
+            }
 
             case 581:
                 if (mpCache->GetFreeburnChallengeManager()->IsActive())
@@ -465,7 +481,11 @@ void CrashedHudState::UpdateRunning()
     // local player has already completed this challenge.
     void CrashedHudState::StartFreeburnChallengeTicker()
     {
-        PostTickerClear(mpStateInterface);
+        // DWARF local cpp:1182.
+        GuiEventTickerClearMessages lClearTicker;
+        lClearTicker.mbForceFadeOut = false;
+        lClearTicker.mbDeleteChallengeMessages = true;
+        mpStateInterface->OutputGuiEvent(lClearTicker);
 
         const FreeburnChallengeManager* lpManager = mpCache->GetFreeburnChallengeManager();
         const BrnResource::ChallengeListEntry* lpChallenge = lpManager->GetCurrentChallenge();

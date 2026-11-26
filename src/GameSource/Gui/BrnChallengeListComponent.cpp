@@ -220,8 +220,10 @@ namespace {
 // ARTIST 0x8243D930, including the original four identical ticker posts.
 void ChallengeListComponent::ShowDescriptionInTicker()
 {
-    GuiEventTickerClearMessages clear = {{0, 1}};
-    Output(mpStateInterface, clear);
+    GuiEventTickerClearMessages lClearTicker;
+    lClearTicker.mbForceFadeOut = false;
+    lClearTicker.mbDeleteChallengeMessages = true;
+    Output(mpStateInterface, lClearTicker);
     s32 index;
     const BrnResource::ChallengeListEntry* entry = GetFilteredChallenge(miStartChallengeIndex + miHighlightedIndex, &index);
     GuiEventTickerCustomMessage message = {};

@@ -436,18 +436,20 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 332);   // cpp:332
 
-        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        bool lbReturnValue = false;
+
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad) == true)
         {
-            return false;
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+            // X360 (this+0x38, flow 0, cache, withTitle 1).
+            mBrightnessToggle.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache, true);
+
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_CRASHNAV_COLOUR_CALIBRATE],
+                                           KI_APT_DISPLAY_LEVEL);
+            lbReturnValue = true;
         }
 
-        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-        // X360 (this+0x38, flow 0, cache, withTitle 1).
-        mBrightnessToggle.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache, true);
-
-        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KI_RESOURCE_ID_COLOUR_CALIBRATE],
-                                       KI_APT_DISPLAY_LEVEL);
-        return true;
+        return lbReturnValue;
     }
 
     // ---- UpdateWFInit @ 0x824D98D8 -------------------------------------------------
@@ -457,15 +459,17 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 371);   // cpp:371
 
-        if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+        bool lbReturnValue = false;
+
+        if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN) == true)
         {
-            return false;
+            lbReturnValue = true;
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+            GetSettingsFromProfile();
+            SetupComponents();
         }
 
-        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-        GetSettingsFromProfile();
-        SetupComponents();
-        return true;
+        return lbReturnValue;
     }
 
     // ---- UpdatePermanent @ 0x824DEAD0 ----------------------------------------------

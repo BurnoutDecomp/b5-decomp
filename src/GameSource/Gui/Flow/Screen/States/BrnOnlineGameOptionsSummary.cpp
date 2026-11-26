@@ -157,18 +157,6 @@ namespace BrnGui
         {
         };
 
-        // { 1, 148, 12, <show byte> }, channel 40, 16 bytes: show / hide the HUD.
-        struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
-        {
-            bool mbShowHud;   // +0x0C
-
-            explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : mbShowHud(lbShowHud)
-            {
-            }
-            GuiEventShowHideHudWire() {}
-        };
-
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
         struct GuiOverlayRequestWire
@@ -193,7 +181,6 @@ namespace BrnGui
 
         // The channel-40 records OutputGuiEvent's GuiEventOut<T> builds around these payloads.
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiCommandWire16<175> >) == 16), "command record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiAutosaveRequestEvent>) == 16), "autosave record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiAudioTriggerEvent>) == 112), "audio trigger record is 112 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
@@ -250,13 +237,14 @@ namespace BrnGui
         miCurrentRound = 0;
 
         // The summary owns the screen: CrashNav down, HUD hidden.
-        {
-            GuiEventActivateCrashNav lActivate;
-            lActivate.muActivate = 0u;
-            lActivate.muParam = 0;
-            mpStateInterface->OutputGuiEvent(lActivate);
-        }
-        PostWire(mpStateInterface, GuiEventShowHideHudWire(false));
+        GuiEventActivateCrashNav lActivateCrashNav;
+        lActivateCrashNav.muActivate = 0u;
+        lActivateCrashNav.muParam = 0;
+        mpStateInterface->OutputGuiEvent(lActivateCrashNav);
+
+        GuiEventShowHideHud lShowHideHudEvent;
+        lShowHideHudEvent.mbShow = false;
+        mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
 
         miStartSaveItem = 0;
     }
@@ -662,13 +650,14 @@ namespace BrnGui
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mDownArrowAnimator.GetName());
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mTitleText.GetName());
 
-        {
-            GuiEventActivateCrashNav lActivate;
-            lActivate.muActivate = 0u;
-            lActivate.muParam = 0;
-            mpStateInterface->OutputGuiEvent(lActivate);
-        }
-        PostWire(mpStateInterface, GuiEventShowHideHudWire(false));
+        GuiEventActivateCrashNav lActivateCrashNav;
+        lActivateCrashNav.muActivate = 0u;
+        lActivateCrashNav.muParam = 0;
+        mpStateInterface->OutputGuiEvent(lActivateCrashNav);
+
+        GuiEventShowHideHud lShowHideHudEvent;
+        lShowHideHudEvent.mbShow = false;
+        mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
 
         miStartSaveItem = 0;
     }

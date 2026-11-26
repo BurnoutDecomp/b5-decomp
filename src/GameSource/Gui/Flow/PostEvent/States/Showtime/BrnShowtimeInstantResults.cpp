@@ -239,11 +239,9 @@ namespace BrnGui
         lHideBoostBar.maData[0] = 0;
         mpStateInterface->OutputViewState(lHideBoostBar);
 
-        GuiEventShowHideHud lHideHud;
-        lHideHud.maData[0] = 0;
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHud>) == 16),
-                      "ARTIST ShowHideHud record is {1,148,12} plus one byte");
-        mpStateInterface->OutputGuiEvent(lHideHud);
+        GuiEventShowHideHud lHideHudEvent;   // DWARF local cpp:149
+        lHideHudEvent.mbShow = false;
+        mpStateInterface->OutputGuiEvent(lHideHudEvent);
 
         // ---- the components -----------------------------------------------------------------
         for (s32 liHelpItem = 0; liHelpItem < KI_HELPITEMS; ++liHelpItem)
@@ -353,11 +351,9 @@ namespace BrnGui
                 mabSubStateFlags[E_ACTIVE_SUBSTATE_EVENT_RESULTS] = true;
                 meCurrentState = E_RESULTS_STATE_ACTIVE;
 
-                GuiEventShowHideHud lHideHud;
-                lHideHud.maData[0] = 0;
-                CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHud>) == 16),
-                              "ARTIST ShowHideHud record is {1,148,12} plus one byte");
-                mpStateInterface->OutputGuiEvent(lHideHud);
+                GuiEventShowHideHud lHideHudEvent;   // DWARF local cpp:266
+                lHideHudEvent.mbShow = false;
+                mpStateInterface->OutputGuiEvent(lHideHudEvent);
             }
             break;
 
@@ -854,9 +850,9 @@ namespace BrnGui
                 // ⚠️ The payload byte is 0 -- the same value OnEnter posts, i.e. HIDE. An
                 // earlier draft of this arm called it "show the HUD again"; the console
                 // stores `li r11, 0 / stb r11, sp+0x8C`, so it does not.
-                GuiEventShowHideHud lHideHud;
-                lHideHud.maData[0] = 0;
-                mpStateInterface->OutputInternalState(lHideHud);
+                GuiEventShowHideHud lShowHideHud;   // DWARF local cpp:434
+                lShowHideHud.mbShow = false;
+                mpStateInterface->OutputInternalState(lShowHideHud);
 
                 CGS_ASSERT_AT(*reinterpret_cast<const s32*>(lpEvent) == 2,
                            "static_cast<const GuiCarSelectStartEvent*>( lpEvent )"

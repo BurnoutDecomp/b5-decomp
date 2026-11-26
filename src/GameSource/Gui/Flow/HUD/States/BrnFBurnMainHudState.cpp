@@ -643,24 +643,25 @@ namespace BrnGui
     // =======================================================================
     bool FBurnMainHudState::UpdateLoading()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache != NULL");
-        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
-            return false;
+        // ARTIST @0x8247C640 carries no null assert on mpGuiCache here.
+        bool lbReturnValue = false;
 
-        if (mbSatNavEnabled)
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
-            mSatNavComponent.LoadResources();   // [H3b] X360 UpdateLoading @0x8247C640
+            if (mbSatNavEnabled)
+            {
+                mSatNavComponent.LoadResources();   // [H3b] X360 UpdateLoading @0x8247C640
+            }
+
+            // Mount the HUD apt movie at level 1; the name comes from the resource-name table
+            // (ARTIST @0x8247C6B0: `lwz r11, 0x300(r11)` off gGuiResourceIdentifier == "B5RaceHud").
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_HUD_RACE], 1);
+
+            SetExpectedAptComponentList();
+            lbReturnValue = true;
         }
 
-        // Mount the HUD apt movie at level 1 (X360 off_82F27BE0[0] == "B5RaceHud"). Use
-        // the StateInterface play-movie path so the record is the real GuiEventPlayAptMovie
-        // posted at its true sizeof -- a hand-rolled record posted at the X360's 20-byte
-        // size truncates the level field on x64 (8-byte name pointer) and the ViewModule
-        // reads a garbage level number.
-        mpStateInterface->PlayAptMovie("B5RaceHud", 1);
-
-        SetExpectedAptComponentList();
-        return true;
+        return lbReturnValue;
     }
 
     // =======================================================================

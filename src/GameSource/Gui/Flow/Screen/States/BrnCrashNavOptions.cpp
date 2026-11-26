@@ -395,16 +395,18 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 347);   // cpp:347
 
-        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        bool lbReturnValue = false;   // DWARF local cpp:350
+
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
-            return false;
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+            mMenuToggleGroup.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache, true);
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_CRASHNAV_OPTIONS],
+                                           KI_APT_DISPLAY_LEVEL);
+            lbReturnValue = true;
         }
 
-        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-        mMenuToggleGroup.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache, true);
-        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KI_RESOURCE_ID_OPTIONS],
-                                       KI_APT_DISPLAY_LEVEL);
-        return true;
+        return lbReturnValue;
     }
 
     // ---- UpdateWFInit @0x824C19B8 --------------------------------------------------
@@ -414,15 +416,17 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 385);   // cpp:385
 
-        if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+        bool lbReturnValue = false;
+
+        if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
-            return false;
+            lbReturnValue = true;
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+            SetSettingsFromProfile();
+            mOptionsData.SetUpComponent<E_OPTIONROW_COUNT>(&mMenuToggleGroup);
         }
 
-        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-        SetSettingsFromProfile();
-        mOptionsData.SetUpComponent<E_OPTIONROW_COUNT>(&mMenuToggleGroup);
-        return true;
+        return lbReturnValue;
     }
 
     // ---- UpdatePermanent @0x824DFF90 -----------------------------------------------

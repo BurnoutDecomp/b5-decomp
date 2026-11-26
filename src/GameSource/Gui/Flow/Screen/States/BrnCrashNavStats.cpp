@@ -17,6 +17,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"   // StateInterface
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"           // VariableEventQueue<18432,16> (in-queue view)
 #include "GameSource/Gui/BrnGuiCache.h"                   // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiShared.h"                  // gGuiResourceIdentifier / EGuiResourceId
 #include "GameSource/Gui/Events/BrnGuiEventStatsResponse.h"  // GuiEventStatsResponse (id 436)
 
 #include <cstring>   // std::strcpy
@@ -90,8 +91,7 @@ namespace BrnGui
     {
     };
 
-    // Stats apt-movie binding (UpdateLoading PlayAptMovie record).
-    static const char* const KPC_STATS_MOVIE_NAME = "";   // empty-string movie name sentinel
+    // Stats apt-movie level (UpdateLoading PlayAptMovie record).
     static const s32         KI_STATS_MOVIE_LEVEL = 3;    // channel-41 level word
     static const s32         KI_ACTION_GO_BACK    = 50;   // UpdatePermanent id-6 sub-action
 
@@ -263,13 +263,19 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpGuiCache, "NULL != mpGuiCache", CGS_ARTIST_FILE, 304);
 
-        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
-            return false;
+        bool lbReturnValue = false;
 
-        mpStateInterface->PlayAptMovie(KPC_STATS_MOVIE_NAME, KI_STATS_MOVIE_LEVEL);
-        SetExpectedAptComponents();
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        {
+            // The movie name comes from the resource-name table (ARTIST @0x824CAB28:
+            // `lwz r11, 0x224(r11)` off gGuiResourceIdentifier, index 137 == "BrnCrashNavStats").
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_CRASHNAV_STATS],
+                                           KI_STATS_MOVIE_LEVEL);
+            SetExpectedAptComponents();
+            lbReturnValue = true;
+        }
 
-        return true;
+        return lbReturnValue;
     }
 
     // ---- UpdateInitialising @ 0x824B5C60 ------------------------------------------
@@ -277,18 +283,21 @@ namespace BrnGui
     {
         CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", CGS_ARTIST_FILE, 339 /* ARTIST 0x824B5C9C */));
 
-        if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
-            return false;
+        bool lbReturnValue = false;
 
-        if (mbDataReceived)
+        if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
-            for (u32 luField = 0; luField < KU_NUM_STAT_TEXTFIELDS; ++luField)
+            if (mbDataReceived == true)
             {
-                maStatTextfields[luField].SetText(maStatTextfields[luField].GetText());
+                for (u32 luField = 0; luField < KU_NUM_STAT_TEXTFIELDS; ++luField)
+                {
+                    maStatTextfields[luField].SetText(maStatTextfields[luField].GetText());
+                }
             }
+            lbReturnValue = true;
         }
 
-        return true;
+        return lbReturnValue;
     }
 
     // ---- Update @ 0x824D8318 ------------------------------------------------------

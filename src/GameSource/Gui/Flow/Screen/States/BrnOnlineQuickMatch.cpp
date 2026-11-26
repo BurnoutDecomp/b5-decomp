@@ -149,24 +149,11 @@ namespace BrnGui
             }
         };
 
-        // { 1, 148, 12, <show byte> }, channel 40, 16 bytes: show / hide the HUD.
-        struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
-        {
-            bool mbShowHud;   // +0x0C
-
-            explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : mbShowHud(lbShowHud)
-            {
-            }
-            GuiEventShowHideHudWire() {}
-        };
-
         // { 2, 251, 12, ranked, freeburn }, channel 40, 16 bytes: the quick-match request.
         typedef CgsGui::GuiEventOut<GuiEventNetworkQuickMatch> GuiEventNetworkQuickMatchWire;
 
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CustomMatchSearchStopWire>) == 16), "search-stop record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEvent533Wire>) == 16), "id-533 record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventNetworkQuickMatchWire) == 16), "quick-match record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CgsGui::GuiEventNetworkSuspension>) == 16), "suspension record is 16 bytes");
@@ -195,8 +182,9 @@ namespace BrnGui
         lDeactivateCrashNav.muParam = 0;
         mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
-        GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->OutputGuiEvent(lHideHud);
+        GuiEventShowHideHud lShowHideHudEvent;
+        lShowHideHudEvent.mbShow = false;
+        mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
     }
 
     // ================================================================================

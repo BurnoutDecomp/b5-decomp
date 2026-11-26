@@ -221,22 +221,9 @@ namespace BrnGui
             }
         };
 
-        // { 1, 148, 12, <show byte> }, channel 40, 16 bytes: show / hide the HUD.
-        struct GuiEventShowHideHudWire : public CgsGui::GuiEvent<148>
-        {
-            bool mbShowHud;   // +0x0C
-
-            explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : mbShowHud(lbShowHud)
-            {
-            }
-            GuiEventShowHideHudWire() {}
-        };
-
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "wait-finish record is 24 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventReply135Wire>) == 16), "id-135 record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
     }
 
@@ -406,14 +393,15 @@ namespace BrnGui
             // The no-title flavour also takes the front end over: CrashNav down, HUD hidden.
             if (meSignInType == E_SIGN_IN_TYPE_NO_TITLE)
             {
-                GuiEventActivateCrashNav lDeactivateCrashNav;
-                lDeactivateCrashNav.muActivate = 0u;
-                lDeactivateCrashNav.muParam = 0;
-                lDeactivateCrashNav.muParam = KU_ACTIVATE_CRASHNAV_PARAM_SIGN_IN;
-                mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
+                GuiEventActivateCrashNav lActivateCrashNav;
+                lActivateCrashNav.muActivate = 0u;
+                lActivateCrashNav.muParam = 0;
+                lActivateCrashNav.muParam = KU_ACTIVATE_CRASHNAV_PARAM_SIGN_IN;
+                mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
-                GuiEventShowHideHudWire lHideHud(false);
-                mpStateInterface->OutputGuiEvent(lHideHud);
+                GuiEventShowHideHud lShowHideHudEvent;
+                lShowHideHudEvent.mbShow = false;
+                mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
             }
         }
     }
@@ -1272,7 +1260,7 @@ namespace BrnGui
             // DWARF local GuiEventShowHideHud lShowHideHud (cpp:1426), posted through
             // OutputInternalState<GuiEventShowHideHud>: {1, 148, 12} + the byte, size 16.
             GuiEventShowHideHud lShowHideHud;
-            lShowHideHud.maData[0] = 0;
+            lShowHideHud.mbShow = false;
             mpStateInterface->OutputInternalState(lShowHideHud);
 
             if (mpGuiCache->IsJunkyardCarUnlockPending() == true)
@@ -1809,7 +1797,6 @@ namespace BrnGui
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes. All
         // three handlers post it for the "OnConnecting" overlay to tear the connecting
         // spinner down before they act.
-        typedef CgsGui::GuiEventOut<GuiEventShowHideHud> GuiShowHideHudWire;
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> record: { 288, 184, 16, <pad>,
         // the 288-byte request }, channel 40, 304 bytes -- the shape the out-of-line
@@ -1820,7 +1807,6 @@ namespace BrnGui
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "wait-finish record is 24 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CgsGui::GuiEventNetworkSuspension>) == 16), "suspension record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
 
         // ---- in-queue payload views (the queue hands out the HEADER-STRIPPED payload,
@@ -1886,16 +1872,16 @@ namespace BrnGui
         {
             // Put the CrashNav map flow to sleep: this screen owns the front end until
             // the sign-in resolves.
-            GuiEventActivateCrashNav lDeactivateCrashNav;
-            lDeactivateCrashNav.muActivate = 0u;
-            lDeactivateCrashNav.muParam = 0;
-            lDeactivateCrashNav.muParam = KU_ACTIVATE_CRASHNAV_PARAM_SIGN_IN;
+            GuiEventActivateCrashNav lActivateCrashNav;
+            lActivateCrashNav.muActivate = 0u;
+            lActivateCrashNav.muParam = 0;
+            lActivateCrashNav.muParam = KU_ACTIVATE_CRASHNAV_PARAM_SIGN_IN;
 
-            mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
+            mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
-            GuiEventShowHideHud lHideHud;
-            lHideHud.maData[0] = 0;
-            mpStateInterface->OutputGuiEvent(lHideHud);
+            GuiEventShowHideHud lShowHideHudEvent;
+            lShowHideHudEvent.mbShow = false;
+            mpStateInterface->OutputGuiEvent(lShowHideHudEvent);
         }
     }
 }
