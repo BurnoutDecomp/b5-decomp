@@ -209,12 +209,16 @@ namespace BrnGui
 
         case E_SUBSTATE_WAIT_SIGN_IN_FINISH:
         {
-            DWORD luNotificationId = 0;
-            ULONG_PTR luNotificationParam = 0;
+            // Uninitialised: XNotifyGetNext fills both (ARTIST stores nothing before 0x824AB0F0).
+            DWORD luNotificationId;
+            ULONG_PTR luNotificationParam;
             if (XNotifyGetNext(mhNotifyListener, 0, &luNotificationId, &luNotificationParam) != 0)
             {
-                if (luNotificationId == XN_SYS_UI)
+                // A switch on the notification: XN_SYS_UI is tested first and placed last
+                // (ARTIST 0x824AB100 beq to 0x824AB150).
+                switch (luNotificationId)
                 {
+                case XN_SYS_UI:
                     // The sign-in panel closed: open the friends list if the profile is now
                     // on the service, and go back to the menu either way.
                     if (luNotificationParam == 0)
@@ -227,18 +231,21 @@ namespace BrnGui
                         }
                         meInternalState = E_INTERNALSTATE_RUNNING;
                     }
-                }
-                else if (luNotificationId == XN_LIVE_INVITE_ACCEPTED)
-                {
-                    CGS_ASSERT(false, "Invite notification processed by Online main menu screen. "
-                                      "This could break cross game invites\n");
+                    break;
+                case XN_LIVE_INVITE_ACCEPTED:
+                    CGS_ASSERT_STREAM_AT(false, "Invite notification processed by Online main menu screen. "
+                                                "This could break cross game invites\n",
+                                         CGS_ARTIST_FILE, 196);
+                    break;
                 }
             }
             break;
         }
 
         default:
-            CGS_ASSERT(false, "Invalid internal state : ");
+            // Streamed in place, as ARTIST builds it (cpp:218).
+            CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+                                 CGS_ARTIST_FILE, 218);
             break;
         }
 

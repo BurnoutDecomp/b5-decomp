@@ -366,7 +366,9 @@ namespace BrnGui
 
             default:
                 // The console streams "Invalid internal state : " << meInternalState.
-                CGS_ASSERT(false, "Invalid internal state : ");
+                // Streamed in place, as ARTIST builds it (cpp:270).
+                CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+                                     CGS_ARTIST_FILE, 270);
                 break;
         }
 

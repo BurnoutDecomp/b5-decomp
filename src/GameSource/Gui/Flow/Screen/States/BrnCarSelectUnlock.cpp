@@ -33,6 +33,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (register / stop-loading / play-apt / out-queue)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiFlow
+#include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                     // BrnGui::WorldDataController
 #include "SharedClasses/DataLists/VehicleList.h"                          // BrnResource::VehicleList
 #include "SharedClasses/DataLists/VehicleListEntry.h"                     // BrnResource::VehicleListEntry
@@ -287,7 +288,9 @@ namespace BrnGui
             // The original streams the fixed prefix, then meInternalState, then a newline
             // into the assert message buffer and fires unconditionally; the macro carries
             // the fixed half of that text.
-            CGS_ASSERT(false, "Invalid internal state : ");
+            // Streamed in place, as ARTIST builds it (cpp:162).
+            CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+                                 CGS_ARTIST_FILE, 162);
             break;
         }
 
@@ -301,7 +304,9 @@ namespace BrnGui
     // is exact. The name matches this screen's own resource identifier (id 148).
     void CarSelectUnlock::PlayMovie()
     {
-        mpStateInterface->PlayAptMovie("BrnCarSelectUnlock", 3);
+        // The movie name is the resource table entry (ARTIST lwz gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_CARSELECT_UNLOCK]);
+        // DWARF: the inlined StateInterface::PlayAptMovie.
+        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_CARSELECT_UNLOCK], 3);
     }
 
     // ---- UpdateGetCache @ 0x824C15A8 ----------------------------------------------

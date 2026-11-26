@@ -144,7 +144,9 @@ void OnlineYouWin::Update()
 
         default:
             // The console streams "Invalid internal state : " << state << "\n".
-            CGS_ASSERT(false, "Invalid internal state : ");
+            // Streamed in place, as ARTIST builds it (cpp:166).
+            CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+                                 CGS_ARTIST_FILE, 166);
             break;
     }
 
@@ -303,14 +305,15 @@ bool OnlineYouWin::UpdateTaking()
 // Hold the result for KF_SHOWING_DURATION, then advance.
 void OnlineYouWin::UpdateShowing()
 {
-    if (!(mfCurrentTime < KF_SHOWING_DURATION))
+    // The counting arm first (ARTIST 0x824AB718 bge to the advance arm).
+    if (mfCurrentTime < KF_SHOWING_DURATION)
     {
-        mfCurrentTime = 0.0f;
-        SendStateEvent("ADVANCE");
+        mfCurrentTime += mpGuiCache->GetTimeStep();
     }
     else
     {
-        mfCurrentTime += mpGuiCache->GetTimeStep();
+        mfCurrentTime = 0.0f;
+        SendStateEvent("ADVANCE");
     }
 }
 
@@ -352,10 +355,11 @@ void OnlineYouWin::UpdatePermanent()
 // True when any player in the cached online post-event record carries its timed-out flag.
 bool OnlineYouWin::HasAnyoneTimedOut()
 {
-    const GuiEventOnlinePostEvent* lpPostEventData = mpGuiCache->GetOnlinePostEventData();
-    for (s32 liIndex = 0; liIndex < lpPostEventData->miNumPlayersInEvent; ++liIndex)
+    // DWARF cpp:425 has only liIndex: the cache accessor is read in place (ARTIST
+    // 0x82487E28 reads the count straight off the cache, 0x82487E38 the record base).
+    for (s32 liIndex = 0; liIndex < mpGuiCache->GetOnlinePostEventData()->miNumPlayersInEvent; ++liIndex)
     {
-        if (lpPostEventData->maRecords[liIndex].mbHasTimedOut != 0)
+        if (mpGuiCache->GetOnlinePostEventData()->maRecords[liIndex].mbHasTimedOut != 0)
         {
             return true;
         }

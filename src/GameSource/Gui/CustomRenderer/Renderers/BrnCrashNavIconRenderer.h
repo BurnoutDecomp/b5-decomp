@@ -60,6 +60,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                    // Vector3 / Vector4 / CgsID
+#include "GameShared/GameClasses/Core/CgsAssert.h"                             // CGS_ASSERT_AT (SetLanguageManager)
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"  // CustomRenderComponentInterface base + ImRendererSet
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"    // CgsGraphics::Im2dTransform (mTextTransform)
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"              // CgsGraphics::TextObject / TextRenderer
@@ -215,7 +216,13 @@ namespace BrnGui
         // h:562 / h:487 -- header-inline setters the GUI view module drives when it binds
         // the shared text renderer / language manager onto every custom renderer.
         void SetTextRenderer(CgsGraphics::TextRenderer* lpTextRenderer) { mpTextRenderer = lpTextRenderer; }
-        void SetLanguageManager(CgsLanguage::LanguageManager* lpLanguageManager) { mpLanguageManager = lpLanguageManager; }
+        void SetLanguageManager(CgsLanguage::LanguageManager* lpLanguageManager)
+        {
+            // h:489 (ARTIST CustomRendererManager::SetLanguageManager 0x824455F8; PS3 the same).
+            CGS_ASSERT_AT(lpLanguageManager, "lpLanguageManager",
+                          "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnCrashNavIconRenderer.h", 489);
+            mpLanguageManager = lpLanguageManager;
+        }
 
     private:
         // ---- RENDER half (BrnCrashNavIconRenderer_wK_01.cpp) --------------------

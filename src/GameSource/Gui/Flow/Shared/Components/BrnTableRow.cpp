@@ -165,19 +165,17 @@ namespace BrnGui
         if (!IsSelectable())
             return E_TABLEROWSTATES_DISABLED;
 
-        const bool lbHighlighted = IsHighlighted();
-        const bool lbPrevInvisible = (mePreviousState == E_TABLEROWSTATES_INVISIBLE);
-
-        if (lbHighlighted)
+        // Each arm tests the previous state itself (ARTIST 0x824E4F24 / 0x824E4F48 cmpwi 1).
+        if (IsHighlighted())
         {
             // Highlighted: SHOWING_HIGHLIGHTED while transitioning in, else HIGHLIGHTED.
-            if (lbPrevInvisible && mbEnableShowingAnim)
+            if (mePreviousState == E_TABLEROWSTATES_INVISIBLE && mbEnableShowingAnim)
                 return E_TABLEROWSTATES_SHOWING_HIGHLIGHTED;
             return E_TABLEROWSTATES_HIGHLIGHTED;
         }
 
         // Unhighlighted: SHOWING_UNHIGHLIGHTED while transitioning in, else UNHIGHLIGHTED.
-        if (lbPrevInvisible && mbEnableShowingAnim)
+        if (mePreviousState == E_TABLEROWSTATES_INVISIBLE && mbEnableShowingAnim)
             return E_TABLEROWSTATES_SHOWING_UNHIGHLIGHTED;
         return E_TABLEROWSTATES_UNHIGHLIGHTED;
     }

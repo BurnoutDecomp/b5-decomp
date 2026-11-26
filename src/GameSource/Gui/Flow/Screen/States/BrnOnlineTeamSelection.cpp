@@ -290,18 +290,23 @@ void OnlineTeamSelection::HandleControllerInputMainSubState(const CgsModule::Eve
 {
     const ControllerButtonPayload* lpPress = static_cast<const ControllerButtonPayload*>(lpEvent);
 
-    bool lbMoved = false;
-    if (lpPress->miButtonId == E_GAMEINPUTACTIONS_GUI_UP)
+    // A switch on the action: the UP case is tested first and placed last (ARTIST
+    // 0x824A1C08 beq to 0x824A1C34), any other action returns.
+    bool lbMoved;
+    switch (lpPress->miButtonId)
     {
+    case E_GAMEINPUTACTIONS_GUI_UP:
         if (mPlayerNameComponent.GetHighlightedIndex() <= -1)
             return;
         lbMoved = mPlayerNameComponent.HighlightPrevious();
-    }
-    else if (lpPress->miButtonId == E_GAMEINPUTACTIONS_GUI_DOWN)
-    {
+        break;
+    case E_GAMEINPUTACTIONS_GUI_DOWN:
         if (mPlayerNameComponent.GetHighlightedIndex() <= -1)
             return;
         lbMoved = mPlayerNameComponent.HighlightNext();
+        break;
+    default:
+        return;
     }
 
     if (lbMoved)

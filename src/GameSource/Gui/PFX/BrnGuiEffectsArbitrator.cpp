@@ -991,27 +991,29 @@ namespace BrnGui
     // ------------------------------------------------------------------------------------
     void EffectsArbitrator::Debug_StartHook(void* lpThis)
     {
+        // DWARF cpp:117/119: lpEffectsArbitrator, lEvent. The selected name is the format
+        // string itself, bounded by KI_MAX_PFX_ID_LENGTH, and the guid is left unset (ARTIST
+        // 0x82512564 li r4,0x20 with no format and no guid store; PS3 0x5A4270 the same).
         EffectsArbitrator* lpArbitrator = static_cast<EffectsArbitrator*>(lpThis);
         GuiPFXHookEvent lEvent;
-        lEvent.muGuid = 0;
-        CgsCore::SPrintf(lEvent.macName, sizeof(lEvent.macName), "%s",
+        CgsCore::SPrintf(lEvent.macName, KI_MAX_PFX_ID_LENGTH,
                          lpArbitrator->maPfxHookList[lpArbitrator->miPfxHookIndex].mpcName);
         const f32 lfWeight = lpArbitrator->mfBackgroundWeight;
-        lEvent.mfMaximumBloomWeight        = lfWeight;
-        lEvent.mfMaximumVignetteWeight     = lfWeight;
-        lEvent.mfMaximumBlurWeight         = lfWeight;
-        lEvent.mfMaximumDepthOfFieldWeight = lfWeight;
         lEvent.mfMaximum2DTintWeight       = lfWeight;
         lEvent.mfMaximum3DTintWeight       = lfWeight;
+        lEvent.mfMaximumBloomWeight        = lfWeight;
+        lEvent.mfMaximumBlurWeight         = lfWeight;
+        lEvent.mfMaximumDepthOfFieldWeight = lfWeight;
+        lEvent.mfMaximumVignetteWeight     = lfWeight;
         lpArbitrator->StartHook(&lEvent);
     }
 
     void EffectsArbitrator::Debug_StartBackgroundHook(void* lpThis)
     {
+        // DWARF cpp:94/96; the same name-as-format SPrintf (ARTIST 0x8251250C).
         EffectsArbitrator* lpArbitrator = static_cast<EffectsArbitrator*>(lpThis);
         GuiPFXStartBackgroundHookEvent lEvent;
-        lEvent.muGuid = 0;
-        CgsCore::SPrintf(lEvent.macName, sizeof(lEvent.macName), "%s",
+        CgsCore::SPrintf(lEvent.macName, KI_MAX_PFX_ID_LENGTH,
                          lpArbitrator->maPfxHookList[lpArbitrator->miPfxHookIndex].mpcName);
         lEvent.mfMaximumWeight = lpArbitrator->mfBackgroundWeight;
         lpArbitrator->StartBackgroundHook(&lEvent);

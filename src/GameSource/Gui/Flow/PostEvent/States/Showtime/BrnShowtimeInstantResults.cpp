@@ -717,6 +717,7 @@ namespace BrnGui
                        || meSubStateState == E_SUBSTATE_SUMMARY,
                    "E_SUBSTATE_TOTALLING == meSubStateState || "
                    "E_SUBSTATE_SUMMARY == meSubStateState", CGS_ARTIST_FILE, 896);                  // cpp:896
+        bool lbReturn = false;                                                                         // DWARF cpp:898
         CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 900);                                 // cpp:900
 
         mfTimeRemaining -= mpGuiCache->GetTimeStep();
@@ -732,7 +733,9 @@ namespace BrnGui
             }
         }
 
-        return mfTimeRemaining <= 0.0f;
+        if (mfTimeRemaining <= 0.0f)
+            lbReturn = true;
+        return lbReturn;
     }
 
     // ---------------------------------------------------------------------------------------

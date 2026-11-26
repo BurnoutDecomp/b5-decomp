@@ -151,7 +151,6 @@ void ReplayOptions::OnLeave()
 
 void ReplayOptions::Update()
 {
-    InGuiEventQueue* lpInQueue = reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue);
 
     switch (meInternalState)
     {
@@ -176,11 +175,13 @@ void ReplayOptions::Update()
         break;
 
     default:
-        CGS_ASSERT(false, "Invalid internal state : ");
+        // Streamed in place, as ARTIST builds it (cpp:182).
+        CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+                             CGS_ARTIST_FILE, 182);
         break;
     }
 
-    lpInQueue->Clear();
+    mpInGuiEventQueue->Clear();
 }
 
 bool ReplayOptions::UpdateLoadResources()

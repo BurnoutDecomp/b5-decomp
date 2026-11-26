@@ -985,8 +985,9 @@ void FriendsListComponent::Prepare(const char* lacName, const BrnFlapt::FileRef&
 // ARTIST 0x8242B440.
 void FriendsListComponent::Invalidate()
 {
-    for (s32 i = 0; i < KI_VISIBLE_ROWS; ++i)
-        maEntries[i].Invalidate();
+    // DWARF cpp:2335 `int8_t liCurrentIndex` (ARTIST 0x8242B470 extsb).
+    for (s8 liCurrentIndex = 0; liCurrentIndex < KI_VISIBLE_ROWS; ++liCurrentIndex)
+        maEntries[liCurrentIndex].Invalidate();
 }
 
 // ARTIST 0x8242B628. +0x880 is the number of populated visible rows, despite

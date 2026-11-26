@@ -356,13 +356,6 @@ void CrashedStuntHudState::OnLeave()
                 // maps END_CSTNT back to state 2 RACE_MAIN -- the race UI returning.
                 if (lpiPayload[0] == 1 || lpiPayload[0] == 3)
                 {
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        // [cstnt-hud] witness. NOT X360.
-                        *CgsDev::Log::gpDebugPrint
-                            << "[cstnt-hud] CrashedStuntHudState: GUI 377 payload=" << lpiPayload[0]
-                            << " -> SendStateEvent(\"END_CSTNT\")\n";
-                    }
                     SendStateEvent("END_CSTNT");
                 }
                 // 0|2 (START_CRASHED) is a no-op here: the state is already crashed. The console

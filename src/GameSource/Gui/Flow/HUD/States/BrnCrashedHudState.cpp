@@ -382,13 +382,6 @@ void CrashedHudState::UpdateRunning()
                 // the falling edge; 3 is the showtime-side spelling of the same leave.
                 if (lpiPayload[0] == 1 || lpiPayload[0] == 3)
                 {
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        // [crash-hud] witness. NOT X360.
-                        *CgsDev::Log::gpDebugPrint
-                            << "[crash-hud] CrashedHudState: GUI 377 payload=" << lpiPayload[0]
-                            << " -> SendStateEvent(\"END_CRASH\")\n";
-                    }
                     SendStateEvent("END_CRASH");
                 }
                 // 0|2 (START_CRASHED) is a no-op here: the state is already crashed. The console

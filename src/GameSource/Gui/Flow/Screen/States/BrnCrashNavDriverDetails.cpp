@@ -49,6 +49,7 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnButtonIcon.h"             // ButtonIconComponent::EPadButton
 #include "GameSource/Gui/BrnGuiCache.h"                                     // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                             // GuiEventActivateCrashNav / GuiFlow
+#include "GameSource/Gui/BrnGuiShared.h"                                    // gGuiResourceIdentifier
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                       // WorldDataController::GetProgressionData
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                       // GuiEventStatsResponse (event 436)
 #include "GameSource/Gui/Events/BrnGuiEventRankProgressResponse.h"          // GuiEventRankProgressResponse (event 438)
@@ -406,25 +407,13 @@ void CrashNavDriverDetails::Update()
         break;
 
     default:
-        if (CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint << "Invalid internal state : "
-                                       << static_cast<s32>(meInternalState) << "\n";
-        CGS_ASSERT_AT(false, "Invalid internal state", CGS_ARTIST_FILE, 358);   // cpp:358
+        // The streamed assert ARTIST builds in place (0x824DEC38..0x824DECD0).
+        CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+                             CGS_ARTIST_FILE, 358);   // cpp:358
         break;
     }
 
-    // [ddetails] change-only ladder trace.
-    {
-        static s32 s_iLastState = -1;
-        if (static_cast<s32>(meInternalState) != s_iLastState)
-        {
-            s_iLastState = static_cast<s32>(meInternalState);
-            if (CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << "[ddetails] internal state -> " << s_iLastState << "\n";
-        }
-    }
-
-    if (lbRunPermanent)
+    if (lbRunPermanent == true)
         UpdatePermanent();
 
     // The console clears its in-queue at the end of every Update, whatever the rung did.
@@ -548,62 +537,50 @@ bool CrashNavDriverDetails::UpdateSetupLicense()
 // START THE SCREEN'S APT MOVIE.
 bool CrashNavDriverDetails::UpdateLoadResources()
 {
+    // DWARF cpp:517 lbReturnValue, seeded false before the cpp:519 assert (ARTIST 0x824CF1F0);
+    // the three resource gates chain into one if (0x824CF224..0x824CF274), the movie name is
+    // the resource table entry (lwz gGuiResourceIdentifier[144], the inlined PlayAptMovie).
+    bool lbReturnValue = false;
     CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 519);   // cpp:519
 
-    // [ddetails] change-only bring-up trace: which of the three resource gates is still
-    // holding the ladder. Cheap and change-only, in the tree's dev-trace idiom.
-    const bool lbScreenIn  = (mpGuiCache != 0)
-        && mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad);
-    const bool lbLicenceIn = lbScreenIn && mLicenseComponent.EnsureResourcesAreLoaded();
-    const bool lbPhotoIn   = lbLicenceIn && mPhotoBoothComponent.EnsureResourcesAreLoaded();
+    if (mpGuiCache != 0
+        && mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad) == true
+        && mLicenseComponent.EnsureResourcesAreLoaded()
+        && mPhotoBoothComponent.EnsureResourcesAreLoaded())
     {
-        static s32 s_iLastGates = -1;
-        const s32 liGates = (lbScreenIn ? 1 : 0) | (lbLicenceIn ? 2 : 0) | (lbPhotoIn ? 4 : 0);
-        if (liGates != s_iLastGates)
+        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+
+        // Every text field, the stats-panel animator and the take-photo prompt register their
+        // apt component name with the cache (the X360 passes each component's macName to the
+        // name-hashing GuiCache::AppendExpectedAptComponent overload).
+        for (s32 liCurrentTextfield = 0; liCurrentTextfield < KI_NUM_STAT_TEXTFIELDS; ++liCurrentTextfield)   // DWARF cpp:529
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, maStatTextfields[liCurrentTextfield].GetName());
+
+        for (s32 lCountyIndex = 0; lCountyIndex < KI_NUM_DISTRICTS; ++lCountyIndex)   // DWARF cpp:535
         {
-            s_iLastGates = liGates;
-            if (CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << "[ddetails] resource gates: screen=" << (lbScreenIn ? 1 : 0)
-                                           << " licence=" << (lbLicenceIn ? 1 : 0)
-                                           << " photo=" << (lbPhotoIn ? 1 : 0) << "\n";
+            mpGuiCache->AppendExpectedAptComponent(
+                E_GUIFLOW_SCREEN, maDistrictBillboardsTextfields[lCountyIndex].GetName());
+            mpGuiCache->AppendExpectedAptComponent(
+                E_GUIFLOW_SCREEN, maDistrictJumpsTextfields[lCountyIndex].GetName());
+            mpGuiCache->AppendExpectedAptComponent(
+                E_GUIFLOW_SCREEN, maDistrictSmashesTextfields[lCountyIndex].GetName());
         }
+
+        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mStatsPanelAnimator.GetName());
+        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mTakePhotoPrompt.GetName());
+
+        mMenuComponent.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache);
+        mLicenseComponent.AppendExpectedAptComponent(E_GUIFLOW_SCREEN);
+        mPhotoBoothComponent.AppendExpectedAptComponents(E_GUIFLOW_SCREEN);
+
+        mLicenseComponent.OnLoad();
+        mPhotoBoothComponent.OnLoad();
+
+        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_CRASHNAV_DRIVER_DETAILS],
+                                       KI_APT_MOVIE_LEVEL);
+        lbReturnValue = true;
     }
-    if (!lbPhotoIn)
-        return false;
-
-    mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-
-    // Every text field, the stats-panel animator and the take-photo prompt register their
-    // apt component name with the cache (the X360 passes each component's macName to the
-    // name-hashing GuiCache::AppendExpectedAptComponent overload).
-    for (s32 liField = 0; liField < KI_NUM_STAT_TEXTFIELDS; ++liField)
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, maStatTextfields[liField].GetName());
-
-    for (s32 liDistrict = 0; liDistrict < KI_NUM_DISTRICTS; ++liDistrict)
-    {
-        mpGuiCache->AppendExpectedAptComponent(
-            E_GUIFLOW_SCREEN, maDistrictBillboardsTextfields[liDistrict].GetName());
-        mpGuiCache->AppendExpectedAptComponent(
-            E_GUIFLOW_SCREEN, maDistrictJumpsTextfields[liDistrict].GetName());
-        mpGuiCache->AppendExpectedAptComponent(
-            E_GUIFLOW_SCREEN, maDistrictSmashesTextfields[liDistrict].GetName());
-    }
-
-    mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mStatsPanelAnimator.GetName());
-    mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mTakePhotoPrompt.GetName());
-
-    mMenuComponent.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache);
-    mLicenseComponent.AppendExpectedAptComponent(E_GUIFLOW_SCREEN);
-    mPhotoBoothComponent.AppendExpectedAptComponents(E_GUIFLOW_SCREEN);
-
-    mLicenseComponent.OnLoad();
-    mPhotoBoothComponent.OnLoad();
-
-    // ⭐ THE SCREEN DRAWS FROM HERE: { 8, 18, 12, "BrnCrashNavDriverDetails", 3 } on the
-    // view-state channel, i.e. the record StateInterface::PlayAptMovie builds, which the
-    // X360 stack-builds inline at this site.
-    mpStateInterface->PlayAptMovie("BrnCrashNavDriverDetails", KI_APT_MOVIE_LEVEL);
-    return true;
+    return lbReturnValue;
 }
 
 // ----------------------------------------------------------- UpdateWFInit @0x824BFE40

@@ -32,6 +32,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"  // GuiEventAptTriggerPayload
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (+ GuiFlow)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiAudioTriggerEvent
+#include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
 #include "SharedClasses/DataLists/VehicleList.h"                          // BrnResource::VehicleList
 #include "SharedClasses/DataLists/VehicleListEntry.h"                     // BrnResource::VehicleListEntry
 
@@ -329,7 +330,9 @@ namespace BrnGui
     // off_82F27B38, i.e. the same resource maResourcesToLoad[0] loads.
     void CarSelectLivery::PlayMovie()
     {
-        mpStateInterface->PlayAptMovie("BrnCarSelectLivery", 3);
+        // The movie name is the resource table entry (ARTIST lwz gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_CARSELECT_LIVERY]);
+        // DWARF: the inlined StateInterface::PlayAptMovie.
+        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_CARSELECT_LIVERY], 3);
     }
 
     // ---- AppendAptComponents @ 0x824BB970 ------------------------------------------
@@ -340,13 +343,15 @@ namespace BrnGui
     {
         CarSelectMain::AppendAptComponents();
 
-        CGS_ASSERT_AT(mpGuiCache != 0, "lpGuiCache", CGS_ARTIST_FILE, 447);   // cpp:447
+        // DWARF cpp:446 local lpGuiCache = CarSelectMain::GetGuiCache() (ARTIST r30, 0x824BB98C).
+        GuiCache* lpGuiCache = GetGuiCache();
+        CGS_ASSERT_AT(lpGuiCache != 0, "lpGuiCache", CGS_ARTIST_FILE, 447);   // cpp:447
 
         // The group forwards each live row's own three names (row / title / item selection).
-        mOptionToggles.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache, true);
+        mOptionToggles.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, lpGuiCache, true);
 
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mFadeScreenAnimComponent.GetName());
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mHelpBarAnimComponent.GetName());
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mFadeScreenAnimComponent.GetName());
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mHelpBarAnimComponent.GetName());
     }
 
     // ---- GetResourcesToLoad @ 0x824B5180 / GetNumberResourcesToLoad (DWARF cpp:987) --

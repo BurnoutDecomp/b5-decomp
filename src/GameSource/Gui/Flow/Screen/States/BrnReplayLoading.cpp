@@ -91,7 +91,7 @@ void ReplayLoading::Update()
         meLoadState = E_LOAD_ADVANCE;             // this+0x3C = 2
         // Once the cache stops blocking, send ADVANCE (leaves the loading screen).
         // X360: ((*(mpGuiCache + 0x13BBC) >> 4) & 1) -- a far GuiCache advance-block flag.
-        if (((mpGuiCache->GetReplayStatusInterface().GetStatusFlags() >> 4) & 1u) != 0)
+        if (mpGuiCache->GetReplayStatusInterface().IsSaving())
             break;                                // blocked -> Clear + return
         SendStateEvent("ADVANCE");
         break;
@@ -103,7 +103,9 @@ void ReplayLoading::Update()
         // X360 builds "Invalid internal state : " + meLoadState + "\n" into the message buffer;
         // per project rule that de-inlined StrStream/FireAssert machinery collapses to one
         // CGS_ASSERT with the verbatim rodata prefix (id + trailing \n dropped).
-        CGS_ASSERT(false, "Invalid internal state : ");
+        // Streamed in place, as ARTIST builds it (cpp:125).
+        CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meLoadState << "\n",
+                             CGS_ARTIST_FILE, 125);
         break;
     }
 

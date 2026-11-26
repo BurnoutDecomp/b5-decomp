@@ -779,10 +779,12 @@ void CustomRendererManager::SetTextRenderer(CgsGraphics::TextRenderer* lpTextRen
 // The credits virtual, road-name renderer store and ticker tail call are all live.
 void CustomRendererManager::SetLanguageManager(CgsLanguage::LanguageManager* lpLanguageManager)
 {
-    mCreditsTextRenderer.SetLanguageManager(lpLanguageManager);
+    // Above-car first, then the credits renderer (ARTIST 0x824455D4 stores +0x1BEC8 before the
+    // credits vcall; PS3 DecFIGS the same order).
     mAboveCarRenderer.SetLanguageManager(lpLanguageManager); // ARTIST manager+1BEC8
+    mCreditsTextRenderer.SetLanguageManager(lpLanguageManager);
 
-    CGS_ASSERT(lpLanguageManager != 0, "lpLanguageManager");
+    // Header-inline, its own assert at BrnCrashNavIconRenderer.h:489 (ARTIST 0x824455F8).
     mCrashNavIconRenderer.SetLanguageManager(lpLanguageManager); // ARTIST 82445624, manager+B0B0.
 
     // ⭐ [tut-ticker] the guest's tail call -- `return InGameMessageRenderer::

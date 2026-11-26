@@ -208,7 +208,9 @@ namespace BrnGui
 
         default:
             // X360 cpp:155 -- the streamed form, "Invalid internal state (" << state << ").
-            CGS_ASSERT(false, "Invalid internal state");
+            // Streamed in place, as ARTIST builds it (cpp:155).
+            CGS_ASSERT_STREAM_AT(false, "Invalid internal state (" << meCurrentState << ") \n",
+                                 CGS_ARTIST_FILE, 155);
             break;
         }
 

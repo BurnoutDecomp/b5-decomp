@@ -804,22 +804,28 @@ namespace BrnGui
                    "(E_ACTIVE_SUBSTATE_EVENT_COUNT > meActiveSubState)", CGS_ARTIST_FILE, 3250);        // cpp:3250
         CGS_ASSERT_AT(meSubStateState == E_SUBSTATE_RUNNING,
                    "E_SUBSTATE_RUNNING == meSubStateState", CGS_ARTIST_FILE, 3251);                     // cpp:3251
+        bool lbReturn = false;                                                                             // DWARF cpp:3253
         CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 3255);                                    // cpp:3255
 
         mfTimeRemaining -= mpGuiCache->GetTimeStep();
-        return mfTimeRemaining <= 0.0f;
+        if (mfTimeRemaining <= 0.0f)
+            lbReturn = true;
+        return lbReturn;
     }
 
     // TickSubstateAndEndIfDone  @0x824BB4D8  (27 instructions)
     bool InstantResultsState::TickSubstateAndEndIfDone()
     {
-        if (!HasSubstateTimedOut())
-            return false;
-
-        meActiveSubState = GetNextSubstate();
-        ResetStateTimer();
-        meSubStateState = E_SUBSTATE_SET_UP_COMPONENTS;
-        return true;
+        // DWARF cpp:3225 lbReturn seeded false (ARTIST 0x824BB4F0), the test is `== true`.
+        bool lbReturn = false;
+        if (HasSubstateTimedOut() == true)
+        {
+            meActiveSubState = GetNextSubstate();
+            ResetStateTimer();
+            meSubStateState = E_SUBSTATE_SET_UP_COMPONENTS;
+            lbReturn = true;
+        }
+        return lbReturn;
     }
 
     // -----------------------------------------------------------------------------------
@@ -2029,21 +2035,22 @@ namespace BrnGui
         s32 liStartIndex, s32* lpiFoundIndex, CgsID* lpFoundCar)
     {
         CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 3485);
-        const s32 liCount = mResults.maCarsToUnlockFromSpecialEvent.GetLength();
-        for (s32 liIndex = liStartIndex; liIndex < liCount; ++liIndex)
+        // DWARF locals (BrnGuiScreenUnity dump): liNumCarsUnlocked cpp:3487, liUnlockIndex
+        // cpp:3488, lUnlockedCarId cpp:3493, lpVehicleEntry cpp:3494; the entry comes from the
+        // header-inline VehicleList::GetVehicleData(CgsID) (h:109; ARTIST 0x824C081C..30).
+        const s32 liNumCarsUnlocked = mResults.maCarsToUnlockFromSpecialEvent.GetLength();
+        for (s32 liUnlockIndex = liStartIndex; liUnlockIndex < liNumCarsUnlocked; ++liUnlockIndex)
         {
-            const CgsID lCar = mResults.maCarsToUnlockFromSpecialEvent[liIndex];
-            const BrnResource::VehicleList* lpVehicles = mpGuiCache->GetWorldDataController()->GetVehicleList();
-            const s32 liVehicleIndex = lpVehicles->GetVehicleIndex(lCar);
-            const BrnResource::VehicleListEntry* lpVehicle =
-                liVehicleIndex < 0 ? 0 : lpVehicles->GetVehicleData(liVehicleIndex);
-            CGS_ASSERT_AT(lpVehicle != 0, "lpVehicleEntry", CGS_ARTIST_FILE, 3495);
-            if (lpVehicle->GetLiveryType() == BrnResource::VehicleListEntry::E_LIVERY_TYPE_PATTERN)
+            const CgsID lUnlockedCarId = mResults.maCarsToUnlockFromSpecialEvent[liUnlockIndex];
+            const BrnResource::VehicleListEntry* lpVehicleEntry =
+                mpGuiCache->GetWorldDataController()->GetVehicleList()->GetVehicleData(lUnlockedCarId);
+            CGS_ASSERT_AT(lpVehicleEntry != 0, "lpVehicleEntry", CGS_ARTIST_FILE, 3495);
+            if (lpVehicleEntry->GetLiveryType() == BrnResource::VehicleListEntry::E_LIVERY_TYPE_PATTERN)
             {
                 if (lpiFoundIndex != 0)
-                    *lpiFoundIndex = liIndex;
+                    *lpiFoundIndex = liUnlockIndex;
                 if (lpFoundCar != 0)
-                    *lpFoundCar = lCar;
+                    *lpFoundCar = lUnlockedCarId;
                 return true;
             }
         }

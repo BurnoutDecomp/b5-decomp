@@ -12,6 +12,7 @@
 #include "GameSource/Gui/BrnGuiShared.h"                                    // gGuiResourceIdentifier
 #include "GameSource/Input/GameInputActions.h"                              // EGameInputActions
 #include "GameSource/Replays/BrnReplayReels.h"                              // BrnReplays::Reel
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/Replays/BrnReplayClipsOnline.cpp"
 
 namespace BrnGui
 {
@@ -104,7 +105,9 @@ void ReplayClipsOnline::Update()
         break;
 
     default:
-        CGS_ASSERT(false, "Invalid internal state : ");
+        // Streamed in place, as ARTIST builds it (cpp:141).
+        CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+                             CGS_ARTIST_FILE, 141);
         break;
     }
 

@@ -137,20 +137,6 @@ void PausedHudState::Update()
 
             GuiPausedHudUnpausePayload lPayload;
             mpStateInterface->OutputGuiEvent(lPayload);
-
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                // [hud-pause] witness. NOT X360. The FBurn HUD stage sequence reappearing after
-                // the unpause is the real proof; this line says which arm produced it.
-                static bool sbLoggedUnpause = false;
-                if (!sbLoggedUnpause)
-                {
-                    sbLoggedUnpause = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[hud-pause] PausedHudState: GUI 148 payload non-zero -> "
-                           "SendStateEvent(\"UNPAUSE\") + GuiEventWrapper<456> (40 bytes)\n";
-                }
-            }
             continue;
         }
 

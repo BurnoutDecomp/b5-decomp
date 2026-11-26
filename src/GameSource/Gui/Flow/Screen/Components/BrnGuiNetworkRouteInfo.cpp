@@ -567,11 +567,11 @@ namespace BrnGui
     {
         if (mpGuiCache != 0 && mpIconManager != 0 && mbReceivedInfo && mbShowingMap)
         {
-            mpIconManager->meIconFilterMode        = MapIconManager::E_ICONFILTER_ALL;
-            mpIconManager->mbIsDisplayingEventInfo = false;
-            mpIconManager->miSelectedCheckpoint    = 0;
-            mpIconManager->mSelectedLightTriggerID = mEvent.GetTrafficLightTriggerId();
-            mpIconManager->miNumUsedIcons          = 0;
+            mpIconManager->SetIconFilter(MapIconManager::E_ICONFILTER_ALL);
+            mpIconManager->SetIsDisplayingEvent(false);
+            mpIconManager->SetSelectedCheckpointInMenu(0);
+            mpIconManager->SetSelectedLightTriggerID(mEvent.GetTrafficLightTriggerId());
+            mpIconManager->ClearIconInfo();
             mpIconManager->Update();
         }
     }

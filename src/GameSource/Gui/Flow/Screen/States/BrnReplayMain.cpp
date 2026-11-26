@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (Register/GetAccessPointers)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // VariableEventQueue<18432,16> (the in-queue view)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/Replays/BrnReplayMain.cpp"
 
 // BrnGui::ReplayMain -- reconstructed from BURNOUT_X360_ARTIST.XEX. The running replay screen
 // state; a sibling of the committed BrnGui::ReplayLoading / BrnGui::ReplayOutro.
@@ -118,7 +119,6 @@ void ReplayMain::UpdateRunning()
 // ------------------------------------------------ Update @ 0x824C2C88
 void ReplayMain::Update()
 {
-    ReplayInQueue* lpInQueue = reinterpret_cast<ReplayInQueue*>(mpInGuiEventQueue);
 
     switch (meState)
     {
@@ -142,10 +142,12 @@ void ReplayMain::Update()
         // X360 builds "Invalid internal state : " + meState + "\n" into the message buffer; the
         // de-inlined StrStream/FireAssert machinery collapses to one CGS_ASSERT with the verbatim
         // rodata prefix (id + trailing \n dropped).
-        CGS_ASSERT(false, "Invalid internal state : ");
+        // Streamed in place, as ARTIST builds it (cpp:126).
+        CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meState << "\n",
+                             CGS_ARTIST_FILE, 126);
         break;
     }
 
-    lpInQueue->Clear();   // shared tail: VariableEventQueue<18432,16>::Clear(mpInGuiEventQueue)
+    mpInGuiEventQueue->Clear();   // shared tail: VariableEventQueue<18432,16>::Clear(mpInGuiEventQueue)
 }
 }   // namespace BrnGui

@@ -124,7 +124,7 @@ void EventInfoComponent::Construct(const char* lacName,
     ClearEventSpecificData();
 
     mpEventInfoComponentName   = 0;      // stw 0, 0x14
-    mHUDFileRef.mpFileInstance = 0;      // stw 0, 0x18
+    mHUDFileRef.ConstructEmpty();        // stw 0, 0x18 (FileRef::ConstructEmpty, DWARF h:53)
 
     // Construct's tail: ARTIST loads both values from the shared float literal pool
     // (1000.0 @0x820DB5B4, 1609.344 @0x820DB5AC; the latter is also loaded by
@@ -1658,7 +1658,12 @@ void EventInfoComponent::UpdateFreeBurnLobby(GuiCache* lpCache)
         lpCache->GetOnlineGameModeOptions();
     CGS_ASSERT_AT(lpParams != 0, "lpParams", CGS_ARTIST_FILE, 996);
 
-    if (lpParams->meGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
+    // The event arm is ARTIST's fall-through (0x8242FF88 beq to the lobby arm).
+    if (lpParams->meGameMode != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
+    {
+        UpdateFreeBurnLobbyEvent(lpCache, lpParams);
+    }
+    else
     {
         if (mbFreeBurnInfoShowing == true)
         {
@@ -1667,10 +1672,6 @@ void EventInfoComponent::UpdateFreeBurnLobby(GuiCache* lpCache)
             ClearEventSpecificData();
         }
         UpdateFreeBurnLobbyBasic(lpCache);
-    }
-    else
-    {
-        UpdateFreeBurnLobbyEvent(lpCache, lpParams);
     }
 }
 
@@ -1782,31 +1783,36 @@ void EventInfoComponent::ShowFreeburnWithTitleText(GuiCache* lpCache)
 // ARTIST0x82412F20: the destination label is shared by checkpoint event panels.
 void EventInfoComponent::UpdateDestinationText(GuiCache* lpCache)
 {
-    BrnGameState::LandmarkIndex landmark;
+    // DWARF locals (BrnEventInfo.cpp dump): lCurrentLandmark cpp:1966; lpGuiTracker /
+    // liIndex cpp:1970/1973; lLandmarkInfo / KI_MAX_DEST_STRING_LENGTH / lacDestinationString
+    // cpp:1994/1998/1999. The sentinel is the unit's K_INVALID_LANDMARK copy, compared first
+    // (lhz 0x82F25440 @0x82412FD0, as the assert text spells it).
+    BrnGameState::LandmarkIndex lCurrentLandmark;
     if (lpCache->IsOnlineStartInProgress())
     {
-        GuiTracker* tracker = lpCache->GetGuiTracker();
-        CGS_ASSERT_AT(tracker != 0, "lpGuiTracker", CGS_ARTIST_FILE, 2109);
-        const s32 trackedIndex = tracker->GetCurrentlyTrackedIndex();
-        if (trackedIndex < 0)
+        const GuiTracker* lpGuiTracker = lpCache->GetGuiTracker();
+        CGS_ASSERT_AT(lpGuiTracker != 0, "lpGuiTracker", CGS_ARTIST_FILE, 2109);
+        const s32 liIndex = lpGuiTracker->GetCurrentlyTrackedIndex();
+        if (liIndex < 0)
         {
             maTextField[0].ClearText();
             return;
         }
-        landmark = lpCache->GetOnlineLandmarkIndex(trackedIndex);
+        lCurrentLandmark = lpCache->GetOnlineLandmarkIndex(liIndex);
     }
     else
-        landmark = lpCache->GetEventDestinationLandmarkIndex();
-    if (landmark != mCurrentLandmark)
+        lCurrentLandmark = lpCache->GetEventDestinationLandmarkIndex();
+    if (lCurrentLandmark != mCurrentLandmark)
     {
-        mCurrentLandmark = landmark;
-        CGS_ASSERT_AT(mCurrentLandmark != BrnGameState::LandmarkIndex(-1),
+        mCurrentLandmark = lCurrentLandmark;
+        CGS_ASSERT_AT(BrnGameState::K_INVALID_LANDMARK != mCurrentLandmark,
                    "BrnGameState::K_INVALID_LANDMARK != mCurrentLandmark", CGS_ARTIST_FILE, 2129);
-        GuiEventUpdateSatNav::SatNavIconInfo info;
-        lpCache->GetLandmarkInfoFromIndex(mCurrentLandmark, &info);
-        char name[32];
-        CgsCore::SnPrintf(name, sizeof(name), "LM_%llu", info.GetCgsId());
-        maTextField[0].SetLocalisedText(name, KI_FORMAT_TEXT_DATABASE_LOOKUP);
+        GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
+        lpCache->GetLandmarkInfoFromIndex(mCurrentLandmark, &lLandmarkInfo);
+        const s32 KI_MAX_DEST_STRING_LENGTH = 32;
+        char lacDestinationString[KI_MAX_DEST_STRING_LENGTH];
+        CgsCore::SnPrintf(lacDestinationString, KI_MAX_DEST_STRING_LENGTH, "LM_%llu", lLandmarkInfo.GetCgsId());
+        maTextField[0].SetLocalisedText(lacDestinationString, KI_FORMAT_TEXT_DATABASE_LOOKUP);
     }
 }
 
@@ -1913,12 +1919,16 @@ void EventInfoComponent::UpdateBurningRoute(GuiCache* lpCache)
         maTextField[4].SetText(timeText, false);
         const f32 remaining = mfTargetTimeInEvent - mfCurrentTimeInEvent;
         SetTextFieldDangerColour(&maTextField[4], remaining);
-        if (remaining < 10.0f && !mbTimeRemainingFlashing)
+        // One threshold test, then the flag (ARTIST 0x8242AA30: bge to the else arm).
+        if (remaining < 10.0f)
         {
-            mTimeAnimatorBRoute.Run("flashing");
-            mbTimeRemainingFlashing = true;
+            if (!mbTimeRemainingFlashing)
+            {
+                mTimeAnimatorBRoute.Run("flashing");
+                mbTimeRemainingFlashing = true;
+            }
         }
-        else if (remaining >= 10.0f && mbTimeRemainingFlashing)
+        else if (mbTimeRemainingFlashing)
         {
             mTimeAnimatorBRoute.Run("notFlashing");
             mbTimeRemainingFlashing = false;
@@ -2050,19 +2060,20 @@ void EventInfoComponent::UpdateRoadRage(GuiCache* lpCache)
 
         SetTextFieldDangerColour(&maTextField[0], mfTimeLeft);
 
-        if (mfTimeLeft >= KF_DANGERTIME_START)
+        // The danger arm first (ARTIST 0x82429B4C bge to the else arm).
+        if (mfTimeLeft < KF_DANGERTIME_START)
         {
-            if (mbTimeRemainingFlashing)
+            if (!mbTimeRemainingFlashing)
             {
-                // +0x210 -- the burning-route animator, as the binary has it (see banner).
-                mTimeAnimatorBRoute.Run(KPC_TIME_NOT_FLASHING);
-                mbTimeRemainingFlashing = false;
+                mTimeAnimatorRRage.Run(KPC_TIME_FLASHING);                   // +0x1D8
+                mbTimeRemainingFlashing = true;
             }
         }
-        else if (!mbTimeRemainingFlashing)
+        else if (mbTimeRemainingFlashing)
         {
-            mTimeAnimatorRRage.Run(KPC_TIME_FLASHING);                       // +0x1D8
-            mbTimeRemainingFlashing = true;
+            // +0x210 -- the burning-route animator, as the binary has it (see banner).
+            mTimeAnimatorBRoute.Run(KPC_TIME_NOT_FLASHING);
+            mbTimeRemainingFlashing = false;
         }
     }
 

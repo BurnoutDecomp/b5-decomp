@@ -26,12 +26,12 @@ namespace BrnFlapt
 // ARTIST 0x8246EC90.
 MovieClipRef FileRef::FindComponent(const char* lpcName) const
 {
-    CGS_ASSERT_AT(mpFileInstance != 0, "mpFileInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileRef.cpp", 45);
+    CGS_ASSERT_AT(mpFileInst != 0, "mpFileInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileRef.cpp", 45);
     CGS_ASSERT_AT(lpcName != 0, "lpcName", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileRef.cpp", 46);
 
     const u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName), static_cast<u32>(std::strlen(lpcName)));
     MovieClipRef lComponent;
-    static_cast<FlaptFileInstance*>(mpFileInstance)->FindComponent(luHash, &lComponent, lpcName);
+    mpFileInst->FindComponent(luHash, &lComponent, lpcName);
     return lComponent;
 }
 
@@ -40,8 +40,8 @@ MovieClipRef FileRef::FindComponent(const char* lpcName) const
 // writes the root timeline's MovieClipRef into lpOutRef and returns it.
 MovieClipRef FileRef::GetRootMovieClip() const
 {
-    CGS_ASSERT_AT(mpFileInstance != 0, "mpFileInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileRef.cpp", 63);
-    return static_cast<FlaptFileInstance*>(mpFileInstance)->GetRootMovieClip();
+    CGS_ASSERT_AT(mpFileInst != 0, "mpFileInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileRef.cpp", 63);
+    return mpFileInst->GetRootMovieClip();
 }
 
 }

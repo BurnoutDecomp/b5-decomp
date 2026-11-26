@@ -188,7 +188,9 @@ void ReplayOutro::Update()
         // X360 builds "Invalid internal state : " + meState + "\n" into the message buffer;
         // the de-inlined StrStream/FireAssert machinery collapses to one CGS_ASSERT with the
         // verbatim rodata prefix (id + trailing \n dropped).
-        CGS_ASSERT(false, "Invalid internal state : ");
+        // Streamed in place, as ARTIST builds it (cpp:126).
+        CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meState << "\n",
+                             CGS_ARTIST_FILE, 126);
         break;
     }
 

@@ -47,19 +47,17 @@ namespace BrnGui
     // @ 0x82476608 -- drain the in-queue (only the observed event may arrive), then clear it.
     void BootAttract::Update()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        if (lpInQueue == 0)
-            return;
-
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        // DWARF cpp:73..75 locals; the queue is read through the member at each use and is
+        // not null-tested (ARTIST 0x82476620 / 0x82476668 / 0x82476684 lwz 0x18(this)).
+        const CgsModule::Event* lpEvent;
+        s32 liEventSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             if (liEventId != 14)
                 CGS_ASSERT_AT(false, "Unexpected event in IntroHudState::Update", CGS_ARTIST_FILE, 91);
         }
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
     }
 }

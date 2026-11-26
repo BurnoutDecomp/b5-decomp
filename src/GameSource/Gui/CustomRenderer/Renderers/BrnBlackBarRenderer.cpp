@@ -23,9 +23,15 @@ namespace BrnGui
     {
         if (liEventType == 221)
         {
+            // The clamp stores the member in each arm, the low bound first and the 0.5 bound
+            // as the fall-through (ARTIST 0x82446EC0 bgt / 0x82446ED8 blt); the flag re-reads it.
             const f32 lfBarHeight = *reinterpret_cast<const f32*>(lpEvent);
-            mfBarHeight = lfBarHeight > 0.0f
-                ? (lfBarHeight < 0.5f ? lfBarHeight : 0.5f) : 0.0f;
+            if (lfBarHeight <= 0.0f)
+                mfBarHeight = 0.0f;
+            else if (lfBarHeight >= 0.5f)
+                mfBarHeight = 0.5f;
+            else
+                mfBarHeight = lfBarHeight;
             mbRenderEnabled = mfBarHeight > 0.0f;
         }
         else if (liEventType == 145)

@@ -281,6 +281,16 @@ namespace BrnGui
         // is exactly the defect class this project bans; the host base widths differ).
         EventIconManager& GetEventIconManager() { return mEventIconManager; }
 
+        // DWARF h:155/212/216/244/249, header-inline one-liners with no ARTIST copy: the
+        // callers store the members in line (GuiNetworkRouteInfo::UpdateIconManager
+        // 0x824173D8..0x82417404; the trigger id is read before the manager pointer is
+        // reloaded, the argument-before-object order of a setter call).
+        void ClearIconInfo()                                      { miNumUsedIcons = 0; }
+        void SetIconFilter(IconFilterMode leIconFilterMode)       { meIconFilterMode = leIconFilterMode; }
+        void SetIsDisplayingEvent(bool lbIsDisplayingEvent)       { mbIsDisplayingEventInfo = lbIsDisplayingEvent; }
+        void SetSelectedCheckpointInMenu(s32 liCheckpoint)        { miSelectedCheckpoint = liCheckpoint; }
+        void SetSelectedLightTriggerID(u32 lLightTriggerID)       { mSelectedLightTriggerID = lLightTriggerID; }
+
     private:
         // The online game-room screen's Update stores meIconSizeMode directly (the X360
         // inlines the raw stwx at 0x824B1418; no DWARF accessor row) -- friendship, not

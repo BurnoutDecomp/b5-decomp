@@ -170,7 +170,9 @@ void Credits::Update()
         // The original streams the fixed prefix, then meInternalState, then a newline into
         // the assert message buffer and fires unconditionally; the macro carries the fixed
         // half of that text.
-        CGS_ASSERT(false, "Invalid internal state : ");
+        // Streamed in place, as ARTIST builds it (cpp:124).
+        CGS_ASSERT_STREAM_AT(false, "Invalid internal state : " << meInternalState << "\n",
+                             CGS_ARTIST_FILE, 124);
         break;
     }
 

@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"   // BrnFlapt::MovieClipRef
+#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT_AT (Construct)
 
 // ============================================================================
 // GameSource/Gui/Flapt/BrnFlaptFileRef.h
@@ -18,8 +19,17 @@
 
 namespace BrnFlapt
 {
+    struct FlaptFileInstance;
+
     struct FileRef
     {
+        // DWARF BrnFlaptFileRef.h:53; no ARTIST copy (EventInfoComponent::Construct stores 0).
+        void ConstructEmpty() { mpFileInst = 0; }
+
+        // DWARF BrnFlaptFileRef.h:58, defined below; ARTIST has no copy (FlaptManager::GetFile
+        // 0x824730C8 inlines it with its h:102 "lpFileInst" assert).
+        void Construct(FlaptFileInstance* lpFileInst);
+
         // ARTIST 0x8246EC90 uses the hidden result buffer for the returned clip.
         MovieClipRef FindComponent(const char* lpcName) const;
 
@@ -27,11 +37,15 @@ namespace BrnFlapt
         // file instance's root timeline, by value into lpOutRef.
         MovieClipRef GetRootMovieClip() const;
 
-        // +0x00 : the referenced live FlaptFileInstance (raw pointer; modeled as
-        // void* — GetFile only stores the element address, and FileRef's own
-        // accessors deref it via the FlaptFileInstance home).
-        void* mpFileInstance;   // +0x00
+        // +0x00 : the referenced live FlaptFileInstance (DWARF h:73 mpFileInst).
+        FlaptFileInstance* mpFileInst;   // +0x00
     };
+
+    inline void FileRef::Construct(FlaptFileInstance* lpFileInst)
+    {
+        CGS_ASSERT_AT(lpFileInst, "lpFileInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileRef.h", 102);
+        mpFileInst = lpFileInst;
+    }
 }
 
 #endif // BRN_FLAPT_FILE_REF_H

@@ -88,6 +88,11 @@ namespace BrnGui
         // @ 0x824DC9C0 -- the per-frame load/interactive state machine; always ends in
         // ProcesssIncomingEvents().
         virtual void Update();
+
+        // DWARF BrnCarSelectMain.h:324 / :350; no ARTIST copy (the AppendAptComponents
+        // overrides read +0x288 in line into their DWARF local lpGuiCache).
+        const GuiCache* GetGuiCache() const { return mpGuiCache; }
+        GuiCache*       GetGuiCache()       { return mpGuiCache; }
         // @ 0x824B55B8 -- this state's static resource list (empty: writes {0,0}).
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
                                         u32* lpuNumberOfResources) const;

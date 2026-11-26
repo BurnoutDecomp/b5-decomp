@@ -27,14 +27,16 @@ namespace BrnGui
 
     // @ 0x824E5B60 -- the X360 inlines the strcmp against the embedded bar's
     // component name; on a match the transition is the bar's.
-    bool PlayerStatsBar::HandleTransitionComplete(const char* lpcComponentName, s32 liArg)
+    bool PlayerStatsBar::HandleTransitionComplete(const char* lpcName, s32 liUniqueId)
     {
-        if (std::strcmp(lpcComponentName, mCarBar.GetName()) == 0)
+        // DWARF cpp:83 lbRetValue, seeded false (ARTIST 0x824E5B74 li r3,0).
+        bool lbRetValue = false;
+        if (std::strcmp(lpcName, mCarBar.GetName()) == 0)
         {
-            mCarBar.HandleTransitionComplete(liArg);
-            return true;
+            mCarBar.HandleTransitionComplete(liUniqueId);
+            lbRetValue = true;
         }
-        return false;
+        return lbRetValue;
     }
 
     // @ 0x824BAD68 -- set the car-stats value: assert non-negative, clamp to the

@@ -336,17 +336,12 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid internal state (");   // cpp:241
+            // Streamed in place (ARTIST 0x824E0C90..0x824E0D28).
+            CGS_ASSERT_STREAM_AT(false, "Invalid internal state (" << meState << ") \n",
+                                 CGS_ARTIST_FILE, 241);   // cpp:241
             break;
         }
 
-        // [DIAG] NOT IN THE X360 BINARY -- [opt] the ladder stage, once per change.
-        // Function-local because there is exactly one CrashNavOptions instance (the
-        // pool state ScreenFlow constructs) and the header's layout is pinned.
-        {
-            static s32 siDiagLastStage = -1;
-            siDiagLastStage = static_cast<s32>(meState);
-        }
 
         if (lbRunPermanent)
         {

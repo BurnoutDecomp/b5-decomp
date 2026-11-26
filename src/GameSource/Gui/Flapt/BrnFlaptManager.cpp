@@ -183,12 +183,13 @@ void FlaptManager::SetSoundTriggerHandler(
 // ---- GetFile @ 0x82473078 ------------------------------------------------
 FileRef FlaptManager::GetFile(FlaptFiles leFile)
 {
-    FlaptFileInstance* lpFileInst = &maFlaptFileInstances[leFile];
-    CGS_ASSERT_AT(lpFileInst->mbIsActive, "maFlaptFileInstances[leFile].IsActive()",
+    // The IsActive() assert (BrnFlaptManager.h:185), then FileRef::Construct with its own
+    // "lpFileInst" assert (BrnFlaptFileRef.h:102) on the element address, which ARTIST keeps
+    // (0x824730C8 cmplwi).
+    CGS_ASSERT_AT(maFlaptFileInstances[leFile].IsActive(), "maFlaptFileInstances[leFile].IsActive()",
                   "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptManager.h", 185);
-    CGS_ASSERT_AT(lpFileInst != 0, "lpFileInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileRef.h", 102);
     FileRef lFile;
-    lFile.mpFileInstance = lpFileInst;
+    lFile.Construct(&maFlaptFileInstances[leFile]);
     return lFile;
 }
 

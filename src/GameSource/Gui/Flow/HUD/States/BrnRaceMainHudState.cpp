@@ -1485,23 +1485,6 @@ namespace BrnGui
         // else: in an event, countdown armed, offline start -- NO reveal here. The HUD waits
         // for UpdateEventCountdown's "GO" arm to call RevealHud(false).
 
-        // [hud-reveal] RACE_MAIN. NOT X360 -- the PC-side twin of the freeburn state's
-        // engine-state diagnostic (BrnFBurnMainHudState.cpp:743). This ladder has four
-        // outcomes and three of them look identical from outside (a HUD that is simply not
-        // there yet), so print which arm was taken. The fourth -- "waiting for GO" -- is the
-        // one that legitimately leaves the screen bare, and the one worth telling apart from
-        // an apt-init hang before anyone starts bisecting a black screen.
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[hud-reveal] RACE_MAIN UpdateWFInit inEvent=" << (lbInEvent ? 1 : 0)
-                << " preRaceCountdown=" << (mbPreRaceCountdown ? 1 : 0)
-                << " onlineStart=" << (mpCache->IsOnlineStartInProgress() ? 1 : 0)
-                << (lbRevealNow
-                        ? (lbImmediate ? " -> RevealHud(IMMEDIATE)\n" : " -> RevealHud(TRANSIN)\n")
-                        : " -> DEFERRED, waiting for the countdown GO\n");
-        }
-
         if (lbRevealNow)
             RevealHud(lbImmediate);                                        // @0x82480448
 

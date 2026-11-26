@@ -548,21 +548,21 @@ void BoostMessageManager::RecvEvent(const CgsModule::Event* lpEvent, s32 liEvent
 //   bit2 (air spin): raise the in-progress latch, convert radians -> degrees.
 //   bit1 (handbrake): raise the latch, store the live degrees directly.
 // ===================================================================================
-void BoostMessageManager::HandleOnInProgressStunt(const GuiInProgressStuntEvent* lpEvent)
+void BoostMessageManager::HandleOnInProgressStunt(const GuiInProgressStuntEvent* lpGuiInProgressStuntEvent)
 {
-    const u32 luMask = lpEvent->muStuntActionInProgress;
-    if (luMask == 0)
+    // No DWARF locals: the flags word is re-read for each test (ARTIST 0x82411C98 lwz).
+    if (lpGuiInProgressStuntEvent->muStuntActionInProgress == 0)
         return;
 
-    if ((luMask & 4) != 0)
+    if ((lpGuiInProgressStuntEvent->muStuntActionInProgress & 4) != 0)
     {
         mbHandBreakTurnCompleted   = true;                                       // @0x82411C8C
-        mfHandBrakeTurnAngle       = lpEvent->mfInProgressHandbreakTurnAngle;
+        mfHandBrakeTurnAngle       = lpGuiInProgressStuntEvent->mfInProgressHandbreakTurnAngle;
     }
-    if ((luMask & 2) != 0)
+    if ((lpGuiInProgressStuntEvent->muStuntActionInProgress & 2) != 0)
     {
         mbAirSpinInProgress        = true;                                       // @0x82411CA8
-        mfInProgressAirSpinAngle   = lpEvent->mfInProgressAirSpinAngle * KF_DEGREES_PER_RADIAN;
+        mfInProgressAirSpinAngle   = lpGuiInProgressStuntEvent->mfInProgressAirSpinAngle * KF_DEGREES_PER_RADIAN;
     }
 }
 
@@ -571,23 +571,23 @@ void BoostMessageManager::HandleOnInProgressStunt(const GuiInProgressStuntEvent*
 //   bit0 (barrel roll): latch the roll count + completed angle.
 //   bit3: clean landing. bit4: successful landing = NOT already clean-flagged.
 // ===================================================================================
-void BoostMessageManager::HandleOnCompletedStunt(const GuiCompletedStuntEvent* lpEvent)
+void BoostMessageManager::HandleOnCompletedStunt(const GuiCompletedStuntEvent* lpGuiCompletedStuntEvent)
 {
-    const u32 luMask = lpEvent->muStuntActionComplete;
-    if (luMask == 0)
+    // No DWARF locals: the flags word is re-read for each test (ARTIST 0x82411CF8/0x82411D0C).
+    if (lpGuiCompletedStuntEvent->muStuntActionComplete == 0)
         return;
 
-    if ((luMask & 1) != 0)
+    if ((lpGuiCompletedStuntEvent->muStuntActionComplete & 1) != 0)
     {
         mbBarrelRollCompleted          = true;                                   // @0x82411CE4
-        miNumberOfCompletedBarrelRolls = lpEvent->miCompletedBarrelRolls;
-        mfCompletedBarrelRollAngle     = lpEvent->mfCompletedBarrelRollAngle;
+        miNumberOfCompletedBarrelRolls = lpGuiCompletedStuntEvent->miCompletedBarrelRolls;
+        mfCompletedBarrelRollAngle     = lpGuiCompletedStuntEvent->mfCompletedBarrelRollAngle;
     }
-    if ((luMask & 8) != 0)
+    if ((lpGuiCompletedStuntEvent->muStuntActionComplete & 8) != 0)
     {
         mbCleanLandingComplete = true;                                           // @0x82411D08
     }
-    if ((luMask & 16) != 0)
+    if ((lpGuiCompletedStuntEvent->muStuntActionComplete & 16) != 0)
     {
         mbSuccessfulLandingComplete = !mbCleanLandingComplete;                   // @0x82411D1C
     }

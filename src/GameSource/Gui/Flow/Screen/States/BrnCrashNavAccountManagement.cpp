@@ -312,25 +312,23 @@ namespace BrnGui
             meState = E_STATE_MAIN;
             break;
 
-        case E_STATE_SAVING:
-            meState = E_STATE_SAVING;
-            break;
-
+        // The leaving arm precedes the saving one (ARTIST 0x824E014C / 0x824E015C).
         case E_STATE_LEAVING:
             lbRunPermanent = false;
             meState = E_STATE_LEAVING;
             break;
 
+        case E_STATE_SAVING:
+            meState = E_STATE_SAVING;
+            break;
+
         default:
-            CGS_ASSERT(false, "Invalid internal state (");
+            // Streamed in place (ARTIST 0x824E0168..0x824E0200, cpp:211).
+            CGS_ASSERT_STREAM_AT(false, "Invalid internal state (" << meState << ") \n",
+                                 CGS_ARTIST_FILE, 211);
             break;
         }
 
-        // [DIAG] NOT IN THE X360 BINARY -- [acct] the ladder stage, once per change.
-        {
-            static s32 siDiagLastStage = -1;
-            siDiagLastStage = static_cast<s32>(meState);
-        }
 
         if (lbRunPermanent)
         {

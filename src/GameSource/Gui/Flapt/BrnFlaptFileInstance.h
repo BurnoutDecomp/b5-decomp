@@ -63,6 +63,10 @@ namespace BrnFlapt
         void Update(f32 lfTimeStep);
         void Render(FlaptRenderer* lpRenderer);
 
+        // DWARF BrnFlaptFileInstance.h:104, in-class; no ARTIST copy (FlaptManager::GetFile
+        // 0x8247309C reads the flag in line for its h:185 assert).
+        bool IsActive() const { return mbIsActive; }
+
         bool mbIsActive;
         CgsResource::ResourcePtr<FlaptFile> mpFile;
         MovieClipInstance* mpRootMovieClipInstance;

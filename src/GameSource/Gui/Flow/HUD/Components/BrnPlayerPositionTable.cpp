@@ -184,23 +184,6 @@ namespace BrnGui
 
         SetValuesDirty();    // the inlined nine-row raise loop
 
-        // [p0-postable] one-shot witness. NOT console code. The table is flag-gated by
-        // RaceMainHudState's mbPlayerPositionTable, which is only raised for the ONLINE
-        // game modes -- every offline mode either never sets it or has it cleared again by
-        // the ladder tail -- so this line firing at all means an offline path reached the
-        // component, which would be worth knowing.
-        {
-            static bool sbLoggedSetup = false;
-            if (!sbLoggedSetup && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbLoggedSetup = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[p0-postable] PlayerPositionTableComponent::SetupGameMode -- mode "
-                    << static_cast<s32>(meGameMode)
-                    << ", title/skills text cleared\n";
-            }
-        }
-
         if (!lbOnlineMode)
         {
             // The console streams into the GLOBAL CgsDev::Assert::gpcMessageBuffer
@@ -411,18 +394,6 @@ namespace BrnGui
         SortData();
         CountLinesAndAddTotal();
         DisplayData();
-
-        // [netui] witness (PC harness, LAN gated): one line per change of the row count or
-        // the game mode. Not console code.
-        {
-            static s32 siLastBarsUsed = -1;
-            static s32 siLastGameMode = -2;
-            if (miCurrentBarsUsed != siLastBarsUsed || static_cast<s32>(meGameMode) != siLastGameMode)
-            {
-                siLastBarsUsed = miCurrentBarsUsed;
-                siLastGameMode = static_cast<s32>(meGameMode);
-            }
-        }
 
         CgsDev::PerfMonCpu::StopMonitor(GuiPerfmons::miPlayerPosTableUpdate);
     }

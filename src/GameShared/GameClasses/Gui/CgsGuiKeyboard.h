@@ -38,7 +38,9 @@ namespace CgsGui
     public:
         // ARTIST825187D0; do not clear result/overlapped bytes before Show.
         void Construct();
-        bool IsShown() const;
+        // DWARF CgsGuiKeyboard.h:95, in-class: ARTIST has no copy (BrnGuiKeyboard::Show reads
+        // mpListener in line at 0x824F5B20).
+        bool IsShown() const { return mpListener != 0; }
 
         // @ 0x8284CFD8 — assert no dialog is already shown, store the listener, init the
         // overlapped handle, and call XShowKeyboardUI (flags 0x30000064). Returns the

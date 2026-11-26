@@ -937,15 +937,16 @@ void GuiDebugComponent::TriggerOnlineInviteCallback(void* lpUserData)
 void GuiDebugComponent::TriggerPaybackComponent(void* lpUserData)
 {
     (void)lpUserData;
-    GuiDirtyTrickNewEvent lEvent;
-    lEvent.meTrickType = static_cast<BrnNetwork::EPaybackType>(0);
+    // DWARF cpp:1265 lNewPaybackAvailable. The player index goes to the victim first and the
+    // aggressor copies it (ARTIST 0x8250D8B4/B8 stw +4 then +0; PS3 0x... v3 then v2 = v3).
+    GuiDirtyTrickNewEvent lNewPaybackAvailable;
+    lNewPaybackAvailable.meTrickType = static_cast<BrnNetwork::EPaybackType>(0);
     GuiDebugComponent* lpThis = GetSingletonPtr();
-    const EActiveRaceCarIndex lePlayer = static_cast<EActiveRaceCarIndex>(
-        lpThis->mpGuiModule->mGuiCache.GetPlayerActiveRaceCarIndex());
-    lEvent.meAggressorActiveRaceCarIndex = lePlayer;
-    lEvent.meVictimActiveRaceCarIndex = lePlayer;
-    lpThis->mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
-        177, sizeof(lEvent));
+    lNewPaybackAvailable.meAggressorActiveRaceCarIndex =
+        lNewPaybackAvailable.meVictimActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(
+            lpThis->mpGuiModule->mGuiCache.GetPlayerActiveRaceCarIndex());
+    lpThis->mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lNewPaybackAvailable),
+        177, sizeof(lNewPaybackAvailable));
 }
 
 // Original command is gated only by the actual SystemUserProfile state word.

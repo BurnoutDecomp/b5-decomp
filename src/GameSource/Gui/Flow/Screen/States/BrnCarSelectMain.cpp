@@ -43,16 +43,6 @@ namespace BrnGui
     const char* CarSelectMain::mpacTitleTextFieldName = "TitleText";
     const char* CarSelectMain::mpacWaitingTextFieldName = "Waiting";
 
-    namespace
-    {
-
-        bool TakeCarSelGuiDiagLine()
-        {
-            static s32 siLines = 0;
-            ++siLines;
-            return true;
-        }
-    }
 
     // The car-select trigger event posted to the state interface out-queue (X360 buffer
     // {8, 415, 16} + the selected car id, published on channel 40 as 24 bytes). Modelled as a
@@ -109,25 +99,24 @@ namespace BrnGui
     // ---- AppendAptComponents @ 0x824B5380 -----------------------------------------
     void CarSelectMain::AppendAptComponents()
     {
-        CGS_ASSERT_AT(mpGuiCache, "lpGuiCache", CGS_ARTIST_FILE, 502);   // cpp:502
+        // DWARF cpp:495 local lpGuiCache = GetGuiCache() (ARTIST keeps it in r31, 0x824B5390).
+        GuiCache* lpGuiCache = GetGuiCache();
+        CGS_ASSERT_AT(lpGuiCache, "lpGuiCache", CGS_ARTIST_FILE, 502);   // cpp:502
 
         // The three always-present help/logo apt clips (X360 sub_824F87C0 == the name-taking
         // GuiCache::AppendExpectedAptComponent entry, flow 0).
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, "ManufacturerLogo_mc");
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, "HelpItemContinue_mc");
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, "HelpItemBack_mc");
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, "ManufacturerLogo_mc");
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, "HelpItemContinue_mc");
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, "HelpItemBack_mc");
     }
 
     // ---- HandleControllerInput @ 0x824B5410 ---------------------------------------
     void CarSelectMain::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liController)
     {
-        CGS_ASSERT(lpEvent != 0, "Invalid event in CarSelectMain::HandleControllerInput");  // cpp:535
-
-        if (lpEvent != 0 && liController != 8 && TakeCarSelGuiDiagLine())
-        {
-            // The input payload's leading words: pad id, then the game input action id.
-            const s32* lpaiWords = reinterpret_cast<const s32*>(lpEvent);
-        }
+        // The whole ARTIST body is this streamed assert (0x824B5410..0x824B549C).
+        CGS_ASSERT_STREAM_AT(lpEvent != 0, "Invalid event in CarSelectMain::HandleControllerInput",
+                             CGS_ARTIST_FILE, 535);   // cpp:535
+        (void)liController;
     }
 
     // ---- UpdateGuiCache @ 0x824B54A8 ----------------------------------------------
@@ -216,14 +205,12 @@ namespace BrnGui
 
         if (mCurrentSetupInfo.mbSelectable)
         {
-            CGS_ASSERT(mCurrentSetupInfo.mCarId != 0, "Trying to select a car will null id");   // cpp:655
+            // Streamed in place (ARTIST 0x824C8E44..0x824C8EAC).
+            CGS_ASSERT_STREAM_AT(mCurrentSetupInfo.mCarId != 0, "Trying to select a car will null id",
+                                 CGS_ARTIST_FILE, 655);   // cpp:655
 
             GuiEventTriggerCarSelect lEvent(mCurrentSetupInfo.mCarId);
             mpStateInterface->OutputGuiEvent(lEvent);
-
-            if (TakeCarSelGuiDiagLine())
-            {
-            }
         }
     }
 

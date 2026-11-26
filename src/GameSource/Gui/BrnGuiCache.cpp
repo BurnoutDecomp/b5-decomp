@@ -1564,39 +1564,10 @@ namespace BrnGui
                     switch (lrIcon.GetIconTypeByte())
                     {
                     case BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_PLAYER_CAR:
-                        // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the gate, once.
-                        {
-                            static bool sbGateLogged = false;
-                            if (!sbGateLogged && CgsDev::Log::gpDebugPrint != 0)
-                            {
-                                sbGateLogged = true;
-                                *CgsDev::Log::gpDebugPrint
-                                    << "[satnav-diag] cache 199 gate: activeIdx="
-                                    << mGuiPlayerInfo.mePlayerActiveRaceCarIndex << " used="
-                                    << static_cast<s32>(
-                                           mGuiPlayerInfo.mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID
-                                               ? (IsActiveRaceCarIndexUsed(static_cast<EActiveRaceCarIndex>(
-                                                     mGuiPlayerInfo.mePlayerActiveRaceCarIndex)) ? 1 : 0)
-                                               : -1) << "\n";
-                            }
-                        }
                         if (mGuiPlayerInfo.mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                             IsActiveRaceCarIndexUsed(static_cast<EActiveRaceCarIndex>(
                                 mGuiPlayerInfo.mePlayerActiveRaceCarIndex)))
                         {
-                            // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] first store.
-                            {
-                                static bool sbLogged = false;
-                                if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
-                                {
-                                    sbLogged = true;
-                                    *CgsDev::Log::gpDebugPrint
-                                        << "[satnav-diag] cache 199 player store: pos=("
-                                        << lrIcon.GetPositionLane().mV.x << ","
-                                        << lrIcon.GetPositionLane().mV.z << ") rot="
-                                        << lrIcon.GetRotation() << "\n";
-                                }
-                            }
                             mGuiPlayerInfo.mv3PlayerCarPosition = Vector3(lrIcon.GetPositionLane().mV);   // stvx +19168
                             mGuiPlayerInfo.mfRotation    = lrIcon.GetRotation();       // +19220 (lfs icon+24)
                             mGuiPlayerInfo.meCurrentCounty = lrIcon.GetCounty();   // +19224
@@ -1650,19 +1621,6 @@ namespace BrnGui
                         }
 
                         ++miNumDriveThroughs;
-
-                        // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] one line per NEW table
-                        // row (bounded by the 46-row table); the minimap_drivethru_blips case
-                        // pairs it with the producer's SETUP rec line by id.
-                        if (CgsDev::Log::gpDebugPrint != 0)
-                        {
-                            *CgsDev::Log::gpDebugPrint
-                                << "[satnav-diag] cache 199 drive-thru row " << (miNumDriveThroughs - 1)
-                                << " id=" << static_cast<u32>(lrIcon.GetCgsId())
-                                << " type=" << static_cast<s32>(lrIcon.GetIconTypeByte())
-                                << " pos=(" << lrStored.GetPositionLane().mV.x << ","
-                                << lrStored.GetPositionLane().mV.z << ")\n";
-                        }
                         break;
                     }
 
@@ -2058,18 +2016,6 @@ namespace BrnGui
             CGS_ASSERT(std::strlen(lpNetworkPlayerStatus->macGameName) < sizeof(macOnlineGameName),
                        "String too long: ");
             std::strncpy(macOnlineGameName, lpNetworkPlayerStatus->macGameName, sizeof(macOnlineGameName));
-
-            // [netui] witness (PC harness, LAN gated): one line per change of the roster size
-            // or the host byte. Not console code.
-            {
-                static s32  siLastNumPlayers = -1;
-                static bool sbLastIsHost     = false;
-                if (lpNetworkPlayerStatus->miNumPlayers != siLastNumPlayers || mbIsOnlineHost != sbLastIsHost)
-                {
-                    siLastNumPlayers = lpNetworkPlayerStatus->miNumPlayers;
-                    sbLastIsHost     = mbIsOnlineHost;
-                }
-            }
             break;
         }
 
@@ -3803,11 +3749,6 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpWorldDataController != 0, "mpWorldDataController", CGS_ARTIST_FILE, 3620);   // cpp:3620
 
-        if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
-        {
-            LogAbsentTriggerDataOnce("GuiCache::GetLandmarkInfoFromIndex");
-            return lpOutIconInfo;
-        }
 
         const BrnTrigger::Landmark* lpLandmark =
             mpWorldDataController->GetLandmarkInfoFromIndex(lLandmarkIndex);
@@ -3849,11 +3790,6 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpWorldDataController != 0, "mpWorldDataController", CGS_ARTIST_FILE, 3654);   // cpp:3654
 
-        if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
-        {
-            LogAbsentTriggerDataOnce("GuiCache::GetLandmarkInfoFromID");
-            return;
-        }
 
         const BrnTrigger::Landmark* lpLandmark =
             mpWorldDataController->GetLandmarkInfoFromID(lLandmarkID);
