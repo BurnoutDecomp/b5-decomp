@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <cstddef>   // offsetof (GuiEventWrapper::SetRawEvent)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 
 // GUI event vocabulary recovered from the DecFIGS DWARF (CgsGuiEvent.h):
@@ -61,19 +62,22 @@ namespace CgsGui
 
     public:
         const CgsModule::Event* GetRawEvent() const;
-        void SetRawEvent(T& lEvent);
+        void SetRawEvent(const T& lEvent);   // DWARF h:217: const T&
     };
 
     // DecFIGS CgsGuiEvent.h:217; PS3 lines 221..224 inline in every publisher (e.g.
     // LargeCarComponent::ReleaseResources 0x3D8740..0x3D8778): the payload copy, then the offset,
     // size and type words. ARTIST stores them in that order too (OutputGuiEvent
     // <GuiEventRequestTraining> 0x82436840: payload, 0xC, 4, 0x23C).
+    // The offset is the compile-time offset of mOutEvent, not a runtime address difference: ARTIST
+    // gives two wrappers inlined into one publisher the same stack slot (e.g. CarSelectMain::OnEnter
+    // 0x824C8920 builds both records at r1+0x50; 126 GUI functions do this), which the compiler
+    // only does when the wrapper's address is not taken inside SetRawEvent.
     template <class T, s32 leEventType>
-    void GuiEventWrapper<T, leEventType>::SetRawEvent(T& lEvent)
+    void GuiEventWrapper<T, leEventType>::SetRawEvent(const T& lEvent)
     {
         mOutEvent        = lEvent;
-        miOutEventOffset = static_cast<s32>(reinterpret_cast<const u8*>(&mOutEvent) -
-                                            reinterpret_cast<const u8*>(this));
+        miOutEventOffset = static_cast<s32>(offsetof(GuiEventWrapper, mOutEvent));
         miOutEventSize   = static_cast<s32>(sizeof(T));
         miOutEventType   = lEvent.GetEventType();
     }

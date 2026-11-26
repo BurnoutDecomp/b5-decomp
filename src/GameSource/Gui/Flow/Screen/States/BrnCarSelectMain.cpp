@@ -466,15 +466,19 @@ namespace BrnGui
     {
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        // { 1, 148, 12, 0 } on channel 42: take the HUD components down.
-        PostInternalState16<148>(mpStateInterface, 0);
+        // DWARF local GuiEventShowHideHud lShowHideHud (cpp:158): take the HUD components down
+        // ({1, 148, 12, 0} on channel 42).
+        GuiEventShowHideHud lShowHideHud;
+        lShowHideHud.maData[0] = 0;
+        mpStateInterface->OutputInternalState(lShowHideHud);
 
         miMostRecentDropInId = 0;
 
         // The X360 inlines GetAccessPointers() (assert "mpAccessPointers != NULL",
         // CgsGuiStateInterface.h:344) and GetGuiCache() (assert "mpGuiCache",
         // CgsGuiShared.h:201) here; the accessor calls reproduce that assert sequence.
-        GuiCache* lpGuiCache = mpStateInterface->GetAccessPointers()->GetGuiCache();
+        // No local (DWARF lists only lShowHideHud / lPlayerEvent).
+        mpGuiCache = mpStateInterface->GetAccessPointers()->GetGuiCache();
 
         // Both setup descriptors are cleared to the null car id -- the X360 writes only
         // the leading id qword of each, leaving mbSelectable as Construct left it.
@@ -482,12 +486,11 @@ namespace BrnGui
         mDesiredSetupInfo.mCarId = 0;
 
         meCurrentState = E_CARSELECT_UNLOADED;
-        mpGuiCache     = lpGuiCache;
 
-        // { 1, 405, 12 } on channel 40. The X360 reuses the previous record's payload
-        // slot without rewriting the flag byte (it still holds the zero the 148 record
-        // put there), so the posted flag is 0.
-        PostCommand16<405>(mpStateInterface, 0);
+        // DWARF local GuiPlayerInfoRequest lPlayerEvent (cpp:171): an empty event, so ARTIST
+        // copies its tag byte without writing it ({1, 405, 12} on channel 40).
+        GuiPlayerInfoRequest lPlayerEvent;
+        mpStateInterface->OutputGuiEvent(lPlayerEvent);
 
         // The five apt components, in the X360's Construct order. All are parented to the
         // movie root (null parent name).

@@ -770,6 +770,13 @@ namespace BrnGui
     // responding player's car id as the qword at event+0x20 (ld r11, 0x20(event)) -- named
     // mCarId here; the surrounding payload bytes stay opaque.
 
+    // DWARF BrnGuiEventTypeDefs.h `struct GuiPlayerInfoRequest : public GuiEvent<400> {}` (PS3 id;
+    // this range sits 5 higher on the X360: GuiPlayerInfoResponse 401 -> 406, GuiPowerParkResult
+    // 399 -> 404). CarSelectMain::OnEnter posts it as {1, 405, 12} (ARTIST 0x824C8A0C).
+    struct GuiPlayerInfoRequest : public CgsGui::GuiEvent<405>
+    {
+    };
+
     class GuiPlayerInfoResponse : public CgsGui::GuiEvent<406>
     {
     public:
