@@ -26,9 +26,9 @@ namespace BrnDirector
         };
 
         virtual void Construct();                                   // cpp:34
-        virtual bool Prepare(void* lrBehaviourController);          // cpp:55
-        virtual void Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo);               // cpp:72
+        virtual bool Prepare(Camera::BehaviourManager& lrBehaviourController);          // cpp:55
+        virtual void Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo);               // cpp:72
         virtual bool Release();                                     // cpp:171
         virtual const char* GetName() const;                        // cpp:229
         virtual void SetParameters(const Moment::Parameters* lpParameters);   // cpp:203

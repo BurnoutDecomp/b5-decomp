@@ -1,4 +1,8 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentPassengerSeesAction.h"
+#include "GameSource/Director/MomentController/BrnMomentSharedInfo.h"
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -34,9 +38,6 @@ namespace detail
 {
     // ---- MomentSharedInfo reaches (un-homed record; the family precedent's
     // decl-only helpers; console shared-info offsets in comments). ----
-    bool MomentSharedInfo_IsPlayerCrashing(const void* lpSharedInfo);        // +1284 byte 249
-    const AllVehicleData* MomentSharedInfo_GetAllVehicleData(const void* lpSharedInfo);   // +1288
-    s32  MomentSharedInfo_GetCrashVehicleIndex(const void* lpSharedInfo);    // +1304 word
 }
 using namespace detail;
 
@@ -51,7 +52,7 @@ void MomentPassengerSeesAction::Construct()
     mpParameters    = 0;
 }
 
-bool MomentPassengerSeesAction::Prepare(void* /*lrBehaviourController*/)
+bool MomentPassengerSeesAction::Prepare(Camera::BehaviourManager& /*lrBehaviourController*/)
 {
     mfTimeCrashing = 0.0f;
     SetState(E_STATE_INVALID_SEARCHING);
@@ -99,13 +100,13 @@ Moment::EType MomentPassengerSeesAction::GetInstanceType()
 //   VALID            mirror the produced camera; past the 0.5s window take the
 //                    shared bit-20 hold; once the crash ends, the virtual
 //                    Release + back to SEARCHING.
-void MomentPassengerSeesAction::Update(f32 lfTimeStep, void* lrBehaviourController,
-                                       const void* lSharedInfo)
+void MomentPassengerSeesAction::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                                       const MomentSharedInfo& lrSharedInfo)
 {
     Camera::BehaviourManager* lpBehaviourManager =
-        static_cast<Camera::BehaviourManager*>(lrBehaviourController);
+        &lrBehaviourController;
 
-    mfTimeCrashing = MomentSharedInfo_IsPlayerCrashing(lSharedInfo)
+    mfTimeCrashing = lrSharedInfo.mpGameState->mbCrashActive
                          ? mfTimeCrashing + lfTimeStep
                          : 0.0f;
 
@@ -114,11 +115,11 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, void* lrBehaviourControll
     case E_STATE_INVALID_SEARCHING:
     {
         bool lbStart = false;
-        if (MomentSharedInfo_IsPlayerCrashing(lSharedInfo)
+        if (lrSharedInfo.mpGameState->mbCrashActive
             && mfTimeCrashing < KF_PASSENGER_CRASH_WINDOW)
         {
-            const s32 liCrashVehicle = MomentSharedInfo_GetCrashVehicleIndex(lSharedInfo);
-            const AllVehicleData* lpAllVehicles = MomentSharedInfo_GetAllVehicleData(lSharedInfo);
+            const s32 liCrashVehicle = lrSharedInfo.mePlayerActiveRaceCarIndex;
+            const AllVehicleData* lpAllVehicles = lrSharedInfo.mpAllVehicleData;
 
             // Seed the incident ref to the raw invalid record then resolve it
             // (the console build issues the resolve twice, back to back -- kept), and
@@ -129,7 +130,7 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, void* lrBehaviourControll
             mIncident.miRaceCarIndex = -1;
             mIncident.Get(lpAllVehicles);
             mIncident.Get(lpAllVehicles);
-            lbStart = liCrashVehicle == MomentSharedInfo_GetCrashVehicleIndex(lSharedInfo);
+            lbStart = liCrashVehicle == lrSharedInfo.mePlayerActiveRaceCarIndex;
 
             if (lbStart)
             {
@@ -188,7 +189,7 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, void* lrBehaviourControll
         GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
         return;
     }
-    if (!MomentSharedInfo_IsPlayerCrashing(lSharedInfo))
+    if (!lrSharedInfo.mpGameState->mbCrashActive)
     {
         Release();   // the live-vtable call (slot 4)
         SetState(E_STATE_INVALID_SEARCHING);

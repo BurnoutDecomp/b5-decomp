@@ -40,12 +40,12 @@ void MomentFailSafe::Construct()
     mpParameters = NULL;
 }
 
-void MomentFailSafe::Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo)
+void MomentFailSafe::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo)
 {
     (void)lfTimeStep;
     (void)lrBehaviourController;
-    (void)lSharedInfo;
+    (void)lrSharedInfo;
 
     CGS_ASSERT(mpParameters != NULL,
         CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 69 /* ARTIST 0x8220A2E4 */));
@@ -86,7 +86,7 @@ const char* MomentFailSafe::GetName() const
 //   slot 7 GetInstanceType  0x824B5A18  `li r3, 6 ; blr` -- E_MOMENT_FAILSAFE
 namespace BrnDirector
 {
-bool MomentFailSafe::Prepare(void* /*lrBehaviourController*/)
+bool MomentFailSafe::Prepare(Camera::BehaviourManager& /*lrBehaviourController*/)
 {
     SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
     return true;                           // li r3, 1

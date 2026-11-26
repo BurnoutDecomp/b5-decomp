@@ -569,7 +569,7 @@ namespace DirectorIO
     void InputBuffer::SetRaceCarInUse(u32 luIndex, bool lbInUse)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        CGS_ASSERT(luIndex < 8u, "Index < Number of bits");   // CgsBitArray.h:222
+        // SetBit / UnSetBit carry their own CgsBitArray.h:222 / :241 index asserts.
         if (lbInUse)
             mUsedRaceCars.SetBit(luIndex);
         else

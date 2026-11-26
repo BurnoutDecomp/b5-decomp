@@ -385,7 +385,6 @@ void GameStateImageManagerBase::HandleImageFilesLoadedEvent(const ImageFilesLoad
 
             std::memcpy(lDestTexture.GetTexture(), lrFileInfo.mpBuffer, static_cast<size_t>(lrFileInfo.miSize));
 
-            CGS_ASSERT(static_cast<u32>(liDestSlot) < static_cast<u32>(KI_NUM_PICTURES), "Index out of range");
             mImagesToRenderBitArray.SetBit(static_cast<u32>(liDestSlot));
         }
     }
@@ -834,11 +833,8 @@ void GameStateImageManagerBase::ProcessScrollImagesEvent(const ImageGalleryReque
     lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEmptySlot),
                       KI_EVENT_IMAGE_INFO, (s32)sizeof(EmptySlotInfoEvent));
 
-    CGS_ASSERT(static_cast<u32>(liEndSlotIndexAfterScroll) < static_cast<u32>(KI_NUM_PICTURES), "luIndex < NUMBITS");
-    if (liEndSlotIndexAfterScroll >= 0 && liEndSlotIndexAfterScroll < KI_NUM_PICTURES)
-    {
-        mImagesToRenderBitArray.UnSetBit(static_cast<u32>(liEndSlotIndexAfterScroll));
-    }
+    // UnSetBit carries its own CgsBitArray.h:241 index assert (ARTIST 0x82385014); no other guard.
+    mImagesToRenderBitArray.UnSetBit(static_cast<u32>(liEndSlotIndexAfterScroll));
     (void)liStartSlotIndex;
 }
 
@@ -991,11 +987,8 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
         const ImageLoadRequest& lrImageLoadRequest = maImageLoadRequests[static_cast<u32>(liNumProcessed)];
         const s32 liSlotIndex = lrImageLoadRequest.miSlotIndex;
 
-        CGS_ASSERT(static_cast<u32>(liSlotIndex) < static_cast<u32>(KI_NUM_PICTURES), CGS_ASSERT_MESSAGE_AT("luIndex < NUMBITS", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 241));
-        if (liSlotIndex >= 0 && liSlotIndex < KI_NUM_PICTURES)
-        {
-            mImagesToRenderBitArray.UnSetBit(static_cast<u32>(liSlotIndex));
-        }
+        // UnSetBit carries its own CgsBitArray.h:241 index assert (ARTIST 0x823840DC); no other guard.
+        mImagesToRenderBitArray.UnSetBit(static_cast<u32>(liSlotIndex));
 
         if (lrImageLoadRequest.miImageIndex >= 0)
         {

@@ -41,12 +41,12 @@ namespace BrnDirector
         virtual void Construct();
 
         //  No standalone console symbol (ICF-folded; declaration-only).
-        virtual bool Prepare(void* lrBehaviourController);
+        virtual bool Prepare(Camera::BehaviourManager& lrBehaviourController);
 
         // the per-frame new-car-joined
         // state machine (see the .cpp).
-        virtual void Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo);
+        virtual void Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo);
 
         // release all three behaviour handles,
         // drop the gates, raise the searching head bit, park at SEARCHING.

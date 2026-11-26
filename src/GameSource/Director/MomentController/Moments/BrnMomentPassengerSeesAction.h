@@ -31,12 +31,12 @@ namespace BrnDirector
 
         // zero the crash timer and enter
         // SEARCHING. Always reports true.
-        virtual bool Prepare(void* lrBehaviourController);
+        virtual bool Prepare(Camera::BehaviourManager& lrBehaviourController);
 
         // the per-frame state machine
         // (see the .cpp).
-        virtual void Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo);
+        virtual void Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo);
 
         // drop the passenger cam if held,
         // clear the gates, raise the searching head bit, park at INACTIVE (0).

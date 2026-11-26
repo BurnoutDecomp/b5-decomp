@@ -1,4 +1,8 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentStationaryCrash.h"
+#include "GameSource/Director/MomentController/BrnMomentSharedInfo.h"
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentStationaryCrash.cpp"
 #include <cmath>                                                      // fabsf (the rotation wrap test)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
@@ -39,17 +43,9 @@ namespace detail
     // ---- MomentSharedInfo reaches (un-homed record; the Moment base type-erases
     // it to const void*). DECLARATION-ONLY named helpers per the moment-family
     // precedent; console shared-info offsets in comments; role names FLAG-inferred. ----
-    bool MomentSharedInfo_IsPlayerCrashing(const void* lpSharedInfo);          // +1284 byte 249
-    f32  MomentSharedInfo_GetTimeCrashing(const void* lpSharedInfo);           // +1284 f32 +252
-    f32  MomentSharedInfo_GetTimestep(const void* lpSharedInfo);               // +1312 f32
-    const DirectorResourceManager*
-         MomentSharedInfo_GetDirectorResourceManager(const void* lpSharedInfo); // +1340
 
     // Vehicle-dynamics block (+1292) vector lanes (each a 16-byte Vector3 the console build
     // lvx128s straight into the two vmsum3fp128 dot products):
-    const rw::math::vpu::Vector3& MomentSharedInfo_GetCrashRotationAxis(const void* lpSharedInfo);   // +1292 vec +528
-    const rw::math::vpu::Vector3& MomentSharedInfo_GetLinearVelocity(const void* lpSharedInfo);      // +1292 vec +816
-    const rw::math::vpu::Vector3& MomentSharedInfo_GetAngularVelocity(const void* lpSharedInfo);     // +1292 vec +832
 
     // The ICE take's play length (take data +0x2C f32; the console build compares it, less
     // 0.1s, against the time already spent crashing). DECLARATION-ONLY (the
@@ -76,7 +72,7 @@ void MomentStationaryCrash::Construct()
     mpParameters      = 0;
 }
 
-bool MomentStationaryCrash::Prepare(void* /*lrBehaviourController*/)
+bool MomentStationaryCrash::Prepare(Camera::BehaviourManager& /*lrBehaviourController*/)
 {
     mfTimeCrashing = 0.0f;
     SetState(E_STATE_INVALID_SEARCHING);
@@ -111,19 +107,19 @@ const char* MomentStationaryCrash::GetName() const
 //                    BODY THE SAME FRAME (the console build falls through).
 //   VALID            mirror the produced camera; drop back to SEARCHING when the
 //                    keep gate clears or the take finishes/fails.
-void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
-                                   const void* lSharedInfo)
+void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager& lrBehaviourController,
+                                   const MomentSharedInfo& lrSharedInfo)
 {
     Camera::BehaviourManager* lpBehaviourManager =
-        static_cast<Camera::BehaviourManager*>(lrBehaviourController);
+        &lrBehaviourController;
 
     // ---- the per-frame rotation integrator (before the state machine) ----
     const f32 lfRotationRate = rw::math::vpu::Dot(
-        MomentSharedInfo_GetAngularVelocity(lSharedInfo),
-        MomentSharedInfo_GetCrashRotationAxis(lSharedInfo));
-    if (MomentSharedInfo_IsPlayerCrashing(lSharedInfo))
+        lrSharedInfo.mpPlayerCar->mRaceCarState.mAngularVelocity,
+        lrSharedInfo.mpPlayerCar->mRaceCarState.mTransform.zAxis);
+    if (lrSharedInfo.mpGameState->mbCrashActive)
     {
-        mfRotationAngle += MomentSharedInfo_GetTimestep(lSharedInfo) * lfRotationRate;
+        mfRotationAngle += lrSharedInfo.mfSimTimestep * lfRotationRate;
         if (fabsf(mfRotationAngle) > KF_TWO_PI)
             mbIsTumblingCrash = true;
     }
@@ -138,7 +134,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
     case E_STATE_INVALID_SEARCHING:
     {
         const rw::math::vpu::Vector3& lv3Velocity =
-            MomentSharedInfo_GetLinearVelocity(lSharedInfo);
+            lrSharedInfo.mpPlayerCar->mRaceCarState.mLinearVelocity;
         if (KF_MAX_SPEED_SQ > rw::math::vpu::Dot(lv3Velocity, lv3Velocity)
             && lfRotationRate < KF_HALF_PI)
         {
@@ -159,12 +155,12 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
                 lpShotData = Attrib::DefaultDataArea(0x18u);
 
             ICE::ICETakeData* lpTakeData =
-                MomentSharedInfo_GetDirectorResourceManager(lSharedInfo)
+                lrSharedInfo.mpDirectorResourceManager
                     ->GetKeyAnimFromGuid(IceAnimShotData_GetAnimGuid(lpShotData));
             CGS_ASSERT(lpTakeData != 0, CGS_ASSERT_MESSAGE_AT("lpTakeData != NULL", CGS_ARTIST_FILE, 114));   //  (non-gating)
 
             if (ICETakeData_GetDuration(lpTakeData) - 0.1f
-                < MomentSharedInfo_GetTimeCrashing(lSharedInfo))
+                < lrSharedInfo.mpGameState->mfCrashTimeRemaining)
             {
                 // Too far into the crash for the take to fit.
                 SetConditionsNotMet();

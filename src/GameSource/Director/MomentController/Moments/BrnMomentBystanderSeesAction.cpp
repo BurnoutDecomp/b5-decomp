@@ -1,4 +1,8 @@
 #include "GameSource/Director/MomentController/BrnMoment.h"   // MomentBystanderSeesAction (concretely homed there)
+#include "GameSource/Director/MomentController/BrnMomentSharedInfo.h"
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentBystanderSeesAction.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -36,13 +40,6 @@ namespace detail
     // ---- MomentSharedInfo reaches (un-homed record; the family precedent's
     // decl-only helpers; console shared-info offsets in comments; role names
     // FLAG-inferred from the uses). ----
-    bool MomentSharedInfo_IsPlayerCrashing(const void* lpSharedInfo);        // +1284 byte 249
-    bool MomentSharedInfo_WasTakedown(const void* lpSharedInfo);             // +1284 byte 218 (the takedown-just-happened condition)
-    bool MomentSharedInfo_IsCrashCameraBlocked(const void* lpSharedInfo);    // +1284 byte 449
-    bool MomentSharedInfo_IsCrashReplayDisabled(const void* lpSharedInfo);   // +1284 byte 284
-    s32  MomentSharedInfo_GetTakedownVictimIndex(const void* lpSharedInfo);  // +1284 word +224 (the takedown target car)
-    s32  MomentSharedInfo_GetCrashVehicleIndex(const void* lpSharedInfo);    // +1304 word (the crashing car the bystander frames)
-    bool MomentSharedInfo_GetForceFlag1320(const void* lpSharedInfo);        // +1320 byte (forces the crash condition)
 }
 using namespace detail;
 
@@ -92,11 +89,11 @@ const char* MomentBystanderSeesAction::GetName() const
 //   VALID            (the shared switch tail) mirror the produced camera, force
 //                    the bystander motion blur, and drop the moment when the
 //                    conditions/keep gate lapse.
-void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
-                                       const void* lSharedInfo)
+void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager& lrBehaviourController,
+                                       const MomentSharedInfo& lrSharedInfo)
 {
     Camera::BehaviourManager* lpBehaviourManager =
-        static_cast<Camera::BehaviourManager*>(lrBehaviourController);
+        &lrBehaviourController;
 
     CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 87));   //  (non-gating)
 
@@ -111,14 +108,14 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
                 : lpBehaviourManager->GetBehaviourParameterBank().GetBystanderCamMomentParams();
 
         const bool lbCrashCondition =
-            (MomentSharedInfo_IsPlayerCrashing(lSharedInfo)
+            (lrSharedInfo.mpGameState->mbCrashActive
              && mpParameters->mbCrashMoment
-             && !MomentSharedInfo_IsCrashCameraBlocked(lSharedInfo)
-             && !MomentSharedInfo_IsCrashReplayDisabled(lSharedInfo))
-            || MomentSharedInfo_GetForceFlag1320(lSharedInfo);
+             && !lrSharedInfo.mpGameState->mbRoadRageTotalled
+             && !lrSharedInfo.mpGameState->mbGoToCrashModeAfterIntro)
+            || lrSharedInfo.mbForceCollisionPolicysToStart;
 
         const bool lbTakedownCondition =
-            MomentSharedInfo_WasTakedown(lSharedInfo) && mpParameters->mbTakedownMoment;
+            lrSharedInfo.mpGameState->mbTakedownActive && mpParameters->mbTakedownMoment;
 
         if (lbCrashCondition)
         {
@@ -128,7 +125,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
                     mBystander, 0, this, 1);
                 mBystander.Get()->SetParameters(&lrCamParams);
                 mBystander.Get()->SetTarget(
-                    static_cast<EActiveRaceCarIndex>(MomentSharedInfo_GetCrashVehicleIndex(lSharedInfo)));
+                    static_cast<EActiveRaceCarIndex>(lrSharedInfo.mePlayerActiveRaceCarIndex));
                 SetCanSwitchToMeNow(false);
                 SetState(E_STATE_INVALID_FOUND_PREPARING);
                 GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
@@ -148,7 +145,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
                 mBystander, 0, this, 1);
             mBystander.Get()->SetParameters(&lrCamParams);
             mBystander.Get()->SetTarget(
-                static_cast<EActiveRaceCarIndex>(MomentSharedInfo_GetTakedownVictimIndex(lSharedInfo)));
+                static_cast<EActiveRaceCarIndex>(lrSharedInfo.mpGameState->meTakedownVictimID));
             SetCanSwitchToMeNow(false);
             SetState(E_STATE_INVALID_FOUND_PREPARING);
             GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
@@ -201,9 +198,9 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
         GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_NOT_SWITCHABLE);
     }
 
-    if ((!MomentSharedInfo_IsPlayerCrashing(lSharedInfo)
-         && !MomentSharedInfo_WasTakedown(lSharedInfo))
-        || MomentSharedInfo_IsCrashReplayDisabled(lSharedInfo)
+    if ((!lrSharedInfo.mpGameState->mbCrashActive
+         && !lrSharedInfo.mpGameState->mbTakedownActive)
+        || lrSharedInfo.mpGameState->mbGoToCrashModeAfterIntro
         || !mBystander.GetCamera().mState.IsFlagSet(Camera::CameraState::E_FLAG_VALID))
     {
         Release();   // the live-vtable call (slot 4)

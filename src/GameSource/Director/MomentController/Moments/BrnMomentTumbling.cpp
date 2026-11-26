@@ -1,4 +1,8 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentTumbling.h"
+#include "GameSource/Director/MomentController/BrnMomentSharedInfo.h"
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTumbling.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -50,23 +54,13 @@ namespace detail
 {
     // ---- MomentSharedInfo reaches (un-homed record; the family precedent's
     // decl-only helpers; console shared-info offsets in comments). ----
-    bool MomentSharedInfo_IsPlayerCrashing(const void* lpSharedInfo);        // +1284 byte 249
-    bool MomentSharedInfo_WasTakedown(const void* lpSharedInfo);             // +1284 byte 218
-    bool MomentSharedInfo_IsCrashCameraBlocked(const void* lpSharedInfo);    // +1284 byte 449
-    bool MomentSharedInfo_IsCrashReplayDisabled(const void* lpSharedInfo);   // +1284 byte 284
-    s32  MomentSharedInfo_GetTakedownVictimIndex(const void* lpSharedInfo);  // +1284 word +224
-    bool MomentSharedInfo_GetForceFlag1320(const void* lpSharedInfo);        // +1320 byte
 
     // The two Vector3 lanes embedded DIRECTLY in the shared record (this moment
     // lvx128s them off the record base, unlike the +1292-block lanes its
     // stationary-crash sibling reads):
-    const rw::math::vpu::Vector3& MomentSharedInfo_GetPlayerVelocity(const void* lpSharedInfo);         // +816
-    const rw::math::vpu::Vector3& MomentSharedInfo_GetPlayerAngularVelocity(const void* lpSharedInfo);  // +832
 
-    const AllVehicleData* MomentSharedInfo_GetAllVehicleData(const void* lpSharedInfo);   // +1288
 
     // The named camera parameter record SetGyroCamParameters picks its gyro block out of.
-    const NamedParameters* MomentSharedInfo_GetNamedBehaviourParams(const void* lpSharedInfo);
 
     // ⭐ RETIRED 2026-08-23 (moment-camera wave). This used to be a DECLARATION-ONLY
     // `VehicleInfo_GetVelocity(const VehicleInfo&)` shim -- an unresolved external AND an
@@ -97,7 +91,7 @@ void MomentTumbling::Construct()
 // angular velocity the tumble test integrates (one 16-byte zero store over the
 // whole lane register). It allocates nothing -- the gyro rig is allocated in
 // Update, once the tumble conditions read true -- and always reports prepared.
-bool MomentTumbling::Prepare(void* /* lrBehaviourController */)
+bool MomentTumbling::Prepare(Camera::BehaviourManager& /*lrBehaviourController*/)
 {
     SetState(E_STATE_INVALID_SEARCHING);
     mSmoothedAngularVelocity.SetZero();
@@ -143,9 +137,9 @@ const char* MomentTumbling::GetName() const
 // The alternation is deliberately not collapsed into the two latch tests: the console
 // re-reads mbUseLeftForThisCrash inside the right-latched arm, and the flip is a
 // separate statement that runs on the un-latched path only.
-void MomentTumbling::SetGyroCamParameters(const void* lSharedInfo)
+void MomentTumbling::SetGyroCamParameters(const MomentSharedInfo& lrSharedInfo)
 {
-    const NamedParameters& lrNamed = *MomentSharedInfo_GetNamedBehaviourParams(lSharedInfo);
+    const NamedParameters& lrNamed = *lrSharedInfo.mpNamedBehaviourParams;
 
     switch (mpParameters->meSubType)
     {
@@ -238,18 +232,18 @@ void MomentTumbling::SignalIsGoodTimeToPlant()
 //                    gate (bit 22); force the tumble motion blur (0.25 on
 //                    FOLLOW/LEAD, else 0) and drop the moment when the rig
 //                    fails.
-void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo)
+void MomentTumbling::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo)
 {
     Camera::BehaviourManager* lpBehaviourManager =
-        static_cast<Camera::BehaviourManager*>(lrBehaviourController);
+        &lrBehaviourController;
 
     CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 89));   //  (non-gating)
 
     // ---- the per-frame angular-velocity smoother (before the state machine) ----
     {
         const rw::math::vpu::Vector3& lv3Angular =
-            MomentSharedInfo_GetPlayerAngularVelocity(lSharedInfo);
+            lrSharedInfo.mPlayerInfo.mRaceCarState.mAngularVelocity;
         mSmoothedAngularVelocity = mSmoothedAngularVelocity
             + (lv3Angular - mSmoothedAngularVelocity) * KF_TUMBLE_SENSITIVITY;
     }
@@ -258,7 +252,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
     {
     case E_STATE_INVALID_SEARCHING:
     {
-        if (!MomentSharedInfo_IsPlayerCrashing(lSharedInfo))
+        if (!lrSharedInfo.mpGameState->mbCrashActive)
         {
             mbFirstTryThisCrash    = true;
             mbUseLeftForThisCrash  = false;
@@ -267,10 +261,10 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
 
         // ---- the takedown trigger ----
         bool lbTakedownCondition = false;
-        if (MomentSharedInfo_WasTakedown(lSharedInfo) && mpParameters->mbTakedownMoment)
+        if (lrSharedInfo.mpGameState->mbTakedownActive && mpParameters->mbTakedownMoment)
         {
-            const s32 liVictim = MomentSharedInfo_GetTakedownVictimIndex(lSharedInfo);
-            const AllVehicleData* lpAllVehicles = MomentSharedInfo_GetAllVehicleData(lSharedInfo);
+            const s32 liVictim = lrSharedInfo.mpGameState->meTakedownVictimID;
+            const AllVehicleData* lpAllVehicles = lrSharedInfo.mpAllVehicleData;
             if (lpAllVehicles->GetUsedRaceCarsBitArray().IsBitSet(liVictim))   // the  tripwire
             {
                 const rw::math::vpu::Vector3& lv3VictimVelocity =
@@ -283,40 +277,40 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
 
         // ---- the crash trigger ----
         bool lbCrashCondition = false;
-        if (MomentSharedInfo_IsPlayerCrashing(lSharedInfo)
-            && !MomentSharedInfo_IsCrashCameraBlocked(lSharedInfo))
+        if (lrSharedInfo.mpGameState->mbCrashActive
+            && !lrSharedInfo.mpGameState->mbRoadRageTotalled)
         {
             const rw::math::vpu::Vector3& lv3Velocity =
-                MomentSharedInfo_GetPlayerVelocity(lSharedInfo);
+                lrSharedInfo.mPlayerInfo.mRaceCarState.mLinearVelocity;
             lbCrashCondition =
                 rw::math::vpu::Dot(lv3Velocity, lv3Velocity) > KF_TUMBLE_START_THRESHOLD
                 && mpParameters->mbCrashMoment
-                && !MomentSharedInfo_IsCrashReplayDisabled(lSharedInfo);
+                && !lrSharedInfo.mpGameState->mbGoToCrashModeAfterIntro;
         }
 
         if (lbTakedownCondition || lbCrashCondition
-            || MomentSharedInfo_GetForceFlag1320(lSharedInfo))
+            || lrSharedInfo.mbForceCollisionPolicysToStart)
         {
-            if (IsInhibited())
-            {
-                SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
-            }
-            else
+            if (!IsInhibited())
             {
                 mbLookingAtTakedown = lbTakedownCondition && !lbCrashCondition;
                 lpBehaviourManager->NewBehaviour<Camera::BehaviourGyroCam>(
                     mGyroCam, 0, this, 1);
-                SetGyroCamParameters(lSharedInfo);
+                SetGyroCamParameters(lrSharedInfo);
                 if (mbLookingAtTakedown)
                 {
                     mGyroCam.Get()->AttachToRaceCar(
-                        MomentSharedInfo_GetTakedownVictimIndex(lSharedInfo));
+                        lrSharedInfo.mpGameState->meTakedownVictimID);
                 }
                 SetCanSwitchToMeNow(false);
                 mfRunningTime = 0.0f;
                 SetState(E_STATE_INVALID_FOUND_PREPARING);
                 GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
+            }
+            else
+            {
+                SetCanSwitchToMeNow(false);
+                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
             }
         }
         else
@@ -367,10 +361,10 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
 
     // Re-evaluate the keep condition (the trigger tests sans the parameter gates).
     bool lbTakedownKeep = false;
-    if (MomentSharedInfo_WasTakedown(lSharedInfo))
+    if (lrSharedInfo.mpGameState->mbTakedownActive)
     {
-        const s32 liVictim = MomentSharedInfo_GetTakedownVictimIndex(lSharedInfo);
-        const AllVehicleData* lpAllVehicles = MomentSharedInfo_GetAllVehicleData(lSharedInfo);
+        const s32 liVictim = lrSharedInfo.mpGameState->meTakedownVictimID;
+        const AllVehicleData* lpAllVehicles = lrSharedInfo.mpAllVehicleData;
         if (lpAllVehicles->GetUsedRaceCarsBitArray().IsBitSet(liVictim))   //  tripwire
         {
             const rw::math::vpu::Vector3& lv3VictimVelocity =
@@ -381,13 +375,13 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
         }
     }
     bool lbCrashKeep = false;
-    if (MomentSharedInfo_IsPlayerCrashing(lSharedInfo))
+    if (lrSharedInfo.mpGameState->mbCrashActive)
     {
         const rw::math::vpu::Vector3& lv3Velocity =
-            MomentSharedInfo_GetPlayerVelocity(lSharedInfo);
+            lrSharedInfo.mPlayerInfo.mRaceCarState.mLinearVelocity;
         lbCrashKeep =
             rw::math::vpu::Dot(lv3Velocity, lv3Velocity) > KF_TUMBLE_START_THRESHOLD
-            && !MomentSharedInfo_IsCrashReplayDisabled(lSharedInfo);
+            && !lrSharedInfo.mpGameState->mbGoToCrashModeAfterIntro;
     }
 
     // Publish the rig's own switch gates.

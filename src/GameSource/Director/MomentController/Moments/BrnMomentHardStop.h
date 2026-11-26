@@ -40,12 +40,12 @@ namespace BrnDirector
         // reset the per-run state (running
         // time / ready / crashing-last-frame; first-frame raised) and enter
         // SEARCHING. Always reports true.
-        virtual bool Prepare(void* lrBehaviourController);
+        virtual bool Prepare(Camera::BehaviourManager& lrBehaviourController);
 
         // the per-frame hard-stop state
         // machine (see the .cpp).
-        virtual void Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo);
+        virtual void Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo);
 
         // adopt the tuning record.
         virtual void SetParameters(const Moment::Parameters* lpParameters);

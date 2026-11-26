@@ -112,7 +112,7 @@ void MomentController::UpdateAllMoments(Camera::BehaviourManager& lrBehaviourMan
         lpMoment->GetCamera().GetValidityAccount().Print(lrDebugPrinter);
 
         lpMoment->PreUpdate();
-        lpMoment->Update(lfTimeStep, &lrBehaviourManager, &lrMomentSharedInfo);
+        lpMoment->Update(lfTimeStep, lrBehaviourManager, lrMomentSharedInfo);
     }
 }
 
@@ -183,7 +183,7 @@ bool MomentController::MomentHandle::Prepare(AbstractPoolVoidHandle lVoidHandle,
 
     static_cast<Moment*>(const_cast<void*>(mMomentPoolHandle.Get()))->Construct();
 
-    CGS_ASSERT(GetMoment().Prepare(&lrBehaviourManager),
+    CGS_ASSERT(GetMoment().Prepare(lrBehaviourManager),
         CGS_ASSERT_MESSAGE_AT(
             "GetMoment().Prepare(lBehaviourManager)",
             CGS_ARTIST_FILE, 242 /* ARTIST 0x821F7358 */));

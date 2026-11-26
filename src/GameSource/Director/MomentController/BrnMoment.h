@@ -100,10 +100,10 @@ namespace BrnDirector
         // every concrete moment's Construct carries this same inlined base. Defined
         // inline below.
         virtual void  Construct();
-        virtual bool  Prepare(/* Camera::BehaviourManager& */ void* lrBehaviourController) = 0;
+        virtual bool  Prepare(Camera::BehaviourManager& lrBehaviourController) = 0;
         virtual void  Update(f32 lfTimeStep,
-                             /* Camera::BehaviourManager& */ void* lrBehaviourController,
-                             /* MomentSharedInfo::InParam */ const void* lSharedInfo) = 0;
+                             Camera::BehaviourManager& lrBehaviourController,
+                             const MomentSharedInfo& lrSharedInfo) = 0;
         virtual void  SetParameters(const Parameters* lpParameters);
         virtual bool  Release() = 0;
         virtual void  Destruct();
@@ -218,14 +218,14 @@ namespace BrnDirector
             bool mbTakedownMoment;
         };
 
-        bool Prepare(void* lrBehaviourController) ;
+        bool Prepare(Camera::BehaviourManager& lrBehaviourController) ;
 
         // The rest of the override set (GROWN by this moment's own TU, batch 14 --
         // Moments/BrnMomentBystanderSeesAction.cpp replaces the earlier concrete
         // stubs with the real bodies):
         void  Construct() ;
-        void  Update(f32 lfTimeStep, void* lrBehaviourController,
-                     const void* lSharedInfo) ;
+        void  Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                     const MomentSharedInfo& lrSharedInfo) ;
         void  SetParameters(const Moment::Parameters* lpParameters) ;
         bool  Release() ;
         const char* GetName() const ;

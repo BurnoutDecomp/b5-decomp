@@ -15,7 +15,7 @@ namespace BrnDirector
     // The console sets the base state word (this+0x174 == meState) to
     // E_STATE_INVALID_SEARCHING and returns true -- i.e. the bystander moment marks
     // itself "searching" once prepared.
-    bool MomentBystanderSeesAction::Prepare(void* /*lrBehaviourController*/)
+    bool MomentBystanderSeesAction::Prepare(Camera::BehaviourManager& /*lrBehaviourController*/)
     {
         SetState(E_STATE_INVALID_SEARCHING);
         return true;

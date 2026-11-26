@@ -39,30 +39,30 @@ void MomentStaticCamImpact::Construct()
 
 // the per-frame static-cam state machine. The timestep/shared-info
 // args are untouched by the console build body (only the behaviour manager is read).
-void MomentStaticCamImpact::Update(f32 lfTimeStep, void* lrBehaviourController,
-                                   const void* lSharedInfo)
+void MomentStaticCamImpact::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                                   const MomentSharedInfo& lrSharedInfo)
 {
     (void)lfTimeStep;
-    (void)lSharedInfo;
+    (void)lrSharedInfo;
 
     Camera::BehaviourManager* lpBehaviourManager =
-        static_cast<Camera::BehaviourManager*>(lrBehaviourController);
+        &lrBehaviourController;
 
     switch (GetState())
     {
     case E_STATE_INVALID_SEARCHING:
-        if (IsInhibited())
-        {
-            SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_CAMERA_HEAD_FLAG_INHIBITED);
-        }
-        else
+        if (!IsInhibited())
         {
             lpBehaviourManager->NewBehaviour<Camera::BehaviourFixedCam>(
                 mFixedCam, 0, this, 1);
             mFixedCam.Get()->SetParameters(
                 &lpBehaviourManager->GetBehaviourParameterBank().GetStaticCamImpactCamParams());
             SetState(E_STATE_VALID);
+        }
+        else
+        {
+            SetCanSwitchToMeNow(false);
+            GetNonConstCamera().mState.SetHeadFlag(KU_CAMERA_HEAD_FLAG_INHIBITED);
         }
         break;
 
@@ -73,13 +73,17 @@ void MomentStaticCamImpact::Update(f32 lfTimeStep, void* lrBehaviourController,
             SetState(E_STATE_INVALID_SEARCHING);
             break;
         }
-        if (!mFixedCam.Get()->CanSwitchToMeNow())
+        // ARTIST falls through into the ready arm (0x82266B54 beq -> the still-preparing arm).
+        if (mFixedCam.Get()->CanSwitchToMeNow())
+        {
+            SetState(E_STATE_VALID);
+        }
+        else
         {
             SetCanSwitchToMeNow(false);
             GetNonConstCamera().mState.SetHeadFlag(KU_CAMERA_HEAD_FLAG_PREPARING);
             break;
         }
-        SetState(E_STATE_VALID);
         // deliberate fall-through into the valid-frame body (the console build falls into it)
 
     case E_STATE_VALID:
@@ -133,7 +137,7 @@ const char* MomentStaticCamImpact::GetName() const
 //   slot 7 GetInstanceType  0x821F7658  `li r3, 9 ; blr` -- E_MOMENT_STATIC_CAM_IMPACT
 namespace BrnDirector
 {
-bool MomentStaticCamImpact::Prepare(void* /*lrBehaviourController*/)
+bool MomentStaticCamImpact::Prepare(Camera::BehaviourManager& /*lrBehaviourController*/)
 {
     SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
     return true;                           // li r3, 1

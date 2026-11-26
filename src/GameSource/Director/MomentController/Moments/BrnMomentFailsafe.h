@@ -24,14 +24,14 @@ namespace BrnDirector
         virtual void Construct();
 
         //  Declaration-only (their own ledger functions).
-        virtual bool Prepare(void* lrBehaviourController);
+        virtual bool Prepare(Camera::BehaviourManager& lrBehaviourController);
         virtual bool Release();
         virtual void Destruct();
         virtual void SetParameters(const Moment::Parameters* lpParameters);
 
         // the per-frame fail-safe state machine.
-        virtual void Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo);
+        virtual void Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo);
 
         virtual const char* GetName() const;
 

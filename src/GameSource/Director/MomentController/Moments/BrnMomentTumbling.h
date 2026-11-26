@@ -47,12 +47,12 @@ namespace BrnDirector
 
         // (this TU) -- park at SEARCHING and clear the
         // smoothed angular velocity; allocates nothing.
-        virtual bool Prepare(void* lrBehaviourController);
+        virtual bool Prepare(Camera::BehaviourManager& lrBehaviourController);
 
         // the per-frame tumbling state
         // machine (see the .cpp).
-        virtual void Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo);
+        virtual void Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo);
 
         // drop the gyro cam if held, clear
         // the gates, raise the searching head bit, and reset to INACTIVE (this
@@ -79,7 +79,7 @@ namespace BrnDirector
     private:
         // Bodied in this TU -- push the subtype-selected gyro parameter block onto
         // the freshly allocated rig.
-        void SetGyroCamParameters(const void* lSharedInfo);
+        void SetGyroCamParameters(const MomentSharedInfo& lrSharedInfo);
 
         //  (console offsets in comments; access BY NAME).
         Vector3 mSmoothedAngularVelocity;                            // +0x180

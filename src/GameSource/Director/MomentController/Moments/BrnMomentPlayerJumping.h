@@ -138,12 +138,12 @@ namespace BrnDirector
         // only, load every collection's authored shots (rig/bystander blocks from
         // the parameter bank; up to five ice ShotList refs off the resource
         // manager's player-jumping shot group). Reports the prepared latch.
-        virtual bool Prepare(void* lrBehaviourController);
+        virtual bool Prepare(Camera::BehaviourManager& lrBehaviourController);
 
         // the per-frame state machine
         // (see the .cpp).
-        virtual void Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo);
+        virtual void Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo);
 
         // zero the cooldown, release all
         // four collections + the interpolate handle, clear the gates, raise the

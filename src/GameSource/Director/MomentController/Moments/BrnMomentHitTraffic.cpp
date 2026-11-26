@@ -1,4 +1,8 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentHitTraffic.h"
+#include "GameSource/Director/MomentController/BrnMomentSharedInfo.h"
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -40,7 +44,6 @@ namespace detail
     // the real accessor when the MomentSharedInfo home lands. The role (the
     // "player is hitting traffic" condition: gates allocation while searching and
     // freezes the running-time integrator while valid) is inferred from both uses.
-    bool MomentSharedInfo_IsHitTrafficConditionActive(const void* lpSharedInfo);
 }
 using namespace detail;
 
@@ -57,23 +60,18 @@ void MomentHitTraffic::Construct()
 // The per-frame hit-traffic state machine (declared locals
 // lrParameterBank; call set: SetCantSwitchToMeNow/SetBit/GetCamera/SetCamera/Release/
 // SetState/SetConditionsNotMet/Get/GetBehaviourParameterBank/SetParameters).
-void MomentHitTraffic::Update(f32 lfTimeStep, void* lrBehaviourController,
-                              const void* lSharedInfo)
+void MomentHitTraffic::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                              const MomentSharedInfo& lrSharedInfo)
 {
     Camera::BehaviourManager* lpBehaviourManager =
-        static_cast<Camera::BehaviourManager*>(lrBehaviourController);
+        &lrBehaviourController;
 
     switch (GetState())
     {
     case E_STATE_INVALID_SEARCHING:
-        if (MomentSharedInfo_IsHitTrafficConditionActive(lSharedInfo))
+        if (lrSharedInfo.mPlayerInfo.mRaceCarState.mbCrashing)
         {
-            if (IsInhibited())
-            {
-                SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_CAMERA_HEAD_FLAG_INHIBITED);
-            }
-            else
+            if (!IsInhibited())   // ARTIST falls through into the allocation (0x82271E78 bne -> inhibited)
             {
                 mfRunningTime = 0.0f;
                 lpBehaviourManager->NewBehaviour<Camera::BehaviourGyroCam>(
@@ -86,6 +84,11 @@ void MomentHitTraffic::Update(f32 lfTimeStep, void* lrBehaviourController,
                 GetNonConstCamera().mState.SetHeadFlag(KU_CAMERA_HEAD_FLAG_GYRO_ALLOCATED);
                 SetState(E_STATE_VALID);
             }
+            else
+            {
+                SetCanSwitchToMeNow(false);
+                GetNonConstCamera().mState.SetHeadFlag(KU_CAMERA_HEAD_FLAG_INHIBITED);
+            }
         }
         else
         {
@@ -97,7 +100,7 @@ void MomentHitTraffic::Update(f32 lfTimeStep, void* lrBehaviourController,
 
     case E_STATE_VALID:
         SetCamera(mHeliCamHandle.GetCamera());
-        if (!MomentSharedInfo_IsHitTrafficConditionActive(lSharedInfo))
+        if (!lrSharedInfo.mPlayerInfo.mRaceCarState.mbCrashing)
             mfRunningTime += lfTimeStep;
         if (mfRunningTime > KF_HIT_TRAFFIC_MAX_RUNNING_TIME
             || mHeliCamHandle.Get()->HasFailed())
@@ -144,7 +147,7 @@ const char* MomentHitTraffic::GetName() const
 //   slot 7 GetInstanceType  0x82C296C8  `li r3, 1 ; blr` -- E_MOMENT_HIT_TRAFFIC
 namespace BrnDirector
 {
-bool MomentHitTraffic::Prepare(void* /*lrBehaviourController*/)
+bool MomentHitTraffic::Prepare(Camera::BehaviourManager& /*lrBehaviourController*/)
 {
     SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
     return true;                           // li r3, 1

@@ -32,12 +32,12 @@ namespace BrnDirector
 
         // zero the crash timer and enter
         // SEARCHING. Always reports true.
-        virtual bool Prepare(void* lrBehaviourController);
+        virtual bool Prepare(Camera::BehaviourManager& lrBehaviourController);
 
         // the per-frame stationary-crash
         // state machine (see the .cpp).
-        virtual void Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo);
+        virtual void Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo);
 
         // drop the ICE cam if held (the
         // inlined BehaviourHandle::Release) and reset to SEARCHING. Returns true.

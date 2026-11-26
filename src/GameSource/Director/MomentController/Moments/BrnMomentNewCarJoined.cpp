@@ -12,6 +12,10 @@
 //     BrnMomentNewCarJoined_wO_01.cpp
 
 // the union of the BrnMomentNewCarJoined_w*.cpp partfiles' #include lines, first occurrence wins, mount order (2026-09-15)
+#include "GameSource/Director/MomentController/BrnMomentSharedInfo.h"
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 #include "GameSource/Director/MomentController/Moments/BrnMomentNewCarJoined.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT (the unhandled-case assert)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -122,20 +126,16 @@ namespace detail
     // FLAG (role inferred): the +1284 block's byte at +338 (0x152) gates the whole
     // moment -- a rival is streaming in / the join camera should play. The offset and
     // the two read sites are from the console code.
-    bool MomentSharedInfo_IsNewCarJoining(const void* lpSharedInfo);           // +1284 block byte +338
 
     // FLAG (role inferred): the +1284 block's word at +344 (0x158) is handed to the
     // loose attachment's SetTarget, i.e. the race car the join camera frames.
-    s32  MomentSharedInfo_GetNewCarJoinTargetIndex(const void* lpSharedInfo);  // +1284 block word +344
 
     // +1304 word -- the SAME slot (and therefore the same accessor) the
     // Bystander/PassengerSeesAction moments declare; here it is the car the loose
     // attachment ATTACHES to.
-    s32  MomentSharedInfo_GetCrashVehicleIndex(const void* lpSharedInfo);      // +1304 word
 
     // +1308 f32 -- the SAME slot MomentPlayerStunt declares (distinct from the
     // +1312 timestep its other siblings read).
-    f32  MomentSharedInfo_GetFrameTimestep(const void* lpSharedInfo);          // +1308 f32
 }
 using namespace detail;
 
@@ -184,16 +184,16 @@ bool MomentNewCarJoined::Release()
 // info's own +1308 frame timestep instead. Then the BehaviourManager, then the
 // MomentSharedInfo (type-erased to const void* by the family Update signature).
 void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
-                                void* lrBehaviourController,
-                                const void* lSharedInfo)
+                                Camera::BehaviourManager& lrBehaviourController,
+                                const MomentSharedInfo& lrSharedInfo)
 {
     Camera::BehaviourManager* lpBehaviourManager =
-        static_cast<Camera::BehaviourManager*>(lrBehaviourController);
+        &lrBehaviourController;
 
     switch (GetState())
     {
     case E_STATE_INVALID_SEARCHING:
-        if (MomentSharedInfo_IsNewCarJoining(lSharedInfo))
+        if (lrSharedInfo.mpGameState->mbNewCarAdded)
         {
             if (IsInhibited())
             {
@@ -206,9 +206,9 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
                     mLooseAttachment, 0, this, 2);
                 mLooseAttachment.Get()->SetParameters(&mLooseAttachmentParameters);
                 mLooseAttachment.Get()->AttachTo(
-                    MomentSharedInfo_GetCrashVehicleIndex(lSharedInfo));
+                    lrSharedInfo.mePlayerActiveRaceCarIndex);
                 mLooseAttachment.Get()->SetTarget(
-                    MomentSharedInfo_GetNewCarJoinTargetIndex(lSharedInfo));
+                    lrSharedInfo.mpGameState->meAddedCarID);
 
                 lpBehaviourManager->NewBehaviour<Camera::BehaviourInterpolate>(
                     mInterpolaterA, 0, this, 1);
@@ -292,7 +292,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
     }
     else
     {
-        if (!MomentSharedInfo_IsNewCarJoining(lSharedInfo))
+        if (!lrSharedInfo.mpGameState->mbNewCarAdded)
         {
             // FAITHFUL ODDITY -- KEEP: if B is allocated but not yet switchable and
             // the join flag has cleared, the console RE-ALLOCATES B every frame
@@ -335,7 +335,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
     {
         GetNonConstCamera().GetEffects().SetStartHookName("Rival_Join", 1.0f);
     }
-    mfTimeInState += MomentSharedInfo_GetFrameTimestep(lSharedInfo);
+    mfTimeInState += lrSharedInfo.mfTimestep;
 }
 
 }
@@ -407,7 +407,7 @@ void MomentNewCarJoined::Construct()
 //   slot 3 SetParameters    0x821F7670  `stw r4, 0x180(r3)` -- mpParameters
 namespace BrnDirector
 {
-bool MomentNewCarJoined::Prepare(void* /*lrBehaviourController*/)
+bool MomentNewCarJoined::Prepare(Camera::BehaviourManager& /*lrBehaviourController*/)
 {
     SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
     return true;                           // li r3, 1

@@ -1,4 +1,8 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentHardStop.h"
+#include "GameSource/Director/MomentController/BrnMomentSharedInfo.h"
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentHardStop.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -85,35 +89,17 @@ namespace detail
     // moment-family precedent (BrnMomentHitTraffic.cpp's detail reach); console
     // shared-info offsets in comments; role names FLAG-inferred from the uses.
     // Replace with the real accessors when the MomentSharedInfo home lands. ----
-    CgsNumeric::Random* MomentSharedInfo_GetRandom(const void* lpSharedInfo);        // +1272
-    DebugLog*           MomentSharedInfo_GetDebugLog(const void* lpSharedInfo);      // +1276
-    ShotSelector*       MomentSharedInfo_GetShotSelector(const void* lpSharedInfo);  // +1344
 
     // The live crash analysis (+1348, a pointer to the CrashAnalysis record).
-    const CrashAnalysis* MomentSharedInfo_GetCrashAnalysis(const void* lpSharedInfo); // +1348
 
     // Player-state block (+1284) fields:
-    bool MomentSharedInfo_IsCrashCameraBlocked(const void* lpSharedInfo);   // +1284 byte 449 (blocks eligibility)
-    bool MomentSharedInfo_IsCrashCameraActive(const void* lpSharedInfo);    // +1284 byte 256 (gates alloc AND stay-valid)
-    bool MomentSharedInfo_IsCrashReplayDisabled(const void* lpSharedInfo);  // +1284 byte 284 (blocks eligibility)
-    s32  MomentSharedInfo_GetCrashModeWord(const void* lpSharedInfo);       // +1284 word +288 (-1/0/3 significant)
-    bool MomentSharedInfo_IsPlayerCrashing(const void* lpSharedInfo);       // +1284 byte 249 (-> mbCrashingLastFrame)
 
     // Vehicle-dynamics block (+1292) fields:
-    f32  MomentSharedInfo_GetCrashSpeedDiff(const void* lpSharedInfo);      // +1292 vec +512 lane 1 (the console build compares that one lane)
-    bool MomentSharedInfo_HasCrashDynamics(const void* lpSharedInfo);       // +1292 word +488
-    f32  MomentSharedInfo_GetCrashElapsed(const void* lpSharedInfo);        // +1292 f32 +480 (eligible while < 4s)
 
-    bool MomentSharedInfo_GetFlag1318(const void* lpSharedInfo);            // +1318 byte (eligibility gate)
-    bool MomentSharedInfo_GetFlag1319(const void* lpSharedInfo);            // +1319 byte (biases the A-shot pick)
-    bool MomentSharedInfo_GetForceFlag1320(const void* lpSharedInfo);       // +1320 byte (forces eligibility)
 
-    s32  MomentSharedInfo_GetCurrentCrashType(const void* lpSharedInfo);    // +1332 word +664 (VehicleTracker::ECrashType)
 
     // Block +1356 (a byte pair; at least one set for eligibility, the first also
     // biases the A-shot pick):
-    bool MomentSharedInfo_GetCrashFlag36(const void* lpSharedInfo);         // +1356 byte +36
-    bool MomentSharedInfo_GetCrashFlag37(const void* lpSharedInfo);         // +1356 byte +37
 
     // ⛔ THE TWO BEHAVIOUR-HANDLE RESOLVER SHIMS ARE GONE. They stood here declared and never
     // defined -- the same defect BrnArbStateDriveThru.cpp retired, and for the same reason: they
@@ -164,7 +150,7 @@ void MomentHardStop::Construct()
 }
 
 // Reset the per-run state and enter SEARCHING.
-bool MomentHardStop::Prepare(void* /*lrBehaviourController*/)
+bool MomentHardStop::Prepare(Camera::BehaviourManager& /*lrBehaviourController*/)
 {
     mfRunningTime       = 0.0f;
     mbReady             = false;
@@ -216,12 +202,12 @@ bool MomentHardStop::Release()
 //                    SEARCHING when the keep conditions lapse.
 // The epilogue always clears the first-frame latch and re-latches
 // mbCrashingLastFrame from the shared info.
-void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo)
+void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo)
 {
     Camera::BehaviourManager* lpBehaviourManager =
-        static_cast<Camera::BehaviourManager*>(lrBehaviourController);
-    DebugLog* lpDebugLog = MomentSharedInfo_GetDebugLog(lSharedInfo);
+        &lrBehaviourController;
+    DebugLog* lpDebugLog = lrSharedInfo.mpDebugLog;
     char lacLine[64];   // the console build's three 64-byte stack print buffers
 
     CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 92));   //  (non-gating)
@@ -231,23 +217,23 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
     case E_STATE_INVALID_SEARCHING:
     {
         // ---- eligibility (every gate must hold, unless the force flag is up) ----
-        const CrashAnalysis* lpLiveAnalysis = MomentSharedInfo_GetCrashAnalysis(lSharedInfo);
+        const CrashAnalysis* lpLiveAnalysis = lrSharedInfo.mpCrashAnalysis;
         bool lbEligible = false;
         if ((lpLiveAnalysis->mxEventFlags & AttribSys::Enums::CrashEvents::CrashStart) != 0
-            && !MomentSharedInfo_IsCrashCameraBlocked(lSharedInfo)
-            && MomentSharedInfo_IsCrashCameraActive(lSharedInfo)
-            && MomentSharedInfo_GetFlag1318(lSharedInfo)
-            && (MomentSharedInfo_GetCrashFlag36(lSharedInfo)
-                || MomentSharedInfo_GetCrashFlag37(lSharedInfo))
-            && MomentSharedInfo_GetCrashSpeedDiff(lSharedInfo) > KF_MAX_DOT_PRODUCT_FOR_HARD_STOP
-            && MomentSharedInfo_HasCrashDynamics(lSharedInfo)
-            && MomentSharedInfo_GetCrashElapsed(lSharedInfo) < 4.0f
-            && !MomentSharedInfo_IsCrashReplayDisabled(lSharedInfo))
+            && !lrSharedInfo.mpGameState->mbRoadRageTotalled
+            && lrSharedInfo.mpGameState->mbCanUseSlomo
+            && lrSharedInfo.mbAllowHardStopMoment
+            && (lrSharedInfo.mpPlayerCrashInfo->mbHardstopVsWall
+                || lrSharedInfo.mpPlayerCrashInfo->mbHardStopVsAI)
+            && lrSharedInfo.mpPlayerCar->mRaceCarState.mTransform.yAxis.mV.y > KF_MAX_DOT_PRODUCT_FOR_HARD_STOP
+            && lrSharedInfo.mpPlayerCar->mRaceCarState.mAboveGroundTestResult.mbValid
+            && lrSharedInfo.mpPlayerCar->mRaceCarState.mAboveGroundTestResult.mfVerticalDistance < 4.0f
+            && !lrSharedInfo.mpGameState->mbGoToCrashModeAfterIntro)
         {
             lbEligible = true;
         }
 
-        if (!lbEligible && !MomentSharedInfo_GetForceFlag1320(lSharedInfo))
+        if (!lbEligible && !lrSharedInfo.mbForceCollisionPolicysToStart)
         {
             SetConditionsNotMet();
             SetCanSwitchToMeNow(false);
@@ -262,7 +248,7 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
         }
 
         // ---- snapshot the crash + map it onto a shot group ----
-        meCrashType = MomentSharedInfo_GetCurrentCrashType(lSharedInfo);
+        meCrashType = lrSharedInfo.mpPlayerTracker->GetCrashType();
         ShotSelector::EGroup leShotGroup;
         switch (meCrashType)
         {
@@ -275,9 +261,9 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
             break;
         }
         {
-            const s32 liCrashModeWord = MomentSharedInfo_GetCrashModeWord(lSharedInfo);
+            const s32 liCrashModeWord = lrSharedInfo.mpGameState->meEventType;
             if ((liCrashModeWord == 3 || liCrashModeWord == 0)
-                && MomentSharedInfo_GetCurrentCrashType(lSharedInfo) == 3)
+                && lrSharedInfo.mpPlayerTracker->GetCrashType() == 3)
             {
                 leShotGroup = ShotSelector::EGroup(1);
             }
@@ -288,8 +274,8 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
         //      the 1319/36 pair holds, else the crash side; B the generic
         //      property-4 fallback) ----
         u32 luPreferredA, luRequiredA;
-        if (MomentSharedInfo_GetFlag1319(lSharedInfo)
-            && MomentSharedInfo_GetCrashFlag36(lSharedInfo))
+        if (lrSharedInfo.mbForceNextWorldCrashToBeFastTopDown
+            && lrSharedInfo.mpPlayerCrashInfo->mbHardstopVsWall)
         {
             luPreferredA = 0;
             luRequiredA  = 4;
@@ -300,7 +286,7 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
             luRequiredA  = 0;
         }
 
-        ShotSelector* lpShotSelector = MomentSharedInfo_GetShotSelector(lSharedInfo);
+        const ShotSelector* lpShotSelector = lrSharedInfo.mpShotSelector;   // DWARF: const record member, const GetCrashShot
         const u32 luCrashEventFlags = mCrashAnalysisUsedAtSelection.mxEventFlags;
         Camera::Camera::ShotReference* lpShotA = lpShotSelector->GetCrashShot(
             luCrashEventFlags, &mShotASelectionInfo, luPreferredA, 0, luRequiredA, leShotGroup);
@@ -327,7 +313,7 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
         //      (type 3, mode -1, analysis bit 3) rolls a random ultra-slo-mo scale ----
         mbForceUltraSloMo = false;
         if (meCrashType == 3
-            && MomentSharedInfo_GetCrashModeWord(lSharedInfo) == -1
+            && lrSharedInfo.mpGameState->meEventType == -1
             && (mCrashAnalysisUsedAtSelection.mxEventFlags & AttribSys::Enums::CrashEvents::WorldImpact) != 0)
         {
             if (muHighEnergyWorldCrashCount % KU_CRASHES_BEFORE_FORCE_ULTRA_SLOMO == 0)
@@ -335,7 +321,7 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
                 // The console inlines Random's LCG draw (the seed@+0x20 / ring@+0x28
                 // AddRandomFloatToBuffer step + the [1,2)->range map) == the
                 // committed RandomFloat(min, max).
-                mfUltraSloMoTimestepScale = MomentSharedInfo_GetRandom(lSharedInfo)->RandomFloat(
+                mfUltraSloMoTimestepScale = lrSharedInfo.mpRandom->RandomFloat(
                     KF_ULTRA_SLOMO_TIMESTEP_MIN_SCALE, KF_ULTRA_SLOMO_TIMESTEP_MAX_SCALE);
                 // [HARNESS PIN -- NOT X360] BRN_ULTRA_SLOMO_SCALE=<scale> replaces the drawn scale so that
                 // same-exe crash sweep cells compare (the director Random's cursor at the crash depends on
@@ -465,12 +451,12 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
         const bool lbCleanEarlyOut =
             !mbCrashingLastFrame
             && lbActiveCanSwitchFrom
-            && MomentSharedInfo_GetCurrentCrashType(lSharedInfo) == 0
+            && lrSharedInfo.mpPlayerTracker->GetCrashType() == 0
             && meCrashType == 1;
 
         ++siHardStopDiagFrames;
         if (!GetNonConstCamera().mState.IsFlagSet(Camera::CameraState::E_FLAG_VALID)
-            || !MomentSharedInfo_IsCrashCameraActive(lSharedInfo)
+            || !lrSharedInfo.mpGameState->mbCanUseSlomo
             || (lbActiveCanSwitchFrom && meCrashType != 1)
             || lbCleanEarlyOut)
         {
@@ -486,7 +472,7 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
     }
 
     mbFirstFrame        = false;
-    mbCrashingLastFrame = MomentSharedInfo_IsPlayerCrashing(lSharedInfo);
+    mbCrashingLastFrame = lrSharedInfo.mpGameState->mbCrashActive;
 }
 
 }

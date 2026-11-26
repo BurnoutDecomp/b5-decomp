@@ -33,12 +33,12 @@ namespace BrnDirector
         virtual void Construct();
 
         //  Its own ledger function (declaration-only).
-        virtual bool Prepare(void* lrBehaviourController);
+        virtual bool Prepare(Camera::BehaviourManager& lrBehaviourController);
 
         // the per-frame stunt state
         // machine (see the .cpp).
-        virtual void Update(f32 lfTimeStep, void* lrBehaviourController,
-                            const void* lSharedInfo);
+        virtual void Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController,
+                            const MomentSharedInfo& lrSharedInfo);
 
         // drop the ICE cam if held, clear
         // the gates, raise the searching head bit, back to SEARCHING. Returns true.

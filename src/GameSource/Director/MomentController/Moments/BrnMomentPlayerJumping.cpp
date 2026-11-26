@@ -17,7 +17,7 @@
 // with no authored camera, cut to an attached rig shot. ArbStateRoaming::Construct @0x82259C00 registers it ({7, 0}),
 // so on the console it is allocated and ticked on every roaming frame.
 //
-// ⭐ INERT ON RETAIL. Its SEARCHING arm has three gates, and the third is lSharedInfo.mbAllowJumpMoment (`lbz r11,
+// ⭐ INERT ON RETAIL. Its SEARCHING arm has three gates, and the third is lrSharedInfo.mbAllowJumpMoment (`lbz r11,
 // 0x524(r28)` @0x82275C44). That flag is MainDirector +0x3542C, a dev tweakable (DWARF BrnDirectorModule.h:296).
 // MainDirector::Construct seeds it FALSE (`stbx r31(=0), r30, r7` @0x8225B97C), and nothing in the ARTIST image
 // writes it again. The only other instruction naming the offset is UpdateMoments' copy into the record
@@ -206,9 +206,9 @@ void MomentPlayerJumping::Construct()
 //     mbPrepared = 1.
 //   Returns mbPrepared, re-read.
 // ============================================================================
-bool MomentPlayerJumping::Prepare(void* lrBehaviourController)
+bool MomentPlayerJumping::Prepare(Camera::BehaviourManager& lrBehaviourController)
 {
-    Camera::BehaviourManager& lrBehaviourManager = *static_cast<Camera::BehaviourManager*>(lrBehaviourController);
+    Camera::BehaviourManager& lrBehaviourManager = lrBehaviourController;
 
     SetState(E_STATE_INVALID_SEARCHING);
     if (!mbPrepared)
@@ -434,10 +434,9 @@ MomentPlayerJumping::EStatus MomentPlayerJumping::GetCameraStatus()
 //     longer allowed: Release (vtable +0x10) and meState = SEARCHING -- and the camera tail STILL runs (the console
 //     falls through): the border post-FX amount, state bits 7 and 1, then the moment adopts the camera.
 // ============================================================================
-void MomentPlayerJumping::Update(f32 lfTimeStep, void* lrBehaviourController, const void* lSharedInfo)
+void MomentPlayerJumping::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviourController, const MomentSharedInfo& lrSharedInfo)
 {
-    Camera::BehaviourManager& lrBehaviourManager = *static_cast<Camera::BehaviourManager*>(lrBehaviourController);
-    const MomentSharedInfo&   lrSharedInfo       = *static_cast<const MomentSharedInfo*>(lSharedInfo);
+    Camera::BehaviourManager& lrBehaviourManager = lrBehaviourController;
 
     CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 263));   // :263
 

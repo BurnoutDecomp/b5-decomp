@@ -116,12 +116,11 @@ bool MomentTakedownLookback::Release()
 //     held while the victim is behind and within 60 m: the moment's camera = the rig's produced camera
 //     (Camera::operator=, 0x82266480); otherwise back to SEARCHING (`stw 1, 0x174`, nothing else).
 // ============================================================================
-void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, void* lrBehaviourController, const void* lSharedInfo)
+void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager& lrBehaviourController, const MomentSharedInfo& lrSharedInfo)
 {
     namespace ConsoleVpu = Camera::Utils::ConsoleVpu;
 
-    Camera::BehaviourManager& lrBehaviourManager = *static_cast<Camera::BehaviourManager*>(lrBehaviourController);
-    const MomentSharedInfo&   lrSharedInfo       = *static_cast<const MomentSharedInfo*>(lSharedInfo);
+    Camera::BehaviourManager& lrBehaviourManager = lrBehaviourController;
 
     CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 74));   // :74
 
@@ -219,7 +218,7 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, void* lrBehaviourControl
 //   slot 7 GetInstanceType  0x826D7F68  `li r3, 3 ; blr` -- E_MOMENT_TAKEDOWN_LOOKBACK
 // [FX-DIRECTOR 2026-09-24]
 // ============================================================================
-bool MomentTakedownLookback::Prepare(void* /*lrBehaviourController*/)
+bool MomentTakedownLookback::Prepare(Camera::BehaviourManager& /*lrBehaviourController*/)
 {
     SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
     return true;                           // li r3, 1

@@ -1,4 +1,8 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentPlayerStunt.h"
+#include "GameSource/Director/MomentController/BrnMomentSharedInfo.h"
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -43,26 +47,13 @@ namespace detail
 {
     // ---- MomentSharedInfo reaches (un-homed record; the family precedent's
     // decl-only helpers; console shared-info offsets in comments). ----
-    bool MomentSharedInfo_IsCrashCameraActive(const void* lpSharedInfo);       // +1284 byte 256
     // Renamed from the offset-shaped GetStuntAbort493 now that it has a body: it is the
     // DirectorProfileData showtime-intro flag ArbStateRoaming already gates two of its own arms
     // on, so all three consumers now read it under one name. Aborting is what it MEANS here, not
     // what it is.
-    bool MomentSharedInfo_IsShowtimeIntroActive(const void* lpSharedInfo);     // +1284 byte 493
-    u32  MomentSharedInfo_GetStuntFlags(const void* lpSharedInfo);             // +1284 word +228 (bit0 active, bit1 first-frame, bit5 chained)
-    s64  MomentSharedInfo_GetStuntTakeField(const void* lpSharedInfo);        // +1284 s64 +232 (the gate is >0; the LOW word -- BE +236 -- is the staged take number)
-    f32  MomentSharedInfo_GetFrameTimestep(const void* lpSharedInfo);          // +1308 f32 (NOTE: distinct from the +1312 timestep its siblings read)
-    bool MomentSharedInfo_GetStuntEnableFlag1317(const void* lpSharedInfo);    // +1317 byte
-    const DirectorResourceManager*
-         MomentSharedInfo_GetDirectorResourceManager(const void* lpSharedInfo); // +1340
-    const EffectInterface*
-         MomentSharedInfo_GetEffectInterface(const void* lpSharedInfo);        // +1352
 
     // Vehicle-dynamics block (+1292) fields:
-    bool MomentSharedInfo_GetDynamicsAbort1098(const void* lpSharedInfo);      // +1292 byte +1098 (aborts the stunt cam)
-    f32  MomentSharedInfo_GetAirborneHeight(const void* lpSharedInfo);         // +1292 f32 +1028 (0 == grounded; gates the land timer)
 
-    bool MomentSharedInfo_GetCrashFlag39(const void* lpSharedInfo);            // +1356 byte +39 (aborts the stunt cam)
 
     // The staged take's guid (take data +0x8; the "%i" the reference is keyed
     // by). DECLARATION-ONLY (the ICE data TU owns the field surface).
@@ -77,7 +68,7 @@ using namespace detail;
 // assign left it holding a resolved collection). Shared by the state-1
 // allocation and the mid-flight take swap. lpTakeAssertLine distinguishes the
 // two "lpIceTake != NULL" assert lines ( /).
-static void MomentPlayerStunt_StageTakeReference(const void* lSharedInfo,
+static void MomentPlayerStunt_StageTakeReference(const MomentSharedInfo& lrSharedInfo,
                                                  Attrib::RefSpec& lrShotRef,
                                                  s32 liTakeAssertLine)
 {
@@ -85,7 +76,7 @@ static void MomentPlayerStunt_StageTakeReference(const void* lSharedInfo,
     //  wrap tripwire the console build inlines -- an unsigned
     // != 0 check, firing only at -1 -- then -1 back for the name).
     const s32 liTakeNumber =
-        static_cast<s32>(MomentSharedInfo_GetStuntTakeField(lSharedInfo));
+        static_cast<s32>(lrSharedInfo.mpGameState->miActionRequestedCamera);
     CGS_ASSERT(static_cast<u32>(liTakeNumber + 1) != 0, "luTakeIndex > 0");   //  (non-gating)
 
     char lacTakeName[64];
@@ -102,7 +93,7 @@ static void MomentPlayerStunt_StageTakeReference(const void* lSharedInfo,
     lTakeId.SetHash(static_cast<u64>(static_cast<u32>(
         CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacTakeName)))));
     ICE::ICETakeData* lpIceTake =
-        MomentSharedInfo_GetDirectorResourceManager(lSharedInfo)->GetKeyAnim(lTakeId);
+        lrSharedInfo.mpDirectorResourceManager->GetKeyAnim(lTakeId);
     // (One assert on the allocation path, one on the take swap -- both non-gating.)
     if (lpIceTake == 0)
     {
@@ -181,21 +172,21 @@ Moment::EType MomentPlayerStunt::GetInstanceType()
 //                    drops, or the abort trio fires (latching mbHasCrashed);
 //                    and swap to the newly staged take mid-flight when the
 //                    stunt chain continues (bits 1/0/5 of the stunt flags).
-void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
-                               const void* lSharedInfo)
+void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager& lrBehaviourController,
+                               const MomentSharedInfo& lrSharedInfo)
 {
     Camera::BehaviourManager* lpBehaviourManager =
-        static_cast<Camera::BehaviourManager*>(lrBehaviourController);
+        &lrBehaviourController;
 
     switch (GetState())
     {
     case E_STATE_INVALID_SEARCHING:
     {
         const bool lbAbort =
-            MomentSharedInfo_GetDynamicsAbort1098(lSharedInfo)
-            || MomentSharedInfo_GetCrashFlag39(lSharedInfo)
-            || MomentSharedInfo_IsShowtimeIntroActive(lSharedInfo);
-        const u32 luStuntFlags   = MomentSharedInfo_GetStuntFlags(lSharedInfo);
+            lrSharedInfo.mpPlayerCar->mRaceCarState.mbCrashing
+            || lrSharedInfo.mpPlayerCrashInfo->mbHitWater
+            || lrSharedInfo.mpGameState->mShowTimeInfo.mbInIntro;
+        const u32 luStuntFlags   = static_cast<u32>(lrSharedInfo.mpGameState->miThisFramesActionFlags);
         const bool lbFirstFrame  = (luStuntFlags & 2) != 0;
 
         // Not-met only when aborting or NEITHER stunt bit is up (the console code proceeds
@@ -206,19 +197,14 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
             SetCanSwitchToMeNow(false);
             GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
         }
-        else if (MomentSharedInfo_GetStuntTakeField(lSharedInfo) > 0
-                 && MomentSharedInfo_GetStuntEnableFlag1317(lSharedInfo)
-                 && MomentSharedInfo_IsCrashCameraActive(lSharedInfo))
+        else if (lrSharedInfo.mpGameState->miActionRequestedCamera > 0
+                 && lrSharedInfo.mbAllowStuntMoment
+                 && lrSharedInfo.mpGameState->mbCanUseSlomo)
         {
-            if (IsInhibited())
-            {
-                SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
-            }
-            else
+            if (!IsInhibited())
             {
                 Attrib::RefSpec lShotRef;
-                MomentPlayerStunt_StageTakeReference(lSharedInfo, lShotRef, 90);
+                MomentPlayerStunt_StageTakeReference(lrSharedInfo, lShotRef, 90);
 
                 lpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                     mIceCam, 0, this, 1);
@@ -235,6 +221,11 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
 
                 if (lShotRef.HasResolvedCollection())
                     lShotRef.Clean();
+            }
+            else
+            {
+                SetCanSwitchToMeNow(false);
+                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
             }
         }
         return;
@@ -280,7 +271,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
     if (!mbFirstTimeForThisStunt && lb2dFlashRequested)
     {
         Camera::EnsureEffectIsPlaying(GetNonConstCamera(),
-                                      *MomentSharedInfo_GetEffectInterface(lSharedInfo),
+                                      *lrSharedInfo.mpEffectInterface,
                                       "2dFlash", 1.0f);
     }
     if (mfTimeInState < KF_FRESH_STUNT_WINDOW && mbFirstTimeForThisStunt)
@@ -293,8 +284,8 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
     }
 
     // The land timer: integrate while grounded, reset while airborne.
-    if (MomentSharedInfo_GetAirborneHeight(lSharedInfo) == 0.0f)
-        mfLandTime += MomentSharedInfo_GetFrameTimestep(lSharedInfo);
+    if (lrSharedInfo.mpPlayerCar->mRaceCarState.mfTimeInAir == 0.0f)
+        mfLandTime += lrSharedInfo.mfTimestep;
     else
         mfLandTime = 0.0f;
 
@@ -302,18 +293,18 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
     const bool lbReleaseCondition =
         mIceCam.Get()->CanSwitchFromMeNow()
         || mfLandTime > KF_LANDED_RELEASE_TIME
-        || !MomentSharedInfo_IsCrashCameraActive(lSharedInfo);
+        || !lrSharedInfo.mpGameState->mbCanUseSlomo;
     const bool lbAbort =
-        MomentSharedInfo_GetDynamicsAbort1098(lSharedInfo)
-        || MomentSharedInfo_GetCrashFlag39(lSharedInfo)
-        || MomentSharedInfo_IsShowtimeIntroActive(lSharedInfo);
+        lrSharedInfo.mpPlayerCar->mRaceCarState.mbCrashing
+        || lrSharedInfo.mpPlayerCrashInfo->mbHitWater
+        || lrSharedInfo.mpGameState->mShowTimeInfo.mbInIntro;
     if (!mbHasCrashed && lbAbort)
         mbHasCrashed = true;
 
     if (lbReleaseCondition || lbAbort)
     {
         Camera::StopCurrentEffect(GetNonConstCamera(),
-                                  *MomentSharedInfo_GetEffectInterface(lSharedInfo));
+                                  *lrSharedInfo.mpEffectInterface);
         if (mbStoppedEffect)
         {
             mIceCam.Release();
@@ -332,11 +323,11 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
     // staged -- drop the manager hold, stage the new reference (the console build's
     // resolve pins the take collection; the behaviour object itself stays live
     // in its pool slot), and re-raise the collision/first-frame gates.
-    const u32 luStuntFlags = MomentSharedInfo_GetStuntFlags(lSharedInfo);
+    const u32 luStuntFlags = static_cast<u32>(lrSharedInfo.mpGameState->miThisFramesActionFlags);
     if ((luStuntFlags & 2) != 0 || (luStuntFlags & 1) == 1 || (luStuntFlags & 0x20) != 0)
     {
         mbFirstTimeForThisStunt = (luStuntFlags & 2) != 0;
-        if (MomentSharedInfo_GetStuntTakeField(lSharedInfo) > 0)
+        if (lrSharedInfo.mpGameState->miActionRequestedCamera > 0)
         {
             // The console releases the handle FIRST, then re-resolves the (still
             // live) pool slot through the kept allocation key to poke it; the
@@ -345,7 +336,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
             mIceCam.Release();
 
             Attrib::RefSpec lShotRef;
-            MomentPlayerStunt_StageTakeReference(lSharedInfo, lShotRef, 248);
+            MomentPlayerStunt_StageTakeReference(lrSharedInfo, lShotRef, 248);
 
             lpBehaviour->SetUseCollisionPolicy(true);   // +0xE28
             lpBehaviour->ClearBaseFirstFrameGate();     // base +0x28 = 0
@@ -357,7 +348,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
         }
     }
 
-    mfTimeInState += MomentSharedInfo_GetFrameTimestep(lSharedInfo);
+    mfTimeInState += lrSharedInfo.mfTimestep;
 }
 
 }
@@ -371,7 +362,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
 //   slot 5 Destruct         0x8284CB38  `blr` (the one empty body all twelve moments share)
 namespace BrnDirector
 {
-bool MomentPlayerStunt::Prepare(void* /*lrBehaviourController*/)
+bool MomentPlayerStunt::Prepare(Camera::BehaviourManager& /*lrBehaviourController*/)
 {
     SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
     return true;                           // li r3, 1
