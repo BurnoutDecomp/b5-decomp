@@ -2,6 +2,7 @@
 #include "GameSource/World/AI/RacingLine/BrnAISteeringFan.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::Abs (GetSpeedRatio, DWARF)
 
 #include <cfloat>   // FLT_MAX (0x7F7FFFFF)
 #include <cmath>    // std::cos (XMVectorCos), std::fabs
@@ -23,8 +24,9 @@
 namespace BrnAI
 {
     // GetSpeedRatio's knee: |((best/16 - 0.5)*2)^3| >= K -> ratio drops from 1.0 to 0.0 as the
-    // best fan ray moves from the knee to the fan edge. Initialised .data @0x82F302BC == 0.5.
-    const f32 KF_STEERING_FAN_SPEED_RATIO_KNEE = 0.5f;
+    // best fan ray moves from the knee to the fan edge. DWARF :48 `float32_t KF_START_TO_SLOW`, a
+    // non-const tunable: initialised .data @0x82F302BC == 0.5, read from memory (0x82779BE4).
+    f32 KF_START_TO_SLOW = 0.5f;
     // The fan's half-angle. Initialised .data @0x82F30428 == 1.3962634 rad.
     const f32 KF_STEERING_FAN_ANGLE = 1.3962634f;
 
@@ -128,21 +130,16 @@ namespace BrnAI
     // ====================================================================================
     f32 SteeringFan::GetSpeedRatio()
     {
-        const s32 liBest = GetBestIndex();
-        const f32 lfV    = (static_cast<f32>(liBest) * 0.0625f - 0.5f) * 2.0f;
-        const f32 lfCube = std::fabs(lfV * lfV * lfV);
-
-        // [DIAG] NOT IN THE X360 BINARY (BRN_AI_FAN_DIAG=1). CalculateDesiredSpeed scales the
-        // AI's target speed by (ratio * 0.75 + 0.25), so a ratio of 0 is a HARD QUARTER-SPEED
-        // CAP on every AI car -- measured as desired 15 mph against an 80 mph top speed, which
-        // is both "the AI is too slow" and "the AI never boosts" (CheckForBoosting needs the
-        // car to be BELOW its desired speed). ratio 0 means GetBestIndex returned ray 0, and
-        // because that scan is "first wins on ties" starting at -FLT_MAX, ray 0 is exactly what
-        // an ALL-EQUAL (e.g. all-zero) weighting array yields. So print the array's spread, not
-        // just the index. Rate limited to one line per ~2 s across all cars.
-        if (lfCube >= KF_STEERING_FAN_SPEED_RATIO_KNEE)
-            return 1.0f - (lfCube - KF_STEERING_FAN_SPEED_RATIO_KNEE) / (1.0f - KF_STEERING_FAN_SPEED_RATIO_KNEE);
-        return 1.0f;
+        // DWARF :776 / :778: liBestIndex, lfInterp; fpu::Abs<float> and fpu::Lerp<float> inlined.
+        const s32 liBestIndex = GetBestIndex();
+        f32 lfInterp = (static_cast<f32>(liBestIndex) * 0.0625f - 0.5f) * 2.0f;
+        lfInterp = rw::math::fpu::Abs(lfInterp * lfInterp * lfInterp);
+        // ARTIST falls through into the `return 1.0` arm (0x82779BF4); bge (>= or unordered) lerps.
+        if (lfInterp < KF_START_TO_SLOW)
+        {
+            return 1.0f;
+        }
+        return rw::math::fpu::Lerp(1.0f, 0.0f, (lfInterp - KF_START_TO_SLOW) / (1.0f - KF_START_TO_SLOW));
     }
 }
 

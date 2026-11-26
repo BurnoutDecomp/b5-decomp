@@ -22,6 +22,7 @@
 #include <cmath>                                     // std::fmaf (ComputeTargetSpeed's fmadds)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"   // CgsCore::KF_MPH_TO_MPS (KF_DEFAULT_SPEED's run-time multiply)
 #include "GameSource/World/AI/BrnAICar.h"            // BrnAI::AICar + its accessors
 #include "GameSource/World/AI/BrnAISharedConstants.h"// EAICarState
 #include "GameSource/World/AI/Route/BrnRoute.h"      // BrnAI::RouteNode (GetNextRouteNode deref)
@@ -244,9 +245,10 @@ f32 RaceBalancingManager::ComputeParSpeed(GraphType leGraphType, const AICar* lp
         return KF_DEFAULT_SPEED;   // flt_8300D7F8
     }
 
-    const s8 liOpponent = lpAICar->GetOpponentIndex();
-    const RaceBalancingGraph& lrGraph = maRaceBalancingGraphs[static_cast<u32>(liOpponent)];
-    const RaceBalancingRoute& lrRoute = maRaceBalancingRoutes[static_cast<u32>(liOpponent)];
+    // DWARF :399/:400 pointer locals, no opponent-index local: ARTIST reads the index per use
+    // (lbz 0x153A at 0x82789F14 and 0x82789F24).
+    const RaceBalancingGraph* lpRaceBalancingGraph = &maRaceBalancingGraphs[lpAICar->GetOpponentIndex()];
+    const RaceBalancingRoute* lpRaceBalancingRoute = &maRaceBalancingRoutes[lpAICar->GetOpponentIndex()];
 
     // Next route node (bounds-checked against the route node count; null if out of range).
     const RouteNode* lpNode = lpAICar->GetNextRouteNode();
@@ -254,10 +256,10 @@ f32 RaceBalancingManager::ComputeParSpeed(GraphType leGraphType, const AICar* lp
     // The AI section this node sits in, and the racer's 0..1 completion of the whole route.
     const AISection* lpAISection = lpAISectionsData->GetAISection(lpNode->GetSectionIndex());
     const f32 lfRaceCompletionRatio =
-        lrRoute.ComputeRaceCompletionRatio(lpNode->GetDistanceToCheckpoint(), miCheckpointCount);
+        lpRaceBalancingRoute->ComputeRaceCompletionRatio(lpNode->GetDistanceToCheckpoint(), miCheckpointCount);
 
     // Curve-sampled speed ratio for this completion fraction.
-    const f32 lfSpeedRatio = lrGraph.ComputeSpeedRatio(leGraphType, lfRaceCompletionRatio);
+    const f32 lfSpeedRatio = lpRaceBalancingGraph->ComputeSpeedRatio(leGraphType, lfRaceCompletionRatio);
 
     // Convert the ratio into a section speed (RaceBalancingRoute::GetAISectionSpeed is static).
     return RaceBalancingRoute::GetAISectionSpeed(lpAISection, lpAISectionsData, lfSpeedRatio);
@@ -428,7 +430,7 @@ void RaceBalancingManager::_AssertLayout()
 // 2026-09-03 (conductor). KF_DEFAULT_SPEED is .bss flt_8300D7F8 with its dyn-init in an export hole:
 // @0x82C69488 `lfs f13, flt_820C4158 (60.0) ; fmuls f0, f0, flt_82F31928 (0.44704) ; stfs f0, 0x8300D7F8`
 // -- 60 mph in m/s. The band limits are rodata, each read from image.bin at the address given.
-const f32 KF_DEFAULT_SPEED                       = 60.0f * 0.44704f;   // 26.8224 (flt_8300D7F8 <- flt_820C4158 * flt_82F31928)
+const f32 KF_DEFAULT_SPEED                       = 60.0f * CgsCore::KF_MPH_TO_MPS;   // 26.8224 (.bss flt_8300D7F8 <- flt_820C4158 * CgsCore::KF_MPH_TO_MPS 0x82F31928, dyn-init 0x82C69488)
 const f32 KF_SPEED_DIFFERENCE_MULTIPLIER         = 0.1f;               // flt_820C424C
 const f32 KF_MAX_SPEED_MULTIPLIER_IN_RANGE       = 1.1f;               // flt_820C3D90
 const f32 KF_MIN_SPEED_MULTIPLIER_IN_RANGE       = 0.9f;               // flt_820C48A0

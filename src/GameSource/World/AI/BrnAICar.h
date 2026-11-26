@@ -171,6 +171,8 @@ namespace BrnAI
         f32              GetMaxPlayerSpeed() const;           // DWARF BrnAICar.h:287 (== mfMaxPlayerSpeed @+0x1504)
         s8               GetOpponentIndex() const { return miOpponentIndex; }            // DWARF BrnAICar.h:371 (== miOpponentIndex @+0x153A)
         bool             IsAheadOfPlayer() const;             // DWARF BrnAICar.h:332 (== mbIsAheadOfPlayer @+0x153B)
+        // DWARF BrnAICar.h:272, no ARTIST copy (AIDriver::SetAICar stores +0x14C8 in line, 0x8279643C).
+        void             SetState(EAICarState leState) { meCarState = leState; }
         EAICarState      GetState() const { return meCarState; }                         // DWARF BrnAICar.h:275 (== meCarState @+0x14C8)
         bool             IsPlayerCar() const { return mbIsPlayer; }                      // DWARF BrnAICar.h:326 (== mbIsPlayer @+0x1549)
         f32              GetBuzzFrequencyRatio() const { return mfBuzzFrequencyRatio; }   // mfBuzzFrequencyRatio @+0x1510 (DWARF :696); BuzzBy::ResetActiveList @0x82771C90 reads it (`lfs 0x1510(car)`)
@@ -254,13 +256,16 @@ namespace BrnAI
 
         // X360-inlined at every Generate* call: the best section, falling back to the
         // default section when the best is still the invalid sentinel. Reads
-        // muBestSectionIndex @+0x1534 then muDefaultSectionIndex @+0x1532.
+        // muBestSectionIndex @+0x1534 then muDefaultSectionIndex @+0x1532. DWARF (h:292, unity CU
+        // dump) has no local: the member is tested and returned directly; with that shape
+        // RouteRequestManager::Update bases its roster walk at +0x1534 as ARTIST does (0x82797FD4).
         u16 GetBestSectionIndex() const
         {
-            u16 luBest = muBestSectionIndex;
-            if (luBest == KI_INVALID_SECTION_INDEX)
-                luBest = muDefaultSectionIndex;
-            return luBest;
+            if (muBestSectionIndex != KI_INVALID_SECTION_INDEX)
+            {
+                return muBestSectionIndex;
+            }
+            return muDefaultSectionIndex;
         }
 
         // The destination section the route-request brain wrote (==muDestinationSectionIndex

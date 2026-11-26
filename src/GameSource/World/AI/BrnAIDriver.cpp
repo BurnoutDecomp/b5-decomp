@@ -309,12 +309,15 @@ namespace BrnAI
         CGS_ASSERT_AT(mpCar == 0,
                    "Shouldn't be reassigning an AI driver directly to another car.", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 841);
 
+        // DWARF calls AICar::SetState and ResetStuckTime (both header-inline). The car is reached
+        // through mpCar after the store: ARTIST re-reads 0x1CE0 for SetDriver (0x82796440) and for the
+        // aggression Prepare (0x82796458) because the state store through the car may alias it.
         mpCar = lpCar;
-        lpCar->meCarState = E_AI_CAR_STATE_IN_RANGE;        // *(car+0x14C8) = 0
-        lpCar->SetDriver(this);                             // X360 @0x82796444
+        mpCar->SetState(E_AI_CAR_STATE_IN_RANGE);           // *(car+0x14C8) = 0
+        mpCar->SetDriver(this);                             // X360 @0x82796444
         InitialiseRacingLine();
 
-        mfStuckTime        = 0.0f;          // 0x1D04
+        ResetStuckTime();                   // 0x1D04
         mbIsActive         = 1;             // 0x1D69 (driver becomes active on bind)
         mfDistanceToPlayer = 0.0f;          // 0x1D08
         mfInvulnerableTime = -1.0f;         // 0x1D0C
@@ -330,7 +333,7 @@ namespace BrnAI
         // 0x82796480..0x827964B0: the twelve aggression stores (mpCar = car, state OUT_OF_RANGE, timers) --
         // homed by lane A8 as AIAggression::Prepare(AICar*); the call was missing here (run4 AV:
         // AIAggression::Update @0x82799ABC `lwz r11,8(agg) ; lbz 0x1549(r11)` on a null mpCar).
-        GetAggression()->Prepare(lpCar);
+        GetAggression()->Prepare(mpCar);
 
         ResetAttribSysValues();
     }
