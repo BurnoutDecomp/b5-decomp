@@ -249,9 +249,9 @@ namespace BrnPhysics
 
     void ExternalPhysicsBody::CalculateWorldIntertia()
     {
-        CGS_ASSERT(IsValid3(mTransform.xAxis.mV) && IsValid3(mTransform.yAxis.mV)
-            && IsValid3(mTransform.zAxis.mV) && IsValid3(mTransform.wAxis.mV),
-            "rw::math::IsValid( mTransform )");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(mTransform),
+
+            "rw::math::IsValid( mTransform )", KAC_EXTERNALPHYSICSBODY_CPP, 353);
         const __vector4 r0 = mTransform.xAxis.mV;
         const __vector4 r1 = mTransform.yAxis.mV;
         const __vector4 r2 = mTransform.zAxis.mV;
@@ -282,8 +282,8 @@ namespace BrnPhysics
     void ExternalPhysicsBody::AddLocalForce(Vector3 force, rw::physics::InputSpace forceSpace,
         Vector3 position, rw::physics::InputSpace positionSpace)
     {
-        CGS_ASSERT(IsValid3(force.mV), "Bad positioned force added");
-        CGS_ASSERT(IsValid3(position.mV), "Force applied at a bad position");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(force), "Bad positioned force added", KAC_EXTERNALPHYSICSBODY_CPP, 134);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(position), "Force applied at a bad position", KAC_EXTERNALPHYSICSBODY_CPP, 135);
         const __vector4 worldForce = forceSpace == rw::physics::BODY_SPACE ? RotateTaggedToWorld(mTransform, force.mV) : force.mV;
         const __vector4 arm = positionSpace == rw::physics::WORLD_SPACE ? __vsubfp(position.mV, mTransform.wAxis.mV) : RotateTaggedToWorld(mTransform, position.mV);
         mTotalLinearForce.mV = __vaddfp(mTotalLinearForce.mV, worldForce);
@@ -293,8 +293,8 @@ namespace BrnPhysics
     void ExternalPhysicsBody::AddLocalImpulse(Vector3 impulse, rw::physics::InputSpace impulseSpace,
         Vector3 position, rw::physics::InputSpace positionSpace)
     {
-        CGS_ASSERT(IsValid3(impulse.mV), "Bad positioned impulse added");
-        CGS_ASSERT(IsValid3(position.mV), "Impulse applied at a bad position");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(impulse), "Bad positioned impulse added", KAC_EXTERNALPHYSICSBODY_CPP, 184);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(position), "Impulse applied at a bad position", KAC_EXTERNALPHYSICSBODY_CPP, 185);
         const __vector4 worldImpulse = impulseSpace == rw::physics::BODY_SPACE ? RotateTaggedToWorld(mTransform, impulse.mV) : impulse.mV;
         const __vector4 arm = positionSpace == rw::physics::WORLD_SPACE ? __vsubfp(position.mV, mTransform.wAxis.mV) : RotateTaggedToWorld(mTransform, position.mV);
         mTotalLinearImpulse.mV = __vaddfp(mTotalLinearImpulse.mV, worldImpulse);
