@@ -249,28 +249,5 @@ namespace BrnGui
         }
     }
 
-    // X360-INLINED setters (H2 2026-08-25; the DWARF declares all three -- each
-    // inline is attested at a RoadRuleComponent site). SetSafeColours/SetDangerColours:
-    // RoadRuleComponent::Construct @0x8242AE78.. pokes the two colour vectors' xyz
-    // lanes with (255,204,0)/255 and (153,16,16)/255, leaving the w lanes untouched.
-    // SetCountingMode: RefreshBestData @0x82422734/@0x8242274C stores the mode word
-    // directly.
-    void FlaptTimerFieldComponent::SetSafeColours(u8 luRed, u8 luGreen, u8 luBlue)
-    {
-        mv4SafeColour.mV.x = static_cast<f32>(luRed)   * (1.0f / 255.0f);
-        mv4SafeColour.mV.y = static_cast<f32>(luGreen) * (1.0f / 255.0f);
-        mv4SafeColour.mV.z = static_cast<f32>(luBlue)  * (1.0f / 255.0f);
-    }
-
-    void FlaptTimerFieldComponent::SetDangerColours(u8 luRed, u8 luGreen, u8 luBlue)
-    {
-        mv4DangerColour.mV.x = static_cast<f32>(luRed)   * (1.0f / 255.0f);
-        mv4DangerColour.mV.y = static_cast<f32>(luGreen) * (1.0f / 255.0f);
-        mv4DangerColour.mV.z = static_cast<f32>(luBlue)  * (1.0f / 255.0f);
-    }
-
-    void FlaptTimerFieldComponent::SetCountingMode(ETimerMode leCountingMode)
-    {
-        meCountingMode = leCountingMode;
-    }
+    // SetSafeColours / SetDangerColours / SetCountingMode are header-inline (DWARF h:204/225/244).
 }

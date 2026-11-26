@@ -19,7 +19,7 @@ namespace BrnGui
     const s32 OnlineScoreboards::miNumEventsObserved = 12;   // @0x8205F678
 
     // @0x82F2687C -- the three filter toggle titles (rows 0/1/2).
-    const char* const OnlineScoreboards::KAPC_FILTER_TITLE_STRINGS[3] =
+    const char* OnlineScoreboards::KAPC_FILTER_TITLE_STRINGS[3] =
         { "$SCOREBOARD_EVENT", "$SCOREBOARD_FILTER", "$SCOREBOARD_ROAD" };
 
     // The apt component names (the OnEnter constructor literals).

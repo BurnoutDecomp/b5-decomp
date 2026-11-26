@@ -139,7 +139,7 @@ namespace BrnGui
         static const s32 miNumEventsObserved;               // cpp:47 == 12 (@0x8205F678)
         static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x8205F67C (unk_8205F67C, .rdata)
         static const u32                    muNumResourcesToLoad; // @ 0x8205F684 (dword_8205F684, .rdata) == 1
-        static const char* const KAPC_FILTER_TITLE_STRINGS[3];    // cpp:57 @0x82F2687C
+        static const char* KAPC_FILTER_TITLE_STRINGS[3];          // cpp:57 @0x82F2687C (.data: DWARF `const char *[3]`, pointers not const)
         static const char KAC_FILTER_GROUP_NAME[10];        // "filter_mc"
         static const char KAC_LEADERBOARD_TABLE_NAME[9];    // "Table_mc"
         static const char KAC_LOADING_ICON_NAME[11];        // "Loading_mc"

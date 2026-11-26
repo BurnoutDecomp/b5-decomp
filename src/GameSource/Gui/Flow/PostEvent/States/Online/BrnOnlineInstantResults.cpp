@@ -459,7 +459,8 @@ namespace BrnGui
         lClearTickerMessagesEvent.mbForceFadeOut = true;
         lClearTickerMessagesEvent.mbDeleteChallengeMessages = false;
         OutputGuiEvent(mpStateInterface, lClearTickerMessagesEvent);
-        mpGuiCache->RecEvent(reinterpret_cast<const CgsModule::Event*>(&mOnlineFinishingOrder), 317);
+        mpGuiCache->RecEvent(reinterpret_cast<const CgsModule::Event*>(&mOnlineFinishingOrder), 317,
+                             static_cast<s32>(sizeof(mOnlineFinishingOrder)));
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, 12);
         mpStateInterface->PlayAptMovie("", 3);
         GuiEventNetworkOutputPlayerTexture lTexture = { GuiEventNetworkOutputPlayerTexture::E_OUTPUT_OFF, -1 };

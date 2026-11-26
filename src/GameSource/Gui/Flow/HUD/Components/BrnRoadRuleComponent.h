@@ -3,6 +3,8 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                        // CgsID, Vector3, VecFloat
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT_AT
+#define CGS_ARTIST_BRNROADRULECOMPONENT_H_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnRoadRuleComponent.h"
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"                    // ParameterFormatType
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                                    // GuiEventRoadRuleEnter / GuiEventRoadRuleUpcomingRoads / RoadRuleLeaderType
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                             // BrnFlapt::TextFieldRef
@@ -174,9 +176,16 @@ namespace BrnGui
         }
 
     private:
-        // DWARF BrnRoadRuleComponent.h:288/:289 (private static tables, defined in the .cpp).
-        static const char* const KAPC_UPCOMING_ROAD_ANIMATIONS[E_UPCOMING_ROAD_ANIM_COUNT];
-        static const char* const KAPC_UPCOMING_SUGGESTED_ROAD_ANIMATIONS[E_UPCOMING_ROAD_ANIM_COUNT];
+        // DWARF BrnRoadRuleComponent.h:276-289: private static tables, defined in the .cpp.
+        // The string tables are arrays of non-const pointers (DWARF `const char *[]`; ARTIST
+        // keeps them in .data @0x82F24CF8..0x82F24D40); the sign-size map is const (.rdata
+        // @0x8204BDA8; the dump drops const on an unbounded array, as for FriendsListEntry's).
+        static const ERoadSignSizes KAE_ROAD_SIGN_SIZES[];                           // :276
+        static const s32 KI_MAX_ROAD_INDEX;                                          // :277
+        static const char* KAAC_ROADSIGN_SIZE_FRAME_LABELS[];                        // :279
+        static const char* KAPC_ANIMATION_FRAMES[E_ANIMATION_STATE_ADVANCED_COUNT];  // :287
+        static const char* KAPC_UPCOMING_ROAD_ANIMATIONS[];                          // :288
+        static const char* KAPC_UPCOMING_SUGGESTED_ROAD_ANIMATIONS[];                // :289
 
         // ---- private helpers (DWARF :464-:587) -- declared-only except EnterRoad.
         void GetNameOfRule(char* lpacBuffer, s32 liBufferSize,
@@ -308,4 +317,31 @@ namespace BrnGui
         f32                    mfCurrentCrashScore;        // :455
         s32                    miCrashMultiplier;          // :456
     };
+
+    // Defined in this header after the class (ARTIST's asserts name BrnRoadRuleComponent.h
+    // :755 / :767; DWARF shows it inlined into HandleEnterRoadEvent, the out-of-line copy
+    // @0x82410640 serves EnterRoad and HandleLeaveRoadEvent). Play the sign's animation
+    // for the new state and size the sign/component frames from the transition road.
+    inline void RoadRuleComponent::SetCurrentSignState(EAnimationState leNewSignState)
+    {
+        CGS_ASSERT_AT((E_ANIMATION_STATE_FIRST <= leNewSignState) && (E_ANIMATION_STATE_ADVANCED_COUNT > leNewSignState),
+                      "( E_ANIMATION_STATE_FIRST <= leNewSignState ) && ( E_ANIMATION_STATE_ADVANCED_COUNT > leNewSignState )",
+                      CGS_ARTIST_BRNROADRULECOMPONENT_H_FILE, 755);
+
+        if (meCurrentSignState != leNewSignState)
+        {
+            mRoadSignAnimationsMC.GotoAndPlayLabel(KAPC_ANIMATION_FRAMES[leNewSignState]);
+
+            CGS_ASSERT_AT(mTransitionData.miRoadIndex < KI_MAX_ROAD_INDEX,
+                          "mTransitionData.miRoadIndex < KI_MAX_ROAD_INDEX",
+                          CGS_ARTIST_BRNROADRULECOMPONENT_H_FILE, 767);
+
+            const char* lpcSizeFrame =
+                KAAC_ROADSIGN_SIZE_FRAME_LABELS[KAE_ROAD_SIGN_SIZES[mTransitionData.miRoadIndex]];
+            mAptRef.GotoAndStopLabel(lpcSizeFrame);                    // the component root @+0x04
+            mSubComponentPositionsMC.GotoAndStopLabel(lpcSizeFrame);   // "rulesCpts" @+0x14
+
+            meCurrentSignState = leNewSignState;
+        }
+    }
 }

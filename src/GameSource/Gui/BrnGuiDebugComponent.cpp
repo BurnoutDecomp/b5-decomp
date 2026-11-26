@@ -1163,7 +1163,7 @@ void GuiDebugComponent::TriggerPostEvent()
 
     const CgsModule::Event* lpResultEvent = reinterpret_cast<const CgsModule::Event*>(&lResult);
     mInputQueue.AddEvent(lpResultEvent, 289, static_cast<s32>(sizeof(lResult)));
-    mpGuiModule->mGuiCache.RecEvent(lpResultEvent, 289);
+    mpGuiModule->mGuiCache.RecEvent(lpResultEvent, 289, static_cast<s32>(sizeof(lResult)));
 }
 
 } // namespace BrnGui

@@ -95,11 +95,25 @@ namespace BrnGui
         // here so Construct can call it.
         void SetBoundaries(f32 lfSafeColourBoundary, f32 lfDangerColourBoundary);
 
-        // The following setters are X360-attested for this class but bodied in their
-        // own sibling TUs; declared here so they resolve against this single home.
-        void SetSafeColours(u8 luRed, u8 luGreen, u8 luBlue);
-        void SetDangerColours(u8 luRed, u8 luGreen, u8 luBlue);
-        void SetCountingMode(ETimerMode leCountingMode);
+        // Header-inline (DWARF h:204 / h:225 / h:244): ARTIST has no out-of-line copy and
+        // inlines them at every site (RoadRuleComponent::Construct @0x8242AE78 pokes the colour
+        // lanes, RefreshBestData @0x82422734 / @0x8242274C stores the mode word).
+        void SetSafeColours(u8 luRed, u8 luGreen, u8 luBlue)
+        {
+            mv4SafeColour.mV.x = static_cast<f32>(luRed)   * (1.0f / 255.0f);
+            mv4SafeColour.mV.y = static_cast<f32>(luGreen) * (1.0f / 255.0f);
+            mv4SafeColour.mV.z = static_cast<f32>(luBlue)  * (1.0f / 255.0f);
+        }
+        void SetDangerColours(u8 luRed, u8 luGreen, u8 luBlue)
+        {
+            mv4DangerColour.mV.x = static_cast<f32>(luRed)   * (1.0f / 255.0f);
+            mv4DangerColour.mV.y = static_cast<f32>(luGreen) * (1.0f / 255.0f);
+            mv4DangerColour.mV.z = static_cast<f32>(luBlue)  * (1.0f / 255.0f);
+        }
+        void SetCountingMode(ETimerMode leCountingMode)
+        {
+            meCountingMode = leCountingMode;
+        }
         void IncrementTime(f32 lfDelta);
         void DecrementsTime(f32 lfDelta);
         void HideTime();

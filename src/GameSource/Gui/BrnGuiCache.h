@@ -455,8 +455,9 @@ namespace BrnGui
                                                   CgsGui::ObjectController* lpObjectController);
 
         // RecEvent @ 0x8250DDF0 -- resource completion (14/16) and Apt ONLOAD (21)
-        // branches used by the module bridges.
-        void RecEvent(const CgsModule::Event* lpEvent, s32 liEventId);
+        // branches used by the module bridges. DWARF cpp:1460 takes the event size too
+        // (every ARTIST caller loads r6: 12 / 32 / 192 / the queue's size).
+        void RecEvent(const CgsModule::Event* lpEvent, s32 liEventId, s32 liEventSize);
 
         // DecFIGS BrnGuiCache.h:1487/1491; ARTIST owns the enum words and
         // primary Prepare825193D8 reads this language for its font table.
@@ -731,7 +732,7 @@ namespace BrnGui
             CGS_ASSERT(mTrophyCarID != static_cast<CgsID>(0), "kCGSID_NULL != mTrophyCarID");
             return mTrophyCarID;
         }
-        s32 GetActiveRoadRuleScoringMode() const;   // X360 @0x8240FC28 (meRoadRuleScoreMode, != COUNT)
+        GuiEventSetRoadRuleScoreMode::ERoadPanelModes GetActiveRoadRuleScoringMode() const;   // DWARF h:1261; inline below (h:4210)
 
         const FreeburnChallengeManager* GetFreeburnChallengeManager() const; // X360 @0x8240F168
 
@@ -2119,7 +2120,7 @@ namespace BrnGui
         // lands at +0xAC30, miNumPlayersFinishedEvent at +0xAC34, miNumAwardsGiven at +0xAC38.
         GuiEventOnlinePostEvent mOnlinePostEventData;    // +0xAA04 (43524)
         s32 meActiveRoadRule;                            // +0xAC3C (44092) BrnGameState::EActiveRoadRule (PlayerPositionSingle::RenderValue gate @0x824220B4)
-        s32 meRoadRuleScoreMode;                         // +0xAC40 (44096) GuiEventSetRoadRuleScoreMode::ERoadPanelModes
+        GuiEventSetRoadRuleScoreMode::ERoadPanelModes meRoadRuleScoreMode;   // +0xAC40 (44096) DWARF type
         // The original declaration order lists mabRoadRulesActive before meActiveRoadRule; on
         // the console the post-event record runs right up to +0xAC3C and the two flags sit
         // here, after meRoadRuleScoreMode (IsRoadRuleActive and the RecEvent road-rule
@@ -2355,6 +2356,17 @@ namespace BrnGui
 
         static void _AssertLayout();
     };
+
+    // Header-inline (DWARF h:1261; ARTIST asserts at BrnGuiCache.h:4210 and inlines it into the
+    // road-rule HUD, e.g. RoadRuleComponent::UpdateUpcomingRoadLeaders @0x82410760; the COMDAT copy
+    // @0x8240FC28 serves the callers that keep a call).
+    inline GuiEventSetRoadRuleScoreMode::ERoadPanelModes GuiCache::GetActiveRoadRuleScoringMode() const
+    {
+        CGS_ASSERT_AT(GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_COUNT != meRoadRuleScoreMode,
+                      "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_COUNT != meRoadRuleScoreMode",
+                      "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 4210);
+        return meRoadRuleScoreMode;
+    }
 
     inline void GuiCache::_AssertLayout()
     {

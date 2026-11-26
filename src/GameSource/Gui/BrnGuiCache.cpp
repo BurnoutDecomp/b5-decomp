@@ -1333,7 +1333,7 @@ namespace BrnGui
         return lpParent->GetParentId() != 0 ? lpParent->GetParentId() : lParentId;
     }
 
-    void GuiCache::RecEvent(const CgsModule::Event* lpEvent, s32 liEventId)
+    void GuiCache::RecEvent(const CgsModule::Event* lpEvent, s32 liEventId, s32 liEventSize)
     {
         // Preserve this original case's assert-and-continue before the
         // older host-wide null guard.501 carries the canonical flat payload.
@@ -2953,13 +2953,7 @@ namespace BrnGui
         return meTrophyCarUnlockType;
     }
 
-    // @ 0x8240FC28 -- E_ROAD_PANEL_MODE_COUNT is 2.
-    s32 GuiCache::GetActiveRoadRuleScoringMode() const
-    {
-        CGS_ASSERT(2 != meRoadRuleScoreMode,
-                   "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_COUNT != meRoadRuleScoreMode");
-        return meRoadRuleScoreMode;
-    }
+    // GetActiveRoadRuleScoringMode (@0x8240FC28) is header-inline in BrnGuiCache.h (h:4210).
 
     // @ 0x82472E78 -- the per-score-type road-rule live flags (@0xAC44). [H2 wave
     // 2026-08-25: body landed with the FBurnMainHudState WFInit sweep -- the H2 link

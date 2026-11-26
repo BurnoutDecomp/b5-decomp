@@ -1517,7 +1517,7 @@ void GuiModule::Destruct()
         {
             ProcessIncomingEvent(lpEvent, liId, liSize, lpOutput, lpModelOutputBuffer,
                 lpViewInputBuffer, lbForceAutosave, lbHasSaveImage, lSaveImageInfo);
-            mGuiCache.RecEvent(lpEvent, liId);
+            mGuiCache.RecEvent(lpEvent, liId, liSize);
             if (liId == 232 || liId == 165 || liId == 211 || liId == 64 || liId == 233)
                 mGuiTracker.RecEvent(lpEvent, liId, liSize);
             liId = lpEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);

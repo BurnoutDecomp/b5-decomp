@@ -117,41 +117,6 @@ namespace
                   "ARTIST event 572 channel-40 record is {4,572,12}+4");
 
 
-    // BrnRoadRuleComponent.h:277 (KI_MAX_ROAD_INDEX) -- the miRoadIndex bound the
-    // X360 asserts against (cmpwi 0x42).
-    const s32 KI_MAX_ROAD_INDEX = 66;
-
-    // --- SetCurrentSignState animation-frame tables (X360 off_82F24D08 /
-    //     off_82F24CF8 / dword_8204BDA8). Contents RECOVERED from the image
-    //     2026-08-25 (headless idat read -- scratch h2_roadrule_dump.txt).
-    const char* const KAPC_ANIMATION_FRAMES[RoadRuleComponent::E_ANIMATION_STATE_ADVANCED_COUNT] =
-    {
-        "invisible",        // [0] E_ANIMATION_STATE_INVISIBLE
-        "transin",          // [1]
-        "idle",             // [2]
-        "transout",         // [3]
-        "idleFailed",       // [4]
-        "transoutFailed",   // [5]
-    };
-    const char* const KAAC_ROADSIGN_SIZE_FRAME_LABELS[RoadRuleComponent::E_ROAD_SIGN_COUNT] =
-    {
-        "small",     // [0] E_ROAD_SIGN_SMALL
-        "medium1",   // [1]
-        "medium2",   // [2]
-        "large",     // [3]
-    };
-    const s32 KAI_ROAD_INDEX_TO_SIGN_SIZE[KI_MAX_ROAD_INDEX] =
-    {
-        2, 0, 0, 0, 0, 3, 3, 3, 0, 0, 0, 2, 2, 3, 2, 1, 0, 2, 3, 1, 2, 3,
-        2, 1, 2, 1, 3, 1, 3, 3, 1, 1, 3, 2, 0, 0, 0, 3, 3, 2, 3, 1, 2, 3,
-        1, 3, 3, 3, 3, 3, 2, 3, 3, 3, 3, 3, 2, 1, 2, 3, 2, 3, 2, 2, 2, 2,
-    };
-
-    // --- SetUpcomingRoadAnimation frame tables (X360 off_82F24D20 / off_82F24D30,
-    //     read off the image 2026-08-25 -- h2_dump2.txt). Indexed by
-    //     EUpcomingRoadAnimState; the SUGGESTED table is selected when the road
-    //     state is E_ROADSTATE_SUGGESTED.
-
     // --- the road-rule sound triggers (X360 table off_82F277A8; only the two entries
     //     this TU reads are named -- [1] and [7] of the shared 8-name apt-trigger set).
     const char* const KPC_SOUND_COMPONENT  = "B5RoadRuleComponent";
@@ -200,17 +165,58 @@ namespace
 
 }
 
-// DWARF BrnRoadRuleComponent.h:288/:289: private static members of RoadRuleComponent,
-// defined here. X360 tables @0x82F24D20 / @0x82F24D30 (read off the image 2026-08-25),
-// each loaded through its own symbol in SetUpcomingRoadAnimation @0x82438598.
-const char* const RoadRuleComponent::KAPC_UPCOMING_ROAD_ANIMATIONS[RoadRuleComponent::E_UPCOMING_ROAD_ANIM_COUNT] =
+// DWARF BrnRoadRuleComponent.h:276-289: private static members of RoadRuleComponent,
+// defined here; each is loaded through its own symbol (SetCurrentSignState @0x82410640,
+// SetUpcomingRoadAnimation @0x82438598). Contents read off the image.
+
+// .rdata @0x8204BDA8 (66 words): the size class of each road sign.
+const RoadRuleComponent::ERoadSignSizes RoadRuleComponent::KAE_ROAD_SIGN_SIZES[] =
+{
+    E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_SMALL, E_ROAD_SIGN_SMALL, E_ROAD_SIGN_SMALL, E_ROAD_SIGN_SMALL, E_ROAD_SIGN_LARGE,   // [0..5]
+    E_ROAD_SIGN_LARGE, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_SMALL, E_ROAD_SIGN_SMALL, E_ROAD_SIGN_SMALL, E_ROAD_SIGN_MEDIUM2,   // [6..11]
+    E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_MEDIUM1, E_ROAD_SIGN_SMALL, E_ROAD_SIGN_MEDIUM2,   // [12..17]
+    E_ROAD_SIGN_LARGE, E_ROAD_SIGN_MEDIUM1, E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_MEDIUM1,   // [18..23]
+    E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_MEDIUM1, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_MEDIUM1, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_LARGE,   // [24..29]
+    E_ROAD_SIGN_MEDIUM1, E_ROAD_SIGN_MEDIUM1, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_SMALL, E_ROAD_SIGN_SMALL,   // [30..35]
+    E_ROAD_SIGN_SMALL, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_MEDIUM1,   // [36..41]
+    E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_MEDIUM1, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_LARGE,   // [42..47]
+    E_ROAD_SIGN_LARGE, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_LARGE,   // [48..53]
+    E_ROAD_SIGN_LARGE, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_MEDIUM1, E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_LARGE,   // [54..59]
+    E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_LARGE, E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_MEDIUM2, E_ROAD_SIGN_MEDIUM2,   // [60..65]
+};
+
+// The miRoadIndex bound the asserts test (cmpwi 0x42).
+const s32 RoadRuleComponent::KI_MAX_ROAD_INDEX = 66;
+
+// .data @0x82F24CF8, indexed by ERoadSignSizes.
+const char* RoadRuleComponent::KAAC_ROADSIGN_SIZE_FRAME_LABELS[] =
+{
+    "small",     // [0] E_ROAD_SIGN_SMALL
+    "medium1",   // [1]
+    "medium2",   // [2]
+    "large",     // [3]
+};
+
+// .data @0x82F24D08, indexed by EAnimationState.
+const char* RoadRuleComponent::KAPC_ANIMATION_FRAMES[RoadRuleComponent::E_ANIMATION_STATE_ADVANCED_COUNT] =
+{
+    "invisible",        // [0] E_ANIMATION_STATE_INVISIBLE
+    "transin",          // [1]
+    "idle",             // [2]
+    "transout",         // [3]
+    "idleFailed",       // [4]
+    "transoutFailed",   // [5]
+};
+
+// .data @0x82F24D20 / @0x82F24D30, indexed by EUpcomingRoadAnimState.
+const char* RoadRuleComponent::KAPC_UPCOMING_ROAD_ANIMATIONS[] =
 {
     "invisible",      // [0] E_UPCOMING_ROAD_ANIM_INVISIBLE
     "transin",        // [1] E_UPCOMING_ROAD_ANIM_TRANS_IN
     "transout",       // [2] E_UPCOMING_ROAD_ANIM_TRANS_OUT_TAKEN
     "transoutfade",   // [3] E_UPCOMING_ROAD_ANIM_TRANS_OUT_NOT_TAKEN
 };
-const char* const RoadRuleComponent::KAPC_UPCOMING_SUGGESTED_ROAD_ANIMATIONS[RoadRuleComponent::E_UPCOMING_ROAD_ANIM_COUNT] =
+const char* RoadRuleComponent::KAPC_UPCOMING_SUGGESTED_ROAD_ANIMATIONS[] =
 {
     "invisible",              // [0]
     "transinSuggested",       // [1]
@@ -582,7 +588,7 @@ void RoadRuleComponent::UpdateRoadSignDistance(Vector3 lv3CameraPosition,
 }
 
 // @ 0x824140F8 -- the x-offset a sign picks up from its own size class plus the
-// current road's size class (both through KAI_ROAD_INDEX_TO_SIGN_SIZE; a turning
+// current road's size class (both through KAE_ROAD_SIGN_SIZES; a turning
 // index of -2 forces size class 2, -1 zeroes the whole adjustment).
 VecFloat RoadRuleComponent::GetSignOffsetSizeAdjustment(GuiEventRoadRuleUpcomingRoads::ERoadSide leSide)
 {
@@ -610,9 +616,9 @@ VecFloat RoadRuleComponent::GetSignOffsetSizeAdjustment(GuiEventRoadRuleUpcoming
     {
         CGS_ASSERT_AT(liTurningIndex >= 0,
                    "mUpcomingRoadData.maiTurningRoadIndices[leRoadSide] >= 0", CGS_ARTIST_FILE, 1799);   // :1799 (non-gating)
-        liTurningSize = KAI_ROAD_INDEX_TO_SIGN_SIZE[liTurningIndex];
+        liTurningSize = KAE_ROAD_SIGN_SIZES[liTurningIndex];
     }
-    const s32 liCurrentSize = KAI_ROAD_INDEX_TO_SIGN_SIZE[mUpcomingRoadData.miCurrentRoadIndex];
+    const s32 liCurrentSize = KAE_ROAD_SIGN_SIZES[mUpcomingRoadData.miCurrentRoadIndex];
 
     return MakeVecFloatSplat(KAF_TURNING_SIGN_OFFSETS[2 * liTurningSize + leSide]
                            + KAF_CURRENT_SIGN_OFFSETS[2 * liCurrentSize + leSide]);
@@ -632,36 +638,30 @@ void RoadRuleComponent::HandleEnterRoadEvent(const GuiEventRoadRuleEnter* lpEven
     mTransitionData = *lpEvent;   // X360 memcpy 0x70
 
     CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 509);   // :509 (non-gating)
-    const s32 liScoreMode = mpGuiCache->GetActiveRoadRuleScoringMode();
 
-    for (s32 liType = 0; liType < BrnStreetData::E_SCORE_TYPE_COUNT; ++liType)
+    if (mpGuiCache->GetActiveRoadRuleScoringMode() == GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE)
     {
-        CGS_ASSERT(liType <= BrnStreetData::E_SCORE_TYPE_COUNT,
-                   "leEnumIndex <= E_SCORE_TYPE_COUNT");   // BrnChallengeData.h:56 (non-gating)
-        if (liScoreMode == 1)   // E_ROAD_PANEL_MODE_ONLINE
+        for (BrnStreetData::ScoreType leScoreType = BrnStreetData::E_SCORE_TYPE_START;
+             leScoreType < BrnStreetData::E_SCORE_TYPE_COUNT; leScoreType++)   // DWARF local cpp:512
         {
-            mTransitionData.maiBestValues[liType]         = mTransitionData.maiBestOnlineValues[liType];
-            mTransitionData.maeRoadRuleLeaderType[liType] = lpEvent->maeOnlineRoadRuleLeaderType[liType];
+            mTransitionData.maiBestValues[leScoreType]         = mTransitionData.maiBestOnlineValues[leScoreType];
+            mTransitionData.maeRoadRuleLeaderType[leScoreType] = lpEvent->maeOnlineRoadRuleLeaderType[leScoreType];
         }
-        else
+    }
+    else
+    {
+        for (BrnStreetData::ScoreType leScoreType = BrnStreetData::E_SCORE_TYPE_START;
+             leScoreType < BrnStreetData::E_SCORE_TYPE_COUNT; leScoreType++)   // DWARF local cpp:521
         {
-            mTransitionData.maiBestValues[liType]         = mTransitionData.maiBestOfflineValues[liType];
-            mTransitionData.maeRoadRuleLeaderType[liType] = lpEvent->maeOfflineRoadRuleLeaderType[liType];
+            mTransitionData.maiBestValues[leScoreType]         = mTransitionData.maiBestOfflineValues[leScoreType];
+            mTransitionData.maeRoadRuleLeaderType[leScoreType] = lpEvent->maeOfflineRoadRuleLeaderType[leScoreType];
         }
     }
 
-    if (mTransitionData.mRoadId != 0 && meCurrentSignState != E_ANIMATION_STATE_TRANSOUT)
+    // Unsigned greater-than test: cmpldi + ble @0x82413F58 (a != test would branch with beq).
+    if (mTransitionData.mRoadId > 0)
     {
-        mRoadSignAnimationsMC.GotoAndPlayLabel(KAPC_ANIMATION_FRAMES[E_ANIMATION_STATE_TRANSOUT]);
-
-        CGS_ASSERT(mTransitionData.miRoadIndex < KI_MAX_ROAD_INDEX,
-                   "mTransitionData.miRoadIndex < KI_MAX_ROAD_INDEX");   // BrnRoadRuleComponent.h:767 (non-gating)
-        const char* lpcSizeFrame =
-            KAAC_ROADSIGN_SIZE_FRAME_LABELS[KAI_ROAD_INDEX_TO_SIGN_SIZE[mTransitionData.miRoadIndex]];
-        mAptRef.GotoAndStopLabel(lpcSizeFrame);
-        mSubComponentPositionsMC.GotoAndStopLabel(lpcSizeFrame);
-
-        meCurrentSignState = E_ANIMATION_STATE_TRANSOUT;
+        SetCurrentSignState(E_ANIMATION_STATE_TRANSOUT);
     }
 }
 
@@ -672,26 +672,21 @@ void RoadRuleComponent::HandleRoadRuleTargetUpdate(const GuiEventRoadRuleUpdateT
 {
     CGS_ASSERT_AT(lpEvent != 0, "lpEvent", CGS_ARTIST_FILE, 550);   // :550 (non-gating)
 
-    if (lpEvent->mRoadId != mTransitionData.mRoadId)
-        return;
-
-    const s32 liScoreMode = mpGuiCache->GetActiveRoadRuleScoringMode();
-    CGS_ASSERT(liScoreMode != 2,
-               "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_COUNT != meRoadRuleScoreMode");   // BrnGuiCache.h:4210 (non-gating)
-
-    if (liScoreMode == 1)   // E_ROAD_PANEL_MODE_ONLINE
+    if (lpEvent->mRoadId == mTransitionData.mRoadId)
     {
-        for (s32 liType = 0; liType < BrnStreetData::E_SCORE_TYPE_COUNT; ++liType)
+        if (mpGuiCache->GetActiveRoadRuleScoringMode() == GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE)
         {
-            CGS_ASSERT(liType <= BrnStreetData::E_SCORE_TYPE_COUNT,
-                       "leEnumIndex <= E_SCORE_TYPE_COUNT");   // BrnChallengeData.h:56 (non-gating)
-            mTransitionData.maeRoadRuleLeaderType[liType] = lpEvent->maeRoadRuleLeaderType[liType];
-            mTransitionData.maFriendLeader[liType]        = lpEvent->maFriendLeader[liType];   // 16-byte name copy
-            mTransitionData.maiBestValues[liType]         = lpEvent->maiBestValues[liType];
+            for (BrnStreetData::ScoreType leScoreType = BrnStreetData::E_SCORE_TYPE_START;
+                 leScoreType < BrnStreetData::E_SCORE_TYPE_COUNT; leScoreType++)
+            {
+                mTransitionData.maeRoadRuleLeaderType[leScoreType] = lpEvent->maeRoadRuleLeaderType[leScoreType];
+                mTransitionData.maFriendLeader[leScoreType]        = lpEvent->maFriendLeader[leScoreType];   // 16-byte name copy
+                mTransitionData.maiBestValues[leScoreType]         = lpEvent->maiBestValues[leScoreType];
+            }
         }
+        RefreshBestData();
+        RefreshSignColours();
     }
-    RefreshBestData();
-    RefreshSignColours();
 }
 
 // @ 0x8243EDB8 -- a rule went live. The time rule (type 0) only runs OUTSIDE
@@ -976,7 +971,7 @@ void RoadRuleComponent::ShowUpcomingRoads(bool lbShow)
         CGS_ASSERT_AT(mUpcomingRoadData.maiTurningRoadIndices[0] < KI_MAX_ROAD_INDEX,
                    "mUpcomingRoadData.maiTurningRoadIndices[leSignSide] < KI_MAX_ROAD_INDEX", CGS_ARTIST_FILE, 2201);   // :2201 (non-gating)
         mLeftSignAlignmentsMC.GotoAndStopLabel(
-            KAAC_ROADSIGN_SIZE_FRAME_LABELS[KAI_ROAD_INDEX_TO_SIGN_SIZE[mUpcomingRoadData.maiTurningRoadIndices[0]]]);
+            KAAC_ROADSIGN_SIZE_FRAME_LABELS[KAE_ROAD_SIGN_SIZES[mUpcomingRoadData.maiTurningRoadIndices[0]]]);
         const FlaptRoadSignIconComponent::ESignColour leColour =
             GetRoadSignColour(mUpcomingRoadData.maaeLeaderTypes[0], mUpcomingRoadData.mRoadIds[0]);
         mRoadSignLefty.DisplayRoadFromCgsID(mUpcomingRoadData.mRoadIds[0], false);
@@ -989,7 +984,7 @@ void RoadRuleComponent::ShowUpcomingRoads(bool lbShow)
         CGS_ASSERT_AT(mUpcomingRoadData.maiTurningRoadIndices[1] < KI_MAX_ROAD_INDEX,
                    "mUpcomingRoadData.maiTurningRoadIndices[leSignSide] < KI_MAX_ROAD_INDEX", CGS_ARTIST_FILE, 2201);   // :2201 (non-gating)
         mRightSignAlignmentsMC.GotoAndStopLabel(
-            KAAC_ROADSIGN_SIZE_FRAME_LABELS[KAI_ROAD_INDEX_TO_SIGN_SIZE[mUpcomingRoadData.maiTurningRoadIndices[1]]]);
+            KAAC_ROADSIGN_SIZE_FRAME_LABELS[KAE_ROAD_SIGN_SIZES[mUpcomingRoadData.maiTurningRoadIndices[1]]]);
         const FlaptRoadSignIconComponent::ESignColour leColour =
             GetRoadSignColour(mUpcomingRoadData.maaeLeaderTypes[1], mUpcomingRoadData.mRoadIds[1]);
         mRoadSignRighty.DisplayRoadFromCgsID(mUpcomingRoadData.mRoadIds[1], false);
@@ -1105,9 +1100,7 @@ void RoadRuleComponent::RefreshBestData()
     // ---- the best-time row ------------------------------------------------
     const s32 liBestTimeMs = mTransitionData.maiBestValues[BrnStreetData::E_SCORE_TYPE_TIME];
     const f32 lfBestTime   = static_cast<f32>(liBestTimeMs) * 0.001f;   // flt_82013F90
-    f32 lfSafeBoundary     = lfBestTime - 3.0f;                          // fsel clamp
-    if (lfSafeBoundary < 0.0f)
-        lfSafeBoundary = 0.0f;
+    const f32 lfSafeBoundary = (lfBestTime - 3.0f >= 0.0f) ? (lfBestTime - 3.0f) : 0.0f;   // fsel
 
     if (liBestTimeMs != 0)
     {
@@ -1126,18 +1119,16 @@ void RoadRuleComponent::RefreshBestData()
     mBestTimeNameTextField.SetLocalisedText(lacRuleName,
                                             static_cast<s32>(mRoadRulePlayerNameFormatType));
 
-    const s32 liScoreMode = mpGuiCache->GetActiveRoadRuleScoringMode();
-    CGS_ASSERT(liScoreMode != 2,
-               "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_COUNT != meRoadRuleScoreMode");   // BrnGuiCache.h:4210 (non-gating)
-    if (liScoreMode != 0)
+    if (mpGuiCache->GetActiveRoadRuleScoringMode() == GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_OFFLINE)
     {
-        CGS_ASSERT(liScoreMode == 1,
-                   "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE == mpGuiCache->GetActiveRoadRuleScoringMode()");   // :999 (non-gating)
-        mBestTimeLabelTextField.SetLocalisedText("HUD_BESTTIME_ONLINE", 9);
+        mBestTimeLabelTextField.SetLocalisedText("HUD_BESTTIME_OFFLINE", 9);
     }
     else
     {
-        mBestTimeLabelTextField.SetLocalisedText("HUD_BESTTIME_OFFLINE", 9);
+        CGS_ASSERT_AT(GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE == mpGuiCache->GetActiveRoadRuleScoringMode(),
+                      "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE == mpGuiCache->GetActiveRoadRuleScoringMode()",
+                      CGS_ARTIST_FILE, 999);
+        mBestTimeLabelTextField.SetLocalisedText("HUD_BESTTIME_ONLINE", 9);
     }
 
     // ---- the best-crash row -----------------------------------------------
@@ -1151,15 +1142,16 @@ void RoadRuleComponent::RefreshBestData()
     mBestCrashNameTextField.SetLocalisedText(lacRuleName,
                                              static_cast<s32>(mRoadRulePlayerNameFormatType));
 
-    if (liScoreMode != 0)
+    if (mpGuiCache->GetActiveRoadRuleScoringMode() == GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_OFFLINE)
     {
-        CGS_ASSERT_AT(mpGuiCache->GetActiveRoadRuleScoringMode() == 1,
-                   "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE == mpGuiCache->GetActiveRoadRuleScoringMode()", CGS_ARTIST_FILE, 1028);   // :1028 (non-gating)
-        mBestCrashLabelTextField.SetLocalisedText("HUD_BESTCRASH_ONLINE", 9);
+        mBestCrashLabelTextField.SetLocalisedText("HUD_BESTCRASH_OFFLINE", 9);
     }
     else
     {
-        mBestCrashLabelTextField.SetLocalisedText("HUD_BESTCRASH_OFFLINE", 9);
+        CGS_ASSERT_AT(GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE == mpGuiCache->GetActiveRoadRuleScoringMode(),
+                      "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE == mpGuiCache->GetActiveRoadRuleScoringMode()",
+                      CGS_ARTIST_FILE, 1028);
+        mBestCrashLabelTextField.SetLocalisedText("HUD_BESTCRASH_ONLINE", 9);
     }
 }
 
@@ -1332,19 +1324,18 @@ void RoadRuleComponent::SetUpcomingRoadAnimation(GuiEventRoadRuleUpcomingRoads::
 bool RoadRuleComponent::IsSameAsCurrentRoad(GuiEventRoadRuleUpcomingRoads::ERoadSide leSide,
                                             const GuiEventRoadRuleUpcomingRoads* lpEvent) const
 {
-    CGS_ASSERT(leSide < GuiEventRoadRuleUpcomingRoads::E_ROAD_COUNT,
-               "(0 <= leRoadSide) && (GuiEventRoadRuleUpcomingRoads::E_ROAD_COUNT > leRoadSide)"); // :707 (non-gating)
-    CGS_ASSERT(0 != lpEvent, "NULL != lpEvent");   // :708 (non-gating)
+    CGS_ASSERT_AT((0 <= leSide) && (GuiEventRoadRuleUpcomingRoads::E_ROAD_COUNT > leSide),
+                  "(0 <= leRoadSide) && (GuiEventRoadRuleUpcomingRoads::E_ROAD_COUNT > leRoadSide)",
+                  CGS_ARTIST_BRNROADRULECOMPONENT_H_FILE, 707);
+    CGS_ASSERT_AT(NULL != lpEvent, "NULL != lpEvent", CGS_ARTIST_BRNROADRULECOMPONENT_H_FILE, 708);
 
-    if (lpEvent->mRoadIds[leSide] != mUpcomingRoadData.mRoadIds[leSide])
-        return false;
-    if (lpEvent->meRoadStates[leSide] != mUpcomingRoadData.meRoadStates[leSide])
-        return false;
-    if (lpEvent->maaeLeaderTypes[leSide][0] != mUpcomingRoadData.maaeLeaderTypes[leSide][0])
-        return false;
-    if (lpEvent->maaeLeaderTypes[leSide][1] != mUpcomingRoadData.maaeLeaderTypes[leSide][1])
-        return false;
-    return true;
+    // The road-id test is held as a bool before the && chain: ARTIST @0x824104E0..0x824104F8
+    // materialises it as 0/1 (li/clrlwi) and only then branches; the later terms branch directly.
+    bool lbSameRoad = (lpEvent->mRoadIds[leSide] == mUpcomingRoadData.mRoadIds[leSide]);
+    return lbSameRoad
+        && (lpEvent->meRoadStates[leSide] == mUpcomingRoadData.meRoadStates[leSide])
+        && (lpEvent->maaeLeaderTypes[leSide][0] == mUpcomingRoadData.maaeLeaderTypes[leSide][0])
+        && (lpEvent->maaeLeaderTypes[leSide][1] == mUpcomingRoadData.maaeLeaderTypes[leSide][1]);
 }
 
 // @ 0x82410568 -- BrnRoadRuleComponent.h:731. Should the road sign fall back to the
@@ -1368,34 +1359,8 @@ bool RoadRuleComponent::ShouldUseInEventColouring()
     return lbShowtimeFamily;
 }
 
-// @ 0x82410640 -- BrnRoadRuleComponent.h:755/:767. Drive the current sign to a new
-// animation state: play the state's frame on the animated-road-sign clip and stop
-// the component root + the rulesCpts container on the transition road's size label.
-// No-op when already in that state. (H2: the play/stop targets are now ATTESTED --
-// Prepare's binding names + the HandleEnterRoadEvent inline; the old slot-guess FLAG
-// mapped play->rulesCpts and is retired.)
-void RoadRuleComponent::SetCurrentSignState(EAnimationState leState)
-{
-    CGS_ASSERT((leState >= E_ANIMATION_STATE_FIRST) && (leState < E_ANIMATION_STATE_ADVANCED_COUNT),
-               "( E_ANIMATION_STATE_FIRST <= leNewSignState ) && ( E_ANIMATION_STATE_ADVANCED_COUNT > leNewSignState )"); // :755 (non-gating)
-
-    if (meCurrentSignState == leState)
-    {
-        return;
-    }
-
-    mRoadSignAnimationsMC.GotoAndPlayLabel(KAPC_ANIMATION_FRAMES[leState]);   // "animatedRoadSign_mc" @+0x0C
-
-    CGS_ASSERT(mTransitionData.miRoadIndex < KI_MAX_ROAD_INDEX,
-               "mTransitionData.miRoadIndex < KI_MAX_ROAD_INDEX");   // :767 (non-gating)
-
-    const char* lpcSizeFrame =
-        KAAC_ROADSIGN_SIZE_FRAME_LABELS[KAI_ROAD_INDEX_TO_SIGN_SIZE[mTransitionData.miRoadIndex]];
-    mAptRef.GotoAndStopLabel(lpcSizeFrame);                    // the component root @+0x04
-    mSubComponentPositionsMC.GotoAndStopLabel(lpcSizeFrame);   // "rulesCpts" @+0x14
-
-    meCurrentSignState = leState;
-}
+// SetCurrentSignState @0x82410640 is defined in BrnRoadRuleComponent.h (its asserts name
+// the header, :755 / :767).
 
 // @ 0x82410720 -- BrnRoadRuleComponent.h:795 / BrnGuiCache.h:4210. Refresh the two
 // upcoming-road panels' active leader-type slots from either the online or the
@@ -1403,22 +1368,26 @@ void RoadRuleComponent::SetCurrentSignState(EAnimationState leState)
 // rewritten onto the named X360-ordered members.)
 void RoadRuleComponent::UpdateUpcomingRoadLeaders(GuiEventRoadRuleUpcomingRoads* lpEvent)
 {
-    CGS_ASSERT(0 != mpGuiCache, "mpGuiCache");   // :795 (non-gating)
+    CGS_ASSERT_AT(NULL != mpGuiCache, "mpGuiCache", CGS_ARTIST_BRNROADRULECOMPONENT_H_FILE, 795);
 
-    // The accessor reproduces the X360-inlined "E_ROAD_PANEL_MODE_COUNT !=
-    // meRoadRuleScoreMode" assert (BrnGuiCache.h:4210, non-gating).
-    const s32 leScoreMode = mpGuiCache->GetActiveRoadRuleScoringMode();
-    const bool lbUseOnline = (leScoreMode == 1);
-
-    for (s32 liType = 0; liType < BrnStreetData::E_SCORE_TYPE_COUNT; ++liType)
+    if (mpGuiCache->GetActiveRoadRuleScoringMode() == GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE)
     {
-        CGS_ASSERT(liType <= BrnStreetData::E_SCORE_TYPE_COUNT,
-                   "leEnumIndex <= E_SCORE_TYPE_COUNT");   // BrnChallengeData.h:56 (non-gating)
-        for (s32 liSide = 0; liSide < GuiEventRoadRuleUpcomingRoads::E_ROAD_COUNT; ++liSide)
+        for (BrnStreetData::ScoreType leType = BrnStreetData::E_SCORE_TYPE_START; leType < BrnStreetData::E_SCORE_TYPE_COUNT; leType++)
         {
-            lpEvent->maaeLeaderTypes[liSide][liType] =
-                lbUseOnline ? lpEvent->maaeOnlineLeaderTypes[liSide][liType]
-                            : lpEvent->maaeOfflineLeaderTypes[liSide][liType];
+            for (s32 liSide = 0; liSide < GuiEventRoadRuleUpcomingRoads::E_ROAD_COUNT; ++liSide)
+            {
+                lpEvent->maaeLeaderTypes[liSide][leType] = lpEvent->maaeOnlineLeaderTypes[liSide][leType];
+            }
+        }
+    }
+    else
+    {
+        for (BrnStreetData::ScoreType leType = BrnStreetData::E_SCORE_TYPE_START; leType < BrnStreetData::E_SCORE_TYPE_COUNT; leType++)
+        {
+            for (s32 liSide = 0; liSide < GuiEventRoadRuleUpcomingRoads::E_ROAD_COUNT; ++liSide)
+            {
+                lpEvent->maaeLeaderTypes[liSide][leType] = lpEvent->maaeOfflineLeaderTypes[liSide][leType];
+            }
         }
     }
 }

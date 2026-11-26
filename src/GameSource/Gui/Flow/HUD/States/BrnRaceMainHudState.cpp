@@ -2479,7 +2479,8 @@ namespace BrnGui
                 mDistrictMarker.SetCounty(static_cast<BrnWorld::ECounty>(lRecord.meCounty));
                 mDistrictMarker.SetDistrict(static_cast<BrnWorld::EDistrict>(lRecord.meDistrict));
                 lRecord.mu8Consumed = 1;
-                mpCache->RecEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord), 169);
+                mpCache->RecEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord), 169,
+                                  static_cast<s32>(sizeof(lRecord)));
                 mbFirstFrame = false;
             }
         }

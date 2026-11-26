@@ -53,14 +53,13 @@ namespace BrnGui
     static const u32 KU_GUI_RESOURCEID_NUM = static_cast<u32>(E_GUI_RESOURCEID_NUM);   // 237 (0xED), attested by cmplwi
 
     // -------------------------------------------------------------------------------
-    // File-scope statics (BrnPhotoBoothComponent.cpp rodata / bss). Names/types from
-    // the DecFIGS DWARF (cpp:27/:29/:30/:32/:41/:49/:51/:53/:54); string values are X360
-    // rodata verbatim. The two apt child-icon names seed each embedded HelpItem;
-    // sacCachedPictureData backs the DXT1 mugshot the NetworkTexture wraps.
+    // The DWARF private static members (cpp:27/:29/:30/:32/:41/:49/:51/:53/:54); string
+    // values are X360 rodata verbatim. The two apt child-icon names seed each embedded
+    // HelpItem; sacCachedPictureData backs the DXT1 mugshot the NetworkTexture wraps.
     // -------------------------------------------------------------------------------
-    static const char KAC_HELPITEM_LEFT_NAME[]   = "buttonPrompt0";   // cpp:29 (char[14])
-    static const char KAC_HELPITEM_CENTRE_NAME[] = "buttonPrompt1";   // cpp:30 (char[14])
-    static char       sacCachedPictureData[9600];                     // cpp:27 (char[9600]) @0x82FB0170
+    const char PhotoBoothComponent::KAC_HELPITEM_LEFT_NAME[14]   = "buttonPrompt0";   // cpp:29
+    const char PhotoBoothComponent::KAC_HELPITEM_CENTRE_NAME[14] = "buttonPrompt1";   // cpp:30
+    char       PhotoBoothComponent::sacCachedPictureData[9600];                       // cpp:27 @0x82FB0170
 
     // cpp:32 -- KAPC_ANIMATION_FRAMES[5] @0x82F253A4. ONE table, proven by the
     // table-relative loads: ShowComponent @0x8243D030 addresses off_82F253A4 and then reads
@@ -76,7 +75,7 @@ namespace BrnGui
         E_ANIMATIONFRAME_INVISIBLE = 4,   // HideComponent(true)   -- gone immediately
         E_ANIMATIONFRAME_COUNT     = 5,
     };
-    static const char* const KAPC_ANIMATION_FRAMES[E_ANIMATIONFRAME_COUNT] =
+    const char* PhotoBoothComponent::KAPC_ANIMATION_FRAMES[E_ANIMATIONFRAME_COUNT] =
     {
         "transIn",     // @0x8204A780
         "idle",        // @0x8204AE94
@@ -86,7 +85,7 @@ namespace BrnGui
     };
 
     // cpp:41 -- KAPC_BACK_STRINGIDS[4] @0x82F253B8, indexed by meBackStringType.
-    static const char* const KAPC_BACK_STRINGIDS[PhotoBoothComponent::E_BACKSTRING_COUNT] =
+    const char* PhotoBoothComponent::KAPC_BACK_STRINGIDS[PhotoBoothComponent::E_BACKSTRING_COUNT] =
     {
         "",                             // E_BACKSTRING_NONE        (@0x820046A7)
         "$PHOTOBOOTH_CPT_BACK",         // E_BACKSTRING_BACK
@@ -94,10 +93,10 @@ namespace BrnGui
         "$PHOTOBOOTH_CPT_CANCEL",       // E_BACKSTRING_CANCEL
     };
 
-    static const char KAC_CONTINUE_STRINGID[]    = "$CAPS_BUTTON_CONTINUE";     // cpp:49 (char[22])
-    static const char KAC_TAKEPHOTO_STRINGID[]   = "$PHOTOBOOTH_CPT_TAKEPHOTO"; // cpp:51 (char[26])
-    static const char KAC_RETAKEPHOTO_STRINGID[] = "$PHOTOBOOTH_CPT_RETRY";     // cpp:53 (char[22])
-    static const char KAC_CONFIRM_STRINGID[]     = "$PHOTOBOOTH_CPT_CONFIRM";   // cpp:54 (char[24])
+    const char PhotoBoothComponent::KAC_CONTINUE_STRINGID[22]    = "$CAPS_BUTTON_CONTINUE";     // cpp:49
+    const char PhotoBoothComponent::KAC_TAKEPHOTO_STRINGID[26]   = "$PHOTOBOOTH_CPT_TAKEPHOTO"; // cpp:51
+    const char PhotoBoothComponent::KAC_RETAKEPHOTO_STRINGID[22] = "$PHOTOBOOTH_CPT_RETRY";     // cpp:53
+    const char PhotoBoothComponent::KAC_CONFIRM_STRINGID[24]     = "$PHOTOBOOTH_CPT_CONFIRM";   // cpp:54
 
     namespace
     {
@@ -267,8 +266,8 @@ namespace BrnGui
         // IconComponent::Construct(name, stateInterface, /*stateIdentifiers*/ nullptr, parentName).
         IconComponent::Construct(lpacName, lpStateInterface, 0, lpacParentName);
 
+        mPhotoResourceToLoad.meType = CgsGui::E_GUI_RESOURCETYPE_APT; // 0x98 <- 4 (stored first @0x8241AC14)
         mPhotoResourceToLoad.muId   = KU_GUI_RESOURCEID_NUM;         // 0x94 <- 0xED (no resource yet)
-        mPhotoResourceToLoad.meType = CgsGui::E_GUI_RESOURCETYPE_APT; // 0x98 <- 4
         mbResourceLoaded            = false;                         // 0x9C <- 0
 
         // The two apt child prompts are Constructed (virtual) parented to this item's name.
@@ -325,8 +324,15 @@ namespace BrnGui
     // mbVisible. Both identifiers come out of KAPC_ANIMATION_FRAMES (indices 4 and 3).
     void PhotoBoothComponent::HideComponent(bool lbHide)
     {
-        SetState(lbHide ? KAPC_ANIMATION_FRAMES[E_ANIMATIONFRAME_INVISIBLE]
-                        : KAPC_ANIMATION_FRAMES[E_ANIMATIONFRAME_TRANSOUT]);
+        // `== true`: ARTIST compares the flag with 1 (cmplwi 1 @0x8241AD70); one SetState per arm.
+        if (lbHide == true)
+        {
+            SetState(KAPC_ANIMATION_FRAMES[E_ANIMATIONFRAME_INVISIBLE]);
+        }
+        else
+        {
+            SetState(KAPC_ANIMATION_FRAMES[E_ANIMATIONFRAME_TRANSOUT]);
+        }
         mbVisible = false;
     }
 
@@ -389,8 +395,15 @@ namespace BrnGui
     // "idle", off_82F253A4 == "transIn".) The prompt/state seeding is OnLoad's, repeated.
     void PhotoBoothComponent::ShowComponent(bool lbShow)
     {
-        SetState(lbShow ? KAPC_ANIMATION_FRAMES[E_ANIMATIONFRAME_IDLE]
-                        : KAPC_ANIMATION_FRAMES[E_ANIMATIONFRAME_TRANSIN]);
+        // `== true`: ARTIST compares the flag with 1 (cmplwi 1 @0x8243D04C); one SetState per arm.
+        if (lbShow == true)
+        {
+            SetState(KAPC_ANIMATION_FRAMES[E_ANIMATIONFRAME_IDLE]);
+        }
+        else
+        {
+            SetState(KAPC_ANIMATION_FRAMES[E_ANIMATIONFRAME_TRANSIN]);
+        }
 
         if (mpGuiCache->GetCamStatus() != 0)
         {

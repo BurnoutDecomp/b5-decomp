@@ -134,9 +134,22 @@ namespace BrnGui
     private:
         const char* GetTakePhotoStringID() const;                                    // DWARF h:163
 
+        // DWARF private static members (defined in the .cpp at these lines). The two pointer
+        // tables are `const char *[N]` (pointers not const): ARTIST keeps them in .data
+        // (@0x82F253A4 / @0x82F253B8) and loads the entries through their own symbols.
+        static const char KAC_HELPITEM_LEFT_NAME[14];        // cpp:29
+        static const char KAC_HELPITEM_CENTRE_NAME[14];      // cpp:30
+        static const char* KAPC_ANIMATION_FRAMES[5];         // cpp:32
+        static const char KAC_CONTINUE_STRINGID[22];         // cpp:49
+        static const char* KAPC_BACK_STRINGIDS[4];           // cpp:41
+        static const char KAC_TAKEPHOTO_STRINGID[26];        // cpp:51
+        static const char KAC_RETAKEPHOTO_STRINGID[22];      // cpp:53
+        static const char KAC_CONFIRM_STRINGID[24];          // cpp:54
+        static char sacCachedPictureData[9600];              // cpp:27
+
         // ---- DWARF member layout (h:200-:226; guest offsets in comments; access BY
-        // NAME). The KA*_STRINGID / KAPC_* string tables and sacCachedPictureData
-        // (h:221) are file-statics in the .cpp, NOT members. ----
+        // NAME). The KA*_STRINGID / KAPC_* tables and sacCachedPictureData are the
+        // static members above. ----
         CgsGui::sResourceTuple          mPhotoResourceToLoad;  // h:200 +0x94  (muId @+0x94)
         bool                            mbResourceLoaded;      // h:201 +0x9C
         HelpItem                        mHelpItemLeft;         // h:203

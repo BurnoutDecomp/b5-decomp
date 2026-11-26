@@ -1424,6 +1424,10 @@ namespace BrnGui
 // "OnlFBJoin" tagged with their online name.
 void HudMessageAnalyzer::HandlePlayerJoinedLobby(const GuiEventNetworkPlayerJoinedLobby* lpEvent)
 {
+    GuiHudMessage lMessage;                                                       // DWARF local
+    CgsNetwork::PlayerName lPlayerName;                                           // DWARF local
+    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerData;   // DWARF local
+
     // Non-gating pointer/range tripwires (cpp:5032-5034).
     CGS_ASSERT_AT(lpEvent != NULL, "lpEvent", CGS_ARTIST_FILE, 5032);
     CGS_ASSERT_AT(lpEvent->mNetworkPlayerID != KI_INVALID_PLAYER_ID,
@@ -1436,13 +1440,12 @@ void HudMessageAnalyzer::HandlePlayerJoinedLobby(const GuiEventNetworkPlayerJoin
         *CgsDev::Log::gpDebugPrint << "NetworkPlayerID: " << lpEvent->mNetworkPlayerID << "\n";
     }
 
-    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerData =
-        mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpEvent->mNetworkPlayerID);
+    lpPlayerData = mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpEvent->mNetworkPlayerID);
     CGS_ASSERT_AT(lpPlayerData != NULL, "lpPlayerData", CGS_ARTIST_FILE, 5039);
 
-    GuiHudMessage lMessage;
+    lPlayerName = lpPlayerData->mPlayerName;   // the 16-byte copy (memcpy @0x8251F584)
     lMessage.Construct("OnlFBJoin");
-    lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0, lpPlayerData->mPlayerName.macName);
+    lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0, lPlayerName.GetPlayerName());
     TriggerMessage(&lMessage);
 }
 
@@ -3719,36 +3722,36 @@ void HudMessageAnalyzer::HandlePlayerLeftLobby(const GuiEventNetworkPlayerLeftLo
 // do not "fix" it here.
 void HudMessageAnalyzer::HandleLeaderPassedMileBoundary(const GuiLeaderPassedMileBoundaryEvent* lpEvent) const
 {
-    GuiHudMessage lMessage;
+    GuiHudMessage lMessage;      // DWARF cpp:2226
+    bool lbSuccess = true;       // DWARF cpp:2227 (seeded before Construct: stb @0x8251C29C)
     lMessage.Construct("OnlRRMiToFin");
 
-    bool lbNameValid = true;   // the X360 seeds the out-flag true before the call
-    const char* lpcOnlineName = GetOnlineName(lpEvent->meActiveRaceCarIndex, &lbNameValid);
-    lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0, lpcOnlineName);
+    lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0,
+                      GetOnlineName(lpEvent->meActiveRaceCarIndex, &lbSuccess));
 
-    if (!lbNameValid)
-        return;
-
-    lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_FLOAT, 0,
-                      lpEvent->mfDistanceToFinishInMetres * KF_METRES_TO_MILES);
-    TriggerMessage(&lMessage);
+    if (lbSuccess)
+    {
+        lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_FLOAT, 0,
+                          lpEvent->mfDistanceToFinishInMetres * KF_METRES_TO_MILES);
+        TriggerMessage(&lMessage);
+    }
 }
 
 void HudMessageAnalyzer::HandleLeaderPassedKMBoundary(const GuiLeaderPassedKMBoundaryEvent* lpEvent) const
 {
     GuiHudMessage lMessage;
+    bool lbSuccess = true;       // seeded before Construct, as in the mile twin
     lMessage.Construct("OnlRRMiToFin");   // FLAG: console reuses the MILE id -- see above.
 
-    bool lbNameValid = true;
-    const char* lpcOnlineName = GetOnlineName(lpEvent->meActiveRaceCarIndex, &lbNameValid);
-    lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0, lpcOnlineName);
+    lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0,
+                      GetOnlineName(lpEvent->meActiveRaceCarIndex, &lbSuccess));
 
-    if (!lbNameValid)
-        return;
-
-    lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_FLOAT, 0,
-                      lpEvent->mfDistanceToFinishInMetres * KF_METRES_TO_KILOMETRES);
-    TriggerMessage(&lMessage);
+    if (lbSuccess)
+    {
+        lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_FLOAT, 0,
+                          lpEvent->mfDistanceToFinishInMetres * KF_METRES_TO_KILOMETRES);
+        TriggerMessage(&lMessage);
+    }
 }
 
 } // namespace BrnGui
