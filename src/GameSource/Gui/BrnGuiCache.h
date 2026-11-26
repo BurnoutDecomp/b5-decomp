@@ -1867,10 +1867,12 @@ namespace BrnGui
         SatNavEventDisplayInfo maEventStarts[175];       // +0x5690..+0x775F
         s32 miEventStartsCount;                          // +0x7760 (30560) mSetUpAllEventStartsInterface CgsArray count (ctor -1; GetNumEventStarts sentinel/count @+0x20D0 of the interface)
         u8  mPad_7764[12];                               // +0x7764..+0x776F
-        // 256-bit online finish-point bitmask (4 doublewords). GetNumOnlineFinishPoints
+        // 256-bit online finish-point set (4 doublewords), DWARF
+        // `BitArray<256u> mEventsWithUniqueFinishPoints`. GetNumOnlineFinishPoints
         // @0x8241E7D8 loads each 64-bit word (ld @0x7770/0x7778/0x7780/0x7788), 64-bit
-        // SWAR-popcounts it, and sums the four counts. Carved from the former mPad_7764.
-        u64 maOnlineFinishPointsMask[4];                 // +0x7770 (30576)
+        // SWAR-popcounts it, and sums the four counts; HandleSpecificPreSetRacesEvent sets
+        // its bits through SetBit (CgsBitArray.h:222 assert @0x824FEE94).
+        CgsContainers::BitArray<256> mEventsWithUniqueFinishPoints;   // +0x7770 (30576)
         // [H3b ADDITIVE CARVE] the drive-through / junkyard sat-nav icon list + its count
         // (X360 GetDriveThroughOrJunkyardAtIndex @0x824FAC10: entries at cache+0x7790,
         // stride 0x30, count word at cache+0x8030 -- 46*0x30 + 4 == the old 2212-byte pad

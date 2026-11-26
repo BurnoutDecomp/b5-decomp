@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiCache.h"             // GuiCache::GetActiveControllerIndex
 #include <xtl.h>                                    // native sign-in and notification APIs
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/X360/BrnCrashNavEnterOnlineX360.cpp"
 // BrnGui::CrashNavEnterOnlineX360 -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // The Xbox-360 platform flavour of the crash-nav "enter online" sign-in screen. It owns
@@ -65,7 +65,7 @@ namespace BrnGui
         {
             if (luParam == 0)
             {
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 98);
                 const bool lbSignedIn =
                     XUserGetSigninState(static_cast<DWORD>(mpGuiCache->GetActiveControllerIndex()))
                     == eXUserSigninState_SignedInToLive;

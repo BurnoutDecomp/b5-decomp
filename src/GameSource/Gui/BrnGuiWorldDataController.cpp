@@ -177,7 +177,7 @@ bool WorldDataController::Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDa
         meState = E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_TRIGGERS;
         if (mReceiverQueue.GetLength() == 0)
             return false;
-        CGS_ASSERT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()");   // cpp:102
+        CGS_ASSERT_AT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()", CGS_ARTIST_FILE, 102);   // cpp:102
 
         const CgsModule::Event* lpEvent = PeekFirstPayload(mReceiverQueue);
         CGS_ASSERT(lpEvent != 0, "NULL != lpEvent");                                      // cpp:110
@@ -207,7 +207,7 @@ bool WorldDataController::Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDa
         meState = E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_VEHICLES;
         if (mReceiverQueue.GetLength() == 0)
             return false;
-        CGS_ASSERT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()");   // cpp:140
+        CGS_ASSERT_AT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()", CGS_ARTIST_FILE, 140);   // cpp:140
 
         const CgsModule::Event* lpEvent = PeekFirstPayload(mReceiverQueue);
         CGS_ASSERT(lpEvent != 0, "NULL != lpEvent");                                      // cpp:147
@@ -362,13 +362,13 @@ bool WorldDataController::Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameD
         meState2 = E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_TRIGGERS;
         if (mReceiverQueue.GetLength() == 0)
             return false;
-        CGS_ASSERT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()");   // cpp:293
+        CGS_ASSERT_AT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()", CGS_ARTIST_FILE, 293);   // cpp:293
 
         const CgsModule::Event* lpEvent = PeekFirstPayload(mReceiverQueue);
-        CGS_ASSERT(lpEvent != 0, "NULL != lpEvent");                                      // cpp:301
+        CGS_ASSERT_AT(lpEvent != 0, "NULL != lpEvent", CGS_ARTIST_FILE, 301);                                      // cpp:301
         const CgsResource::Events::AcquireResourceResponse* lpAcquire =
             reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
-        CGS_ASSERT(lpAcquire != 0, "NULL != lpAcquire");                                  // cpp:304
+        CGS_ASSERT_AT(lpAcquire != 0, "NULL != lpAcquire", CGS_ARTIST_FILE, 304);                                  // cpp:304
         if (lpAcquire != 0)
         {
             // X360 `CreateFromHandle(this + 0x444, payload + 0x18)` -- the same trailing
@@ -401,13 +401,13 @@ bool WorldDataController::Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameD
         meState2 = E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_VEHICLES;
         if (mReceiverQueue.GetLength() == 0)
             return false;
-        CGS_ASSERT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()");   // cpp:332
+        CGS_ASSERT_AT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()", CGS_ARTIST_FILE, 332);   // cpp:332
 
         const CgsModule::Event* lpEvent = PeekFirstPayload(mReceiverQueue);
-        CGS_ASSERT(lpEvent != 0, "NULL != lpEvent");                                      // cpp:340
+        CGS_ASSERT_AT(lpEvent != 0, "NULL != lpEvent", CGS_ARTIST_FILE, 340);                                      // cpp:340
         const CgsResource::Events::AcquireResourceResponse* lpAcquire =
             reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
-        CGS_ASSERT(lpAcquire != 0, "NULL != lpAcquire");                                  // cpp:343
+        CGS_ASSERT_AT(lpAcquire != 0, "NULL != lpAcquire", CGS_ARTIST_FILE, 343);                                  // cpp:343
         if (lpAcquire != 0)
         {
             CgsResource::ResourceHandle lHandle;
@@ -496,9 +496,9 @@ const BrnProgression::ProgressionData* WorldDataController::GetProgressionData()
 const BrnTrigger::Landmark*
 WorldDataController::GetLandmarkInfoFromIndex(BrnGameState::LandmarkIndex lLandmarkIndex) const
 {
-    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
-    CGS_ASSERT(static_cast<s32>(lLandmarkIndex) >= 0, "0 <= lLandmarkIndex");
+    CGS_ASSERT_AT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 402);
+    CGS_ASSERT_AT(static_cast<s32>(lLandmarkIndex) >= 0, "0 <= lLandmarkIndex", CGS_ARTIST_FILE, 403);
 
     for (s32 liIndex = 0; liIndex < mpTriggerData->GetLandmarkCount(); ++liIndex)
     {
@@ -528,8 +528,8 @@ WorldDataController::GetLandmarkInfoFromIndex(BrnGameState::LandmarkIndex lLandm
 const BrnTrigger::Landmark*
 WorldDataController::GetLandmarkInfoFromID(CgsID lLandmarkID) const
 {
-    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+    CGS_ASSERT_AT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 433);
 
     for (s32 liIndex = 0; liIndex < mpTriggerData->GetLandmarkCount(); ++liIndex)
     {
@@ -559,8 +559,8 @@ WorldDataController::GetLandmarkInfoFromID(CgsID lLandmarkID) const
 const BrnProgression::RaceEventData*
 WorldDataController::GetEventInfoFromEventId(u32 luEventId) const
 {
-    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+    CGS_ASSERT_AT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 464);
 
     const u32 luJunctionCount = mpProgressionData->GetEventJunctionCount();
     for (u32 luIndex = 0; luIndex < luJunctionCount; ++luIndex)
@@ -578,8 +578,8 @@ WorldDataController::GetEventInfoFromEventId(u32 luEventId) const
 const BrnProgression::RaceEventData*
 WorldDataController::GetOnlineEventInfoFromEventId(u32 luEventId) const
 {
-    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+    CGS_ASSERT_AT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 485);
 
     const u32 luJunctionCount = mpProgressionData->GetEventJunctionCount();
     for (u32 luIndex = 0; luIndex < luJunctionCount; ++luIndex)
@@ -646,8 +646,8 @@ namespace BrnGui
 // ARTIST 0x825017E8: list position is distinct from the landmark's region index.
 const BrnTrigger::Landmark* WorldDataController::GetLandmarkInfoAtPositionInList(s32 liIndex) const
 {
-    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+    CGS_ASSERT_AT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 506);
     CGS_ASSERT(liIndex >= 0 && liIndex < mpTriggerData->GetLandmarkCount(),
         "Landmark list index is outside the valid range");
     return mpTriggerData->GetLandmark(liIndex);
@@ -660,8 +660,8 @@ const BrnTrigger::Landmark* WorldDataController::GetLandmarkInfoAtPositionInList
 // takes a plain string, as everywhere else in this file.
 const BrnTrigger::Landmark* WorldDataController::GetOnlineLandmarkInfoAtPositionInList(s32 liIndex) const
 {
-    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+    CGS_ASSERT_AT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 528);
     CGS_ASSERT(liIndex >= 0 && liIndex < mpTriggerData->GetOnlineLandmarkCount(),
         "Index is outside of valid range");
     return mpTriggerData->GetOnlineLandmark(liIndex);

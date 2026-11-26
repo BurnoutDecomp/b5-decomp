@@ -15,7 +15,7 @@
 // GetOutputEventQueue()->AddEvent with host sizeof sizes.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlinePreEvent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlinePreEvent.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
@@ -197,7 +197,7 @@ namespace BrnGui
     // ================================================================================
     bool OnlinePreEvent::UpdateLoadResources()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 222);
 
         if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
@@ -252,7 +252,7 @@ namespace BrnGui
             }
 
             case KI_EVENT_NETWORK_DISCONNECTED:
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 303);
                 if (mpGuiCache->IsOnline())
                 {
                     GuiOverlayRequestWire lLostConnectionOverlay;

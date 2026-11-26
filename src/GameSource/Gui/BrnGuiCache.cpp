@@ -4596,7 +4596,7 @@ namespace BrnGui
         u32 luFinishPointCount = 0;
         for (s32 liWord = 0; liWord < 4; ++liWord)
         {
-            u64 luBits = maOnlineFinishPointsMask[liWord];
+            u64 luBits = mEventsWithUniqueFinishPoints.GetBitField(static_cast<u32>(liWord));
             luBits = luBits - ((luBits >> 1) & 0xD555555555555555ULL);
             luBits = ((luBits >> 2) & 0xF333333333333333ULL) + (luBits & 0x3333333333333333ULL);
             luBits = (luBits + (luBits >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
@@ -4640,13 +4640,13 @@ namespace BrnGui
         }
 
         // Lowest set bit in the whole set, or KI_INVALID_BITINDEX when every field is zero.
-        s32 GetFirstSetBit(const u64* lpa64Fields)
+        s32 GetFirstSetBit(const CgsContainers::BitArray<KU_MAX_FINISH_POINTS>& lrBits)
         {
             for (u32 luField = 0; luField < KU_FINISH_POINT_FIELDS; ++luField)
             {
-                if (lpa64Fields[luField] != 0)
+                if (lrBits.GetBitField(luField) != 0)
                 {
-                    return LowestSetBitIndex(luField, lpa64Fields[luField]);
+                    return LowestSetBitIndex(luField, lrBits.GetBitField(luField));
                 }
             }
             return KI_INVALID_BITINDEX;
@@ -4658,16 +4658,15 @@ namespace BrnGui
         // field-at-a-time scan of the fields after it. liAfter == KI_INVALID_BITINDEX makes
         // the first phase empty and starts the scan at field 0, which is what the recovered
         // code's `(liAfter & ~63) + 64` arithmetic does with -1.
-        s32 GetNextSetBit(const u64* lpa64Fields, s32 liAfter)
+        s32 GetNextSetBit(const CgsContainers::BitArray<KU_MAX_FINISH_POINTS>& lrBits, s32 liAfter)
         {
             const u32 luFieldEnd = static_cast<u32>((liAfter & ~63) + 64);
             u32 luBit = static_cast<u32>(liAfter + 1);
 
+            // The bit probe is the set's own IsBitSet (its bound assert is the accessor's).
             for (; luBit < luFieldEnd; ++luBit)
             {
-                CGS_ASSERT(luBit < KU_MAX_FINISH_POINTS, "invalid index");  // CgsBitArray.h:203
-                const u64 lu64Mask = static_cast<u64>(1) << (luBit & (KU_BITS_IN_FIELD - 1));
-                if ((lpa64Fields[luBit / KU_BITS_IN_FIELD] & lu64Mask) != 0)
+                if (lrBits.IsBitSet(luBit))
                 {
                     return static_cast<s32>(luBit);
                 }
@@ -4676,9 +4675,9 @@ namespace BrnGui
             for (u32 luField = luBit / KU_BITS_IN_FIELD;
                  luField < KU_FINISH_POINT_FIELDS; ++luField)
             {
-                if (lpa64Fields[luField] != 0)
+                if (lrBits.GetBitField(luField) != 0)
                 {
-                    return LowestSetBitIndex(luField, lpa64Fields[luField]);
+                    return LowestSetBitIndex(luField, lrBits.GetBitField(luField));
                 }
             }
             return KI_INVALID_BITINDEX;
@@ -4729,14 +4728,14 @@ namespace BrnGui
                    "((uint32_t)liIndexIn) < mEventsWithUniqueFinishPoints.CountSetBits()", CGS_ARTIST_FILE, 3696);
                                                                                // cpp:3696
 
-        s32 liSetBit = GetFirstSetBit(maOnlineFinishPointsMask);
+        s32 liSetBit = GetFirstSetBit(mEventsWithUniqueFinishPoints);
         CGS_ASSERT_AT(liSetBit != KI_INVALID_BITINDEX,
                    "liSetBit != CgsContainers::BitArray<KI_MAX_FINISH_POINTS>"
                    "::KI_INVALID_BITINDEX", CGS_ARTIST_FILE, 3699);                                   // cpp:3699
 
         for (s32 liRemaining = liIndexIn; liRemaining > 0; --liRemaining)
         {
-            liSetBit = GetNextSetBit(maOnlineFinishPointsMask, liSetBit);
+            liSetBit = GetNextSetBit(mEventsWithUniqueFinishPoints, liSetBit);
             CGS_ASSERT(liSetBit != KI_INVALID_BITINDEX,
                        "liSetBit != CgsContainers::BitArray<KI_MAX_FINISH_POINTS>"
                        "::KI_INVALID_BITINDEX");                               // cpp:3703
@@ -4917,10 +4916,10 @@ namespace BrnGui
                     reinterpret_cast<const u8*>(lpEvent) + sizeof(maEventsStorage),
                     sizeof(mEventsCtorSentinel));
 
-        maOnlineFinishPointsMask[0] = 0;
-        maOnlineFinishPointsMask[1] = 0;
-        maOnlineFinishPointsMask[2] = 0;
-        maOnlineFinishPointsMask[3] = 0;
+        mEventsWithUniqueFinishPoints.SetBitField(0, 0);
+        mEventsWithUniqueFinishPoints.SetBitField(1, 0);
+        mEventsWithUniqueFinishPoints.SetBitField(2, 0);
+        mEventsWithUniqueFinishPoints.SetBitField(3, 0);
 
         for (s32 liIndex = 0; liIndex < GetNumPresetEvents(); ++liIndex)
         {
@@ -4959,11 +4958,7 @@ namespace BrnGui
                 continue;
             }
 
-            CGS_ASSERT(static_cast<u32>(liIndex) < 256u,
-                       "Index < Number of bits");                    // CgsBitArray.h:222
-
-            maOnlineFinishPointsMask[liIndex >> 6] |=
-                static_cast<u64>(1) << (liIndex & 63);
+            mEventsWithUniqueFinishPoints.SetBit(static_cast<u32>(liIndex));   // CgsBitArray.h:222
         }
     }
 }

@@ -245,8 +245,6 @@ bool EventInterpreterModule::IsEventBlocked(s32 liEvent, EventObserver*& lrpBloc
 
         for (u32 luEntry = 0; luEntry < lrObserver.muHashElementPoolCount; ++luEntry)
         {
-            CGS_ASSERT(static_cast<u32>(liEvent) < 600u, "luIndex < NUMBITS");
-
             const sMapEntry& lrMapEntry = lrObserver.maHashElementPool[luEntry].GetValue();
             if (lrMapEntry.mOverriddenEventListBitArray.IsBitSet(static_cast<u32>(liEvent)))
             {

@@ -28,7 +28,7 @@
 // components manager is reached through GuiModule::GetAlwaysAvailableComponentsManager().
 // ===================================================================================
 #include "GameSource/Gui/BrnGuiViewModule.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiViewModule.cpp"
 // NOTE: BrnGuiModule.h is intentionally NOT included -- the owning GuiModule is held by
 // pointer only and the always-available components manager is reached through the free
 // BrnGui::GetAlwaysAvailableComponentsManager(GuiModule*) accessor declared in
@@ -194,7 +194,7 @@ void ViewModule::ProcessIncomingLoadNotification(const CgsModule::Event* lpEvent
     // Register the just-loaded HUD flapt file with the manager.
     mFlaptManager.RegisterFlaptFile(KE_HUD_FLAPT_FILE, lpNotification->mResourceHandle);
 
-    CGS_ASSERT(mpGuiModule != 0, "mpGuiModule");
+    CGS_ASSERT_AT(mpGuiModule != 0, "mpGuiModule", CGS_ARTIST_FILE, 276);
 
     // Fetch the registered file and (re)prepare the GuiModule's always-available components.
     BrnFlapt::FileRef lFileRef = mFlaptManager.GetFile(KE_HUD_FLAPT_FILE);

@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Overlay/States/BrnPreloadOverlayState.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Overlay/States/BrnPreloadOverlayState.cpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface (Register/UnRegisterForEvents, PlayAptMovie)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // CgsModule::VariableEventQueue<18432,16> / Event (GetFirstEvent/GetNextEvent)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
@@ -126,7 +126,7 @@ void PreloadOverlayState::Update()
 // @ 0x824B2070
 bool PreloadOverlayState::GetCache()
 {
-    CGS_ASSERT(mpGuiCache == NULL, "mpGuiCache == NULL");
+    CGS_ASSERT_AT(mpGuiCache == NULL, "mpGuiCache == NULL", CGS_ARTIST_FILE, 178);
 
     // CgsGui::State stores the in-event queue as an opaque InputBuffer::GuiEventQueue* (a
     // forward-decl, to avoid a header cascade), but the X360 in-event queue is concretely a

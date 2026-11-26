@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/Model/CgsModelModule.h"
 #include "GameSource/Gui/BrnGuiOverlaysDirector.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiOverlaysDirector.cpp"
 #include <cstring>   // std::memcpy (the buffered -> current overlay promote)
 #include <cstdlib>
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                     // CGS_ASSERT
@@ -180,7 +180,7 @@ void GuiOverlaysDirector::HandleShowFreeBurnIntroRequest(const GuiEventNetworkSh
 {
     typedef BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData InGamePlayerStatusData;
 
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 435);
 
     if (lpNotification->mbShow)
     {
@@ -191,7 +191,7 @@ void GuiOverlaysDirector::HandleShowFreeBurnIntroRequest(const GuiEventNetworkSh
         for (s32 liOnlinePlayerIndex = 0; liOnlinePlayerIndex < liOnlinePlayerCount; ++liOnlinePlayerIndex)
         {
             const InGamePlayerStatusData* lpPlayerInfo = mpGuiCache->GetOnlinePlayerInfoByIndex(liOnlinePlayerIndex);
-            CGS_ASSERT(lpPlayerInfo != NULL, "lpPlayerInfo");
+            CGS_ASSERT_AT(lpPlayerInfo != NULL, "lpPlayerInfo", CGS_ARTIST_FILE, 449);
 
             if (lpPlayerInfo->mbIsHost)
                 lpHostPlayerInfo = lpPlayerInfo;
@@ -202,7 +202,7 @@ void GuiOverlaysDirector::HandleShowFreeBurnIntroRequest(const GuiEventNetworkSh
                 break;
         }
 
-        CGS_ASSERT(lpHostPlayerInfo != NULL, "lpHostPlayerInfo");
+        CGS_ASSERT_AT(lpHostPlayerInfo != NULL, "lpHostPlayerInfo", CGS_ARTIST_FILE, 466);
 
         GuiOverlayRequest lEnterGameOverlayRequest;
         if (lpNotification->mbFinishedOnlineEvent)
@@ -225,7 +225,7 @@ void GuiOverlaysDirector::HandleShowFreeBurnIntroRequest(const GuiEventNetworkSh
         else if (lpHostPlayerInfo->mbIsLocalPlayer && liOnlinePlayerCount > 1)
         {
             // The local host with company: named after the first non-host player.
-            CGS_ASSERT(lpFirstNonHostPlayerInfo != NULL, "lpFirstNonHostPlayerInfo");
+            CGS_ASSERT_AT(lpFirstNonHostPlayerInfo != NULL, "lpFirstNonHostPlayerInfo", CGS_ARTIST_FILE, 491);
             lEnterGameOverlayRequest.Construct("OnCEnterOn");
             lEnterGameOverlayRequest.AddMessageParam(CgsGui::E_POPUPPARAMTYPES_STRING, lpFirstNonHostPlayerInfo->mPlayerName.GetPlayerName());
         }
@@ -326,8 +326,8 @@ void GuiOverlaysDirector::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput
     if (mpController == NULL)
         return;
 
-    CGS_ASSERT(lpGuiInputBuffer != NULL,
-               "Input buffer is not valid. Is it definately locked for reading?");
+    CGS_ASSERT_AT(lpGuiInputBuffer != NULL,
+               "Input buffer is not valid. Is it definately locked for reading?", CGS_ARTIST_FILE, 82);
     mpGuiInputBuffer = lpGuiInputBuffer;
 
     CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue =

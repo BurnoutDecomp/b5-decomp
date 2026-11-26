@@ -91,7 +91,7 @@ namespace BrnGui
                                                CgsGui::StateInterface* lpStateInterface,
                                                const void* /*lpcParentName*/)
     {
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
+        CGS_ASSERT_AT(lpStateInterface != 0, "lpStateInterface", CGS_ARTIST_FILE, 72);
         CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
 
         mpStateInterface        = lpStateInterface;
@@ -116,7 +116,7 @@ namespace BrnGui
     void FlaptRoadSignIconComponent::Prepare(const char* lacName,
                                              const BrnFlapt::FileRef& lFile)
     {
-        CGS_ASSERT(lacName != 0, "lacName");
+        CGS_ASSERT_AT(lacName != 0, "lacName", CGS_ARTIST_FILE, 99);
         CGS_ASSERT(lacName != 0, "lacName != NULL");
 
         mAptRef = lFile.FindComponent(lacName);
@@ -218,7 +218,7 @@ namespace BrnGui
     // the shared road-icon name table); assert if no road matches.
     ERoadIcon FlaptRoadSignIconComponent::FindRoadFromName(const char* lpIconName)
     {
-        CGS_ASSERT(lpIconName != 0, "lpIconName");
+        CGS_ASSERT_AT(lpIconName != 0, "lpIconName", CGS_ARTIST_FILE, 314);
 
         s32 liIndex = 0;
         while (liIndex < E_ROADICON_COUNT)

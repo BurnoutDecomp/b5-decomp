@@ -80,7 +80,7 @@ namespace BrnGui
     // @ 0x8241C2C0 -- play the clip on the hashed state label, if it changed.
     void FlaptIconComponent::SetState(const char* lpcStateName)
     {
-        CGS_ASSERT(lpcStateName != 0, "lpcStateName");
+        CGS_ASSERT_AT(lpcStateName != 0, "lpcStateName", CGS_ARTIST_FILE, 100);
 
         u32 luStateHash = CgsContainers::CgsHash::CalculateHash(
             const_cast<char*>(lpcStateName), IconLabelLength(lpcStateName));
@@ -98,7 +98,7 @@ namespace BrnGui
     // @ 0x8241C3D8 -- stop the clip on the hashed state label, if it changed.
     void FlaptIconComponent::GotoAndStopLabel(const char* lpcStateName)
     {
-        CGS_ASSERT(lpcStateName != 0, "lpcStateName");
+        CGS_ASSERT_AT(lpcStateName != 0, "lpcStateName", CGS_ARTIST_FILE, 123);
 
         u32 luStateHash = CgsContainers::CgsHash::CalculateHash(
             const_cast<char*>(lpcStateName), IconLabelLength(lpcStateName));

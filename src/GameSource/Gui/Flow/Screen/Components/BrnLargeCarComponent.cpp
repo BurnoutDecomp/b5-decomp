@@ -129,9 +129,9 @@ namespace BrnGui
     // @ 0x8241B9F8
     bool LargeCarComponent::HandleAptTransitionTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger)
     {
-        CGS_ASSERT(lpAptTrigger != 0, "lpAptTrigger");
-        CGS_ASSERT(CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE == lpAptTrigger->meEventType,
-                   "CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE == lpAptTrigger->meEventType");
+        CGS_ASSERT_AT(lpAptTrigger != 0, "lpAptTrigger", CGS_ARTIST_FILE, 305);
+        CGS_ASSERT_AT(CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE == lpAptTrigger->meEventType,
+                   "CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE == lpAptTrigger->meEventType", CGS_ARTIST_FILE, 306);
 
         bool lbHandled = false;
         if (strcmp(GetName(), lpAptTrigger->mpacComponentName) == 0)
@@ -153,8 +153,8 @@ namespace BrnGui
     // @ 0x8243DAF8
     void LargeCarComponent::OnLoad()
     {
-        CGS_ASSERT(meCurrentState >= E_INTERNAL_STATE_READY,
-                   "E_INTERNAL_STATE_READY <= meCurrentState");
+        CGS_ASSERT_AT(meCurrentState >= E_INTERNAL_STATE_READY,
+                   "E_INTERNAL_STATE_READY <= meCurrentState", CGS_ARTIST_FILE, 107);
 
         mpStateInterface->PlayAptMovie(macCarNameText, 4);
     }

@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnComplexBar.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnComplexBar.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 
@@ -65,7 +65,7 @@ void ComplexBar::SetColour(u32 luColour)
 void ComplexBar::HandleTransitionComplete(s32 liBarSize)
 {
     CGS_ASSERT(mbTransitionInProgress, "Transition should be currently running");   // :116 (streamed on the X360; folded static)
-    CGS_ASSERT(liBarSize >= 0, "liBarSize >= 0");                                    // :117
+    CGS_ASSERT_AT(liBarSize >= 0, "liBarSize >= 0", CGS_ARTIST_FILE, 117);                                    // :117
 
     const s32 liQueuedIndex = miQueuedIndex;
     mbTransitionInProgress = false;

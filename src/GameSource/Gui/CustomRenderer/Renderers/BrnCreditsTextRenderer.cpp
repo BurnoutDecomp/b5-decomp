@@ -9,7 +9,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include <cmath>
 #include <cstring>
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnCreditsTextRenderer.cpp"
 namespace BrnGui {
 // DecFIGS BrnCreditsTextRenderer.cpp:23..40: namespace-scope, NON-const float32_t / int32_t
 // tunables (ARTIST .data 0x82F2589C..0x82F258E0, each read through its own lis/lfs, e.g.
@@ -318,7 +318,7 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
 // and the background mask; 587 selects end or replay credits.
 void CreditsTextRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType)
 {
-    CGS_ASSERT(lpEvent != 0, " null event passed ");
+    CGS_ASSERT_AT(lpEvent != 0, " null event passed ", CGS_ARTIST_FILE, 168);
     if (liEventType == 14)
     {
         const CgsGui::GuiEventLoadNotification* lpNotification =

@@ -1,6 +1,6 @@
 #include "GameSource/Gui/BrnGuiColourCalibrationScreen.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiColourCalibrationScreen.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // CgsResource::Events::AcquireResourceResponse
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // GuiOptionsBrightnessContrastPostFxControl
@@ -91,8 +91,8 @@ void ColourCalibrationScreen::RecvEvent(const CgsModule::Event* lpEvent, s32 liI
 
     if (liId == 514)
     {
-        CGS_ASSERT(E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED == meState,
-                   "E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED == meState");
+        CGS_ASSERT_AT(E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED == meState,
+                   "E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED == meState", CGS_ARTIST_FILE, 258);
         meState = E_COLOURCALIBRATIONSCREENSTATE_PREPARE_TO_SHOW;
     }
     else if (liId == 515)
@@ -128,7 +128,7 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
         if (mReceiverQueue.GetLength() == 0)
             break;   // still waiting for the pool's reply
 
-        CGS_ASSERT(mReceiverQueue.GetLength() == 1, "mReceiverQueue.GetLength() == 1");
+        CGS_ASSERT_AT(mReceiverQueue.GetLength() == 1, "mReceiverQueue.GetLength() == 1", CGS_ARTIST_FILE, 128);
 
         const CgsModule::Event* lpEvent  = NULL;
         s32                     liSize   = 0;
@@ -146,8 +146,8 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
         // Latch the resolved handle and drop the reply.
         mColourCalibrationTextureHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
         mColourCalibrationTextureHandle.mpSourceEntry    = lpAcquire->mpSourceEntry;
-        CGS_ASSERT(mColourCalibrationTextureHandle != CgsResource::NULLResourceHandle,
-                   "mColourCalibrationTextureHandle != CgsResource::NULLResourceHandle");
+        CGS_ASSERT_AT(mColourCalibrationTextureHandle != CgsResource::NULLResourceHandle,
+                   "mColourCalibrationTextureHandle != CgsResource::NULLResourceHandle", CGS_ARTIST_FILE, 147);
         mReceiverQueue.Clear();
 
         // The handle's resource memory is the SmallResource slot whose first word is the
@@ -155,7 +155,7 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
         renderengine::Texture* lpColourCalibrationTexture =
             *reinterpret_cast<renderengine::Texture* const*>(
                 mColourCalibrationTextureHandle.mpResourceMemory);
-        CGS_ASSERT(NULL != lpColourCalibrationTexture, "NULL != lpColourCalibrationTexture");
+        CGS_ASSERT_AT(NULL != lpColourCalibrationTexture, "NULL != lpColourCalibrationTexture", CGS_ARTIST_FILE, 155);
 
         // ARTIST8246AC6C..CCD: address UVW=2, all filters=0.
         // Mip filter differs from the native constructor default of 2.

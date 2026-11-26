@@ -1,6 +1,6 @@
 #include "GameSource/Gui/SatNav/BrnMapManager.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapManager.cpp"
 #include "SharedClasses/Gui/SatNav/BrnSatNavTile.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h" // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiCache.h"              // BrnGui::GuiCache (RecvEvent resource load)
@@ -117,7 +117,7 @@ namespace BrnGui
     // ---------------------------------------------------------------------------
     void MapManager::Construct(CgsGui::StateInterface* lpStateInterface)
     {
-        CGS_ASSERT(lpStateInterface != NULL, "lpStateInterface != NULL");   // cpp:62
+        CGS_ASSERT_AT(lpStateInterface != NULL, "lpStateInterface != NULL", CGS_ARTIST_FILE, 62);   // cpp:62
 
         mpStateInterface = lpStateInterface;
 
@@ -183,7 +183,7 @@ namespace BrnGui
     // @0x82448760 -- the bundle-load state of the requested-tile slot owning luID.
     SatNavTile::EBundleState MapManager::GetTileState(uint32_t luID) const
     {
-        CGS_ASSERT(luID != 0, "luID != 0");
+        CGS_ASSERT_AT(luID != 0, "luID != 0", CGS_ARTIST_FILE, 746);
 
         uint32_t luIndex = 0;
         const SatNavTile::sTileCache* lpRequestedTile = &maRequestedTiles[0];
@@ -225,8 +225,8 @@ namespace BrnGui
         {
             const SatNavTile::sTileCache& lTile = maRequestedTiles[luTileIndex];
 
-            CGS_ASSERT(mActiveTextures.muTextureCount < KU_MAX_TEXTURES_IN_CACHE,
-                       "mActiveTextures.muTextureCount < KU_MAX_TEXTURES_IN_CACHE");
+            CGS_ASSERT_AT(mActiveTextures.muTextureCount < KU_MAX_TEXTURES_IN_CACHE,
+                       "mActiveTextures.muTextureCount < KU_MAX_TEXTURES_IN_CACHE", CGS_ARTIST_FILE, 366);
 
             if (lTile.meState != SatNavTile::E_STATE_LOADED)
             {
@@ -378,7 +378,7 @@ namespace BrnGui
         }
 
         const void* lpTexture2D = lpCache->GetLoadedResource(luMapTextureResourceId);
-        CGS_ASSERT(lpTexture2D != NULL, "lpTexture2D != NULL");
+        CGS_ASSERT_AT(lpTexture2D != NULL, "lpTexture2D != NULL", CGS_ARTIST_FILE, 424);
 
         // Sampler parameters for the backdrop texture-state (clamp-ish addressing, point/linear
         // filter, no mip bias). Field values mirror the X360 stores store-for-store.
@@ -435,7 +435,7 @@ namespace BrnGui
             if (lTileItem.IsWithinWorldRect(lWorldRect))
             {
                 const char* lpcName = lTileItem.macBundleName;
-                CGS_ASSERT(lpcName != NULL, "lpcName != NULL");
+                CGS_ASSERT_AT(lpcName != NULL, "lpcName != NULL", CGS_ARTIST_FILE, 671);
             }
         }
 
@@ -453,8 +453,8 @@ namespace BrnGui
             }
 
             CGS_ASSERT(lTile.mpTile != NULL, "lpTile != NULL");
-            CGS_ASSERT(GetTileState(lTile.mpTile->muID) == SatNavTile::E_STATE_LOADED,
-                       "GetTileState( lpTile->muID) == SatNavTile::E_STATE_LOADED");
+            CGS_ASSERT_AT(GetTileState(lTile.mpTile->muID) == SatNavTile::E_STATE_LOADED,
+                       "GetTileState( lpTile->muID) == SatNavTile::E_STATE_LOADED", CGS_ARTIST_FILE, 980);
         }
     }
 }

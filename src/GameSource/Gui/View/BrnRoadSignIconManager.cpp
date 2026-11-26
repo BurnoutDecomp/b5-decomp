@@ -10,7 +10,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"                      // GuiCache::IsHighDefinition / GetActiveRoadRuleScoringMode
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"              // GuiEventRoadSignIconStatus / GuiEventRoadRuleBatchDataResponse
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"            // MapTransform::WorldToDevice
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/SatNav/BrnRoadSignIconManager.cpp"
 #include <cstdlib>   // getenv (BRN_MAPICON_DIAG)
 
 // BrnGui::RoadSignIcon / BrnGui::RoadSignIconManager (the asserts name the original home,
@@ -69,8 +69,8 @@ namespace
     void RoadSignIcon::SetIcon(ERoadIcon leIcon, const Vector2* lpv2WorldPos, EIconType leIconType,
                                CgsID lRoadId)
     {
-        CGS_ASSERT(leIcon >= 0 && leIcon < E_ROADICON_COUNT,
-                   "leIcon >= 0 && leIcon < E_ROADICON_COUNT");   // assert line 182
+        CGS_ASSERT_AT(leIcon >= 0 && leIcon < E_ROADICON_COUNT,
+                   "leIcon >= 0 && leIcon < E_ROADICON_COUNT", CGS_ARTIST_FILE, 182);   // assert line 182
 
         mv2WorldPos.mV.x = lpv2WorldPos->mV.x;
         mv2WorldPos.mV.y = lpv2WorldPos->mV.y;
@@ -128,7 +128,7 @@ namespace
     // A linear search of the 64 icon names; the console open-codes the strcmp.
     ERoadIcon RoadSignIcon::FindRoadFromName(const char* lpIconName)
     {
-        CGS_ASSERT(lpIconName != 0, "lpIconName");   // assert line 334
+        CGS_ASSERT_AT(lpIconName != 0, "lpIconName", CGS_ARTIST_FILE, 334);   // assert line 334
 
         s32 liIcon = 0;
         for (; liIcon < E_ROADICON_COUNT; ++liIcon)
@@ -228,8 +228,8 @@ namespace
     // One sign per icon name, each wrapped in a freshly allocated apt ObjectController.
     void RoadSignIconManager::Prepare(CgsGui::StateInterface* lpStateInterface, GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");   // assert line 382
-        CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");               // assert line 383
+        CGS_ASSERT_AT(lpStateInterface != 0, "lpStateInterface", CGS_ARTIST_FILE, 382);   // assert line 382
+        CGS_ASSERT_AT(lpGuiCache != 0, "lpGuiCache", CGS_ARTIST_FILE, 383);               // assert line 383
 
         for (u32 luIcon = 0; luIcon < KU_NUM_SIGN_ICONS; ++luIcon)
         {
@@ -466,14 +466,14 @@ namespace
     // attach to its apt object on ONLOAD. The controlled list is cleared first.
     void RoadSignIconManager::AppendExpectedComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // assert line 538
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 538);   // assert line 538
 
         mpGuiCache->ClearExpectedControlledAptComponentList();
 
         for (s32 liIndex = 0; liIndex < GetNumIcons(); ++liIndex)
         {
-            CGS_ASSERT(mapObjectController[liIndex] != 0,
-                       "mapObjectController[liIndex]");   // assert line 545
+            CGS_ASSERT_AT(mapObjectController[liIndex] != 0,
+                       "mapObjectController[liIndex]", CGS_ARTIST_FILE, 545);   // assert line 545
 
             const char* lpcName = mIcons[liIndex].GetName();
             mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, lpcName);
@@ -494,7 +494,7 @@ namespace
     void RoadSignIconManager::GetRoadSignIconPositions(Vector2* lpav2Positions,
                                                        s32* lpiNumIcons) const
     {
-        CGS_ASSERT(lpiNumIcons != 0, "lpiNumIcons");   // assert line 564
+        CGS_ASSERT_AT(lpiNumIcons != 0, "lpiNumIcons", CGS_ARTIST_FILE, 564);   // assert line 564
 
         for (u32 luIcon = 0; luIcon < KU_NUM_SIGN_ICONS; ++luIcon)
         {
