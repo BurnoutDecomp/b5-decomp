@@ -48,7 +48,7 @@
 
 namespace CgsGeometric { struct PolygonSoupListSpatialMap; struct Line; }
 namespace CgsMemory { struct SimpleDataStreamConsumer; }
-namespace CgsSceneManager { namespace CgsCollision { struct CollisionJobDescription; } }
+namespace CgsSceneManager { namespace CgsCollision { struct CollisionJobDescription; struct CollisionResultList; } }
 
 struct PolygonSoupTesterJob
 {
@@ -89,7 +89,7 @@ struct PolygonSoupTesterJob
     // RunBoxQuery @0x82916D28 -- carve the two 2048-entry ping/pong buffers and the
     // node cache out of the arena and run the map's job-side box query. The cursor is
     // restored on the way out, so the buffers are scoped to the call.
-    s32 RunBoxQuery(const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
+    void RunBoxQuery(const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
                     const CgsGeometric::AxisAlignedBox*            lpQueryBox,
                     u16**                                          lppaOutResults,
                     s32*                                           lpiOutNumResults);
@@ -97,6 +97,18 @@ struct PolygonSoupTesterJob
     // LoadPrimitive @0x82916AB8 -- `*a3 = a2`, eight instructions. On SPU this is the
     // DMA fetch of the primitive; on a shared-memory host it is the pointer itself.
     void LoadPrimitive(const void* lpvSource, const void** lppvOut);
+
+    // The fill arm's other loaders, the same on X360 (the SPU's DMA is a plain copy here;
+    // ExecuteFillTriangleCache 0x82915D10 / 0x82915CF4 / 0x82915D6C call them):
+    // LoadTriangleListDestination @0x82916928 -- `*a3 = a2`, the destination pointer;
+    // LoadResultList @0x82916AD8 / SaveResults @0x82916B38 -- the 16-byte
+    // CollisionResultList header copied word by word (source r4, destination r5).
+    void LoadTriangleListDestination(CgsGeometric::Triangle4* lpSourceTriangleList,
+                                     CgsGeometric::Triangle4** lppDestinationTriangleList);
+    void LoadResultList(const CgsSceneManager::CgsCollision::CollisionResultList* lpSourceResultList,
+                        CgsSceneManager::CgsCollision::CollisionResultList*       lpDestinationResultList);
+    void SaveResults(const CgsSceneManager::CgsCollision::CollisionResultList* lpSourceResultList,
+                     CgsSceneManager::CgsCollision::CollisionResultList*       lpDestinationResultList);
 
     // The synchronous fill arm (descriptor type 2). Nothing posts a type-2 descriptor, and
     // FillTriangleCacheJobDesc does not yet type its destination member as the Triangle4

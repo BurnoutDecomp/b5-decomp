@@ -322,17 +322,18 @@ void AptActionInterpreter::_FunctionAptActionPlay(AptActionInterpreter* /*pInter
 // ---------------------------------------------------------------------------
 // Stop @0x82ADD768 -- clear the run scope clip's "playing" bit (a defined,
 // non-level node). The console reads the type tag before the null check; preserved.
+// One condition chain with the character-instance accessor's value tested last
+// (ARTIST's signed `cmpwi r11,0` at 0x82ADD790: the accessor's value, not a local).
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionStop(AptActionInterpreter* /*pInterp*/,
                                                   LocalContextT* pContext)
 {
-    AptCIH* const pNode = pContext->mpCIH;
-    if (!pNode->getIsDefined())
-        return;
-
-    AptCharacterInst* const pInst = pNode->GetCharacterInst();
-    if (pInst->GetTypeTag() != KU_TYPETAG_LEVEL && pInst != 0)
-        static_cast<AptCharacterSpriteInstBase*>(pInst)->mbIsPlaying = 0;
+    AptCIH* const pCurrentContext = pContext->mpCIH;
+    if (pCurrentContext->getIsDefined() && !pCurrentContext->IsLevelInst() &&
+        pCurrentContext->GetCharacterInst() != NULL)
+    {
+        pCurrentContext->SetIsPlaying(false);
+    }
 }
 
 // ---------------------------------------------------------------------------

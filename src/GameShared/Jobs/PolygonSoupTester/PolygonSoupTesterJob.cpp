@@ -30,6 +30,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupSpacialNode.h"
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamConsumer.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsCollisionJobDescription.h"
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"         // CollisionResultList (the fill arm's header copies)
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsFillTriangleCacheStreamJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithPolySoupListJobDesc.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsLine.h"                                    // Line (the line arm's command)
@@ -58,6 +59,26 @@ namespace
     const f32 KF_LINE_PARAM_NO_HIT = 2.0f;
 }
 
+// The job-side assertion as ARTIST expands it in this TU (AllocateMemory 0x82916C10..0x82916C6C):
+// PrintStringed(file, 0, line, message) and the MSR[SE] trap, twice, each expansion with its own
+// copies of the literals (this TU is compiled /Od, so nothing pools them: "Trying to use too much
+// memory" sits at both 0x821004AC and 0x8210052C). The trap is an inline-assembly block, which
+// the compiler brackets with std/ld r12 as ARTIST shows; same sequence as the job entry points
+// (PolygonSoupTester.cpp, RadixSort.cpp).
+#include "GameShared/Jobs/CgsJobAssertBuffer.h"
+#define POLYGONSOUPTESTERJOB_CPP "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\PolygonSoupTester\\PolygonSoupTesterJob.cpp"
+#define POLYGONSOUPTESTER_JOB_FAIL(line, message)                          \
+    {                                                                      \
+        CGS_JOB_ASSERT_LOG(POLYGONSOUPTESTERJOB_CPP, line, message);       \
+        __asm { mfmsr r12 }                                                \
+        __asm { ori r12, r12, 0x400 }                                      \
+        __asm { mtmsr r12 }                                                \
+        CGS_JOB_ASSERT_LOG(POLYGONSOUPTESTERJOB_CPP, line, message);       \
+        __asm { mfmsr r12 }                                                \
+        __asm { ori r12, r12, 0x400 }                                      \
+        __asm { mtmsr r12 }                                                \
+    }
+
 // The line arm carves its result as one 128-byte arena slot and the stream copies a whole
 // aligned result per line, so the one-record block must be exactly that slot.
 CGS_STATIC_ASSERT((sizeof(LineWithPolySoupStreamJobDesc::StreamResult) == 128),
@@ -84,7 +105,7 @@ void PolygonSoupTesterJob::Execute(void* lpvJobData)
     mpJobDescription = static_cast<CollisionJobDescription*>(lpvJobData);
     miAllocCursor    = 0;
 
-    switch (mpJobDescription->GetType())
+    switch (mpJobDescription->GetCollisionType())
     {
     case CgsSceneManager::CgsCollision::E_COLLISIONJOB_FILL_TRIANGLE_CACHE:
         ExecuteFillTriangleCache();
@@ -294,17 +315,19 @@ u16 PolygonSoupTesterJob::FillTriangleCache(
 // ----------------------------------------------------------------------------
 void* PolygonSoupTesterJob::AllocateMemory(s32 liNumBytes, s32 liAlignment)
 {
-    const s32 liAlignedCursor = (miAllocCursor + liAlignment - 1) & ~(liAlignment - 1);
-    const s32 liAlignedSize   = (liNumBytes    + liAlignment - 1) & ~(liAlignment - 1);
+    // /Od: the aligned cursor and size are recomputed in each statement (ARTIST keeps one
+    // local, the result at 0x50(r1)); `x + (alignment - 1)` evaluates the bias first.
+    if (!((((miAllocCursor + (liAlignment - 1)) & ~(liAlignment - 1))
+           + ((liNumBytes + (liAlignment - 1)) & ~(liAlignment - 1))) < KI_ARENA_BYTES))
+    {
+        POLYGONSOUPTESTER_JOB_FAIL(987, "Trying to use too much memory");
+    }
 
-    CGS_ASSERT((liAlignedCursor + liAlignedSize) < KI_ARENA_BYTES,
-               "Trying to use too much memory");   // :987
+    miAllocCursor = (miAllocCursor + (liAlignment - 1)) & ~(liAlignment - 1);
 
-    miAllocCursor = liAlignedCursor;
+    void* lpvResult = maArena + miAllocCursor;
 
-    void* lpvResult = &maArena[miAllocCursor];
-
-    miAllocCursor += liAlignedSize;
+    miAllocCursor = miAllocCursor + ((liNumBytes + (liAlignment - 1)) & ~(liAlignment - 1));
 
     return lpvResult;
 }
@@ -326,39 +349,64 @@ void* PolygonSoupTesterJob::AllocateMemory(s32 liNumBytes, s32 liAlignment)
 //
 // ⚠️ 4096 is a byte size and 2048 is an ENTRY count -- 4096 == 2048 * sizeof(u16).
 // The relationship is written out rather than reproduced as two magic numbers.
+//
+// void on the console: 0x82916DB8's RunJobQuery result is never kept (r3 is dead after the
+// call). This TU is compiled /Od (build_x360.py PATH_FLAGS): statement order is the source
+// order and every local lives in its own frame slot, which the compiler orders by its symbol
+// table (a hash of the names), not by declaration. The node cache carries the name the PS3
+// DWARF gives RunJobQuery's parameter (lpSpacialNodeCache, CgsPolygonSoupListSpatialMap.cpp:481),
+// which puts it at ARTIST's 0x64(r1) with the saved cursor at 0x50(r1); the cursor's own name
+// is not attested (no DWARF for this SPU job).
 // ----------------------------------------------------------------------------
-s32 PolygonSoupTesterJob::RunBoxQuery(
+void PolygonSoupTesterJob::RunBoxQuery(
     const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
     const CgsGeometric::AxisAlignedBox*            lpQueryBox,
     u16**                                          lppaOutResults,
     s32*                                           lpiOutNumResults)
 {
     CgsGeometric::PolygonSoupListSpatialMap::PolygonSoupJobQueryParams lParams;
+    lParams.miQueryBufferSize = KI_QUERY_BUFFER_ENTRIES;
     lParams.mpaQueryBufferA   = static_cast<u16*>(AllocateMemory(KI_QUERY_BUFFER_BYTES, 128));
     lParams.mpaQueryBufferB   = static_cast<u16*>(AllocateMemory(KI_QUERY_BUFFER_BYTES, 128));
-    lParams.miQueryBufferSize = KI_QUERY_BUFFER_ENTRIES;
 
-    const s32 liSavedCursor = miAllocCursor;
+    const s32 liSavedAllocCursor = miAllocCursor;
 
-    CgsContainers::ReadOnlyObjectCache<CgsGeometric::PolygonSoupSpacialNode>* lpNodeCache =
+    CgsContainers::ReadOnlyObjectCache<CgsGeometric::PolygonSoupSpacialNode>* lpSpacialNodeCache =
         static_cast<CgsContainers::ReadOnlyObjectCache<CgsGeometric::PolygonSoupSpacialNode>*>(
             AllocateMemory(static_cast<s32>(sizeof(CgsContainers::ReadOnlyObjectCache<
                                                        CgsGeometric::PolygonSoupSpacialNode>)),
                            128));
 
-    const s32 liResult = lpSpatialMap->RunJobQuery(*lpQueryBox, &lParams,
-                                                   lppaOutResults, lpiOutNumResults,
-                                                   lpNodeCache);
+    lpSpatialMap->RunJobQuery(*lpQueryBox, &lParams, lppaOutResults, lpiOutNumResults, lpSpacialNodeCache);
 
-    miAllocCursor = liSavedCursor;
+    miAllocCursor = liSavedAllocCursor;
+}
 
-    return liResult;
+// LoadTriangleListDestination @0x82916928 (7): `*a3 = a2`, as LoadPrimitive.
+void PolygonSoupTesterJob::LoadTriangleListDestination(CgsGeometric::Triangle4*  lpSourceTriangleList,
+                                                       CgsGeometric::Triangle4** lppDestinationTriangleList)
+{
+    *lppDestinationTriangleList = lpSourceTriangleList;
 }
 
 // LoadPrimitive @0x82916AB8 (8): `*a3 = a2`.
 void PolygonSoupTesterJob::LoadPrimitive(const void* lpvSource, const void** lppvOut)
 {
     *lppvOut = lpvSource;
+}
+
+// LoadResultList @0x82916AD8 (24) / SaveResults @0x82916B38 (24): the whole 16-byte header,
+// four words through the /Od copy temporaries at -0x10/-0xC(r1).
+void PolygonSoupTesterJob::LoadResultList(const CgsSceneManager::CgsCollision::CollisionResultList* lpSourceResultList,
+                                          CgsSceneManager::CgsCollision::CollisionResultList*       lpDestinationResultList)
+{
+    *lpDestinationResultList = *lpSourceResultList;
+}
+
+void PolygonSoupTesterJob::SaveResults(const CgsSceneManager::CgsCollision::CollisionResultList* lpSourceResultList,
+                                       CgsSceneManager::CgsCollision::CollisionResultList*       lpDestinationResultList)
+{
+    *lpDestinationResultList = *lpSourceResultList;
 }
 
 // ----------------------------------------------------------------------------
@@ -573,7 +621,8 @@ void PolygonSoupTesterJob::LineTestNearestSS(CgsMemory::SimpleDataStreamConsumer
 //   map->RunJobQuery(line, &params, out, count, cache)
 //   miAllocCursor = saved
 // The two query buffers stay live in the caller's arena window (one of them is the
-// result array); only the node cache is scoped to the call.
+// result array); only the node cache is scoped to the call. Local names as RunBoxQuery
+// (the /Od frame slots follow the names: saved cursor 0x50(r1), node cache 0x64(r1)).
 // ----------------------------------------------------------------------------
 void PolygonSoupTesterJob::RunLineQuery(const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
                                         const CgsGeometric::Line&                      lrLine,
@@ -585,15 +634,15 @@ void PolygonSoupTesterJob::RunLineQuery(const CgsGeometric::PolygonSoupListSpati
     lParams.mpaQueryBufferA   = static_cast<u16*>(AllocateMemory(KI_QUERY_BUFFER_BYTES, 128));
     lParams.mpaQueryBufferB   = static_cast<u16*>(AllocateMemory(KI_QUERY_BUFFER_BYTES, 128));
 
-    const s32 liSavedCursor = miAllocCursor;
+    const s32 liSavedAllocCursor = miAllocCursor;
 
-    CgsContainers::ReadOnlyObjectCache<CgsGeometric::PolygonSoupSpacialNode>* lpNodeCache =
+    CgsContainers::ReadOnlyObjectCache<CgsGeometric::PolygonSoupSpacialNode>* lpSpacialNodeCache =
         static_cast<CgsContainers::ReadOnlyObjectCache<CgsGeometric::PolygonSoupSpacialNode>*>(
             AllocateMemory(static_cast<s32>(sizeof(CgsContainers::ReadOnlyObjectCache<
                                                        CgsGeometric::PolygonSoupSpacialNode>)),
                            128));
 
-    lpSpatialMap->RunJobQuery(lrLine, &lParams, lppaOutResults, lpiOutNumResults, lpNodeCache);
+    lpSpatialMap->RunJobQuery(lrLine, &lParams, lppaOutResults, lpiOutNumResults, lpSpacialNodeCache);
 
-    miAllocCursor = liSavedCursor;
+    miAllocCursor = liSavedAllocCursor;
 }

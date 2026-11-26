@@ -464,7 +464,7 @@ void ContactGeneratorJob::Execute(void* lpvJobData)
     miAllocCursor        = 0;
     miMemoryRestorePoint = -1;
 
-    switch (mpJobDescription->GetType())
+    switch (mpJobDescription->GetCollisionType())
     {
         // Case 5's `bl` leaves r4 = lpvJobData untouched: the non-stream worker takes the
         // descriptor as its parameter (the stream arm passes a stack-local one instead).

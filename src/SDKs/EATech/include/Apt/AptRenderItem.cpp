@@ -375,7 +375,17 @@ AptCXForm* AptRenderItem::GetColorMatrixWritable()
 // ---- flags ----------------------------------------------------------------
 bool AptRenderItem::GetIsVisible() const { return (mFlags & 0x80000000u) != 0; }
 bool AptRenderItem::GetIsMask() const    { return (mFlags & 0x40000000u) != 0; }
-bool AptRenderItem::GetHasMask() const   { return static_cast<bool>(mbHasMask) && mpMask != 0; }   // ARTIST 0x82AD4F54 extracts the bit (rlwinm. 3,31,31): the bitfield read as bool
+// ARTIST 0x82AD4F54 extracts the bit (rlwinm. 3,31,31): the bitfield read as bool, tested with
+// the record form, so a size region as the other record-form functions here. (It was exact while
+// the bulk TU let an earlier member's open /Os region cover the start of this file; the regions
+// 14681325e added before it close with optimize("", on), which reset it to /O2.)
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+bool AptRenderItem::GetHasMask() const   { return static_cast<bool>(mbHasMask) && mpMask != 0; }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 AptRenderItem* AptRenderItem::GetMask() const { return mpMask; }
 
 // ---- character ------------------------------------------------------------

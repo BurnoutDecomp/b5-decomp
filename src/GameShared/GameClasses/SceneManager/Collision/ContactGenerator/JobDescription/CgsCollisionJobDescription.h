@@ -134,7 +134,10 @@ namespace CgsCollision
         // Execute switches on. ⭐ ADDED 2026-08-10 (fill-worker wave 2): this is the
         // accessor PolygonSoupTesterJob::Execute calls, and it is what makes the
         // descriptor slot's identity readable back out of the batch.
-        u8 GetType() const { return muJobType; }
+        // DWARF h:92 `ECollisionType GetCollisionType() const`: the enum, not the u8 seat --
+        // the /Od caller PolygonSoupTesterJob::Execute stores r3 straight into its switch
+        // temporary (0x82915A1C) with no clrlwi.
+        E_CollisionJobType GetCollisionType() const { return static_cast<E_CollisionJobType>(muJobType); }
     };
 
     CGS_STATIC_ASSERT(sizeof(CollisionJobDescription) == 256, "ARTIST job data size");
