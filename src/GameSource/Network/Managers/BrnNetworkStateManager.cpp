@@ -3692,10 +3692,10 @@ namespace BrnNetwork
         const f32 KF_TIME_MIN = 10.0f;
         const f32 KF_TIME_MAX = 30.0f;
 
-        // ProcessGuiEvents: a launch needs at least two players; the values GuiEventNetworkLaunched
+        // ProcessGuiEvents: a launch needs at least two players (a literal 2: the DWARF lists only
+        // KI_TIME_INCREMENTS, KF_TIME_MAX and KF_TIME_MIN here); the values GuiEventNetworkLaunched
         // carries (CgsGui::GuiEventNetworkLaunched::ELaunchedStatus, reference values; the
         // committed event is a bare 4-byte payload).
-        const s32 KI_MIN_PLAYERS_TO_LAUNCH               = 2;
         const s32 KI_LAUNCHED_STATUS_NOT_ENOUGH_PLAYERS  = 1;
         const s32 KI_LAUNCHED_STATUS_STILL_CONNECTING    = 2;
         const s32 KI_LAUNCHED_STATUS_WAITING_FOR_ROUTES  = 3;
@@ -4706,7 +4706,7 @@ namespace BrnNetwork
                     PlayerParams                             lPlayerParams;
 
                     if (mpNetworkManager->GetServerInterface()->GetGameComponent()->GetNumberPlayersInGame()
-                        < KI_MIN_PLAYERS_TO_LAUNCH)
+                        < 2)
                     {
                         SetPayloadWord(&lLaunchedEvent, KI_LAUNCHED_STATUS_NOT_ENOUGH_PLAYERS);
                         mpNetworkModule->AddOutputGuiEvent(lLaunchedEvent);

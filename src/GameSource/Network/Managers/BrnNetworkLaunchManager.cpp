@@ -53,9 +53,9 @@ namespace BrnNetwork
         // window, in seconds, before UpdateWaiting reports the launch complete.
         const f32 KF_LAUNCH_WAIT_TIME = 3.0f;
 
-        // The minimum number of finalised players required to launch (the asm compares the
-        // finalised-player count against 2 with `cmpwi 2; blt`).
-        const s32 KI_MIN_PLAYERS_TO_LAUNCH = 2;
+        // A launch needs at least two finalised players: the asm compares the count against a
+        // literal 2 (`cmpwi 2; blt`), and the DWARF lists no constant for it (this file's only
+        // file-scope constant is KF_LAUNCH_WAIT_TIME).
 
         // The X360 routes the launch-manager progress lines through the shared network debug
         // StrStream (off_82F335C8). Modelled as a free no-op helper, matching the established
@@ -241,7 +241,7 @@ namespace BrnNetwork
 
         if (mpNetworkManager->GetPlayerManager()->GetTotalNumberPlayers(
                 CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED)
-            < KI_MIN_PLAYERS_TO_LAUNCH)
+            < 2)
         {
             DebugLog("[LAUNCH MGR]: ");
             DebugLog("LAUNCH ERROR Not enough players\n");
@@ -280,7 +280,7 @@ namespace BrnNetwork
         if (lpGames->IsLocalPlayerHost()
             && mpNetworkManager->GetPlayerManager()->GetTotalNumberPlayers(
                    CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED)
-                   < KI_MIN_PLAYERS_TO_LAUNCH)
+                   < 2)
         {
             lpGames->UnlockGame();
             DebugLog("[LAUNCH MGR]: ");
@@ -329,7 +329,7 @@ namespace BrnNetwork
         if (lpGames->IsLocalPlayerHost()
             && mpNetworkManager->GetPlayerManager()->GetTotalNumberPlayers(
                    CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED)
-                   < KI_MIN_PLAYERS_TO_LAUNCH)
+                   < 2)
         {
             lpGames->UnlockGame();
             DebugLog("[LAUNCH MGR]: ");

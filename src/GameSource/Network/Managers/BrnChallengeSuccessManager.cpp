@@ -68,22 +68,22 @@ namespace BrnNetwork
 
     namespace
     {
-        // The BrnNetworkModuleIO::NetworkEventQueue accessor/PostSim return are typed against an
-        // incomplete forward; the concrete queue is the 14000/16 variable-event queue (same
-        // pattern as BrnEventScoresManager.cpp / BrnNetworkPlayer.cpp).
-        typedef CgsModule::VariableEventQueue<14000, 16> NetworkEventQueueConcrete;
+        // The network-event queue is BrnNetworkModuleIO::NetworkEventQueue itself: it derives
+        // from CgsModule::VariableEventQueue<14000, 16> and adds nothing (BrnNetworkModuleIO.h),
+        // so its accessors are called on it directly.
 
-        inline const NetworkEventQueueConcrete* AsConcreteQueue(
-            const BrnNetworkModuleIO::NetworkEventQueue* lpQueue)
-        {
-            return reinterpret_cast<const NetworkEventQueueConcrete*>(lpQueue);
-        }
 
-        inline NetworkEventQueueConcrete* AsConcreteQueue(
-            BrnNetworkModuleIO::NetworkEventQueue* lpQueue)
-        {
-            return reinterpret_cast<NetworkEventQueueConcrete*>(lpQueue);
-        }
+
+
+
+
+
+
+
+
+
+
+
 
         // ---- in-event payloads consumed from the GameState network-event queue --------------
         // Offsets are X360-AUTHORITATIVE from ProcessNetworkEvents @ 0x8255DDC8 (the raw event
@@ -523,7 +523,7 @@ namespace BrnNetwork
 
         CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0,
                    "mpNetworkModule->GetNetworkEventQueue()");
-        AsConcreteQueue(mpNetworkModule->GetNetworkEventQueue())->AddEvent(
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lOutEvent),
             KI_OUTEVENT_FBURN_SUCCESS_UPDATE, KI_OUTEVENT_FBURN_SUCCESS_UPDATE_SIZE);
     }
@@ -539,7 +539,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT(lpInputNetworkEventQueue != 0, "lpInputNetworkEventQueue");
 
-        const NetworkEventQueueConcrete* lpQueue = AsConcreteQueue(lpInputNetworkEventQueue);
+        const BrnNetworkModuleIO::NetworkEventQueue* lpQueue = lpInputNetworkEventQueue;
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
@@ -700,7 +700,7 @@ namespace BrnNetwork
 
         CGS_ASSERT(lpChallengeManager->mpNetworkModule->GetNetworkEventQueue() != 0,
                    "lpChallengeManager->mpNetworkModule->GetNetworkEventQueue()");
-        AsConcreteQueue(lpChallengeManager->mpNetworkModule->GetNetworkEventQueue())->AddEvent(
+        lpChallengeManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lChallengeSuccessEvent),
             KI_OUTEVENT_FBURN_CHALLENGE_SUCCESS, KI_OUTEVENT_FBURN_CHALLENGE_SUCCESS_SIZE);
     }

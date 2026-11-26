@@ -18,11 +18,9 @@
 // The field-descriptor offsets are console byte offsets into this object; the host
 // registers offsetof() of the same named member.
 
-// Platform memset (declared exactly as the other network TUs declare it).
-extern "C"
-{
-    void* XMemSet(void* lpDest, s32 liValue, u32 luCount);
-}
+// Original native XMemSet declaration and ABI (as BrnServerInterfaceTelemetry.cpp, the
+// next member of BrnNetworkUnity, includes it).
+#include <xtl.h>
 
 namespace BrnNetwork
 {
