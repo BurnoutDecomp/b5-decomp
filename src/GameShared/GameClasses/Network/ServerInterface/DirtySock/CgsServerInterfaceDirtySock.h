@@ -373,7 +373,8 @@ namespace CgsNetwork
         void SetConnApiComponentCallback(EComponents leComponent,
                                          ServerInterfaceComponentData::ServerInterfaceConnApiCallback lpfnCallback)
         {
-            CGS_ASSERT_AT(maComponents[leComponent].mpComponent,
+            // The inline accessor's result tested directly (ARTIST cmpwi, e.g. 0x82898390).
+            CGS_ASSERT_AT(GetComponent(leComponent),
                           "The component hasn't been registered!", CGS_ARTIST_CGSSERVERINTERFACEDIRTYSOCK_FILE, 830);
             maComponents[leComponent].mConnApiCallback = lpfnCallback;
         }

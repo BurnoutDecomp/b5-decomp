@@ -462,8 +462,9 @@ namespace BrnNetwork
     void TrafficManager::RestartNetworkTraffic(NetworkPlayerID lPlayerID)
     {
         const s32 liTrafficDataIndex = GetIndexOfPlayerInTrafficData(lPlayerID);
-        CGS_ASSERT(liTrafficDataIndex >= 0, "liTrafficDataIndex >= 0");
-        CGS_ASSERT(liTrafficDataIndex < ::KI_MAX_NETWORK_PLAYERS, "liTrafficDataIndex < KI_MAX_NETWORK_PLAYERS");
+        CGS_ASSERT_AT(liTrafficDataIndex >= 0, "liTrafficDataIndex >= 0", CGS_ARTIST_FILE, 622);
+        CGS_ASSERT_AT(liTrafficDataIndex < ::KI_MAX_NETWORK_PLAYERS, "liTrafficDataIndex < KI_MAX_NETWORK_PLAYERS",
+                      CGS_ARTIST_FILE, 623);
 
         // BitArray::SetBit's inlined range check; the console streams the index and the
         // bit count after this prefix.

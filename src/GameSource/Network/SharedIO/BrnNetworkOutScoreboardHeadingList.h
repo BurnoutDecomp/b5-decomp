@@ -75,6 +75,12 @@ namespace BrnNetworkModuleIO
         // switches on category / index / variation.
         EHeadingType GetHeadingType() const;
 
+        // DWARF BrnNetworkOutEventTypeDefs.h:1124 / :1128 (header inlines). Clear also resets the
+        // console-only mb807: ARTIST CopyVariations 0x825626D8 stores +0, +0x806, +0x807, then
+        // the type.
+        void Clear()                         { miLength = 0; mbIsPerRoad = false; mb807 = false; }
+        void SetHeadingType(EHeadingType leHeadingType) { meHeadingType = leHeadingType; }
+
         bool IsPerRoad() const               { return mbIsPerRoad; }
         void SetPerRoad(bool lbIsPerRoad)    { mbIsPerRoad = lbIsPerRoad; }
     };

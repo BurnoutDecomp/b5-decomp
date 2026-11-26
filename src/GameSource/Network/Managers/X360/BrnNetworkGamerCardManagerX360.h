@@ -62,12 +62,12 @@ namespace BrnNetwork
         // through the embedded tables; they take the `this` pointer and return an s32 status
         // (non-zero == proceed / success). Modelled as plain member-function pointers built
         // from the asm dispatch (`bctrl` on the loaded slot with r3 == this).
-        typedef s32 (NetworkGamerCardManagerX360::*UpdateFunction)();
-        typedef s32 (NetworkGamerCardManagerX360::*ActionFunction)();
+        typedef bool (NetworkGamerCardManagerX360::*UpdateFunction)();
+        typedef bool (NetworkGamerCardManagerX360::*ActionFunction)();
 
         // Fired by ProcessComplete when a request finishes (X360 `bctrl` on +0x98 with
         // r3 == status, r4 == the requested XUID, r5 == the user data). 0 == no callback.
-        typedef s32 (*CompleteCallback)(s32 liStatus, u64 lXuid, s32 liUserData);
+        typedef bool (*CompleteCallback)(bool lbSuccess, u64 lXuid, s32 liUserData);
 
         // X360 0x82561890 -- build the dispatch tables and bring the manager to its idle
         // state (called by BrnNetworkManager::Construct). Stores mpServerInterface, clears
@@ -89,7 +89,7 @@ namespace BrnNetwork
 
         // X360 0x8254CC50 -- the per-frame tick: dispatch the update function for the current
         // sub-state (called by BrnNetworkManager::ProcessBeforeSimulation).
-        s32 ProcessBeforeSimulation();
+        bool ProcessBeforeSimulation();
 
         // X360 0x8254D348 -- reset the request state on a network disconnect (called by
         // BrnNetworkManager::TriggerEventFromServerInterface).
@@ -127,31 +127,31 @@ namespace BrnNetwork
         // address is COMDAT-folded with CgsSceneManager::CgsCollision::BaseCollisionGenerator::
         // Destruct (an identical empty `blr`-only function); the original source slot is this
         // class's own do-nothing idle update. Reconstructed as the empty function it is.
-        s32 UpdateIdle();
+        bool UpdateIdle();
         // X360 0x82557B60 -- poll the by-name xuid request, then advance the action sequence.
-        s32 UpdateWaitPlayerInfo();
+        bool UpdateWaitPlayerInfo();
         // X360 0x82557BA0 -- poll the sign-in, then advance the action sequence.
-        s32 UpdateWaitSignInFinish();
+        bool UpdateWaitSignInFinish();
 
         // -- per-action action functions (mapActionFunctions) --------------------------------
         // X360 0x8254CD18 -- ask the player-info component to resolve the requested name's XUID.
-        s32 ActionReqXuidByName();
+        bool ActionReqXuidByName();
         // X360 0x8254CDE0 -- pop the Xbox Guide sign-in UI.
-        s32 ActionShowSignInUI();
+        bool ActionShowSignInUI();
         // X360 0x8254CE28 -- pop the Xbox Guide gamer-card UI for the requested XUID.
-        s32 ActionShowGamercardUI();
+        bool ActionShowGamercardUI();
 
         // -- internal helpers -----------------------------------------------------------------
         // X360 0x8254CED0 -- poll the player-info component's idle/error state for the by-name
         // xuid request.
-        s32 PlayerInfoIdle();
+        bool PlayerInfoIdle();
         // X360 0x8254D0B0 -- poll the Live notification queue for the sign-in-completed event.
-        s32 IsSignedInToLive();
+        bool IsSignedInToLive();
         // X360 0x8254CBA8 -- advance to the next action in the current process (or complete).
-        s32 SetNextAction();
+        bool SetNextAction();
         // X360 0x8254CB28 -- finish the current request: fire the completion callback (if any)
         // with liStatus and reset the manager to idle.
-        s32 ProcessComplete(s32 liStatus);
+        bool ProcessComplete(bool lbSuccess);
 
         // -- dispatch-table dimensions (X360-authoritative loop counts / immediates) ---------
         // InitialiseProcessArray walks 5 processes (li 5 @ the assert loop) of 4 actions each

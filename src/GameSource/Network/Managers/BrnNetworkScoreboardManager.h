@@ -113,7 +113,7 @@ namespace BrnNetwork
         // @ 0x82562E50 -- static gamer-card-manager completion callback (matches the
         // NetworkGamerCardManagerX360::CompleteCallback typedef: s32(*)(s32,u64,s32)). Stamps the
         // resolved XUID onto mScoreTargetPlayerID and queues the score-target challenge event.
-        static s32 RequestXUIDForPlayerCallback(s32 lbSuccess, u64 lqRequestedXuid, s32 liUserData);
+        static bool RequestXUIDForPlayerCallback(bool lbSuccess, u64 lqRequestedXuid, s32 liUserData);
 
         // KI_INVALID_HEADING (DWARF :111) -- the -1 "no heading selected" sentinel.
         static const s32 KI_INVALID_HEADING = -1;

@@ -184,7 +184,7 @@ namespace BrnNetwork
     }
 
     // X360 0x8254CC50 -- dispatch the update function for the current sub-state.
-    s32 NetworkGamerCardManagerX360::ProcessBeforeSimulation()
+    bool NetworkGamerCardManagerX360::ProcessBeforeSimulation()
     {
         CGS_ASSERT(mapUpdateFunctions[meSubState] != 0, CGS_ASSERT_STREAM_MESSAGE_AT("No update function supplied for the current substate", CGS_ARTIST_FILE, 375));
 
@@ -193,9 +193,9 @@ namespace BrnNetwork
 
     // X360 0x8254CB28 -- finish the current request: fire the completion callback (if any) and
     // reset the manager to idle. Returns liStatus (or the callback's return when it fired).
-    s32 NetworkGamerCardManagerX360::ProcessComplete(s32 liStatus)
+    bool NetworkGamerCardManagerX360::ProcessComplete(bool lbSuccess)
     {
-        s32 liResult = liStatus;                      // r3 = a2
+        bool lbResult = lbSuccess;                      // r3 = a2
 
         CompleteCallback lpfnComplete = mpCompleteCallback;   // r11 = *(a1 + 152)
         if (lpfnComplete)
@@ -204,7 +204,7 @@ namespace BrnNetwork
             u64 lXuid      = mRequestedGamerCardXUID; // r4 = *(a1 + 120)
             mpCompleteCallback = 0;             // stw 0, 0x98
             miCompleteUserData = 0;                   // stw 0, 0x9C
-            liResult = lpfnComplete(liStatus, lXuid, liUserData);  // bctrl (r3=status, r4=xuid, r5=userdata)
+            lbResult = lpfnComplete(lbSuccess, lXuid, liUserData);  // bctrl (r3=status, r4=xuid, r5=userdata)
         }
 
         maRequestedPlayerName.macName[0] = '\0';      // stb 0, 0x68
@@ -213,11 +213,11 @@ namespace BrnNetwork
         miActionIndex              = 0;               // stb 0, 0x8C
         muRequestingControllerPort = KU_NUMBER_OF_PADS;// stw 4, 0x80
         meProcess                  = KI_PROCESS_NONE; // stw 5, 0x88
-        return liResult;
+        return lbResult;
     }
 
     // X360 0x8254CBA8 -- advance to the next action in the current process (or complete it).
-    s32 NetworkGamerCardManagerX360::SetNextAction()
+    bool NetworkGamerCardManagerX360::SetNextAction()
     {
         s32 liActionId = maProcessActions[meProcess * KI_ACTIONS_PER_PROCESS + miActionIndex];
 
@@ -225,48 +225,48 @@ namespace BrnNetwork
         // status 1.
         if (miActionIndex == KI_ACTIONS_PER_PROCESS || liActionId == KI_NO_ACTION)
         {
-            return ProcessComplete(1);
+            return ProcessComplete(true);
         }
 
-        s32 liActionResult = (this->*mapActionFunctions[liActionId])();   // bctrl mapActionFunctions[id]
-        if (liActionResult)
+        bool lbActionResult = (this->*mapActionFunctions[liActionId])();   // bctrl mapActionFunctions[id]
+        if (lbActionResult)
         {
             ++miActionIndex;                          // ++*(a1 + 140)
-            return liActionResult;
+            return lbActionResult;
         }
-        return ProcessComplete(0);
+        return ProcessComplete(false);
     }
 
     // X360 0x82557B60 -- poll the by-name xuid request, then advance the action sequence.
-    s32 NetworkGamerCardManagerX360::UpdateWaitPlayerInfo()
+    bool NetworkGamerCardManagerX360::UpdateWaitPlayerInfo()
     {
-        s32 liResult = PlayerInfoIdle();
-        if (liResult)
+        bool lbResult = PlayerInfoIdle();
+        if (lbResult)
         {
             return SetNextAction();
         }
-        return liResult;
+        return lbResult;
     }
 
     // X360 0x82557BA0 -- poll the sign-in, then advance the action sequence.
-    s32 NetworkGamerCardManagerX360::UpdateWaitSignInFinish()
+    bool NetworkGamerCardManagerX360::UpdateWaitSignInFinish()
     {
-        s32 liResult = IsSignedInToLive();
-        if (liResult)
+        bool lbResult = IsSignedInToLive();
+        if (lbResult)
         {
             return SetNextAction();
         }
-        return liResult;
+        return lbResult;
     }
 
     // mapUpdateFunctions[0] -- the idle/no-op sub-state update (empty in the image).
-    s32 NetworkGamerCardManagerX360::UpdateIdle()
+    bool NetworkGamerCardManagerX360::UpdateIdle()
     {
         return 0;
     }
 
     // X360 0x8254CD18 -- ask the player-info component to resolve the requested name's XUID.
-    s32 NetworkGamerCardManagerX360::ActionReqXuidByName()
+    bool NetworkGamerCardManagerX360::ActionReqXuidByName()
     {
         if (maRequestedPlayerName.macName[0] != '\0')
         {
@@ -285,7 +285,7 @@ namespace BrnNetwork
     }
 
     // X360 0x8254CDE0 -- pop the Xbox Guide sign-in UI; enter the wait-for-sign-in sub-state.
-    s32 NetworkGamerCardManagerX360::ActionShowSignInUI()
+    bool NetworkGamerCardManagerX360::ActionShowSignInUI()
     {
         u32 luResult = XShowSigninUI(1, 2);           // XShowSigninUI(1u, 2u)
         meSubState   = 2;                             // stw 2, 0x84
@@ -294,7 +294,7 @@ namespace BrnNetwork
 
     // X360 0x8254CE28 -- pop the Xbox Guide gamer-card UI for the requested XUID; enter the
     // wait-for-sign-in sub-state.
-    s32 NetworkGamerCardManagerX360::ActionShowGamercardUI()
+    bool NetworkGamerCardManagerX360::ActionShowGamercardUI()
     {
         CGS_ASSERT(muRequestingControllerPort != KU_NUMBER_OF_PADS, CGS_ASSERT_MESSAGE_AT(
             "muRequestingControllerPort != CgsInput::KU_NUMBER_OF_PADS",
@@ -311,7 +311,7 @@ namespace BrnNetwork
     }
 
     // X360 0x8254CED0 -- poll the player-info component's idle/error state for the request.
-    s32 NetworkGamerCardManagerX360::PlayerInfoIdle()
+    bool NetworkGamerCardManagerX360::PlayerInfoIdle()
     {
         CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
         CGS_ASSERT(mpServerInterface->GetPlayerInfoComponent() != 0,
@@ -342,7 +342,7 @@ namespace BrnNetwork
     }
 
     // X360 0x8254D0B0 -- poll the Live notification queue for the sign-in-completed event.
-    s32 NetworkGamerCardManagerX360::IsSignedInToLive()
+    bool NetworkGamerCardManagerX360::IsSignedInToLive()
     {
         u32  luNotification = 0;
         u32  luParam[3]     = { 0, 0, 0 };

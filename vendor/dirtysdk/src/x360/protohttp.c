@@ -71,28 +71,34 @@ typedef enum ProtoHttpRequestTypeE
 
 static const char* _ProtoHttpParseUrl(const char* pUrl, char* pKind, s32 iKindSize, char* pHost, s32 iHostSize, s32* pPort)
 {
-    const char* pScan;
+    // Locals s/i/iPort from DWARF (protohttp.c:162-163); statement order from the PS3 -O0 body (0xECB4B8).
+    const char* s;
     s32 i, iPort;
     while (*pUrl && *pUrl <= ' ') ++pUrl;
-    pScan = pUrl;
     *pKind = 0;
-    while (*pScan >= 'a' && *pScan <= 'z') ++pScan;
-    if (*pScan == ':' && pScan - pUrl < iKindSize)
+    for (s = pUrl; *s >= 'a' && *s <= 'z'; ++s)
+        ;
+    if (*s == ':' && s - pUrl < iKindSize)
     {
-        i = 0;
-        while (*pUrl != ':') pKind[i++] = *pUrl++;
-        pKind[i] = 0; ++pUrl;
+        for (i = 0; pUrl[i] != ':'; ++i)
+            pKind[i] = pUrl[i];
+        pUrl += i + 1;
+        pKind[i] = 0;
     }
     while (*pUrl && *pUrl <= ' ') ++pUrl;
     if (pUrl[0] == '/' && pUrl[1] == '/') pUrl += 2;
-    i = 0;
-    while (i < iHostSize - 1 && *pUrl > ' ' && *pUrl != '/' && *pUrl != '?' && *pUrl != ':') pHost[i++] = *pUrl++;
+    for (i = 0; i < iHostSize - 1; ++i)
+    {
+        if (*pUrl <= ' ' || *pUrl == '/' || *pUrl == '?' || *pUrl == ':') break;
+        pHost[i] = *pUrl++;
+    }
     pHost[i] = 0;
     iPort = 0;
     if (*pUrl == ':')
     {
-        ++pUrl;
-        while (*pUrl >= '0' && *pUrl <= '9') { iPort = iPort * 10 + (*pUrl & 15); ++pUrl; }
+        // PS3 -O0 (0xECB800): pUrl is advanced, then iPort cleared again, as a for initialiser.
+        for (++pUrl, iPort = 0; *pUrl >= '0' && *pUrl <= '9'; ++pUrl)
+            iPort = iPort * 10 + (*pUrl & 15);
     }
     *pPort = iPort;
     while (*pUrl && *pUrl <= ' ') ++pUrl;
@@ -276,32 +282,49 @@ static void _ProtoHttpRedirect(ProtoHttpRefT* pState)
 
 static s32 _ProtoHttpChunkProcess(ProtoHttpRefT* pState, s32 iBufMax)
 {
-    s32 iChunk, iLen;
+    // Statement order and locals from DWARF (protohttp.c:732-744) and the PS3 -O0 body (0xECCEF8).
+    s32 iChkSize, iLen;
     if (pState->iInpLen == pState->iInpOff) return 0;
-    iChunk = pState->iChkLen;
-    if (!iChunk)
+    if (pState->iChkLen == 0)
     {
-        const char* pStart = pState->pInpBuf + pState->iInpOff;
-        const char* pEnd = pState->pInpBuf + pState->iInpLen - 1;
-        const char* pScan = pStart;
-        while (pScan < pEnd && !(pScan[0] == 13 && pScan[1] == 10)) ++pScan;
-        if (pScan == pEnd) return 0;
-        iChunk = (s32)(strtol(pStart, 0, 16));
-        pState->iChkLen = iChunk;
-        if (!iChunk) { pState->iInpOff = pState->iInpLen; return 0; }
-        pState->iInpOff += (s32)(pScan - pStart) + 2;
+        char *s, *s2, *t;
+        s = pState->pInpBuf + pState->iInpOff;
+        t = pState->pInpBuf + pState->iInpLen - 1;
+        for (s2 = s; s2 < t; s2++)
+        {
+            if (s2[0] == '\r' && s2[1] == '\n') break;
+        }
+        if (s2 == t) return 0;
+        pState->iChkLen = strtol(s, NULL, 16);
+        if (pState->iChkLen == 0) { pState->iInpOff = pState->iInpLen; return 0; }
+        pState->iInpOff += (s32)(s2 - s) + 2;
     }
     iLen = pState->iInpLen - pState->iInpOff;
     if (iLen > iBufMax) iLen = iBufMax;
-    if (iLen >= iChunk)
+    if (iLen >= pState->iChkLen)
     {
-        if (iLen >= iChunk + 2) { pState->iChkLen = 0; return iChunk; }
-        if (pState->iInpLen != pState->iInpMax) return 0;
-        iLen /= 2;
-        pState->bCompactRecv = 1;
+        if (iLen >= pState->iChkLen + 2)
+        {
+            iChkSize = pState->iChkLen;
+            pState->iChkLen = 0;
+        }
+        else if (pState->iInpLen == pState->iInpMax)
+        {
+            iChkSize = iLen / 2;
+            pState->iChkLen -= iChkSize;
+            pState->bCompactRecv = 1;
+        }
+        else
+        {
+            iChkSize = 0;
+        }
     }
-    pState->iChkLen = iChunk - iLen;
-    return iLen;
+    else
+    {
+        iChkSize = iLen;
+        pState->iChkLen -= iChkSize;
+    }
+    return iChkSize;
 }
 
 static s32 _ProtoHttpSend(ProtoHttpRefT* pState, const char* pStrBuf, s32 iSize)
@@ -508,17 +531,17 @@ void ProtoHttpUpdate(ProtoHttpRefT* pState)
     { NetPrintfCode("protohttp: server timeout (state=%d)\n", pState->eState); pState->eState = ST_FAIL; pState->bTimeout = 1; }
     if (pState->eState == ST_CONN)
     {
-        const s32 iStatus = ProtoSSLStat(pState->pSsl, 0x73746174, 0, 0);
-        if (iStatus > 0) { pState->uTimer = NetTick() + pState->uTimeout; pState->eState = ST_SEND; }
-        if (iStatus < 0) { NetPrintfCode("protohttp: ST_CONN got ST_FAIL (err=%d)\n", iStatus); pState->eState = ST_FAIL; }
+        iResult = ProtoSSLStat(pState->pSsl, 0x73746174, 0, 0);
+        if (iResult > 0) { pState->uTimer = NetTick() + pState->uTimeout; pState->eState = ST_SEND; }
+        if (iResult < 0) { NetPrintfCode("protohttp: ST_CONN got ST_FAIL (err=%d)\n", iResult); pState->eState = ST_FAIL; }
     }
     if (pState->eState == ST_SEND)
     {
         iResult = _ProtoHttpSend(pState, pState->pInpBuf + pState->iInpOff, pState->iInpLen);
         if (iResult > 0)
         {
-            pState->iInpLen -= iResult; pState->iInpOff += iResult;
-            if (!pState->iInpLen) { pState->iInpOff = 0; pState->eState = ST_RESP; }
+            pState->iInpOff += iResult; pState->iInpLen -= iResult;
+            if (pState->iInpLen == 0) { pState->eState = ST_RESP; pState->iInpOff = 0; }
         }
     }
     if (pState->eState == ST_RESP)
@@ -532,8 +555,7 @@ void ProtoHttpUpdate(ProtoHttpRefT* pState)
     }
     if (pState->eState == ST_HEAD)
     {
-        char* pBuf = pState->pInpBuf + pState->iInpLen;
-        iResult = _ProtoHttpRecv(pState, pBuf, pState->iInpMax - pState->iInpLen);
+        iResult = _ProtoHttpRecv(pState, pState->pInpBuf + pState->iInpLen, pState->iInpMax - pState->iInpLen);
         if (iResult > 0)
             pState->iInpLen += iResult;
         if (iResult < 0) { NetPrintfCode("protohttp: ST_HEAD append got ST_FAIL (err=%d, len=%d)\n", iResult, pState->iInpLen); pState->eState = ST_FAIL; }
@@ -544,30 +566,28 @@ void ProtoHttpUpdate(ProtoHttpRefT* pState)
         {
             if (pState->bHttp1_0 == 1 && !pState->iBodySize && pState->iInpCnt > 0) pState->iBodySize = -1;
             if (pState->bHeadOnly == 1)
-                goto bodyComplete;
-            if (pState->iBodySize < 0 || pState->iInpCnt < pState->iBodySize)
-                pState->eState = ST_BODY;
-            else
-            {
-            bodyComplete:
                 pState->eState = ST_DONE;
-            }
+            else if (pState->iBodySize >= 0 && pState->iInpCnt >= pState->iBodySize)
+                pState->eState = ST_DONE;
+            else
+                pState->eState = ST_BODY;
             if (100 * (pState->iHdrCode / 100) == 300) _ProtoHttpRedirect(pState);
         }
         else return;
     }
     while (pState->eState == ST_BODY)
     {
-        s32 iAvailable;
         if (pState->iInpLen > 0 && pState->iInpOff == pState->iInpLen) pState->iInpOff = pState->iInpLen = 0;
-        iAvailable = pState->iInpMax - pState->iInpLen;
-        if (iAvailable <= 0) break;
-        iResult = _ProtoHttpRecv(pState, pState->pInpBuf + pState->iInpLen, iAvailable);
-        if (!iResult) break;
+        iResult = pState->iInpMax - pState->iInpLen;
+        if (iResult <= 0)
+            iResult = 0;
+        else
+            iResult = _ProtoHttpRecv(pState, pState->pInpBuf + pState->iInpLen, iResult);
+        if (iResult == 0) break;
         if (iResult == -1 && (pState->iBodySize == -1 || pState->iBodySize == pState->iInpCnt))
-        { pState->bCloseHdr = 1; pState->iBodySize = pState->iInpCnt; pState->eState = ST_DONE; break; }
+        { pState->iBodySize = pState->iInpCnt; pState->bCloseHdr = 1; pState->eState = ST_DONE; break; }
         if (iResult < 0) { NetPrintfCode("protohttp: ST_FAIL (err=%d)\n", iResult); pState->eState = ST_FAIL; break; }
-        pState->iInpCnt += iResult; pState->iInpLen = iResult + pState->iInpLen;
+        pState->iInpLen += iResult; pState->iInpCnt += iResult;
         if (pState->iBodySize >= 0 && pState->iInpCnt >= pState->iBodySize) { pState->eState = ST_DONE; break; }
     }
     if (pState->eState == ST_FAIL) _ProtoHttpClose(pState, "error");

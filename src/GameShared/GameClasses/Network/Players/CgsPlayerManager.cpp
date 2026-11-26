@@ -336,21 +336,20 @@ void PlayerManager::SendMessages()
 {
     CgsDev::PerfMonCpu::StartMonitor(miPLAYERManagerSendMessagesPM);
 
-    for (s32 liIndex = 0; liIndex < miNumActivePlayers; ++liIndex)
+    // DWARF (CgsPlayerManager.cpp:730) holds only `i`: the accessor is tested and called directly
+    // (ARTIST cmpwi at 0x8289A848).
+    for (s32 i = 0; i < miNumActivePlayers; ++i)
     {
-        NetworkPlayer* lpNetworkPlayer = maActivePlayers[liIndex].GetNetworkPlayer();
-        if (lpNetworkPlayer == 0)
+        if (maActivePlayers[i].GetNetworkPlayer())
         {
-            continue;
-        }
-
-        if (mbDiskAccessible)
-        {
-            lpNetworkPlayer->SendMessages();
-        }
-        else
-        {
-            lpNetworkPlayer->ResetAllMessages();
+            if (mbDiskAccessible)
+            {
+                maActivePlayers[i].GetNetworkPlayer()->SendMessages();
+            }
+            else
+            {
+                maActivePlayers[i].GetNetworkPlayer()->ResetAllMessages();
+            }
         }
     }
 
@@ -665,10 +664,10 @@ void PlayerManager::ReleasePlayer(s32 liPlayerIndex)
         "liPlayerIndex < miNumActivePlayers",
         CGS_ARTIST_FILE, 1370 /* ARTIST 0x828739DC */));
 
-    NetworkPlayer* lpNetworkPlayer = maActivePlayers[liPlayerIndex].GetNetworkPlayer();
-    if (lpNetworkPlayer != 0)
+    // No local in DWARF: accessor tested directly (ARTIST cmpwi at 0x828739F8).
+    if (maActivePlayers[liPlayerIndex].GetNetworkPlayer())
     {
-        lpNetworkPlayer->Release();
+        maActivePlayers[liPlayerIndex].GetNetworkPlayer()->Release();
     }
 
     maInactivePlayers[miNumInactivePlayers] = maActivePlayers[liPlayerIndex];

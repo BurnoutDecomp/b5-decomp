@@ -8,12 +8,13 @@
 #include <stddef.h>
 #include <string.h>
 
+typedef struct CryptSSC2T CryptSSC2T;   // DirtySDK is C
 struct CryptSSC2T { u8 sbox[256]; u8 idx; u32 crc; };
 typedef char SSC2SizeCheck[(sizeof(CryptSSC2T) == 264) ? 1 : -1];
 typedef char SSC2CrcOffsetCheck[(offsetof(CryptSSC2T, crc) == 260) ? 1 : -1];
 // ARTIST 0x82146AB0, 256 PPC big-endian words (SHA256 of source bytes:
 // da5c898b03a4b8559186e7ce3b034e14aab00e7672966ce3032e2b2a2fd4574e).
-static const u32 kCipherCrc32[256] = {
+static const u32 _Cipher_Crc32[256] = {
     0x00000000u, 0x77073096u, 0xee0e612cu, 0x990951bau, 0x076dc419u, 0x706af48fu, 0xe963a535u, 0x9e6495a3u,
     0x0edb8832u, 0x79dcb8a4u, 0xe0d5e91eu, 0x97d2d988u, 0x09b64c2bu, 0x7eb17cbdu, 0xe7b82d07u, 0x90bf1d91u,
     0x1db71064u, 0x6ab020f2u, 0xf3b97148u, 0x84be41deu, 0x1adad47du, 0x6ddde4ebu, 0xf4d4b551u, 0x83d385c7u,
@@ -47,79 +48,96 @@ static const u32 kCipherCrc32[256] = {
     0xbdbdf21cu, 0xcabac28au, 0x53b39330u, 0x24b4a3a6u, 0xbad03605u, 0xcdd70693u, 0x54de5729u, 0x23d967bfu,
     0xb3667a2eu, 0xc4614ab8u, 0x5d681b02u, 0x2a6f2b94u, 0xb40bbe37u, 0xc30c8ea1u, 0x5a05df1bu, 0x2d02ef8du,
 };
-static CryptSSC2T gStringCipher;
-static s32 gStringCipherInitialized;
-extern "C" void CryptSSC2Init(CryptSSC2T* pState, const u8* pKey, s32 iKeyLen, s32 iIterations)
+// The module statics, named as the PS3 DecFIGS TOC names them (_SSC2_Random_ptr, _SSC2_Init_ptr).
+// ARTIST addresses the init flag at _SSC2_Random+0x108 (CryptSSC2Init 0x82B32194). With a plain
+// tentative definition the XDK C compiler places the flag first; the explicit zero initialiser
+// gives ARTIST's layout.
+static CryptSSC2T _SSC2_Random;
+static s32 _SSC2_Init = 0;
+void CryptSSC2Init(CryptSSC2T* pState, const u8* pKey, s32 iKeyLen, s32 iIterations)
 {
-    if (!gStringCipherInitialized)
+    // Locals from DWARF (cryptssc2.c:128-130); statement order from the PS3 -O0 body (0xF0FD90).
+    s32 iIdx;
+    u32 uCrc;
+    u8 uSwap0, uSwap1;
+    if (!_SSC2_Init)
     {
-        gStringCipherInitialized = 1;
-        CryptSSC2Init(&gStringCipher, reinterpret_cast<const u8*>("hello world"), -1, 10);
+        _SSC2_Init = 1;
+        CryptSSC2Init(&_SSC2_Random, (const u8*)("hello world"), -1, 10);
     }
-    if (iIterations >= 0)
+    if (iIterations < 0)
     {
-        for (s32 i = 0; i < 256; ++i) pState->sbox[i] = static_cast<u8>(i);
-        pState->idx = 0; pState->crc = 0;
+        iIterations = -iIterations;
     }
-    else iIterations = -iIterations;
-    if (iKeyLen < 0) iKeyLen = static_cast<s32>(strlen(reinterpret_cast<const char*>(pKey)));
+    else
+    {
+        for (iIdx = 0; iIdx < 256; ++iIdx) pState->sbox[iIdx] = (u8)iIdx;
+        pState->idx = 0;
+        pState->crc = 0;
+    }
+    if (iKeyLen < 0)
+    {
+        for (iKeyLen = 0; pKey[iKeyLen] != 0; ++iKeyLen)
+            ;
+    }
     if (iKeyLen > 0)
     {
-        u32 uCrc = 0;
-        u8 uIndex = 0;
-        const s32 iLimit = iIterations << 8;
-        for (s32 i = 0; i < iLimit; ++i)
+        uCrc = 0;
+        for (iIdx = 0; iIdx < (iIterations << 8); ++iIdx)
         {
-            const u8 uOld = pState->sbox[static_cast<u8>(i)];
-            uCrc = kCipherCrc32[pKey[i % iKeyLen] ^ uIndex] ^ (uCrc >> 8);
-            uCrc = kCipherCrc32[static_cast<u8>(uCrc) ^ uOld] ^ (uCrc >> 8);
-            uIndex = static_cast<u8>(uCrc);
-            pState->sbox[static_cast<u8>(i)] = pState->sbox[uIndex];
-            pState->sbox[uIndex] = uOld;
+            uCrc = (uCrc >> 8) ^ _Cipher_Crc32[(uCrc & 255) ^ pKey[iIdx % iKeyLen]];
+            uCrc = (uCrc >> 8) ^ _Cipher_Crc32[(uCrc & 255) ^ pState->sbox[iIdx & 255]];
+            uSwap0 = pState->sbox[iIdx & 255];
+            uSwap1 = pState->sbox[uCrc & 255];
+            pState->sbox[iIdx & 255] = uSwap1;
+            pState->sbox[uCrc & 255] = uSwap0;
         }
     }
 }
-extern "C" void CryptSSC2Apply(CryptSSC2T* pState, u8* pData, s32 iDataLen)
+void CryptSSC2Apply(CryptSSC2T* pState, u8* pData, s32 iDataLen)
 {
     u8 uIndex = pState->idx;
     u32 uCrc = pState->crc;
     while (iDataLen-- > 0)
     {
-        uCrc = kCipherCrc32[pState->sbox[uIndex] ^ static_cast<u8>(uCrc)] ^ (uCrc >> 8);
+        u8 a;
+        u8 b;
+        uCrc = _Cipher_Crc32[pState->sbox[uIndex] ^ (u8)uCrc] ^ (uCrc >> 8);
         ++uIndex;
-        const u8 a = pState->sbox[uIndex];
-        const u8 b = pState->sbox[static_cast<u8>(uCrc)];
+        a = pState->sbox[uIndex];
+        b = pState->sbox[(u8)uCrc];
         pState->sbox[uIndex] = b;
-        pState->sbox[static_cast<u8>(uCrc)] = a;
-        *pData++ ^= pState->sbox[static_cast<u8>(a - b)];
+        pState->sbox[(u8)uCrc] = a;
+        *pData++ ^= pState->sbox[(u8)(a - b)];
     }
     pState->idx = uIndex;
     pState->crc = uCrc;
 }
-extern "C" s32 CryptSSC2StringEncrypt(char* pDst, s32 iLen, const char* pSrc, const u8* pKey, s32 iKeyLen, s32 iIterations)
+s32 CryptSSC2StringEncrypt(char* pDst, s32 iLen, const char* pSrc, const u8* pKey, s32 iKeyLen, s32 iIterations)
 {
-    CryptSSC2T state;
-    u8 uData;
-    u8 uEncrypted = 0;
-    CryptSSC2Init(&state, pKey, iKeyLen, iIterations);
-    CryptSSC2Init(&gStringCipher, pKey, iKeyLen, -iIterations);
-    CryptSSC2Init(&gStringCipher, reinterpret_cast<const u8*>("ru paranoid?"), -1, -1);
-    while (iLen > 1)
+    // Locals from DWARF (cryptssc2.c:259-262); statement order from the PS3 -O0 body (0xF10248).
+    s32 iSum;
+    CryptSSC2T ref;
+    u8 uDat;
+    u8 uEnc = 0;
+    CryptSSC2Init(&ref, pKey, iKeyLen, iIterations);
+    CryptSSC2Init(&_SSC2_Random, pKey, iKeyLen, -iIterations);
+    CryptSSC2Init(&_SSC2_Random, (const u8*)("ru paranoid?"), -1, -1);
+    for (; iLen > 1; --iLen)
     {
-        if (pSrc)
+        if (pSrc == 0)
         {
-            uData = static_cast<u8>(*pSrc++);
-            if (!uData) pSrc = 0;
+            CryptSSC2Apply(&_SSC2_Random, &uDat, 1);
+            uDat = (uDat & 63) + 32;
         }
-        else
+        else if ((uDat = (u8)(*pSrc++)) == 0)
         {
-            CryptSSC2Apply(&gStringCipher, &uData, 1);
-            uData = (uData & 0x3f) + 32;
+            pSrc = 0;
         }
-        if (uData < 32 || uData >= 127) uData = 127;
-        CryptSSC2Apply(&state, &uEncrypted, 1);
-        *pDst++ = static_cast<char>(((uEncrypted % 96) + uData + 64) % 96 + 32);
-        --iLen;
+        if (uDat < 32 || uDat >= 127) uDat = 127;   // ARTIST cmplwi 0x7F; blt (0x82B3241C)
+        CryptSSC2Apply(&ref, &uEnc, 1);
+        iSum = (uEnc % 96) + uDat + 64;
+        *pDst++ = (char)((iSum % 96) + 32);
     }
     if (iLen > 0) *pDst = 0;
     return 0;

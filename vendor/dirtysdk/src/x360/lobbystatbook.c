@@ -131,7 +131,9 @@ const char* LobbyStatbookRowData(LobbyStatbookT* pStatbook, u32 uSlot, u32 uRow,
     LobbyStatbookRowT* pRow;
     if (uSlot >= pStatbook->uSlotCount) return NULL;
     pSlot = &pStatbook->pSlots[uSlot];
-    if (!pSlot->bAvailable || uRow >= pStatbook->uRowCount) return NULL;
+    // Two checks, as the PS3 -O0 body (0xEC0520) tests them.
+    if (!pSlot->bAvailable) return NULL;
+    if (uRow >= pStatbook->uRowCount) return NULL;
     pRow = &pSlot->pRows[uRow];
     if (pBuffer)
         ds_strnzcpy(pBuffer, pRow->strValue, iBuflen);

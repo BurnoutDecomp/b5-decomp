@@ -1172,9 +1172,9 @@ namespace CgsNetwork
     {
         if (!IsLocalPlayerInGame())
             return false;
-        CgsNetwork::DirtySock::GameManagerRefT* lpGm = mpServerInterface->GetGameManagerRef();
-        if (lpGm)
-            return GameManagerStatus(lpGm, KI_GM_SELECT_ISSERVER, 0, 0) == 1;
+        // No local in DWARF: the accessor is tested directly (ARTIST cmpwi at 0x828883BC).
+        if (mpServerInterface->GetGameManagerRef())
+            return GameManagerStatus(mpServerInterface->GetGameManagerRef(), KI_GM_SELECT_ISSERVER, 0, 0) == 1;
         // No game-manager: a "game server" game iff the first player's persona name starts
         // with '@' (64) -- asm reads the SIGNED first byte of aOpponents[0].strPers.
         return static_cast<s8>(mLastGameRecord.aOpponents[0].strPers[0]) == 64;

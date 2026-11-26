@@ -700,10 +700,10 @@ namespace BrnNetwork
     // score-target challenge network event HandleEvScoreTargetEvent would have queued directly.
     // (Register order: r3 lbSuccess, r4 lqRequestedXuid, r5 the ScoreboardManager `this`.)
     // -------------------------------------------------------------------------------------------
-    s32 ScoreboardManager::RequestXUIDForPlayerCallback(s32 lbSuccess, u64 lqRequestedXuid,
+    bool ScoreboardManager::RequestXUIDForPlayerCallback(bool lbSuccess, u64 lqRequestedXuid,
                                                         s32 liUserData)
     {
-        s32 liResult = lbSuccess;
+        bool lbResult = lbSuccess;
         if (lbSuccess)
         {
             ScoreboardManager* lpScoreboardManager =
@@ -731,12 +731,12 @@ namespace BrnNetwork
             CGS_ASSERT(lpScoreboardManager->mpNetworkModule->GetNetworkEventQueue() != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpScoreboardManager->mpNetworkModule->GetNetworkEventQueue()",
                 CGS_ARTIST_FILE, 1299 /* ARTIST 0x82562F54 */));
-            liResult = AsConcreteQueue(
+            lbResult = AsConcreteQueue(
                 lpScoreboardManager->mpNetworkModule->GetNetworkEventQueue())->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lChallengeEvent),
                     KI_NETEVENT_SCORE_TARGET, KI_SCORE_TARGET_PAYLOAD_SIZE);
         }
-        return liResult;
+        return lbResult;
     }
 
     // -------------------------------------------------------------------------------------------
@@ -747,10 +747,9 @@ namespace BrnNetwork
     void ScoreboardManager::CopyCategories()
     {
         BrnNetworkModuleIO::NetworkOutScoreboardHeadingList lHeadingList;
-        lHeadingList.miLength                = 0;
-        lHeadingList.mb807                   = false;
-        lHeadingList.meHeadingType           = BrnNetworkModuleIO::E_HEADING_CATEGORY;
-        lHeadingList.mbIsPerRoad             = false;
+        lHeadingList.Clear();
+        lHeadingList.SetHeadingType(BrnNetworkModuleIO::E_HEADING_CATEGORY);
+        lHeadingList.SetPerRoad(false);
 
         for (s32 liCategoryCounter = 0;
              liCategoryCounter < mpRankings->GetNumberOfCategories();
@@ -774,10 +773,9 @@ namespace BrnNetwork
     void ScoreboardManager::CopyIndexes(s32 liCategory)
     {
         BrnNetworkModuleIO::NetworkOutScoreboardHeadingList lHeadingList;
-        lHeadingList.miLength                = 0;
-        lHeadingList.mb807                   = false;
-        lHeadingList.meHeadingType           = BrnNetworkModuleIO::E_HEADING_INDEX;
-        lHeadingList.mbIsPerRoad             = false;
+        lHeadingList.Clear();
+        lHeadingList.SetHeadingType(BrnNetworkModuleIO::E_HEADING_INDEX);
+        lHeadingList.SetPerRoad(false);
 
         for (s32 liIndexCounter = 0;
              liIndexCounter < mpRankings->GetNumberOfIndexes(liCategory);
@@ -813,10 +811,8 @@ namespace BrnNetwork
     void ScoreboardManager::CopyVariations(s32 liCategory, s32 liIndex)
     {
         BrnNetworkModuleIO::NetworkOutScoreboardHeadingList lHeadingList;
-        lHeadingList.miLength                = 0;
-        lHeadingList.meHeadingType           = BrnNetworkModuleIO::E_HEADING_VARIATION;
-        lHeadingList.mbIsPerRoad             = false;
-        lHeadingList.mb807                   = false;
+        lHeadingList.Clear();
+        lHeadingList.SetHeadingType(BrnNetworkModuleIO::E_HEADING_VARIATION);
 
         // The X360 body tracks the format-table index in its own register (r31) alongside the
         // variation counter (r30); both start at 0 and step together, so they stay equal.

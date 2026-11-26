@@ -67,6 +67,13 @@ void ProtoAriesUpdate(ProtoAriesRefT*);
 s32 ProtoAriesPeek(ProtoAriesRefT*, s32*, s32*, char**);
 s32 ProtoAriesRecv(ProtoAriesRefT*, s32*, s32*, char*, s32);
 
+// DWARF telemetryapi.c:230 (inlined at every ARTIST call site).
+static void _TelemetryApiTriggerCallback(TelemetryApiRefT* pRef, TelemetryApiCBTypeE eType)
+{
+    if (pRef->callbacks[eType].pCallback != NULL)
+        pRef->callbacks[eType].pCallback(pRef, pRef->callbacks[eType].pUserData);
+}
+
 static u32 _TelemetryApiNumEvents(const TelemetryApiRefT* pRef)
 {
     if (!pRef || (pRef->uEventState & 1)) return 0;
@@ -245,7 +252,7 @@ static void _TelemetryApiEventBufferApplyFilter(TelemetryApiRefT* pRef)
     {
         pRef->uEventHead = pRef->uEventTail = 0;
         pRef->uEventState |= 1;
-        if (pRef->callbacks[1].pCallback) pRef->callbacks[1].pCallback(pRef, pRef->callbacks[1].pUserData);
+        _TelemetryApiTriggerCallback(pRef, TELEMETRY_CBTYPE_SENDCOMPLETE);
     }
 }
 
@@ -380,7 +387,7 @@ void TelemetryApiUpdate(TelemetryApiRefT* pRef)
     if (pRef->bFullSendPending && !_TelemetryApiNumEvents(pRef) && !ProtoAriesStatus(pRef->pAries, 0x6f627566, 0, 0))
     {
         pRef->bFullSendPending = 0;
-        if (pRef->callbacks[2].pCallback) pRef->callbacks[2].pCallback(pRef, pRef->callbacks[2].pUserData);
+        _TelemetryApiTriggerCallback(pRef, TELEMETRY_CBTYPE_FULLSENDCOMPLETE);
     }
     if (!(pRef->uEventState & 4) && pRef->bCountryDisabled != 1 && pRef->bUserDisabled != 1)
     {
@@ -535,94 +542,110 @@ void TelemetryApiEvent(TelemetryApiRefT* pRef, u32 uModuleID, u32 uGroupID, cons
 }
 
 // ARTIST 82B11088, 82B10250 and 82B11498.
+// PopFront/PopBack: DWARF local pPoppedEvent (telemetryapi.c:1872 / :1938); statement order from
+// the PS3 -O0 bodies (0xEC4C50 / 0xEC4DC8).
 TelemetryApiEventT* TelemetryApiPopFront(TelemetryApiRefT* pRef, TelemetryApiEventT* pEvent)
 {
-    if (!pRef || (pRef->uEventState & 1)) return 0;
+    TelemetryApiEventT* pPoppedEvent;
+    if (pRef == NULL) return NULL;
+    if (pRef->uEventState & 1) return NULL;
     pRef->uEventState &= ~2u;
-    if (pEvent) memcpy(pEvent, &pRef->Events[pRef->uEventHead], sizeof(*pEvent));
-    if (pRef->uEventHead == pRef->uEventTail)
+    pPoppedEvent = &pRef->Events[pRef->uEventHead];
+    if (pEvent != NULL) memcpy(pEvent, pPoppedEvent, sizeof(*pEvent));
+    if (pRef->uEventTail == pRef->uEventHead)   // ARTIST cmplw tail, head (0x82B110DC)
     {
         pRef->uEventState |= 1;
-        if (pRef->callbacks[1].pCallback) pRef->callbacks[1].pCallback(pRef, pRef->callbacks[1].pUserData);
+        _TelemetryApiTriggerCallback(pRef, TELEMETRY_CBTYPE_SENDCOMPLETE);
     }
-    else if (++pRef->uEventHead == pRef->uEventBufSize) pRef->uEventHead = 0;
+    else
+    {
+        pRef->uEventHead++;
+        if (pRef->uEventHead == pRef->uEventBufSize) pRef->uEventHead = 0;
+    }
     return pEvent;
 }
 
 TelemetryApiEventT* TelemetryApiPopBack(TelemetryApiRefT* pRef, TelemetryApiEventT* pEvent)
 {
-    if (!pRef || (pRef->uEventState & 1)) return 0;
+    TelemetryApiEventT* pPoppedEvent;
+    if (pRef == NULL) return NULL;
+    if (pRef->uEventState & 1) return NULL;
     pRef->uEventState &= ~2u;
-    if (pEvent) memcpy(pEvent, &pRef->Events[pRef->uEventTail], sizeof(*pEvent));
+    pPoppedEvent = &pRef->Events[pRef->uEventTail];
+    if (pEvent != NULL) memcpy(pEvent, pPoppedEvent, sizeof(*pEvent));
     if (pRef->uEventTail == pRef->uEventHead)
     {
         pRef->uEventState |= 1;
-        if (pRef->callbacks[1].pCallback)
-            pRef->callbacks[1].pCallback(pRef, pRef->callbacks[1].pUserData);
+        _TelemetryApiTriggerCallback(pRef, TELEMETRY_CBTYPE_SENDCOMPLETE);
     }
     else
     {
-        if (!pRef->uEventTail) pRef->uEventTail = pRef->uEventBufSize;
-        --pRef->uEventTail;
+        if (pRef->uEventTail == 0) pRef->uEventTail = pRef->uEventBufSize;
+        pRef->uEventTail--;
     }
     return pEvent;
 }
 
+// PushFront/PushBack: statement order from the PS3 -O0 bodies (0xEC4FB8 / 0xEC531C): the event
+// is copied inside each branch of the empty test, and no local caches the state word.
 s32 TelemetryApiPushFront(TelemetryApiRefT* pRef, const TelemetryApiEventT* pEvent)
 {
-    u32 uState;
-    if (!pRef || !pEvent) return -1;
-    uState = pRef->uEventState;
-    if (uState & 2)
+    if (pRef == NULL || pEvent == NULL) return -1;
+    if (pRef->uEventState & 2)
     {
         if (pRef->eBufferType == TELEMETRY_BUFFERTYPE_FILLANDSTOP) return -2;
-        if (!pRef->uEventTail) pRef->uEventTail = pRef->uEventBufSize;
-        --pRef->uEventTail;
+        if (pRef->uEventTail == 0) pRef->uEventTail = pRef->uEventBufSize;
+        pRef->uEventTail--;
     }
-    if (uState & 1)
+    if (pRef->uEventState & 1)
     {
         pRef->uEventTail = 0;
-        pRef->uEventState = uState & ~1u;
         pRef->uEventHead = 0;
+        pRef->uEventState &= ~1u;
+        memcpy(&pRef->Events[pRef->uEventHead], pEvent, sizeof(*pEvent));
     }
     else
     {
-        if (!pRef->uEventHead) pRef->uEventHead = pRef->uEventBufSize;
-        --pRef->uEventHead;
+        if (pRef->uEventHead == 0) pRef->uEventHead = pRef->uEventBufSize;
+        pRef->uEventHead--;
+        memcpy(&pRef->Events[pRef->uEventHead], pEvent, sizeof(*pEvent));
     }
-    memcpy(&pRef->Events[pRef->uEventHead], pEvent, sizeof(*pEvent));
     pRef->bFullSendPending = 1;
     if ((pRef->uEventTail + 1) % pRef->uEventBufSize == pRef->uEventHead)
     {
         pRef->uEventState |= 2;
-        if (pRef->callbacks[0].pCallback)
-            pRef->callbacks[0].pCallback(pRef, pRef->callbacks[0].pUserData);
+        _TelemetryApiTriggerCallback(pRef, TELEMETRY_CBTYPE_BUFFERFULL);
     }
     return 0;
 }
 
 s32 TelemetryApiPushBack(TelemetryApiRefT* pRef, const TelemetryApiEventT* pEvent)
 {
-    u32 uState;
-    if (!pRef || !pEvent) return -1;
-    uState = pRef->uEventState;
-    if (uState & 2)
+    if (pRef == NULL || pEvent == NULL) return -1;
+    if (pRef->uEventState & 2)
     {
         if (pRef->eBufferType == TELEMETRY_BUFFERTYPE_FILLANDSTOP) return -2;
-        if (++pRef->uEventHead == pRef->uEventBufSize) pRef->uEventHead = 0;
+        pRef->uEventHead++;
+        if (pRef->uEventHead == pRef->uEventBufSize) pRef->uEventHead = 0;
     }
-    if (uState & 1)
+    if (pRef->uEventState & 1)
     {
-        pRef->uEventTail = pRef->uEventHead = 0;
-        pRef->uEventState = uState & ~1u;
+        pRef->uEventTail = 0;
+        pRef->uEventHead = 0;
+        pRef->uEventState &= ~1u;
+        memcpy(&pRef->Events[pRef->uEventTail], pEvent, sizeof(*pEvent));
     }
-    else if (++pRef->uEventTail == pRef->uEventBufSize) pRef->uEventTail = 0;
-    memcpy(&pRef->Events[pRef->uEventTail], pEvent, sizeof(*pEvent));
+    else
+    {
+        pRef->uEventTail++;
+        if (pRef->uEventTail == pRef->uEventBufSize) pRef->uEventTail = 0;
+        memcpy(&pRef->Events[pRef->uEventTail], pEvent, sizeof(*pEvent));
+    }
     pRef->bFullSendPending = 1;
     if ((pRef->uEventTail + 1) % pRef->uEventBufSize == pRef->uEventHead)
     {
         pRef->uEventState |= 2;
-        if (pRef->callbacks[0].pCallback) pRef->callbacks[0].pCallback(pRef, pRef->callbacks[0].pUserData);
+        _TelemetryApiTriggerCallback(pRef, TELEMETRY_CBTYPE_BUFFERFULL);
     }
     return 0;
 }

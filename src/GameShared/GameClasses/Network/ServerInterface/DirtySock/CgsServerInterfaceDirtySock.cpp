@@ -408,7 +408,7 @@ namespace CgsNetwork
 
     void ServerInterfaceDirtySock::Update()
     {
-        CGS_ASSERT(mpLobbyAPIRef != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT(GetLobbyAPIRef(), CGS_ASSERT_MESSAGE_AT(
             "Prepare the server interface before calling update!",
             CGS_ARTIST_FILE, 454 /* ARTIST 0x82898210 */));
 

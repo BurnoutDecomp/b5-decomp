@@ -48,12 +48,16 @@ static ProtoPingRequestT* PingAllocRequest(ProtoPingRefT* ref, s32 type, const u
     memset(item, 0, sizeof(*item));
     item->type = type; item->sequence = ++ref->sequence;
     if (length < 0) length = static_cast<s32>(strlen(reinterpret_cast<const char*>(data))) + 1;
-    if (length > 256) { NetPrintfCode("protopingxenon: clamping data (length=%d) to %d bytes\n", length, 256); length = 256; }
+    // sizeof() makes the clamp test unsigned (ARTIST cmplwi 0x100 at 0x82B38298).
+    if (length > sizeof(item->data)) { NetPrintfCode("protopingxenon: clamping data (length=%d) to %d bytes\n", length, sizeof(item->data)); length = sizeof(item->data); }
     if (length) memcpy(item->data, data, length);
     item->dataLength = length;
-    ProtoPingRequestT** tail = &ref->requests;
-    while (*tail) tail = &(*tail)->next;
-    *tail = item;
+    // The DirtySDK list-tail walk from the head pointer viewed as a node (next is at +0):
+    // ARTIST 0x82B382D8..0x82B382F8.
+    ProtoPingRequestT* pLast;
+    for (pLast = reinterpret_cast<ProtoPingRequestT*>(&ref->requests); pLast->next != 0; pLast = pLast->next)
+        ;
+    pLast->next = item;
     return item;
 }
 
