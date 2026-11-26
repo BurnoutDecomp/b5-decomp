@@ -80,23 +80,12 @@ void BridgeTrafficToTrigger_PreScene(
     // FLAG cross-home casts: both IO buffers expose their trigger-management member as opaque
     // storage; both ARE the trigger module's TriggerManagementInputInterface (whose Append
     // performs the X360's inlined add-queue + remove-queue whole-interface merge).
-    BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface* lpTriggerManagementInput =
-        reinterpret_cast<BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface*>(
-            lpTriggerInputBuffer_PreScene->GetInputInterface());
-    const BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface* lpSource =
-        reinterpret_cast<const BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface*>(
-            lpTrafficOutputBuffer_PreScene->GetTriggerManagementInputInterface());
-
-    // ---- [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG), budget 24 lines. --------
-    // Reads only. A "[T-trigmerge] ... merge:" line with a non-zero src count is the proof that
-    // the trigger module's PRE-SCENE input received traffic trigger events; the one-shot
-    // "bridge LIVE, traffic source empty" line below proves the bridge itself is running when
-    // there is nothing to carry. No line at all means this TU is not in the link.
-    // DELETE-WHEN-STABLE.
-    const s32 liSourceAdds    = lpSource->GetAddTriggerEventQueue().GetLength();
-    const s32 liSourceRemoves = lpSource->GetRemoveTriggerEventQueue().GetLength();
-
-    lpTriggerManagementInput->Append(*lpSource);
+    // One expression: ARTIST fetches the traffic source interface (bl 0x8279FE00) before the
+    // trigger destination (bl 0x827A3120), the argument-first order of `dst->Append(src)`.
+    reinterpret_cast<BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface*>(
+        lpTriggerInputBuffer_PreScene->GetInputInterface())->Append(
+            *reinterpret_cast<const BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface*>(
+                lpTrafficOutputBuffer_PreScene->GetTriggerManagementInputInterface()));
 }
 
 }

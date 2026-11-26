@@ -161,12 +161,12 @@ namespace BrnAI
         //   mRoute.GetNodeCount() > 0) -- reads Route::meStatus @+0x1408 and miNodeCount @+0x1400.
         bool             HasValidRoute() const;              // DWARF BrnAICar.h:262
         const RouteNode* GetNextRouteNode() const;           // DWARF BrnAICar.h:182 (Route::GetNode(miNextRouteNodeIndex), bounds-checked)
-        s32              GetNextRouteNodeIndex() const;       // DWARF BrnAICar.h:185 (== miNextRouteNodeIndex @+0x1524)
+        s32              GetNextRouteNodeIndex() const { return miNextRouteNodeIndex; }  // DWARF BrnAICar.h:185 (== miNextRouteNodeIndex @+0x1524)
         f32              GetMaxPlayerSpeed() const;           // DWARF BrnAICar.h:287 (== mfMaxPlayerSpeed @+0x1504)
-        s8               GetOpponentIndex() const;            // DWARF BrnAICar.h:371 (== miOpponentIndex @+0x153A)
+        s8               GetOpponentIndex() const { return miOpponentIndex; }            // DWARF BrnAICar.h:371 (== miOpponentIndex @+0x153A)
         bool             IsAheadOfPlayer() const;             // DWARF BrnAICar.h:332 (== mbIsAheadOfPlayer @+0x153B)
-        EAICarState      GetState() const;                   // DWARF BrnAICar.h:275 (== meCarState @+0x14C8)
-        bool             IsPlayerCar() const;                // DWARF BrnAICar.h:326 (== mbIsPlayer @+0x1549)
+        EAICarState      GetState() const { return meCarState; }                         // DWARF BrnAICar.h:275 (== meCarState @+0x14C8)
+        bool             IsPlayerCar() const { return mbIsPlayer; }                      // DWARF BrnAICar.h:326 (== mbIsPlayer @+0x1549)
         f32              GetBuzzFrequencyRatio() const { return mfBuzzFrequencyRatio; }   // mfBuzzFrequencyRatio @+0x1510 (DWARF :696); BuzzBy::ResetActiveList @0x82771C90 reads it (`lfs 0x1510(car)`)
 
         // ---- the checkpoint hand-off AIModule::OnRaceCarReachedCheckpoint @0x8278A658 makes ----

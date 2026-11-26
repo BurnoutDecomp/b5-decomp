@@ -77,9 +77,6 @@ namespace PropEntityIO
     // ⚠️ NO Clear() first: the console appends. The queue is drained by PropEntityModule::
     // PostSceneUpdate @0x822C4718 (which reads it via GetCrashEventQueue at 0x822C476C), so
     // clearing here would drop crash-completes that arrived in the same frame.
-    void InputBuffer_PostScene::AppendRaceCarCrashQueue(const RaceCarCrashCompleteEventQueue* lpQueue)
-    {
-        mRaceCarCrashCompleteEventQueue.Append(*lpQueue);
-    }
+    // (AppendRaceCarCrashQueue is header-inline: BrnPropEntityModuleIO.h.)
 }
 }

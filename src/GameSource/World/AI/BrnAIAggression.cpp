@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"       // CgsNumeric::Random (mRandom.RandomFloat)
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu vector ops
+#include "rw/math/fpu/scalar_operation.h"                   // rw::math::fpu::Clamp (SetSlowOvertakingSpeed)
 
 #include <cfloat>                                         // FLT_MAX (0x7F7FFFFF)
 
@@ -95,9 +96,9 @@ const f32 KF_ACROSS_SEPARATION_DEGENERATE = FLT_MAX; // rodata 0x8204F664 == 0x7
 //     unexported CRT leaf routines in 0x82C685B8..0x82C69488 (one `stfs` per address, exactly
 //     one writer each), and every value in that family is now evaluated in
 //     BrnAICar_Constants.h: GetMinFallBackSpeed's four, GetMaxOvertakeSpeed's four,
-//     KF_NO_PASSING_SPEED, the GetSpeedMatchSpeed OVERTAKE_FAST / SLOW_TO_CLIP / SLOWER /
+//     KF_DROP_BACK_SPEED, the GetSpeedMatchSpeed OVERTAKE_FAST / SLOW_TO_CLIP / SLOWER /
 //     aggressive-fall-back sets, SetSlowOvertakingSpeed's two, SetSlowFallbackSpeed's two,
-//     KF_CLIP_OFF_MIN_SPEED and KF_NON_SPEED_MATCHED_SPEED_DEFAULT.
+//     KF_MINIMUM_SLOW_CLIP and KF_NON_SPEED_MATCHED_SPEED_DEFAULT.
 
 // Shared speed-match RANGE tuning quad (proximity-lerped). Same four rodata floats are used by
 // OutOfSpeedMatchRange and the GetSpeedMatchSpeed default branch.
@@ -111,6 +112,41 @@ const f32 KF_SPEED_MATCH_LEAD_PROX1 = 40.0f; // rodata 0x820C42E4 == 0x42200000 
 const f32 KF_SPEED_MATCH_LEAD_PROX0 =  0.0f; // rodata 0x820C42E8 == 0x00000000 (leading-sep upper, prox=0)
 const f32 KF_SPEED_MATCH_SEP_PROX1  = 60.0f; // rodata 0x820C42EC == 0x42700000 (separation threshold, prox=1)
 const f32 KF_SPEED_MATCH_SEP_PROX0  =  0.0f; // rodata 0x820C42F0 == 0x00000000 (separation threshold, prox=0)
+
+// DWARF BrnAIAggression.cpp:44..79: the mph tunables, each dynamically initialised as `mph *
+// CgsCore::KF_MPH_TO_MPS` by the CRT init bank in declaration order (0x82C68B28.., stored to .bss),
+// so their readers load them from storage. Names by that order and their readers:
+//   :44 KF_DROP_BACK_SPEED 60 (init 0x82C68B28 -> 0x8300D6F4; SetSlowFallbackSpeed,
+//       SetSlowOvertakingSpeed, GetSpeedMatchSpeed), :45 KF_DROP_BACK_RAPIDLY 40 (0x82C68B48 ->
+//       0x8300D784). Four initialisers follow for :44..:49's five names; :46..:49 are not read here.
+//   :58 KF_SLOW_CLIP_SPEED 20 (0x82C68C28 -> 0x8300D754), :59 KF_RELATIVE_CLIP_AWAY_SPEED 10
+//       (0x82C68C48 -> 0x8300D7F0), :60 KF_MINIMUM_SLOW_CLIP 80 (0x82C68C68 -> 0x8300D720; ClipOffBehind),
+//   :69 KF_RELATIVE_FAST_OVERTAKING_SPEED 20 (0x82C68CA8 -> 0x8300DBE0), :70
+//       KF_RELATIVE_SLOW_OVERTAKING_SPEED 5 (0x82C68CC8 -> 0x8300D758), :71 KF_MAX_MAX_OVERTAKE_SPEED
+//       190 (0x82C68CE8 -> 0x8300D7A0), :72 KF_MAX_MIN_OVERTAKE_SPEED 160 (0x82C68D08 -> 0x8300D970),
+//   :77 KF_MIN_OVERTAKE_SPEED 120 (0x82C68D68 -> 0x8300D71C), :79
+//       KF_EXCESS_SPEED_ALLOWED_FOR_SLOW_OVERTAKE 20 (0x82C68D88 -> 0x8300D778).
+// (:74/:75, the non-const marked-man overtake pair, stay gfMarkedManMax/MinOvertakeSpeed here.)
+const f32 KF_DROP_BACK_SPEED                        =  60.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_DROP_BACK_RAPIDLY                      =  40.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_SLOW_CLIP_SPEED                        =  20.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_RELATIVE_CLIP_AWAY_SPEED               =  10.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_MINIMUM_SLOW_CLIP                      =  80.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_RELATIVE_FAST_OVERTAKING_SPEED         =  20.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_RELATIVE_SLOW_OVERTAKING_SPEED         =   5.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_MAX_MAX_OVERTAKE_SPEED                 = 190.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_MAX_MIN_OVERTAKE_SPEED                 = 160.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_MIN_OVERTAKE_SPEED                     = 120.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_EXCESS_SPEED_ALLOWED_FOR_SLOW_OVERTAKE =  20.0f * CgsCore::KF_MPH_TO_MPS;
+
+// DWARF BrnAIAggression.cpp:54..57. Dynamically initialised from CgsCore::KF_MPH_TO_MPS (the CRT
+// init bank 0x82C68BA8/0x82C68BC8/0x82C68BE8/0x82C68C08, in declaration order, each `mph *
+// KF_MPH_TO_MPS` into .bss 0x8300D7DC / 0x8300D744 / 0x8300DB2C / 0x8300D988), so every reader
+// loads them from storage (GetMinFallBackSpeed 0x82770A78..0x82770AB0).
+const f32 KF_MINIMUM_SLOW_FALL_BACK_SPEED_RACE       = 100.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_MINIMUM_SLOW_FALL_BACK_SPEED_ROAD_RAGE  =  60.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_MINIMUM_SLOW_FALL_BACK_SPEED_MARKED_MAN =   0.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_MINIMUM_SLOW_FALL_BACK_SPEED_PURSUIT    =  90.0f * CgsCore::KF_MPH_TO_MPS;
 
 // --- G4-states-slam ---
 // No NEW file-local constants required by these 7 functions -- every numeric used is a recoverable literal immediate visible in the asm/rodata (immediates: -1.0, 0.0, 1.0, 1.5, 2.0, 2.5, 4.0, 6.0, 7.5, -3.0, -8.0, 12.0, 16.0, 20.0, 1000.0; and the integer float-bit constants decoded: 1092616192=10.0f, 1086324736=6.0f, 1090519040=8.0f, 0x40000000=2.0f, -1082130432=-1.0f). The randomised state times use the static `mRandom` (CgsNumeric::Random, declared in BrnAIAggression.h) via mRandom.RandomFloat().
@@ -584,8 +620,8 @@ f32 AIAggression::GetMaxOvertakeSpeed() const
     }
     else
     {
-        lfHi = KF_MAX_OVERTAKE_SPEED_DEFAULT_HI;
-        lfLo = KF_MAX_OVERTAKE_SPEED_DEFAULT_LO;
+        lfHi = KF_MAX_MAX_OVERTAKE_SPEED;
+        lfLo = KF_MAX_MIN_OVERTAKE_SPEED;
     }
 
     return lfLo + (lfHi - lfLo) * lfAggressionLevel;
@@ -599,13 +635,20 @@ f32 AIAggression::GetMaxOvertakeSpeed() const
 // default). The rodata values are not recoverable from the dossier -> KF_ constants.
 f32 AIAggression::GetMinFallBackSpeed()
 {
-    switch (mpCar->meRouteFindingStyle)
+    // ARTIST tests PURSUIT, ROAD_RAGE, MARKED_MAN in turn, each returning on a match (0x82770A70..).
+    if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_PURSUIT)
     {
-        case E_ROUTE_FINDING_PURSUIT:    return KF_MIN_FALLBACK_SPEED_PURSUIT;     // 3
-        case E_ROUTE_FINDING_ROAD_RAGE:  return KF_MIN_FALLBACK_SPEED_ROAD_RAGE;   // 2
-        case E_ROUTE_FINDING_MARKED_MAN: return KF_MIN_FALLBACK_SPEED_MARKED_MAN;  // 6
-        default:         return KF_MIN_FALLBACK_SPEED_DEFAULT;
+        return KF_MINIMUM_SLOW_FALL_BACK_SPEED_PURSUIT;
     }
+    if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_ROAD_RAGE)
+    {
+        return KF_MINIMUM_SLOW_FALL_BACK_SPEED_ROAD_RAGE;
+    }
+    if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)
+    {
+        return KF_MINIMUM_SLOW_FALL_BACK_SPEED_MARKED_MAN;
+    }
+    return KF_MINIMUM_SLOW_FALL_BACK_SPEED_RACE;
 }
 
 // ===== GetPositionNextToTarget =====
@@ -708,13 +751,13 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
             if (mpPlayerCar != NULL && mpCar->meCarState == E_AI_CAR_STATE_IN_RANGE)
             {
                 const f32 lfMaxOvertake = GetMaxOvertakeSpeed();
-                const f32 lfRaw = mpPlayerCar->GetSpeed() + KF_OVERTAKE_FAST_SPEED_BIAS;
+                const f32 lfRaw = mpPlayerCar->GetSpeed() + KF_RELATIVE_FAST_OVERTAKING_SPEED;
                 // fsel f0,f13(MIN - raw),f30(MIN),f0 @0x8277E0E4 floors (a NaN passes through);
                 // fsel f1,f13(max - s),f0,f31(max) @0x8277E0EC caps (a NaN caps to the max).
-                const f32 lfSpeed = (lfRaw < KF_OVERTAKE_FAST_MIN_SPEED) ? KF_OVERTAKE_FAST_MIN_SPEED : lfRaw;
+                const f32 lfSpeed = (lfRaw < KF_MIN_OVERTAKE_SPEED) ? KF_MIN_OVERTAKE_SPEED : lfRaw;
                 return (lfSpeed <= lfMaxOvertake) ? lfSpeed : lfMaxOvertake;
             }
-            return KF_NO_PASSING_SPEED;
+            return KF_DROP_BACK_SPEED;
 
         case ESpeedMatch_SlowToClip:        // 3
             // Our lead in the PLAYER's frame: lwz r4,0x10 (mpPlayerCar, NULL -> flt_8300D754)
@@ -724,15 +767,15 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
             // so we gave up 15 m AHEAD of the player instead of 15 m behind, and dereferenced a
             // NULL mpTargetCar when VEER_EXTREME set this mode with no target.)
             if (mpPlayerCar == NULL || GetLeadingSeparation(mpPlayerCar, mpCar) < -15.0f)
-                return KF_SLOW_TO_CLIP_FALLBACK;
+                return KF_SLOW_CLIP_SPEED;
 
-            return StepTo(mpCar->GetSpeed(), mpPlayerCar->GetSpeed() - KF_SLOW_TO_CLIP_SPEED_DROP,
+            return StepTo(mpCar->GetSpeed(), mpPlayerCar->GetSpeed() - KF_RELATIVE_CLIP_AWAY_SPEED,
                           lfTimeStep * 10.0f);
 
         case ESpeedMatch_Slower:            // 2
         {
             if (mpPlayerCar == NULL || mpCar->meCarState != E_AI_CAR_STATE_IN_RANGE)
-                return KF_NO_PASSING_SPEED;
+                return KF_DROP_BACK_SPEED;
 
             // Our lead in the PLAYER's frame again: lwz r4,0x10 @0x8277E180, lwz r5,8 @0x8277E18C,
             // bl GetLeadingSeparation @0x8277E1A0, bge against 0.0 @0x8277E1B0 -> lfs 0x48
@@ -746,7 +789,7 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
             if (!(GetLeadingSeparation(mpPlayerCar, mpCar) < 0.0f))
                 lfTarget = mFixedPassingSpeed;
             else
-                lfTarget = KF_SLOWER_BEHIND_SPEED;
+                lfTarget = KF_DROP_BACK_RAPIDLY;
 
             return StepTo(mpCar->GetSpeed(), lfTarget, lfTimeStep * 90.0f);
         }
@@ -888,7 +931,7 @@ void AIAggression::SetSlowFallbackSpeed()
 {
     if (mpPlayerCar == NULL || mpCar->meCarState != E_AI_CAR_STATE_IN_RANGE)
     {
-        mFixedPassingSpeed = KF_NO_PASSING_SPEED;
+        mFixedPassingSpeed = KF_DROP_BACK_SPEED;
         return;
     }
 
@@ -912,26 +955,24 @@ void AIAggression::SetSlowFallbackSpeed()
 // two fsel ops are the floor/ceiling clamps. Bias/floor constants are rodata -> KF_.
 void AIAggression::SetSlowOvertakingSpeed()
 {
-    if (mpPlayerCar == NULL || mpCar->meCarState != E_AI_CAR_STATE_IN_RANGE)
+    // ARTIST 0x8277DB38: the in-range test leads to the clamp, the other arm stores the drop-back
+    // speed (0x8277DBC8). The clamp is rwmath fpu::Clamp(value, min, max) = Min(max, Max(min,
+    // value)): `fsel f0, min - v, min, v` then `fsel f0, max - s, s, max` (0x8277DBA4..B0), with its
+    // arguments evaluated right to left (GetMaxOvertakeSpeed first, then the min load, then the
+    // player's speed). The cap compare reuses the stored value (ble over the cap store).
+    if (mpPlayerCar != NULL && mpCar->meCarState == E_AI_CAR_STATE_IN_RANGE)
     {
-        mFixedPassingSpeed = KF_NO_PASSING_SPEED;
-        return;
+        mFixedPassingSpeed = rw::math::fpu::Clamp(mpPlayerCar->GetSpeed() + KF_RELATIVE_SLOW_OVERTAKING_SPEED,
+                                                  KF_MIN_OVERTAKE_SPEED, GetMaxOvertakeSpeed());
+        if (mFixedPassingSpeed > mfNonSpeedMatchedSpeed + KF_EXCESS_SPEED_ALLOWED_FOR_SLOW_OVERTAKE)
+        {
+            mFixedPassingSpeed = mfNonSpeedMatchedSpeed + KF_EXCESS_SPEED_ALLOWED_FOR_SLOW_OVERTAKE;
+        }
     }
-
-    const f32 lfMaxOvertake = GetMaxOvertakeSpeed();
-    const f32 lfCap = mfNonSpeedMatchedSpeed + KF_SLOW_OVERTAKE_CAP_BIAS;
-    const f32 lfRaw = mpPlayerCar->GetSpeed() + KF_SLOW_OVERTAKE_SPEED_BIAS;
-
-    // The floor is `fsel f0, min - raw, min, raw` @0x8277DBA8 (a NaN raw stays NaN, as here); the
-    // ceiling is `fsel f0, max - s, s, max` @0x8277DBAC/0x8277DBB0 (f31 = GetMaxOvertakeSpeed()),
-    // which hands back the max overtake speed for a NaN s -- spelt as the fsel so it does
-    // (FX-AINAN2; `if (s > max) s = max` kept the NaN).
-    f32 lfSpeed = (lfRaw < KF_OVERTAKE_FAST_MIN_SPEED) ? KF_OVERTAKE_FAST_MIN_SPEED : lfRaw;
-    lfSpeed = ((lfMaxOvertake - lfSpeed) >= 0.0f) ? lfSpeed : lfMaxOvertake;
-
-    mFixedPassingSpeed = lfSpeed;
-    if (lfSpeed > lfCap)
-        mFixedPassingSpeed = lfCap;
+    else
+    {
+        mFixedPassingSpeed = KF_DROP_BACK_SPEED;
+    }
 }
 
 // ===== StopAttacking =====
@@ -1235,7 +1276,7 @@ void BrnAI::AIAggression::UpdateAggressionStateBeFodder()
 // BrnAI::AIAggression::UpdateAggressionStateClipOffBehind @0x82770B88.
 //
 // CLIP_OFF_BEHIND handler: shadow-clip the target from behind. With no valid target,
-// or once the state times out, or if the target slows below KF_CLIP_OFF_MIN_SPEED, it
+// or once the state times out, or if the target slows below KF_MINIMUM_SLOW_CLIP, it
 // resets to OUT_OF_RANGE. With a target it holds speed-match mode SlowToClip and drops the
 // slam lineup point (mbTargetPosValid); the no-target arm stores neither.
 void BrnAI::AIAggression::UpdateAggressionStateClipOffBehind()
@@ -1254,7 +1295,7 @@ void BrnAI::AIAggression::UpdateAggressionStateClipOffBehind()
     }
     else
     {
-        if (mpTargetCar->GetSpeed() < KF_CLIP_OFF_MIN_SPEED)
+        if (mpTargetCar->GetSpeed() < KF_MINIMUM_SLOW_CLIP)
         {
             mfStateTime = -1.0f;
             meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
