@@ -1,30 +1,48 @@
 #pragma once
 
-// Portable PC reconstruction of EARenderWare rwmath (1.02.00)
-// rw/math/vpu/detail/vec_float_type_inline.h  -- the out-of-class inline bodies for the
-// VecFloat / VecFloatRef<INDEX> / VecFloatRefIndex lane wrappers declared in vec_float.h.
+// rwmath rw/math/vpu/detail/vec_float_type_inline.h: the inline members of VecFloat, VecFloatRef<INDEX>
+// and VecFloatRefIndex declared in vec_float.h.
 //
-// On the X360 every body here is one or more AltiVec/VMX128 intrinsics operating on a
-// `vector float` register (`VectorIntrinsic mV`). Those intrinsics do not exist on PC,
-// so -- per the project's vendor-SIMD rule -- each is lowered to the equivalent portable
-// scalar lane math with semantic parity (x64 widths, member access by name, no raw
-// offset hacks). The console intrinsic each line replaces is named in a comment.
-//
-// Lane semantics of the originals (all confirmed against the LegacySrc source):
-//   * VectorIntrinsicUnion read     temp.scalarFloat[i]            -> mafLane[i]
-//   * vspltw(v, i)  (broadcast)      every lane = v lane i
-//   * vaddfp/vsubfp(a,b)             per-lane a +/- b
-//   * vmaddfp(a,b,0)                 per-lane a * b   (fused multiply, addend = 0)
-//   * vrefp + 2x Newton refine       per-lane reciprocal (1/b); used to build a / b
-//   * _asmSwizzleStore<D,S>(d, s)    copy s lane S into d lane D, keep d's other lanes
-//   * gSwizzleStoreConstants[D*4+S]  the vperm control that performs that single-lane copy
-//   * RW_MATH_VPU_CreateVectorFromScalar_R(f)  broadcast scalar f to all four lanes
-//
-// Because a lane-write only ever stores one lane and a lane-read only ever reads one lane,
-// the heavy full-register arithmetic in the console code collapses to scalar float math on
-// the single lane involved -- exactly what these de-optimised bodies do.
+// Structure: LegacySrc EARenderWare rwmath 1.02.00 vpu/detail/vec_float_type_inline.h, in its order with
+// its signatures and statement layout (the DecFIGS DWARF places the same members on the same lines, +2..+4
+// from VecFloat::SetFloat :152 on). LegacySrc's copy is PS3 preprocessor output; each platform macro
+// expansion here is the Xenon one an ARTIST site attests:
+//   lane reads                 the lane read in place, no register copy (VecFloatRef<X>::GetFloat in
+//                              ColourSelection::GetUint32ColourFromVector4 0x824E8568: lfs 0(r31)).
+//   VecFloat(v, index)         __vperm(v, v, __vspltw(__lvsl(0, 4 * index), 0)), the VecFloatRefIndex
+//                              broadcast of the operator set (Camera::GetFrustum 0x822772AC).
+//   VecFloat::SetFloat,        { f } stored with three zero words, lvx, vspltw 0:
+//   VecFloatRef<I>::SetFloat   FlaptTimerFieldComponent::CalculateColour 0x8241CA48..0x8241CA60 (PS3 :155);
+//                              Serialise<1> 0x82213C7C..0x82213C9C (VecFloatRef<Y> = float).
+//   constant-lane store        lane D of the destination from lane S of the source: the vrlimi128 lane
+//   (_asmSwizzleStore<D,S>,    insert, mask 8 >> D, rotate (S - D) & 3: Serialise<1> 0x82213CA0 (D = Y,
+//   VecFloatRef<I> =)          S = X: mask 4, rotate 3); BehaviourGameplayExternal::ModifyTargetAngles
+//                              0x822255E4 (X() = VecFloat: 8, 0) and 0x822255F4 (Z() = VecFloat: 2, 2);
+//                              AttachmentTruck::Update 0x8220F0D8 (Y() = v.Y(): 4, 0).
+//   compound VecFloatRef<I>    the operation over the whole register, then the lane insert <I, I>:
+//                              ModifyTargetAngles 0x82225600..0x82225624 (Z() *= const float&: zero-filled
+//                              splat, vmulfp(mV, b), vrlimi 2, 0); PropEntityDebugComponent::
+//                              ToCellGridScreenCoords 0x822DC4C4..0x822DC4F4 (Y() /= v.Y(): vspltw 1, vrefp
+//                              and two refinements, vmulfp(reciprocal, mV), vrlimi 4, 0) and 0x822DC500
+//                              (X() *= v.X()).
+//   runtime-lane store         __vperm(d, s, gSwizzleStoreConstants[D * 4 + S]), the table at 0x8327F140:
+//   (VecFloatRefIndex =,       ProgressBarRenderer::RenderComponent 0x82463454..0x824634E0 (= VecFloat,
+//   _asmSwizzleStore(d,i,s,j)) entry 8); InterpedParam3::Construct 0x8259CD30 (= float x3, entries 0/4/8,
+//                              each a four-lane fill: four stfs and lvx); MainMapComponent::SetZoom
+//                              0x82469B90..0x82469BC8 (*= const float&: zero-filled splat, vmulfp(mV, b),
+//                              entry 10).
+//   + - * /                    __vaddfp / __vsubfp / __vmulfp(a, b) / vrefp + two vnmsubfp/vmaddfp
+//                              refinements + __vmulfp(reciprocal, a), as the operator set
+//                              (detail/vec_float_operation_inline.h).
+// VecFloatRefIndex::SetFloat has no PS3 or ARTIST user; it keeps LegacySrc's text, which is
+// operator=(float)'s (attested above).
+// The SDK declares the members always_inline (LegacySrc, DecFIGS); __forceinline is its Xenon spelling, as
+// for the operator set. VecFloatRefIndex::operator=(VecFloatRef<INDEX>) is a plain template in the SDK.
+// VecFloat has no user copy constructor or copy assignment: DecFIGS vec_float.h:56..72 declares neither
+// (LegacySrc 1.02.00 defines both).
 
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"
+#include "SDKs/EATech/include/rw/math/vpu/vector_intrinsic_operation.h"
 
 namespace rw
 {
@@ -33,509 +51,413 @@ namespace math
 namespace vpu
 {
 
-// =====================================================================================
-//  VecFloatRefIndex
-// =====================================================================================
-
-inline VecFloatRefIndex::VecFloatRefIndex(VectorIntrinsic& v, int index)
-    : mV(v)
+__forceinline VecFloatRefIndex::VecFloatRefIndex(VectorIntrinsic& v, int index)
+:mV(v)
 {
+
+
     mIndex = (VectorAxis)index;
 }
 
-inline VecFloatRefIndex::VecFloatRefIndex(const VecFloatRefIndex& v)
-    : mV(v.mV)
+__forceinline VecFloatRefIndex::VecFloatRefIndex(const VecFloatRefIndex &v)
+:mV(v.mV)
 {
-    mIndex = v.mIndex;
+    mIndex= v.mIndex;
+
 }
 
-inline float VecFloatRefIndex::GetFloat() const
+__forceinline float VecFloatRefIndex::GetFloat() const
 {
-    // VectorIntrinsicUnion temp; temp.vector = mV; return temp.scalarFloat[mIndex];
     return mV.v[mIndex];
 }
 
-inline void VecFloatRefIndex::SetFloat(float f)
+__forceinline void VecFloatRefIndex::SetFloat(float f)
 {
-    // build broadcast(f), then vperm gSwizzleStoreConstants[mIndex*4 + X]:
-    //   store vf's X lane into mV's mIndex lane.  vf.x == f.
-    mV.v[mIndex] = f;
+    VectorIntrinsic vf;
+    { ::rw::math::vpu::detail::VectorIntrinsicUnion u; u.scalarFloat[0] = f; u.scalarFloat[1] = f; u.scalarFloat[2] = f; u.scalarFloat[3] = f; vf = u.vector; };
+    { mV = __vperm(mV, vf, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((mIndex) * 4 ) + (VectorAxisX))]); }
 }
 
-inline const VectorIntrinsic& VecFloatRefIndex::GetVector() const
+__forceinline const VectorIntrinsic& VecFloatRefIndex::GetVector() const
 {
     return mV;
 }
 
-inline int VecFloatRefIndex::GetIndex() const
+__forceinline int VecFloatRefIndex::GetIndex() const
 {
     return mIndex;
 }
 
-inline VecFloatRefIndex& VecFloatRefIndex::operator =(VecFloatRefIndex rhs)
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator=(VecFloatRefIndex rhs)
 {
-    // vperm gSwizzleStoreConstants[mIndex*4 + rhs.mIndex]:
-    //   mV.lane[mIndex] = rhs.mV.lane[rhs.mIndex]
-    mV.v[mIndex] = rhs.mV.v[rhs.mIndex];
+
+    { mV = __vperm(mV, rhs.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((mIndex) * 4 ) + (rhs.mIndex))]); };
     return *this;
 }
 
 template<VectorAxis INDEX>
-VecFloatRefIndex& VecFloatRefIndex::operator =(VecFloatRef<INDEX> rhs)
+VecFloatRefIndex& VecFloatRefIndex::operator=(VecFloatRef<INDEX> rhs)
 {
-    // vperm gSwizzleStoreConstants[mIndex*4 + INDEX]
-    mV.v[mIndex] = rhs.mV.v[INDEX];
+
+    { mV = __vperm(mV, rhs.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((mIndex) * 4 ) + (INDEX))]); };
     return *this;
 }
 
-inline VecFloatRefIndex& VecFloatRefIndex::operator =(VecFloat::InParam rhs)
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator=(VecFloat::InParam rhs)
 {
-    // vperm gSwizzleStoreConstants[mIndex*4 + X]:  mV.lane[mIndex] = rhs X lane
-    mV.v[mIndex] = rhs.mV.v[VectorAxisX];
+
+    { mV = __vperm(mV, rhs.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((mIndex) * 4 ) + (VectorAxisX))]); };
     return *this;
 }
 
-inline VecFloatRefIndex::operator float() const
+__forceinline VecFloatRefIndex::operator float() const
 {
-    // VectorIntrinsicUnion temp; temp.vector = mV; return temp.scalarFloat[mIndex];
     return mV.v[mIndex];
 }
 
-inline VecFloatRefIndex& VecFloatRefIndex::operator =(float f)
+__forceinline VecFloatRefIndex &VecFloatRefIndex::operator =(float f)
 {
-    // broadcast(f) then store X lane into mV.lane[mIndex]
-    mV.v[mIndex] = f;
+    VectorIntrinsic vf;
+    { ::rw::math::vpu::detail::VectorIntrinsicUnion u; u.scalarFloat[0] = f; u.scalarFloat[1] = f; u.scalarFloat[2] = f; u.scalarFloat[3] = f; vf = u.vector; };
+    { mV = __vperm(mV, vf, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((mIndex) * 4 ) + (VectorAxisX))]); };
     return *this;
 }
 
-// =====================================================================================
-//  VecFloat
-// =====================================================================================
-
-inline VecFloat::VecFloat()
+__forceinline VecFloat::VecFloat()
 {
-    // uninitialised on the console (no body); leave mV uninitialised.
 }
 
-// rwmath 1.02.00 vec_float_type_inline.h: header-inline, as ARTIST inlines it at its
-// callers (the out-of-line COMDAT copy is 0x821F0DA0): the referenced word loaded with
-// lvlx and broadcast from lane 0, no FPU conversion.
-inline VecFloat::VecFloat(const float& f)
+__forceinline VecFloat::VecFloat(const float &v)
 {
-    mV = __vspltw(__lvlx(&f, 0), 0);
+    { mV = __vspltw(__lvlx(&v, 0), 0); };
 }
 
-inline VecFloat::VecFloat(VectorIntrinsicInParam v, int index)
+__forceinline VecFloat::VecFloat( VectorIntrinsicInParam v, int index )
 {
-    // vspltw(v, index): broadcast lane `index` of v to all four lanes.
-    const float lfValue = v.v[index];
-    mV.v[0] = lfValue;
-    mV.v[1] = lfValue;
-    mV.v[2] = lfValue;
-    mV.v[3] = lfValue;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(index))), 0); mV = __vperm(v, v, permConstant); };
 }
 
-inline VecFloat::VecFloat(VecFloatRefIndex v)
+__forceinline VecFloat::VecFloat(VecFloatRefIndex v)
 {
-    // DecFIGS vec_float_type_inline.h:131. Broadcast the indexed word.
-    const VectorIntrinsic permConstant = __vspltw(__lvsl(0, sizeof(float) * v.mIndex), 0);
-    mV = __vperm(v.mV, v.mV, permConstant);
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(v.mIndex))), 0); mV = __vperm(v.mV, v.mV, permConstant); };
 }
 
 template<VectorAxis INDEX>
-inline VecFloat::VecFloat(VecFloatRef<INDEX> v)
+__forceinline VecFloat::VecFloat(VecFloatRef<INDEX> v)
 {
-    // rwmath 1.02.00 vec_float_type_inline.h: mV = vspltw(v.mV, INDEX), read through the
-    // reference (ARTIST 0x8270DCC4: addi rX,this,0x10; lvx128 v0,r0,rX; vspltw v0,v0,0).
-    mV = __vspltw(v.mV, INDEX);
+    { mV = __vspltw(v.mV, (int)(INDEX)); };
 }
 
-inline void VecFloat::SetFloat(float v)
+__forceinline void VecFloat::SetFloat(float v)
 {
-    // VectorIntrinsicUnion u; u.scalarFloat[0..3] = v; mV = u.vector  -> broadcast.
-    mV.v[0] = v;
-    mV.v[1] = v;
-    mV.v[2] = v;
-    mV.v[3] = v;
+    { ::rw::math::vpu::VectorIntrinsic u = { v }; mV = __vspltw(u, 0); };
 }
 
-inline float VecFloat::GetFloat() const
-{
-    // VectorIntrinsicUnion vecUnion; vecUnion.vector = mV; return scalarFloat[X];
-    return mV.v[VectorAxisX];
-}
-
-inline VecFloat::operator float() const
+__forceinline float VecFloat::GetFloat() const
 {
     return mV.v[VectorAxisX];
 }
 
-inline VecFloat& VecFloat::operator =(const float& f)
+__forceinline VecFloat::operator float() const
+{
+    return mV.v[VectorAxisX];
+}
+
+__forceinline VecFloat &VecFloat::operator =(const float& f)
 {
     SetFloat(f);
     return *this;
 }
 
 template<VectorAxis INDEX>
-inline VecFloat& VecFloat::operator =(const VecFloatRef<INDEX>& v)
+__forceinline VecFloat& VecFloat::operator=(const VecFloatRef<INDEX>& v)
 {
     *this = VecFloat(v);
     return *this;
 }
 
-inline VecFloat& VecFloat::operator =(const VecFloatRefIndex& v)
+__forceinline VecFloat& VecFloat::operator=(const VecFloatRefIndex& v)
 {
     *this = VecFloat(v);
     return *this;
 }
 
-// =====================================================================================
-//  VecFloatRef<INDEX>
-// =====================================================================================
-
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>::VecFloatRef(VectorIntrinsic& v)
-    : mV(v)
+__forceinline VecFloatRef<INDEX>::VecFloatRef(VectorIntrinsic& v)
+:mV(v)
 {
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>::VecFloatRef(const VecFloatRef<INDEX>& v)
-    : mV(v.mV)
+__forceinline VecFloatRef<INDEX>::VecFloatRef(const VecFloatRef<INDEX> & v)
+:mV(v.mV)
 {
 }
 
 template<VectorAxis INDEX>
-inline float VecFloatRef<INDEX>::GetFloat() const
+__forceinline float VecFloatRef<INDEX>::GetFloat() const
 {
-    // VectorIntrinsicUnion vecUnion; vecUnion.vector = mV; return scalarFloat[INDEX];
     return mV.v[INDEX];
 }
 
 template<VectorAxis INDEX>
-inline void VecFloatRef<INDEX>::SetFloat(float f)
+__forceinline void VecFloatRef<INDEX>::SetFloat(float f)
 {
-    // build broadcast(f); VectorPermuteConstant copies that vec's X lane into lane INDEX.
-    mV.v[INDEX] = f;
+    VectorIntrinsic vec;
+    { ::rw::math::vpu::VectorIntrinsic u = { f }; vec = __vspltw(u, 0); };
+    { mV = __vrlimi(mV, vec, (0x8 >> (INDEX)), (((int)(VectorAxisX)) - (INDEX)) & 3); };
 }
 
 template<VectorAxis INDEX>
-inline const VectorIntrinsic& VecFloatRef<INDEX>::GetVector() const
+__forceinline const VectorIntrinsic& VecFloatRef<INDEX>::GetVector() const
 {
     return mV;
 }
 
 template<VectorAxis INDEX>
-inline int VecFloatRef<INDEX>::GetIndex() const
+__forceinline int VecFloatRef<INDEX>::GetIndex() const
 {
     return INDEX;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefX rhs)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefX rhs)
 {
-    // VectorPermuteConstant: lane INDEX <- rhs lane X
-    mV.v[INDEX] = rhs.mV.v[VectorAxisX];
+    { mV = __vrlimi(mV, rhs.mV, (0x8 >> (INDEX)), (((int)(VectorAxisX)) - (INDEX)) & 3); };
     return *this;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefY rhs)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefY rhs)
 {
-    mV.v[INDEX] = rhs.mV.v[VectorAxisY];
+    { mV = __vrlimi(mV, rhs.mV, (0x8 >> (INDEX)), (((int)(VectorAxisY)) - (INDEX)) & 3); };
     return *this;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefZ rhs)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefZ rhs)
 {
-    mV.v[INDEX] = rhs.mV.v[VectorAxisZ];
+    { mV = __vrlimi(mV, rhs.mV, (0x8 >> (INDEX)), (((int)(VectorAxisZ)) - (INDEX)) & 3); };
     return *this;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefW rhs)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefW rhs)
 {
-    mV.v[INDEX] = rhs.mV.v[VectorAxisW];
+    { mV = __vrlimi(mV, rhs.mV, (0x8 >> (INDEX)), (((int)(VectorAxisW)) - (INDEX)) & 3); };
     return *this;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefIndex rhs)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefIndex rhs)
 {
-    // vperm gSwizzleStoreConstants[INDEX*4 + rhs.mIndex]
-    mV.v[INDEX] = rhs.mV.v[rhs.mIndex];
+    { mV = __vperm(mV, rhs.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((INDEX) * 4 ) + (rhs.mIndex))]); };
     return *this;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloat::InParam rhs)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloat::InParam rhs)
 {
-    // VectorPermuteConstant: lane INDEX <- rhs lane X
-    mV.v[INDEX] = rhs.mV.v[VectorAxisX];
+    { mV = __vrlimi(mV, rhs.mV, (0x8 >> (INDEX)), (((int)(VectorAxisX)) - (INDEX)) & 3); };
     return *this;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>::operator float() const
+__forceinline VecFloatRef<INDEX>::operator float() const
 {
     return GetFloat();
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(float f)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(float f)
 {
     SetFloat(f);
     return *this;
 }
 
-// ---- VecFloatRef<INDEX> += --------------------------------------------------------
-
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (VecFloat::InParam b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (VecFloat::InParam b)
 {
-    // r = vaddfp(mV, b.mV); store r lane INDEX back into mV lane INDEX.
-    // b broadcast => b.lane[INDEX] == b.x.
-    mV.v[INDEX] = mV.v[INDEX] + b.mV.v[INDEX];
-    return *this;
+    VectorIntrinsic r; r = __vaddfp((*this).mV, b.mV);; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
 template<VectorAxis INDEX>
 template<VectorAxis INDEX_OTHER>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (VecFloatRef<INDEX_OTHER> b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (VecFloatRef<INDEX_OTHER> b)
 {
-    // bVI = vspltw(b.mV, INDEX_OTHER) (broadcast b's lane); r = vaddfp(mV, bVI);
-    // store r lane INDEX.
-    mV.v[INDEX] = mV.v[INDEX] + b.mV.v[INDEX_OTHER];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { bVI = __vspltw((b).mV, (int)(INDEX_OTHER)); }; r = __vaddfp((*this).mV, bVI);; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (const VecFloatRefIndex& b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (VecFloatRefIndex::InParam b)
 {
-    // bVI = broadcast(b.mV lane b.mIndex); r = vaddfp(mV, bVI); store r lane INDEX.
-    mV.v[INDEX] = mV.v[INDEX] + b.mV.v[b.mIndex];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((b).mIndex))), 0); bVI = __vperm((b).mV, (b).mV, permConstant); }; r = __vaddfp((*this).mV, bVI);; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (const float& b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (const float& b)
 {
-    mV.v[INDEX] = mV.v[INDEX] + b;
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI = RW_MATH_VPU_CreateVectorFromScalar_R(b); r = __vaddfp((*this).mV, bVI);; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
-// ---- VecFloatRef<INDEX> -= --------------------------------------------------------
-
-template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (VecFloat::InParam b)
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator += (VecFloat::InParam b)
 {
-    mV.v[INDEX] = mV.v[INDEX] - b.mV.v[INDEX];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic aVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((*this).mIndex))), 0); aVI = __vperm((*this).mV, (*this).mV, permConstant); }; r = __vaddfp(aVI, (b).mV);; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
 }
 
 template<VectorAxis INDEX>
-template<VectorAxis INDEX_OTHER>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (VecFloatRef<INDEX_OTHER> b)
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator += (VecFloatRef<INDEX> b)
 {
-    mV.v[INDEX] = mV.v[INDEX] - b.mV.v[INDEX_OTHER];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { bVI = __vspltw((b).mV, (int)(INDEX)); }; r = __vaddfp((*this).mV, bVI);; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
+}
+
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator += (VecFloatRefIndex::InParam b)
+{
+    VectorIntrinsic r; VectorIntrinsic bVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((b).mIndex))), 0); bVI = __vperm((b).mV, (b).mV, permConstant); }; r = __vaddfp((*this).mV, bVI);; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
+}
+
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator += (const float& b)
+{
+    VectorIntrinsic r; VectorIntrinsic bVI = RW_MATH_VPU_CreateVectorFromScalar_R(b); r = __vaddfp((*this).mV, bVI);; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (const VecFloatRefIndex& b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (VecFloat::InParam b)
 {
-    mV.v[INDEX] = mV.v[INDEX] - b.mV.v[b.mIndex];
-    return *this;
-}
-
-template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (const float& b)
-{
-    mV.v[INDEX] = mV.v[INDEX] - b;
-    return *this;
-}
-
-// ---- VecFloatRef<INDEX> *= --------------------------------------------------------
-
-template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (VecFloat::InParam b)
-{
-    // r = vmaddfp(mV, b.mV, 0): per-lane multiply.
-    mV.v[INDEX] = mV.v[INDEX] * b.mV.v[INDEX];
-    return *this;
+    VectorIntrinsic r; r = __vsubfp( (*this).mV, b.mV ); const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
 template<VectorAxis INDEX>
 template<VectorAxis INDEX_OTHER>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (VecFloatRef<INDEX_OTHER> b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (VecFloatRef<INDEX_OTHER> b)
 {
-    mV.v[INDEX] = mV.v[INDEX] * b.mV.v[INDEX_OTHER];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { bVI = __vspltw((b).mV, (int)(INDEX_OTHER)); }; r = __vsubfp( (*this).mV, bVI ); const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (const VecFloatRefIndex& b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (VecFloatRefIndex::InParam b)
 {
-    mV.v[INDEX] = mV.v[INDEX] * b.mV.v[b.mIndex];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((b).mIndex))), 0); bVI = __vperm((b).mV, (b).mV, permConstant); }; r = __vsubfp( (*this).mV, bVI ); const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (const float& b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (const float& b)
 {
-    mV.v[INDEX] = mV.v[INDEX] * b;
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI = RW_MATH_VPU_CreateVectorFromScalar_R(b); r = __vsubfp( (*this).mV, bVI ); const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
-// ---- VecFloatRef<INDEX> /= --------------------------------------------------------
-// The console computes 1/b via vrefp + two Newton-Raphson refinement steps, then
-// multiplies. That is just a hardware-accurate way to evaluate the reciprocal; the
-// portable form is the exact scalar division it converges to.
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator -= (VecFloat::InParam b)
+{
+    VectorIntrinsic r; VectorIntrinsic aVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((*this).mIndex))), 0); aVI = __vperm((*this).mV, (*this).mV, permConstant); }; r = __vsubfp( aVI, (b).mV ); const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
+}
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (VecFloat::InParam b)
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator -= (VecFloatRef<INDEX> b)
 {
-    mV.v[INDEX] = mV.v[INDEX] / b.mV.v[INDEX];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { bVI = __vspltw((b).mV, (int)(INDEX)); }; r = __vsubfp( (*this).mV, bVI ); const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
+}
+
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator -= (VecFloatRefIndex::InParam b)
+{
+    VectorIntrinsic r; VectorIntrinsic bVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((b).mIndex))), 0); bVI = __vperm((b).mV, (b).mV, permConstant); }; r = __vsubfp( (*this).mV, bVI ); const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
+}
+
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator -= (const float& b)
+{
+    VectorIntrinsic r; VectorIntrinsic bVI = RW_MATH_VPU_CreateVectorFromScalar_R(b); r = __vsubfp( (*this).mV, bVI ); const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
+}
+
+template<VectorAxis INDEX>
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (VecFloat::InParam b)
+{
+    VectorIntrinsic r; r = __vmulfp(((*this).mV), (b.mV));; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
 template<VectorAxis INDEX>
 template<VectorAxis INDEX_OTHER>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (VecFloatRef<INDEX_OTHER> b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (VecFloatRef<INDEX_OTHER> b)
 {
-    mV.v[INDEX] = mV.v[INDEX] / b.mV.v[INDEX_OTHER];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { bVI = __vspltw((b).mV, (int)(INDEX_OTHER)); }; r = __vmulfp(((*this).mV), (bVI));; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (const VecFloatRefIndex& b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (VecFloatRefIndex::InParam b)
 {
-    mV.v[INDEX] = mV.v[INDEX] / b.mV.v[b.mIndex];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((b).mIndex))), 0); bVI = __vperm((b).mV, (b).mV, permConstant); }; r = __vmulfp(((*this).mV), (bVI));; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (const float& b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (const float& b)
 {
-    mV.v[INDEX] = mV.v[INDEX] / b;
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI = RW_MATH_VPU_CreateVectorFromScalar_R(b); r = __vmulfp(((*this).mV), (bVI));; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
-// =====================================================================================
-//  VecFloatRefIndex compound assignment
-//  (runtime lane; the console permutes the referenced lane down to lane 0, does the fp
-//   op, then swizzle-stores the result lane back into mIndex)
-// =====================================================================================
-
-// ---- += ---------------------------------------------------------------------------
-
-inline VecFloatRefIndex& VecFloatRefIndex::operator += (VecFloat::InParam b)
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator *= (VecFloat::InParam b)
 {
-    mV.v[mIndex] = mV.v[mIndex] + b.mV.v[VectorAxisX];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic aVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((*this).mIndex))), 0); aVI = __vperm((*this).mV, (*this).mV, permConstant); }; r = __vmulfp((aVI), ((b).mV));; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRefIndex& VecFloatRefIndex::operator += (VecFloatRef<INDEX> b)
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator *= (VecFloatRef<INDEX> b)
 {
-    mV.v[mIndex] = mV.v[mIndex] + b.mV.v[INDEX];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { bVI = __vspltw((b).mV, (int)(INDEX)); }; r = __vmulfp(((*this).mV), (bVI));; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
 }
 
-inline VecFloatRefIndex& VecFloatRefIndex::operator += (VecFloatRefIndex::InParam b)
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator *= (VecFloatRefIndex::InParam b)
 {
-    mV.v[mIndex] = mV.v[mIndex] + b.mV.v[b.mIndex];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((b).mIndex))), 0); bVI = __vperm((b).mV, (b).mV, permConstant); }; r = __vmulfp(((*this).mV), (bVI));; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
 }
 
-inline VecFloatRefIndex& VecFloatRefIndex::operator += (const float& b)
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator *= (const float& b)
 {
-    mV.v[mIndex] = mV.v[mIndex] + b;
-    return *this;
-}
-
-// ---- -= ---------------------------------------------------------------------------
-
-inline VecFloatRefIndex& VecFloatRefIndex::operator -= (VecFloat::InParam b)
-{
-    mV.v[mIndex] = mV.v[mIndex] - b.mV.v[VectorAxisX];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI = RW_MATH_VPU_CreateVectorFromScalar_R(b); r = __vmulfp(((*this).mV), (bVI));; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRefIndex& VecFloatRefIndex::operator -= (VecFloatRef<INDEX> b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (VecFloat::InParam b)
 {
-    mV.v[mIndex] = mV.v[mIndex] - b.mV.v[INDEX];
-    return *this;
-}
-
-inline VecFloatRefIndex& VecFloatRefIndex::operator -= (VecFloatRefIndex::InParam b)
-{
-    mV.v[mIndex] = mV.v[mIndex] - b.mV.v[b.mIndex];
-    return *this;
-}
-
-inline VecFloatRefIndex& VecFloatRefIndex::operator -= (const float& b)
-{
-    mV.v[mIndex] = mV.v[mIndex] - b;
-    return *this;
-}
-
-// ---- *= ---------------------------------------------------------------------------
-
-inline VecFloatRefIndex& VecFloatRefIndex::operator *= (VecFloat::InParam b)
-{
-    mV.v[mIndex] = mV.v[mIndex] * b.mV.v[VectorAxisX];
-    return *this;
+    VectorIntrinsic r; { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(b.mV);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (b.mV), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (b.mV), (vOne))), (secondEstimate)); }; r = __vmulfp((reciprocal), ((*this).mV)); }; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRefIndex& VecFloatRefIndex::operator *= (VecFloatRef<INDEX> b)
+template<VectorAxis INDEX_OTHER>
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (VecFloatRef<INDEX_OTHER> b)
 {
-    mV.v[mIndex] = mV.v[mIndex] * b.mV.v[INDEX];
-    return *this;
-}
-
-inline VecFloatRefIndex& VecFloatRefIndex::operator *= (VecFloatRefIndex::InParam b)
-{
-    mV.v[mIndex] = mV.v[mIndex] * b.mV.v[b.mIndex];
-    return *this;
-}
-
-inline VecFloatRefIndex& VecFloatRefIndex::operator *= (const float& b)
-{
-    mV.v[mIndex] = mV.v[mIndex] * b;
-    return *this;
-}
-
-// ---- /= ---------------------------------------------------------------------------
-
-inline VecFloatRefIndex& VecFloatRefIndex::operator /= (VecFloat::InParam b)
-{
-    mV.v[mIndex] = mV.v[mIndex] / b.mV.v[VectorAxisX];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { bVI = __vspltw((b).mV, (int)(INDEX_OTHER)); }; { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(bVI);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (bVI), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (bVI), (vOne))), (secondEstimate)); }; r = __vmulfp((reciprocal), ((*this).mV)); }; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
 template<VectorAxis INDEX>
-inline VecFloatRefIndex& VecFloatRefIndex::operator /= (VecFloatRef<INDEX> b)
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (VecFloatRefIndex::InParam b)
 {
-    mV.v[mIndex] = mV.v[mIndex] / b.mV.v[INDEX];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((b).mIndex))), 0); bVI = __vperm((b).mV, (b).mV, permConstant); }; { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(bVI);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (bVI), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (bVI), (vOne))), (secondEstimate)); }; r = __vmulfp((reciprocal), ((*this).mV)); }; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
-inline VecFloatRefIndex& VecFloatRefIndex::operator /= (VecFloatRefIndex::InParam b)
+template<VectorAxis INDEX>
+__forceinline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (const float& b)
 {
-    mV.v[mIndex] = mV.v[mIndex] / b.mV.v[b.mIndex];
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic bVI = RW_MATH_VPU_CreateVectorFromScalar_R(b); { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(bVI);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (bVI), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (bVI), (vOne))), (secondEstimate)); }; r = __vmulfp((reciprocal), ((*this).mV)); }; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore<INDEX, INDEX>((*this).mV, r); return *this;;
 }
 
-inline VecFloatRefIndex& VecFloatRefIndex::operator /= (const float& b)
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator /= (VecFloat::InParam b)
 {
-    mV.v[mIndex] = mV.v[mIndex] / b;
-    return *this;
+    VectorIntrinsic r; VectorIntrinsic aVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((*this).mIndex))), 0); aVI = __vperm((*this).mV, (*this).mV, permConstant); }; { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp((b).mV);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), ((b).mV), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), ((b).mV), (vOne))), (secondEstimate)); }; r = __vmulfp((reciprocal), (aVI)); }; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
 }
 
+template<VectorAxis INDEX>
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator /= (VecFloatRef<INDEX> b)
+{
+    VectorIntrinsic r; VectorIntrinsic bVI; { bVI = __vspltw((b).mV, (int)(INDEX)); }; { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(bVI);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (bVI), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (bVI), (vOne))), (secondEstimate)); }; r = __vmulfp((reciprocal), ((*this).mV)); }; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
+}
+
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator /= (VecFloatRefIndex::InParam b)
+{
+    VectorIntrinsic r; VectorIntrinsic bVI; { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)((b).mIndex))), 0); bVI = __vperm((b).mV, (b).mV, permConstant); }; { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(bVI);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (bVI), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (bVI), (vOne))), (secondEstimate)); }; r = __vmulfp((reciprocal), ((*this).mV)); }; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
+}
+
+__forceinline VecFloatRefIndex& VecFloatRefIndex::operator /= (const float& b)
+{
+    VectorIntrinsic r; VectorIntrinsic bVI = RW_MATH_VPU_CreateVectorFromScalar_R(b); { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(bVI);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (bVI), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (bVI), (vOne))), (secondEstimate)); }; r = __vmulfp((reciprocal), ((*this).mV)); }; const_cast<VectorIntrinsic&>((*this).mV) = _asmSwizzleStore((*this).mV, (*this).mIndex, r, (*this).mIndex); return *this;;
+}
 }
 }
 }

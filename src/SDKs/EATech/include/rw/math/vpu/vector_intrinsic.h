@@ -26,6 +26,12 @@ namespace vpu
             float           scalarFloat[4];
             VectorIntrinsic vector;
         };
+
+        // DecFIGS vector_intrinsic.h:37: the vperm controls of the runtime-lane swizzle store; entry
+        // D * 4 + S copies lane S of the second operand into lane D of the first. ARTIST holds the table
+        // at 0x8327F140 (.bss, filled by the rwmath dynamic initialiser 0x82C74120) and every
+        // VecFloatRefIndex store indexes it (InterpedParam3::Construct 0x8259CD30).
+        extern const VectorIntrinsic gSwizzleStoreConstants[16];
     }
 }
 }

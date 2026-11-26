@@ -45,6 +45,44 @@ namespace vpu
         return ret;
     }
 
+    // rwmath vector_intrinsic_operation.h:61..66 (bodies LegacySrc detail/vector_intrinsic_operation_inline.h
+    // :453..:490, DecFIGS lists the <X,X> <Y,Y> <Z,Z> <W,W> instances and the runtime form :284): copy lane
+    // INDEX_SRC of src into lane INDEX_DEST of dest. The PS3 builds a VectorPermuteConstant for the
+    // constant-lane form; the Xenon body is the vrlimi128 lane insert, mask 8 >> DEST, rotate (SRC - DEST) & 3
+    // (VecFloatRef<Z>::operator*= in BehaviourGameplayExternal::ModifyTargetAngles 0x82225624: vrlimi 2, 0;
+    // VecFloatRef<Y> = float in Serialise<1> 0x82213CA0: 4, 3). A runtime lane indexes gSwizzleStoreConstants
+    // and permutes, as on the PS3 (VecFloatRefIndex::operator*= in MainMapComponent::SetZoom 0x82469BC8).
+    template<VectorAxis INDEX_DEST, VectorAxis INDEX_SRC>
+    __forceinline VectorIntrinsic _asmSwizzleStore(VectorIntrinsicInParam dest, VectorIntrinsicInParam src)
+    {
+        VectorIntrinsic ret;
+        { ret = __vrlimi(dest, src, (0x8 >> (INDEX_DEST)), (((int)(INDEX_SRC)) - (INDEX_DEST)) & 3); };
+        return ret;
+    }
+
+    template<VectorAxis INDEX_DEST>
+    __forceinline VectorIntrinsic _asmSwizzleStore(VectorIntrinsicInParam dest, VectorIntrinsicInParam src, VectorAxis srcIndex)
+    {
+        VectorIntrinsic ret;
+        { ret = __vperm(dest, src, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((INDEX_DEST) * 4 ) + (srcIndex))]); };
+        return ret;
+    }
+
+    template<VectorAxis INDEX_SRC>
+    __forceinline VectorIntrinsic _asmSwizzleStore(VectorIntrinsicInParam dest, VectorAxis destIndex, VectorIntrinsicInParam src)
+    {
+        VectorIntrinsic ret;
+        { ret = __vperm(dest, src, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((destIndex) * 4 ) + (INDEX_SRC))]); };
+        return ret;
+    }
+
+    __forceinline VectorIntrinsic _asmSwizzleStore(VectorIntrinsicInParam dest, VectorAxis destIndex, VectorIntrinsicInParam src, VectorAxis srcIndex)
+    {
+        VectorIntrinsic ret;
+        { ret = __vperm(dest, src, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((destIndex) * 4 ) + (srcIndex))]); };
+        return ret;
+    }
+
     // All four lanes equal: the vcmpeqfp. record form, CR6's "all true" bit returned as a
     // bool. ARTIST 0x8270DFB8..0x8270DFC8 (IsValid(VecFloat) in Vehicle::SetWheelRot):
     // li/stw of the zeroed CR word, vcmpeqfp128., mfocrf, rlwinm 25,31,31.
