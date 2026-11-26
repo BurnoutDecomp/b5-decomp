@@ -5002,23 +5002,18 @@ void GameStateModule::ClearTakedownRaceCarData()
 // ==============================================================================================
 void GameStateModule::OnModeFinish(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    GameStateModuleIO::GameActionQueue* lpActionQueue = lpOutputBuffer->GetGameActionQueue();
-
-    GameStateModuleIO::SetTakedownCameraAction lCameraOff;
-    lCameraOff.meFocusOnRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID; // li r11, -1 -> var_30 (the GLOBAL enum -- two of this name are visible here)
-    lCameraOff.mbActive              = false;                             // stb 0, var_2C
-    lCameraOff.mbIsSignature         = false;                             // stb 0, var_2B
-    lCameraOff.mbIsRevengeTakedown   = false;                             // +6 / +7: stack residue on
-    lCameraOff.muPad07               = 0;                                 //  the console; zeroed here
-    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCameraOff),
-                            GameStateModuleIO::E_ACTION_SET_TAKEDOWN_CAMERA_STATE,
-                            static_cast<s32>(sizeof(lCameraOff)));
+    // DWARF cpp:7317 lSetTakedownCameraAction; AddGameAction (BrnGameActions.h:501) inlined.
+    // ARTIST writes only these three fields (+0x04, +0x05, +0x00 at 0x82390F00..08) and posts
+    // the record with mbIsRevengeTakedown unwritten.
+    GameStateModuleIO::SetTakedownCameraAction lSetTakedownCameraAction;
+    lSetTakedownCameraAction.mbActive              = false;
+    lSetTakedownCameraAction.mbIsSignature         = false;
+    lSetTakedownCameraAction.meFocusOnRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    lpOutputBuffer->GetGameActionQueue()->AddGameAction(lSetTakedownCameraAction);
 
     // Embedded by value on the console (`addi r3, r30, 0x238 ; bl ClearAllTakedowns` @0x82390F2C,
-    // r4 = the action queue re-fetched @0x82390F24) -- no test. A pointer on this build (see
-    // ConstructTakedownBringUp), always set by Construct; the `!= 0` guard it used to carry is gone
-    // [FX-TAILS-A 2026-09-24, REVIEW-E on a5619c29].
-    mTakedownManager.ClearAllTakedowns(lpActionQueue);
+    // r4 = the action queue re-fetched @0x82390F24) -- no test.
+    mTakedownManager.ClearAllTakedowns(lpOutputBuffer->GetGameActionQueue());
 
     mDriveThruManager.DriveThroughsCanNowOpenAgain();
 }

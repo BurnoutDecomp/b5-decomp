@@ -403,6 +403,9 @@ enum EGameActionType
     // (`li r5, 0x30 ; li r6, 8` @0x82381A70..0x82381A80) taken from one of two 9-entry CgsID
     // tables indexed by the impact type. DWARF :53 gives 43 -- the same +5 shift.
     E_ACTION_SHOW_HUD_MESSAGE           = 48,    // DWARF :53 gives 43 (+5 X360); size 8 (CgsID)
+    // GameStateImageManagerBase::ProcessAskDeleteRequest posts it with the "LineUpDelete" popup id
+    // (`li r5,0x31 ; li r6,8` @0x82385328..0x8238532C). DWARF :54 gives 44 -- the same +5 shift.
+    E_ACTION_SHOW_POPUP                 = 49,    // DWARF :54 gives 44 (+5 X360); size 8 (CgsID)
     E_ACTION_ON_JUMP_START              = 56,    // X360 UpdateJumps @0x8239D460 (`li r5,0x38`, size 24)
     E_ACTION_SHOW_JUMP_NAME             = 57,    // X360 UpdateJumps @0x8239D460 (`li r5,0x39`, size 8)
     E_ACTION_ON_STUNT_ELEMENT_COMPLETE  = 58,    // X360 0x8239D384 (DWARF :63 gives 53 -- PS3 value)
@@ -1254,6 +1257,12 @@ struct RivalHitPlayerAction : public GameAction<E_ACTION_RIVAL_HIT_PLAYER>
 struct ShowHudMessageAction : public GameAction<E_ACTION_SHOW_HUD_MESSAGE>
 {
     CgsID mMessageId;
+};
+
+// DWARF BrnGameActions.h:1820 -- the popup to raise, a bare CgsID (h:1822; posted as 8 bytes).
+struct ShowPopupAction : public GameAction<E_ACTION_SHOW_POPUP>
+{
+    CgsID mPopupId;
 };
 
 // =============================================================================================
@@ -4043,6 +4052,15 @@ struct RaceCarReachedCheckpointAction : public GameAction<E_ACTION_RACE_CAR_REAC
     bool                mbIsLocalPlayer;                       // +0x0E
 };
 CGS_STATIC_ASSERT((sizeof(RaceCarReachedCheckpointAction) == 16), "RaceCarReachedCheckpointAction is 16 bytes");
+
+// 118 -- DWARF BrnGameActions.h:3288: the per-checkpoint distance-to-finish table
+// ModeManager::TransmitCheckPointDistancesToFinishLine posts once per mode (li r6,0x44 at
+// 0x82342074: 16 floats + the Array count word).
+struct SetWayPointDistancesToFinishAction : public GameAction<E_ACTION_SET_WAYPOINT_DISTANCES_TO_FINISH>
+{
+    CgsContainers::Array<f32, 16> maDistances;                 // :3291
+};
+CGS_STATIC_ASSERT((sizeof(SetWayPointDistancesToFinishAction) == 68), "SetWayPointDistancesToFinishAction is 68 bytes");
 
 // 168 -- a burnout-skillz update. The bridge copies the 56-byte skillz block, the player id at
 // +0x3C, and turns the flags word at +0x38 into the network event's send type.

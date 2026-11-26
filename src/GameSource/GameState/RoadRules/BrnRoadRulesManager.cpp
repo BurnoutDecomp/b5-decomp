@@ -399,9 +399,8 @@ namespace BrnGameState
             GameStateModuleIO::RoadRulesTimeWarningAction lTimeWarningAction;
             lTimeWarningAction.mfTimeRemaining = lfTimeRemaining;
 
-            lpOutputBuffer->GetGameActionQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lTimeWarningAction),
-                                                           GameStateModuleIO::E_ACTION_ROAD_RULES_TIME_WARNING,
-                                                           sizeof(lTimeWarningAction));   // console size 4
+            // AddGameAction (DWARF BrnGameActions.h:501) inlined: getter, then &action (0x823529DC).
+            lpOutputBuffer->GetGameActionQueue()->AddGameAction(lTimeWarningAction);   // console size 4
 
             ++miNumWarningsDone;
             mfNextWarningTime += KF_WARNING_SPACING;

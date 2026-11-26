@@ -520,20 +520,20 @@ void GameStateImageManagerBase::HandleImageGalleryRequest(const ImageGalleryRequ
         case GameStateModuleIO::E_IMAGE_GALLERY_REQUEST_EXPORT:
         {
             CGS_ASSERT_AT(mpProgression != 0, "mpProgression", CGS_ARTIST_FILE, 739);
-            if (lpImageGalleryReqEvent->miImageIndex
-                >= mpProgression->GetProfile()->GetNumMugshots(lpImageGalleryReqEvent->meImageGalleryImageType))
-            {
-                // Out of range -> reply with an empty-slot marker rather than exporting.
-                CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 748);
-                CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 749);
-                char lEmptyMarker = 0;
-                AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lEmptyMarker), KI_EVENT_EMPTY_SLOT, 1);
-            }
-            else
+            // DWARF cpp:736 liNumMugshots.
+            const int32_t liNumMugshots =
+                mpProgression->GetProfile()->GetNumMugshots(lpImageGalleryReqEvent->meImageGalleryImageType);
+            if (lpImageGalleryReqEvent->miImageIndex < liNumMugshots)
             {
                 // The X360 dispatches the export through vtable[0] (ProcessExportRequest is virtual).
                 ProcessExportRequest(lpImageGalleryReqEvent, lpOutput);
+            }
+            else
+            {
+                // Out of range -> reply with the load-complete action rather than exporting.
+                CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 748);
+                CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 749);
+                lpOutput->GetGameActionQueue()->AddGameAction(GameStateModuleIO::ImageGalleryLoadCompleteAction());
             }
             break;
         }
@@ -613,17 +613,18 @@ void GameStateImageManagerBase::ProcessAskDeleteRequest(const ImageGalleryReques
     if (mpProgression->GetProfile()->GetMugshotInfo(lpImageGalleryReqEvent->meImageGalleryImageType,
                                                     lpImageGalleryReqEvent->miImageIndex) != 0)
     {
-        CgsID lLineUpDeleteId = CgsIDCompress("LineUpDelete");
-        AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lLineUpDeleteId), KI_EVENT_LINEUP_DELETE, 8);
+        // DWARF cpp:1048 lShowPopupAction; AddGameAction (BrnGameActions.h:501) inlined.
+        GameStateModuleIO::ShowPopupAction lShowPopupAction;
+        lShowPopupAction.mPopupId = CgsIDCompress("LineUpDelete");
+        lpOutput->GetGameActionQueue()->AddGameAction(lShowPopupAction);
     }
     else
     {
         CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 1057);
         CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 1058);
-        char lEmptyMarker[8] = { 0 };
-        AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lEmptyMarker), KI_EVENT_EMPTY_SLOT, 1);
+        // No DWARF local: the empty action is a temporary (ARTIST posts the never-written byte at
+        // sp+0x50, 0x823853A0).
+        lpOutput->GetGameActionQueue()->AddGameAction(GameStateModuleIO::ImageGalleryLoadCompleteAction());
     }
 }
 
@@ -642,30 +643,29 @@ void GameStateImageManagerBase::ProcessLockRequest(const ImageGalleryRequestEven
     CGS_ASSERT_AT(lpImageGalleryReqEvent->meImageGalleryImageType < GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT,
                "lpImageGalleryReqEvent->meImageGalleryImageType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 995);
 
-    BrnProgression::Profile* lpProfile = mpProgression->GetProfile();
-    if (lpProfile->LockOrUnlockMugshot(lpImageGalleryReqEvent->meImageGalleryImageType,
-                                       lpImageGalleryReqEvent->miImageIndex))
+    // DWARF cpp:986 lbLockStatusUpdated; cpp:1002 lImageInfoAction, cpp:1003 lpMugshotInfo.
+    // ProgressionManager::LockOrUnlockMugshot / GetMugshotInfo (BrnProgressionManager.cpp:3981 /
+    // :4016) reach the profile's own; ARTIST calls Profile::LockOrUnlockMugshot (0x823711C0) and
+    // Profile::GetMugshotInfo (0x82371290) through mpProgression+0x170 (BrnGameStateUnity).
+    const bool lbLockStatusUpdated = mpProgression->GetProfile()->LockOrUnlockMugshot(
+        lpImageGalleryReqEvent->meImageGalleryImageType, lpImageGalleryReqEvent->miImageIndex);
+    if (lbLockStatusUpdated)
     {
-        BrnProgression::MugshotInfo* lpMugshotInfo = lpProfile->GetMugshotInfo(
+        GameStateModuleIO::ImageGalleryImageInfoAction lImageInfoAction;
+        BrnProgression::MugshotInfo* lpMugshotInfo = mpProgression->GetProfile()->GetMugshotInfo(
             lpImageGalleryReqEvent->meImageGalleryImageType, lpImageGalleryReqEvent->miImageIndex);
 
-        ImageInfoEvent lImageInfo;
-        lImageInfo.mUniquePlayerID = lpMugshotInfo->GetUniquePlayerID();
-        lImageInfo.miSlotIndex     = lpImageGalleryReqEvent->miSlotIndex;
-        lImageInfo.mu8LockedFlag   = lpMugshotInfo->GetLockedFlag();
-        lImageInfo.mbIsDeletePreview = 0;
-        lImageInfo.mu64WorldRegionRaw = lpMugshotInfo->GetDateTaken();
-        lImageInfo.miImageWord2C   = lpMugshotInfo->GetImageWord2C();
-        lImageInfo.miImageWord0    = lpMugshotInfo->GetImageWord0();
-        lImageInfo.miImageWord1    = lpMugshotInfo->GetImageWord1();
-        lImageInfo.miImageWord2    = lpMugshotInfo->GetImageWord2();
-        AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lImageInfo), KI_EVENT_IMAGE_INFO, (s32)sizeof(ImageInfoEvent));
+        lImageInfoAction.mPlayerName    = lpMugshotInfo->mUniquePlayerID;
+        lImageInfoAction.miSlotIndex    = lpImageGalleryReqEvent->miSlotIndex;
+        lImageInfoAction.mbLocked       = lpMugshotInfo->mbLocked;
+        lImageInfoAction.mbHasDeleted   = false;
+        lImageInfoAction.mWorldRegion   = lpMugshotInfo->mWorldRegion;
+        lImageInfoAction.miNumCaptures  = lpMugshotInfo->miNumCaptures;
+        lImageInfoAction.mCaptureDate   = lpMugshotInfo->mCaptureDate;
+        lpOutput->GetGameActionQueue()->AddGameAction(lImageInfoAction);
     }
 
-    char lEmptyMarker[16] = { 0 };
-    AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(lEmptyMarker), KI_EVENT_EMPTY_SLOT, 1);
+    lpOutput->GetGameActionQueue()->AddGameAction(GameStateModuleIO::ImageGalleryLoadCompleteAction());
 }
 
 // ---------------------------------------------------------------------------

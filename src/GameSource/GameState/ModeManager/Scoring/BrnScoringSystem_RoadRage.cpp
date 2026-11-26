@@ -49,6 +49,7 @@
 #include "SharedClasses/Progression/BrnTrainingTypes.h"          // BrnProgression::E_TRAINING_TYPE_DAMAGE_CRITICAL (57)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT
+#include "rw/math/vpu/vector3_operation.h"                      // rw::math::vpu::Clamp (DWARF call list)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // CgsDev::Log::gpDebugPrint (the [rr] witness)
 
@@ -61,56 +62,43 @@ namespace BrnGameState
 void ScoringSystem::OnRoadRagePlayerCrashed(GameStateModuleIO::OutputBuffer* lpOutput,
                                             GameStateModuleIO::ERoadRageCrashType /* leCrashType -- unread on the X360 */)
 {
-    // [rr] PC witness (NOT X360), one line per crash: proves the crash arm reaches the scorer.
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-    }
     CGS_ASSERT_AT(miMaximumPlayerCrashedNumber != 0, "miMaximumPlayerCrashedNumber != 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2550);   // BrnScoringSystem.cpp:2550
+
+    // DWARF cpp:2416..2418 locals; the clamp is rw::math::vpu::Clamp (DWARF call list: Clamp,
+    // Max<float>), the two-fsel Min(1, Max(0, x)) at 0x82344560..0x82344570.
+    GameStateModuleIO::RoadRagePlayerDamageAction lRoadRagePlayerDamageAction;
+    f32    lfAmountWrecked;
+    int8_t liAmountOfCrashesLeft;
 
     ++miCurrentPlayerCrashedNumber;
 
-    // The console narrows the remaining count to a signed byte (`extsb r30, r10`) before the
-    // two compares below; reproduced so the compare domain is the console's.
-    const s8 liCrashesRemaining = static_cast<s8>(miMaximumPlayerCrashedNumber - miCurrentPlayerCrashedNumber);
+    liAmountOfCrashesLeft = static_cast<int8_t>(miMaximumPlayerCrashedNumber - miCurrentPlayerCrashedNumber);
 
-    GameStateModuleIO::RoadRagePlayerDamageAction lDamageAction;
-    lDamageAction.mbOneMoreCrashToTotalled = false;
-    lDamageAction.mbPlayerTotalled         = false;
+    lRoadRagePlayerDamageAction.mbOneMoreCrashToTotalled = false;
+    lRoadRagePlayerDamageAction.mbPlayerTotalled         = false;
 
-    // current/max + 0.1, clamped to [0, 1] by the two-fsel idiom (constants dumped from the image:
-    // flt_82020F70 == 0.1f, flt_82001CC0 == 0.0f, flt_82001C98 == 1.0f).
-    f32 lfHowCloseToTotalled = static_cast<f32>(miCurrentPlayerCrashedNumber) /
-                               static_cast<f32>(miMaximumPlayerCrashedNumber) + 0.1f;
-    if (-lfHowCloseToTotalled >= 0.0f)
+    // flt_82020F70 == 0.1f (image: 3DCCCCCD).
+    lfAmountWrecked = static_cast<f32>(miCurrentPlayerCrashedNumber) /
+                      static_cast<f32>(miMaximumPlayerCrashedNumber) + 0.1f;
+    lRoadRagePlayerDamageAction.mfHowCloseToTotalled = rw::math::vpu::Clamp(lfAmountWrecked, 0.0f, 1.0f);
+
+    if (liAmountOfCrashesLeft == 1)
     {
-        lfHowCloseToTotalled = 0.0f;
-    }
-    if (!(1.0f - lfHowCloseToTotalled >= 0.0f))
-    {
-        lfHowCloseToTotalled = 1.0f;
-    }
-    lDamageAction.mfHowCloseToTotalled = lfHowCloseToTotalled;
+        lRoadRagePlayerDamageAction.mbOneMoreCrashToTotalled = true;
 
-    if (liCrashesRemaining == 1)
-    {
-        lDamageAction.mbOneMoreCrashToTotalled = true;
-
-        GameStateModuleIO::RequestGameTrainingAction lTrainingRequest;
-        lTrainingRequest.meTrainingType = BrnProgression::E_TRAINING_TYPE_DAMAGE_CRITICAL;
-        lpOutput->GetGameActionQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lTrainingRequest),
-                                                 GameStateModuleIO::E_ACTION_REQUEST_GAME_TRAINING,
-                                                 sizeof(lTrainingRequest));
+        // DWARF cpp:2436 lRequestTraining; AddGameAction (BrnGameActions.h:501) inlined.
+        GameStateModuleIO::RequestGameTrainingAction lRequestTraining;
+        lRequestTraining.meTrainingType = BrnProgression::E_TRAINING_TYPE_DAMAGE_CRITICAL;
+        lpOutput->GetGameActionQueue()->AddGameAction(lRequestTraining);
     }
 
-    if (liCrashesRemaining == 0)
+    if (liAmountOfCrashesLeft == 0)
     {
-        lDamageAction.mbPlayerTotalled = true;
-        mbPlayerTotalled               = true;      // stb r29(1), 0x4B70(this)
+        lRoadRagePlayerDamageAction.mbPlayerTotalled = true;
+        mbPlayerTotalled                             = true;      // stb r29(1), 0x4B70(this)
     }
 
-    lpOutput->GetGameActionQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lDamageAction),
-                                             GameStateModuleIO::E_ACTION_ROAD_RAGE_PLAYER_DAMAGE,
-                                             sizeof(lDamageAction));
+    lpOutput->GetGameActionQueue()->AddGameAction(lRoadRagePlayerDamageAction);
 }
 
 }

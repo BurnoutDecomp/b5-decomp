@@ -666,8 +666,8 @@ private:
                               GameStateModuleIO::EGameModeType leNextGameModeType);                     // DWARF :840 / X360 0x8234BEC0
     void ResetNextLandmarks(bool lbResetAll);                                                           // DWARF :864 / X360 0x82328460
     void ClearLandmarkAndFinishLineData();                                                              // DWARF :868 / X360 0x82328590
-    void TransmitCheckPointDistancesToFinishLine(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
-                                                 ScoringSystem&                   lrScoringSystem);     // DWARF :874 / X360 0x82341FF8
+    void TransmitCheckPointDistancesToFinishLine(GameStateModuleIO::OutputBuffer* lpOutput,
+                                                 const ScoringSystem&             lScoringSystem);      // DWARF :874 / X360 0x82341FF8
     void TransmitAndIncrementCheckPointsReached(GameStateModuleIO::GameActionQueue* lpGameActionQueue); // DWARF :878 / X360 0x82342098
     void TransmitAndIncrementFinishReached(GameStateModuleIO::GameActionQueue* lpGameActionQueue);      // DWARF :882 / X360 0x823424D0
     void SendGameResultsToNetwork(GameStateModuleIO::GameActionQueue* lpGameActionQueue);               // DWARF :899 / X360 0x82343E88

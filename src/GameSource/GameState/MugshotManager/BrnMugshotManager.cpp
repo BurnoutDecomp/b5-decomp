@@ -542,32 +542,27 @@ void MugshotManager::HandleCapturingMugshot(GameStateModuleIO::OutputBuffer* lpO
 {
     if (mfMugshotCaptureTimer == 0.0f)
     {
-        StartMugshotGameAction lAction;
-        lAction.mImageId        = mRoadRuleMugshotBeatenRoadID;
-        lAction.meShowRaceCar   = meMugshotShowRaceCarIndex;
-        lAction.mePlayerRaceCar = mpGameStateModule->GetPlayerActiveRaceCarIndex();
-        lAction.miStageTag      = 1;
-        lAction.meImageType     = meCaptureMugshotType;
-        lAction.mbFlagA         = false;
-        lAction.mbBroadcast     = (meCaptureMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
+        // DWARF cpp:624 lMugshotAction; AddGameAction (BrnGameActions.h:501) inlined.
+        GameStateModuleIO::PaybackMugshotAction lMugshotAction;
+        lMugshotAction.meTakedownAggressorIndex         = meMugshotShowRaceCarIndex;
+        lMugshotAction.meMugshotResponse                = GameStateModuleIO::E_MUGSHOT_RESPONSE_CAPTURE;
+        lMugshotAction.meTakedownVictimIndex            = mpGameStateModule->GetPlayerActiveRaceCarIndex();
+        lMugshotAction.mRoadRuleBeatenRoadID            = mRoadRuleMugshotBeatenRoadID;
+        lMugshotAction.meImageType                      = meCaptureMugshotType;
+        lMugshotAction.mbIsTakedownAggressorLocalPlayer = false;
+        lMugshotAction.mbMugshotRequiresBroadcast       = (meCaptureMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
 
         CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 636);
         CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 637);
-        AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAction),
-            KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
+        lpOutput->GetGameActionQueue()->AddGameAction(lMugshotAction);
     }
-    else
+    // No DWARF local for the duration: the conditional is the test's own operand.
+    else if (mfMugshotCaptureTimer >= ((meCaptureMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT)
+                                           ? KF_CAPTURE_YOUR_VICTORY_MUGSHOT_DURATION
+                                           : KF_CAPTURE_YOUR_MUGSHOT_DURATION))
     {
-        const f32 lfCaptureDuration =
-            (meCaptureMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT)
-                ? KF_CAPTURE_YOUR_VICTORY_MUGSHOT_DURATION
-                : KF_CAPTURE_YOUR_MUGSHOT_DURATION;
-        if (mfMugshotCaptureTimer >= lfCaptureDuration)
-        {
-            mfMugshotCaptureTimer = -1.0f;
-            meMugshotCaptureState = E_MUGSHOT_CAPTURE_STATE_TAKE_MUGSHOT;
-        }
+        mfMugshotCaptureTimer = -1.0f;
+        meMugshotCaptureState = E_MUGSHOT_CAPTURE_STATE_TAKE_MUGSHOT;
     }
 }
 
@@ -594,29 +589,29 @@ void MugshotManager::HandlePreparingToCaptureTheirMugshot()
 // ---------------------------------------------------------------------------
 // HandleCapturingTheirMugshot -- (show FSM, state 2).
 // Once the capture-their timeout elapses, queue the capture action and advance to SHOW (resetting
-// the show timer + the beaten-road id to the round-reset value 0x600000000).
+// the show timer, clearing the beaten-road id and the show type).
 // ---------------------------------------------------------------------------
 void MugshotManager::HandleCapturingTheirMugshot(GameStateModuleIO::OutputBuffer* lpOutput)
 {
     if (mfMugshotShowTimer >= KF_CAPTURE_THEIR_MUGSHOT_TIMEOUT_DURATION)
     {
-        StartMugshotGameAction lAction;
-        lAction.mImageId        = mRoadRuleMugshotBeatenRoadID;
-        lAction.meShowRaceCar   = meMugshotCaptureRaceCarIndex;
-        lAction.mePlayerRaceCar = mpGameStateModule->GetPlayerActiveRaceCarIndex();
-        lAction.miStageTag      = 5;
-        lAction.meImageType     = meShowMugshotType;
-        lAction.mbFlagA         = true;
-        lAction.mbBroadcast     = (meShowMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
+        // DWARF cpp:763 lMugshotAction; AddGameAction (BrnGameActions.h:501) inlined. The local
+        // player took this mugshot of the captured car (ARTIST stores the player index at +0x08).
+        GameStateModuleIO::PaybackMugshotAction lMugshotAction;
+        lMugshotAction.meMugshotResponse                = GameStateModuleIO::E_MUGSHOT_RESPONSE_STOP_THEIR_MUGSHOT;
+        lMugshotAction.meTakedownAggressorIndex         = mpGameStateModule->GetPlayerActiveRaceCarIndex();
+        lMugshotAction.meTakedownVictimIndex            = meMugshotCaptureRaceCarIndex;
+        lMugshotAction.meImageType                      = meShowMugshotType;
+        lMugshotAction.mbIsTakedownAggressorLocalPlayer = true;
+        lMugshotAction.mRoadRuleBeatenRoadID            = mRoadRuleMugshotBeatenRoadID;
+        lMugshotAction.mbMugshotRequiresBroadcast       = (meShowMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
 
         CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 775);
         CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 776);
-        AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAction),
-            KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
+        lpOutput->GetGameActionQueue()->AddGameAction(lMugshotAction);
 
         mfMugshotShowTimer           = -1.0f;
-        mRoadRuleMugshotBeatenRoadID = (static_cast<u64>(6) << 32);
+        mRoadRuleMugshotBeatenRoadID = 0;   // ARTIST std of 0 to +0x40 (0x82383858 / 0x82383A2C)
         meShowMugshotType            = GameStateModuleIO::E_IMAGE_TYPE_COUNT;
         meMugshotShowState           = E_MUGSHOT_SHOW_STATE_IDLE;
     }
@@ -631,40 +626,40 @@ void MugshotManager::HandleShowingTheirMugshot(GameStateModuleIO::OutputBuffer* 
 {
     if (mfMugshotShowTimer == 0.0f)
     {
-        StartMugshotGameAction lAction;
-        lAction.mImageId        = mRoadRuleMugshotBeatenRoadID;
-        lAction.meShowRaceCar   = meMugshotCaptureRaceCarIndex;
-        lAction.mePlayerRaceCar = mpGameStateModule->GetPlayerActiveRaceCarIndex();
-        lAction.miStageTag      = 3;
-        lAction.meImageType     = meShowMugshotType;
-        lAction.mbFlagA         = true;
-        lAction.mbBroadcast     = (meShowMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
+        // DWARF cpp:800 lMugshotAction; AddGameAction (BrnGameActions.h:501) inlined. The local
+        // player took this mugshot of the captured car (ARTIST stores the player index at +0x08).
+        GameStateModuleIO::PaybackMugshotAction lMugshotAction;
+        lMugshotAction.meMugshotResponse                = GameStateModuleIO::E_MUGSHOT_RESPONSE_SHOW;
+        lMugshotAction.meTakedownAggressorIndex         = mpGameStateModule->GetPlayerActiveRaceCarIndex();
+        lMugshotAction.meTakedownVictimIndex            = meMugshotCaptureRaceCarIndex;
+        lMugshotAction.meImageType                      = meShowMugshotType;
+        lMugshotAction.mbIsTakedownAggressorLocalPlayer = true;
+        lMugshotAction.mRoadRuleBeatenRoadID            = mRoadRuleMugshotBeatenRoadID;
+        lMugshotAction.mbMugshotRequiresBroadcast       = (meShowMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
 
-        CGS_ASSERT(lpOutput != 0, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
-        AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAction),
-            KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
+        CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 812);
+        CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 813);
+        lpOutput->GetGameActionQueue()->AddGameAction(lMugshotAction);
     }
     else if (mfMugshotShowTimer >= KF_SHOW_YOUR_MUGSHOT_DURATION)
     {
-        StartMugshotGameAction lAction;
-        lAction.mImageId        = mRoadRuleMugshotBeatenRoadID;
-        lAction.meShowRaceCar   = meMugshotCaptureRaceCarIndex;
-        lAction.mePlayerRaceCar = mpGameStateModule->GetPlayerActiveRaceCarIndex();
-        lAction.miStageTag      = 5;
-        lAction.meImageType     = meShowMugshotType;
-        lAction.mbFlagA         = true;
-        lAction.mbBroadcast     = (meShowMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
+        // DWARF cpp:819 lMugshotAction; AddGameAction (BrnGameActions.h:501) inlined. The local
+        // player took this mugshot of the captured car (ARTIST stores the player index at +0x08).
+        GameStateModuleIO::PaybackMugshotAction lMugshotAction;
+        lMugshotAction.meMugshotResponse                = GameStateModuleIO::E_MUGSHOT_RESPONSE_STOP_THEIR_MUGSHOT;
+        lMugshotAction.meTakedownAggressorIndex         = mpGameStateModule->GetPlayerActiveRaceCarIndex();
+        lMugshotAction.meTakedownVictimIndex            = meMugshotCaptureRaceCarIndex;
+        lMugshotAction.meImageType                      = meShowMugshotType;
+        lMugshotAction.mbIsTakedownAggressorLocalPlayer = true;
+        lMugshotAction.mRoadRuleBeatenRoadID            = mRoadRuleMugshotBeatenRoadID;
+        lMugshotAction.mbMugshotRequiresBroadcast       = (meShowMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
 
-        CGS_ASSERT(lpOutput != 0, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
-        AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAction),
-            KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
+        CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 831);
+        CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 832);
+        lpOutput->GetGameActionQueue()->AddGameAction(lMugshotAction);
 
         mfMugshotShowTimer           = -1.0f;
-        mRoadRuleMugshotBeatenRoadID = (static_cast<u64>(6) << 32);
+        mRoadRuleMugshotBeatenRoadID = 0;   // ARTIST std of 0 to +0x40 (0x82383858 / 0x82383A2C)
         meShowMugshotType            = GameStateModuleIO::E_IMAGE_TYPE_COUNT;
         meMugshotShowState           = E_MUGSHOT_SHOW_STATE_IDLE;
     }

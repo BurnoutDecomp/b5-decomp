@@ -5902,25 +5902,12 @@ struct RaceCarReachedFinishActionRecord
     s32                   miFinishPosition;       // +4
 };
 
-// DWARF BrnGameActions.h:3288 -- SetWayPointDistancesToFinishAction { Array<float32_t,16u> maDistances; }.
-// 16 * 4 element bytes + the trailing Array count word == 68 == the X360 `li r6,0x44` immediate
-// at 0x82342074, and the console builds it in exactly that shape (Array count zeroed at
-// sp+0xA0 == payload+64 before the Append loop, whole 68-byte block handed to AddEvent).
-struct SetWayPointDistancesToFinishActionRecord
-{
-    // (the console symbol is CgsContainers::Array<float,16>::Append @0x823182B8; this tree homes
-    //  the Array template at GLOBAL scope -- CgsArray.h -- so it is spelled ::Array here)
-    CgsContainers::Array<f32, 16> maDistances;
-};
-
-// The three wire sizes, pinned against the `li r6,<size>` immediates the console hands AddEvent.
+// The two wire sizes, pinned against the `li r6,<size>` immediates the console hands AddEvent.
 // These are the ONLY hard size facts in this partfile; everything else is by named member.
 CGS_STATIC_ASSERT((sizeof(RaceCarReachedCheckpointActionRecord) == 16),
               "RaceCarReachedCheckpointAction wire size (X360 li r6,0x10 @0x823422AC)");
 CGS_STATIC_ASSERT((sizeof(RaceCarReachedFinishActionRecord) == 8),
               "RaceCarReachedFinishAction wire size (X360 li r6,8 @0x823426A4)");
-CGS_STATIC_ASSERT((sizeof(SetWayPointDistancesToFinishActionRecord) == 68),
-              "SetWayPointDistancesToFinishAction wire size (X360 li r6,0x44 @0x82342074)");
 
 // DWARF BrnGameActions.h:2308 -- PlayerReachedPenultimateCheckpointAction is an EMPTY struct
 // (it carries no payload at all; the id IS the message). That is why the console posts it with
@@ -5956,44 +5943,33 @@ CGS_STATIC_ASSERT((sizeof(SetWayPointDistancesToFinishActionRecord) == 68),
 // PrepareForMode's "the distance data is READY" gate that StartModeIntro's fire-once test needs.
 // Two adjacent but genuinely distinct flags -- do not collapse them.
 // ============================================================================================
-void ModeManager::TransmitCheckPointDistancesToFinishLine(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
-                                                          ScoringSystem&                   lrScoringSystem)
+void ModeManager::TransmitCheckPointDistancesToFinishLine(GameStateModuleIO::OutputBuffer* lpOutput,
+                                                          const ScoringSystem&             lScoringSystem)
 {
     // X360: `if (!*(this+38150) && *(scoring+23776))`. The scoring byte at +23776 is
     // mbCheckPointDistancesToFinishReady (ScoringSystem::ProcessFinishDistances @0x823124F0 sets
     // it, and GetCheckpointDistanceToFinish's own "Distance to finish not ready" assert guards on
     // it) -- reached through its named accessor, never by the raw offset (hazards H9).
-    if (mbDistanceToFinishLineTransmitted)   // +38150 -- the fire-once "already sent" latch
+    if (!mbDistanceToFinishLineTransmitted && lScoringSystem.IsCheckPointDistanceToFinishReady())
     {
-        return;
+        // DWARF BrnModeManager.cpp:392 / :395 / :399 (locals lDistanceEvent, liCheckPointIndex,
+        // lfRouteLength). The loop bound is re-read from scoring +0x4EE0 (miTotalCheckpoints) on
+        // every pass (`lwz r11, 0x4EE0(r30)` @0x8234205C).
+        GameStateModuleIO::SetWayPointDistancesToFinishAction lDistanceEvent;
+        int32_t liCheckPointIndex;
+        lDistanceEvent.maDistances.Construct();
+        for (liCheckPointIndex = 0; liCheckPointIndex < lScoringSystem.GetTotalCheckpoints(); ++liCheckPointIndex)
+        {
+            const f32 lfRouteLength = lScoringSystem.GetCheckpointDistanceToFinish(liCheckPointIndex);
+            lDistanceEvent.maDistances.Append(lfRouteLength);
+        }
+
+        // AddGameAction (DWARF BrnGameActions.h:501) inlined: the queue getter 0x8231D4B8 first,
+        // then &lDistanceEvent, 118, 68 into VariableEventQueue<13312,16>::AddEvent.
+        lpOutput->GetGameActionQueue()->AddGameAction(lDistanceEvent);
+
+        mbDistanceToFinishLineTransmitted = true;   // X360 +38150 = 1 (the fire-once latch)
     }
-    if (!lrScoringSystem.IsCheckPointDistanceToFinishReady())   // X360 scoring +23776
-    {
-        return;
-    }
-
-    SetWayPointDistancesToFinishActionRecord lAction;
-    lAction.maDistances.Construct();   // X360 `stw r31(=0), 0xD0+var_30(r1)` @0x82342038 -- the Array count word
-
-    // The X360 loop bound is re-read from scoring +0x4EE0 (20192) on EVERY iteration
-    // (`lwz r11, 0x4EE0(r30)` @0x8234205C). That member is miTotalCheckpoints: muTotalLaps is the
-    // adjacent +0x4ED8, pinned by ScoringSystem::ClearData's `stw r30,0x4ED8`, and
-    // muNumCarsFinishedRace sits between them at +0x4EDC.
-    for (s32 liCheckpoint = 0; liCheckpoint < lrScoringSystem.GetTotalCheckpoints(); ++liCheckpoint)
-    {
-        const f32 lfDistance =
-            lrScoringSystem.GetCheckpointDistanceToFinish(static_cast<u32>(liCheckpoint));
-        lAction.maDistances.Append(lfDistance);
-    }
-
-    // X360 `bl GameStateModuleIO::OutputBuffer::GetGameActionQueue` (0x8231D4B8 -- the
-    // write-locked this+4 accessor) then AddEvent(queue, payload, 118, 68).
-    lpOutputBuffer->GetGameActionQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lAction),
-        GameStateModuleIO::E_ACTION_SET_WAYPOINT_DISTANCES_TO_FINISH,
-        static_cast<s32>(sizeof(SetWayPointDistancesToFinishActionRecord)));
-
-    mbDistanceToFinishLineTransmitted = true;   // X360 +38150 = 1 (the fire-once latch)
 }
 
 // ============================================================================================
