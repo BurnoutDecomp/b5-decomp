@@ -189,11 +189,16 @@ const char* RoadnoiseEffect::GetTypeName() const
 
 s32 RoadnoiseEffect::GetController(s32 aiSlot)
 {
-    if (aiSlot == 0)
+    // ARTIST 0x82685AD0: a switch over the controller slot (unsigned range test).
+    switch (aiSlot)
+    {
+    case 0:
         return 1;
-    if (aiSlot == 1)
+    case 1:
         return 0;
-    return -1;
+    default:
+        return -1;
+    }
 }
 
 void RoadnoiseEffect::AttachController(CgsSound::Logic::EffectBase* apController)

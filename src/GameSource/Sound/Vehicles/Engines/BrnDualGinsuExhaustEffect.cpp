@@ -5,6 +5,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnDualGinsuEffect.cpp"
 #include <algorithm>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_DUALGINSUEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnDualGinsuEffect.cpp"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::DualGinsuExhaustEffect -- out-of-line bodies.
@@ -94,8 +98,8 @@ s32 DualGinsuExhaustEffect::GetController(s32 aiSlot)
 void DualGinsuExhaustEffect::AttachController(
     CgsSound::Logic::EffectBase* apController)
 {
-    const s32 liControllerId = apController->GetEffectID();
-    switch (liControllerId)
+    // ARTIST 0x82684FC0: no null test; a switch whose default streams the controller id.
+    switch (apController->GetEffectID())
     {
     case 0:
         mpPhysicsControl = static_cast<PhysicsControl*>(apController);
@@ -107,7 +111,8 @@ void DualGinsuExhaustEffect::AttachController(
         mpHybridControl = static_cast<HybridExhaustControl*>(apController);
         break;
     default:
-        CGS_ASSERT(false, "Cound't attach controller");
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_DUALGINSUEFFECT_CPP_FILE, 1306);
         break;
     }
 }

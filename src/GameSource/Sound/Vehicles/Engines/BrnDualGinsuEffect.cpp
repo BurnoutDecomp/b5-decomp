@@ -16,6 +16,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_DUALGINSUEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnDualGinsuEffect.cpp"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::DualGinsuEffect -- out-of-line bodies.
@@ -396,20 +400,38 @@ DualGinsuEffect::~DualGinsuEffect()
 
 s32 DualGinsuEffect::GetController(s32 aiSlot)
 {
-    if (aiSlot == 0) return 6;
-    if (aiSlot == 1) return 0;
-    if (aiSlot == 2) return 4;
-    return -1;
+    // ARTIST 0x82684E88: a switch over the controller slot (unsigned range test).
+    switch (aiSlot)
+    {
+    case 0:
+        return 6;
+    case 1:
+        return 0;
+    case 2:
+        return 4;
+    default:
+        return -1;
+    }
 }
 
 void DualGinsuEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
+    // ARTIST 0x82684EC0: no null test; a switch whose default streams the controller id.
     switch (apController->GetEffectID())
     {
-    case 0: mpPhysicsControl = static_cast<PhysicsControl*>(apController); break;
-    case 4: mpEngineControl = static_cast<EngineControl*>(apController); break;
-    case 6: mpHybridControl = static_cast<HybridExhaustControl*>(apController); break;
-    default: CGS_ASSERT(false, "Cound't attach controller "); break;
+    case 0:
+        mpPhysicsControl = static_cast<PhysicsControl*>(apController);
+        break;
+    case 4:
+        mpEngineControl = static_cast<EngineControl*>(apController);
+        break;
+    case 6:
+        mpHybridControl = static_cast<HybridExhaustControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_DUALGINSUEFFECT_CPP_FILE, 211);
+        break;
     }
 }
 

@@ -17,6 +17,10 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_SCRAPEEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Collision/BrnScrapeEffect.cpp"
 
 // =============================================================================
 // BrnSound::Logic::Collision::ScrapeEffect -- out-of-line bodies.
@@ -143,19 +147,21 @@ const char* ScrapeEffect::GetTypeName() const
 
 s32 ScrapeEffect::GetController(s32 aiIndex)
 {
-    if (aiIndex == 0)
+    // ARTIST 0x826885C0: a switch over the controller slot (unsigned range test).
+    switch (aiIndex)
+    {
+    case 0:
         return 0;
-    if (aiIndex == 1)
+    case 1:
         return 1;
-    return -1;
+    default:
+        return -1;
+    }
 }
 
 void ScrapeEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != 0, "lpController");
-    if (!apController)
-        return;
-
+    // ARTIST 0x826885E8: no null test; a switch whose default streams the controller id.
     switch (apController->GetEffectID())
     {
     case 0:
@@ -165,7 +171,8 @@ void ScrapeEffect::AttachController(CgsSound::Logic::EffectBase* apController)
         mpCollision3DControl = static_cast<Collision3DControl*>(apController);
         break;
     default:
-        CGS_ASSERT(false, "Cound't attach controller");
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_SCRAPEEFFECT_CPP_FILE, 139);
         break;
     }
 }

@@ -11,6 +11,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_CLUTCHCONTROL_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnClutchControl.cpp"
 
 extern s32 KI_DEBUG_PRINT_ENGINE_INFO; // X360 dword_82FFB854
 
@@ -70,20 +74,48 @@ CgsSound::Logic::EffectControl* ClutchControl::CreateObject(u32 luType)
 
 s32 ClutchControl::GetController(s32 aiSlot)
 {
-    static const s32 kaiControllers[] = { 0, 4, 2, 5, 1 };
-    return aiSlot >= 0 && aiSlot < 5 ? kaiControllers[aiSlot] : -1;
+    // ARTIST 0x82684C78: a switch over the controller slot (unsigned range test).
+    switch (aiSlot)
+    {
+    case 0:
+        return 0;
+    case 1:
+        return 4;
+    case 2:
+        return 2;
+    case 3:
+        return 5;
+    case 4:
+        return 1;
+    default:
+        return -1;
+    }
 }
 
 void ClutchControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
+    // ARTIST 0x82684CE0: no null test; a switch whose default streams the controller id.
     switch (apController->GetEffectID())
     {
-    case 0: mpPhysicsControl = static_cast<PhysicsControl*>(apController); break;
-    case 1: mpWheelControl = static_cast<BrnSound::Vehicles::Wheels::WheelControl*>(apController); break;
-    case 2: mpShiftControl = static_cast<ShiftControl*>(apController); break;
-    case 4: mpEngineControl = static_cast<EngineControl*>(apController); break;
-    case 5: mpHybridExhaustControl = static_cast<HybridExhaustControl*>(apController); break;
-    default: CGS_ASSERT(false, "Couldn't attach clutch controller"); break;
+    case 0:
+        mpPhysicsControl = static_cast<PhysicsControl*>(apController);
+        break;
+    case 4:
+        mpEngineControl = static_cast<EngineControl*>(apController);
+        break;
+    case 2:
+        mpShiftControl = static_cast<ShiftControl*>(apController);
+        break;
+    case 5:
+        mpHybridExhaustControl = static_cast<HybridExhaustControl*>(apController);
+        break;
+    case 1:
+        mpWheelControl = static_cast<BrnSound::Vehicles::Wheels::WheelControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_CLUTCHCONTROL_CPP_FILE, 262);
+        break;
     }
 }
 

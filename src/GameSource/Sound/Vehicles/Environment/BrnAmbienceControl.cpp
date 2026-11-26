@@ -12,6 +12,9 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsMicrophone.h"
 #include "SharedClasses/Trigger/BrnGenericRegion.h"
 
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_AMBIENCEEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Environment/BrnAmbienceEffect.cpp"
+
 // =============================================================================
 // BrnSound::Vehicles::Environment::AmbienceControl -- out-of-line bodies.
 // =============================================================================
@@ -63,9 +66,16 @@ s32 AmbienceControl::GetController(s32 aiIndex)
 
 void AmbienceControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController->GetEffectID() == 10, "Unexpected control.");
-    if (apController->GetEffectID() == 10)
+    // ARTIST 0x82686120: no null test; a switch whose default asserts.
+    switch (apController->GetEffectID())
+    {
+    case 10:
         mpEnclosureControl = static_cast<EnclosureControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_AT(false, "Unexpected control.", BRN_AMBIENCEEFFECT_CPP_FILE, 190);
+        break;
+    }
 }
 
 // ---------------------------------------------------------------------------

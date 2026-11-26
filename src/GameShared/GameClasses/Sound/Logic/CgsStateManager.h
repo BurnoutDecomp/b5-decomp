@@ -183,7 +183,7 @@ public:
     virtual void ProcessUpdate();
     virtual void Notify(const CgsSound::Io::MessageHeader* /*apkMessage*/) {}
     virtual bool IsDataLoaded();
-    virtual bool IsStateAlias(s32 liState) { return meMapState == liState; }
+    virtual bool IsStateAlias(s32 leStateType) { return leStateType == meMapState; }  // DWARF h:312; ARTIST 0x82680D4C subf r11,r4,r11
 
     // DWARF :223 / :226 / :232 -- the time-field setters Environment::Update seeds
     // before the UpdateParams pass (header-inline trivial setters; the Update asm

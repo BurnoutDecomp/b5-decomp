@@ -369,6 +369,12 @@ public:
     // PlayerVoice::`vector deleting destructor' (0x826C7F58) and every derived one restore the
     // PlayerVoice vtable (0x820B3608) before ~Voice, which an implicit destructor does not.
     virtual ~PlayerVoice() {}
+
+    // DWARF CgsPlayerVoice.h:134 / :145, header-inline (no ARTIST copy; PS3
+    // Logic::Voice::Play 0x87620C inlines it): while the voice is alive, play/stop
+    // its player slot and move the playback state on success. Defined after Slot.
+    void Play(u32 au32OptionalParam);
+    void Stop();
 };
 
 // ---------------------------------------------------------------------------
@@ -435,6 +441,26 @@ private:
     u8                   mu8Playing;     // +0x11  0=stopped, 1=playing
     u16                  mu16PluginOffset; // +0x12  RWAC stage index
 };
+
+// CgsPlayerVoice.h:134.
+inline void PlayerVoice::Play(u32 au32OptionalParam)
+{
+    if (GetRemoveState() == E_VOICE_REMOVE_ALIVE)
+    {
+        if (GetSlot(0).Play(*this, au32OptionalParam))
+            SetPlaybackState(E_PLAYBACK_STATE_PLAYING);
+    }
+}
+
+// CgsPlayerVoice.h:145.
+inline void PlayerVoice::Stop()
+{
+    if (GetRemoveState() == E_VOICE_REMOVE_ALIVE)
+    {
+        if (GetSlot(0).Stop(*this))
+            SetPlaybackState(E_PLAYBACK_STATE_STOPPED);
+    }
+}
 
 enum EVoiceType
 {

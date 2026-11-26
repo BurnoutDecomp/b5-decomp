@@ -15,6 +15,10 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_BOOSTEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnBoostEffect.cpp"
 
 namespace BrnSound
 {
@@ -78,20 +82,33 @@ const char* BoostEffect::GetTypeName() const { return "BoostEffect"; }
 
 s32 BoostEffect::GetController(s32 aiSlot)
 {
-    if (aiSlot == 0) return 0;
-    if (aiSlot == 1) return 15;
-    return -1;
+    // ARTIST 0x826851F0: a switch over the controller slot (unsigned range test).
+    switch (aiSlot)
+    {
+    case 0:
+        return 0;
+    case 1:
+        return 15;
+    default:
+        return -1;
+    }
 }
 
 void BoostEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
+    // ARTIST 0x82685218: no null test; a switch whose default streams the controller id.
     switch (apController->GetEffectID())
     {
-    case 0: mpPhysicsControl = static_cast<PhysicsControl*>(apController); return;
+    case 0:
+        mpPhysicsControl = static_cast<PhysicsControl*>(apController);
+        break;
     case 15:
         mpSpeedStreamControl = static_cast<BrnSound::Vehicles::Environment::SpeedStreamControl*>(apController);
-        return;
-    default: CGS_ASSERT(false, "Cound't attach controller "); return;
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_BOOSTEFFECT_CPP_FILE, 143);
+        break;
     }
 }
 

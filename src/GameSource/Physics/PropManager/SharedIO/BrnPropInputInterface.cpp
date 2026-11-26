@@ -1,6 +1,11 @@
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+// The original defined these four enqueue bodies in BrnPropInputInterface.h (ARTIST bakes that
+// header's path and lines into their asserts, e.g. 0x822CCDEC li r5,311); they are emitted out
+// of line here.
+#define BRN_PROPINPUTINTERFACE_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\PropManager/SharedIO/BrnPropInputInterface.h"
+
 // ===========================================================================
 // BrnPhysics::Props::PropInputInterface enqueue bodies, reconstructed store-for-
 // store from BURNOUT_X360_ARTIST.XEX. Each builds a prop-event payload inline in
@@ -23,17 +28,15 @@ namespace Props
             BrnWorld::PropEntityID lEntityId,
             s32                    liPropTypeId,
             s32                    liSlot,
-            Matrix44Affine         lTransform,
+            const Matrix44Affine&  lTransform,
             bool                   lbAddExtraComOffset,
             BrnWorld::EPropState   leState)
     {
-        lEntityId.AssertIsProp();
-        // Prop entities must have a zero part-index (a part-index makes it a PART).
-        CGS_ASSERT((lEntityId.mEntityId.muValue & BrnWorld::PropEntityID::KU_PART_INDEX_MASK) == 0,
-                   "!lEntityId.IsPart()");
-        CGS_ASSERT(liSlot >= 0, "liSlot >= 0");
-        CGS_ASSERT(liSlot < static_cast<s32>(BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS),
-                   "liSlot < static_cast< int32_t > ( BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS )");
+        CGS_ASSERT_AT(!lEntityId.IsPart(), "!lEntityId.IsPart()", BRN_PROPINPUTINTERFACE_H_FILE, 253);
+        CGS_ASSERT_AT(liSlot >= 0, "liSlot >= 0", BRN_PROPINPUTINTERFACE_H_FILE, 254);
+        CGS_ASSERT_AT(liSlot < static_cast<s32>(BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS),
+                      "liSlot < static_cast< int32_t > ( BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS )",
+                      BRN_PROPINPUTINTERFACE_H_FILE, 255);
 
         AddPhysicalPropEvent lEvent;
         lEvent.mTransform          = lTransform;
@@ -57,13 +60,10 @@ namespace Props
             BrnWorld::PropEntityID lEntityId,
             s32                    liPropTypeId,
             s32                    liPartId,
-            Matrix44Affine         lTransform,
+            const Matrix44Affine&  lTransform,
             s32                    liSlot)
     {
-        lEntityId.AssertIsProp();
-        // A part must carry a nonzero part-index.
-        CGS_ASSERT((lEntityId.mEntityId.muValue & BrnWorld::PropEntityID::KU_PART_INDEX_MASK) != 0,
-                   "lEntityId.IsPart()");
+        CGS_ASSERT_AT(lEntityId.IsPart(), "lEntityId.IsPart()", BRN_PROPINPUTINTERFACE_H_FILE, 283);
 
         AddPhysicalPartEvent lEvent;
         lEvent.mTransform   = lTransform;
@@ -83,9 +83,7 @@ namespace Props
     void PropInputInterface::RemovePartInstance(BrnWorld::PropEntityID lEntityId,
                                                 s32 liPhysicalIndex)
     {
-        lEntityId.AssertIsProp();
-        CGS_ASSERT((lEntityId.mEntityId.muValue & BrnWorld::PropEntityID::KU_PART_INDEX_MASK) != 0,
-                   "lEntityId.IsPart()");
+        CGS_ASSERT_AT(lEntityId.IsPart(), "lEntityId.IsPart()", BRN_PROPINPUTINTERFACE_H_FILE, 331);
 
         RemovePhysicalPartEvent lEvent;
         lEvent.mEntityId       = lEntityId;
@@ -111,9 +109,7 @@ namespace Props
     void PropInputInterface::RemovePropInstance(BrnWorld::PropEntityID lEntityId,
                                                 s32 liPhysicalIndex)
     {
-        lEntityId.AssertIsProp();
-        CGS_ASSERT((lEntityId.mEntityId.muValue & BrnWorld::PropEntityID::KU_PART_INDEX_MASK) == 0,
-                   "!lEntityId.IsPart()");
+        CGS_ASSERT_AT(!lEntityId.IsPart(), "!lEntityId.IsPart()", BRN_PROPINPUTINTERFACE_H_FILE, 311);
 
         RemovePhysicalPropEvent lEvent;
         lEvent.mEntityId       = lEntityId;

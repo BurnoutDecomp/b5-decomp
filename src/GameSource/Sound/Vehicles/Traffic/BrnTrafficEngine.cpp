@@ -169,11 +169,16 @@ s32 TrafficEngine::GetController( s32 liIndex )
 
 void TrafficEngine::AttachController( CgsSound::Logic::EffectBase* lpController )
 {
-    const s32 liEffectId = lpController->GetEffectID();
-    if ( liEffectId < 1 )
+    // ARTIST 0x82684118: a two-case switch (cmplwi 1; blt case 0; bnelr), no default.
+    switch ( lpController->GetEffectID() )
+    {
+    case 0:
         mpTrafficControl = static_cast<TrafficControl*>( lpController );
-    else if ( liEffectId == 1 )
+        break;
+    case 1:
         mpTraffic3DControl = static_cast<Traffic3DControl*>( lpController );
+        break;
+    }
 }
 
 // The EffectBase attach, then -- only for a car whose engine runs -- the engine voice

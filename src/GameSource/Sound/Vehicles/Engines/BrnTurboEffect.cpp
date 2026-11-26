@@ -11,6 +11,10 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_TURBOEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnTurboEffect.cpp"
 
 namespace BrnSound
 {
@@ -63,18 +67,33 @@ const char* TurboEffect::GetTypeName() const { return "TurboEffect"; }
 
 s32 TurboEffect::GetController(s32 aiSlot)
 {
-    if (aiSlot == 0) return 4;
-    if (aiSlot == 1) return 5;
-    return -1;
+    // ARTIST 0x82685330: a switch over the controller slot (unsigned range test).
+    switch (aiSlot)
+    {
+    case 0:
+        return 4;
+    case 1:
+        return 5;
+    default:
+        return -1;
+    }
 }
 
 void TurboEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
+    // ARTIST 0x82685370: no null test; a switch whose default streams the controller id.
     switch (apController->GetEffectID())
     {
-    case 4: mpEngineControl = static_cast<EngineControl*>(apController); return;
-    case 5: mpHybridControl = static_cast<HybridExhaustControl*>(apController); return;
-    default: CGS_ASSERT(false, "Cound't attach controller "); return;
+    case 4:
+        mpEngineControl = static_cast<EngineControl*>(apController);
+        break;
+    case 5:
+        mpHybridControl = static_cast<HybridExhaustControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_TURBOEFFECT_CPP_FILE, 176);
+        break;
     }
 }
 

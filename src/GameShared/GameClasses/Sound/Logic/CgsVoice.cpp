@@ -335,12 +335,7 @@ void Voice::Play(u32 luParam)
     else
         CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("mpObject", CGS_HANDLE_ARTIST_H, 287));
 
-    if (lpVoice->GetRemoveState() == Playback::E_VOICE_REMOVE_ALIVE)
-    {
-        Playback::Slot& lrSlot = lpVoice->GetSlot(0);
-        if (lrSlot.Play(static_cast<Playback::PlayerVoice&>(*lpVoice), luParam))
-            lpVoice->SetPlaybackState(Playback::E_PLAYBACK_STATE_PLAYING);
-    }
+    static_cast<Playback::PlayerVoice*>(lpVoice)->Play(luParam);
     lpVoice->Release();
 }
 
@@ -362,12 +357,7 @@ void Voice::Stop()
     else
         CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("mpObject", CGS_HANDLE_ARTIST_H, 287));
 
-    if (lpVoice->GetRemoveState() == Playback::E_VOICE_REMOVE_ALIVE)
-    {
-        Playback::Slot& lrSlot = lpVoice->GetSlot(0);
-        if (lrSlot.Stop(static_cast<Playback::PlayerVoice&>(*lpVoice)))
-            lpVoice->SetPlaybackState(Playback::E_PLAYBACK_STATE_STOPPED);
-    }
+    static_cast<Playback::PlayerVoice*>(lpVoice)->Stop();
     lpVoice->Release();
 }
 

@@ -10,6 +10,10 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_COLLISIONCONTROL_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Collision/BrnCollisionControl.cpp"
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionControl -- out-of-line bodies.
@@ -105,14 +109,17 @@ s32 CollisionControl::GetController(s32 aiIndex)
 
 void CollisionControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != 0, "lpController");
-    if (!apController)
-        return;
-
-    if (apController->GetEffectID() == 1)
+    // ARTIST 0x826884E0: no null test; a switch whose default streams the controller id.
+    switch (apController->GetEffectID())
+    {
+    case 1:
         mpCollision3DControl = static_cast<Collision3DControl*>(apController);
-    else
-        CGS_ASSERT(false, "Cound't attach controller");
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_COLLISIONCONTROL_CPP_FILE, 162);
+        break;
+    }
 }
 
 // ARTIST @0x826BD580.

@@ -9,6 +9,9 @@
 #include <algorithm>
 #include <cmath>
 
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_WHEELCONTROL_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Wheels/BrnWheelControl.cpp"
+
 extern s32 KI_DEBUG_PRINT_ENGINE_INFO; // global ARTIST82FFB854; BrnPhysicsControl.cpp
 
 namespace BrnSound
@@ -114,22 +117,47 @@ WheelControl::~WheelControl()
 
 s32 WheelControl::GetController(s32 aiSlot)
 {
-    static const s32 kaiControllers[] = { 0, 2, 4, 8, 9 };
-    return aiSlot >= 0 && aiSlot < 5 ? kaiControllers[aiSlot] : -1;
+    // ARTIST 0x82685B68: a switch over the controller slot (unsigned range test).
+    switch (aiSlot)
+    {
+    case 0:
+        return 0;
+    case 1:
+        return 2;
+    case 2:
+        return 4;
+    case 3:
+        return 8;
+    case 4:
+        return 9;
+    default:
+        return -1;
+    }
 }
 
 void WheelControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
+    // ARTIST 0x82685BD0: case bodies in the order 0, 4, 2, 8, 9, then the default's assert.
     switch (apController->GetEffectID())
     {
-    case 0: mpPhysicsControl = static_cast<Engines::PhysicsControl*>(apController); return;
-    case 2: mpShiftControl = static_cast<Engines::ShiftControl*>(apController); return;
-    case 4: mpEngineControl = static_cast<Engines::EngineControl*>(apController); return;
-    case 8: mpLeft3dControl = static_cast<LeftSide3dControl*>(apController); return;
-    case 9: mpRight3dControl = static_cast<RightSide3dControl*>(apController); return;
+    case 0:
+        mpPhysicsControl = static_cast<Engines::PhysicsControl*>(apController);
+        break;
+    case 4:
+        mpEngineControl = static_cast<Engines::EngineControl*>(apController);
+        break;
+    case 2:
+        mpShiftControl = static_cast<Engines::ShiftControl*>(apController);
+        break;
+    case 8:
+        mpLeft3dControl = static_cast<LeftSide3dControl*>(apController);
+        break;
+    case 9:
+        mpRight3dControl = static_cast<RightSide3dControl*>(apController);
+        break;
     default:
-        CGS_ASSERT(false, "Bad attach");
-        return;
+        CGS_ASSERT_AT(false, "Bad attach", BRN_WHEELCONTROL_CPP_FILE, 509);
+        break;
     }
 }
 

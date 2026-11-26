@@ -166,6 +166,12 @@ namespace Deformation
 
     class DeformableObject
     {
+        // The deformation debug component reads private members and calls private methods
+        // directly: ARTIST DeformationDebugComponent::Update 0x82623178 tests mpDeformationSpec
+        // (+0x18E0, private in DWARF h:153) and tail-calls CalculateDriveTimeLimits (private, DWARF
+        // h:605), and DWARF declares no accessor for either.
+        friend class DeformationDebugComponent;
+
     public:
         // DWARF BrnDeformableObject.h:160. The lifecycle state of one IK body part slot.
         enum EPartState

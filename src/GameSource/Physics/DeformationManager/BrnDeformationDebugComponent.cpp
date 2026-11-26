@@ -223,9 +223,9 @@ namespace Deformation
     // =============================================================================================
     void DeformationDebugComponent::Update()
     {
-        if ( mpSelectedRig != 0 && mpSelectedRig->GetDeformationSpec() != 0 )
+        if ( mpSelectedRig && mpSelectedRig->mpDeformationSpec )
         {
-            mpSelectedRig->CalculateDriveTimeLimitsDebug();
+            mpSelectedRig->CalculateDriveTimeLimits();
         }
     }
 

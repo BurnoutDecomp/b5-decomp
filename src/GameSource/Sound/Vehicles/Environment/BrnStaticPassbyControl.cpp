@@ -6,6 +6,9 @@
 #include "GameSource/Sound/Vehicles/Environment/BrnEnclosureControl.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnStaticPassbyControl.h"
 
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_STATICPASSBYCONTROL_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Environment/BrnStaticPassbyControl.cpp"
+
 // =============================================================================
 // BrnSound::Vehicles::Environment::StaticPassbyControl -- out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Recon'd function set:
@@ -168,9 +171,16 @@ s32 StaticPassbyControl::GetController(s32 aiIndex)
 // ARTIST82686228 (adjusted EffectBase this).
 void StaticPassbyControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController->GetEffectID() == 0, "Unexpected control.");
-    if (apController->GetEffectID() == 0)
+    // ARTIST 0x82686228: no null test; a switch whose default asserts.
+    switch (apController->GetEffectID())
+    {
+    case 0:
         mpPhysicsControl = static_cast<Engines::PhysicsControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_AT(false, "Unexpected control.", BRN_STATICPASSBYCONTROL_CPP_FILE, 115);
+        break;
+    }
 }
 
 // ARTIST8269B738: inlined EffectBase::Attach followed by nineteen count clears.

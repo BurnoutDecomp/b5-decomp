@@ -70,6 +70,7 @@ namespace BrnWorld
 
         u16 GetEntityIndex() const;             // 0x822B7B08
         u32 GetPartIndex() const;               // 0x822B7B68
+        bool IsPart() const;                    // DWARF h:74, header-inline (no ARTIST copy)
         u32 GetValue() const;                   // 0x822B7BC8
 
         // ADDITIVE GROW: the owner byte (bits [24..31]) the owner tripwires compare against
@@ -139,6 +140,15 @@ namespace BrnWorld
     {
         AssertIsProp();
         return (mEntityId.muValue & KU_PART_INDEX_MASK) >> KU_PART_INDEX_BASE;
+    }
+
+    // DWARF h:74. Tripwire, then whether the packed part index is set. ARTIST has no
+    // out-of-line copy; PropInputInterface::RemovePropInstance 0x822CCD88 inlines it as the
+    // h:278 owner tripwire, `clrlwi 22` and the bool (subfic/subfe/clrlwi 31) its
+    // "!lEntityId.IsPart()" assert then tests (PS3 0x1B7024: the same single tripwire).
+    inline bool PropEntityID::IsPart() const
+    {
+        return GetPartIndex() != 0;
     }
 
     // 0x822B7BC8: tripwire, then the raw packed word.

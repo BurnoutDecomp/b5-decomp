@@ -128,7 +128,12 @@ struct EffectBase : public CgsSound::MemBase
     virtual void Notify(const CgsSound::Io::MessageHeader* /*apkMessage*/) {}
     virtual void Destroy() {} // ARTIST default 0x8284CB38
 
-    s32 GetStateId() const;
+    // DWARF CgsEffectBase.h:939, header-inline (no ARTIST copy). Effect ids are packed by
+    // StateManager::CreateEffectFromRegistry as state-manager id : 8, instance : 5, effect : 7,
+    // object/control : 4; ARTIST's inlined reads load the halfword at EffectBase+0x14 and keep
+    // its low byte (e.g. HybridExhaustControl::GetController 0x82684A04, PhysicsControl::
+    // SetupLoadData 0x826E3628): bits 16..23, the owning state-manager id.
+    s32 GetStateId() const { return (miObjectId >> 16) & 0xFF; }
     s32 GetInstanceId() const;
     s32 GetEffectID() const { return (miObjectId >> 4) & 0x7F; }
     s32 GetId() const { return miObjectId; }
@@ -155,6 +160,13 @@ struct EffectBase : public CgsSound::MemBase
         meAttachState   = E_ATTACH_STATE_NONE;
         mbHasLoadedData = false;
     }
+
+    // DWARF CgsEffectBase.h:571 / :575 / :579, header-inline (no ARTIST copy). Derived
+    // effects reach the private mbEnabled through these, e.g. WhineEffect::UpdateParams
+    // 0x826E4B00 (lbz +0x2C of the EffectBase view; PS3 0x8A2078 reads the same byte).
+    bool         IsEnabled() { return mbEnabled; }
+    void         Enable() { mbEnabled = true; }
+    void         Disable() { mbEnabled = false; }
 
     EAttachState GetAttachState() const { return meAttachState; }
     void         SetAttachState(EAttachState aeState) { meAttachState = aeState; }

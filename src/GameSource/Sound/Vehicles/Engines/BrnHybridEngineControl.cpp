@@ -1,6 +1,13 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnHybridEngineControl.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnEngineControl.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnShiftControl.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnClutchControl.h"
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_HYBRIDENGINECONTROL_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnHybridEngineControl.cpp"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::HybridEngineControl -- out-of-line bodies.
@@ -72,10 +79,7 @@ bool HybridEngineControl::Attach()
     if (!HybridExhaustControl::Attach())
         return false;
 
-    CGS_ASSERT(mpHybridExhaustControl != 0, "mpHybridExhaustControl");
-    if (!mpHybridExhaustControl)
-        return false;
-
+    // ARTIST 0x82699BEC reads mpHybridExhaustControl with no assert or null test.
     const u64 luMasterCollection =
         mpHybridExhaustControl->GetVehicleEngineAttributes().CollectionKey();
     Attrib::Collection* lpMasterCollection = Attrib::FindCollectionWithDefault(
@@ -86,21 +90,54 @@ bool HybridEngineControl::Attach()
 
 s32 HybridEngineControl::GetController(s32 aiSlot)
 {
-    static const s32 kaiControllers[] = { 0, 4, 2, 3, 5, 13 };
-    return (aiSlot >= 0 && aiSlot < static_cast<s32>(sizeof(kaiControllers) / sizeof(kaiControllers[0])))
-        ? kaiControllers[aiSlot] : -1;
+    // ARTIST 0x82684AB0: a switch over the controller slot (unsigned range test).
+    switch (aiSlot)
+    {
+    case 0:
+        return 0;
+    case 1:
+        return 4;
+    case 2:
+        return 2;
+    case 3:
+        return 3;
+    case 4:
+        return 5;
+    case 5:
+        return 13;
+    default:
+        return -1;
+    }
 }
 
 void HybridEngineControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    if (apController->GetEffectID() == 5)
+    // ARTIST 0x82684B20: one switch over ids 0..13 (no call to the base AttachController): the
+    // base's four controllers, the hybrid exhaust control (5), 13 ignored, any other id asserts.
+    switch (apController->GetEffectID())
     {
+    case 0:
+        mpPhysicsControl = static_cast<PhysicsControl*>(apController);
+        break;
+    case 4:
+        mpEngineControl = static_cast<EngineControl*>(apController);
+        break;
+    case 2:
+        mpShiftControl = static_cast<ShiftControl*>(apController);
+        break;
+    case 3:
+        mpClutchControl = static_cast<ClutchControl*>(apController);
+        break;
+    case 5:
         mpHybridExhaustControl = static_cast<HybridExhaustControl*>(apController);
-        return;
+        break;
+    case 13:
+        break;
+    default:
+        CGS_ASSERT_AT(false, "I don't know how to handle attaching this type of EffectBase.",
+                      BRN_HYBRIDENGINECONTROL_CPP_FILE, 1005);
+        break;
     }
-    if (apController->GetEffectID() == 13)
-        return;
-    HybridExhaustControl::AttachController(apController);
 }
 
 } // namespace Engines

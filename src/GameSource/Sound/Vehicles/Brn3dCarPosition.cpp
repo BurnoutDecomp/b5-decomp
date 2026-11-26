@@ -5,6 +5,10 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_3DCARPOSITION_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Brn3dCarPosition.cpp"
 
 // =============================================================================
 // BrnSound::Vehicles::Car3DControl (+ Engine/Exhaust/LeftSide/RightSide3dControl)
@@ -50,13 +54,17 @@ s32 Car3DControl::GetController(s32 aiIndex)
 
 void Car3DControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != 0, "lpEffectControl");
-    if (!apController)
-        return;
-
-    CGS_ASSERT(apController->GetEffectID() == 0, "Cound't attach controller ");
-    if (apController->GetEffectID() == 0)
+    // ARTIST 0x826858D0: no null test; a switch whose default streams the controller id.
+    switch (apController->GetEffectID())
+    {
+    case 0:
         mpPhysicsControl = static_cast<Engines::PhysicsControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_3DCARPOSITION_CPP_FILE, 224);
+        break;
+    }
 }
 
 bool Car3DControl::Prepare(CgsSound::Logic::State* apState)

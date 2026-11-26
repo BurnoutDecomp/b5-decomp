@@ -5,6 +5,9 @@
 #include <algorithm>
 #include <cmath>
 
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_SPEEDSTREAMEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Environment/BrnSpeedStreamEffect.cpp"
+
 // =============================================================================
 // BrnSound::Vehicles::Environment::SpeedStreamControl — out-of-line deleting-
 // destructor body.
@@ -54,9 +57,16 @@ s32 SpeedStreamControl::GetController(s32 aiSlot)
 
 void SpeedStreamControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController && apController->GetEffectID() == 0, "Unexpected control.");
-    if (apController && apController->GetEffectID() == 0)
+    // ARTIST 0x82686358: no null test; a switch whose default asserts.
+    switch (apController->GetEffectID())
+    {
+    case 0:
         mpPhysicsControl = static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_AT(false, "Unexpected control.", BRN_SPEEDSTREAMEFFECT_CPP_FILE, 122);
+        break;
+    }
 }
 
 bool SpeedStreamControl::Attach()

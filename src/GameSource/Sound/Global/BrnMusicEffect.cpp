@@ -26,6 +26,9 @@
 #include <cstdlib>
 #include <cstring>
 
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_MUSICEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Global/BrnMusicEffect.cpp"
+
 namespace BrnSound
 {
 namespace Logic
@@ -425,13 +428,16 @@ s32 MusicEffect::GetController(s32 aiIndex)
 // pointer, expressed here as the ordinary derived cast.
 void MusicEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != 0, "lpController");
-    if (!apController)
-        return;
-    if (apController->GetEffectID() == 0)
+    // ARTIST 0x826873A0: no null test; a switch whose default asserts (cpp:483).
+    switch (apController->GetEffectID())
+    {
+    case 0:
         mpMixerControl = static_cast<MixerControl*>(apController);
-    else
-        CGS_ASSERT(false, "Unexpected control.");
+        break;
+    default:
+        CGS_ASSERT_AT(false, "Unexpected control.", BRN_MUSICEFFECT_CPP_FILE, 483);
+        break;
+    }
 }
 
 bool MusicEffect::Attach()

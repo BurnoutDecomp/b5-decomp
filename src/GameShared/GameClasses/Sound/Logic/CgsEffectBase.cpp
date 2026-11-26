@@ -101,18 +101,6 @@ bool EffectBase::Prepare(State* apState)
     return true;                                                // li r3, 1
 }
 
-s32 EffectBase::GetStateId() const
-{
-    // Effect ids are packed by StateManager::CreateEffectFromRegistry as
-    //   state-manager id : 8, instance : 5, effect : 7, object/control : 4.
-    // ARTIST's inlined reads load the halfword at EffectBase+0x14 and keep its
-    // low byte (for example PhysicsControl::SetupLoadData @0x826E3628), which
-    // is bits 16..23 of this numeric id -- the owning state-manager id.  The
-    // State::miStateInstType field is a different value (the per-manager state
-    // subtype, commonly zero) and must not arbitrate player/AI effect paths.
-    return (miObjectId >> 16) & 0xFF;
-}
-
 s32 EffectBase::GetInstanceId() const
 {
     return mpState ? mpState->miInstNum : -1;

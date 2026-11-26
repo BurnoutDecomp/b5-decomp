@@ -72,12 +72,12 @@ namespace Props
         // ---- wave-8b bodied ledger functions ------------------------------------------
         // @0x822CCB60: enqueue an add-physical-prop request.
         void AddPropInstance(BrnWorld::PropEntityID lEntityId, s32 liPropTypeId, s32 liSlot,
-                             Matrix44Affine lTransform, bool lbAddExtraComOffset,
+                             const Matrix44Affine& lTransform, bool lbAddExtraComOffset,
                              BrnWorld::EPropState leState);
 
         // @0x822CCCA0: enqueue an add-physical-part request.
         void AddPartInstance(BrnWorld::PropEntityID lEntityId, s32 liPropTypeId, s32 liPartId,
-                             Matrix44Affine lTransform, s32 liSlot);
+                             const Matrix44Affine& lTransform, s32 liSlot);
 
         // @0x822CCE20: enqueue a remove-physical-part request.
         void RemovePartInstance(BrnWorld::PropEntityID lEntityId, s32 liPhysicalIndex);

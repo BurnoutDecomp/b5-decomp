@@ -19,6 +19,10 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"
 #include <cmath>
 #include <vectorintrinsics.h>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_DEFORMATIONEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Deformation/BrnDeformationEffect.cpp"
 
 namespace BrnSound
 {
@@ -125,13 +129,16 @@ s32 DeformationEffect::GetController(s32 aiSlot)
 // ---------------------------------------------------------------------------
 void DeformationEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    if ((apController->GetId() & KI_CONTROLLER_CLASS_MASK) != 0)
+    // ARTIST 0x82685740: no null test; a switch whose default streams the controller id.
+    switch (apController->GetEffectID())
     {
-        CGS_ASSERT(false, "Cound't attach controller ");
-    }
-    else
-    {
+    case 0:
         mpPhysicsControl = static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_DEFORMATIONEFFECT_CPP_FILE, 128);
+        break;
     }
 }
 

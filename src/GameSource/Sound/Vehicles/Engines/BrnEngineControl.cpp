@@ -9,6 +9,9 @@
 #include <algorithm>
 #include <cmath>
 
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_ENGINECONTROL_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnEngineControl.cpp"
+
 // =============================================================================
 // BrnSound::Vehicles::Engines::EngineControl -- out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnEngineControl.h for the
@@ -98,23 +101,48 @@ EngineControl::~EngineControl()
 
 s32 EngineControl::GetController(s32 aiSlot)
 {
-    static const s32 kaiControllers[] = { 0, 3, 2, 7, 1 };
-    return (aiSlot >= 0 && aiSlot < static_cast<s32>(sizeof(kaiControllers) / sizeof(kaiControllers[0])))
-        ? kaiControllers[aiSlot] : -1;
+    // ARTIST 0x826845C0: a switch over the controller slot (unsigned range test).
+    switch (aiSlot)
+    {
+    case 0:
+        return 0;
+    case 1:
+        return 3;
+    case 2:
+        return 2;
+    case 3:
+        return 7;
+    case 4:
+        return 1;
+    default:
+        return -1;
+    }
 }
 
 void EngineControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
+    // ARTIST 0x82684628: the case bodies sit in this order after the jump table (0, 2, 3, 7, 1,
+    // then the default's assert on cpp:195).
     switch (apController->GetEffectID())
     {
-    case 0: mpPhysicsControl = static_cast<PhysicsControl*>(apController); return;
-    case 1: mpWheelControl = static_cast<BrnSound::Vehicles::Wheels::WheelControl*>(apController); return;
-    case 2: mpShiftControl = static_cast<ShiftControl*>(apController); return;
-    case 3: mpClutchControl = static_cast<ClutchControl*>(apController); return;
-    case 7: mpCar3DControl = static_cast<BrnSound::Vehicles::Car3DControl*>(apController); return;
+    case 0:
+        mpPhysicsControl = static_cast<PhysicsControl*>(apController);
+        break;
+    case 2:
+        mpShiftControl = static_cast<ShiftControl*>(apController);
+        break;
+    case 3:
+        mpClutchControl = static_cast<ClutchControl*>(apController);
+        break;
+    case 7:
+        mpCar3DControl = static_cast<BrnSound::Vehicles::Car3DControl*>(apController);
+        break;
+    case 1:
+        mpWheelControl = static_cast<BrnSound::Vehicles::Wheels::WheelControl*>(apController);
+        break;
     default:
-        CGS_ASSERT(false, "false");
-        return;
+        CGS_ASSERT_AT(false, "false", BRN_ENGINECONTROL_CPP_FILE, 195);
+        break;
     }
 }
 

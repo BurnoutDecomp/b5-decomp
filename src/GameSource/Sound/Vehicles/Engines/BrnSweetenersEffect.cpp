@@ -9,6 +9,9 @@
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_SWEETENERSEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnSweetenersEffect.cpp"
 #include <cmath>
 
 namespace BrnSound
@@ -79,19 +82,21 @@ BrnSound::Logic::IResourceRequester* SweetenersEffect::CreateObjec(u32 flavour)
 
 s32 SweetenersEffect::GetController(s32 aiSlot)
 {
-    if (aiSlot == 0)
+    // ARTIST 0x82685558: a switch over the controller slot (unsigned range test).
+    switch (aiSlot)
+    {
+    case 0:
         return 0;
-    if (aiSlot == 1)
+    case 1:
         return 2;
-    return -1;
+    default:
+        return -1;
+    }
 }
 
 void SweetenersEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != 0, "apController");
-    if (!apController)
-        return;
-
+    // ARTIST 0x82685580 neither asserts nor tests apController before the switch.
     switch (apController->GetEffectID())
     {
     case 0:
@@ -101,7 +106,7 @@ void SweetenersEffect::AttachController(CgsSound::Logic::EffectBase* apControlle
         mpShiftingControl = static_cast<ShiftControl*>(apController);
         break;
     default:
-        CGS_ASSERT(false, "Unexpected control.");
+        CGS_ASSERT_AT(false, "Unexpected control.", BRN_SWEETENERSEFFECT_CPP_FILE, 145);
         break;
     }
 }
@@ -254,7 +259,7 @@ bool SweetenersEffect::SelectSampleIndex(eSweetenerBankElement aeElement,
 {
     CGS_ASSERT(aeElement < E_SWEETENER_BANK_ELEMENT_COUNT,
         CGS_ASSERT_MESSAGE_AT("E_SWEETENER_BANK_ELEMENT_COUNT > leElement",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnSweetenersEffect.cpp", 798));
+            BRN_SWEETENERSEFFECT_CPP_FILE, 798));
 
     const SweetenerInfo& lrInfo = maSweetenerInfo[aeElement];
     if (lrInfo.mi16FirstIndex != -1)

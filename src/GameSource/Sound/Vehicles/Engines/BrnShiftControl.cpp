@@ -68,8 +68,18 @@ CgsSound::Logic::EffectControl* ShiftControl::CreateObject(u32 luType)
 
 s32 ShiftControl::GetController(s32 aiSlot)
 {
-    static const s32 kaiControllers[] = { 0, 4, 5 };
-    return aiSlot >= 0 && aiSlot < 3 ? kaiControllers[aiSlot] : -1;
+    // ARTIST 0x826848F0: a switch over the controller slot (unsigned range test).
+    switch (aiSlot)
+    {
+    case 0:
+        return 0;
+    case 1:
+        return 4;
+    case 2:
+        return 5;
+    default:
+        return -1;
+    }
 }
 
 void ShiftControl::AttachController(CgsSound::Logic::EffectBase* apController)

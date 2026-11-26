@@ -8,6 +8,9 @@
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_AMBIENCEEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Environment/BrnAmbienceEffect.cpp"
+
 // =============================================================================
 // BrnSound::Vehicles::Environment::AmbienceEffect -- out-of-line bodies.
 // =============================================================================
@@ -90,9 +93,16 @@ s32 AmbienceEffect::GetController(s32 aiIndex)
 
 void AmbienceEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController->GetEffectID() == 16, "Unexpected control.");
-    if (apController->GetEffectID() == 16)
+    // ARTIST 0x826861A0: no null test; a switch whose default asserts.
+    switch (apController->GetEffectID())
+    {
+    case 16:
         mpAmbienceControl = static_cast<AmbienceControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_AT(false, "Unexpected control.", BRN_AMBIENCEEFFECT_CPP_FILE, 448);
+        break;
+    }
 }
 
 // ---------------------------------------------------------------------------

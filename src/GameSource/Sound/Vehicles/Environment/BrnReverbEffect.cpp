@@ -87,11 +87,16 @@ bool ReverbEffect::Attach()
 // Controller slot 0 is the enclosure control, slot 1 the physics control.
 s32 ReverbEffect::GetController(s32 aiIndex)
 {
-    if (aiIndex == 0)
+    // ARTIST 0x82686460: a switch over the controller slot (unsigned range test).
+    switch (aiIndex)
+    {
+    case 0:
         return 10;
-    if (aiIndex == 1)
+    case 1:
         return 0;
-    return -1;
+    default:
+        return -1;
+    }
 }
 
 void ReverbEffect::AttachController(CgsSound::Logic::EffectBase* apController)

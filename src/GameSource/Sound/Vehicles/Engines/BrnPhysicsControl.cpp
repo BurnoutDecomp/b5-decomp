@@ -15,6 +15,10 @@
 #include <cmath>
 #include <cstdio>
 #include <algorithm>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_PHYSICSCONTROL_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnPhysicsControl.cpp"
 
 // The console's global Engine Info flag is registered as a bool-tagged alias by
 // ARTIST OnActivate but consumers test the same word as an int.
@@ -327,28 +331,39 @@ PhysicsControl::~PhysicsControl()
 
 s32 PhysicsControl::GetController(s32 aiSlot)
 {
-    if (aiSlot == 0)
+    // ARTIST 0x82684388: slot 2 has no controller; any other slot streams its index (cpp:408).
+    switch (aiSlot)
+    {
+    case 0:
         return 7;
-    if (aiSlot == 1)
+    case 1:
         return 1;
-    CGS_ASSERT(aiSlot < 3, "liIndex < 3");
+    case 2:
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Cound't get effect controller " << aiSlot,
+                             BRN_PHYSICSCONTROL_CPP_FILE, 408);
+        break;
+    }
     return -1;
 }
 
 void PhysicsControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    const s32 liControllerId = apController->GetEffectID();
-    if (liControllerId == 1)
+    // ARTIST 0x82684448: no null test; a switch whose default streams the controller id.
+    switch (apController->GetEffectID())
     {
+    case 1:
         mpWheelControl = static_cast<BrnSound::Vehicles::Wheels::WheelControl*>(apController);
-        return;
-    }
-    if (liControllerId == 7)
-    {
+        break;
+    case 7:
         mp3dCarControl = static_cast<BrnSound::Vehicles::Car3DControl*>(apController);
-        return;
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_PHYSICSCONTROL_CPP_FILE, 446);
+        break;
     }
-    CGS_ASSERT(false, "Cound't attach controller ");
 }
 
 void PhysicsControl::SetupLoadData()

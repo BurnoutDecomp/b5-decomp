@@ -10,6 +10,10 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_WHINEEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnWhineEffect.cpp"
 
 namespace BrnSound
 {
@@ -50,12 +54,17 @@ s32 WhineEffect::GetController(s32 aiSlot)
 
 void WhineEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    if (apController->GetEffectID() != 0)
+    // ARTIST 0x82685460: a switch whose default streams the controller id (cpp:161).
+    switch (apController->GetEffectID())
     {
-        CGS_ASSERT(false, "Cound't attach controller ");
-        return;
+    case 0:
+        mpPhysicsControl = static_cast<PhysicsControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_WHINEEFFECT_CPP_FILE, 161);
+        break;
     }
-    mpPhysicsControl = static_cast<PhysicsControl*>(apController);
 }
 
 void WhineEffect::SetupLoadData()
@@ -111,9 +120,11 @@ bool WhineEffect::Attach()
     return true;
 }
 
+// 0x826E4B00 (PS3 0x8A2078): the voice runs only while the effect is enabled (lbz +0x2C,
+// EffectBase::mbEnabled through the DWARF IsEnabled(), CgsEffectBase.h:571).
 void WhineEffect::UpdateParams(f32)
 {
-    if (mbHasLoadedData)
+    if (IsEnabled())
         mWhineVoice.Update();
 }
 

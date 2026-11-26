@@ -16,6 +16,9 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
 
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_CRASHSTREAMEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Environment/BrnCrashStreamEffect.cpp"
+
 // =============================================================================
 // BrnSound::Vehicles::Environment::CrashStreamEffect -- out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Recon'd function set:
@@ -70,10 +73,16 @@ s32 CrashStreamEffect::GetController(s32 aiIndex)
 
 void CrashStreamEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != 0 && apController->GetEffectID() == 0,
-               "Unexpected control.");
-    if (apController && apController->GetEffectID() == 0)
+    // ARTIST 0x826862B0: no null test; a switch whose default asserts.
+    switch (apController->GetEffectID())
+    {
+    case 0:
         mpPhysicsControl = static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_AT(false, "Unexpected control.", BRN_CRASHSTREAMEFFECT_CPP_FILE, 114);
+        break;
+    }
 }
 
 // ---------------------------------------------------------------------------

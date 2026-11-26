@@ -131,12 +131,24 @@ HybridExhaustControl::~HybridExhaustControl()
 
 s32 HybridExhaustControl::GetController(s32 aiSlot)
 {
-    static const s32 kaiControllers[] = { 0, 4, 2, 3, 12 };
-    if (aiSlot < 0 || aiSlot >= static_cast<s32>(sizeof(kaiControllers) / sizeof(kaiControllers[0])))
-        return -1;
-    if (aiSlot == 4 && GetStateId() != 1)
-        return -1;
-    return kaiControllers[aiSlot];
+    // ARTIST 0x826849B0: a switch over the controller slot; slot 4 (the hybrid engine control,
+    // 12) exists only for state manager 1.
+    switch (aiSlot)
+    {
+    case 0:
+        return 0;
+    case 1:
+        return 4;
+    case 2:
+        return 2;
+    case 3:
+        return 3;
+    case 4:
+        if (GetStateId() == 1)
+            return 12;
+        break;
+    }
+    return -1;
 }
 
 void HybridExhaustControl::AttachController(CgsSound::Logic::EffectBase* apController)
@@ -156,9 +168,6 @@ void HybridExhaustControl::AttachController(CgsSound::Logic::EffectBase* apContr
     case 10:
     case 11:
     case 12:
-        break;
-    default:
-        CGS_ASSERT(false, "I don't know how to handle attaching this type of EffectBase.");
         break;
     }
 }

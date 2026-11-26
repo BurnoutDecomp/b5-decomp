@@ -17,6 +17,9 @@
 #include <cmath>
 #include <cstdlib>
 
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_EMITTEREFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/World/BrnEmitterEffect.cpp"
+
 namespace BrnSound
 {
 namespace Logic
@@ -90,9 +93,16 @@ s32 EmitterEffect::GetController(s32 aiIndex)
 // the controller without a null test.
 void EmitterEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT((apController->GetId() & 0x7F0) == 0, "Unexpected control.");
-    if ((apController->GetId() & 0x7F0) == 0)
+    // ARTIST 0x826866A8: no null test; a switch whose default asserts.
+    switch (apController->GetEffectID())
+    {
+    case 0:
         mp3dControl = static_cast<Emitter3dControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_AT(false, "Unexpected control.", BRN_EMITTEREFFECT_CPP_FILE, 138);
+        break;
+    }
 }
 
 const BrnSound::World::StaticSoundEntity& EmitterEffect::GetSoundEntity() const

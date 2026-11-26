@@ -15,6 +15,10 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_PASSBYEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Passby/BrnPassbyEffect.cpp"
 
 // =============================================================================
 // BrnSound::Logic::Passby::Passby3DControl / PassbyEffect -- out-of-line bodies.
@@ -251,12 +255,17 @@ s32 PassbyEffect::GetController(s32 aiIndex)
 // ---------------------------------------------------------------------------
 void PassbyEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    if (apController->GetEffectID() != 0)
+    // ARTIST 0x82689048: no null test; a switch whose default streams the controller id.
+    switch (apController->GetEffectID())
     {
-        CGS_ASSERT(false, "Cound't attach controller ");
-        return;
+    case 0:
+        mpPassby3DControl = static_cast<Passby3DControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Cound't attach controller " << apController->GetId(),
+                             BRN_PASSBYEFFECT_CPP_FILE, 146);
+        break;
     }
-    mpPassby3DControl = static_cast<Passby3DControl*>(apController);
 }
 
 // ---------------------------------------------------------------------------
