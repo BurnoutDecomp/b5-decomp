@@ -97,7 +97,9 @@ namespace rw { namespace core { namespace filesys {
         DWORD luRead;
         if (!ReadFile(lp->mpHandle, lpBuffer, luSize, &luRead, 0))
         {
-            if (!gpFileSysManager->mpErrorHandler(GetLastError())) Sleep(INFINITE);
+            // The handler is read before GetLastError (ARTIST r30 at 0x82BBDAE8): the callee
+            // expression Manager::GetInstance()->GetErrorHandler() (DWARF manager.h:92/:134).
+            if (!Manager::GetInstance()->GetErrorHandler()(GetLastError())) Sleep(INFINITE);
         }
         lp->muPosition += luRead;
         return luRead;
@@ -121,9 +123,10 @@ namespace rw { namespace core { namespace filesys {
         LARGE_INTEGER lPosition, lResult;
         lPosition.QuadPart = static_cast<LONGLONG>(luPosition);
         u64 luResult;
-        if (SetFilePointerEx(lp->mpHandle, lPosition, &lResult, FILE_BEGIN))
+        if (!SetFilePointerEx(lp->mpHandle, lPosition, &lResult, FILE_BEGIN))
+            luResult = static_cast<u32>(SetFilePointer(lp->mpHandle, 0, 0, FILE_CURRENT));
+        else
             luResult = static_cast<u64>(lResult.QuadPart);
-        else luResult = static_cast<u32>(SetFilePointer(lp->mpHandle, 0, 0, FILE_CURRENT));
         lp->muPosition = luResult;
         return luResult;
     }

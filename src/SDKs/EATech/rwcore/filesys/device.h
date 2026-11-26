@@ -198,6 +198,12 @@ namespace rw
                     mThreadParameters = lrParameters;
                 }
 
+                // DecFIGS manager.h:134; no out-of-line copy in ARTIST.
+                bool (*GetErrorHandler())(s32)
+                {
+                    return mpErrorHandler;
+                }
+
                 void SetErrorHandler(bool (*lpErrorHandler)(s32))
                 {
                     mpErrorHandler = lpErrorHandler;

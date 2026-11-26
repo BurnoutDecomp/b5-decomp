@@ -25,6 +25,9 @@
 // ===========================================================================
 
 #include "types.hpp"
+#include <cstddef>   // size_t
+#include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager
+#include "SDKs/EATech/Apt/DogmaAllocator.h"       // DOGMA_PoolManager::Allocate/Deallocate
 
 struct AptFloatArrayCXForm;
 struct AptUint32CXForm;
@@ -132,6 +135,12 @@ struct AptCXForm
     AptCXForm(AptCXForm* pCXForm);
     AptCXForm(AptFloatArrayCXForm* pFloatCXForm);
     AptCXForm(AptUint32CXForm* pUintCXForm);
+
+    // Pool-allocated like AptMatrix: ARTIST's new-expressions call DOGMA_PoolManager::Allocate
+    // (pool, 0x28) and null-test the block before the constructor (AptRenderItem::
+    // GetColorMatrixWritable 0x82AE52BC, CopyRenderDataFrom 0x82AE5504).
+    static void* operator new(size_t size)             { return gpNonGCPoolManager->Allocate(size); }
+    static void  operator delete(void* p, size_t size) { gpNonGCPoolManager->Deallocate(p, size); }
 
     void AptCXFormCopy(const AptCXForm* pCXForm);
     void AptFloatArrayCXFormCopy(const AptFloatArrayCXForm* pCXForm);

@@ -254,16 +254,10 @@ namespace ICE
     // ------------------------------------------------------------------------
     void ICEWidgetMenu::MoveUp()
     {
-        const s32 liSelected = miSelectedRow;
-        if (liSelected <= 0)
-        {
-            // At (or above) the top: wrap to the last non-empty row.
-            miSelectedRow = GetNumNonEmptyItems() - 1;
-        }
+        if (miSelectedRow > 0)
+            miSelectedRow--;
         else
-        {
-            miSelectedRow = liSelected - 1;
-        }
+            miSelectedRow = GetNumNonEmptyItems() - 1;
     }
 
     // ------------------------------------------------------------------------

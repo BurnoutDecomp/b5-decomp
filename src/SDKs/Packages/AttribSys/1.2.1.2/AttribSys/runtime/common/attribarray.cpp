@@ -12,6 +12,8 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+#define CGS_ARTIST_ATTRIBHASHMAP_FILE "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/common/attribhashmap.h"
+
 namespace Attrib
 {
 
@@ -111,8 +113,11 @@ Array::~Array()
 
     const TypeDesc* lpTypeDesc = this->GetTypeDesc();
     ITypeHandler* lpHandler = lpTypeDesc->mHandler;
-    CGS_ASSERT(lpHandler != NULL,
-               "Attrib::Array requires a type handler for reference types.");
+    // ARTIST 0x82807988..0x82807990: the assert sits in attribhashmap.h at line 214 (DWARF
+    // attribhashmap.h:209 declares ~Array; its body is the header's).
+    CGS_ASSERT_AT(lpHandler != NULL,
+                  "Attrib::Array requires a type handler for reference types.",
+                  CGS_ARTIST_ATTRIBHASHMAP_FILE, 214);
 
     u8* lpBase = reinterpret_cast<u8*>(this);
     void** lpElement =

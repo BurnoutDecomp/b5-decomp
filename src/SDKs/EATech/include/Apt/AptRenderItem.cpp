@@ -131,8 +131,7 @@ AptRenderItem::AptRenderItem(const AptRenderItem* pSource, int nCreatedOnTick, b
     }
     if (pSource->mpColorMatrix)
     {
-        AptCXForm* p = static_cast<AptCXForm*>(gpNonGCPoolManager->Allocate(sizeof(AptCXForm)));
-        mpColorMatrix = p ? new (p) AptCXForm(pSource->mpColorMatrix) : 0;
+        mpColorMatrix = new AptCXForm(pSource->mpColorMatrix);   // pool class operator new
     }
 
     // Extended copy: mask, depth, manager links + the source's state-flag bits.
@@ -167,73 +166,66 @@ AptRenderItem::AptRenderItem(const AptRenderItem* pSource, int nCreatedOnTick, b
 
 // SetMaskMatrix @0x82AE52F8 -- lazily (de)allocate + copy the mask position matrix
 // (null clears + frees it).
+// ARTIST tests with the record forms (0x82AE5310 `cmplwi r4,0`); the new matrix is
+// value-initialised (memset 0x82AE5344) before the copy.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptRenderItem::SetMaskMatrix(const AptMatrix* pMatrix)
 {
-    if (mpMaskPositionMatrix)
+    if (!mpMaskPositionMatrix && pMatrix)
     {
-        if (pMatrix)
-        {
-            mpMaskPositionMatrix->AptMatrixCopy(pMatrix);
-        }
-        else
-        {
-            gpNonGCPoolManager->Deallocate(mpMaskPositionMatrix, sizeof(AptMatrix));
-            mpMaskPositionMatrix = 0;
-        }
+        mpMaskPositionMatrix = new AptMatrix();
+        mpMaskPositionMatrix->AptMatrixCopy(pMatrix);
     }
-    else if (pMatrix)
+    else if (mpMaskPositionMatrix && pMatrix)
     {
-        AptMatrix* p = static_cast<AptMatrix*>(gpNonGCPoolManager->Allocate(sizeof(AptMatrix)));
-        if (p)
-        {
-            p->a = 0.0f; p->b = 0.0f; p->c = 0.0f; p->d = 0.0f; p->tx = 0.0f; p->ty = 0.0f;
-            p->AptMatrixCopy(pMatrix);
-        }
-        mpMaskPositionMatrix = p;
+        mpMaskPositionMatrix->AptMatrixCopy(pMatrix);
+    }
+    else if (mpMaskPositionMatrix && !pMatrix)
+    {
+        delete mpMaskPositionMatrix;
+        mpMaskPositionMatrix = 0;
     }
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // CopyRenderDataFrom @0x82AE5400 -- transfer pSource's visual state onto this item.
+// ARTIST tests with the record forms (0x82AE5468 `cmplwi r11,0`).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptRenderItem::CopyRenderDataFrom(const AptRenderItem* pSource)
 {
-    // Position matrix: copy the source's (lazy-alloc if we have none), or -- when the
-    // source has none -- reset ours to identity.
     if (pSource->mpPositionMatrix)
     {
         if (!mpPositionMatrix)
-        {
-            AptMatrix* p = static_cast<AptMatrix*>(gpNonGCPoolManager->Allocate(sizeof(AptMatrix)));
-            if (p) { p->a = 0.0f; p->b = 0.0f; p->c = 0.0f; p->d = 0.0f; p->tx = 0.0f; p->ty = 0.0f; }
-            mpPositionMatrix = p;
-        }
-        if (mpPositionMatrix)
-            mpPositionMatrix->AptMatrixCopy(pSource->mpPositionMatrix);
+            mpPositionMatrix = new AptMatrix();
+        mpPositionMatrix->AptMatrixCopy(pSource->mpPositionMatrix);
     }
     else if (mpPositionMatrix)
     {
         mpPositionMatrix->AptMatrixCopy(&gAptIdentityMatrix);   // X360 flt_8324E2B0
     }
 
-    // Colour matrix: only the lazy-alloc path copies the source (the X360 leaves an
-    // existing colour matrix untouched when the source also has one); when the source
-    // has none, reset ours to the null colour transform.
     if (pSource->mpColorMatrix)
     {
         if (!mpColorMatrix)
-        {
-            AptCXForm* p = static_cast<AptCXForm*>(gpNonGCPoolManager->Allocate(sizeof(AptCXForm)));
-            mpColorMatrix = p ? new (p) AptCXForm(pSource->mpColorMatrix) : 0;
-        }
+            mpColorMatrix = new AptCXForm(pSource->mpColorMatrix);
     }
     else if (mpColorMatrix)
     {
         mpColorMatrix->AptCXFormCopy(&gAptNullCXForm);   // X360 off_82F73388
     }
 
-    // Carry the clip depth + the isVisible flag (bit 31) from the source.
     mClipDepth = pSource->mClipDepth;
-    mFlags = (mFlags & ~0x80000000u) | (pSource->mFlags & 0x80000000u);
+    mbIsVisible = pSource->mbIsVisible;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // dtor @0x80F860 (X360 twin @0x82AEBCE0 -- manager-chain teardown decompiled from
 // the ARTIST asm).
@@ -346,30 +338,37 @@ const AptCXForm* AptRenderItem::GetColorMatrixConst() const
 
 const AptMatrix* AptRenderItem::GetMaskPositionMatrixConst() const { return mpMaskPositionMatrix; }
 
+// ARTIST: value-initialised matrix (memset 0x82AE5228) seeded with identity; record-form test
+// 0x82AE51FC.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 AptMatrix* AptRenderItem::GetPositionMatrixWritable()
 {
     if (mpPositionMatrix)
         return mpPositionMatrix;
-    AptMatrix* p = static_cast<AptMatrix*>(gpNonGCPoolManager->Allocate(sizeof(AptMatrix)));
-    // console 0x82AE51E0: memset(0) then copies the IDENTITY AptMatrix (flt_8324E2B0 ==
-    // gAptIdentityMatrix): a=d=1, the rest 0. A zero 2x3 affine would collapse every
-    // vertex to the origin -- unlike the const getters + the clone/SetMask lazy-allocs
-    // (which copy a source over the zeros), this getter has no follow-up copy, so it must
-    // seed identity itself (the sibling GetColorMatrixWritable likewise copies identity).
-    p->a = 1.0f; p->b = 0.0f; p->c = 0.0f; p->d = 1.0f; p->tx = 0.0f; p->ty = 0.0f;
-    mpPositionMatrix = p;
-    return p;
+    mpPositionMatrix = new AptMatrix();
+    mpPositionMatrix->AptMatrixCopy(&gAptIdentityMatrix);   // X360 flt_8324E2B0
+    return mpPositionMatrix;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
+// ARTIST: pool new-expression with a null test before the copy constructor (0x82AE52BC..D8).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 AptCXForm* AptRenderItem::GetColorMatrixWritable()
 {
     if (mpColorMatrix)
         return mpColorMatrix;
-    AptCXForm* p = static_cast<AptCXForm*>(gpNonGCPoolManager->Allocate(sizeof(AptCXForm)));
-    new (p) AptCXForm(&gIdentityCXForm);   // copy-from-pointer ctor (console: AptCXForm(v3,&gIdentityCXForm))
-    mpColorMatrix = p;
-    return p;
+    mpColorMatrix = new AptCXForm(&gIdentityCXForm);   // X360 off_82F73388
+    return mpColorMatrix;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---- depth / clip depth ---------------------------------------------------
 
