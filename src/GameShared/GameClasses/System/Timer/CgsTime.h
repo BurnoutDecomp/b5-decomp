@@ -2,15 +2,19 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT_STREAM_AT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#define CGS_ARTIST_CGSTIME_FILE "..\\..\\..\\GameShared\\GameClasses\\System/Timer/CgsTime.h"
 
 // CgsSystem::Time - a lightweight game-time value type: an integer second count plus a
 // normalised [0,1) sub-second fraction. Defined entirely inline (a header-only value
 // class). Layout + API authoritative from DecFIGS DWARF (System/Timer/CgsTime.h:33):
 // miSeconds @ +0 (int32), mfFraction @ +4 (float32); full inline logic matches the
 // LegacySrc partial source source verbatim (the X360 binary agrees, including operator-'s
-// clamp-fraction-to-0 branch). The original streamed the assert message through a
-// CgsDev::StrStream temporary; that lowers to the project's CGS_ASSERT.
+// clamp-fraction-to-0 branch). Every assert streams its message through a CgsDev::StrStream, as
+// LegacySrc expands them (CgsTime.h:115/137/157/188/205/222/316/329) and ARTIST shows it
+// (SetFloatVal 0x821F2140: StrStream on gpcMessageBuffer, Append "Time out of range\n", FireAssert
+// on the path at 0x82002288, line 329).
 //
 // This TU's six binary-recovered functions are operator=(f32), operator+, operator-,
 // operator+=, operator-=, SetFraction. The remaining inline bodies (ctors, copy/assign,
@@ -80,7 +84,7 @@ namespace CgsSystem
     // X360 @0x821F1FA0: 0x821F1FC0 fcmpu t, 0.0 (flt_82001CC0) ; 0x821F1FC4 bge -> past the assert.
     inline Time::Time(f32 lfTime)
     {
-        CGS_ASSERT(!(lfTime < 0.f), "Time out of range\n");   // CgsTime.h:115
+        CGS_ASSERT_STREAM_AT(!(lfTime < 0.f), "Time out of range\n", CGS_ARTIST_CGSTIME_FILE, 115);
         miSeconds  = static_cast<s32>(lfTime);
         mfFraction = static_cast<f32>(lfTime - static_cast<f32>(miSeconds));
     }
@@ -105,7 +109,7 @@ namespace CgsSystem
     inline Time&
     Time::operator=(f32 lfTime)
     {
-        CGS_ASSERT(!(lfTime < 0.f), "Time out of range\n");   // CgsTime.h:137
+        CGS_ASSERT_STREAM_AT(!(lfTime < 0.f), "Time out of range\n", CGS_ARTIST_CGSTIME_FILE, 137);
         miSeconds  = static_cast<s32>(lfTime);
         mfFraction = static_cast<f32>(lfTime - static_cast<f32>(miSeconds));
         return *this;
@@ -126,7 +130,7 @@ namespace CgsSystem
             lNewTime.miSeconds++;
         }
 
-        CGS_ASSERT(lNewTime.mfFraction < 1.f, "Fraction out of range\n");   // CgsTime.h:157
+        CGS_ASSERT_STREAM_AT(lNewTime.mfFraction < 1.f, "Fraction out of range\n", CGS_ARTIST_CGSTIME_FILE, 157);
         return lNewTime;
     }
 
@@ -152,7 +156,7 @@ namespace CgsSystem
             }
         }
 
-        CGS_ASSERT(lNewTime.mfFraction < 1.f, "Fraction out of range\n");   // CgsTime.h:188
+        CGS_ASSERT_STREAM_AT(lNewTime.mfFraction < 1.f, "Fraction out of range\n", CGS_ARTIST_CGSTIME_FILE, 188);
         return lNewTime;
     }
 
@@ -170,7 +174,7 @@ namespace CgsSystem
             miSeconds++;
         }
 
-        CGS_ASSERT(mfFraction < 1.f, "Fraction out of range\n");   // CgsTime.h:205
+        CGS_ASSERT_STREAM_AT(mfFraction < 1.f, "Fraction out of range\n", CGS_ARTIST_CGSTIME_FILE, 205);
         return *this;
     }
 
@@ -186,14 +190,14 @@ namespace CgsSystem
             miSeconds--;
         }
 
-        CGS_ASSERT(mfFraction < 1.f, "Fraction out of range\n");   // CgsTime.h:222
+        CGS_ASSERT_STREAM_AT(mfFraction < 1.f, "Fraction out of range\n", CGS_ARTIST_CGSTIME_FILE, 222);
         return *this;
     }
 
     inline void
     Time::SetFraction(f32 lfFraction)
     {
-        CGS_ASSERT((lfFraction >= 0.f) && (lfFraction < 1.f), "Fraction out of range\n");   // CgsTime.h:316
+        CGS_ASSERT_STREAM_AT((lfFraction >= 0.f) && (lfFraction < 1.f), "Fraction out of range\n", CGS_ARTIST_CGSTIME_FILE, 316);
         mfFraction = lfFraction;
     }
 
@@ -263,8 +267,10 @@ namespace CgsSystem
     inline void
     Time::SetFloatVal(f32 lfFloatVal)
     {
-        CGS_ASSERT(!(lfFloatVal < 0.f), "Time out of range\n");   // CgsTime.h:329
+        CGS_ASSERT_STREAM_AT(!(lfFloatVal < 0.f), "Time out of range\n", CGS_ARTIST_CGSTIME_FILE, 329);
         miSeconds  = static_cast<s32>(lfFloatVal);
         mfFraction = static_cast<f32>(lfFloatVal - static_cast<f32>(miSeconds));
     }
 }
+
+#undef CGS_ARTIST_CGSTIME_FILE
