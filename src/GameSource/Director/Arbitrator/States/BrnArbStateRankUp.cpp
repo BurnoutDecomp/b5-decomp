@@ -140,7 +140,7 @@ namespace BrnDirector
         }
 
         // The take is "prepared" only once the manager no longer has it queued.
-        return !mIceCam.IsWaitingToPrepare();
+        return !mIceCam.IsBehaviourWaitingToPrepare();
     }
 
     // ------------------------------------------------------------------------

@@ -164,10 +164,12 @@ namespace BrnDirector
         // site as the four stores Set's E_PLAYER_CAR case makes (@0x8252D838..0x8252D850), e.g. the
         // tail of BehaviourBystanderCam::Construct (@0x82243C68..0x82243C74: +0xC = 1, +0 = 0,
         // +8 = 0, +4 = -1).
+        // Statement order from LegacySrc BrnVehicleRef.h:196 (mbSet first): ARTIST's register
+        // choice for the shared 1 / 0 constants follows it (ArbStatePostEvent::Prepare 0x8226E2EC..F4).
         void SetToPlayer()
         {
-            meType         = E_PLAYER_CAR;
             mbSet          = true;
+            meType         = E_PLAYER_CAR;
             muRef          = 0;
             miRaceCarIndex = -1;
         }

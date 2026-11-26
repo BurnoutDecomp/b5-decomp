@@ -27,7 +27,7 @@ namespace BrnDirector
 {
     // (The two out-of-line BehaviourHandle<> template bodies this file used to carry -- for
     // this state's own nested handle copy -- are gone: the state now uses the SHARED
-    // Camera::BehaviourHandle<>, whose GetCamera / IsWaitingToPrepare are bodied in
+    // Camera::BehaviourHandle<>, whose GetCamera / IsBehaviourWaitingToPrepare are bodied in
     // BrnBehaviourManager.h against the manager's real helper pool.)
 
     // ------------------------------------------------------------------------
@@ -52,14 +52,13 @@ namespace BrnDirector
     //
     //     if ( meState == E_STATE_ACTIVE || meState == E_STATE_CHANGING_TO_ROAMING )
     //         return true;                                   // already up
-    //     const bool lbWasAllocated = mRoadRunnerCam.IsAllocated();
     //     meState = E_STATE_PREPARING;
-    //     if ( !lbWasAllocated )
+    //     if ( !mRoadRunnerCam.IsAllocated() )
     //         lrSharedInfo.mpBehaviourManager->NewBehaviour<BehaviourRoadRunner>(
     //             mRoadRunnerCam, this, 0, 1 );              // owner = this state, refLimit 1
-    //     return !mRoadRunnerCam.IsWaitingToPrepare();
+    //     return !mRoadRunnerCam.IsBehaviourWaitingToPrepare();
     //
-    // The X360 reads mbAllocated BEFORE writing meState and allocates only when the handle is
+    // The X360 schedules the mbAllocated read before the meState store and allocates only when the handle is
     // empty, so a repeated Prepare is idempotent -- it just re-asks the manager whether the
     // behaviour has finished its first Prepare yet. That polling shape is why
     // Arbitrator::Update's CHANGING_TO_ATTRACT_MODE case can call this every frame.
@@ -67,12 +66,12 @@ namespace BrnDirector
     // HOW THE POLL NOW TERMINATES (it never could before):
     //   frame N   : NewBehaviour<> allocates a helper slot, constructs a BehaviourRoadRunner in
     //               one of the manager's behaviour pools, raises mBehaviourNeedsPreparingFlags
-    //               for that slot and binds this handle to it. IsWaitingToPrepare() reads that
+    //               for that slot and binds this handle to it. IsBehaviourWaitingToPrepare() reads that
     //               same bit -> true -> Prepare returns FALSE.
     //   frame N   : (tail of MainDirector::Update) BehaviourManager::PrepareBehaviours walks the
     //               needs-preparing set, dispatches BehaviourRoadRunner::Prepare -- which is a
     //               pure field sweep that ALWAYS returns true -- and clears the bit.
-    //   frame N+1 : IsWaitingToPrepare() -> false -> Prepare returns TRUE, Arbitrator::Update's
+    //   frame N+1 : IsBehaviourWaitingToPrepare() -> false -> Prepare returns TRUE, Arbitrator::Update's
     //               CHANGING_TO_ATTRACT_MODE case advances to E_STATE_ATTRACT_MODE, and this
     //               state's own Update moves to E_STATE_ACTIVE.
     // ⚠️ That second step only happens if the conductor calls PrepareBehaviours -- the console
@@ -83,17 +82,19 @@ namespace BrnDirector
         if (meState == E_STATE_ACTIVE || meState == E_STATE_CHANGING_TO_ROAMING)
             return true;
 
-        const bool lbWasAllocated = mRoadRunnerCam.IsAllocated();
-
         meState = E_STATE_PREPARING;   // +0x194 = 1
 
-        if (!lbWasAllocated)
+        if (!mRoadRunnerCam.IsAllocated())
         {
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourRoadRunner>(
                 mRoadRunnerCam, this, 0, 1);
         }
 
-        return mRoadRunnerCam.IsReadyToPrepare();
+        // ARTIST 0x8225B278 calls the out-of-line IsBehaviourWaitingToPrepare copy (0x82212AC8) and
+        // negates its bool (clrlwi/cntlzw); DWARF BrnArbStateAttractMode.cpp:49 keeps the
+        // answer in the local lbPrepared.
+        const bool lbPrepared = !mRoadRunnerCam.IsBehaviourWaitingToPrepare();
+        return lbPrepared;
     }
 
     // ------------------------------------------------------------------------

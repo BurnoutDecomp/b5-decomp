@@ -517,7 +517,7 @@ namespace BrnDirector
                 &lrSharedInfo.mpNamedParameters->GetLookAroundCarCamParameters());
         }
 
-        if (mTransitionCam.IsWaitingToPrepare())
+        if (mTransitionCam.IsBehaviourWaitingToPrepare())
         {
             // Still queued: hold the live gameplay camera and drop its "follow" bit.
             GetNonConstCamera() = lrSharedInfo.mpSharedCameraContainer->GetSelectedGameplayCamera();
@@ -770,9 +770,9 @@ namespace BrnDirector
         case E_STATE_PREPARING:
         {
             const bool lbReady = Prepare(lrSharedInfo)
-                              && !mTransitionCam.IsWaitingToPrepare()
-                              && !mIntroNewCars.IsWaitingToPrepare()
-                              && !mLookAroundCarCam.IsWaitingToPrepare();
+                              && !mTransitionCam.IsBehaviourWaitingToPrepare()
+                              && !mIntroNewCars.IsBehaviourWaitingToPrepare()
+                              && !mLookAroundCarCam.IsBehaviourWaitingToPrepare();
             if (!lbReady)
             {
                 // Still preparing: the X360 falls into the INTRO body this frame.

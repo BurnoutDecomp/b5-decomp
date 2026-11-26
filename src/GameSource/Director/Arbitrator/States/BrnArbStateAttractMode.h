@@ -80,7 +80,7 @@ namespace BrnDirector
         // the shared handle is therefore MORE faithful, and it is what lets the bodied
         // BehaviourManager::NewBehaviour<> overload bind here (the generic THandle overload
         // stays declaration-only for the states that still carry nested copies).
-        // The shared handle brings IsWaitingToPrepare / IsReadyToPrepare / GetProducedCamera /
+        // The shared handle brings IsBehaviourWaitingToPrepare / IsBehaviourPrepared / GetProducedCamera /
         // Release with it, all now bodied -- so this header no longer declares any of them.
 
         // ---- members, DWARF order; X360 offsets in comments ------------------------------

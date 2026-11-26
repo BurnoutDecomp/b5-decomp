@@ -206,7 +206,7 @@ Camera::Camera::ShotReference* ShotSelector::GetCrashShot(
 
     while (luIndex < lpCrashShots->Num_ShotList())
     {
-        Camera::Camera::ShotReference* lpShot = lpCrashShots->ShotList(luIndex);
+        Camera::Camera::ShotReference* lpShot = &lpCrashShots->ShotList(luIndex);
 
         // The candidate's {group, index} pair -- staged up front (the X360 keeps it
         // in a stack qword and stores it wholesale on a win).

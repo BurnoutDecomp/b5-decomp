@@ -575,7 +575,7 @@ namespace BrnDirector
             }
 
             CGS_ASSERT(mIceCam.IsAllocated(), CGS_ASSERT_MESSAGE_AT("mbIsAllocated", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 517));
-            return mIceCam.IsReadyToPrepare();
+            return mIceCam.IsBehaviourPrepared();
         }
 
         return true;
@@ -709,8 +709,8 @@ namespace BrnDirector
         }
 
         // Ready only once neither behaviour is still queued for its own first Prepare (each
-        // handle's IsWaitingToPrepare carries the console's own "mbIsAllocated" tripwire).
-        if (mGyroCam.IsWaitingToPrepare() || mInterpolaterA.IsWaitingToPrepare())
+        // handle's IsBehaviourWaitingToPrepare carries the console's own "mbIsAllocated" tripwire).
+        if (mGyroCam.IsBehaviourWaitingToPrepare() || mInterpolaterA.IsBehaviourWaitingToPrepare())
         {
             lbReady = false;
         }
@@ -915,9 +915,9 @@ namespace BrnDirector
             mInterpolaterA.Get()->Setup();
         }
 
-        if (!mGyroCamA.IsWaitingToPrepare() &&
-            !mGyroCamB.IsWaitingToPrepare() &&
-            !mInterpolaterA.IsWaitingToPrepare())
+        if (!mGyroCamA.IsBehaviourWaitingToPrepare() &&
+            !mGyroCamB.IsBehaviourWaitingToPrepare() &&
+            !mInterpolaterA.IsBehaviourWaitingToPrepare())
         {
             lbReady = true;
         }
@@ -1055,7 +1055,7 @@ namespace BrnDirector
             mGyroCamDriveByR.Get()->AttachToRaceCar(liVictimRaceCarIndex);
         }
 
-        if (mGyroCamDriveByL.IsWaitingToPrepare() || mGyroCamDriveByR.IsWaitingToPrepare())
+        if (mGyroCamDriveByL.IsBehaviourWaitingToPrepare() || mGyroCamDriveByR.IsBehaviourWaitingToPrepare())
         {
             lbReady = false;
         }
@@ -1115,7 +1115,7 @@ namespace BrnDirector
                 lrSharedInfo.mpBehaviourManager);
         }
 
-        if (mInterpolaterA.IsWaitingToPrepare() || mLooseAttachment.IsWaitingToPrepare())
+        if (mInterpolaterA.IsBehaviourWaitingToPrepare() || mLooseAttachment.IsBehaviourWaitingToPrepare())
         {
             lbReady = false;
         }

@@ -237,7 +237,7 @@ bool MomentPlayerJumping::Prepare(Camera::BehaviourManager& lrBehaviourControlle
         }
         for (u32 luShot = 0; luShot < luNumShots; ++luShot)
         {
-            mIceCollection.AddShot(lrJumpShots.ShotList(luShot));
+            mIceCollection.AddShot(&lrJumpShots.ShotList(luShot));
         }
 
         mbPrepared = true;

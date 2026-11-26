@@ -119,50 +119,44 @@ namespace BrnDirector
         // The console latches meState (+0x1AC) as a "have we prepared this cycle" gate: when it is
         // already non-zero, do nothing and report ready (return 1). Otherwise set it and run the
         // allocation.
-        if (meState != E_STATE_INACTIVE)
+        // ARTIST branches past the whole body to the shared `return true` (0x8227103C ->
+        // 0x82271114), so the body is the then-block.
+        if (meState == E_STATE_INACTIVE)
         {
-            return true;
+            meState = E_STATE_PREPARING;   // +0x1AC = 1
+
+            if (!mIceCam.IsAllocated())
+            {
+                // ---- the ICE-anim "reveal" cam --------------------------------------------------
+                lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
+                    mIceCam, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+
+                // DWARF call list: the generated shotgroup::ShotList(0) accessor (GetAttributePointer
+                // with the 24-byte DefaultDataArea fallback, 0x82271090..0x822710A0).
+                mIceCam.Get()->SetParameters(
+                    &lrSharedInfo.mpDirectorResourceManager->GetOnlineCarSelect().ShotList(0));
+                mIceCam.Get()->SetTakeLooping(KB_TAKE_LOOPS);   // +0xDE4 = 1
+            }
+
+            if (!mLookAroundCarCam.IsAllocated())
+            {
+                // ---- the rotate-about-vehicle "look around car" cam -----------------------------
+                lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourRotateAboutVehicle>(
+                    mLookAroundCarCam, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+
+                // Configure it from the "look around car" named-parameter block (NamedParameters
+                // +0x2334).
+                const NamedParameters::LookAroundCarCamParameters& lrParams =
+                    lrSharedInfo.mpNamedParameters->GetLookAroundCarCamParameters();
+                mLookAroundCarCam.Get()->SetParameters(&lrParams);
+            }
+
+            // The console tail-returns the reveal behaviour's "still waiting to prepare?" query
+            // directly (no negation, unlike the rank-up state).
+            return mIceCam.IsBehaviourWaitingToPrepare();
         }
 
-        const bool lbIceCamAlreadyAllocated = mIceCam.IsAllocated();
-
-        meState = E_STATE_PREPARING;   // +0x1AC = 1
-
-        if (!lbIceCamAlreadyAllocated)
-        {
-            // ---- the ICE-anim "reveal" cam --------------------------------------------------
-            lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                mIceCam, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
-
-            const void* lpShotData =
-                lrSharedInfo.mpDirectorResourceManager->GetOnlineCarSelect().GetShotListData(
-                    /*lbUseSecond*/ false);
-            if (!lpShotData)
-                lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
-
-            Camera::BehaviourIceAnim* lpIceBehaviour = mIceCam.Get();
-            lpIceBehaviour->SetParameters(
-                static_cast<Camera::BehaviourIceAnim::ShotReference*>(
-                    const_cast<void*>(lpShotData)));
-            mIceCam.Get()->SetTakeLooping(KB_TAKE_LOOPS);   // +0xDE4 = 1
-        }
-
-        if (!mLookAroundCarCam.IsAllocated())
-        {
-            // ---- the rotate-about-vehicle "look around car" cam -----------------------------
-            lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourRotateAboutVehicle>(
-                mLookAroundCarCam, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
-
-            // Configure it from the "look around car" named-parameter block (NamedParameters
-            // +0x2334).
-            const NamedParameters::LookAroundCarCamParameters& lrParams =
-                lrSharedInfo.mpNamedParameters->GetLookAroundCarCamParameters();
-            mLookAroundCarCam.Get()->SetParameters(&lrParams);
-        }
-
-        // The console tail-returns the reveal behaviour's "still waiting to prepare?" query
-        // directly (no negation, unlike the rank-up state).
-        return mIceCam.IsWaitingToPrepare();
+        return true;
     }
 
     // ------------------------------------------------------------------------

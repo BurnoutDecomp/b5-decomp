@@ -41,15 +41,18 @@ namespace BrnDirector
             return true;
         }
 
+        // DWARF BrnArbStateRenderMetrics.cpp:51 local lbPrepared (ARTIST returns the constant of
+        // each arm: li r3,0 after NewBehaviour 0x8225B3B8, the stored 1 otherwise).
+        bool lbPrepared = true;
         meState = E_STATE_PREPARING;
 
         if (!mCam.IsAllocated())
         {
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourRenderMetrics>(mCam, this, 0, 1);
-            return false;
+            lbPrepared = false;
         }
 
-        return true;
+        return lbPrepared;
     }
 
     // ------------------------------------------------------------------------

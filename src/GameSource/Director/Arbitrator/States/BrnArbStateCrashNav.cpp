@@ -85,13 +85,10 @@ namespace BrnDirector
         //   flt_82003F40 = 3E800000 = 0.25   (the lfs into f1 for InterpolateFrom @0x82266150)
         //   flt_82001DA0 = 3F000000 = 0.5    (the lfs into f0 stored to BOTH out-blend floats)
         // Both also render as 0.25 / 0.5 in Hex-Rays, so each has two independent derivations.
-        const f32 KF_INTERPOLATE_IN_DURATION     = 0.25f;  // flt_82003F40
-        const f32 KF_INTERPOLATE_OUT_DURATION    = 0.5f;   // flt_82001DA0
-        const f32 KF_INTERPOLATE_OUT_MAX_OVERLAP = 0.5f;   // flt_82001DA0 (the same constant)
+        // ARTIST loads both from the shared literal pool (flt_82003F40 = 0.25, flt_82001DA0 = 0.5,
+        // each reloaded at its use, 0x82266150 / 0x82266174), so Prepare writes them as literals:
+        // named const objects make the XDK emit and address their own storage.
 
-        // Both blends keep running while the simulation is paused -- which is the point of the
-        // whole state. X360: r8 = 1 into InterpolateFrom, stb 1 -> player +0x6A2.
-        const bool KB_INTERPOLATE_UPDATES_DURING_PAUSE = true;
 
         // BehaviourManager::NewBehaviour's owner / ref-limit slots (X360 r6 = 0, r7 = 1). Same
         // pair the other arbitrator states pass; named identically to BrnArbStateOnlineRaceIntro.
@@ -229,89 +226,94 @@ namespace BrnDirector
     bool ArbStateCrashNav::Prepare(ArbStateSharedInfo& lrSharedInfo)
     {
         // Already entered -- Prepare is idempotent (the arbitrator calls it on the trigger edge
-        // and Update's PREPARING case calls it again on the next tick). X360: `lwz r11, 0x878;
-        // if (r11) return true;`
-        if (meState != E_STATE_INACTIVE)
+        // and Update's PREPARING case calls it again on the next tick). ARTIST tests meState and
+        // branches past the whole body to the shared `return true` (0x822660C4 -> 0x822661F4),
+        // so the body is the then-block.
+        if (meState == E_STATE_INACTIVE)
         {
-            return true;
+            meState = E_STATE_PREPARING;   // +0x878 = 1
+
+            // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. One line per entry edge.
+
+            // The movie player is only set up once; a re-entry while it is still playing keeps the
+            // take that is already running (X360 `lbz r11, 0x830` -> mICEMoviePlayer.IsPlaying()).
+            if (!mICEMoviePlayer.IsPlaying())
+            {
+                // DWARF BrnArbStateCrashNav.cpp:61. Both blends keep running while the simulation
+                // is paused: r8 = 1 into InterpolateFrom, stb 1 -> player +0x6A2.
+                bool lbUpdateDuringPause = true;
+
+                // Remember the take the ICE wrapper was playing, so the exit paths in Update() can
+                // put it back (mICEPlayingMovie is read there by mID / mfPlaybackPositionParameter /
+                // mbIsValid). X360 copies the 16-byte return value with two ld/std pairs.
+                mICEPlayingMovie = lrSharedInfo.mpICEWrapper->GetCurrentMovie();
+
+                // ⭐ THE PAUSE PLAYLIST. X360 emits `memcpy(this+0x2F0, GetPausePlaylist(), 0x4E8)`,
+                // which is the by-value ICEMoviePlaylist assignment inside SetPlaylist. The source
+                // pointer is shared-info +0x14 -- the ArbitratorStateContainer -- because
+                // SharedPlaylists is that container's FIRST member (DWARF
+                // BrnDirectorArbitratorStateContainer.h:50), so the console's inlined
+                // GetSharedPlaylists() is a no-op cast. Reached BY NAME here.
+                mICEMoviePlayer.SetPlaylist(
+                    lrSharedInfo.mpStateContainer->GetSharedPlaylists().GetPausePlaylist());
+
+                mICEMoviePlayer.Prepare(lrSharedInfo.mpICEWrapper);
+
+                // Blend INTO the playlist from whatever gameplay camera is live, over 0.25 s, using
+                // this state's orbit-the-car curve, ticking through the pause.
+                mICEMoviePlayer.InterpolateFrom(
+                    *lrSharedInfo.mpBehaviourManager,
+                    lrSharedInfo.mpSharedCameraContainer->GetGameplayCameraHelperIndex(),
+                    0.25f,          // flt_82003F40
+                    &mInterpolateParams,
+                    lbUpdateDuringPause);
+
+                // ...and latch the blend BACK OUT to that same gameplay camera for when the playlist
+                // ends (0.5 s, may overlap the last take by 0.5 s). The X360 inlines this as six
+                // stores into the player; the second GetGameplayCameraHelperIndex() call is the
+                // console's, not a duplication introduced here.
+                mICEMoviePlayer.WhenFinishedInterpolateTo(
+                    lrSharedInfo.mpSharedCameraContainer->GetGameplayCameraHelperIndex(),
+                    0.5f,           // flt_82001DA0
+                    0.5f,
+                    &mInterpolateParams,
+                    lbUpdateDuringPause);
+
+                // ⭐ AND LOOP IT. Loop() asserts the wrapper is set and that nothing is playing,
+                // calls Play(), and raises mbIsLooping -- so the pause take list runs for as long as
+                // the screen is up instead of ending on one take.
+                mICEMoviePlayer.Loop();
+            }
+
+            // The road-runner fly-by behaviour is likewise allocated once.
+            if (!mRoadRunnerCam.IsAllocated())
+            {
+                lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourRoadRunner>(
+                    mRoadRunnerCam, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
+
+                // ⭐ Keep the fly-by ticking while the simulation is frozen. X360 sub_82212B28 is
+                // BehaviourHandle<T>::SetUpdatesDuringPause (identified by its own assert:
+                // "IsAllocated()", BrnBehaviourManager.h:676, then
+                // BehaviourManager::SetBehaviourUpdatesDuringPause(mpManager, muAllocationKey, arg)).
+                mRoadRunnerCam.SetUpdatesDuringPause(true);
+
+                // ...and drive it off the GAME timestep rather than the world one. X360:
+                //     bl BehaviourManager::BehaviourHandle(handle)   ; == handle.GetBehaviour(),
+                //                                                    ;    assert @ BrnBehaviourManager.h:589
+                //     li  r11, 2 ; stw r11, 4(r3)                    ; behaviour +0x04
+                // and Camera::Behaviour +0x04 is meTimestepType (Timestep::EType), whose value 2 is
+                // E_GAME. That is the fourth "ignore the paused world clock" switch.
+                mRoadRunnerCam.Get()->SetTimestepType(BrnDirector::Timestep::E_GAME);
+            }
+
+            // Ready once the fly-by behaviour is no longer queued for its first Prepare. X360:
+            // `result = BehaviourRoadRun(handle) == 0`, where the truncated symbol @0x82212AC8 is
+            // BehaviourHandle<BehaviourRoadRunner>::IsBehaviourWaitingToPrepare (assert "mbIsAllocated",
+            // BrnBehaviourManager.h:517, then manager IsBehaviourWaitingToPrepare).
+            return !mRoadRunnerCam.IsBehaviourWaitingToPrepare();
         }
 
-        meState = E_STATE_PREPARING;   // +0x878 = 1
-
-        // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. One line per entry edge.
-
-        // The movie player is only set up once; a re-entry while it is still playing keeps the
-        // take that is already running (X360 `lbz r11, 0x830` -> mICEMoviePlayer.IsPlaying()).
-        if (!mICEMoviePlayer.IsPlaying())
-        {
-            // Remember the take the ICE wrapper was playing, so the exit paths in Update() can
-            // put it back (mICEPlayingMovie is read there by mID / mfPlaybackPositionParameter /
-            // mbIsValid). X360 copies the 16-byte return value with two ld/std pairs.
-            mICEPlayingMovie = lrSharedInfo.mpICEWrapper->GetCurrentMovie();
-
-            // ⭐ THE PAUSE PLAYLIST. X360 emits `memcpy(this+0x2F0, GetPausePlaylist(), 0x4E8)`,
-            // which is the by-value ICEMoviePlaylist assignment inside SetPlaylist. The source
-            // pointer is shared-info +0x14 -- the ArbitratorStateContainer -- because
-            // SharedPlaylists is that container's FIRST member (DWARF
-            // BrnDirectorArbitratorStateContainer.h:50), so the console's inlined
-            // GetSharedPlaylists() is a no-op cast. Reached BY NAME here.
-            mICEMoviePlayer.SetPlaylist(
-                lrSharedInfo.mpStateContainer->GetSharedPlaylists().GetPausePlaylist());
-
-            mICEMoviePlayer.Prepare(lrSharedInfo.mpICEWrapper);
-
-            // Blend INTO the playlist from whatever gameplay camera is live, over 0.25 s, using
-            // this state's orbit-the-car curve, ticking through the pause.
-            mICEMoviePlayer.InterpolateFrom(
-                *lrSharedInfo.mpBehaviourManager,
-                lrSharedInfo.mpSharedCameraContainer->GetGameplayCameraHelperIndex(),
-                KF_INTERPOLATE_IN_DURATION,
-                &mInterpolateParams,
-                KB_INTERPOLATE_UPDATES_DURING_PAUSE);
-
-            // ...and latch the blend BACK OUT to that same gameplay camera for when the playlist
-            // ends (0.5 s, may overlap the last take by 0.5 s). The X360 inlines this as six
-            // stores into the player; the second GetGameplayCameraHelperIndex() call is the
-            // console's, not a duplication introduced here.
-            mICEMoviePlayer.WhenFinishedInterpolateTo(
-                lrSharedInfo.mpSharedCameraContainer->GetGameplayCameraHelperIndex(),
-                KF_INTERPOLATE_OUT_DURATION,
-                KF_INTERPOLATE_OUT_MAX_OVERLAP,
-                &mInterpolateParams,
-                KB_INTERPOLATE_UPDATES_DURING_PAUSE);
-
-            // ⭐ AND LOOP IT. Loop() asserts the wrapper is set and that nothing is playing,
-            // calls Play(), and raises mbIsLooping -- so the pause take list runs for as long as
-            // the screen is up instead of ending on one take.
-            mICEMoviePlayer.Loop();
-        }
-
-        // The road-runner fly-by behaviour is likewise allocated once.
-        if (!mRoadRunnerCam.IsAllocated())
-        {
-            lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourRoadRunner>(
-                mRoadRunnerCam, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
-
-            // ⭐ Keep the fly-by ticking while the simulation is frozen. X360 sub_82212B28 is
-            // BehaviourHandle<T>::SetUpdatesDuringPause (identified by its own assert:
-            // "IsAllocated()", BrnBehaviourManager.h:676, then
-            // BehaviourManager::SetBehaviourUpdatesDuringPause(mpManager, muAllocationKey, arg)).
-            mRoadRunnerCam.SetUpdatesDuringPause(true);
-
-            // ...and drive it off the GAME timestep rather than the world one. X360:
-            //     bl BehaviourManager::BehaviourHandle(handle)   ; == handle.GetBehaviour(),
-            //                                                    ;    assert @ BrnBehaviourManager.h:589
-            //     li  r11, 2 ; stw r11, 4(r3)                    ; behaviour +0x04
-            // and Camera::Behaviour +0x04 is meTimestepType (Timestep::EType), whose value 2 is
-            // E_GAME. That is the fourth "ignore the paused world clock" switch.
-            mRoadRunnerCam.Get()->SetTimestepType(BrnDirector::Timestep::E_GAME);
-        }
-
-        // Ready once the fly-by behaviour is no longer queued for its first Prepare. X360:
-        // `result = BehaviourRoadRun(handle) == 0`, where the truncated symbol @0x82212AC8 is
-        // BehaviourHandle<BehaviourRoadRunner>::IsWaitingToPrepare (assert "mbIsAllocated",
-        // BrnBehaviourManager.h:517, then manager IsBehaviourWaitingToPrepare).
-        return !mRoadRunnerCam.IsWaitingToPrepare();
+        return true;
     }
 
     // ------------------------------------------------------------------------

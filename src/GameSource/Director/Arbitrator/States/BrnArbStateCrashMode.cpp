@@ -156,28 +156,22 @@ namespace BrnDirector
             return true;
         }
 
-        // The allocated test is read BEFORE meState is written, exactly as the console does it.
-        const bool lbWasAllocated = mAftertouch.IsAllocated();
-
         meState = E_STATE_PREPARING;   // +0x194 = 1
 
-        Camera::BehaviourManager& lrManager = *lrSharedInfo.mpBehaviourManager;
+        // DWARF BrnArbStateCrashMode.cpp:90: the manager's parameter bank is taken before the
+        // allocation test (ARTIST forms manager+0x12530 ahead of the branch, 0x82265FB4/B8).
+        const Camera::BehaviourParameterBank& lrBehaviourParameterBank =
+            lrSharedInfo.mpBehaviourManager->GetBehaviourParameterBank();
 
-        if (!lbWasAllocated)
+        if (!mAftertouch.IsAllocated())
         {
-            lrManager.NewBehaviour<Camera::BehaviourAftertouchCrash>(mAftertouch, this, 0, 1);
-
-            // The bank's own record block for this camera -- the manager's parameter bank, not
-            // the shared-info pointer (this state reaches it through the manager it just
-            // allocated from).
-            const Camera::BehaviourAftertouchCrash::Parameters& lrParameters =
-                lrManager.GetBehaviourParameterBank().GetNamedParameters().GetAftertouchCrashParameters();
-
-            mAftertouch.Get()->SetParameters(&lrParameters);
+            lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourAftertouchCrash>(mAftertouch, this, 0, 1);
+            mAftertouch.Get()->SetParameters(
+                &lrBehaviourParameterBank.GetNamedParameters().GetAftertouchCrashParameters());
         }
 
         // The callee already negates (it answers "ready", not "waiting"), so it is returned raw.
-        return mAftertouch.IsReadyToPrepare();
+        return mAftertouch.IsBehaviourPrepared();
     }
 
     // ------------------------------------------------------------------------

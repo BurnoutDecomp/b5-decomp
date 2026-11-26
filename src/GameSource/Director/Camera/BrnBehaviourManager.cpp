@@ -246,7 +246,7 @@ namespace Camera
     //
     // Is the behaviour identified by luAllocationKey still queued for its first Prepare (i.e.
     // still set in the "needs preparing" book-keeping set). This is the query every
-    // BehaviourHandle<T>::IsWaitingToPrepare / ::IsReadyToPrepare instantiation forwards to
+    // BehaviourHandle<T>::IsBehaviourWaitingToPrepare / ::IsBehaviourPrepared instantiation forwards to
     // (BrnBehaviourManager.h, out-of-line template bodies) -- purely homed-member book-keeping,
     // no un-homed Behaviour interior involved.
     //

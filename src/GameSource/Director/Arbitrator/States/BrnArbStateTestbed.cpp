@@ -371,7 +371,7 @@ namespace BrnDirector
         const u32 luNumShots = lpShotGroup->Num_ShotList();
         for (u32 luLoop = 0; luLoop < luNumShots; ++luLoop)
         {
-            if (lpShotGroup->ShotList(luLoop)->GetClassKey()
+            if (lpShotGroup->ShotList(luLoop).GetClassKey()
                 != static_cast<u64>(Attrib::Gen::iceanim::ClassKey()))
             {
                 CgsDev::Assert::BeginAssert();
@@ -382,7 +382,7 @@ namespace BrnDirector
                 CgsDev::Assert::EndAssert();
             }
 
-            const Attrib::Gen::iceanim lIceAnim(*lpShotGroup->ShotList(luLoop), 0);
+            const Attrib::Gen::iceanim lIceAnim(lpShotGroup->ShotList(luLoop), 0);
             const ICE::ICETakeData* const lpTakeData = lrResources.GetKeyAnimFromGuid(lIceAnim.GetAnimGuid());
             if (lpTakeData == NULL)
             {
@@ -395,7 +395,7 @@ namespace BrnDirector
             }
 
             spDebugComponent->RegisterFunction(&ArbStateTestbed::ActivateIceCam,
-                                               const_cast<Attrib::RefSpec*>(lpShotGroup->ShotList(luLoop)),
+                                               const_cast<Attrib::RefSpec*>(&lpShotGroup->ShotList(luLoop)),
                                                lpcMenuPath,
                                                lpTakeData->GetName());
         }

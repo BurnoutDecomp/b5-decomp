@@ -303,7 +303,7 @@ void KeyAnimShakeController::Update(f32 lfTimeStep, Camera::Camera* lpCamera)
     }
 
     // The shot this type names, and the local ref the console takes on it.
-    const Attrib::RefSpec* lpShotElement = lrShakeGroup.ShotList(luShakeType - 1u);
+    const Attrib::RefSpec* lpShotElement = &lrShakeGroup.ShotList(luShakeType - 1u);
     Attrib::RefSpec        lShotRef(*lpShotElement);
 
     if (lShotRef.GetClassKey() == KU_ICEANIM_CLASS_KEY)

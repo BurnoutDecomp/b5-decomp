@@ -165,7 +165,7 @@ bool BehaviourFailsafe::Prepare(const BehaviourSharedPrepareReleaseInfo& lShared
 
     CGS_ASSERT(lrResources.GetFailsafe().Num_ShotList() > 0,
                CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpDirectorResourceManager->GetFailsafe().Num_ShotList() > 0", CGS_ARTIST_FILE, 74));              // :74
-    const Attrib::Gen::iceanim lShot(*lrResources.GetFailsafe().ShotList(0), 0);
+    const Attrib::Gen::iceanim lShot(lrResources.GetFailsafe().ShotList(0), 0);
 
     const bool lbControllerPrepared = mKeyAnimController.Prepare(lrResources, lShot.GetAnimGuid());
     CGS_ASSERT(lbControllerPrepared,

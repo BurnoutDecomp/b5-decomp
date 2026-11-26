@@ -21,9 +21,16 @@ namespace BrnDirector
     {
         // lbz 0(this) / lbz 1(this): the external cam is live only when selected AND not
         // overridden by lookback.
+        // ARTIST constructs each arm's index straight into the return slot (r3 = the caller's
+        // sret, 0x82219750..0x8221976C): one return per arm, no ternary temporary.
         const bool lbUseExternal = mbUseGameplayExternal && !mbLookbackOverride;
-
-        return lbUseExternal ? mGameplayExternal.GetBehaviourHelperIndex()
-                             : mGameplayBumper.GetBehaviourHelperIndex();
+        if (lbUseExternal)
+        {
+            return mGameplayExternal.GetBehaviourHelperIndex();
+        }
+        else
+        {
+            return mGameplayBumper.GetBehaviourHelperIndex();
+        }
     }
 }

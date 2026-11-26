@@ -83,7 +83,7 @@ namespace BrnDirector
         // helper pool +0x08, mpManager +0x0C, mpBehaviour +0x10). This state used to carry a
         // private copy of that template with the +0x08 word FLAGged as an unrecovered "lookup
         // helper"; the shared one has it pinned as the pool pointer and brings the three members
-        // this TU needs and the copy could not provide -- IsReadyToPrepare(), GetProducedCamera()
+        // this TU needs and the copy could not provide -- IsBehaviourPrepared(), GetProducedCamera()
         // and Release().
         Camera::BehaviourHandle<Camera::BehaviourAftertouchCrash> mAftertouch; // +0x180
         EState meState;             // +0x194  the crash-mode state-machine state

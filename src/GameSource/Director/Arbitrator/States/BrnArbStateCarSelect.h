@@ -101,13 +101,13 @@ namespace BrnDirector
         // helper's leading member).
         bool IsPrepared() const { return mInterpolater.IsAllocated(); }
 
-        // @0x82219900 -- h:62 tripwire, then the handle's IsReadyToPrepare
+        // @0x82219900 -- h:62 tripwire, then the handle's IsBehaviourPrepared
         // (whose committed body carries the X360's inlined :517 "mbIsAllocated"
         // tripwire + the manager IsBehaviourWaitingToPrepare()==0 tail).
         bool IsReady() const
         {
             CGS_ASSERT(IsPrepared(), CGS_ASSERT_MESSAGE_AT("IsPrepared()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 62));   // :62 (non-gating)
-            return mInterpolater.IsReadyToPrepare();
+            return mInterpolater.IsBehaviourPrepared();
         }
 
         // @0x82208680 -- h:65 tripwire + the handle-level :600 "IsAllocated()"

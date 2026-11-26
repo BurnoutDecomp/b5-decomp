@@ -223,7 +223,7 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
     // ARTIST 8223F038..8223F7EC: resolve the authored take, wrap its two
     // adjacent 30 Hz keys, interpolate their quaternion rotations, then add
     // the procedural pitch vibration and its focal-plane compensation.
-    const Attrib::RefSpec ref(*lpDirectorResourceManager->GetShakeAnimGroup().ShotList(lu8ShakeType - 1));
+    const Attrib::RefSpec ref(lpDirectorResourceManager->GetShakeAnimGroup().ShotList(lu8ShakeType - 1));
     CGS_ASSERT(ref.GetClassKey() == static_cast<u64>(Attrib::Gen::iceanim::ClassKey()),
                CGS_ASSERT_MESSAGE_AT("lShakeParams.GetClassKey() == Attrib::Gen::iceanim::ClassKey()", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraShake.cpp", 261));
     if (mu8ActiveShake != lu8ShakeType)

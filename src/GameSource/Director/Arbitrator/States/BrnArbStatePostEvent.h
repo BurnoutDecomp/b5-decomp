@@ -84,7 +84,7 @@ namespace BrnDirector
         // leaves the behaviour unallocated at link time). The shared handle also identifies
         // the +0x08 word this file used to flag as "role not recovered": it is the owning
         // BehaviourHelper pool pointer, which a u32 would have truncated on this host.
-        // It brings IsAllocated / GetBehaviour / GetProducedCamera / IsWaitingToPrepare /
+        // It brings IsAllocated / GetBehaviour / GetProducedCamera / IsBehaviourWaitingToPrepare /
         // Release with it, all bodied, so this header no longer declares any of them.
 
         // PickAppropriateShot -- choose the completion shot to play out of the event-completion

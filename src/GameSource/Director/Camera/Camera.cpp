@@ -649,13 +649,13 @@ f32 Camera::GetLodZoomFactor() const
 //
 // RECONSTRUCTED PRIOR WAVE (7 funcs -- the BehaviourHandle<T> "is-waiting-to-prepare" query
 // family). Bodied as real template members on the homed BehaviourHandle<TBehaviour> in
-// BrnBehaviourManager.h (BehaviourHandle<>::IsWaitingToPrepare / ::IsReadyToPrepare),
+// BrnBehaviourManager.h (BehaviourHandle<>::IsBehaviourWaitingToPrepare / ::IsBehaviourPrepared),
 // reaching the homed BehaviourManager by its NAMED public IsBehaviourWaitingToPrepare(u32)
 // -- no raw offsets, no fabrication. All six "waiting" siblings are byte-identical asm:
-//   IsWaitingToPrepare():  BehaviourGyroCam @0x82212510, BehaviourIceAnim @0x822128A0,
+//   IsBehaviourWaitingToPrepare():  BehaviourGyroCam @0x82212510, BehaviourIceAnim @0x822128A0,
 //                          BehaviourInterpo @0x82212150, BehaviourLooseAt @0x82212A68,
 //                          BehaviourRoadRun @0x82212AC8, BehaviourRotateA @0x82212B98
-//   IsReadyToPrepare():    BehaviourAfterto @0x8222D0E8  (the `== 0` negation)
+//   IsBehaviourPrepared():    BehaviourAfterto @0x8222D0E8  (the `== 0` negation)
 //
 // RESOLVED THIS WAVE (6 funcs -- the BehaviourHandle<T>::Prepare "SetUp factory" family).
 // These are NOT new hand-written bodies: each is a per-T instantiation of the SINGLE inline

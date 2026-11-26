@@ -545,7 +545,7 @@ namespace BrnDirector
         // unless the impact-time effect is running (GameState +0x105), which owns the frame.
         if (!lrSharedInfo.mpGameState->mbImpactTimeActive &&
             mTakenDownCam.IsAllocated() &&
-            !mTakenDownCam.IsWaitingToPrepare() &&
+            !mTakenDownCam.IsBehaviourWaitingToPrepare() &&
             (mTakenDownCam.GetCamera().mState_uFlags & KI_CAMERA_STATE_FOLLOW) != 0)
         {
             GetNonConstCamera() = mTakenDownCam.GetCamera();

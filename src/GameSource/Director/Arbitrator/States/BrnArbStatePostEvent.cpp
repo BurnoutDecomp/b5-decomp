@@ -219,42 +219,35 @@ namespace BrnDirector
 
         if (!mPostEventCam.IsAllocated())   // +0x18C block
         {
-            GameState& lrGameState = *lrSharedInfo.mpGameState;
-
-            // ---- resolve the event-completion shot-group -------------------------------
-            const Attrib::Gen::shotgroup& lrEventCompleteShotGroup =
+            // ---- resolve the event-completion shot-group (DWARF cpp:50 / :57 locals) -------
+            const Attrib::Gen::shotgroup& lEventCompleteShotGroup =
                 lrSharedInfo.mpDirectorResourceManager->GetEventCompletionShots(
-                    lrGameState.meEventType,
-                    static_cast<s64>(lrGameState.mFinishLineID));
+                    lrSharedInfo.mpGameState->meEventType,
+                    static_cast<s64>(lrSharedInfo.mpGameState->mFinishLineID));
 
-            // [diag] BRN_FINISHLINE_DIAG -- NOT IN THE X360 BINARY. The lookup above keys on the
-            // id MainDirector::ProcessInputQueue case 24 stores; one line per post-event entry is
-            // the live witness that it ran (an "Unknown finish line" assert, when the id misses the
-            // race ladder, fires inside GetEventCompletionShots just before this line).
-
-            CGS_ASSERT(lrEventCompleteShotGroup.Num_ShotList() > 0,
+            CGS_ASSERT(lEventCompleteShotGroup.Num_ShotList() > 0,
                        CGS_ASSERT_MESSAGE_AT("lEventCompleteShotGroup.Num_ShotList()>0", CGS_ARTIST_FILE, 54));
 
-            Camera::BehaviourIceAnim::ShotReference& lrShot =
-                PickAppropriateShot(lrEventCompleteShotGroup, lrSharedInfo);
+            Camera::BehaviourIceAnim::ShotReference& lAppropriateShot =
+                PickAppropriateShot(lEventCompleteShotGroup, lrSharedInfo);
 
             // ---- allocate + configure the ICE-anim behaviour --------------------------
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                 mPostEventCam, this, 0, 1);
 
-            mPostEventCam.Get()->SetParameters(&lrShot);
+            mPostEventCam.Get()->SetParameters(&lAppropriateShot);
 
             // Seed the bystander vehicle ref the post-event take frames the winner against.
             mPostEventCam.Get()->GetBystanderVehicleRef()->SetToPlayer();
 
-            mPostEventCam.Get()->SetUseCollisionPolicy(true);   // +0xE28
-            mPostEventCam.Get()->ClearBaseFirstFrameGate();     // base +0x28 = 0
+            mPostEventCam.Get()->SetUseCollisionPolicy(true);        // +0xE28
+            mPostEventCam.Get()->SetCollisionPolicyCanFail(false);   // DWARF call list
 
             meState = E_STATE_PREPARING;   // +0x188 = 1
         }
 
         // Ready once the freshly-allocated behaviour is no longer queued for its first Prepare.
-        return !mPostEventCam.IsWaitingToPrepare();
+        return !mPostEventCam.IsBehaviourWaitingToPrepare();
     }
 
     // ------------------------------------------------------------------------

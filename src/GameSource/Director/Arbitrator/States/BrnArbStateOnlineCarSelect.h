@@ -98,7 +98,7 @@ namespace BrnDirector
         // at link time). The shared handle also identifies the +0x08 word this file used to flag
         // as "role not recovered": it is the owning BehaviourHelper pool pointer, which a u32
         // would have truncated on this host. It brings IsAllocated / GetBehaviour /
-        // GetProducedCamera / IsWaitingToPrepare / Release with it, all bodied, so this header no
+        // GetProducedCamera / IsBehaviourWaitingToPrepare / Release with it, all bodied, so this header no
         // longer declares any of them.
 
         // ---- members, declaration order; offsets in comments -----------------------------

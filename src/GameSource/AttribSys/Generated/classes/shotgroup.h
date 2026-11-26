@@ -121,9 +121,10 @@ namespace Gen
         // indexed Attrib::Instance::GetAttributePointer(key, index) overload -- unlike
         // the two provenance forwarders above -- with the 24-byte DefaultDataArea
         // null-element fallback @0x822398A0).
-        const Attrib::RefSpec* ShotList(u32 luIndex) const
+        // DWARF shotgroup.h:136 `const Attrib::RefSpec& ShotList(unsigned int) const`.
+        const Attrib::RefSpec& ShotList(u32 luIndex) const
         {
-            return reinterpret_cast<const Attrib::RefSpec*>(GetShotListElement(luIndex));
+            return *reinterpret_cast<const Attrib::RefSpec*>(GetShotListElement(luIndex));
         }
 
         // ADDITIVE GROW (BrnArbStateCarSelect): the SAME indexed element resolve as
@@ -133,12 +134,15 @@ namespace Gen
         // `Attrib::Instance::GetAttributePointer(group, 0x15246B49, index)` returning void*
         // with the 24-byte DefaultDataArea null-element fallback (@0x822398A0), so the untyped
         // form is the faithful one; ShotList() is the typed convenience over it.
+        //
+        // The fallback is a conditional expression: every ARTIST copy tests the
+        // GetAttributePointer result in r3 and merges DefaultDataArea's into r3 before moving
+        // it to a saved register (ArbStateOnlineCarSelect::Prepare 0x82271094..0x822710A4,
+        // ShotSelector::GetCrashShot 0x82239898..0x822398A8); `if (!p) p = ...` copies it first.
         const void* GetShotListElement(u32 luIndex) const
         {
             const void* lpElement = GetAttributePointer(KU_SHOTLIST_ATTRIBUTE_KEY, luIndex);
-            if (lpElement == 0)
-                lpElement = DefaultDataArea(0x18u);
-            return lpElement;
+            return lpElement ? lpElement : DefaultDataArea(0x18u);
         }
     };
 

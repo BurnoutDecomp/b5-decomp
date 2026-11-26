@@ -398,14 +398,14 @@ namespace BrnDirector
         // The console bodies (0x822646A4 / 0x82264960 / 0x82264B60 / 0x82264F14, 677 of this
         // function's 1154 instruction lines) drive two BehaviourManager-allocated cameras --
         // a BehaviourRoadRunner and a BehaviourInterpolate -- through
-        // NewBehaviour<T> / Setup / IsWaitingToPrepare / HasFailed / HasFinished / Release, plus
+        // NewBehaviour<T> / Setup / IsBehaviourWaitingToPrepare / HasFailed / HasFinished / Release, plus
         // Camera::EnsureEffectIsPlaying and RequestStartEffectHook on four named hooks
         // ("Black_In_BW", "Black_Out_BW", "Picture_Effect", "Black_In(No_B_W)").
         // They cannot be written here yet because:
         //   * this header carries its OWN private nested BehaviourHandle<T> (a 5-field POD with
         //     no methods) rather than Camera::BehaviourHandle<T> -- the type the manager's
         //     NewBehaviour<T> takes and the only one with GetCamera/GetBehaviour/
-        //     IsWaitingToPrepare/Release. De-forking that is its own job;
+        //     IsBehaviourWaitingToPrepare/Release. De-forking that is its own job;
         //   * BehaviourInterpolate::Setup(f32, BehaviourHelperIndex, BehaviourHelperIndex,
         //     BehaviourManager*) and SharedCameraContainer::GetGameplayCameraHelperIndex have
         //     no bodies anywhere in the tree;
