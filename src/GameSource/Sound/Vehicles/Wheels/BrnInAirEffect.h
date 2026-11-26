@@ -131,7 +131,8 @@ protected:
 
 struct JunkyardInAirEffect : public InAirEffect
 {
-    JunkyardInAirEffect();
+    // JunkyardInAirEffect() is implicit (DWARF: the class line BrnInAirEffect.h:247); ARTIST 0x826F4200
+    // constructs InAirEffect and the DataPoint<bool>, and leaves meJunkyardAmbience to Attach.
     virtual ~JunkyardInAirEffect();
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F700)
 

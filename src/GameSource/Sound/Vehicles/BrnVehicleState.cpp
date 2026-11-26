@@ -33,36 +33,13 @@ namespace BrnSound
 namespace Vehicles
 {
 
-// @ 0x826C9E70. Clear the physics blob via RaceCarState::Clear (@0x8229FFC8) and
-// seed the tail fields the asm writes: the attach record zeroed (asset/index/token
-// = the old rival's mi1216/mi1220/mu1224 zero-seeds), the two component-name
-// strings' first chars zeroed (bytes 1268/1281), the two key elements zeroed
-// (mu1296/mu1304), mfMaxRpm = 0.0, and the collision flag + the is-active
-// DataPoint bytes zeroed (mu1317/mu1318). mVehicleBoostInfo is untouched by the
-// X360 ctor; value-init keeps it defined without fabricating stores.
+// @ 0x826C9E70. The body is VehicleState::Clear inlined, store for store (0x826982C0): the
+// DataPoint bytes, RaceCarState::Clear, AttachInfo::Clear, the names, the keys and mfMaxRpm.
+// mbCollisionOccuredFlag and mauVehicleBoostInfo are not touched. Left: ARTIST stores the two
+// 8-byte keys as u64 (DWARF Attribute::Key; the tree's Key is u32) around the mfMaxRpm store.
 VehicleState::VehicleState()
-    : BrnSound::Logic::BrnState()
-    , mAttachInfo()
-    , mfMaxRpm(0.0f)
-    , mbCollisionOccuredFlag(false)
-    , bIsRaceCarActive()
 {
-    mVehiclePhysicsData.Clear();            // bl RaceCarState::Clear @0x8229FFC8
-
-    mAttachInfo.mpVehicleAsset = 0;         // the old mi1216 zero-seed
-    mAttachInfo.muVehicleIndex = 0;         // the old mi1220 zero-seed
-    mAttachInfo.mAttachToken   = 0;         // the old mu1224 zero-seed
-
-    for (u32 lu = 0; lu < sizeof(mauVehicleBoostInfo); ++lu)
-        mauVehicleBoostInfo[lu] = 0;        // value-defined (untouched by the X360 ctor)
-
-    mcaEngineComponentName[0][0] = '\0';    // stb 0, +1268
-    mcaEngineComponentName[1][0] = '\0';    // stb 0, +1281
-
-    mEngineComponentKey[0].mKey  = 0;       // the old mu1296 zero-seed
-    mEngineComponentKey[0].muPad = 0;
-    mEngineComponentKey[1].mKey  = 0;       // the old mu1304 zero-seed
-    mEngineComponentKey[1].muPad = 0;
+    Clear();
 }
 
 // The component attribute key, by name (the console (type+0xA2)*8 walk == this

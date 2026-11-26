@@ -273,16 +273,7 @@ static const PhysicsControl::EngRevDataSet KA_START_LINE_REV_SETS[PhysicsControl
 } // namespace
 
 // ---------------------------------------------------------------------------
-// PhysicsControl::PhysicsControl  @ 0x826C8890  (default ctor)
-//
-// Derived ctor: the X360 INLINES the base zero-init (no `bl` to a base ctor) and
-// installs the dual leaf vptrs directly, zeroes the leading scalar/DataPoint members,
-// constructs the PhysicsData (@+0x40) and vehicleengine (@+0x228) sub-objects, then
-// clears the intro-reving block (+0x248..+0x280) and sets the trailing flag @+0x284 = 1.
-// The inlined dual-base install + base scalar zero-init is represented by the
-// `: BrnEffectControl()` base-init. PhysicsData / vehicleengine are un-homed opaque
-// spans, so their construction + the intro block are reproduced by zeroing the spans +
-// setting the attested flag byte rather than by ctor calls (see header FLAG).
+// PhysicsControl::PhysicsData::PhysicsData  @ 0x826B2918 (called by the PhysicsControl ctor).
 // ---------------------------------------------------------------------------
 PhysicsControl::PhysicsData::PhysicsData()
     : mbJustShifted(false)
@@ -299,23 +290,13 @@ PhysicsControl::PhysicsData::PhysicsData()
     mTransform.Flush(lIdentity);
 }
 
+// DWARF BrnPhysicsControl.h:453. ARTIST 0x826C8890 stores only mpVehiclePhysicsData and runs the member
+// constructors (PhysicsData, vehicleengine(0, 0), the DataPoints, EngRevDataSet, InterpolateLine): the
+// controller pointers, mAttachInfo and meIntroRevingState stay unset until Attach.
 PhysicsControl::PhysicsControl()
-    : BrnSound::Logic::BrnEffectControl()
-    , mpVehiclePhysicsData(0)
-    , mProcessedPhysicsData()
-    , mp3dCarControl(0)
-    , mpWheelControl(0)
+    : mpVehiclePhysicsData(0)
     , mVehicleEngineAttributes(0, 0)
-    , mAttachInfo()
-    , mfOscillator(0.0f)
-    , mfAngularVelocityAccumulator(0.0f)
-    , meIntroRevingState(E_NIS_REVING_STATE_OFF)
-    , mEngineDataSet()
-    , mEngineStartLineRPM()
 {
-    mAttachInfo.mpVehicleAsset = 0;
-    mAttachInfo.muVehicleIndex = 0;
-    mAttachInfo.mAttachToken = 0;
 }
 
 // ---------------------------------------------------------------------------

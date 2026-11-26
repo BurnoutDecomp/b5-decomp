@@ -38,20 +38,8 @@ namespace World
 //   stw  off_820B1738, 0x98(this)                      ; secondary vtable (final)
 //   return this
 //
-// The four vtable stores are the compiler's devirtualisation of the base/derived and
-// secondary sub-object vptrs; in reconstructed C++ they are produced implicitly by the
-// construction of a polymorphic class deriving from CgsSound::Logic::StateManager, so
-// the BODY here is empty — the only observable work is the base construction (handled
-// by the member-init list / implicit base ctor) and the member-pool default
-// construction (maContentPool).
+// The constructor is implicit (DWARF), as is SoundWorldScene's: only the vtables are stored.
 // ---------------------------------------------------------------------------
-EmitterStateManager::EmitterStateManager()
-    : BrnSound::Logic::BrnStateManager()
-    , mSoundScene()
-    , mCameraPos()
-{
-    mCameraPos.SetZero();
-}
 
 // ---------------------------------------------------------------------------
 // ~EmitterStateManager  @ 0x826FE2E0  (the X360 `vector deleting destructor`)

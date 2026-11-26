@@ -52,13 +52,6 @@ CgsSound::Logic::EffectObject* JunkyardInAirEffect::CreateObject(u32 luType)
         return new (sTypeInfo.typeName, true) JunkyardInAirEffect();
 }
 
-JunkyardInAirEffect::JunkyardInAirEffect()
-    : InAirEffect()
-    , mbIsVehicleValid(false)
-    , meJunkyardAmbience(BrnSound::Logic::MusicEffect::E_JUNKYARD_AMBIENCE_NONE)
-{
-}
-
 JunkyardInAirEffect::~JunkyardInAirEffect()
 {
 }

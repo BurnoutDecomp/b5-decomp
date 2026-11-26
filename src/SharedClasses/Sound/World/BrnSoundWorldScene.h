@@ -18,8 +18,7 @@ namespace World
 
 struct StaticSoundMapZone
 {
-    StaticSoundMapZone() { Construct(0); }
-
+    // No constructor (DWARF lists none): SoundWorldScene::Construct() calls Construct(0) per zone.
     void Construct(u16 lu16Zone);
     bool Prepare(const CgsResource::ResourceHandle& lrHandle);
     const CgsResource::ResourceHandle& GetResourceHandle() const { return mHandle; }
@@ -69,7 +68,8 @@ struct SoundWorldScene : public BrnSound::Logic::IResourceRequester
     CGS_STATIC_ASSERT((offsetof(QueryInfo, miEntitiesWritten) == 0x18), "ARTIST query count");
     CGS_STATIC_ASSERT((offsetof(QueryInfo, mbDrawDebug) == 0x1c), "ARTIST query debug flag");
 
-    SoundWorldScene();
+    // SoundWorldScene() is implicit (DWARF: the class line h:151): the owners' constructors store only
+    // its vtable (EmitterStateManager 0x826FE2CC); Construct() runs from Prepare.
     void Construct();
     bool Prepare(BrnSound::Module::SoundLogicModule* lpLogicModule,
                  const char* lpcResourceExt);

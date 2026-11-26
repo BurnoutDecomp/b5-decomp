@@ -115,12 +115,22 @@ public:
                 bool lbSuppressBoostBys,
                 f32 lfVolumeModifier );
 
-        // BrnPassbyStateManager.h:102 -- from a static world position.
+        // BrnPassbyStateManager.h:102 -- from a static world position. Inline in the original header:
+        // ARTIST has no out-of-line copy and inlines it (PassbyState::PassbyState 0x826BF5E0,
+        // StaticPassbyControl::TriggerPassby 0x826B9BF0, UpdateDynamicPropBys 0x826A1070).
         Passby( Vector3 lStaticPos,
                 f32 lfRelativeVelocityMagnitude,
                 EePassbyTypes leType,
                 bool lbSuppressBoostBys,
-                f32 lfVolumeModifier );
+                f32 lfVolumeModifier )
+            : mStaticPos( lStaticPos )
+            , mp3dControl( 0 )
+            , mfRelativeVelocityMagnitude( lfRelativeVelocityMagnitude )
+            , meType( leType )
+            , mfVolumeModifier( lfVolumeModifier )
+            , mbSuppressBoostBys( lbSuppressBoostBys )
+        {
+        }
 
         Passby() {}
 

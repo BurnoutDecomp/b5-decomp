@@ -15,15 +15,11 @@
 
 #include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSpliceBankStatistics.h"
 #include "GameShared/GameClasses/Sound/Playback/Splicer/SpliceManager.h"
+#include <new>   // placement new
 
 namespace CgsSound { namespace Playback {
 
 SpliceBankStatistics* SpliceBankStatistics::spHead = 0;
-
-SpliceBankStatistics::Stats::Stats()
-    : muPlayCount(0)
-{
-}
 
 SpliceBankStatistics::SpliceBankStatistics()
     : mpSpliceContent(0)
@@ -46,20 +42,16 @@ SpliceBankStatistics::SpliceBankStatistics(const SpliceManager::SpliceContainer*
 
     if (lpSpliceBank)
     {
-        const u32 luCount = lpSpliceBank->mNumSplices; // *(a2 + 8)
-        muStatCount = luCount;
+        // DWARF locals luSize (CgsSplicerContent.h:68) and i (h:71). ARTIST reads the bank's
+        // count twice (0x826D5824 / 0x826D5838) and constructs each Stats in place: the
+        // placement new's null test is the `cmplwi r10,0; beq` at 0x826D5864.
+        muStatCount = lpSpliceBank->mNumSplices;
+        size_t luSize = sizeof(Stats) * lpSpliceBank->mNumSplices;
+        mpaStats = static_cast<Stats*>(gpSpliceManager->Allocate(luSize, "SpliceBankStatistics"));
 
-        mpaStats = static_cast<Stats*>(
-            gpSpliceManager->Allocate(sizeof(Stats) * luCount, "SpliceBankStatistics"));
-
-        if (muStatCount > 0)
+        for (u16 i = 0; i < muStatCount; ++i)
         {
-            for (u16 lu = 0; lu < muStatCount; ++lu)
-            {
-                Stats* lpSlot = mpaStats + lu;
-                if (lpSlot)          // asm's redundant `cmplwi r10,0; beq` preserved
-                    lpSlot->muPlayCount = 0;
-            }
+            new (&mpaStats[i]) Stats;
         }
 
         // Prepend onto the intrusive statistics list.

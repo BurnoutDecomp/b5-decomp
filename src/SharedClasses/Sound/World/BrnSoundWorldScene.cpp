@@ -54,11 +54,6 @@ void StaticSoundMapZone::SetPackedMinAndMax(const rw::math::fpu::Vector4Template
     mbPackedMinAndMax = true;
 }
 
-SoundWorldScene::SoundWorldScene()
-{
-    Construct();
-}
-
 void SoundWorldScene::Construct()
 {
     miNumZonesInUse = 0;

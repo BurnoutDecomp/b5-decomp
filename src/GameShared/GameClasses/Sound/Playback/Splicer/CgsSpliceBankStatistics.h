@@ -41,7 +41,7 @@ struct SpliceBankStatistics
     // muPlayCount is the sole member.
     struct Stats
     {
-        Stats();            // :129 (own TU -- declared only)
+        Stats() : muPlayCount(0) {}   // DWARF CgsSplicerContent.h:129 (inline)
         u16 muPlayCount;    // :130 (+0x00)
     };
 

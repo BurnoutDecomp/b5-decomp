@@ -526,31 +526,6 @@ PassbyStateManager::DynamicPropByCache::Insert( f32 lfTimeStamp, const EntityId&
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Passby::Passby( Vector3, f32, EePassbyTypes, bool, f32 )  (DWARF BrnPassbyStateManager.h:102)
-//
-// Header inline on the console; its inlined copies (UpdateDynamicPropBys @0x826A1070..
-// 0x826A1094, StaticPassbyControl::TriggerPassby @0x826B9BF0) store exactly
-//   mStaticPos = lStaticPos (stvx128) ; mp3dControl = 0 ; mfRelativeVelocityMagnitude ;
-//   meType ; mfVolumeModifier ; mbSuppressBoostBys
-// and no range assert (TriggerPassby passes a run-time type and shows only its own
-// "lePassbyType < ePassbyTypes::MaxPassbyTypes" check, BrnStaticPassbyControl.cpp:247).
-// ---------------------------------------------------------------------------
-PassbyStateManager::Passby::Passby(
-        Vector3 lStaticPos,
-        f32 lfRelativeVelocityMagnitude,
-        EePassbyTypes leType,
-        bool lbSuppressBoostBys,
-        f32 lfVolumeModifier )
-    : mStaticPos( lStaticPos )
-    , mp3dControl( 0 )
-    , mfRelativeVelocityMagnitude( lfRelativeVelocityMagnitude )
-    , meType( leType )
-    , mfVolumeModifier( lfVolumeModifier )
-    , mbSuppressBoostBys( lbSuppressBoostBys )
-{
-}
-
 namespace
 {
 // |a - b| over x / y / z: `vsubfp ; vmsum3fp`, vrsqrtefp with two Newton steps, and the

@@ -70,7 +70,7 @@ class EmitterStateManager : public BrnSound::Logic::BrnStateManager
 public:
     // EmitterStateManager @ 0x826FE290 — forwards to the base ctor chain and
     // installs this class's vtables (host-synthesised).
-    EmitterStateManager();
+    // EmitterStateManager() is implicit (DWARF: the class line h:64; ARTIST 0x826FE290).
 
     // The X360 `vector deleting destructor' @ 0x826FE2E0 destructs the base content
     // pool and re-installs the MemBase sub-object vtable before freeing. Virtual so

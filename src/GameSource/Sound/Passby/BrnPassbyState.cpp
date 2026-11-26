@@ -32,20 +32,15 @@ namespace Passby
 //   stw 3,  +120         -> mPassbyData.meType = 3
 //   stfs 1.0, +124       -> mPassbyData.mfVolumeModifier      (flt_82001C98)
 //   stb 0,  +128         -> mPassbyData.mbSuppressBoostBys
-// mfTimeOutTimer (+144) is NOT stored by the X360 ctor; value-defined here on the
-// host (0.0f) so the member is never read uninitialised -- no behavioural
-// reliance on the pre-seed value is attested.
+// mfTimeOutTimer (+144) is NOT stored by the X360 ctor.
 // ---------------------------------------------------------------------------
+// DWARF BrnPassbyState.cpp:45: mPassbyData through the static-position Passby constructor
+// (BrnPassbyStateManager.h:102, inline; ARTIST stores its fields through this+0x60 at 0x826BF5EC);
+// mfTimeOutTimer is left unset.
 PassbyState::PassbyState()
     : BrnSound::Logic::BrnState()
-    , mfTimeOutTimer(0.0f)
+    , mPassbyData(Vector3(__vspltisw(0)), 0.0f, AttribSys::Enums::ePassbyTypes::TrafficSmall, false, 1.0f)
 {
-    mPassbyData.mStaticPos.SetZero();                       // stvx128 zero, +96
-    mPassbyData.mp3dControl                 = 0;            // stw 0, +112
-    mPassbyData.mfRelativeVelocityMagnitude = 0.0f;         // stfs 0, +116
-    mPassbyData.meType = AttribSys::Enums::ePassbyTypes::TrafficSmall; // stw 3, +120
-    mPassbyData.mfVolumeModifier            = 1.0f;         // stfs flt_82001C98, +124
-    mPassbyData.mbSuppressBoostBys          = false;        // stb 0, +128
 }
 
 // ARTIST descriptor 0x82F2F95C.

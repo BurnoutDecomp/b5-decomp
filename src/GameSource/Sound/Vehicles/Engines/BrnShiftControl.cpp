@@ -57,24 +57,21 @@ const char* ShiftControl::GetTypeName() const
     return sTypeInfo.typeName;
 }
 
+// DWARF BrnShiftControl.h:310. ARTIST 0x826AF010 leaves mpEngineControl, mpHybridControl, miRaceCarIndex,
+// meShift_LFO and mfLastUpShift unset (set by Attach / the shift logic).
 ShiftControl::ShiftControl()
     : mpPhysicsControl(0)
-    , mpEngineControl(0)
-    , mpHybridControl(0)
     , mbNeed_ShiftGearSnd(false)
     , mbNeed_DisengageSnd(false)
     , mbNeed_EngageSnd(false)
     , mShiftingPatternData(0, 0)
     , meShiftState(E_SHFT_NONE)
     , meShiftStageChanged(E_SHFT_NONE)
-    , miRaceCarIndex(0)
-    , meShift_LFO(E_SHIFT_LFO_NONE)
     , mfVOL_LFO_AMP(0.0f)
     , mfVOL_LFO_FRQ(0.0f)
     , mfRPM_LFO_AMP(0.0f)
     , mfRPM_LFO_FRQ(0.0f)
     , mfRPMAtShift(0.0f)
-    , mfLastUpShift(0.0f)
     , mpShiftingActivator(0)
 {
 }
