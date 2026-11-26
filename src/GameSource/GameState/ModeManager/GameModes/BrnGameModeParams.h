@@ -210,9 +210,17 @@ public:
     // NOT added: CheckpointDataArray is a PRIVATE typedef on this class, so a public accessor
     // returning it would be unusable by name at any call site. Promote the typedef first if a
     // consumer really needs the array rather than an element.
-    void                  AddCheckpoint(LandmarkIndex luLandmarkIndex, u16 luAISectionIndex);
-    const CheckpointData* GetCheckpointData(s32 liIndex) const;
-    CheckpointData*       GetCheckpointData(s32 liIndex);
+    // Header-inline (DWARF :388/:395/:399; ARTIST holds no standalone copy of any of the three:
+    // ModeManager::CheckForOutOfRangeCarsReachingFinish 0x82340858 calls Array::GetItem on
+    // params+0x260 itself).
+    void AddCheckpoint(LandmarkIndex luLandmarkIndex, u16 luAISectionIndex)
+    {
+        CheckpointData lCheckpointData;
+        lCheckpointData.Construct(luLandmarkIndex, luAISectionIndex);
+        maCheckpointDataArray.Append(lCheckpointData);
+    }
+    const CheckpointData* GetCheckpointData(s32 liIndex) const { return &maCheckpointDataArray.Ge(static_cast<u32>(liIndex)); }
+    CheckpointData*       GetCheckpointData(s32 liIndex)       { return &maCheckpointDataArray.Ge(static_cast<u32>(liIndex)); }
     // ===========================================================================================
     // [gateui r8 link fix] GetFlag @0x821F2C88 is `ld r11,0x860(r3); and; cntlzw-normalise` --
     // a pure muFlags bit test. Its out-of-line body lives only in an UNMOUNTED (and currently
@@ -500,7 +508,8 @@ public:
     void                                              SetEventJunctionId(u32 luEventJunctionId);
     u32                                               GetEventJunctionId() const;
     void                                              SetEventData(const BrnProgression::RaceEventData* lpEventData);
-    const BrnProgression::RaceEventData*              GetEventData() const;
+    // DWARF :254, header-inline (no ARTIST copy; SurvivorMode::Start 0x823322D4 loads +0x32C).
+    const BrnProgression::RaceEventData*              GetEventData() const { return mpEventData; }
     const BrnProgression::ProgressionRankData*        GetProgressionRankData() const;
     void                                              SetJunctionID(u32 luJunctionID);
     u32                                               GetJunctionID() const;

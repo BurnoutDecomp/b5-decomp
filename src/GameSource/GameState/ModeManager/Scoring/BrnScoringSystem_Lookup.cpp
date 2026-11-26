@@ -610,10 +610,7 @@ void ScoringSystem::ClearData(bool lbResetCarData)
 // Non-const because the DWARF declares it non-const (:1180); GetRoadRageScoring() has both
 // overloads, so the non-const one binds.
 // ============================================================================================
-bool ScoringSystem::HasBeatenRoadRageTarget()
-{
-    return GetRoadRageScoring()->HasBeatenRoadRageTarget();
-}
+// (HasBeatenRoadRageTarget is header-inline.)
 
 }
 

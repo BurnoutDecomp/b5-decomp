@@ -141,21 +141,21 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
     CGS_ASSERT(lpTriggerQueryManager, CGS_ASSERT_MESSAGE_AT("lpTriggerQueryManager", CGS_ARTIST_FILE, 319));
     CGS_ASSERT(lpGameStateModule, CGS_ASSERT_MESSAGE_AT("lpGameStateModule", CGS_ARTIST_FILE, 320));
 
-    mpGameStateModule.Set(lpGameStateModule);
-    mpTriggerQueryManager.Set(lpTriggerQueryManager);
-    mpProgressionManager.Set(lpProgressionManager);
+    mpGameStateModule = lpGameStateModule;
+    mpTriggerQueryManager = lpTriggerQueryManager;
+    mpProgressionManager = lpProgressionManager;
 
     mfStateTimer = 0.0f;
     meState      = E_STATE_NONE;
 
-    mpVehicleList.Set(0);
-    mpWheelList.Set(0);
+    mpVehicleList = 0;
+    mpWheelList = 0;
 
     mJunkyardId = 0;
-    for (u32 lu = 0; lu < KU_CARSELECT_SPAWNLOCATION_COUNT; ++lu)
-    {
-        maSpawnLocations[lu].Set(0);
-    }
+    // One block clear (BrnCarSelectManager.h:334): ARTIST stores it as `std 0x28; std 0x30; stw 0x38`
+    // (0x82356570), and the PS3 inline copy in GameStateModule::Construct (0x25A5A8) takes the
+    // array's address before its five stores.
+    std::memset(maSpawnLocations, 0, sizeof(maSpawnLocations));
     meLastSpawnLocationType = KI_SPAWNLOCATIONTYPE_NONE;
 
     mStartCarId             = 0;
@@ -211,8 +211,8 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
 void CarSelectManager::Prepare(const BrnResource::VehicleList* lpVehicleList,
                                const BrnResource::WheelList*   lpWheelList)
 {
-    mpVehicleList.Set(lpVehicleList);
-    mpWheelList.Set(lpWheelList);
+    mpVehicleList = lpVehicleList;
+    mpWheelList = lpWheelList;
 
 }
 
@@ -231,10 +231,7 @@ void CarSelectManager::Prepare(const BrnResource::VehicleList* lpVehicleList,
 // SetupSpawnLocations asserts `mJunkyardId != kCGSID_NULL` (BrnCarSelectManager.cpp:1063) as its
 // own precondition.
 // ============================================================================
-bool CarSelectManager::IsInJunkyard() const
-{
-    return mJunkyardId != 0;
-}
+// (IsInJunkyard is header-inline.)
 
 // ============================================================================
 // EnterModification (X360). [committed body -- preserved verbatim]
@@ -265,7 +262,7 @@ void CarSelectManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
 {
     (void)lpControllerInput;   // passed through to the deeper state updaters; not read at this level
 
-    GameStateModule* lpModule = mpGameStateModule.Get();
+    GameStateModule* lpModule = mpGameStateModule;
     if (lpModule == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -421,7 +418,7 @@ void CarSelectManager::EndTransitionInState(GameStateModuleIO::GameActionQueue* 
 // ============================================================================
 void CarSelectManager::SaveChosenLiveryForCar(CgsID lCarId)
 {
-    BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -430,7 +427,7 @@ void CarSelectManager::SaveChosenLiveryForCar(CgsID lCarId)
         return;
     }
 
-    const BrnResource::VehicleList* lpVehicleList = mpVehicleList.Get();
+    const BrnResource::VehicleList* lpVehicleList = mpVehicleList;
     const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lCarId);
     const BrnResource::VehicleListEntry* lpVehicleListEntry =
         (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
@@ -523,9 +520,9 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
     {
         BrnProgression::DerivedCarArray lDerivedCars;
 
-        if (mpVehicleList.Get() != 0)
+        if (mpVehicleList != 0)
         {
-            lDerivedCars.ConstructColourLiveryList(mpVehicleList.Get(), mDesiredCarId);
+            lDerivedCars.ConstructColourLiveryList(mpVehicleList, mDesiredCarId);
         }
         else
         {
@@ -542,9 +539,9 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
             CgsDev::Assert::EndAssert();
         }
 
-        if (mpProgressionManager.Get() != 0)
+        if (mpProgressionManager != 0)
         {
-            mpProgressionManager.Get()->UnlockDerivedCarCollection(lDerivedCars);
+            mpProgressionManager->UnlockDerivedCarCollection(lDerivedCars);
         }
 
         // Debug dump, gated internally on CgsDev::Message::gxMessageFilterFlags bit 0.
@@ -591,7 +588,7 @@ void CarSelectManager::StartCarSelectState(GameStateModuleIO::GameActionQueue* l
 
     if (meState == E_STATE_CAR_MODIFICATION)
     {
-        mpGameStateModule.Get()->RequestStreamingForVehicleSelection(lpActionQueue, mDesiredCarId);
+        mpGameStateModule->RequestStreamingForVehicleSelection(lpActionQueue, mDesiredCarId);
     }
 
     mfStateTimer = 0.0f;
@@ -728,16 +725,16 @@ void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpA
             reinterpret_cast<const CgsModule::Event*>(lacUnlocked), KI_ACTION_NEW_CAR_UNLOCKED, 16);
     }
 
-    if (mpGameStateModule.Get() == 0)
+    if (mpGameStateModule == 0)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mpGameStateModule", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 816));
         CgsDev::Assert::EndAssert();
     }
-    mpGameStateModule.Get()->SetCarUnlockAlreadyShown(lpUnlockCarData->GetId());
-    mpGameStateModule.Get()->OnSpecialEventPlayerCarChange(mCurrentCarToUnlock, 0, lpActionQueue, true);
+    mpGameStateModule->SetCarUnlockAlreadyShown(lpUnlockCarData->GetId());
+    mpGameStateModule->OnSpecialEventPlayerCarChange(mCurrentCarToUnlock, 0, lpActionQueue, true);
 
-    const BrnTrigger::SpawnLocation* lpUnlockSpawnLocation = maSpawnLocations[3].Get();
+    const BrnTrigger::SpawnLocation* lpUnlockSpawnLocation = maSpawnLocations[3];
     if (lpUnlockSpawnLocation == 0)   // X360 *(v2+13) byte 0x34 == maSpawnLocations[3]
     {
         CgsDev::Assert::BeginAssert();
@@ -785,7 +782,7 @@ void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpA
         GameStateModuleIO::CarSelectChangeColourAction lColour;
         s32 liColour  = 0;
         s32 liPalette = 0;
-        mpProgressionManager.Get()->GetCarColourAndPalette(mCurrentCarToUnlock, &liColour, &liPalette);
+        mpProgressionManager->GetCarColourAndPalette(mCurrentCarToUnlock, &liColour, &liPalette);
         lColour.muPaletteIndex = static_cast<u32>(liPalette);
         lColour.muColourIndex  = static_cast<u32>(liColour);
         AsActionQueue(lpActionQueue)->AddEvent(
@@ -835,7 +832,7 @@ void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActi
         }
     }
 
-    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[1].Get();   // X360 *(this+44)
+    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[1];   // X360 *(this+44)
     if (lpSpawnLocation == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -919,7 +916,7 @@ void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActi
             reinterpret_cast<const CgsModule::Event*>(lacDropIn), KI_ACTION_CAR_SELECTION_DROPIN, 16);
     }
 
-    mpGameStateModule.Get()->OnSpecialEventPlayerCarChange(mCurrentCarToUnlock, 0, lpActionQueue, true);
+    mpGameStateModule->OnSpecialEventPlayerCarChange(mCurrentCarToUnlock, 0, lpActionQueue, true);
 
     // X360 tail: mDesiredCarId(+0x48) = mCurrentCarToUnlock(+0x60); muUnlockCount(+0x5C) = 0. (The
     // X360 also scribbles a {0, spawnLoc} scratch value back into mCurrentCarToUnlock; inert.)
@@ -951,7 +948,7 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
     }
 
     // X360: if (active-player-car CgsID == mDesiredCarId) -> swap already complete.
-    const CgsID lActiveCarId = mpGameStateModule.Get()->GetActivePlayerCarId();   // GameStateModule + 0x456D8
+    const CgsID lActiveCarId = mpGameStateModule->GetActivePlayerCarId();   // GameStateModule + 0x456D8
     if (lActiveCarId == mDesiredCarId)
     {
         mfStateTimer = KF_CARSELECT_DELAY_BEFORE_CHANGE_CAR;   // 1.0
@@ -979,7 +976,7 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
     if (!mbInCarModScreen)
         meLastSpawnLocationType = (meLastSpawnLocationType == 1) ? 2 : 1;   // X360 (==1)+1
 
-    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[meLastSpawnLocationType].Get();
+    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[meLastSpawnLocationType];
     if (lpSpawnLocation == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -1000,7 +997,7 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
     }
 
     if (!mbInCarModScreen)
-        mpGameStateModule.Get()->RequestStreamingForVehicleSelection(lpActionQueue, mDesiredCarId);
+        mpGameStateModule->RequestStreamingForVehicleSelection(lpActionQueue, mDesiredCarId);
 
     mfStateTimer = KF_TIMER_RESET;                  // 0.0
     meState      = E_STATE_STARTING_CHANGING_CAR;   // 7
@@ -1028,7 +1025,7 @@ void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* 
     {
         if (mfStateTimer >= KF_CARSELECT_DELAY_BEFORE_CHANGE_CAR)   // >= 1.0
         {
-            const CgsID lActiveCarId = mpGameStateModule.Get()->GetActivePlayerCarId();
+            const CgsID lActiveCarId = mpGameStateModule->GetActivePlayerCarId();
             if (lActiveCarId == mDesiredCarId)
             {
                 // CarSelectionChangedDropInAction (16B): the desired car id + "type 1" bit.
@@ -1042,13 +1039,13 @@ void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* 
             }
             else
             {
-                if (mpGameStateModule.Get() == 0)
+                if (mpGameStateModule == 0)
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert("mpGameStateModule", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 689));
                     CgsDev::Assert::EndAssert();
                 }
-                mpGameStateModule.Get()->OnSpecialEventPlayerCarChange(mDesiredCarId, 0, lpActionQueue, true);
+                mpGameStateModule->OnSpecialEventPlayerCarChange(mDesiredCarId, 0, lpActionQueue, true);
                 TeleportCurrentVehicle(lpActionQueue);
                 mbWaitingForStreaming = true;     // X360 *(this+88) = 1
                 meState               = E_STATE_CHANGING_CAR;   // 8
@@ -1138,7 +1135,7 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
         lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacResetDriver), KI_ACTION_RESET_PLAYER_DRIVER, 1);
     }
 
-    const BrnTrigger::SpawnLocation* lpExitSpawnLocation = maSpawnLocations[4].Get();
+    const BrnTrigger::SpawnLocation* lpExitSpawnLocation = maSpawnLocations[4];
     if (lpExitSpawnLocation == 0)   // X360 v2[14] byte 0x38 == maSpawnLocations[4]
     {
         CgsDev::Assert::BeginAssert();
@@ -1205,16 +1202,16 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
     }
 
     // X360 raw poke: *(mpProgressionManager + 133512) = 1 (a drive-thrus-dirty / rivals-dirty flag).
-    mpProgressionManager.Get()->SetDriveThrusDirtyFlag();   // FLAG: ProgressionManager + 133512 (de-inlined byte poke)
+    mpProgressionManager->SetDriveThrusDirtyFlag();   // FLAG: ProgressionManager + 133512 (de-inlined byte poke)
 
     // X360 UpdateExitState @0x82398C20: `li r4, 1` -- the pause-REASON bit this exit clears, not a
     // bool (see the RequestUnpause signature note in BrnGameStateModule.h).
-    mpGameStateModule.Get()->RequestUnpause(KI_PAUSE_REASON_CAR_SELECT, lpActionQueue);
+    mpGameStateModule->RequestUnpause(KI_PAUSE_REASON_CAR_SELECT, lpActionQueue);
 
-    if (!mpGameStateModule.Get()->IsOnlineGameMode())
-        mpGameStateModule.Get()->OnPlayerCarChange(mDesiredCarId, 0, lpActionQueue, true);
+    if (!mpGameStateModule->IsOnlineGameMode())
+        mpGameStateModule->OnPlayerCarChange(mDesiredCarId, 0, lpActionQueue, true);
 
-    if (mpProgressionManager.Get() == 0)
+    if (mpProgressionManager == 0)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1043));
@@ -1222,7 +1219,7 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
     }
 
     // X360 raw poke: *(mpProgressionManager + 133489) = 1 (rivals-update request flag).
-    mpProgressionManager.Get()->RequestUpdateRivals();   // FLAG: ProgressionManager + 133489 (de-inlined byte poke)
+    mpProgressionManager->RequestUpdateRivals();   // FLAG: ProgressionManager + 133489 (de-inlined byte poke)
 
     // RequestAutoSaveAction (1B: 0).
     {
@@ -1287,9 +1284,9 @@ void CarSelectManager::EnterJunkyard(GameStateModuleIO::GameActionQueue* lpActio
 
     // Snapshot the active player car id into mStartCarId, then pin its chosen-livery base car on the
     // profile (X360 reads the active car CgsID at GameStateModule + 0x456D8).
-    const CgsID lActiveCarId = mpGameStateModule.Get()->GetActivePlayerCarId();
+    const CgsID lActiveCarId = mpGameStateModule->GetActivePlayerCarId();
     mStartCarId = lActiveCarId;
-    mpProgressionManager.Get()->GetProfile()->SetChosenLiveryIdForBaseCar(lActiveCarId);
+    mpProgressionManager->GetProfile()->SetChosenLiveryIdForBaseCar(lActiveCarId);
 
     StartTransitionInState(lpActionQueue);
 }
@@ -1311,7 +1308,7 @@ void CarSelectManager::EnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQ
 
     SetupSpawnLocations();
 
-    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[1].Get();   // X360 *(this+44)
+    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[1];   // X360 *(this+44)
     if (lpSpawnLocation == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -1381,7 +1378,7 @@ void CarSelectManager::EnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQ
         lpCarSelectChangedAction->mbReserved0x31      = false;
     }
 
-    mpGameStateModule.Get()->OnSpecialEventPlayerCarChange(lCarModelId, lWheelId, lpActionQueue, true);
+    mpGameStateModule->OnSpecialEventPlayerCarChange(lCarModelId, lWheelId, lpActionQueue, true);
 
     mStartCarId = lCarModelId;   // X360 *(this+64) = v7 (car model id)
 }
@@ -1412,7 +1409,7 @@ void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameA
         GameStateModuleIO::CarSelectChangeColourAction lColour;
         s32 liColour  = 0;
         s32 liPalette = 0;
-        mpProgressionManager.Get()->GetCarColourAndPalette(mStartCarId, &liColour, &liPalette);
+        mpProgressionManager->GetCarColourAndPalette(mStartCarId, &liColour, &liPalette);
         lColour.muPaletteIndex = static_cast<u32>(liPalette);
         lColour.muColourIndex  = static_cast<u32>(liColour);
         lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lColour),
@@ -1420,7 +1417,7 @@ void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameA
     }
 
     u8 lacStartupDeform[1] = { 0 };
-    BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
     // X360: `if ( *(mpProgressionManager + 118401) )`. mProfile is embedded at ProgressionManager
     // +0x170 (368), so that byte is Profile +118033 == mbIsNewProfile -- the start-of-game deform
     // is gated on the profile being BRAND NEW. (The old comment here said "Profile + 118401",

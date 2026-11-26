@@ -371,7 +371,8 @@ namespace RaceCarEntityModuleIO
         Vector3 GetPlayerPosition() const;                                                   // :396 (own TU)
         Vector3 GetPlayerDirection() const;                                                  // :399 (own TU)
         Vector3 GetPlayerLinearVelocity() const;                                             // :402 (own TU)
-        bool GetCanDriveAwayFromCrash() const;                                               // :405 (own TU)
+        // :405, header-inline (no ARTIST copy; BridgeWorldVehicleDataToGui 0x823E5900 loads +0x28E1).
+        bool GetCanDriveAwayFromCrash() const { return mbCanDriveAwayFromCrash; }
         void ClearCarsInRace();                                                              // :408 (own TU)
         void AddCarToRace(BrnWorld::RaceCar*, EGlobalRaceCarIndex);                           // :413 (own TU)
         void SetActiveRaceCarIndex(BrnGameState::GameStateModuleIO::EPlayerScoringIndex, EActiveRaceCarIndex); // :420 (own TU)
@@ -382,7 +383,9 @@ namespace RaceCarEntityModuleIO
         // (The batch annotation on the block above marked every declaration "own TU"; this one
         // is a plain store and is bodied where the DWARF declares it.)
         void SetPlayerWrecked(bool lbWrecked) { mbPlayerWrecked = lbWrecked; }   // @+0x28E0
-        bool IsPlayerWrecked() const;                                                        // :431 (own TU)
+        // :431, header-inline (no ARTIST copy; StuntModeScoring::UpdateStunts 0x8233899C and
+        // WorldModule::BridgeRaceCarModuleToPropModule_PreScene 0x827A5510 load +0x28E0 in place).
+        bool IsPlayerWrecked() const { return mbPlayerWrecked; }
         Vector3 GetCurrentInAirRotations(EActiveRaceCarIndex) const;                         // :435 (own TU)
         bool HasCrashedIntoWater(EActiveRaceCarIndex) const;                                 // :440 (own TU)
 

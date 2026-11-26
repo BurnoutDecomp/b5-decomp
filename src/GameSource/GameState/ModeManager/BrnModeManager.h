@@ -465,7 +465,9 @@ public:
     EActiveRaceCarIndex  GetPlayerActiveRaceCarIndex() const { return mePlayerActiveRaceCarIndex; }
     GameStateModule*     GetGameStateModule();                            // asserts "mpGameStateModule"
     TriggerQueryManager* GetTriggerQueryManager() const { return mpTriggerQueryManager; }
-    BrnProgression::ProgressionManager* GetProgressionManager() const;    // returns mpProgressionManager (+0x6D5C)
+    // DWARF h:387 / h:390, header-inline (no ARTIST copy). +0x6D5C.
+    const BrnProgression::ProgressionManager* GetProgressionManager() const { return mpProgressionManager; }
+    BrnProgression::ProgressionManager*       GetProgressionManager()       { return mpProgressionManager; }
     // DWARF h:310, header-inline (no ARTIST copy).
     const NetworkRoundManager*          GetNetworkRoundManager() const { return mpNetworkRoundManager; }   // +0x6D64
     // A one-instruction forward to the embedded ChallengeManager (+0x6E00); ProcessGameEvents'

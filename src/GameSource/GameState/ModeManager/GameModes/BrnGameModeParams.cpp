@@ -174,23 +174,8 @@ s32 GameModeParams::GetCheckpointCount() const
 // KU_MAX_ACTIVE_RACE_CARS assert because the CONSOLE emits one at their sites (it is the
 // grid-slot range check, not the array's), and this one has no such console assert.
 // -----------------------------------------------------------------------------
-// Inlined in SetUpCheckPointsForGameMode, ARTIST0x82328FE8..0x82328FF8.
-void GameModeParams::AddCheckpoint(LandmarkIndex luLandmarkIndex, u16 luAISectionIndex)
-{
-    CheckpointData lCheckpointData;
-    lCheckpointData.Construct(luLandmarkIndex, luAISectionIndex);
-    maCheckpointDataArray.Append(lCheckpointData);
-}
-
-const CheckpointData* GameModeParams::GetCheckpointData(s32 liIndex) const
-{
-    return &maCheckpointDataArray.Ge(static_cast<u32>(liIndex));
-}
-
-CheckpointData* GameModeParams::GetCheckpointData(s32 liIndex)
-{
-    return &maCheckpointDataArray.Ge(static_cast<u32>(liIndex));
-}
+// AddCheckpoint / GetCheckpointData are header-inline (BrnGameModeParams.h); AddCheckpoint is
+// inlined in SetUpCheckPointsForGameMode, ARTIST 0x82328FE8..0x82328FF8.
 
 // -----------------------------------------------------------------------------
 // GetStartLocationCount - number of start-grid slots registered.
@@ -613,10 +598,7 @@ u32 StartGameModeParams::GetJunctionID() const
 // name, exactly as GetProgressionRankData's does below. That file-string/line difference is the
 // whole reason this body is bare and the next one is not; it is not a judgement call.
 // -----------------------------------------------------------------------------
-const BrnProgression::RaceEventData* StartGameModeParams::GetEventData() const
-{
-    return mpEventData;
-}
+// (GetEventData is header-inline.)
 
 // -----------------------------------------------------------------------------
 // GetProgressionRankData -- mpProgressionRankData, console +0x334 (820).

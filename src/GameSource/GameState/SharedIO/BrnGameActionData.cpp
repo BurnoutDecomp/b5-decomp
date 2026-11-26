@@ -3,6 +3,8 @@
 #include "GameSource/GameState/SharedIO/BrnGameActionData.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/GameState/BrnGameStateTypes.h"   // StuntElementType and its operator++
+#include "SharedClasses/World/BrnWorldRegion.h"       // BrnWorld::ECounty and its operator++
 
 #include <cstring>   // strncpy
 
@@ -81,36 +83,21 @@ void GameStats::Construct()
         maRoadsRuledCounts[liScoreTypeIndex] = 0;
     }
 
-    s32 liStuntElementType = 0;
-    do
+    // The two grids walk the original enums with their header-inline post-increments, whose range
+    // asserts ARTIST inlines (BrnWorldRegion.h:44 at 0x82354FE4, BrnGameStateTypes.h:98 at
+    // 0x82355010).
+    for (StuntElementType leStuntElementType = E_STUNT_ELEMENT_TYPE_JUMP;
+         leStuntElementType < E_STUNT_ELEMENT_TYPE_COUNT;
+         leStuntElementType++)
     {
-        s32 liCounty = 0;
-        do
+        for (BrnWorld::ECounty leCounty = BrnWorld::E_COUNTY_PALM_BAY_HEIGHTS;
+             leCounty < BrnWorld::E_COUNTY_VALID_COUNT;
+             leCounty++)
         {
-            maaiMaxStuntElementsPerCounty[liStuntElementType][liCounty]     = 0;
-            maaiCurrentStuntElementsPerCounty[liStuntElementType][liCounty] = 0;
-
-            ++liCounty;
-            if (!(liCounty <= KI_COUNTY_VALID_COUNT))
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("leEnumIndex <= E_COUNTY_VALID_COUNT",
-                                            CGS_ASSERT_LOCATION("..\\..\\..\\SharedClasses\\World/BrnWorldRegion.h", 44));
-                CgsDev::Assert::EndAssert();
-            }
-        }
-        while (liCounty < KI_COUNTY_VALID_COUNT);
-
-        ++liStuntElementType;
-        if (!(liStuntElementType <= KI_STUNT_ELEMENT_TYPE_COUNT))
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("leEnumIndex <= E_STUNT_ELEMENT_TYPE_COUNT",
-                                        CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\GameState/BrnGameStateTypes.h", 98));
-            CgsDev::Assert::EndAssert();
+            maaiMaxStuntElementsPerCounty[leStuntElementType][leCounty]     = 0;
+            maaiCurrentStuntElementsPerCounty[leStuntElementType][leCounty] = 0;
         }
     }
-    while (liStuntElementType < KI_STUNT_ELEMENT_TYPE_COUNT);
 
     // NOTE: miTotalRoads is intentionally left untouched here -- the X360 asm at 0x82354F38
     // stores exactly 87 dwords (indices 0-86: 3 CgsID == 6 words, 33 int, 3 float, 13 takedown,

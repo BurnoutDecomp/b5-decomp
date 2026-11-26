@@ -785,7 +785,8 @@ namespace BrnGameState
 
         bool DidPlayerFinishOnlineEventFirst(EActiveRaceCarIndex leRaceCarIndex);             // :1171
         s32  GetOnlineFinishPosition(EActiveRaceCarIndex leRaceCarIndex);                     // :1176 / 0x823112A8
-        bool HasBeatenRoadRageTarget();                                                       // :1180
+        // :1180, header-inline (no ARTIST copy).
+        bool HasBeatenRoadRageTarget() { return GetRoadRageScoring()->HasBeatenRoadRageTarget(); }
         bool HasTargetScoreBeenExceeded() const;                                              // :1183
         void ResetOnlineCheckpointsVisited(EActiveRaceCarIndex leRaceCarIndex);               // :1188
         void ReducePlayerDurability();                                                        // :1192

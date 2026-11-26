@@ -253,7 +253,12 @@ public:
         E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE   = 3
     };
 
-    bool IsControllerActive() const;
+    // DWARF h:817 (body h:1173), header-inline: no ARTIST copy; PreWorldUpdate 0x823A5328 inlines it.
+    bool IsControllerActive() const
+    {
+        return meControllerState == E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE
+            || meControllerState == E_CONTROLLERSTATE_NOT_IN_GAME;
+    }
 
     void SetControllerState(EControllerState leControllerState) { meControllerState = leControllerState; }
     void SetActiveGameModeState()   { meControllerState = E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE; }
@@ -296,8 +301,9 @@ public:
 
     bool IsTrainingPauseSuppressed() const;
 
+    // DWARF h:627, header-inline (no ARTIST copy).
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
-        GetLastActiveRaceCarInterface() const;
+        GetLastActiveRaceCarInterface() const { return &mLastActiveRaceCarInterface; }
 
     const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*
         GetLastGlobalRaceCarInterface() const;

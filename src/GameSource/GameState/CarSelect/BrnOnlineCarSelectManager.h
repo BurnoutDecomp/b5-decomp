@@ -4,14 +4,12 @@
 #include "BrnCommonTypes.h"   // CgsID, Vector3
 
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // GameStateModuleIO::GameActionQueue (real typedef)
-#include "GameSource/GameState/CarSelect/BrnCarSelectManager.h" // BrnGameState::HostPointer
+#include "GameSource/GameState/CarSelect/BrnCarSelectManager.h" // GameStateModuleIO::ControllerInput, BrnProgression::CarData
 
 // Recovered source slice for BrnGameState::OnlineCarSelectManager (DWARF: BrnOnlineCarSelectManager.h:61,
 // non-polymorphic struct). The declaration shape follows DecFIGS; member order and each named field
 // are gated by ARTIST stores and accesses in the owning functions. Pointers are
-// 32-bit on the console and held as full host pointers here (HostPointer<T>, as BrnCarSelectManager.h
-// does); semantic parity is by named member (x64 byte offsets differ per AGENTS.md), so no
-// byte-exact inter-member padding is forced here.
+// the DWARF's raw pointers (BrnOnlineCarSelectManager.h), 4 bytes each on the console.
 
 namespace BrnGameState   { class GameStateModule; }
 namespace BrnProgression { class ProgressionManager; }
@@ -19,10 +17,6 @@ namespace BrnResource    { struct VehicleList; class WheelList; }
 
 namespace BrnGameState
 {
-// The owner and list pointers are held in BrnCarSelectManager.h's HostPointer (a full host
-// pointer). The 32-bit copy this header used to carry truncated x64 addresses; see the note on
-// HostPointer for the measured failure.
-
 struct OnlineCarSelectManager
 {
     // DWARF BrnOnlineCarSelectManager.h:65.
@@ -56,8 +50,8 @@ struct OnlineCarSelectManager
     // GameStateModule::Prepare's terminal stage (the two `stw` into +0x0C / +0x10).
     void Prepare(const BrnResource::VehicleList* lpVehicleList, const BrnResource::WheelList* lpWheelList)
     {
-        mpWheelList.Set(lpWheelList);
-        mpVehicleList.Set(lpVehicleList);
+        mpWheelList = lpWheelList;
+        mpVehicleList = lpVehicleList;
     }
 
     // Reference inline accessor; ProcessGameEvents' case 123 tests it (`lbzx` of +0x14).
@@ -113,10 +107,10 @@ private:
     void SendOnlineChangeCarAction(GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbFinalSelection);
 
     EInternalState                                meInternalState;          // X360 this+0
-    HostPointer<GameStateModule>                    mpGameStateModule;        // console +0x04
-    HostPointer<BrnProgression::ProgressionManager> mpProgressionManager;     // console +0x08
-    HostPointer<const BrnResource::VehicleList>     mpVehicleList;            // console +0x0C
-    HostPointer<const BrnResource::WheelList>       mpWheelList;              // console +0x10
+    GameStateModule*                              mpGameStateModule;        // console +0x04
+    BrnProgression::ProgressionManager*           mpProgressionManager;     // console +0x08
+    const BrnResource::VehicleList*               mpVehicleList;            // console +0x0C
+    const BrnResource::WheelList*                 mpWheelList;              // console +0x10
     bool                                          mbIsInOnlineCarSelect;    // X360 this+20
     f32                                           mfTimeLeftInCarSelect;    // X360 this+24 (NOT zeroed by Construct)
     Vector3                                       mSpawnPosition;           // X360 this+32 (stvx128 zero)

@@ -1430,12 +1430,7 @@ CgsID GameStateModule::GetActivePlayerWheelId() const
     return mActivePlayerWheelId;
 }
 
-// The module's cached active-race-car snapshot (X360 embedded interface at this+0x397E0).
-const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
-    GameStateModule::GetLastActiveRaceCarInterface() const
-{
-    return &mLastActiveRaceCarInterface;
-}
+// (GetLastActiveRaceCarInterface, the embedded snapshot at this+0x397E0, is header-inline.)
 
 // ⭐ [stuntrace waveB mount closure] GetDistrictMap -- X360 read at this+245904 (0x3C090).
 // The world district map the checkpoint-district labeller and ProcessGameEvents' region lookup
@@ -2180,11 +2175,7 @@ CgsID GameStateModule::GetSpawnCar(const BrnProgression::Profile* lpProfile)
 //     if ( v61 == 3 || (v63 = v61 != 0, v62 = 0, !v63) ) v62 = 1;
 // which is `state == 3 || state == 0` written the way the compiler folded it.
 // ============================================================================
-bool GameStateModule::IsControllerActive() const
-{
-    return meControllerState == E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE
-        || meControllerState == E_CONTROLLERSTATE_NOT_IN_GAME;
-}
+// (now header-inline in BrnGameStateModule.h.)
 
 // ================================================================================================
 // ⭐⭐⭐ [A9 scoring-feed wave 2026-08-27] GameStateModule::CopyScoringDataToOutput -- X360

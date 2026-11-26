@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT_AT (operator++ range guard)
 
 // New header b5-decomp/src/SharedClasses/World/BrnWorldRegion.h. Sourced from
 // references/DecFIGS/dwarfdump/SharedClasses/World/BrnWorldRegion.h:30-76,81-83
@@ -51,8 +52,17 @@ enum EDistrict
     E_DISTRICT_COUNT
 };
 
-// DWARF BrnWorldRegion.h:44 -- post-increment for county iteration loops.
-ECounty operator++(ECounty& leCounty, int);
+// DWARF BrnWorldRegion.h:44 -- post-increment for county iteration loops. Header-inline with
+// no ARTIST copy: GameStats::Construct 0x82354FE4 inlines its range assert
+// ("leEnumIndex <= E_COUNTY_VALID_COUNT", this header, line 44).
+inline ECounty operator++(ECounty& leEnumIndex, int)
+{
+    const ECounty leOldEnumIndex = leEnumIndex;
+    leEnumIndex = static_cast<ECounty>(static_cast<s32>(leEnumIndex) + 1);
+    CGS_ASSERT_AT(leEnumIndex <= E_COUNTY_VALID_COUNT, "leEnumIndex <= E_COUNTY_VALID_COUNT",
+                  "..\\..\\..\\SharedClasses\\World/BrnWorldRegion.h", 44);
+    return leOldEnumIndex;
+}
 
 // Name tables (defined out-of-line in the X360 .data; declared here, defined as
 // externs in BrnWorldRegion.cpp). DWARF BrnWorldRegion.h:81/83 + .cpp hint 4/7/10.

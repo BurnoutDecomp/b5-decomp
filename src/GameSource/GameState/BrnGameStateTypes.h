@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT_AT (operator++ range guard)
 
 // Owning header for BrnGameState::LandmarkIndex.
 //
@@ -133,6 +134,18 @@ enum StuntElementType
     E_STUNT_ELEMENT_TYPE_BILLBOARD = 2,
     E_STUNT_ELEMENT_TYPE_COUNT     = 3,
 };
+
+// DWARF BrnGameStateTypes.h:203 (declared with the enum). Header-inline with no ARTIST copy:
+// GameStats::Construct 0x82355010 inlines its range assert ("leEnumIndex <=
+// E_STUNT_ELEMENT_TYPE_COUNT", this header, line 98).
+inline StuntElementType operator++(StuntElementType& leEnumIndex, int)
+{
+    const StuntElementType leOldEnumIndex = leEnumIndex;
+    leEnumIndex = static_cast<StuntElementType>(static_cast<s32>(leEnumIndex) + 1);
+    CGS_ASSERT_AT(leEnumIndex <= E_STUNT_ELEMENT_TYPE_COUNT, "leEnumIndex <= E_STUNT_ELEMENT_TYPE_COUNT",
+                  "..\\..\\..\\GameSource\\GameState/BrnGameStateTypes.h", 98);
+    return leOldEnumIndex;
+}
 
 // X360-attested handle type (DWARF BrnGameStateTypes.h:57). A 2-byte signed wrapper over
 // a trigger-region index. SelectRandomDestinations builds one of these from the s32 it

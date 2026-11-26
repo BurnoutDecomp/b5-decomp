@@ -4,21 +4,13 @@
 #include "BrnCommonTypes.h"   // CgsID
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // GameStateModuleIO::EPlayerScoringIndex (committed home)
 
-#include "types.hpp"            // uintptr_t
-
 // Owning header for BrnGameState::CarSelectManager -- the junkyard car-select state machine (the
 // player drove into a junkyard; this runs the car-swap / car-unlock-sequence / car-modification
 // flow). DWARF: BrnCarSelectManager.h:59 (non-polymorphic struct). GROWN to the full DWARF member
 // layout + all methods; bodies land across two .cpp TUs.
 //
-// PARITY-BY-NAMED-MEMBER (AGENTS.md): on the X360 every raw pointer is 4 bytes and CgsID is 8
-// bytes, so the console class is ~0x7C bytes. On the x64 gate the pointers are HOST pointers held
-// in a HostPointer<T> wrapper (8 bytes) -- the class is WIDER here and that is fine, because what
-// is pinned is member ORDER + the ABI-stable structural facts (relative offsetof asserts in a
-// never-called _AssertLayout()), NOT absolute byte offsets.
-// ⛔ It did not always say that: until 2026-08-01 the wrapper stored the host pointer in a u32 to
-// hold the 4-byte spacing, which silently truncated every pointer on x64. See the banner on
-// HostPointer below -- that is the single most important comment in this header.
+// On the X360 every raw pointer is 4 bytes and CgsID is 8 bytes, so the console class is ~0x7C
+// bytes; _AssertLayout() pins the CgsID spacing and the spawn-array length.
 //
 // X360 member byte offsets (console, 4-byte ptrs) the bodies bind to, for reference:
 //   +0x00 meState (s32)            +0x04 mfStateTimer (f32)
@@ -54,45 +46,10 @@ namespace GameStateModuleIO
     struct ControllerInput;                                    // Update() param (passed through; never deref'd here)
 }
 
-// ⛔⛔ CORRECTED 2026-08-01 -- THIS WAS A WILD-POINTER BUG, PROVEN AT RUNTIME.
-//
-// This template used to be:
-//     struct Pointer32 { u32 muAddress;
-//         void Set(T* p) { muAddress = static_cast<u32>(reinterpret_cast<uintptr_t>(p)); }
-//         T*   Get() const { return reinterpret_cast<T*>(static_cast<uintptr_t>(muAddress)); } };
-// i.e. it stored a HOST pointer in 32 bits to keep the X360's 4-byte pointer spacing. The game
-// builds x64 (build_game_exe.bat line 19, "VS 2022 x64 toolchain"), so every Set() DISCARDED THE
-// TOP 32 BITS and every Get() handed back a wild address. Measured, first boot after
-// GameStateModule finally constructed one:
-//     [CarSelectManager::Prepare] in veh=140699359625488 (0x7FF7586AC110)
-//                                out veh=525975824       (0x00000000586AC110)   roundtrip=0
-// All EIGHT members below were affected, mpGameStateModule included -- so the first
-// `mpGameStateModule.Get()->...` in Update() would have been an access violation, and
-// maSpawnLocations[1].Get()->GetType() (the junkyard start-of-game spawn) likewise.
-//
-// ⚠️⚠️ AND THE OBVIOUS DIAGNOSTIC HIDES IT: CgsStrStream.cpp:83 renders operator<<(void*) as
-// `(unsigned)(size_t)p` -- ONLY THE LOW 32 BITS. Printing both ends as void* shows two IDENTICAL
-// addresses for a pointer that was in fact truncated. Print pointers as u64 in this engine.
-//
-// THE FIX, and why it is faithful: the header's own contract (see the PARITY-BY-NAMED-MEMBER
-// banner above) is that absolute X360 byte offsets are NOT baked here -- _AssertLayout pins only
-// ABI-stable structural facts. So the 4-byte spacing bought nothing and cost correctness. The
-// wrapper survives only as the .Set()/.Get() call-site vocabulary; it now holds a real pointer.
-// Renamed off "Pointer32" because that name is no longer true (and because
-// BrnOnlineCarSelectManager.h declares its own BrnGameState::Pointer32 with the SAME name in the
-// SAME namespace -- a redefinition the moment both headers meet in one TU).
-//
-// ⚠️ THE SAME TRUNCATING Pointer32 IS STILL COPY-PASTED IN TWO OTHER PLACES, both currently
-// UNMOUNTED (so latent, not live): BrnGameStateFlybyManager.cpp,
-// BrnGameStateOnlineFlybyManager.h. Whoever mounts any of them must fix it there too.
-// (BrnOnlineCarSelectManager.h now uses HostPointer.)
-template <typename T>
-struct HostPointer
-{
-    T* mpPointer;
-    void Set(T* lpPointer) { mpPointer = lpPointer; }
-    T*   Get() const       { return mpPointer; }
-};
+// The pointer members are the DWARF's raw pointers (BrnCarSelectManager.h:175..:184), 4 bytes
+// each on the console. The PC tree's HostPointer<T> wrapper is not ARTIST's type: as a struct it
+// kept the XDK from merging Construct's five maSpawnLocations stores into ARTIST's
+// `std 0x28; std 0x30; stw 0x38` (0x823564D0).
 
 class CarSelectManager
 {
@@ -121,7 +78,8 @@ public:
     void Construct(const TriggerQueryManager* lpTriggerQueryManager,
                    GameStateModule* lpGameStateModule,
                    BrnProgression::ProgressionManager* lpProgressionManager);   // X360 0x823564D0
-    bool IsInJunkyard() const;
+    // DWARF h:121, header-inline (no ARTIST copy).
+    bool IsInJunkyard() const { return mJunkyardId != 0; }
     // Inlined in ProcessStreamingCompleteEvent @0x82390200: manager +0x58.
     bool IsWaitingForStreaming() const { return mbWaitingForStreaming; }
 
@@ -202,13 +160,13 @@ private:
     friend class GameStateDebugComponent; // ARTIST GameStateDebugComponent::OnActivate binds these console fields
     State                                          meState;                       // +0x00  :172
     f32                                            mfStateTimer;                  // +0x04  :173
-    HostPointer<GameStateModule>                   mpGameStateModule;             // +0x08  :175
-    HostPointer<const TriggerQueryManager>         mpTriggerQueryManager;         // +0x0C  :176
-    HostPointer<BrnProgression::ProgressionManager> mpProgressionManager;          // +0x10  :177
-    HostPointer<const BrnResource::VehicleList>    mpVehicleList;                 // +0x14  :179
-    HostPointer<const BrnResource::WheelList>      mpWheelList;                   // +0x18  :180
+    GameStateModule*                               mpGameStateModule;             // +0x08  :175
+    const TriggerQueryManager*                     mpTriggerQueryManager;         // +0x0C  :176
+    BrnProgression::ProgressionManager*            mpProgressionManager;          // +0x10  :177
+    const BrnResource::VehicleList*                mpVehicleList;                 // +0x14  :179
+    const BrnResource::WheelList*                  mpWheelList;                   // +0x18  :180
     CgsID                                          mJunkyardId;                   // +0x20  :182
-    HostPointer<const BrnTrigger::SpawnLocation>   maSpawnLocations[KU_CARSELECT_SPAWNLOCATION_COUNT]; // +0x28 :184
+    const BrnTrigger::SpawnLocation*               maSpawnLocations[KU_CARSELECT_SPAWNLOCATION_COUNT]; // +0x28 :184
     s32                                            meLastSpawnLocationType;       // +0x3C  :185
     CgsID                                          mStartCarId;                   // +0x40  :187
     CgsID                                          mDesiredCarId;                 // +0x48  :188

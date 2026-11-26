@@ -35,31 +35,7 @@ namespace GsmIO = BrnGameState::GameStateModuleIO;
 // DEBUG_ClearMedals' flag clear, and the GetMedalAchievedForEventWithID /
 // GetTotalWinCount bit tests on the u16 flag word @ +4).
 // ------------------------------------------------------------------------------------
-void ProfileEvent::Construct(u32 luEventID)
-{
-    muEventID = luEventID;
-    muFlags   = 0;
-}
-
-u32 ProfileEvent::GetID() const
-{
-    return muEventID;
-}
-
-u16 ProfileEvent::GetFlags() const
-{
-    return muFlags;
-}
-
-void ProfileEvent::SetFlags(u16 lu16Flags)
-{
-    muFlags = lu16Flags;
-}
-
-bool ProfileEvent::IsFlagSet(Flags leFlag) const
-{
-    return (muFlags & leFlag) != 0;
-}
+// (Construct / GetID / GetFlags / SetFlags / IsFlagSet are header-inline.)
 
 // EnableFlags / ClearFlags -- DWARF BrnProfile.h:328 / :332. Both are inlined at every console
 // site: the discovery arm of GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent open-codes
@@ -67,15 +43,7 @@ bool ProfileEvent::IsFlagSet(Flags leFlag) const
 // (0x82390750..0x82390760), and ProgressionDebugComponent::DEBUG_ClearMedals @0x8235A168 uses
 // the andi. form. Declared here since the odometer/drive-thru waves; bodied now that the
 // discovery arm has a caller.
-void ProfileEvent::EnableFlags(u16 lu16Flags)
-{
-    muFlags = static_cast<u16>(muFlags | lu16Flags);
-}
-
-void ProfileEvent::ClearFlags(u16 lu16Flags)
-{
-    muFlags = static_cast<u16>(muFlags & static_cast<u16>(~lu16Flags));
-}
+// (EnableFlags / ClearFlags are header-inline too.)
 
 // ------------------------------------------------------------------------------------
 // CarData::Construct -- initialise one owned-car record (X360 inlines this in AddCar).

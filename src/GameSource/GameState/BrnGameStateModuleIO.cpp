@@ -428,9 +428,10 @@ PostWorldInputBuffer::ContactSpyInterface* PostWorldInputBuffer::GetContactSpyIn
 }
 
 // Read lock, assert line 213: the global race-car output interface (+0x9B40).
+// X360 0x8231D368 (streamed read-lock assert at BrnGameStateModuleIO.h:213).
 const PostWorldInputBuffer::RCEntityGlobalRaceCarOutputInterface* PostWorldInputBuffer::GetGlobalRaceCarOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_BRNGAMESTATEMODULEIO_FILE, 213));
     return &mGlobalRaceCarOutputInterface;
 }
 

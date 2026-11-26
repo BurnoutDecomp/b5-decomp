@@ -67,14 +67,14 @@ static const f32 KF_DEBUG_TROPHY_CAR_DEFORM = 0.85f;   // flt_82029BB8 (10628366
 // ============================================================================
 const BrnProgression::CarData* CarSelectManager::GetProfileCarData(CgsID& lrCarID) const
 {
-    if (mpProgressionManager.Get() == 0)
+    if (mpProgressionManager == 0)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1341));
         CgsDev::Assert::EndAssert();
     }
 
-    BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -134,9 +134,9 @@ bool CarSelectManager::IsThisCarInCurrentUnlockSequence(const BrnProgression::Ca
     if (leUnlockType == 5)
     {
         // Rank-gated unlock: in iff the player's progression rank has reached the car's requirement.
-        const s32 liVehicleIndex = mpVehicleList.Get()->GetVehicleIndex(lpProfileCar->GetId());
+        const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lpProfileCar->GetId());
         const BrnResource::VehicleListEntry* lpEntry =
-            (liVehicleIndex < 0) ? 0 : mpVehicleList.Get()->GetVehicleData(liVehicleIndex);
+            (liVehicleIndex < 0) ? 0 : mpVehicleList->GetVehicleData(liVehicleIndex);
         if (lpEntry == 0)
         {
             CgsDev::Assert::BeginAssert();
@@ -153,7 +153,7 @@ bool CarSelectManager::IsThisCarInCurrentUnlockSequence(const BrnProgression::Ca
             CgsDev::Assert::EndAssert();
         }
         const s32 liRequiredRank = lpEntry->GetUnlockRank();   // X360 *(entry + 0x90 + 0x09) -- FLAG
-        if (mpProgressionManager.Get()->GetProgressionRank() >= liRequiredRank)
+        if (mpProgressionManager->GetProgressionRank() >= liRequiredRank)
             return true;
         return false;
     }
@@ -175,13 +175,13 @@ bool CarSelectManager::IsThisCarInCurrentUnlockSequence(const BrnProgression::Ca
 // ============================================================================
 void CarSelectManager::SetupNormalUnlockList()
 {
-    if (mpProgressionManager.Get() == 0)
+    if (mpProgressionManager == 0)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1199));
         CgsDev::Assert::EndAssert();
     }
-    BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -193,10 +193,10 @@ void CarSelectManager::SetupNormalUnlockList()
     mbShutdownUnlockSequence = false;   // X360 *(this + 0x74) = 0 (select the normal predicate)
 
     // Offline only, and only when car-unlock is enabled (X360 *(this + 0x75) == mbCarUnlockEnabled).
-    if (!mpGameStateModule.Get()->IsOnlineGameMode() && mbCarUnlockEnabled)
+    if (!mpGameStateModule->IsOnlineGameMode() && mbCarUnlockEnabled)
     {
-        const s32 liCarCount = lpProfile->GetCarCount();
-        for (s32 li = 0; li < liCarCount; ++li)
+        // The count is re-read every pass (lwz 0x26c at 0x82379BD8).
+        for (s32 li = 0; li < lpProfile->GetCarCount(); ++li)
         {
             const BrnProgression::CarData* lpProfileCar = lpProfile->GetCarData(li);
             if (lpProfileCar == 0)
@@ -210,7 +210,7 @@ void CarSelectManager::SetupNormalUnlockList()
         }
     }
 
-    mbNoNormalUnlockCars = (muUnlockCount == 0);   // X360 *(this + 0x70) = (count == 0)
+    mbNoNormalUnlockCars = (muUnlockCount < 1);    // X360 0x82379BEC: unsigned compare with 1 (subfc/subfe)
 }
 
 // ============================================================================
@@ -222,13 +222,13 @@ void CarSelectManager::SetupNormalUnlockList()
 // ============================================================================
 void CarSelectManager::SetupShutdownUnlockList()
 {
-    if (mpProgressionManager.Get() == 0)
+    if (mpProgressionManager == 0)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1239));
         CgsDev::Assert::EndAssert();
     }
-    BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -242,13 +242,13 @@ void CarSelectManager::SetupShutdownUnlockList()
     // shutdown-predicate select). They are set together here but read at different points, so they are
     // kept DISTINCT (folding them is unsafe: SetupNormalUnlockList clears only 0x74 while leaving 0x70 live).
     mbNoNormalUnlockCars     = true;    // X360 *(this + 0x70) = 1
-    mbShutdownUnlockSequence = true;    // X360 *(this + 0x74) = 1
     muUnlockCount            = 0;       // X360 *(this + 0x5C) = 0
+    mbShutdownUnlockSequence = true;    // X360 *(this + 0x74) = 1
 
-    if (!mpGameStateModule.Get()->IsOnlineGameMode() && mbCarUnlockEnabled)
+    if (!mpGameStateModule->IsOnlineGameMode() && mbCarUnlockEnabled)
     {
-        const s32 liCarCount = lpProfile->GetCarCount();
-        for (s32 li = 0; li < liCarCount; ++li)
+        // The count is re-read every pass (lwz 0x26c at 0x82379D10).
+        for (s32 li = 0; li < lpProfile->GetCarCount(); ++li)
         {
             const BrnProgression::CarData* lpProfileCar = lpProfile->GetCarData(li);
             if (lpProfileCar == 0)
@@ -273,7 +273,7 @@ void CarSelectManager::SetupShutdownUnlockList()
 // ============================================================================
 CgsID CarSelectManager::GetNextUnlockCarID(CgsID lCurrentID)
 {
-    BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -383,7 +383,7 @@ void CarSelectManager::RequestChangeCar(const CgsID& lCarId)
         return;
     }
 
-    BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -525,7 +525,7 @@ void CarSelectManager::SpawnInStartCar(GameStateModuleIO::GameActionQueue* lpAct
     // X360 reads the spawn-location handle at this+0x2C == maSpawnLocations[1] (byte 0x28 + 4). The
     // frozen layout summary maps byte 0x2C to maSpawnLocations[1]; that is the "drive-in" slot the
     // start car is placed at.
-    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[1].Get();
+    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[1];
     if (lpSpawnLocation == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -673,7 +673,7 @@ void CarSelectManager::TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue
     const s32 liSpawnIndex = meLastSpawnLocationType;
     const BrnTrigger::SpawnLocation* lpSpawnLocation =
         (liSpawnIndex >= 0 && liSpawnIndex < static_cast<s32>(KU_CARSELECT_SPAWNLOCATION_COUNT))
-            ? maSpawnLocations[liSpawnIndex].Get()
+            ? maSpawnLocations[liSpawnIndex]
             : 0;
     if (lpSpawnLocation == 0)
     {
@@ -760,7 +760,7 @@ void CarSelectManager::TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue
         // X360 reads *(this + 0x4C) == the cache-during-change car id (mCacheDuringChangeCarId region)
         // for the colour query; behaviourally it is the car just teleported in. Use mDesiredCarId,
         // which is the active car at this point of the swap.
-        mpProgressionManager.Get()->GetCarColourAndPalette(mDesiredCarId, &liColour, &liPalette);
+        mpProgressionManager->GetCarColourAndPalette(mDesiredCarId, &liColour, &liPalette);
         lColour.muPaletteIndex = static_cast<u32>(liPalette);
         lColour.muColourIndex  = static_cast<u32>(liColour);
         AsActionQueue(lpActionQueue)->AddEvent(
@@ -789,7 +789,7 @@ void CarSelectManager::SetupSpawnLocations()
         CgsDev::Assert::FireAssert("mJunkyardId != kCGSID_NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1063));
         CgsDev::Assert::EndAssert();
     }
-    if (mpTriggerQueryManager.Get() == 0)
+    if (mpTriggerQueryManager == 0)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mpTriggerQueryManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1064));
@@ -797,9 +797,9 @@ void CarSelectManager::SetupSpawnLocations()
     }
 
     for (u32 lu = 0; lu < KU_CARSELECT_SPAWNLOCATION_COUNT; ++lu)
-        maSpawnLocations[lu].Set(0);
+        maSpawnLocations[lu] = 0;
 
-    const BrnTrigger::TriggerData* lpTriggerData = mpTriggerQueryManager.Get()->GetTriggerData();
+    const BrnTrigger::TriggerData* lpTriggerData = mpTriggerQueryManager->GetTriggerData();
     if (lpTriggerData == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -832,24 +832,24 @@ void CarSelectManager::SetupSpawnLocations()
             {
                 // type 1..3 -> the matching dedicated slot (exactly one of each).
                 const u32 luSlot = luType;
-                if (maSpawnLocations[luSlot].Get() != 0)
+                if (maSpawnLocations[luSlot] != 0)
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "maSpawnLocations[lSpawnLocationType] == NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1110));
                     CgsDev::Assert::EndAssert();
                 }
-                maSpawnLocations[luSlot].Set(lpSpawnLocation);
+                maSpawnLocations[luSlot] = lpSpawnLocation;
             }
-            else if (maSpawnLocations[0].Get() != 0)
+            else if (maSpawnLocations[0] != 0)
             {
                 // second generic drive-in slot -> index 4.
-                maSpawnLocations[4].Set(lpSpawnLocation);
+                maSpawnLocations[4] = lpSpawnLocation;
             }
             else
             {
                 // first generic drive-in slot -> index 0.
-                maSpawnLocations[0].Set(lpSpawnLocation);
+                maSpawnLocations[0] = lpSpawnLocation;
             }
         }
     }
@@ -857,7 +857,7 @@ void CarSelectManager::SetupSpawnLocations()
     // ARTIST 0x8236ECB4..0x8236ED6C. Keep the authored slot order unless
     // the active player's heading opposes the second generic spawn.
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpLastActiveCar =
-        mpGameStateModule.Get()->GetLastActiveRaceCarInterface();
+        mpGameStateModule->GetLastActiveRaceCarInterface();
     if (lpLastActiveCar == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -867,20 +867,20 @@ void CarSelectManager::SetupSpawnLocations()
 
     if (lpLastActiveCar->IsPlayerCarActive())
     {
-        const Vector3 lvSpawnDirection = maSpawnLocations[4].Get()->mDirection;
+        const Vector3 lvSpawnDirection = maSpawnLocations[4]->mDirection;
         const Vector3 lvPlayerDirection = lpLastActiveCar->GetPlayerDirection();
         if (rw::math::vpu::Dot(lvSpawnDirection, lvPlayerDirection) < 0.0f)
         {
-            const BrnTrigger::SpawnLocation* lpFirst = maSpawnLocations[0].Get();
-            maSpawnLocations[0].Set(maSpawnLocations[4].Get());
-            maSpawnLocations[4].Set(lpFirst);
+            const BrnTrigger::SpawnLocation* lpFirst = maSpawnLocations[0];
+            maSpawnLocations[0] = maSpawnLocations[4];
+            maSpawnLocations[4] = lpFirst;
         }
     }
 
     // --- All five slots must now be filled --------------------------------------------------------
     for (u32 lu = 0; lu < KU_CARSELECT_SPAWNLOCATION_COUNT; ++lu)
     {
-        if (maSpawnLocations[lu].Get() == 0)
+        if (maSpawnLocations[lu] == 0)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
@@ -909,7 +909,7 @@ void CarSelectManager::SetupSpawnLocations()
 // ============================================================================
 void CarSelectManager::DEBUG_UnlockCarsForTesting()
 {
-    BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -929,10 +929,10 @@ void CarSelectManager::DEBUG_UnlockCarsForTesting()
     u8  lucPass = (mbDEBUG_UnlockTrophyCarsForTesting == 0) ? 1 : 0;
     u32 luAddedThisPass = 0;
 
-    const s32 liVehicleCount = mpVehicleList.Get()->GetVehicleCount();
+    const s32 liVehicleCount = mpVehicleList->GetVehicleCount();
     for (s32 liVehicle = 0; liVehicle < liVehicleCount; ++liVehicle)
     {
-        const BrnResource::VehicleListEntry* lpVehicleData = mpVehicleList.Get()->GetVehicleData(liVehicle);
+        const BrnResource::VehicleListEntry* lpVehicleData = mpVehicleList->GetVehicleData(liVehicle);
         const CgsID lCarId = lpVehicleData->GetId();   // X360 *(VehicleData) (the leading car id)
 
         // Does the profile already own this car?
@@ -955,7 +955,7 @@ void CarSelectManager::DEBUG_UnlockCarsForTesting()
             {
                 // Not owned -> add it. Pass selector chooses the unlock type + deform stamp.
                 const s32 leUnlockType = (lucPass != 0) ? 3 : 0;
-                BrnProgression::CarData* lpNewCar = mpProgressionManager.Get()->AddCar(lCarId, leUnlockType);
+                BrnProgression::CarData* lpNewCar = mpProgressionManager->AddCar(lCarId, leUnlockType);
                 if (lucPass != 0)
                     lpNewCar->SetUnlockDeformationAmount(KF_DEBUG_TROPHY_CAR_DEFORM);   // CarData +0x0C = 0.85
                 ++luAddedThisPass;

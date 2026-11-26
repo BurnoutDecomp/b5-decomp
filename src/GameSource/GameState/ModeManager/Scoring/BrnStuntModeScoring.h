@@ -387,7 +387,7 @@ namespace BrnGameState
         // enum into this keystone; the asm compares it as a 32-bit word against the convoy id array.
         void       DealWithInProgressStunt(const GameStateModuleIO::OnStuntElementCompleteAction* lpAction,
                                            f32 lfDelta, s32 liPlayerActiveRaceCarIndex);  // X360 0x82321710 (reconciled; call-site 0x82340AB8 proved arg count/types)
-        void       UpdateStunts(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar);     // X360 0x82338908 (best-effort; mirrors UpdateAirStunts driver)
+        void       UpdateStunts(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta);     // X360 0x82338908 (best-effort; mirrors UpdateAirStunts driver)
 
         // RECONCILED signature (was best-effort `void(f32)`). The X360 body (0x82338A98) gates ALL its
         // work behind a player-active test that dereferences the output interface (*(a2+10328) ==
@@ -395,7 +395,7 @@ namespace BrnGameState
         // active does it call UpdateCombo/UpdateBufferedScore/UpdateStuntRepetition. The Update
         // call-site (0x82340BC0) loads r4 = the interface, f1 = delta -> sig carries the interface.
         // Param ORDER matches the sibling UpdateStunts(f32, interface*) so Update's call site is uniform.
-        void       UpdateScores(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar);     // X360 0x82338A98 (reconciled; call-site 0x82340B40 proved the interface arg)
+        void       UpdateScores(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta);     // X360 0x82338A98 (reconciled; call-site 0x82340B40 proved the interface arg)
 
         // RECONCILED signature (was best-effort `void(const ActiveRaceCarOutputInterface*, f32)`).
         // The X360 body (0x823446F8) takes NO interface and NO float: r3 = this, r4 = the per-frame

@@ -98,13 +98,16 @@ struct ProfileEvent
         E_FLAG_WON_EVENT_BEFORE         = 32
     };
 
-    void Construct(u32 luEventID);
-    u32  GetID() const;
-    u16  GetFlags() const;
-    void SetFlags(u16 lu16Flags);
-    bool IsFlagSet(Flags leFlag) const;
-    void EnableFlags(u16 lu16Flags);
-    void ClearFlags(u16 lu16Flags);
+    // DWARF BrnProfile.h:309..:332, header-inline: ARTIST holds no standalone copy of any
+    // ProfileEvent method (AddEvent, DEBUG_ClearMedals and CheckIfPlayerIsAtJunctionWithAnEvent
+    // 0x82390750 open-code them).
+    void Construct(u32 luEventID)       { muEventID = luEventID; muFlags = 0; }
+    u32  GetID() const                  { return muEventID; }
+    u16  GetFlags() const               { return muFlags; }
+    void SetFlags(u16 lu16Flags)        { muFlags = lu16Flags; }
+    bool IsFlagSet(Flags leFlag) const  { return (muFlags & leFlag) != 0; }
+    void EnableFlags(u16 lu16Flags)     { muFlags = static_cast<u16>(muFlags | lu16Flags); }
+    void ClearFlags(u16 lu16Flags)      { muFlags = static_cast<u16>(muFlags & static_cast<u16>(~lu16Flags)); }
     bool IsFound() const;
     void SetFound(bool lbFound);
 

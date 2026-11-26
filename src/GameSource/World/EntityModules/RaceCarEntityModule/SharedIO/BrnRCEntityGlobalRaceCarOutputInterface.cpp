@@ -91,8 +91,11 @@ void RCEntityGlobalRaceCarOutputInterface::Clear()
 EActiveRaceCarIndex RCEntityGlobalRaceCarOutputInterface::GetActiveRaceCarIndex(
         EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    // ARTIST's asserts cite the header (0x82003360, lines 1512/1513 at 0x821F46F4/0x821F4718).
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0, "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
+                  BRN_RCEMOI_H_ASSERT_FILE, 1512);
+    CGS_ASSERT_AT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
+                  BRN_RCEMOI_H_ASSERT_FILE, 1513);
     return maeActiveRaceCarIndices[leGlobalRaceCarIndex];
 }
 

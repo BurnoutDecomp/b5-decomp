@@ -890,11 +890,7 @@ GameStateModule* ModeManager::GetGameStateModule()
     return mpGameStateModule;
 }
 
-// DWARF BrnModeManager.h:387 (the const overload). X360 +0x6D5C.
-BrnProgression::ProgressionManager* ModeManager::GetProgressionManager() const
-{
-    return mpProgressionManager;
-}
+// (GetProgressionManager, DWARF h:387/:390, is header-inline.)
 
 // DWARF BrnModeManager.h:384. X360 +0x6D64.
 

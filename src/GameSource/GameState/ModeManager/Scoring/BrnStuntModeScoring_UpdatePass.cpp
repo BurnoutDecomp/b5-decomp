@@ -149,19 +149,20 @@ namespace BrnGameState
             mStuntTypeInfo[liType].mbActive = false;
         }
 
-        UpdateStunts(lfDelta, lpRaceCar);
-        UpdateScores(lfDelta, lpRaceCar);   // reconciled sig now carries the interface (player-active gate)
+        UpdateStunts(lpRaceCar, lfDelta);   // ARTIST 0x82340BBC: r4 = interface, f1 = delta
+        UpdateScores(lpRaceCar, lfDelta);   // reconciled sig now carries the interface (player-active gate)
 
         // Tick down the end-of-mode delay; a crashing player car collapses it to zero immediately.
         if (mfTimeDelayBeforeModeEnd > KF_ZERO)
         {
-            if (mbPlayerCarCrashing)
+            // The countdown is the fall-through arm (ARTIST 0x82340BEC bne -> the zero store).
+            if (!mbPlayerCarCrashing)
             {
-                mfTimeDelayBeforeModeEnd = KF_ZERO;
+                mfTimeDelayBeforeModeEnd -= lfDelta;
             }
             else
             {
-                mfTimeDelayBeforeModeEnd -= lfDelta;
+                mfTimeDelayBeforeModeEnd = KF_ZERO;
             }
         }
 
@@ -192,61 +193,36 @@ namespace BrnGameState
     // FLAGs (LEDGER-ONLY method -- no DWARF signature; best-effort per the committed home):
     //   (1) *(a2+10464) modelled as IsPlayerCarCrashing() from the crash/disturbance semantics; the
     //       exact interface field at +10464 was not offset-walked. Re-confirm vs the asm.
-    void StuntModeScoring::UpdateStunts(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar)
+    void StuntModeScoring::UpdateStunts(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta)
     {
-        const EActiveRaceCarIndex lePlayerIndex = lpRaceCar->GetPlayerActiveRaceCarIndex();
-        CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BRNRACECARENTITYMODULEOUTPUTINTERFACE, 967));
-
-        bool lbPlayerCarActive = false;
-        if (lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        // The PS3 Update holds this pass inline with the DWARF locals lbStunting (cpp:190) and
+        // lbPlayerCarCrashing (cpp:194). The interface predicates are header-inline: ARTIST
+        // 0x82338924..0x823389DC tests IsPlayerCarActive, then IsPlayerCarCrashing (+0x77A),
+        // IsPlayerWrecked (+0x28E0) and IsPlayerCarFatalyCrashing (+0x77B) into one bool.
+        if (lpRaceCar->IsPlayerCarActive())
         {
-            lbPlayerCarActive = lpRaceCar->IsPlayerCarActive();
+            bool lbStunting = false;
+            bool lbPlayerCarCrashing = lpRaceCar->IsPlayerCarCrashing() ||
+                                       lpRaceCar->IsPlayerWrecked() ||
+                                       lpRaceCar->IsPlayerCarFatalyCrashing();
+
+            if (mbPlayerCarCrashing || lbPlayerCarCrashing)
+            {
+                mbValidStunt = false;
+                EndCombo();
+            }
+            else
+            {
+                // All four detectors run; their results are or-ed (ARTIST 0x82338A2C..0x82338A58).
+                lbStunting = UpdateAirStunts(lfDelta, lpRaceCar);
+                lbStunting |= UpdateDriftStunts(lfDelta, lpRaceCar);
+                lbStunting |= UpdateBoostStunts(lfDelta, lpRaceCar);
+                lbStunting |= UpdateDrivingStunts(lfDelta, lpRaceCar);
+            }
+
+            mbPlayerCarCrashing = lbPlayerCarCrashing;
+            mbStuntInProgress &= lbStunting;   // byte and (0x82338A84)
         }
-
-        if (!lbPlayerCarActive)
-        {
-            return;
-        }
-
-        // Per-car physics flags for the player's race-car state.
-        bool lbCrashing        = false;
-        bool lbFatalyCrashing  = false;
-        if (lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
-        {
-            const BrnPhysics::Vehicle::RaceCarState* lpState = lpRaceCar->GetRaceCarState(lePlayerIndex);
-            lbCrashing       = lpState->mbCrashing;           // +0x44A
-            lbFatalyCrashing = lpState->mbIsFatalyCrashing;   // +0x44B
-        }
-
-        // FLAG(1): provisional accessor for the player-level *(a2+10464) bool.
-        const bool lbPlayerDisturbedNow =
-            lbCrashing || lpRaceCar->IsPlayerCarCrashing() || lbFatalyCrashing;
-
-        bool lbAnyStuntValid = false;
-
-        if (mbPlayerCarCrashing || lbPlayerDisturbedNow)
-        {
-            // Disturbed: drop the in-progress stunt and end the combo. The console dispatches
-            // through the vtable (the online scorer overrides EndCombo); the committed home
-            // declares it non-virtual, so this binds the base body, as UpdateCombo's two calls do.
-            mbValidStunt = false;
-            EndCombo();
-        }
-        else
-        {
-            // Run the four category detectors; OR their per-frame "valid stunt" results together.
-            const bool lbAir     = UpdateAirStunts(lfDelta, lpRaceCar);
-            const bool lbDrift   = UpdateDriftStunts(lfDelta, lpRaceCar);
-            const bool lbBoost   = UpdateBoostStunts(lfDelta, lpRaceCar);
-            const bool lbDriving = UpdateDrivingStunts(lfDelta, lpRaceCar);
-            lbAnyStuntValid = lbAir || lbDrift || lbBoost || lbDriving;
-        }
-
-        // Carry the disturbance state into mbPlayerCarCrashing for next frame, and keep the stunt
-        // in-progress flag only while it was already in progress AND something valid happened.
-        mbPlayerCarCrashing = lbPlayerDisturbedNow;
-        mbStuntInProgress   = mbStuntInProgress && lbAnyStuntValid;
     }
 
     // ------------------------------------------------------------------------
@@ -505,21 +481,11 @@ namespace BrnGameState
     //   * if (v6) { UpdateCombo(this, delta, interface); UpdateBufferedScore(this, delta);
     //               UpdateStuntRepetition(this, delta); }   (asm 0x82338B08 mr r5,r31 -> interface)
     // The +10328 / +10336 interface offsets are the same the sibling UpdateStunts body maps to
-    // GetPlayerActiveRaceCarIndex() / IsPlayerCarActive(). Param order matches sibling UpdateStunts
-    // (f32 delta, interface*) so Update's two sub-pass call sites are uniform.
-    void StuntModeScoring::UpdateScores(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar)
+    // IsPlayerCarActive() is the header-inline accessor whose h:967 assert and -1 short-circuit
+    // ARTIST shows inlined (0x82338ABC..0x82338AFC). Interface first, delta second (r4 / f1).
+    void StuntModeScoring::UpdateScores(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta)
     {
-        const EActiveRaceCarIndex lePlayerIndex = lpRaceCar->GetPlayerActiveRaceCarIndex();
-        CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BRNRACECARENTITYMODULEOUTPUTINTERFACE, 967));
-
-        bool lbPlayerCarActive = false;
-        if (lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
-        {
-            lbPlayerCarActive = lpRaceCar->IsPlayerCarActive();
-        }
-
-        if (lbPlayerCarActive)
+        if (lpRaceCar->IsPlayerCarActive())
         {
             // X360: UpdateCombo also gets the output interface (asm 0x82338B08 mr r5,r31);
             // UpdateBufferedScore / UpdateStuntRepetition take delta only.
