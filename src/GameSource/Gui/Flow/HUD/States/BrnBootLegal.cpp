@@ -233,15 +233,16 @@ namespace BrnGui
         //   ch 41 (view-state) GuiEvent<214> { 1, 214, 12 } flag 0     (16 bytes)
         //   ch 40 (gui-out)    GuiEvent<20>  { 1, 20, 12 }            (16 bytes)
         //   ch 41 (view-state) GuiEvent<25>  { 8, 25, 12, 0, 1.0f }   (20 bytes)
-        {
-            GuiCommandEvent16<214> lBoostBar(0);
-            mpStateInterface->OutputViewState(lBoostBar);
-        }
-        PostCommand16<20>(mpStateInterface);
-        {
-            GuiOptionEvent20 lOption;
-            mpStateInterface->OutputViewState(lOption);
-        }
+        // DWARF locals lHideBoostBarEvent (cpp:103) / lClearScreen (cpp:112); the id-20 record
+        // between them is the header-inline StateInterface::StopLoadingScreen.
+        GuiEventShowHideBoostBar lHideBoostBarEvent;
+        lHideBoostBarEvent.mbShow = false;
+        mpStateInterface->OutputViewState(lHideBoostBarEvent);
+        mpStateInterface->StopLoadingScreen();
+        CgsGui::GuiEventClearScreenSet lClearScreen;
+        lClearScreen.meClearScreen = CgsGui::GuiEventClearScreenSet::E_CLEAR_SCREEN_ACTIVE;
+        lClearScreen.mfAlpha       = 1.0f;
+        mpStateInterface->OutputViewState(lClearScreen);
 
         // Build the five apt animator components + the title-screen menu (the X360 calls each
         // component's vtable Construct; here we call CgsGui::GuiComponent::Construct by name).
@@ -250,7 +251,7 @@ namespace BrnGui
         mStartMessageAnimator.Construct("StartMessageAnimatorComponent", mpStateInterface, 0);
         mBackgroundAnimator.Construct("BackgroundAnimatorComponent", mpStateInterface, 0);
         mSelectionMenuAnimator.Construct("SelectionMenuAnimatorComponent", mpStateInterface, 0);
-        mSelectionMenu.Construct("MenuItem", mpStateInterface, KI_NUM_MENU_ENTRIES, 0, -1);
+        mSelectionMenu.Construct("MenuItem", mpStateInterface, KI_NUM_MENU_ENTRIES, 0, 0xFFFFFFFFu);   // li r8,-1; clrldi
 
         // Initial state: idx 0, no sign-out, wait-for-start armed, stage timer 0.
         muCurrentAttractMovieIdx = 0;

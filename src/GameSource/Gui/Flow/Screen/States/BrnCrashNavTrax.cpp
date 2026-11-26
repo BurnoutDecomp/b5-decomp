@@ -113,25 +113,6 @@ namespace BrnGui
             GuiEventAudioTraxUpdate::EATraxArrayType mEnabledInEvents;     // +0x20
         };
 
-        // type 460 (0x1CC), record 20: audition this track (-1 == stop).
-        struct GuiEventAudioTraxPreviewRecord
-        {
-            s32 miSize;      // 8
-            s32 miType;      // 460
-            s32 miOffset;    // 12
-            s32 miTrackIndex;   // +0x0C
-            u8  mbFlag;         // +0x10 -- the console writes 0 and never anything else
-        };
-
-        // type 462 (0x1CE), record 16: the play-order selector.
-        struct GuiEventAudioTraxPlayOrderRecord
-        {
-            s32 miSize;      // 4
-            s32 miType;      // 462
-            s32 miOffset;    // 12
-            s32 miPlayOrderMode;   // +0x0C
-        };
-
         // type 356 (0x164), record 16: the same "commit the profile" marker
         // CrashNavOptionsData::OutputEvents ends with.
         struct GuiEventTraxCommitRecord
@@ -488,25 +469,19 @@ namespace BrnGui
     {
         mEATraxMenuComponent.UpdatePlayOrderMode(meTraxPlayOrderMode);
 
-        GuiEventAudioTraxPlayOrderRecord lRecord;
-        lRecord.miSize          = 4;
-        lRecord.miType          = 462;
-        lRecord.miOffset        = 12;
-        lRecord.miPlayOrderMode = static_cast<s32>(meTraxPlayOrderMode);
-        PostRecord(mpStateInterface, lRecord);
+        GuiEventAudioTraxPlayOrder lPlayOrderEvent;   // DWARF local (cpp:599)
+        lPlayOrderEvent.meMode = meTraxPlayOrderMode;
+        mpStateInterface->OutputGuiEvent(lPlayOrderEvent);
     }
 
     // ---- PreviewTrack @0x824CF830 ---------------------------------------------------
     // Audition liTrackIndex, or stop when it is -1.
     void CrashNavTrax::PreviewTrack(s32 liTrackIndex)
     {
-        GuiEventAudioTraxPreviewRecord lRecord;
-        lRecord.miSize       = 8;
-        lRecord.miType       = 460;
-        lRecord.miOffset     = 12;
-        lRecord.miTrackIndex = liTrackIndex;
-        lRecord.mbFlag       = 0;
-        PostRecord(mpStateInterface, lRecord);
+        GuiEventAudioTraxPreview lPreviewEvent;   // DWARF local (cpp:616)
+        lPreviewEvent.miPreviewTrackIndex  = liTrackIndex;
+        lPreviewEvent.mbPlayOnEATraxSlider = false;
+        mpStateInterface->OutputGuiEvent(lPreviewEvent);
     }
 
     // ---- HandleTraxEnabledStateChange @0x824CF898 -----------------------------------
@@ -515,14 +490,16 @@ namespace BrnGui
     // saved, and StateCancelFlow is what puts the profile's copy back.
     void CrashNavTrax::HandleTraxEnabledStateChange()
     {
-        GuiEventAudioTraxUpdateRecord lRecord;
-        lRecord.miSize   = 32;
-        lRecord.miType   = 458;
-        lRecord.miOffset = 16;
-        lRecord.miPad    = 0;
-        lRecord.mEnabledInFreeBurn = *mEATraxMenuComponent.GetTraxEnabledInFreeBurnBitfieldPtr();
-        lRecord.mEnabledInEvents   = *mEATraxMenuComponent.GetTraxEnabledInEventsBitfieldPtr();
-        PostRecord(mpStateInterface, lRecord);
+        // DWARF locals (cpp:649 / :650 / :653): the two bit fields copied out of the component,
+        // then the event built from the copies.
+        GuiEventAudioTraxUpdate::EATraxArrayType lEATraxEnabledInFreeBurnBitfield =
+            *mEATraxMenuComponent.GetTraxEnabledInFreeBurnBitfieldPtr();
+        GuiEventAudioTraxUpdate::EATraxArrayType lEATraxEnabledInEventsBitfield =
+            *mEATraxMenuComponent.GetTraxEnabledInEventsBitfieldPtr();
+        GuiEventAudioTraxUpdate lUpdateEvent;
+        lUpdateEvent.mEATraxEnabledInFreeBurn = lEATraxEnabledInFreeBurnBitfield;
+        lUpdateEvent.mEATraxEnabledInEvents   = lEATraxEnabledInEventsBitfield;
+        mpStateInterface->OutputGuiEvent(lUpdateEvent);
     }
 
     // ---- ApplyAndSaveSettings @0x824CF938 -------------------------------------------
@@ -558,27 +535,16 @@ namespace BrnGui
         PreviewTrack(KI_PREVIEW_STOP);
         SendStateEvent("GO_BACK");
 
-        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
+        // No profile local (DWARF has none): ARTIST re-reads mpGuiCache for each accessor call.
+        GuiEventAudioTraxUpdate lUpdateEvent;            // DWARF local (cpp:571)
+        lUpdateEvent.mEATraxEnabledInFreeBurn = *mpGuiCache->GetMenuOptionsData()->GetTraxAvailableInFreeBurn();
+        lUpdateEvent.mEATraxEnabledInEvents   = *mpGuiCache->GetMenuOptionsData()->GetTraxAvailableInEvents();
 
-        GuiEventAudioTraxUpdateRecord lRecord;
-        lRecord.miSize   = 32;
-        lRecord.miType   = 458;
-        lRecord.miOffset = 16;
-        lRecord.miPad    = 0;
-        lRecord.mEnabledInFreeBurn = *lpProfile->GetTraxAvailableInFreeBurn();
-        lRecord.mEnabledInEvents   = *lpProfile->GetTraxAvailableInEvents();
+        GuiEventAudioTraxPlayOrder lPlayOrderEvent;      // DWARF local (cpp:576)
+        lPlayOrderEvent.meMode = mpGuiCache->GetMenuOptionsData()->GetTraxPlayOrderMode();
 
-        const GuiEventAudioTraxPlayOrder::ETraxPlayOrderMode lePlayOrderMode =
-            lpProfile->GetTraxPlayOrderMode();
-
-        PostRecord(mpStateInterface, lRecord);
-
-        GuiEventAudioTraxPlayOrderRecord lOrderRecord;
-        lOrderRecord.miSize          = 4;
-        lOrderRecord.miType          = 462;
-        lOrderRecord.miOffset        = 12;
-        lOrderRecord.miPlayOrderMode = static_cast<s32>(lePlayOrderMode);
-        PostRecord(mpStateInterface, lOrderRecord);
+        mpStateInterface->OutputGuiEvent(lUpdateEvent);
+        mpStateInterface->OutputGuiEvent(lPlayOrderEvent);
     }
 }
 

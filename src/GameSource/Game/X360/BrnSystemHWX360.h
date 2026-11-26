@@ -110,7 +110,7 @@ namespace BrnHW
         u32 mdwUserIndex;                 // +0x00
         char macUserName[16];             // +0x04
         char macSessionID[128];           // +0x14
-        u8 mbIsLocalUserChange;           // +0x94
+        bool mbIsLocalUserChange;         // +0x94 (bool: BrnGameModule::HasGameBeenSoftRebooted returns it unnormalised, lbzx @0x823C0280)
         u8 maPad95[3];                    // +0x95..+0x97
     };
 

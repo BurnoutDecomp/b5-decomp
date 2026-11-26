@@ -1091,13 +1091,13 @@ namespace BrnGame
         // data block). The X360 forms this + 0x9A11C0 == &mHardware.
         BrnHW::System360HW* GetSoftRebootData();
 
-        // X360 0x823C0288 -- forward to the hardware object's invite-reboot query.
-        // (X360 BOOL == int; the returned bool widens faithfully.)
-        int HasGameBeenRebootedDueToInvite();
+        // X360 0x823C0288 -- forward to the hardware object's invite-reboot query (bool, as
+        // System360HW's; callers mask the result to a byte, e.g. BootLegal::OnEnter @0x8247720C).
+        bool HasGameBeenRebootedDueToInvite();
 
         // X360 0x823C0278 -- the soft-reboot flag (reads mHardware.mLaunchData.mbIsLocalUserChange,
         // at mHardware + 0x94 == game-module + 0x9A1254).
-        int HasGameBeenSoftRebooted();
+        bool HasGameBeenSoftRebooted();   // bool: callers mask with clrlwi 24 (@0x824771F8)
         // X360 0x823A9030 -- GameTalk "StopRenderMetrics" receiver: walk the message keys
         // and clear miRenderMetricsRequested on the StopRenderMetrics key. Static (the
         // context module is delivered by pointer-to-pointer). Same receiver shape as

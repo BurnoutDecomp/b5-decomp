@@ -140,16 +140,15 @@ namespace BrnGui
     // NOT a string-carrying shape; the strlen concern belonged to the id-17..20 apt family).
     void BootVideos::OnEnter()
     {
-        if (mpStateInterface != 0)
-        {
-            mpStateInterface->RegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
-            PostCommand16<20>(mpStateInterface);      // stop the loading screen
-            // {8, 25, 12, 0, 1.0f} ch 41 size 20 (@0x82478738-58): black clear ON under the
-            // loading screen's hide fade, so the fade lands on black and the logo fades in
-            // from it -- the console's fade-out-into-the-first-video look.
-            GuiClearScreenEvent20 lClearOn(0);
-            mpStateInterface->OutputViewState(lClearOn);
-        }
+        // No null guard (ARTIST calls straight through). The id-20 record is the header-inline
+        // StopLoadingScreen; then the DWARF lClearScreen (cpp:100): black clear ON under the
+        // loading screen's hide fade, so the logo fades in from black.
+        mpStateInterface->RegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
+        mpStateInterface->StopLoadingScreen();
+        CgsGui::GuiEventClearScreenSet lClearScreen;
+        lClearScreen.meClearScreen = CgsGui::GuiEventClearScreenSet::E_CLEAR_SCREEN_ACTIVE;
+        lClearScreen.mfAlpha       = 1.0f;
+        mpStateInterface->OutputViewState(lClearScreen);
     }
 
     // @ 0x82478D38 -- unregister and clear the level-1 apt movie (asm-decoded: the

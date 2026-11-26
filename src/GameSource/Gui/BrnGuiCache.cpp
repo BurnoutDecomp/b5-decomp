@@ -2809,137 +2809,33 @@ namespace BrnGui
     //  GuiCache layout in BrnGuiCache.h.
     // =====================================================================
 
-    // @ 0x8240F2C8
-    f32 GuiCache::GetCurrentTimeInEvent() const
-    {
-        CGS_ASSERT(0.0f <= mfEventTime,
-            CGS_ASSERT_MESSAGE_AT("0.0f <= mfEventTime", KAC_ARTIST_ASSERT_FILE, 2962 /* ARTIST 0x8240F2FC */));
-        return mfEventTime;
-    }
+    // GetCurrentTimeInEvent is header-inline in BrnGuiCache.h.
 
-    // @ 0x8240F330
-    f32 GuiCache::GetTargetTimeInEvent() const
-    {
-        CGS_ASSERT(0.0f <= mfTargetTime,
-            CGS_ASSERT_MESSAGE_AT("0.0f <= mfTargetTime", KAC_ARTIST_ASSERT_FILE, 2979 /* ARTIST 0x8240F364 */));
-        return mfTargetTime;
-    }
+    // GetTargetTimeInEvent is header-inline in BrnGuiCache.h.
 
     // GetOpponentsInEvent (@0x8240F450) is header-inline in BrnGuiCache.h.
 
-    // @ 0x82472DB0 -- valid only in the race-style game modes; then asserts the
-    // district was actually resolved (!= E_DISTRICT_INVALID, value 18).
-    s32 GuiCache::GetEventDestinationDistrict() const
-    {
-        // asm @0x82472DD8..E08 skips the assert (beq) for meGameModeType in {0,1,10,6,8,5}.
-        // Header-inline on the console: both asserts carry BrnGuiCache.h lines 4078/4080
-        // (li r5 @0x82472E14 / @0x82472E44); the texts are the stringised conditions
-        // (ARTIST 0x8204DAD8 / 0x8205B470).
-        CGS_ASSERT(
-            (meGameModeType == 0) || (meGameModeType == 1) || (meGameModeType == 10)
-                || (meGameModeType == 6) || (meGameModeType == 8) || (meGameModeType == 5),
-            CGS_ASSERT_MESSAGE_AT(
-                "( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_FACE_OFF ) || "
-                "( meGameModeType == GsmIO::E_MODE_ONLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_ELIMINATOR ) || "
-                "( meGameModeType == GsmIO::E_MODE_MARKED_MAN ) || ( meGameModeType == GsmIO::E_MODE_BURNING_ROUTE )",
-                KAC_ARTIST_ASSERT_FILE, 4078 /* ARTIST 0x82472E14 */));
-        // BrnWorld::E_DISTRICT_INVALID == 18 (asm immediate).
-        CGS_ASSERT(mEventDestinationDistrict != 18,
-                   CGS_ASSERT_MESSAGE_AT("mEventDestinationDistrict != BrnWorld::E_DISTRICT_INVALID",
-                                             KAC_ARTIST_ASSERT_FILE, 4080 /* ARTIST 0x82472E44 */));
-        return mEventDestinationDistrict;
-    }
+    // GetEventDestinationDistrict is header-inline in BrnGuiCache.h.
 
     // GetCheckpointReached (@0x824EC468) is header-inline in BrnGuiCache.h.
 
-    // @ 0x8240F4B0 -- road-rage only.
-    s32 GuiCache::GetCurrentTakedownsInEvent() const
-    {
-        CGS_ASSERT(meGameModeType == 3,
-            CGS_ASSERT_MESSAGE_AT(
-                "BrnGameState::GsmIO::E_MODE_ROAD_RAGE == meGameModeType", KAC_ARTIST_ASSERT_FILE, 3047 /* ARTIST 0x8240F4EC */));
-        CGS_ASSERT(-1 < miTakedownsCurrent,
-            CGS_ASSERT_MESSAGE_AT(
-                "-1 < miTakedownsCurrent", KAC_ARTIST_ASSERT_FILE, 3048 /* ARTIST 0x8240F51C */));
-        return miTakedownsCurrent;
-    }
+    // GetCurrentTakedownsInEvent is header-inline in BrnGuiCache.h.
 
-    // @ 0x8240F550 -- road-rage only.
-    s32 GuiCache::GetTargetTakedownsInEvent() const
-    {
-        CGS_ASSERT(meGameModeType == 3,
-            CGS_ASSERT_MESSAGE_AT(
-                "BrnGameState::GsmIO::E_MODE_ROAD_RAGE == meGameModeType", KAC_ARTIST_ASSERT_FILE, 3065 /* ARTIST 0x8240F58C */));
-        CGS_ASSERT(-1 < miTakedownTarget,
-            CGS_ASSERT_MESSAGE_AT(
-                "-1 < miTakedownTarget", KAC_ARTIST_ASSERT_FILE, 3066 /* ARTIST 0x8240F5BC */));
-        return miTakedownTarget;
-    }
+    // GetTargetTakedownsInEvent is header-inline in BrnGuiCache.h.
 
-    // @ 0x8240F5F0
-    s32 GuiCache::GetCurrentScoreInEvent() const
-    {
-        CGS_ASSERT(-1 < miScoreCurrent,
-            CGS_ASSERT_MESSAGE_AT("-1 < miScoreCurrent", KAC_ARTIST_ASSERT_FILE, 3083 /* ARTIST 0x8240F61C */));
-        return miScoreCurrent;
-    }
+    // GetCurrentScoreInEvent is header-inline in BrnGuiCache.h.
 
-    // @ 0x8240F650
-    s32 GuiCache::GetTargetScoreInEvent() const
-    {
-        CGS_ASSERT(-1 < miScoreTarget,
-            CGS_ASSERT_MESSAGE_AT("-1 < miScoreTarget", KAC_ARTIST_ASSERT_FILE, 3099 /* ARTIST 0x8240F67C */));
-        return miScoreTarget;
-    }
+    // GetTargetScoreInEvent is header-inline in BrnGuiCache.h.
 
-    // @ 0x8240F6B0
-    s32 GuiCache::GetCurrentComboInEvent() const
-    {
-        CGS_ASSERT(-1 < miScoreCombo,
-            CGS_ASSERT_MESSAGE_AT("-1 < miScoreCombo", KAC_ARTIST_ASSERT_FILE, 3115 /* ARTIST 0x8240F6DC */));
-        return miScoreCombo;
-    }
+    // GetCurrentComboInEvent is header-inline in BrnGuiCache.h.
 
-    // @ 0x8240F710
-    s32 GuiCache::GetMultiplierInEvent() const
-    {
-        CGS_ASSERT(-1 < miComboMultiplier,
-            CGS_ASSERT_MESSAGE_AT(
-                "-1 < miComboMultiplier", KAC_ARTIST_ASSERT_FILE, 3130 /* ARTIST 0x8240F73C */));
-        return miComboMultiplier;
-    }
+    // GetMultiplierInEvent is header-inline in BrnGuiCache.h.
 
-    // @ 0x8240F7F0 -- pursuit mode; the X360 tests the high word of the 8-byte id
-    // for kCGSID_NULL (id != 0).
-    CgsID GuiCache::GetPursuitCarID() const
-    {
-        CGS_ASSERT(meGameModeType == 4,
-            CGS_ASSERT_MESSAGE_AT(
-                "BrnGameState::GsmIO::E_MODE_PURSUIT == meGameModeType", KAC_ARTIST_ASSERT_FILE, 3319 /* ARTIST 0x8240F82C */));
-        CGS_ASSERT(mPursuedCarID != static_cast<CgsID>(0),
-            CGS_ASSERT_MESSAGE_AT(
-                "kCGSID_NULL != mPursuedCarID", KAC_ARTIST_ASSERT_FILE, 3320 /* ARTIST 0x8240F85C */));
-        return mPursuedCarID;
-    }
+    // GetPursuitCarID is header-inline in BrnGuiCache.h.
 
-    // @ 0x824B3060
-    CgsID GuiCache::GetShutdownCarID() const
-    {
-        CGS_ASSERT(mShutdownCarID != static_cast<CgsID>(0),
-            CGS_ASSERT_MESSAGE_AT(
-                "kCGSID_NULL != mShutdownCarID", KAC_ARTIST_ASSERT_FILE, 3337 /* ARTIST 0x824B308C */));
-        return mShutdownCarID;
-    }
+    // GetShutdownCarID is header-inline in BrnGuiCache.h.
 
-    // @ 0x824B30C0 -- E_UNLOCKTYPE_NONE is 0.
-    s32 GuiCache::GetTrophyCarUnlockType() const
-    {
-        CGS_ASSERT(meTrophyCarUnlockType != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE != meTrophyCarUnlockType",
-                KAC_ARTIST_ASSERT_FILE, 3354 /* ARTIST 0x824B30EC */));
-        return meTrophyCarUnlockType;
-    }
+    // GetTrophyCarUnlockType is header-inline in BrnGuiCache.h.
 
     // GetActiveRoadRuleScoringMode (@0x8240FC28) is header-inline in BrnGuiCache.h (h:4210).
 
@@ -2970,14 +2866,7 @@ namespace BrnGui
         mpChallengeManager = lpChallengeManager;
     }
 
-    // @ 0x82472D00
-    const BrnResource::HudMessageController* GuiCache::GetHudMessageController() const
-    {
-        CGS_ASSERT(mpHudMessageController != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpHudMessageController", KAC_ARTIST_ASSERT_FILE, 2418 /* ARTIST 0x82472D28 */));
-        return mpHudMessageController;
-    }
+    // GetHudMessageController is header-inline in BrnGuiCache.h.
 
     // GetHudMessageDirector (@0x82472D58) is header-inline in BrnGuiCache.h.
 
@@ -2991,16 +2880,7 @@ namespace BrnGui
         return mfTimeNow;
     }
 
-    // @ 0x8240F110
-    WorldDataController* GuiCache::GetWorldDataController() const
-    {
-        CGS_ASSERT(mpWorldDataController != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpWorldDataController", KAC_ARTIST_ASSERT_FILE, 2324 /* ARTIST 0x8240F138 */));
-        // The X360 stores the controller as a non-const pointer the GUI mutates through;
-        // the cache member is declared const, so cast away for the (non-const) accessor.
-        return const_cast<WorldDataController*>(mpWorldDataController);
-    }
+    // GetWorldDataController is header-inline in BrnGuiCache.h.
 
     // X360-INLINED at BrnGuiCache.h:2310 -- BrnGui::GuiModule::Construct @0x82518028 fires
     // the "lpController" assert then stores the module's own WorldDataController into the
@@ -3174,40 +3054,9 @@ namespace BrnGui
 
 namespace BrnGui
 {
-    // @ 0x8240F770  ( maStuntToDisplay @+0xAC5C, stride 8, -1-terminated )
-    const StuntToDisplayInfo* GuiCache::GetStuntToDisplay(s32 liIndex) const
-    {
-        // GetNumberOfStuntsToDisplay() inlined: walk the list counting leading valid
-        // entries (miStuntId == -1 terminates); the X360 loop is bounded at 1.
-        s32 liNumberOfStuntsToDisplay = 0;
-        const StuntToDisplayInfo* lpStunt = maStuntToDisplay;
-        do
-        {
-            if (lpStunt->miStuntId == -1)
-            {
-                break;
-            }
-            ++liNumberOfStuntsToDisplay;
-            ++lpStunt;
-        }
-        while (liNumberOfStuntsToDisplay < 1);
+    // GetStuntToDisplay is header-inline in BrnGuiCache.h.
 
-        CGS_ASSERT(liIndex < liNumberOfStuntsToDisplay,
-            CGS_ASSERT_MESSAGE_AT(
-                "liIndex < GetNumberOfStuntsToDisplay()", KAC_ARTIST_ASSERT_FILE, 3224 /* ARTIST 0x8240F7C0 */));
-
-        return &maStuntToDisplay[liIndex];
-    }
-
-    // @ 0x8240F890  ( maPlayerInfo @+0xAC80, stride 312 == sizeof(InGamePlayerStatusData) )
-    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
-        GuiCache::GetOnlinePlayerInfoByIndex(s32 liPlayerInfoIndex)
-    {
-        CGS_ASSERT(liPlayerInfoIndex >= 0, CGS_ASSERT_MESSAGE_AT("liPlayerInfoIndex >= 0", KAC_ARTIST_ASSERT_FILE, 3645 /* ARTIST 0x8240F8C8 */));
-        CGS_ASSERT(liPlayerInfoIndex < 8, CGS_ASSERT_MESSAGE_AT("liPlayerInfoIndex < KI_MAX_PLAYERS", KAC_ARTIST_ASSERT_FILE, 3646 /* ARTIST 0x8240F8EC */));
-
-        return &maPlayerInfo[liPlayerInfoIndex];
-    }
+    // GetOnlinePlayerInfoByIndex (@0x8240F890) is header-inline in BrnGuiCache.h.
 
     // GetCurrentOnlinePlayerTeam (@0x8240F910) is header-inline in BrnGuiCache.h.
 
@@ -3296,35 +3145,9 @@ namespace BrnGui
 
 namespace BrnGui
 {
-    // @ 0x8240F988 -- maOnlinePlayerDisconnected @ +0xB84C (47180)
-    bool GuiCache::GetOnlinePlayerDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const
-    {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-                KAC_ARTIST_ASSERT_FILE, 3684 /* ARTIST 0x8240F9B4 */));
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                KAC_ARTIST_ASSERT_FILE, 3685 /* ARTIST 0x8240F9D8 */));
+    // GetOnlinePlayerDisconnected is header-inline in BrnGuiCache.h.
 
-        return maOnlinePlayerDisconnected[leActiveRaceCarIndex];
-    }
-
-    // @ 0x8240FA08 -- maOnlinePlayerEliminated @ +0xB85C (47196)
-    bool GuiCache::IsOnlinePlayerEliminated(EActiveRaceCarIndex leActiveRaceCarIndex) const
-    {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "leCurrentPlayer >= E_ACTIVE_RACE_CAR_INDEX_0",
-                KAC_ARTIST_ASSERT_FILE, 3724 /* ARTIST 0x8240FA34 */));
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leCurrentPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                KAC_ARTIST_ASSERT_FILE, 3725 /* ARTIST 0x8240FA58 */));
-
-        return maOnlinePlayerEliminated[leActiveRaceCarIndex];
-    }
+    // IsOnlinePlayerEliminated is header-inline in BrnGuiCache.h.
 }
 
 // ============================================================================
@@ -3421,21 +3244,7 @@ namespace BrnGui
         return GetOnlineGameModeOptions()->maEvents[miOnlineRoundIndex].GetLandmark(liCheckpointIndex);
     }
 
-    // @ 0x824436D0 -- is the given race car still in car-select. Bounds-checks the ARCI
-    // (>= 0, < 8), then returns maOnlinePlayerInCarSelect[idx] (@0xB854, stride 1).
-    bool GuiCache::GetOnlinePlayerInCarSelect(EActiveRaceCarIndex leActiveRaceCarIndex) const
-    {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-                KAC_ARTIST_ASSERT_FILE, 3704 /* ARTIST 0x824436FC */));
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                KAC_ARTIST_ASSERT_FILE, 3705 /* ARTIST 0x82443720 */));
-
-        return maOnlinePlayerInCarSelect[leActiveRaceCarIndex];
-    }
+    // GetOnlinePlayerInCarSelect is header-inline in BrnGuiCache.h.
 }
 
 // ============================================================================
@@ -3489,17 +3298,7 @@ namespace BrnGui
 
 namespace BrnGui
 {
-    // @ 0x824B2FE8 -- index the preset-race table. The X360 bounds-checks against
-    // miNumPresetRaces (@0x5280), then returns 120*(idx+170)+this, i.e. the stride-120
-    // element idx of maPresetRaces (base 120*170 == 0x4FB0 == maPresetRacesStorage).
-    const PresetRace* GuiCache::GetPresetRace(s32 liPresetRaceIndex) const
-    {
-        CGS_ASSERT(liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces,
-            CGS_ASSERT_MESSAGE_AT(
-                "liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces",
-                KAC_ARTIST_ASSERT_FILE, 2211 /* ARTIST 0x824B3020 */));
-        return &maPresetRaces[liPresetRaceIndex];
-    }
+    // GetPresetRace is header-inline in BrnGuiCache.h.
 
     // @ 0x824EC3C8 -- latch the map-icon manager pointer (v3[4120] = a2, i.e.
     // mpMapIconManager @0x4060). Asserts the incoming pointer is non-null.
@@ -5056,18 +4855,7 @@ namespace BrnGui
         }
     }
 
-    // @ 0x824827D8 -- resolve the fly-by pre-event record at liIndex: assert the index is in
-    // [0, mPreRaceData.miNumMessages), then return &maPreEventInfo[liIndex] (stride 580 storage
-    // @0x12F0C, count miNumMessages @0x135D8). X360: return 580 * liIndex + this + 77580.
-    const PreEventInfo* GuiCache::GetPreEventInfo(s32 liIndex) const
-    {
-        CGS_ASSERT(liIndex >= 0,
-            CGS_ASSERT_MESSAGE_AT("liIndex >= 0", KAC_ARTIST_ASSERT_FILE, 4589 /* ARTIST 0x82482804 */));
-        CGS_ASSERT(liIndex < mPreRaceData.miNumMessages,
-            CGS_ASSERT_MESSAGE_AT(
-                "liIndex < mPreRaceData.miNumMessages", KAC_ARTIST_ASSERT_FILE, 4590 /* ARTIST 0x82482834 */));
-        return &mPreRaceData.mMessages[liIndex];
-    }
+    // GetPreEventInfo is header-inline in BrnGuiCache.h.
 }
 
 namespace BrnGui

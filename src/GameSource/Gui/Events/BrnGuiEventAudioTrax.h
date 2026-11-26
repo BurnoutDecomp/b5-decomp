@@ -31,6 +31,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"   // FastBitArray<128>
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"               // CgsGui::GuiEvent<N>
 
 namespace BrnGui
 {
@@ -110,9 +111,18 @@ namespace BrnGui
     CGS_STATIC_ASSERT((sizeof(GuiClassicalChyronEvent) == 100),
                   "ARTIST posts 100 bytes for the classical chyron");
 
+    // GUI event 460 -- audition a track (-1 stops). DWARF BrnGuiEventTypeDefs.h:4054-4055
+    // `: GuiEvent<455>` (PS3 id; X360 460): the track index and the slider flag, 8 bytes.
+    struct GuiEventAudioTraxPreview : public CgsGui::GuiEvent<460>
+    {
+        int32_t miPreviewTrackIndex;   // +0x00 (h:4054)
+        bool    mbPlayOnEATraxSlider;  // +0x04 (h:4055)
+    };
+
     // GUI event 462 -- the trax play-order selector (the profile stores it as a 4-byte word
-    // at +0x7340).
-    struct GuiEventAudioTraxPlayOrder
+    // at +0x7340). DWARF BrnGuiEventTypeDefs.h:4064-4076 `: GuiEvent<457>` (PS3 id; X360 462)
+    // with one ETraxPlayOrderMode meMode: GuiEvent<N> is empty, so the payload is 4 bytes.
+    struct GuiEventAudioTraxPlayOrder : public CgsGui::GuiEvent<462>
     {
         enum ETraxPlayOrderMode
         {
@@ -122,8 +132,6 @@ namespace BrnGui
             E_TRAX_PLAY_ORDER_MODE_DEFAULT    = E_TRAX_PLAY_ORDER_MODE_SEQUENTIAL,
         };
 
-        s32 miPlayOrderMode;   // +0x00
-
-        s32 GetEventType() const { return 462; }
+        ETraxPlayOrderMode meMode;   // +0x00 (h:4076)
     };
 }

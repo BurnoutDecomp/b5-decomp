@@ -708,7 +708,7 @@ namespace BrnGame
         if (mbGameOver)
         {
             XGetLaunchData(&mHardware.mLaunchData, sizeof(mHardware.mLaunchData));
-            mHardware.mLaunchData.mbIsLocalUserChange = 1;
+            mHardware.mLaunchData.mbIsLocalUserChange = true;
             XSetLaunchData(&mHardware.mLaunchData, sizeof(mHardware.mLaunchData));
             XLaunchNewImage(mHardware.macCommandLine, 0);
         }
@@ -3535,14 +3535,14 @@ namespace BrnGame
 
     // @ X360 0x823C0288 - forward to the hardware object's invite-reboot query (the X360
     // hands it &mHardware as the System360HW `this` and tail-calls).
-    int BrnGameModule::HasGameBeenRebootedDueToInvite()
+    bool BrnGameModule::HasGameBeenRebootedDueToInvite()
     {
         return mHardware.HasGameBeenRebootedDueToInvite();
     }
 
     // @ X360 0x823C0278 - the soft-reboot flag. Reads a single byte at game-module + 0x9A1254,
     // which is mHardware + 0x94 (the launch-data flag byte BrnHW::LaunchData::mbIsLocalUserChange).
-    int BrnGameModule::HasGameBeenSoftRebooted()
+    bool BrnGameModule::HasGameBeenSoftRebooted()
     {
         return mHardware.mLaunchData.mbIsLocalUserChange;
     }

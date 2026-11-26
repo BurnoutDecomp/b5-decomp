@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // image-gallery capture date (518)
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // EImageGalleryType (520 / 522)
 #include "SharedClasses/World/BrnWorldRegion.h" // BrnWorld::WorldRegion (518)
+#include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"   // GuiEventAudioTraxPreview (460)
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"   // GuiPFXHookEvent / ...StopEvent / ...Background... / GuiPFXHookEnumeration (495..501, RECOVERED 2026-09-17)
 #include "GameSource/Gui/Events/BrnGuiEventSetBlackBars.h"
 #include "GameShared/GameClasses/Core/CgsID.h"
@@ -988,7 +989,7 @@ namespace BrnGui
     // hard C2011 against the profile header's slice, so it is DELETED rather than left to
     // shadow the real home -- the same move GuiAutosaveRequestEvent got above.
     struct CGS_ALIGN(8) GuiEventAudioTraxLastPlayedIndexes : public CgsGui::GuiEvent<459> { u8 maPayload[24]; };  // id 459 size 24 [8-aligned: OGE off16]
-    struct GuiEventAudioTraxPreview { u8 maData[8]; s32 GetEventType() const { return 460; } };  // id 460 size 8
+    // GuiEventAudioTraxPreview (id 460) lives in Events/BrnGuiEventAudioTrax.h in its DWARF shape.
     struct GuiEventAudioVoiceOver { u8 maData[4]; s32 GetEventType() const { return 466; } };  // id 466 size 4
     // The local camera's status (network -> GUI). The network module posts the object itself.
     struct GuiEventCamStatus
