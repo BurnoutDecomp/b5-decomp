@@ -715,10 +715,7 @@ WorldEntityModule::UpdateStream( WorldEntityIO::OutputBuffer_PreScene* lpOutputB
         BrnGameState::GameStateModuleIO::StreamingCompleteEvent lEvent;
         lEvent.meModule = BrnGameState::GameStateModuleIO::StreamingCompleteEvent::E_MODULE_WORLD_GRAPHICS;
         lEvent.mUserId  = 0;
-        lpOutputBuffer->GetGameEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>( &lEvent ),
-            BrnGameState::GameStateModuleIO::E_EVENT_STREAMING_COMPLETE,
-            sizeof( lEvent ) );
+        lpOutputBuffer->GetGameEventQueue()->AddGameEvent( lEvent );
         mbWaitingForStreaming = false;
     }
 

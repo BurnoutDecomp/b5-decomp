@@ -178,33 +178,26 @@ void RaceCarEntityModule::HandleCarTypeTrainingMessage(u32 luCarType)
 // (module 1, slot-zero car model id), then drain training requests in LIFO order.
 void RaceCarEntityModule::SendGameEvents(RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput)
 {
-    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", __FILE__, 5114));   // :5114
-    if (lpOutput == 0)
-    {
-        return;
-    }
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", __FILE__, 5114));   // :5114 (non-gating)
 
     // ARTIST 0x822F6C24..0x822F6C98. GetCarModelId is the exact ACTIVE-bit test
-    // and graphics asset prefix removal inlined by the console for slot zero.
+    // and graphics asset prefix removal inlined by the console for slot zero (unity TU:
+    // BrnRaceCarStreamer.cpp's out-of-line 0x822A1578 inlined here).
     if (mbSendStreamingComplete)
     {
         BrnGameState::GameStateModuleIO::StreamingCompleteEvent lEvent;
         lEvent.meModule = BrnGameState::GameStateModuleIO::StreamingCompleteEvent::E_MODULE_RACE_CAR_ENTITY;
         lEvent.mUserId = mRaceCarStreamer.GetCarModelId(0);
-        lpOutput->GetGameEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent),
-            BrnGameState::GameStateModuleIO::E_EVENT_STREAMING_COMPLETE, sizeof(lEvent));
+        lpOutput->GetGameEventQueue()->AddGameEvent(lEvent);
         mbSendStreamingComplete = false;
     }
 
     while (miPendingRequestCount > 0)
     {
         --miPendingRequestCount;
-        const s32 liTrainingType =
-            static_cast<s32>(mePendingTrainingRequestQueue[miPendingRequestCount]);
-        lpOutput->GetGameEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&liTrainingType),
-            113 /* E_EVENT_REQUEST_GAME_TRAINING */, 4);
+        BrnGameState::GameStateModuleIO::RequestGameTrainingEvent lEvent;
+        lEvent.meTrainingType = mePendingTrainingRequestQueue[miPendingRequestCount];
+        lpOutput->GetGameEventQueue()->AddGameEvent(lEvent);
     }
 }
 

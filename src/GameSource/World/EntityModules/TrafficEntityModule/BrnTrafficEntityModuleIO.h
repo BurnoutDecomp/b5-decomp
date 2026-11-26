@@ -59,6 +59,7 @@
 // forward-declared; the real headers come in.
 #include "GameSource/Graphics/BrnBlobbyShadowManager.h"   // BrnBlobbyShadowManager::BrnBlobbyShadowBuffer
 #include "GameSource/Graphics/BrnCoronaManager.h"         // BrnCoronaManager::BrnSubmissionInterface
+#include "GameSource/GameState/BrnGameEvents.h"           // BrnGameState::GameStateModuleIO::GameEventQueue
 // Pointer-only uses in InputBuffer_Dispatch (forward-declaration exception (b)): including
 // CgsDispatcher.h / BrnShadowMap.h here would pull the renderer and shadow-cascade tail into
 // every includer, and BrnWorldModule.h reaches this header.
@@ -496,8 +497,9 @@ namespace BrnTrafficIO
     public:
         // DWARF :416 / :94 -- the crash module's traffic input interface (real committed type).
         typedef BrnWorld::CrashIO::TrafficInputInterface CrashTrafficInputInterface;
-        // DWARF :420 -- Construct proves the shape (VariableEventQueue<1536,16> @ +9824).
-        typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
+        // DWARF :420 -- `typedef GameEventQueue GameEventQueue`, the game-state module's queue
+        // (a VariableEventQueue<1536,16>; Construct puts it at +9824). Posted to with AddGameEvent.
+        typedef BrnGameState::GameStateModuleIO::GameEventQueue GameEventQueue;
         // DWARF :421 spells the member `OutputBuffer_Prepare::SceneInputInterface`, which is the
         // scene manager's InSceneUpdateInterface -- Construct-attested at +11376.
         typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface SceneInputInterface;

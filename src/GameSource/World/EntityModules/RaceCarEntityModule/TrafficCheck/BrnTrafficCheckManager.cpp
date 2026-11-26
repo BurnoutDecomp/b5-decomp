@@ -22,12 +22,9 @@ namespace BrnWorld
     // successful traffic checks before the chain is broken. X360: flt_82014A54 == 6.0f.
     static const f32 KF_TIME_MAX_TIME_BETWEEN_CHECKS = 6.0f;
 
-    // Reset value for the dry-spell timer when a check passes. X360: flt_82001CC0 == 0.0f.
-    static const f32 KF_TIME_SINCE_LAST_CHECK_RESET = 0.0f;
-
-    // Event type ids exchanged on the 1536-byte queues (X360-attested immediates).
+    // The consumed event id (X360-attested immediate, `cmpwi 0x49`); the published chain is
+    // GameStateModuleIO::TrafficCheckingChainEvent (E_EVENT_TRAFFIC_CHECKING_CHAIN == 74).
     static const s32 KI_TRAFFIC_CHECK_PASSED_EVENT = 73;  // 0x49 -- consumed from the input.
-    static const s32 KI_TRAFFIC_CHECK_CHAIN_EVENT  = 74;  // 0x4A -- published to the output.
 
     void TrafficCheckManager::_AssertLayout()
     {
@@ -37,7 +34,7 @@ namespace BrnWorld
     }
 
     void TrafficCheckManager::Update(const GameEventQueue* lpInput,
-                                     GameEventQueue* lpOutput,
+                                     BrnGameState::GameStateModuleIO::GameEventQueue* lpOutput,
                                      bool lbLocalPlayerCrashing,
                                      f32 lfTimeStep)
     {
@@ -54,31 +51,33 @@ namespace BrnWorld
 
         // Walk every event in the input queue; each "check passed" event bumps the chain and
         // resets the dry-spell timer.
-        const CgsModule::Event* lpEvent = 0;
-        s32 liEventSize = 0;
+        // DWARF locals (cpp:107..109), no initialisers (ARTIST stores none before
+        // GetFirstEvent, 0x822F8F74..0x822F8F80).
+        const CgsModule::Event* lpEvent;
+        s32 liEventSize;
         s32 liEventType = lpInput->GetFirstEvent(&lpEvent, &liEventSize);
         while (lpEvent != 0)
         {
             if (liEventType == KI_TRAFFIC_CHECK_PASSED_EVENT)
             {
-                mfTimeSinceLastCheck = KF_TIME_SINCE_LAST_CHECK_RESET;
+                mfTimeSinceLastCheck = 0.0f;
                 ++miCurrentCheckChain;
             }
             liEventType = lpInput->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }
 
-        if (mfTimeSinceLastCheck >= KF_TIME_MAX_TIME_BETWEEN_CHECKS)
+        // ARTIST 0x822F8FDC branches to the chain reset placed last: the publish arm is first.
+        if (mfTimeSinceLastCheck < KF_TIME_MAX_TIME_BETWEEN_CHECKS)
         {
-            // Dry spell exceeded the cap -- the chain is broken.
-            miCurrentCheckChain = 0;
+            // Still within the cap -- publish the current chain count.
+            BrnGameState::GameStateModuleIO::TrafficCheckingChainEvent lEvent;
+            lEvent.miChainSize = miCurrentCheckChain;
+            lpOutput->AddGameEvent(lEvent);
         }
         else
         {
-            // Still within the cap -- publish the current chain count.
-            s32 liChain = miCurrentCheckChain;
-            lpOutput->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liChain),
-                               KI_TRAFFIC_CHECK_CHAIN_EVENT,
-                               (s32)sizeof(s32));
+            // Dry spell exceeded the cap -- the chain is broken.
+            miCurrentCheckChain = 0;
         }
     }
 }

@@ -17,6 +17,7 @@
 #include "types.hpp"   // s32, f32, bool
 
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<1536,16>
+#include "GameSource/GameState/BrnGameEvents.h"                    // GameStateModuleIO::GameEventQueue (Update's output, DWARF)
 
 namespace BrnWorld
 {
@@ -46,8 +47,10 @@ namespace BrnWorld
         // chain and resets the timer. If the dry-spell timer is still under the cap it
         // publishes the current chain count to the output as a KI_TRAFFIC_CHECK_CHAIN (74)
         // event; otherwise it zeroes the chain.
+        // DWARF BrnTrafficCheckManager.cpp:29: the output is the game-state GameEventQueue
+        // (the chain event is posted with AddGameEvent).
         void Update(const GameEventQueue* lpInput,
-                    GameEventQueue* lpOutput,
+                    BrnGameState::GameStateModuleIO::GameEventQueue* lpOutput,
                     bool lbLocalPlayerCrashing,
                     f32 lfTimeStep);
 

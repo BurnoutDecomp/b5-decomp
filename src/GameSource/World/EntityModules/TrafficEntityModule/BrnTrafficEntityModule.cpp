@@ -1807,13 +1807,14 @@ void TrafficEntityModule::EnterTearingDownState()
 // ----------------------------------------------------------------------------
 bool TrafficEntityModule::IsDecisionFrame()
 {
-    if (meState == E_STATE_STARTING_UP)
+    // ARTIST 0x827074FC branches to the starting-up `return true` placed last.
+    if (meState != E_STATE_STARTING_UP)
     {
-        return true;
+        CGS_ASSERT_AT(meState == E_STATE_RUNNING, "meState == E_STATE_RUNNING", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2113);
+        return mbDecisionFrame;
     }
 
-    CGS_ASSERT_AT(meState == E_STATE_RUNNING, "meState == E_STATE_RUNNING", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2113);
-    return mbDecisionFrame;
+    return true;
 }
 
 // ============================================================================
@@ -3393,9 +3394,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         BrnGameState::GameStateModuleIO::StreamingCompleteEvent lStreamingComplete = BrnGameState::GameStateModuleIO::StreamingCompleteEvent();
         lStreamingComplete.meModule = BrnGameState::GameStateModuleIO::StreamingCompleteEvent::E_MODULE_TRAFFIC_ENTITY;
         mbWaitingForStreaming = false;
-        lpOutput->GetGameEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStreamingComplete),
-                                                BrnGameState::GameStateModuleIO::E_EVENT_STREAMING_COMPLETE,
-                                                sizeof(lStreamingComplete));
+        lpOutput->GetGameEventQueue()->AddGameEvent(lStreamingComplete);
     }
 
     UpdateDensity();
@@ -3482,9 +3481,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
                     lStreamingComplete.meModule =
                         BrnGameState::GameStateModuleIO::StreamingCompleteEvent::E_MODULE_TRAFFIC_ENTITY;
                     mbWaitingForStreaming = false;
-                    lpOutput->GetGameEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lStreamingComplete),
-                        BrnGameState::GameStateModuleIO::E_EVENT_STREAMING_COMPLETE, sizeof(lStreamingComplete));
+                    lpOutput->GetGameEventQueue()->AddGameEvent(lStreamingComplete);
                 }
             }
             break;
@@ -18165,9 +18162,7 @@ void TrafficEntityModule::HandleExternalRequests(
                 BrnGameState::GameStateModuleIO::StreamingCompleteEvent lStreamingComplete = BrnGameState::GameStateModuleIO::StreamingCompleteEvent();
                 lStreamingComplete.meModule =
                     BrnGameState::GameStateModuleIO::StreamingCompleteEvent::E_MODULE_TRAFFIC_ENTITY;
-                lpOutput->GetGameEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStreamingComplete),
-                                                        BrnGameState::GameStateModuleIO::E_EVENT_STREAMING_COMPLETE,
-                                                        sizeof(lStreamingComplete));
+                lpOutput->GetGameEventQueue()->AddGameEvent(lStreamingComplete);
             }
 
             break;

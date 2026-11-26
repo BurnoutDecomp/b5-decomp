@@ -40,6 +40,7 @@
 #include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropGraphicsAndZoneEvents.h"    // Prop* events
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface
 #include "GameSource/Sound/Module/SharedIO/BrnSoundRootSharedIO.h" // BrnSound::Module::Io::SoundWorldLoadEvent
+#include "GameSource/GameState/BrnGameEvents.h"                    // BrnGameState::GameStateModuleIO::GameEventQueue (DWARF :318 typedef)
 
 namespace CgsGraphics
 {
@@ -255,7 +256,7 @@ namespace WorldEntityIO
         typedef CgsModule::EventQueue<BrnWorld::PropEntityIO::PropInstancesNeededForZoneEvent, 30> PropInstancesNeededForZoneQueue;
         typedef CgsModule::EventQueue<BrnWorld::PropEntityIO::PropGraphicsLoadedEvent, 25>         PropGraphicsLoadedQueue;
         typedef CgsModule::EventQueue<BrnWorld::PropEntityIO::PropGraphicsUnloadedEvent, 25>       PropGraphicsUnloadedQueue;
-        typedef CgsModule::VariableEventQueue<1536, 16>                                            GameEventQueue;
+        typedef BrnGameState::GameStateModuleIO::GameEventQueue                                     GameEventQueue;   // DWARF :318
         typedef CgsModule::EventQueue<BrnSound::Module::Io::SoundWorldLoadEvent, 25>               SoundWorldLoadInterface;
 
         // X360 0x822EDF78 -- IOBuffer status then, in the console's own call order, the
