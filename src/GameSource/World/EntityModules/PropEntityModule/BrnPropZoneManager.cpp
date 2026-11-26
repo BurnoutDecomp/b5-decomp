@@ -30,6 +30,7 @@
 // ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
 // containers\./CgsBitArray.h, e.g. PropZoneManager::GetRespawnType 0x822BC4D0): see CgsBitArray.h.
 #define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
+#define CGS_ARTIST_BRNPROPENTITYINSTANCE_H_FILE "..\\..\\..\\GameSource\\World\\EntityModules\\PropEntityModule\\BrnPropEntityInstance.h"
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropZoneManager.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropZoneManager.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -616,11 +617,11 @@ namespace BrnWorld
     s32 PropZoneManager::AllocatePropInstancesBlock(u32 luSizeOfBlock)
     {
         (void)luSizeOfBlock;
-        CGS_ASSERT(luSizeOfBlock < KU_MAX_PROP_INSTANCES_PER_ZONE,
-                   "luSizeOfBlock < BrnPhysics::Props::KU_MAX_PROP_INSTANCES_PER_ZONE");
+        CGS_ASSERT_AT(luSizeOfBlock < KU_MAX_PROP_INSTANCES_PER_ZONE,
+                   "luSizeOfBlock < BrnPhysics::Props::KU_MAX_PROP_INSTANCES_PER_ZONE", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 611);
 
         const s32 liSlotIndex = maUsedProps.GetFirstClearBit();
-        CGS_ASSERT(liSlotIndex != -1, "liSlotIndex != -1");
+        CGS_ASSERT_AT(liSlotIndex != -1, "liSlotIndex != -1", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 613);
 
         maUsedProps.SetBit(static_cast<u32>(liSlotIndex));
 
@@ -634,11 +635,11 @@ namespace BrnWorld
     s32 PropZoneManager::AllocatePartInstancesBlock(u32 luSizeOfBlock)
     {
         (void)luSizeOfBlock;
-        CGS_ASSERT(luSizeOfBlock < KU_MAX_PROP_PARTS_PER_ZONE,
-                   "luSizeOfBlock < BrnPhysics::Props::KU_MAX_PROP_PARTS_PER_ZONE");
+        CGS_ASSERT_AT(luSizeOfBlock < KU_MAX_PROP_PARTS_PER_ZONE,
+                   "luSizeOfBlock < BrnPhysics::Props::KU_MAX_PROP_PARTS_PER_ZONE", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 631);
 
         const s32 liSlotIndex = maUsedParts.GetFirstClearBit();
-        CGS_ASSERT(liSlotIndex != -1, "liSlotIndex != -1");
+        CGS_ASSERT_AT(liSlotIndex != -1, "liSlotIndex != -1", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 633);
 
         maUsedParts.SetBit(static_cast<u32>(liSlotIndex));
 
@@ -762,7 +763,7 @@ namespace BrnWorld
         const u16 lu16ZoneId         = lpProp->mu16ZoneIndex;
         const s32 liPropIndexInZone  =
             static_cast<s32>(lVolumeInstanceID.GetEntityIndex()) - mauStartIndexOfZone[lu16ZoneId];
-        CGS_ASSERT(liPropIndexInZone >= 0, "liPropIndexInZone >= 0");
+        CGS_ASSERT_AT(liPropIndexInZone >= 0, "liPropIndexInZone >= 0", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 257);
 
         mCellManager.AddPropPartsToScene(lpProp, lpType, lVolumeInstanceID, lpScene,
                                          lpSerialiser, lu16ZoneId, liPropIndexInZone);
@@ -778,7 +779,7 @@ namespace BrnWorld
         const u16 lu16ZoneId         = lpProp->mu16ZoneIndex;
         const s32 liPropIndexInZone  =
             static_cast<s32>(lVolumeInstanceID.GetEntityIndex()) - mauStartIndexOfZone[lu16ZoneId];
-        CGS_ASSERT(liPropIndexInZone >= 0, "liPropIndexInZone >= 0");
+        CGS_ASSERT_AT(liPropIndexInZone >= 0, "liPropIndexInZone >= 0", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 399);
 
         mCellManager.RemovePropFromScene(lpProp, lpType, lVolumeInstanceID, lpScene,
                                          lpSerialiser, lu16ZoneId, liPropIndexInZone);
@@ -794,7 +795,7 @@ namespace BrnWorld
         const u16 lu16ZoneId         = lpProp->mu16ZoneIndex;
         const s32 liPropIndexInZone  =
             static_cast<s32>(lVolumeInstanceID.GetEntityIndex()) - mauStartIndexOfZone[lu16ZoneId];
-        CGS_ASSERT(liPropIndexInZone >= 0, "liPropIndexInZone >= 0");
+        CGS_ASSERT_AT(liPropIndexInZone >= 0, "liPropIndexInZone >= 0", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 440);
 
         mCellManager.RemovePropPartsFromScene(lpProp, lpType, lVolumeInstanceID, lpScene,
                                               lpSerialiser, lu16ZoneId, liPropIndexInZone);
@@ -809,8 +810,8 @@ namespace BrnWorld
                                             PropVolumeInstanceID lVolumeInstanceID,
                                             PropEntityIO::OutputBuffer_PreScene* lpOutput)
     {
-        CGS_ASSERT(lpProp->mu8State < E_STATE_COUNT, "mu8State < E_STATE_COUNT");
-        CGS_ASSERT(lpProp->mu8State == E_PHYSICAL, "lpProp->IsPhysical()");
+        CGS_ASSERT_AT(lpProp->mu8State < E_STATE_COUNT, "mu8State < E_STATE_COUNT", CGS_ARTIST_BRNPROPENTITYINSTANCE_H_FILE, 653);
+        CGS_ASSERT_AT(lpProp->mu8State == E_PHYSICAL, "lpProp->IsPhysical()", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 417);
 
         PropCellManager::PropInputInterface* lpPropInput =
             reinterpret_cast<PropCellManager::PropInputInterface*>(lpOutput->GetPropInputInterface());

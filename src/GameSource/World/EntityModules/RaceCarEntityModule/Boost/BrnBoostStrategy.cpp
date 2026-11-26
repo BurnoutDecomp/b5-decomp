@@ -15,6 +15,7 @@
 //   flt_82005450 = 0x3F666666 = 0.9f   (0.89999998 as the pseudocode prints it)
 //   flt_820147FC = 0x3F000000 = 0.5f
 // ============================================================================
+#define CGS_ARTIST_UNITY_BRNBOOSTSTRATEGY_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.cpp"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.h"
 #include "GameShared/GameClasses/Core/CgsCoreConstants.h"   // CgsCore::KF_MPH_TO_MPS (KF_ONCOMING_MINSPEED)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // EGameModeType
@@ -408,7 +409,7 @@ void BoostStrategy::Update(RaceCarEntityModuleIO::GameEventQueue* lpEventQueue,
         if (mfCurrentBoostingTime != 0.0f)
         {
             const ScalarBoostEvent lEvent = { mfCurrentBoostingTime };
-            CGS_ASSERT(lpEventQueue != 0, "lpEventQueue");
+            CGS_ASSERT_AT(lpEventQueue != 0, "lpEventQueue", CGS_ARTIST_UNITY_BRNBOOSTSTRATEGY_CPP_FILE, 253);
             AddBoostEvent(lpEventQueue, lEvent, 55);
         }
         mfCurrentBoostingTime = 0.0f;

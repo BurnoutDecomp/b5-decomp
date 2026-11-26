@@ -16,6 +16,8 @@
 // build as `module[handle & 0x7F]` with a stored-handle match), and poke the slot.
 // =============================================================================
 
+#define CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\Particles/ParticleModule.h"
+#define CGS_ARTIST_UNITY_BOOSTSTATEMACHINE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Boost/BoostStateMachine.cpp"
 #include "GameSource/Effects/Boost/BoostStateMachine.h"
 #include "GameSource/Effects/EffectsStateMachine.h"
 #include "GameSource/Effects/EffectsModule.h"                 // BrnEffects::CarState
@@ -180,8 +182,8 @@ void BoostStateMachine::SetBlendValue(ParticleEffectHelper& lParticleEffectHelpe
     BrnParticle::ParticleModule& lModule = lParticleEffectHelper.ParticleModule();
     for (u32 lu = 0; lu < muNumBoostTags; ++lu)
     {
-        CGS_ASSERT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
-                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS");
+        CGS_ASSERT_AT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
+                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS", CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE, 382);
         BrnParticle::LionEffect* lpEffect = lModule.GetLionEffect(mEffects[lu].muHandle);
         if (lpEffect != NULL)
         {
@@ -201,8 +203,8 @@ void BoostStateMachine::SetEnabled(ParticleEffectHelper& lParticleEffectHelper, 
     BrnParticle::ParticleModule& lModule = lParticleEffectHelper.ParticleModule();
     for (u32 lu = 0; lu < muNumBoostTags; ++lu)
     {
-        CGS_ASSERT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
-                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS");
+        CGS_ASSERT_AT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
+                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS", CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE, 382);
         BrnParticle::LionEffect* lpEffect = lModule.GetLionEffect(mEffects[lu].muHandle);
         if (lpEffect != NULL)
         {
@@ -230,8 +232,8 @@ void BoostStateMachine::SetWorldIndex(ParticleEffectHelper& lParticleEffectHelpe
     BrnParticle::ParticleModule& lModule = lParticleEffectHelper.ParticleModule();
     for (u32 lu = 0; lu < muNumBoostTags; ++lu)
     {
-        CGS_ASSERT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
-                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS");
+        CGS_ASSERT_AT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
+                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS", CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE, 382);
         BrnParticle::LionEffect* lpEffect = lModule.GetLionEffect(mEffects[lu].muHandle);
         if (lpEffect != NULL)
         {
@@ -251,8 +253,8 @@ void BoostStateMachine::StopEffects(ParticleEffectHelper& lParticleEffectHelper)
     BrnParticle::ParticleModule& lModule = lParticleEffectHelper.ParticleModule();
     for (u32 lu = 0; lu < muNumBoostTags; ++lu)
     {
-        CGS_ASSERT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
-                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS");
+        CGS_ASSERT_AT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
+                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS", CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE, 382);
         BrnParticle::LionEffect* lpEffect = lModule.GetLionEffect(mEffects[lu].muHandle);
         if (lpEffect != NULL)
         {
@@ -272,8 +274,8 @@ void BoostStateMachine::Reset(ParticleEffectHelper& lParticleEffectHelper)
     BrnParticle::ParticleModule& lModule = lParticleEffectHelper.ParticleModule();
     for (u32 lu = 0; lu < muNumBoostTags; ++lu)
     {
-        CGS_ASSERT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
-                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS");
+        CGS_ASSERT_AT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
+                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS", CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE, 382);
         BrnParticle::LionEffect* lpEffect = lModule.GetLionEffect(mEffects[lu].muHandle);
         if (lpEffect != NULL)
         {
@@ -299,8 +301,8 @@ void BoostStateMachine::StartEffects(ParticleEffectHelper& lParticleEffectHelper
     BrnParticle::ParticleModule& lModule = lParticleEffectHelper.ParticleModule();
     for (u32 lu = 0; lu < muNumBoostTags; ++lu)
     {
-        CGS_ASSERT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
-                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS");
+        CGS_ASSERT_AT((mEffects[lu].muHandle & 0x7Fu) < KU_MAX_PLAYING_EFFECTS,
+                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS", CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE, 382);
         BrnParticle::LionEffect* lpExisting = lModule.GetLionEffect(mEffects[lu].muHandle);
         if (lpExisting != NULL)
         {
@@ -539,7 +541,7 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             return lbStateTimerExpired ? EffectsStateAllOff : leCurrentState;
 
         default:
-            CGS_ASSERT(false, "Unknown state");
+            CGS_ASSERT_AT(false, "Unknown state", CGS_ARTIST_UNITY_BOOSTSTATEMACHINE_CPP_FILE, 281);
             return leCurrentState;
     }
 }

@@ -1,3 +1,4 @@
+#define CGS_ARTIST_ABS_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\SharedIO/BrnCrashModuleNetworkIOInterfaces.h"
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleNetworkIOInterfaces.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::IsValid (per-row matrix validity)
@@ -42,14 +43,14 @@ void NetworkOutputInterface::Clear()
 // non-gating tripwires.
 void NetworkOutputInterface::AddOwnedTrafficUpdate(u32 luVehicleIndex, Matrix44Affine lTransform)
 {
-    CGS_ASSERT(luVehicleIndex < KU_MAX_TOTAL_TRAFFIC,
-               "luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
+    CGS_ASSERT_AT(luVehicleIndex < KU_MAX_TOTAL_TRAFFIC,
+               "luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_ABS_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE, 308);
 
     const bool lbValid = rw::math::vpu::IsValid(lTransform.xAxis)
                       && rw::math::vpu::IsValid(lTransform.yAxis)
                       && rw::math::vpu::IsValid(lTransform.zAxis)
                       && rw::math::vpu::IsValid(lTransform.wAxis);
-    CGS_ASSERT(lbValid, "rw::math::IsValid( lTransform )");
+    CGS_ASSERT_AT(lbValid, "rw::math::IsValid( lTransform )", CGS_ARTIST_ABS_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE, 309);
 
     CrashingTrafficUpdateEvent lEvent;
     lEvent.muVehicleId = static_cast<u16>(luVehicleIndex);

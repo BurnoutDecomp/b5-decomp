@@ -19,6 +19,7 @@
 // module (EffectsModule::ParticleModule().GetLionEffect(handle)).
 // ============================================================================
 
+#define CGS_ARTIST_UNITY_BRNEFFECTSDEBUGCOMPONENT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/BrnEffectsDebugComponent.cpp"
 #include "GameSource/Effects/BrnEffectsDebugComponent.h"
 
 #include <cmath>
@@ -583,9 +584,9 @@ namespace BrnEffects
             lpThis->mfJunkyardVfxAngle -= 360.0f;
 
         u32 luEffectIndex = static_cast<u32>(lpThis->mnJunkyardVfxId);
-        CGS_ASSERT((lpThis->mnJunkyardVfxId >= 0) &&
+        CGS_ASSERT_AT((lpThis->mnJunkyardVfxId >= 0) &&
                    (lpThis->mnJunkyardVfxId < static_cast<s32>(KU_MAX_JUNKYARD_VFX)),
-                   "( lnEffectIndex >= 0 ) && ( lnEffectIndex < static_cast<int32_t>( EffectsModule::KU_MAX_JUNKYARD_VFX ) )");
+                   "( lnEffectIndex >= 0 ) && ( lnEffectIndex < static_cast<int32_t>( EffectsModule::KU_MAX_JUNKYARD_VFX ) )", CGS_ARTIST_UNITY_BRNEFFECTSDEBUGCOMPONENT_CPP_FILE, 394);
 
         u32 luHandle = lpModule->GetJunkyardEffectHandle(luEffectIndex);
         BrnParticle::LionEffect* lpLionEffect = lpModule->ParticleModule().GetLionEffect(luHandle);
@@ -619,7 +620,7 @@ namespace BrnEffects
     // ====================================================================================
     void EffectsDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
     {
-        CGS_ASSERT(mpEffectsModule != NULL, "mpEffectsModule != NULL");
+        CGS_ASSERT_AT(mpEffectsModule != NULL, "mpEffectsModule != NULL", CGS_ARTIST_UNITY_BRNEFFECTSDEBUGCOMPONENT_CPP_FILE, 156);
 
         // If the module has left junkyard-edit mode, reset the editor.
         if (!mpEffectsModule->IsJunkyardVfxActive())
@@ -634,9 +635,9 @@ namespace BrnEffects
         if (mbJunkyardVfxEdit && mbJunkyardVfxShowAxes)
         {
             u32 luEffectIndex = static_cast<u32>(mnJunkyardVfxId);
-            CGS_ASSERT((mnJunkyardVfxId >= 0) &&
+            CGS_ASSERT_AT((mnJunkyardVfxId >= 0) &&
                        (mnJunkyardVfxId < static_cast<s32>(KU_MAX_JUNKYARD_VFX)),
-                       "( lnEffectIndex >= 0 ) && ( lnEffectIndex < static_cast<int32_t>( EffectsModule::KU_MAX_JUNKYARD_VFX ) )");
+                       "( lnEffectIndex >= 0 ) && ( lnEffectIndex < static_cast<int32_t>( EffectsModule::KU_MAX_JUNKYARD_VFX ) )", CGS_ARTIST_UNITY_BRNEFFECTSDEBUGCOMPONENT_CPP_FILE, 176);
 
             u32 luHandle = mpEffectsModule->GetJunkyardEffectHandle(luEffectIndex);
             BrnParticle::LionEffect* lpLionEffect = mpEffectsModule->ParticleModule().GetLionEffect(luHandle);

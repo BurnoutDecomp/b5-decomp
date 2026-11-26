@@ -37,6 +37,8 @@
 // ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
 // containers\./CgsBitArray.h, e.g. PropCellManager::FreePhysicalPropSlot 0x822BBF10): see CgsBitArray.h.
 #define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
+#define CGS_ARTIST_BRNPROPENTITYINSTANCE_H_FILE "..\\..\\..\\GameSource\\World\\EntityModules\\PropEntityModule\\BrnPropEntityInstance.h"
+#define CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/PropEntityModule/BrnPropCellManager.cpp"
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropCellManager.h"
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h" // OutputBuffer_PreScene
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h"          // PropInputInterface
@@ -209,10 +211,10 @@ namespace BrnWorld
         {
             const PropCellData* lpCellData = lpZoneData->GetCellData(liCell);
 
-            CGS_ASSERT(!IsCellLoaded(lpCellData->GetId()),
-                       "!IsCellLoaded( lpCellData->GetId() )");
-            CGS_ASSERT(miNumLoadedCells < KI_MAX_CELLS,
-                       "miNumLoadedCells < BrnPhysics::Props::KU_MAX_PROP_CELLS");
+            CGS_ASSERT_AT(!IsCellLoaded(lpCellData->GetId()),
+                       "!IsCellLoaded( lpCellData->GetId() )", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 80);
+            CGS_ASSERT_AT(miNumLoadedCells < KI_MAX_CELLS,
+                       "miNumLoadedCells < BrnPhysics::Props::KU_MAX_PROP_CELLS", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 83);
 
             // The zone id written into the record comes from the ZONE, not the cell
             // (asm `lhz r9,0x18(lpZoneData)` -> `sth r9,8(newRecord)`).
@@ -235,8 +237,8 @@ namespace BrnWorld
     {
         for (s32 liCellIndex = 0; liCellIndex < miNumLoadedCells; ++liCellIndex)
         {
-            CGS_ASSERT(liCellIndex >= 0 && liCellIndex < miNumLoadedCells,
-                       "liCellIndex >= 0 && liCellIndex < miNumLoadedCells");
+            CGS_ASSERT_AT(liCellIndex >= 0 && liCellIndex < miNumLoadedCells,
+                       "liCellIndex >= 0 && liCellIndex < miNumLoadedCells", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 112);
 
             PropCellRecord& lrCell = maCells[liCellIndex];
             if (lrCell.GetZoneId() != li16ZoneId)
@@ -252,7 +254,7 @@ namespace BrnWorld
 
             --miNumLoadedCells;
             maCells[liCellIndex] = maCells[miNumLoadedCells];
-            CGS_ASSERT(miNumLoadedCells >= 0, "miNumLoadedCells >= 0");
+            CGS_ASSERT_AT(miNumLoadedCells >= 0, "miNumLoadedCells >= 0", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 132);
 
             // Re-test the entry that was swapped into this hole.
             --liCellIndex;
@@ -275,14 +277,14 @@ namespace BrnWorld
         const f32 lfX = lv3Position.GetX().GetFloat();
         const f32 lfZ = lv3Position.GetZ().GetFloat();
 
-        CGS_ASSERT(lfX > -static_cast<f32>(KI_WORLD_X_HALF_EXTENT),
-                   "lfX > -KI_WORLD_X_HALF_EXTENT");
-        CGS_ASSERT(lfX < static_cast<f32>(KI_WORLD_X_HALF_EXTENT + KI_WORLD_X_EXTENSION),
-                   "lfX < KI_WORLD_X_HALF_EXTENT+KI_WORLD_X_EXTENSION");
-        CGS_ASSERT(lfZ > -static_cast<f32>(KI_WORLD_Z_HALF_EXTENT),
-                   "lfZ > -KI_WORLD_Z_HALF_EXTENT");
-        CGS_ASSERT(lfZ < static_cast<f32>(KI_WORLD_Z_HALF_EXTENT),
-                   "lfZ < KI_WORLD_Z_HALF_EXTENT");
+        CGS_ASSERT_AT(lfX > -static_cast<f32>(KI_WORLD_X_HALF_EXTENT),
+                   "lfX > -KI_WORLD_X_HALF_EXTENT", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 214);
+        CGS_ASSERT_AT(lfX < static_cast<f32>(KI_WORLD_X_HALF_EXTENT + KI_WORLD_X_EXTENSION),
+                   "lfX < KI_WORLD_X_HALF_EXTENT+KI_WORLD_X_EXTENSION", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 215);
+        CGS_ASSERT_AT(lfZ > -static_cast<f32>(KI_WORLD_Z_HALF_EXTENT),
+                   "lfZ > -KI_WORLD_Z_HALF_EXTENT", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 216);
+        CGS_ASSERT_AT(lfZ < static_cast<f32>(KI_WORLD_Z_HALF_EXTENT),
+                   "lfZ < KI_WORLD_Z_HALF_EXTENT", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 217);
 
         const f32 lfCellRatioX = (lfX + static_cast<f32>(KI_WORLD_X_HALF_EXTENT)) / lfCellSizeX;
         const f32 lfCellRatioZ = (lfZ + static_cast<f32>(KI_WORLD_Z_HALF_EXTENT)) / lfCellSizeZ;
@@ -385,9 +387,9 @@ namespace BrnWorld
             *CgsDev::Log::gpDebugPrint << "Activating cell: " << lpCell->GetId() << "\n";
         }
 
-        CGS_ASSERT(!lpCell->IsActive(), "!lpCell->IsActive()");
-        CGS_ASSERT(miNumActiveCells < KI_MAX_ACTIVE_CELLS,
-                   "miNumActiveCells < BrnPhysics::Props::KU_MAX_ACTIVE_CELLS");
+        CGS_ASSERT_AT(!lpCell->IsActive(), "!lpCell->IsActive()", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 512);
+        CGS_ASSERT_AT(miNumActiveCells < KI_MAX_ACTIVE_CELLS,
+                   "miNumActiveCells < BrnPhysics::Props::KU_MAX_ACTIVE_CELLS", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 515);
 
         maActiveCells[miNumActiveCells] = *lpCell;
         ++miNumActiveCells;
@@ -401,7 +403,7 @@ namespace BrnWorld
 
             if ((lpProp->mu8Flags & KU_ADDED_TO_SCENE_BIT) != 0)
             {
-                CGS_ASSERT(lpProp->mu8State < E_STATE_COUNT, "mu8State < E_STATE_COUNT");
+                CGS_ASSERT_AT(lpProp->mu8State < E_STATE_COUNT, "mu8State < E_STATE_COUNT", CGS_ARTIST_BRNPROPENTITYINSTANCE_H_FILE, 653);
 
                 if (lpProp->mu8State < E_SMASHED)
                 {
@@ -754,16 +756,16 @@ namespace BrnWorld
         (void)lpType;   // the shipped body never reads the type descriptor
 
         const u8 lu8State = lpProp->mu8State;
-        CGS_ASSERT(lu8State == E_STATIC || lu8State == E_LEANING ||
+        CGS_ASSERT_AT(lu8State == E_STATIC || lu8State == E_LEANING ||
                    lu8State == E_PHYSICAL || lu8State == E_SMASHED,
-                   "lpProp->IsAddedToSim()");
-        CGS_ASSERT((lpProp->mu8Flags & KU_PHYSICS_ENABLED_BIT) != 0, "lpProp->IsPhysicsEnabled()");
+                   "lpProp->IsAddedToSim()", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 661);
+        CGS_ASSERT_AT((lpProp->mu8Flags & KU_PHYSICS_ENABLED_BIT) != 0, "lpProp->IsPhysicsEnabled()", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 662);
 
         const s32 liPhysicsIndex = lpProp->mu8PhysicsIndex;
         FreePhysicalPropSlot(liPhysicsIndex);
 
         --miNumPropsInSim;
-        CGS_ASSERT(miNumPropsInSim >= 0, "miNumPropsInSim >= 0");
+        CGS_ASSERT_AT(miNumPropsInSim >= 0, "miNumPropsInSim >= 0", CGS_ARTIST_UNITY_BRNPROPCELLMANAGER_CPP_FILE, 668);
 
         lpPropInput->RemovePropInstance(lVolumeInstanceID.GetPropEntityID(), liPhysicsIndex);
 

@@ -14,6 +14,7 @@
 // The baked d:\p4 assert file/line are dropped in favour of __FILE__/__LINE__ by CGS_ASSERT; the
 // assert MESSAGE strings are verbatim from the asm.
 
+#define CGS_ARTIST_UNITY_BRNRACEBALANCINGMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/RaceBalancing/BrnRaceBalancingManager.cpp"
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h"
 #include "GameSource/World/BrnWorldSharedConstants.h"   // BrnWorld::KI_MAX_RIVALS_IN_MODE (UpdateOpponentRoute's :185 assert)
 
@@ -216,7 +217,7 @@ void RaceBalancingManager::OnOpponentReachedCheckpoint(const AICar* lpAICar, s32
 {
     if (mbInRace)
     {
-        CGS_ASSERT(!lpAICar->IsPlayerCar(), "!lpAICar->IsPlayerCar()");
+        CGS_ASSERT_AT(!lpAICar->IsPlayerCar(), "!lpAICar->IsPlayerCar()", CGS_ARTIST_UNITY_BRNRACEBALANCINGMANAGER_CPP_FILE, 234);
 
         RaceBalancingRoute& lrRoute = maRaceBalancingRoutes[static_cast<u32>(lpAICar->GetOpponentIndex())];
         lrRoute.mbValid                  = false;                  // +0xA14 -> 0

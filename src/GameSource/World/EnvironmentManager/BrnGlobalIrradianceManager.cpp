@@ -1,3 +1,5 @@
+#define CGS_ARTIST_BRNGLOBALIRRADIANCEMANAGER_H_FILE "..\\..\\..\\GameSource\\World/EnvironmentManager/BrnGlobalIrradianceManager.h"
+#define CGS_ARTIST_UNITY_BRNGLOBALIRRADIANCEMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EnvironmentManager/BrnGlobalIrradianceManager.cpp"
 #include "GameSource/World/EnvironmentManager/BrnGlobalIrradianceManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -252,8 +254,8 @@ GlobalIrradianceManager::ComputeFrameCoeffs( const Vector3& lKeyLightDirection,
                                              const Vector3& lUpFillColour,
                                              const Vector3& lDownFillColour )
 {
-    CGS_ASSERT( lKeyLightDirection.mV.y <  KF_KEY_LIGHT_Y_LIMIT, "lKeyLightDirection.Y() < 0.99f" );
-    CGS_ASSERT( lKeyLightDirection.mV.y > -KF_KEY_LIGHT_Y_LIMIT, "lKeyLightDirection.Y() > -0.99f" );
+    CGS_ASSERT_AT( lKeyLightDirection.mV.y <  KF_KEY_LIGHT_Y_LIMIT, "lKeyLightDirection.Y() < 0.99f" , CGS_ARTIST_UNITY_BRNGLOBALIRRADIANCEMANAGER_CPP_FILE, 218);
+    CGS_ASSERT_AT( lKeyLightDirection.mV.y > -KF_KEY_LIGHT_Y_LIMIT, "lKeyLightDirection.Y() > -0.99f" , CGS_ARTIST_UNITY_BRNGLOBALIRRADIANCEMANAGER_CPP_FILE, 219);
 
     const Vector3 lUpDirection(0.0f, 1.0f, 0.0f);
 
@@ -380,7 +382,7 @@ Matrix44&
 GlobalIrradianceManager::GetIrradianceMatrix( Matrix44& lrOutMatrix, u8 lu8Colour ) const
 {
     // X360: if (lu8Colour >= 3u) Begin/Fire/EndAssert("lu8Colour < 3", "...h", 100);
-    CGS_ASSERT( lu8Colour < E_NUM_COLOURS, "lu8Colour < 3" );
+    CGS_ASSERT_AT( lu8Colour < E_NUM_COLOURS, "lu8Colour < 3" , CGS_ARTIST_BRNGLOBALIRRADIANCEMANAGER_H_FILE, 100);
 
     // r11 = (lu8Colour << 6) + this  ->  &maIrradianceMatrix[lu8Colour]
     // four lvx128/stvx128 == copy the 64-byte Matrix44 row-for-row.

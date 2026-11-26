@@ -88,6 +88,7 @@
 // ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
 // containers\./CgsBitArray.h, e.g. PropEntityModule::UpdateInstanceStreaming 0x82308330): see CgsBitArray.h.
 #define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
+#define CGS_ARTIST_UNITY_BRNPROPENTITYMODULE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/PropEntityModule/BrnPropEntityModule.cpp"
 #include "BrnPropEntityModule.h"
 
 #include "BrnPropEntityModuleIO.h"   // PropEntityIO::OutputBuffer_PreScene
@@ -271,7 +272,7 @@ namespace BrnWorld
             break;
 
         default:
-            CGS_ASSERT( false, "Bad streaming state\n" );   // BrnPropEntityModule.cpp:967
+            CGS_ASSERT_AT( false, "Bad streaming state\n" , CGS_ARTIST_UNITY_BRNPROPENTITYMODULE_CPP_FILE, 967);   // BrnPropEntityModule.cpp:967
             break;
         }
     }
@@ -295,8 +296,8 @@ namespace BrnWorld
     void PropEntityModule::LoadZone( PropZoneData* lpZoneData,
                                      PropEntityIO::OutputBuffer_PreScene* lpOutput )
     {
-        CGS_ASSERT( !mZoneManager.IsZoneLoaded( lpZoneData->GetZoneId() ),
-                    "!mZoneManager.IsZoneLoaded( lpZoneData->GetZoneId() )" );  // cpp:2182
+        CGS_ASSERT_AT( !mZoneManager.IsZoneLoaded( lpZoneData->GetZoneId() ),
+                    "!mZoneManager.IsZoneLoaded( lpZoneData->GetZoneId() )" , CGS_ARTIST_UNITY_BRNPROPENTITYMODULE_CPP_FILE, 2182);  // cpp:2182
 
         // Only the RECORDING side keeps the loaded-zone table; on playback the table
         // comes out of the replay stream instead.
@@ -306,8 +307,8 @@ namespace BrnWorld
         }
 
         ++muNumberOfLoadedZones;
-        CGS_ASSERT( muNumberOfLoadedZones <= KU_MAX_LOADED_ZONES,
-                    "muZonesLoaded <= BrnPhysics::Props::KU_MAX_LOADED_ZONES" );  // cpp:2192
+        CGS_ASSERT_AT( muNumberOfLoadedZones <= KU_MAX_LOADED_ZONES,
+                    "muZonesLoaded <= BrnPhysics::Props::KU_MAX_LOADED_ZONES" , CGS_ARTIST_UNITY_BRNPROPENTITYMODULE_CPP_FILE, 2192);  // cpp:2192
 
         if ( CgsDev::Message::gxMessageFilterFlags & 1 )
         {
@@ -369,8 +370,8 @@ namespace BrnWorld
     void PropEntityModule::UnloadZone( u16 lu16ZoneId,
                                        PropEntityIO::OutputBuffer_PreScene* lpOutput )
     {
-        CGS_ASSERT( mZoneManager.IsZoneLoaded( lu16ZoneId ),
-                    "mZoneManager.IsZoneLoaded( luZone )" );   // cpp:2213
+        CGS_ASSERT_AT( mZoneManager.IsZoneLoaded( lu16ZoneId ),
+                    "mZoneManager.IsZoneLoaded( luZone )" , CGS_ARTIST_UNITY_BRNPROPENTITYMODULE_CPP_FILE, 2213);   // cpp:2213
 
         --muNumberOfLoadedZones;
 

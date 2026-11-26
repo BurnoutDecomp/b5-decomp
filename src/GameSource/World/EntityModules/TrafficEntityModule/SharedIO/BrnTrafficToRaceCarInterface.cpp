@@ -1,3 +1,4 @@
+#define CGS_ARTIST_CGSENTITYID_H_FILE "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsEntityId.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"  // BrnTraffic::MakeTrafficEntityId
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -80,8 +81,8 @@ namespace BrnTrafficIO
             if (lfDistanceSquared < mPotentialStompees[liSlot].mfDistanceSquared)
             {
                 // Inlined MakeTrafficEntityId (asm packs it directly here; same immediates: <<10 | 0x02000000).
-                CGS_ASSERT(luEntityIndex < (1U << 14),
-                           "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
+                CGS_ASSERT_AT(luEntityIndex < (1U << 14),
+                           "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)", CGS_ARTIST_CGSENTITYID_H_FILE, 116);
 
                 VehicleStompingData& lrSlot = mPotentialStompees[liSlot];
                 lrSlot.mfDistanceSquared        = lfDistanceSquared;

@@ -16,6 +16,7 @@
 // Authority for declaration shape is the DecFIGS DWARF; authority for control flow,
 // offsets, assert strings and line numbers is the X360 pseudocode + disassembly.
 
+#define CGS_ARTIST_UNITY_BRNPROPENTITYINSTANCE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/PropEntityModule/BrnPropEntityInstance.cpp"
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityInstance.h"
 
 #include "SharedClasses/Physics/Props/BrnPhysicsPropInstanceData.h" // PropInstanceData (the serialised record)
@@ -137,18 +138,18 @@ namespace BrnWorld
 
         mu8State = 0;                       // +77  E_NON_PHYSICAL (stb 0x4D)
 
-        CGS_ASSERT(liRotationParamsIndex >= -1, "liRotationParamsIndex >= -1");
-        CGS_ASSERT(liRotationParamsIndex < 127, "liRotationParamsIndex < 127");
-        CGS_ASSERT(liRotationParamsIndex < 100,
-                   "liRotationParamsIndex < static_cast< int32_t > ( BrnPhysics::Props::KU_MAX_PROPS_TO_UPDATE )");
+        CGS_ASSERT_AT(liRotationParamsIndex >= -1, "liRotationParamsIndex >= -1", KAC_ARTIST_ASSERT_FILE, 369);
+        CGS_ASSERT_AT(liRotationParamsIndex < 127, "liRotationParamsIndex < 127", KAC_ARTIST_ASSERT_FILE, 370);
+        CGS_ASSERT_AT(liRotationParamsIndex < 100,
+                   "liRotationParamsIndex < static_cast< int32_t > ( BrnPhysics::Props::KU_MAX_PROPS_TO_UPDATE )", KAC_ARTIST_ASSERT_FILE, 371);
 
         // A prop that carries rotation params must be animated. Note the X360 tests the
         // member that is STILL UNASSIGNED at this point (`lbz r11,0x4B(r31)` before the
         // `stb r28,0x4B(r31)` below), not the incoming argument -- reproduced as-is.
         if (mi8RotationParamsIndex != -1)
         {
-            CGS_ASSERT(lpInstanceData->IsAnimated(),
-                       "(mi8RotationParamsIndex == -1) || lpInstanceData->IsAnimated()");
+            CGS_ASSERT_AT(lpInstanceData->IsAnimated(),
+                       "(mi8RotationParamsIndex == -1) || lpInstanceData->IsAnimated()", KAC_ARTIST_ASSERT_FILE, 372);
         }
 
         mi8RotationParamsIndex = static_cast<s8>(liRotationParamsIndex);   // +75 (stb 0x4B)
@@ -401,9 +402,9 @@ namespace BrnWorld
                                               f32* lpMaxAngle,
                                               const PropEntityRotationParams* lpRotationParams)
     {
-        CGS_ASSERT(lpTrueAngle != 0, "lpTrueAngle");
-        CGS_ASSERT(lpMinAngle  != 0, "lpMinAngle");
-        CGS_ASSERT(lpMaxAngle  != 0, "lpMaxAngle");
+        CGS_ASSERT_AT(lpTrueAngle != 0, "lpTrueAngle", CGS_ARTIST_UNITY_BRNPROPENTITYINSTANCE_CPP_FILE, 65);
+        CGS_ASSERT_AT(lpMinAngle  != 0, "lpMinAngle", CGS_ARTIST_UNITY_BRNPROPENTITYINSTANCE_CPP_FILE, 66);
+        CGS_ASSERT_AT(lpMaxAngle  != 0, "lpMaxAngle", CGS_ARTIST_UNITY_BRNPROPENTITYINSTANCE_CPP_FILE, 67);
 
         // Rodata scales: acos result -> degrees, and packed 8-bit angle -> degrees (256 -> 360).
         const f32 KF_RAD_TO_DEG  = 57.288353f;   // flt_82017B38

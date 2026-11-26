@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNAIMODULE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIModule.cpp"
 #include <cstdlib>
 // =================================================================================================
 // BrnAIModule_Drive.cpp -- the DRIVE legs of BrnAI::AIModule's per-frame spine
@@ -278,7 +279,7 @@ AIDriver* AIModule::GetAIDriver(EActiveRaceCarIndex leActiveRaceCarIndex)
 AISectionsData* AIModule::GetAISectionsData() const
 {
     const AISectionsData* lpAISectionsData = GetLoadedAISectionsData();
-    CGS_ASSERT(lpAISectionsData != 0, "lpAISectionsData != NULL");   // BrnAIModule.cpp:2485
+    CGS_ASSERT_AT(lpAISectionsData != 0, "lpAISectionsData != NULL", CGS_ARTIST_UNITY_BRNAIMODULE_CPP_FILE, 2485);   // BrnAIModule.cpp:2485
     return const_cast<AISectionsData*>(lpAISectionsData);
 }
 
@@ -513,7 +514,7 @@ void AIModule::SetSuitabilityForAggression(EActiveRaceCarIndex leActiveRaceCarIn
     (void)lpCarInterface;   // console r5 -- unused by the body
 
     AIDriver* lpDriver = GetAIDriver(leActiveRaceCarIndex);
-    CGS_ASSERT(lpDriver != 0, "Missing Driver in aggression check\n");   // BrnAIModule.cpp:1251
+    CGS_ASSERT_AT(lpDriver != 0, "Missing Driver in aggression check\n", CGS_ARTIST_UNITY_BRNAIMODULE_CPP_FILE, 1251);   // BrnAIModule.cpp:1251
 
     AICar* lpCar = lpDriver->GetCar();
     if (lpCar == 0)

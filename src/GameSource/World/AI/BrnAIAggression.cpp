@@ -219,8 +219,8 @@ bool AIAggression::AcrossSeparationTooBig(const AICar* lpThisCar, const AICar* l
 // (crash-parity audit G00-D2).
 f32 AIAggression::CalcSeparationAcrossToTarget()
 {
-    CGS_ASSERT(mpTargetCar != NULL, "mpTargetCar != NULL");
-    CGS_ASSERT(mpCar != NULL, "mpCar != NULL");
+    CGS_ASSERT_AT(mpTargetCar != NULL, "mpTargetCar != NULL", CGS_ARTIST_FILE, 2078);
+    CGS_ASSERT_AT(mpCar != NULL, "mpCar != NULL", CGS_ARTIST_FILE, 2079);
 
     Vector3 lvDiff = mpCar->GetPosition() - mpTargetCar->GetPosition();
     Vector3 lvRight = mpCar->GetRight();
@@ -497,8 +497,8 @@ bool AIAggression::FindTarget(const AICar* lpCandidateTarget)
 // function normalises the right axis unflattened (GetRight -> v13 -> vmsum3fp128 v13,v13 @0x827711E8).
 f32 AIAggression::GetAcrossSeparation(const AICar* lpThisCar, const AICar* lpOtherCar)
 {
-    CGS_ASSERT(lpThisCar != NULL, "lpThisCar != NULL");
-    CGS_ASSERT(lpOtherCar != NULL, "lpOtherCar != NULL");
+    CGS_ASSERT_AT(lpThisCar != NULL, "lpThisCar != NULL", CGS_ARTIST_FILE, 1742);
+    CGS_ASSERT_AT(lpOtherCar != NULL, "lpOtherCar != NULL", CGS_ARTIST_FILE, 1743);
 
     Vector3 lvAcross = lpOtherCar->GetPosition() - lpThisCar->GetPosition();
     lvAcross.mV.y = 0.0f;
@@ -549,8 +549,8 @@ f32 AIAggression::GetAheadness(const AICar* lpPlayerCar, Vector3 lPosition)
 // separation against the unit forward vector.
 f32 AIAggression::GetLeadingSeparation(const AICar* lpThisCar, const AICar* lpOtherCar) const
 {
-    CGS_ASSERT(lpThisCar != NULL, "lpThisCar != NULL");
-    CGS_ASSERT(lpOtherCar != NULL, "lpOtherCar != NULL");
+    CGS_ASSERT_AT(lpThisCar != NULL, "lpThisCar != NULL", CGS_ARTIST_FILE, 1689);
+    CGS_ASSERT_AT(lpOtherCar != NULL, "lpOtherCar != NULL", CGS_ARTIST_FILE, 1690);
 
     // Ground-plane (XZ) separation between the two cars.
     Vector3 lvSeparation = lpOtherCar->GetPosition() - lpThisCar->GetPosition();
@@ -639,7 +639,7 @@ Vector3 AIAggression::GetPositionNextToTarget(const AICar* lpTargetCar, const AI
 
     const Vector3 lvTargetPosition = lpTargetCar->GetPosition() + (lpTargetCar->GetRight() * lfSignedOffset);
 
-    CGS_ASSERT(rw::math::vpu::IsValid(lvTargetPosition), "RwMath::IsValid( lTargetPosition )");
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lvTargetPosition), "RwMath::IsValid( lTargetPosition )", CGS_ARTIST_FILE, 2162);
     return lvTargetPosition;
 }
 
@@ -755,7 +755,7 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
             // ESpeedMatch_Disabled (0) / Enabled (1) / Count (6): the aggressive fall-back path.
             if (meSpeedMatchType != ESpeedMatch_Disabled && mpTargetCar != NULL)
             {
-                CGS_ASSERT(mpCar != NULL, "mpCar != NULL");
+                CGS_ASSERT_AT(mpCar != NULL, "mpCar != NULL", CGS_ARTIST_FILE, 2342);
 
                 const f32 lfProximity = mpCar->GetAggressiveness()->GetProximityToSpeedMatch();
                 const f32 lfError = mfRelativePositionAhead + mfTargetSeparationAlong;
@@ -951,7 +951,7 @@ void AIAggression::StopAttacking(EStopAttack leStopAttack)
             + lfAggressionLevel * (KF_MAX_POST_ATTACK_WAIT_TIME - KF_MIN_POST_ATTACK_WAIT_TIME);
 
         // `fcmpu wait, 0.0 ; bge` @0x82793DEC/0x82793DF0 skips the assert on an unordered compare.
-        CGS_ASSERT(!(lfWaitTime < 0.0f), "lfWaitTime >= 0.0f");
+        CGS_ASSERT_AT(!(lfWaitTime < 0.0f), "lfWaitTime >= 0.0f", CGS_ARTIST_FILE, 1971);
 
         if ( leStopAttack == E_AGGRESSION_ATTACKAGAIN && lfWaitTime < 0.1f )
         {
@@ -1086,7 +1086,7 @@ void AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar)
             UpdateAggressionStateHangAboutAhead(mpPlayerCar);
             break;
         default:
-            CGS_ASSERT(false, "Unknown aggression state");
+            CGS_ASSERT_AT(false, "Unknown aggression state", CGS_ARTIST_FILE, 556);
             break;
     }
 }

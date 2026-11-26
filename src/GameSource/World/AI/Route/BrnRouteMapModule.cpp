@@ -124,13 +124,6 @@ void RouteMapModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
     (void)lpInputBufferStack;
     (void)lpOutputBufferStack;
 
-    // [GUARD] the console dereferences both buffers unconditionally after the asserts; a NULL
-    // here is a spine wiring error, not a frame condition.
-    if (lpInputBuffer == 0 || lpOutputBuffer == 0)
-    {
-        return;
-    }
-
     lpInputBuffer->LockForRead();
     lpOutputBuffer->LockForWrite();
 
@@ -198,13 +191,6 @@ void RouteMapModule::ProcessRaceRoute(const RouteMapModuleIO::RaceRouteRequest* 
 
     if (!mAStar.IsInProgress())
     {
-        // [GUARD] the console would dereference a NULL request here (the assert above is not a
-        // guard); the only way in is a spine wiring error.
-        if (lpRouteRequest == 0)
-        {
-            return;
-        }
-
         muOwnerId = lpRouteRequest->GetOwnerId();
         muEventId = lpRouteRequest->GetEventId();
 
@@ -320,12 +306,6 @@ void RouteMapModule::ProcessExtrapolatedRoute(
     const RouteMapModuleIO::ExtrapolatedRouteRequest* lpRouteRequest,
     RouteMapModuleIO::RouteResponseQueue* lpRouteResponseQueue)
 {
-    // [GUARD] the console reads the request unconditionally; NULL is a wiring error.
-    if (lpRouteRequest == 0)
-    {
-        return;
-    }
-
     // 0x8278C4F0..0x8278C508: the response on the stack -- ids from the request, empty route.
     RouteMapModuleIO::RouteResponse lRouteResponse;
     Route* lpRoute = lRouteResponse.GetRoute();
@@ -335,13 +315,6 @@ void RouteMapModule::ProcessExtrapolatedRoute(
     lRouteResponse.Construct(lpRouteRequest->GetOwnerId(), lpRouteRequest->GetEventId());
 
     const AISectionsData* lpAISectionsData = mAISectionsData.GetMemoryResource();
-
-    // [GUARD] the console dereferences the road network unconditionally; no network bound is
-    // a Prepare-order error, not a frame condition.
-    if (lpAISectionsData == 0)
-    {
-        return;
-    }
 
     ExtrapolatedIndexArray lGeneratedIndices;
     lGeneratedIndices.SetFullCount();                                       // stw 16, +0x80

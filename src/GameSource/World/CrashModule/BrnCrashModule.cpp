@@ -6,6 +6,9 @@
 //   CrashModule()                                   @ 0x827DE960
 //   FindCrashForRaceCar(EActiveRaceCarIndex) const  @ 0x827C6AD8
 //   WillTrafficVehicleBeRecycledNextFrame(u16)      @ 0x827BBB10
+#define CGS_ARTIST_BRNCRASHMODULE_H_FILE "..\\..\\..\\GameSource\\World/CrashModule/BrnCrashModule.h"
+#define CGS_ARTIST_CGSFASTBITARRAY_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h"
+#define CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/CrashModule/BrnCrashModule.cpp"
 #include "GameSource/World/CrashModule/BrnCrashModule.h"
 
 #include "GameSource/BurnoutConstants.h"                                   // E_ACTIVE_RACE_CAR_INDEX_COUNT
@@ -23,7 +26,7 @@ namespace BrnWorld
                                         CrashIO::OutputBuffer_PreScene* lpOutput)
     {
         using namespace BrnGameState::GameStateModuleIO;
-        CGS_ASSERT(lpInput, "lpInput");
+        CGS_ASSERT_AT(lpInput, "lpInput", CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE, 690);
         const CrashIO::InputBuffer_PreScene::GameActionQueue* lpQueue = lpInput->GetGameActionQueue();
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
@@ -203,7 +206,7 @@ namespace BrnWorld
     // == 600 == 0x258).
     bool CrashModule::WillTrafficVehicleBeRecycledNextFrame(u16 luVehicle)
     {
-        CGS_ASSERT(luVehicle < 0x258u, "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
+        CGS_ASSERT_AT(luVehicle < 0x258u, "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_BRNCRASHMODULE_H_FILE, 467);
 
         const s32 liCount = mRecycledTrafficQueue.GetLength();
         for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
@@ -962,7 +965,7 @@ void CrashModule::ResetCrashedNetworkRaceCars( const CrashIO::InputBuffer_PreSce
             continue;
         }
 
-        CGS_ASSERT( lpNetworkDriver->miVehicleID < 8, "Index is out of range (max bits: 8)" );
+        CGS_ASSERT_AT( lpNetworkDriver->miVehicleID < 8, "Index is out of range (max bits: 8)" , CGS_ARTIST_CGSFASTBITARRAY_H_FILE, 396);
         if( !mCrashingRaceCars.IsBitSet( static_cast<u32>( lpNetworkDriver->miVehicleID ) ) )
         {
             continue;

@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_WHEELSTATEMACHINE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Wheel/WheelStateMachine.cpp"
 #include "GameSource/Effects/Particles/Native/BrnParticleMath.h"
 // =============================================================================
 // GameSource/Effects/Wheel/WheelStateMachine.cpp  (X360 ARTIST)
@@ -195,7 +196,7 @@ void WheelStateMachine::HandleSmokeLayer(u32 luLayer, CarState& lCarState,
                                          f32 lfBackwardEmissionFactor, f32 lfAngularVelocityScale,
                                          u32 leParticleType)
 {
-    CGS_ASSERT(luLayer < 2, "luLayer < 2");
+    CGS_ASSERT_AT(luLayer < 2, "luLayer < 2", CGS_ARTIST_UNITY_WHEELSTATEMACHINE_CPP_FILE, 224);
 
     // Below the layer's skid-start threshold nothing accumulates: `fcmpu f31, f27 ; ble` (0x82288EB0 / 0x82288EB4)
     // is TAKEN on an unordered compare, so a NaN skid factor returns here.

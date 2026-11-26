@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNDEBRISRENDERER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/Native/BrnDebrisRenderer.cpp"
 #include "GameSource/Effects/Particles/Native/BrnDebrisRenderer.h"
 #include "GameSource/Effects/Particles/Native/BrnDebrisArray.h"     // BrnDebrisArrayParams table
 
@@ -114,7 +115,7 @@ namespace Native
         const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
         mpBlendState = renderengine::BlendState::Initialize(resource, lParameters);
 
-        CGS_ASSERT( mpBlendState, "mpBlendState" );
+        CGS_ASSERT_AT( mpBlendState, "mpBlendState" , CGS_ARTIST_UNITY_BRNDEBRISRENDERER_CPP_FILE, 449);
     }
 
     // =====================================================================================

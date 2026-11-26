@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/CrashModule/BrnCrashModule.cpp"
 #include "GameSource/World/CrashModule/BrnTrafficCrash.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstddef>
@@ -8,11 +9,11 @@ namespace BrnWorld
     // DecFIGS confirms four explicit arguments; Hex-Rays invented a double and extra integer.
     void TrafficCrash::Construct(s32 liOwner, u16 luVehicleIndex, f32 lfTimeTillClearup, bool lbNetwork)
     {
-        CGS_ASSERT(liOwner >= 0, "liOwner >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(liOwner < 8, "liOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        CGS_ASSERT_AT(liOwner >= 0, "liOwner >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE, 211);
+        CGS_ASSERT_AT(liOwner < 8, "liOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE, 212);
         miOwner = static_cast<s8>(liOwner);
         muVehicleIndex = luVehicleIndex;
-        CGS_ASSERT(luVehicleIndex < 600u, "muVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
+        CGS_ASSERT_AT(luVehicleIndex < 600u, "muVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE, 216);
         mfTimeTillClearup = lfTimeTillClearup;
         mxFlags = lbNetwork ? 2 : 0;
     }

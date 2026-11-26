@@ -425,7 +425,7 @@ WorldEntityModule::Release( void )
 
         default:
         {
-            CGS_ASSERT( false, "Invalid Stage\n" );
+            CGS_ASSERT_AT( false, "Invalid Stage\n" , KAC_ARTIST_ASSERT_FILE, 917);
         }
         break;
     }
@@ -450,7 +450,7 @@ WorldEntityModule::Destruct( void )
 void
 WorldEntityModule::ProcessValidationRequests( const WorldEntityIO::RequestInterface* lpRequestInterface )
 {
-    CGS_ASSERT( lpRequestInterface, "lpRequestInterface" );
+    CGS_ASSERT_AT( lpRequestInterface, "lpRequestInterface" , KAC_ARTIST_ASSERT_FILE, 955);
 
     if ( lpRequestInterface->mbValidateCollisionWorld || mbDebugTriggerValidate )
     {
@@ -458,8 +458,8 @@ WorldEntityModule::ProcessValidationRequests( const WorldEntityIO::RequestInterf
         {
             ( *CgsDev::Log::gpDebugPrint ) << "Collision world validate requested\n";
         }
-        CGS_ASSERT( meCollisionWorldState == E_COLWORLDSTATE_INVALID,
-                        "Can only validate when invalid\n" );
+        CGS_ASSERT_AT( meCollisionWorldState == E_COLWORLDSTATE_INVALID,
+                        "Can only validate when invalid\n" , KAC_ARTIST_ASSERT_FILE, 960);
 
         meValidationStage = E_COLWORLDVALIDATIONSTAGE_START;
         mbDebugTriggerValidate = false;
@@ -471,8 +471,8 @@ WorldEntityModule::ProcessValidationRequests( const WorldEntityIO::RequestInterf
         {
             ( *CgsDev::Log::gpDebugPrint ) << "Collision world invalidate requested\n";
         }
-        CGS_ASSERT( meCollisionWorldState == E_COLWORLDSTATE_VALID,
-                        "Can only invalidate when valid\n" );
+        CGS_ASSERT_AT( meCollisionWorldState == E_COLWORLDSTATE_VALID,
+                        "Can only invalidate when valid\n" , KAC_ARTIST_ASSERT_FILE, 968);
 
         meInvalidationStage = E_COLWORLDINVALIDATIONSTAGE_START;
         mbDebugTriggerInvalidate = false;
@@ -1075,8 +1075,8 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
                 const CgsModule::Event* lpEventData = 0;
                 s32 liSize = 0;
                 const s32 liEventId = mReceiverQueue.GetFirstEvent( &lpEventData, &liSize );
-                CGS_ASSERT( liEventId == BrnResource::GameDataIO::EVENT_GET_SURFACE_LIST,
-                                "liEventId == BrnResource::GameDataIO::EVENT_GET_SURFACE_LIST" );
+                CGS_ASSERT_AT( liEventId == BrnResource::GameDataIO::EVENT_GET_SURFACE_LIST,
+                                "liEventId == BrnResource::GameDataIO::EVENT_GET_SURFACE_LIST" , KAC_ARTIST_ASSERT_FILE, 2063);
             }
 
             // A STALE SURFACELIST.BIN makes this rebind die in Attrib::Collection::GetData
@@ -1097,11 +1097,11 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
                 const_cast<Attrib::Collection*>( lpSampleRef->GetCollection() ), 0 );
             const f32* lpfSampleColour =
                 static_cast<const f32*>( lSampleSurface.GetAttributeData() );
-            CGS_ASSERT( std::fabs( lpfSampleColour[0] ) > KF_SURFACE_SANITY_EPSILON ||
+            CGS_ASSERT_AT( std::fabs( lpfSampleColour[0] ) > KF_SURFACE_SANITY_EPSILON ||
                             std::fabs( lpfSampleColour[1] ) > KF_SURFACE_SANITY_EPSILON ||
                             std::fabs( lpfSampleColour[2] ) > KF_SURFACE_SANITY_EPSILON ||
                             std::fabs( lpfSampleColour[3] ) > KF_SURFACE_SANITY_EPSILON,
-                        "Surface list appears to be corrupt" );
+                        "Surface list appears to be corrupt" , KAC_ARTIST_ASSERT_FILE, 2074);
 
             meSurfaceListPrepareStage = E_SURFACELIST_PREPARESTAGE_DONE;
             return false;
@@ -1115,7 +1115,7 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
 
         default:
         {
-            CGS_ASSERT( false, "Invalid surface list prepare state" );
+            CGS_ASSERT_AT( false, "Invalid surface list prepare state" , KAC_ARTIST_ASSERT_FILE, 2091);
         }
         break;
     }
@@ -1295,11 +1295,11 @@ WorldEntityModule::AddCollisionZoneToSceneManager(
     CgsResource::ResourceHandle* lpaMeshHandles,
     s32 liNumHandles )
 {
-    CGS_ASSERT( meZoneColPrepareStage == E_ZONECOL_PREPARESTAGE_ACQUIRING_MESHES, "meZoneColPrepareStage == E_ZONECOL_PREPARESTAGE_ACQUIRING_MESHES" );
-    CGS_ASSERT( meWorldColPrepareStage == E_WORLDCOL_PREPARESTAGE_PREPARING_ZONES, "meWorldColPrepareStage == E_WORLDCOL_PREPARESTAGE_PREPARING_ZONES" );
-    CGS_ASSERT( liNumHandles == 1,
-        "Currently only support 1 handle per zone - DONT change this without fixing invalidation / validation code\n" );
-    CGS_ASSERT( lpRequestInterface && lpSceneInterface, "lpRequestInterface && lpSceneInterface" );
+    CGS_ASSERT_AT( meZoneColPrepareStage == E_ZONECOL_PREPARESTAGE_ACQUIRING_MESHES, "meZoneColPrepareStage == E_ZONECOL_PREPARESTAGE_ACQUIRING_MESHES" , KAC_ARTIST_ASSERT_FILE, 2342);
+    CGS_ASSERT_AT( meWorldColPrepareStage == E_WORLDCOL_PREPARESTAGE_PREPARING_ZONES, "meWorldColPrepareStage == E_WORLDCOL_PREPARESTAGE_PREPARING_ZONES" , KAC_ARTIST_ASSERT_FILE, 2343);
+    CGS_ASSERT_AT( liNumHandles == 1,
+        "Currently only support 1 handle per zone - DONT change this without fixing invalidation / validation code\n" , KAC_ARTIST_ASSERT_FILE, 2344);
+    CGS_ASSERT_AT( lpRequestInterface && lpSceneInterface, "lpRequestInterface && lpSceneInterface" , KAC_ARTIST_ASSERT_FILE, 2346);
 
     for ( s32 liHandle = 0; liHandle < liNumHandles; liHandle++ )
     {
@@ -1338,7 +1338,7 @@ WorldEntityModule::HandleExternalRequests( const WorldEntityIO::InputBuffer_Post
         else
         {
             // (assert text preserved from the original source)
-            CGS_ASSERT( false, "Unknown GameAction coming into TrafficModule" );
+            CGS_ASSERT_AT( false, "Unknown GameAction coming into TrafficModule" , KAC_ARTIST_ASSERT_FILE, 2408);
         }
 
         liEventId = lpQueue->GetNextEvent( lpEventData, &lpEventData, &liEventSize );
@@ -1399,7 +1399,7 @@ WorldEntityModule::ValidateCollision(
 
         default:
         {
-            CGS_ASSERT( false, "Invalid validation state\n" );
+            CGS_ASSERT_AT( false, "Invalid validation state\n" , KAC_ARTIST_ASSERT_FILE, 2479);
         }
         break;
     }
@@ -1459,7 +1459,7 @@ WorldEntityModule::InvalidateCollision(
 
         default:
         {
-            CGS_ASSERT( false, "Invalid invalidation state\n" );
+            CGS_ASSERT_AT( false, "Invalid invalidation state\n" , KAC_ARTIST_ASSERT_FILE, 2546);
         }
         break;
     }
@@ -2242,7 +2242,7 @@ WorldEntityModule::UpdateMassive( BrnUpdateSet lUpdateSet )
         {
             const BrnMassive::BrnMassiveSubscriber* lpPrevious =
                 mMassive.GetSubscriberAtIndex( miNumMassiveSubscribersCreated - 1 );
-            CGS_ASSERT( lpPrevious, "Invalid Subscriber has been created" );
+            CGS_ASSERT_AT( lpPrevious, "Invalid Subscriber has been created" , KAC_ARTIST_ASSERT_FILE, 821);
             if ( lpPrevious != 0 && !( lpPrevious->miState == 3 || lpPrevious->miState == 2 ) )
             {
                 lbCreateNext = false;

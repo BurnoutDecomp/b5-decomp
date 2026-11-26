@@ -47,6 +47,7 @@
 // ============================================================================
 
 #define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
+#define CGS_ARTIST_UNITY_BRNTRAFFICENTITYMODULE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.cpp"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #undef CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
 
@@ -511,7 +512,7 @@ void TrafficEntityModule::SubmitCoronasForVehicle(
 {
     if (mbTrafficIsHidden)
         return;
-    CGS_ASSERT(lpCoronaSubmissionInterface != 0, "lpCoronaSubmissionInterface != NULL");
+    CGS_ASSERT_AT(lpCoronaSubmissionInterface != 0, "lpCoronaSubmissionInterface != NULL", CGS_ARTIST_UNITY_BRNTRAFFICENTITYMODULE_CPP_FILE, 14525);
 
     const TrafficPhysicsInfo* lpPhysicsInfo = 0;
     Matrix44Affine lTransform;

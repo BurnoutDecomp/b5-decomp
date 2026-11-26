@@ -50,6 +50,7 @@
 // carried as flagged zeros -- their CRT dynamic initialisers are in the 0x82C4Bxxx bank and
 // every one is `<mph literal> * 0.44704`.
 // ============================================================================
+#define CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
@@ -196,7 +197,7 @@ RaceCar* RaceCarEntityModule::GetPlayerRaceCar()
         return 0;   // [GUARD], see banner
     }
 
-    CGS_ASSERT(lpPlayerActiveRaceCar->IsAttached(), "IsAttached()");   // BrnActiveRaceCar.h:1089
+    CGS_ASSERT_AT(lpPlayerActiveRaceCar->IsAttached(), "IsAttached()", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);   // BrnActiveRaceCar.h:1089
 
     return lpPlayerActiveRaceCar->GetGlobalRaceCar();
 }

@@ -64,7 +64,7 @@ namespace BrnWorld
 // ---------------------------------------------------------------------------
 void RaceCarAudioStreamer::Construct( RaceCarStreamer* lpStreamer )
 {
-    CGS_ASSERT( lpStreamer != 0, "lpStreamer != NULL" );
+    CGS_ASSERT_AT( lpStreamer != 0, "lpStreamer != NULL" , KAC_ARTIST_ASSERT_FILE, 310);
     mpStreamer = lpStreamer;
 
     mAudioCarLoadedDataQueue.Construct();
@@ -99,15 +99,15 @@ void RaceCarAudioStreamer::Construct( RaceCarStreamer* lpStreamer )
 // ---------------------------------------------------------------------------
 bool RaceCarAudioStreamer::AddEntry( CgsID luAssetID, u64 luUserId, bool lbIsPlayer )
 {
-    CGS_ASSERT( luUserId < static_cast<u64>( KI_MAX_ACTIVE_RACE_CARS ),
-                "luUserId >= 0 && luUserId < static_cast<uint64_t>(KI_MAX_ACTIVE_RACE_CARS)" );
+    CGS_ASSERT_AT( luUserId < static_cast<u64>( KI_MAX_ACTIVE_RACE_CARS ),
+                "luUserId >= 0 && luUserId < static_cast<uint64_t>(KI_MAX_ACTIVE_RACE_CARS)" , KAC_ARTIST_ASSERT_FILE, 750);
 
     RaceCarStreamingSound& lEntry = maEntries[luUserId];
 
     // The X360 streamed the racecar index into this assert's message buffer.
-    CGS_ASSERT( lEntry.mDesiredId == 0,
-                "Adding a streaming asset that for a racecar that already has one" );
-    CGS_ASSERT( luAssetID != 0, "lAssetID" );
+    CGS_ASSERT_AT( lEntry.mDesiredId == 0,
+                "Adding a streaming asset that for a racecar that already has one" , KAC_ARTIST_ASSERT_FILE, 754);
+    CGS_ASSERT_AT( luAssetID != 0, "lAssetID" , KAC_ARTIST_ASSERT_FILE, 755);
 
     char lacVehicleID[KI_CGSID_STRING_LEN];
     CgsIDUnCompress( luAssetID, lacVehicleID );
@@ -159,19 +159,19 @@ void RaceCarAudioStreamer::OnLoadComplete( const BrnResource::GameDataIO::GameDa
 {
     const s32 liActiveRaceCar = static_cast<s32>( GetUserId( liListIndex ) );
 
-    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+    CGS_ASSERT_AT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" , KAC_ARTIST_ASSERT_FILE, 359);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" , KAC_ARTIST_ASSERT_FILE, 360);
 
     mLoadedEntries.SetBit( static_cast<u32>( liActiveRaceCar ) );
 
     RaceCarStreamingSound& lEntry = maEntries[liActiveRaceCar];
 
-    CGS_ASSERT( lEntry.mLoadedBundleId == 0, "lpEntry->mLoadedBundleId == kCGSID_NULL" );
+    CGS_ASSERT_AT( lEntry.mLoadedBundleId == 0, "lpEntry->mLoadedBundleId == kCGSID_NULL" , KAC_ARTIST_ASSERT_FILE, 368);
 
     lEntry.mLoadedBundleId = lpEvent->GetGameDataId();
 
-    CGS_ASSERT( lEntry.meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADINGBUNDLES,
-                "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADINGBUNDLES" );
+    CGS_ASSERT_AT( lEntry.meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADINGBUNDLES,
+                "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADINGBUNDLES" , KAC_ARTIST_ASSERT_FILE, 373);
 
     lEntry.mbLoadedIsPlayer = true;
     lEntry.meState          = RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADEDBUNDLES;
@@ -225,9 +225,9 @@ void RaceCarAudioStreamer::OnUnloadComplete( const BrnResource::GameDataIO::Unlo
 // ---------------------------------------------------------------------------
 bool RaceCarAudioStreamer::SendLoadRequest( RaceCarStreamingSound* lpEntry )
 {
-    CGS_ASSERT( lpEntry != 0, "lpEntry" );
-    CGS_ASSERT( lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACH,
-                "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACH" );
+    CGS_ASSERT_AT( lpEntry != 0, "lpEntry" , KAC_ARTIST_ASSERT_FILE, 700);
+    CGS_ASSERT_AT( lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACH,
+                "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACH" , KAC_ARTIST_ASSERT_FILE, 703);
 
     lpEntry->meState = RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACHING;
 
@@ -241,10 +241,10 @@ bool RaceCarAudioStreamer::SendLoadRequest( RaceCarStreamingSound* lpEntry )
 
     const BrnResource::VehicleList* lpVehicleList = mpStreamer->GetVehicleList();
     const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex( lModelId );
-    CGS_ASSERT( liVehicleIndex != -1, "liVehicleIndex != -1" );
+    CGS_ASSERT_AT( liVehicleIndex != -1, "liVehicleIndex != -1" , KAC_ARTIST_ASSERT_FILE, 716);
 
     const BrnResource::VehicleListEntry* lpVehicleEntry = lpVehicleList->GetVehicleData( liVehicleIndex );
-    CGS_ASSERT( lpVehicleEntry != 0, "lpVehicleEntry != NULL" );
+    CGS_ASSERT_AT( lpVehicleEntry != 0, "lpVehicleEntry != NULL" , KAC_ARTIST_ASSERT_FILE, 718);
 
     RaceCarEntityModuleIO::AudioCarDataLoadedEvent lEvent;
     lEvent.meMessageType         = RaceCarEntityModuleIO::AudioCarDataLoadedEvent::E_REQUEST_LOAD_DATA;
@@ -271,9 +271,9 @@ bool RaceCarAudioStreamer::SendLoadRequest( RaceCarStreamingSound* lpEntry )
 // ---------------------------------------------------------------------------
 bool RaceCarAudioStreamer::SendUnLoadRequest( RaceCarStreamingSound* lpEntry )
 {
-    CGS_ASSERT( lpEntry != 0, "lpEntry" );
+    CGS_ASSERT_AT( lpEntry != 0, "lpEntry" , KAC_ARTIST_ASSERT_FILE, 659);
     // The X360 streamed the racecar index into this assert's message buffer.
-    CGS_ASSERT( lpEntry->mLoadedBundleId != 0, "Removing an already unloaded car." );
+    CGS_ASSERT_AT( lpEntry->mLoadedBundleId != 0, "Removing an already unloaded car." , KAC_ARTIST_ASSERT_FILE, 660);
 
     char lacVehicleID[KI_CGSID_STRING_LEN];
     CgsIDUnCompress( lpEntry->mLoadedBundleId, lacVehicleID );
@@ -281,9 +281,9 @@ bool RaceCarAudioStreamer::SendUnLoadRequest( RaceCarStreamingSound* lpEntry )
 
     const CgsID lModelId = CgsIDCompress( lacVehicleID + 4 );
 
-    CGS_ASSERT( lpEntry->mLoadedBundleId != 0, "lpEntry->mLoadedBundleId" );
-    CGS_ASSERT( lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_DETACH,
-                "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_DETACH" );
+    CGS_ASSERT_AT( lpEntry->mLoadedBundleId != 0, "lpEntry->mLoadedBundleId" , KAC_ARTIST_ASSERT_FILE, 672);
+    CGS_ASSERT_AT( lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_DETACH,
+                "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_DETACH" , KAC_ARTIST_ASSERT_FILE, 673);
 
     lpEntry->meState = RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_DETACHING;
 
@@ -487,8 +487,8 @@ void RaceCarAudioStreamer::OnAssetLoaded( s32 liActiveRaceCar, const BrnResource
     mpStreamer->OnAudioLoaded( liActiveRaceCar );
 
     RaceCarStreamingSound& lEntry = maEntries[liActiveRaceCar];
-    CGS_ASSERT( lEntry.meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACHED,
-                "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACHED" );
+    CGS_ASSERT_AT( lEntry.meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACHED,
+                "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACHED" , KAC_ARTIST_ASSERT_FILE, 430);
     lEntry.meState = RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADEDANDATTACHED;
 }
 
@@ -516,16 +516,16 @@ void RaceCarAudioStreamer::OnAssetUnloading( s32 liActiveRaceCar )
 // ---------------------------------------------------------------------------
 bool RaceCarAudioStreamer::RemoveEntry( CgsID lAssetId, u64 luUserId )
 {
-    CGS_ASSERT( luUserId < static_cast<u64>( KI_MAX_ACTIVE_RACE_CARS ),
-                "luUserId >= 0 && luUserId < static_cast<uint64_t>(KI_MAX_ACTIVE_RACE_CARS)" );
+    CGS_ASSERT_AT( luUserId < static_cast<u64>( KI_MAX_ACTIVE_RACE_CARS ),
+                "luUserId >= 0 && luUserId < static_cast<uint64_t>(KI_MAX_ACTIVE_RACE_CARS)" , KAC_ARTIST_ASSERT_FILE, 812);
 
     RaceCarStreamingSound& lEntry = maEntries[luUserId];
 
     // The X360 streamed the racecar index into both message buffers.
-    CGS_ASSERT( lEntry.mDesiredId != 0,
-                "Removing a streaming asset that hasn't been set, racecar=" );
-    CGS_ASSERT( lEntry.mDesiredId == lAssetId,
-                "Removing a different asset from a racecar from the one that was added, racecar=" );
+    CGS_ASSERT_AT( lEntry.mDesiredId != 0,
+                "Removing a streaming asset that hasn't been set, racecar=" , KAC_ARTIST_ASSERT_FILE, 816);
+    CGS_ASSERT_AT( lEntry.mDesiredId == lAssetId,
+                "Removing a different asset from a racecar from the one that was added, racecar=" , KAC_ARTIST_ASSERT_FILE, 817);
 
     if( KI_PRINT_CAR_LOADING_STATES != 0 )
     {

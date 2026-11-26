@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNWORLDDEBUGCOMPONENT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/DebugComponents/BrnWorldDebugComponent.cpp"
 #include "GameSource/World/DebugComponents/BrnWorldDebugComponent.h"
 
 #include "GameSource/Director/Camera/Camera.h"
@@ -272,7 +273,7 @@ void WorldDebugComponent::ClearStoredFile(void*)
 
 void WorldDebugComponent::UnPrimeGunCallback(void* lpThis)
 {
-    CGS_ASSERT(lpThis != 0, "Invalid data in the callback");
+    CGS_ASSERT_AT(lpThis != 0, "Invalid data in the callback", CGS_ARTIST_UNITY_BRNWORLDDEBUGCOMPONENT_CPP_FILE, 477);
     if (lpThis != 0)
         static_cast<WorldDebugComponent*>(lpThis)->UnPrimeGun();
 }
@@ -286,14 +287,14 @@ void WorldDebugComponent::PrimeGunCallback(void* lpThis)
 
 void WorldDebugComponent::FireGunCallback(void* lpThis)
 {
-    CGS_ASSERT(lpThis != 0, "Invalid data in the callback");
+    CGS_ASSERT_AT(lpThis != 0, "Invalid data in the callback", CGS_ARTIST_UNITY_BRNWORLDDEBUGCOMPONENT_CPP_FILE, 509);
     if (lpThis != 0)
         static_cast<WorldDebugComponent*>(lpThis)->FireGun();
 }
 
 void WorldDebugComponent::TriggerCollWorldValidate(void* lpThis)
 {
-    CGS_ASSERT(lpThis != 0, "Invalid data in the callback");
+    CGS_ASSERT_AT(lpThis != 0, "Invalid data in the callback", CGS_ARTIST_UNITY_BRNWORLDDEBUGCOMPONENT_CPP_FILE, 525);
     if (lpThis != 0)
     {
         WorldDebugComponent* lpComponent = static_cast<WorldDebugComponent*>(lpThis);
@@ -303,7 +304,7 @@ void WorldDebugComponent::TriggerCollWorldValidate(void* lpThis)
 
 void WorldDebugComponent::TriggerCollWorldInvalidate(void* lpThis)
 {
-    CGS_ASSERT(lpThis != 0, "Invalid data in the callback");
+    CGS_ASSERT_AT(lpThis != 0, "Invalid data in the callback", CGS_ARTIST_UNITY_BRNWORLDDEBUGCOMPONENT_CPP_FILE, 541);
     if (lpThis != 0)
     {
         WorldDebugComponent* lpComponent = static_cast<WorldDebugComponent*>(lpThis);

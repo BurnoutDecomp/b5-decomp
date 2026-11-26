@@ -157,7 +157,7 @@ OutputBuffer_PreScene::GetRaceCarAIInterface() const
 RCEntityActiveRaceCarOutputInterface*
 OutputBuffer_PreScene::GetActiveRaceCarOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing", CGS_ARTIST_FILE, 288);
     return &mActiveRaceCarOutputInterface;
 }
 
@@ -177,7 +177,7 @@ OutputBuffer_PreScene::GetActiveRaceCarOutputInterface()
 RCEntityGlobalRaceCarOutputInterface*
 OutputBuffer_PreScene::GetGlobalRaceCarOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing", CGS_ARTIST_FILE, 291);
     return &mGlobalRaceCarOutputInterface;
 }
 

@@ -33,6 +33,7 @@
 // Behaviour is authoritative from the asm; declaration shapes from the DecFIGS DWARF.
 // ============================================================================
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\""../World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.cpp"
+#define CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h"
@@ -312,16 +313,16 @@ void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
     mHandlingBodyVolumeId.SetEntityIDOwner(static_cast<u8>(BrnWorld::E_ENTITYTYPE_RACECAR));
     mHandlingBodyVolumeId.SetEntityIDEntityIndex(static_cast<u32>(meActiveRaceCarIndex));
 
-    CGS_ASSERT(!IsAttached(), "!IsAttached()");
-    CGS_ASSERT(lpRaceCar != 0, "lpRaceCar != NULL");
-    CGS_ASSERT(mpRaceCar == 0, "mpRaceCar == NULL");
+    CGS_ASSERT_AT(!IsAttached(), "!IsAttached()", CGS_ARTIST_FILE, 735);
+    CGS_ASSERT_AT(lpRaceCar != 0, "lpRaceCar != NULL", CGS_ARTIST_FILE, 736);
+    CGS_ASSERT_AT(mpRaceCar == 0, "mpRaceCar == NULL", CGS_ARTIST_FILE, 737);
 
     mpRaceCar = lpRaceCar;                                         // 0x6F0
     muState   = E_STATE_ATTACHED;                                  // 0x740 = 1
 
-    CGS_ASSERT(IsAttached(), "IsAttached()");
+    CGS_ASSERT_AT(IsAttached(), "IsAttached()", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);
     mpRaceCar->AssignActiveRaceCar(this);
-    CGS_ASSERT(IsAttached(), "IsAttached()");
+    CGS_ASSERT_AT(IsAttached(), "IsAttached()", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);
 
     // 0x1BE4 == mRenderParams + 5124 == mbDamaged. The console inlines the three tests of
     // RaceCar::ToBeRenderedDamaged @0x822B3D70 here (mfPersistentDamage > 0 ||
@@ -347,7 +348,7 @@ void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
     muPrevAISection      = 0x7FFF;                                 // 0x73C
     muCurrAISection      = 0x7FFF;                                 // 0x73E
 
-    CGS_ASSERT(mpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+    CGS_ASSERT_AT(mpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 577);
     if (mpRaceCar->GetType() != E_RACE_CAR_TYPE_PLAYER)
     {
         mPrevTransforms.Clear();                                   // 0x598/0x59C/0x5A0
@@ -370,7 +371,7 @@ void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
     // 0x1580 / 0x1588: both mBodyPartVisibility words to all-ones.
     mRenderParams.MakeAllPartsVisible();
 
-    CGS_ASSERT(mpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+    CGS_ASSERT_AT(mpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 577);
     if (mpRaceCar->GetType() != E_RACE_CAR_TYPE_PLAYER
         || !mbEnableEngineSwitchOff
         || (mbIsInGameMode && !lbCarSelectDontStreamAudio))
@@ -431,7 +432,7 @@ void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
 void ActiveRaceCar::Detach( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
                             CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface )
 {
-    CGS_ASSERT(IsAttached(), "IsAttached()");            // X360 BrnActiveRaceCar.cpp:943
+    CGS_ASSERT_AT(IsAttached(), "IsAttached()", CGS_ARTIST_FILE, 943);            // X360 BrnActiveRaceCar.cpp:943
     CGS_ASSERT(mpRaceCar != 0, CGS_ASSERT_MESSAGE_AT("mpRaceCar != NULL", __FILE__, 944));     // :944
     if (mpRaceCar == 0)
     {
@@ -444,7 +445,7 @@ void ActiveRaceCar::Detach( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicl
         RemoveFromScene(lpSceneInterface, lpVehicleInterface);
     }
 
-    CGS_ASSERT(IsAttached(), "IsAttached()");            // BrnActiveRaceCar.h:1089
+    CGS_ASSERT_AT(IsAttached(), "IsAttached()", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);            // BrnActiveRaceCar.h:1089
 
     mpRaceCar->RemoveActiveRaceCar();
 
@@ -633,13 +634,13 @@ void ActiveRaceCar::RemoveFromCollision( CgsSceneManager::SceneManagerIO::InScen
 
     mCurrentCullingGroup = 0xFFFF;        // 0x7D0
 
-    CGS_ASSERT(IsAttached(), "IsAttached()");                       // BrnActiveRaceCar.h:1089
+    CGS_ASSERT_AT(IsAttached(), "IsAttached()", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);                       // BrnActiveRaceCar.h:1089
 
     if (mpRaceCar->GetType() == E_RACE_CAR_TYPE_NETWORK)
     {
-        CGS_ASSERT(mAddRemoveNetworkCarForCollisionQueue.GetLength() <
+        CGS_ASSERT_AT(mAddRemoveNetworkCarForCollisionQueue.GetLength() <
                        mAddRemoveNetworkCarForCollisionQueue.GetMaxLength(),
-                   "Trying to add/remove race car more than ");
+                   "Trying to add/remove race car more than ", CGS_ARTIST_FILE, 1516);
 
         BrnPhysics::Vehicle::VehicleAddedForCollisionEvent lEvent;
         lEvent.mRaceCarVolumeInstanceId = mHandlingBodyVolumeId;
@@ -832,9 +833,9 @@ void ActiveRaceCar::Update_PreScene( CgsSceneManager::SceneManagerIO::InSceneUpd
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::CalcBodyTransform(Matrix44Affine& lrBodyTransform) const
 {
-    CGS_ASSERT(IsActive(), "IsActive()");
-    CGS_ASSERT(rw::math::vpu::IsValid(mPhysicsState.mTransform),
-               "Invalid racecar physics transform");
+    CGS_ASSERT_AT(IsActive(), "IsActive()", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1585);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(mPhysicsState.mTransform),
+               "Invalid racecar physics transform", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1587);
 
     lrBodyTransform = rw::math::vpu::Mult(mCentreOfMassTransform, mPhysicsState.mTransform);
 }
@@ -1099,7 +1100,7 @@ bool ActiveRaceCar::IsWrecked() const
 void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3& lDirection,
                                          f32 lfSpeed )
 {
-    CGS_ASSERT(IsAttached(), "IsAttached()");                        // BrnActiveRaceCar.cpp:1801
+    CGS_ASSERT_AT(IsAttached(), "IsAttached()", CGS_ARTIST_FILE, 1801);                        // BrnActiveRaceCar.cpp:1801
     CGS_ASSERT(rw::math::vpu::IsValid(lDirection),
                CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( lDirection )", __FILE__, 1802));                     // :1802
     CGS_ASSERT(BrnMath::IsNormal(lDirection),
@@ -1205,18 +1206,18 @@ void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface
 {
     const Vector3 lZeroVelocity(0.0f, 0.0f, 0.0f);
 
-    CGS_ASSERT(IsActive(), "IsActive()");                             // BrnActiveRaceCar.cpp:1153
+    CGS_ASSERT_AT(IsActive(), "IsActive()", CGS_ARTIST_FILE, 1153);                             // BrnActiveRaceCar.cpp:1153
     CGS_ASSERT(lpVehicleInterface != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleInterface != NULL", __FILE__, 1154)); // :1154
     CGS_ASSERT(mpRaceCar != 0, CGS_ASSERT_MESSAGE_AT("mpRaceCar != NULL", __FILE__, 1155));                   // :1155
 
     bool lbDisablePhysicsStateReset = false;
     if( lbResettingPhysicsState )
     {
-        CGS_ASSERT(IsAttached(), "IsAttached()");                      // BrnActiveRaceCar.h:1089
+        CGS_ASSERT_AT(IsAttached(), "IsAttached()", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);                      // BrnActiveRaceCar.h:1089
         lbDisablePhysicsStateReset = ( mpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER );
     }
 
-    CGS_ASSERT(IsAttached(), "IsAttached()");                          // BrnActiveRaceCar.h:1089
+    CGS_ASSERT_AT(IsAttached(), "IsAttached()", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);                          // BrnActiveRaceCar.h:1089
 
     lpVehicleInterface->CreateRaceCar(
         mHandlingBodyVolumeId,
@@ -1462,8 +1463,8 @@ void ActiveRaceCar::UpdateWheelPhysicsState(const void* lpPhysicsWheelData)
         mPhysicsState.maWheelTransforms[luWheel] = lpSnapshot->maWheels[luWheel].mTransform;
         mPhysicsState.mabWheelExists[luWheel]    = (lpSnapshot->mau8OnGround[luWheel] != 0);
 
-        CGS_ASSERT(luWheel < 6,
-                   "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
+        CGS_ASSERT_AT(luWheel < 6,
+                   "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 2037);
 
         mRenderParams.SetWheelTransform(luWheel, mPhysicsState.maWheelTransforms[luWheel]);
         mRenderParams.SetWheelExists(luWheel, lpSnapshot->mau8OnGround[luWheel] != 0);
@@ -2039,7 +2040,7 @@ void ActiveRaceCar::OnCrash(bool lbIsPrimaryCrash,
         return;
     }
 
-    CGS_ASSERT( IsAttached(), "IsAttached()" );                          // BrnActiveRaceCar.h:1418
+    CGS_ASSERT_AT( IsAttached(), "IsAttached()" , CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1418);                          // BrnActiveRaceCar.h:1418
 
     if( mPhysicsState.mbCrashing )                                       // lbz 0x52A
     {
@@ -2087,9 +2088,9 @@ void ActiveRaceCar::OnCrash(bool lbIsPrimaryCrash,
 // -------------------------------------------------------------------------------------------------
 bool ActiveRaceCar::IsDriveableAfterCrash() const
 {
-    CGS_ASSERT( IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.h:1089
+    CGS_ASSERT_AT( IsAttached(), "IsAttached()" , CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);   // BrnActiveRaceCar.h:1089
 
-    CGS_ASSERT( mpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
+    CGS_ASSERT_AT( mpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" , BRN_RACECAR_H_ASSERT_FILE, 577);
     if( mpRaceCar->GetType() != E_RACE_CAR_TYPE_PLAYER )
     {
         return false;
@@ -2131,9 +2132,9 @@ bool ActiveRaceCar::IsDriveableAfterCrash() const
 // -------------------------------------------------------------------------------------------------
 bool ActiveRaceCar::IsDeformationFixedAfterCrash() const
 {
-    CGS_ASSERT( IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.h:1089
+    CGS_ASSERT_AT( IsAttached(), "IsAttached()" , CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);   // BrnActiveRaceCar.h:1089
 
-    CGS_ASSERT( mpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
+    CGS_ASSERT_AT( mpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" , BRN_RACECAR_H_ASSERT_FILE, 577);
     if( mpRaceCar->GetType() != E_RACE_CAR_TYPE_PLAYER )
     {
         return true;
@@ -2166,14 +2167,14 @@ bool ActiveRaceCar::IsDeformationFixedAfterCrash() const
 // -------------------------------------------------------------------------------------------------
 void ActiveRaceCar::ResetVerletOffsets()
 {
-    CGS_ASSERT( !IsInactive(), "!IsInactive()" );   // BrnActiveRaceCar.cpp:1128
+    CGS_ASSERT_AT( !IsInactive(), "!IsInactive()" , CGS_ARTIST_FILE, 1128);   // BrnActiveRaceCar.cpp:1128
 
     Vector3Plus* lpVerletOffsets = mRenderParams.GetVerletOffsets();
     const Vector3Plus lZero(0.0f, 0.0f, 0.0f, 0.0f );
     for( u32 luPartIndex = 0; luPartIndex < KU_MAX_RACE_CAR_VERLET_POINTS; ++luPartIndex )
     {
-        CGS_ASSERT( luPartIndex < KU_MAX_RACE_CAR_VERLET_POINTS,
-                    "luPartIndex < (uint32_t)KI_MAX_RACE_CAR_VERLET_POINTS" );   // h:1866
+        CGS_ASSERT_AT( luPartIndex < KU_MAX_RACE_CAR_VERLET_POINTS,
+                    "luPartIndex < (uint32_t)KI_MAX_RACE_CAR_VERLET_POINTS" , CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1866);   // h:1866
         lpVerletOffsets[luPartIndex] = lZero;
     }
 }
@@ -2209,7 +2210,7 @@ void ActiveRaceCar::ResetVerletOffsets()
 // -------------------------------------------------------------------------------------------------
 void ActiveRaceCar::ResetAfterCrash( bool lbKeepVerletOffsets )
 {
-    CGS_ASSERT( IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.cpp:1048
+    CGS_ASSERT_AT( IsAttached(), "IsAttached()" , CGS_ARTIST_FILE, 1048);   // BrnActiveRaceCar.cpp:1048
 
     if( IsActive() )
     {
@@ -2218,10 +2219,10 @@ void ActiveRaceCar::ResetAfterCrash( bool lbKeepVerletOffsets )
             ResetVerletOffsets();
         }
 
-        CGS_ASSERT( IsAttached(), "IsAttached()" );   // h:1089
+        CGS_ASSERT_AT( IsAttached(), "IsAttached()" , CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);   // h:1089
         mRenderParams.SetDamaged( mpRaceCar->ToBeRenderedDamaged() );
 
-        CGS_ASSERT( IsAttached(), "IsAttached()" );   // h:1418
+        CGS_ASSERT_AT( IsAttached(), "IsAttached()" , CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1418);   // h:1418
         if( mPhysicsState.mbCrashing )
         {
             mbUncrashedThisFrame = true;
@@ -2464,7 +2465,7 @@ void ActiveRaceCar::UpdateResetTransform()
 // -------------------------------------------------------------------------------------------------
 void ActiveRaceCar::GetResetCoords( Vector3* lpOutPosition, Vector3* lpOutDirection ) const
 {
-    CGS_ASSERT( IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.cpp:1022
+    CGS_ASSERT_AT( IsAttached(), "IsAttached()" , CGS_ARTIST_FILE, 1022);   // BrnActiveRaceCar.cpp:1022
 
     if( mPrevTransforms.GetLength() > 0 )
     {
@@ -3260,7 +3261,7 @@ void ActiveRaceCar::UpdateCullingGroup(
 BrnPhysics::Vehicle::SetRaceCarCullingGroupEvent::CullingGroup
 ActiveRaceCar::DetermineCullingGroup()
 {
-    CGS_ASSERT(IsAttached(), "IsAttached()");                        // BrnActiveRaceCar.h:1089
+    CGS_ASSERT_AT(IsAttached(), "IsAttached()", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);                        // BrnActiveRaceCar.h:1089
 
     const RaceCar* lpRaceCar = GetGlobalRaceCar();
     if (lpRaceCar == 0)
@@ -3277,7 +3278,7 @@ ActiveRaceCar::DetermineCullingGroup()
         return KU_CULLING_GROUP_PLAYER_CAR;
     }
 
-    CGS_ASSERT(IsAttached(), "IsAttached()");                        // BrnActiveRaceCar.h:1089
+    CGS_ASSERT_AT(IsAttached(), "IsAttached()", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);                        // BrnActiveRaceCar.h:1089
 
     return lpRaceCar->IsAIDriven() ? KU_CULLING_GROUP_AI_CAR
                                    : KU_CULLING_GROUP_OTHER_CAR;

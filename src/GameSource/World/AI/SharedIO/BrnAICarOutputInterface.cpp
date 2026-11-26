@@ -1,3 +1,4 @@
+#define CGS_ARTIST_BRNAICAROUTPUTINTERFACE_H_FILE "..\\..\\..\\GameSource\\World/AI/SharedIO/BrnAICarOutputInterface.h"
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cstring>   // memcpy (SetPlayerRoute's Route::Construct copy)
@@ -42,12 +43,12 @@ namespace AIModuleIO
 
     void AICarOutputInterface::SetAICarDistanceToCheckpoint(s32 liAICarIndex, f32 lfDistanceToCheckpoint)
     {
-        CGS_ASSERT(liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
-                   "liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS");
+        CGS_ASSERT_AT(liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
+                   "liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS", CGS_ARTIST_BRNAICAROUTPUTINTERFACE_H_FILE, 212);
         // `fcmpu d, 0.0 ; bge -> skip` @0x82764548/0x8276454C is taken on an unordered compare, so
         // a NaN distance skips the assert (FX-AINAN2); `d >= 0` fired it -- every frame, per car.
-        CGS_ASSERT(!(lfDistanceToCheckpoint < 0.0f),
-                   "The lfDistToRouteEnd  is less than 0! Mental!");
+        CGS_ASSERT_AT(!(lfDistanceToCheckpoint < 0.0f),
+                   "The lfDistToRouteEnd  is less than 0! Mental!", CGS_ARTIST_BRNAICAROUTPUTINTERFACE_H_FILE, 213);
         mafDistanceToCheckpoint[liAICarIndex] = lfDistanceToCheckpoint;
     }
 

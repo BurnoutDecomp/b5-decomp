@@ -36,7 +36,7 @@ namespace RaceCarEntityModuleIO
 OutputBuffer_PreScene::RaceCarAIInterface*
 OutputBuffer_PreScene::GetRaceCarAIInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing", CGS_ARTIST_FILE, 300);
     return &mRaceCarAIInterface;
 }
 

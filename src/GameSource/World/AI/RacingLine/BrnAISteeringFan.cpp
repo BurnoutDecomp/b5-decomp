@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNAISTEERINGFAN_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/RacingLine/BrnAISteeringFan.cpp"
 #include "GameSource/World/AI/RacingLine/BrnAISteeringFan.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -89,8 +90,8 @@ namespace BrnAI
     // ====================================================================================
     void SteeringFan::SetBiasMode(EBiasMode leBiasMode)
     {
-        CGS_ASSERT(static_cast<u32>(leBiasMode) < static_cast<u32>(E_BIAS_MODE_COUNT),
-                   "Bad Bias mode set in Steering Fan");
+        CGS_ASSERT_AT(static_cast<u32>(leBiasMode) < static_cast<u32>(E_BIAS_MODE_COUNT),
+                   "Bad Bias mode set in Steering Fan", CGS_ARTIST_UNITY_BRNAISTEERINGFAN_CPP_FILE, 1001);
 
         const EBiasMode lePrevious = meBiasMode;     // this[236]
         meBiasMode = leBiasMode;
@@ -1392,9 +1393,9 @@ SteeringFan* SteeringFan::AccumulateWeightings()
 // ========================================================================================
 s32 SteeringFan::BestTargetInArea(s32 liFrom, s32 liTo)
 {
-    CGS_ASSERT(liTo < KI_FAN_STEPS, "Off end of target fan\n");
-    CGS_ASSERT(liFrom >= 0,         "Off end of target fan\n");
-    CGS_ASSERT(liFrom <= liTo,      "Off end of target fan\n");
+    CGS_ASSERT_AT(liTo < KI_FAN_STEPS, "Off end of target fan\n", CGS_ARTIST_UNITY_BRNAISTEERINGFAN_CPP_FILE, 807);
+    CGS_ASSERT_AT(liFrom >= 0,         "Off end of target fan\n", CGS_ARTIST_UNITY_BRNAISTEERINGFAN_CPP_FILE, 808);
+    CGS_ASSERT_AT(liFrom <= liTo,      "Off end of target fan\n", CGS_ARTIST_UNITY_BRNAISTEERINGFAN_CPP_FILE, 809);
 
     s32 liBest = liFrom;
     f32 lfBest = -FLT_MAX;
@@ -1420,9 +1421,9 @@ s32 SteeringFan::BestTargetInArea(s32 liFrom, s32 liTo)
 // ========================================================================================
 f32 SteeringFan::AccumulateInArea(s32 liFrom, s32 liTo)
 {
-    CGS_ASSERT(liTo < KI_FAN_STEPS, "Off end of target fan\n");
-    CGS_ASSERT(liFrom >= 0,         "Off end of target fan\n");
-    CGS_ASSERT(liFrom <= liTo,      "Off end of target fan\n");
+    CGS_ASSERT_AT(liTo < KI_FAN_STEPS, "Off end of target fan\n", CGS_ARTIST_UNITY_BRNAISTEERINGFAN_CPP_FILE, 837);
+    CGS_ASSERT_AT(liFrom >= 0,         "Off end of target fan\n", CGS_ARTIST_UNITY_BRNAISTEERINGFAN_CPP_FILE, 838);
+    CGS_ASSERT_AT(liFrom <= liTo,      "Off end of target fan\n", CGS_ARTIST_UNITY_BRNAISTEERINGFAN_CPP_FILE, 839);
 
     f32 lfTotal = 0.0f;
     f32 lfCount = 0.0f;
@@ -1738,7 +1739,7 @@ void SteeringFan::IncludeConstantBearing(RacingLine* lpRacingLine, AICar* lpCar,
 
     // :1511 -- see the banner: KF_PASSING_SPACE_SPEED_TERM is the console's folded 0.0.
     const f32 lfAllowedPassingSpace = lfSpeedRatio * KF_PASSING_SPACE_SPEED_TERM + KF_SLOW_PASSING_SPACE;
-    CGS_ASSERT(lfAllowedPassingSpace != 0.0f, "Passing Space is zero\n");             // :1512
+    CGS_ASSERT_AT(lfAllowedPassingSpace != 0.0f, "Passing Space is zero\n", CGS_ARTIST_UNITY_BRNAISTEERINGFAN_CPP_FILE, 1512);             // :1512
     const f32 lfReciprocalAllowedPassingSpace = 1.0f / lfAllowedPassingSpace;         // :1513
 
     // ARTIST 827874C0/CC: flatten XZ, retaining the original Z/W lanes.

@@ -64,6 +64,7 @@
 // answers KI_INVALID_SECTION_INDEX for every position and the whole racing line is inert.
 // =================================================================================================
 
+#define CGS_ARTIST_UNITY_BRNRACINGLINEGENERATOR_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/RacingLine/BrnRacingLineGenerator.cpp"
 #include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"
 
 #include <cmath>
@@ -2577,8 +2578,8 @@ u8 RacingLineGenerator::GetForwardPortalIndex(const AISectionsData* lpAISectionD
 {
     (void)lpAISectionData;   // r3: passed by every caller, read by nothing in the body
 
-    CGS_ASSERT(!IsZero2D(lCarDirection.mV.x, lCarDirection.mV.y),
-               "!RwMath::IsZero(lCarDirection)");   // BrnRacingLineGenerator.cpp:2640
+    CGS_ASSERT_AT(!IsZero2D(lCarDirection.mV.x, lCarDirection.mV.y),
+               "!RwMath::IsZero(lCarDirection)", CGS_ARTIST_UNITY_BRNRACINGLINEGENERATOR_CPP_FILE, 2640);   // BrnRacingLineGenerator.cpp:2640
 
     // The console normalises unconditionally after the (non-gating) assert; a zero direction
     // yields NaN lanes, every dot compare then fails and portal 0 is returned. Same here.

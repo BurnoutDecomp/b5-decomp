@@ -55,11 +55,6 @@ void BridgeRaceCarModuleToAIModule_PostScene(
     CGS_ASSERT(lpAIInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpAIInputBuffer", __FILE__, 60));                                    // :60
     CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarOutputBuffer_PostScene", __FILE__, 61));    // :61
 
-    if (lpAIInputBuffer == 0 || lpRaceCarOutputBuffer_PostScene == 0)
-    {
-        return;
-    }
-
     lpAIInputBuffer->AppendAIModuleRequestInterface(
         lpRaceCarOutputBuffer_PostScene->GetAIModuleRequestInterface());
 }

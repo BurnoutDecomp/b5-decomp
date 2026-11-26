@@ -12,6 +12,7 @@
 // getters assert the player index has been set (mePlayerActiveRaceCarIndex != -1,
 // i.e. != E_ACTIVE_RACE_CAR_INDEX_INVALID). The enum indexes the arrays directly.
 // ============================================================================
+#define CGS_ARTIST_BRNRACECARENTITYMODULEOUTPUTINTERFACE_H_FILE "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
 #include "GameSource/BurnoutConstants.h"            // EActiveRaceCarIndex / EGlobalRaceCarIndex enumerators
@@ -167,8 +168,8 @@ s32 RCEntityActiveRaceCarOutputInterface::GetActiveRaceCarPaintFinishIndex(EActi
 // X360 0x82277A18 -- GetCarModelId (maCarModelIds[idx], CgsID stride 8).
 CgsID RCEntityActiveRaceCarOutputInterface::GetCarModelId(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_BRNRACECARENTITYMODULEOUTPUTINTERFACE_H_FILE, 844);
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_BRNRACECARENTITYMODULEOUTPUTINTERFACE_H_FILE, 845);
     return maCarModelIds[leActiveRaceCarIndex];
 }
 
@@ -393,8 +394,8 @@ void RCEntityActiveRaceCarOutputInterface::SetRaceCarState(
         bool                lbHasCrashedIntoWater,
         bool                lbCanDriveAwayFromCrash)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_BRNRACECARENTITYMODULEOUTPUTINTERFACE_H_FILE, 1179);
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_BRNRACECARENTITYMODULEOUTPUTINTERFACE_H_FILE, 1180);
 
     maGlobalRaceCarIndices[leActiveRaceCarIndex] = leGlobalRaceCarIndex;          // 4*(idx+2566)+this
     maRivalIds[leActiveRaceCarIndex]             = lRivalId;                      // 8*(idx+1222)+this
@@ -484,14 +485,14 @@ void RCEntityActiveRaceCarOutputInterface::AddCarToRace(BrnWorld::RaceCar* lpRac
     CarsInTheRaceData lCachedCar;
     lCachedCar.mPosition = lpRaceCar->GetPosition();
     lCachedCar.meActiveRaceCarIndex = lpRaceCar->GetActiveRaceCarIndex();
-    CGS_ASSERT((lCachedCar.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) &&
+    CGS_ASSERT_AT((lCachedCar.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) &&
                (lCachedCar.meActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT),
                "( lCachedCar.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && "
-               "(lCachedCar.meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+               "(lCachedCar.meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )", CGS_ARTIST_BRNRACECARENTITYMODULEOUTPUTINTERFACE_H_FILE, 706);
     lCachedCar.meGlobalRaceCarIndex = leGlobalRaceCarIndex;
     lCachedCar.mPreviousPosition = lpRaceCar->GetPreviousPosition();
-    CGS_ASSERT(lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
-               "muType < E_RACE_CAR_TYPE_COUNT");
+    CGS_ASSERT_AT(lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+               "muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 577);
     lCachedCar.mbIsPlayer = lpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER;
     lCachedCar.mDirection = lCachedCar.mbIsPlayer
         ? lpRaceCar->GetVelocity() : Vector3(__vspltisw(0));

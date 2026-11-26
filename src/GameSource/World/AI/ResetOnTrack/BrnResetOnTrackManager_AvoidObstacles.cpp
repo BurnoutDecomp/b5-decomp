@@ -157,11 +157,6 @@ bool ResetOnTrackManager::TestSectionHNG(const AISection* lpAISection,
                                           Vector2 lStartPos, Vector2 lEndPos)
 {
     CGS_ASSERT(lpAISection != 0, CGS_ASSERT_MESSAGE_AT("lpAISection != NULL", __FILE__, 2254));   // :2254
-    if (lpAISection == 0 || !mpAISectionData.HasMemoryResource())
-    {
-        return false;   // [GUARD] the console dereferences both unconditionally
-    }
-
     CgsDev::PerfMonCpu::StartMonitor(muTestLineHNGPM);
     bool lbHitHNG = LineTestSectionHNG(lpAISection, lStartPos, lEndPos);
 

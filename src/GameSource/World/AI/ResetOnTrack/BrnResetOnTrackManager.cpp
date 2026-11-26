@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNRESETONTRACKMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/ResetOnTrack/BrnResetOnTrackManager.cpp"
 #include <xtl.h>
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackDebugComponent.h"
@@ -24,7 +25,7 @@ namespace BrnAI
     {
         using namespace rw::math::vpu;
         const ::Vector3 segment = lEnd - lStart;
-        CGS_ASSERT(!IsZero(segment, 1.5258789e-5f), "!RwMath::IsSimilar( lLineStart, lLineEnd )");
+        CGS_ASSERT_AT(!IsZero(segment, 1.5258789e-5f), "!RwMath::IsSimilar( lLineStart, lLineEnd )", CGS_ARTIST_UNITY_BRNRESETONTRACKMANAGER_CPP_FILE, 666);
         const ::Vector3 direction = Normalize(segment);
         const f32 distance = Dot(direction, lPosition - lStart);
         // NaN polarity (FX-AINAN2): `fcmpu distance, 0.0 ; ble -> return lStart` @0x82768A08/

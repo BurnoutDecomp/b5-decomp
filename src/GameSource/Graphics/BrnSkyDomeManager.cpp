@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNSKYDOMEMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnSkyDomeManager.cpp"
 #include "GameSource/Graphics/BrnSkyDomeManager.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
@@ -88,8 +89,8 @@ float BrnSkyDomeManager::RaySphereDistance(
     const float lrDirectionMagnitude = sqrtf(
         (lpDirection[2] * lpDirection[2])
         + ((lpDirection[0] * lpDirection[0]) + (lpDirection[1] * lpDirection[1])));
-    CGS_ASSERT(fabsf(lrDirectionMagnitude - 1.0f) < 0.001f,
-               "RwMathFPU::IsSimilar( RwMathFPU::Magnitude( lDirection ), 1.0f, 0.001f )");
+    CGS_ASSERT_AT(fabsf(lrDirectionMagnitude - 1.0f) < 0.001f,
+               "RwMathFPU::IsSimilar( RwMathFPU::Magnitude( lDirection ), 1.0f, 0.001f )", CGS_ARTIST_UNITY_BRNSKYDOMEMANAGER_CPP_FILE, 52);
 
     const float lCenterDotDirection =
         (lpCenter[2] * lpDirection[2])

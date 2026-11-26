@@ -1,3 +1,5 @@
+#define CGS_ARTIST_BRNTRAFFICJOB_CPP_FILE "..\\..\\..\\GameSource\\Jobs/Traffic/BrnTrafficJob.cpp"
+#define CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\jobs\\traffic\\TrafficCommon.h"
 #include "GameSource/Jobs/Traffic/BrnTrafficJob.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 #include "SDKs/EATech/eajobs/entry_point.h"                   // EA::Jobs::EntryPoint
@@ -102,14 +104,14 @@ PhysicalRequestInfoList* TrafficJobStub::GetNewPhysicalRequests()
 // BrnTrafficJob.cpp:67 / X360 0x82752CB0
 void TrafficJobStub::Execute(JobParams* lpParams)
 {
-    CGS_ASSERT(lpParams, "lpParams");
-    CGS_ASSERT(!mbRunningJob, "!mbRunningJob");
+    CGS_ASSERT_AT(lpParams, "lpParams", CGS_ARTIST_BRNTRAFFICJOB_CPP_FILE, 69);
+    CGS_ASSERT_AT(!mbRunningJob, "!mbRunningJob", CGS_ARTIST_BRNTRAFFICJOB_CPP_FILE, 70);
 
     // SetOutputs(&mNewPhysicalRequests) -- inlined. The X360 asserts the output list
     // pointer (the member address it is about to store) is non-null; &mNewPhysicalRequests
     // is a member address so this is a degenerate always-true guard preserved as-is.
     PhysicalRequestInfoList* lpOutNewPhysicalRequests = &mNewPhysicalRequests;
-    CGS_ASSERT(lpOutNewPhysicalRequests, "lpOutNewPhysicalRequests");
+    CGS_ASSERT_AT(lpOutNewPhysicalRequests, "lpOutNewPhysicalRequests", CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE, 285);
     lpParams->mUpdateVehicles.mpOutNewPhysicalRequests = lpOutNewPhysicalRequests;
 
     // Snapshot the caller's params into our own descriptor (160 bytes ==

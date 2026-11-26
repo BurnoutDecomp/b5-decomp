@@ -35,6 +35,7 @@
 //     rodata 10.0 @0x8228C058) -- the renderer fades it over that same life.
 // ============================================================================
 
+#define CGS_ARTIST_UNITY_BRNTRAILSYSTEM_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/Native/BrnTrailSystem.cpp"
 #include "GameSource/Effects/Particles/Native/BrnTrailSystem.h"
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"   // BrnGraphics::Im3dSkidsRenderer (EndRender fold)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                       // CGS_ASSERT
@@ -265,7 +266,7 @@ namespace Native
         }
 
         // Append (@0x8227AC20..).
-        CGS_ASSERT(mn8NumSegments < KN_MAX_TRAIL_SIZE, "mn8NumSegments < knMaxTrailSize");
+        CGS_ASSERT_AT(mn8NumSegments < KN_MAX_TRAIL_SIZE, "mn8NumSegments < knMaxTrailSize", CGS_ARTIST_UNITY_BRNTRAILSYSTEM_CPP_FILE, 638);
         mpCurrentSegments->WriteSegmentPosition(lPosition, mn8NumSegments);
         mpCurrentSegments->WriteSegmentTangent(lTangent, mn8NumSegments);
         mpCurrentSegments->WriteSegmentTime(lfCurrentTime, mn8NumSegments);
@@ -419,7 +420,7 @@ namespace Native
                 const TrailSegmentCollection* const lpSegmentCollection = lpExisting->mpCurrentSegments;
                 const s32                           lnIndex             = lpExisting->mn8NumSegments - 1;
 
-                CGS_ASSERT(lpTrailEmitter->mn8NumSegments == 0, "lpTrailEmitter->mn8NumSegments == 0");
+                CGS_ASSERT_AT(lpTrailEmitter->mn8NumSegments == 0, "lpTrailEmitter->mn8NumSegments == 0", CGS_ARTIST_UNITY_BRNTRAILSYSTEM_CPP_FILE, 423);
                 lpTrailEmitter->mpCurrentSegments->CopySegmentFromCollection(
                     lpTrailEmitter->mn8NumSegments, lpSegmentCollection, lnIndex);
                 ++lpTrailEmitter->mn8NumSegments;
@@ -472,7 +473,7 @@ namespace Native
                 if ((mfCurrentTime - lrActive[lnIndex]->mrTimeLastSegmentAdded) > KF_TRAIL_EMITTER_LIFE)
                 {
                     TrailEmitter* const lpEmitter = lrActive[lnIndex];
-                    CGS_ASSERT(lpEmitter != 0, "lpEmitter != NULL");
+                    CGS_ASSERT_AT(lpEmitter != 0, "lpEmitter != NULL", CGS_ARTIST_UNITY_BRNTRAILSYSTEM_CPP_FILE, 282);
 
                     // [diag] read before the reset below clears it; used only by the probe.
                     const f32 lfIdle = mfCurrentTime - lpEmitter->mrTimeLastSegmentAdded;
@@ -510,7 +511,7 @@ namespace Native
     void TrailSystem::UpdateTrailType(s16 liSkidMarkTypeID, ::Vector4 lSkidMarkStartColour,
                                       ::Vector4 lSkidMarkEndColour)
     {
-        CGS_ASSERT(liSkidMarkTypeID < KI_MAX_NUM_TRAIL_TYPES, "liSkidMarkTypeID < KI_MAX_NUM_TRAIL_TYPES");
+        CGS_ASSERT_AT(liSkidMarkTypeID < KI_MAX_NUM_TRAIL_TYPES, "liSkidMarkTypeID < KI_MAX_NUM_TRAIL_TYPES", CGS_ARTIST_UNITY_BRNTRAILSYSTEM_CPP_FILE, 308);
 
         TrailParams& lrParams = mgaDefaultParams[liSkidMarkTypeID];
         lrParams.mStartColour.red   = lSkidMarkStartColour.GetX().GetFloat();

@@ -276,13 +276,6 @@ bool ResetOnTrackManager::ScanBackwardsAlongExtrapolatedRoute(const RouteNode*& 
                                                               EExtrapolateType leExtrapolateType)
 {
     const AISectionsData* lpAISectionsData = mpAISectionData.GetMemoryResource();
-    if (lpAISectionsData == 0)
-    {
-        // [GUARD] Construct binds the network; no network is a Prepare-order error, not a frame
-        // condition. The console dereferences it unconditionally.
-        return false;
-    }
-
     const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
 
     const Vector2 lPlayerDirection = BrnMath::Flatten(lpPlayerAICar->GetDirection());
@@ -431,11 +424,6 @@ bool ResetOnTrackManager::ScanForwardsAlongExtrapolatedRoute(const RouteNode*& l
                                                              f32 lfResetDistance)
 {
     const AISectionsData* lpAISectionsData = mpAISectionData.GetMemoryResource();
-    if (lpAISectionsData == 0)
-    {
-        return false;   // [GUARD] see ScanBackwardsAlongExtrapolatedRoute
-    }
-
     const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
 
     const Vector2 lPlayerDirection = BrnMath::Flatten(lpPlayerAICar->GetDirection());
@@ -545,11 +533,6 @@ bool ResetOnTrackManager::ScanForwardsAlongExtrapolatedRoute(const RouteNode*& l
 f32 ResetOnTrackManager::GetRoadSideForStartingLine(const RouteNode* lpNextNode, s32 liRaceCarIndex)
 {
     CGS_ASSERT(lpNextNode != 0, "lpNextNode != NULL");
-    if (lpNextNode == 0 || !mpAISectionData.HasMemoryResource())
-    {
-        return KF_ROAD_CENTRE;   // [GUARD] see ScanBackwardsAlongExtrapolatedRoute
-    }
-
     const AISection* lpNextSection =
         mpAISectionData.operator->()->GetAISection(lpNextNode->muSectionIndex);
     const Portal* lNextPortal = lpNextSection->GetPortal(GetHelperNodePortalIndex(*lpNextNode));
@@ -690,11 +673,6 @@ bool ResetOnTrackManager::ConvertNodesToPositionAndDirection(const RouteNode* lp
 
     CGS_ASSERT(lpPrevNode != lpNextNode, CGS_ASSERT_MESSAGE_AT("lpPrevNode != lpNextNode", __FILE__, 708));   // :708
 
-    if (lpResetData == 0 || !mpAISectionData.HasMemoryResource())
-    {
-        return false;   // [GUARD] see ScanBackwardsAlongExtrapolatedRoute
-    }
-
     // `ld gxMessageFilterFlags ; clrldi 63 ; cmpldi ; beq` 0x82790380..0x82790390: bit 0 gates the line.
     // [FX-TAILS-A item 8 2026-09-24: printed whenever gpDebugPrint was set]
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
@@ -802,11 +780,6 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
         return false;
     }
 
-    if (lpResetData == 0 || !mpAISectionData.HasMemoryResource())
-    {
-        return false;   // [GUARD] see ScanBackwardsAlongExtrapolatedRoute
-    }
-
     const AISection* lpAISection =
         mpAISectionData.operator->()->GetAISection(liResetOnTrackIndex);
     lpResetData->mpAISection = lpAISection;
@@ -910,11 +883,6 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
 // =================================================================================================
 bool ResetOnTrackManager::ResetAwayFromPlayer(ResetOnTrackCoords* lpResetData)
 {
-    if (lpResetData == 0 || !mpAISectionData.HasMemoryResource())
-    {
-        return false;   // [GUARD] see ScanBackwardsAlongExtrapolatedRoute
-    }
-
     const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
     const Vector3 lPlayerPosition = lpPlayerAICar->GetPosition();
 

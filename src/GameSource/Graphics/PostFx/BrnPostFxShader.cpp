@@ -4,6 +4,7 @@
 // Shader packages below are exact native image bytes, stored as big-endian u32 words.
 // Constant-name tables were read from ARTIST 82043F88 (2) and 82043F90 (10).
 
+#define CGS_ARTIST_UNITY_BRNPOSTFXSHADER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/PostFx/BrnPostFxShader.cpp"
 #include "GameSource/Graphics/PostFx/BrnPostFxShader.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -868,8 +869,8 @@ void MotionBlurState::Update(const rw::math::vpu::Matrix44Affine& lView,
                              EQuality leQuality)
 {
 
-    CGS_ASSERT((leQuality >= 0) && (leQuality <= E_QUALITY_COUNT),
-               "( leQuality >= 0 ) && ( leQuality <= E_QUALITY_COUNT )");
+    CGS_ASSERT_AT((leQuality >= 0) && (leQuality <= E_QUALITY_COUNT),
+               "( leQuality >= 0 ) && ( leQuality <= E_QUALITY_COUNT )", CGS_ARTIST_UNITY_BRNPOSTFXSHADER_CPP_FILE, 132);
 
     meQuality = leQuality;
 
@@ -945,7 +946,7 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
         renderengine::ProgramBuffer::GetResourceDescriptor(lVsParameters);
     rw::Resource lVsResource = lpAllocator->DoAllocate(lVsResDesc, 0);
     mpVertexProgram = renderengine::ProgramBuffer::Initialize(&lVsResource, &lVsParameters);
-    CGS_ASSERT(mpVertexProgram != 0, "NULL != mpVertexProgram");
+    CGS_ASSERT_AT(mpVertexProgram != 0, "NULL != mpVertexProgram", CGS_ARTIST_UNITY_BRNPOSTFXSHADER_CPP_FILE, 196);
 
     renderengine::ProgramBufferParameters lPsParameters;
     lPsParameters.mpFunction = lpPixelProgram;
@@ -959,7 +960,7 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
         renderengine::ProgramBuffer::GetResourceDescriptor(lPsParameters);
     rw::Resource lPsResource = lpAllocator->DoAllocate(lPsResDesc, 0);
     mpPixelProgram = renderengine::ProgramBuffer::Initialize(&lPsResource, &lPsParameters);
-    CGS_ASSERT(mpPixelProgram != 0, "NULL != mpPixelProgram");
+    CGS_ASSERT_AT(mpPixelProgram != 0, "NULL != mpPixelProgram", CGS_ARTIST_UNITY_BRNPOSTFXSHADER_CPP_FILE, 208);
 
     for (u32 luVsConstant = 0; luVsConstant < E_VS_VAR_COUNT; ++luVsConstant)
         renderengine::ProgramBuffer::GetVariableHandleByName(mpVertexProgram,

@@ -20,6 +20,7 @@
 // Called from BrnGraphics::LionBlendRenderer QuadDraw.
 // ============================================================================
 
+#define CGS_ARTIST_BRNLIONBLENDVERTEX_H_FILE "..\\..\\..\\GameSource\\Effects/Particles/Native/BrnLionBlendVertex.h"
 #include "GameSource/Effects/Particles/Native/BrnLionBlendVertex.h"
 #include "SDKs/EATech/include/cmn/renderengine/types.h" // renderengine::RGBA8
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
@@ -36,10 +37,10 @@ void LionBlendVertex::VertexIterator::Write(
         rw::math::vpu::Vector4 lv4Uv)
 {
     // cmplwi r11(=muStride), 0x24 -> assert stride == LionBlendVertex::GetStride() (36).
-    CGS_ASSERT( GetStride() == LionBlendVertex::GetStride(),
-                "GetStride() == LionBlendVertex::GetStride()" );
+    CGS_ASSERT_AT( GetStride() == LionBlendVertex::GetStride(),
+                "GetStride() == LionBlendVertex::GetStride()" , CGS_ARTIST_BRNLIONBLENDVERTEX_H_FILE, 117);
     // (top - current) / stride != 0.
-    CGS_ASSERT( GetVerticesFree() != 0, "GetVerticesFree() != 0" );
+    CGS_ASSERT_AT( GetVerticesFree() != 0, "GetVerticesFree() != 0" , CGS_ARTIST_BRNLIONBLENDVERTEX_H_FILE, 118);
 
     // Delegated element writes (renderengine::VertexIterator3::Write) -- MODELLED.
     // The canonical EffectsVertexBufferIterator (EffectsVertexBuffer.h) keeps its four

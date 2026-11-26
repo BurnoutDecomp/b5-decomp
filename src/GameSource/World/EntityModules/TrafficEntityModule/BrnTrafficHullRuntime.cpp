@@ -13,6 +13,7 @@
 // LegacySrc body (references/.../BrnTrafficHullRuntime.cpp).
 // ============================================================================
 
+#define CGS_ARTIST_ABS_BRNTRAFFICHULLRUNTIME_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficHullRuntime.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficHullRuntime.h"
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"  // KU_INVALID_PARAM
@@ -98,10 +99,10 @@ void HullRuntime::Destruct()
 // as (luSection + 0x28)*2 bytes from `this`, i.e. &mauFirstParamInSection[luSection].
 void HullRuntime::SetFirstParamInSection(u32 luSection, u16 luParam, u16 luOldParam)
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
-    CGS_ASSERT(luSection < muNumSectionsInHull, "luSection < muNumSectionsInHull");
-    CGS_ASSERT(mauFirstParamInSection[luSection] == luOldParam,
-               "mauFirstParamInSection[luSection] == luOldParam");
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_ABS_BRNTRAFFICHULLRUNTIME_H_FILE, 122);
+    CGS_ASSERT_AT(luSection < muNumSectionsInHull, "luSection < muNumSectionsInHull", CGS_ARTIST_ABS_BRNTRAFFICHULLRUNTIME_H_FILE, 123);
+    CGS_ASSERT_AT(mauFirstParamInSection[luSection] == luOldParam,
+               "mauFirstParamInSection[luSection] == luOldParam", CGS_ARTIST_ABS_BRNTRAFFICHULLRUNTIME_H_FILE, 130);
 
     mauFirstParamInSection[luSection] = luParam;
 }
@@ -110,8 +111,8 @@ void HullRuntime::SetFirstParamInSection(u32 luSection, u16 luParam, u16 luOldPa
 // successor). Tail is `add r11, luStopline, this ; stb lbRed, 0x250(r11)`.
 void HullRuntime::SetStoplineRed(u32 luStopline, bool lbRed)
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
-    CGS_ASSERT(luStopline < muNumStoplinesInHull, "luStopline < muNumStoplinesInHull");
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_ABS_BRNTRAFFICHULLRUNTIME_H_FILE, 141);
+    CGS_ASSERT_AT(luStopline < muNumStoplinesInHull, "luStopline < muNumStoplinesInHull", CGS_ARTIST_ABS_BRNTRAFFICHULLRUNTIME_H_FILE, 142);
 
     mabStoplineRedState[luStopline] = lbRed;
 }
@@ -123,8 +124,8 @@ void HullRuntime::SetStoplineRed(u32 luStopline, bool lbRed)
 // CGS_ASSERT carries the same guard.
 u16 HullRuntime::GetFirstParamInSection(u32 luSection) const
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
-    CGS_ASSERT(luSection < muNumSectionsInHull, "luSection < muNumSectionsInHull");
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_ABS_BRNTRAFFICHULLRUNTIME_H_FILE, 151);
+    CGS_ASSERT_AT(luSection < muNumSectionsInHull, "luSection < muNumSectionsInHull", CGS_ARTIST_ABS_BRNTRAFFICHULLRUNTIME_H_FILE, 152);
     return mauFirstParamInSection[luSection];
 }
 
@@ -132,8 +133,8 @@ u16 HullRuntime::GetFirstParamInSection(u32 luSection) const
 // the asm reads the byte at this + 0x250 + luStopline.
 bool HullRuntime::IsStoplineRed(u32 luStopline) const
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
-    CGS_ASSERT(luStopline < muNumStoplinesInHull, "luStopline < muNumStoplinesInHull");
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_ABS_BRNTRAFFICHULLRUNTIME_H_FILE, 161);
+    CGS_ASSERT_AT(luStopline < muNumStoplinesInHull, "luStopline < muNumStoplinesInHull", CGS_ARTIST_ABS_BRNTRAFFICHULLRUNTIME_H_FILE, 162);
     return mabStoplineRedState[luStopline];
 }
 

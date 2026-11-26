@@ -26,6 +26,8 @@
 // ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
 // containers\./CgsBitArray.h, e.g. PropZoneManager::UpdateAnimation 0x822DF3A0): see CgsBitArray.h.
 #define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
+#define CGS_ARTIST_UNITY_BRNPROPENTITYINSTANCE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/PropEntityModule/BrnPropEntityInstance.cpp"
+#define CGS_ARTIST_UNITY_BRNPROPENTITYMODULE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/PropEntityModule/BrnPropEntityModule.cpp"
 #include "BrnPropEntityModule.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
@@ -462,7 +464,7 @@ namespace BrnWorld
             return true;
 
         default:
-            CGS_ASSERT(false, "Invalid Stage\n");
+            CGS_ASSERT_AT(false, "Invalid Stage\n", CGS_ARTIST_UNITY_BRNPROPENTITYMODULE_CPP_FILE, 365);
             return false;
         }
     }
@@ -2550,7 +2552,7 @@ namespace BrnWorld
     {
         // 0x822C562C: `lbz r11, 0x4B(r31) ; cmplwi r11, 0xFF` -- the byte form of
         // IsAnimated(), i.e. mi8RotationParamsIndex != -1. BrnPropEntityInstance.cpp:254.
-        CGS_ASSERT( mi8RotationParamsIndex != -1, "IsAnimated()" );
+        CGS_ASSERT_AT( mi8RotationParamsIndex != -1, "IsAnimated()" , CGS_ARTIST_UNITY_BRNPROPENTITYINSTANCE_CPP_FILE, 254);
 
         const f32 KF_PEI_ROT_SPEED_STEP  = 0.015625f;         // flt_82014AB0 == 1/64
         const f32 KF_PEI_ROT_SPEED_SCALE = 12.568f;           // flt_82CDB6AC

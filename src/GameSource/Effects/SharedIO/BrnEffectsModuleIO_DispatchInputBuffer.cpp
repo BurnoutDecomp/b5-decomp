@@ -91,8 +91,8 @@ void DispatchInputBuffer::SetBaseEffectsFrame(BrnEffectsFrame* lpFrame)
 // carries NO trailing \n.
 void DispatchInputBuffer::SetFXEventsEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame)
 {
-    CGS_ASSERT(luSlot < 2, "Invalid slot for Fx Layer");
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT_AT(luSlot < 2, "Invalid slot for Fx Layer", CGS_ARTIST_FILE, 381);
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 382);
     mapFXEventsEffectsFrames[luSlot] = lpFrame;
 }
 

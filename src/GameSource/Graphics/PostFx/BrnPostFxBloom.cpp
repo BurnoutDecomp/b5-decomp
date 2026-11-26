@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNPOSTFXBLOOM_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/PostFx/BrnPostFxBloom.cpp"
 #include "GameSource/Graphics/PostFx/BrnPostFxBloom.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
@@ -356,10 +357,10 @@ void BrnPostFxBloom::Generate1PassBlurredBloomBuffer(rw::graphics::postfx::Rende
 void BrnPostFxBloom::Generate2PassBlurredBloomBuffer(rw::graphics::postfx::RenderTarget* lpBloomRt,
                                                      rw::graphics::postfx::RenderTarget* lpWorkRt)
 {
-    CGS_ASSERT(lpWorkRt->muWidth == lpBloomRt->muWidth,
-               "lpWorkRt->GetWidth() == lpBloomRt->GetWidth()");      // BrnPostFxBloom.cpp:551
-    CGS_ASSERT(lpWorkRt->muHeight == lpBloomRt->muHeight,
-               "lpWorkRt->GetHeight() == lpBloomRt->GetHeight()");    // BrnPostFxBloom.cpp:552
+    CGS_ASSERT_AT(lpWorkRt->muWidth == lpBloomRt->muWidth,
+               "lpWorkRt->GetWidth() == lpBloomRt->GetWidth()", CGS_ARTIST_UNITY_BRNPOSTFXBLOOM_CPP_FILE, 551);      // BrnPostFxBloom.cpp:551
+    CGS_ASSERT_AT(lpWorkRt->muHeight == lpBloomRt->muHeight,
+               "lpWorkRt->GetHeight() == lpBloomRt->GetHeight()", CGS_ARTIST_UNITY_BRNPOSTFXBLOOM_CPP_FILE, 552);    // BrnPostFxBloom.cpp:552
 
     const f32 lfFullInvWidth  = KF_ONE / static_cast<f32>(lpWorkRt->muWidth);
     const f32 lfFullInvHeight = KF_ONE / static_cast<f32>(lpWorkRt->muHeight);

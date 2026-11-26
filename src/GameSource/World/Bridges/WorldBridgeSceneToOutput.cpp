@@ -55,11 +55,6 @@ namespace WorldModule
         CGS_ASSERT(lpOutputBuffer != 0,       "lpOutputBuffer != NULL");             // :42
         CGS_ASSERT(lpSceneOutputBuffer != 0,  "lpSceneModuleOutputBuffer != NULL");  // :43
 
-        if (lpOutputBuffer == 0 || lpSceneOutputBuffer == 0)
-        {
-            return;
-        }
-
         lpOutputBuffer->AppendTriangleCacheInterface(
             lpSceneOutputBuffer->GetTriangleCacheInterface());
     }

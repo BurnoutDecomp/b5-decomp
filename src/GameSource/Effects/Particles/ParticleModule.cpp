@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/ParticleModule.cpp"
 #include "SDKs/RenderEngineClub/MAIN/components/src/texture2d.h"
 #include "GameSource/Effects/Particles/ParticleModule.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
@@ -1245,8 +1246,8 @@ namespace BrnParticle
 
         if (miNumDebrisUpdateJobsToWaitOn == 0)
             return;
-        CGS_ASSERT(static_cast<u32>(miNumDebrisUpdateJobsToWaitOn) <= static_cast<u32>(KI_NUM_DEBRIS_UPDATE_JOBS),
-                   "muNumDebrisUpdateJobsToWaitOn <= KU_DEBRISUPDATE_NUMJOBS");
+        CGS_ASSERT_AT(static_cast<u32>(miNumDebrisUpdateJobsToWaitOn) <= static_cast<u32>(KI_NUM_DEBRIS_UPDATE_JOBS),
+                   "muNumDebrisUpdateJobsToWaitOn <= KU_DEBRISUPDATE_NUMJOBS", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 1045);
         // EA::Jobs::JobScheduler::AddJobs(gJobScheduler, maDebrisUpdateJob, count) -- run in place.
         for (s32 liJob = 0; liJob < miNumDebrisUpdateJobsToWaitOn; ++liJob)
             Native::DebrisUpdateJob::Execute(&maDebrisUpdateJobData[liJob]);

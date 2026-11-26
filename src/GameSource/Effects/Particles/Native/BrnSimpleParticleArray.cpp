@@ -22,6 +22,8 @@
 // nowhere to write. See BrnSimpleParticleArray.h for the recovered layout.
 // ============================================================================
 
+#define CGS_ARTIST_BRNSIMPLEPARTICLERENDERER_H_FILE "..\\..\\..\\GameSource\\Effects/Particles/Native/BrnSimpleParticleRenderer.h"
+#define CGS_ARTIST_UNITY_BRNSIMPLEPARTICLERENDERER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/Native/BrnSimpleParticleRenderer.cpp"
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"
 #include "GameSource/AttribSys/Generated/classes/nativeparticleparams.h"   // Attrib::Gen::nativeparticleparams
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                   // CgsMemory::HeapMalloc::Malloc
@@ -266,10 +268,10 @@ namespace Native
         lpParams->muTilesWide                 = lParams.TilesWide();                 // +0x48 -> +0x6C
         lpParams->muTilesHigh                 = lParams.TilesHigh();                 // +0x4C -> +0x70
 
-        CGS_ASSERT((lpParams->meBlendMode == eParticleBlendNormal)
+        CGS_ASSERT_AT((lpParams->meBlendMode == eParticleBlendNormal)
                 || (lpParams->meBlendMode == eParticleBlendAdditive),
                    "( mpStandardParams->meBlendMode == AttribSys::Enums::ParticleBlend::eParticleBlendNormal ) || "
-                   "( mpStandardParams->meBlendMode == AttribSys::Enums::ParticleBlend::eParticleBlendAdditive )"); // :1045
+                   "( mpStandardParams->meBlendMode == AttribSys::Enums::ParticleBlend::eParticleBlendAdditive )", CGS_ARTIST_UNITY_BRNSIMPLEPARTICLERENDERER_CPP_FILE, 1045); // :1045
 
         Initialize();
     }
@@ -324,13 +326,13 @@ namespace Native
                                                 CgsResource::SafeResourceHandle<renderengine::Texture> lTexture,
                                                 ENativeParticleType leArrayID)
     {
-        CGS_ASSERT((leArrayID >= 0) && (leArrayID < eParticleArray_Max),
-                   "( leArrayID >= 0 ) && ( leArrayID < AttribSys::Enums::NativeParticleType::eParticleArray_Max )");
+        CGS_ASSERT_AT((leArrayID >= 0) && (leArrayID < eParticleArray_Max),
+                   "( leArrayID >= 0 ) && ( leArrayID < AttribSys::Enums::NativeParticleType::eParticleArray_Max )", CGS_ARTIST_BRNSIMPLEPARTICLERENDERER_H_FILE, 260);
 
         const char* const lpcTextureName = mpStandardParams->mpacTextureName;
         if (lpcTextureName == 0)
         {
-            CGS_ASSERT(leArrayID == eParticleArray_None, "Missing Texture name for Native Particle Params");
+            CGS_ASSERT_AT(leArrayID == eParticleArray_None, "Missing Texture name for Native Particle Params", CGS_ARTIST_BRNSIMPLEPARTICLERENDERER_H_FILE, 264);
             maTextures[leArrayID] = gsDefaultTexture;
             mbIsReady = true;
             return;

@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/CrashModule/BrnCrashModule.cpp"
 #include "GameSource/World/CrashModule/BrnRaceCarCrash.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
@@ -29,8 +30,8 @@ namespace BrnWorld
     s32 RaceCarCrash::GetOwner() const
     {
         const u32 luIndex = mRaceCarVolumeInstanceId.GetEntityIDEntityIndex();
-        CGS_ASSERT(luIndex < 8u,
-                   "mRaceCarVolumeInstanceId.GetEntityIDEntityIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        CGS_ASSERT_AT(luIndex < 8u,
+                   "mRaceCarVolumeInstanceId.GetEntityIDEntityIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE, 174);
         return static_cast<s32>(luIndex);
     }
 
@@ -157,8 +158,8 @@ namespace BrnWorld
 
         // 0x827BF144..0x827BF158 -- the console re-reads the id and asserts the slot, non-gating.
         const u32 luOwner = mRaceCarVolumeInstanceId.GetEntityIDEntityIndex();
-        CGS_ASSERT(luOwner < static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "mRaceCarVolumeInstanceId.GetEntityIDEntityIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        CGS_ASSERT_AT(luOwner < static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "mRaceCarVolumeInstanceId.GetEntityIDEntityIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE, 174);
 
         bool lbGrantedExtension = false;
 

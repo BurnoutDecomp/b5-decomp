@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNAICAR_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAICar.cpp"
 #include "GameSource/World/AI/BrnAICar.h"
 #include "GameSource/World/AI/BrnAIDriver.h"
 #include "GameSource/World/AI/BrnAICar_Constants.h"       // the .bss tunables, recovered from their start-up initialisers
@@ -201,7 +202,7 @@ namespace BrnAI
     // ==================================================================================
     f32 AICar::CalcRoadRageSpeed(const AICar* lpPlayerCar)
     {
-        CGS_ASSERT(IsActive(), "IsActive()");
+        CGS_ASSERT_AT(IsActive(), "IsActive()", CGS_ARTIST_UNITY_BRNAICAR_CPP_FILE, 1654);
 
         if (mbIsPlayer)
             return GetDecentSpeed();
@@ -266,7 +267,7 @@ namespace BrnAI
     f32 AICar::CalcDesiredSpeed(const RaceBalancingManager* lpRaceBalancingManager,
                                 AISectionsData* lpAISectionsData, const AICar* lpPlayerCar)
     {
-        CGS_ASSERT(IsActive(), "IsActive()");
+        CGS_ASSERT_AT(IsActive(), "IsActive()", CGS_ARTIST_UNITY_BRNAICAR_CPP_FILE, 1543);
 
         // meBehaviour == 1: opponent-rank-scaled speed, returned without consulting the
         // speed-selection switch. (The dossier's Hex-Rays pseudocode dropped this branch; the
@@ -416,9 +417,9 @@ namespace BrnAI
     void AICar::UpdateRaceDistance(const AISectionsData* lpAISectionsData,
                                    const AICar* lpPlayerCar, f32 lfTimeStep)
     {
-        CGS_ASSERT(IsActive(), "IsActive()");
-        CGS_ASSERT(lpPlayerCar != NULL, "lpPlayerCar != NULL");
-        CGS_ASSERT(lpAISectionsData != NULL, "lpAISectionsData != NULL");
+        CGS_ASSERT_AT(IsActive(), "IsActive()", CGS_ARTIST_UNITY_BRNAICAR_CPP_FILE, 1712);
+        CGS_ASSERT_AT(lpPlayerCar != NULL, "lpPlayerCar != NULL", CGS_ARTIST_UNITY_BRNAICAR_CPP_FILE, 1713);
+        CGS_ASSERT_AT(lpAISectionsData != NULL, "lpAISectionsData != NULL", CGS_ARTIST_UNITY_BRNAICAR_CPP_FILE, 1714);
 
         const f32 lfPrevDistance = mfDistanceToCheckpoint;
 
@@ -515,7 +516,7 @@ namespace BrnAI
     // ==================================================================================
     void AICar::UpdateRoute(const Route* lpRoute, const AISectionsData* lpAISectionsData)
     {
-        CGS_ASSERT(IsActive(), "IsActive()");
+        CGS_ASSERT_AT(IsActive(), "IsActive()", CGS_ARTIST_UNITY_BRNAICAR_CPP_FILE, 1290);
 
         mbRouteRequested = false;
 
@@ -701,8 +702,8 @@ namespace BrnAI
     {
         const Route* lpThisRoute = GetRoute();
 
-        CGS_ASSERT(HasValidRoute(), "HasValidRoute()");
-        CGS_ASSERT(lpThisRoute->GetNodeCount() > 0, "mRoute.GetNodeCount() > 0");
+        CGS_ASSERT_AT(HasValidRoute(), "HasValidRoute()", KAC_ARTIST_ASSERT_FILE, 978);
+        CGS_ASSERT_AT(lpThisRoute->GetNodeCount() > 0, "mRoute.GetNodeCount() > 0", KAC_ARTIST_ASSERT_FILE, 979);
 
         return lpThisRoute->GetNode(lpThisRoute->GetNodeCount() - 1)->GetSectionIndex();
     }
@@ -820,7 +821,7 @@ namespace BrnAI
     // ==================================================================================
     void AICar::SetRight(Vector3 lRight)
     {
-        CGS_ASSERT(vpu::IsValid(lRight), "RwMath::IsValid( lRight )");
+        CGS_ASSERT_AT(vpu::IsValid(lRight), "RwMath::IsValid( lRight )", KAC_ARTIST_ASSERT_FILE, 1311);
 
         if (!BrnMath::IsNormal(lRight))
         {
@@ -1158,7 +1159,7 @@ namespace BrnAI
     // ==================================================================================
     void AICar::SetDirection(Vector3 lDirection)
     {
-        CGS_ASSERT(vpu::IsValid(lDirection), "RwMath::IsValid( lDirection )");              // BrnAICar.h:847
+        CGS_ASSERT_AT(vpu::IsValid(lDirection), "RwMath::IsValid( lDirection )", KAC_ARTIST_ASSERT_FILE, 847);              // BrnAICar.h:847
 
         if (!BrnMath::IsNormal(lDirection))
         {

@@ -9,6 +9,7 @@
 // combinators (FuzzyAND/OR/NOT) are folded inline by the X360 compiler; they are
 // un-inlined here back into the method/free-function calls the original source wrote.
 
+#define CGS_ARTIST_UNITY_BRNTRAFFICFUZZYLOGICBEHAVIOURS_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/TrafficEntityModule/BrnTrafficFuzzyLogicBehaviours.cpp"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficFuzzyLogicBehaviours.h"
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficTweakConstants.h" // TweakValues
@@ -46,7 +47,7 @@ namespace Fuzzy
         mSwerveDistanceEnvelopes.Construct();
         mSwerveAngleEnvelopes.Construct();
 
-        CGS_ASSERT(lpTweakValues != 0, "lpTweakValues");
+        CGS_ASSERT_AT(lpTweakValues != 0, "lpTweakValues", CGS_ARTIST_UNITY_BRNTRAFFICFUZZYLOGICBEHAVIOURS_CPP_FILE, 252);
         mpTweakValues = lpTweakValues;
 
         ResetToDefaults();
@@ -83,7 +84,7 @@ namespace Fuzzy
             case 8: lpSet = &mSwerveDistanceEnvelopes;break;   // this+0x240
             case 9: lpSet = &mSwerveAngleEnvelopes;   break;   // this+0x280
             default:
-                CGS_ASSERT(false, "Unknown category");
+                CGS_ASSERT_AT(false, "Unknown category", CGS_ARTIST_UNITY_BRNTRAFFICFUZZYLOGICBEHAVIOURS_CPP_FILE, 690);
                 return;
         }
         // The corners are scalar floats here but the envelope set works in broadcast
@@ -99,10 +100,10 @@ namespace Fuzzy
     // ---------------------------------------------------------------------------------
     void FuzzyBehaviourLogic::SetConstantValue(s32 liValueIndex, f32 lfValue)
     {
-        CGS_ASSERT(mpTweakValues != 0, "mpTweakValues");
+        CGS_ASSERT_AT(mpTweakValues != 0, "mpTweakValues", CGS_ARTIST_UNITY_BRNTRAFFICFUZZYLOGICBEHAVIOURS_CPP_FILE, 706);
         if (!mpTweakValues->SetByIndex(liValueIndex, lfValue))
         {
-            CGS_ASSERT(false, "Unknown mega-tweek value");
+            CGS_ASSERT_AT(false, "Unknown mega-tweek value", CGS_ARTIST_UNITY_BRNTRAFFICFUZZYLOGICBEHAVIOURS_CPP_FILE, 839);
         }
     }
 

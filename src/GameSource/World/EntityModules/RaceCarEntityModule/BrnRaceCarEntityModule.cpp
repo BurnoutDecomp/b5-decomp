@@ -2281,8 +2281,8 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
             {
                 liColourPalette = lpOldCar->GetColourPalette();
                 liColourIndex   = lpOldCar->GetColourIndex();
-                CGS_ASSERT( liColourPalette < 4, "Invalid Number of Palettes: " );   // :7535
-                CGS_ASSERT( liColourIndex >= 0, "Invalid car colour: " );            // :7536
+                CGS_ASSERT_AT( liColourPalette < 4, "Invalid Number of Palettes: " , KAC_ARTIST_ASSERT_FILE, 7535);   // :7535
+                CGS_ASSERT_AT( liColourIndex >= 0, "Invalid car colour: " , KAC_ARTIST_ASSERT_FILE, 7536);            // :7536
             }
             RemoveRaceCar( lpOldCar->GetGlobalRaceCarIndex(), lpOutput );
         }
@@ -2303,8 +2303,8 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
         RaceCar* lpRaceCar = GetGlobalRaceCar( leGlobal );
         AttachActiveRaceCar( lpRaceCar, leOldPlayerSlot );          // mr r5, r27 @0x82305364
 
-        CGS_ASSERT( liColourPalette < 4, "Invalid Number of Palettes: " );   // X360 :7556
-        CGS_ASSERT( liColourIndex >= 0, "Invalid car colour: " );            // X360 :7557
+        CGS_ASSERT_AT( liColourPalette < 4, "Invalid Number of Palettes: " , KAC_ARTIST_ASSERT_FILE, 7556);   // X360 :7556
+        CGS_ASSERT_AT( liColourIndex >= 0, "Invalid car colour: " , KAC_ARTIST_ASSERT_FILE, 7557);            // X360 :7557
 
         lpRaceCar->SetColourIndex( liColourIndex );
         lpRaceCar->SetColourPalette( liColourPalette );
@@ -2327,7 +2327,7 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
     {
         // ================= TELEPORT ======================================================
         ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
-        CGS_ASSERT( lpActiveRaceCar != 0, "lpActiveRaceCar" );                 // X360 :7581
+        CGS_ASSERT_AT( lpActiveRaceCar != 0, "lpActiveRaceCar" , KAC_ARTIST_ASSERT_FILE, 7581);                 // X360 :7581
 
         lpActiveRaceCar->RequestPlaceOnTrack( lTransform.wAxis, lTransform.zAxis, 0.0f );
 
@@ -2355,7 +2355,7 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
     if( lpAction->mfDeformationAmount >= 0.0f )
     {
         ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
-        CGS_ASSERT( lpActiveRaceCar != 0, "lpActiveRaceCar" );                 // X360 :7595
+        CGS_ASSERT_AT( lpActiveRaceCar != 0, "lpActiveRaceCar" , KAC_ARTIST_ASSERT_FILE, 7595);                 // X360 :7595
 
         lpActiveRaceCar->SetBaseDeformation(
             lpAction->mfDeformationAmount,
@@ -2528,7 +2528,7 @@ void RaceCarEntityModule::HandleCarStatsUpdate(BrnResource::ECarType leCarType,
         mBoostManager.SetBoostStrategy(BoostManager::E_BOOSTSTRATEGY_BURNOUT5);
         break;
     default:
-        CGS_ASSERT(false, "Unknown car type");
+        CGS_ASSERT_AT(false, "Unknown car type", KAC_ARTIST_ASSERT_FILE, 8412);
         break;
     }
 
@@ -3923,10 +3923,10 @@ void RaceCarEntityModule::HandleSetupNetworkCarAction(
 
     const EActiveRaceCarIndex leNewNetworkActiveRaceCarIndex =
         lpNetworkRaceCar->GetActiveRaceCar()->GetActiveRaceCarIndex();
-    CGS_ASSERT( leNewNetworkActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                "leNewNetworkActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0" );
-    CGS_ASSERT( leNewNetworkActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                "leNewNetworkActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+    CGS_ASSERT_AT( leNewNetworkActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                "leNewNetworkActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0" , KAC_ARTIST_ASSERT_FILE, 7818);
+    CGS_ASSERT_AT( leNewNetworkActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "leNewNetworkActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" , KAC_ARTIST_ASSERT_FILE, 7819);
 
     const f32 lfDeformAmount = lpSNCAction->mfBaseDeformationAmount;
     lpNetworkRaceCar->GetActiveRaceCar()->mfBaseDeformAmount = lfDeformAmount;
@@ -6108,10 +6108,10 @@ void RaceCarEntityModule::ProcessPropContactQueue(
 void RaceCarEntityModule::UpdateCrashingPlayerContacts(
         const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput )
 {
-    CGS_ASSERT( ( mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )
+    CGS_ASSERT_AT( ( mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )
                 && ( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ),
                 "( mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && "
-                "( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )" );   // X360 :4718
+                "( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )" , KAC_ARTIST_ASSERT_FILE, 4718);   // X360 :4718
 
     ActiveRaceCar* lpPlayerActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
     if( !lpPlayerActiveRaceCar->IsActive() )
@@ -6923,7 +6923,7 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultip
                                            RaceCarEntityModuleIO::GameEventQueue* lpGameEvents,
                                            BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput )
 {
-    CGS_ASSERT( lpVehicleInput != 0, "lpVehicleOutput != NULL" );
+    CGS_ASSERT_AT( lpVehicleInput != 0, "lpVehicleOutput != NULL" , KAC_ARTIST_ASSERT_FILE, 4335);
     for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
     {
         ActiveRaceCar& lrCar = maActiveRaceCars[liCar];
@@ -8242,8 +8242,8 @@ void RaceCarEntityModule::PostSceneUpdate(
     RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput,
     BrnUpdateSet lUpdateSet )
 {
-    CGS_ASSERT( lpInput  != 0, "lpInput != NULL" );    // BrnRaceCarEntityModule.cpp:1179
-    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );   // BrnRaceCarEntityModule.cpp:1180
+    CGS_ASSERT_AT( lpInput  != 0, "lpInput != NULL" , KAC_ARTIST_ASSERT_FILE, 1179);    // BrnRaceCarEntityModule.cpp:1179
+    CGS_ASSERT_AT( lpOutput != 0, "lpOutput != NULL" , KAC_ARTIST_ASSERT_FILE, 1180);   // BrnRaceCarEntityModule.cpp:1180
 
     lpInput->LockForRead();
     lpOutput->LockForWrite();

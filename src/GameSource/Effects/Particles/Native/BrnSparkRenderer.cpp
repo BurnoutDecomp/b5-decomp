@@ -23,6 +23,7 @@
 // spelled at each body. Nothing here is authored to "look like sparks".
 // ============================================================================
 
+#define CGS_ARTIST_UNITY_BRNSPARKRENDERER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/Native/BrnSparkRenderer.cpp"
 #include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cmath>                                            // std::sqrt (the console's fsqrts)
@@ -473,8 +474,8 @@ void SparkArray::SpawnSpark(rw::math::vpu::Vector3::InParam lPosition,
                             bool lbIsCrashSpark)
 {
     // The console's own two NaN self-checks, BrnSparkRenderer.cpp:416 and :417.
-    CGS_ASSERT(lfHeightAbovePlane == lfHeightAbovePlane, "lrHeightAbovePlane == lrHeightAbovePlane");
-    CGS_ASSERT(mfGravityStrength == mfGravityStrength, "mfGravityStrength == mfGravityStrength");
+    CGS_ASSERT_AT(lfHeightAbovePlane == lfHeightAbovePlane, "lrHeightAbovePlane == lrHeightAbovePlane", CGS_ARTIST_UNITY_BRNSPARKRENDERER_CPP_FILE, 416);
+    CGS_ASSERT_AT(mfGravityStrength == mfGravityStrength, "mfGravityStrength == mfGravityStrength", CGS_ARTIST_UNITY_BRNSPARKRENDERER_CPP_FILE, 417);
 
     SparkBank& lrBank = lbIsCrashSpark ? mCrashBank : mRegularBank;
 

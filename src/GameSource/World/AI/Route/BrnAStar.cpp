@@ -1,3 +1,6 @@
+#define CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/Route/BrnAStar.cpp"
+#define CGS_ARTIST_ABS_BRNASTAR_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\route\\BrnAStar.h"
+#define CGS_ARTIST_AISECTIONSDATA_H_FILE "..\\..\\..\\SharedClasses\\AI/AISectionsData.h"
 #include "GameSource/World/AI/Route/BrnAStar.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
@@ -168,8 +171,8 @@ AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostW
 
     // `fcmpu w,0 ; blt -> fire` 0x827677C4/0x827677CC then `fcmpu w,1 ; ble -> skip`
     // 0x827677D8/0x827677DC: an unordered weight skips the assert (FX-AINAN2).
-    CGS_ASSERT(!(lfCostWeight < 0.0f) && !(lfCostWeight > 1.0f),
-               "lfCostWeight >= 0.0f && lfCostWeight <= 1.0f");
+    CGS_ASSERT_AT(!(lfCostWeight < 0.0f) && !(lfCostWeight > 1.0f),
+               "lfCostWeight >= 0.0f && lfCostWeight <= 1.0f", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 128);
 
     AStarNode* lpBestNode = 0;
     f32        lfBestScore = FLT_MAX;          // FLT_MAX (flt_8204F664)
@@ -182,7 +185,7 @@ AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostW
         {
             AStarNode* lpNode = GetNode(mauOpenNodes[luOpenIndex]);
             const f32 lfScore = (lpNode->GetCost() * lfCostWeight) + lpNode->GetHeuristic();
-            CGS_ASSERT(lpNode->IsOpen(), "lpNode->IsOpen()");
+            CGS_ASSERT_AT(lpNode->IsOpen(), "lpNode->IsOpen()", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 141);
             if (lfScore < lfBestScore)
             {
                 lpBestNode = lpNode;
@@ -198,7 +201,7 @@ AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostW
             *lpuBestNodeIndex = mauOpenNodes[luBestOpenNodeIndex];
             --muOpenNodeCount;
 
-            CGS_ASSERT(lpBestNode->IsOpen(), "mbOpen");
+            CGS_ASSERT_AT(lpBestNode->IsOpen(), "mbOpen", CGS_ARTIST_ABS_BRNASTAR_H_FILE, 421);
             lpBestNode->Close();
 
             // Compact: move the last open entry into the freed slot (only when the
@@ -209,8 +212,8 @@ AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostW
                 {
                     const u16 luMovedIndex = mauOpenNodes[muOpenNodeCount];
                     mauOpenNodes[luBestOpenNodeIndex] = luMovedIndex;
-                    CGS_ASSERT(GetNode(luMovedIndex)->IsOpen(),
-                               "GetNode( mauOpenNodes[luBestOpenNodeIndex] )->IsOpen()");
+                    CGS_ASSERT_AT(GetNode(luMovedIndex)->IsOpen(),
+                               "GetNode( mauOpenNodes[luBestOpenNodeIndex] )->IsOpen()", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 164);
                 }
             }
         }
@@ -317,12 +320,12 @@ bool AStar::Prepare(const AStarVector2& lStartPosition, const AStarVector2& lEnd
     miIterationCount    = 0;
     meRouteStatus       = Route::E_STATUS_UNINITIALISED;
 
-    CGS_ASSERT(leQuality >= 0 && leQuality < E_ASTAR_QUALITY_COUNT,
-               "leQuality >=0 && leQuality < E_ASTAR_QUALITY_COUNT");
+    CGS_ASSERT_AT(leQuality >= 0 && leQuality < E_ASTAR_QUALITY_COUNT,
+               "leQuality >=0 && leQuality < E_ASTAR_QUALITY_COUNT", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 270);
     mfCostWeight = KAF_QUALITY_COST_WEIGHTS[leQuality];
 
-    CGS_ASSERT(leDistanceFunction >= 0 && leDistanceFunction < E_ASTAR_DISTANCE_FUNCTION_COUNT,
-               "leDistanceFunction >=0 && leDistanceFunction < E_ASTAR_DISTANCE_FUNCTION_COUNT");
+    CGS_ASSERT_AT(leDistanceFunction >= 0 && leDistanceFunction < E_ASTAR_DISTANCE_FUNCTION_COUNT,
+               "leDistanceFunction >=0 && leDistanceFunction < E_ASTAR_DISTANCE_FUNCTION_COUNT", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 274);
     mpDistanceFunction = KAP_DISTANCE_FUNCTIONS[leDistanceFunction];
 
     for (u32 luBucket = 0; luBucket < AStarNodePool::KU_PARTITION_COUNT; ++luBucket)
@@ -332,7 +335,7 @@ bool AStar::Prepare(const AStarVector2& lStartPosition, const AStarVector2& lEnd
 
     mpBestNode = mAStarNodePool.NewNode(lStartPosition, luStartSectionIndex,
                                         luStartSectionIndex, AStarNodePool::KU_INVALID_PORTAL_INDEX);
-    CGS_ASSERT(mpBestNode != 0, "mpBestNode != NULL");
+    CGS_ASSERT_AT(mpBestNode != 0, "mpBestNode != NULL", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 283);
 
     mpBestNode->SetCost(0.0f);
     mpBestNode->SetHeuristic(mpDistanceFunction(mpBestNode->GetPosition(), lEndPosition));
@@ -363,16 +366,11 @@ bool AStar::IsBlockSection(u32 lSectionId)
 //   FireAssert("miBlockSectionCount < KI_MAX_BLOCK_SECTION_COUNT", BrnAStar.h, 522)
 //   stwx id, (count + 0x18CB) * 4, mAStar    == maBlockSectionIds[count]  (0x18CB*4 == 0x632C)
 //   miBlockSectionCount++
-// NON-GATING on the console (the store runs after the assert). [GUARD] the bail below is the
-// PC deviation: the 17th id would overwrite miBlockSectionCount itself on the host too.
+// NON-GATING on the console (the store runs after the assert).
 void AStar::AddBlockSectionId(u32 lSectionId)
 {
     CGS_ASSERT(miBlockSectionCount < KI_MAX_BLOCK_SECTION_COUNT,
                "miBlockSectionCount < KI_MAX_BLOCK_SECTION_COUNT");   // BrnAStar.h:522
-    if (miBlockSectionCount >= KI_MAX_BLOCK_SECTION_COUNT)
-    {
-        return;
-    }
     maBlockSectionIds[miBlockSectionCount] = lSectionId;
     ++miBlockSectionCount;
 }
@@ -409,13 +407,13 @@ void AStar::Compute()
 {
     CgsDev::PerfMonCpu::StartMonitor(dword_82F3023C);
 
-    CGS_ASSERT(muStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX,
-               "muStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX");
-    CGS_ASSERT(muEndSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX,
-               "muEndSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX");
-    CGS_ASSERT(meRouteStatus == Route::E_STATUS_UNINITIALISED,
-               "meRouteStatus == Route::E_STATUS_UNINITIALISED");
-    CGS_ASSERT(miIterationCount < KI_MAX_ITERATIONS, "miIterationCount < KI_MAX_ITERATIONS");
+    CGS_ASSERT_AT(muStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX,
+               "muStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 302);
+    CGS_ASSERT_AT(muEndSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX,
+               "muEndSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 303);
+    CGS_ASSERT_AT(meRouteStatus == Route::E_STATUS_UNINITIALISED,
+               "meRouteStatus == Route::E_STATUS_UNINITIALISED", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 304);
+    CGS_ASSERT_AT(miIterationCount < KI_MAX_ITERATIONS, "miIterationCount < KI_MAX_ITERATIONS", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 305);
 
     while ((mAStarNodePool.mauNodeCount[0] + mAStarNodePool.mauNodeCount[1]
             + mAStarNodePool.mauNodeCount[2] + mAStarNodePool.mauNodeCount[3])
@@ -441,8 +439,8 @@ void AStar::Compute()
         // node+0x14) -- the section it crosses INTO -- not its own section (the goal
         // test above used the own section, node+0x12).
         const u32 luSectionIndex = mpBestNode->GetLinkSectionIndex();
-        CGS_ASSERT(luSectionIndex < mpAISectionsData->muNumSections,
-                   "luSectionIndex < muNumSections");
+        CGS_ASSERT_AT(luSectionIndex < mpAISectionsData->muNumSections,
+                   "luSectionIndex < muNumSections", CGS_ARTIST_AISECTIONSDATA_H_FILE, 1201);
         const AISection* lpSection = mpAISectionsData->GetAISection(luSectionIndex);
 
         const u8 luNumPortals = lpSection->mu8NumPortals;
@@ -460,8 +458,8 @@ void AStar::Compute()
                 continue;
 
             const u16 luLinkSectionIndex = lpPortal->GetLinkSectionIndex();
-            CGS_ASSERT(luLinkSectionIndex < mpAISectionsData->muNumSections,
-                       "luSectionIndex < muNumSections");
+            CGS_ASSERT_AT(luLinkSectionIndex < mpAISectionsData->muNumSections,
+                       "luSectionIndex < muNumSections", CGS_ARTIST_AISECTIONSDATA_H_FILE, 1201);
             const AISection* lpLinkSection = mpAISectionsData->GetAISection(luLinkSectionIndex);
 
             // Reject the portal if the link section is on the block list.

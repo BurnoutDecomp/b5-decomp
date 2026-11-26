@@ -172,12 +172,6 @@ void BridgePhysicsModuleToAIModule_PostPhysics(
 
     CGS_ASSERT(lpAIModuleInputBuffer_PostPhysics != 0, CGS_ASSERT_MESSAGE_AT("lpAIModuleInputBuffer_PostPhysics != NULL", __FILE__, 142));   // :142
     CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleOutputBuffer != NULL", __FILE__, 143));               // :143
-    // [GUARD] the console dereferences both unconditionally right after the tripwires.
-    if (lpAIModuleInputBuffer_PostPhysics == 0 || lpPhysicsModuleOutputBuffer == 0)
-    {
-        return;
-    }
-
     lpAIModuleInputBuffer_PostPhysics->AppendContacts(lpPhysicsModuleOutputBuffer->GetContactSpyInterface());
 }
 
@@ -308,12 +302,6 @@ namespace BrnAI
     void AIModule::PostPhysicsUpdate( const AIModuleIO::InputBuffer_PostPhysics* lpInputBuffer )
     {
         CGS_ASSERT(lpInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpInputBuffer != NULL", __FILE__, 738));   // :738
-        // [GUARD] the console LockForRead()s through it unconditionally.
-        if (lpInputBuffer == 0)
-        {
-            return;
-        }
-
         lpInputBuffer->LockForRead();
 
         mContactSpyInterface.Construct();

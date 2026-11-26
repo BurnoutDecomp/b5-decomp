@@ -69,11 +69,6 @@ namespace WorldModule
         CGS_ASSERT(lpRaceCarInputBuffer_PostPhysics != 0,
                    "lpRaceCarInputBuffer_PostPhysics != NULL");
         CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL");
-        if (lpRaceCarInputBuffer_PostPhysics == 0 || lpPhysicsModuleOutputBuffer == 0)
-        {
-            return;
-        }
-
         // Leg 1 -- the per-race-car physics snapshots (mUsedRaceCars + maRaceCarStates[8]).
         lpRaceCarInputBuffer_PostPhysics->SetVehicleOutputInterface(
             lpPhysicsModuleOutputBuffer->GetVehicleOutputInterface());
@@ -146,11 +141,6 @@ namespace WorldModule
         // always passes live buffers. Same bring-up guard the race-car sibling above carries.
         CGS_ASSERT(lpTrafficInputBuffer_PostPhysics != 0, "lpTrafficInputBuffer_PostPhysics != NULL");
         CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL");
-        if (lpTrafficInputBuffer_PostPhysics == 0 || lpPhysicsModuleOutputBuffer == 0)
-        {
-            return;
-        }
-
         // PREREQ, satisfied: both setters run operator=, which Clear()+Append()s every embedded
         // EventQueue and memcpys through mpEvents -- seated only by EventQueue<T,N>::Construct.
         // BrnTrafficEntityModuleIO_InputBuffer_Getters.cpp InputBuffer_PostPhysics::Construct now

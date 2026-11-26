@@ -1,3 +1,5 @@
+#define CGS_ARTIST_UNITY_BRNROUTEMAPDEBUGCOMPONENT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/Route/BrnRouteMapDebugComponent.cpp"
+#define CGS_ARTIST_AISECTIONSDATA_H_FILE "..\\..\\..\\SharedClasses\\AI/AISectionsData.h"
 #include "GameSource/World/AI/Route/BrnRouteMapDebugComponent.h"
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Math/BrnMathUtils.h"
@@ -211,7 +213,7 @@ RGBA RouteMapDebugComponent::GetSectionTypeColour(const AISection* lpSection) co
 // ====================================================================================================
 RGBA RouteMapDebugComponent::GetSectionSpeedColour(const AISection* lpSection) const
 {
-    CGS_ASSERT(lpSection->muSpeed < E_SECTION_SPEED_COUNT, "muSpeed < E_SECTION_SPEED_COUNT");
+    CGS_ASSERT_AT(lpSection->muSpeed < E_SECTION_SPEED_COUNT, "muSpeed < E_SECTION_SPEED_COUNT", CGS_ARTIST_AISECTIONSDATA_H_FILE, 907);
 
     const u8 lu8Speed = lpSection->muSpeed;
     if (lu8Speed < E_SECTION_SPEED_COUNT)
@@ -402,14 +404,14 @@ void RouteMapDebugComponent::DrawX(CgsDev::Debug2DImmediateRender* lpDisplay,
 // ====================================================================================================
 void RouteMapDebugComponent::DrawPortalIds(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpRouteMapModule != NULL, "mpRouteMapModule != NULL");
+    CGS_ASSERT_AT(mpRouteMapModule != NULL, "mpRouteMapModule != NULL", CGS_ARTIST_UNITY_BRNROUTEMAPDEBUGCOMPONENT_CPP_FILE, 933);
 
     const Vector3& lrCamera = lpDisplay->GetCameraPosition();
 
     const u32 luNumSections = mpAISectionsData->muNumSections;
     for (u32 luSection = 0; luSection < luNumSections; ++luSection)
     {
-        CGS_ASSERT(luSection < mpAISectionsData->muNumSections, "luSectionIndex < muNumSections");
+        CGS_ASSERT_AT(luSection < mpAISectionsData->muNumSections, "luSectionIndex < muNumSections", CGS_ARTIST_AISECTIONSDATA_H_FILE, 1201);
         const AISection* lpSection = mpAISectionsData->GetAISection(luSection);
 
         if (lpSection->mu8NumPortals == 0)
@@ -886,7 +888,7 @@ void RouteMapDebugComponent::DrawHNGSectionAsPlanes(CgsDev::Debug3DImmediateRend
     for (s32 liLine = 0; liLine < lpSection->muNumNoGoLines; ++liLine)
     {
         const u16 luLine = static_cast<u16>(liLine);
-        CGS_ASSERT(luLine < lpSection->muNumNoGoLines, "luHNGLineIndex < muNumNoGoLines");
+        CGS_ASSERT_AT(luLine < lpSection->muNumNoGoLines, "luHNGLineIndex < muNumNoGoLines", CGS_ARTIST_AISECTIONSDATA_H_FILE, 894);
         const BoundaryLine& lrLine = lpSection->mpaNoGoLines[luLine];
         const f32 lfMiddleY = lpSection->GetMiddle().GetY().GetFloat();
         const Vector3 lBottomStart(lrLine.mfStartX, lfMiddleY - 20.0f, lrLine.mfStartY);

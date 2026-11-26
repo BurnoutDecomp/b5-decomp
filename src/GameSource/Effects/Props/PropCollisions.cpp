@@ -17,6 +17,7 @@
 // console refines vrsqrtefp twice (RefinedRsqrt) and has no zero guard. CreateEffect is unchanged: it matches
 // 0x822936F0 word for word.
 // ============================================================================
+#define CGS_ARTIST_UNITY_PROPCOLLISIONS_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Props/PropCollisions.cpp"
 #include "GameSource/Effects/Props/PropCollisions.h"
 #include "GameSource/Effects/Particles/ParticleModule.h"                        // BrnParticle::ParticleModule, LionEffect
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"        // BrnPhysics::Vehicle::RaceCarState
@@ -156,8 +157,8 @@ namespace
         CgsNumeric::Random&                         lRandom)
     {
         // `clrlwi r11, r26, 28 ; cmplwi ; beq` (0x82299180): the array's low four address bits (line 59).
-        CGS_ASSERT((static_cast<u32>(reinterpret_cast<uintptr_t>(lpLocatorArray)) & 15u) == 0u,
-                   "( ( (uint32_t)lpLocatorArray ) & 15 ) == 0");
+        CGS_ASSERT_AT((static_cast<u32>(reinterpret_cast<uintptr_t>(lpLocatorArray)) & 15u) == 0u,
+                   "( ( (uint32_t)lpLocatorArray ) & 15 ) == 0", CGS_ARTIST_UNITY_PROPCOLLISIONS_CPP_FILE, 59);
 
         for (u32 luLocator = 0; luLocator < lNumLocators; ++luLocator)
         {
@@ -321,10 +322,10 @@ namespace
 
             const u32 luPropType = lEvent.GetPropType();                                 // :224 +0x40
             PropVFXLocatorEvent::EEventType leEventType = lEvent.GetEventType();          // :226 +0x44
-            CGS_ASSERT((leEventType == PropVFXLocatorEvent::E_EVENTTYPE_PROPSMASH)
+            CGS_ASSERT_AT((leEventType == PropVFXLocatorEvent::E_EVENTTYPE_PROPSMASH)
                        || (leEventType == PropVFXLocatorEvent::E_EVENTTYPE_PROPHIT),
                        "( leEventType == BrnWorld::PropEntityIO::PropVFXLocatorEvent::E_EVENTTYPE_PROPSMASH ) || "
-                       "( leEventType == BrnWorld::PropEntityIO::PropVFXLocatorEvent::E_EVENTTYPE_PROPHIT )");   // :228
+                       "( leEventType == BrnWorld::PropEntityIO::PropVFXLocatorEvent::E_EVENTTYPE_PROPHIT )", CGS_ARTIST_UNITY_PROPCOLLISIONS_CPP_FILE, 228);   // :228
             // `lfs f0, 0x3CC(r25) ; fcmpu f0, f28 ; ble` -- a NaN speed keeps the event's own type.
             if (lpRaceCarState->mfSpeedMPH > KF_PROP_VFX_SMASH_SPEED_MPH)
                 leEventType = PropVFXLocatorEvent::E_EVENTTYPE_PROPSMASH;

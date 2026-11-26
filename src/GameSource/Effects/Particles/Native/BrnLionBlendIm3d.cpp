@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNLIONBLENDIM3D_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/Native/BrnLionBlendIm3d.cpp"
 #include "GameSource/Effects/Particles/Native/BrnParticlePrograms.h"
 // CgsGraphics::ImRenderer<BrnGraphics::LionBlendVertex> -- the X360 immediate-mode Lion-blend particle
 // renderer instantiation. This is the renderer behind BrnGraphics::Im3dBlend (Im3dBase<LionBlendVertex>
@@ -551,7 +552,7 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
         // ---- program slot 1: the depth-fading pair -------------------------------------------
         CgsGraphics::ImRenderer<LionBlendVertex>::BeginRendering(static_cast<s8>(1));
 
-        CGS_ASSERT(apDepthTextureState != 0, "lpDepthTextureState != NULL");
+        CGS_ASSERT_AT(apDepthTextureState != 0, "lpDepthTextureState != NULL", CGS_ARTIST_UNITY_BRNLIONBLENDIM3D_CPP_FILE, 142);
         // asm words 27-29: bind the scene depth texture on sampler unit 1.
         shadow::Device::SetState(apDepthTextureState, 1);
 

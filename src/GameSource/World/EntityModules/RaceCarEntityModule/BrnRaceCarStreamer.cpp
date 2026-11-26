@@ -195,14 +195,14 @@ const RaceCarStreamer::WheelGraphicsResourcePtr& RaceCarStreamer::GetWheelGraphi
 // active and the bit must not already be set (loading the same resource twice is a bug).
 void RaceCarStreamer::OnResourceLoaded( s32 liActiveRaceCar, u8 lxResourceFlag )
 {
-    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+    CGS_ASSERT_AT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" , KAC_ARTIST_ASSERT_FILE, 767);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" , KAC_ARTIST_ASSERT_FILE, 768);
 
     const u8 lxLoadFlags = maxLoadFlags[liActiveRaceCar];
 
-    CGS_ASSERT( ( lxLoadFlags & E_LOADFLAG_ACTIVE ) != 0, "lxLoadFlags & E_LOADFLAG_ACTIVE" );
-    CGS_ASSERT( ( lxResourceFlag & lxLoadFlags ) == 0,
-                "RaceCar resource to have been loaded twice" );
+    CGS_ASSERT_AT( ( lxLoadFlags & E_LOADFLAG_ACTIVE ) != 0, "lxLoadFlags & E_LOADFLAG_ACTIVE" , KAC_ARTIST_ASSERT_FILE, 771);
+    CGS_ASSERT_AT( ( lxResourceFlag & lxLoadFlags ) == 0,
+                "RaceCar resource to have been loaded twice" , KAC_ARTIST_ASSERT_FILE, 772);
 
     maxLoadFlags[liActiveRaceCar] = static_cast<u8>( lxLoadFlags | lxResourceFlag );
 }
@@ -211,8 +211,8 @@ void RaceCarStreamer::OnResourceLoaded( s32 liActiveRaceCar, u8 lxResourceFlag )
 // here; the bit is cleared by the caller's path / the base streamer notification.
 void RaceCarStreamer::OnResourceUnloading( s32 liActiveRaceCar, u8 lxResourceFlag )
 {
-    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+    CGS_ASSERT_AT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" , KAC_ARTIST_ASSERT_FILE, 791);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" , KAC_ARTIST_ASSERT_FILE, 792);
 
     if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
     {
@@ -237,7 +237,7 @@ void RaceCarStreamer::OnGraphicsLoaded( s32 liActiveRaceCar, GraphicsResourcePtr
 
     OnResourceLoaded( liActiveRaceCar, E_LOADFLAG_LOADEDGFX );
 
-    CGS_ASSERT( lResource != CgsResource::NULLResourcePtr, "lpResource != CgsResource::NULLResourcePtr" );
+    CGS_ASSERT_AT( lResource != CgsResource::NULLResourcePtr, "lpResource != CgsResource::NULLResourcePtr" , KAC_ARTIST_ASSERT_FILE, 525);
     maGraphicsResources[liActiveRaceCar] = lResource;
 }
 
@@ -249,7 +249,7 @@ void RaceCarStreamer::OnPhysicsLoaded( s32 liActiveRaceCar, PhysicsResourcePtr l
 
     OnResourceLoaded( liActiveRaceCar, E_LOADFLAG_LOADEDPHYSICS );
 
-    CGS_ASSERT( lResource != CgsResource::NULLResourcePtr, "lpResource != CgsResource::NULLResourcePtr" );
+    CGS_ASSERT_AT( lResource != CgsResource::NULLResourcePtr, "lpResource != CgsResource::NULLResourcePtr" , KAC_ARTIST_ASSERT_FILE, 545);
     maPhysicsResources[liActiveRaceCar] = lResource;
 }
 
@@ -271,7 +271,7 @@ void RaceCarStreamer::OnWheelGraphicsLoaded( s32 liActiveRaceCar, WheelGraphicsR
 
     OnResourceLoaded( liActiveRaceCar, E_LOADFLAG_LOADEDWHEELGFX );
 
-    CGS_ASSERT( lResource != CgsResource::NULLResourcePtr, "lpResource != CgsResource::NULLResourcePtr" );
+    CGS_ASSERT_AT( lResource != CgsResource::NULLResourcePtr, "lpResource != CgsResource::NULLResourcePtr" , KAC_ARTIST_ASSERT_FILE, 583);
     maWheelGraphicsResources[liActiveRaceCar] = lResource;
 }
 
@@ -481,10 +481,10 @@ void RaceCarStreamer::Destruct()
 // streamer as the is-player flag.
 void RaceCarStreamer::AddVehicleData( s32 liActiveRaceCar, CgsID lModelId, CgsID lWheelId, bool lbActive )
 {
-    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
-    CGS_ASSERT( lModelId != 0, "lModelId" );
-    CGS_ASSERT( lWheelId != 0, "lWheelId" );
+    CGS_ASSERT_AT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" , KAC_ARTIST_ASSERT_SOURCE, 140);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" , KAC_ARTIST_ASSERT_SOURCE, 141);
+    CGS_ASSERT_AT( lModelId != 0, "lModelId" , KAC_ARTIST_ASSERT_SOURCE, 142);
+    CGS_ASSERT_AT( lWheelId != 0, "lWheelId" , KAC_ARTIST_ASSERT_SOURCE, 143);
 
     // Re-adding a car to a slot that is already ACTIVE and NOT pending-removal is an error
     // (asm 0x822EBE48: (flags & E_LOADFLAG_ACTIVE) != 0 && (flags & E_LOADFLAG_UNUSED) == 0).
@@ -495,7 +495,7 @@ void RaceCarStreamer::AddVehicleData( s32 liActiveRaceCar, CgsID lModelId, CgsID
         CgsDev::StrStream lStrStream( lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE );
         lStrStream << "Flags = " << static_cast<u32>( maxLoadFlags[liActiveRaceCar] )
                    << " Car index = " << liActiveRaceCar << "\n";
-        CGS_ASSERT( false, lStrStream.GetBuffer() );
+        CGS_ASSERT_AT( false, lStrStream.GetBuffer() , KAC_ARTIST_ASSERT_SOURCE, 146);
     }
 
     mfTimeSinceLastLoad                  = 0.0f;
@@ -504,8 +504,8 @@ void RaceCarStreamer::AddVehicleData( s32 liActiveRaceCar, CgsID lModelId, CgsID
 
     if( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_UNUSED ) != 0 )
     {
-        CGS_ASSERT( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0,
-                    "( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0" );
+        CGS_ASSERT_AT( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0,
+                    "( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0" , KAC_ARTIST_ASSERT_SOURCE, 156);
 
         if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
         {

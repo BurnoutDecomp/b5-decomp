@@ -1,3 +1,5 @@
+#define CGS_ARTIST_ABS_BRNAIDRIVER_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIDriver.h"
+#define CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDriver.cpp"
 #include "GameSource/World/AI/BrnAIDriver.h"
 #include "GameSource/World/AI/BrnAIDriver_Constants.h"     // the file-scope KF_ tunables (both partfiles)
 #include "GameSource/World/AI/BrnAICar.h"                  // AICar (named members + accessors)
@@ -194,9 +196,9 @@ namespace BrnAI
     // ====================================================================================
     void AIDriver::SetAICar(AICar* lpCar)
     {
-        CGS_ASSERT(lpCar != 0, "Driver given NULL car");
-        CGS_ASSERT(mpCar == 0,
-                   "Shouldn't be reassigning an AI driver directly to another car.");
+        CGS_ASSERT_AT(lpCar != 0, "Driver given NULL car", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 838);
+        CGS_ASSERT_AT(mpCar == 0,
+                   "Shouldn't be reassigning an AI driver directly to another car.", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 841);
 
         mpCar = lpCar;
         lpCar->meCarState = E_AI_CAR_STATE_IN_RANGE;        // *(car+0x14C8) = 0
@@ -363,7 +365,7 @@ namespace BrnAI
 
                     CalculateCarControls(lfTimeStep, lPlayerCarPosition, lbDoInRangeCatchup, lpRandom);
 
-                    CGS_ASSERT(IsFinite(mfSteeringAngle), "RwMath::IsValid( mfSteeringAngle )");
+                    CGS_ASSERT_AT(IsFinite(mfSteeringAngle), "RwMath::IsValid( mfSteeringAngle )", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 823);
                 }
             }
         }
@@ -476,7 +478,7 @@ namespace BrnAI
                 break;
 
             default:
-                CGS_ASSERT(false, "Unknown AI behaviour");
+                CGS_ASSERT_AT(false, "Unknown AI behaviour", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 1318);
                 break;
         }
     }
@@ -685,11 +687,11 @@ namespace BrnAI
                 break;
 
             default:
-                CGS_ASSERT(false, "AI driver with unknown behaviour");
+                CGS_ASSERT_AT(false, "AI driver with unknown behaviour", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 2015);
                 break;
         }
 
-        CGS_ASSERT(IsFinite(mfSteeringAngle), "RwMath::IsValid( mfSteeringAngle )");
+        CGS_ASSERT_AT(IsFinite(mfSteeringAngle), "RwMath::IsValid( mfSteeringAngle )", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 2022);
     }
 
     // ====================================================================================
@@ -1034,7 +1036,7 @@ namespace BrnAI
     // ====================================================================================
     bool AIDriver::IsInvulnerable() const
     {
-        CGS_ASSERT(mpCar != 0, "mpCar != NULL");
+        CGS_ASSERT_AT(mpCar != 0, "mpCar != NULL", CGS_ARTIST_ABS_BRNAIDRIVER_H_FILE, 930);
 
         if (mpCar->meRelativeLocation < 2)          // car+0x14D4 (behind player: 0 or 1)
         {
@@ -1958,8 +1960,8 @@ namespace BrnAI
         if (lfDot > KF_QUICKTURN_DROP_OUT                                // flt_8300DC00 == cos(30 deg)
             || mpCar->GetSpeed() < KF_QUICKTURN_SLOWNESS_DROPOUT)    // flt_8300D6FC == 10 mph
         {
-            CGS_ASSERT(mpCar->mePreviousBehaviour != static_cast<EAIBehaviour>(5),
-                       "Nested quick turns!\n");                          // :1151
+            CGS_ASSERT_AT(mpCar->mePreviousBehaviour != static_cast<EAIBehaviour>(5),
+                       "Nested quick turns!\n", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 1151);                          // :1151
             const s32 liOldBehaviour = static_cast<s32>(mpCar->meBehaviour);
             const s32 liNewBehaviour = static_cast<s32>(mpCar->mePreviousBehaviour);
             mpCar->SetBehaviour(mpCar->mePreviousBehaviour);      // @0x82764DE0

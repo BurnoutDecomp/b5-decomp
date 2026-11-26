@@ -1,3 +1,4 @@
+#define CGS_ARTIST_ABS_BRNPVSMODULEEVENTS_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\pvsmodule\\SharedIO/BrnPVSModuleEvents.h"
 #include "GameSource/World/EntityModules/WorldEntityModule/PVSModule/SharedIO/BrnPVSModuleEvents.h"
 
 #include <cstddef>   // offsetof
@@ -22,7 +23,7 @@ namespace PVSIO
     void GetZoneRequest::GetVelocity(Vector4* lpOutVelocity, bool* lpbOutUseVelocity) const
     {
         // X360: if (!lpbOutUseVelocity) Begin/Fire/EndAssert("lpbOutUseVelocity is NULL", "...h", 208);
-        CGS_ASSERT(lpbOutUseVelocity != 0, "lpbOutUseVelocity is NULL\n");
+        CGS_ASSERT_AT(lpbOutUseVelocity != 0, "lpbOutUseVelocity is NULL\n", CGS_ARTIST_ABS_BRNPVSMODULEEVENTS_H_FILE, 208);
 
         *lpOutVelocity     = mVelocity;       // lvx128 0x30(this) -> stvx128 *lpOutVelocity
         *lpbOutUseVelocity = mbUseVelocity != 0;  // lbz 0x24(this) -> stb *lpbOutUseVelocity

@@ -1,3 +1,5 @@
+#define CGS_ARTIST_AISECTIONSDATA_H_FILE "..\\..\\..\\SharedClasses\\AI/AISectionsData.h"
+#define CGS_ARTIST_UNITY_BRNROUTEREQUESTMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnRouteRequestManager.cpp"
 #include "GameSource/World/AI/BrnRouteRequestManager.h"
 
 #include "GameSource/Math/BrnMathUtils.h"                    // BrnMath::Flatten (XZ ground plane)
@@ -213,8 +215,8 @@ void RouteRequestManager::GenerateStandardRouteRequest(
     if (luBestSectionIndex == luDestinationSectionIndex)
         return;
 
-    CGS_ASSERT(luDestinationSectionIndex < lpAISectionData->muNumSections,
-               "luDestinationSectionIndex < lpAISectionData->GetAISectionCount()");
+    CGS_ASSERT_AT(luDestinationSectionIndex < lpAISectionData->muNumSections,
+               "luDestinationSectionIndex < lpAISectionData->GetAISectionCount()", CGS_ARTIST_UNITY_BRNROUTEREQUESTMANAGER_CPP_FILE, 290);
 
     const u16 luRaceCarIndex = static_cast<u16>(lpAICar->GetRaceCarIndex());
 
@@ -239,7 +241,7 @@ void RouteRequestManager::GenerateStandardRouteRequest(
     if (lpAICar->HasBlockCheckpoints())
     {
         const s32 liCheckpoint = lpAICar->GetCurrentCheckpoint();
-        CGS_ASSERT(liCheckpoint < 16, "lpAICar->GetCurrentCheckpoint() < KI_MAX_LANDMARKS_IN_MODE");
+        CGS_ASSERT_AT(liCheckpoint < 16, "lpAICar->GetCurrentCheckpoint() < KI_MAX_LANDMARKS_IN_MODE", CGS_ARTIST_UNITY_BRNROUTEREQUESTMANAGER_CPP_FILE, 321);
 
         lRouteRequest.SetQuality(E_ASTAR_QUALITY_MEDIUM);   // X360 stores 1 == the medium preset
 
@@ -280,8 +282,8 @@ void RouteRequestManager::GenerateAlternativeRouteRequest(
     if (luBestSectionIndex == luDestinationSectionIndex)
         return;
 
-    CGS_ASSERT(luDestinationSectionIndex < lpAISectionData->muNumSections,
-               "luDestinationSectionIndex < lpAISectionData->GetAISectionCount()");
+    CGS_ASSERT_AT(luDestinationSectionIndex < lpAISectionData->muNumSections,
+               "luDestinationSectionIndex < lpAISectionData->GetAISectionCount()", CGS_ARTIST_UNITY_BRNROUTEREQUESTMANAGER_CPP_FILE, 436);
 
     const s32 liRaceCarIndex = lpAICar->GetRaceCarIndex();
 
@@ -308,8 +310,8 @@ void RouteRequestManager::GenerateExtrapolatedRouteRequest(
 {
     (void)lpAISectionData;
 
-    CGS_ASSERT(lpAICar->GetBestSectionIndex() != AICar::KI_INVALID_SECTION_INDEX,
-               "lpAICar->GetBestSectionIndex() != BrnWorld::KI_INVALID_SECTION_INDEX");
+    CGS_ASSERT_AT(lpAICar->GetBestSectionIndex() != AICar::KI_INVALID_SECTION_INDEX,
+               "lpAICar->GetBestSectionIndex() != BrnWorld::KI_INVALID_SECTION_INDEX", CGS_ARTIST_UNITY_BRNROUTEREQUESTMANAGER_CPP_FILE, 481);
 
     const u16 luBestSectionIndex = lpAICar->GetBestSectionIndex();
     const u16 luRaceCarIndex     = static_cast<u16>(lpAICar->GetRaceCarIndex());
@@ -351,8 +353,8 @@ void RouteRequestManager::GenerateRouteFleeingRouteRequest(
 {
     (void)lpAISectionData;
 
-    CGS_ASSERT(lpAICar->GetBestSectionIndex() != AICar::KI_INVALID_SECTION_INDEX,
-               "lpAICar->GetBestSectionIndex() != BrnWorld::KI_INVALID_SECTION_INDEX");
+    CGS_ASSERT_AT(lpAICar->GetBestSectionIndex() != AICar::KI_INVALID_SECTION_INDEX,
+               "lpAICar->GetBestSectionIndex() != BrnWorld::KI_INVALID_SECTION_INDEX", CGS_ARTIST_UNITY_BRNROUTEREQUESTMANAGER_CPP_FILE, 542);
 
     const u16 luBestSectionIndex = lpAICar->GetBestSectionIndex();
     const u16 luRaceCarIndex     = static_cast<u16>(lpAICar->GetRaceCarIndex());
@@ -407,7 +409,7 @@ void RouteRequestManager::GenerateFreeRoamingDestination(
 
         // Advance to the next section (wrapping), bounds-checked like the X360.
         luSectionIndex = static_cast<u16>((luSectionIndex + 1) % luNumSections);
-        CGS_ASSERT(luSectionIndex < luNumSections, "luSectionIndex < muNumSections");
+        CGS_ASSERT_AT(luSectionIndex < luNumSections, "luSectionIndex < muNumSections", CGS_ARTIST_AISECTIONSDATA_H_FILE, 1201);
     }
 
     lpAICar->SetDestinationSectionIndex(luSectionIndex);

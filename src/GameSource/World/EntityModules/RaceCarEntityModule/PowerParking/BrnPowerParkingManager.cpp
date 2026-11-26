@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNPOWERPARKINGMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.cpp"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
@@ -389,8 +390,8 @@ namespace BrnWorld
             && mfClosestPerpendicularDist < KF_MAX_PERPENDICULAR_DISTANCE_FOR_ALIGNMENT)
         {
             // :300 (li r5, 0x12C). blt 0.0 fires, ble HALF_PI skips: a NaN does not fire.
-            CGS_ASSERT(!(mfClosestAngleDiff < 0.0f) && !(mfClosestAngleDiff > PowerParkingDetail::KF_HALF_PI),
-                       "mfClosestAngleDiff >= 0 && mfClosestAngleDiff <= RwMathFPU::HALF_PI");
+            CGS_ASSERT_AT(!(mfClosestAngleDiff < 0.0f) && !(mfClosestAngleDiff > PowerParkingDetail::KF_HALF_PI),
+                       "mfClosestAngleDiff >= 0 && mfClosestAngleDiff <= RwMathFPU::HALF_PI", CGS_ARTIST_UNITY_BRNPOWERPARKINGMANAGER_CPP_FILE, 300);
 
             const f32 lfClosestAngleDiff = mfClosestAngleDiff;
 

@@ -217,7 +217,7 @@ namespace BrnWorld
         for (s32 i = 0; i < mRecycledTrafficQueue.GetLength(); ++i)
         {
             const EntityId id = mRecycledTrafficQueue.GetEvent(i).mRemovedVehicleEntityId;
-            CGS_ASSERT((id.muValue >> 24) == 2, "lRemovedVehicleEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+            CGS_ASSERT_AT((id.muValue >> 24) == 2, "lRemovedVehicleEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", CGS_ARTIST_FILE, 1902);
             const u32 vehicle = (id.muValue >> 10) & 0x3fff;
             const u32 index = FindCrashForTrafficVehicle(vehicle);
             if (index != KU_INVALID_CRASH)

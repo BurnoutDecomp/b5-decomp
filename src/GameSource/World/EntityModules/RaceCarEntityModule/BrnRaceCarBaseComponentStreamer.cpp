@@ -1,6 +1,7 @@
 // ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
 // containers\./CgsBitArray.h, e.g. RaceCarBaseComponentStreamer::AddEntry 0x822B6D30): see CgsBitArray.h.
 #define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
+#define CGS_ARTIST_UNITY_BRNRACECARBASECOMPONENTSTREAMER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarBaseComponentStreamer.cpp"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarBaseComponentStreamer.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
@@ -173,10 +174,10 @@ void RaceCarBaseComponentStreamer::OnUnloadBegin( s32 liListIndex )
 {
     const s32 liActiveRaceCar = static_cast<s32>( GetUserId( liListIndex ) );
 
-    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
-    CGS_ASSERT( mLoadedEntries.IsBitSet( static_cast<u32>( liActiveRaceCar ) ),
-                "Trying to unload a vehicle asset that hasn't been loaded yet" );
+    CGS_ASSERT_AT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" , CGS_ARTIST_UNITY_BRNRACECARBASECOMPONENTSTREAMER_CPP_FILE, 139);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" , CGS_ARTIST_UNITY_BRNRACECARBASECOMPONENTSTREAMER_CPP_FILE, 140);
+    CGS_ASSERT_AT( mLoadedEntries.IsBitSet( static_cast<u32>( liActiveRaceCar ) ),
+                "Trying to unload a vehicle asset that hasn't been loaded yet" , CGS_ARTIST_UNITY_BRNRACECARBASECOMPONENTSTREAMER_CPP_FILE, 141);
 
     mLoadedEntries.UnSetBit( static_cast<u32>( liActiveRaceCar ) );
     maLoadedAssets[liActiveRaceCar] = 0;
@@ -192,10 +193,10 @@ void RaceCarBaseComponentStreamer::OnLoadComplete( const BrnResource::GameDataIO
 {
     const s32 liActiveRaceCar = static_cast<s32>( GetUserId( liListIndex ) );
 
-    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
-    CGS_ASSERT( !mLoadedEntries.IsBitSet( static_cast<u32>( liActiveRaceCar ) ),
-                "Loading a vehicle asset twice" );
+    CGS_ASSERT_AT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" , CGS_ARTIST_UNITY_BRNRACECARBASECOMPONENTSTREAMER_CPP_FILE, 164);
+    CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" , CGS_ARTIST_UNITY_BRNRACECARBASECOMPONENTSTREAMER_CPP_FILE, 165);
+    CGS_ASSERT_AT( !mLoadedEntries.IsBitSet( static_cast<u32>( liActiveRaceCar ) ),
+                "Loading a vehicle asset twice" , CGS_ARTIST_UNITY_BRNRACECARBASECOMPONENTSTREAMER_CPP_FILE, 166);
 
     mLoadedEntries.SetBit( static_cast<u32>( liActiveRaceCar ) );
     maLoadedAssets[liActiveRaceCar] = lpEvent->GetGameDataId();

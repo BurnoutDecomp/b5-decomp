@@ -45,9 +45,9 @@ namespace AIModuleIO
     // @0x827650B8  ExportCarData caches the player's current + next route-node (x,y).
     void AIRaceCarInterface::SetPlayerRouteNodePositions(const AICar* lpAICar)
     {
-        CGS_ASSERT(lpAICar != NULL, "lpAICar != NULL");
+        CGS_ASSERT_AT(lpAICar != NULL, "lpAICar != NULL", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 943);
         const Route* lpPlayerRoute = lpAICar->GetRoute();
-        CGS_ASSERT(lpPlayerRoute != NULL, "lpPlayerRoute != NULL");
+        CGS_ASSERT_AT(lpPlayerRoute != NULL, "lpPlayerRoute != NULL", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 946);
 
         const s32 liNextNodeIndex = lpAICar->GetNextRouteNodeIndex();
 
@@ -56,8 +56,8 @@ namespace AIModuleIO
             const RouteNode* lpRouteNode     = lpPlayerRoute->GetNode(liNextNodeIndex);
             const RouteNode* lpNextRouteNode = lpPlayerRoute->GetNode(liNextNodeIndex + 1);
 
-            CGS_ASSERT(lpRouteNode != NULL, "lpRouteNode != NULL");
-            CGS_ASSERT(lpNextRouteNode != NULL, "lpNextRouteNode != NULL");
+            CGS_ASSERT_AT(lpRouteNode != NULL, "lpRouteNode != NULL", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 954);
+            CGS_ASSERT_AT(lpNextRouteNode != NULL, "lpNextRouteNode != NULL", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 955);
 
             // Only the planar (x,y) is carried; the z/w lanes are zeroed (std r9=0).
             mCurrentNodePosition = Vector2(lpRouteNode->GetX(), lpRouteNode->GetY());

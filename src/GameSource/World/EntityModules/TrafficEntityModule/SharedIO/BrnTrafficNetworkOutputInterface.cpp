@@ -1,3 +1,4 @@
+#define CGS_ARTIST_BURNOUTCONSTANTS_H_FILE "..\\..\\..\\GameSource\\BurnoutConstants.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h"
 #include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"  // BrnTraffic::KU_MAX_HULLS, KU_MAX_HULLS_IN_PVS
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h"  // BrnTraffic::KU_INVALID_HULL
@@ -36,8 +37,8 @@ namespace BrnTrafficIO
             mau16ActiveHulls[luIndex] = KU_INVALID_HULL;   // 0x6C + 2*luIndex, 0xFFFF
             // The X360 walks this table with the inlined operator++(EActiveRaceCarIndex)
             // (BurnoutConstants.h:39), which fires this non-gating per-iteration assert.
-            CGS_ASSERT(luIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CGS_ASSERT_AT(luIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_BURNOUTCONSTANTS_H_FILE, 39);
         }
 
         mbHullSyncDivergence = false;   // 0x7E

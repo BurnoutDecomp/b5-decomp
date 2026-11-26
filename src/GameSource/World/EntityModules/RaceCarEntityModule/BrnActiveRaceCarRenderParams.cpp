@@ -151,7 +151,7 @@ const Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelScaleMatrix(u32 luWhe
 // vpu::Mult reads x/y/z only. The fix is layout parity, not a visible change.)
 void ActiveRaceCar::RenderParams::SetWheelScale(u32 luWheel, const Vector3& lrScale)
 {
-    CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
+    CGS_ASSERT_AT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS", CGS_ARTIST_FILE, 1900);
 
     Matrix44Affine& lrDest = mWheelScaleTransforms[luWheel];
     lrDest.xAxis.mV.x = lrScale.mV.x; lrDest.xAxis.mV.y = 0.0f;      lrDest.xAxis.mV.z = 0.0f;      lrDest.xAxis.mV.w = 0.0f;

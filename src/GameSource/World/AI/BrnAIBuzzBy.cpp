@@ -10,6 +10,8 @@
 // (GetBuzzFrequency / Prepare / the remaining API land with sibling waves -- declared only.)
 // =============================================================================
 
+#define CGS_ARTIST_UNITY_BRNAIBUZZBY_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIBuzzBy.cpp"
+#define CGS_ARTIST_BURNOUTCONSTANTS_H_FILE "..\\..\\..\\GameSource\\BurnoutConstants.h"
 #include "GameSource/World/AI/BrnAIBuzzBy.h"
 #include "GameSource/World/AI/BrnAICar.h"
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
@@ -367,7 +369,7 @@ namespace BrnAI
                                    leState == E_AI_CAR_STATE_OUT_OF_RANGE);
             if (lbActive && !lpAICar->IsPlayerCar())
             {
-                CGS_ASSERT(miNumActiveCars < 35, "Too many AI cars in buzz-by active list\n");
+                CGS_ASSERT_AT(miNumActiveCars < 35, "Too many AI cars in buzz-by active list\n", CGS_ARTIST_UNITY_BRNAIBUZZBY_CPP_FILE, 631);
 
                 maeActiveList[miNumActiveCars] = leGlobalRaceCarIndex;
                 mafBuzzTimes[miNumActiveCars]  = GetBuzzFrequency(lpAICar);
@@ -375,8 +377,8 @@ namespace BrnAI
             }
 
             leGlobalRaceCarIndex = static_cast<EGlobalRaceCarIndex>(leGlobalRaceCarIndex + 1);
-            CGS_ASSERT(leGlobalRaceCarIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT,
-                       "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT");
+            CGS_ASSERT_AT(leGlobalRaceCarIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_BURNOUTCONSTANTS_H_FILE, 84);
         }
     }
 

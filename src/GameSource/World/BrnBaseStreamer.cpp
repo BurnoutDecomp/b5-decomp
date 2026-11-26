@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNBASESTREAMER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/BrnBaseStreamer.cpp"
 #include "GameSource/World/BrnBaseStreamer.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"   // Load/UnloadGameDataEvent
@@ -373,7 +374,7 @@ void InternalBaseStreamer::PostLoadRequest( s32 liListIndex )
 // ---------------------------------------------------------------------------
 InternalBaseStreamer::EStreamMode InternalBaseStreamer::UpdateIdle()
 {
-    CGS_ASSERT( mPendingEntryQueue.GetLength() == 0, "mPendingEntryQueue.GetLength() == 0" );
+    CGS_ASSERT_AT( mPendingEntryQueue.GetLength() == 0, "mPendingEntryQueue.GetLength() == 0" , CGS_ARTIST_UNITY_BRNBASESTREAMER_CPP_FILE, 493);
 
     s32 liUnload = AttemptUnload();
     while ( liUnload >= 0 )
@@ -673,7 +674,7 @@ void InternalBaseStreamer::Update()
         break;
 
     default:
-        CGS_ASSERT( false, "Invalid stream mode" );
+        CGS_ASSERT_AT( false, "Invalid stream mode" , CGS_ARTIST_UNITY_BRNBASESTREAMER_CPP_FILE, 472);
         break;
     }
 }

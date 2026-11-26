@@ -9,6 +9,8 @@
 // ============================================================================
 
 #define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
+#define CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.cpp"
+#define CGS_ARTIST_ABS_BRNTRAFFICENTITYMODULE_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModule.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #undef CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
@@ -770,7 +772,7 @@ void DebugComponent::DrawSegments(CgsDev::Debug3DImmediateRender* lpDisplay) con
 // ARTIST 0x82760B68.
 void DebugComponent::DrawSections(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1012);
     if (miHullToDrawFor != -1)
         DrawSectionsInHull(miHullToDrawFor, lpDisplay);
     else
@@ -806,8 +808,8 @@ void DebugComponent::DrawSectionsInHull(s32 liHull, CgsDev::Debug3DImmediateRend
 // ARTIST 0x82760C98.
 void DebugComponent::DrawSectionCurves(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule");
-    CGS_ASSERT(lpDisplay != 0, "lpDisplay");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1040);
+    CGS_ASSERT_AT(lpDisplay != 0, "lpDisplay", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1041);
     if (miHullToDrawFor != -1)
         DrawSectionCurvesInHull(miHullToDrawFor, lpDisplay);
     else
@@ -851,7 +853,7 @@ void DebugComponent::DrawSectionCurvesInHull(s32 liHull, CgsDev::Debug3DImmediat
 // ARTIST 0x82760DF0.
 void DebugComponent::DrawJunctions(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1240);
     if (miHullToDrawFor != -1)
         DrawJunctionsInHull(miHullToDrawFor, lpDisplay);
     else
@@ -885,7 +887,7 @@ void DebugComponent::DrawJunctionsInHull(s32 liHull, CgsDev::Debug3DImmediateRen
 // ARTIST 0x827636A8.
 void DebugComponent::DrawStopLines(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1344);
     if (miHullToDrawFor != -1)
         DrawStopLinesInHull(miHullToDrawFor, lpDisplay);
     else
@@ -1135,7 +1137,7 @@ void DebugComponent::DrawStuckDetection(CgsDev::Debug3DImmediateRender* lpDispla
 // ARTIST 0x8275C298: all 40 allocated records, ignoring the live count.
 void DebugComponent::DrawFuzzyLogic(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 3120);
     const u32 laColours[6] = {0xFFFF50FF, 0xFF5050B4, 0xFFFFB400,
                               0xFF0000FF, 0xFFFF5050, 0xFF00FF00};
     rw::RGBA lBase;
@@ -1211,7 +1213,7 @@ namespace BrnTraffic
 // ARTIST 0x82759D68.
 void DebugComponent::DrawParamBehaviours(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1669);
     const Vector3 lHalf(0.3f, 0.3f, 0.3f);
     const u32 laColours[7] = {0xFF00C8C8, 0xFF1E1E64, 0xFFC81EC8, 0xFFC86400,
                               0xFF0000C8, 0xFFC81E1E, 0xFF00C800};
@@ -1316,7 +1318,7 @@ namespace BrnTraffic
 // ARTIST 0x82754328.
 void DebugComponent::DrawParams(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1598);
     const Vector3 lMin(-0.3f, -0.3f, -0.3f);
     const Vector3 lMax(0.3f, 0.3f, 0.3f);
     const rw::RGBA lColour(0, 255, 0, 255); // 0xFF00FF00
@@ -1339,7 +1341,7 @@ void DebugComponent::DrawParams(CgsDev::Debug3DImmediateRender* lpDisplay) const
 // ARTIST 0x82754550.
 void DebugComponent::DrawLerpedParams(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1635);
     const Vector3 lMin(-0.25f, -0.25f, -0.25f);
     const Vector3 lMax(0.25f, 0.25f, 0.25f);
     const rw::RGBA lColour(70, 130, 180, 255); // 0xFFB48246
@@ -1372,7 +1374,7 @@ void DebugComponent::DrawParamVehicleLinks(CgsDev::Debug3DImmediateRender* lpDis
 // ARTIST 0x82754B08.
 void DebugComponent::DrawParamParamLinks(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 2321);
     const Vector3 lLift(0.0f, 1.0f, 0.0f);
     const rw::RGBA lNextColour(240, 0, 64, 255); // 0xFF4000F0
     const rw::RGBA lPrevColour(64, 0, 240, 255); // 0xFFF00040
@@ -1770,7 +1772,7 @@ void DebugComponent::DrawSplitters(CgsDev::Debug3DImmediateRender* lpDisplay) co
 // ARTIST 0x82750110: nearest live vehicle to the renderer camera, independent of cull range.
 void DebugComponent::DrawNearestVehicleId(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 2368);
     const Vector3 lCamera = lpDisplay->GetCameraPosition();
     f32 lfNearestSquared = 3.402823466e38f; // 8204F664 = FLT_MAX
     u32 luNearest = KU_INVALID_VEHICLE;
@@ -1780,7 +1782,7 @@ void DebugComponent::DrawNearestVehicleId(CgsDev::Debug3DImmediateRender* lpDisp
         const Vehicle* lpVehicle = mpModule->GetVehicle(luVehicle);
         if (!lpVehicle->IsAlive())
             continue;
-        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+        CGS_ASSERT_AT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_ABS_BRNTRAFFICENTITYMODULE_H_FILE, 2483);
         const Vector3 lPosition = mpModule->maVehicleTransforms[luVehicle].Pos();
         const Vector3 lOffset = lCamera - lPosition;
         const f32 lfSquared = rw::math::vpu::Dot(lOffset, lOffset);
@@ -1802,14 +1804,14 @@ void DebugComponent::DrawNearestVehicleId(CgsDev::Debug3DImmediateRender* lpDisp
 // ARTIST 0x827502F8: fixed inclusive 30-unit radius, not mfRenderCullDistance.
 void DebugComponent::DrawVehicleIds(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 2419);
     const Vector3 lCamera = lpDisplay->GetCameraPosition();
     for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
     {
         const Vehicle* lpVehicle = mpModule->GetVehicle(luVehicle);
         if (!lpVehicle->IsAlive())
             continue;
-        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+        CGS_ASSERT_AT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_ABS_BRNTRAFFICENTITYMODULE_H_FILE, 2483);
         const Vector3 lPosition = mpModule->maVehicleTransforms[luVehicle].Pos();
         const Vector3 lOffset = lCamera - lPosition;
         if (900.0f >= rw::math::vpu::Dot(lOffset, lOffset))
@@ -1831,7 +1833,7 @@ namespace BrnTraffic
 // ARTIST 0x82754700. The stream receives signed phases and a truncated float timer.
 void DebugComponent::DrawVehicleManoeuvres(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 2220);
     char lacText[4096];
     CgsDev::StrStream lStream(lacText, sizeof(lacText));
     rw::RGBA lColour;
@@ -1889,7 +1891,7 @@ void DebugComponent::DrawRearArticPoints(CgsDev::Debug3DImmediateRender* lpDispl
 // ARTIST 0x82754F18. Original mixes trailer slot zero's type with transform pool slot zero.
 void DebugComponent::DrawFrontArticPoints(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(lpDisplay != 0, "lpDisplay");
+    CGS_ASSERT_AT(lpDisplay != 0, "lpDisplay", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 2787);
     const Vehicle* lpVehicle = mpModule->GetTrailerVehicle(0);
     if (!lpVehicle->IsAlive())
         return;
@@ -1905,7 +1907,7 @@ void DebugComponent::DrawFrontArticPoints(CgsDev::Debug3DImmediateRender* lpDisp
 // ARTIST 0x82750570. Effects byte bit zero is the horn; no extra horn accessor assert.
 void DebugComponent::DrawHorns(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(lpDisplay != 0, "lpDisplay");
+    CGS_ASSERT_AT(lpDisplay != 0, "lpDisplay", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 2922);
     const Vector3 lMin(-0.5f, -0.5f, -0.5f);
     const Vector3 lMax(0.5f, 0.5f, 0.5f);
     rw::RGBA lColour;
@@ -1926,7 +1928,7 @@ void DebugComponent::DrawHorns(CgsDev::Debug3DImmediateRender* lpDisplay) const
 // ARTIST 0x8275BBC0. The original validates xyz by self-equality (NaN only).
 void DebugComponent::DrawAxle(const Axle* lpAxle, CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(lpAxle != 0, "lpAxle");
+    CGS_ASSERT_AT(lpAxle != 0, "lpAxle", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 2876);
     const Vector3 lPosition = lpAxle->mPosAndWheelRadius.GetVector3();
     if (!(lPosition.GetX().GetFloat() == lPosition.GetX().GetFloat()
           && lPosition.GetY().GetFloat() == lPosition.GetY().GetFloat()
@@ -1956,7 +1958,7 @@ void DebugComponent::DrawAxle(const Axle* lpAxle, CgsDev::Debug3DImmediateRender
 // ARTIST 0x827612C8. maVehicleTransforms is read directly, not GetVehicleTransform.
 void DebugComponent::DrawAxles(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(lpDisplay != 0, "lpDisplay");
+    CGS_ASSERT_AT(lpDisplay != 0, "lpDisplay", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 2830);
     for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
     {
         const Vehicle* lpVehicle = mpModule->GetVehicle(luVehicle);
@@ -1964,7 +1966,7 @@ void DebugComponent::DrawAxles(CgsDev::Debug3DImmediateRender* lpDisplay) const
             continue;
         const VehicleAxles* lpAxles = mpModule->GetVehicleAxles(luVehicle);
         // The original inlines the transform accessor's pool bound assert.
-        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+        CGS_ASSERT_AT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_ABS_BRNTRAFFICENTITYMODULE_H_FILE, 2483);
         const Vector3 lPosition = mpModule->maVehicleTransforms[luVehicle].Pos();
         if (ShouldObjectBeCulled(lPosition, lpDisplay))
             continue;
@@ -2055,7 +2057,7 @@ void DebugComponent::RenderVerticalMeter(CgsDev::Debug3DImmediateRender* lpDispl
                                          rw::RGBA lOutlineColour, rw::RGBA lFillColour,
                                          f32 lfFullScale, f32 lfValue) const
 {
-    CGS_ASSERT(lpDisplay != 0, "lpDisplay");
+    CGS_ASSERT_AT(lpDisplay != 0, "lpDisplay", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 3926);
     const Matrix44 lViewProjection = lpDisplay->GetViewProjectionMatrix();
     Vector3 lClip = TrafficVmxMadd(TrafficRow(lViewProjection.xAxis), lPosition.GetX().GetFloat(),
                                  TrafficRow(lViewProjection.wAxis));
@@ -2143,7 +2145,7 @@ void DebugComponent::RenderPerformanceTable(CgsDev::Debug2DImmediateRender* lpDi
 // original divides by the stored dimensions without substituting fallback sizes.
 void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 2458);
     const Pvs* lpPvs = mpModule->mpData->mpPvs;
     const u32 luColumns = lpPvs->muNumCells_X;
     const u32 luRows = lpPvs->muNumCells / luColumns;
@@ -2190,8 +2192,8 @@ void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) 
 // emits the original warning. Array::GetItem retains the empty-array assertion.
 void DebugComponent::DrawPlayerCarHullId(CgsDev::Debug2DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule != NULL");
-    CGS_ASSERT(lpDisplay != 0, "lpDisplay != NULL");
+    CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 3331);
+    CGS_ASSERT_AT(lpDisplay != 0, "lpDisplay != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 3332);
     if (mpModule->meLocalPlayerIndex != 0)
         lpDisplay->DrawText("Warning: Hull ID is for car zero, not player",
                       40.0f, 100.0f, 16.0f, 0xFF0000FFu);

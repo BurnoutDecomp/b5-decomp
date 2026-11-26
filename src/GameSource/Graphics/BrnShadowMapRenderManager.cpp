@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNSHADOWMAPRENDERMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnShadowMapRenderManager.cpp"
 #include "GameSource/Graphics/BrnShadowMapRenderManager.h"
 
 #include "GameSource/Graphics/BrnRendererMemory.h"                  // BrnRendererMemory::GetShadowMapBuffer
@@ -95,9 +96,9 @@ void BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap(s32 liIndex, bool
     if (BrnGraphics::gbCombinedShadowMapViewport)
     {
         CgsRenderTarget* lpShadowBuffer = lpAllocatedRenderTargets->GetShadowMapBuffer(0);
-        CGS_ASSERT(lpShadowBuffer != 0, "lpAllocatedRenderTargets->GetShadowMapBuffer(0)");
-        CGS_ASSERT(lpShadowBuffer->GetRenderTarget() != 0,
-                   "lpAllocatedRenderTargets->GetShadowMapBuffer(0)->GetRenderTarget()");
+        CGS_ASSERT_AT(lpShadowBuffer != 0, "lpAllocatedRenderTargets->GetShadowMapBuffer(0)", CGS_ARTIST_UNITY_BRNSHADOWMAPRENDERMANAGER_CPP_FILE, 108);
+        CGS_ASSERT_AT(lpShadowBuffer->GetRenderTarget() != 0,
+                   "lpAllocatedRenderTargets->GetShadowMapBuffer(0)->GetRenderTarget()", CGS_ARTIST_UNITY_BRNSHADOWMAPRENDERMANAGER_CPP_FILE, 109);
 
         if (lpShadowBuffer->GetNumSections() > 1)
         {
@@ -161,10 +162,10 @@ void BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap(s32 liIndex, bool
     else
     {
         // Separate per-face targets: face liIndex owns its render target.
-        CGS_ASSERT(lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex) != 0,
-                   "lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)");
-        CGS_ASSERT(lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)->GetRenderTarget() != 0,
-                   "lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)->GetRenderTarget()");
+        CGS_ASSERT_AT(lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex) != 0,
+                   "lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)", CGS_ARTIST_UNITY_BRNSHADOWMAPRENDERMANAGER_CPP_FILE, 169);
+        CGS_ASSERT_AT(lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)->GetRenderTarget() != 0,
+                   "lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)->GetRenderTarget()", CGS_ARTIST_UNITY_BRNSHADOWMAPRENDERMANAGER_CPP_FILE, 170);
 
         lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)->SetRenderTargetState(0);
         shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(

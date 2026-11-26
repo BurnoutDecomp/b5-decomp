@@ -1,3 +1,5 @@
+#define CGS_ARTIST_BRNHARDNOGOMAP_H_FILE "..\\..\\..\\GameSource\\World/AI/RacingLine/BrnHardNoGoMap.h"
+#define CGS_ARTIST_UNITY_BRNHARDNOGOMAP_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/RacingLine/BrnHardNoGoMap.cpp"
 #include <xtl.h>
 // BrnAI::HardNoGoMap -- the whole class, reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -380,7 +382,7 @@ void HardNoGoMap::SpreadHNGIntoPreviousSection(f32* lpafStretchDistance)
 // `vmaddfp v0, (right - left), left, interp` == (right - left) * interp + left.
 f32 HardNoGoMap::SectionLength(f32 lfInterp)
 {
-    CGS_ASSERT(mbReady, "Section cannot give length\n");   // BrnHardNoGoMap.cpp:1493
+    CGS_ASSERT_AT(mbReady, "Section cannot give length\n", CGS_ARTIST_UNITY_BRNHARDNOGOMAP_CPP_FILE, 1493);   // BrnHardNoGoMap.cpp:1493
 
     const f32 lfLeftLength  = Distance2D(GetCurrentLeft(),  GetPreviousLeft());
     const f32 lfRightLength = Distance2D(GetCurrentRight(), GetPreviousRight());
@@ -535,9 +537,9 @@ bool HardNoGoMap::DistanceToHardNoGoEdge(Vector2 lPos, f32& lfDistance)
 // pins the parameters to int32_t rather than the pseudocode's unsigned.
 bool HardNoGoMap::MapSquareOccupiedFast(s32 liWidth, s32 liHeight)
 {
-    CGS_ASSERT(mbReady, "Hard No Go Secton not ready\n");
-    CGS_ASSERT(liWidth  >= 0 && liWidth  < KI_HNG_MAP_WIDTH,  "Bad width index ");
-    CGS_ASSERT(liHeight >= 0 && liHeight < KI_HNG_MAP_HEIGHT, "Bad height index ");
+    CGS_ASSERT_AT(mbReady, "Hard No Go Secton not ready\n", CGS_ARTIST_BRNHARDNOGOMAP_H_FILE, 264);
+    CGS_ASSERT_AT(liWidth  >= 0 && liWidth  < KI_HNG_MAP_WIDTH,  "Bad width index ", CGS_ARTIST_BRNHARDNOGOMAP_H_FILE, 265);
+    CGS_ASSERT_AT(liHeight >= 0 && liHeight < KI_HNG_MAP_HEIGHT, "Bad height index ", CGS_ARTIST_BRNHARDNOGOMAP_H_FILE, 266);
 
     // DWARF local BrnHardNoGoMap.h:270. The asm's subf/cntlzw/extrwi tail is the compiler's
     // way of yielding the == comparison as a BOOL.
@@ -569,9 +571,9 @@ bool HardNoGoMap::MapSquareOccupied(s32 liWidth, s32 liHeight)
 // MapSquareOccupiedFast, and the bit set afterwards is unconditional).
 void HardNoGoMap::SetMapSquare(s32 liWidth, s32 liHeight)
 {
-    CGS_ASSERT(liWidth  >= 0 && liWidth  < KI_HNG_MAP_WIDTH,  "Bad Width of ");
-    CGS_ASSERT(liHeight >= 0 && liHeight < KI_HNG_MAP_HEIGHT, "Bad Height of ");
-    CGS_ASSERT(mbReady, "Hard No Go Secton not ready\n");
+    CGS_ASSERT_AT(liWidth  >= 0 && liWidth  < KI_HNG_MAP_WIDTH,  "Bad Width of ", CGS_ARTIST_BRNHARDNOGOMAP_H_FILE, 287);
+    CGS_ASSERT_AT(liHeight >= 0 && liHeight < KI_HNG_MAP_HEIGHT, "Bad Height of ", CGS_ARTIST_BRNHARDNOGOMAP_H_FILE, 288);
+    CGS_ASSERT_AT(mbReady, "Hard No Go Secton not ready\n", CGS_ARTIST_BRNHARDNOGOMAP_H_FILE, 289);
 
     const MapData lMapBit = static_cast<MapData>(1u << liWidth);   // DWARF local, h:291
     mHNGMap[liHeight] |= lMapBit;
@@ -588,7 +590,7 @@ void HardNoGoMap::SetMapSquare(s32 liWidth, s32 liHeight)
 // (x, z): `vrlimi128 v12, v0, 2, 3` drops the 2D y into lane 2 after lane 1 was set to lfHeight.
 Vector3 HardNoGoMap::GetSquareTopLeft(u32 luWidth, u32 luHeight, f32 lfHeight)
 {
-    CGS_ASSERT(mbReady, "Hard No Go Secton not ready");
+    CGS_ASSERT_AT(mbReady, "Hard No Go Secton not ready", CGS_ARTIST_UNITY_BRNHARDNOGOMAP_CPP_FILE, 896);
 
     const f32 lfHeightInterp = static_cast<f32>(luHeight) * KF_HNG_SQUARE_HEIGHT;
     const f32 lfWidthInterp  = static_cast<f32>(luWidth)  * KF_HNG_SQUARE_WIDTH;
@@ -617,7 +619,7 @@ Vector3 HardNoGoMap::GetSquareTopLeft(u32 luWidth, u32 luHeight, f32 lfHeight)
 // bodies is the `addi r8, r26, 1` at 0x827832F0, i.e. (luWidth + 1) / 32.
 Vector3 HardNoGoMap::GetSquareTopRight(u32 luWidth, u32 luHeight, f32 lfHeight)
 {
-    CGS_ASSERT(mbReady, "Hard No Go Secton not ready");
+    CGS_ASSERT_AT(mbReady, "Hard No Go Secton not ready", CGS_ARTIST_UNITY_BRNHARDNOGOMAP_CPP_FILE, 918);
 
     const f32 lfHeightInterp = static_cast<f32>(luHeight)     * KF_HNG_SQUARE_HEIGHT;
     const f32 lfWidthInterp  = static_cast<f32>(luWidth + 1u) * KF_HNG_SQUARE_WIDTH;
@@ -646,7 +648,7 @@ Vector3 HardNoGoMap::GetSquareTopRight(u32 luWidth, u32 luHeight, f32 lfHeight)
 // scale (`fadds f12, f12, f0` / `fadds f13, f13, f0` at 0x827834E8/0x827834EC).
 Vector3 HardNoGoMap::GetSquareCentre(u32 luWidth, u32 luHeight, f32 lfHeight)
 {
-    CGS_ASSERT(mbReady, "Hard No Go Secton not ready");
+    CGS_ASSERT_AT(mbReady, "Hard No Go Secton not ready", CGS_ARTIST_UNITY_BRNHARDNOGOMAP_CPP_FILE, 939);
 
     const f32 lfHeightInterp = (static_cast<f32>(luHeight) + 0.5f) * KF_HNG_SQUARE_HEIGHT;
     const f32 lfWidthInterp  = (static_cast<f32>(luWidth)  + 0.5f) * KF_HNG_SQUARE_WIDTH;
@@ -840,7 +842,7 @@ void HardNoGoMap::ConvertInterpToIndex(f32 lfInterpX, f32 lfInterpY, s32& liWidt
 // A NaN interpolant counts as inside, as the console's compares do.
 void HardNoGoMap::Render(Vector3 lPosition)
 {
-    CGS_ASSERT(mbReady, "Hard No Go Secton not ready for rendering\n");
+    CGS_ASSERT_AT(mbReady, "Hard No Go Secton not ready for rendering\n", CGS_ARTIST_UNITY_BRNHARDNOGOMAP_CPP_FILE, 1033);
 
     const f32 lfHeight = lPosition.mV.y;
 

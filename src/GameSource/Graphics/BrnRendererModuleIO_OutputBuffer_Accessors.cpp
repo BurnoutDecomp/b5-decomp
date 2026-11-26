@@ -140,8 +140,8 @@ BrnEffectsFrame* OutputBuffer::GetBaseEffectsFrame() const
 // ahead of the lock check, then returns mapWorldEffectsFrames[luSlot] (word 10+slot).
 BrnEffectsFrame* OutputBuffer::GetWorldEffectsFrame(u8 luSlot) const
 {
-    CGS_ASSERT(luSlot < 4, "Invalid slot for Fx Layer");
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT_AT(luSlot < 4, "Invalid slot for Fx Layer", CGS_ARTIST_FILE, 563);
+    CGS_ASSERT_AT(IsBufferLockedForReading(), "Not locked for reading", CGS_ARTIST_FILE, 564);
     return mapWorldEffectsFrames[luSlot];
 }
 
@@ -149,8 +149,8 @@ BrnEffectsFrame* OutputBuffer::GetWorldEffectsFrame(u8 luSlot) const
 // ahead of the lock check, then returns mapFXEventsEffectsFrames[luSlot] (word 14+slot).
 BrnEffectsFrame* OutputBuffer::GetFXEventsEffectsFrame(u8 luSlot) const
 {
-    CGS_ASSERT(luSlot < 2, "Invalid slot for Fx Layer");
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT_AT(luSlot < 2, "Invalid slot for Fx Layer", CGS_ARTIST_FILE, 580);
+    CGS_ASSERT_AT(IsBufferLockedForReading(), "Not locked for reading", CGS_ARTIST_FILE, 581);
     return mapFXEventsEffectsFrames[luSlot];
 }
 
@@ -272,8 +272,8 @@ void OutputBuffer::SetBaseEffectsFrame(BrnEffectsFrame* lpFrame)
 // ahead of the lock check, then writes mapWorldEffectsFrames[luSlot] (word 10+slot).
 void OutputBuffer::SetWorldEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame)
 {
-    CGS_ASSERT(luSlot < 4, "Invalid slot for Fx Layer");
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT_AT(luSlot < 4, "Invalid slot for Fx Layer", CGS_ARTIST_FILE, 554);
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing", CGS_ARTIST_FILE, 555);
     mapWorldEffectsFrames[luSlot] = lpFrame;
 }
 
@@ -281,8 +281,8 @@ void OutputBuffer::SetWorldEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame)
 // ahead of the lock check, then writes mapFXEventsEffectsFrames[luSlot] (word 14+slot).
 void OutputBuffer::SetFXEventsEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame)
 {
-    CGS_ASSERT(luSlot < 2, "Invalid slot for Fx Layer");
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT_AT(luSlot < 2, "Invalid slot for Fx Layer", CGS_ARTIST_FILE, 572);
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing", CGS_ARTIST_FILE, 573);
     mapFXEventsEffectsFrames[luSlot] = lpFrame;
 }
 

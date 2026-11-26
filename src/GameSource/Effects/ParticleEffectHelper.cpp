@@ -16,6 +16,7 @@
 // siblings in BoostStateMachine.cpp (SetBlendValue / StopEffects).
 // =============================================================================
 
+#define CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\Particles/ParticleModule.h"
 #include "GameSource/Effects/ParticleEffectHelper.h"
 #include "GameSource/Effects/Particles/ParticleModule.h"   // BrnParticle::ParticleModule, LionEffect
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
@@ -32,8 +33,8 @@ namespace BrnEffects
 void ParticleEffectHelper::SetEffectTransform(u32& lruHandle, const Matrix44Affine& lTransform)
 {
     const u32 luHandle = lruHandle;
-    CGS_ASSERT((luHandle & 0x7Fu) < BrnParticle::ParticleModule::KU_MAX_PLAYING_EFFECTS,
-               "luArrayIndex < KU_MAX_PLAYING_EFFECTS");
+    CGS_ASSERT_AT((luHandle & 0x7Fu) < BrnParticle::ParticleModule::KU_MAX_PLAYING_EFFECTS,
+               "luArrayIndex < KU_MAX_PLAYING_EFFECTS", CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE, 382);
     BrnParticle::LionEffect* lpEffect = ParticleModule().GetLionEffect(luHandle);
     if (lpEffect != NULL)
     {
@@ -54,8 +55,8 @@ void ParticleEffectHelper::SetEffectStateBlend(const u32* lpuHandles, u32 luCoun
     for (u32 lu = 0; lu < luCount; ++lu)
     {
         const u32 luHandle = lpuHandles[lu];
-        CGS_ASSERT((luHandle & 0x7Fu) < BrnParticle::ParticleModule::KU_MAX_PLAYING_EFFECTS,
-                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS");
+        CGS_ASSERT_AT((luHandle & 0x7Fu) < BrnParticle::ParticleModule::KU_MAX_PLAYING_EFFECTS,
+                   "luArrayIndex < KU_MAX_PLAYING_EFFECTS", CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE, 382);
         BrnParticle::LionEffect* lpEffect = lModule.GetLionEffect(luHandle);
         if (lpEffect != NULL)
         {
@@ -74,8 +75,8 @@ void ParticleEffectHelper::SetEffectStateBlend(const u32* lpuHandles, u32 luCoun
 void ParticleEffectHelper::StopEffect(u32& lruHandle)
 {
     BrnParticle::ParticleModule& lModule = ParticleModule();
-    CGS_ASSERT((lruHandle & 0x7Fu) < BrnParticle::ParticleModule::KU_MAX_PLAYING_EFFECTS,
-               "luArrayIndex < KU_MAX_PLAYING_EFFECTS");
+    CGS_ASSERT_AT((lruHandle & 0x7Fu) < BrnParticle::ParticleModule::KU_MAX_PLAYING_EFFECTS,
+               "luArrayIndex < KU_MAX_PLAYING_EFFECTS", CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE, 382);
     BrnParticle::LionEffect* lpEffect = lModule.GetLionEffect(lruHandle);
     if (lpEffect != NULL)
     {

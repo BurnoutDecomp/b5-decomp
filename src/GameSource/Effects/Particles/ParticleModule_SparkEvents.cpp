@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/ParticleModule.cpp"
 #include "GameSource/Effects/Particles/Native/BrnParticleMath.h"
 // =================================================================================================
 // GameSource/Effects/Particles/ParticleModule_SparkEvents.cpp
@@ -280,8 +281,8 @@ namespace BrnParticle
                         const DebrisBatchSpawnEvent::DebrisSpawnData& lrData =
                             lpBatch->maDebris[luRecord];
 
-                        CGS_ASSERT(lrData.meType < Native::eDebrisArray_Max,
-                                   "lDebrisData.meType < BrnParticle::Native::eDebrisArray_Max");
+                        CGS_ASSERT_AT(lrData.meType < Native::eDebrisArray_Max,
+                                   "lDebrisData.meType < BrnParticle::Native::eDebrisArray_Max", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 917);
 
                         maDebris[lrData.meType].SpawnDebris(
                             lrData.mvPositionPlusSize.GetVector3(),
@@ -301,7 +302,7 @@ namespace BrnParticle
                 break;
 
             default:
-                CGS_ASSERT(false, "Unhandled Event");
+                CGS_ASSERT_AT(false, "Unhandled Event", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 938);
                 break;
             }
 
@@ -350,7 +351,7 @@ namespace BrnParticle
     void ParticleModule::HandleSpawnSparksAlongLineEvent(const SpawnSparksAlongLineEvent* lpEvent,
                                                          const ParticleRenderData& lrRenderData)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent != NULL");                  // ParticleModule.cpp:1288
+        CGS_ASSERT_AT(lpEvent != 0, "lpEvent != NULL", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 1288);                  // ParticleModule.cpp:1288
 
         // f27 / f26, hoisted out of both loops by the console exactly as they are here.
         const f32 lfRenderTime = lrRenderData.mfCurrentTime;                             // r18 + 8
@@ -544,8 +545,8 @@ namespace BrnParticle
     void ParticleModule::HandleSpawnSparkShowerFromPointEvent(const SpawnSparkShowerFromPointEvent* lpEvent,
                                                               const ParticleRenderData& lrRenderData)
     {
-        CGS_ASSERT(lpEvent->meSparkType >= 0 && lpEvent->meSparkType < Native::eSparkArray_Max,
-                   "( lpEvent->meSparkType >= 0 ) && ( lpEvent->meSparkType < BrnParticle::Native::eSparkArray_Max )");
+        CGS_ASSERT_AT(lpEvent->meSparkType >= 0 && lpEvent->meSparkType < Native::eSparkArray_Max,
+                   "( lpEvent->meSparkType >= 0 ) && ( lpEvent->meSparkType < BrnParticle::Native::eSparkArray_Max )", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 1190);
 
         const Matrix44Affine& lrFrame = lpEvent->mTransform;
         const f32 lfRenderTime = lrRenderData.mfCurrentTime;                            // f27 (r5 + 8)
@@ -595,7 +596,7 @@ namespace BrnParticle
         lOffsetRandomiser.Prepare(lvOffsetMin, lvOffsetMax);
 
         const u32 luNumToSpawn = lpEvent->muNumToSpawn;
-        CGS_ASSERT(luNumToSpawn > 0, "luNumToSpawn > 0");
+        CGS_ASSERT_AT(luNumToSpawn > 0, "luNumToSpawn > 0", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 1230);
         // fcfid of the zero-extended count, frsp, then (1/60) / count.
         const f32 lfTimeStep = KF_SHOWER_SPAWN_WINDOW / static_cast<f32>(static_cast<f64>(luNumToSpawn));
         f32 lfSpawnTime = lpEvent->mfCurrentTime;                                      // f31
@@ -776,7 +777,7 @@ namespace BrnParticle
 
     void ParticleModule::HandleFireDebrisBurstEvent(const FireDebrisBurstEvent* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "Received a Null Event");
+        CGS_ASSERT_AT(lpEvent != 0, "Received a Null Event", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 1444);
 
         const u8* const lpLayout =
             static_cast<const u8*>(((const Attrib::Instance&)lpEvent->mDebrisParams).GetLayoutPointer());
@@ -814,7 +815,7 @@ namespace BrnParticle
                 lfSizeMax = BurstLayoutF32(lpLayout, KA_DEBRIS_BURST_TYPE_FIELDS[luType].muSizeMax);
                 break;
             default:
-                CGS_ASSERT(false, "Unknown Debris Type in ParticleModule !");
+                CGS_ASSERT_AT(false, "Unknown Debris Type in ParticleModule !", CGS_ARTIST_UNITY_PARTICLEMODULE_CPP_FILE, 1500);
                 break;
             }
 

@@ -655,11 +655,6 @@ void BridgeRaceCarEntityInfoToOutput_PostPhysics(
     CGS_ASSERT(lpOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpWorldOutput != NULL", __FILE__, 402));                                  // :402
     CGS_ASSERT(lpRaceCarOutput_PostPhysics != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarOutputBuffer_PostPhysics != NULL", __FILE__, 403)); // :403
 
-    if (lpOutputBuffer == 0 || lpRaceCarOutput_PostPhysics == 0)
-    {
-        return;
-    }
-
     lpOutputBuffer->SetActiveRaceCarOutputInterface(
         lpRaceCarOutput_PostPhysics->GetActiveRaceCarOutputInterface());
     lpOutputBuffer->SetReplayActiveRaceCarOutputInterface(
@@ -699,11 +694,6 @@ void BridgeRaceCarEntityInfoToOutput_PreScene(
 
     CGS_ASSERT(lpOutputBuffer != 0, "lpWorldOutput != NULL");
     CGS_ASSERT(lpRaceCarOutput_PreScene != 0, "lpRaceCarOutputBuffer_PreScene != NULL");
-
-    if (lpOutputBuffer == 0 || lpRaceCarOutput_PreScene == 0)
-    {
-        return;
-    }
 
     if (lpRaceCarOutput_PreScene->IsRequestingRivalUpdate())
     {
@@ -873,13 +863,7 @@ void BridgePhysicsToOutput(
 {
     (void)lpWorldModule;   // X360 r3 -- never read by this bridge
 
-    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");
-    CGS_ASSERT(lpPhysicsOutputBuffer != 0, "lpPhysicsOutputBuffer != NULL");
-    if (lpOutputBuffer == 0 || lpPhysicsOutputBuffer == 0)
-    {
-        return;   // [PC GUARD] not X360 -- the console has no tripwire here at all.
-    }
-
+    // ARTIST 0x827AEB18 has no pointer tripwires: the body starts with the first copy.
     // ---- leg 1: the VEHICLE-OUTPUT-INTERFACE fan-in --------------------------------------
     // The console's first act, five statements over the two interfaces:
     //     PhysicalTrafficState<20>::Append( dst +0x2620, src +0x2620 )

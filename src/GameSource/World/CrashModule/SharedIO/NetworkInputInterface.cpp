@@ -47,19 +47,19 @@ void NetworkInputInterface::MarkRaceCarForUpdate(s32 liRaceCarId)
 // for update this frame; the event {u16 vehicle id, transform} then goes onto that car's queue.
 void NetworkInputInterface::AddTrafficUpdate(u32 luVehicleIndex, u32 luOwnerRaceCarIndex, Matrix44Affine lTransform)
 {
-    CGS_ASSERT(luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC,
-               "luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
-    CGS_ASSERT(luOwnerRaceCarIndex < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS),
-               "luOwnerRaceCarIndex < (uint32_t) BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+    CGS_ASSERT_AT(luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC,
+               "luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE, 223);
+    CGS_ASSERT_AT(luOwnerRaceCarIndex < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS),
+               "luOwnerRaceCarIndex < (uint32_t) BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE, 224);
 
     const bool lbValid = rw::math::vpu::IsValid(lTransform.xAxis)
                       && rw::math::vpu::IsValid(lTransform.yAxis)
                       && rw::math::vpu::IsValid(lTransform.zAxis)
                       && rw::math::vpu::IsValid(lTransform.wAxis);
-    CGS_ASSERT(lbValid, "rw::math::IsValid( lTransform )");
+    CGS_ASSERT_AT(lbValid, "rw::math::IsValid( lTransform )", CGS_ARTIST_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE, 225);
 
-    CGS_ASSERT(mActiveRaceCars.IsBitSet(luOwnerRaceCarIndex),
-               "You must mark a race car for update before adding vehicles owned by them");
+    CGS_ASSERT_AT(mActiveRaceCars.IsBitSet(luOwnerRaceCarIndex),
+               "You must mark a race car for update before adding vehicles owned by them", CGS_ARTIST_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE, 227);
 
     CrashingTrafficUpdateEvent lEvent;
     lEvent.muVehicleId = static_cast<u16>(luVehicleIndex);

@@ -22,6 +22,7 @@
 // collections off the post-scene input buffer into the near lists the tick above matches its
 // remembered crashes against.
 // =================================================================================================
+#define CGS_ARTIST_UNITY_BRNRACECARENTITYMODULE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include <xboxmath.h>
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
@@ -313,7 +314,7 @@ void RaceCarEntityModule::UpdateTrafficAndRaceCarNearMisses(
     const TrafficInterface::NearMissTrafficCollection* lpNearMissTrafficCollection =
             lpInput->GetTrafficToRaceCarInterface_PreScene()->GetNearMissTrafficCollection();
 
-    CGS_ASSERT( lpNearMissTrafficCollection != 0, "lpNearMissTrafficCollection != NULL" );
+    CGS_ASSERT_AT( lpNearMissTrafficCollection != 0, "lpNearMissTrafficCollection != NULL" , CGS_ARTIST_UNITY_BRNRACECARENTITYMODULE_CPP_FILE, 4538);
 
     const bool lbCountForPowerParking =
             !mbIsInGameMode ||
@@ -334,7 +335,7 @@ void RaceCarEntityModule::UpdateTrafficAndRaceCarNearMisses(
     const TrafficInterface::NearMissRaceCarCollection* lpNearMissRaceCarCollection =
             lpInput->GetTrafficToRaceCarInterface_PreScene()->GetNearMissRaceCarCollection();
 
-    CGS_ASSERT( lpNearMissRaceCarCollection != 0, "lpNearMissRaceCarCollection != NULL" );
+    CGS_ASSERT_AT( lpNearMissRaceCarCollection != 0, "lpNearMissRaceCarCollection != NULL" , CGS_ARTIST_UNITY_BRNRACECARENTITYMODULE_CPP_FILE, 4556);
 
     for( u32 luIndex = 0; luIndex < lpNearMissRaceCarCollection->GetLength(); ++luIndex )
     {

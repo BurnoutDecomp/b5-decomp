@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNCOLLISIONDEBUGCOMPONENT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/DebugComponents/BrnCollisionDebugComponent.cpp"
 #include "GameSource/World/DebugComponents/BrnCollisionDebugComponent.h"
 
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
@@ -99,12 +100,12 @@ u32 CollisionDebugComponent::GetSurfaceRenderColour(u8 luSurfaceId)
     spWorldEntityModule->GetSurface(luSurfaceId, &lSurface);
     const f32 (&laColour)[4] = lSurface.DebugRenderColor();
 
-    CGS_ASSERT(laColour[0] >= 0.0f && laColour[0] <= 1.0f,
-               "lColour.GetX() >= 0.0f && lColour.GetX() <= 1.0f");
-    CGS_ASSERT(laColour[1] >= 0.0f && laColour[1] <= 1.0f,
-               "lColour.GetY() >= 0.0f && lColour.GetY() <= 1.0f");
-    CGS_ASSERT(laColour[2] >= 0.0f && laColour[2] <= 1.0f,
-               "lColour.GetZ() >= 0.0f && lColour.GetZ() <= 1.0f");
+    CGS_ASSERT_AT(laColour[0] >= 0.0f && laColour[0] <= 1.0f,
+               "lColour.GetX() >= 0.0f && lColour.GetX() <= 1.0f", CGS_ARTIST_UNITY_BRNCOLLISIONDEBUGCOMPONENT_CPP_FILE, 529);
+    CGS_ASSERT_AT(laColour[1] >= 0.0f && laColour[1] <= 1.0f,
+               "lColour.GetY() >= 0.0f && lColour.GetY() <= 1.0f", CGS_ARTIST_UNITY_BRNCOLLISIONDEBUGCOMPONENT_CPP_FILE, 530);
+    CGS_ASSERT_AT(laColour[2] >= 0.0f && laColour[2] <= 1.0f,
+               "lColour.GetZ() >= 0.0f && lColour.GetZ() <= 1.0f", CGS_ARTIST_UNITY_BRNCOLLISIONDEBUGCOMPONENT_CPP_FILE, 531);
 
     const u32 luRed = static_cast<u8>(laColour[0] * 255.0f);
     const u32 luGreen = static_cast<u8>(laColour[1] * 255.0f);
@@ -142,9 +143,9 @@ u32 CollisionDebugComponent::GetFlagsRenderColour(CollisionTag lCollisionTag)
 u32 CollisionDebugComponent::GetPolyColour(CollisionTag lCollisionTag,
                                             s32 liPolyIndex)
 {
-    CGS_ASSERT(siDrawMode >= E_DRAWMODE_SURFACES &&
+    CGS_ASSERT_AT(siDrawMode >= E_DRAWMODE_SURFACES &&
                    siDrawMode < E_DRAWMODE_COUNT,
-               "leDrawMode >= 0 && leDrawMode < E_DRAWMODE_COUNT");
+               "leDrawMode >= 0 && leDrawMode < E_DRAWMODE_COUNT", CGS_ARTIST_UNITY_BRNCOLLISIONDEBUGCOMPONENT_CPP_FILE, 321);
 
     switch (siDrawMode)
     {
@@ -190,7 +191,7 @@ u32 CollisionDebugComponent::GetPolyColour(CollisionTag lCollisionTag,
     case E_DRAWMODE_DRIVABLE:
         return lCollisionTag.IsDrivable() ? 0x20006400u : 0x20000064u;
     default:
-        CGS_ASSERT(false, "\nInvalid collision draw mode");
+        CGS_ASSERT_AT(false, "\nInvalid collision draw mode", CGS_ARTIST_UNITY_BRNCOLLISIONDEBUGCOMPONENT_CPP_FILE, 437);
         return 0;
     }
 }

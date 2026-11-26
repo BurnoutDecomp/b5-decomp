@@ -192,9 +192,9 @@ void Param::Initialise(u32 luHullIndex,
 void Param::SetParamAlong(f32 lfParamAlong)
 {
     // X360: RwMath::IsValid (vcmpeqfp self-compare == not-NaN), then range asserts.
-    CGS_ASSERT(lfParamAlong == lfParamAlong, "RwMath::IsValid( lfParamAlong )");
-    CGS_ASSERT(lfParamAlong >= 0.0f, "lfParamAlong >= 0.0f");
-    CGS_ASSERT(lfParamAlong < 256.0f, "lfParamAlong < 256.0f");
+    CGS_ASSERT_AT(lfParamAlong == lfParamAlong, "RwMath::IsValid( lfParamAlong )", KAC_ARTIST_ASSERT_FILE, 508);
+    CGS_ASSERT_AT(lfParamAlong >= 0.0f, "lfParamAlong >= 0.0f", KAC_ARTIST_ASSERT_FILE, 509);
+    CGS_ASSERT_AT(lfParamAlong < 256.0f, "lfParamAlong < 256.0f", KAC_ARTIST_ASSERT_FILE, 510);
 
     mfParamAlong = lfParamAlong;
     // asm: fctidz (truncate-toward-zero to int64) then store the low byte.
@@ -428,8 +428,8 @@ Vector3 ParamTransform::CalcUp() const
     const Vector3 lDirection = GetDirection();
     const Vector3 lRight     = GetRight();
 
-    CGS_ASSERT(!rw::math::vpu::IsZero(lDirection - lRight),
-               "!IsSimilar( GetDirection(), GetRight() )");
+    CGS_ASSERT_AT(!rw::math::vpu::IsZero(lDirection - lRight),
+               "!IsSimilar( GetDirection(), GetRight() )", KAC_ARTIST_ASSERT_FILE, 592);
 
     return rw::math::vpu::Normalize(rw::math::vpu::Cross(GetRight(), GetDirection()));
 }
@@ -443,7 +443,7 @@ VecFloat ParamTransform::GetSpeed() const
 {
     const f32 lfSpeed = mLerpedPosAndSpeed.GetPlus();
 
-    CGS_ASSERT(lfSpeed == lfSpeed, "RwMath::IsValid( mLerpedPosAndSpeed.GetPlus() )");
+    CGS_ASSERT_AT(lfSpeed == lfSpeed, "RwMath::IsValid( mLerpedPosAndSpeed.GetPlus() )", KAC_ARTIST_ASSERT_FILE, 604);
 
     { const VecFloat lResult(lfSpeed); return lResult; }
 }
@@ -526,15 +526,15 @@ Vector3 ParamTransform::GetDirection() const
 // vector store and the plus store are two separate writes to mLerpedPosAndSpeed.
 void ParamTransform::UpdateLerpedPosition(VecFloat lfSimTimeStep)
 {
-    CGS_ASSERT(rw::math::vpu::IsValid(mLerpedPosAndSpeed.GetVector3()),
-               "RwMath::IsValid( mLerpedPosAndSpeed.GetVector3() )");
-    CGS_ASSERT(mLerpedPosAndSpeed.GetPlus() == mLerpedPosAndSpeed.GetPlus(),
-               "RwMath::IsValid( mLerpedPosAndSpeed.GetPlus() )");
-    CGS_ASSERT(rw::math::vpu::IsValid(mDirAndAccel.GetVector3()),
-               "RwMath::IsValid( mDirAndAccel.GetVector3() )");
-    CGS_ASSERT(mDirAndAccel.GetPlus() == mDirAndAccel.GetPlus(),
-               "RwMath::IsValid( mDirAndAccel.GetPlus() )");
-    CGS_ASSERT(lfSimTimeStep.GetFloat() == lfSimTimeStep.GetFloat(), "RwMath::IsValid( lfSimTimeStep )");
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(mLerpedPosAndSpeed.GetVector3()),
+               "RwMath::IsValid( mLerpedPosAndSpeed.GetVector3() )", KAC_ARTIST_ASSERT_FILE, 633);
+    CGS_ASSERT_AT(mLerpedPosAndSpeed.GetPlus() == mLerpedPosAndSpeed.GetPlus(),
+               "RwMath::IsValid( mLerpedPosAndSpeed.GetPlus() )", KAC_ARTIST_ASSERT_FILE, 634);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(mDirAndAccel.GetVector3()),
+               "RwMath::IsValid( mDirAndAccel.GetVector3() )", KAC_ARTIST_ASSERT_FILE, 635);
+    CGS_ASSERT_AT(mDirAndAccel.GetPlus() == mDirAndAccel.GetPlus(),
+               "RwMath::IsValid( mDirAndAccel.GetPlus() )", KAC_ARTIST_ASSERT_FILE, 636);
+    CGS_ASSERT_AT(lfSimTimeStep.GetFloat() == lfSimTimeStep.GetFloat(), "RwMath::IsValid( lfSimTimeStep )", KAC_ARTIST_ASSERT_FILE, 637);
 
     const f32 lfStep     = lfSimTimeStep.GetFloat();
     const f32 lfAccelled = mLerpedPosAndSpeed.GetPlus() + mDirAndAccel.GetPlus() * lfStep;
@@ -551,14 +551,14 @@ void ParamTransform::UpdateLerpedPosition(VecFloat lfSimTimeStep)
 void ParamTransform::Update(Vector3 lPos, Vector3 lDir, Vector3 lRight,
                             VecFloat lfSpeed, VecFloat lfAcceleration)
 {
-    CGS_ASSERT(rw::math::vpu::IsValid(lPos),   "RwMath::IsValid( lPos )");
-    CGS_ASSERT(rw::math::vpu::IsValid(lDir),   "RwMath::IsValid( lDir )");
-    CGS_ASSERT(rw::math::vpu::IsValid(lRight), "RwMath::IsValid( lRight )");
-    CGS_ASSERT(lfSpeed.GetFloat() == lfSpeed.GetFloat(),
-               "RwMath::IsValid( lfSpeed )");
-    CGS_ASSERT(lfAcceleration.GetFloat() == lfAcceleration.GetFloat(),
-               "RwMath::IsValid( lfAcceleration )");
-    CGS_ASSERT(rw::math::vpu::IsValid(mPos), "RwMath::IsValid( mPos )");
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lPos),   "RwMath::IsValid( lPos )", KAC_ARTIST_ASSERT_FILE, 693);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lDir),   "RwMath::IsValid( lDir )", KAC_ARTIST_ASSERT_FILE, 694);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lRight), "RwMath::IsValid( lRight )", KAC_ARTIST_ASSERT_FILE, 695);
+    CGS_ASSERT_AT(lfSpeed.GetFloat() == lfSpeed.GetFloat(),
+               "RwMath::IsValid( lfSpeed )", KAC_ARTIST_ASSERT_FILE, 696);
+    CGS_ASSERT_AT(lfAcceleration.GetFloat() == lfAcceleration.GetFloat(),
+               "RwMath::IsValid( lfAcceleration )", KAC_ARTIST_ASSERT_FILE, 697);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(mPos), "RwMath::IsValid( mPos )", KAC_ARTIST_ASSERT_FILE, 700);
 
     mLerpedPosAndSpeed.SetVector3(mPos);
     mLerpedPosAndSpeed.SetPlus(lfSpeed.GetFloat());

@@ -10,6 +10,8 @@
 //   Recalculate                (@0x82789708) -- reverse pass: rebuild the tables as
 //                                               time-remaining from the live totals.
 
+#define CGS_ARTIST_AISECTIONSDATA_H_FILE "..\\..\\..\\SharedClasses\\AI/AISectionsData.h"
+#define CGS_ARTIST_UNITY_BRNRACEBALANCINGROUTE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/RaceBalancing/BrnRaceBalancingRoute.cpp"
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingRoute.h"
 
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingGraph.h" // ComputeSpeedRatio
@@ -115,7 +117,7 @@ f32 RaceBalancingRoute::GetAISectionSpeed(const AISection* lpAISection,
                                           f32 lfSpeedRatio)
 {
     const u32 luSpeed = lpAISection->muSpeed;
-    CGS_ASSERT(luSpeed < E_SECTION_SPEED_COUNT, "muSpeed < E_SECTION_SPEED_COUNT");
+    CGS_ASSERT_AT(luSpeed < E_SECTION_SPEED_COUNT, "muSpeed < E_SECTION_SPEED_COUNT", CGS_ARTIST_AISECTIONSDATA_H_FILE, 907);
 
     // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): `fsubs f13, max, min ; fmadds f1, f13,
     // f31 (ratio), f0 (min)` @0x8276980C/0x82769810 -- the rubber band's par-speed lerp is ONE rounding
@@ -215,8 +217,8 @@ bool RaceBalancingRoute::Recalculate(const AISectionsData* lpAISectionsData,
                                      const RaceBalancingGraph* lpRaceBalancingGraph,
                                      const Route* lpRoute, s32 liCheckpointCount)
 {
-    CGS_ASSERT(mfDistance != 0.0f, "mfDistance != 0.0f");
-    CGS_ASSERT(lpRoute->GetNodeCount() > 0, "lpRoute->GetNodeCount() > 0");
+    CGS_ASSERT_AT(mfDistance != 0.0f, "mfDistance != 0.0f", CGS_ARTIST_UNITY_BRNRACEBALANCINGROUTE_CPP_FILE, 117);
+    CGS_ASSERT_AT(lpRoute->GetNodeCount() > 0, "lpRoute->GetNodeCount() > 0", CGS_ARTIST_UNITY_BRNRACEBALANCINGROUTE_CPP_FILE, 118);
 
     // Seed the running totals from the current tables' end (take-down biased).
     f32 lfAheadTime = (miTimeCount > 0)
@@ -241,8 +243,8 @@ bool RaceBalancingRoute::Recalculate(const AISectionsData* lpAISectionsData,
         const RouteNode* lpPrevNode = lpRoute->GetNode(liNode);
 
         const u32 luSectionIndex = lpNode->GetSectionIndex();
-        CGS_ASSERT(luSectionIndex < lpAISectionsData->muNumSections,
-                   "luSectionIndex < muNumSections");
+        CGS_ASSERT_AT(luSectionIndex < lpAISectionsData->muNumSections,
+                   "luSectionIndex < muNumSections", CGS_ARTIST_AISECTIONSDATA_H_FILE, 1201);
         const AISection* lpSection = lpAISectionsData->GetAISection(luSectionIndex);
 
         const f32 lfSegment = ComputeSegmentDistance(lpPrevNode->GetX(), lpPrevNode->GetY(),

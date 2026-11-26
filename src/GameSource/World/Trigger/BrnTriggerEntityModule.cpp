@@ -87,13 +87,13 @@ void TriggerEntityModule::Construct()
 {
     ModuleSingleBuffered::Construct();
 
-    meReleaseStage = E_RELEASESTAGE_DONE;   // *(this+556) = 2
     mePrepareStage = E_PREPARESTAGE_START;  // *(this+552) = 0
+    meReleaseStage = E_RELEASESTAGE_DONE;   // *(this+556) = 2
 
     mTriggerEntityModuleDebugComponent.Construct(this);
 
-    // X360 zeroes the 512-bit used-trigger set with an unrolled 8 * std-qword store loop.
-    mUsedTriggerList.UnSetAll();
+    // BitArray::Construct clears the 512-bit used-trigger set (ARTIST: an 8 * std-qword loop).
+    mUsedTriggerList.Construct();
 
     // X360: *(this+4) = 1 -- the base ModuleSingleBuffered "new module" flag (mbIsNewModule),
     // set true so Prepare()/Release() skip the (un)allocation of input/output data structures

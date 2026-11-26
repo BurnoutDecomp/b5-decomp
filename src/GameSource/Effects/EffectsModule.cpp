@@ -1,3 +1,6 @@
+#define CGS_ARTIST_UNITY_EFFECTSMODULE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/EffectsModule.cpp"
+#define CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\Particles/ParticleModule.h"
+#define CGS_ARTIST_CGSMODULEIOHELPER_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h"
 #include "GameSource/Effects/EffectsModule.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 
@@ -1045,7 +1048,7 @@ void EffectsModule::PostWorldPreparePrepare()
         const f32 KF_EPSILON = 1.1920929e-07f;   // unk_8200D990 (FLT_EPSILON splat)
         const bool lbAnyLane = std::fabs(lpfLeading[0]) > KF_EPSILON || std::fabs(lpfLeading[1]) > KF_EPSILON
                             || std::fabs(lpfLeading[2]) > KF_EPSILON || std::fabs(lpfLeading[3]) > KF_EPSILON;
-        CGS_ASSERT(lbAnyLane, "Surface list appears to be corrupt");   // EffectsModule.cpp:573
+        CGS_ASSERT_AT(lbAnyLane, "Surface list appears to be corrupt", CGS_ARTIST_UNITY_EFFECTSMODULE_CPP_FILE, 573);   // EffectsModule.cpp:573
         (void)lbAnyLane;
     }
 
@@ -1885,10 +1888,10 @@ void EffectsModule::HandleConvoySlipStream(f32 lfBlend, u32 luUnused,
     }
 
     const u32 luHandle = muSlipStreamEffectHandle;
-    CGS_ASSERT((luHandle & 0x7Fu) < BrnParticle::ParticleModule::KU_MAX_PLAYING_EFFECTS,
-               "luArrayIndex < KU_MAX_PLAYING_EFFECTS");
+    CGS_ASSERT_AT((luHandle & 0x7Fu) < BrnParticle::ParticleModule::KU_MAX_PLAYING_EFFECTS,
+               "luArrayIndex < KU_MAX_PLAYING_EFFECTS", CGS_ARTIST_ABS_PARTICLEMODULE_H_FILE, 382);
     BrnParticle::LionEffect* lpEffect = mParticleModule.GetLionEffect(luHandle);
-    CGS_ASSERT(lpEffect != 0, "Lion Effect is NULL when it shouldn't be (SlipStream Effect)");
+    CGS_ASSERT_AT(lpEffect != 0, "Lion Effect is NULL when it shouldn't be (SlipStream Effect)", CGS_ARTIST_UNITY_EFFECTSMODULE_CPP_FILE, 2845);
 
     lpEffect->mTransform = lrTransform;
     const f32 lfClampedBlend = (lfBlend >= 1.0f) ? 1.0f : lfBlend;   // fsel(blend - 1, 1, blend)
@@ -1914,7 +1917,7 @@ void EffectsModule::GenerateDispatchLists(CgsModule::IOBufferStack* lpInputBuffe
 
     ParticleDispatchInput* lpParticleInput = 0;
     const bool lbCreated = lpInputBufferStack->CreateIOBuffer(&lpParticleInput, "Particles");
-    CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");   // CgsModuleIOHelper.h:52
+    CGS_ASSERT_AT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )", CGS_ARTIST_CGSMODULEIOHELPER_H_FILE, 52);   // CgsModuleIOHelper.h:52
     (void)lbCreated;
 
         lpParticleInput->SetDispatchFrame(lpDispatchInputBuffer->GetDispatchFrame());         // +0x10 -> +0x04
@@ -1931,7 +1934,7 @@ void EffectsModule::GenerateDispatchLists(CgsModule::IOBufferStack* lpInputBuffe
     lpParticleInput->UnlockForRead();
 
     const bool lbDestroyed = lpInputBufferStack->DestroyIOBuffer(&lpParticleInput);
-    CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");   // CgsModuleIOHelper.h:57
+    CGS_ASSERT_AT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )", CGS_ARTIST_CGSMODULEIOHELPER_H_FILE, 57);   // CgsModuleIOHelper.h:57
     (void)lbDestroyed;
 
     // Publish the particle inputs on the producer. Their consumption belongs
@@ -1951,7 +1954,7 @@ void EffectsModule::PreRenderUpdate(BrnGame::DispatchThreadInputBuffer* lpDispat
 // ARTIST 0x8227FE88: only the dispatch owner consumes particle events/jobs.
 void EffectsModule::DispatchThreadUpdate(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
 {
-    CGS_ASSERT(lpDispatchThreadInputBuffer != 0, "lpDispatchThreadInputBuffer != NULL");
+    CGS_ASSERT_AT(lpDispatchThreadInputBuffer != 0, "lpDispatchThreadInputBuffer != NULL", CGS_ARTIST_UNITY_EFFECTSMODULE_CPP_FILE, 1286);
     lpDispatchThreadInputBuffer->LockForRead();
     mParticleModule.DispatchThreadUpdate(lpDispatchThreadInputBuffer);
     lpDispatchThreadInputBuffer->UnlockForRead();
@@ -3213,10 +3216,10 @@ void EffectsModule::BurstAreaEmitParticles(Vector3* lpCorners,
     // `fcmpu f30, f31 ; bge` (0x822921AC / 0x822921B0): `bge` is TAKEN on an unordered compare, so a NaN size SKIPS
     // this assert. CORRECTED 2026-09-25 (FX-CRASHVFX, REVIEW-I on 2f19433e): it read `lfSizeMax >= lfSizeMin`, which
     // a NaN fires. The three below are `bgt`, not taken on a NaN, so a NaN fires them, as written.
-    CGS_ASSERT(!(lfSizeMax < lfSizeMin), "lfSizeMax >= lfSizeMin");
-    CGS_ASSERT(lfSizeMin > 0.0f, "lfSizeMin > 0.0f");
-    CGS_ASSERT(lfSizeMax > 0.0f, "lfSizeMax > 0.0f");
-    CGS_ASSERT(lfParticleDensity > 0.0f, "lfParticleDensity > 0.0f");
+    CGS_ASSERT_AT(!(lfSizeMax < lfSizeMin), "lfSizeMax >= lfSizeMin", CGS_ARTIST_UNITY_EFFECTSMODULE_CPP_FILE, 2732);
+    CGS_ASSERT_AT(lfSizeMin > 0.0f, "lfSizeMin > 0.0f", CGS_ARTIST_UNITY_EFFECTSMODULE_CPP_FILE, 2733);
+    CGS_ASSERT_AT(lfSizeMax > 0.0f, "lfSizeMax > 0.0f", CGS_ARTIST_UNITY_EFFECTSMODULE_CPP_FILE, 2734);
+    CGS_ASSERT_AT(lfParticleDensity > 0.0f, "lfParticleDensity > 0.0f", CGS_ARTIST_UNITY_EFFECTSMODULE_CPP_FILE, 2735);
 
     const Vector3 lCornerA = lpCorners[0];
     const Vector3 lCornerB = lpCorners[1];
@@ -3907,7 +3910,7 @@ void EffectsModule::OnAttribEdit(const Attrib::Collection*, u64)
 
 bool EffectsModule::JunkyardVfxReadLine(const char* label, char* output, s32 capacity, const char** cursor)
 {
-    CGS_ASSERT(label != NULL && label[0] != '\0', "( lpacLabel != NULL ) && ( lpacLabel[0] != '\\0' )");
+    CGS_ASSERT_AT(label != NULL && label[0] != '\0', "( lpacLabel != NULL ) && ( lpacLabel[0] != '\\0' )", CGS_ARTIST_UNITY_EFFECTSMODULE_CPP_FILE, 2455);
     const s32 labelLength = static_cast<s32>(strlen(label));
     for (;;)
     {
@@ -3984,7 +3987,7 @@ f32 EffectsModule::JunkyardVfxStringToFloat(const char* text)
             factor *= 0.1f;
         }
     }
-    CGS_ASSERT(*text == '\0', "*lpcChar == '\\0'");
+    CGS_ASSERT_AT(*text == '\0', "*lpcChar == '\\0'", CGS_ARTIST_UNITY_EFFECTSMODULE_CPP_FILE, 2567);
     return result * sign;
 }
 

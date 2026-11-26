@@ -77,11 +77,6 @@ namespace WorldModule
         CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleInputBuffer != NULL", __FILE__, 40));  // :40
         CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpSceneModuleOutputBuffer != NULL", __FILE__, 41));   // :41
 
-        if (lpPhysicsModuleInputBuffer == 0 || lpSceneModuleOutputBuffer == 0)
-        {
-            return;
-        }
-
         const CgsSceneManager::SceneManagerIO::OutputBuffer::SceneQueryResultsQueue* lpQueryResults =
             lpSceneModuleOutputBuffer->GetSceneQueryResultsQueue();
         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface =

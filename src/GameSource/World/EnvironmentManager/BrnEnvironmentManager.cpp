@@ -125,7 +125,7 @@ bool EnvironmentManager::Pause(bool lbPause)
     {
         if (!lbPause)
         {
-            CGS_ASSERT(meBlendMode == E_BLENDMODE_PAUSED, "Tyring to unpause a blocking op");
+            CGS_ASSERT_AT(meBlendMode == E_BLENDMODE_PAUSED, "Tyring to unpause a blocking op", KAC_ARTIST_ASSERT_FILE, 636);
             meBlendMode = meBlendModePaused;
         }
         return true;
@@ -159,7 +159,7 @@ bool EnvironmentManager::UpdateFromTool(bool lbPause)
     {
         if (!lbPause)
         {
-            CGS_ASSERT(meBlendMode == KE_BLENDMODE_TOOL_BLOCKING, "Tyring to unpause a blocking op");
+            CGS_ASSERT_AT(meBlendMode == KE_BLENDMODE_TOOL_BLOCKING, "Tyring to unpause a blocking op", KAC_ARTIST_ASSERT_FILE, 675);
             meBlendMode = meBlendModePaused;
         }
         return true;
@@ -891,7 +891,7 @@ Vector3 EnvironmentManager::CalcKeyLightDirection() const
 // to the camera.
 void EnvironmentManager::EnableJunkyardLightingSetup()
 {
-    CGS_ASSERT(!mbJunkyardLightingSetup, "!mbJunkyardLightingSetup");
+    CGS_ASSERT_AT(!mbJunkyardLightingSetup, "!mbJunkyardLightingSetup", KAC_ARTIST_ASSERT_FILE, 1828);
 
     mfTimeBeforeEnteringJunkyard = mfTimeOfDay;
 
@@ -1287,11 +1287,11 @@ bool EnvironmentManager::SetupBlend( BlendFrame& lrBlendFrame, f32 lfTimeStep,
 
                 if ( miOverrideCurrentSeason != miOverrideNextSeason )
                 {
-                    CGS_ASSERT( miOverrideNextSeason > 0, "miOverrideNextSeason > 0" );
-                    CGS_ASSERT( miOverrideNextSeason
+                    CGS_ASSERT_AT( miOverrideNextSeason > 0, "miOverrideNextSeason > 0" , KAC_ARTIST_ASSERT_FILE, 1420);
+                    CGS_ASSERT_AT( miOverrideNextSeason
                                     <= static_cast<s32>( mDictionaryPtr.GetMemoryResource()->muSeasonCnt ),
                                 "miOverrideNextSeason <= (int32_t)((const Dictionary*)"
-                                "mDictionaryPtr.GetMemoryResource())->muSeasonCnt" );
+                                "mDictionaryPtr.GetMemoryResource())->muSeasonCnt" , KAC_ARTIST_ASSERT_FILE, 1421);
                     miOverrideCurrentSeason = miOverrideNextSeason;
                 }
                 else if ( SetupTimeOfDayBlend( lrBlendFrame, lpOutput, lfTimeStep ) )
@@ -1330,7 +1330,7 @@ bool EnvironmentManager::SetupBlend( BlendFrame& lrBlendFrame, f32 lfTimeStep,
 
         if ( luRetries++ >= 2u )
         {
-            CGS_ASSERT( false, "Incorrect time keys fed to the environment manager" );
+            CGS_ASSERT_AT( false, "Incorrect time keys fed to the environment manager" , KAC_ARTIST_ASSERT_FILE, 1455);
         }
     }
 }

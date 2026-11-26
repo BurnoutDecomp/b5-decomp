@@ -1,3 +1,4 @@
+#define CGS_ARTIST_ABS_BRNWORLDENTITYREQUESTINTERFACE_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\SharedIO/BrnWorldEntityRequestInterface.h"
 #include "GameSource/World/EntityModules/WorldEntityModule/SharedIO/BrnWorldEntityRequestInterface.h"
 
 #include <cstddef>   // offsetof
@@ -33,8 +34,8 @@ namespace WorldEntityIO
                       "mbValidateCollisionWorld @1");
 
         // X360 0x823A7DC8: cannot invalidate while a validate request is pending.
-        CGS_ASSERT(!mbValidateCollisionWorld,
-                   "Can not invalidate collision world when already validating!");
+        CGS_ASSERT_AT(!mbValidateCollisionWorld,
+                   "Can not invalidate collision world when already validating!", CGS_ARTIST_ABS_BRNWORLDENTITYREQUESTINTERFACE_H_FILE, 85);
         mbInvalidateCollisionWorld = true;
     }
 
@@ -42,8 +43,8 @@ namespace WorldEntityIO
     {
         // X360 0x823A7E70: cannot validate while an invalidate request is pending. (The X360
         // streams the same message text as InvalidateCollisionWorld; line 92.)
-        CGS_ASSERT(!mbInvalidateCollisionWorld,
-                   "Can not invalidate collision world when already validating!");
+        CGS_ASSERT_AT(!mbInvalidateCollisionWorld,
+                   "Can not invalidate collision world when already validating!", CGS_ARTIST_ABS_BRNWORLDENTITYREQUESTINTERFACE_H_FILE, 92);
         mbValidateCollisionWorld = true;
     }
 

@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNROUTE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/Route/BrnRoute.cpp"
 #include "BrnRoute.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT + Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (default-node miss message)
@@ -99,7 +100,7 @@ void Route::Construct(const Route* lpSource)
 bool Route::Prepare(s32 liDefaultStartNode)
 {
     // Top guard (lwz 0x1408; bne skips the assert).
-    CGS_ASSERT(meStatus != E_STATUS_UNINITIALISED, "meStatus != E_STATUS_UNINITIALISED");
+    CGS_ASSERT_AT(meStatus != E_STATUS_UNINITIALISED, "meStatus != E_STATUS_UNINITIALISED", CGS_ARTIST_UNITY_BRNROUTE_CPP_FILE, 68);
 
     const s32 liNodeCount = miNodeCount;
 

@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_LIONPARTICLERENDER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/LionParticleRender.cpp"
 #include <xtl.h>
 #include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 // ============================================================================
@@ -602,11 +603,11 @@ void LionParticleRender::SetMaterial(const cParticleMaterial* apMaterial)
 {
     if (apMaterial == 0)
     {
-        CGS_ASSERT(apMaterial, "apMaterial");
+        CGS_ASSERT_AT(apMaterial, "apMaterial", CGS_ARTIST_UNITY_LIONPARTICLERENDER_CPP_FILE, 384);
         return;
     }
 
-    CGS_ASSERT(mpCurrentRenderer != 0, "mpCurrentRenderer != NULL");
+    CGS_ASSERT_AT(mpCurrentRenderer != 0, "mpCurrentRenderer != NULL", CGS_ARTIST_UNITY_LIONPARTICLERENDER_CPP_FILE, 392);
     BrnGraphics::LionBlendRenderer* lpRenderer = mpCurrentRenderer;
 
     // Resolve + bind the material's texture (only touch the device when it changes).
@@ -692,7 +693,7 @@ void LionParticleRender::TextureRegister(cParticleMaterial* apMaterial, char* ap
 void LionParticleRender::AcquireTexture(U32 /*auTextureMapHandle*/,
                                         CgsResource::SafeResourceHandle<renderengine::Texture> aTexture)
 {
-    CGS_ASSERT(siTextureCount < static_cast<s32>(KU_MAX_PARTICLE_TEXTURES), "Too many textures");
+    CGS_ASSERT_AT(siTextureCount < static_cast<s32>(KU_MAX_PARTICLE_TEXTURES), "Too many textures", CGS_ARTIST_UNITY_LIONPARTICLERENDER_CPP_FILE, 483);
     saTextures[siTextureCount] = aTexture;
     ++siTextureCount;
 }

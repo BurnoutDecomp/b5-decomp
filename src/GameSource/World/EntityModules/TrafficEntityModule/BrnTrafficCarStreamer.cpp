@@ -411,15 +411,15 @@ void TrafficCarStreamer::OnUnloadBegin( s32 liListIndex )
 void TrafficCarStreamer::OnLoadComplete( const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent,
                                          s32 liListIndex )
 {
-    CGS_ASSERT( lpEvent != 0, "lpEvent" );
+    CGS_ASSERT_AT( lpEvent != 0, "lpEvent" , KAC_ARTIST_ASSERT_FILE, 382);
 
     const u64 luAsset = GetUserId( liListIndex );
-    CGS_ASSERT( luAsset < muNumAssets, "luAsset < muNumAssets" );
+    CGS_ASSERT_AT( luAsset < muNumAssets, "luAsset < muNumAssets" , KAC_ARTIST_ASSERT_FILE, 385);
 
-    CGS_ASSERT( mauLoadStates[luAsset] == E_LOADSTATE_LOAD_STARTED,
-                "Traffic asset was in the wrong state when finished loading" );
-    CGS_ASSERT( CgsResource::NULLResourcePtr.IsEqual( &maGraphicsStubs[luAsset] ),
-                "Loading a traffic asset which already has a resource" );
+    CGS_ASSERT_AT( mauLoadStates[luAsset] == E_LOADSTATE_LOAD_STARTED,
+                "Traffic asset was in the wrong state when finished loading" , KAC_ARTIST_ASSERT_FILE, 387);
+    CGS_ASSERT_AT( CgsResource::NULLResourcePtr.IsEqual( &maGraphicsStubs[luAsset] ),
+                "Loading a traffic asset which already has a resource" , KAC_ARTIST_ASSERT_FILE, 388);
 
     mauLoadStates[luAsset] = E_LOADSTATE_LOADED;
 
@@ -427,8 +427,8 @@ void TrafficCarStreamer::OnLoadComplete( const BrnResource::GameDataIO::GameData
         static_cast< const BrnResource::GameDataIO::GetTrafficVehicleGraphicsResponse* >( lpEvent );
     maGraphicsStubs[luAsset] = lpResponse->GetTrafficVehicleGraphicsObjectHandle();
 
-    CGS_ASSERT( !CgsResource::NULLResourcePtr.IsEqual( &maGraphicsStubs[luAsset] ),
-                "Didn't get a resource back after loading a traffic asset" );
+    CGS_ASSERT_AT( !CgsResource::NULLResourcePtr.IsEqual( &maGraphicsStubs[luAsset] ),
+                "Didn't get a resource back after loading a traffic asset" , KAC_ARTIST_ASSERT_FILE, 395);
 }
 
 
@@ -442,10 +442,10 @@ void TrafficCarStreamer::OnUnloadComplete( const BrnResource::GameDataIO::Unload
     (void)lpEvent;   // the console reads nothing out of it
 
     const u64 luAsset = GetUserId( liListIndex );
-    CGS_ASSERT( luAsset < muNumAssets, "luAsset < muNumAssets" );
+    CGS_ASSERT_AT( luAsset < muNumAssets, "luAsset < muNumAssets" , KAC_ARTIST_ASSERT_FILE, 413);
 
-    CGS_ASSERT( mauLoadStates[luAsset] == E_LOADSTATE_UNLOAD_STARTED,
-                "Traffic asset was in the wrong state when finished unloading" );
+    CGS_ASSERT_AT( mauLoadStates[luAsset] == E_LOADSTATE_UNLOAD_STARTED,
+                "Traffic asset was in the wrong state when finished unloading" , KAC_ARTIST_ASSERT_FILE, 415);
 
     mauLoadStates[luAsset] = E_LOADSTATE_NOT_LOADED;
 }

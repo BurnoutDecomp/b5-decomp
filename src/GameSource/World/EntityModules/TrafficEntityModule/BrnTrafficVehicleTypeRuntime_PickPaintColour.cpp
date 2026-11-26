@@ -1,3 +1,4 @@
+#define CGS_ARTIST_ABS_BRNTRAFFICVEHICLETYPERUNTIME_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficVehicleTypeRuntime.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h"
 
 #include <cstddef>   // offsetof, for the never-called _AssertLayout pin below
@@ -51,9 +52,9 @@ Vector4 VehicleTypeRuntime::PickPaintColourForVehicle(u32 luSeed,
                                                       s32 liNumAvailableColours,
                                                       const Vector4* lpaPaintColours) const
 {
-    CGS_ASSERT(lpaPaintColours != 0, "lpaPaintColours");
+    CGS_ASSERT_AT(lpaPaintColours != 0, "lpaPaintColours", CGS_ARTIST_ABS_BRNTRAFFICVEHICLETYPERUNTIME_H_FILE, 134);
 
-    CGS_ASSERT(miNumPaintColours != 0, "miNumPaintColours != 0");
+    CGS_ASSERT_AT(miNumPaintColours != 0, "miNumPaintColours != 0", CGS_ARTIST_ABS_BRNTRAFFICVEHICLETYPERUNTIME_H_FILE, 135);
 
     const u32 luCount = static_cast<u32>(miNumPaintColours);   // (s8)->extsb, then unsigned
     const u32 luWhich = luSeed % luCount;

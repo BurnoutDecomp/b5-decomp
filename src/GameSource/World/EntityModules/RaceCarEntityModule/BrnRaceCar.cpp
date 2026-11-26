@@ -339,8 +339,10 @@ void RaceCar::UpdatePositioningData(const Matrix44Affine& lTransform, CgsWorld::
 // ----------------------------------------------------------------------------
 void RaceCar::UpdateVelocity(Vector3 lVelocity)
 {
-    CGS_ASSERT(IsInWorld(), "IsInWorld()");
-    CGS_ASSERT(rw::math::vpu::IsValid(lVelocity), "RwMath::IsValid( lVelocity )");
+    // Header-inline in the original: ARTIST bakes BrnRaceCar.h:682/683 (0x822B3E48/0x822B3ECC).
+    CGS_ASSERT(IsInWorld(), CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 682));
+    CGS_ASSERT(rw::math::vpu::IsValid(lVelocity),
+               CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( lVelocity )", BRN_RACECAR_H_ASSERT_FILE, 683));
 
     mVelocity = lVelocity;
 }

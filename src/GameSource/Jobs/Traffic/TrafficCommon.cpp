@@ -1,3 +1,4 @@
+#define CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\jobs\\traffic\\TrafficCommon.h"
 #include "GameSource/Jobs/Traffic/TrafficCommon.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -30,15 +31,15 @@ void BrnTraffic::UpdateVehiclesJobParams::Construct(
     f32                        lfCrashSliderFinalValue,
     DebugRenderStreamReader*   lpDebugStream)
 {
-    CGS_ASSERT(lpapHulls,             "lpapHulls");
-    CGS_ASSERT(lpaParams,             "lpaParams");
-    CGS_ASSERT(lpaParamTransforms,    "lpaParamTransforms");
-    CGS_ASSERT(lpaVehicles,           "lpaVehicles");
-    CGS_ASSERT(lpaVehicleTransforms,  "lpaVehicleTransforms");
-    CGS_ASSERT(lpaVehicleAxles,       "lpaVehicleAxles");
-    CGS_ASSERT(lpaVehicleRuntimeData, "lpaVehicleRuntimeData");
-    CGS_ASSERT(lpRaceCarState,        "lpRaceCarState");
-    CGS_ASSERT(lpEffectRand,          "lpEffectRand");
+    CGS_ASSERT_AT(lpapHulls,             "lpapHulls", CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE, 237);
+    CGS_ASSERT_AT(lpaParams,             "lpaParams", CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE, 238);
+    CGS_ASSERT_AT(lpaParamTransforms,    "lpaParamTransforms", CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE, 239);
+    CGS_ASSERT_AT(lpaVehicles,           "lpaVehicles", CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE, 240);
+    CGS_ASSERT_AT(lpaVehicleTransforms,  "lpaVehicleTransforms", CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE, 241);
+    CGS_ASSERT_AT(lpaVehicleAxles,       "lpaVehicleAxles", CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE, 242);
+    CGS_ASSERT_AT(lpaVehicleRuntimeData, "lpaVehicleRuntimeData", CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE, 243);
+    CGS_ASSERT_AT(lpRaceCarState,        "lpRaceCarState", CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE, 244);
+    CGS_ASSERT_AT(lpEffectRand,          "lpEffectRand", CGS_ARTIST_ABS_TRAFFICCOMMON_H_FILE, 245);
 
     meProcess                        = E_JOBPROCESS_UPDATE_VEHICLES;
     mpDebugStream                    = lpDebugStream;
