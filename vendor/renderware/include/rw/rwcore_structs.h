@@ -90,6 +90,16 @@ struct Resource : public BaseResources<KU_RESOURCE_LANE_COUNT> {
     {
         m_baseResources[0] = lrMemoryResource;
     }
+
+    // DecFIGS resourcetarget.h:313/:322 declares GetMemoryResource() const (by value) and
+    // GetMemoryResource() (by reference) on lane 0. The Xenon target names lane 2 the physical
+    // memory resource: ARTIST's assert strings read GetPhysicalMemoryResource() (0x82072EEC,
+    // 0x820D74D8) and MovieAllocator::DoFree tests +8 (0x824F98AC `lwz r11,8(r30)`). ARTIST has
+    // no out-of-line copy of either: header-inline, as resourcetarget.h defines them.
+    void* GetMemoryResource() const { return m_baseResources[0]; }
+    void*& GetMemoryResource() { return m_baseResources[0]; }
+    void* GetPhysicalMemoryResource() const { return m_baseResources[2]; }
+    void*& GetPhysicalMemoryResource() { return m_baseResources[2]; }
 };
 RW_SIZE_ASSERT(rw::Resource, 40);
 
