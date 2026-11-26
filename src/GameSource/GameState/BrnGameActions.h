@@ -2876,8 +2876,8 @@ struct FburnChallengeEndNotActiveAction : public GameAction<E_ACTION_FREEBURN_CH
 // (the EventQueue element, id first) -- here the bit store leads.
 struct FburnChallengeStatusAction : public GameAction<E_ACTION_FREEBURN_CHALLENGE_COMPLETION_STATUS>
 {
-    CompletedFburnChallenges    mCompletedChallenges; // 0x000 (:5565, FastBitArray<2000> == 256B)
-    BrnNetwork::NetworkPlayerID mPlayerID;            // 0x100 (:5566)
+    CompletedFburnChallengesData::CompletedFburnChallenges mCompletedChallenges; // 0x000 (:5565, FastBitArray<2000> == 256B)
+    BrnNetwork::NetworkPlayerID                            mPlayerID;            // 0x100 (:5566)
 }; // sizeof == 0x108 (4B tail pad)
 
 // The "show the challenge selector" GUI action (id 160). DWARF BrnGameActions.h:5619.

@@ -192,16 +192,6 @@ namespace BrnGameState
             E_GMS_COUNT          = 8,
         };
 
-        // Per-player freeburn-challenge completion bit storage == CgsContainers::FastBitArray<2000>
-        // (DWARF CgsFastBitArray.h:51/155: uint64_t maxBits[32] == 256 bytes, KU_NUMBEROFBITFIELDS=32).
-        // Relocated above CompletedFburnChallengesData so the element struct can embed it; this is the
-        // SAME struct previously defined further down (do not double-define -- delete the later copy).
-        struct CompletedFburnChallenges
-        {
-            static const u32 KU_NUM_BIT_WORDS = 32;
-            u64 maxBits[KU_NUM_BIT_WORDS]; // 256 bytes (FastBitArray<2000>)
-        };
-
         // EventQueue element type. DWARF BrnGameStateSharedIO.h:288-291: an s32 network player id
         // followed by a FastBitArray<2000> bit store. The X360 build bakes a 264-byte element stride
         // into BaseEventQueue<...>::AddEvent (0x8258C160) and ::Append (0x823C46A8): s32@0x00 (4B) +
@@ -210,6 +200,13 @@ namespace BrnGameState
         class CompletedFburnChallengesData
         {
         public:
+            // DWARF BrnGameStateSharedIO.h:277: the per-player completion bit store is this nested
+            // typedef (every user spells CompletedFburnChallengesData::CompletedFburnChallenges);
+            // ARTIST clears it through FastBitArray::UnSetAll's u64 loop (cmpldi 0x20,
+            // FburnChallengeEveryPlayerStatusData::Construct 0x82326380) and tests it through the
+            // inlined IsBitSet (CgsFastBitArray.h:396 assert, ChallengeListComponent::Update 0x82434EA8).
+            typedef CgsContainers::FastBitArray<2000> CompletedFburnChallenges;
+
             s32                      mNetworkPlayerID;             // 0x00 (BrnNetwork::NetworkPlayerID == s32)
             CompletedFburnChallenges mCompletedFreeburnChallenges; // 0x08 (FastBitArray<2000>, 256B)
         };
@@ -529,7 +526,7 @@ namespace BrnGameState
         {
         public:
             void Construct();
-            void AddCompletionStatus(const CompletedFburnChallenges* lpCompletedChallenges,
+            void AddCompletionStatus(const CompletedFburnChallengesData::CompletedFburnChallenges* lpCompletedChallenges,
                                      BrnNetwork::NetworkPlayerID lPlayerID);
 
             // ADDITIVE GROW (ChallengeManager keystone, wave C). DWARF BrnGameStateSharedIO.h:944:
@@ -540,10 +537,10 @@ namespace BrnGameState
             // that 256-byte copy. Defined inline so the inlining call sites stay store-for-store.
             // DWARF :947; ARTIST FriendsListComponent::UpdateAllChallengesEntryData
             // reads this tail at completedData+0x738 (manager+0x7F0).
-            const CompletedFburnChallenges* GetLocalPlayerCompletionStatus() const
+            const CompletedFburnChallengesData::CompletedFburnChallenges* GetLocalPlayerCompletionStatus() const
             { return &mLocalChallengeCompletionData; }
 
-            void AddLocalPlayerCompletionStatus(const CompletedFburnChallenges* lpCompletedChallenges)
+            void AddLocalPlayerCompletionStatus(const CompletedFburnChallengesData::CompletedFburnChallenges* lpCompletedChallenges)
             {
                 mLocalChallengeCompletionData = *lpCompletedChallenges;
             }
@@ -552,11 +549,11 @@ namespace BrnGameState
             static const s32 KI_NUM_PLAYER_SLOTS = 7;
             struct CompletedChallenges
             {
-                CompletedFburnChallenges    mCompletedChallenges; // slot+0   (256 bytes)
-                BrnNetwork::NetworkPlayerID mPlayerID;            // slot+256 (sentinel -1)
+                CompletedFburnChallengesData::CompletedFburnChallenges mCompletedChallenges; // slot+0   (256 bytes)
+                BrnNetwork::NetworkPlayerID                            mPlayerID;            // slot+256 (sentinel -1)
             };
-            CompletedChallenges      maCompletedChallenges[KI_NUM_PLAYER_SLOTS];
-            CompletedFburnChallenges mLocalChallengeCompletionData;
+            CompletedChallenges                                    maCompletedChallenges[KI_NUM_PLAYER_SLOTS];
+            CompletedFburnChallengesData::CompletedFburnChallenges mLocalChallengeCompletionData;
         };
 
         // ===== Added by the CarCheckpointData TU (checkpoint bit-set IO) =====

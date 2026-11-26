@@ -274,7 +274,7 @@ namespace BrnNetworkModuleIO
 
     struct NetworkInFburnChallengeStatusEvent : public NetworkEvent<39>
     {
-        BrnGameState::GameStateModuleIO::CompletedFburnChallenges mCompletedChallenges;  // +0x000 (256)
+        BrnGameState::GameStateModuleIO::CompletedFburnChallengesData::CompletedFburnChallenges mCompletedChallenges;  // +0x000 (256)
         NetworkPlayerID                                           mPlayerID;             // +0x100
     };
     CGS_STATIC_ASSERT((sizeof(NetworkInFburnChallengeStatusEvent) == 0x108), "queued as 0x108 bytes");

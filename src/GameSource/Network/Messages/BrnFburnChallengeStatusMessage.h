@@ -26,7 +26,7 @@ namespace BrnNetwork
 {
     // The completion bit set type the message carries (FastBitArray<2000>, 256 bytes),
     // reused BY NAME from its committed GameState home.
-    typedef BrnGameState::GameStateModuleIO::CompletedFburnChallenges
+    typedef BrnGameState::GameStateModuleIO::CompletedFburnChallengesData::CompletedFburnChallenges
         FburnChallengeStatusPayload;
 
     struct FburnChallengeStatusMessage : CgsNetwork::ReliableMessage

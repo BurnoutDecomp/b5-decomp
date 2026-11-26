@@ -1857,7 +1857,7 @@ void ChallengeManager::UpdateRemotePlayerSuccessStatus(
 
             // Find the completion record owned by this player id (X360 walks
             // maChallengeCompletionData[i].mNetworkPlayerID from slot 0, stride 0x108).
-            CgsContainers::FastBitArray<2000>* lpDestCompletionData = 0;   // X360 r29 = 0
+            GameStateModuleIO::CompletedFburnChallengesData::CompletedFburnChallenges* lpDestCompletionData = 0;   // X360 r29 = 0
             s32 liSlot = 0;
             while (maChallengeCompletionData[liSlot].mNetworkPlayerID != lEvent.mNetworkPlayerID)
             {
@@ -4482,8 +4482,7 @@ void ChallengeManager::OutputFreeburnChallengeEveryPlayerStatusEvent(TGameAction
     GameStateModuleIO::FburnChallengeEveryPlayerStatusData lStatusData;
     lStatusData.Construct();
 
-    lStatusData.AddLocalPlayerCompletionStatus(
-        reinterpret_cast<const GameStateModuleIO::CompletedFburnChallenges*>(&mLocalChallengeCompletionData));
+    lStatusData.AddLocalPlayerCompletionStatus(&mLocalChallengeCompletionData);
 
     // X360: r31 = this + 0x6C8 (== &maChallengeCompletionData[0].mNetworkPlayerID), 7 iterations,
     // stride 0x108; the status block address passed is r31 - 0x100 (the slot's bit store).
@@ -4491,10 +4490,8 @@ void ChallengeManager::OutputFreeburnChallengeEveryPlayerStatusEvent(TGameAction
     {
         if (maChallengeCompletionData[liSlot].mNetworkPlayerID != -1)
         {
-            lStatusData.AddCompletionStatus(
-                reinterpret_cast<const GameStateModuleIO::CompletedFburnChallenges*>(
-                    &maChallengeCompletionData[liSlot].mCompletedChallenges),
-                maChallengeCompletionData[liSlot].mNetworkPlayerID);
+            lStatusData.AddCompletionStatus(&maChallengeCompletionData[liSlot].mCompletedChallenges,
+                                            maChallengeCompletionData[liSlot].mNetworkPlayerID);
         }
     }
 

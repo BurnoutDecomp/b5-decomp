@@ -142,7 +142,7 @@ namespace BrnNetwork
                                           BrnGameState::EChallengeStatus leChallengeStatus,
                                           s32 liValue);
         void SendFburnChallengeStatusMessage(
-                const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* lpCompletedChallenges);
+                const BrnGameState::GameStateModuleIO::CompletedFburnChallengesData::CompletedFburnChallenges* lpCompletedChallenges);
         void SendActiveFburnChallengeMessage(
                 const BrnNetworkModuleIO::NetworkInActiveFburnChallengeEvent* lpActiveFreeburnChallengeEvent,
                 CgsNetwork::NetworkPlayerID* lpPlayerIDs);
@@ -279,7 +279,7 @@ namespace BrnNetwork
         static void _AssertLayout();
 
         // ---- layout --------------------------------------------------------------------
-        BrnGameState::GameStateModuleIO::CompletedFburnChallenges mCompletedChallengesToSend; // +0x0C48
+        BrnGameState::GameStateModuleIO::CompletedFburnChallengesData::CompletedFburnChallenges mCompletedChallengesToSend; // +0x0C48
         BrnGameState::BurnoutSkillzData mCachedBurnoutSkillzData;                      // +0x0D48
         f32                             mafPastLatencies[KI_LATENCY_FRAMES_TO_AVERAGE_OVER]; // +0x0D80
 

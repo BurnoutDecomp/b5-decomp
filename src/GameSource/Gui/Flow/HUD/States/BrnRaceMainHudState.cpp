@@ -3116,28 +3116,8 @@ namespace BrnGui
         // 2000)", CgsFastBitArray.h:396. The range test is a SIGNED compare against 2000, and
         // the assert does not gate the read. A set bit means the local player has ALREADY
         // completed this challenge, and the ticker then prefixes the line with "[~]".
-        const s32 KI_MAX_CHALLENGE_BITS = 2000;
-        if (liChallengeIndex >= KI_MAX_CHALLENGE_BITS)
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Index ";
-            lStrStream << liChallengeIndex;
-            lStrStream << " is out of range (max bits: ";
-            lStrStream << KI_MAX_CHALLENGE_BITS;
-            lStrStream << "\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                lacMessage,
-                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h",
-                396));
-            CgsDev::Assert::EndAssert();
-        }
-        const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* lpCompleted =
-            lpManager->GetCompletedChallengesData()->GetLocalPlayerCompletionStatus();
-        const u64 lu64Word = lpCompleted->maxBits[liChallengeIndex >> 6];
         const bool lbAlreadyCompleted =
-            lu64Word != 0 && (lu64Word & (static_cast<u64>(1) << (liChallengeIndex & 63))) != 0;
+            lpManager->GetCompletedChallengesData()->GetLocalPlayerCompletionStatus()->IsBitSet(liChallengeIndex);
 
         // @0x8247ADC8..0x8247AE34 -- the separator format. FRENCH (ELanguage 10) puts a space
         // BEFORE the colon; every other language does not. The "[~]" prefix marks a challenge

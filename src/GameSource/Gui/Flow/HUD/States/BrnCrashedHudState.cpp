@@ -39,9 +39,6 @@ namespace {
 
     // The console queues the finished ticker message four times.
     const s32 KI_TICKER_MESSAGE_POST_COUNT = 4;
-
-    // The completed-challenge bit store is a FastBitArray<2000>.
-    const s32 KI_MAX_CHALLENGE_BITS = 2000;
 }
 const s32 CrashedHudState::maiEventToObserve[21] =
 {
@@ -521,29 +518,10 @@ void CrashedHudState::UpdateRunning()
         GuiEventTickerCustomMessage lMessage;
         lMessage.Construct(true, false, true, true);
 
-        // The local player's completed-challenge bit (FastBitArray<2000>::IsBitSet, inlined
-        // with its own streamed range assert).
-        if (liChallengeIndex >= KI_MAX_CHALLENGE_BITS)
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Index ";
-            lStrStream << liChallengeIndex;
-            lStrStream << " is out of range (max bits: ";
-            lStrStream << KI_MAX_CHALLENGE_BITS;
-            lStrStream << "\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                lacMessage,
-                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h",
-                396));
-            CgsDev::Assert::EndAssert();
-        }
-        const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* lpCompleted =
-            lpManager->GetCompletedChallengesData()->GetLocalPlayerCompletionStatus();
-        const u64 lu64Word = lpCompleted->maxBits[liChallengeIndex >> 6];
+        // The local player's completed-challenge bit: FastBitArray<2000>::IsBitSet, inlined with
+        // its own streamed range assert (CgsFastBitArray.h:396, ARTIST 0x8247D660..0x8247D7C8).
         const bool lbAlreadyCompleted =
-            lu64Word != 0 && (lu64Word & (static_cast<u64>(1) << (liChallengeIndex & 63))) != 0;
+            lpManager->GetCompletedChallengesData()->GetLocalPlayerCompletionStatus()->IsBitSet(liChallengeIndex);
 
         lMessage.AddString(lbAlreadyCompleted ? "--- COMPLETED --- %1 : %2" : "%1 : %2", 1);
         lMessage.AddString(lpChallenge->GetTitleStringID(), 2);

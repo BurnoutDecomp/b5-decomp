@@ -147,10 +147,7 @@ namespace BrnNetwork
         mCollectableID                            = 0;
         mCachedBurnoutSkillzData.Clear();
 
-        for (u32 luField = 0; luField < BrnGameState::GameStateModuleIO::CompletedFburnChallenges::KU_NUM_BIT_WORDS; ++luField)
-        {
-            mCompletedChallengesToSend.maxBits[luField] = 0;
-        }
+        mCompletedChallengesToSend.Construct();   // DWARF call list: FastBitArray<2000>::Construct
 
         mUpdateMessageSend.Construct();
         mUpdateMessageRecv.Construct();
@@ -184,10 +181,7 @@ namespace BrnNetwork
         mCollectableID                            = 0;
         mCachedBurnoutSkillzData.Clear();
 
-        for (u32 luField = 0; luField < BrnGameState::GameStateModuleIO::CompletedFburnChallenges::KU_NUM_BIT_WORDS; ++luField)
-        {
-            mCompletedChallengesToSend.maxBits[luField] = 0;
-        }
+        mCompletedChallengesToSend.UnSetAll();
 
         return CgsNetwork::NetworkPlayer::Release();
     }
@@ -593,7 +587,7 @@ namespace BrnNetwork
     // Send the completion bits now if it is our turn; otherwise keep them for
     // HandleSendingFburnChallengeMessages.
     void BrnNetworkPlayer::SendFburnChallengeStatusMessage(
-            const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* lpCompletedChallenges)
+            const BrnGameState::GameStateModuleIO::CompletedFburnChallengesData::CompletedFburnChallenges* lpCompletedChallenges)
     {
         if (IsOurTurnToSend())
         {
@@ -1174,10 +1168,7 @@ namespace BrnNetwork
         mbIsEliminated       = false;
         mbFirstUpdateMessage = true;
 
-        for (u32 luField = 0; luField < BrnGameState::GameStateModuleIO::CompletedFburnChallenges::KU_NUM_BIT_WORDS; ++luField)
-        {
-            mCompletedChallengesToSend.maxBits[luField] = 0;
-        }
+        mCompletedChallengesToSend.UnSetAll();
 
         mCollectableID    = 0;
         meCollectableType = CollectableMessage::E_COLLECTABLE_TYPE_MAX;
@@ -1242,24 +1233,11 @@ namespace BrnNetwork
     // the previous challenge message is still unsent).
     void BrnNetworkPlayer::HandleSendingFburnChallengeMessages(f32 lfTimeStep)
     {
-        bool lbNothingToSend = true;
-        for (u32 luField = 0; luField < BrnGameState::GameStateModuleIO::CompletedFburnChallenges::KU_NUM_BIT_WORDS; ++luField)
-        {
-            if (mCompletedChallengesToSend.maxBits[luField] != 0)
-            {
-                lbNothingToSend = false;
-                break;
-            }
-        }
-
-        if (!lbNothingToSend && IsOurTurnToSend())
+        if (!mCompletedChallengesToSend.IsZero() && IsOurTurnToSend())
         {
             mFburnChallengeStatusMessageSend.PrepareForSend(mpTimeManager->GetU16FrameCount(),
                                                             &mCompletedChallengesToSend);
-            for (u32 luField = 0; luField < BrnGameState::GameStateModuleIO::CompletedFburnChallenges::KU_NUM_BIT_WORDS; ++luField)
-            {
-                mCompletedChallengesToSend.maxBits[luField] = 0;
-            }
+            mCompletedChallengesToSend.UnSetAll();
         }
 
         if (mfTimeBeforeSelectedChallengeSend < 0.0f)

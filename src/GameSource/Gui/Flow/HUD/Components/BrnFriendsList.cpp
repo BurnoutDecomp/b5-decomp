@@ -1686,9 +1686,8 @@ void FriendsListComponent::UpdateAllChallengesEntryData()
             ++miCurrentlyActiveSlots;
             const BrnResource::ChallengeListEntry* entry = list->GetChallengeData(maChallengesAvailable[first + i]);
             const s32 index = list->GetChallengeIndex(entry->GetChallengeID());
-            const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* completed = mpGuiCache->GetFreeburnChallengeManager()->GetCompletedChallengesData()->GetLocalPlayerCompletionStatus();
-            CGS_ASSERT(static_cast<u32>(index) < 2000, "Challenge index out of range");
-            const bool done = (completed->maxBits[index / 64] & (u64(1) << (index % 64))) != 0;
+            const BrnGameState::GameStateModuleIO::CompletedFburnChallengesData::CompletedFburnChallenges* completed = mpGuiCache->GetFreeburnChallengeManager()->GetCompletedChallengesData()->GetLocalPlayerCompletionStatus();
+            const bool done = completed->IsBitSet(index);
             SetEntryData(i, entry->GetTitleStringID(), done ? 20 : 19, true);
             maEntries[i].SetIndexText(first + i + 1);
         }

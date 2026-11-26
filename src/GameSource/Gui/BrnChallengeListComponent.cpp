@@ -277,9 +277,9 @@ void ChallengeListComponent::Update()
         s32 index;
         const BrnResource::ChallengeListEntry* entry = GetFilteredChallenge(filteredIndex, &index);
         if (entry == 0) continue;
-        CGS_ASSERT(static_cast<u32>(index) < 2000, "Challenge index out of range");
-        const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* completion = mEveryPlayerCompletionStatus.GetLocalPlayerCompletionStatus();
-        const bool done = (completion->maxBits[index / 64] & (u64(1) << (index % 64))) != 0;
+        // FastBitArray<2000>::IsBitSet inlined with its own range assert (CgsFastBitArray.h:396,
+        // ARTIST 0x82434E1C..0x82434EF8); there is no separate index check.
+        const bool done = mEveryPlayerCompletionStatus.GetLocalPlayerCompletionStatus()->IsBitSet(index);
         AddOutputAptViewState(maacAptState[row], done ? "completed" : "unCompleted", false);
         char textId[64], number[64];
         CgsCore::SnPrintf(textId, sizeof(textId), "$CHALLENGE_COMP_DESC_%d", row);

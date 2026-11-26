@@ -37,9 +37,8 @@ namespace BrnNetwork
         mRecvingPlayerID = KI_INVALID_PLAYER_ID;
         CgsNetwork::Message::Construct();
 
-        // Zero the 256-byte completion payload (32 x 64-bit stores at +0x28).
-        for (u32 luWord = 0; luWord < FburnChallengeStatusPayload::KU_NUM_BIT_WORDS; ++luWord)
-            mCompletedChallenges.maxBits[luWord] = 0;
+        // DWARF call list: FastBitArray<2000>::Construct (the u64 UnSetAll loop at +0x28).
+        mCompletedChallenges.Construct();
     }
 
     const char* FburnChallengeStatusMessage::GetName() const
@@ -50,8 +49,7 @@ namespace BrnNetwork
     s32 FburnChallengeStatusMessage::GetPackedMessageSize()
     {
         // The X360 build re-zeroes the payload before reporting the base reliable size.
-        for (u32 luWord = 0; luWord < FburnChallengeStatusPayload::KU_NUM_BIT_WORDS; ++luWord)
-            mCompletedChallenges.maxBits[luWord] = 0;
+        mCompletedChallenges.UnSetAll();   // DWARF call list: FastBitArray<2000>::UnSetAll
         return CgsNetwork::ReliableMessage::GetPackedMessageSize();
     }
 

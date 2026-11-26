@@ -236,9 +236,9 @@ namespace BrnGameState
         // (stw -1,+0x100 / stb 0,+0x104 per 0x108-stride entry).
         struct ChallengeCompletionData
         {
-            CgsContainers::FastBitArray<2000> mCompletedChallenges; // +0x000 (DWARF :297, CompletedFburnChallengesData::CompletedFburnChallenges)
-            BrnNetwork::NetworkPlayerID       mNetworkPlayerID;     // +0x100 (DWARF :298; -1 == unused slot)
-            bool                              mbFinalised;          // +0x104 (DWARF :299)
+            GameStateModuleIO::CompletedFburnChallengesData::CompletedFburnChallenges mCompletedChallenges; // +0x000 (DWARF :297)
+            BrnNetwork::NetworkPlayerID mNetworkPlayerID;     // +0x100 (DWARF :298; -1 == unused slot)
+            bool                        mbFinalised;          // +0x104 (DWARF :299)
         };
 
         static const s32 KI_MAX_CHALLENGE_PLAYERS = 8;   // per-player array bound (== E_ACTIVE_RACE_CAR_INDEX_COUNT)
@@ -515,7 +515,7 @@ namespace BrnGameState
         s32   maiCrashedWithChallengePlayer[KI_MAX_CHALLENGE_PLAYERS]; // +0x5A0 (:396)
         const BrnResource::VehicleList* mpVehicleList;               // +0x5C0 (:397) -- FIRST POINTER; x64 offsets drift from here (+4 pad on X360)
         ChallengeCompletionData maChallengeCompletionData[KI_MAX_REMOTE_PLAYERS]; // +0x5C8 (:399; stride 0x108)
-        CgsContainers::FastBitArray<2000> mLocalChallengeCompletionData; // +0xD00 (:400; DWARF type CompletedFburnChallengesData::CompletedFburnChallenges == this layout)
+        GameStateModuleIO::CompletedFburnChallengesData::CompletedFburnChallenges mLocalChallengeCompletionData; // +0xD00 (:400)
         GameStateModuleIO::LastSecondChallengeSuccess mLastSecondSuccessStatus; // +0xE00 (:402; DWARF type FburnChallengeSuccessUpdateAction::LastSecondChallengeSuccess == FastBitArray<60>)
         EChallengeManagerStatus meChallengeManagerStatus;            // +0xE08 (:405)
         const BrnResource::ChallengeListEntry* mpCurrentChallenge;   // +0xE0C (:406)

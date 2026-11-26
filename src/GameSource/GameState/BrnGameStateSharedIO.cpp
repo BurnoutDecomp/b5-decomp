@@ -112,20 +112,13 @@ SpecificGameModeEventInterface::Event* SpecificGameModeEventInterface::AddEvent(
 // per-player slots' completion bits + invalidate its player id, then zero the local-player bits.
 void FburnChallengeEveryPlayerStatusData::Construct()
 {
-    for (s32 liSlot = 0; liSlot < KI_NUM_PLAYER_SLOTS; ++liSlot)
+    for (int32_t liIndex = 0; liIndex < KI_NUM_PLAYER_SLOTS; ++liIndex)   // DWARF h:1670 liIndex
     {
-        CompletedChallenges& lSlot = maCompletedChallenges[liSlot];
-        for (u32 luWord = 0; luWord < CompletedFburnChallenges::KU_NUM_BIT_WORDS; ++luWord)
-        {
-            lSlot.mCompletedChallenges.maxBits[luWord] = 0;
-        }
-        lSlot.mPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
+        maCompletedChallenges[liIndex].mCompletedChallenges.Construct();
+        maCompletedChallenges[liIndex].mPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
     }
 
-    for (u32 luWord = 0; luWord < CompletedFburnChallenges::KU_NUM_BIT_WORDS; ++luWord)
-    {
-        mLocalChallengeCompletionData.maxBits[luWord] = 0;
-    }
+    mLocalChallengeCompletionData.Construct();
 }
 
 // X360 0x823263C8. Record one remote player's completion entry in the first free slot (free ==
@@ -133,7 +126,7 @@ void FburnChallengeEveryPlayerStatusData::Construct()
 // FAITHFUL QUIRK: the X360 body zeroes the slot's bit-array rather than copying lpCompletedChallenges
 // (the source param is dead); only the player id is stored. Void; return-result dropped.
 void FburnChallengeEveryPlayerStatusData::AddCompletionStatus(
-    const CompletedFburnChallenges* /*lpCompletedChallenges*/, BrnNetwork::NetworkPlayerID lPlayerID)
+    const CompletedFburnChallengesData::CompletedFburnChallenges* /*lpCompletedChallenges*/, BrnNetwork::NetworkPlayerID lPlayerID)
 {
     s32 liIndex = 0;
     while (maCompletedChallenges[liIndex].mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID)
@@ -146,10 +139,7 @@ void FburnChallengeEveryPlayerStatusData::AddCompletionStatus(
         }
     }
 
-    for (u32 luWord = 0; luWord < CompletedFburnChallenges::KU_NUM_BIT_WORDS; ++luWord)
-    {
-        maCompletedChallenges[liIndex].mCompletedChallenges.maxBits[luWord] = 0;
-    }
+    maCompletedChallenges[liIndex].mCompletedChallenges.UnSetAll();
     maCompletedChallenges[liIndex].mPlayerID = lPlayerID;
 }
 
