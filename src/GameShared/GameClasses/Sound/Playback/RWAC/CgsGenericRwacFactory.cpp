@@ -221,9 +221,7 @@ Handle<GenericRwacFactory> GenericRwacFactory::Create(Environment& arEnvironment
         ::new (lpMemory) GenericRwacFactory(arEnvironment, aSpec);
 
     // The returned handle's owned ref (console: `stw ptr, 0(r29)` + the +0x04
-    // increment). Interim plain-store Handle model: the explicit Acquire beside
-    // the store IS the handle's ref.
-    lpFactory->Acquire();
+    // increment, ARTIST 0x826C7BC8): Handle(T*) takes it.
     return Handle<GenericRwacFactory>(lpFactory);
 }
 
@@ -781,8 +779,5 @@ void HACK_SetSnd9InitSubmix(CgsSound::Playback::Handle<CgsSound::Playback::Submi
                                    << "\n";
     }
     sppSnd9InitSubmix = ahSubmix->GetSubmixAddress();
-
-    // The by-value handle's release.
-    if (ahSubmix.GetObject())
-        ahSubmix.GetObject()->Release();
+    // The by-value handle releases its reference as it is destroyed.
 }

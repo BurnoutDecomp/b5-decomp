@@ -54,83 +54,50 @@ namespace Logic
 // private overload @ 0x826DC4C8, which consumes the copy.
 void Voice::Attach(s32 liSlotName, const Content& arContent)
 {
-    CGS_ASSERT_AT(arContent.IsCreated(), "Content not yet created!",
-        "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsContent.h", 201);
+    // GetContent asserts the content exists (CgsContent.h:201).
     Attach(liSlotName, arContent.GetContent());
 }
 
 // ----------------------------------------------------------------------------
-// Voice::Construct(lpOwnerModule, liIndex, lpGlobalSpecTable, luNameHash)
-//   FLAG: RECONSTRUCTED FROM CALL SITES -- the X360 INLINES Construct (no standalone
-//   dump). Call sites (BrnSound::Module::SoundLogicModule::Prepare @0x82703C18):
-//     Construct(a1+5250, a1, -16, dword_83008650, MakeHash("SubmixVoiceSpec"))
-//     Construct(a1+5244, a1,   1, dword_83008650, MakeHash("MasterVoiceSpec"))
-//     Construct(a1+5247, a1,   2, dword_83008650, MakeHash("GlobalReverbVoiceSpec"))
-//
-//   What is PROVEN by the call sites + the sibling method offsets:
-//     * arg1 (a1, the owning module) is stored as mpOwnerModule (+0x08): Connect
-//       reads it as *(a1+8) and routes ConnectVoice through (*(a1+8)+568).
-//     * the object starts with mVoiceHandle == null on entry to creation; every
-//       method asserts "Voice not yet created!" on a null handle, and Destruct/the
-//       scalar-deleting dtor leave it null -- so Construct's job is to FILL it.
-//
-//   What is FLAGGED (the actual playback-voice creation is a Playback-layer call):
-//     * liIndex (the submix index; -16 == 0xFFFFFFF0 == K_INIT_SND9_SUBMIX_IDENT),
-//       lpGlobalSpecTable (dword_83008650, the shared voice-spec factory/table) and
-//       luNameHash (the spec name hash) feed a Playback factory call that produces
-//       the Playback::Voice and seeds mVoiceHandle. That factory entry point is NOT
-//       reconstructed, so we cannot create a real Playback::Voice here.
+// Voice::Construct(lpModule, aIdent, aFactoryName, aVoiceSpecName)  @ 0x826DC3E0
+//   DWARF CgsVoice.h:110 (Construct(Module*, QueueElement x3)), body in this file
+//   (ARTIST asserts CgsVoice.cpp:61 / :66, file string 0x820B32C4). The twin of
+//   Logic::Content::Construct: create the playback voice through the module's
+//   embedded Playback::Module (X360 r4 == lpModule + 0x238), assign the returned
+//   temporary handle (the inlined Handle::operator=: acquire, release the old,
+//   store) and destroy it (its release), ARTIST 0x826DC44C..0x826DC490.
 // ----------------------------------------------------------------------------
-void Voice::Construct(Module* lpOwnerModule, Ident luIdent,
-                      Ident luFactoryName, Ident luVoiceSpecName)
+void Voice::Construct(Module* lpModule, Ident lVoiceId,
+                      Ident lFactoryName, Ident lVoiceSpecName)
 {
-    CGS_ASSERT(lpOwnerModule != 0, "lpOwnerModule");
-    mpOwnerModule = lpOwnerModule;
+    CGS_ASSERT_AT(lpModule && !IsCreated(), "( lpModule ) && ( !IsCreated() )",
+                  CGS_VOICE_ARTIST_CPP, 61);
 
-    // DecFIGS pins the three scalar arguments as Command::QueueElement values. The
-    // ARTIST call site supplies {ident, GenericRwacFactory::SK_NAME, VoiceSpec name};
-    // Playback::Module::CreateVoice is the exact engine endpoint at owner+0x238.
-    lpOwnerModule->GetPlaybackModule().CreateVoice(
-        &mVoiceHandle,
-        luIdent,
-        Playback::Name(static_cast<uintptr_t>(luFactoryName)),
-        luVoiceSpecName);
+    mVoiceHandle = lpModule->GetPlaybackModule().CreateVoice(lVoiceId, lFactoryName, lVoiceSpecName);
+    mpOwnerModule = lpModule;
+
+    CGS_ASSERT_AT(mVoiceHandle, "mVoiceHandle", CGS_VOICE_ARTIST_CPP, 66);
 }
 
 // ----------------------------------------------------------------------------
 // Voice::Destruct  @ 0x826C4E38
-//   Assert the voice exists (CgsVoice.cpp:83) and the dereference guard
-//   (CgsHandle.h:287); assert it is NOT playing (CgsVoice.h:1548), write the state
-//   byte at +0x11 = 2, then Release the playback object and null the handle.
-//     asm: v2=*(a1+4); if((*(v2+16)&0x7F)==2) <assert>; *(v2+17)=2;
-//          if(*(a1+4)) Playback::Object::Release(); *(a1+4)=0;
+//   Assert the voice exists (CgsVoice.cpp:83), begin the playback voice's removal
+//   through the handle (Handle::operator-> "mpObject" CgsHandle.h:287, then the
+//   inlined Playback::Voice::BeginRemove, CgsVoice.h:1546), then drop the reference
+//   by assigning the empty handle (release, store null; ARTIST 0x826C4EE4..F8).
 // ----------------------------------------------------------------------------
 void Voice::Destruct()
 {
-    CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
-    CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
-
-    Playback::Voice* lpVoice = mVoiceHandle.GetObject();
-
-    // E_PLAYBACK_STATE_PLAYING must not be the current state.
-    CGS_ASSERT(Playback::E_PLAYBACK_STATE_PLAYING != lpVoice->GetPlaybackState(),
-               "E_PLAYBACK_STATE_PLAYING != GetPlaybackState()");
-
-    // Mark the playback voice REMOVING (the X360 `*(v2+17) = 2` -- mu8RemoveState
-    // by name).
-    lpVoice->SetRemoveState(Playback::E_VOICE_REMOVE_REMOVING);
-
-    lpVoice->Release();
-    mVoiceHandle.SetObject(0);
+    CGS_ASSERT_AT(IsCreated(), "Voice not yet created!", CGS_VOICE_ARTIST_CPP, 83);
+    mVoiceHandle->BeginRemove();
+    mVoiceHandle = VoiceHandle();
 }
 
 // ----------------------------------------------------------------------------
-// Voice::Connect(luSendNameHash, liSend)  @ 0x826C4F18
-//   Assert the voice exists (CgsVoice.cpp:104), take a temp ref on the playback
-//   voice (++*(obj+4)), then forward to ConnectVoice on the owner module's playback
-//   sub-module (*(owner+8) ... + 568).
-//     asm: if(!*(a1+4)) <assert>; v7=*(a1+4); if(v7) ++*(v7+4);
-//          result = Playback::Module::Module::ConnectVoice(*(a1+8)+568,&v7,a2,a3);
+// Voice::Connect(luSendNameHash, luSubmixIdent)  @ 0x826C4F18
+//   Assert the voice exists (CgsVoice.cpp:104), then forward a copy of the handle
+//   (one reference, released by the callee) to ConnectVoice on the owner module's
+//   playback sub-module (owner + 0x238).
 // ----------------------------------------------------------------------------
 void Voice::Connect(Ident luSendNameHash, Ident luSubmixIdent)
 {
@@ -292,8 +259,7 @@ void Voice::Attach(s32 liSlotName, Playback::Handle<Playback::Content> ahContent
 {
     CGS_ASSERT_AT(mVoiceHandle, "Voice not yet created!", CGS_VOICE_ARTIST_CPP, 162);
     Playback::Module::Module::AttachVoice(mVoiceHandle, ahContent, static_cast<u32>(liSlotName));
-    if (Playback::Content* lpContent = ahContent.GetObject())
-        lpContent->Release();
+    // ahContent (by value) releases its reference as it is destroyed.
 }
 
 // ----------------------------------------------------------------------------

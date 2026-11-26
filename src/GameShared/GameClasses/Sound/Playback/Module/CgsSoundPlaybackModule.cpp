@@ -177,12 +177,8 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         lSpec.mRegistrySpec.muStringTableSize = 0;
 
         // Assign the created handle (operator= takes a reference and drops the old
-        // one), then release the temporary's reference the way its destructor does
-        // on the console: the member is left owning exactly one reference.
-        Handle<Environment> lhEnvironment = Environment::Create(lSpec);
-        mhEnvironment = lhEnvironment;
-        if (lhEnvironment.GetObject())
-            lhEnvironment.GetObject()->Release();
+        // one); the temporary's destructor then drops its own (ARTIST 0x826E91E8..F8).
+        mhEnvironment = Environment::Create(lSpec);
         CGS_ASSERT(mhEnvironment.GetObject() != 0, "mhEnvironment");
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
@@ -213,11 +209,7 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
             lRwacSpec.mRegistrySpec.mu32EntityCount = 128;
             lRwacSpec.mRegistrySpec.muDataSize = 32384;
             lRwacSpec.mRegistrySpec.muStringTableSize = 0;
-            Handle<GenericRwacFactory> lhRwacFactory =
-                GenericRwacFactory::Create(*mhEnvironment, lRwacSpec);
-            mhRwacFactory = Handle<Factory>(lhRwacFactory.GetObject());
-            if (lhRwacFactory.GetObject())
-                lhRwacFactory.GetObject()->Release();
+            mhRwacFactory = GenericRwacFactory::Create(*mhEnvironment, lRwacSpec);
             CGS_ASSERT(!!mhRwacFactory, "mhRwacFactory");
         }
         // [2/3] AEMS -- REAL (AemsFactory::Create @0x826DAC28, cascade slice 2):
@@ -232,11 +224,7 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
             lAemsSpec.mu32EntityCount     = 128;
             lAemsSpec.mu32DataSize        = 32384;
             lAemsSpec.mu32StringTableSize = 0;
-            Handle<AemsFactory> lhAemsFactory =
-                AemsFactory::Create(*mhEnvironment, lAemsSpec);
-            mhAemsFactory = lhAemsFactory;
-            if (lhAemsFactory.GetObject())
-                lhAemsFactory.GetObject()->Release();
+            mhAemsFactory = AemsFactory::Create(*mhEnvironment, lAemsSpec);
             CGS_ASSERT(!!mhAemsFactory, "mhAemsFactory");
         }
         // [3/3] SPLICER -- REAL (SplicerFactory::Create @0x826DB130, cascade
@@ -252,11 +240,7 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
             lSplicerSpec.mu32EntityCount     = 128;
             lSplicerSpec.mu32DataSize        = 32384;
             lSplicerSpec.mu32StringTableSize = 0;
-            Handle<SplicerFactory> lhSplicerFactory =
-                SplicerFactory::Create(*mhEnvironment, lSplicerSpec);
-            mhSplicerFactory = Handle<Factory>(lhSplicerFactory.GetObject());
-            if (lhSplicerFactory.GetObject())
-                lhSplicerFactory.GetObject()->Release();
+            mhSplicerFactory = SplicerFactory::Create(*mhEnvironment, lSplicerSpec);
             CGS_ASSERT(!!mhSplicerFactory, "mhSplicerFactory");
 
             // DWARF: SndPlayer1_CgsStreamMod::SetStreamProvider inlined here (BrnSoundUnity);
@@ -571,11 +555,8 @@ void Module::AttachVoice(Handle<Voice> lhVoice, Handle<Content> lhContent, u32 l
     const Name lSlotName(static_cast<uintptr_t>(lu32SlotName));
     const bool lbAttached = lhVoice->Attach(lSlotName, lhContent);
     CGS_ASSERT_AT(lbAttached, "lhVoice->Attach(lSlotName, lhContent)", CGS_ARTIST_PLAYBACK_MODULE_CPP, 1130);
-
-    if (Voice* lpVoice = lhVoice.GetObject())
-        lpVoice->Release();
-    if (Content* lpContent = lhContent.GetObject())
-        lpContent->Release();
+    // The by-value handles release their references as they are destroyed
+    // (ARTIST 0x826D7E58..0x826D7E74).
 }
 
 // ---------------------------------------------------------------------------
@@ -586,206 +567,107 @@ void Module::AttachVoice(Handle<Voice> lhVoice, Handle<Content> lhContent, u32 l
 // ---------------------------------------------------------------------------
 void Module::ConnectVoice(Handle<Voice> lhVoice, u32 lu32SendName, u32 lu32SubmixId)
 {
-    Environment* lpEnvironment = mhEnvironment.GetObject();
-    CGS_ASSERT(lpEnvironment, "mpObject");
+    // GetVoice (the IDA-truncated `GetV`, DWARF h:289) returns a temporary
+    // Handle<Voice> (ARTIST var_80); its object is copied into the SubmixVoice handle
+    // through the CgsHandle.h:239 view (one reference, 0x826C1548), then the temporary
+    // is destroyed (0x826C155C).
+    Handle<SubmixVoice> lhSubmixVoice = GetEnvironment().GetVoice(lu32SubmixId);
 
-    // GetVoice (the IDA-truncated `GetV`, DWARF h:289) fills a transient handle
-    // (var_80); the X360 reads the owned Voice*, takes a ref on it, then releases
-    // the transient handle's reference.
-    Handle<Voice> lhSubmixLookup = lpEnvironment->GetVoice(lu32SubmixId);
-    Voice* lpSubmixVoice = lhSubmixLookup.GetObject();
-    if (lpSubmixVoice)
-        lpSubmixVoice->Acquire();
-    if (lhSubmixLookup.GetObject())
-        lhSubmixLookup.GetObject()->Release();
+    CGS_ASSERT_AT(lhVoice, "lhVoice", CGS_ARTIST_PLAYBACK_MODULE_CPP, 1151);
+    CGS_ASSERT_STREAM_AT(lhSubmixVoice, "Submix ID: " << lu32SubmixId,
+                         CGS_ARTIST_PLAYBACK_MODULE_CPP, 1152);
 
-    CGS_ASSERT(lhVoice.GetObject(), "lhVoice");
-    CGS_ASSERT(lpSubmixVoice, "lhVoice");  // X360 streams "Submix ID: <id>" here
-
-    CGS_ASSERT(lhVoice.GetObject(), "mpObject");
-
-    // The real Voice::Connect(Name, Handle<SubmixVoice>&) @0x826ACC90 -- the u32
-    // built on the stack is the interned send Name, and the submix voice is the
-    // SubmixVoice subclass (CgsSubmixVoice.h).
-    Handle<SubmixVoice> lhSubmix(static_cast<SubmixVoice*>(lpSubmixVoice));
-    bool lbConnected =
-        lhVoice.GetObject()->Connect(Name(static_cast<uintptr_t>(lu32SendName)),
-                                       lhSubmix);
-    CGS_ASSERT(lbConnected, "lhVoice->Connect(lSendName, lhSubmixVoice)");
-
-    if (lpSubmixVoice)
-        lpSubmixVoice->Release();
-    if (lhVoice.GetObject())
-        lhVoice.GetObject()->Release();
+    // The real Voice::Connect(Name, Handle<SubmixVoice>&) @0x826ACC90.
+    Name lSendName(static_cast<uintptr_t>(lu32SendName));
+    const bool lbConnected = lhVoice->Connect(lSendName, lhSubmixVoice);
+    CGS_ASSERT_AT(lbConnected, "lhVoice->Connect(lSendName, lhSubmixVoice)",
+                  CGS_ARTIST_PLAYBACK_MODULE_CPP, 1153);
 }
 
 // ---------------------------------------------------------------------------
-// Module::CreateVoice  @ 0x826D7B00  (the IDA-truncated "Module::C"; DWARF h:318
-// `Handle<Voice> CreateVoice(u32,u32,u32)` -- the by-value Handle return is the
-// sret out-pointer this signature spells)
+// Module::CreateVoice  @ 0x826D7B00  (the IDA-truncated "Module::C"; DWARF h:318,
+// cpp:1022 `Handle<Voice> CreateVoice(uint32_t, uint32_t, uint32_t)`)
 //
-// Resolves the owning factory (by lFactoryName, the real Environment::GetFactory
-// -- IDA's `Environment::Ge`) and the voice spec (by lu32SubmixName, looked up in
-// the environment registry via the real Registry::GetEntity<VoiceSpec>) out of the
-// environment, asks the factory to CreateVoice for the requested ident, runs the
-// init-submix hack on the reserved ident, and stores the new voice into
-// lphVoiceOut. On any failure path it clears lphVoiceOut and releases the
-// resolved factory handle.
-//
-// FLAG: the X360 emits a streamed assert message
-// ("E_COMMAND_VOICE_CREATE failed: VoiceSpec\n") on the failure path; reconstructed
-// here as a plain CGS_ASSERT(false, ...) with the message text, matching the
-// fire-assert effect (the StrStream machinery is style-only).
+// Resolve the owning factory (by name) and the voice spec (by name) out of the
+// environment, ask the factory to create the voice for the requested ident, stamp
+// the ident, hand the reserved init-submix ident's voice to the Snd9 hack, and
+// return the voice. Any failure streams the spec name into the assert and returns
+// an empty handle. The handles' constructors and destructors carry every reference
+// (ARTIST: the out-of-line Handle<Factory>/<Voice>::operator-> at 0x826D7BF4 /
+// 0x826D7C14, the copy into HACK_SetSnd9InitSubmix's by-value parameter at
+// 0x826D7C54, the returned copy at 0x826D7C78, then lhVoice's and lhFactory's
+// releases).
 // ---------------------------------------------------------------------------
-void Module::CreateVoice(Handle<Voice>* lphVoiceOut, u32 lu32SlotName,
-                         const Name& lFactoryName, u32 lu32SubmixName)
+Handle<Voice> Module::CreateVoice(u32 lu32Ident, u32 lu32FactoryName, u32 lu32VoiceSpecName)
 {
-    Environment* lpEnvironment = mhEnvironment.GetObject();
-    CGS_ASSERT(lpEnvironment, "mpObject");
-
-    // Resolve the owning factory handle by name (Environment::GetFactory, DWARF h:280).
-    Handle<Factory> lhFactory = lpEnvironment->GetFactory(lFactoryName);
-    Factory* lpFactory = lhFactory.GetObject();
-
-    const VoiceSpec* lpSpec = 0;
-    if (lpFactory)
+    Handle<Factory> lhFactory = GetEnvironment().GetFactory(Name(lu32FactoryName));
+    if (lhFactory)
     {
-        Environment* lpEnv2 = mhEnvironment.GetObject();
-        CGS_ASSERT(lpEnv2, "mpObject");
-        Registry* lpRegistry = lpEnv2->GetRegistry();
-        CGS_ASSERT(lpRegistry, "mpRegistry");
-        Name lSpecName(static_cast<uintptr_t>(lu32SubmixName));
-        lpSpec = lpRegistry->GetEntity<VoiceSpec>(lSpecName);
+        Name lVoiceSpecName(lu32VoiceSpecName);
+        const VoiceSpec* lpVoiceSpec =
+            GetEnvironment().GetRegistry()->GetEntity<VoiceSpec>(lVoiceSpecName);
+        if (lpVoiceSpec)
+        {
+            Handle<Voice> lhVoice;
+            if (lhFactory->CreateVoice<Voice>(*lpVoiceSpec, lhVoice, lu32Ident) !=
+                static_cast<u32>(-1))
+            {
+                // The `*(voice+12) = ident` store: Voice::SetIdent (DWARF CgsVoice.h:567).
+                lhVoice->SetIdent(lu32Ident);
+
+                if (lu32Ident == KU_INIT_SND9_SUBMIX_IDENT)
+                {
+                    CGS_ASSERT_AT(GenericRwacFactory::SK_NAME == Name(lu32FactoryName),
+                                  "GenericRwacFactory::SK_NAME == lFactoryName",
+                                  CGS_ARTIST_PLAYBACK_MODULE_CPP, 1051);
+                    ::HACK_SetSnd9InitSubmix(lhVoice);
+                }
+                return lhVoice;
+            }
+        }
     }
 
-    if (!lpFactory || !lpSpec)
-    {
-        CGS_FAIL("E_COMMAND_VOICE_CREATE failed: VoiceSpec");
-        lphVoiceOut->SetObject(0);
-        if (lpFactory)
-            lpFactory->Release();
-        return;
-    }
-
-    Handle<Voice> lhNewVoice;
-    if (lpFactory->CreateVoice<Voice>(*lpSpec, lhNewVoice, lu32SlotName) ==
-        static_cast<u32>(-1))
-    {
-        if (lhNewVoice.GetObject())
-            lhNewVoice.GetObject()->Release();
-        CGS_FAIL("E_COMMAND_VOICE_CREATE failed: VoiceSpec");
-        lphVoiceOut->SetObject(0);
-        if (lpFactory)
-            lpFactory->Release();
-        return;
-    }
-
-    // The `*(voice+12) = ident` store: the real Voice::SetIdent (DWARF CgsVoice.h:567
-    // -- the old rival named it SetSlotName; the +0xC word is Voice::mIdent).
-    lhNewVoice.GetObject()->SetIdent(lu32SlotName);
-
-    if (lu32SlotName == KU_INIT_SND9_SUBMIX_IDENT)
-    {
-        CGS_ASSERT(lFactoryName == GenericRwacFactory::SK_NAME,
-                   "GenericRwacFactory::SK_NAME == lFactoryName");
-        SubmixVoice* lpInitVoice = static_cast<SubmixVoice*>(lhNewVoice.GetObject());
-        if (lpInitVoice)
-            lpInitVoice->Acquire();
-        ::HACK_SetSnd9InitSubmix(Handle<SubmixVoice>(lpInitVoice));
-    }
-
-    Voice* lpNewVoice = lhNewVoice.GetObject();
-    lphVoiceOut->SetObject(lpNewVoice);
-    if (!lpNewVoice)
-    {
-        if (lpFactory)
-            lpFactory->Release();
-        return;
-    }
-
-    lpNewVoice->Acquire();
-    lpNewVoice->Release();
-    lpFactory->Release();
+    CGS_FAIL_STREAM_AT("E_COMMAND_VOICE_CREATE failed: VoiceSpec"
+                           << Name(lu32VoiceSpecName) << "\n",
+                       CGS_ARTIST_PLAYBACK_MODULE_CPP, 1063);
+    return Handle<Voice>();
 }
 
 // ---------------------------------------------------------------------------
-// Module::CreateContent  @ 0x826C12A8
+// Module::CreateContent  @ 0x826C12A8  (DWARF h:327, cpp:1075 `Handle<Content>
+// CreateContent(uint32_t, uint32_t, uint32_t)`)
 //
-// Mirror of the sibling Module::C (CreateVoice @0x826D7B00). Resolves the owning
-// Factory (by lContentClassName) and the ContentSpec (by lContentSpecName) out of the
-// environment, asks the factory to CreateContent, wires the created Content's ident
-// (+0x10 = mIdent) and owner iface (+0x14 = mpLoadService, = this+0x22C when non-null),
-// stores it into *lppContentOut, refs it, and releases the transient factory handle.
-// On failure it clears *lppContentOut and releases the factory handle.
-//
-// FLAG: the X360 streams an assert message on the failure path; reconstructed as a
-// plain CGS_ASSERT(false, <leading literal>) exactly as Module::C reduced its own
-// streamed voice-create failure -- the StrStream interpolation + trailing \n dropped.
+// The content mirror of CreateVoice: resolve the owning factory (by class name) and
+// the ContentSpec (by name), ask the factory to create the content, wire the
+// created content's ident (+0x10 mIdent) and owner interface (+0x14 mpLoadService,
+// the IContentLoadService base at this+0x22C when non-null), and return it.
 // ---------------------------------------------------------------------------
-Content** Module::CreateContent(Content** lppContentOut, u32 lu32Ident,
-                                const Name& lContentClassName,
-                                const Name& lContentSpecName)
+Handle<Content> Module::CreateContent(u32 lu32Ident, u32 lu32ContentClassName,
+                                      u32 lu32ContentSpecName)
 {
-    Environment* lpEnvironment = mhEnvironment.GetObject();
-    CGS_ASSERT(lpEnvironment, "mpObject");
-
-    // Resolve the owning content factory handle by class name (Environment::GetFactory).
-    Handle<Factory> lhFactory = lpEnvironment->GetFactory(lContentClassName);
-    Factory* lpFactory = lhFactory.GetObject();
-
-    const ContentSpec* lpContentSpec = 0;
-    if (lpFactory)
+    Handle<Factory> lhFactory = GetEnvironment().GetFactory(Name(lu32ContentClassName));
+    if (lhFactory)
     {
-        Environment* lpEnv2 = mhEnvironment.GetObject();
-        CGS_ASSERT(lpEnv2, "mpObject");
-        Registry* lpRegistry = lpEnv2->GetRegistry();
-        CGS_ASSERT(lpRegistry, "mpRegistry");
-        Name lSpecName(lContentSpecName);
-        lpContentSpec = lpRegistry->GetEntity<ContentSpec>(lSpecName);
+        Name lContentSpecName(lu32ContentSpecName);
+        const ContentSpec* lpContentSpec =
+            GetEnvironment().GetRegistry()->GetEntity<ContentSpec>(lContentSpecName);
+        if (lpContentSpec)
+        {
+            Handle<Content> lhContent;
+            if (lhFactory->CreateContent(*lpContentSpec, lhContent, lu32Ident) !=
+                static_cast<u32>(-1))
+            {
+                lhContent->mIdent = lu32Ident;                                       // Content +0x10
+                lhContent->SetLoadService(static_cast<IContentLoadService*>(this));  // Content +0x14
+                return lhContent;
+            }
+        }
     }
 
-    if (!lpFactory || !lpContentSpec)
-    {
-        CGS_FAIL("E_COMMAND_CONTENT_CREATE failed with content spec ");
-        *lppContentOut = 0;
-        if (lpFactory)
-            lpFactory->Release();
-        return lppContentOut;
-    }
-
-    Handle<Content> lhContent;
-    if (lpFactory->CreateContent(*lpContentSpec, lhContent, lu32Ident) ==
-        static_cast<u32>(-1))
-    {
-        if (lhContent.GetObject())
-            lhContent.GetObject()->Release();
-        CGS_FAIL("E_COMMAND_CONTENT_CREATE failed with content spec ");
-        *lppContentOut = 0;
-        if (lpFactory)
-            lpFactory->Release();
-        return lppContentOut;
-    }
-
-    // Wire the freshly created content's owner fields BY NAME (the module's own
-    // `stw +0x10 / stw +0x14` stores after the factory call): mIdent, and the
-    // IContentLoadService base sub-object pointer -- since phase B4 the REAL MI
-    // upcast (the console's this+0x22C adjustment IS this static_cast).
-    (*lhContent).mIdent = lu32Ident;                                       // Content +0x10
-    (*lhContent).SetLoadService(static_cast<IContentLoadService*>(this));  // Content +0x14
-
-    Content* lpContent = lhContent.GetObject();
-    *lppContentOut = lpContent;
-    if (!lpContent)
-    {
-        if (lpFactory)
-            lpFactory->Release();
-        return lppContentOut;
-    }
-
-    lpContent->Acquire();   // X360: ++*(content+4) inline
-    lpContent->Release();
-    lpFactory->Release();
-    return lppContentOut;
+    CGS_FAIL_STREAM_AT("E_COMMAND_CONTENT_CREATE failed with content spec "
+                           << Name(lu32ContentSpecName) << "\n",
+                       CGS_ARTIST_PLAYBACK_MODULE_CPP, 1108);
+    return Handle<Content>();
 }
 
 namespace
@@ -1066,7 +948,10 @@ bool Module::DoServiceContentLoadRequest(u32 lu32Ident, EContentLoadMethod leMet
 // ---------------------------------------------------------------------------
 CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrSpec)
 {
-    mStreamMutex.Lock();
+    // DWARF BrnSoundUnity locals: lRequest (cpp:1202), lAutoMutex (cpp:1203, the scoped
+    // stream lock), liBufferToUse / liCount, lHandle (cpp:1226).
+    CgsResource::Events::OpenReadStreamRequest lRequest;
+    EA::Thread::AutoMutex lAutoMutex(mStreamMutex);
 
     // First free record.
     s32 liIndex = -1;
@@ -1081,26 +966,24 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
     if (liIndex < 0)
     {
         CGS_FAIL("We've run out of Audio Stream Buffers.");
-        mStreamMutex.Unlock();
         return 0;
     }
 
     // Resolve the requesting plug-in's owning voice out of the environment.
-    Handle<Voice> lhVoice =
+    Handle<Voice> lHandle =
         GetEnvironment().GetRwacVoiceByPlugin(lrSpec.mpPlugin);
-    CGS_ASSERT(lhVoice.GetObject() != 0, "lHandle");
+    CGS_ASSERT(lHandle.GetObject() != 0, "lHandle");
 
     // Seed the record and hand the carve buffer back through the spec.
     StreamBuffer& lrBuffer = maStreamBuffers[liIndex];
     lrBuffer.mfGraceWaitTime  = 0.0f;
     lrBuffer.mReadStream      = static_cast<CgsFileSystem::StreamDeviceDiskRead*>(0);
     lrBuffer.mBufferStatus    = StreamBuffer::E_USING_BUFFER;
-    lrBuffer.mVoiceId         = lhVoice.GetObject()->GetIdent();
+    lrBuffer.mVoiceId         = lHandle.GetObject()->GetIdent();
     lrBuffer.mbQueuedForClose = false;
     *lrSpec.mppvBuffer = lrBuffer.mpBuffer;
 
     // Build + post the open request (event type 16) into the deferred queue.
-    CgsResource::Events::OpenReadStreamRequest lRequest;
     lRequest.Construct(&mResourceReceiverQueue, liIndex);
     lRequest.SetFileName(lrSpec.mpFilename);
     lRequest.SetBuffer(*lrSpec.mppvBuffer);
@@ -1116,11 +999,7 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
         CGS_FAIL("mDeferredResourceRequestQueue.OpenReadStream( lRequest )");
     }
 
-    // Release the transient voice reference (the console's inline refcount
-    // decrement + DoDispose-at-zero == Object::Release).
-    lhVoice.GetObject()->Release();
-
-    mStreamMutex.Unlock();
+    // lHandle releases the voice, then lAutoMutex unlocks (ARTIST 0x826FA250..0x826FA2A8).
     return &lrBuffer.mReadStream;
 }
 

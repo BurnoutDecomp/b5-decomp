@@ -5,6 +5,9 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsContent.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 
+// ARTIST's VoiceWrapper asserts name the voice source file (string 0x820B32C4).
+#define CGS_VOICEWRAPPER_ARTIST_CPP "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoice.cpp"
+
 namespace CgsSound
 {
 namespace Logic
@@ -14,40 +17,32 @@ namespace Logic
 void VoiceWrapper::Create(const CreateParams& arCreateParams)
 {
     mCreateParams = arCreateParams;
-    CGS_ASSERT(mContent.GetObject() == 0, "!mContent");
-    CGS_ASSERT(mCreateParams.mpLogicModule != 0,
-               "mCreateParams.mpLogicModule");
+    CGS_ASSERT_AT(!mContent, "!mContent", CGS_VOICEWRAPPER_ARTIST_CPP, 243);
+    CGS_ASSERT_AT(mCreateParams.mpLogicModule, "mCreateParams.mpLogicModule",
+                  CGS_VOICEWRAPPER_ARTIST_CPP, 244);
 
     mVoice.Construct(mCreateParams.mpLogicModule,
-                     mCreateParams.mpLogicModule->GetUniqueId(),
                      mCreateParams.mFactoryName,
                      mCreateParams.mVoiceSpecName);
-    CGS_ASSERT(mVoice.GetVoiceObject() != 0, "mVoiceObject.IsCreated()");
+    CGS_ASSERT_AT(mVoice.IsCreated(), "mVoiceObject.IsCreated()", CGS_VOICEWRAPPER_ARTIST_CPP, 248);
 
     if (mCreateParams.mContentSpecName != 0)
     {
-        Playback::Content* lpContent = 0;
-        mCreateParams.mpLogicModule->GetPlaybackModule().CreateContent(
-            &lpContent,
-            mCreateParams.mpLogicModule->GetUniqueId(),
-            Playback::Name(static_cast<uintptr_t>(mCreateParams.mFactoryName)),
-            Playback::Name(static_cast<uintptr_t>(mCreateParams.mContentSpecName)));
-
-        Playback::Handle<Playback::Content> lhContent(lpContent);
-        mContent = lhContent;
-        if (lpContent)
-            lpContent->Release();
+        // DWARF BrnSoundUnity: the block local `uint32_t lUniqueId` (CgsVoice.cpp:252). The
+        // returned temporary is assigned through the out-of-line Handle<Content>::operator=
+        // (ARTIST 0x826EAFD0) and then destroyed.
+        const u32 lUniqueId = mCreateParams.mpLogicModule->GetUniqueId();
+        mContent = mCreateParams.mpLogicModule->GetPlaybackModule().CreateContent(
+            lUniqueId, mCreateParams.mFactoryName, mCreateParams.mContentSpecName);
     }
     else
     {
-        CGS_ASSERT(mCreateParams.mpContent != 0, "mCreateParams.mpContent");
-        const Content::ContentHandle& lrContent =
-            mCreateParams.mpContent->GetContent();
-        CGS_ASSERT(lrContent.GetObject() != 0, "Content not yet created!");
-        mContent = lrContent;
+        CGS_ASSERT_AT(mCreateParams.mpContent, "mCreateParams.mpContent",
+                      CGS_VOICEWRAPPER_ARTIST_CPP, 258);
+        mContent = mCreateParams.mpContent->GetContent();
     }
 
-    CGS_ASSERT(mContent.GetObject() != 0, "mContent");
+    CGS_ASSERT_AT(mContent, "mContent", CGS_VOICEWRAPPER_ARTIST_CPP, 261);
     meUpdateStage = E_UPDATE_STAGE_CREATE;
 }
 
@@ -185,9 +180,7 @@ void VoiceWrapper::Release()
 
     if (mCreateParams.mContentSpecName && mContent)
         mContent->BeginRemove();
-    if (Playback::Content* lpContent = mContent.GetObject())
-        lpContent->Release();
-    mContent.SetObject(0);
+    mContent = Content::ContentHandle();
 
     mbPlay = false;
     mu32OptionalPlayParam = 0;
@@ -202,3 +195,5 @@ VoiceWrapper::~VoiceWrapper()
 
 } // namespace Logic
 } // namespace CgsSound
+
+#undef CGS_VOICEWRAPPER_ARTIST_CPP

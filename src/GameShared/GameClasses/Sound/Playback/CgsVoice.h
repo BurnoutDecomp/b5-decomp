@@ -331,6 +331,17 @@ public:
         mu8RemoveState = static_cast<u8>(aeState);
     }
 
+    // DWARF CgsVoice.h:1546. Begin removing the voice: it must not be playing (the
+    // assert ARTIST's Logic::Voice::Destruct inlines at CgsVoice.h:1548, 0x826C4EB4,
+    // file string 0x820AABEC), then mark it REMOVING (`*(obj+0x11) = 2`).
+    void BeginRemove()
+    {
+        CGS_ASSERT_AT(E_PLAYBACK_STATE_PLAYING != GetPlaybackState(),
+                      "E_PLAYBACK_STATE_PLAYING != GetPlaybackState()",
+                      "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsVoice.h", 1548);
+        mu8RemoveState = E_VOICE_REMOVE_REMOVING;
+    }
+
     // @ 0x826A24F0. Per-frame tick (updates slots + DoUpdate, or drives removal).
     void Update(System* apSystem, f32 af32DeltaTime);
 

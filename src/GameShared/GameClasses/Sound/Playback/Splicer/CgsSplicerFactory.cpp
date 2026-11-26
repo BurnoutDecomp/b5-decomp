@@ -69,8 +69,7 @@ Handle<SplicerFactory> SplicerFactory::Create(Environment& arEnvironment,
 
     SplicerFactory* lpFactory = ::new (lpMemory) SplicerFactory(arEnvironment, akrSpec);
 
-    lpFactory->Acquire();
-    return Handle<SplicerFactory>(lpFactory);
+    return Handle<SplicerFactory>(lpFactory);   // Handle(T*) takes the returned reference
 }
 
 // @ 0x826DB010. Store order per the decode: base Factory (name = the intern

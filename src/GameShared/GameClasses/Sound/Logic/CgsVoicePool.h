@@ -86,13 +86,9 @@ static const s32 KI_VOICE_STATE_STOPPED = 7;
 class VoicePoolBase
 {
 public:
-    VoicePoolBase()
-        : mpLogicModule(0)
-        , mpaPooledVoices(0)
-        , muPooledVoiceCount(0)
-        , muDebugFrameIndex(0)
-    {
-    }
+    // No user-declared constructor: DWARF lists VoicePoolBase() on the class line (CgsVoicePool.h:53,
+    // implicit), and ARTIST VoicePool<4>::VoicePool<4> 0x826E5328 stores only the vtable before
+    // constructing the slots. The members are set by Prepare.
 
     // Bind + reset a caller-supplied PooledVoice array. @ 0x826B6528.
     bool Prepare(PooledVoice* lpaPooledVoices, u32 luNumVoiceProxies);
@@ -126,14 +122,13 @@ protected:
 // VoicePool<N> embeds the slots and binds them on explicit Prepare.
 // The X360 emits VoicePool<4>::VoicePool<4> @ 0x826E5328 and
 // ~VoicePool<4> @ 0x826E5370 (embedded by BrnSound::Vehicles::Wheels::InAirEffect).
-// The ctor/dtor bodies live in CgsVoicePool.cpp (explicit N==4 instantiation).
+// Both are implicit: DWARF lists them on the class line (CgsVoicePool.h:116) and
+// VoicePoolBase declares no destructor, so ~VoicePool<4> stores no vtable (0x826E5370).
 // -----------------------------------------------------------------------------
 template <u32 N>
 class VoicePool : public VoicePoolBase
 {
 public:
-    VoicePool();            // @ 0x826E5328 for N==4
-    virtual ~VoicePool();   // @ 0x826E5370 for N==4
 
     // InAirEffect::Attach supplies the owning logic module after the effect has
     // been prepared.  The console stores that pointer in VoicePoolBase and then

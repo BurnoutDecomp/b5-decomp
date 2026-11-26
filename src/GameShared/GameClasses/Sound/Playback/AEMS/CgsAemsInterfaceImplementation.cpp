@@ -230,7 +230,6 @@ namespace Playback
             "AemsRWSamplePlayer", 16, 0);
         if (!lpMemory)
         {
-            lpBaseVoice->Release();
             return 0;
         }
 
@@ -251,7 +250,6 @@ namespace Playback
             lpPlayer->mNumChannels > AemsRWSamplePlayer::KU_MAX_SAMPLE_CHANNELS)
         {
             lpPlayer->Release();
-            lpBaseVoice->Release();
             return 0;
         }
 
@@ -281,7 +279,6 @@ namespace Playback
         if (!lpPlayer->mpVoice)
         {
             lpPlayer->Release();
-            lpBaseVoice->Release();
             return 0;
         }
 
@@ -391,7 +388,6 @@ namespace Playback
         rw::audio::core::PlugIn::Event(lpPlayer->mpSndPlayer, 0, &lPlay);
         lpPlayer->mRequestHandle = lPlay.requestHandle;
 
-        lpBaseVoice->Release();
         return lpPlayer;
     }
     // The console body @0x8284CB38 is a bare `blr` (raw 4E 80 00 20) -- an ICF-shared

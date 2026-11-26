@@ -5,6 +5,8 @@
 
 #include "GameShared/GameClasses/Sound/Playback/CgsHandle.h"   // CgsSound::Playback::Handle<T>
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"   // CgsSound::Playback::Name (MakeHash / hash idents)
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"    // complete Playback::Voice: DWARF puts Voice()/~Voice/IsReady/IsPlaying inline here (CgsVoice.h:537/554/663/685)
+#include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h" // complete Logic::Module: the inline three-argument Construct (CgsVoice.h:574) asks it for a unique id
 
 // =============================================================================
 // CgsSound::Logic::Voice -- the sound-LOGIC voice object.
@@ -82,6 +84,9 @@ public:
     // Construct's spec name). Playback::Name::MakeHash returns this widened value.
     typedef u32 Ident;
 
+    // DWARF CgsContent.h:59. The held playback-voice handle type.
+    typedef Playback::Handle<Playback::Voice> VoiceHandle;
+
     // -------------------------------------------------------------------------
     // Construct(parentModule, idx, globalSpecTable, nameHash)
     //   FLAG: RECONSTRUCTED FROM CALL SITES -- the X360 INLINES Construct (no
@@ -97,6 +102,16 @@ public:
     //   -- see the .cpp for the proven-vs-FLAGGED split.
     void Construct(Module* lpOwnerModule, Ident luIdent,
                    Ident luFactoryName, Ident luVoiceSpecName);
+
+    // DWARF CgsVoice.h:574 (local `uint32_t lVoiceId`, h:576): construct with a fresh
+    // unique id from the module. ARTIST VoiceWrapper::Create 0x826EAF2C..0x826EAF60
+    // loads the three arguments, calls the module's GetUniqueId (vtable +0x48), then
+    // the four-argument Construct.
+    void Construct(Module* lpModule, Ident lFactoryName, Ident lVoiceSpecName)
+    {
+        const Ident lVoiceId = lpModule->GetUniqueId();
+        Construct(lpModule, lVoiceId, lFactoryName, lVoiceSpecName);
+    }
 
     // Destruct  @ 0x826C4E38. Assert the wrapped voice exists and is NOT playing,
     // mark its state byte (+0x11 = 2), then Release the handle and null mpObject.

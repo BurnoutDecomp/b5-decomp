@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"   // CgsSound::Playback::Object (Acquire/Release)
 #include "GameShared/GameClasses/Sound/Playback/CgsHandle.h"   // CgsSound::Playback::Handle<T>
+#include "GameShared/GameClasses/Sound/Playback/CgsContent.h"  // complete Playback::Content: DWARF puts IsLoaded inline here (CgsContent.h:231), reading its state
 
 // ============================================================================
 // CgsContent.h -- CgsSound::Logic::Content (COHERENT HOME, revised to DWARF).
@@ -77,19 +78,19 @@ namespace Logic
         void Destruct();
 
         // CgsContent.h:195. The held content handle (const accessor).
-        const ContentHandle& GetContent() const { return mContentHandle; }
+        // ARTIST inlines its assert at CgsContent.h:201 (Logic::Voice::Attach 0x826EAE38,
+        // VoiceWrapper::Create 0x826EB010).
+        const ContentHandle& GetContent() const
+        {
+            CGS_ASSERT_AT(IsCreated(), "Content not yet created!",
+                          "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsContent.h", 201);
+            return mContentHandle;
+        }
 
         // CgsContent.h:213. Created == the handle owns a content object.
         bool IsCreated() const { return mContentHandle; }
 
         bool IsLoaded() const;
-
-        // Named form of the handle assignment in VoiceWrapper::Create/Release.
-        void Adopt(CgsSound::Playback::Content* apContent, Module* apModule)
-        {
-            mContentHandle.SetObject(apContent);
-            mpModule = apModule;
-        }
 
     private:
         // Non-copyable (CgsContent.h:142/147 -- private copy ctor / assign, declared-only).

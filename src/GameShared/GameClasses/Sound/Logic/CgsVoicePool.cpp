@@ -211,29 +211,9 @@ void VoicePoolBase::SetParameter(s32 liParameterIndex, f32 lfValue, Playback::Na
     }
 }
 
-// ----------------------------------------------------------------------------
-// VoicePool<4>::VoicePool<4>  @ 0x826E5328
-//   The compiler constructs the embedded wrappers and installs the pool vtable.
-//   The array is bound later by Prepare, as in InAirEffect::Attach.
-// ----------------------------------------------------------------------------
-template <u32 N>
-VoicePool<N>::VoicePool()
-{
-}
-
-// ----------------------------------------------------------------------------
-// VoicePool<4>::~VoicePool<4>  @ 0x826E5370
-//   The compiler destroys the embedded wrappers in reverse order. Explicit pool
-//   Release belongs to the caller's detach path, not the pool destructor.
-// ----------------------------------------------------------------------------
-template <u32 N>
-VoicePool<N>::~VoicePool()
-{
-}
-
-// Explicit instantiation: emits VoicePool<4>::VoicePool<4> @ 0x826E5328 and
-// ~VoicePool<4> @ 0x826E5370.
-template class VoicePool<4>;
+// VoicePool<4>::VoicePool<4> 0x826E5328 and ~VoicePool<4> 0x826E5370 are the implicit
+// special members (DWARF CgsVoicePool.h:116); InAirEffect's construction and destruction
+// emit them.
 
 } // namespace Logic
 } // namespace CgsSound

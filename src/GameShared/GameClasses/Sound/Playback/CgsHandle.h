@@ -32,6 +32,13 @@
 //   CgsHandle.h:332      void ReleaseObject() const;   // private
 //
 // Attested bodies (each instantiation is emitted out of line per T):
+//   Handle(T*)  -- store the pointer, then take a reference (ARTIST
+//                  Environment::Create 0x826C7948: `stw r31,0(r30)` then ++count
+//                  when non-null; GenericRwacFactory::Create 0x826C7BC8 the same).
+//   ~Handle     -- drop the reference: `lwz r3,mpObject; cmplwi; beq; bl
+//                  Object::Release` (ARTIST ~VoiceWrapper 0x826C7E80 for its
+//                  members, Module::Prepare 0x826E91EC for its temporaries,
+//                  Module::AttachVoice 0x826D7E58 for its by-value parameters).
 //   operator=   -- take the other handle's reference, drop our own through
 //                  Object::Release, then copy the pointer (Environment /
 //                  GenericRwacFactory / SplicerFactory instantiations are called
@@ -40,9 +47,11 @@
 //                  (Factory / Environment / AemsFactory instantiations).
 //   operator*   -- assert "mpObject" (CgsHandle.h) and return the pointee
 //                  (the AemsRWSampleFactory player-voice instantiation).
-// The copy constructor and destructor still follow the interim ref model
-// described beside them: the committed call sites pair Acquire/Release
-// explicitly around adopt-constructed and destroyed handles.
+//   operator Handle<U>&  -- CgsHandle.h:239, a member template (DWARF names one
+//                  instantiation per U); a reinterpretation of this handle as a
+//                  handle of a related type, so a factory's Handle<Derived> result
+//                  assigns into a Handle<Base> through the ordinary operator=
+//                  (PS3 GenericRwacFactory::DoCreateVoice 0x8A9BD0).
 // =============================================================================
 
 namespace CgsSound
@@ -56,30 +65,17 @@ template <typename T>
 struct Handle
 {
 public:
-    // FLAG (additive grow): default ctor -- null-initialise the owned pointer.
-    // The sound-playback Module ctor (0x827DFA98) embeds several handles and the
-    // X360 simply stores 0 into each handle word (`stw r30, 0x2258(r31)` with
-    // r30 == 0), i.e. the handle slot is value-initialised to a null mpObject with
-    // NO Acquire. This trivial null-init ctor matches that store exactly and lets a
-    // handle be a default-constructible aggregate member. Shape-only (the X360
-    // never emits a distinct Handle() out-of-line -- it is the inlined zero store).
-    Handle() : mpObject(0) {}
+    // CgsHandle.h:199. Take a reference on the object (if any). DWARF declares no
+    // separate default constructor, so the null handle is this constructor's default
+    // argument: the playback Module ctor (0x827DFA98) stores 0 into each handle word
+    // and the acquire of a null pointer folds away.
+    explicit Handle(T* apObject = 0) : mpObject(apObject) { AcquireObject(); }
 
-    // CgsHandle.h:199 -- adopt a raw pointer. Inline plain store (phase B5): every
-    // committed call site either passes null (the GetVoice/GetR/CreateContent empty
-    // handles) or takes its reference explicitly beside the store (the Acquire the
-    // :199 ctor's ref-counting implies is applied manually in those bodies) --
-    // consistent with the empty inline dtor below. Revisit with the handle slice.
-    explicit Handle(T* lpObject) : mpObject(lpObject) {}
+    // CgsHandle.h:209. Share the other handle's object: one more reference.
+    Handle(const Handle& akrOther) : mpObject(akrOther.mpObject) { AcquireObject(); }
 
-    // The original copy constructor acquires the reference passed to the playback operation.
-    Handle(const Handle& lkrOther) : mpObject(lkrOther.mpObject) { AcquireObject(); }
-    // CgsHandle.h -- the console destructor drops the owned reference
-    // (ReleaseObject). Here it is empty because the committed call sites pair
-    // Acquire/Release explicitly around adopt-constructed and destroyed handles
-    // (e.g. Logic::Voice's mVoiceHandle, the playback Module's create temps);
-    // moving it onto ReleaseObject means moving those sites with it.
-    ~Handle() {}
+    // CgsHandle.h:217. Drop the reference this handle holds.
+    ~Handle() { ReleaseObject(); }
 
     // CgsHandle.h -- assign. The other handle's object gains a reference
     // first (Object +4 count), then our current object is released, then the
@@ -90,6 +86,15 @@ public:
         ReleaseObject();
         mpObject = lkrOther.mpObject;
         return *this;
+    }
+
+    // CgsHandle.h:239. View this handle as a handle of a related object type (a
+    // Handle<Derived> as the Handle<Base> a factory's out-parameter or member holds).
+    // The handles have one pointer member each, so the view is the same storage.
+    template <typename U>
+    operator Handle<U>&()
+    {
+        return *reinterpret_cast<Handle<U>*>(this);
     }
 
     // CgsHandle.h:251 / 259. Validity -- the owned-pointer test (the X360

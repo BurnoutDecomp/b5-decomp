@@ -10,6 +10,8 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"  // the REAL Environment (+ Registry/Voice/Content via its includes)
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"      // the REAL Factory (CreateVoice<T>/CreateContent)
 #include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h"  // SubmixVoice (ConnectVoice's real Connect target)
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"       // Module::AemsFactoryHandle (DWARF typedef CgsAemsFactory.h:399)
+#include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.h" // SplicerFactory::GenericRwacFactoryHandle / Module::SplicerFactoryHandle (CgsSplicerFactory.h:139)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h" // the REAL ModuleSingleBuffered base (phase B1)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // EventReceiverQueue<0x2000,16> (mResourceReceiverQueue)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<1024,16> (mDeferredResourceRequestQueue)
@@ -326,22 +328,19 @@ public:
     // transient handles.
     void ConnectVoice(Handle<Voice> lhVoice, u32 lu32SendName, u32 lu32SubmixId);
 
-    // Module::CreateVoice @ 0x826D7B00 (DWARF h:318: `Handle<Voice>
-    // CreateVoice(u32,u32,u32)` -- the by-value Handle return is lowered on PPC as
-    // the sret out-pointer this signature spells; IDA truncated the symbol to
+    // Module::CreateVoice @ 0x826D7B00 (DWARF h:318 / cpp:1022: `Handle<Voice>
+    // CreateVoice(uint32_t, uint32_t, uint32_t)`; IDA truncated the symbol to
     // `Module::C`). Resolves the owning factory + voice spec out of the
     // environment, creates a voice for the requested ident, runs the init-submix
-    // hack on the reserved ident, and returns the new voice in lphVoiceOut.
-    void CreateVoice(Handle<Voice>* lphVoiceOut, u32 lu32SlotName, const Name& lFactoryName,
-                     u32 lu32SubmixName);
+    // hack on the reserved ident, and returns the new voice.
+    Handle<Voice> CreateVoice(u32 lu32Ident, u32 lu32FactoryName, u32 lu32VoiceSpecName);
 
-    // Module::CreateContent @ 0x826C12A8. Resolve the owning factory (by class name)
-    // + the content spec (by name) out of the environment, ask the factory to create
-    // the content, wire its ident + owner iface, ref/release it, and release the
-    // transient factory handle. Mirror of Module::C. Returns lppContentOut.
-    Content** CreateContent(Content** lppContentOut, u32 lu32Ident,
-                            const Name& lContentClassName,
-                            const Name& lContentSpecName);
+    // Module::CreateContent @ 0x826C12A8 (DWARF h:327 / cpp:1075: `Handle<Content>
+    // CreateContent(uint32_t, uint32_t, uint32_t)`). Resolve the owning factory (by
+    // class name) + the content spec (by name) out of the environment, ask the factory
+    // to create the content, wire its ident + owner iface, and return it.
+    Handle<Content> CreateContent(u32 lu32Ident, u32 lu32ContentClassName,
+                                  u32 lu32ContentSpecName);
 
     // ---- the IContentLoadService override (console sub-object +0x22C) ----
     // @ 0x826F9F88 (DWARF cpp:1167). Service a content load request: for the

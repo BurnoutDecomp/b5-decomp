@@ -193,8 +193,7 @@ Handle<Factory> Environment::GetFactory(Name aName)
         Factory* lpFactory = mphFactory[lu32I].GetObject();
         if (lpFactory && lpFactory->GetName() == aName)
         {
-            lpFactory->Acquire();
-            return Handle<Factory>(lpFactory);
+            return mphFactory[lu32I];
         }
     }
 
@@ -218,8 +217,7 @@ Handle<Voice> Environment::GetVoice(u32 au32Id)
                 CGS_ASSERT(lpVoice, "mpObject");
                 if (au32Id == lpVoice->GetIdent())
                 {
-                    lpVoice->Acquire();
-                    return Handle<Voice>(lpVoice);
+                    return mphVoice[lu32I];   // ARTIST 0x826BFB98: the copy's store + acquire
                 }
             }
         }
@@ -263,7 +261,7 @@ Handle<Voice> Environment::GetRwacVoiceByPlugin(
         }
 
         CGS_ASSERT(lpVoice, "mpObject");
-        lpVoice->Acquire();
+        Handle<Voice> lhVoice(lpVoice);   // the candidate's reference for the plug-in walk
 
         GenericRwacPlayerVoice* lpPlayerVoice =
             static_cast<GenericRwacPlayerVoice*>(lpVoice);
@@ -281,11 +279,8 @@ Handle<Voice> Environment::GetRwacVoiceByPlugin(
 
         if (lbMatched)
         {
-            lpVoice->Acquire();
-            lpVoice->Release();
-            return Handle<Voice>(lpVoice);
+            return lhVoice;
         }
-        lpVoice->Release();
     }
 
     return Handle<Voice>(0);
@@ -468,9 +463,7 @@ Handle<Environment> Environment::Create(const EnvironmentSpec& lrSpec)
 
     CGS_ASSERT(lpEnvironment != 0, "lpNewEnvironment");
 
-    if (lpEnvironment)
-        lpEnvironment->Acquire();
-    return Handle<Environment>(lpEnvironment);
+    return Handle<Environment>(lpEnvironment);   // ARTIST 0x826C79AC: store, then acquire
 }
 
 // =============================================================================

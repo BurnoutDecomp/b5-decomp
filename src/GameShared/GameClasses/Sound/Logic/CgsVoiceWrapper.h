@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsContent.h"
+#include "GameShared/GameClasses/Sound/CgsMemBase.h"
 
 namespace CgsSound
 {
@@ -12,7 +13,10 @@ namespace Logic
 
 // DecFIGS fixes this declaration shape; ARTIST CgsVoice.cpp fixes the state
 // machine. The console object is 0x50 bytes behind 32-bit pointers.
-class VoiceWrapper
+// DWARF CgsVoice.h:264: struct VoiceWrapper : public CgsSound::MemBase. ARTIST ~VoiceWrapper
+// 0x826C7E80 ends by restoring MemBase's vtable (0x820AA820), and its deleting destructor
+// 0x826E0B88 frees through MemBase's allocator (0x82FFB954, DoFree).
+class VoiceWrapper : public CgsSound::MemBase
 {
 public:
     enum E_UPDATE_STAGE

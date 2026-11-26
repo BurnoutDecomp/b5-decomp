@@ -82,9 +82,8 @@ Handle<AemsFactory> AemsFactory::Create(Environment& arEnvironment,
 
     AemsFactory* lpFactory = ::new (lpMemory) AemsFactory(arEnvironment, akrSpec);
 
-    // The returned handle's owned ref (console `stw ptr` + the +0x08 increment;
-    // interim plain-store Handle model -- the explicit Acquire beside the store).
-    lpFactory->Acquire();
+    // The returned handle's owned ref (console `stw ptr` + the +0x08 increment):
+    // Handle(T*) takes it.
     return Handle<AemsFactory>(lpFactory);
 }
 
