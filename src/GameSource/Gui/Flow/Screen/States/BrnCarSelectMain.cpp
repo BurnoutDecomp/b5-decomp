@@ -1134,7 +1134,7 @@ namespace BrnGui
         else
         {
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerStatusData =
-                mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpLaunchingEvent->mPlayerID);
+                mpGuiCache->GetOnlinePlayerInfo(lpLaunchingEvent->mPlayerID);
             CGS_ASSERT_AT(lpPlayerStatusData != 0, "lpPlayerStatusData", CGS_ARTIST_FILE, 731);
 
             lWire.mRequest.Construct("CNOnlLchGame");

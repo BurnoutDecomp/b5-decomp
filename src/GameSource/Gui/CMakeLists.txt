@@ -6,7 +6,6 @@ target_sources(${PROJECT_NAME}
         BrnGuiAlwaysAvailableComponentsManager.cpp
         BrnGuiBurnoutSkillsManager.cpp
         BrnGuiCache.cpp
-        BrnGuiCache_GetOnlinePlayerInfoFromPlayerId.cpp
         BrnGuiCache_wB_11.cpp
         BrnGuiCache_wB_12.cpp
         BrnGuiCache_wB_res.cpp

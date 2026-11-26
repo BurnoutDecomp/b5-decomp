@@ -1205,14 +1205,12 @@ namespace BrnGui
             return 0;
         }
 
-        // ADDITIVE GROW (BrnGuiHudMessageAnalyzer online-stunt-run TU): resolve a network
-        // player id to its in-game online-player record (X360 @0x82482738). The analyzer's
-        // online-stunt-run handlers pass mpGuiCache + the event's mPlayerId, then read the
-        // returned record's online name (@+256) and active-race-car index (@+276). May return
-        // NULL (the message handler asserts non-NULL before use). Returned by pointer (the same
-        // committed 312-byte InGamePlayerStatusData record). Body links from the GuiCache TU.
+        // DWARF h:780 -- the record of network player lPlayerID, or NULL. The DWARF parameter is
+        // RoadRulesRecvData::NetworkPlayerID (int32_t, == BrnNetwork::NetworkPlayerID).
+        // Header-inline (its assert names BrnGuiCache.h:3597); ARTIST calls the COMDAT copy
+        // 0x82482738 out of line. Defined after the class.
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
-             GetOnlinePlayerInfoFromPlayerId(s32 liPlayerId) const;
+             GetOnlinePlayerInfo(BrnNetwork::NetworkPlayerID lPlayerID) const;
 
         // The active race car of a network player: the in-game record whose network id
         // matches, or E_ACTIVE_RACE_CAR_INDEX_INVALID. Inlined at every console reader
@@ -2473,6 +2471,25 @@ namespace BrnGui
         CGS_ASSERT(liPlayerInfoIndex < 8, CGS_ASSERT_MESSAGE_AT("liPlayerInfoIndex < KI_MAX_PLAYERS", CGS_ARTIST_BRNGUICACHE_H_FILE, 3646 /* ARTIST 0x8240F8EC */));
 
         return &maPlayerInfo[liPlayerInfoIndex];
+    }
+
+    // @ 0x82482738 -- walk the eight records (maPlayerInfo @+0xAC80, mNetworkPlayerID @+272)
+    // for lPlayerID. CgsNetwork::K_INVALID_PLAYER_ID is -1 (`cmpwi r31,-1`).
+    inline const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
+        GuiCache::GetOnlinePlayerInfo(BrnNetwork::NetworkPlayerID lPlayerID) const
+    {
+        CGS_ASSERT(lPlayerID != -1,
+            CGS_ASSERT_MESSAGE_AT(
+                "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_BRNGUICACHE_H_FILE, 3597 /* ARTIST 0x82482764 */));
+
+        for (s32 liIndex = 0; liIndex < 8; ++liIndex)
+        {
+            if (maPlayerInfo[liIndex].mNetworkPlayerID == lPlayerID)
+            {
+                return &maPlayerInfo[liIndex];
+            }
+        }
+        return 0;
     }
 
     // @ 0x8240F988 -- maOnlinePlayerDisconnected @ +0xB84C (47180)

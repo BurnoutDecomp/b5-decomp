@@ -1714,7 +1714,7 @@ namespace BrnGui
                 // The console fetches the record twice around the assert -- that is the assert
                 // macro expanding, not two reads -- and derefs it unguarded either way.
                 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
-                    mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lrPlayer.mPlayerID);
+                    mpGuiCache->GetOnlinePlayerInfo(lrPlayer.mPlayerID);
 
                 CGS_ASSERT(lpPlayerInfo != 0,
                            "Trying to show the name of a player who isn't in our game");  // cpp:1464

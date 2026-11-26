@@ -218,7 +218,7 @@ void HudMessageAnalyzer::HandleOnlineStuntRunElimination(
     else
     {
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpEliminatedPlayer =
-            mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpEliminationEvent->mPlayerId);
+            mpGuiCache->GetOnlinePlayerInfo(lpEliminationEvent->mPlayerId);
 
         // One Construct per arm (ARTIST 0x8251FBBC: r3 = &lMessage above the branch, the
         // call cross-jumped -- an if/else, not a ternary argument).
@@ -272,7 +272,7 @@ void HudMessageAnalyzer::HandleOnlineStuntRunLeading(
         else
         {
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpLeadingPlayer =
-                mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpLeadingEvent->mPlayerId);
+                mpGuiCache->GetOnlinePlayerInfo(lpLeadingEvent->mPlayerId);
 
             lMessage.Construct("OnlSrRiLead");
             lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0,
@@ -318,7 +318,7 @@ void HudMessageAnalyzer::HandleOnlineStuntRunVictory(
         else
         {
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpVictoryPlayer =
-                mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpVictoryEvent->mPlayerId);
+                mpGuiCache->GetOnlinePlayerInfo(lpVictoryEvent->mPlayerId);
 
             lMessage.Construct("OnlSrRiWin");
             lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0,
@@ -359,7 +359,7 @@ void HudMessageAnalyzer::HandleOnlineStuntRunMessage(
             static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex()));
 
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpEliminatedPlayer =
-            mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpMessageEvent->mPlayerId);
+            mpGuiCache->GetOnlinePlayerInfo(lpMessageEvent->mPlayerId);
         CGS_ASSERT_AT(lpEliminatedPlayer != NULL, "lpEliminatedPlayer", CGS_ARTIST_FILE, 5503);
 
         const s32 liScoringPlayerTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(
@@ -1288,7 +1288,7 @@ void HudMessageAnalyzer::HandleShowtimeModeSwitch(const GuiShowtimeModeSwitch* l
         }
 
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
-            mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpEvent->mNetworkPlayerID);
+            mpGuiCache->GetOnlinePlayerInfo(lpEvent->mNetworkPlayerID);
         if (lpPlayerInfo != NULL)
         {
             lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0,
@@ -1440,7 +1440,7 @@ void HudMessageAnalyzer::HandlePlayerJoinedLobby(const GuiEventNetworkPlayerJoin
         *CgsDev::Log::gpDebugPrint << "NetworkPlayerID: " << lpEvent->mNetworkPlayerID << "\n";
     }
 
-    lpPlayerData = mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpEvent->mNetworkPlayerID);
+    lpPlayerData = mpGuiCache->GetOnlinePlayerInfo(lpEvent->mNetworkPlayerID);
     CGS_ASSERT_AT(lpPlayerData != NULL, "lpPlayerData", CGS_ARTIST_FILE, 5039);
 
     lPlayerName = lpPlayerData->mPlayerName;   // the 16-byte copy (memcpy @0x8251F584)
@@ -3525,7 +3525,7 @@ void HudMessageAnalyzer::HandleSignSmashMessage(const GuiHUDMessageSignSmashed* 
 // FOLDED FROM BrnGuiHudMessageAnalyzer_gUI_02.cpp
 #include "GameSource/Gui/BrnGuiHudMessageAnalyzer.h"   // brings BrnGuiEventTypeDefs + PlayerName
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"         // the four HUD-message payloads below
-#include "GameSource/Gui/BrnGuiCache.h"                 // GuiCache (friend access + GetOnlinePlayerInfoFromPlayerId)
+#include "GameSource/Gui/BrnGuiCache.h"                 // GuiCache (friend access + GetOnlinePlayerInfo)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData
 #include "GameSource/GameState/BrnGameStateSharedIO.h"  // GameStateModuleIO::EGameModeType
 
@@ -3565,7 +3565,7 @@ namespace
 // The network-player-id keyed sibling of the EActiveRaceCarIndex overload in the class
 // TU. Where that one linear-scans the cache's eight player records by car index, this one
 // hands the id to the cache's own lookup and reads the name off the record it returns
-// (X360 `sub_82482738(mpGuiCache, id)` == GuiCache::GetOnlinePlayerInfoFromPlayerId, then
+// (X360 `sub_82482738(mpGuiCache, id)` == GuiCache::GetOnlinePlayerInfo, then
 // `record + 256` == mPlayerName). PITFALL, per the header: pass a genuine s32 player id --
 // an EActiveRaceCarIndex argument silently binds the OTHER overload.
 const char* HudMessageAnalyzer::GetOnlineName(s32 liNetworkPlayerID, bool* lpbValid) const
@@ -3575,7 +3575,7 @@ const char* HudMessageAnalyzer::GetOnlineName(s32 liNetworkPlayerID, bool* lpbVa
     CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
 
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
-        mpGuiCache->GetOnlinePlayerInfoFromPlayerId(liNetworkPlayerID);
+        mpGuiCache->GetOnlinePlayerInfo(liNetworkPlayerID);
 
     if (lpPlayerInfo != NULL)
     {
