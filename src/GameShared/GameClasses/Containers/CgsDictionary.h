@@ -2,7 +2,11 @@
 #define CGS_DICTIONARY_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT_AT
+
+// ARTIST's spelling of this header in its inlined asserts (0x820A1A70: the GameShared include
+// directory plus "Containers/CgsDictionary.h").
+#define CGS_ARTIST_CGSDICTIONARY_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsDictionary.h"
 
 // ============================================================================
 // GameShared/GameClasses/Containers/CgsDictionary.h
@@ -105,8 +109,16 @@ struct SimpleDictionary : public DictionaryBase
 public:
     // ---- declaration-only (reconstructed in their own TUs) ----
     Type*                    Find(DictEntry::DictionaryKey lKey);            // :263
-    Type*                    GetAt(s32 liIndex);                             // :354
     DictEntry::DictionaryKey FindByValue(const Type* lpData) const;         // :324
+
+    // CgsDictionary.h:354 (DWARF). Indexed access; the bound assert sits on line 356 with the
+    // message ARTIST bakes (0x820A1A48), inlined into Dictionary<T>::FixUp (0x82666048).
+    Type* GetAt(s32 lnIndex)
+    {
+        CGS_ASSERT_AT(lnIndex>=0 && lnIndex < miNumEntries, "lnIndex>=0 && lnIndex < miNumEntries",
+            CGS_ARTIST_CGSDICTIONARY_FILE, 356);
+        return reinterpret_cast<Type*>( mpaIndex[ lnIndex ].mpData );
+    }
 
     // CgsDictionary.h:294 (DWARF). Const key lookup. The X360 inlined this as a
     // linear scan over mpaIndex comparing the full 64-bit mKey field (asm ld/cmpd
@@ -124,14 +136,13 @@ public:
         return 0;
     }
 
-    // CgsDictionary.h:375 (DWARF). Const indexed access. The X360 asserts the index
-    // bound inline before returning mpaIndex[i].mpData; reconstructed with the same
-    // bound via CGS_ASSERT (the baked CgsDictionary.h:377 path/line is discarded).
-    const Type* GetAt(s32 liIndex) const
+    // CgsDictionary.h:375 (DWARF). Const indexed access: the bound assert on line 377
+    // (ICEList::GetICETakeDataFromGuid 0x8267BF60), then mpaIndex[i].mpData.
+    const Type* GetAt(s32 lnIndex) const
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex < miNumEntries,
-            "lnIndex>=0 && lnIndex < miNumEntries\n");
-        return reinterpret_cast<const Type*>( mpaIndex[ liIndex ].mpData );
+        CGS_ASSERT_AT(lnIndex>=0 && lnIndex < miNumEntries, "lnIndex>=0 && lnIndex < miNumEntries",
+            CGS_ARTIST_CGSDICTIONARY_FILE, 377);
+        return reinterpret_cast<const Type*>( mpaIndex[ lnIndex ].mpData );
     }
 };
 
@@ -151,16 +162,11 @@ public:
     {
         DictionaryBase::FixUp();
 
-        const s32 liNumEntries = this->miNumEntries;
-        for ( s32 liIndex = 0; liIndex < liNumEntries; ++liIndex )
+        // DWARF h:398 scopes only liIndex: ARTIST re-reads the count each pass (0x82666070)
+        // and asserts through the inlined GetAt (h:356).
+        for ( s32 liIndex = 0; liIndex < this->GetNumEntries(); ++liIndex )
         {
-            // Per-entry bound assert (the X360 re-tests it each iteration;
-            // CgsDictionary.h:356 in the baked image -- path/line dropped here).
-            CGS_ASSERT(liIndex >= 0 && liIndex < this->miNumEntries,
-                "lnIndex>=0 && lnIndex < miNumEntries\n");
-
-            Type* lpEntryData = reinterpret_cast<Type*>( this->mpaIndex[ liIndex ].mpData );
-            lpEntryData->FixUp(lrResource);
+            this->GetAt(liIndex)->FixUp(lrResource);
         }
     }
 
@@ -172,14 +178,10 @@ public:
     // precedes the trailing bl DictionaryBase::FixDown).
     void FixDown(const CgsResource::Resource& lrResource)
     {
-        const s32 liNumEntries = this->miNumEntries;
-        for ( s32 liIndex = 0; liIndex < liNumEntries; ++liIndex )
+        // DWARF h:423 scopes only liIndex (as FixUp).
+        for ( s32 liIndex = 0; liIndex < this->GetNumEntries(); ++liIndex )
         {
-            CGS_ASSERT(liIndex >= 0 && liIndex < this->miNumEntries,
-                "lnIndex>=0 && lnIndex < miNumEntries\n");
-
-            Type* lpEntryData = reinterpret_cast<Type*>( this->mpaIndex[ liIndex ].mpData );
-            lpEntryData->FixDown(lrResource);
+            this->GetAt(liIndex)->FixDown(lrResource);
         }
 
         DictionaryBase::FixDown();
