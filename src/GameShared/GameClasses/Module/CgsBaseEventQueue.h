@@ -10,10 +10,11 @@
 // Native memory copy declared by the XDK in xbox.h.
 extern "C" void* __stdcall XMemCpy(void* pDest, const void* pSrc, SIZE_T count);
 
+#define KAC_BASE_EVENT_QUEUE_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsBaseEventQueue.h"
+
 namespace CgsModule
 {
-    static const char KAC_BASE_EVENT_QUEUE_FILE[] =
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsBaseEventQueue.h";
 
     // A non-owning ring of events stored in an externally supplied buffer. The
     // derived EventQueue<T, N> supplies an inline maEvents[N] buffer; other users
