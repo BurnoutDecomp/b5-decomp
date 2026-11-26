@@ -218,11 +218,6 @@ namespace CgsSystem
         return mbIsLocal;
     }
 
-    bool DateAndTime::IsZero() const
-    {
-        return mFileTime.muLowDateTime == 0 && mFileTime.muHighDateTime == 0;
-    }
-
     bool DateAndTime::operator==(const DateAndTime& lDateAndTime) const
     {
         return GetRawTimeValue() == lDateAndTime.GetRawTimeValue();

@@ -131,7 +131,7 @@ namespace CgsNetwork
                 mpLobbyRank = LobbyRankCreate(mpServerInterface->GetLobbyAPIRef(), 0);
                 CGS_ASSERT_AT(mpLobbyRank != 0,
                     "mpLobbyRank",
-                    __FILE__, 225 /* ARTIST 0x8287BB84 */);
+                    CGS_ARTIST_FILE, 225 /* ARTIST 0x8287BB84 */);
             }
         }
         else if (leEvent == E_SERVER_INTERFACE_GENERAL_EVENT_LOBBY_API_DESTROYING)
@@ -157,11 +157,11 @@ namespace CgsNetwork
     s32 ServerInterfaceRankings::GetNumberOfRows()
     {
         CGS_ASSERT_AT(mpLobbyRank != 0,
-            "mpLobbyRank", __FILE__, 307 /* ARTIST 0x8287BCD4 */);
+            "mpLobbyRank", CGS_ARTIST_FILE, 307 /* ARTIST 0x8287BCD4 */);
 
         const s32 liNoOfRows = LobbyRankRowCount(mpLobbyRank);
         CGS_ASSERT_AT(liNoOfRows >= 0,
-            "liNoOfRows >= 0", __FILE__, 310 /* ARTIST 0x8287BD04 */);
+            "liNoOfRows >= 0", CGS_ARTIST_FILE, 310 /* ARTIST 0x8287BD04 */);
         return liNoOfRows;
     }
 
@@ -196,14 +196,14 @@ namespace CgsNetwork
     const char* ServerInterfaceRankings::GetCategoryName(s32 liCategory)
     {
         CGS_ASSERT_AT(mpLobbyRank != 0,
-            "mpLobbyRank", __FILE__, 544 /* ARTIST 0x8287C038 */);
+            "mpLobbyRank", CGS_ARTIST_FILE, 544 /* ARTIST 0x8287C038 */);
         return LobbyRankCategoryName(mpLobbyRank, liCategory, 0, 0);
     }
 
     const char* ServerInterfaceRankings::GetIndexName(s32 liCategory, s32 liIndex)
     {
         CGS_ASSERT_AT(mpLobbyRank != 0,
-            "mpLobbyRank", __FILE__, 560 /* ARTIST 0x8287C0AC */);
+            "mpLobbyRank", CGS_ARTIST_FILE, 560 /* ARTIST 0x8287C0AC */);
         return LobbyRankIndexName(mpLobbyRank, liCategory, liIndex, 0, 0);
     }
 
@@ -222,14 +222,14 @@ namespace CgsNetwork
     const char* ServerInterfaceRankings::GetColumnTitle(s32 liColumn)
     {
         CGS_ASSERT_AT(mpLobbyRank != 0,
-            "mpLobbyRank", __FILE__, 615 /* ARTIST 0x8287C1D0 */);
+            "mpLobbyRank", CGS_ARTIST_FILE, 615 /* ARTIST 0x8287C1D0 */);
         return LobbyRankColumnName(mpLobbyRank, liColumn, 0, 0);
     }
 
     void ServerInterfaceRankings::GetCell(s32 liColumn, s32 liRow, char* lpcBuffer, s32 liBufferSize)
     {
         CGS_ASSERT_AT(mpLobbyRank != 0,
-            "mpLobbyRank", __FILE__, 633 /* ARTIST 0x8287C24C */);
+            "mpLobbyRank", CGS_ARTIST_FILE, 633 /* ARTIST 0x8287C24C */);
         LobbyRankData(mpLobbyRank, liColumn, liRow, lpcBuffer, liBufferSize);
     }
 

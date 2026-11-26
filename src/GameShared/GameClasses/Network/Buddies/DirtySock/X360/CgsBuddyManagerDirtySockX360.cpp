@@ -163,14 +163,14 @@ namespace CgsNetwork
     u64 BuddyManagerX360::GetBuddyXUID(const PlayerName* lpBuddyName)
     {
         CGS_ASSERT_AT(mpBuddies,
-            "mpBuddies", __FILE__, 222 /* ARTIST 0x8287F9E0 */);
+            "mpBuddies", CGS_ARTIST_FILE, 222 /* ARTIST 0x8287F9E0 */);
         CGS_ASSERT_AT(lpBuddyName,
-            "lpBuddyName", __FILE__, 223 /* ARTIST 0x8287FA04 */);
+            "lpBuddyName", CGS_ARTIST_FILE, 223 /* ARTIST 0x8287FA04 */);
 
         DirtySock::HLBBudT* lpBuddy =
             DirtySock::HLBListGetBuddyByName(mpBuddies, lpBuddyName->GetPlayerName());
         CGS_ASSERT_AT(lpBuddy,
-            "lpBuddy", __FILE__, 226 /* ARTIST 0x8287FA38 */);
+            "lpBuddy", CGS_ARTIST_FILE, 226 /* ARTIST 0x8287FA38 */);
 
         return DirtySock::HLBBudGetXenonXUID(lpBuddy);
     }
@@ -233,7 +233,7 @@ namespace CgsNetwork
             DirtySock::HLBBudT* lpBuddy = DirtySock::HLBListGetBuddyByIndex(mpBuddies, liIndex);
             CGS_ASSERT_AT(lpBuddy,
                 "lpBuddy",
-                __FILE__, 649 /* ARTIST 0x8287FFDC */);
+                CGS_ARTIST_FILE, 649 /* ARTIST 0x8287FFDC */);
 
             if ((lpBuddy->uFlags & HLB_BUDFLAG_INVITE_SENT) != 0)
             {
@@ -433,7 +433,7 @@ namespace CgsNetwork
             reinterpret_cast<PXOVERLAPPED>(mGamerPicOverlapped));
         CGS_ASSERT_AT(luResult == ERROR_IO_PENDING,
             "dwRet == ERROR_IO_PENDING",
-            __FILE__, 426 /* ARTIST 0x8288CCD8 */);
+            CGS_ARTIST_FILE, 426 /* ARTIST 0x8288CCD8 */);
 
         meCurrentStatus             = E_BUDDY_ACTION_DOWNLOADING_PROFILE;
         miFirstProfileInThisRequest = miNextProfileToRequest;
@@ -548,7 +548,7 @@ namespace CgsNetwork
             meCurrentStatus = E_BUDDY_ACTION_IDLE;
             const u32 luResult = XCancelOverlapped(reinterpret_cast<PXOVERLAPPED>(mGamerPicOverlapped));
             CGS_ASSERT_AT(luResult == 0,
-                "mGamerPicOverlapped.CancelXOverlapped()", __FILE__, 316 /* ARTIST 0x8287FAA0 */);
+                "mGamerPicOverlapped.CancelXOverlapped()", CGS_ARTIST_FILE, 316 /* ARTIST 0x8287FAA0 */);
 
         }
     }

@@ -124,10 +124,10 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(lTimeDiffTolerance.GetFloatVal() > 0.0f,
             "lTimeDiffTolerance.GetFloatVal() > 0.0f",
-            __FILE__, 329 /* ARTIST 0x8287D2A8 */);
+            CGS_ARTIST_FILE, 329 /* ARTIST 0x8287D2A8 */);
         CGS_ASSERT_AT(liMinNumPacketsRecvd >= 0,
             "liMinNumPacketsRecvd >= 0",
-            __FILE__, 330 /* ARTIST 0x8287D2CC */);
+            CGS_ARTIST_FILE, 330 /* ARTIST 0x8287D2CC */);
 
         if (miNumTimePackets < liMinNumPacketsRecvd)
         {

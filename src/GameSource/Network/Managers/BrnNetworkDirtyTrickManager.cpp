@@ -23,7 +23,7 @@
 // The rest of the manager: the lifecycle, the per-peer message registration, the per-frame
 // relay of the game's dirty-trick events to every peer and the delivery of a peer's dirty
 // trick back onto the network-to-game-state queue.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkDirtyTrickManager.cpp"
 #include "GameSource/Network/Managers/BrnNetworkDirtyTrickManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -56,7 +56,7 @@ namespace BrnNetwork
         }
 
         CGS_ASSERT_AT(lpEntry != 0,
-            "lpEntry", __FILE__, 370 /* ARTIST 0x825486FC */);
+            "lpEntry", CGS_ARTIST_FILE, 370 /* ARTIST 0x825486FC */);
         return lpEntry;
     }
 
@@ -108,7 +108,7 @@ namespace BrnNetwork
     void NetworkDirtyTrickManager::ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* /*lpInputBuffer*/)
     {
         CGS_ASSERT_AT(mpNetworkModule,
-            "mpNetworkModule", __FILE__, 163 /* ARTIST 0x8255BA90 */);
+            "mpNetworkModule", CGS_ARTIST_FILE, 163 /* ARTIST 0x8255BA90 */);
         ProcessDirtyTrickEvents();
     }
 
@@ -116,14 +116,14 @@ namespace BrnNetwork
     void NetworkDirtyTrickManager::AddPlayer(NetworkPlayerID lNetworkPlayerID)
     {
         CGS_ASSERT_AT(mpPlayerManager,
-            "mpPlayerManager", __FILE__, 293 /* ARTIST 0x82560BA8 */);
+            "mpPlayerManager", CGS_ARTIST_FILE, 293 /* ARTIST 0x82560BA8 */);
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lNetworkPlayerID);
         if (lpNetworkPlayer != 0)
         {
             DirtyTrickData* lpDataEntry = GetDirtyTrickDataEntry(-1);
             CGS_ASSERT_AT(lpDataEntry,
-                "lpDataEntry", __FILE__, 300 /* ARTIST 0x82560BF4 */);
+                "lpDataEntry", CGS_ARTIST_FILE, 300 /* ARTIST 0x82560BF4 */);
 
             lpNetworkPlayer->RegisterMessageType(KI_DIRTY_TRICK_MESSAGE_TYPE,
                                                  sizeof(DirtyTrickMessage),
@@ -140,7 +140,7 @@ namespace BrnNetwork
     void NetworkDirtyTrickManager::RemovePlayer(NetworkPlayerID lNetworkPlayerID)
     {
         CGS_ASSERT_AT(mpPlayerManager,
-            "mpPlayerManager", __FILE__, 330 /* ARTIST 0x825536C8 */);
+            "mpPlayerManager", CGS_ARTIST_FILE, 330 /* ARTIST 0x825536C8 */);
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lNetworkPlayerID);
         if (lpNetworkPlayer != 0)
@@ -191,7 +191,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpPlayerManager,
             "mpPlayerManager",
-            __FILE__, 250 /* ARTIST 0x82548570 */);
+            CGS_ARTIST_FILE, 250 /* ARTIST 0x82548570 */);
 
         NetworkPlayerID lPlayerID = -1;
         while (mpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
@@ -203,14 +203,14 @@ namespace BrnNetwork
                     lpNetworkPlayer->GetRegisteredSendMessage(KI_DIRTY_TRICK_MESSAGE_TYPE));
                 CGS_ASSERT_AT(lpDirtyTrickMessage,
                     "lpDirtyTrickMessage",
-                    __FILE__, 260 /* ARTIST 0x825485F4 */);
+                    CGS_ARTIST_FILE, 260 /* ARTIST 0x825485F4 */);
 
                 const NetworkPlayerID lAggressorPlayerID = mpNetworkModule->GetNetworkPlayerID(leAggressor);
                 const NetworkPlayerID lVictimPlayerID    = mpNetworkModule->GetNetworkPlayerID(leVictim);
 
                 CGS_ASSERT_AT(!lpDirtyTrickMessage->IsMessageValid(),
                     "!lpDirtyTrickMessage->IsMessageValid()",
-                    __FILE__, 269 /* ARTIST 0x82548644 */);
+                    CGS_ARTIST_FILE, 269 /* ARTIST 0x82548644 */);
 
                 lpDirtyTrickMessage->PrepareForSend(mpTimeManager->GetU16FrameCount(), lAggressorPlayerID,
                                                     lVictimPlayerID, lu8DirtyTrickType, lu8DirtyTrickStatus);
@@ -224,10 +224,10 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpNetworkModule,
             "mpNetworkModule",
-            __FILE__, 419 /* ARTIST 0x8255BB04 */);
+            CGS_ARTIST_FILE, 419 /* ARTIST 0x8255BB04 */);
         CGS_ASSERT_AT(lpDirtyTrickMessageRecv,
             "lpDirtyTrickMessageRecv",
-            __FILE__, 420 /* ARTIST 0x8255BB28 */);
+            CGS_ARTIST_FILE, 420 /* ARTIST 0x8255BB28 */);
 
         NetworkPlayerID lAggressorPlayerID;
         NetworkPlayerID lVictimPlayerID;
@@ -249,11 +249,11 @@ namespace BrnNetwork
     {
         NetworkDirtyTrickManager* lpDirtyTrickManager = static_cast<NetworkDirtyTrickManager*>(lpContext);
         CGS_ASSERT_AT(lpDirtyTrickManager,
-            "lpDirtyTrickManager", __FILE__, 465 /* ARTIST 0x8255BBE8 */);
+            "lpDirtyTrickManager", CGS_ARTIST_FILE, 465 /* ARTIST 0x8255BBE8 */);
 
         DirtyTrickMessage* lpDirtyTrickMessage = static_cast<DirtyTrickMessage*>(lpMessage);
         CGS_ASSERT_AT(lpDirtyTrickMessage,
-            "lpDirtyTrickMessage", __FILE__, 466 /* ARTIST 0x8255BC0C */);
+            "lpDirtyTrickMessage", CGS_ARTIST_FILE, 466 /* ARTIST 0x8255BC0C */);
 
         lpDirtyTrickManager->ReceiveDirtyTrickMessage(lNetworkPlayerID, lpDirtyTrickMessage);
     }

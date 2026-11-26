@@ -175,7 +175,7 @@ namespace CgsNetwork
         if (mbTextureAllocatedFromHeap)
         {
             CGS_ASSERT_AT(mpcTexture,
-                "mpcTexture", __FILE__, 144 /* ARTIST 0x8287E60C */);
+                "mpcTexture", CGS_ARTIST_FILE, 144 /* ARTIST 0x8287E60C */);
             mpHeapMalloc->Free(mpcTexture);
             mpcTexture                 = 0;
             mbTextureAllocatedFromHeap = false;
@@ -275,10 +275,10 @@ namespace CgsNetwork
                                        renderengine::PixelFormat lePixelFormat)
     {
         CGS_ASSERT_AT(liDataSizeInBytes == GetTextureSize(),
-            "liDataSizeInBytes == GetTextureSize()", __FILE__, 369 /* ARTIST 0x8287E8E4 */);
+            "liDataSizeInBytes == GetTextureSize()", CGS_ARTIST_FILE, 369 /* ARTIST 0x8287E8E4 */);
 
         CGS_ASSERT_AT(lePixelFormat == GetFormat(),
-            "lePixelFormat == GetFormat()", __FILE__, 370 /* ARTIST 0x8287E90C */);
+            "lePixelFormat == GetFormat()", CGS_ARTIST_FILE, 370 /* ARTIST 0x8287E90C */);
 
 
         XMemCpy(mpcTexture, lpcPixelData, static_cast<SIZE_T>(liDataSizeInBytes));

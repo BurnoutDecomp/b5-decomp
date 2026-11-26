@@ -125,12 +125,12 @@ bool NetworkAdapterBase::SendTo(void* lpData, s32 liLength, ConnectionData lConn
 {
     CGS_ASSERT_AT(lConnectionData.IsValid(),
         "lConnectionData.IsValid()",
-        __FILE__, 206 /* ARTIST 0x828710EC */);
+        CGS_ARTIST_FILE, 206 /* ARTIST 0x828710EC */);
 
     NetGamePacketT lPacket;
     CGS_ASSERT_AT((liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) ),
         "(liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) )",
-        __FILE__, 208 /* ARTIST 0x82871110 */);
+        CGS_ARTIST_FILE, 208 /* ARTIST 0x82871110 */);
 
     std::memset(&lPacket, 0, sizeof(lPacket));
     lPacket.head.len  = static_cast<u16>(liLength);
@@ -165,9 +165,9 @@ s32 NetworkAdapterBase::ReceiveFrom(void** lppData, ConnectionData lConnectionDa
     NetGamePacketT* lpPacket = reinterpret_cast<NetGamePacketT*>(mpRecvBuffer);
 
     CGS_ASSERT_AT(lppData,
-        "lppData", __FILE__, 262 /* ARTIST 0x8287122C */);
+        "lppData", CGS_ARTIST_FILE, 262 /* ARTIST 0x8287122C */);
     CGS_ASSERT_AT(mpRecvBuffer,
-        "mpRecvBuffer", __FILE__, 263 /* ARTIST 0x82871254 */);
+        "mpRecvBuffer", CGS_ARTIST_FILE, 263 /* ARTIST 0x82871254 */);
 
     if (lConnectionData.mpNetGameLink == 0)
     {

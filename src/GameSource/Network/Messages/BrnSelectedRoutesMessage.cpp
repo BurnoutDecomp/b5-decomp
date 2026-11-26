@@ -108,12 +108,12 @@ namespace BrnNetwork
             return;
 
         CGS_ASSERT_AT(lpEvent != 0,
-            "lpEvent", __FILE__, 95 /* ARTIST 0x8257AFC4 */);
+            "lpEvent", CGS_ARTIST_FILE, 95 /* ARTIST 0x8257AFC4 */);
         CGS_ASSERT_AT(liRoundNumber >= KI_MIN_ROUND_NUM,
-            "liRoundNumber>=KI_MIN_ROUND_NUM", __FILE__, 96 /* ARTIST 0x8257AFE8 */);
+            "liRoundNumber>=KI_MIN_ROUND_NUM", CGS_ARTIST_FILE, 96 /* ARTIST 0x8257AFE8 */);
 
         CGS_ASSERT_AT(liRoundNumber <= KI_MAX_ROUND_NUM,
-            "liRoundNumber<=KI_MAX_ROUND_NUM", __FILE__, 97 /* ARTIST 0x8257B00C */);
+            "liRoundNumber<=KI_MAX_ROUND_NUM", CGS_ARTIST_FILE, 97 /* ARTIST 0x8257B00C */);
 
 
         miRoundNumber = liRoundNumber;          // stw, +0x54
@@ -121,7 +121,7 @@ namespace BrnNetwork
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_SELECTED_ROUTES_MESSAGE_TYPE, lu16Frame);
         CGS_ASSERT_AT(IsReliable(),
-            "IsReliable()", __FILE__, 103 /* ARTIST 0x8257B06C */);
+            "IsReliable()", CGS_ARTIST_FILE, 103 /* ARTIST 0x8257B06C */);
     }
 
     // ---------------------------------------------------------------------------------

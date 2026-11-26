@@ -21,7 +21,7 @@
 // comments rather than fabricating the un-homed dev-stream global; the asserts are
 // preserved via CGS_ASSERT.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLoginManagerBase.cpp"
 #include "GameSource/Network/Managers/BrnNetworkLoginManagerBase.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -107,13 +107,13 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpNetworkModule != 0,
             "lpNetworkModule",
-            __FILE__, 60 /* ARTIST 0x82543840 */);
+            CGS_ARTIST_FILE, 60 /* ARTIST 0x82543840 */);
         mpNetworkModule = lpNetworkModule;
 
         mpNetworkManager = lpNetworkModule->GetNetworkManager();
         CGS_ASSERT_AT(mpNetworkManager != 0,
             "mpNetworkManager",
-            __FILE__, 65 /* ARTIST 0x82543874 */);
+            CGS_ARTIST_FILE, 65 /* ARTIST 0x82543874 */);
 
         meSignInState        = E_SIGN_IN_STATE_COUNT;
         meSubState           = E_SUBSTATE_COUNT;
@@ -182,7 +182,7 @@ namespace BrnNetwork
         default:
             CGS_FAIL_AT(
                 "Invalid login sub state",
-                    __FILE__, 237 /* ARTIST 0x8256CE04 */);
+                    CGS_ARTIST_FILE, 237 /* ARTIST 0x8256CE04 */);
 
             return false;
         }
@@ -334,7 +334,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(meSignInState == E_SIGN_IN_STATE_SIGNING_IN,
             "meSignInState == E_SIGN_IN_STATE_SIGNING_IN",
-                __FILE__, 958 /* ARTIST 0x82543BE8 */);
+                CGS_ARTIST_FILE, 958 /* ARTIST 0x82543BE8 */);
 
         // X360: meSignInState = !lbSuccess + 1 -- success -> SUCCESS(1), failure -> FAILED(2).
         meSignInState = lbSuccess ? E_SIGN_IN_STATE_SUCCESS : E_SIGN_IN_STATE_FAILED;
@@ -409,7 +409,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpNetworkManager != 0,
             "NULL != mpNetworkManager",
-            __FILE__, 1116 /* ARTIST 0x8254FEFC */);
+            CGS_ARTIST_FILE, 1116 /* ARTIST 0x8254FEFC */);
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         BrnServerInterfaceDownloadableConfig* lpConfig = lpServerInterface->GetDownloadableConfigComponent();
@@ -435,7 +435,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpNetworkManager != 0,
             "mpNetworkManager",
-            __FILE__, 1156 /* ARTIST 0x82543DC0 */);
+            CGS_ARTIST_FILE, 1156 /* ARTIST 0x82543DC0 */);
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         if (lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO) == BrnServerInterface::E_STATUS_IDLE)
@@ -450,7 +450,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpNetworkManager != 0,
             "mpNetworkManager",
-            __FILE__, 1176 /* ARTIST 0x82543E40 */);
+            CGS_ARTIST_FILE, 1176 /* ARTIST 0x82543E40 */);
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         if (lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_PING_REGIONS) == BrnServerInterface::E_STATUS_IDLE)
@@ -539,7 +539,7 @@ namespace BrnNetwork
         {
             CGS_FAIL_AT(
                 "Invalid server interface status!",
-                __FILE__, 362 /* ARTIST 0x8254F988 */);
+                CGS_ARTIST_FILE, 362 /* ARTIST 0x8254F988 */);
         }
     }
 
@@ -566,7 +566,7 @@ namespace BrnNetwork
         case CgsNetwork::ServerInterfaceConnection::E_LOGIN_STATUS_LOGIN:
             CGS_FAIL_AT(
                 "Probably shouldn't get here but just in case try logging in again",
-                __FILE__, 389 /* ARTIST 0x8254FAE4 */);
+                CGS_ARTIST_FILE, 389 /* ARTIST 0x8254FAE4 */);
             LogInToServer();
             break;
 
@@ -616,7 +616,7 @@ namespace BrnNetwork
         default:
             CGS_FAIL_AT(
                 "Unexpected Login status",
-                __FILE__, 469 /* ARTIST 0x8254FC34 */);
+                CGS_ARTIST_FILE, 469 /* ARTIST 0x8254FC34 */);
             break;
         }
     }
@@ -710,7 +710,7 @@ namespace BrnNetwork
         lPlayerInfo.Prepare();
         CGS_ASSERT_AT(lPlayerInfo.Prepare(),
             "lPlayerInfo.Prepare()",
-            __FILE__, 644 /* ARTIST 0x82561A64 */);
+            CGS_ARTIST_FILE, 644 /* ARTIST 0x82561A64 */);
 
         mpNetworkManager->GetServerInterface()->GetPlayerInfoComponent()->GetLocalPlayerInfo(&lPlayerInfo);
         if (lPlayerInfo.GetID() != -1)

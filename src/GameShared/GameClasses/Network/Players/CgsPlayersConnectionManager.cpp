@@ -75,10 +75,10 @@ bool PlayersConnectionManager::HavePlayersFailedToConnect(NetworkPlayerID lPlaye
 {
     CGS_ASSERT_AT(lPlayerID1 != K_INVALID_PLAYER_ID,
         "lPlayerID1 != K_INVALID_PLAYER_ID",
-        __FILE__, 732 /* ARTIST 0x82884B4C */);
+        CGS_ARTIST_FILE, 732 /* ARTIST 0x82884B4C */);
     CGS_ASSERT_AT(lPlayerID2 != K_INVALID_PLAYER_ID,
         "lPlayerID2 != K_INVALID_PLAYER_ID",
-        __FILE__, 733 /* ARTIST 0x82884B70 */);
+        CGS_ARTIST_FILE, 733 /* ARTIST 0x82884B70 */);
 
     NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
     mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
@@ -104,7 +104,7 @@ bool PlayersConnectionManager::HavePlayersFailedToConnect(NetworkPlayerID lPlaye
         const ConnectionDataEntry* lpPlayer1Entry = GetEntry(lPlayerID1);
         CGS_ASSERT_AT(lpPlayer1Entry,
             "lpPlayer1Entry",
-            __FILE__, 758 /* ARTIST 0x82884C0C */);
+            CGS_ARTIST_FILE, 758 /* ARTIST 0x82884C0C */);
         for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
         {
             const PlayerConnectionData& lData = lpPlayer1Entry->maLastFinaliseStateRecvd[liIndex];
@@ -136,7 +136,7 @@ bool PlayersConnectionManager::HavePlayersFailedToConnect(NetworkPlayerID lPlaye
     const ConnectionDataEntry* lpPlayer2Entry = GetEntry(lPlayerID2);
     CGS_ASSERT_AT(lpPlayer2Entry,
         "lpPlayer2Entry",
-        __FILE__, 795 /* ARTIST 0x82884CD4 */);
+        CGS_ARTIST_FILE, 795 /* ARTIST 0x82884CD4 */);
     for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
     {
         const PlayerConnectionData& lData = lpPlayer2Entry->maLastFinaliseStateRecvd[liIndex];
@@ -437,7 +437,7 @@ void PlayersConnectionManager::SendTestConnectionMessage(ConnectionDataEntry* lp
 {
     CGS_ASSERT_AT(lpEntry->mPlayerConnectionData.meConnectionStatus == E_CHECKING_CONNECTION,
         "lpEntry->mPlayerConnectionData.meConnectionStatus == E_CHECKING_CONNECTION",
-            __FILE__, 693 /* ARTIST 0x82884ACC */);
+            CGS_ARTIST_FILE, 693 /* ARTIST 0x82884ACC */);
 
 
     lpEntry->mbTestConnectionPacketNacked = false;
@@ -567,13 +567,13 @@ void PlayersConnectionManager::ConnectionStatusMessageArrivedCallback(ReliableMe
                                                                       void* lpUserData)
 {
     CGS_ASSERT_AT(lpMessage,
-        "lpMessage", __FILE__, 1305 /* ARTIST 0x82884E00 */);
+        "lpMessage", CGS_ARTIST_FILE, 1305 /* ARTIST 0x82884E00 */);
     CGS_ASSERT_AT(lSendingPlayerID != K_INVALID_PLAYER_ID,
         "lSendingPlayerID != K_INVALID_PLAYER_ID",
-            __FILE__, 1306 /* ARTIST 0x82884E24 */);
+            CGS_ARTIST_FILE, 1306 /* ARTIST 0x82884E24 */);
 
     CGS_ASSERT_AT(lpUserData,
-        "lpUserData", __FILE__, 1307 /* ARTIST 0x82884E48 */);
+        "lpUserData", CGS_ARTIST_FILE, 1307 /* ARTIST 0x82884E48 */);
 
     PlayersConnectionManager* lpConnMgr = static_cast<PlayersConnectionManager*>(lpUserData);
     ConnectionDataEntry*      lpEntry   = lpConnMgr->GetEntry(lSendingPlayerID);
@@ -663,7 +663,7 @@ void PlayersConnectionManager::ConnApiStatusChangeCallback(DirtySock::ConnApiRef
     const DirtySock::ConnApiClientListT* lpClientList = ConnApiGetClientList(lpConnApi);
     CGS_ASSERT_AT(lpClientList,
         "lpClientList",
-        __FILE__, 1509 /* ARTIST 0x82874CAC */);
+        CGS_ARTIST_FILE, 1509 /* ARTIST 0x82874CAC */);
 
     const bool lbDisconnected = (lpCbInfo->eNewStatus == DirtySock::CONNAPI_STATUS_DISC) ||
                                 (lpCbInfo->eNewStatus == DirtySock::CONNAPI_STATUS_DEST);
@@ -731,7 +731,7 @@ const char* PlayersConnectionManager::GetPlayerName(NetworkPlayerID lPlayerID) c
 
     CGS_ASSERT_AT(mpServerInterface,
         "mpServerInterface",
-        __FILE__, 836 /* ARTIST 0x8289057C */);
+        CGS_ARTIST_FILE, 836 /* ARTIST 0x8289057C */);
     static_cast<ServerInterfacePlayerInfo*>(mpServerInterface->GetComponent(E_COMPONENTS_PLAYER_INFO))
         ->GetLocalPlayerInfo(&sLocalPlayerInfo);
     if (sLocalPlayerInfo.GetID() == lPlayerID)
@@ -741,7 +741,7 @@ const char* PlayersConnectionManager::GetPlayerName(NetworkPlayerID lPlayerID) c
 
     CGS_FAIL_AT(
         "Could not find name of player",
-        __FILE__, 844 /* ARTIST 0x828905E8 */);
+        CGS_ARTIST_FILE, 844 /* ARTIST 0x828905E8 */);
     return 0;
 }
 

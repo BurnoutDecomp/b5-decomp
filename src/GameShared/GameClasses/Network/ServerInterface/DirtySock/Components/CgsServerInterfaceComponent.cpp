@@ -47,6 +47,15 @@ namespace CgsNetwork
     };
     const s32 KI_NUM_DEFAULT_ERROR_MAPPINGS = 1;
 
+    // Out of line (DWARF: the CgsNetworkUnity CU defines it here, before ClearLastError). ARTIST's
+    // callers in other units call the folded `lwz r3,0xC(r3); blr` at 0x82836DC8:
+    // ScoreboardManager::ProcessBeforeSimulation 0x825688F8, BuddyManagerBase::
+    // _GetFriendsListFromServerComplete 0x82549C58, NetworkGamerCardManagerX360::PlayerInfoIdle 0x8254CED0.
+    s32 ServerInterfaceComponent::GetLastError() const
+    {
+        return miLastError;
+    }
+
     void* ServerInterfaceComponent::ClearLastError()
     {
         miLastError = 0;

@@ -156,17 +156,17 @@ namespace BrnNetwork
                                     BrnNetwork::BrnNetworkModule* lpModule)
     {
         CGS_ASSERT_AT(lpModule != 0,
-            "lpModule", __FILE__, 128 /* ARTIST 0x825471E0 */);
+            "lpModule", CGS_ARTIST_FILE, 128 /* ARTIST 0x825471E0 */);
         mpNetworkModule   = lpModule;
         mpServerInterface = lpServerInterface;
         CGS_ASSERT_AT(lpServerInterface != 0,
-            "mpServerInterface", __FILE__, 132 /* ARTIST 0x8254720C */);
+            "mpServerInterface", CGS_ARTIST_FILE, 132 /* ARTIST 0x8254720C */);
 
         // X360: mpRankings = mpServerInterface->maComponents[E_COMPONENTS_RANKINGS].mpComponent.
         mpRankings = reinterpret_cast<CgsNetwork::ServerInterfaceRankings*>(
             lpServerInterface->GetRankingsComponent());
         CGS_ASSERT_AT(mpRankings != 0,
-            "mpRankings", __FILE__, 135 /* ARTIST 0x82547238 */);
+            "mpRankings", CGS_ARTIST_FILE, 135 /* ARTIST 0x82547238 */);
 
         miCurrentView      = KI_INVALID_HEADING;
         miCurrentVariation = KI_INVALID_HEADING;
@@ -227,7 +227,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpRankings->IsBusy() == false,
             "mpRankings->IsBusy() == false",
-            __FILE__, 751 /* ARTIST 0x825472BC */);
+            CGS_ARTIST_FILE, 751 /* ARTIST 0x825472BC */);
 
         const bool lbLeaderboardContent =
             BrnResource::g_DLCFeatureAvailability.IsFeatureAvailable(BrnResource::E_DLC_FEATURE_LEADERBOARDS_BURNING_ROUTE)
@@ -318,12 +318,12 @@ namespace BrnNetwork
             static_cast<const ScoreboardRowSortData*>(lpData2);
 
         CGS_ASSERT_AT(lpSortData1 != 0,
-            "lpSortData1", __FILE__, 1236 /* ARTIST 0x8254766C */);
+            "lpSortData1", CGS_ARTIST_FILE, 1236 /* ARTIST 0x8254766C */);
         CGS_ASSERT_AT(lpSortData2 != 0,
-            "lpSortData2", __FILE__, 1237 /* ARTIST 0x82547690 */);
+            "lpSortData2", CGS_ARTIST_FILE, 1237 /* ARTIST 0x82547690 */);
         CGS_ASSERT_AT(lpSortData1->mbAscending == lpSortData2->mbAscending,
             "lpSortData1->mbAscending == lpSortData2->mbAscending",
-                __FILE__, 1238 /* ARTIST 0x825476BC */);
+                CGS_ARTIST_FILE, 1238 /* ARTIST 0x825476BC */);
 
 
         int liRetVal;
@@ -352,16 +352,16 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpScoreboard != 0,
             "lpScoreboard",
-            __FILE__, 833 /* ARTIST 0x8255F980 */);
+            CGS_ARTIST_FILE, 833 /* ARTIST 0x8255F980 */);
         CGS_ASSERT_AT(miCurrentCategory >= 0,
             "miCurrentCategory >= 0",
-            __FILE__, 836 /* ARTIST 0x8255F9A8 */);
+            CGS_ARTIST_FILE, 836 /* ARTIST 0x8255F9A8 */);
         CGS_ASSERT_AT(miCurrentIndex >= 0,
             "miCurrentIndex >= 0",
-            __FILE__, 837 /* ARTIST 0x8255F9D0 */);
+            CGS_ARTIST_FILE, 837 /* ARTIST 0x8255F9D0 */);
         CGS_ASSERT_AT(miCurrentVariation >= 0,
             "miCurrentVariation >= 0",
-            __FILE__, 838 /* ARTIST 0x8255F9F8 */);
+            CGS_ARTIST_FILE, 838 /* ARTIST 0x8255F9F8 */);
 
         bool lbAreCategoryIndexAndVariationValid =
             (miCurrentCategory  < mpRankings->GetNumberOfCategories()) &&
@@ -505,13 +505,13 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ScoreboardManager::AddSortedRowDataToScoreboard(Scoreboard* lpScoreboard)
     {
-        CGS_ASSERT(mpRankings->GetNumberOfRows() < 101,
-                   "mpRankings->GetNumberOfRows() < CgsNetwork::KI_MAX_BUDDIES + 1");
+        CGS_ASSERT_AT(mpRankings->GetNumberOfRows() < 101,
+                   "mpRankings->GetNumberOfRows() < CgsNetwork::KI_MAX_BUDDIES + 1", CGS_ARTIST_FILE, 1032);
 
         s32 liPointsColumnIndex = GetColumnIndexOfType(KI_COLUMN_TYPE_POINTS);
         s32 liRankColumnIndex   = GetColumnIndexOfType(KI_COLUMN_TYPE_RANK);
-        CGS_ASSERT(liPointsColumnIndex != -1, "liPointsColumnIndex != -1");
-        CGS_ASSERT(liRankColumnIndex   != -1, "liRankColumnIndex != -1");
+        CGS_ASSERT_AT(liPointsColumnIndex != -1, "liPointsColumnIndex != -1", CGS_ARTIST_FILE, 1039);
+        CGS_ASSERT_AT(liRankColumnIndex   != -1, "liRankColumnIndex != -1", CGS_ARTIST_FILE, 1040);
 
         ScoreboardRowSortData lacSortData[101];
         s32 liRowCount = 0;
@@ -836,7 +836,7 @@ namespace BrnNetwork
             {
                 CGS_ASSERT_AT(liVariationCounter < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS,
                     "liVariationLoopCounter < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS",
-                    __FILE__, 542 /* ARTIST 0x825627E0 */);
+                    CGS_ARTIST_FILE, 542 /* ARTIST 0x825627E0 */);
                 char lacHeading[32];
                 CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u",
                                  static_cast<u32>(KAU64_STUNT_RUN_SCOREBOARD_EVENT_IDS[liTableIndex]));
@@ -848,7 +848,7 @@ namespace BrnNetwork
             {
                 CGS_ASSERT_AT(liVariationCounter < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS,
                     "liVariationLoopCounter < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS",
-                    __FILE__, 552 /* ARTIST 0x82562848 */);
+                    CGS_ARTIST_FILE, 552 /* ARTIST 0x82562848 */);
                 char lacHeading[32];
                 CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u",
                                  static_cast<u32>(KAU64_BURN_ROUTE_SCOREBOARD_EVENT_IDS[liTableIndex]));
@@ -882,6 +882,11 @@ namespace BrnNetwork
     void ScoreboardManager::ProcessBeforeSimulation(
         BrnNetwork::BrnNetworkModuleIO::OutputBuffer* /*lpOutputBuffer*/)
     {
+        // ARTIST 0x82568624 dispatches the state through a four-entry jump table (0..3, entry 0 the
+        // shared break) and the rankings status through a second switch (0x8256868C: busy breaks,
+        // error and idle have their arms, anything else is the bad-state assert at 318). Each
+        // challengeable-event arm builds and posts its own event (asserts 278/282/283, 291/295/296).
+        // Remaining difference: our XDK lowers the three-case state switch to compares.
         switch (meCurrentState)
         {
         case E_STATE_WAITING_FOR_EVENTS:
@@ -896,28 +901,12 @@ namespace BrnNetwork
             break;
 
         case E_STATE_GETTING_SCOREBOARD:
-        {
-            const s32 liStatus = mpRankings->GetStatus();
-            if (liStatus == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_BUSY)
+            switch (mpRankings->GetStatus())
             {
+            case CgsNetwork::ServerInterfaceDirtySock::E_STATUS_BUSY:
                 break;
-            }
 
-            if (liStatus == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
-            {
-                CgsDev::Assert::BeginAssert();
-                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                lStrStream << "Downloading of scoreboard failed: " << mpRankings->GetLastError()
-                           << " note E_SERVER_INTERFACE_RANKINGS_ERROR_START="
-                           << static_cast<s32>(CgsNetwork::E_SERVER_INTERFACE_RANKINGS_ERROR_START) << "\n";
-                CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-                CgsDev::Assert::EndAssert();
-
-                meCurrentState = E_STATE_WAITING_FOR_EVENTS;
-                mpRankings->ClearLastError();
-            }
-            else if (liStatus == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
+            case CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE:
             {
                 BrnNetworkModuleIO::NetworkOutScoreboardEvent lScoreboardEvent;
                 lScoreboardEvent.Construct();
@@ -926,27 +915,28 @@ namespace BrnNetwork
                     reinterpret_cast<const CgsModule::Event*>(&lScoreboardEvent),
                     lScoreboardEvent.GetEventType(), sizeof(lScoreboardEvent));
 
-                const u64* lpau64EventIDs = 0;
                 if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_STUNT_RUN))
                 {
-                    CGS_ASSERT(miCurrentVariation < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS,
-                               "miCurrentVariation < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS");
-                    lpau64EventIDs = KAU64_STUNT_RUN_SCOREBOARD_EVENT_IDS;
+                    CGS_ASSERT_AT(miCurrentVariation < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS,
+                               "miCurrentVariation < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS", CGS_ARTIST_FILE, 278);
+                    BrnNetworkModuleIO::NetworkOutDldChallengeableEvent lChallengeableEvent;
+                    lChallengeableEvent.mID = KAU64_STUNT_RUN_SCOREBOARD_EVENT_IDS[miCurrentVariation];
+                    CGS_ASSERT_AT(mpNetworkModule != 0, "mpNetworkModule", CGS_ARTIST_FILE, 282);
+                    CGS_ASSERT_AT(mpNetworkModule->GetNetworkEventQueue() != 0,
+                               "mpNetworkModule->GetNetworkEventQueue()", CGS_ARTIST_FILE, 283);
+                    AsConcreteQueue(mpNetworkModule->GetNetworkEventQueue())->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lChallengeableEvent),
+                        lChallengeableEvent.GetEventType(), sizeof(lChallengeableEvent));
                 }
                 else if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_BURN_ROUTE))
                 {
-                    CGS_ASSERT(miCurrentVariation < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS,
-                               "miCurrentVariation < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS");
-                    lpau64EventIDs = KAU64_BURN_ROUTE_SCOREBOARD_EVENT_IDS;
-                }
-
-                if (lpau64EventIDs != 0)
-                {
+                    CGS_ASSERT_AT(miCurrentVariation < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS,
+                               "miCurrentVariation < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS", CGS_ARTIST_FILE, 291);
                     BrnNetworkModuleIO::NetworkOutDldChallengeableEvent lChallengeableEvent;
-                    lChallengeableEvent.mID = lpau64EventIDs[miCurrentVariation];
-                    CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
-                    CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0,
-                               "mpNetworkModule->GetNetworkEventQueue()");
+                    lChallengeableEvent.mID = KAU64_BURN_ROUTE_SCOREBOARD_EVENT_IDS[miCurrentVariation];
+                    CGS_ASSERT_AT(mpNetworkModule != 0, "mpNetworkModule", CGS_ARTIST_FILE, 295);
+                    CGS_ASSERT_AT(mpNetworkModule->GetNetworkEventQueue() != 0,
+                               "mpNetworkModule->GetNetworkEventQueue()", CGS_ARTIST_FILE, 296);
                     AsConcreteQueue(mpNetworkModule->GetNetworkEventQueue())->AddEvent(
                         reinterpret_cast<const CgsModule::Event*>(&lChallengeableEvent),
                         lChallengeableEvent.GetEventType(), sizeof(lChallengeableEvent));
@@ -954,18 +944,23 @@ namespace BrnNetwork
 
                 meCurrentState = E_STATE_WAITING_FOR_EVENTS;
                 mDebugComponent.HandleScoreboardEvent(lScoreboardEvent.GetScoreboard());
+                break;
             }
-            else
-            {
-                CgsDev::Assert::BeginAssert();
-                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                lStrStream << "Rankings component in bad state: " << liStatus;
-                CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-                CgsDev::Assert::EndAssert();
+
+            case CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR:
+                CGS_FAIL_STREAM_AT("Downloading of scoreboard failed: " << mpRankings->GetLastError()
+                                   << " note E_SERVER_INTERFACE_RANKINGS_ERROR_START="
+                                   << static_cast<s32>(CgsNetwork::E_SERVER_INTERFACE_RANKINGS_ERROR_START) << "\n",
+                                   CGS_ARTIST_FILE, 310);
+                meCurrentState = E_STATE_WAITING_FOR_EVENTS;
+                mpRankings->ClearLastError();
+                break;
+
+            default:
+                CGS_FAIL_STREAM_AT("Rankings component in bad state: " << mpRankings->GetStatus(), CGS_ARTIST_FILE, 318);
+                break;
             }
             break;
-        }
 
         default:
             break;
@@ -1055,13 +1050,9 @@ namespace BrnNetwork
                 }
                 else if (liUserType != 0)
                 {
-                    CgsDev::Assert::BeginAssert();
-                    char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                    CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                    lStrStream << "User type for C" << miCurrentCategory << " I" << miCurrentIndex
-                               << " V" << miCurrentVariation << " is invalid :" << liUserType << "\n";
-                    CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-                    CgsDev::Assert::EndAssert();
+                    CGS_FAIL_STREAM_AT("User type for C" << miCurrentCategory << " I" << miCurrentIndex
+                                       << " V" << miCurrentVariation << " is invalid :" << liUserType << "\n",
+                                       CGS_ARTIST_FILE, 704);
                 }
 
                 mpRankings->DownloadScoreboardData(lapcUserListNames, liUserListCount);

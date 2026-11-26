@@ -1,7 +1,7 @@
 #include "types.hpp"
 #include "GameSource/Network/Messages/BrnStuntMultiplierMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnStuntMultiplierMessage.cpp"
 #include <cstring>   // memcpy (the 8-byte record crosses the s64 interface)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -52,27 +52,27 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             "lu16FrameCount != KU16_INVALID_FRAME",
-                __FILE__, 145 /* ARTIST 0x8257D334 */);
+                CGS_ARTIST_FILE, 145 /* ARTIST 0x8257D334 */);
 
         CGS_ASSERT_AT(lMultiplierInfo.muMultiplierStuntTypes > 0,
             "lMultiplierInfo.muMultiplierStuntTypes > 0",
-                __FILE__, 146 /* ARTIST 0x8257D35C */);
+                CGS_ARTIST_FILE, 146 /* ARTIST 0x8257D35C */);
 
         CGS_ASSERT_AT(lMultiplierInfo.muMultiplierStuntTypes <= 0x3FFFFu,
             "lMultiplierInfo.muMultiplierStuntTypes <= static_cast<uint32_t>( KI_MAX_MULTIPLIER_STUNT_TYPES )",
-                __FILE__, 147 /* ARTIST 0x8257D388 */);
+                CGS_ARTIST_FILE, 147 /* ARTIST 0x8257D388 */);
 
         CGS_ASSERT_AT(lMultiplierInfo.mu16BarrelRolls <= 8u,
             "lMultiplierInfo.muBarrelRolls <= static_cast<uint32_t>( KI_MAX_BARREL_ROLLS )",
-                __FILE__, 148 /* ARTIST 0x8257D3B0 */);
+                CGS_ARTIST_FILE, 148 /* ARTIST 0x8257D3B0 */);
 
         CGS_ASSERT_AT(lMultiplierInfo.mu16FlatSpins <= 16u,
             "lMultiplierInfo.muFlatSpins <= static_cast<uint32_t>( KI_MAX_FLAT_SPINS )",
-                __FILE__, 149 /* ARTIST 0x8257D3D8 */);
+                CGS_ARTIST_FILE, 149 /* ARTIST 0x8257D3D8 */);
 
         CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
             "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                __FILE__, 152 /* ARTIST 0x8257D404 */);
+                CGS_ARTIST_FILE, 152 /* ARTIST 0x8257D404 */);
 
 
         mMultiplierInfo    = lMultiplierInfo;      // the whole 8-byte record, +0x28

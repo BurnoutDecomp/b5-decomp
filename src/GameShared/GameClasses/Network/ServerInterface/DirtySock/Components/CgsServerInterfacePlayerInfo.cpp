@@ -251,14 +251,14 @@ namespace CgsNetwork
                 mpFindUser = LobbyFindUserCreate(mpServerInterface->GetLobbyAPIRef());
                 CGS_ASSERT_AT(mpFindUser,
                     "mpFindUser",
-                    __FILE__, 449 /* ARTIST 0x8288873C */);
+                    CGS_ARTIST_FILE, 449 /* ARTIST 0x8288873C */);
             }
             if (!mpStatbook)
             {
                 mpStatbook = LobbyStatbookCreate(mpServerInterface->GetLobbyAPIRef(), 1);
                 CGS_ASSERT_AT(mpStatbook,
                     "mpStatbook",
-                    __FILE__, 455 /* ARTIST 0x82888780 */);
+                    CGS_ARTIST_FILE, 455 /* ARTIST 0x82888780 */);
             }
         }
         else if (liEvent == 1)
@@ -331,8 +331,8 @@ namespace CgsNetwork
     void ServerInterfacePlayerInfo::GetPlayerXUIDByName(const PlayerName* lpcPlayerName,
                                                         u64* lpXuidOut)
     {
-        CGS_ASSERT_AT(lpXuidOut, "lpXUID", __FILE__, 1204 /* ARTIST 0x82888948 */);
-        CGS_ASSERT_AT(lpcPlayerName, "lpPlayerName", __FILE__, 1205 /* ARTIST 0x8288896C */);
+        CGS_ASSERT_AT(lpXuidOut, "lpXUID", CGS_ARTIST_FILE, 1204 /* ARTIST 0x82888948 */);
+        CGS_ASSERT_AT(lpcPlayerName, "lpPlayerName", CGS_ARTIST_FILE, 1205 /* ARTIST 0x8288896C */);
 
         mpXUID = lpXuidOut;   // +0x28 (aliases the account-settings flag bytes; stw @0x82888984)
 
@@ -361,7 +361,7 @@ namespace CgsNetwork
             static_cast<ServerInterfacePlayerInfo*>(lpData);
         CGS_ASSERT_AT(lpComponent->mpXUID,
             "lpServerInterface->mpXUID",
-            __FILE__, 1234 /* ARTIST 0x828796D8 */);
+            CGS_ARTIST_FILE, 1234 /* ARTIST 0x828796D8 */);
 
         // The lobby result code is read where it is used (ARTIST 0x828796E0 and 0x82879730).
         if (lpMsg->code == 0)
@@ -386,14 +386,14 @@ namespace CgsNetwork
     void ServerInterfacePlayerInfo::FindUserCallback(void* lpUserData, const char* /*lpcName*/,
                                                      LobbyApiUserT* lpUser)
     {
-        CGS_ASSERT_AT(lpUser, "lpUser", __FILE__, 736 /* ARTIST 0x82878EEC */);
-        CGS_ASSERT_AT(lpUserData, "lpUserData", __FILE__, 737 /* ARTIST 0x82878F10 */);
+        CGS_ASSERT_AT(lpUser, "lpUser", CGS_ARTIST_FILE, 736 /* ARTIST 0x82878EEC */);
+        CGS_ASSERT_AT(lpUserData, "lpUserData", CGS_ARTIST_FILE, 737 /* ARTIST 0x82878F10 */);
 
         ServerInterfacePlayerInfo* lpPlayerInfoComponent =
             static_cast<ServerInterfacePlayerInfo*>(lpUserData);
-        CGS_ASSERT_AT(lpPlayerInfoComponent, "lpPlayerInfoComponent", __FILE__, 741 /* ARTIST 0x82878F2C */);
+        CGS_ASSERT_AT(lpPlayerInfoComponent, "lpPlayerInfoComponent", CGS_ARTIST_FILE, 741 /* ARTIST 0x82878F2C */);
         CGS_ASSERT_AT(lpPlayerInfoComponent->mpPlayerInfo, "lpPlayerInfoComponent->mpPlayerInfo",
-                      __FILE__, 742 /* ARTIST 0x82878F54 */);
+                      CGS_ARTIST_FILE, 742 /* ARTIST 0x82878F54 */);
 
         lpPlayerInfoComponent->mpPlayerInfo->SerialiseFromUser(lpUser);
         // Direct (qualified) call: ARTIST 0x82878F88 bl, no vtable load.
@@ -408,7 +408,7 @@ namespace CgsNetwork
     void ServerInterfacePlayerInfo::GetLocalPlayerInfo(ServerInterfacePlayerInfoDataBase* lpPlayerInfo)
     {
         CGS_ASSERT_AT(lpPlayerInfo,
-            "lpPlayerInfo", __FILE__, 652 /* ARTIST 0x82878E5C */);
+            "lpPlayerInfo", CGS_ARTIST_FILE, 652 /* ARTIST 0x82878E5C */);
 
         // Selector fourcc 0x73656C66 == 'self', buffer 0x234 (564) bytes into a local
         // scratch (recovered from the asm immediates @ 0x82878E78/0x82878E7C/0x82878E7C).
@@ -427,13 +427,13 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(lpcPlayerName,
             "lpcPlayerName",
-            __FILE__, 675 /* ARTIST 0x828887DC */);
+            CGS_ARTIST_FILE, 675 /* ARTIST 0x828887DC */);
         CGS_ASSERT_AT(lpPlayerInfo,
             "lpPlayerInfo",
-            __FILE__, 676 /* ARTIST 0x82888800 */);
+            CGS_ARTIST_FILE, 676 /* ARTIST 0x82888800 */);
         CGS_ASSERT_AT(mpFindUser,
             "Prepare the component before trying to use it",
-            __FILE__, 677 /* ARTIST 0x82888828 */);
+            CGS_ARTIST_FILE, 677 /* ARTIST 0x82888828 */);
 
         mpPlayerInfo    = lpPlayerInfo;
         meCurrentAction = E_ACTION_FIND_USER;
@@ -465,7 +465,7 @@ namespace CgsNetwork
         default:
             CGS_FAIL_AT(
                 "Unexpected return code from LobbyFindUser",
-                __FILE__, 714 /* ARTIST 0x82888904 */);
+                CGS_ARTIST_FILE, 714 /* ARTIST 0x82888904 */);
             break;
         }
     }
@@ -477,7 +477,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(mpStatbook,
             "mpStatbook",
-            __FILE__, 797 /* ARTIST 0x82878FE0 */);
+            CGS_ARTIST_FILE, 797 /* ARTIST 0x82878FE0 */);
 
         meCurrentAction = E_ACTION_SELECT_VIEW;
         ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[E_ACTION_SELECT_VIEW]);
@@ -496,7 +496,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(mpStatbook,
             "mpStatbook",
-            __FILE__, 826 /* ARTIST 0x828790B0 */);
+            CGS_ARTIST_FILE, 826 /* ARTIST 0x828790B0 */);
 
         meCurrentAction = E_ACTION_DOWNLOADING_STATS;
         ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[E_ACTION_DOWNLOADING_STATS]);  // asm: off_82F33518 = table[3]
@@ -515,7 +515,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(mpStatbook,
             "mpStatbook",
-            __FILE__, 973 /* ARTIST 0x82879290 */);
+            CGS_ARTIST_FILE, 973 /* ARTIST 0x82879290 */);
 
         meCurrentAction = E_ACTION_DOWNLOADING_VIEW_INFO;
         ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[E_ACTION_DOWNLOADING_VIEW_INFO]);  // asm: off_82F3351C = table[4]
@@ -534,7 +534,7 @@ namespace CgsNetwork
                                                    s32 liBufferLength)
     {
         CGS_ASSERT_AT(lpacStatDataBuffer,
-            "lpacStatDataBuffer", __FILE__, 858 /* ARTIST 0x8287916C */);
+            "lpacStatDataBuffer", CGS_ARTIST_FILE, 858 /* ARTIST 0x8287916C */);
 
         return LobbyStatbookRowData(mpStatbook, 0, static_cast<u32>(liRow),
                                     lpacStatDataBuffer, liBufferLength) != 0;
@@ -547,7 +547,7 @@ namespace CgsNetwork
     bool ServerInterfacePlayerInfo::GetRowType(s32 liRow, s32* lpnType)
     {
         CGS_ASSERT_AT(lpnType,
-            "lpnType", __FILE__, 913 /* ARTIST 0x828791D8 */);
+            "lpnType", CGS_ARTIST_FILE, 913 /* ARTIST 0x828791D8 */);
 
         const LobbyStatbookRowInfoT* lpRowInfo =
             LobbyStatbookRowInfo(mpStatbook, static_cast<u32>(liRow));
@@ -632,13 +632,13 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(lpbAgreeToShareInfoEA,
             "lpbAgreeToShareInfoEA",
-            __FILE__, 1156 /* ARTIST 0x82879568 */);
+            CGS_ARTIST_FILE, 1156 /* ARTIST 0x82879568 */);
         CGS_ASSERT_AT(lpbAgreeToShareInfoPartners,
             "lpbAgreeToShareInfoPartners",
-            __FILE__, 1157 /* ARTIST 0x8287958C */);
+            CGS_ARTIST_FILE, 1157 /* ARTIST 0x8287958C */);
         CGS_ASSERT_AT(lpbTelemetryEnable,
             "lpbTelemetryEnable",
-            __FILE__, 1158 /* ARTIST 0x828795B0 */);
+            CGS_ARTIST_FILE, 1158 /* ARTIST 0x828795B0 */);
 
         // asm decodes all three flags identically: (cntlzw(GetNumber-1) & 0x20), i.e. == 1.
         // The settings ref is fetched per call (ARTIST 0x828795B8 / 0x828795EC / 0x82879614).
@@ -666,10 +666,10 @@ namespace CgsNetwork
     void ServerInterfacePlayerInfo::UpdateSettingsCallback(DirtySock::LobbySettingRefT* /*lpRef*/,
                                                            s32 liResult, void* lpData)
     {
-        CGS_ASSERT_AT(lpData, "lpData", __FILE__, 1055 /* ARTIST 0x8287933C */);
+        CGS_ASSERT_AT(lpData, "lpData", CGS_ARTIST_FILE, 1055 /* ARTIST 0x8287933C */);
         ServerInterfacePlayerInfo* lpPlayerInfoComponent =
             static_cast<ServerInterfacePlayerInfo*>(lpData);
-        CGS_ASSERT_AT(lpPlayerInfoComponent, "lpPlayerInfoComponent", __FILE__, 1057 /* ARTIST 0x82879360 */);
+        CGS_ASSERT_AT(lpPlayerInfoComponent, "lpPlayerInfoComponent", CGS_ARTIST_FILE, 1057 /* ARTIST 0x82879360 */);
 
         lpPlayerInfoComponent->EndAction(liResult);
     }

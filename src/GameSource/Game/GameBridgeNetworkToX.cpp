@@ -666,7 +666,7 @@ namespace BrnGame
                         reinterpret_cast<const NetIO::NetworkOutFburnChallengeSuccessEvent*>(lpEvent);
                     CGS_ASSERT(lpFburnChallengeSuccessEvent != 0, "lpFburnChallengeSuccessEvent");
                     GsIO::FburnChallengeSuccessEvent lSuccess;
-                    lSuccess.miChallengeUpdateFrame = lpFburnChallengeSuccessEvent->miChallengeUpdateFrame;
+                    lSuccess.miChallengeUpdateFrame = lpFburnChallengeSuccessEvent->miFramesSinceNetworkStart;
                     std::memcpy(lSuccess.mafActionScores, lpFburnChallengeSuccessEvent->mafActionScores,
                                 sizeof(lSuccess.mafActionScores));
                     std::memcpy(lSuccess.mabSuccessfulActions, lpFburnChallengeSuccessEvent->mabSuccessfulActions,

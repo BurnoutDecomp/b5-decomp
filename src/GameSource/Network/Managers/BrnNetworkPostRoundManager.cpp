@@ -14,7 +14,7 @@
 // ===========================================================================
 #include "GameSource/Network/Managers/BrnNetworkPostRoundManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPostRoundManager.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Network/BrnNetworkManager.h"            // BrnNetworkManager, SuspensionManager, LiveRevengeManager
 #include "GameSource/Network/Managers/BrnNetworkSuspensionManager.h"  // SuspensionManager::Update
@@ -48,7 +48,7 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(maUpdateFunctions[liIndex] != 0,
                 "No update function supplied for this sub state",
-                __FILE__, 89 /* ARTIST 0x82573E58 */);
+                CGS_ARTIST_FILE, 89 /* ARTIST 0x82573E58 */);
         }
     }
 
@@ -79,7 +79,7 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(maActionFunctions[liActionIndex] != 0,
                 "No update function supplied for this substate",
-                __FILE__, 123 /* ARTIST 0x825714DC */);
+                CGS_ARTIST_FILE, 123 /* ARTIST 0x825714DC */);
         }
 
         // Every process action slot defaults to "no action" (E_ACTION_COUNT).
@@ -145,7 +145,7 @@ namespace BrnNetwork
             {
                 CGS_ASSERT_AT(maProcessActions[liProcessIndex].maeAction[0] != E_ACTION_COUNT,
                     "No actions supplied for this process",
-                    __FILE__, 176 /* ARTIST 0x825715AC */);
+                    CGS_ARTIST_FILE, 176 /* ARTIST 0x825715AC */);
             }
         }
     }
@@ -236,7 +236,7 @@ namespace BrnNetwork
         const UpdateFunction lpfUpdate = maUpdateFunctions[meSubState];
         CGS_ASSERT_AT(lpfUpdate != 0,
             "No update function supplied for the current substate",
-            __FILE__, 265 /* ARTIST 0x82544E1C */);
+            CGS_ARTIST_FILE, 265 /* ARTIST 0x82544E1C */);
         (this->*lpfUpdate)();
     }
 
@@ -330,7 +330,7 @@ namespace BrnNetwork
         default:
             CGS_FAIL_AT(
                 "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in PostRoundManager::ServerInterfaceIdle",
-                __FILE__, 407 /* ARTIST 0x8256D408 */);
+                CGS_ARTIST_FILE, 407 /* ARTIST 0x8256D408 */);
             return false;
         }
     }
@@ -416,13 +416,13 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mpNetworkManager != 0,
             "mpNetworkManager",
-            __FILE__, 562 /* ARTIST 0x82567710 */);
+            CGS_ARTIST_FILE, 562 /* ARTIST 0x82567710 */);
         CGS_ASSERT_AT(mpNetworkManager->GetServerInterface() != 0,
             "mpNetworkManager->GetServerInterface()",
-            __FILE__, 563 /* ARTIST 0x82567738 */);
+            CGS_ARTIST_FILE, 563 /* ARTIST 0x82567738 */);
         CGS_ASSERT_AT(mpNetworkManager->GetServerInterface()->GetConnectionComponent() != 0,
             "mpNetworkManager->GetServerInterface()->GetConnectionComponent()",
-            __FILE__, 564 /* ARTIST 0x82567764 */);
+            CGS_ARTIST_FILE, 564 /* ARTIST 0x82567764 */);
 
         if (mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn())
         {
@@ -454,17 +454,17 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mCallback != 0,
             "mCallback",
-            __FILE__, 460 /* ARTIST 0x825674B8 */);
+            CGS_ARTIST_FILE, 460 /* ARTIST 0x825674B8 */);
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         CGS_ASSERT_AT(lpServerInterface != 0,
             "lpServerInterface",
-            __FILE__, 465 /* ARTIST 0x82567558 */);
+            CGS_ARTIST_FILE, 465 /* ARTIST 0x82567558 */);
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
         CGS_ASSERT_AT(lpServerInterfaceGames != 0,
             "lpServerInterfaceGames",
-            __FILE__, 468 /* ARTIST 0x82567580 */);
+            CGS_ARTIST_FILE, 468 /* ARTIST 0x82567580 */);
 
         CgsNetwork::NetworkPlayerID lLocalNetworkPlayerID = static_cast<CgsNetwork::NetworkPlayerID>(-1);
         const bool lbHaveLocalPlayer =
@@ -502,10 +502,10 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(lpPostRoundManager->mpNetworkManager != 0,
             "lpPostRoundManager->mpNetworkManager",
-            __FILE__, 885 /* ARTIST 0x82567CCC */);
+            CGS_ARTIST_FILE, 885 /* ARTIST 0x82567CCC */);
         CGS_ASSERT_AT(lpPostRoundManager->mpNetworkManager->GetServerInterface() != 0,
             "lpPostRoundManager->mpNetworkManager->GetServerInterface()",
-            __FILE__, 886 /* ARTIST 0x82567CF4 */);
+            CGS_ARTIST_FILE, 886 /* ARTIST 0x82567CF4 */);
 
         BrnServerInterface* lpServerInterface =
             lpPostRoundManager->mpNetworkManager->GetServerInterface();
@@ -518,7 +518,7 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(lpServerInterface->GetConnectionComponent() != 0,
             "lpPostRoundManager->mpNetworkManager->GetServerInterface()->GetConnectionComponent()",
-            __FILE__, 900 /* ARTIST 0x82567D7C */);
+            CGS_ARTIST_FILE, 900 /* ARTIST 0x82567D7C */);
 
         lpPostRoundManager->meSubState = E_SUBSTATE_NONE;
         lpPostRoundManager->ProcessComplete(false);
@@ -548,12 +548,12 @@ namespace BrnNetwork
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         CGS_ASSERT_AT(lpServerInterface != 0,
             "lpServerInterface",
-            __FILE__, 665 /* ARTIST 0x825450D8 */);
+            CGS_ARTIST_FILE, 665 /* ARTIST 0x825450D8 */);
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
         CGS_ASSERT_AT(lpServerInterfaceGames != 0,
             "lpServerInterfaceGames",
-            __FILE__, 668 /* ARTIST 0x82545100 */);
+            CGS_ARTIST_FILE, 668 /* ARTIST 0x82545100 */);
 
         lpServerInterfaceGames->SendGameResult(&mGameResults);
         meSubState = E_SUBSTATE_WAIT_IDLE;
@@ -637,12 +637,12 @@ namespace BrnNetwork
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         CGS_ASSERT_AT(lpServerInterface != 0,
             "lpServerInterface",
-            __FILE__, 698 /* ARTIST 0x825678B4 */);
+            CGS_ARTIST_FILE, 698 /* ARTIST 0x825678B4 */);
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
         CGS_ASSERT_AT(lpServerInterfaceGames != 0,
             "lpServerInterfaceGames",
-            __FILE__, 701 /* ARTIST 0x825678DC */);
+            CGS_ARTIST_FILE, 701 /* ARTIST 0x825678DC */);
 
         if (lpServerInterfaceGames->IsLocalPlayerInGame())
         {
@@ -669,12 +669,12 @@ namespace BrnNetwork
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         CGS_ASSERT_AT(lpServerInterface != 0,
             "lpServerInterface",
-            __FILE__, 750 /* ARTIST 0x82567A40 */);
+            CGS_ARTIST_FILE, 750 /* ARTIST 0x82567A40 */);
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
         CGS_ASSERT_AT(lpServerInterfaceGames != 0,
             "lpServerInterfaceGames",
-            __FILE__, 753 /* ARTIST 0x82567A68 */);
+            CGS_ARTIST_FILE, 753 /* ARTIST 0x82567A68 */);
 
         if (lpServerInterfaceGames->IsLocalPlayerInGame())
         {

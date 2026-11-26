@@ -96,8 +96,7 @@ void RoadRulesDownloadData::GetRoadRulesDataForDownloadIndex(s32 liDownloadIndex
 
     // Name copy: assert the stored name fits the 16-byte slot, then strncpy 16 bytes.
     char* lpStored = mData.maPlayerNames[liDownloadIndex];
-    CGS_ASSERT(std::strlen(lpStored) < static_cast<u32>(KI_ROAD_RULES_NAME_LENGTH), "String too long");
-    std::strncpy(lpName, lpStored, KI_ROAD_RULES_NAME_LENGTH);
+    CgsCore::StrnCpy(lpName, lpStored, KI_ROAD_RULES_NAME_LENGTH);   // CgsStringUtils.h:55 (ARTIST 0x82541890)
 }
 
 // X360 0x82580810.
@@ -109,8 +108,7 @@ void RoadRulesDownloadData::SetDownloadedRoadRulesData(char* lpName, s32 liScore
     // The X360 computes the name-slot pointer (16 * miNumScores + base) BEFORE the
     // strlen/assert; the strncpy of the incoming name happens before the score stores.
     char* lpSlot = mData.maPlayerNames[mData.miNumScores];
-    CGS_ASSERT(std::strlen(lpName) < static_cast<u32>(KI_ROAD_RULES_NAME_LENGTH), "String too long");
-    std::strncpy(lpSlot, lpName, KI_ROAD_RULES_NAME_LENGTH);
+    CgsCore::StrnCpy(lpSlot, lpName, KI_ROAD_RULES_NAME_LENGTH);   // CgsStringUtils.h:55
 
     // Score stores into the two parallel arrays at the current count, then bump it.
     mData.maiScoreTypes[mData.miNumScores]     = liScoreType;

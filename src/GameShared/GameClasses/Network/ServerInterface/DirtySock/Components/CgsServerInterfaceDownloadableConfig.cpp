@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include "lobbyapi.h"                                 // LobbyApiRequestCB / LobbyApiMsgT / LobbyApiCallbackT
 #include "lobbytagfield.h"                            // TagFieldFind / Get* / SetNumber
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceDownloadableConfig.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::ServerInterfaceDownloadableConfig::Construct                    @ 0x8287ACC0
 //   CgsNetwork::ServerInterfaceDownloadableConfig::Destruct                     @ 0x8287ACF0
@@ -213,9 +213,9 @@ namespace CgsNetwork
         DataIDToMemoryAddr* lpaDataIDToMemAddrs,
         int32_t liSize)
     {
-        CGS_ASSERT_AT(lpaDataIDToMemAddrs != 0, "lpaDataIDToMemAddrs", __FILE__, 243 /* ARTIST 0x828916FC */);
-        CGS_ASSERT_AT(mpaDataIDToMemAddrs == 0, "mpaDataIDToMemAddrs == NULL", __FILE__, 244 /* ARTIST 0x82891724 */);
-        CGS_ASSERT_AT(mpServerInterface != 0, "mpServerInterface", __FILE__, 245 /* ARTIST 0x8289174C */);
+        CGS_ASSERT_AT(lpaDataIDToMemAddrs != 0, "lpaDataIDToMemAddrs", CGS_ARTIST_FILE, 243 /* ARTIST 0x828916FC */);
+        CGS_ASSERT_AT(mpaDataIDToMemAddrs == 0, "mpaDataIDToMemAddrs == NULL", CGS_ARTIST_FILE, 244 /* ARTIST 0x82891724 */);
+        CGS_ASSERT_AT(mpServerInterface != 0, "mpServerInterface", CGS_ARTIST_FILE, 245 /* ARTIST 0x8289174C */);
 
         miMemAddrTableSize   = liSize;                     // +0x1C  (a4)
         miRequestedNewsIndex = liRequestIndex;             // +0x20  (a2)
@@ -291,10 +291,10 @@ namespace CgsNetwork
 
         CGS_ASSERT_AT(lpacConfigData != 0,
             "NULL != lpacConfigData",
-            __FILE__, 416 /* ARTIST 0x8287AED4 */);
+            CGS_ARTIST_FILE, 416 /* ARTIST 0x8287AED4 */);
         CGS_ASSERT_AT(mpaDataIDToMemAddrs != 0,
             "mpaDataIDToMemAddrs != NULL",
-            __FILE__, 417 /* ARTIST 0x8287AEFC */);
+            CGS_ARTIST_FILE, 417 /* ARTIST 0x8287AEFC */);
 
         char* lpacBase = reinterpret_cast<char*>(this);
 
@@ -360,7 +360,7 @@ namespace CgsNetwork
                 {
                     CGS_FAIL_AT(
                         "Invalid Data Type",
-                        __FILE__, 478 /* ARTIST 0x8287B0A4 */);
+                        CGS_ARTIST_FILE, 478 /* ARTIST 0x8287B0A4 */);
                     break;
                 }
             }

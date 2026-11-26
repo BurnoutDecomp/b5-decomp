@@ -112,34 +112,34 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(miNetworkBeforeSimPM >= 0,
             "miNetworkBeforeSimPM >= 0",
-            __FILE__, 119 /* ARTIST 0x82592C54 */);
+            CGS_ARTIST_FILE, 119 /* ARTIST 0x82592C54 */);
         CGS_ASSERT_AT(miNetworkAfterSimPM  >= 0,
             "miNetworkAfterSimPM >= 0",
-            __FILE__, 120 /* ARTIST 0x82592C7C */);
+            CGS_ARTIST_FILE, 120 /* ARTIST 0x82592C7C */);
         CGS_ASSERT_AT(miNetworkAfterSim1PM >= 0,
             "miNetworkAfterSim1PM >= 0",
-            __FILE__, 121 /* ARTIST 0x82592CA4 */);
+            CGS_ARTIST_FILE, 121 /* ARTIST 0x82592CA4 */);
         CGS_ASSERT_AT(miNetworkAfterSim2PM >= 0,
             "miNetworkAfterSim2PM >= 0",
-            __FILE__, 122 /* ARTIST 0x82592CCC */);
+            CGS_ARTIST_FILE, 122 /* ARTIST 0x82592CCC */);
         CGS_ASSERT_AT(miNetworkAfterSim3PM >= 0,
             "miNetworkAfterSim3PM >= 0",
-            __FILE__, 123 /* ARTIST 0x82592CF4 */);
+            CGS_ARTIST_FILE, 123 /* ARTIST 0x82592CF4 */);
         CGS_ASSERT_AT(miNetworkAfterSim4PM >= 0,
             "miNetworkAfterSim4PM >= 0",
-            __FILE__, 124 /* ARTIST 0x82592D1C */);
+            CGS_ARTIST_FILE, 124 /* ARTIST 0x82592D1C */);
         CGS_ASSERT_AT(miNetworkAfterSim5PM >= 0,
             "miNetworkAfterSim5PM >= 0",
-            __FILE__, 125 /* ARTIST 0x82592D44 */);
+            CGS_ARTIST_FILE, 125 /* ARTIST 0x82592D44 */);
         CGS_ASSERT_AT(miNetworkAfterSim6PM >= 0,
             "miNetworkAfterSim6PM >= 0",
-            __FILE__, 126 /* ARTIST 0x82592D6C */);
+            CGS_ARTIST_FILE, 126 /* ARTIST 0x82592D6C */);
         CGS_ASSERT_AT(miNetworkAfterSim7PM >= 0,
             "miNetworkAfterSim7PM >= 0",
-            __FILE__, 127 /* ARTIST 0x82592D94 */);
+            CGS_ARTIST_FILE, 127 /* ARTIST 0x82592D94 */);
         CGS_ASSERT_AT(miNetworkAfterSim8PM >= 0,
             "miNetworkAfterSim8PM >= 0",
-            __FILE__, 128 /* ARTIST 0x82592DBC */);
+            CGS_ARTIST_FILE, 128 /* ARTIST 0x82592DBC */);
 
         CgsNetwork::NetworkImageConverter::SetupPerfmons();
     }
@@ -282,7 +282,7 @@ namespace BrnNetwork
     void BrnNetworkModule::CacheNetworkPlayerIDsAtGameStart()
     {
         CGS_ASSERT_AT(mNetworkManager.GetServerInterface(),
-            "mNetworkManager.GetServerInterface()", __FILE__, 515 /* ARTIST 0x82581A70 */);
+            "mNetworkManager.GetServerInterface()", CGS_ARTIST_FILE, 515 /* ARTIST 0x82581A70 */);
 
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = mNetworkManager.GetServerInterface()->GetGameComponent();
@@ -290,10 +290,10 @@ namespace BrnNetwork
         NetworkPlayerID                   lPlayerID              = CgsNetwork::KI_INVALID_PLAYER_ID;
 
         CGS_ASSERT_AT(lpServerInterfaceGames,
-            "lpServerInterfaceGames", __FILE__, 521 /* ARTIST 0x82581AA4 */);
+            "lpServerInterfaceGames", CGS_ARTIST_FILE, 521 /* ARTIST 0x82581AA4 */);
 
         CGS_ASSERT_AT(lpPlayerManager,
-            "lpPlayerManager", __FILE__, 522 /* ARTIST 0x82581AC8 */);
+            "lpPlayerManager", CGS_ARTIST_FILE, 522 /* ARTIST 0x82581AC8 */);
 
         miCachedPlayersInGame = 0;
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))

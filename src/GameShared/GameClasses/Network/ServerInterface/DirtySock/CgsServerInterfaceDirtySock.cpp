@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::StrnCpy
 #include "CgsServerInterfaceDirtySock.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"
@@ -241,7 +242,7 @@ namespace CgsNetwork
     void ServerInterfaceDirtySock::MemFree(void* lpBlock, s32 /*liAlignment*/, s32 /*liPool*/)
     {
         CGS_ASSERT_AT(mpMemoryBlock,
-            "mpMemoryBlock", __FILE__, 256 /* ARTIST 0x828755B8 */);
+            "mpMemoryBlock", CGS_ARTIST_FILE, 256 /* ARTIST 0x828755B8 */);
         mpMemoryBlock->Free(lpBlock);
     }
 
@@ -249,10 +250,10 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(lpHeapMalloc,
             "lpHeapMalloc",
-            __FILE__, 932 /* ARTIST 0x82875C34 */);
+            CGS_ARTIST_FILE, 932 /* ARTIST 0x82875C34 */);
         CGS_ASSERT_AT(mpMemoryBlock == 0,
             "mpMemoryBlock == NULL",
-            __FILE__, 934 /* ARTIST 0x82875C60 */);
+            CGS_ARTIST_FILE, 934 /* ARTIST 0x82875C60 */);
         mpMemoryBlock = lpHeapMalloc;
     }
 
@@ -260,7 +261,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(mpMemoryBlock,
             "mpMemoryBlock",
-            __FILE__, 950 /* ARTIST 0x82875CB0 */);
+            CGS_ARTIST_FILE, 950 /* ARTIST 0x82875CB0 */);
         mpMemoryBlock = 0;
     }
 
@@ -302,15 +303,15 @@ namespace CgsNetwork
     bool ServerInterfaceDirtySock::Prepare(ServerInterfacePrepareParams* lpParams)
     {
         CGS_ASSERT_AT(mpMemoryBlock,
-            "Set a memory buffer before preparing the lobby", __FILE__, 330 /* ARTIST 0x828980DC */);
+            "Set a memory buffer before preparing the lobby", CGS_ARTIST_FILE, 330 /* ARTIST 0x828980DC */);
 
         CGS_ASSERT_AT(mpacMessageBuffer == 0,
-            "mpacMessageBuffer == NULL", __FILE__, 334 /* ARTIST 0x82898104 */);
+            "mpacMessageBuffer == NULL", CGS_ARTIST_FILE, 334 /* ARTIST 0x82898104 */);
 
 
         mpacMessageBuffer = static_cast<char*>(MemAlloc(KI_MESSAGE_BUFFER_SIZE, 0, KI_DIRTY_MEM_GROUP_DEFAULT));
         CGS_ASSERT_AT(mpacMessageBuffer,
-            "mpacMessageBuffer", __FILE__, 336 /* ARTIST 0x82898140 */);
+            "mpacMessageBuffer", CGS_ARTIST_FILE, 336 /* ARTIST 0x82898140 */);
 
         miLanguage            = lpParams->mLobbyParams.miLanguage;
         mpcVersion            = lpParams->mLobbyParams.mpcVersion;
@@ -356,31 +357,31 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(mpMemoryBlock == 0,
             "Release the memory block before calling Destruct!",
-                __FILE__, 409 /* ARTIST 0x82885A90 */);
+                CGS_ARTIST_FILE, 409 /* ARTIST 0x82885A90 */);
 
         CGS_ASSERT_AT(mpLobbyAPIRef == 0,
             "Call release before calling Destruct!",
-                __FILE__, 410 /* ARTIST 0x82885ABC */);
+                CGS_ARTIST_FILE, 410 /* ARTIST 0x82885ABC */);
 
         CGS_ASSERT_AT(mpLobbyLoginRef == 0,
             "Call release before calling Destruct!",
-                __FILE__, 411 /* ARTIST 0x82885AE0 */);
+                CGS_ARTIST_FILE, 411 /* ARTIST 0x82885AE0 */);
 
         CGS_ASSERT_AT(mpConnApiRef == 0,
             "Call release before calling Destruct!",
-                __FILE__, 412 /* ARTIST 0x82885B04 */);
+                CGS_ARTIST_FILE, 412 /* ARTIST 0x82885B04 */);
 
         CGS_ASSERT_AT(mpGameManagerRef == 0,
             "Call release before calling Destruct!",
-                __FILE__, 413 /* ARTIST 0x82885B28 */);
+                CGS_ARTIST_FILE, 413 /* ARTIST 0x82885B28 */);
 
         CGS_ASSERT_AT(mpSettingRef == 0,
             "Call release before calling Destruct!",
-                __FILE__, 414 /* ARTIST 0x82885B4C */);
+                CGS_ARTIST_FILE, 414 /* ARTIST 0x82885B4C */);
 
         CGS_ASSERT_AT(mpacMessageBuffer == 0,
             "Call release before calling Destruct!",
-                __FILE__, 415 /* ARTIST 0x82885B70 */);
+                CGS_ARTIST_FILE, 415 /* ARTIST 0x82885B70 */);
 
 
         mpLobbyAPIRef     = 0;
@@ -494,8 +495,8 @@ namespace CgsNetwork
         StartActionCore("Suspend select request");
         const s32 liResult = LobbyApiRequestCB(mpLobbyAPIRef, 0x73656C65 /* 'sele' */, lpcMessageBuffer,
                                                &ServerInterfaceDirtySock::SuspendSelectCallback, this);
-        CGS_ASSERT(liResult >= 0,
-                   "DirtySock::LobbyApiRequestCB(GetLobbyAPIRef(), 'sele', lpcMessageBuffer, SuspendSelectCallback, this) >= 0");
+        CGS_ASSERT_AT(liResult >= 0,
+                   "DirtySock::LobbyApiRequestCB(GetLobbyAPIRef(), 'sele', lpcMessageBuffer, SuspendSelectCallback, this) >= 0", CGS_ARTIST_FILE, 759);
     }
 
     void ServerInterfaceDirtySock::Resume()
@@ -504,11 +505,8 @@ namespace CgsNetwork
 
         GetMessageBuffer()[0] = 0;
 
-        // The inlined bounded copy of the standard select options into the buffer.
-        const char* lpcOptions = mpcStandardSelectOptions;
-        char*       lpcBuffer  = GetMessageBuffer();
-        CGS_ASSERT(strlen(lpcOptions) < static_cast<size_t>(KI_MESSAGE_BUFFER_SIZE), "String too long: ");
-        strncpy(lpcBuffer, lpcOptions, KI_MESSAGE_BUFFER_SIZE);
+        // CgsCore::StrnCpy (CgsStringUtils.h:55; ARTIST 0x82885DD0 asserts at that line).
+        CgsCore::StrnCpy(GetMessageBuffer(), mpcStandardSelectOptions, KI_MESSAGE_BUFFER_SIZE);
 
         StartActionCore("Resume select request");
         LobbyApiRequestCB(mpLobbyAPIRef, 0x73656C65 /* 'sele' */, GetMessageBuffer(),
@@ -600,7 +598,7 @@ namespace CgsNetwork
         }
         CGS_ASSERT_AT(GetComponent(leComponent),
             "GetComponent( leComponent )",
-            __FILE__, 1092 /* ARTIST 0x82885F38 */);
+            CGS_ARTIST_FILE, 1092 /* ARTIST 0x82885F38 */);
         GetComponent(leComponent)->ClearLastError();
     }
 
@@ -612,7 +610,7 @@ namespace CgsNetwork
             ClearLastError(E_COMPONENTS_COUNT);
             return liError;
         }
-        CGS_ASSERT(GetComponent(leComponent), "GetComponent( leComponent )");
+        CGS_ASSERT_AT(GetComponent(leComponent), "GetComponent( leComponent )", CGS_ARTIST_FILE, 1120);
         return GetComponent(leComponent)->GetAndClearLastError();
     }
 
@@ -680,19 +678,19 @@ namespace CgsNetwork
 
         mpLobbyLoginRef = LobbyLoginCreate(mpLobbyAPIRef, KA_LOBBY_LOGIN_ALERT_TEXT);
         CGS_ASSERT_AT(mpLobbyLoginRef,
-            "Lobby Login reference creation failed!", __FILE__, 491 /* ARTIST 0x82890D40 */);
+            "Lobby Login reference creation failed!", CGS_ARTIST_FILE, 491 /* ARTIST 0x82890D40 */);
 
 
         CreateConnApi();
 
         mpGameManagerRef = GameManagerCreate(mpLobbyAPIRef, mpConnApiRef);
         CGS_ASSERT_AT(mpGameManagerRef,
-            "Failed to allocate GameManager", __FILE__, 587 /* ARTIST 0x82890D7C */);
+            "Failed to allocate GameManager", CGS_ARTIST_FILE, 587 /* ARTIST 0x82890D7C */);
 
 
         mpSettingRef = LobbySettingCreate(mpLobbyAPIRef);
         CGS_ASSERT_AT(mpSettingRef,
-            "Failed to allocate SettingRef", __FILE__, 602 /* ARTIST 0x82890DAC */);
+            "Failed to allocate SettingRef", CGS_ARTIST_FILE, 602 /* ARTIST 0x82890DAC */);
 
 
         OnEvent(E_SERVER_INTERFACE_GENERAL_EVENT_LOBBY_API_CREATED, 0);
@@ -776,7 +774,7 @@ namespace CgsNetwork
         mpConnApiRef = ConnApiCreate(mConnApiPrepareParams.miPort, mConnApiPrepareParams.miMaxPlayers,
                                      &ServerInterfaceDirtySock::ConnApiCallback, this);
         CGS_ASSERT_AT(mpConnApiRef,
-            "Failed to allocate ConnAPI", __FILE__, 563 /* ARTIST 0x82885C20 */);
+            "Failed to allocate ConnAPI", CGS_ARTIST_FILE, 563 /* ARTIST 0x82885C20 */);
 
 
         ConnApiControl(mpConnApiRef, 0x70656572 /* 'peer' */, mConnApiPrepareParams.mbPeerToPeer, 0, 0);

@@ -81,20 +81,20 @@ namespace BrnNetwork
                                                      s32 liNumPlayersInChallenge)
     {
         CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-            "lu16FrameCount != KU16_INVALID_FRAME", __FILE__, 145 /* ARTIST 0x8257CD6C */);
+            "lu16FrameCount != KU16_INVALID_FRAME", CGS_ARTIST_FILE, 145 /* ARTIST 0x8257CD6C */);
 
         CGS_ASSERT_AT(!IsMessageValid(),
-            "!CgsNetwork::ReliableMessage::IsMessageValid()", __FILE__, 146 /* ARTIST 0x8257CD98 */);
+            "!CgsNetwork::ReliableMessage::IsMessageValid()", CGS_ARTIST_FILE, 146 /* ARTIST 0x8257CD98 */);
 
 
         mChallengeID            = lChallengeID;
         miNumPlayersInChallenge = liNumPlayersInChallenge;
 
         CGS_ASSERT_AT(liNumPlayersInChallenge > 0,
-            "liNumPlayersInChallenge > 0", __FILE__, 151 /* ARTIST 0x8257CDC4 */);
+            "liNumPlayersInChallenge > 0", CGS_ARTIST_FILE, 151 /* ARTIST 0x8257CDC4 */);
 
         CGS_ASSERT_AT(liNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS,
-            "liNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS", __FILE__, 152 /* ARTIST 0x8257CDE8 */);
+            "liNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS", CGS_ARTIST_FILE, 152 /* ARTIST 0x8257CDE8 */);
 
 
         for (s32 liPlayer = 0; liPlayer < miNumPlayersInChallenge; ++liPlayer)

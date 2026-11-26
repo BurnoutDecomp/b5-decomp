@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnFburnSuccessUpdateMessage.cpp"
 #include "GameSource/Network/Messages/BrnFburnSuccessUpdateMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -69,7 +69,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             "lu16FrameCount != KU16_INVALID_FRAME",
-            __FILE__, 129 /* ARTIST 0x8257FB0C */);
+            CGS_ARTIST_FILE, 129 /* ARTIST 0x8257FB0C */);
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
         {

@@ -114,17 +114,17 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mpServerInterface->GetDownloadableConfigComponent() != 0,
             "mpServerInterface->GetDownloadableConfigComponent()",
-            __FILE__, 345 /* ARTIST 0x82556D08 */);
+            CGS_ARTIST_FILE, 345 /* ARTIST 0x82556D08 */);
 
         mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesDownloads());
         mProcessesComplete.UnSetAll();
 
         CGS_ASSERT_AT(mpNetworkModule != 0,
             "mpNetworkModule",
-            __FILE__, 353 /* ARTIST 0x82556D4C */);
+            CGS_ARTIST_FILE, 353 /* ARTIST 0x82556D4C */);
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
             "mpNetworkModule->GetNetworkManager()",
-            __FILE__, 354 /* ARTIST 0x82556D78 */);
+            CGS_ARTIST_FILE, 354 /* ARTIST 0x82556D78 */);
 
         mpNetworkModule->GetNetworkManager()->OnAutoLogin();
 
@@ -168,13 +168,13 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mpNetworkModule != 0,
             "mpNetworkModule",
-            __FILE__, 209 /* ARTIST 0x8257627C */);
+            CGS_ARTIST_FILE, 209 /* ARTIST 0x8257627C */);
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
             "mpNetworkModule->GetNetworkManager()",
-            __FILE__, 210 /* ARTIST 0x825762A8 */);
+            CGS_ARTIST_FILE, 210 /* ARTIST 0x825762A8 */);
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetStateManager() != 0,
             "mpNetworkModule->GetNetworkManager()->GetStateManager()",
-            __FILE__, 211 /* ARTIST 0x825762DC */);
+            CGS_ARTIST_FILE, 211 /* ARTIST 0x825762DC */);
 
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
 
@@ -183,7 +183,7 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(mpServerInterface->GetDownloadableConfigComponent() != 0,
                 "mpServerInterface->GetDownloadableConfigComponent()",
-                __FILE__, 221 /* ARTIST 0x82576354 */);
+                CGS_ARTIST_FILE, 221 /* ARTIST 0x82576354 */);
 
             mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesDownloads());
             meState = E_AUTO_LOGIN_STATE_CONNECTING;
@@ -210,19 +210,19 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpNetworkModule != 0,
             "mpNetworkModule",
-            __FILE__, 258 /* ARTIST 0x8254B6C8 */);
+            CGS_ARTIST_FILE, 258 /* ARTIST 0x8254B6C8 */);
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
             "mpNetworkModule->GetNetworkManager()",
-            __FILE__, 259 /* ARTIST 0x8254B6F4 */);
+            CGS_ARTIST_FILE, 259 /* ARTIST 0x8254B6F4 */);
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetLoginManager() != 0,
             "mpNetworkModule->GetNetworkManager()->GetLoginManager()",
-            __FILE__, 260 /* ARTIST 0x8254B720 */);
+            CGS_ARTIST_FILE, 260 /* ARTIST 0x8254B720 */);
         CGS_ASSERT_AT(mpServerInterface != 0,
             "mpServerInterface",
-            __FILE__, 261 /* ARTIST 0x8254B748 */);
+            CGS_ARTIST_FILE, 261 /* ARTIST 0x8254B748 */);
         CGS_ASSERT_AT(mpServerInterface->GetConnectionComponent() != 0,
             "mpServerInterface->GetConnectionComponent()",
-            __FILE__, 262 /* ARTIST 0x8254B774 */);
+            CGS_ARTIST_FILE, 262 /* ARTIST 0x8254B774 */);
 
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
 

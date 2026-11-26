@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceHttp.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceHttp.cpp"
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // MemAlloc / MemFree
@@ -100,7 +100,7 @@ namespace CgsNetwork
         meCurrentAction   = E_ACTION_COUNT;
         mpHttp            = ProtoHttpCreate(KI_PROTO_HTTP_BUFFER_SIZE);
         CGS_ASSERT_AT(mpHttp != 0,
-            "NULL != mpHttp", __FILE__, 143 /* ARTIST 0x8287AA9C */);
+            "NULL != mpHttp", CGS_ARTIST_FILE, 143 /* ARTIST 0x8287AA9C */);
         return true;
     }
 
@@ -227,13 +227,13 @@ namespace CgsNetwork
     void ServerInterfaceHttp::StartHttpsDownload(const char* lpcUrl, s32 liBufferSize, s16 li16Timeout)
     {
         CGS_ASSERT_AT(mpHttp != 0,
-            "mpHttp != NULL", __FILE__, 437 /* ARTIST 0x8287ABB0 */);
+            "mpHttp != NULL", CGS_ARTIST_FILE, 437 /* ARTIST 0x8287ABB0 */);
 
         miHttpBufferSize       = liBufferSize;
         miAmountHttpDownloaded = 0;
 
         CGS_ASSERT_AT(li16Timeout > 0,
-            "li16Timeout > 0", __FILE__, 442 /* ARTIST 0x8287ABE4 */);
+            "li16Timeout > 0", CGS_ARTIST_FILE, 442 /* ARTIST 0x8287ABE4 */);
 
         mi16Timeout = li16Timeout;
         ProtoHttpGet(mpHttp, lpcUrl, 0);

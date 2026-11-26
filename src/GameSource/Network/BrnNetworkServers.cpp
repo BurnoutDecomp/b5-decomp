@@ -1,5 +1,5 @@
 #include "GameSource/Network/BrnNetworkServers.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkServers.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Network/BrnNetworkManager.h"
 #include "GameSource/Network/BrnServerInterface.h"   // BrnServerInterface::GetConnectionComponent
@@ -24,14 +24,14 @@ namespace BrnNetwork
     const char* NetworkServers::GetServerIP() const
     {
         CGS_ASSERT_AT(mpcServerIP,
-            "mpcServerIP", __FILE__, 171 /* ARTIST 0x82582BC0 */);
+            "mpcServerIP", CGS_ARTIST_FILE, 171 /* ARTIST 0x82582BC0 */);
         return mpcServerIP;
     }
 
     s32 NetworkServers::GetServerPort() const
     {
         CGS_ASSERT_AT(miServerPort > 0,
-            "miServerPort > 0", __FILE__, 189 /* ARTIST 0x82582C18 */);
+            "miServerPort > 0", CGS_ARTIST_FILE, 189 /* ARTIST 0x82582C18 */);
         return miServerPort;
     }
 
@@ -73,7 +73,7 @@ namespace BrnNetwork
         default:
             CGS_FAIL_AT(
                 "Unknown server type",
-                __FILE__, 319 /* ARTIST 0x82582D08 */);
+                CGS_ARTIST_FILE, 319 /* ARTIST 0x82582D08 */);
             mpcServerIP = KAC_TEST_SERVER_IP;
             break;
         }

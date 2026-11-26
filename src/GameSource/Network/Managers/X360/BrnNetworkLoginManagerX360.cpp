@@ -17,7 +17,7 @@
 // Every literal/constant below is grounded in a stored immediate / cmpwi-cmplwi operand /
 // rodata string in the recovered asm; the X360 method address is given at each function head.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkLoginManagerX360.cpp"
 #include "GameSource/Network/Managers/X360/BrnNetworkLoginManagerX360.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -114,7 +114,7 @@ namespace BrnNetwork
         {
             CGS_FAIL_AT(
                 "Unknown platform specific update state",
-                __FILE__, 144 /* ARTIST 0x8255E7F4 */);
+                CGS_ARTIST_FILE, 144 /* ARTIST 0x8255E7F4 */);
         }
     }
 

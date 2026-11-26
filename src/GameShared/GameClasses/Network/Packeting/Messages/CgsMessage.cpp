@@ -116,12 +116,10 @@ namespace CgsNetwork
         const s32 KI_TIME_DIFF_REPORTED_FRAME_RANGE = 0x5555;
 
         // The float reference drifts with the session length: the allowed error grows
-        // from 33 and from 242 wraps on.
+        // from 33 and from 242 wraps on (the errors themselves are literals in
+        // GetTimeDiffWrapped16).
         const s32 KI_TIME_DIFF_SHORT_SESSION_WRAPS  = 33;
         const s32 KI_TIME_DIFF_MEDIUM_SESSION_WRAPS = 242;
-        const f32 KF_TIME_DIFF_SHORT_SESSION_ERROR  = 0.0299999993f;
-        const f32 KF_TIME_DIFF_MEDIUM_SESSION_ERROR = 0.0500000007f;
-        const f32 KF_TIME_DIFF_LONG_SESSION_ERROR   = 0.0700000003f;
     }
 
     // DecFIGS CgsMessage.cpp:355 and ARTIST 82870B90.
@@ -772,7 +770,7 @@ namespace CgsNetwork
         mBitstream.PrepareCursors(lpu8Buffer, liBufferReadOffsetInBits, liBufferLengthInBits,
                                  liBufferLengthInBits);
 
-        const s32 liStartUnread = mBitstream.miBitWritePosition - mBitstream.miBitReadPosition;
+        const s32 liInitialBitstreamLength = mBitstream.GetBitLengthRemaining();
 
         mx8Flags = 0;
 
@@ -784,7 +782,7 @@ namespace CgsNetwork
             mx8Flags |= KX8_FLAGS_RELIABLE;
         }
 
-        *lpiBitsRead = (mBitstream.miBitReadPosition - mBitstream.miBitWritePosition) + liStartUnread;
+        *lpiBitsRead = liInitialBitstreamLength - mBitstream.GetBitLengthRemaining();
 
         mBitstream.Release();
         mePackOrUnpack = E_PACK_OR_UNPACK_COUNT;
@@ -825,7 +823,7 @@ namespace CgsNetwork
         const XMVECTOR lvPlusOne = { 1.0f, 1.0f, 1.0f, 0.0f };
         CGS_ASSERT_AT(lpfRollOut && lpfPitchOut && lpfYawOut,
             "lpfRollOut && lpfPitchOut && lpfYawOut",
-            __FILE__, 828 /* ARTIST 0x82881680 */);
+            CGS_ARTIST_FILE, 828 /* ARTIST 0x82881680 */);
         const XMVECTOR lvZAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.zAxis, 0), lvMinusOne), lvPlusOne);
         const XMVECTOR lvXAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.xAxis, 0), lvMinusOne), lvPlusOne);
         const XMVECTOR lvYAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.yAxis, 0), lvMinusOne), lvPlusOne);
@@ -895,19 +893,16 @@ namespace CgsNetwork
     {
         s64 liFramesA = static_cast<s32>(liNumWraps * KI_FRAMES_PER_WRAP + lu16FramesA);
 
-        CGS_ASSERT(lu16FramesA != KU16_INVALID_FRAME, "lu16FramesA != KU16_INVALID_FRAME");
-        CGS_ASSERT(lu16FramesB != KU16_INVALID_FRAME, "lu16FramesB != KU16_INVALID_FRAME");
+        CGS_ASSERT_AT(lu16FramesA != KU16_INVALID_FRAME, "lu16FramesA != KU16_INVALID_FRAME", CGS_ARTIST_FILE, 258);
+        CGS_ASSERT_AT(lu16FramesB != KU16_INVALID_FRAME, "lu16FramesB != KU16_INVALID_FRAME", CGS_ARTIST_FILE, 259);
 
         const f32 lfTimeStep = lbFramesBAre50Hz ? KF_TIME_STEP_50HZ : KF_TIME_STEP_60HZ;
 
-        if (lbFramesAAre50Hz)
+        if (lbFramesAAre50Hz && !lbFramesBAre50Hz)
         {
-            if (!lbFramesBAre50Hz)
-            {
-                liFramesA = (liFramesA * 12 + 5) / 10;
-            }
+            liFramesA = (liFramesA * 12 + 5) / 10;
         }
-        else if (lbFramesBAre50Hz)
+        else if (!lbFramesAAre50Hz && lbFramesBAre50Hz)
         {
             liFramesA = (liFramesA * 5 + 3) / 6;
         }
@@ -923,8 +918,9 @@ namespace CgsNetwork
         }
 
         const s64 liFramesBMinusA = liFramesB - liFramesA;
-        CGS_ASSERT((liFramesBMinusA < KI_HALF_WRAP_FRAMES) || ((liFramesA - liFramesB) < KI_HALF_WRAP_FRAMES),
-                   "((liFramesB - liFramesA) < KU16_HALF_WRAP_FRAMES) || ((liFramesA - liFramesB) < KU16_HALF_WRAP_FRAMES)");
+        CGS_ASSERT_AT((liFramesBMinusA < KI_HALF_WRAP_FRAMES) || ((liFramesA - liFramesB) < KI_HALF_WRAP_FRAMES),
+                   "((liFramesB - liFramesA) < KU16_HALF_WRAP_FRAMES) || ((liFramesA - liFramesB) < KU16_HALF_WRAP_FRAMES)",
+                   CGS_ARTIST_FILE, 291);
 
         f32 lfTimeDiff;
         if (liFramesB > liFramesA)
@@ -943,39 +939,39 @@ namespace CgsNetwork
             const f32 lfOldTimeDiff = OLDGetTimeDiffWrapped16(lu16FramesA, lu16FramesB, liNumWraps,
                                                               lbFramesAAre50Hz, lbFramesBAre50Hz);
 
+            // The three errors are literals: ARTIST loads them from the shared literal pool
+            // (0x82009B8C 0.03, 0x820047C8 0.05, 0x8200D528 0.07), not from this file's own
+            // constant block that holds the time steps (0x820E8C10/0x820E8C14). DWARF
+            // (CgsNetworkUnity, CgsMessage.cpp:308/309) lists no local for the bound.
             f32 lfMaxError;
             if (liNumWraps < KI_TIME_DIFF_SHORT_SESSION_WRAPS)
             {
-                lfMaxError = KF_TIME_DIFF_SHORT_SESSION_ERROR;
+                lfMaxError = 0.03f;
             }
             else if (liNumWraps < KI_TIME_DIFF_MEDIUM_SESSION_WRAPS)
             {
-                lfMaxError = KF_TIME_DIFF_MEDIUM_SESSION_ERROR;
+                lfMaxError = 0.05f;
             }
             else
             {
-                lfMaxError = KF_TIME_DIFF_LONG_SESSION_ERROR;
+                lfMaxError = 0.07f;
             }
 
             const f32 lfError = lfOldTimeDiff - lfTimeDiff;
-            if (!(fabsf(lfError) < lfMaxError))
-            {
-                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                lStream << "GetTimeDiffWrapped16(" << static_cast<s32>(lu16FramesA)
-                        << "," << static_cast<s32>(lu16FramesB)
-                        << "," << liNumWraps
-                        << "," << (lbFramesAAre50Hz ? "true" : "false")
-                        << "," << (lbFramesBAre50Hz ? "true" : "false")
-                        << "," << KI_TIME_DIFF_REPORTED_FRAME_RANGE
-                        << ") failed. Old time=" << lfOldTimeDiff
-                        << " new time=" << lfTimeDiff
-                        << " error=" << fabsf(lfError)
-                        << " larger than max allowed error of " << lfMaxError;
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-                CgsDev::Assert::EndAssert();
-            }
+            // ARTIST 0x82870B00/0x82870B10 stream the two flags through operator<<(bool)
+            // (0x8229F668, KAC_TRUE/KAC_FALSE).
+            CGS_ASSERT_STREAM_AT(fabsf(lfError) < lfMaxError,
+                "GetTimeDiffWrapped16(" << static_cast<s32>(lu16FramesA)
+                << "," << static_cast<s32>(lu16FramesB)
+                << "," << liNumWraps
+                << "," << lbFramesAAre50Hz
+                << "," << lbFramesBAre50Hz
+                << "," << KI_TIME_DIFF_REPORTED_FRAME_RANGE
+                << ") failed. Old time=" << lfOldTimeDiff
+                << " new time=" << lfTimeDiff
+                << " error=" << fabsf(lfError)
+                << " larger than max allowed error of " << lfMaxError,
+                CGS_ARTIST_FILE, 334);
         }
 
         return lfTimeDiff;

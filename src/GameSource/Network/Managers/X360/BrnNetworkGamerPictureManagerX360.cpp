@@ -64,7 +64,7 @@ namespace BrnNetwork
                                             CgsNetwork::NetworkTextureDXTCompress* lpTextureCompressor)
     {
         CGS_ASSERT_AT(lpNetworkManager,
-            "lpNetworkManager", __FILE__, 59 /* ARTIST 0x825574E8 */);
+            "lpNetworkManager", CGS_ARTIST_FILE, 59 /* ARTIST 0x825574E8 */);
 
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_GAMER_PICTURES; ++liPlayerIndex)
         {
@@ -79,7 +79,7 @@ namespace BrnNetwork
         mDownloadingXuid        = 0;
 
         CGS_ASSERT_AT(lpTextureCompressor,
-            "lpTextureCompressor", __FILE__, 76 /* ARTIST 0x82557550 */);
+            "lpTextureCompressor", CGS_ARTIST_FILE, 76 /* ARTIST 0x82557550 */);
         mpTextureCompressor = lpTextureCompressor;
 
         ResetGamerPictureData();
@@ -344,7 +344,7 @@ namespace BrnNetwork
         CgsNetwork::NetworkTexture* lpSource = &lpData->mTexture;
         CGS_ASSERT_AT(mpTextureCompressor,
             "mpTextureCompressor",
-            __FILE__, 510 /* ARTIST 0x8254C41C */);
+            CGS_ARTIST_FILE, 510 /* ARTIST 0x8254C41C */);
 
         const s32 liWidth  = lpSource->GetWidth();
         const s32 liHeight = lpSource->GetHeight();
@@ -444,7 +444,7 @@ namespace BrnNetwork
 
                 CGS_ASSERT_AT(maGamerPictureData[liPlayerIndex].miPlayerID == KI_INVALID_PLAYER_ID,
                     "maGamerPictureData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
-                    __FILE__, 364 /* ARTIST 0x8255790C */);
+                    CGS_ARTIST_FILE, 364 /* ARTIST 0x8255790C */);
             }
         }
 
@@ -475,7 +475,7 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mLocalPlayerGamerPictureData.miPlayerID == KI_INVALID_PLAYER_ID,
             "mLocalPlayerGamerPictureData.mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
-            __FILE__, 369 /* ARTIST 0x825579DC */);
+            CGS_ARTIST_FILE, 369 /* ARTIST 0x825579DC */);
     }
 
     // =======================================================================
@@ -563,10 +563,10 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mpNetworkManager != 0,
             "mpNetworkManager",
-            __FILE__, 255 /* ARTIST 0x82561708 */);
+            CGS_ARTIST_FILE, 255 /* ARTIST 0x82561708 */);
         CGS_ASSERT_AT(mpNetworkManager->GetPlayerManager() != 0,
             "mpNetworkManager->GetPlayerManager()",
-            __FILE__, 256 /* ARTIST 0x82561730 */);
+            CGS_ARTIST_FILE, 256 /* ARTIST 0x82561730 */);
 
         // A player the session registry does not know is the LOCAL player.
         const bool lbLocalPlayer =
@@ -593,7 +593,7 @@ namespace BrnNetwork
 
             CGS_ASSERT_AT(lpDataEntry,
                 "lpDataEntry",
-                __FILE__, 267 /* ARTIST 0x825617C0 */);
+                CGS_ARTIST_FILE, 267 /* ARTIST 0x825617C0 */);
         }
 
         u64 lXuid = 0;
@@ -620,7 +620,7 @@ namespace BrnNetwork
 
             CGS_ASSERT_AT(lPlayerInfo.GetID() == liPlayerID,
                 "Can only get local player XUID when not in a game",
-                __FILE__, 280 /* ARTIST 0x82561840 */);
+                CGS_ARTIST_FILE, 280 /* ARTIST 0x82561840 */);
 
             lXuid = lPlayerInfo.GetXUID();
         }

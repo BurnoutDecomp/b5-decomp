@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeBase.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeBase.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"
 
@@ -80,7 +80,7 @@ namespace CgsNetwork
     s32 SyncTimeMessageManager::GetPlayerMessageIndex(NetworkPlayerID lPlayerID)
     {
         CGS_ASSERT_AT(lPlayerID != KI_INVALID_PLAYER_ID,
-            "lPlayerID != K_INVALID_PLAYER_ID", __FILE__, 246 /* ARTIST 0x8287D164 */);
+            "lPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 246 /* ARTIST 0x8287D164 */);
 
 
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_SYNC_PLAYERS; ++liPlayerIndex)
@@ -204,9 +204,9 @@ namespace CgsNetwork
     void SyncTimeMessageManager::SwitchMode(EMessageMode leMessageMode)
     {
         CGS_ASSERT_AT(leMessageMode >= 0,
-            "leMessageMode >= 0", __FILE__, 305 /* ARTIST 0x8288AC44 */);
+            "leMessageMode >= 0", CGS_ARTIST_FILE, 305 /* ARTIST 0x8288AC44 */);
         CGS_ASSERT_AT(leMessageMode <= E_MESSAGE_MODE_NONE,
-            "leMessageMode <= E_MESSAGE_MODE_NONE", __FILE__, 306 /* ARTIST 0x8288AC68 */);
+            "leMessageMode <= E_MESSAGE_MODE_NONE", CGS_ARTIST_FILE, 306 /* ARTIST 0x8288AC68 */);
 
 
         meMessageMode = leMessageMode;

@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::StrnCpy
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayerManager.cpp"
 namespace CgsNetwork
@@ -529,10 +530,9 @@ void PlayerManager::AddPlayer(const CgsSystem::TimerStatus* lpTimerStatus, const
     lpPlayerData->GetMenuData()->Clear();
     lpPlayerData->GetMenuData()->miConnectionIndex = liConnectionIndex;
 
-    // The bounded name copy: the console streams the name after the literal.
+    // CgsCore::StrnCpy (CgsStringUtils.h:55; ARTIST 0x82884478 asserts at that line).
     PlayerMenuData* lpMenuData = lpPlayerData->GetMenuData();
-    CGS_ASSERT(strlen(lpcName) < sizeof(lpMenuData->macName), "String too long: ");
-    strncpy(lpMenuData->macName, lpcName, sizeof(lpMenuData->macName));
+    CgsCore::StrnCpy(lpMenuData->macName, lpcName, sizeof(lpMenuData->macName));
 
     if (liConnectionIndex == 0)
     {

@@ -6,8 +6,8 @@
 //
 // Every buffer accessor is the same console shape: test the lock bit (read = status bit 0x10,
 // write = status bit 0x08), fire the "Not locked for reading\n" / "Not locked for writing\n"
-// assert when it is clear, then return &member. The assert's streamed file/line is reduced to
-// CGS_ASSERT on the base predicate, as everywhere in the tree.
+// assert when it is clear, then return &member. The asserts keep ARTIST's locations (the header
+// path below and its lines) where an ARTIST copy of the accessor shows them.
 //
 // The three buffers' Construct / Destruct run each member's own Construct / Clear in the
 // console's emission order, which is not member order and constructs a few queues twice
@@ -23,7 +23,7 @@
 #include "GameSource/GameState/BrnGameStateModuleIO.h"   // BrnGameState::GameStateModuleIO::GameEventQueue (OutputBuffer storage)
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::StrnCpy (SetGameName)
-#include <cstring>   // std::memcpy (SetActiveRaceCarInterface)
+#include "GameShared/GameClasses/Core/X360/CgsCoreX360.h"   // CgsCore::MemCpy (SetActiveRaceCarInterface)
 
 namespace BrnNetwork
 {
@@ -176,7 +176,7 @@ namespace BrnNetworkModuleIO
 
     const BrnGameState::GameStateModuleIO::GameActionQueue* PostSimulationInputBuffer::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 582);
         return &mGameActionQueue;
     }
 
@@ -208,7 +208,7 @@ namespace BrnNetworkModuleIO
 
     const GameStateToNetworkInterface* PostSimulationInputBuffer::GetGameStateToNetworkInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 617);
         return &mGameStateToNetworkInterface;
     }
 
@@ -248,15 +248,15 @@ namespace BrnNetworkModuleIO
     // PostSimulationInputBuffer -- producer setters (BrnGameModule's world/game-state bridges)
     // ========================================================================
 
-    // Asserts the source (direct assert, no stream) and the write lock, then XMemCpy's the
-    // whole 10480-byte interface. The console assignment is a plain block copy; the committed
-    // interface declares a user operator= with no body in the tree, so the block copy is kept.
+    // Asserts the source (direct assert, no stream) and the write lock, then block-copies the
+    // whole 10480-byte interface with CgsCore::MemCpy: ARTIST calls XMemCpy there (0x823BBAF0),
+    // the call every CgsCore::MemCpy site makes.
     void PostSimulationInputBuffer::SetActiveRaceCarInterface(
             const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpInterface)
     {
-        CGS_ASSERT(lpInterface != 0, "lpInterface");
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        std::memcpy(static_cast<void*>(&mActiveRaceCarInterface), lpInterface, sizeof(mActiveRaceCarInterface));
+        CGS_ASSERT_AT(lpInterface != 0, "lpInterface", CGS_ARTIST_FILE, 647);
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 648);
+        CgsCore::MemCpy(&mActiveRaceCarInterface, lpInterface, sizeof(mActiveRaceCarInterface));
     }
 
     // Write lock, then VehicleOutputInterface::Append (inlined on the console): the three queue
@@ -377,7 +377,7 @@ namespace BrnNetworkModuleIO
 
     const BrnGameState::GameStateModuleIO::GameEventQueue* OutputBuffer::GetGameEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 745);
         return reinterpret_cast<const BrnGameState::GameStateModuleIO::GameEventQueue*>(&maGameEventQueueStorage[0]);
     }
 
@@ -403,7 +403,7 @@ namespace BrnNetworkModuleIO
 
     const OutputBuffer::TakedownEventQueue* OutputBuffer::GetTakedownEventOutputQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 759);
         return &mTakedownEventOutputQueue;
     }
 
@@ -465,7 +465,7 @@ namespace BrnNetworkModuleIO
 
     BrnPhysics::Vehicle::VehicleDriverInputInterface* OutputBuffer::GetVehicleDriverInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 848);
         return &mVehicleDriverInputInterface;
     }
 
@@ -491,19 +491,19 @@ namespace BrnNetworkModuleIO
 
     BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface* OutputBuffer::GetTrafficNetworkInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 876);
         return &mTrafficNetworkInputInterface;
     }
 
     NetworkToGameStateInterface* OutputBuffer::GetNetworkToGameStateInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 883);
         return &mNetworkToGameStateInterface;
     }
 
     const NetworkToGameStateInterface* OutputBuffer::GetNetworkToGameStateInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 890);
         return &mNetworkToGameStateInterface;
     }
 
@@ -515,25 +515,25 @@ namespace BrnNetworkModuleIO
 
     StatsOutputInterface* OutputBuffer::GetStatsOutputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 925);
         return &mStatsOutputInterface;
     }
 
     const InGamePlayerStatusInterface* OutputBuffer::GetInGamePlayerStatusInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 932);
         return &mInGamePlayerStatusInterface;
     }
 
     InGamePlayerStatusInterface* OutputBuffer::GetInGamePlayerStatusInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 939);
         return &mInGamePlayerStatusInterface;
     }
 
     const PlayerResultsInterface* OutputBuffer::GetPlayerResultsInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", CGS_ARTIST_FILE, 948);
         return &mPlayerResultsInterface;
     }
 
@@ -552,13 +552,13 @@ namespace BrnNetworkModuleIO
 
     NetworkToGuiInterface* OutputBuffer::GetNetworkToGuiInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 971);
         return &mNetworkToGuiInterface;
     }
 
     OnlineLobbyPlayerStatusInterface* OutputBuffer::GetOnlineLobbyPlayerStatusInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 979);
         return &mOnlineLobbyPlayerStatusInterface;
     }
 

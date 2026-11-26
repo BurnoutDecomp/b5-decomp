@@ -1,5 +1,5 @@
 #include "GameSource/Network/Components/BrnServerInterfaceCustomCommands.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Components/BrnServerInterfaceCustomCommands.cpp"
 #include "GameSource/Network/Parameters/BrnNetworkRoadRulesData.h"  // RoadRulesUploadData / *DownloadData
 #include "GameSource/GameState/BrnCgsPlayerName.h"                  // CgsNetwork::PlayerName
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"
@@ -150,7 +150,7 @@ bool ServerInterfaceCustomCommands::Prepare(CgsNetwork::ServerInterfaceDirtySock
         return false;
 
     CGS_ASSERT_AT(lpServerInterface != 0,
-        "lpServerInterface", __FILE__, 209 /* ARTIST 0x825837B4 */);
+        "lpServerInterface", CGS_ARTIST_FILE, 209 /* ARTIST 0x825837B4 */);
 
     mpServerInterface    = lpServerInterface;  // a1[4]
     mpCallback           = 0;            // a1[9]
@@ -209,14 +209,14 @@ void ServerInterfaceCustomCommands::SendCustomCommand(EAction leNewAction,
 {
     CGS_ASSERT_AT(leNewAction != E_ACTION_COUNT,
         "meNewAction != E_ACTION_COUNT",
-        __FILE__, 571 /* ARTIST 0x8258F064 */);
+        CGS_ARTIST_FILE, 571 /* ARTIST 0x8258F064 */);
 
     meCurrentAction = leNewAction;                       // a1[8] = leNewAction
     StartActionCore(KPC_ACTION_NAMES[leNewAction]);      // (*(vtable+12))(this, off_82F29F30[a2])
 
     CGS_ASSERT_AT(lpcMessageData != 0,
         "lpcMessageData",
-        __FILE__, 578 /* ARTIST 0x8258F0B0 */);
+        CGS_ARTIST_FILE, 578 /* ARTIST 0x8258F0B0 */);
 
     LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),         // *(a1[4]+120)
                       KI_ACTIONS_TO_MESSAGE_CODES[meCurrentAction], // dword_820872A4[a1[8]]
@@ -240,15 +240,15 @@ void ServerInterfaceCustomCommands::GetEloOfLocalPlayer(s32* lpiRaceElo, s32* lp
                                                         CustomCommandCallback lCallback, void* lpData)
 {
     CGS_ASSERT_AT(lpiRaceElo != 0,
-        "lpRaceElo", __FILE__, 601 /* ARTIST 0x8258F12C */);            // a2, cpp:601
+        "lpRaceElo", CGS_ARTIST_FILE, 601 /* ARTIST 0x8258F12C */);            // a2, cpp:601
     CGS_ASSERT_AT(lpiRoadRageElo != 0,
-        "lpRoadRageElo", __FILE__, 602 /* ARTIST 0x8258F150 */);    // a4, cpp:602
+        "lpRoadRageElo", CGS_ARTIST_FILE, 602 /* ARTIST 0x8258F150 */);    // a4, cpp:602
     CGS_ASSERT_AT(lpiBurningHomeRunElo != 0,
-        "lpBurningHomeRunElo", __FILE__, 603 /* ARTIST 0x8258F174 */); // a3, cpp:603
+        "lpBurningHomeRunElo", CGS_ARTIST_FILE, 603 /* ARTIST 0x8258F174 */); // a3, cpp:603
     CGS_ASSERT_AT(lCallback != 0,
-        "lCallback", __FILE__, 604 /* ARTIST 0x8258F198 */);            // a5, cpp:604
+        "lCallback", CGS_ARTIST_FILE, 604 /* ARTIST 0x8258F198 */);            // a5, cpp:604
     CGS_ASSERT_AT(lpData != 0,
-        "lpData", __FILE__, 605 /* ARTIST 0x8258F1BC */);                  // a6, cpp:605
+        "lpData", CGS_ARTIST_FILE, 605 /* ARTIST 0x8258F1BC */);                  // a6, cpp:605
 
     mpCallbackData       = lpData;                 // a1[10] -- stw r25, 0x28
     mpCallback           = lCallback;              // a1[9]  -- stw r26, 0x24
@@ -275,18 +275,18 @@ void ServerInterfaceCustomCommands::SetEloOfLocalPlayer(s32 liRaceElo, s32 liRoa
                                     mpServerInterface->GetMessageBufferLength(), "RACE", liRaceElo),
                   "CgsNetwork::DirtySock::TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), "
                   "mpServerInterface->GetMessageBufferLength(), \"RACE\", liRaceElo)",
-                  __FILE__, 638);
+                  CGS_ARTIST_FILE, 638);
     CGS_ASSERT_AT(TagFieldSetNumber(mpServerInterface->GetMessageBuffer(),
                                     mpServerInterface->GetMessageBufferLength(), "ROADRAGE", liRoadRageElo),
                   "CgsNetwork::DirtySock::TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), "
                   "mpServerInterface->GetMessageBufferLength(), \"ROADRAGE\", liRoadRageElo)",
-                  __FILE__, 639);
+                  CGS_ARTIST_FILE, 639);
     CGS_ASSERT_AT(TagFieldSetNumber(mpServerInterface->GetMessageBuffer(),
                                     mpServerInterface->GetMessageBufferLength(), "BURNINGHOMERUN",
                                     liBurningHomeRunElo),
                   "CgsNetwork::DirtySock::TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), "
                   "mpServerInterface->GetMessageBufferLength(), \"BURNINGHOMERUN\", liBurningHomeRunElo)",
-                  __FILE__, 640);
+                  CGS_ARTIST_FILE, 640);
 
     SendCustomCommand(E_ACTION_SET_ELO, mpServerInterface->GetMessageBuffer());
 }
@@ -300,13 +300,13 @@ void ServerInterfaceCustomCommands::GetFriendsListFromServer(CustomCommandCallba
     // Every buffer use goes through GetMessageBuffer (DWARF lists four calls; ARTIST 0x8258FD34..
     // 0x8258FE60), the field write inside its assert, as the assert text quotes it.
     CGS_ASSERT_AT(mpServerInterface->GetMessageBuffer(), "mpServerInterface->GetMessageBuffer()",
-                  __FILE__, 851);
+                  CGS_ARTIST_FILE, 851);
     mpServerInterface->GetMessageBuffer()[0] = 0;
     CGS_ASSERT_AT(TagFieldSetString(mpServerInterface->GetMessageBuffer(),
                                     mpServerInterface->GetMessageBufferLength(), "TAG", "F"),
                   "CgsNetwork::DirtySock::TagFieldSetString( mpServerInterface->GetMessageBuffer(), "
                   "mpServerInterface->GetMessageBufferLength(), \"TAG\", \"F\" )",
-                  __FILE__, 861);
+                  CGS_ARTIST_FILE, 861);
 
     SendCustomCommand(E_ACTION_GET_FRIENDS, mpServerInterface->GetMessageBuffer());
 }
@@ -317,7 +317,7 @@ void ServerInterfaceCustomCommands::GetLocalRoadRulesHighScores(s32 liNumScoresT
                                                                 const char* lpcRoadRulesServerKey,
                                                                 CustomCommandCallback lCallback, void* lpData)
 {
-    CGS_ASSERT_AT(liNumScoresToDownload != 0, "liNumScoresToDownload", __FILE__, 808);
+    CGS_ASSERT_AT(liNumScoresToDownload != 0, "liNumScoresToDownload", CGS_ARTIST_FILE, 808);
 
     mpCallbackData = lpData;     // a1[10]
     mpCallback     = lCallback;  // a1[9]
@@ -328,17 +328,17 @@ void ServerInterfaceCustomCommands::GetLocalRoadRulesHighScores(s32 liNumScoresT
                                  mpServerInterface->GetMessageBufferLength(), "SKEY", lpcRoadRulesServerKey),
                   "CgsNetwork::DirtySock::TagFieldSetRaw( mpServerInterface->GetMessageBuffer(), "
                   "mpServerInterface->GetMessageBufferLength(), \"SKEY\", lpcRoadRulesServerKey )",
-                  __FILE__, 820);
+                  CGS_ARTIST_FILE, 820);
     CGS_ASSERT_AT(TagFieldSetNumber(mpServerInterface->GetMessageBuffer(),
                                     mpServerInterface->GetMessageBufferLength(), "NUM", liNumScoresToDownload),
                   "CgsNetwork::DirtySock::TagFieldSetNumber( mpServerInterface->GetMessageBuffer(), "
                   "mpServerInterface->GetMessageBufferLength(), \"NUM\", liNumScoresToDownload )",
-                  __FILE__, 826);
+                  CGS_ARTIST_FILE, 826);
     CGS_ASSERT_AT(TagFieldSetNumber(mpServerInterface->GetMessageBuffer(),
                                     mpServerInterface->GetMessageBufferLength(), "IDX", liNextRoadIndexToDownload),
                   "CgsNetwork::DirtySock::TagFieldSetNumber( mpServerInterface->GetMessageBuffer(), "
                   "mpServerInterface->GetMessageBufferLength(), \"IDX\", liNextRoadIndexToDownload )",
-                  __FILE__, 830);
+                  CGS_ARTIST_FILE, 830);
 
     SendCustomCommand(E_ACTION_GET_LOCAL_ROAD_RULES_SCORES, mpServerInterface->GetMessageBuffer());
 }
@@ -348,8 +348,8 @@ void ServerInterfaceCustomCommands::UploadOfflineProgress(
     const NetworkInOfflineProgression::OfflineProgressionT* lpOfflineProgression,
     s32 liFreeburnChallengeSuccessCount)
 {
-    CGS_ASSERT_AT(lpOfflineProgression != 0, "lpOfflineProgression", __FILE__, 1317);
-    CGS_ASSERT_AT(mpServerInterface != 0, "mpServerInterface", __FILE__, 1318);
+    CGS_ASSERT_AT(lpOfflineProgression != 0, "lpOfflineProgression", CGS_ARTIST_FILE, 1317);
+    CGS_ASSERT_AT(mpServerInterface != 0, "mpServerInterface", CGS_ARTIST_FILE, 1318);
 
     // DWARF: no locals, three GetMessageBuffer calls (ARTIST 0x825909AC / 0x825909BC: the clear
     // and the OFFPROG field each read the buffer through it).
@@ -400,7 +400,7 @@ void ServerInterfaceCustomCommands::GetRoadRulesHighScores(u32 luTimeStamp, s32 
                                  mpServerInterface->GetMessageBufferLength(), "R", lacRoadsToGetScoresFor),
                   "CgsNetwork::DirtySock::TagFieldSetRaw( mpServerInterface->GetMessageBuffer(), "
                   "mpServerInterface->GetMessageBufferLength(), \"R\", lacRoadsToGetScoresFor )",
-                  __FILE__, 787);
+                  CGS_ARTIST_FILE, 787);
 
     // ARTIST inlines SendCustomCommand here (its lpcMessageData assert, line 578 at 0x8258FAD0).
     SendCustomCommand(E_ACTION_GET_ROAD_RULES_SCORES, mpServerInterface->GetMessageBuffer());
@@ -503,8 +503,8 @@ void ServerInterfaceCustomCommands::SetRoadRulesForLocalPlayer(RoadRulesUploadDa
 void ServerInterfaceCustomCommands::OverWriteServerFriendsRecord(
     const CgsNetwork::PlayerName* lpaFriendsNames, s32 liNumBuddies)
 {
-    CGS_ASSERT_AT(liNumBuddies > 0, "liNumBuddies > 0", __FILE__, 998);
-    CGS_ASSERT_AT(!lpaFriendsNames[0].IsEmpty(), "!lpaFriendsNames[0].IsEmpty()", __FILE__, 999);
+    CGS_ASSERT_AT(liNumBuddies > 0, "liNumBuddies > 0", CGS_ARTIST_FILE, 998);
+    CGS_ASSERT_AT(!lpaFriendsNames[0].IsEmpty(), "!lpaFriendsNames[0].IsEmpty()", CGS_ARTIST_FILE, 999);
 
     mpCallbackData = 0;  // a1[10]
     mpCallback     = 0;  // a1[9]
@@ -512,13 +512,13 @@ void ServerInterfaceCustomCommands::OverWriteServerFriendsRecord(
     // ARTIST 0x8259032C..0x82590594: GetMessageBuffer at each use, the fields inside their asserts
     // (texts quoted from the image), SendCustomCommand inlined after the loop (its line 578).
     CGS_ASSERT_AT(mpServerInterface->GetMessageBuffer(), "mpServerInterface->GetMessageBuffer()",
-                  __FILE__, 1004);
+                  CGS_ARTIST_FILE, 1004);
     mpServerInterface->GetMessageBuffer()[0] = 0;
     CGS_ASSERT_AT(TagFieldSetRaw(mpServerInterface->GetMessageBuffer(),
                                  mpServerInterface->GetMessageBufferLength(), "TAG", "F"),
                   "CgsNetwork::DirtySock::TagFieldSetRaw( mpServerInterface->GetMessageBuffer(), "
                   "mpServerInterface->GetMessageBufferLength(), \"TAG\", \"F\" )",
-                  __FILE__, 1014);
+                  CGS_ARTIST_FILE, 1014);
 
     if (liNumBuddies > 0)
     {
@@ -546,7 +546,7 @@ void ServerInterfaceCustomCommands::OverWriteServerFriendsRecord(
                                      mpServerInterface->GetMessageBufferLength(), "SET", lacFriendsList),
                       "CgsNetwork::DirtySock::TagFieldSetRaw( mpServerInterface->GetMessageBuffer(), "
                       "mpServerInterface->GetMessageBufferLength(), \"SET\", lacFriendsList )",
-                      __FILE__, 1048);
+                      CGS_ARTIST_FILE, 1048);
     }
 
     SendCustomCommand(E_ACTION_UPLOAD_FRIENDS, mpServerInterface->GetMessageBuffer());
@@ -639,8 +639,8 @@ void ServerInterfaceCustomCommands::UploadLiveRevengeData(const ServerGeneratedT
                                                           const s32* lpiRivalIDs,
                                                           s32 liNumberToUpload)
 {
-    CGS_ASSERT_AT(lpRivalData != 0, "lpRivalData", __FILE__, 1352);
-    CGS_ASSERT_AT(liNumberToUpload >= 0, "liNumberToUpload >= 0", __FILE__, 1353);
+    CGS_ASSERT_AT(lpRivalData != 0, "lpRivalData", CGS_ARTIST_FILE, 1352);
+    CGS_ASSERT_AT(liNumberToUpload >= 0, "liNumberToUpload >= 0", CGS_ARTIST_FILE, 1353);
 
     if (liNumberToUpload > 0)
     {
@@ -801,7 +801,7 @@ void ServerInterfaceCustomCommands::UploadEventScoreData(EventScoreUploadData* l
     mpCallback     = lCallback;  // a1[9]  -- stw r5, 0x24
 
     CGS_ASSERT_AT(lpEventScoreUploadData != 0, "lpEventScoreUploadData",
-        __FILE__, 1071 /* ARTIST 0x82590604 */);
+        CGS_ARTIST_FILE, 1071 /* ARTIST 0x82590604 */);
 
     lpEventScoreUploadData->SerialiseToString(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH);
 

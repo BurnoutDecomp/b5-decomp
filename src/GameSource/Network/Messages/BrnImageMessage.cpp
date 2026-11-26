@@ -110,53 +110,27 @@ namespace BrnNetwork
         mu16TotalPhotoPacketCount    = lu16TotalPacketCount;
         mu16NumberOfBytesOfPhotoData = lu16NumberOfBytes;
 
-        if ((lu16PacketNumber != 0 || lu16TotalPacketCount != 0) && !(lu16PacketNumber < lu16TotalPacketCount))
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStream << "Trying to send packet number " << static_cast<s32>(lu16PacketNumber)
-                    << " when the max packet number is " << static_cast<s32>(lu16TotalPacketCount);
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
-
-        if (!(lu16TotalPacketCount < KI_MAX_PHOTO_PACKETS))
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStream << "This photo has been broken into " << static_cast<s32>(lu16TotalPacketCount)
-                    << " and exceeded the maximum packet count of " << KI_MAX_PHOTO_PACKETS;
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
-
-        if (lu16NumberOfBytes > KI_PHOTO_SEGMENT_SIZE)
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStream << "Trying to pack " << static_cast<s32>(lu16NumberOfBytes)
-                    << " into a dirty trick message whose photo buffer is " << KI_PHOTO_SEGMENT_SIZE;
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_STREAM_AT((lu16PacketNumber == 0 && lu16TotalPacketCount == 0) || lu16PacketNumber < lu16TotalPacketCount,
+            "Trying to send packet number " << static_cast<s32>(lu16PacketNumber)
+            << " when the max packet number is " << static_cast<s32>(lu16TotalPacketCount),
+            CGS_ARTIST_FILE, 127);
+        CGS_ASSERT_STREAM_AT(lu16TotalPacketCount < KI_MAX_PHOTO_PACKETS,
+            "This photo has been broken into " << static_cast<s32>(lu16TotalPacketCount)
+            << " and exceeded the maximum packet count of " << KI_MAX_PHOTO_PACKETS,
+            CGS_ARTIST_FILE, 128);
+        CGS_ASSERT_STREAM_AT(lu16NumberOfBytes <= KI_PHOTO_SEGMENT_SIZE,
+            "Trying to pack " << static_cast<s32>(lu16NumberOfBytes)
+            << " into a dirty trick message whose photo buffer is " << KI_PHOTO_SEGMENT_SIZE,
+            CGS_ARTIST_FILE, 129);
 
         // Bytes and a buffer go together: some bytes from no buffer, or no bytes from a
         // buffer, is reported (the bytes are still copied whenever there is a buffer).
-        if ((lu16NumberOfBytes != 0) != (lpvPhotoData != 0))
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStream << "Either we are trying to copy some data (" << static_cast<s32>(lu16NumberOfBytes)
-                    << " bytes) from a NULL pointer (" << lpvPhotoData
-                    << ") or we are trying to copy no data (" << static_cast<s32>(lu16NumberOfBytes)
-                    << " bytes) from a valid pointer(" << lpvPhotoData << ")";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_STREAM_AT((lu16NumberOfBytes != 0 && lpvPhotoData != 0) || (lu16NumberOfBytes == 0 && lpvPhotoData == 0),
+            "Either we are trying to copy some data (" << static_cast<s32>(lu16NumberOfBytes)
+            << " bytes) from a NULL pointer (" << lpvPhotoData
+            << ") or we are trying to copy no data (" << static_cast<s32>(lu16NumberOfBytes)
+            << " bytes) from a valid pointer(" << lpvPhotoData << ")",
+            CGS_ARTIST_FILE, 131);
 
         if (lpvPhotoData != 0)
         {
@@ -164,7 +138,7 @@ namespace BrnNetwork
         }
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_IMAGE_MESSAGE_TYPE, lu16Frame);
-        CGS_ASSERT(IsReliable(), "IsReliable()");
+        CGS_ASSERT_AT(IsReliable(), "IsReliable()", CGS_ARTIST_FILE, 140);
     }
 
     // BrnNetwork::ImageMessage::GetPackedMessageSize @ 0x8257C0D0

@@ -18,45 +18,19 @@
 // static callback, which dispatches a freshly built NetworkInSelectScoreboardEvent through the manager to
 // pull the next level down.
 //
-// The X360 inlines a "copy string with length check" CgsStringUtils helper (the per-name strlen + "String
-// too long: <name>" StrStream assertion at 0x82585C1C / 0x82585DC0 / 0x82585F70); the dynamic messages,
-// Begin/Fire/End order, and original assertion locations are retained below. The decompiler's
+// The names are copied through CgsCore::StrnCpy (CgsStringUtils.h:55; ARTIST inlines it with its "String
+// too long: <name>" assert at 0x82585C8C / 0x82585E30 / 0x82585FE0). The decompiler's
 // sub_8282D720 is DebugComponent::RegisterVariable(s32*, name); sub_8282F598 is DebugComponent::SetRange.
 
 #include "GameSource/Network/Debug Components/BrnNetworkScoreboardDebugComponent.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameSource/Network/Managers/BrnNetworkScoreboardManager.h"   // ScoreboardManager::HandleScoreboardEvent
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT_AT
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"       // CgsCore::StrnCpy
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp"
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original streamed assert messages
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint (PrintScoreboard)
 #include <cstring>                                    // std::strlen / std::strncpy
-
-namespace
-{
-    void FireOriginalAssert(const char* lpcMessage, const char* lpcFile, s32 liLine)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(lpcMessage, lpcFile, liLine);
-        CgsDev::Assert::EndAssert();
-    }
-
-    void AssertHeadingNameLength(const char* lpcHeading)
-    {
-        if (std::strlen(lpcHeading) >= 31)
-        {
-            CgsDev::Assert::BeginAssert();
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "String too long: ";
-            lStrStream << (lpcHeading ? lpcHeading : "<NULLSTRING>");
-            CgsDev::Assert::FireAssert(
-                lacMessage,
-                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-                55));
-            CgsDev::Assert::EndAssert();
-        }
-    }
-}
 
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp".
 
@@ -176,37 +150,24 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------------
 
     // @ 0x82585A88. A heading list arrived from the server; rebuild the matching debug-menu drop-down.
+    // DWARF (BrnNetworkUnity): a switch on GetHeadingType() (ARTIST inlines it with its
+    // BrnNetworkOutEventTypeDefs.h:1778 assert and calls it out of line inside the default arm's
+    // streamed message), one loop per list (liCategoryIndex / liIndexIndex / liVariationIndex,
+    // cpp:285/313/337), each name copied through CgsCore::StrnCpy from GetHeading(li).
     void ScoreboardDebugComponent::HandleScoreboardHeadingEvent(
         IO::NetworkOutScoreboardHeadingList* lpHeadingEvent)
     {
-        if (!lpHeadingEvent)
-        {
-            FireOriginalAssert(
-                "lpHeadingEvent",
-                CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp",
-                279));
-        }
-        if (lpHeadingEvent->meHeadingType == IO::E_HEADING_COUNT)
-        {
-            FireOriginalAssert(
-                "meHeadingType != E_HEADING_COUNT",
-                CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Network/BrnNetworkOutEventTypeDefs.h",
-                1778));
-        }
+        CGS_ASSERT_AT(lpHeadingEvent, "lpHeadingEvent", CGS_ARTIST_FILE, 279);
 
-        const s32 liCount = lpHeadingEvent->miLength;
-
-        switch (lpHeadingEvent->meHeadingType)
+        switch (lpHeadingEvent->GetHeadingType())
         {
         case IO::E_HEADING_CATEGORY:
         {
-            for (s32 li = 0; li < liCount; ++li)
+            for (s32 liCategoryIndex = 0; liCategoryIndex < lpHeadingEvent->miLength; ++liCategoryIndex)
             {
-                const char* lpcName = lpHeadingEvent->maHeadings[li];
-                AssertHeadingNameLength(lpcName);
-                std::strncpy(maacCategories[li], lpcName, KI_NAME_LENGTH);
-                maCategoryList[li].miValue = li;
-                maCategoryList[li].mpcName = maacCategories[li];
+                CgsCore::StrnCpy(maacCategories[liCategoryIndex], lpHeadingEvent->GetHeading(liCategoryIndex), KI_NAME_LENGTH);
+                maCategoryList[liCategoryIndex].miValue = liCategoryIndex;
+                maCategoryList[liCategoryIndex].mpcName = maacCategories[liCategoryIndex];
             }
 
             miCategory = 0;
@@ -215,20 +176,18 @@ namespace BrnNetwork
             RegisterVariable(&miCategory, "Category");
             SetChangeCallback(&miCategory, &GetIndexes, this);
             SetSelectCallback(&miCategory, &GetIndexes, this);
-            SetRange(&miCategory, 0, liCount - 1);
+            SetRange(&miCategory, 0, lpHeadingEvent->miLength - 1);
             SetOptions(&miCategory, maCategoryList);
             break;
         }
 
         case IO::E_HEADING_INDEX:
         {
-            for (s32 li = 0; li < liCount; ++li)
+            for (s32 liIndexIndex = 0; liIndexIndex < lpHeadingEvent->miLength; ++liIndexIndex)
             {
-                const char* lpcName = lpHeadingEvent->maHeadings[li];
-                AssertHeadingNameLength(lpcName);
-                std::strncpy(maacIndexes[li], lpcName, KI_NAME_LENGTH);
-                maIndexList[li].miValue = li;
-                maIndexList[li].mpcName = maacIndexes[li];
+                CgsCore::StrnCpy(maacIndexes[liIndexIndex], lpHeadingEvent->GetHeading(liIndexIndex), KI_NAME_LENGTH);
+                maIndexList[liIndexIndex].miValue = liIndexIndex;
+                maIndexList[liIndexIndex].mpcName = maacIndexes[liIndexIndex];
             }
 
             miIndex = 0;
@@ -236,48 +195,33 @@ namespace BrnNetwork
             RegisterVariable(&miIndex, "Index");
             SetChangeCallback(&miIndex, &GetVariations, this);
             SetSelectCallback(&miIndex, &GetVariations, this);
-            SetRange(&miIndex, 0, liCount - 1);
+            SetRange(&miIndex, 0, lpHeadingEvent->miLength - 1);
             SetOptions(&miIndex, maIndexList);
             break;
         }
 
         case IO::E_HEADING_VARIATION:
         {
-            for (s32 li = 0; li < liCount; ++li)
+            for (s32 liVariationIndex = 0; liVariationIndex < lpHeadingEvent->miLength; ++liVariationIndex)
             {
-                const char* lpcName = lpHeadingEvent->maHeadings[li];
-                AssertHeadingNameLength(lpcName);
-                std::strncpy(maacVariations[li], lpcName, KI_NAME_LENGTH);
-                maVariationList[li].miValue = li;
-                maVariationList[li].mpcName = maacVariations[li];
+                CgsCore::StrnCpy(maacVariations[liVariationIndex], lpHeadingEvent->GetHeading(liVariationIndex), KI_NAME_LENGTH);
+                maVariationList[liVariationIndex].miValue = liVariationIndex;
+                maVariationList[liVariationIndex].mpcName = maacVariations[liVariationIndex];
             }
 
             miVariation = 0;
             RegisterVariable(&miVariation, "Variation");
             SetChangeCallback(&miVariation, &GetScoreboard, this);
             SetSelectCallback(&miVariation, &GetScoreboard, this);
-            SetRange(&miVariation, 0, liCount - 1);
+            SetRange(&miVariation, 0, lpHeadingEvent->miLength - 1);
             SetOptions(&miVariation, maVariationList);
             break;
         }
 
         default:
-        {
-            // meHeadingType outside [0,2] (and != COUNT): a programming error. The X360 streams the
-            // numeric type into the assert message ("Unhandled scoreboard event type: <n>\n").
-            CgsDev::Assert::BeginAssert();
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Unhandled scoreboard event type: ";
-            lStrStream << static_cast<s32>(lpHeadingEvent->meHeadingType);
-            lStrStream << "\n";
-            CgsDev::Assert::FireAssert(
-                lacMessage,
-                CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp",
-                359));
-            CgsDev::Assert::EndAssert();
+            CGS_FAIL_STREAM_AT("Unhandled scoreboard event type: " << lpHeadingEvent->GetHeadingType() << "\n",
+                               CGS_ARTIST_FILE, 359);
             break;
-        }
         }
     }
 

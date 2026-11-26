@@ -79,12 +79,10 @@ namespace CgsNetwork
         // into protected state.
         s32 GetStatus() const { return meStatus; }
 
-        // ADDITIVE GROW (BrnNetworkBuddyManagerBase TU): the last recorded error code
-        // (== miLastError). The X360 buddy-manager completion callbacks read it through the
-        // component by name (CgsNetwork::ServerInterfaceComponent::GetLastError on the custom-
-        // commands component) to branch on E_BUDDY_ERROR_CODES values (3 == not-found ->
-        // overwrite, 1 == pending -> clear). Inline accessor over the named member.
-        s32 GetLastError() const { return miLastError; }
+        // The last recorded error code (== miLastError). DWARF h:144 declares it; its body is in
+        // the .cpp (the CgsNetworkUnity CU defines it before ClearLastError), so callers outside
+        // the unity call it (ARTIST: the folded `lwz r3,0xC(r3); blr` at 0x82836DC8).
+        s32 GetLastError() const;
 
         // Fetch the last recorded error and reset the component to idle in one step
         // (X360 @ 0x82876708: read miLastError, then the same reset as ClearLastError).

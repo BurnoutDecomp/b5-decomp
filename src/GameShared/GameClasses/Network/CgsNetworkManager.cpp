@@ -123,7 +123,7 @@ namespace CgsNetwork
 
             CGS_ASSERT_AT(lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
                 "lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ",
-                __FILE__, 184 /* ARTIST 0x8289C9B8 */);
+                CGS_ARTIST_FILE, 184 /* ARTIST 0x8289C9B8 */);
 
             if (!mPlayerManager.Prepare(&lPrepareParams))
             {
@@ -157,7 +157,7 @@ namespace CgsNetwork
         default:
             CGS_FAIL_AT(
                 "unknown prepare stage",
-                __FILE__, 228 /* ARTIST 0x8289CA6C */);
+                CGS_ARTIST_FILE, 228 /* ARTIST 0x8289CA6C */);
             return E_MANAGER_STATUS_BUSY;
         }
     }

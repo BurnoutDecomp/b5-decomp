@@ -24,8 +24,8 @@
 #include "GameSource/Network/Managers/BrnNetworkPlayerStats.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // ::LobbyNameCmp (the vendor name compare)
-
-// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsResults.cpp".
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsResults.cpp"
+// The assert locations are ARTIST's (CGS_ARTIST_FILE and the original lines).
 
 namespace BrnNetwork
 {
@@ -87,17 +87,17 @@ namespace BrnNetwork
         miCacheSize = 0;
 
         CGS_ASSERT_AT(mpNetworkManager,
-            "mpNetworkManager", __FILE__, 77 /* ARTIST 0x82552C5C */);
+            "mpNetworkManager", CGS_ARTIST_FILE, 77 /* ARTIST 0x82552C5C */);
         CGS_ASSERT_AT(mpNetworkManager->GetServerInterface(),
             "mpNetworkManager->GetServerInterface()",
-                __FILE__, 78 /* ARTIST 0x82552C84 */);
+                CGS_ARTIST_FILE, 78 /* ARTIST 0x82552C84 */);
 
 
         CGS_ASSERT_AT(
             mStatsDebugComponent.Prepare(mpNetworkManager->GetServerInterface(),
                                          mpNetworkManager->GetStatsManager()),
             "mStatsDebugComponent.Prepare( mpNetworkManager->GetServerInterface(), mpNetworkManager->GetStatsManager() )",
-                __FILE__, 80 /* ARTIST 0x82552CC4 */);
+                CGS_ARTIST_FILE, 80 /* ARTIST 0x82552CC4 */);
 
 
         return true;
@@ -117,7 +117,7 @@ namespace BrnNetwork
         miCacheSize = 0;
         // Inlined into NetworkPlayerStatsManager::Release (ARTIST 0x82559F68, no out-of-line copy).
         CGS_ASSERT_AT(mStatsDebugComponent.Release(), "mStatsDebugComponent.Release()",
-                      __FILE__, 100 /* ARTIST 0x82559F68 */);
+                      CGS_ARTIST_FILE, 100 /* ARTIST 0x82559F68 */);
         return true;
     }
 
@@ -146,7 +146,7 @@ namespace BrnNetwork
     NetworkPlayerStats*
     NetworkPlayerStatsResults::GetPlayerStats(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT_AT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 176 /* ARTIST 0x82546D68 */);
 
         for (s32 luCacheLoopCounter = 0; luCacheLoopCounter < miCacheSize; ++luCacheLoopCounter)
         {
@@ -166,7 +166,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED,
             "lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED",
-                __FILE__, 295 /* ARTIST 0x82552E40 */);
+                CGS_ARTIST_FILE, 295 /* ARTIST 0x82552E40 */);
 
 
         NetworkPlayerStats* lpPlaceToInsert = 0;
@@ -190,7 +190,7 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(lpPlaceToInsert != 0,
             "lpPlaceToInsert != NULL",
-                __FILE__, 324 /* ARTIST 0x82552EB8 */);
+                CGS_ARTIST_FILE, 324 /* ARTIST 0x82552EB8 */);
 
         *lpPlaceToInsert = lNewStats;
         mStatsDebugComponent.AddStats(lpPlaceToInsert);

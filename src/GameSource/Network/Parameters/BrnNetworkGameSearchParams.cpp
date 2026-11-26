@@ -13,7 +13,7 @@
 #include "GameSource/Network/Managers/BrnNetworkLiveRevengeRelationship.h"// LiveRevengeRelationship::GetTotalTakedowns / GetRivalXUID
 #include "GameSource/Network/BrnNetworkManager.h"                         // BrnNetworkManager::GetLiveRevengeManager
 #include <string.h>
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkGameSearchParams.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::GameSearchParamsBase::operator=              @ 0x8255EA80
 //   BrnNetwork::GameSearchParamsX360::AreRivalsInSameGame    @ 0x82590FC0
@@ -100,7 +100,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpNetworkManager,
             "lpNetworkManager",
-            __FILE__, 58 /* ARTIST 0x82593778 */);
+            CGS_ARTIST_FILE, 58 /* ARTIST 0x82593778 */);
 
         if (!CgsNetwork::ServerInterfaceGameSearchParams::Prepare())
         {
@@ -308,10 +308,9 @@ namespace BrnNetwork
                     {
                         const char* lpcRivalName =
                             lpLiveRevengeManager->GetRevengeRelationshipByIndex(liRivalIndex)->GetRivalName()->GetPlayerName();
-                        CGS_ASSERT(strlen(lpcRivalName) < static_cast<u32>(SearchData::KI_MAX_PLAYER_NAME_LENGTH),
-                                   "String too long");
-                        strncpy(mSearchData.macPlayerNames[liPlayerNameIndex], lpcRivalName,
-                                SearchData::KI_MAX_PLAYER_NAME_LENGTH);
+                        // CgsCore::StrnCpy (CgsStringUtils.h:55; ARTIST 0x82590F64).
+                        CgsCore::StrnCpy(mSearchData.macPlayerNames[liPlayerNameIndex], lpcRivalName,
+                                         SearchData::KI_MAX_PLAYER_NAME_LENGTH);
                         ++liPlayerNameIndex;
                     }
                     ++liValidRivalIndex;

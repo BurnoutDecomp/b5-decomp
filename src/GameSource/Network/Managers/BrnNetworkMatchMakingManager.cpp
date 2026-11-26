@@ -98,7 +98,7 @@ namespace BrnNetwork
     void MatchMakingManager::Update()
     {
         CGS_ASSERT_AT(maUpdateFunctions[meSubState] != 0,
-            "No update function supplied for the current substate", __FILE__, 322 /* ARTIST 0x8254461C */);
+            "No update function supplied for the current substate", CGS_ARTIST_FILE, 322 /* ARTIST 0x8254461C */);
 
         (this->*maUpdateFunctions[meSubState])();
     }
@@ -122,7 +122,7 @@ namespace BrnNetwork
         for (s32 liIndex = 0; liIndex < E_SUBSTATE_COUNT; ++liIndex)
         {
             CGS_ASSERT_AT(maUpdateFunctions[liIndex] != 0,
-                "No update function supplied for this substate", __FILE__, 99 /* ARTIST 0x82558D84 */);
+                "No update function supplied for this substate", CGS_ARTIST_FILE, 99 /* ARTIST 0x82558D84 */);
 
         }
     }
@@ -255,17 +255,10 @@ namespace BrnNetwork
 
     void MatchMakingManager::StartProcess(EProcess leProcess, Callback lCallback, void* lpCallbackUserData)
     {
-        CGS_ASSERT(lCallback != 0, "lCallback");
-        if (mCallback != 0)
-        {
-            CgsDev::Assert::BeginAssert();
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "meCurrentProcess=" << static_cast<s32>(meCurrentProcess)
-                       << " leProcess=" << static_cast<s32>(leProcess);
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_AT(lCallback != 0, "lCallback", CGS_ARTIST_FILE, 416);
+        CGS_ASSERT_STREAM_AT(mCallback == 0,
+            "meCurrentProcess=" << static_cast<s32>(meCurrentProcess) << " leProcess=" << static_cast<s32>(leProcess),
+            CGS_ARTIST_FILE, 417);
 
         mCallback          = lCallback;
         mpCallbackUserData = lpCallbackUserData;
@@ -279,7 +272,7 @@ namespace BrnNetwork
     void MatchMakingManager::ProcessComplete(bool lbSuccess)
     {
         CGS_ASSERT_AT(mCallback != 0,
-            "mCallback", __FILE__, 442 /* ARTIST 0x825447B8 */);
+            "mCallback", CGS_ARTIST_FILE, 442 /* ARTIST 0x825447B8 */);
 
         Callback lCallback          = mCallback;
         void*    lpCallbackUserData = mpCallbackUserData;
@@ -532,7 +525,7 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(lpUsersets->IsLocalPlayerHost(),
                 "mpNetworkManager->GetServerInterface()->GetUsersetsComponent()->IsLocalPlayerHost()",
-                __FILE__, 1042 /* ARTIST 0x8255EBF4 */);
+                CGS_ARTIST_FILE, 1042 /* ARTIST 0x8255EBF4 */);
 
             UsersetParams lParams;
             lParams.Prepare();
@@ -622,15 +615,9 @@ namespace BrnNetwork
         static_cast<CgsNetwork::ServerInterfaceGamesX360*>(lpGames)->SetSessionFlags(
             mGameParameters.Security() == 2 ? 0x600 : 0x400);
 
-        if (!(lPlayerParams.GetPaintFinishIndex() < KU16_NUM_PAINT_FINISHES))
-        {
-            CgsDev::Assert::BeginAssert();
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Invalid Paint Finish: " << static_cast<s32>(lPlayerParams.GetPaintFinishIndex()) << "\n";
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_STREAM_AT(lPlayerParams.GetPaintFinishIndex() < KU16_NUM_PAINT_FINISHES,
+            "Invalid Paint Finish: " << static_cast<s32>(lPlayerParams.GetPaintFinishIndex()) << "\n",
+            CGS_ARTIST_FILE, 853);
 
         lpGames->CreateGame(&mGameParameters, &lPlayerParams);
         meSubState = E_SUBSTATE_WAIT_IDLE;
@@ -660,15 +647,9 @@ namespace BrnNetwork
         lpGames->SetGameServerConnectionType(
             mpNetworkManager->GetServerInterface()->GetDebugComponent()->GetConnectionType());
 
-        if (!(lPlayerParams.GetPaintFinishIndex() < KU16_NUM_PAINT_FINISHES))
-        {
-            CgsDev::Assert::BeginAssert();
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Invalid Paint Finish: " << static_cast<s32>(lPlayerParams.GetPaintFinishIndex()) << "\n";
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_STREAM_AT(lPlayerParams.GetPaintFinishIndex() < KU16_NUM_PAINT_FINISHES,
+            "Invalid Paint Finish: " << static_cast<s32>(lPlayerParams.GetPaintFinishIndex()) << "\n",
+            CGS_ARTIST_FILE, 899);
 
         lpGames->JoinGame(&mGameParameters, &lPlayerParams);
         meSubState = E_SUBSTATE_WAIT_IDLE;
@@ -708,15 +689,9 @@ namespace BrnNetwork
         lpGames->SetGameServerConnectionType(
             mpNetworkManager->GetServerInterface()->GetDebugComponent()->GetConnectionType());
 
-        if (!(lPlayerParams.GetPaintFinishIndex() < KU16_NUM_PAINT_FINISHES))
-        {
-            CgsDev::Assert::BeginAssert();
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Invalid Paint Finish: " << static_cast<s32>(lPlayerParams.GetPaintFinishIndex()) << "\n";
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_STREAM_AT(lPlayerParams.GetPaintFinishIndex() < KU16_NUM_PAINT_FINISHES,
+            "Invalid Paint Finish: " << static_cast<s32>(lPlayerParams.GetPaintFinishIndex()) << "\n",
+            CGS_ARTIST_FILE, 974);
 
         lpGames->QuickJoinGame(&lQuickJoinParams, &lPlayerParams);
         meSubState = E_SUBSTATE_WAIT_IDLE;

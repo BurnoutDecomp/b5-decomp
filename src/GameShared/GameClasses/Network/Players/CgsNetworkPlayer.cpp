@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::StrnCpy
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsNetworkPlayer.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -218,26 +219,26 @@ void NetworkPlayer::RegisterMessageType(s32 leType, s32 liLength, Message* lpSen
 {
     CGS_ASSERT_AT(liLength > 0,
         "liLength > 0",
-        __FILE__, 742 /* ARTIST 0x82872610 */);
+        CGS_ARTIST_FILE, 742 /* ARTIST 0x82872610 */);
     CGS_ASSERT_AT(leType >= 0,
         "leType >= 0",
-        __FILE__, 743 /* ARTIST 0x82872634 */);
+        CGS_ARTIST_FILE, 743 /* ARTIST 0x82872634 */);
     CGS_ASSERT_AT(miNumberMessagesRegistered < KI_MAX_MESSAGE_TYPES,
         "miNumberMessagesRegistered < KI_MAX_MESSAGE_TYPES",
-        __FILE__, 746 /* ARTIST 0x8287265C */);
+        CGS_ARTIST_FILE, 746 /* ARTIST 0x8287265C */);
 
     CGS_ASSERT_AT(!lpSendMsg->IsReliable() || lpfArrived,
         "!lpSendMsg->IsReliable() || lpfMsgArrivedCallback",
-        __FILE__, 749 /* ARTIST 0x828726A0 */);
+        CGS_ARTIST_FILE, 749 /* ARTIST 0x828726A0 */);
     CGS_ASSERT_AT(lpRecvMsg,
         "lpRecvMsg",
-        __FILE__, 752 /* ARTIST 0x828726C4 */);
+        CGS_ARTIST_FILE, 752 /* ARTIST 0x828726C4 */);
 
     for (s32 liIndex = 0; liIndex < miNumberMessagesRegistered; ++liIndex)
     {
         CGS_ASSERT_AT(maSendMessageData[liIndex].meType != leType,
             "maSendMessageData[i].meType != leType",
-            __FILE__, 760 /* ARTIST 0x82872708 */);
+            CGS_ARTIST_FILE, 760 /* ARTIST 0x82872708 */);
     }
 
     const s32 liSlot = miNumberMessagesRegistered;
@@ -355,30 +356,22 @@ bool NetworkPlayer::Prepare(NetworkAdapter* lpNetworkAdapter,
 {
     CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Preparing player " << liPlayerID << "\n";
 
-    CGS_ASSERT(leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ||
+    CGS_ASSERT_AT(leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ||
                leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
                "leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || "
-               "leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ");
-    CGS_ASSERT(leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ||
+               "leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ", CGS_ARTIST_FILE, 214);
+    CGS_ASSERT_AT(leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ||
                leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
                "leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || "
-               "leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ");
+               "leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ", CGS_ARTIST_FILE, 216);
 
     // Reset identity / connection state (same sentinel set Construct writes).
     mPlayerID        = KI_INVALID_PLAYER_ID;
     mpNetworkAdapter = 0;
     mConnectionData.Clear();
 
-    // Bound-check the name length (the X360 string-copy guard: must fit in 16 chars).
-    s32 liNameLength = 0;
-    while (lpcName[liNameLength] != '\0')
-        ++liNameLength;
-    if (liNameLength >= 16)
-    {
-        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "String too long: " << (lpcName ? lpcName : "<NULLSTRING>");
-        CGS_FAIL("String too long");
-    }
-    std::strncpy(macName, lpcName, 16);
+    // CgsCore::StrnCpy (CgsStringUtils.h:55; ARTIST 0x82883C18 asserts at that line).
+    CgsCore::StrnCpy(macName, lpcName, 16);
 
     mpNetworkAdapter        = lpNetworkAdapter;     // +0x04
     mPlayerID               = liPlayerID;           // +0x08
@@ -737,7 +730,7 @@ void NetworkPlayer::UpdateMessagesReceived()
 
         CGS_ASSERT_AT(lData.miValidCountdown == 0,
             "maRecvMessageData[liIndex].miValidCountdown == 0",
-            __FILE__, 1235 /* ARTIST 0x82873000 */);
+            CGS_ARTIST_FILE, 1235 /* ARTIST 0x82873000 */);
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Removing message received data for message type "
                                    << lData.meType << " with frame "
                                    << static_cast<s32>(lData.mu16Frame) << "\n";
@@ -797,8 +790,8 @@ void NetworkPlayer::UpdatePing(const CgsSystem::TimerStatus* lpTimerStatus, u16 
 // an ack), with the id of the player it was addressed to.
 void NetworkPlayer::ReceiveAckOrNack(SignalMessage* lpMessage, bool lbAck)
 {
-    CGS_ASSERT((lpMessage->mx8Flags & KX8_FLAGS_ACK) != 0 || (lpMessage->mx8Flags & KX8_FLAGS_NACK) != 0,
-               "lpMessage->IsAck() || lpMessage->IsNack()");
+    CGS_ASSERT_AT((lpMessage->mx8Flags & KX8_FLAGS_ACK) != 0 || (lpMessage->mx8Flags & KX8_FLAGS_NACK) != 0,
+               "lpMessage->IsAck() || lpMessage->IsNack()", CGS_ARTIST_FILE, 674);
 
     for (s32 liIndex = 0; liIndex < miNumberMessagesRegistered; ++liIndex)
     {
@@ -818,7 +811,7 @@ void NetworkPlayer::ReceiveAckOrNack(SignalMessage* lpMessage, bool lbAck)
             }
             else
             {
-                CGS_ASSERT((lpMessage->mx8Flags & KX8_FLAGS_NACK) != 0, "lpMessage->IsNack()");
+                CGS_ASSERT_AT((lpMessage->mx8Flags & KX8_FLAGS_NACK) != 0, "lpMessage->IsNack()", CGS_ARTIST_FILE, 705);
                 lData.mpfMsgDeliveredCallback(false, lbAck, lpMessage,
                                               lpMessage->GetRecvingPlayerID(), lpUserData);
             }
@@ -842,7 +835,7 @@ void NetworkPlayer::ReceiveMessage(u8* lpacMessageData, s32 liMessageSize,
     CompressionAndEncryptionUtils::RecvMessageData laRecvMessageData[KI_MAX_MESSAGE_TYPES];
     s32 liNumRecvMessageData = 0;
 
-    CGS_ASSERT(lpacMessageData, "lpacMessageData");
+    CGS_ASSERT_AT(lpacMessageData, "lpacMessageData", CGS_ARTIST_FILE, 622);
 
     for (s32 liIndex = 0; liIndex < miNumberMessagesRegistered; ++liIndex)
     {
@@ -890,11 +883,11 @@ void NetworkPlayer::OnMessageUnpackedCallback(Message* lpMsg, void* lpUserData)
 
     CGS_ASSERT_AT(lpMsg->IsMessageValid(),
         "lpMsg->IsMessageValid()",
-        __FILE__, 1142 /* ARTIST 0x82883E58 */);
+        CGS_ARTIST_FILE, 1142 /* ARTIST 0x82883E58 */);
     const u8 lu8GameID = lpMsg->GetGameID();
     CGS_ASSERT_AT(lu8GameID != KU8_INVALID_GAME_ID,
         "lu8GameID != KU8_INVALID_GAME_ID",
-        __FILE__, 1148 /* ARTIST 0x82883E88 */);
+        CGS_ARTIST_FILE, 1148 /* ARTIST 0x82883E88 */);
 
     const u8 lu8MyGameID = lpNetPlayer->mpPlayerManager->GetGameID();
     if (lu8GameID != lu8MyGameID)
@@ -924,14 +917,14 @@ void NetworkPlayer::OnMessageUnpackedCallback(Message* lpMsg, void* lpUserData)
     }
     CGS_ASSERT_AT(i < lpNetPlayer->miNumberMessagesRegistered,
         "i < lpNetPlayer->miNumberMessagesRegistered",
-        __FILE__, 1177 /* ARTIST 0x82883FD0 */);
+        CGS_ARTIST_FILE, 1177 /* ARTIST 0x82883FD0 */);
 
     NetMessageData& lData = lpNetPlayer->maRecvMessageData[i];
     if (lpMsg->IsReliable())
     {
         CGS_ASSERT_AT(lData.mpfMsgArrivedCallback,
             "lpNetPlayer->maRecvMessageData[i].mpfMsgArrivedCallback",
-            __FILE__, 1184 /* ARTIST 0x82884020 */);
+            CGS_ARTIST_FILE, 1184 /* ARTIST 0x82884020 */);
         void* lpCallbackUserData = lData.mpCallbackUserData;
         ReliableMessage* lpReliableMsg = static_cast<ReliableMessage*>(lpMsg);
         lData.mpfMsgArrivedCallback(lpReliableMsg, lpReliableMsg->GetSendingPlayerID(),
@@ -941,7 +934,7 @@ void NetworkPlayer::OnMessageUnpackedCallback(Message* lpMsg, void* lpUserData)
 
     CGS_ASSERT_AT(!lData.mpfMsgArrivedCallback,
         "!lpNetPlayer->maRecvMessageData[i].mpfMsgArrivedCallback",
-        __FILE__, 1193 /* ARTIST 0x82884070 */);
+        CGS_ARTIST_FILE, 1193 /* ARTIST 0x82884070 */);
     if (lData.mu16Frame == KU16_INVALID_FRAME || UInt16IsLargerWrapped(lpMsg->mu16Frame, lData.mu16Frame))
     {
         lData.mu16Frame        = lpMsg->mu16Frame;

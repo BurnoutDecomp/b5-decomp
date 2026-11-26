@@ -64,7 +64,13 @@ namespace CgsSystem
         void SetLocal(bool lbIsLocal) { mbIsLocal = lbIsLocal; }
         void Clear();
         bool IsLocal() const;
-        bool IsZero() const;
+        // Defined in the header (DecFIGS CgsDateAndTimePS3.h:105): its DWARF body is in the game CUs
+        // (BrnNetworkManagerUnity), not in the .cpp's; ARTIST inlines it at every site
+        // (LiveRevengeRelationship::Validate 0x82548020: the low half, then the high half).
+        bool IsZero() const
+        {
+            return mFileTime.muLowDateTime == 0 && mFileTime.muHighDateTime == 0;
+        }
 
         bool operator==(const DateAndTime& lDateAndTime) const;
         bool operator<(const DateAndTime& lDateAndTime) const;

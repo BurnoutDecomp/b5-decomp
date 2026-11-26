@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include "lobbyapi.h"                                 // DirtySDK LobbyApiSetCallback / LobbyApiClearCallback + LobbyApiRefT / LobbyApiMsgT / LobbyApiCallbackT
 #include "lobbytagfield.h"                            // DirtySDK TagFieldFind / Get*
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceBroadcastMessages.cpp"
 #include <string.h>   // memmove
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -247,7 +247,7 @@ namespace CgsNetwork
 
             CGS_ASSERT_AT(static_cast<s32>(leType) >= 0 && static_cast<s32>(leType) < E_BROADCAST_MESSAGE_TYPES_COUNT,
                 "Broadcast message has invalid type",
-                __FILE__, 191 /* ARTIST 0x828861FC */);
+                CGS_ARTIST_FILE, 191 /* ARTIST 0x828861FC */);
 
             BroadcastMessageCallback lpfCallback = mapRegisteredCallbacks[leType];
             if (lpfCallback)

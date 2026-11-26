@@ -17,7 +17,7 @@
 //           (HandlePlayerStoppedMode, EnableMugshotOutput and GetImageDataToSend are header
 //           inlines; IsThereEnoughBandwidthToSend is an inline in this file).
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkImageManager.cpp"
 #include "GameSource/Network/Managers/BrnNetworkImageManager.h"
 
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"   // CgsNetwork::PlayerManager
@@ -53,7 +53,7 @@
 // Vendor XDK mute-list query used by AreMugshotsDisabledForPlayer (same convention).
 
 
-// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkImageManager.cpp".
+// Assert locations name ARTIST's file string through CGS_ARTIST_FILE (defined above).
 
 namespace BrnNetwork
 {
@@ -266,11 +266,11 @@ namespace BrnNetwork
     void NetworkImageManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
         CGS_ASSERT_AT(mpPlayerManager,
-            "mpPlayerManager", __FILE__, 1158 /* ARTIST 0x82576140 */);
+            "mpPlayerManager", CGS_ARTIST_FILE, 1158 /* ARTIST 0x82576140 */);
 
         MugshotData* lpMugshotDataEntry = GetMugshotDataEntry(-1);
         CGS_ASSERT_AT(lpMugshotDataEntry,
-            "lpMugshotDataEntry", __FILE__, 1161 /* ARTIST 0x82576174 */);
+            "lpMugshotDataEntry", CGS_ARTIST_FILE, 1161 /* ARTIST 0x82576174 */);
 
         lpMugshotDataEntry->mReceivedPhotoPackets.UnSetAll();
         lpMugshotDataEntry->mTakedownAggressorPlayerID = lPlayerID;  // stw r28,0x28 -- slot KEY
@@ -285,7 +285,7 @@ namespace BrnNetwork
         {
             ImageMessageData* lpDataEntry = GetImageMessageDataEntry(-1);
             CGS_ASSERT_AT(lpDataEntry,
-                "lpDataEntry", __FILE__, 1176 /* ARTIST 0x825761E4 */);
+                "lpDataEntry", CGS_ARTIST_FILE, 1176 /* ARTIST 0x825761E4 */);
 
             lpNetworkPlayer->RegisterMessageType(
                 KI_IMAGE_MESSAGE_TYPE,
@@ -308,7 +308,7 @@ namespace BrnNetwork
     void NetworkImageManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
         CGS_ASSERT_AT(mpPlayerManager,
-            "mpPlayerManager", __FILE__, 1207 /* ARTIST 0x8255DB68 */);
+            "mpPlayerManager", CGS_ARTIST_FILE, 1207 /* ARTIST 0x8255DB68 */);
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
         if ( lpNetworkPlayer )
@@ -344,7 +344,7 @@ namespace BrnNetwork
                 RemovePlayer(maMugshotData[liIndex].mTakedownAggressorPlayerID);
                 CGS_ASSERT_AT(maMugshotData[liIndex].mTakedownAggressorPlayerID == -1,
                     "maMugshotData[liIndex].mTakedownAggressorPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
-                        __FILE__, 1321 /* ARTIST 0x8255DC54 */);
+                        CGS_ARTIST_FILE, 1321 /* ARTIST 0x8255DC54 */);
 
             }
         }
@@ -364,7 +364,7 @@ namespace BrnNetwork
         if ( !lpMugshotDataEntry )
         {
             CGS_ASSERT_AT(lpMugshotDataEntry,
-                "lpMugshotDataEntry", __FILE__, 1825 /* ARTIST 0x8254AC48 */);
+                "lpMugshotDataEntry", CGS_ARTIST_FILE, 1825 /* ARTIST 0x8254AC48 */);
 
             return 0;
         }
@@ -383,7 +383,7 @@ namespace BrnNetwork
     {
         MugshotData* lpMugshotDataEntry = GetMugshotDataEntry(lTakedownAggressorID);
         CGS_ASSERT_AT(lpMugshotDataEntry,
-            "lpMugshotDataEntry", __FILE__, 1951 /* ARTIST 0x8254AE38 */);
+            "lpMugshotDataEntry", CGS_ARTIST_FILE, 1951 /* ARTIST 0x8254AE38 */);
         return lpMugshotDataEntry->mTakedownVictimPlayerID;
     }
 
@@ -396,9 +396,9 @@ namespace BrnNetwork
                                                            NetworkPlayerID liFromPlayerID, void* lpUserData)
     {
         CGS_ASSERT_AT(lpMessage,
-            "lpImageMessage", __FILE__, 1721 /* ARTIST 0x82573728 */);
+            "lpImageMessage", CGS_ARTIST_FILE, 1721 /* ARTIST 0x82573728 */);
         CGS_ASSERT_AT(lpMessage,
-            "lpImageMessage", __FILE__, 1722 /* ARTIST 0x8257374C */);
+            "lpImageMessage", CGS_ARTIST_FILE, 1722 /* ARTIST 0x8257374C */);
 
         NetworkImageManager* lpThis = static_cast<NetworkImageManager*>(lpUserData);
         lpThis->ReceiveImageMessage(liFromPlayerID, reinterpret_cast<ImageMessage*>(lpMessage));
@@ -413,12 +413,12 @@ namespace BrnNetwork
     void NetworkImageManager::ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
         CGS_ASSERT_AT(mpNetworkModule,
-            "mpNetworkModule", __FILE__, 498 /* ARTIST 0x8256BB68 */);
+            "mpNetworkModule", CGS_ARTIST_FILE, 498 /* ARTIST 0x8256BB68 */);
 
         if ( mTakedownVictimPlayerID == -1 )
         {
             CGS_ASSERT_AT(mpPlayerManager,
-                "mpPlayerManager", __FILE__, 507 /* ARTIST 0x8256BBA0 */);
+                "mpPlayerManager", CGS_ARTIST_FILE, 507 /* ARTIST 0x8256BBA0 */);
             const NetworkPlayerID lLocalPlayerID = mpPlayerManager->GetLocalPlayerID();
             if ( lLocalPlayerID != -1 )
             {
@@ -459,7 +459,7 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(lpRoundResults,
             "lpRoundResults",
-            __FILE__, 2022 /* ARTIST 0x825737CC */);
+            CGS_ARTIST_FILE, 2022 /* ARTIST 0x825737CC */);
 
         const NetworkPlayerID lRoundWinnerID = lpRoundResults->GetWinner();
         if ( lRoundWinnerID == -1 )
@@ -468,7 +468,7 @@ namespace BrnNetwork
         MugshotData* lpMugshotDataEntry = GetMugshotDataEntry(lRoundWinnerID);
         CGS_ASSERT_AT(lpMugshotDataEntry,
             "lpMugshotDataEntry",
-            __FILE__, 2031 /* ARTIST 0x8257380C */);
+            CGS_ARTIST_FILE, 2031 /* ARTIST 0x8257380C */);
 
         if ( lpMugshotDataEntry->mbPhotoFinishValid )
         {
@@ -479,15 +479,15 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
             "mpNetworkModule->GetNetworkManager()",
-            __FILE__, 2041 /* ARTIST 0x82573844 */);
+            CGS_ARTIST_FILE, 2041 /* ARTIST 0x82573844 */);
         GamerPictureManagerX360* lpGamerPicManager = mpNetworkModule->GetNetworkManager()->GetGamerPictureManager();
         CGS_ASSERT_AT(lpGamerPicManager,
             "lpGamerPicManager",
-            __FILE__, 2043 /* ARTIST 0x82573878 */);
+            CGS_ARTIST_FILE, 2043 /* ARTIST 0x82573878 */);
 
         CGS_ASSERT_AT(mpPlayerManager,
             "mpPlayerManager",
-            __FILE__, 2047 /* ARTIST 0x825738A0 */);
+            CGS_ARTIST_FILE, 2047 /* ARTIST 0x825738A0 */);
         const NetworkPlayerID lLocalPlayerID = mpPlayerManager->GetLocalPlayerID();
         if ( lLocalPlayerID == -1 )
             return;
@@ -495,7 +495,7 @@ namespace BrnNetwork
         MugshotData* lpLocalMugshotData = GetMugshotDataEntry(lLocalPlayerID);
         CGS_ASSERT_AT(lpLocalMugshotData,
             "lpLocalMugshotData",
-            __FILE__, 2055 /* ARTIST 0x825738E0 */);
+            CGS_ARTIST_FILE, 2055 /* ARTIST 0x825738E0 */);
 
         lpLocalMugshotData->mTakedownVictimPlayerID = lRoundWinnerID;
         meImageTypeOfGamerPicToSave = BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT;
@@ -585,10 +585,10 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mpNetworkModule,
             "mpNetworkModule",
-            __FILE__, 793 /* ARTIST 0x82564A00 */);
+            CGS_ARTIST_FILE, 793 /* ARTIST 0x82564A00 */);
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkEventQueue(),
             "mpNetworkModule->GetNetworkEventQueue()",
-            __FILE__, 794 /* ARTIST 0x82564A2C */);
+            CGS_ARTIST_FILE, 794 /* ARTIST 0x82564A2C */);
 
         BrnNetworkModuleIO::NetworkOutAbortImageCaptureEvent lAbortEvent;
         lAbortEvent.mbCapture = true;
@@ -611,10 +611,10 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mpNetworkModule,
             "mpNetworkModule",
-            __FILE__, 831 /* ARTIST 0x82564AF0 */);
+            CGS_ARTIST_FILE, 831 /* ARTIST 0x82564AF0 */);
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkEventQueue(),
             "mpNetworkModule->GetNetworkEventQueue()",
-            __FILE__, 832 /* ARTIST 0x82564B1C */);
+            CGS_ARTIST_FILE, 832 /* ARTIST 0x82564B1C */);
 
         BrnNetworkModuleIO::NetworkOutAbortImageCaptureEvent lAbortEvent;
         lAbortEvent.mbCapture = false;
@@ -697,7 +697,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpNetworkModule,
             "mpNetworkModule",
-            __FILE__, 273 /* ARTIST 0x8256F724 */);
+            CGS_ARTIST_FILE, 273 /* ARTIST 0x8256F724 */);
 
         switch ( meState )
         {
@@ -705,21 +705,21 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
                 "mpNetworkModule->GetNetworkManager()",
-                __FILE__, 287 /* ARTIST 0x8256F788 */);
+                CGS_ARTIST_FILE, 287 /* ARTIST 0x8256F788 */);
             CameraX360* lpCamera = mpNetworkModule->GetNetworkManager()->GetCamera();
             GamerPictureManagerX360* lpGamerPicManager = mpNetworkModule->GetNetworkManager()->GetGamerPictureManager();
             CGS_ASSERT_AT(lpCamera,
                 "lpCamera",
-                __FILE__, 290 /* ARTIST 0x8256F7D0 */);
+                CGS_ARTIST_FILE, 290 /* ARTIST 0x8256F7D0 */);
             CGS_ASSERT_AT(lpGamerPicManager,
                 "lpGamerPicManager",
-                __FILE__, 291 /* ARTIST 0x8256F7F4 */);
+                CGS_ARTIST_FILE, 291 /* ARTIST 0x8256F7F4 */);
 
             lpCamera->SetGameEnabled(true);
 
             CGS_ASSERT_AT(mpPlayerManager,
                 "mpPlayerManager",
-                __FILE__, 297 /* ARTIST 0x8256F828 */);
+                CGS_ARTIST_FILE, 297 /* ARTIST 0x8256F828 */);
             NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
             mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
             if ( lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID )   // the id, not the result (ARTIST 0x8256F834)
@@ -729,7 +729,7 @@ namespace BrnNetwork
                 {
                     CGS_ASSERT_AT(meImageTypeToSend != BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT,
                         "meImageTypeToSend != GsmIO::E_IMAGE_TYPE_COUNT",
-                        __FILE__, 310 /* ARTIST 0x8256F878 */);
+                        CGS_ARTIST_FILE, 310 /* ARTIST 0x8256F878 */);
                     if ( KAB_IMAGE_TRANSMITS_GAMERPIC[meImageTypeToSend] )
                     {
                         lpTexture = lpGamerPicManager->GetGamerPictureTexture(lLocalPlayerID);
@@ -752,40 +752,40 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
                 "mpNetworkModule->GetNetworkManager()",
-                __FILE__, 345 /* ARTIST 0x8256F8FC */);
+                CGS_ARTIST_FILE, 345 /* ARTIST 0x8256F8FC */);
             CameraX360* lpCamera = mpNetworkModule->GetNetworkManager()->GetCamera();
             GamerPictureManagerX360* lpGamerPicManager = mpNetworkModule->GetNetworkManager()->GetGamerPictureManager();
             CGS_ASSERT_AT(lpCamera,
                 "lpCamera",
-                __FILE__, 348 /* ARTIST 0x8256F944 */);
+                CGS_ARTIST_FILE, 348 /* ARTIST 0x8256F944 */);
             CGS_ASSERT_AT(lpGamerPicManager,
                 "lpGamerPicManager",
-                __FILE__, 349 /* ARTIST 0x8256F968 */);
+                CGS_ARTIST_FILE, 349 /* ARTIST 0x8256F968 */);
 
             lpCamera->SetGameEnabled(true);
 
             CGS_ASSERT_AT(mpPlayerManager,
                 "mpPlayerManager",
-                __FILE__, 356 /* ARTIST 0x8256F99C */);
+                CGS_ARTIST_FILE, 356 /* ARTIST 0x8256F99C */);
             NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
             mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
             CGS_ASSERT_AT(CgsNetwork::K_INVALID_PLAYER_ID != lLocalPlayerID,
                 "CgsNetwork::K_INVALID_PLAYER_ID != lLocalPlayerID",
-                __FILE__, 359 /* ARTIST 0x8256F9D4 */);
+                CGS_ARTIST_FILE, 359 /* ARTIST 0x8256F9D4 */);
             CGS_ASSERT_AT(meImageTypeToSend != BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT,
                 "meImageTypeToSend != GsmIO::E_IMAGE_TYPE_COUNT",
-                __FILE__, 362 /* ARTIST 0x8256F9FC */);
+                CGS_ARTIST_FILE, 362 /* ARTIST 0x8256F9FC */);
 
             const CgsNetwork::NetworkTexture* lpTexture = lpCamera->GetCameraPicture(lLocalPlayerID);
             if ( lpTexture != 0 )
             {
                 CGS_ASSERT_AT(mTakedownAggressorPlayerID != -1,
                     "mTakedownAggressorPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                    __FILE__, 374 /* ARTIST 0x8256FA38 */);
+                    CGS_ARTIST_FILE, 374 /* ARTIST 0x8256FA38 */);
                 MugshotData* lpMugshotData = GetMugshotDataEntry(mTakedownAggressorPlayerID);
                 CGS_ASSERT_AT(lpMugshotData,
                     "lpMugshotData",
-                    __FILE__, 387 /* ARTIST 0x8256FA6C */);
+                    CGS_ARTIST_FILE, 387 /* ARTIST 0x8256FA6C */);
 
                 GetCompressedTexture(&lpMugshotData->mPicture);
                 meState = E_IMAGE_MANAGER_STATE_WAIT_COMPRESS_MUGSHOT;
@@ -794,7 +794,7 @@ namespace BrnNetwork
             {
                 CGS_ASSERT_AT(mTakedownAggressorPlayerID != -1,
                     "mTakedownAggressorPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                    __FILE__, 404 /* ARTIST 0x8256FAD0 */);
+                    CGS_ARTIST_FILE, 404 /* ARTIST 0x8256FAD0 */);
                 SendMugshotPicture(mTakedownAggressorPlayerID, mTakedownAggressorPlayerID, lLocalPlayerID);
                 meState = E_IMAGE_MANAGER_STATE_SHOW_MY_MUGSHOT;
             }
@@ -809,20 +809,20 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
                 "mpNetworkModule->GetNetworkManager()",
-                __FILE__, 433 /* ARTIST 0x8256FB1C */);
+                CGS_ARTIST_FILE, 433 /* ARTIST 0x8256FB1C */);
             CameraX360* lpCamera = mpNetworkModule->GetNetworkManager()->GetCamera();
             CGS_ASSERT_AT(lpCamera,
                 "lpCamera",
-                __FILE__, 435 /* ARTIST 0x8256FB50 */);
+                CGS_ARTIST_FILE, 435 /* ARTIST 0x8256FB50 */);
 
             CGS_ASSERT_AT(mpPlayerManager,
                 "mpPlayerManager",
-                __FILE__, 438 /* ARTIST 0x8256FB78 */);
+                CGS_ARTIST_FILE, 438 /* ARTIST 0x8256FB78 */);
             NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
             mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
             CGS_ASSERT_AT(CgsNetwork::K_INVALID_PLAYER_ID != lLocalPlayerID,
                 "CgsNetwork::K_INVALID_PLAYER_ID != lLocalPlayerID",
-                __FILE__, 442 /* ARTIST 0x8256FBA4 */);
+                CGS_ARTIST_FILE, 442 /* ARTIST 0x8256FBA4 */);
 
             const CgsNetwork::NetworkTexture* lpTexture = lpCamera->GetCameraPicture(lLocalPlayerID);
             mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(lpTexture, 0);
@@ -868,18 +868,18 @@ namespace BrnNetwork
         MugshotData* lpMugshotDataEntry = GetMugshotDataEntry(lRoundWinnerID);
         CGS_ASSERT_AT(lpMugshotDataEntry,
             "lpMugshotDataEntry",
-            __FILE__, 1860 /* ARTIST 0x8254AD08 */);
+            CGS_ARTIST_FILE, 1860 /* ARTIST 0x8254AD08 */);
 
         if ( meState != E_IMAGE_MANAGER_STATE_COUNT )
         {
             CGS_ASSERT_AT(mpPlayerManager,
                 "mpPlayerManager",
-                __FILE__, 1868 /* ARTIST 0x8254AD3C */);
+                CGS_ARTIST_FILE, 1868 /* ARTIST 0x8254AD3C */);
             NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
             mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
             CGS_ASSERT_AT(lLocalPlayerID != -1,
                 "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                __FILE__, 1871 /* ARTIST 0x8254AD68 */);
+                CGS_ARTIST_FILE, 1871 /* ARTIST 0x8254AD68 */);
 
             if ( lLocalPlayerID != lRoundWinnerID ||
                  meImageTypeToSend != BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT )
@@ -930,17 +930,17 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT(lRemotePlayerID != -1, "lRemotePlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
-            CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+            CGS_ASSERT_AT(lRemotePlayerID != -1, "lRemotePlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 2372);
+            CGS_ASSERT_AT(mpPlayerManager, "mpPlayerManager", CGS_ARTIST_FILE, 2373);
 
             CgsNetwork::PlayerMenuData* lpPlayerMenuData = mpPlayerManager->GetMenuDataByID(lRemotePlayerID);
-            CGS_ASSERT(lpPlayerMenuData, "lpPlayerMenuData");
+            CGS_ASSERT_AT(lpPlayerMenuData, "lpPlayerMenuData", CGS_ARTIST_FILE, 2376);
 
             CgsNetwork::PlayerName lPlayerName;
             lPlayerName.Construct(lpPlayerMenuData->macName);
 
             BuddyManagerX360* lpBuddyManager = mpNetworkModule->GetNetworkManager()->GetBuddyManager();
-            CGS_ASSERT(lpBuddyManager, "lpBuddyManager");
+            CGS_ASSERT_AT(lpBuddyManager, "lpBuddyManager", CGS_ARTIST_FILE, 2380);
 
             if ( lpBuddyManager->IsBuddyBlocked(&lPlayerName) )
             {
@@ -964,15 +964,9 @@ namespace BrnNetwork
                     break;
 
                 default:
-                {
-                    CgsDev::Assert::BeginAssert();
-                    char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                    CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                    lStrStream << "Unknown mugshot privilege: " << static_cast<s32>(leMugshotPrivilege);
-                    CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
-                    CgsDev::Assert::EndAssert();
+                    CGS_FAIL_STREAM_AT("Unknown mugshot privilege: " << static_cast<s32>(leMugshotPrivilege),
+                        CGS_ARTIST_FILE, 2418);
                     break;
-                }
                 }
             }
         }
@@ -987,7 +981,7 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------
     void NetworkImageManager::HandleMugshotEvent(const BrnNetworkModuleIO::NetworkInPaybackMugshotEvent* lpMugshotEvent)
     {
-        CGS_ASSERT(lpMugshotEvent, "lpMugshotEvent");
+        CGS_ASSERT_AT(lpMugshotEvent, "lpMugshotEvent", CGS_ARTIST_FILE, 610);
 
         const bool lbGameCameraEnabled =
             lpMugshotEvent->meMugshotResponse == BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_CAPTURE ||
@@ -1001,12 +995,12 @@ namespace BrnNetwork
             {
                 MugshotData* lpMugshotData =
                     GetMugshotDataEntry(mpNetworkModule->GetNetworkPlayerID(lpMugshotEvent->meTakedownAggressorIndex));
-                CGS_ASSERT(lpMugshotData, "lpMugshotData");
+                CGS_ASSERT_AT(lpMugshotData, "lpMugshotData", CGS_ARTIST_FILE, 628);
 
                 lpMugshotData->mTakedownVictimPlayerID =
                     mpNetworkModule->GetNetworkPlayerID(lpMugshotEvent->meTakedownVictimIndex);
-                CGS_ASSERT(lpMugshotData->mTakedownVictimPlayerID != -1,
-                           "lpMugshotData->mTakedownVictimPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+                CGS_ASSERT_AT(lpMugshotData->mTakedownVictimPlayerID != -1,
+                           "lpMugshotData->mTakedownVictimPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 632);
             }
             mbBroadcastCurrentImage = lpMugshotEvent->mbMugshotRequiresBroadcast;
             mRoadRuleBeatenID       = lpMugshotEvent->mRoadRuleBeatenRoadID;
@@ -1015,28 +1009,28 @@ namespace BrnNetwork
         case BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_CAPTURE:
             if ( !lpMugshotEvent->mbIsTakedownAggressorLocalPlayer )
             {
-                CGS_ASSERT(lpMugshotEvent->meTakedownAggressorIndex != -1,
-                           "lpMugshotEvent->meTakedownAggressorIndex != CgsNetwork::K_INVALID_PLAYER_ID");
-                CGS_ASSERT(lpMugshotEvent->meMugshotType != BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT,
-                           "lpMugshotEvent->meMugshotType != GsmIO::E_IMAGE_TYPE_COUNT");
+                CGS_ASSERT_AT(lpMugshotEvent->meTakedownAggressorIndex != -1,
+                           "lpMugshotEvent->meTakedownAggressorIndex != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 647);
+                CGS_ASSERT_AT(lpMugshotEvent->meMugshotType != BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT,
+                           "lpMugshotEvent->meMugshotType != GsmIO::E_IMAGE_TYPE_COUNT", CGS_ARTIST_FILE, 648);
 
                 mTakedownAggressorPlayerID = mpNetworkModule->GetNetworkPlayerID(lpMugshotEvent->meTakedownAggressorIndex);
-                meState                    = E_IMAGE_MANAGER_STATE_CAPTURE_MUGSHOT;
                 meImageTypeToSend          = lpMugshotEvent->meMugshotType;
+                meState                    = E_IMAGE_MANAGER_STATE_CAPTURE_MUGSHOT;
             }
             break;
 
         case BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_TAKE:
-            CGS_ASSERT(mTakedownAggressorPlayerID != -1,
-                       "mTakedownAggressorPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+            CGS_ASSERT_AT(mTakedownAggressorPlayerID != -1,
+                       "mTakedownAggressorPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 661);
             meState = E_IMAGE_MANAGER_STATE_TAKE_MUGSHOT;
             break;
 
         case BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_SHOW:
             if ( meState == E_IMAGE_MANAGER_STATE_COUNT )
             {
-                CGS_ASSERT(mTakedownVictimPlayerID != -1,
-                           "mTakedownVictimPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+                CGS_ASSERT_AT(mTakedownVictimPlayerID != -1,
+                           "mTakedownVictimPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 678);
                 if ( mbMugshotsEnabled )
                 {
                     meState = E_IMAGE_MANAGER_STATE_SHOW_MUGSHOT;
@@ -1049,8 +1043,8 @@ namespace BrnNetwork
             break;
 
         case BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_STOP_MY_MUGSHOT:
-            CGS_ASSERT(E_IMAGE_MANAGER_STATE_SHOW_MY_MUGSHOT == meState,
-                       "E_IMAGE_MANAGER_STATE_SHOW_MY_MUGSHOT == meState");
+            CGS_ASSERT_AT(E_IMAGE_MANAGER_STATE_SHOW_MY_MUGSHOT == meState,
+                       "E_IMAGE_MANAGER_STATE_SHOW_MY_MUGSHOT == meState", CGS_ARTIST_FILE, 701);
 
             mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(0, -1);
 
@@ -1079,15 +1073,9 @@ namespace BrnNetwork
             break;
 
         default:
-        {
-            CgsDev::Assert::BeginAssert();
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Unexpected mugshot response: " << static_cast<s32>(lpMugshotEvent->meMugshotResponse);
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
+            CGS_FAIL_STREAM_AT("Unexpected mugshot response: " << static_cast<s32>(lpMugshotEvent->meMugshotResponse),
+                CGS_ARTIST_FILE, 752);
             break;
-        }
         }
     }
 
@@ -1110,7 +1098,7 @@ namespace BrnNetwork
                     GetMugshotDataEntry(mpNetworkModule->GetNetworkPlayerID(lDirtyTrickEvent.meVictimActiveRaceCarIndex));
                 CGS_ASSERT_AT(lpMugshotData,
                     "lpMugshotData",
-                    __FILE__, 877 /* ARTIST 0x82555620 */);
+                    CGS_ARTIST_FILE, 877 /* ARTIST 0x82555620 */);
 
                 lpMugshotData->mTakedownVictimPlayerID =
                     mpNetworkModule->GetNetworkPlayerID(lDirtyTrickEvent.meAggressorActiveRaceCarIndex);
@@ -1132,30 +1120,30 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mTakedownAggressorPlayerID != -1,
             "mTakedownAggressorPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            __FILE__, 919 /* ARTIST 0x825556DC */);
+            CGS_ARTIST_FILE, 919 /* ARTIST 0x825556DC */);
         MugshotData* lpAggressorMugshotData = GetMugshotDataEntry(mTakedownAggressorPlayerID);
         CGS_ASSERT_AT(lpAggressorMugshotData,
             "lpAggressorMugshotData",
-            __FILE__, 922 /* ARTIST 0x82555710 */);
+            CGS_ARTIST_FILE, 922 /* ARTIST 0x82555710 */);
 
         const NetworkPlayerID lRemotePlayerID = lpRemoteMugshotData->mTakedownAggressorPlayerID;
         CGS_ASSERT_AT(mpPlayerManager,
             "mpPlayerManager",
-            __FILE__, 925 /* ARTIST 0x8255573C */);
+            CGS_ARTIST_FILE, 925 /* ARTIST 0x8255573C */);
         CGS_ASSERT_AT(!mpPlayerManager->IsLocalPlayer( lRemotePlayerID ),
             "!mpPlayerManager->IsLocalPlayer( lRemotePlayerID )",
-            __FILE__, 926 /* ARTIST 0x82555784 */);
+            CGS_ARTIST_FILE, 926 /* ARTIST 0x82555784 */);
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lRemotePlayerID);
         CGS_ASSERT_AT(lpNetworkPlayer,
             "lpNetworkPlayer",
-            __FILE__, 928 /* ARTIST 0x825557B8 */);
+            CGS_ARTIST_FILE, 928 /* ARTIST 0x825557B8 */);
 
         ImageMessage* lpImageMessage =
             static_cast<ImageMessage*>(lpNetworkPlayer->GetRegisteredSendMessage(KI_IMAGE_MESSAGE_TYPE));
         CGS_ASSERT_AT(lpImageMessage,
             "lpImageMessage",
-            __FILE__, 931 /* ARTIST 0x825557EC */);
+            CGS_ARTIST_FILE, 931 /* ARTIST 0x825557EC */);
 
         // The previous segment is still queued: wait for it to go.
         if ( lpImageMessage->IsMessageValid() )
@@ -1168,20 +1156,20 @@ namespace BrnNetwork
                                          ? liBytesRemaining : ImageMessage::KI_PHOTO_SEGMENT_SIZE;
         CGS_ASSERT_AT(liBytesToWrite > 0,
             "liBytesToWrite > 0",
-            __FILE__, 949 /* ARTIST 0x8255585C */);
+            CGS_ARTIST_FILE, 949 /* ARTIST 0x8255585C */);
         CGS_ASSERT_AT(liBytesToWrite <= ImageMessage::KI_PHOTO_SEGMENT_SIZE,
             "liBytesToWrite <= ImageMessage::KI_PHOTO_SEGMENT_SIZE",
-            __FILE__, 950 /* ARTIST 0x82555880 */);
+            CGS_ARTIST_FILE, 950 /* ARTIST 0x82555880 */);
 
         const char* lpcReadPosition = lpAggressorMugshotData->mPicture.GetTexture() + liBytesSent;
         XMemCpy(lacBuffer, lpcReadPosition, liBytesToWrite);
 
         CGS_ASSERT_AT(lpAggressorMugshotData->mTakedownAggressorPlayerID != -1,
             "lpAggressorMugshotData->mTakedownAggressorPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            __FILE__, 956 /* ARTIST 0x825558BC */);
+            CGS_ARTIST_FILE, 956 /* ARTIST 0x825558BC */);
         CGS_ASSERT_AT(lpAggressorMugshotData->mTakedownVictimPlayerID != -1,
             "lpAggressorMugshotData->mTakedownVictimPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            __FILE__, 957 /* ARTIST 0x825558E4 */);
+            CGS_ARTIST_FILE, 957 /* ARTIST 0x825558E4 */);
 
         lpImageMessage->PrepareForSend(mpTimeManager->GetU16FrameCount(),
                                        lpAggressorMugshotData->mTakedownVictimPlayerID,
@@ -1233,21 +1221,21 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpPlayerManager,
             "mpPlayerManager",
-            __FILE__, 1035 /* ARTIST 0x82564BC4 */);
+            CGS_ARTIST_FILE, 1035 /* ARTIST 0x82564BC4 */);
         CGS_ASSERT_AT(lRemotePlayerID != -1,
             "lRemotePlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            __FILE__, 1036 /* ARTIST 0x82564BE8 */);
+            CGS_ARTIST_FILE, 1036 /* ARTIST 0x82564BE8 */);
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lRemotePlayerID);
         CGS_ASSERT_AT(lpNetworkPlayer,
             "lpNetworkPlayer",
-            __FILE__, 1038 /* ARTIST 0x82564C1C */);
+            CGS_ARTIST_FILE, 1038 /* ARTIST 0x82564C1C */);
 
         ImageMessage* lpImageMessage =
             static_cast<ImageMessage*>(lpNetworkPlayer->GetRegisteredSendMessage(KI_IMAGE_MESSAGE_TYPE));
         CGS_ASSERT_AT(lpImageMessage,
             "lpImageMessage",
-            __FILE__, 1041 /* ARTIST 0x82564C50 */);
+            CGS_ARTIST_FILE, 1041 /* ARTIST 0x82564C50 */);
 
         const u16 lu16CurrentFrame = mpTimeManager->GetU16FrameCount();
 
@@ -1268,7 +1256,7 @@ namespace BrnNetwork
 
             CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
                 "mpNetworkModule->GetNetworkManager()",
-                __FILE__, 1062 /* ARTIST 0x82564D44 */);
+                CGS_ARTIST_FILE, 1062 /* ARTIST 0x82564D44 */);
             mpNetworkModule->GetNetworkManager()->CaptureTelemetryEvent(E_TELEMETRY_MUGSHOT_PHOTO, 0);
 
             BrnNetworkModuleIO::NetworkOutSentMugshot lMugshotSentEvent;
@@ -1278,7 +1266,7 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(meImageTypeToSend != BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT,
             "meImageTypeToSend != GsmIO::E_IMAGE_TYPE_COUNT",
-            __FILE__, 1072 /* ARTIST 0x82564DA0 */);
+            CGS_ARTIST_FILE, 1072 /* ARTIST 0x82564DA0 */);
         if ( KAB_IMAGE_TRANSMITS_GAMERPIC[meImageTypeToSend] )
         {
             lpImageMessage->PrepareForSend(lu16CurrentFrame, lTakedownVictimPlayerID, lTakedownAggressorPlayerID,
@@ -1286,7 +1274,7 @@ namespace BrnNetwork
 
             CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
                 "mpNetworkModule->GetNetworkManager()",
-                __FILE__, 1084 /* ARTIST 0x82564E0C */);
+                CGS_ARTIST_FILE, 1084 /* ARTIST 0x82564E0C */);
             mpNetworkModule->GetNetworkManager()->CaptureTelemetryEvent(E_TELEMETRY_MUGSHOT_GAMERPIC, 0);
         }
 
@@ -1303,12 +1291,12 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpPlayerManager,
             "mpPlayerManager",
-            __FILE__, 1109 /* ARTIST 0x82555A04 */);
+            CGS_ARTIST_FILE, 1109 /* ARTIST 0x82555A04 */);
         NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
         CGS_ASSERT_AT(lLocalPlayerID != -1,
             "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            __FILE__, 1112 /* ARTIST 0x82555A3C */);
+            CGS_ARTIST_FILE, 1112 /* ARTIST 0x82555A3C */);
 
         mTakedownAggressorPlayerID = lLocalPlayerID;
 
@@ -1357,24 +1345,24 @@ namespace BrnNetwork
         NetworkPlayerID                             lTakedownAggressorPlayerID;
         NetworkPlayerID                             lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
 
-        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
-        CGS_ASSERT(lpImageMessageRecv, "lpImageMessageRecv");
+        CGS_ASSERT_AT(mpNetworkModule, "mpNetworkModule", CGS_ARTIST_FILE, 1359);
+        CGS_ASSERT_AT(lpImageMessageRecv, "lpImageMessageRecv", CGS_ARTIST_FILE, 1360);
 
         lpImageMessageRecv->Retrieve(&lTakedownVictimPlayerID, &lTakedownAggressorPlayerID, &leReceivedImageType,
                                      &lRoadRuleBeatenID, &lu16PhotoPacketNumber, &lu16TotalNumberOfPhotoPackets,
                                      &lu16PhotoBytes, lacPhotoBuffer);
 
-        CGS_ASSERT(lTakedownAggressorPlayerID != -1,
-                   "lTakedownAggressorPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
-        CGS_ASSERT(lTakedownVictimPlayerID != -1,
-                   "lTakedownVictimPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT_AT(lTakedownAggressorPlayerID != -1,
+                   "lTakedownAggressorPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 1373);
+        CGS_ASSERT_AT(lTakedownVictimPlayerID != -1,
+                   "lTakedownVictimPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 1374);
 
         MugshotData* lpMugshotData = GetMugshotDataEntry(lTakedownAggressorPlayerID);
-        CGS_ASSERT(lpMugshotData, "lpMugshotData");
+        CGS_ASSERT_AT(lpMugshotData, "lpMugshotData", CGS_ARTIST_FILE, 1376);
 
-        CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+        CGS_ASSERT_AT(mpPlayerManager, "mpPlayerManager", CGS_ARTIST_FILE, 1380);
         mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
-        CGS_ASSERT(lLocalPlayerID != -1, "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT_AT(lLocalPlayerID != -1, "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 1383);
 
         if ( lu16PhotoBytes > 0 )
         {
@@ -1398,7 +1386,7 @@ namespace BrnNetwork
                 HandleReceivedCameraPic(lSendingPlayerID, lpMugshotData, leReceivedImageType);
 
                 BrnServerInterface* lpServerInterface = mpNetworkModule->GetNetworkManager()->GetServerInterface();
-                CGS_ASSERT(lpServerInterface, "lpServerInterface");
+                CGS_ASSERT_AT(lpServerInterface, "lpServerInterface", CGS_ARTIST_FILE, 1420);
 
                 if ( lLocalPlayerID == lpMugshotData->mTakedownAggressorPlayerID &&
                      lpMugshotData->mbPictureValid &&
@@ -1511,18 +1499,18 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------
     void NetworkImageManager::GetCompressedTexture(CgsNetwork::NetworkTexture* lpCompressedTexture)
     {
-        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetCamera(), "mpNetworkModule->GetNetworkManager()->GetCamera()");
+        CGS_ASSERT_AT(mpNetworkModule, "mpNetworkModule", CGS_ARTIST_FILE, 1773);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()", CGS_ARTIST_FILE, 1774);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetCamera(), "mpNetworkModule->GetNetworkManager()->GetCamera()", CGS_ARTIST_FILE, 1775);
 
         CameraX360* lpCamera = mpNetworkModule->GetNetworkManager()->GetCamera();
         lpCamera->GetCompressedLocalCameraPicture(lpCompressedTexture, 0,
                                                   &NetworkImageManager::_GetCompressedCameraPicCallback, this);
 
-        CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+        CGS_ASSERT_AT(mpPlayerManager, "mpPlayerManager", CGS_ARTIST_FILE, 1790);
         NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
-        CGS_ASSERT(lLocalPlayerID != -1, "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT_AT(lLocalPlayerID != -1, "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 1795);
 
         const CgsNetwork::NetworkTexture* lpTexture = lpCamera->GetCameraPicture(lLocalPlayerID);
         if ( lpTexture )
@@ -1541,13 +1529,13 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpLocalMugshotData,
             "lpLocalMugshotData",
-            __FILE__, 2152 /* ARTIST 0x8256FC58 */);
+            CGS_ARTIST_FILE, 2152 /* ARTIST 0x8256FC58 */);
         CGS_ASSERT_AT(lImageSenderPlayerID != -1,
             "lImageSenderPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            __FILE__, 2153 /* ARTIST 0x8256FC7C */);
+            CGS_ARTIST_FILE, 2153 /* ARTIST 0x8256FC7C */);
         CGS_ASSERT_AT(lpLocalMugshotData->mPicture.GetTexture() != NULL,
             "lpLocalMugshotData->mPicture.GetTexture() != NULL",
-            __FILE__, 2154 /* ARTIST 0x8256FCA4 */);
+            CGS_ARTIST_FILE, 2154 /* ARTIST 0x8256FCA4 */);
 
         switch ( leMugshotType )
         {
@@ -1562,7 +1550,7 @@ namespace BrnNetwork
 
             CGS_ASSERT_AT(mpNetworkModule,
                 "mpNetworkModule",
-                __FILE__, 2165 /* ARTIST 0x8256FCFC */);
+                CGS_ARTIST_FILE, 2165 /* ARTIST 0x8256FCFC */);
             GetUniqueIDByPlayerID(lImageSenderPlayerID, &lMugshotToSaveEvent.mUniquePlayerID);
             lMugshotToSaveEvent.mpTexture          = &lpLocalMugshotData->mPicture;
             lMugshotToSaveEvent.meImageGalleryType = leMugshotType;
@@ -1586,19 +1574,19 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpPixels,
             "lpPixels",
-            __FILE__, 2218 /* ARTIST 0x82564F30 */);
+            CGS_ARTIST_FILE, 2218 /* ARTIST 0x82564F30 */);
         CGS_ASSERT_AT(lpUserData,
             "lpUserData",
-            __FILE__, 2219 /* ARTIST 0x82564F54 */);
+            CGS_ARTIST_FILE, 2219 /* ARTIST 0x82564F54 */);
         NetworkImageManager* lpImageManager = static_cast<NetworkImageManager*>(lpUserData);
         CGS_ASSERT_AT(lpImageManager,
             "lpImageManager",
-            __FILE__, 2221 /* ARTIST 0x82564F70 */);
+            CGS_ARTIST_FILE, 2221 /* ARTIST 0x82564F70 */);
 
         MugshotData* lpMugshotData = lpImageManager->GetMugshotDataEntry(lpImageManager->mTakedownAggressorPlayerID);
         CGS_ASSERT_AT(lpMugshotData,
             "lpMugshotData",
-            __FILE__, 2237 /* ARTIST 0x82564FA4 */);
+            CGS_ARTIST_FILE, 2237 /* ARTIST 0x82564FA4 */);
 
         XMemCpy(lpMugshotData->mPicture.GetTexture(), lpPixels, lpMugshotData->mPicture.GetTextureSize());
         lpMugshotData->mbPictureValid = true;
@@ -1610,7 +1598,7 @@ namespace BrnNetwork
         CgsNetwork::PlayerManager* lpPlayerManager = lpImageManager->mpPlayerManager;
         CGS_ASSERT_AT(lpPlayerManager,
             "lpPlayerManager",
-            __FILE__, 2249 /* ARTIST 0x82565010 */);
+            CGS_ARTIST_FILE, 2249 /* ARTIST 0x82565010 */);
 
         NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         lpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
@@ -1644,16 +1632,16 @@ namespace BrnNetwork
     void NetworkImageManager::_GetCompressedGamerPicCallback(void* lpPixels, void* lpUserData)
     {
         CGS_ASSERT_AT(lpPixels,
-            "lpPixels", __FILE__, 2304 /* ARTIST 0x8256FD6C */);
+            "lpPixels", CGS_ARTIST_FILE, 2304 /* ARTIST 0x8256FD6C */);
         CGS_ASSERT_AT(lpUserData,
-            "lpUserData", __FILE__, 2305 /* ARTIST 0x8256FD90 */);
+            "lpUserData", CGS_ARTIST_FILE, 2305 /* ARTIST 0x8256FD90 */);
         NetworkImageManager* lpImageManager = static_cast<NetworkImageManager*>(lpUserData);
         CGS_ASSERT_AT(lpImageManager,
-            "lpImageManager", __FILE__, 2307 /* ARTIST 0x8256FDAC */);
+            "lpImageManager", CGS_ARTIST_FILE, 2307 /* ARTIST 0x8256FDAC */);
 
         CgsNetwork::PlayerManager* lpPlayerManager = lpImageManager->mpPlayerManager;
         CGS_ASSERT_AT(lpPlayerManager,
-            "lpPlayerManager", __FILE__, 2311 /* ARTIST 0x8256FDD4 */);
+            "lpPlayerManager", CGS_ARTIST_FILE, 2311 /* ARTIST 0x8256FDD4 */);
 
         // The walk's id is tested, not its result (ARTIST 0x8256FDE8: the loaded local id against -1).
         NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
@@ -1662,7 +1650,7 @@ namespace BrnNetwork
         {
             MugshotData* lpMugshotData = lpImageManager->GetMugshotDataEntry(lLocalPlayerID);
             CGS_ASSERT_AT(lpMugshotData,
-                "lpMugshotData", __FILE__, 2320 /* ARTIST 0x8256FE10 */);
+                "lpMugshotData", CGS_ARTIST_FILE, 2320 /* ARTIST 0x8256FE10 */);
 
             XMemCpy(lpMugshotData->mPicture.GetTexture(), lpPixels, lpMugshotData->mPicture.GetTextureSize());
             lpImageManager->RequestMugshotSave(lpMugshotData, lpMugshotData->mTakedownVictimPlayerID,
@@ -1694,7 +1682,7 @@ namespace BrnNetwork
         }
 
         CGS_ASSERT_AT(lpEntry,
-            "lpEntry", __FILE__, 1264 /* ARTIST 0x8254A910 */);
+            "lpEntry", CGS_ARTIST_FILE, 1264 /* ARTIST 0x8254A910 */);
         return lpEntry;
     }
 
@@ -1720,7 +1708,7 @@ namespace BrnNetwork
         }
 
         CGS_ASSERT_AT(lpEntry,
-            "lpEntry", __FILE__, 1296 /* ARTIST 0x8254A994 */);
+            "lpEntry", CGS_ARTIST_FILE, 1296 /* ARTIST 0x8254A994 */);
         return lpEntry;
     }
 
@@ -1779,15 +1767,15 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mpNetworkModule,
             "mpNetworkModule",
-            __FILE__, 2188 /* ARTIST 0x8256BDD4 */);
+            CGS_ARTIST_FILE, 2188 /* ARTIST 0x8256BDD4 */);
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
         CGS_ASSERT_AT(lpNetworkManager,
             "lpNetworkManager",
-            __FILE__, 2190 /* ARTIST 0x8256BE04 */);
+            CGS_ARTIST_FILE, 2190 /* ARTIST 0x8256BE04 */);
         BrnServerInterface* lpServerInterface = lpNetworkManager->GetServerInterface();
         CGS_ASSERT_AT(lpServerInterface,
             "lpServerInterface",
-            __FILE__, 2192 /* ARTIST 0x8256BE2C */);
+            CGS_ARTIST_FILE, 2192 /* ARTIST 0x8256BE2C */);
 
         lPlayerParams.Prepare();
         lpServerInterface->GetGameComponent()->GetPlayerParametersByPlayerID(lNetworkPlayerID, &lPlayerParams);

@@ -1,7 +1,3 @@
-#if defined(_XBOX) && defined(_MSC_VER)
-#pragma auto_inline(off)
-#endif
-
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // full ServerInterfaceDirtySock (GetLobbyAPIRef/GetGameManagerRef/GetConnAPIRef/GetMessageBuffer/GetSKU)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h" // ServerInterfaceComponent (StartActionCore/EndActionCore/ConvertError)
@@ -18,7 +14,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf / SnPrintf / StrCat
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include <string.h>                                      // memcpy / strlen / strcmp
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceGames.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (CgsServerInterfaceGames.cpp).
 // The DirtySock "games" component: owns the local play record (mLastGameRecord,
 // a LobbyApiPlayT) and drives create/join/quick-join/search/leave/kick/lock/
@@ -439,7 +435,7 @@ namespace CgsNetwork
     {
         ServerInterfaceGames* lpSelf = static_cast<ServerInterfaceGames*>(lpUserData);
         CGS_ASSERT_AT(lpSelf != 0,
-            "lpLobbyComponent", __FILE__, 661 /* ARTIST 0x82891384 */);
+            "lpLobbyComponent", CGS_ARTIST_FILE, 661 /* ARTIST 0x82891384 */);
         ConnApiControl(lpSelf->mpServerInterface->GetConnAPIRef(),
                        KI_CONN_CTRL_DISCONNECT, 0, 0, "");
         if (lpSelf->IsLocalPlayerInGame())
@@ -702,7 +698,7 @@ namespace CgsNetwork
         for (s32 i = 0; ; ++i)
         {
             CGS_ASSERT_AT(IsLocalPlayerInGame(),
-                "IsLocalPlayerInGame()", __FILE__, 1726 /* ARTIST 0x8289166C */);
+                "IsLocalPlayerInGame()", CGS_ARTIST_FILE, 1726 /* ARTIST 0x8289166C */);
 
             if (i >= mLastGameRecord.iCount)
                 break;
@@ -998,7 +994,7 @@ namespace CgsNetwork
     void ServerInterfaceGames::GetGameParameters(ServerInterfaceGameParamsBase* lpOut)
     {
         CGS_ASSERT_AT(IsLocalPlayerInGame(),
-            "IsLocalPlayerInGame()", __FILE__, 1688 /* ARTIST 0x82887474 */);
+            "IsLocalPlayerInGame()", CGS_ARTIST_FILE, 1688 /* ARTIST 0x82887474 */);
 
         lpOut->SerialiseFromGame(&mLastGameRecord);
     }
@@ -1021,14 +1017,14 @@ namespace CgsNetwork
     s32 ServerInterfaceGames::GetNumberOfFoundGames()
     {
         CGS_ASSERT_AT(mpFoundGames != 0,
-            "mpFoundGames", __FILE__, 1337 /* ARTIST 0x82878130 */);
+            "mpFoundGames", CGS_ARTIST_FILE, 1337 /* ARTIST 0x82878130 */);
         return DispListCount(mpFoundGames);
     }
 
     s32 ServerInterfaceGames::GetNumberPlayersInGame()
     {
         CGS_ASSERT_AT(IsLocalPlayerInGame(),
-            "IsLocalPlayerInGame()", __FILE__, 1726 /* ARTIST 0x8288759C */);
+            "IsLocalPlayerInGame()", CGS_ARTIST_FILE, 1726 /* ARTIST 0x8288759C */);
 
         return mLastGameRecord.iCount;
     }
@@ -1151,7 +1147,7 @@ namespace CgsNetwork
     bool ServerInterfaceGames::IsGameLocked()
     {
         CGS_ASSERT_AT(IsLocalPlayerInGame(),
-            "IsLocalPlayerInGame()", __FILE__, 1903 /* ARTIST 0x82887D7C */);
+            "IsLocalPlayerInGame()", CGS_ARTIST_FILE, 1903 /* ARTIST 0x82887D7C */);
 
         return ((ConvertFlags(mLastGameRecord.uSysflags, E_FLAGS_GAMESHARED) >> 5) & 1) != 0;
     }
@@ -1159,7 +1155,7 @@ namespace CgsNetwork
     bool ServerInterfaceGames::IsGameStarted()
     {
         CGS_ASSERT_AT(IsLocalPlayerInGame(),
-            "IsLocalPlayerInGame()", __FILE__, 1881 /* ARTIST 0x82887D14 */);
+            "IsLocalPlayerInGame()", CGS_ARTIST_FILE, 1881 /* ARTIST 0x82887D14 */);
 
         return ((ConvertFlags(mLastGameRecord.uSysflags, E_FLAGS_GAMESHARED) >> 11) & 1) != 0;
     }
@@ -1369,7 +1365,3 @@ void ServerInterfaceGames::ConnApiCallback(DirtySock::ConnApiCbInfoT* lpCbInfo,
 }
 
 }
-
-#if defined(_XBOX) && defined(_MSC_VER)
-#pragma auto_inline(on)   // the file-top auto_inline(off) is this file's own (x360 b1db9d56c): end it here
-#endif

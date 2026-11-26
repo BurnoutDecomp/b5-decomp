@@ -13,7 +13,7 @@
 // count after it; the game-side context helpers take it as a MatchmakingContext array and an
 // s32 count, so the two platform members are handed over through that view.
 
-// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkQuickJoinParams.cpp".
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkQuickJoinParams.cpp"
 
 namespace BrnNetwork
 {
@@ -46,19 +46,19 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(static_cast<s32>(leParameter) >= 0 && leParameter < E_QUICKJOIN_COUNT,
             "(int32_t)leParameter >= 0 && leParameter < E_QUICKJOIN_COUNT",
-                __FILE__, 74 /* ARTIST 0x82584210 */);
+                CGS_ARTIST_FILE, 74 /* ARTIST 0x82584210 */);
 
 
         maiQuickJoinParams[leParameter] = liValue;
         ++miNumParameters;
         CGS_ASSERT_AT(miNumParameters <= CgsNetwork::KI_MAX_QUICK_JOIN_PARAMS,
-            "miNumParameters <= 16", __FILE__, 80 /* ARTIST 0x8258424C */);
+            "miNumParameters <= 16", CGS_ARTIST_FILE, 80 /* ARTIST 0x8258424C */);
     }
 
     void QuickJoinParams::SetMatchmakingParameter(EBrnQuickJoinParameters leParameter, bool lbValue)
     {
-        CGS_ASSERT(static_cast<s32>(leParameter) >= 0 && leParameter < E_QUICKJOIN_COUNT,
-                   "(int32_t)leParameter >= 0 && leParameter < E_QUICKJOIN_COUNT");
+        CGS_ASSERT_AT(static_cast<s32>(leParameter) >= 0 && leParameter < E_QUICKJOIN_COUNT,
+                   "(int32_t)leParameter >= 0 && leParameter < E_QUICKJOIN_COUNT", CGS_ARTIST_FILE, 99 /* ARTIST 0x8258A968 */);
 
         SetMatchmakingParameter(leParameter, static_cast<s32>(lbValue ? 1 : 0));
 

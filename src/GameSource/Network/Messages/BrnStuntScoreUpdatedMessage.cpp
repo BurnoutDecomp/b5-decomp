@@ -1,5 +1,5 @@
 #include "types.hpp"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnStuntScoreUpdatedMessage.cpp"
 #include "GameSource/Network/Messages/BrnStuntScoreUpdatedMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -40,13 +40,13 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             "lu16FrameCount != KU16_INVALID_FRAME",
-                __FILE__, 141 /* ARTIST 0x8257D18C */);
+                CGS_ARTIST_FILE, 141 /* ARTIST 0x8257D18C */);
 
         CGS_ASSERT_AT(liStuntScore != -1,
-            "liStuntScore != -1", __FILE__, 142 /* ARTIST 0x8257D1B0 */);
+            "liStuntScore != -1", CGS_ARTIST_FILE, 142 /* ARTIST 0x8257D1B0 */);
         CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
             "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                __FILE__, 145 /* ARTIST 0x8257D1DC */);
+                CGS_ARTIST_FILE, 145 /* ARTIST 0x8257D1DC */);
 
 
         miStuntScore = liStuntScore;   // stw r28, 0x28(this)

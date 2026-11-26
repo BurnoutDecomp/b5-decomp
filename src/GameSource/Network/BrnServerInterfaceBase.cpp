@@ -1,5 +1,5 @@
 #include "GameSource/Network/BrnServerInterfaceBase.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnServerInterfaceBase.cpp"
 #include "GameSource/Network/BrnNetworkManager.h"                       // TriggerEventFromServerInterface
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu
@@ -95,37 +95,37 @@ namespace BrnNetwork
         miNetworkServerInterfaceBasePM11 = CgsDev::PerfMonCpu::AddMonitor( "Int - Debug Update",      CgsDev::E_PMP_9, false, 5.0f, true );
 
         CGS_ASSERT_AT( miNetworkServerInterfaceBasePM1 >= 0,
-            "miNetworkServerInterfaceBasePM1 >= 0", __FILE__, 89 /* ARTIST 0x825894BC */);
+            "miNetworkServerInterfaceBasePM1 >= 0", CGS_ARTIST_FILE, 89 /* ARTIST 0x825894BC */);
 
         CGS_ASSERT_AT( miNetworkServerInterfaceBasePM2 >= 0,
-            "miNetworkServerInterfaceBasePM2 >= 0", __FILE__, 90 /* ARTIST 0x825894E4 */);
+            "miNetworkServerInterfaceBasePM2 >= 0", CGS_ARTIST_FILE, 90 /* ARTIST 0x825894E4 */);
 
         CGS_ASSERT_AT( miNetworkServerInterfaceBasePM3 >= 0,
-            "miNetworkServerInterfaceBasePM3 >= 0", __FILE__, 91 /* ARTIST 0x8258950C */);
+            "miNetworkServerInterfaceBasePM3 >= 0", CGS_ARTIST_FILE, 91 /* ARTIST 0x8258950C */);
 
         CGS_ASSERT_AT( miNetworkServerInterfaceBasePM4 >= 0,
-            "miNetworkServerInterfaceBasePM4 >= 0", __FILE__, 92 /* ARTIST 0x82589534 */);
+            "miNetworkServerInterfaceBasePM4 >= 0", CGS_ARTIST_FILE, 92 /* ARTIST 0x82589534 */);
 
         CGS_ASSERT_AT( miNetworkServerInterfaceBasePM5 >= 0,
-            "miNetworkServerInterfaceBasePM5 >= 0", __FILE__, 93 /* ARTIST 0x8258955C */);
+            "miNetworkServerInterfaceBasePM5 >= 0", CGS_ARTIST_FILE, 93 /* ARTIST 0x8258955C */);
 
         CGS_ASSERT_AT( miNetworkServerInterfaceBasePM6 >= 0,
-            "miNetworkServerInterfaceBasePM6 >= 0", __FILE__, 94 /* ARTIST 0x82589584 */);
+            "miNetworkServerInterfaceBasePM6 >= 0", CGS_ARTIST_FILE, 94 /* ARTIST 0x82589584 */);
 
         CGS_ASSERT_AT( miNetworkServerInterfaceBasePM7 >= 0,
-            "miNetworkServerInterfaceBasePM7 >= 0", __FILE__, 95 /* ARTIST 0x825895AC */);
+            "miNetworkServerInterfaceBasePM7 >= 0", CGS_ARTIST_FILE, 95 /* ARTIST 0x825895AC */);
 
         CGS_ASSERT_AT( miNetworkServerInterfaceBasePM8 >= 0,
-            "miNetworkServerInterfaceBasePM8 >= 0", __FILE__, 96 /* ARTIST 0x825895D4 */);
+            "miNetworkServerInterfaceBasePM8 >= 0", CGS_ARTIST_FILE, 96 /* ARTIST 0x825895D4 */);
 
         CGS_ASSERT_AT( miNetworkServerInterfaceBasePM9 >= 0,
-            "miNetworkServerInterfaceBasePM9 >= 0", __FILE__, 97 /* ARTIST 0x825895FC */);
+            "miNetworkServerInterfaceBasePM9 >= 0", CGS_ARTIST_FILE, 97 /* ARTIST 0x825895FC */);
 
         CGS_ASSERT_AT( miNetworkServerInterfaceBasePM10 >= 0,
-            "miNetworkServerInterfaceBasePM10 >= 0", __FILE__, 98 /* ARTIST 0x82589624 */);
+            "miNetworkServerInterfaceBasePM10 >= 0", CGS_ARTIST_FILE, 98 /* ARTIST 0x82589624 */);
 
         CGS_ASSERT_AT( miNetworkServerInterfaceBasePM11 >= 0,
-            "miNetworkServerInterfaceBasePM11 >= 0", __FILE__, 99 /* ARTIST 0x8258964C */);
+            "miNetworkServerInterfaceBasePM11 >= 0", CGS_ARTIST_FILE, 99 /* ARTIST 0x8258964C */);
 
     }
 
@@ -252,7 +252,7 @@ namespace BrnNetwork
         default:
             CGS_ASSERT_AT(false,
                 "0",
-                __FILE__, 290 /* ARTIST 0x82589940 */);
+                CGS_ARTIST_FILE, 290 /* ARTIST 0x82589940 */);
             return false;
         }
     }
@@ -359,7 +359,7 @@ namespace BrnNetwork
         default:
             CGS_ASSERT_AT(false,
                 "0",
-                __FILE__, 468 /* ARTIST 0x82589B74 */);
+                CGS_ARTIST_FILE, 468 /* ARTIST 0x82589B74 */);
             return false;
         }
     }

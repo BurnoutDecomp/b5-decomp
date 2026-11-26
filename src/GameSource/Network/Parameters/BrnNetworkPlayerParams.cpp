@@ -117,14 +117,10 @@ namespace BrnNetwork
     {
         CGS_ASSERT(lpCarId != 0, "lpCarId");
 
-        // The stored string uses '?' where a space would otherwise sit; measure it in
-        // its current form and fire the CgsStringUtils.h:55 length assert if it has
-        // overrun its 13-byte field.
-        CGS_ASSERT(strlen(mData.macCarId) < static_cast<size_t>(KI_CGSID_STRING_LEN),
-                   "String too long: ");
-
+        // The stored string uses '?' where a space would otherwise sit: copy it through
+        // CgsCore::StrnCpy (CgsStringUtils.h:55, ARTIST 0x82541E58).
         char laCarId[KI_CGSID_STRING_LEN];
-        strncpy(laCarId, mData.macCarId, KI_CGSID_STRING_LEN);
+        CgsCore::StrnCpy(laCarId, mData.macCarId, KI_CGSID_STRING_LEN);
         for (int i = 0; i < KI_CGSID_STRING_LEN; ++i)
         {
             if (laCarId[i] == '?')

@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/Time/CgsStartTimeMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsStartTimeMessage.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   (CgsNetwork::StartTimeMessage)
 //
@@ -92,7 +92,7 @@ namespace CgsNetwork
             SetMessageInvalid();
             CGS_ASSERT_AT(!IsMessageValid(),
                 "!IsMessageValid()",
-                __FILE__, 159 /* ARTIST 0x8288A600 */);
+                CGS_ARTIST_FILE, 159 /* ARTIST 0x8288A600 */);
             return true;
         }
         return false;

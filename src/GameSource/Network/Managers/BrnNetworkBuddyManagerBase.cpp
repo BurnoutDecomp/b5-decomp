@@ -159,13 +159,13 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mpNetworkModule,
             "mpNetworkModule",
-            __FILE__, 343 /* ARTIST 0x8256374C */);
+            CGS_ARTIST_FILE, 343 /* ARTIST 0x8256374C */);
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
             "mpNetworkModule->GetNetworkManager()",
-            __FILE__, 344 /* ARTIST 0x82563778 */);
+            CGS_ARTIST_FILE, 344 /* ARTIST 0x82563778 */);
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetNetworkInviteManager(),
             "mpNetworkModule->GetNetworkManager()->GetNetworkInviteManager()",
-            __FILE__, 345 /* ARTIST 0x825637A8 */);
+            CGS_ARTIST_FILE, 345 /* ARTIST 0x825637A8 */);
         mpNetworkModule->GetNetworkManager()->GetNetworkInviteManager()->SetPreparingForInvite();
     }
 
@@ -300,10 +300,10 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(lpServerInterface,
             "mpServerInterface",
-            __FILE__, 410 /* ARTIST 0x82554278 */);
+            CGS_ARTIST_FILE, 410 /* ARTIST 0x82554278 */);
         CGS_ASSERT_AT(lpServerInterface->GetConnectionComponent(),
             "mpServerInterface->GetConnectionComponent()",
-            __FILE__, 411 /* ARTIST 0x825542A4 */);
+            CGS_ARTIST_FILE, 411 /* ARTIST 0x825542A4 */);
 
         if (!lpServerInterface->GetConnectionComponent()->IsLoggedIn())
         {
@@ -318,11 +318,11 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(lpServerInterface->GetCustomCommandsComponent(),
             "mpServerInterface->GetCustomCommandsComponent()",
-            __FILE__, 419 /* ARTIST 0x825542FC */);
+            CGS_ARTIST_FILE, 419 /* ARTIST 0x825542FC */);
         ServerInterfaceCustomCommands* lpCustomCommandsComponent = lpServerInterface->GetCustomCommandsComponent();
         CGS_ASSERT_AT(lpCustomCommandsComponent,
             "lpCustomCommandsComponent",
-            __FILE__, 421 /* ARTIST 0x82554328 */);
+            CGS_ARTIST_FILE, 421 /* ARTIST 0x82554328 */);
 
         mbOverwriteFriendsList = false;
         lpCustomCommandsComponent->GetFriendsListFromServer(_GetFriendsListFromServerComplete, this);
@@ -556,10 +556,10 @@ namespace BrnNetwork
             {
                 CGS_ASSERT_AT(mpNetworkModule,
                     "mpNetworkModule",
-                    __FILE__, 162 /* ARTIST 0x8256B474 */);
+                    CGS_ARTIST_FILE, 162 /* ARTIST 0x8256B474 */);
                 CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
                     "mpNetworkModule->GetNetworkManager()",
-                    __FILE__, 163 /* ARTIST 0x8256B49C */);
+                    CGS_ARTIST_FILE, 163 /* ARTIST 0x8256B49C */);
 
                 CgsSystem::Time lElapsed = mTimeUntilRetryAfterFailedBuddyUpload
                     - mpNetworkModule->GetNetworkManager()->GetTime();
@@ -567,10 +567,10 @@ namespace BrnNetwork
                 BrnServerInterface* lpServerInterface = AsBrnServerInterface(mpServerInterface);
                 CGS_ASSERT_AT(lpServerInterface,
                     "mpServerInterface",
-                    __FILE__, 168 /* ARTIST 0x8256B4F8 */);
+                    CGS_ARTIST_FILE, 168 /* ARTIST 0x8256B4F8 */);
                 CGS_ASSERT_AT(lpServerInterface->GetGameComponent(),
                     "mpServerInterface->GetGameComponent()",
-                    __FILE__, 169 /* ARTIST 0x8256B524 */);
+                    CGS_ARTIST_FILE, 169 /* ARTIST 0x8256B524 */);
 
                 if (!lpServerInterface->GetGameComponent()->IsLocalPlayerInGame())
                 {
@@ -616,13 +616,13 @@ namespace BrnNetwork
             {
                 CGS_ASSERT_AT(mpNetworkModule,
                     "mpNetworkModule",
-                    __FILE__, 211 /* ARTIST 0x8256B61C */);
+                    CGS_ARTIST_FILE, 211 /* ARTIST 0x8256B61C */);
                 CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
                     "mpNetworkModule->GetNetworkManager()",
-                    __FILE__, 212 /* ARTIST 0x8256B644 */);
+                    CGS_ARTIST_FILE, 212 /* ARTIST 0x8256B644 */);
                 CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetStateManager(),
                     "mpNetworkModule->GetNetworkManager()->GetStateManager()",
-                    __FILE__, 213 /* ARTIST 0x8256B678 */);
+                    CGS_ARTIST_FILE, 213 /* ARTIST 0x8256B678 */);
 
                 StateManager* lpStateManager = mpNetworkModule->GetNetworkManager()->GetStateManager();
                 if (lpStateManager->IsInLimbo())
@@ -673,10 +673,10 @@ namespace BrnNetwork
 
             CGS_ASSERT_AT(GetBuddyName(miNextBuddyToSend, &lRecord.mPlayerName),
                 "GetBuddyName( miNextBuddyToSend, &lEvent.mBuddyInformation[liBuddySlotIndex].mPlayerName )",
-                __FILE__, 818 /* ARTIST 0x82563978 */);
+                CGS_ARTIST_FILE, 818 /* ARTIST 0x82563978 */);
             CGS_ASSERT_AT(lRecord.mPlayerName.macName[0] != 0,
                 "!lEvent.mBuddyInformation[liBuddySlotIndex].mPlayerName.IsEmpty()",
-                __FILE__, 820 /* ARTIST 0x8256399C */);
+                CGS_ARTIST_FILE, 820 /* ARTIST 0x8256399C */);
 
             lRecord.miInviteType    = GetTotalNumberOfMessages(&lRecord.mPlayerName);
             lRecord.miInviteSubType = GetNumberOfUnreadMessages(&lRecord.mPlayerName);

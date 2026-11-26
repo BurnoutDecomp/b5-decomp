@@ -1,7 +1,7 @@
 #include "GameSource/Network/Managers/X360/BrnNetworkCameraX360.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/X360/BrnNetworkCameraX360.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                       // socket assertions
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"              // CgsNetwork::NetworkTexture
@@ -107,7 +107,7 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(lpTextureCompressor,
             "lpTextureCompressor",
-            __FILE__, 87 /* ARTIST 0x8258B4EC */);
+            CGS_ARTIST_FILE, 87 /* ARTIST 0x8258B4EC */);
         mpTextureCompressor = lpTextureCompressor;
 
         miUserSetting   = 1;

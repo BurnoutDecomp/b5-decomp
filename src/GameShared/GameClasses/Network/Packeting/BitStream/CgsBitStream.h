@@ -53,7 +53,10 @@ namespace CgsNetwork
         bool AddBits(u64 luValue, s32 liNumBits);
         u64  GetBits(s32 liNumBits);
         s32  GetBitLength() const;
-        s32  GetBitLengthRemaining() const;
+        // DWARF CgsBitStream.h:61; the body is defined in the header (the CgsNetworkUnity CU holds
+        // it, the .cpp's dump does not): the bits written but not yet read (ARTIST Message::UnPack
+        // 0x82880244 `subf r28,read,write`).
+        s32  GetBitLengthRemaining() const { return miBitWritePosition - miBitReadPosition; }
         void DebugPrint();
     };
 }

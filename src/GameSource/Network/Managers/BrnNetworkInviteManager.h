@@ -130,16 +130,17 @@ namespace BrnNetwork
         void DownloadPlayersGameIDFromServer(const PlayerName* lpPlayerName);
 
         // Read back the downloaded game id: valid (true) once the get-game-id sub-machine is idle
-        // again, otherwise 0 and false (inlined into Update).
+        // again, otherwise 0 and false (inlined into Update). The not-idle arm comes first: ARTIST
+        // Update 0x8256DD98 and the PS3 copy 0x5DF8C8 fall into it and branch to the valid arm.
         bool GetGameID(s32* lpiGameID)
         {
-            if (meGetGameIDState == E_GET_ID_STATE_IDLE)
+            if (meGetGameIDState != E_GET_ID_STATE_IDLE)
             {
-                *lpiGameID = mPlayerInfoData.GetGameID();
-                return true;
+                *lpiGameID = 0;
+                return false;
             }
-            *lpiGameID = 0;
-            return false;
+            *lpiGameID = mPlayerInfoData.GetGameID();
+            return true;
         }
 
     private:

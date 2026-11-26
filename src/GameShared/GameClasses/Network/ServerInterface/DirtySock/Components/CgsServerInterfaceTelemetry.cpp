@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceTelemetry.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceTelemetry.cpp"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceServerInfo.h"
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
@@ -103,7 +103,7 @@ namespace CgsNetwork
         mpTelemetryNormalUsage = TelemetryApiCreate(liMaxNormalUsageBufferSize,
                                                     KI_TELEMETRY_BUFFERTYPE_CIRCULAROVERWRITE);
         CGS_ASSERT_AT(mpTelemetryNormalUsage != 0, "NULL != mpTelemetryNormalUsage",
-            __FILE__, 132 /* ARTIST 0x82888DD8 */);
+            CGS_ARTIST_FILE, 132 /* ARTIST 0x82888DD8 */);
 
         mpTelemetryCurrent = mpTelemetryNormalUsage;
         TelemetryApiControl(mpTelemetryNormalUsage, KI_TELEMETRY_CONTROL_DISABLED_COUNTRY, 0, lpDisabledCountryList);
@@ -113,7 +113,7 @@ namespace CgsNetwork
         {
             mpTelemetryFirstUsage = TelemetryApiCreate(liMaxFirstUsageBufferSize, KI_TELEMETRY_BUFFERTYPE_FILLANDSTOP);
             CGS_ASSERT_AT(mpTelemetryFirstUsage != 0, "NULL != mpTelemetryFirstUsage",
-                __FILE__, 144 /* ARTIST 0x82888E50 */);
+                CGS_ARTIST_FILE, 144 /* ARTIST 0x82888E50 */);
 
             // Record into the first-usage buffer until it fills; the normal buffer is held.
             mpTelemetryCurrent = mpTelemetryFirstUsage;
@@ -158,7 +158,7 @@ namespace CgsNetwork
         }
 
         CGS_ASSERT_AT(mpTelemetryNormalUsage != 0,
-            "NULL != mpTelemetryNormalUsage", __FILE__, 228 /* ARTIST 0x8287B1E0 */);
+            "NULL != mpTelemetryNormalUsage", CGS_ARTIST_FILE, 228 /* ARTIST 0x8287B1E0 */);
 
         TelemetryApiUpdate(mpTelemetryNormalUsage);
     }
@@ -196,7 +196,7 @@ namespace CgsNetwork
     EServerInterfaceError ServerInterfaceTelemetry::Connect(bool lbAbandonFirstUsage)
     {
         CGS_ASSERT_AT(mpTelemetryNormalUsage != 0,
-            "NULL != mpTelemetryNormalUsage", __FILE__, 336 /* ARTIST 0x82888F58 */);
+            "NULL != mpTelemetryNormalUsage", CGS_ARTIST_FILE, 336 /* ARTIST 0x82888F58 */);
 
 
         if (lbAbandonFirstUsage)
@@ -316,7 +316,7 @@ namespace CgsNetwork
 
     EServerInterfaceError ServerInterfaceTelemetry::AuthAndConnect()
     {
-        CGS_ASSERT_AT(mpServerInterface != 0, "NULL != mpServerInterface", __FILE__, 900 /* ARTIST 0x8287B764 */);
+        CGS_ASSERT_AT(mpServerInterface != 0, "NULL != mpServerInterface", CGS_ARTIST_FILE, 900 /* ARTIST 0x8287B764 */);
 
         char* lpcAuthString = mpServerInterface->GetMessageBuffer();
         lpcAuthString[0] = 0;
@@ -359,7 +359,7 @@ namespace CgsNetwork
     {
         ServerInterfaceTelemetry* lpServerInterfaceTelemetry = static_cast<ServerInterfaceTelemetry*>(lpUserData);
         CGS_ASSERT_AT(lpServerInterfaceTelemetry != 0,
-            "NULL != lpServerInterfaceTelemetry", __FILE__, 960 /* ARTIST 0x8287B8AC */);
+            "NULL != lpServerInterfaceTelemetry", CGS_ARTIST_FILE, 960 /* ARTIST 0x8287B8AC */);
 
 
         // The first-usage buffer is full: record into the normal buffer and hold the full one.
@@ -372,7 +372,7 @@ namespace CgsNetwork
     {
         ServerInterfaceTelemetry* lpServerInterfaceTelemetry = static_cast<ServerInterfaceTelemetry*>(lpUserData);
         CGS_ASSERT_AT(lpServerInterfaceTelemetry != 0,
-            "NULL != lpServerInterfaceTelemetry", __FILE__, 989 /* ARTIST 0x8287B924 */);
+            "NULL != lpServerInterfaceTelemetry", CGS_ARTIST_FILE, 989 /* ARTIST 0x8287B924 */);
 
 
         lpServerInterfaceTelemetry->mpServerInterface->OnEvent(E_SERVER_INTERFACE_TELEMETRY_FIRST_USAGE_DATA_UPLOADED, 0);

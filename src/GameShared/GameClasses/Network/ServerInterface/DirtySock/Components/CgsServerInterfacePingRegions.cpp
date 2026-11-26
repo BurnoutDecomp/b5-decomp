@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePingRegions.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePingRegions.cpp"
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // GetLobbyAPIRef
@@ -147,7 +147,7 @@ namespace CgsNetwork
 
         CGS_ASSERT_AT(mpHostAddress != 0,
             "mpHostAddress",
-            __FILE__, 236 /* ARTIST 0x82889F54 */);
+            CGS_ARTIST_FILE, 236 /* ARTIST 0x82889F54 */);
 
         const s32 liDone = mpHostAddress->Done(mpHostAddress);
         if (liDone == KI_HOST_LOOKUP_FAILED)
@@ -194,10 +194,10 @@ namespace CgsNetwork
     void ServerInterfacePingRegions::StartPingRegions()
     {
         CGS_ASSERT_AT(meCurrentAction == E_ACTION_COUNT,
-            "meCurrentAction == E_ACTION_COUNT", __FILE__, 442 /* ARTIST 0x8288A044 */);
+            "meCurrentAction == E_ACTION_COUNT", CGS_ARTIST_FILE, 442 /* ARTIST 0x8288A044 */);
 
         CGS_ASSERT_AT(mpHostAddress == 0,
-            "mpHostAddress == NULL", __FILE__, 443 /* ARTIST 0x8288A06C */);
+            "mpHostAddress == NULL", CGS_ARTIST_FILE, 443 /* ARTIST 0x8288A06C */);
 
         miPingRequest   = -1;
         miCurrentRegion = 0;
@@ -257,7 +257,7 @@ namespace CgsNetwork
     void ServerInterfacePingRegions::EndAction(s32 liError)
     {
         CGS_ASSERT_AT(meCurrentAction != E_ACTION_COUNT, "Trying to end an action when not doing anything\n",
-                      __FILE__, 422 /* ARTIST 0x8287CA10 */);
+                      CGS_ARTIST_FILE, 422 /* ARTIST 0x8287CA10 */);
 
         ServerInterfaceComponent::EndActionCore(ConvertError(liError, meCurrentAction));
         meCurrentAction = E_ACTION_COUNT;
@@ -277,7 +277,7 @@ namespace CgsNetwork
         }
 
         CGS_ASSERT_AT(mpHostAddress == 0,
-            "!mpHostAddress", __FILE__, 531 /* ARTIST 0x8287CBBC */);
+            "!mpHostAddress", CGS_ARTIST_FILE, 531 /* ARTIST 0x8287CBBC */);
 
         mpHostAddress = ProtoNameAsync(lacHostName, KI_NAME_RESOLVE_TIMEOUT);
         if (mpHostAddress == 0)
@@ -292,9 +292,9 @@ namespace CgsNetwork
     void ServerInterfacePingRegions::HandlePingResults(s32 liPing)
     {
         CGS_ASSERT_AT(miCurrentRegion >= 0,
-            "miCurrentRegion >= 0", __FILE__, 567 /* ARTIST 0x8287CC48 */);
+            "miCurrentRegion >= 0", CGS_ARTIST_FILE, 567 /* ARTIST 0x8287CC48 */);
         CGS_ASSERT_AT(miCurrentRegion < KI_MAX_PING_REGIONS,
-            "miCurrentRegion < KI_MAX_PING_REGIONS", __FILE__, 568 /* ARTIST 0x8287CC70 */);
+            "miCurrentRegion < KI_MAX_PING_REGIONS", CGS_ARTIST_FILE, 568 /* ARTIST 0x8287CC70 */);
 
 
         miPingRequest                   = -1;

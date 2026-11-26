@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsConnectionStatusMessage.cpp"
 // CgsNetwork::ConnectionStatusMessage -- the send stamp and the receive copy-out. GetName is
 // header-inline; the packing virtuals live with the rest of the message hierarchy.
 
@@ -22,7 +22,7 @@ namespace CgsNetwork
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Preparing ConnectionStatusMessage\n";
         CGS_ASSERT_AT(lu16Frame != KU16_INVALID_FRAME,
             "lu16Frame != KU16_INVALID_FRAME",
-            __FILE__, 80 /* ARTIST 0x82883194 */);
+            CGS_ARTIST_FILE, 80 /* ARTIST 0x82883194 */);
 
         for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
         {
@@ -48,7 +48,7 @@ namespace CgsNetwork
             SetMessageInvalid();
             CGS_ASSERT_AT(!IsMessageValid(),
                 "!IsMessageValid()",
-                __FILE__, 121 /* ARTIST 0x82883294 */);
+                CGS_ARTIST_FILE, 121 /* ARTIST 0x82883294 */);
             return true;
         }
 

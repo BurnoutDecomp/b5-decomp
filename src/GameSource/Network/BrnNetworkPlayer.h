@@ -213,7 +213,7 @@ namespace BrnNetwork
 
     private:
         // ---- per-frame helpers ---------------------------------------------------------
-        void UpdateLatencyValue(u16 lu16SentFrame, u16 lu16CurrentFrame);
+        void UpdateLatencyValue(u16 lu16FrameSent, u16 lu16FrameRecvd);
         bool IsOurTurnToSend();
         void CheckForNewMessages(u16 lu16CurrentFrame);
         void CheckForPlayerPausedTimeout(u16 lu16CurrentFrame);

@@ -517,10 +517,10 @@ NetworkPlayerID CompressionAndEncryptionUtils::ExtractSendingPlayerID(u8* lpacBu
 {
     CGS_ASSERT_AT(static_cast<u32>(liBufferSize) >= sizeof(PackedPacketHeader),
         "(uint32_t)liBufferSize >= sizeof(PackedPacketHeader)",
-            __FILE__, 581 /* ARTIST 0x8286FD64 */);
+            CGS_ARTIST_FILE, 581 /* ARTIST 0x8286FD64 */);
 
     CGS_ASSERT_AT(lpacBufferToUnPackFrom,
-        "lpacBufferToUnPackFrom", __FILE__, 582 /* ARTIST 0x8286FD88 */);
+        "lpacBufferToUnPackFrom", CGS_ARTIST_FILE, 582 /* ARTIST 0x8286FD88 */);
 
     const PackedPacketHeader* lpHeader =
         reinterpret_cast<const PackedPacketHeader*>(lpacBufferToUnPackFrom);
@@ -528,7 +528,7 @@ NetworkPlayerID CompressionAndEncryptionUtils::ExtractSendingPlayerID(u8* lpacBu
     {
         CGS_ASSERT_AT(static_cast<u32>(liBufferSize) > sizeof(ReliablePackedPacketHeader),
             "(uint32_t)liBufferSize > sizeof(ReliablePackedPacketHeader)",
-                __FILE__, 590 /* ARTIST 0x8286FDBC */);
+                CGS_ARTIST_FILE, 590 /* ARTIST 0x8286FDBC */);
 
         const ReliablePackedPacketHeader* lpReliableHeader =
             reinterpret_cast<const ReliablePackedPacketHeader*>(lpacBufferToUnPackFrom);

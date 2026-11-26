@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnPlayerFinishedRoundMessage.cpp"
 #include "GameSource/Network/Messages/BrnPlayerFinishedRoundMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"                                       // BrnNetworkManager::PackOrUnpack (NetworkPlayerID field primitive)
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"               // CgsNetwork::PackOrUnpack* field primitives
@@ -129,7 +129,7 @@ namespace BrnNetwork
         // A valid distance must never equal the in-range invalid sentinel.
         CGS_ASSERT_AT(mfDistanceFromFinish != KF_INVALID_NETWORK_DISTANCE,
             "mfDistanceFromFinish != KF_INVALID_NETWORK_DISTANCE",
-            __FILE__, 199 /* ARTIST 0x8257A28C */);
+            CGS_ARTIST_FILE, 199 /* ARTIST 0x8257A28C */);
 
         // Map the in-RAM unset default onto its serialisable wire equivalent before packing.
         if (mfDistanceFromFinish == KF_UNSET_DISTANCE)

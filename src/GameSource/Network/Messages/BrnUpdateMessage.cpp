@@ -1,7 +1,7 @@
 #include "GameSource/Network/Messages/BrnUpdateMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (UpdateMessage validity guards)
 #include "rw/math/vpu/vector3_operation.h"          // Magnitude / Normalize / Min / Max
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnUpdateMessage.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::UpdateData::operator=   @ 0x82579CD0
 //   called by: BrnNetwork::UpdateMessage::PrepareForSend, BrnNetwork::UpdateMessage::operator=
@@ -109,7 +109,7 @@ namespace BrnNetwork
         CgsNetwork::Message::PrepareForSend(KI_UPDATE_MESSAGE_TYPE, mUpdateData.mu16SentFrame);
         CGS_ASSERT_AT(!IsReliable(),
             "!IsReliable()",
-            __FILE__, 151 /* ARTIST 0x8257D96C */);
+            CGS_ARTIST_FILE, 151 /* ARTIST 0x8257D96C */);
     }
 
     UpdateData& UpdateData::operator=(const UpdateData& lOther)
@@ -209,7 +209,7 @@ namespace BrnNetwork
     const UpdateData* UpdateMessage::GetUpdateData()
     {
         CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
-            "IsMessageValid()", __FILE__, 131 /* ARTIST 0x82580BCC */);
+            "IsMessageValid()", "..\\..\\..\\GameSource\\Network/Messages/BrnUpdateMessage.h", 131 /* ARTIST 0x82580BCC */);
         return &mUpdateData;
     }
 
@@ -219,7 +219,7 @@ namespace BrnNetwork
     u16 UpdateMessage::GetU16FramesSinceStart()
     {
         CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
-            "IsMessageValid()", __FILE__, 138 /* ARTIST 0x82580C2C */);
+            "IsMessageValid()", "..\\..\\..\\GameSource\\Network/Messages/BrnUpdateMessage.h", 138 /* ARTIST 0x82580C2C */);
         return mUpdateData.mu16FramesSinceStart;
     }
 

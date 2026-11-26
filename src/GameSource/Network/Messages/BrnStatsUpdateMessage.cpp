@@ -1,5 +1,5 @@
 #include "types.hpp"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnStatsUpdateMessage.cpp"
 #include "GameSource/Network/Messages/BrnStatsUpdateMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -107,14 +107,14 @@ namespace BrnNetwork
                                       s32* lpiNumberOfTakedowns)
     {
         CGS_ASSERT_AT(lpiNumberOfChallenges,
-            "lpiNumberOfChallenges", __FILE__, 101 /* ARTIST 0x8257FF38 */);
+            "lpiNumberOfChallenges", CGS_ARTIST_FILE, 101 /* ARTIST 0x8257FF38 */);
         CGS_ASSERT_AT(lpiNumberOfRivals,
-            "lpiNumberOfRivals", __FILE__, 102 /* ARTIST 0x8257FF5C */);
+            "lpiNumberOfRivals", CGS_ARTIST_FILE, 102 /* ARTIST 0x8257FF5C */);
         CGS_ASSERT_AT(lpiNumberOfAchievements,
-            "lpiNumberOfAchievements", __FILE__, 103 /* ARTIST 0x8257FF80 */);
+            "lpiNumberOfAchievements", CGS_ARTIST_FILE, 103 /* ARTIST 0x8257FF80 */);
 
         CGS_ASSERT_AT(lpiNumberOfTakedowns,
-            "lpiNumberOfTakedowns", __FILE__, 104 /* ARTIST 0x8257FFA4 */);
+            "lpiNumberOfTakedowns", CGS_ARTIST_FILE, 104 /* ARTIST 0x8257FFA4 */);
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {

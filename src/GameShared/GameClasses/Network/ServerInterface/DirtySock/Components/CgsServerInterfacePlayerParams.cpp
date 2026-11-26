@@ -5,7 +5,7 @@
 #include "lobbyapi.h"                                         // LobbyApiPlayerT
 #include "lobbytagfield.h"                                    // DirtySDK TagFieldGet/Set*
 #include <cstring>                                            // std::strlen / std::strncpy
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerParams.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::ServerInterfacePlayerParamsBase::SerialiseFromPlayer @ 0x82879F28
 //   CgsNetwork::ServerInterfacePlayerParamsBase::SerialiseToString   @ 0x8287A120
@@ -40,7 +40,7 @@ void ServerInterfacePlayerParamsBase::SerialiseFromPlayer(const LobbyApiPlayerT*
     // (held at LobbyApiPlayerT + 0x68) into the structure-interface data buffer.
     CGS_ASSERT_AT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
         "strlen( GetPattern() ) < (size_t) GetPatternLength()",
-        __FILE__, 88 /* ARTIST 0x8287A0A8 */);
+        CGS_ARTIST_FILE, 88 /* ARTIST 0x8287A0A8 */);
 
     // The mutable GetData() is vtable slot +0x14 (MSVC lays the two overloads out in
     // reverse declaration order), ARTIST 0x8287A0F8; arguments evaluated right to left.
@@ -51,7 +51,7 @@ void ServerInterfacePlayerParamsBase::SerialiseToString(char* lpcRecord, s32 liR
 {
     CGS_ASSERT_AT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
         "strlen( GetPattern() ) < (size_t) GetPatternLength()",
-        __FILE__, 108 /* ARTIST 0x8287A19C */);
+        CGS_ARTIST_FILE, 108 /* ARTIST 0x8287A19C */);
 
     const char* lpcPattern = GetPattern();
     const u32   luDataSize = GetDataSize();

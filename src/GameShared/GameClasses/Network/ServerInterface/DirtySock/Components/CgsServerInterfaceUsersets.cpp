@@ -233,7 +233,7 @@ namespace CgsNetwork
             mpUsersInUsersetList = LobbyApiListAlloc(mpServerInterface->GetLobbyAPIRef(),
                                                      KI_LOBBY_LIST_USERSET_USERS, 0, 0);
             CGS_ASSERT_AT(mpUsersInUsersetList != 0,
-                "Failed to create users in userset list", __FILE__, 451 /* ARTIST 0x8287C42C */);
+                "Failed to create users in userset list", CGS_ARTIST_FILE, 451 /* ARTIST 0x8287C42C */);
 
         }
     }
@@ -254,7 +254,7 @@ namespace CgsNetwork
     bool ServerInterfaceUsersets::GetUserSetParams(ServerInterfaceUsersetParamsBase* lpParams) const
     {
         CGS_ASSERT_AT(lpParams != 0,
-            "lpUsersetParams", __FILE__, 602 /* ARTIST 0x8287C4FC */);
+            "lpUsersetParams", CGS_ARTIST_FILE, 602 /* ARTIST 0x8287C4FC */);
 
         lpParams->Prepare();
 

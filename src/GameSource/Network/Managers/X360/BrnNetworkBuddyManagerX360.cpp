@@ -1,6 +1,7 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::StrnCpy
 #include <xtl.h>
 #include "GameSource/Network/Managers/X360/BrnNetworkBuddyManagerX360.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkBuddyManagerX360.cpp"
 #include <cstring>   // strncpy, memcpy, strlen
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // CgsModule::VariableEventQueue<14000,16>
@@ -138,13 +139,10 @@ namespace BrnNetwork
             return false;
         }
 
-        CGS_ASSERT(lpSoftRebootData, "lpSoftRebootData");
+        CGS_ASSERT_AT(lpSoftRebootData, "lpSoftRebootData", CGS_ARTIST_FILE, 92);
 
-        // Length-guard the soft-reboot session id (the X360 inlined CgsString length check that
-        // fires "String too long: " if the id is >= 128 bytes before the strncpy).
-        CGS_ASSERT(strlen(lpSoftRebootData->macSessionID) < KU_SESSION_ID_LENGTH, "String too long: ");
-
-        strncpy(macPendingSessionID, lpSoftRebootData->macSessionID, KU_SESSION_ID_LENGTH);
+        // CgsCore::StrnCpy (CgsStringUtils.h:55; ARTIST 0x8254C93C asserts at that line).
+        CgsCore::StrnCpy(macPendingSessionID, lpSoftRebootData->macSessionID, KU_SESSION_ID_LENGTH);
         miPendingInviteUserPort = static_cast<s32>(lpSoftRebootData->mdwUserIndex);
         return true;
     }
@@ -166,22 +164,22 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpcSessionID,
             "lpcSessionID",
-            __FILE__, 342 /* ARTIST 0x8256C780 */);
+            CGS_ARTIST_FILE, 342 /* ARTIST 0x8256C780 */);
 
         CGS_ASSERT_AT(GetNetworkModule(),
             "GetNetworkModule()",
-            __FILE__, 345 /* ARTIST 0x8256C7B0 */);
+            CGS_ARTIST_FILE, 345 /* ARTIST 0x8256C7B0 */);
         CGS_ASSERT_AT(GetNetworkModule()->GetNetworkManager(),
             "GetNetworkModule()->GetNetworkManager()",
-            __FILE__, 346 /* ARTIST 0x8256C7DC */);
+            CGS_ARTIST_FILE, 346 /* ARTIST 0x8256C7DC */);
 
         BrnServerInterface* lpServerInterface = GetNetworkModule()->GetNetworkManager()->GetServerInterface();
         CGS_ASSERT_AT(lpServerInterface,
             "lpServerInterface",
-            __FILE__, 348 /* ARTIST 0x8256C80C */);
+            CGS_ARTIST_FILE, 348 /* ARTIST 0x8256C80C */);
         CGS_ASSERT_AT(lpServerInterface->GetGameComponent(),
             "lpServerInterface->GetGameComponent()",
-            __FILE__, 349 /* ARTIST 0x8256C834 */);
+            CGS_ARTIST_FILE, 349 /* ARTIST 0x8256C834 */);
 
         if (!lpServerInterface->GetGameComponent()->IsLocalPlayerInGame())
         {
@@ -202,10 +200,10 @@ namespace BrnNetwork
     // =======================================================================
     void BuddyManagerX360::DoInvite(BrnNetworkModuleIO::InviteOrJoinParams lInviteOrJoinParams)
     {
-        CGS_ASSERT(GetNetworkModule(), "GetNetworkModule()");
-        CGS_ASSERT(GetNetworkModule()->GetNetworkManager(), "GetNetworkModule()->GetNetworkManager()");
-        CGS_ASSERT(GetNetworkModule()->GetNetworkManager()->GetPlayerManager(),
-                   "GetNetworkModule()->GetNetworkManager()->GetPlayerManager()");
+        CGS_ASSERT_AT(GetNetworkModule(), "GetNetworkModule()", CGS_ARTIST_FILE, 267);
+        CGS_ASSERT_AT(GetNetworkModule()->GetNetworkManager(), "GetNetworkModule()->GetNetworkManager()", CGS_ARTIST_FILE, 268);
+        CGS_ASSERT_AT(GetNetworkModule()->GetNetworkManager()->GetPlayerManager(),
+                   "GetNetworkModule()->GetNetworkManager()->GetPlayerManager()", CGS_ARTIST_FILE, 269);
 
         BrnNetworkManager* lpNetworkManager = GetNetworkModule()->GetNetworkManager();
         CgsNetwork::PlayerManager* lpPlayerManager = lpNetworkManager->GetPlayerManager();
@@ -230,9 +228,6 @@ namespace BrnNetwork
                     return;
                 }
 
-                CGS_ASSERT(strlen(lInviteOrJoinParams.macSessionID) < KU_SESSION_ID_LENGTH,
-                           "String too long: ");
-
                 // Build the Guide soft-reboot launch data (0x98 bytes) and relaunch the title into
                 // the joined session. Offsets are X360-authoritative (XSetLaunchData(&var_C0, 0x98)
                 // with the named stores at var_C0 + 0x00 / +0x04 / +0x14 / +0x94):
@@ -240,10 +235,13 @@ namespace BrnNetwork
                 //   +0x04 macUserName[16]       (XUserGetName for that port; the gamertag)
                 //   +0x14 macSessionID[128]     (strncpy of the invite session id, 128)
                 //   +0x94 mbIsLocalUserChange   (stb 1)
+                // ARTIST 0x82570294..0x82570378: the name, the session id through CgsCore::StrnCpy
+                // (CgsStringUtils.h:55, FireAssert 0x8257034C), then the user index and the flag
+                // (the local's address escapes to both calls, so the stores keep this order).
                 BrnHW::LaunchData lLaunchData;
-                lLaunchData.mdwUserIndex = static_cast<u32>(lInviteOrJoinParams.miUserControllerPort);
                 XUserGetName(lInviteOrJoinParams.miUserControllerPort, lLaunchData.macUserName, 16);
-                strncpy(lLaunchData.macSessionID, lInviteOrJoinParams.macSessionID, KU_SESSION_ID_LENGTH);
+                CgsCore::StrnCpy(lLaunchData.macSessionID, lInviteOrJoinParams.macSessionID, KU_SESSION_ID_LENGTH);
+                lLaunchData.mdwUserIndex = static_cast<u32>(lInviteOrJoinParams.miUserControllerPort);
                 lLaunchData.mbIsLocalUserChange = 1;
                 XSetLaunchData(&lLaunchData, sizeof(lLaunchData));
             }
@@ -299,7 +297,7 @@ namespace BrnNetwork
             {
                 CGS_ASSERT_AT(lpEvent,
                     "lpShowProfileEvent",
-                    __FILE__, 402 /* ARTIST 0x8256C980 */);
+                    CGS_ARTIST_FILE, 402 /* ARTIST 0x8256C980 */);
                 // this IS-A CgsNetwork::BuddyManagerX360 (the platform leaf in the base chain);
                 // route the show-profile event name through its Xbox Guide ShowProfile.
                 CgsNetwork::BuddyManagerX360::ShowProfile(

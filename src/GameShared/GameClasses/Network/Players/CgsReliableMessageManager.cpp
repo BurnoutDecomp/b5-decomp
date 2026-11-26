@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                    // CgsMemory::HeapMalloc::Free
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // CgsDev::Log::gpDebugPrint
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsReliableMessageManager.cpp"
 // CgsNetwork::ReliableMessageManager -- reconstructed method bodies (BURNOUT_X360_ARTIST.XEX).
 // The queue's full layout lives in the owning header; four of its methods are homed here
 // (GetNextReliableMessageToResend / Release / Update / MessageIsDuplicate). MessageIsDuplicate
@@ -233,11 +233,11 @@ bool ReliableMessageManager::Prepare(PlayerManager* lpPlayerManager,
 {
     mpPlayerManager = lpPlayerManager;
     mpHeapAllocator = lpHeapAllocator;
-    CGS_ASSERT(mpHeapAllocator, "mpHeapAllocator");
+    CGS_ASSERT_AT(mpHeapAllocator, "mpHeapAllocator", CGS_ARTIST_FILE, 95);
 
     mpReliableMessageBuffer = static_cast<u8*>(mpHeapAllocator->Malloc(
         KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER * KI_MAX_RELIABLE_MESSAGE_SIZE, 4));
-    CGS_ASSERT(mpReliableMessageBuffer, "mpReliableMessageBuffer");
+    CGS_ASSERT_AT(mpReliableMessageBuffer, "mpReliableMessageBuffer", CGS_ARTIST_FILE, 98);
 
     for (s32 liIndex = 0; liIndex < KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER; ++liIndex)
     {
@@ -446,7 +446,7 @@ void ReliableMessageManager::UpdateReliableMessagesReceived()
 
         CGS_ASSERT_AT(lData.miValidCountdown == 0,
             "maReliableMessagesRcvdData[i].miValidCountdown == 0",
-            __FILE__, 721 /* ARTIST 0x82875250 */);
+            CGS_ARTIST_FILE, 721 /* ARTIST 0x82875250 */);
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Removing reliable message received data for message type "
                                    << lData.miType << " from player " << lData.mPlayerID
                                    << " with frame " << static_cast<s32>(lData.mu16FrameSent)
@@ -467,10 +467,10 @@ void ReliableMessageManager::FakeNackMessage(Message* lpMessage, NetworkPlayerID
     SignalMessage lNackMessage;
     CGS_ASSERT_AT(lSendingPlayerID != K_INVALID_PLAYER_ID,
         "lSendingPlayerID != K_INVALID_PLAYER_ID",
-        __FILE__, 568 /* ARTIST 0x82890AF8 */);
+        CGS_ARTIST_FILE, 568 /* ARTIST 0x82890AF8 */);
     CGS_ASSERT_AT(lRecvingPlayerID != K_INVALID_PLAYER_ID,
         "lRecvingPlayerID != K_INVALID_PLAYER_ID",
-        __FILE__, 569 /* ARTIST 0x82890B1C */);
+        CGS_ARTIST_FILE, 569 /* ARTIST 0x82890B1C */);
 
     lNackMessage.Construct();
     lNackMessage.PrepareNack(lpMessage, lSendingPlayerID, lRecvingPlayerID);

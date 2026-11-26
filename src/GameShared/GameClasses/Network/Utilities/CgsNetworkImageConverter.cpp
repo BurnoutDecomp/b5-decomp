@@ -56,22 +56,22 @@ namespace CgsNetwork
         miPackToTexture    = CgsDev::PerfMonCpu::AddMonitor("DXT1 Pack",      CgsDev::E_PMP_8, false, 1.0f, false);
 
         CGS_ASSERT_AT(miConvertPM        >= 0,
-            "miConvertPM >= 0", __FILE__, 78 /* ARTIST 0x828719D0 */);
+            "miConvertPM >= 0", CGS_ARTIST_FILE, 78 /* ARTIST 0x828719D0 */);
         CGS_ASSERT_AT(miCopyPM           >= 0,
-            "miCopyPM >= 0", __FILE__, 79 /* ARTIST 0x828719F8 */);
+            "miCopyPM >= 0", CGS_ARTIST_FILE, 79 /* ARTIST 0x828719F8 */);
         CGS_ASSERT_AT(miResizePM         >= 0,
-            "miResizePM >= 0", __FILE__, 80 /* ARTIST 0x82871A20 */);
+            "miResizePM >= 0", CGS_ARTIST_FILE, 80 /* ARTIST 0x82871A20 */);
         CGS_ASSERT_AT(miUnpackToBufferPM >= 0,
-            "miUnpackToBufferPM >= 0", __FILE__, 81 /* ARTIST 0x82871A48 */);
+            "miUnpackToBufferPM >= 0", CGS_ARTIST_FILE, 81 /* ARTIST 0x82871A48 */);
 
         CGS_ASSERT_AT(miXToRPM           >= 0,
-            "miXToRPM >= 0", __FILE__, 82 /* ARTIST 0x82871A70 */);
+            "miXToRPM >= 0", CGS_ARTIST_FILE, 82 /* ARTIST 0x82871A70 */);
         CGS_ASSERT_AT(miCompressPM       >= 0,
-            "miCompressPM >= 0", __FILE__, 83 /* ARTIST 0x82871A98 */);
+            "miCompressPM >= 0", CGS_ARTIST_FILE, 83 /* ARTIST 0x82871A98 */);
         CGS_ASSERT_AT(miUnpackToImage    >= 0,
-            "miUnpackToImage >= 0", __FILE__, 84 /* ARTIST 0x82871AC0 */);
+            "miUnpackToImage >= 0", CGS_ARTIST_FILE, 84 /* ARTIST 0x82871AC0 */);
         CGS_ASSERT_AT(miPackToTexture    >= 0,
-            "miPackToTexture >= 0", __FILE__, 85 /* ARTIST 0x82871AE8 */);
+            "miPackToTexture >= 0", CGS_ARTIST_FILE, 85 /* ARTIST 0x82871AE8 */);
     }
 
     // ---- Convert @ 0x828943A8 -------------------------------------------------------------------

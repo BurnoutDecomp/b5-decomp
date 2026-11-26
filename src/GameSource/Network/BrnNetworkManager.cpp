@@ -40,10 +40,10 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(GetServerInterface(),
             "GetServerInterface()",
-            __FILE__, 3138 /* ARTIST 0x82582230 */);
+            CGS_ARTIST_FILE, 3138 /* ARTIST 0x82582230 */);
         CGS_ASSERT_AT(GetServerInterface()->GetTelemetryComponent(),
             "GetServerInterface()->GetTelemetryComponent()",
-            __FILE__, 3139 /* ARTIST 0x82582258 */);
+            CGS_ARTIST_FILE, 3139 /* ARTIST 0x82582258 */);
 
         char lacData[CgsNetwork::KI_MAX_TELEMETRY_DATA_SIZE];
         CgsCore::SPrintf(lacData, sizeof(lacData), "%i", liData);
@@ -937,17 +937,17 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(GetPlayerManager(),
             "GetPlayerManager()",
-            __FILE__, 3260 /* ARTIST 0x82596900 */);
+            CGS_ARTIST_FILE, 3260 /* ARTIST 0x82596900 */);
 
         mbDiskReadErrorThisFrame = (luUpdateSet & 0x200) != 0;
         if (mbDiskReadErrorThisFrame)
         {
             CGS_ASSERT_AT(GetServerInterface(),
                 "GetServerInterface()",
-                __FILE__, 3267 /* ARTIST 0x82596940 */);
+                CGS_ARTIST_FILE, 3267 /* ARTIST 0x82596940 */);
             CGS_ASSERT_AT(GetServerInterface()->GetConnectionComponent(),
                 "GetServerInterface()->GetConnectionComponent()",
-                __FILE__, 3268 /* ARTIST 0x82596968 */);
+                CGS_ARTIST_FILE, 3268 /* ARTIST 0x82596968 */);
 
             mbNotifyGameOfDisconnectAfterDiskError = true;
             GetBuddyManager()->RevokeAllInvites();
@@ -985,14 +985,14 @@ namespace BrnNetwork
     {
         BrnNetworkManager* lpNetworkManager = static_cast<BrnNetworkManager*>(lpUserData);
         CGS_ASSERT_AT(lpNetworkManager,
-            "lpNetworkManager", __FILE__, 2276 /* ARTIST 0x82581BD4 */);
+            "lpNetworkManager", CGS_ARTIST_FILE, 2276 /* ARTIST 0x82581BD4 */);
         CGS_ASSERT_AT(lpNetworkManager->GetServerInterface(),
             "lpNetworkManager->GetServerInterface()",
-                __FILE__, 2281 /* ARTIST 0x82581BF8 */);
+                CGS_ARTIST_FILE, 2281 /* ARTIST 0x82581BF8 */);
 
         CGS_ASSERT_AT(lpNetworkManager->GetServerInterface()->GetGameComponent(),
             "lpNetworkManager->GetServerInterface()->GetGameComponent()",
-                __FILE__, 2282 /* ARTIST 0x82581C20 */);
+                CGS_ARTIST_FILE, 2282 /* ARTIST 0x82581C20 */);
 
 
         if (lpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame() &&
@@ -1000,7 +1000,7 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(lpNetworkManager->mpNetworkModule,
                 "lpNetworkManager->mpNetworkModule",
-                    __FILE__, 2286 /* ARTIST 0x82581C78 */);
+                    CGS_ARTIST_FILE, 2286 /* ARTIST 0x82581C78 */);
 
             lpNetworkManager->GetTrafficManager()->RestartNetworkTraffic(lClientReadyID);
         }
@@ -1119,9 +1119,9 @@ namespace BrnNetwork
     void BrnNetworkManager::CaptureTelemetryEvent(ETelemetryHook leHook, const char* lpcData)
     {
         CGS_ASSERT_AT(GetServerInterface(),
-            "GetServerInterface()", __FILE__, 3121 /* ARTIST 0x825821A8 */);
+            "GetServerInterface()", CGS_ARTIST_FILE, 3121 /* ARTIST 0x825821A8 */);
         CGS_ASSERT_AT(GetServerInterface()->GetTelemetryComponent(),
-            "GetServerInterface()->GetTelemetryComponent()", __FILE__, 3122 /* ARTIST 0x825821D0 */);
+            "GetServerInterface()->GetTelemetryComponent()", CGS_ARTIST_FILE, 3122 /* ARTIST 0x825821D0 */);
 
         GetServerInterface()->GetTelemetryComponent()->CaptureEvent(leHook, lpcData);
     }
@@ -1232,10 +1232,10 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpDxtDecodeRequestEvent,
             "lpDxtDecodeRequestEvent",
-            __FILE__, 3208 /* ARTIST 0x82596828 */);
+            CGS_ARTIST_FILE, 3208 /* ARTIST 0x82596828 */);
         CGS_ASSERT_AT(renderengine::PIXELFORMAT_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat(),
             "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat()",
-            __FILE__, 3209 /* ARTIST 0x8259685C */);
+            CGS_ARTIST_FILE, 3209 /* ARTIST 0x8259685C */);
 
         mExportPlayerName = lpDxtDecodeRequestEvent->mPlayerName;
 
@@ -1328,7 +1328,7 @@ namespace BrnNetwork
         default:
             CGS_FAIL_AT(
                 "Invalid login event",
-                __FILE__, 1556 /* ARTIST 0x825959D8 */);
+                CGS_ARTIST_FILE, 1556 /* ARTIST 0x825959D8 */);
             return;
         }
 
@@ -1393,6 +1393,14 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::OutputPlayerStatsToGui(NetworkPlayerID lPlayerID)
     {
+        // DWARF BrnNetworkManager.cpp:2212-2214 (function scope: lpPlayerStats, lpcPlayerName,
+        // liRank), :2228 (the requested player's lpPlayerStats), :2251 lPlayerParams and :2259
+        // lPlayerInfo each in their own arm (ARTIST constructs and destroys lPlayerInfo inside the
+        // else arm, 0x82595DF8..0x82595E54, and reads the name after it), :2278 lPlayerStatsEvent.
+        const NetworkPlayerStats* lpPlayerStats;
+        const char*               lpcPlayerName;
+        s32                       liRank;
+
         if (!GetServerInterface()->GetConnectionComponent()->IsLoggedIn())
         {
             return;
@@ -1413,40 +1421,33 @@ namespace BrnNetwork
             }
 
             if (!(lpPlayerStats->GetTimeStamp() > mLastStatsSentToOnlinePlayStamp) &&
-                !lpPlayerStats->IsCalculated())
+                lpPlayerStats->IsCalculated() != true)
             {
                 return;
             }
             mPlayerIDStatsGet = lPlayerID;
         }
 
-        const char* lpcPlayerName;
-        s32         liRank;
-
-        // The local player's name is read out of lPlayerInfo after the branch, so the record
-        // lives at function scope (the console frame keeps it; a block scope would not).
-        PlayerInfoData lPlayerInfo;
-
-        CgsNetwork::ServerInterfaceGames* lpGamesComponent = GetServerInterface()->GetGameComponent();
-        if (lpGamesComponent->IsPlayerInGame(lPlayerID))
+        if (GetServerInterface()->GetGameComponent()->IsPlayerInGame(lPlayerID))
         {
             PlayerParams lPlayerParams;
             lPlayerParams.Prepare();
-            lpGamesComponent->GetPlayerParametersByPlayerID(lPlayerID, &lPlayerParams);
+            GetServerInterface()->GetGameComponent()->GetPlayerParametersByPlayerID(lPlayerID, &lPlayerParams);
             lpcPlayerName = lPlayerParams.GetName();
             liRank        = lPlayerParams.GetRank();
         }
         else
         {
+            PlayerInfoData lPlayerInfo;
             lPlayerInfo.Prepare();
             GetServerInterface()->GetPlayerInfoComponent()->GetLocalPlayerInfo(&lPlayerInfo);
             CGS_ASSERT_AT(lPlayerInfo.GetID() == lPlayerID, "Can only get local player stats when not in a game",
-                          __FILE__, 2370 /* ARTIST 0x82595E3C */);
+                          CGS_ARTIST_FILE, 2370 /* ARTIST 0x82595E3C */);
             lpcPlayerName = lPlayerInfo.GetName();
             liRank        = lPlayerInfo.GetRank();
         }
 
-        const NetworkPlayerStats* lpPlayerStats = GetStatsManager()->GetPlayerStatsByName(lpcPlayerName);
+        lpPlayerStats = GetStatsManager()->GetPlayerStatsByName(lpcPlayerName);
         if (lpPlayerStats != NULL && lpPlayerStats->GetStatus() == NetworkPlayerStats::E_STATS_AGE_CURRENT)
         {
             BrnGui::GuiEventNetworkPlayerStats lPlayerStatsEvent;

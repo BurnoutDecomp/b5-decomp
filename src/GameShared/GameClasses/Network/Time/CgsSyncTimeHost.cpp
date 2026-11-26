@@ -52,7 +52,7 @@ namespace CgsNetwork
     bool SyncTimeHost::Prepare()
     {
         CGS_ASSERT_AT(mpSyncTimeMessageManager != 0,
-            "mpSyncTimeMessageManager", __FILE__, 70 /* ARTIST 0x8288B0A0 */);
+            "mpSyncTimeMessageManager", CGS_ARTIST_FILE, 70 /* ARTIST 0x8288B0A0 */);
 
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_HOST);
@@ -64,7 +64,7 @@ namespace CgsNetwork
     bool SyncTimeHost::Release()
     {
         CGS_ASSERT_AT(mpSyncTimeMessageManager != 0,
-            "mpSyncTimeMessageManager", __FILE__, 137 /* ARTIST 0x8288B108 */);
+            "mpSyncTimeMessageManager", CGS_ARTIST_FILE, 137 /* ARTIST 0x8288B108 */);
 
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_NONE);
@@ -82,10 +82,10 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(mpPlayerManager != 0,
             "mpPlayerManager",
-            __FILE__, 95 /* ARTIST 0x82892954 */);
+            CGS_ARTIST_FILE, 95 /* ARTIST 0x82892954 */);
         CGS_ASSERT_AT(mpSyncTimeMessageManager != 0,
             "mpSyncTimeMessageManager",
-            __FILE__, 96 /* ARTIST 0x8289297C */);
+            CGS_ARTIST_FILE, 96 /* ARTIST 0x8289297C */);
 
         NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
         mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
@@ -101,7 +101,7 @@ namespace CgsNetwork
 
             CGS_ASSERT_AT(lpMessage != 0,
                 "lpMessage",
-                __FILE__, 108 /* ARTIST 0x82892A20 */);
+                CGS_ARTIST_FILE, 108 /* ARTIST 0x82892A20 */);
 
             const bool lbRetrieved = lpMessage->Retrieve(&lMessageClientPlayerID,
                                                          &lMessageClientTime,
@@ -109,7 +109,7 @@ namespace CgsNetwork
                                                          &lMessageHostTime);
             CGS_ASSERT_AT(lbRetrieved,
                 "lpMessage->Retrieve( &lMessageClientPlayerID, &lMessageClientTime, " "&lMessageHostPlayerID, &lMessageHostTime )",
-                __FILE__, 109 /* ARTIST 0x82892A5C */);
+                CGS_ARTIST_FILE, 109 /* ARTIST 0x82892A5C */);
 
             if (lMessageHostPlayerID == lLocalPlayerID)
             {

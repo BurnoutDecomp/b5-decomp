@@ -25,7 +25,7 @@
 // the network log stream ServerInterfaceDirtySock::mNetStreamLogChannelOutput (ARTIST
 // 0x82F335C8); the failing defaults stream their message through gpcMessageBuffer.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsTimeManager.cpp"
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
@@ -66,7 +66,7 @@ namespace CgsNetwork
         ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "" << __FUNCTION__ << " called\n";
         CGS_ASSERT_AT(miPlayersAdded == 0,
             "miPlayersAdded == 0",
-            __FILE__, 73 /* ARTIST 0x82899030 */);
+            CGS_ARTIST_FILE, 73 /* ARTIST 0x82899030 */);
 
         meSyncTimePrepareStatus = E_SYNC_TIME_PREPARE_STATUS_NONE;
         mbWeAreSyncingTime      = false;
@@ -105,7 +105,7 @@ namespace CgsNetwork
 
         default:
             CGS_FAIL_STREAM_AT("SyncTimeManager invalid status " << meSyncTimePrepareStatus << " in "
-                                   << __FUNCTION__ << "\n", __FILE__, 121);
+                                   << __FUNCTION__ << "\n", CGS_ARTIST_FILE, 121);
             break;
         }
     }
@@ -142,16 +142,16 @@ namespace CgsNetwork
         switch (meSyncTimePrepareStatus)
         {
         case E_SYNC_TIME_PREPARE_STATUS_HOST:
-            CGS_ASSERT_AT(mSyncTimeHost.Prepare(), "mSyncTimeHost.Prepare()", __FILE__, 609);
+            CGS_ASSERT_AT(mSyncTimeHost.Prepare(), "mSyncTimeHost.Prepare()", CGS_ARTIST_FILE, 609);
             break;
 
         case E_SYNC_TIME_PREPARE_STATUS_CLIENT:
-            CGS_ASSERT_AT(mSyncTimeClient.Prepare(lNewHostID), "mSyncTimeClient.Prepare(lNewHostID)", __FILE__, 614);
+            CGS_ASSERT_AT(mSyncTimeClient.Prepare(lNewHostID), "mSyncTimeClient.Prepare(lNewHostID)", CGS_ARTIST_FILE, 614);
             break;
 
         default:
             CGS_FAIL_STREAM_AT("Can't prepare state " << meSyncTimePrepareStatus << " in " << __FUNCTION__ << "\n",
-                               __FILE__, 619);
+                               CGS_ARTIST_FILE, 619);
             break;
         }
     }
@@ -167,7 +167,7 @@ namespace CgsNetwork
 
         CGS_ASSERT_AT(mpPlayerManager != 0,
             "mpPlayerManager",
-            __FILE__, 259 /* ARTIST 0x82892E70 */);
+            CGS_ARTIST_FILE, 259 /* ARTIST 0x82892E70 */);
 
         NetworkPlayer* lpPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
         if (lpPlayer != 0)
@@ -178,7 +178,7 @@ namespace CgsNetwork
         ++miPlayersAdded;
         CGS_ASSERT_AT(miPlayersAdded <= KI_MAX_PLAYERS,
             "miPlayersAdded <= KI_MAX_PLAYERS",
-            __FILE__, 268 /* ARTIST 0x82892EFC */);
+            CGS_ARTIST_FILE, 268 /* ARTIST 0x82892EFC */);
     }
 
     // ---- RemovePlayer @0x82892F10 ---------------------------------------------------
@@ -189,10 +189,10 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(mpPlayerManager != 0,
             "mpPlayerManager",
-            __FILE__, 287 /* ARTIST 0x82892F4C */);
+            CGS_ARTIST_FILE, 287 /* ARTIST 0x82892F4C */);
         CGS_ASSERT_AT(miPlayersAdded > 0,
             "miPlayersAdded > 0",
-            __FILE__, 288 /* ARTIST 0x82892F74 */);
+            CGS_ARTIST_FILE, 288 /* ARTIST 0x82892F74 */);
 
         --miPlayersAdded;
         ReleaseSyncTimeManagers();
@@ -228,7 +228,7 @@ namespace CgsNetwork
 
         CGS_ASSERT_AT(lu16Result != KU16_INVALID_FRAME,
             "lu16Result != KU16_INVALID_FRAME",
-            __FILE__, 410 /* ARTIST 0x8288B354 */);
+            CGS_ARTIST_FILE, 410 /* ARTIST 0x8288B354 */);
         return lu16Result;
     }
 
@@ -285,11 +285,11 @@ namespace CgsNetwork
         switch (meSyncTimePrepareStatus)
         {
         case E_SYNC_TIME_PREPARE_STATUS_HOST:
-            CGS_ASSERT_AT(mSyncTimeHost.Release(), "mSyncTimeHost.Release()", __FILE__, 565 /* ARTIST 0x8288B3F8 */);
+            CGS_ASSERT_AT(mSyncTimeHost.Release(), "mSyncTimeHost.Release()", CGS_ARTIST_FILE, 565 /* ARTIST 0x8288B3F8 */);
             break;
 
         case E_SYNC_TIME_PREPARE_STATUS_CLIENT:
-            CGS_ASSERT_AT(mSyncTimeClient.Release(), "mSyncTimeClient.Release()", __FILE__, 570 /* ARTIST 0x8288B3B8 */);
+            CGS_ASSERT_AT(mSyncTimeClient.Release(), "mSyncTimeClient.Release()", CGS_ARTIST_FILE, 570 /* ARTIST 0x8288B3B8 */);
             break;
 
         default:
@@ -364,7 +364,7 @@ namespace CgsNetwork
             << " NewHost=" << lNewHostID << " lbIAmHost " << lbIAmHost << "\n";
         CGS_ASSERT_AT(miPlayersAdded > 0,
             "miPlayersAdded > 0",
-            __FILE__, 230 /* ARTIST 0x82892DF0 */);
+            CGS_ARTIST_FILE, 230 /* ARTIST 0x82892DF0 */);
 
         ReleaseSyncTimeManagers();
         PrepareSyncTimeManagers(lbIAmHost, lNewHostID);
@@ -388,10 +388,10 @@ namespace CgsNetwork
         {
             CGS_ASSERT_AT(lpStartTime,
                 "lpStartTime",
-                __FILE__, 363 /* ARTIST 0x8289316C */);
+                CGS_ARTIST_FILE, 363 /* ARTIST 0x8289316C */);
             CGS_ASSERT_AT(lfTimeStep > 0.0f,
                 "lfTimeStep > 0.0f",
-                __FILE__, 364 /* ARTIST 0x82893198 */);
+                CGS_ARTIST_FILE, 364 /* ARTIST 0x82893198 */);
 
             const CgsSystem::Time lElapsedTime    = mNetworkTime - *lpStartTime;
             const u32             luElapsedFrames = static_cast<u32>(lElapsedTime.GetFloatVal() / lfTimeStep);
@@ -405,7 +405,7 @@ namespace CgsNetwork
         {
             CGS_ASSERT_AT(leStartFrame == E_START_FRAME_INVALID,
                 "leStartFrame == E_START_FRAME_INVALID",
-                __FILE__, 381 /* ARTIST 0x828932C0 */);
+                CGS_ARTIST_FILE, 381 /* ARTIST 0x828932C0 */);
 
             mu16StartFrame        = KU16_INVALID_FRAME;
             ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Cleared Start frame\n";

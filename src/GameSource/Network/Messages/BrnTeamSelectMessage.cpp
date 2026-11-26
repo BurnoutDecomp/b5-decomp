@@ -80,10 +80,10 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(lpaPlayerTeamInfo != 0,
             "lpaPlayerTeamInfo",
-            __FILE__, 96 /* ARTIST 0x825800D4 */);
+            CGS_ARTIST_FILE, 96 /* ARTIST 0x825800D4 */);
         CGS_ASSERT_AT(sizeof(maPlayerTeamInfo) >= liNumPlayers * sizeof(PlayerTeamInfo),
             "sizeof( maPlayerTeamInfo) >= liNumPlayers * sizeof( PlayerTeamInfo )",
-            __FILE__, 97 /* ARTIST 0x825800FC */);
+            CGS_ARTIST_FILE, 97 /* ARTIST 0x825800FC */);
 
         XMemCpy(maPlayerTeamInfo, lpaPlayerTeamInfo, sizeof(maPlayerTeamInfo));   // +0x28, src, 0x40
         miNumPlayers     = liNumPlayers;        // stw, +0x68
@@ -94,7 +94,7 @@ namespace BrnNetwork
         CgsNetwork::ReliableMessage::PrepareForSend(KI_TEAM_SELECT_MESSAGE_TYPE, lu16Frame);
         CGS_ASSERT_AT(IsReliable(),
             "IsReliable()",
-            __FILE__, 106 /* ARTIST 0x82580168 */);
+            CGS_ARTIST_FILE, 106 /* ARTIST 0x82580168 */);
     }
 
     // ---------------------------------------------------------------------------------

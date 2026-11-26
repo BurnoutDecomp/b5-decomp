@@ -1,7 +1,7 @@
 #include "types.hpp"
 #include "GameSource/Network/Messages/BrnCheckpointTriggeredMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnCheckpointTriggeredMessage.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::CheckpointTriggeredMessage::GetName              @ 0x8257CEC8
 //   BrnNetwork::CheckpointTriggeredMessage::GetPackedMessageSize @ 0x8257D0D0
@@ -42,15 +42,15 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             "lu16FrameCount != KU16_INVALID_FRAME",
-                __FILE__, 141 /* ARTIST 0x8257CF0C */);
+                CGS_ARTIST_FILE, 141 /* ARTIST 0x8257CF0C */);
 
         CGS_ASSERT_AT(liCheckpointIndex != -1,
             "liCheckpointIndex != -1",
-                __FILE__, 142 /* ARTIST 0x8257CF30 */);
+                CGS_ARTIST_FILE, 142 /* ARTIST 0x8257CF30 */);
 
         CGS_ASSERT_AT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
             "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                __FILE__, 145 /* ARTIST 0x8257CF5C */);
+                CGS_ARTIST_FILE, 145 /* ARTIST 0x8257CF5C */);
 
 
         miCheckpointIndex = liCheckpointIndex;   // stw r28,0x28(this)

@@ -22,6 +22,8 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h" // PlayerVehicleControls
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cmath>   // fmaf
+#include "rw/core/stdc/util.h"   // rw::core::stdc::Min (UpdateLatencyValue, DWARF)
+#include "SDKs/EATech/include/rw/math/vpu/scalar.h"   // rw::math::vpu::Max<float> / Max<int32_t> (UpdateLatencyValue, DWARF)
 
 // ===================================================================================
 // BrnNetwork::BrnNetworkPlayer -- the Burnout per-peer session object.
@@ -84,14 +86,6 @@ namespace BrnNetwork
         // A received frame more than a third of the 16-bit frame space away from the
         // latency-affected frame means the latency estimate has gone wrong.
         const s16 KI16_MAX_LATENCY_AFFECTED_FRAME_DIFF = 0x5555;
-
-        // Latency frames are rounded to the nearest frame.
-        const f32 KF_ROUND_TO_NEAREST = 0.5f;
-
-        // Frames per second at each console rate (the latency estimate is capped at one
-        // second of frames).
-        const f32 KF_FRAMES_PER_SECOND_50HZ = 50.0f;
-        const f32 KF_FRAMES_PER_SECOND_60HZ = 60.0f;
 
         // mfTimeBeforeSelectedChallengeSend while no selected-challenge send is pending.
         const f32 KF_NO_SELECTED_CHALLENGE_SEND = -1.0f;
@@ -265,7 +259,7 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(mu16LastAnyUpdateAppliedFrame != CgsNetwork::KU16_INVALID_FRAME,
                 "mu16LastAnyUpdateAppliedFrame != KU16_INVALID_FRAME",
-                __FILE__, 1326 /* ARTIST 0x8259A118 */);
+                CGS_ARTIST_FILE, 1326 /* ARTIST 0x8259A118 */);
 
             // DWARF BrnNetworkPlayer.cpp:1308 lu16BuffMsgPlusSome; both frames fold back through
             // WrapFrameToValidRange (h:504), the member in place.
@@ -409,14 +403,14 @@ namespace BrnNetwork
     // discard every buffered update older than it, and hand it back (or null).
     UpdateMessage* BrnNetworkPlayer::RetrieveBufferedMessage(u16 lu16Frame)
     {
-        CGS_ASSERT(GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
+        CGS_ASSERT_AT(GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
                    || GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ,
-                   "GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ");
-        CGS_ASSERT(GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
+                   "GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ", CGS_ARTIST_FILE, 956);
+        CGS_ASSERT_AT(GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
                    || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ,
-                   "GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ");
-        CGS_ASSERT(miNumUpdateMessagesBuffered <= KI_NUM_UPDATE_MESSAGES_TO_BUFFER,
-                   "miNumUpdateMessagesBuffered <= KI_NUM_UPDATE_MESSAGES_TO_BUFFER");
+                   "GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ", CGS_ARTIST_FILE, 958);
+        CGS_ASSERT_AT(miNumUpdateMessagesBuffered <= KI_NUM_UPDATE_MESSAGES_TO_BUFFER,
+                   "miNumUpdateMessagesBuffered <= KI_NUM_UPDATE_MESSAGES_TO_BUFFER", CGS_ARTIST_FILE, 960);
 
         u16 lu16MessageThatWeWantFrame;
         if (GetLocalConsoleFrameRate() == GetRemoteConsoleFrameRate())
@@ -451,8 +445,8 @@ namespace BrnNetwork
             return 0;
         }
 
-        CGS_ASSERT(lu16MessageThatWeWantFrame == lpUpdateMessage->GetU16FramesSinceStart(),
-                   "lu16MessageThatWeWantFrame == lpUpdateMessage->GetU16FramesSinceStart()");
+        CGS_ASSERT_AT(lu16MessageThatWeWantFrame == lpUpdateMessage->GetU16FramesSinceStart(),
+                   "lu16MessageThatWeWantFrame == lpUpdateMessage->GetU16FramesSinceStart()", CGS_ARTIST_FILE, 1008);
 
         // Throw away everything older than the update we are about to use. Removal moves the
         // last buffered update into the freed slot, so that slot is looked at again.
@@ -476,7 +470,7 @@ namespace BrnNetwork
                 break;
             }
         }
-        CGS_ASSERT(lpUpdateMessage != 0, "lpUpdateMessage");
+        CGS_ASSERT_AT(lpUpdateMessage != 0, "lpUpdateMessage", CGS_ARTIST_FILE, 1039);
 
         return lpUpdateMessage;
     }
@@ -486,15 +480,15 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpUpdateMessage->mu16Frame != CgsNetwork::KU16_INVALID_FRAME,
             "lpUpdateMessage->GetU16Frame() != KU16_INVALID_FRAME",
-                __FILE__, 1059 /* ARTIST 0x82588DA8 */);
+                CGS_ARTIST_FILE, 1059 /* ARTIST 0x82588DA8 */);
 
 
         const s32 liBufIndex = static_cast<s32>(lpUpdateMessage - maUpdateMessageBuffer);
         CGS_ASSERT_AT(liBufIndex >= 0,
-            "liBufIndex >= 0", __FILE__, 1065 /* ARTIST 0x82588DDC */);
+            "liBufIndex >= 0", CGS_ARTIST_FILE, 1065 /* ARTIST 0x82588DDC */);
         CGS_ASSERT_AT(liBufIndex < miNumUpdateMessagesBuffered,
             "liBufIndex < miNumUpdateMessagesBuffered",
-                __FILE__, 1066 /* ARTIST 0x82588E04 */);
+                CGS_ARTIST_FILE, 1066 /* ARTIST 0x82588E04 */);
 
 
         maUpdateMessageBuffer[liBufIndex] = maUpdateMessageBuffer[miNumUpdateMessagesBuffered - 1];
@@ -508,7 +502,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpUpdateMessage->mu16Frame != CgsNetwork::KU16_INVALID_FRAME,
             "lpUpdateMessage->GetU16Frame() != KU16_INVALID_FRAME",
-                __FILE__, 1259 /* ARTIST 0x825972DC */);
+                CGS_ARTIST_FILE, 1259 /* ARTIST 0x825972DC */);
 
 
         mu16LastBufferedUpdateAppliedFrame = lpUpdateMessage->mu16Frame;
@@ -547,7 +541,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lNewBurningHomeRunRunner != CgsNetwork::K_INVALID_PLAYER_ID,
             "lNewBurningHomeRunRunner != CgsNetwork::K_INVALID_PLAYER_ID",
-            __FILE__, 1918 /* ARTIST 0x825827C4 */);
+            CGS_ARTIST_FILE, 1918 /* ARTIST 0x825827C4 */);
         mBurningHomeRunSwitchRunnerMessageSend.PrepareForSend(mpTimeManager->GetU16FrameCount(),
                                                               lNewBurningHomeRunRunner);
     }
@@ -558,7 +552,7 @@ namespace BrnNetwork
                                                     bool lbIsInitial)
     {
         CGS_ASSERT_AT(lpBurnoutSkillzData != 0,
-            "lpBurnoutSkillzData", __FILE__, 1936 /* ARTIST 0x82582840 */);
+            "lpBurnoutSkillzData", CGS_ARTIST_FILE, 1936 /* ARTIST 0x82582840 */);
 
         mCachedBurnoutSkillzData = *lpBurnoutSkillzData;
 
@@ -606,7 +600,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpActiveFreeburnChallengeEvent != 0,
             "lpActiveFreeburnChallengeEvent",
-            __FILE__, 2073 /* ARTIST 0x82582A30 */);
+            CGS_ARTIST_FILE, 2073 /* ARTIST 0x82582A30 */);
         mActiveFburnChallengeMessageSend.PrepareForSend(mpTimeManager->GetU16FrameCount(),
                                                         lpActiveFreeburnChallengeEvent->mChallengeID,
                                                         lpPlayerIDs,
@@ -642,31 +636,31 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpNetworkModule != 0,
             "mpNetworkModule",
-            __FILE__, 1632 /* ARTIST 0x82593E38 */);
+            CGS_ARTIST_FILE, 1632 /* ARTIST 0x82593E38 */);
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
             "mpNetworkModule->GetNetworkManager()",
-            __FILE__, 1633 /* ARTIST 0x82593E64 */);
+            CGS_ARTIST_FILE, 1633 /* ARTIST 0x82593E64 */);
 
         const s32 liLocalFrameRate =
             static_cast<s32>(mpNetworkModule->GetNetworkManager()->GetLocalConsoleFrameRate());
         CGS_ASSERT_AT(liLocalFrameRate == KI_FRAMERATE_50HZ || liLocalFrameRate == KI_FRAMERATE_60HZ,
             "( leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ) || " "( leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ )",
-            __FILE__, 1636 /* ARTIST 0x82593EA4 */);
+            CGS_ARTIST_FILE, 1636 /* ARTIST 0x82593EA4 */);
 
         CGS_ASSERT_AT(GetPlayerManager() != 0,
             "mpPlayerManager",
-            __FILE__, 1638 /* ARTIST 0x82593ECC */);
+            CGS_ARTIST_FILE, 1638 /* ARTIST 0x82593ECC */);
         CgsNetwork::NetworkPlayer* lpNetworkPlayer =
             GetPlayerManager()->GetPlayerByID(lNetworkPlayerID);
         CGS_ASSERT_AT(lpNetworkPlayer != 0,
             "lpNetworkPlayer",
-            __FILE__, 1640 /* ARTIST 0x82593F00 */);
+            CGS_ARTIST_FILE, 1640 /* ARTIST 0x82593F00 */);
 
         const s32 liRemoteFrameRate =
             static_cast<s32>(lpNetworkPlayer->GetRemoteConsoleFrameRate());
         CGS_ASSERT_AT(liRemoteFrameRate == KI_FRAMERATE_50HZ || liRemoteFrameRate == KI_FRAMERATE_60HZ,
             "( leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ) || " "( leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ )",
-            __FILE__, 1643 /* ARTIST 0x82593F30 */);
+            CGS_ARTIST_FILE, 1643 /* ARTIST 0x82593F30 */);
 
         s32 liConvertedMultiplier;
         if (liLocalFrameRate == liRemoteFrameRate)
@@ -691,10 +685,10 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(mpNetworkModule != 0,
             "mpNetworkModule",
-            __FILE__, 1672 /* ARTIST 0x82593FA0 */);
+            CGS_ARTIST_FILE, 1672 /* ARTIST 0x82593FA0 */);
         CGS_ASSERT_AT(mpNetworkModule->GetNetworkEventQueue() != 0,
             "mpNetworkModule->GetNetworkEventQueue()",
-            __FILE__, 1673 /* ARTIST 0x82593FCC */);
+            CGS_ARTIST_FILE, 1673 /* ARTIST 0x82593FCC */);
         mpNetworkModule->GetNetworkEventQueue()->AddEvent(lEvent);   // console record: 16 bytes
     }
 
@@ -709,9 +703,9 @@ namespace BrnNetwork
         BrnNetworkPlayer* lpNetPlayer        = static_cast<BrnNetworkPlayer*>(lpUserData);
         CarSelectMessage* lpCarSelectMessage = static_cast<CarSelectMessage*>(lpMessage);
         CGS_ASSERT_AT(lpNetPlayer != 0,
-            "lpNetPlayer", __FILE__, 2109 /* ARTIST 0x82582AAC */);
+            "lpNetPlayer", CGS_ARTIST_FILE, 2109 /* ARTIST 0x82582AAC */);
         CGS_ASSERT_AT(lpCarSelectMessage != 0,
-            "lpCarSelectMessage", __FILE__, 2110 /* ARTIST 0x82582AD0 */);
+            "lpCarSelectMessage", CGS_ARTIST_FILE, 2110 /* ARTIST 0x82582AD0 */);
 
         CgsID lCarId;
         CgsID lWheelId;
@@ -807,10 +801,10 @@ namespace BrnNetwork
         BurnoutSkillzMessage* lpBurnoutSkillzMessage = static_cast<BurnoutSkillzMessage*>(lpMessage);
         CGS_ASSERT_AT(lpPlayer != 0,
             "lpPlayer",
-            __FILE__, 2290 /* ARTIST 0x82594204 */);
+            CGS_ARTIST_FILE, 2290 /* ARTIST 0x82594204 */);
         CGS_ASSERT_AT(lpBurnoutSkillzMessage != 0,
             "lpBurnoutSkillzMessage",
-            __FILE__, 2293 /* ARTIST 0x82594228 */);
+            CGS_ARTIST_FILE, 2293 /* ARTIST 0x82594228 */);
 
         BrnNetworkModuleIO::NetworkOutBurnoutSkillzChanged lSkillzEvent;
         lSkillzEvent.mNewSkillzData.Clear();
@@ -830,10 +824,10 @@ namespace BrnNetwork
         ShowtimeSwitchMessage* lpShowtimeSwitchMessage = static_cast<ShowtimeSwitchMessage*>(lpMessage);
         CGS_ASSERT_AT(lpPlayer != 0,
             "lpPlayer",
-            __FILE__, 2341 /* ARTIST 0x825942B4 */);
+            CGS_ARTIST_FILE, 2341 /* ARTIST 0x825942B4 */);
         CGS_ASSERT_AT(lpShowtimeSwitchMessage != 0,
             "lpShowtimeSwitchMessage",
-            __FILE__, 2344 /* ARTIST 0x825942D8 */);
+            CGS_ARTIST_FILE, 2344 /* ARTIST 0x825942D8 */);
 
         BrnNetworkModuleIO::NetworkOutShowtimeSwitch lShowtimeSwitchEvent;
         lShowtimeSwitchEvent.mPlayerID = lNetworkPlayerID;
@@ -853,10 +847,10 @@ namespace BrnNetwork
         FreeburnChallengeMessage* lpFreeburnChallengeMessage = static_cast<FreeburnChallengeMessage*>(lpMessage);
         CGS_ASSERT_AT(lpPlayer != 0,
             "lpPlayer",
-            __FILE__, 2391 /* ARTIST 0x8259435C */);
+            CGS_ARTIST_FILE, 2391 /* ARTIST 0x8259435C */);
         CGS_ASSERT_AT(lpFreeburnChallengeMessage != 0,
             "lpFreeburnChallengeMessage",
-            __FILE__, 2394 /* ARTIST 0x82594380 */);
+            CGS_ARTIST_FILE, 2394 /* ARTIST 0x82594380 */);
 
         BrnNetworkModuleIO::NetworkOutFreeburnChallenge lChallengeEvent;
         lChallengeEvent.mPlayerID = lNetworkPlayerID;
@@ -879,13 +873,13 @@ namespace BrnNetwork
     {
         BrnNetworkPlayer* lpPlayer = static_cast<BrnNetworkPlayer*>(lpUserData);
         CGS_ASSERT_AT(lpPlayer != 0,
-            "lpPlayer", __FILE__, 2442 /* ARTIST 0x8258EEA8 */);
+            "lpPlayer", CGS_ARTIST_FILE, 2442 /* ARTIST 0x8258EEA8 */);
 
         FburnChallengeStatusMessage* lpFreeburnChallengeStatusMessage =
             static_cast<FburnChallengeStatusMessage*>(lpMessage);
         CGS_ASSERT_AT(lpFreeburnChallengeStatusMessage != 0,
             "lpFreeburnChallengeStatusMessage",
-                __FILE__, 2445 /* ARTIST 0x8258EECC */);
+                CGS_ARTIST_FILE, 2445 /* ARTIST 0x8258EECC */);
 
 
         BrnGameState::GameStateModuleIO::CompletedFburnChallengesData lCompletedChallengesData;
@@ -894,18 +888,18 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(lpPlayer->mpNetworkModule != 0,
                 "lpPlayer->mpNetworkModule",
-                    __FILE__, 2455 /* ARTIST 0x8258EF10 */);
+                    CGS_ARTIST_FILE, 2455 /* ARTIST 0x8258EF10 */);
 
 
             BrnNetworkModuleIO::NetworkToGameStateInterface* lpNetworkToGameStateInterface =
                 lpPlayer->mpNetworkModule->GetNetworkToGameStateInterface();
             CGS_ASSERT_AT(lpNetworkToGameStateInterface != 0,
                 "lpNetworkToGameStateInterface",
-                    __FILE__, 2457 /* ARTIST 0x8258EF40 */);
+                    CGS_ARTIST_FILE, 2457 /* ARTIST 0x8258EF40 */);
 
             CGS_ASSERT_AT(lpNetworkToGameStateInterface->GetCompletedChallengesQueue() != 0,
                 "lpNetworkToGameStateInterface->GetCompletedChallengesQueue()",
-                    __FILE__, 2458 /* ARTIST 0x8258EF64 */);
+                    CGS_ARTIST_FILE, 2458 /* ARTIST 0x8258EF64 */);
 
 
             lpNetworkToGameStateInterface->GetCompletedChallengesQueue()->AddEvent(lCompletedChallengesData);
@@ -923,10 +917,10 @@ namespace BrnNetwork
             static_cast<ActiveFburnChallengeMessage*>(lpMessage);
         CGS_ASSERT_AT(lpNetworkPlayer != 0,
             "lpNetworkPlayer",
-            __FILE__, 2485 /* ARTIST 0x82594408 */);
+            CGS_ARTIST_FILE, 2485 /* ARTIST 0x82594408 */);
         CGS_ASSERT_AT(lpActiveChallengeMessage != 0,
             "lpActiveChallengeMessage",
-            __FILE__, 2489 /* ARTIST 0x8259442C */);
+            CGS_ARTIST_FILE, 2489 /* ARTIST 0x8259442C */);
 
         BrnNetworkModuleIO::NetworkOutActiveFburnChallengeEvent lActiveChallengeEvent;
         CgsNetwork::NetworkPlayerID laPlayersInChallengeIDs[ActiveFburnChallengeMessage::KI_MAX_NETWORK_PLAYERS];
@@ -935,7 +929,7 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(lpNetworkPlayer->mpNetworkModule != 0,
                 "lpNetworkPlayer->mpNetworkModule",
-                __FILE__, 2495 /* ARTIST 0x82594474 */);
+                CGS_ARTIST_FILE, 2495 /* ARTIST 0x82594474 */);
 
             for (s32 liIndex = 0; liIndex < lActiveChallengeEvent.miNumPlayersInChallenge; ++liIndex)
             {
@@ -945,7 +939,7 @@ namespace BrnNetwork
 
             CGS_ASSERT_AT(lpNetworkPlayer->mpNetworkModule->GetNetworkEventQueue() != 0,
                 "lpNetworkPlayer->mpNetworkModule->GetNetworkEventQueue()",
-                __FILE__, 2502 /* ARTIST 0x825944EC */);
+                CGS_ARTIST_FILE, 2502 /* ARTIST 0x825944EC */);
             lpNetworkPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lActiveChallengeEvent);   // console record: 48 bytes
         }
     }
@@ -959,7 +953,7 @@ namespace BrnNetwork
             static_cast<CheckpointTriggeredMessage*>(lpMessage);
         CGS_ASSERT_AT(lpCheckpointTriggeredMessage != 0,
             "lpCheckpointTriggeredMessage",
-            __FILE__, 2563 /* ARTIST 0x82594554 */);
+            CGS_ARTIST_FILE, 2563 /* ARTIST 0x82594554 */);
 
         BrnNetworkModuleIO::NetworkOutRemotePlayerHitCheckpoint lCheckpointEvent;
         if (lpCheckpointTriggeredMessage->Retrieve(&lCheckpointEvent.miCheckpointIndex))
@@ -967,7 +961,7 @@ namespace BrnNetwork
             BrnNetworkPlayer* lpPlayer = static_cast<BrnNetworkPlayer*>(lpUserData);
             CGS_ASSERT_AT(lpPlayer != 0,
                 "lpPlayer",
-                __FILE__, 2571 /* ARTIST 0x82594590 */);
+                CGS_ARTIST_FILE, 2571 /* ARTIST 0x82594590 */);
 
             lCheckpointEvent.mNetworkPlayerID = lNetworkPlayerID;
             lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lCheckpointEvent);   // console record: 8 bytes
@@ -983,7 +977,7 @@ namespace BrnNetwork
             static_cast<StuntScoreUpdatedMessage*>(lpMessage);
         CGS_ASSERT_AT(lpStuntScoreUpdatedMessage != 0,
             "lpStuntScoreUpdatedMessage",
-            __FILE__, 2614 /* ARTIST 0x825945FC */);
+            CGS_ARTIST_FILE, 2614 /* ARTIST 0x825945FC */);
 
         BrnNetworkModuleIO::NetworkOutStuntScoreUpdatedEvent lEvent;
         if (lpStuntScoreUpdatedMessage->Retrieve(&lEvent.miStuntScore))
@@ -991,7 +985,7 @@ namespace BrnNetwork
             BrnNetworkPlayer* lpPlayer = static_cast<BrnNetworkPlayer*>(lpUserData);
             CGS_ASSERT_AT(lpPlayer != 0,
                 "lpPlayer",
-                __FILE__, 2622 /* ARTIST 0x82594638 */);
+                CGS_ARTIST_FILE, 2622 /* ARTIST 0x82594638 */);
 
             lEvent.mNetworkPlayerID = lNetworkPlayerID;
             lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lEvent);   // console record: 8 bytes
@@ -1006,7 +1000,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpMessage != 0,
             "lpStuntMultiplierMessage",
-            __FILE__, 2666 /* ARTIST 0x825946A4 */);
+            CGS_ARTIST_FILE, 2666 /* ARTIST 0x825946A4 */);
 
         s32 liStuntMultiplier = 0;
         s64 li64MultiplierData = 0;
@@ -1015,7 +1009,7 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(lpUserData != 0,
                 "lpNetworkPlayer",
-                __FILE__, 2674 /* ARTIST 0x825946E4 */);
+                CGS_ARTIST_FILE, 2674 /* ARTIST 0x825946E4 */);
             static_cast<BrnNetworkPlayer*>(lpUserData)->ProcessReceivedStuntMultiplier(
                 lNetworkPlayerID, liStuntMultiplier, li64MultiplierData);
         }
@@ -1094,13 +1088,13 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
             "leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ",
-            __FILE__, 445 /* ARTIST 0x82596A90 */);
+            CGS_ARTIST_FILE, 445 /* ARTIST 0x82596A90 */);
 
         CgsNetwork::ServerInterfaceGames* lpGameComponent =
             mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetGameComponent();
         CGS_ASSERT_AT(lpGameComponent,
             "lpGameComponent",
-            __FILE__, 449 /* ARTIST 0x82596AC0 */);
+            CGS_ARTIST_FILE, 449 /* ARTIST 0x82596AC0 */);
 
         PlayerParams lPlayerParams;
         lPlayerParams.Prepare();
@@ -1223,7 +1217,7 @@ namespace BrnNetwork
 
         CGS_ASSERT_AT(!mFreeburnChallengeMessageSend.IsMessageValid(),
             "!mFreeburnChallengeMessageSend.IsMessageValid()",
-            __FILE__, 2031 /* ARTIST 0x82589140 */);
+            CGS_ARTIST_FILE, 2031 /* ARTIST 0x82589140 */);
         mFreeburnChallengeMessageSend.PrepareForSend(mpTimeManager->GetU16FrameCount(), lChallengeID,
                                                      leEventType, leChallengeStatus, liValue);
     }
@@ -1266,61 +1260,65 @@ namespace BrnNetwork
 
     // Record the one-way time of the latest update (clamped at zero) in the latency ring and
     // turn the ring's average into whole frames at the local rate, capped at one second.
-    void BrnNetworkPlayer::UpdateLatencyValue(u16 lu16SentFrame, u16 lu16CurrentFrame)
+    // DWARF (BrnNetworkUnity, BrnNetworkPlayer.cpp:585-587): the parameters lu16FrameSent /
+    // lu16FrameRecvd and the three locals liIndex / lfLatencyTime / lfFPS; the latency is kept
+    // with rw::math::vpu::Max<float>, the count with Max<int32_t>, the frames capped with
+    // rw::core::stdc::Min. The frame rates, the zero floor and the rounding half are literals:
+    // ARTIST loads them from the shared literal pool (0x820138DC 50, 0x82004C6C 60,
+    // 0x82001CC0 0, 0x82001DA0 0.5).
+    void BrnNetworkPlayer::UpdateLatencyValue(u16 lu16FrameSent, u16 lu16FrameRecvd)
     {
-        f32 lfFramesPerSecond;
-        if (GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ)
+        s32 liIndex;
+        f32 lfLatencyTime;
+        f32 lfFPS;
+
+        switch (GetLocalConsoleFrameRate())
         {
-            lfFramesPerSecond = KF_FRAMES_PER_SECOND_50HZ;
-        }
-        else
-        {
-            if (GetLocalConsoleFrameRate() != CgsSystem::E_FRAMERATE_60HZ)
-            {
-                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                lStream << "Unknown local frame rate enum " << static_cast<s32>(GetLocalConsoleFrameRate()) << "\n";
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-                CgsDev::Assert::EndAssert();
-            }
-            lfFramesPerSecond = KF_FRAMES_PER_SECOND_60HZ;
+        case CgsSystem::E_FRAMERATE_50HZ:
+            lfFPS = 50.0f;
+            break;
+        case CgsSystem::E_FRAMERATE_60HZ:
+            lfFPS = 60.0f;
+            break;
+        default:
+            CGS_FAIL_STREAM_AT("Unknown local frame rate enum " << GetLocalConsoleFrameRate() << "\n",
+                CGS_ARTIST_FILE, 619);
+            lfFPS = 60.0f;
+            break;
         }
 
-        CGS_ASSERT(GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
+        CGS_ASSERT_AT(GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
                    || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ,
-                   "GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ");
+                   "GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ",
+                   CGS_ARTIST_FILE, 626);
 
-        const bool lbRemoteIs50Hz = GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ;
-        const bool lbLocalIs50Hz  = GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ;
-        const f32 lfTimeDiff = CgsNetwork::GetTimeDiffWrapped16(lu16CurrentFrame, lu16SentFrame,
-                                                                 mpTimeManager->GetFrameWrapCountSinceStart(),
-                                                                 lbLocalIs50Hz, lbRemoteIs50Hz);
-        const f32 lfLatency = (lfTimeDiff >= 0.0f) ? lfTimeDiff : 0.0f;
+        lfLatencyTime = rw::math::vpu::Max(CgsNetwork::GetTimeDiffWrapped16(lu16FrameRecvd, lu16FrameSent,
+                                                                             mpTimeManager->GetFrameWrapCountSinceStart(),
+                                                                             GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ,
+                                                                             GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ),
+                                           0.0f);
 
-        CGS_ASSERT(miLatencyIndex < KI_LATENCY_FRAMES_TO_AVERAGE_OVER,
-                   "miLatencyIndex < KI_LATENCY_FRAMES_TO_AVERAGE_OVER");
-        mafPastLatencies[miLatencyIndex] = lfLatency;
+        CGS_ASSERT_AT(miLatencyIndex < KI_LATENCY_FRAMES_TO_AVERAGE_OVER,
+                   "miLatencyIndex < KI_LATENCY_FRAMES_TO_AVERAGE_OVER", CGS_ARTIST_FILE, 655);
+        mafPastLatencies[miLatencyIndex] = lfLatencyTime;
         ++miLatencyIndex;
-        miPastLatenciesCount = (miPastLatenciesCount > miLatencyIndex) ? miPastLatenciesCount : miLatencyIndex;
+        miPastLatenciesCount = rw::math::vpu::Max(miPastLatenciesCount, miLatencyIndex);
         if (miLatencyIndex >= KI_LATENCY_FRAMES_TO_AVERAGE_OVER)
         {
             miLatencyIndex = 0;
         }
 
-        f32 lfTotalLatency = 0.0f;
-        for (s32 liIndex = 0; liIndex < miPastLatenciesCount; ++liIndex)
+        lfLatencyTime = 0.0f;
+        for (liIndex = 0; liIndex < miPastLatenciesCount; ++liIndex)
         {
-            lfTotalLatency += mafPastLatencies[liIndex];
+            lfLatencyTime += mafPastLatencies[liIndex];
         }
-        CGS_ASSERT(miPastLatenciesCount > 0, "miPastLatenciesCount > 0");
-        CGS_ASSERT(miPastLatenciesCount <= KI_LATENCY_FRAMES_TO_AVERAGE_OVER,
-                   "miPastLatenciesCount <= KI_LATENCY_FRAMES_TO_AVERAGE_OVER");
+        CGS_ASSERT_AT(miPastLatenciesCount > 0, "miPastLatenciesCount > 0", CGS_ARTIST_FILE, 670);
+        CGS_ASSERT_AT(miPastLatenciesCount <= KI_LATENCY_FRAMES_TO_AVERAGE_OVER,
+                   "miPastLatenciesCount <= KI_LATENCY_FRAMES_TO_AVERAGE_OVER", CGS_ARTIST_FILE, 671);
 
-        const f32 lfAverageLatency = lfTotalLatency / static_cast<f32>(miPastLatenciesCount);
-        const s32 liLatencyFrames  = static_cast<s32>((lfAverageLatency * lfFramesPerSecond + KF_ROUND_TO_NEAREST));
-        const s32 liMaxLatencyFrames = static_cast<s32>(lfFramesPerSecond);
-        miLatencyFrames = (liLatencyFrames < liMaxLatencyFrames) ? liLatencyFrames : liMaxLatencyFrames;
+        miLatencyFrames = static_cast<s32>(lfLatencyTime / static_cast<f32>(miPastLatenciesCount) * lfFPS + 0.5f);
+        miLatencyFrames = rw::core::stdc::Min(miLatencyFrames, static_cast<s32>(lfFPS));
     }
 
     // Take the received update (when it belongs to this lobby / round): stamp the receive
@@ -1435,16 +1433,16 @@ namespace BrnNetwork
         const BrnWorld::PlayerVehicleControls* lpPlayerVehicleControls = mpNetworkModule->GetPlayerVehicleControls();
         CGS_ASSERT_AT(lpActiveRaceCarInterface,
             "lpActiveRaceCarInterface",
-            __FILE__, 1482 /* ARTIST 0x8258EA74 */);
+            CGS_ARTIST_FILE, 1482 /* ARTIST 0x8258EA74 */);
         CGS_ASSERT_AT(lpPlayerVehicleControls,
             "lpPlayerVehicleControls",
-            __FILE__, 1483 /* ARTIST 0x8258EA98 */);
+            CGS_ARTIST_FILE, 1483 /* ARTIST 0x8258EA98 */);
 
         const CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkModule->GetNetworkManager()->GetPlayerManager();
         CgsNetwork::NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         CGS_ASSERT_AT(lpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID),
             "lpPlayerManager->GetNextLocalPlayerID( &lLocalPlayerID )",
-            __FILE__, 1487 /* ARTIST 0x8258EAEC */);
+            CGS_ARTIST_FILE, 1487 /* ARTIST 0x8258EAEC */);
 
         const EActiveRaceCarIndex leActiveRaceCarIndex = mpNetworkModule->GetActiveRaceCarIndex(lLocalPlayerID);
         if (leActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID
@@ -1457,7 +1455,7 @@ namespace BrnNetwork
             lpActiveRaceCarInterface->GetRaceCarState(leActiveRaceCarIndex);
         CGS_ASSERT_AT(lpRaceCarState != 0,
             "lpRaceCarState != NULL",
-            __FILE__, 1503 /* ARTIST 0x8258EB58 */);
+            CGS_ARTIST_FILE, 1503 /* ARTIST 0x8258EB58 */);
 
         // Latched with a bitwise or (ARTIST 0x8258EB70 / 0x8258EB7C: `or`, no branch).
         mbHasResetCarTransformSinceLastUpdateSent |= lpRaceCarState->mbResetCarTransform;
@@ -1471,21 +1469,21 @@ namespace BrnNetwork
         const CgsNetwork::PlayerMenuData* lpLocalPlayerMenuData = GetPlayerManager()->GetMenuDataByID(lLocalPlayerID);
         CGS_ASSERT_AT(lpLocalPlayerMenuData,
             "lpLocalPlayerMenuData",
-            __FILE__, 1516 /* ARTIST 0x8258EBC0 */);
+            CGS_ARTIST_FILE, 1516 /* ARTIST 0x8258EBC0 */);
         CGS_ASSERT_AT(!mUpdateMessageSend.IsMessageValid(),
             "!mUpdateMessageSend.IsMessageValid()",
-            __FILE__, 1518 /* ARTIST 0x8258EBEC */);
+            CGS_ARTIST_FILE, 1518 /* ARTIST 0x8258EBEC */);
 
         const u16 lu16CurrentFrame = mpTimeManager->GetU16FrameCount();
         CGS_ASSERT_AT(lu16CurrentFrame != CgsNetwork::KU16_INVALID_FRAME,
             "lu16CurrentFrame != KU16_INVALID_FRAME",
-            __FILE__, 1522 /* ARTIST 0x8258EC38 */);
+            CGS_ARTIST_FILE, 1522 /* ARTIST 0x8258EC38 */);
         CGS_ASSERT_AT(mpNetworkModule,
             "mpNetworkModule",
-            __FILE__, 1524 /* ARTIST 0x8258EC60 */);
+            CGS_ARTIST_FILE, 1524 /* ARTIST 0x8258EC60 */);
         CGS_ASSERT_AT(mpNetworkModule->GetGameStateToNetworkInterface(),
             "mpNetworkModule->GetGameStateToNetworkInterface()",
-            __FILE__, 1525 /* ARTIST 0x8258EC8C */);
+            CGS_ARTIST_FILE, 1525 /* ARTIST 0x8258EC8C */);
 
         UpdateData lUpdateData;
         lUpdateData.mu16SentFrame              = lu16CurrentFrame;
@@ -1527,12 +1525,12 @@ namespace BrnNetwork
     {
         BrnPhysics::Vehicle::BrnNetworkDriverControls lNetworkDriverControls;
 
-        CGS_ASSERT(GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
+        CGS_ASSERT_AT(GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
                    || GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ,
-                   "GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ");
-        CGS_ASSERT(GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
+                   "GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ", CGS_ARTIST_FILE, 1132);
+        CGS_ASSERT_AT(GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
                    || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ,
-                   "GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ");
+                   "GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ", CGS_ARTIST_FILE, 1134);
 
         const EActiveRaceCarIndex leActiveRaceCarIndex = mpNetworkModule->GetActiveRaceCarIndex(GetPlayerID());
         if (leActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
@@ -1544,7 +1542,7 @@ namespace BrnNetwork
 
         BrnPhysics::Vehicle::VehicleDriverInputInterface* lpVehicleDriverInputInterface =
             mpNetworkModule->GetVehicleDriverInputInterface();
-        CGS_ASSERT(lpVehicleDriverInputInterface, "lpVehicleDriverInputInterface");
+        CGS_ASSERT_AT(lpVehicleDriverInputInterface, "lpVehicleDriverInputInterface", CGS_ARTIST_FILE, 1147);
 
         const UpdateData* lpUpdateData = lpUpdateMessage->GetUpdateData();
         lNetworkDriverControls.Clear();
@@ -1552,11 +1550,11 @@ namespace BrnNetwork
         EActiveRaceCarIndex leCrasherRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
         if (lpUpdateData->mbReceivingPlayerCrashedUs)
         {
-            CGS_ASSERT(GetPlayerManager(), "mpPlayerManager");
+            CGS_ASSERT_AT(GetPlayerManager(), "mpPlayerManager", CGS_ARTIST_FILE, 1163);
             CgsNetwork::NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
             if (GetPlayerManager()->GetNextLocalPlayerID(&lLocalPlayerID))
             {
-                CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+                CGS_ASSERT_AT(mpNetworkModule, "mpNetworkModule", CGS_ARTIST_FILE, 1168);
                 leCrasherRaceCarIndex = mpNetworkModule->GetActiveRaceCarIndex(lLocalPlayerID);
             }
         }
@@ -1604,13 +1602,13 @@ namespace BrnNetwork
         lNetworkDriverControls.mbIsInvulnerableToWorld    = false;
 
         PlayerMenuData* lpMenuData = static_cast<PlayerMenuData*>(GetPlayerManager()->GetMenuDataByID(GetPlayerID()));
-        CGS_ASSERT(lpMenuData, "lpMenuData");
+        CGS_ASSERT_AT(lpMenuData, "lpMenuData", CGS_ARTIST_FILE, 1216);
         lpMenuData->meCameraStatus = lpUpdateData->meCameraStatus;
 
-        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
+        CGS_ASSERT_AT(mpNetworkModule, "mpNetworkModule", CGS_ARTIST_FILE, 1219);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()", CGS_ARTIST_FILE, 1220);
         CgsNetwork::VoIPManager* lpVoipManager = mpNetworkModule->GetNetworkManager()->GetVoIPManager();
-        CGS_ASSERT(lpVoipManager, "lpVoipManager");
+        CGS_ASSERT_AT(lpVoipManager, "lpVoipManager", CGS_ARTIST_FILE, 1222);
         lpVoipManager->HandleReceivedHeadsetStatus(
             GetPlayerID(), static_cast<CgsNetwork::ENetworkHeadsetPlayerStatus>(lpUpdateData->meHeadsetStatus));
 
@@ -1629,8 +1627,8 @@ namespace BrnNetwork
             }
         }
 
-        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue(), "mpNetworkModule->GetNetworkEventQueue()");
+        CGS_ASSERT_AT(mpNetworkModule, "mpNetworkModule", CGS_ARTIST_FILE, 1236);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkEventQueue(), "mpNetworkModule->GetNetworkEventQueue()", CGS_ARTIST_FILE, 1237);
         BrnNetworkModuleIO::NetworkOutPlayerCarSelectStatus lCarSelectStatusEvent;
         lCarSelectStatusEvent.meActiveRaceCarIndex = leActiveRaceCarIndex;
         lCarSelectStatusEvent.mbInCarSelect        = lpUpdateData->mbIsInCarSelect;

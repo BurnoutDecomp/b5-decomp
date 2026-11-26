@@ -56,7 +56,7 @@ namespace BrnNetwork
         for (s32 liIndex = 0; liIndex < KI_NUM_UPDATE_FUNCTIONS; ++liIndex)
             CGS_ASSERT_AT(maUpdateFunctions[liIndex] != 0,
                 "No update function supplied for this sub state",
-                __FILE__, 113 /* ARTIST 0x8255E7A0 */);
+                CGS_ARTIST_FILE, 113 /* ARTIST 0x8255E7A0 */);
     }
 
     // ---------------------------------------------------------------------------------
@@ -121,7 +121,7 @@ namespace BrnNetwork
         miNumPlayersAssigned     = 0;
         mbReceivedFinalSelection = false;
         mpNetworkManager         = lpNetworkManager;
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT_AT(mpNetworkManager != 0, "mpNetworkManager", CGS_ARTIST_FILE, 71);
 
         mu8ActionIndex        = 0;
         mpfCompletionCallback = 0;
@@ -591,10 +591,10 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(mpNetworkManager != 0,
             "mpNetworkManager",
-            __FILE__, 864 /* ARTIST 0x825571B0 */);
+            CGS_ARTIST_FILE, 864 /* ARTIST 0x825571B0 */);
         CGS_ASSERT_AT(mpNetworkManager->GetPlayerManager() != 0,
             "mpNetworkManager->GetPlayerManager()",
-            __FILE__, 865 /* ARTIST 0x825571D8 */);
+            CGS_ARTIST_FILE, 865 /* ARTIST 0x825571D8 */);
 
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
         const NetworkPlayerID lLocalPlayerID = lpPlayerManager->GetLocalPlayerID();
@@ -616,7 +616,7 @@ namespace BrnNetwork
                 TeamSelectionData* lpTeamSelectionData = GetTeamSelectionDataEntry(lPlayerID);
                 CGS_ASSERT_AT(lpTeamSelectionData != 0,
                     "lpTeamSelectionData",
-                    __FILE__, 877 /* ARTIST 0x82557290 */);
+                    CGS_ARTIST_FILE, 877 /* ARTIST 0x82557290 */);
 
                 lpTeamSelectionData->mMessageSend.PrepareForSend(
                     lu16Frame, lpaPlayerTeamInfo, miNumPlayersAssigned,

@@ -202,7 +202,21 @@ inline HeapResourceAllocator* GetDebugAllocator()
 // FLAG: the macro's own name is not recovered; the expanded body is the shipped one, except that
 // [PC] the print is additionally gated on the memory log category, which the PC default filter
 // (CgsLog.cpp) leaves off: once the network module runs, dozens of these lines fire per frame.
-#define BRN_RESOURCE_MEMORY_CHECK(luMemory)                                                                    \
+//
+// BRN_RESOURCE_MEMORY_CHECK_AT records the expansion site's location the way CGS_ASSERT_AT does: the
+// log line and the assert both carry the site's __LINE__ and __FILE__ (ARTIST StateManager::Update
+// 0x825769D4 streams `li r4,0x1DF` and fires with `li r5,0x1DF`, both line 479, with the same file
+// string), so matching builds (CGS_MATCH_ASSERT_LOCATIONS) pass ARTIST's file and line; normal builds
+// keep __FILE__ / __LINE__ through BRN_RESOURCE_MEMORY_CHECK.
+#if defined(CGS_MATCH_ASSERT_LOCATIONS) && CGS_MATCH_ASSERT_LOCATIONS
+#define BRN_RESOURCE_MEMORY_CHECK_FILE(artistFile) artistFile
+#define BRN_RESOURCE_MEMORY_CHECK_LINE(artistLine) artistLine
+#else
+#define BRN_RESOURCE_MEMORY_CHECK_FILE(artistFile) __FILE__
+#define BRN_RESOURCE_MEMORY_CHECK_LINE(artistLine) __LINE__
+#endif
+#define BRN_RESOURCE_MEMORY_CHECK(luMemory) BRN_RESOURCE_MEMORY_CHECK_AT(luMemory, __FILE__, __LINE__)
+#define BRN_RESOURCE_MEMORY_CHECK_AT(luMemory, artistFile, artistLine)                                         \
     /* D12: a block, not a do/while(0) loop: ARTIST 0x82597960 calls operator<<(s32/u32) here */               \
     {                                                                                                          \
         const u32 luMemoryNow = BrnResource::GetAvailableMemory();                                             \
@@ -211,12 +225,14 @@ inline HeapResourceAllocator* GetDebugAllocator()
             if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0 &&            \
                 (CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GSMEMORY) != 0)            \
             {                                                                                                  \
-                *CgsDev::Log::gpDebugPrint << "[" << static_cast<s32>(__LINE__) << ":" << __FILE__             \
+                *CgsDev::Log::gpDebugPrint << "[" << static_cast<s32>(BRN_RESOURCE_MEMORY_CHECK_LINE(artistLine)) \
+                                           << ":" << BRN_RESOURCE_MEMORY_CHECK_FILE(artistFile)                \
                                            << "] Available memory changed from " << (luMemory)                 \
                                            << " to " << luMemoryNow << "\n";                                   \
             }                                                                                                  \
             (luMemory) = luMemoryNow;                                                                          \
-            CGS_ASSERT(!BrnResource::Allocators::mbAssertOnMemoryChange, "Memory check failed");               \
+            CGS_ASSERT_AT(!BrnResource::Allocators::mbAssertOnMemoryChange, "Memory check failed",             \
+                          artistFile, artistLine);                                                             \
         }                                                                                                      \
     }
 

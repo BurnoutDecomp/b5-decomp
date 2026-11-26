@@ -7,7 +7,7 @@
 // the per-offset map). Release shares Prepare's body; JoinGameComplete, GetGameID and
 // SetPreparingForInvite are header inlines; ProcessGameStateActions has no body of its own.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkInviteManager.cpp"
 #include "GameSource/Network/Managers/BrnNetworkInviteManager.h"
 
 #include "GameSource/Network/BrnNetworkModule.h"   // BrnNetworkModule::GetNetworkManager / GetGameEventQueue / GetNetworkEventQueue
@@ -131,10 +131,10 @@ namespace BrnNetwork
             // fall through
         case E_INVITE_STATE_VERIFYING_GAME_ID:
         {
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
+            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()", CGS_ARTIST_FILE, 171);
             BrnServerInterface* lpServerInterface = mpNetworkModule->GetNetworkManager()->GetServerInterface();
-            CGS_ASSERT(lpServerInterface, "lpServerInterface");
-            CGS_ASSERT(lpServerInterface->GetGameComponent(), "lpServerInterface->GetGameComponent()");
+            CGS_ASSERT_AT(lpServerInterface, "lpServerInterface", CGS_ARTIST_FILE, 173);
+            CGS_ASSERT_AT(lpServerInterface->GetGameComponent(), "lpServerInterface->GetGameComponent()", CGS_ARTIST_FILE, 174);
 
             s32 liCurrentGameID = -1;
             if (lpServerInterface->GetGameComponent()->IsLocalPlayerInGame())
@@ -157,10 +157,10 @@ namespace BrnNetwork
             // fall through
         case E_INVITE_STATE_START_JOIN_GAME_SESSION:
             meInviteState = E_INVITE_STATE_START_JOIN_GAME_SESSION;
-            CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetStateManager(),
-                       "mpNetworkModule->GetNetworkManager()->GetStateManager()");
+            CGS_ASSERT_AT(mpNetworkModule, "mpNetworkModule", CGS_ARTIST_FILE, 202);
+            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()", CGS_ARTIST_FILE, 203);
+            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetStateManager(),
+                       "mpNetworkModule->GetNetworkManager()->GetStateManager()", CGS_ARTIST_FILE, 204);
             if (mpNetworkModule->GetNetworkManager()->GetStateManager()->GetState()
                 == StateManager::E_STATE_WAIT_MATCHMAKING)
             {
@@ -171,15 +171,9 @@ namespace BrnNetwork
             break;
 
         default:
-        {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Unknown state in NetworkInviteManager: " << static_cast<s32>(meInviteState) << "\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
+            CGS_FAIL_STREAM_AT("Unknown state in NetworkInviteManager: " << static_cast<s32>(meInviteState) << "\n",
+                CGS_ARTIST_FILE, 226);
             break;
-        }
         }
 
         UpdateGettingGameID();
@@ -190,13 +184,13 @@ namespace BrnNetwork
     void NetworkInviteManager::DownloadPlayersGameIDFromServer(const PlayerName* lpPlayerName)
     {
         CGS_ASSERT_AT(meGetGameIDState == E_GET_ID_STATE_IDLE,
-            "meGetGameIDState == E_GET_ID_STATE_IDLE", __FILE__, 423 /* ARTIST 0x82548AD8 */);
+            "meGetGameIDState == E_GET_ID_STATE_IDLE", CGS_ARTIST_FILE, 423 /* ARTIST 0x82548AD8 */);
 
         CGS_ASSERT_AT(lpPlayerName != 0,
-            "lpPlayerName", __FILE__, 425 /* ARTIST 0x82548AFC */);
+            "lpPlayerName", CGS_ARTIST_FILE, 425 /* ARTIST 0x82548AFC */);
         // X360 checks the first name byte is non-zero (the inlined PlayerName::IsEmpty()).
         CGS_ASSERT_AT(lpPlayerName->macName[0] != '\0',
-            "!lpPlayerName->IsEmpty()", __FILE__, 426 /* ARTIST 0x82548B24 */);
+            "!lpPlayerName->IsEmpty()", CGS_ARTIST_FILE, 426 /* ARTIST 0x82548B24 */);
 
 
         std::memcpy(&mPlayerNameToGetGameID, lpPlayerName, sizeof(PlayerName)); // memcpy(a1 + 416, a2, 16)
@@ -281,71 +275,54 @@ namespace BrnNetwork
     //              and FALL THROUGH into the WAITING_FOR_PLAYER_INFO body below.
     //   WAITING_FOR_PLAYER_INFO (1): (re-)latch state 1, then once the server interface reports idle
     //              fall to IDLE (2).
-    //   IDLE (2): nothing to do (X360 early-out at LABEL_3).
+    //   IDLE (2): nothing to do. A switch with the fall-through: ARTIST 0x82548928 dispatches
+    //   with cmplwi 1 / blt / beq and reloads the network manager at every use.
     void NetworkInviteManager::UpdateGettingGameID()
     {
-        // X360: `if (v2) { if (v2 != 1) return; goto LABEL_12; }` -- any state other than 0/1 (i.e.
-        // IDLE) returns immediately; state 1 jumps straight to the LABEL_12 body (skipping the first
-        // status gate + the player-info query).
-        if (meGetGameIDState != E_GET_ID_STATE_START &&
-            meGetGameIDState != E_GET_ID_STATE_WAITING_FOR_PLAYER_INFO)
+        switch (meGetGameIDState)
         {
-            return;
-        }
-
-        bool lbReachedLabel12 = (meGetGameIDState == E_GET_ID_STATE_WAITING_FOR_PLAYER_INFO);
-
-        if (meGetGameIDState == E_GET_ID_STATE_START)
-        {
-            CGS_ASSERT_AT(mpNetworkModule != 0,
+        case E_GET_ID_STATE_START:
+            CGS_ASSERT_AT(mpNetworkModule,
                 "mpNetworkModule",
-                __FILE__, 250 /* ARTIST 0x8254895C */);
-            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
+                CGS_ARTIST_FILE, 250 /* ARTIST 0x8254895C */);
+            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
                 "mpNetworkModule->GetNetworkManager()",
-                __FILE__, 251 /* ARTIST 0x82548984 */);
-            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0,
+                CGS_ARTIST_FILE, 251 /* ARTIST 0x82548984 */);
+            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetServerInterface(),
                 "mpNetworkModule->GetNetworkManager()->GetServerInterface()",
-                __FILE__, 252 /* ARTIST 0x825489AC */);
+                CGS_ARTIST_FILE, 252 /* ARTIST 0x825489AC */);
 
-            BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
-            if (lpNetworkManager->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO)
+            if (mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO)
+                != BrnServerInterface::E_STATUS_IDLE)
+            {
+                break;
+            }
+            // BrnNetwork::PlayerName and CgsNetwork::PlayerName share the same 16-byte char[16]
+            // layout (BrnNetworkSharedIO.h mirrors the committed CgsNetwork::PlayerName); the
+            // X360 passes the raw this+0x1A0 pointer to the Cgs query.
+            mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetPlayerInfoComponent()->GetPlayerInfoByName(
+                reinterpret_cast<const CgsNetwork::PlayerName*>(&mPlayerNameToGetGameID),
+                &mPlayerInfoData);
+            // fall through
+        case E_GET_ID_STATE_WAITING_FOR_PLAYER_INFO:
+            meGetGameIDState = E_GET_ID_STATE_WAITING_FOR_PLAYER_INFO;
+
+            CGS_ASSERT_AT(mpNetworkModule,
+                "mpNetworkModule",
+                CGS_ARTIST_FILE, 268 /* ARTIST 0x82548A0C */);
+            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
+                "mpNetworkModule->GetNetworkManager()",
+                CGS_ARTIST_FILE, 269 /* ARTIST 0x82548A34 */);
+            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetServerInterface(),
+                "mpNetworkModule->GetNetworkManager()->GetServerInterface()",
+                CGS_ARTIST_FILE, 270 /* ARTIST 0x82548A5C */);
+
+            if (mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO)
                 == BrnServerInterface::E_STATUS_IDLE)
             {
-                // Server interface is idle: issue the by-name player-info query into mPlayerInfoData,
-                // then fall into the LABEL_12 body.
-                BrnNetworkManager* lpQueryManager = mpNetworkModule->GetNetworkManager();
-                // BrnNetwork::PlayerName and CgsNetwork::PlayerName share the same 16-byte char[16]
-                // layout (BrnNetworkSharedIO.h mirrors the committed CgsNetwork::PlayerName); the
-                // X360 passes the raw this+0x1A0 pointer to the Cgs query.
-                lpQueryManager->GetServerInterface()->GetPlayerInfoComponent()->GetPlayerInfoByName(
-                    reinterpret_cast<const CgsNetwork::PlayerName*>(&mPlayerNameToGetGameID),
-                    &mPlayerInfoData);
-                lbReachedLabel12 = true;
+                meGetGameIDState = E_GET_ID_STATE_IDLE;
             }
-        }
-
-        if (lbReachedLabel12)
-        {
-            // LABEL_12: latch WAITING_FOR_PLAYER_INFO, then fall to IDLE once the server interface
-            // reports idle.
-            meGetGameIDState = E_GET_ID_STATE_WAITING_FOR_PLAYER_INFO; // *(v1 + 432) = 1
-
-            CGS_ASSERT_AT(mpNetworkModule != 0,
-                "mpNetworkModule",
-                __FILE__, 268 /* ARTIST 0x82548A0C */);
-            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
-                "mpNetworkModule->GetNetworkManager()",
-                __FILE__, 269 /* ARTIST 0x82548A34 */);
-            CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0,
-                "mpNetworkModule->GetNetworkManager()->GetServerInterface()",
-                __FILE__, 270 /* ARTIST 0x82548A5C */);
-
-            BrnNetworkManager* lpWaitManager = mpNetworkModule->GetNetworkManager();
-            if (lpWaitManager->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO)
-                == BrnServerInterface::E_STATUS_IDLE)
-            {
-                meGetGameIDState = E_GET_ID_STATE_IDLE;  // *(v1 + 432) = 2
-            }
+            break;
         }
     }
 }

@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/Players/CgsHostMigrationManager.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsHostMigrationManager.cpp"
 // ===================================================================================
 // CgsNetwork::HostMigrationManager -- peer-to-peer host migration.
 //   b5-decomp/src/GameShared/GameClasses/Network/Players/CgsHostMigrationManager.cpp
@@ -153,7 +153,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(mpPlayerManager != 0,
             "mpPlayerManager",
-            __FILE__, 225 /* ARTIST 0x828998B0 */);
+            CGS_ARTIST_FILE, 225 /* ARTIST 0x828998B0 */);
 
         UnregisterMessages();   // ARTIST 0x828998BC
 
@@ -215,7 +215,7 @@ namespace CgsNetwork
         const NetworkPlayerID liHostID = gQuickSortHostPlayerID;
         CGS_ASSERT_AT(gQuickSortHostPlayerID >= 0,
             "gQuickSortHostPlayerID >= 0",
-            __FILE__, 1009 /* ARTIST 0x82871D2C */);
+            CGS_ARTIST_FILE, 1009 /* ARTIST 0x82871D2C */);
 
         const NetworkPlayerID liA = *static_cast<const NetworkPlayerID*>(lpData1);
         const NetworkPlayerID liB = *static_cast<const NetworkPlayerID*>(lpData2);
@@ -300,7 +300,7 @@ namespace CgsNetwork
         // DWARF CgsHostMigrationManager.cpp:741 liArrayIndex, :747 lLocalPlayerID.
         s32 liArrayIndex;
 
-        CGS_ASSERT_AT(liPlayerID != KI_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID", __FILE__, 743);
+        CGS_ASSERT_AT(liPlayerID != KI_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 743);
 
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "CgsNetwork::HostMigrationManager::AddPlayer"
                                    << ": id " << static_cast<s32>(liPlayerID) << "\n";
@@ -319,7 +319,7 @@ namespace CgsNetwork
                 break;
             }
         }
-        CGS_ASSERT_AT(liArrayIndex < KI_MAX_PLAYERS, "liArrayIndex < KI_MAX_PLAYERS", __FILE__, 764);
+        CGS_ASSERT_AT(liArrayIndex < KI_MAX_PLAYERS, "liArrayIndex < KI_MAX_PLAYERS", CGS_ARTIST_FILE, 764);
         maHostMigrationPlayerIDs[liArrayIndex] = liPlayerID;
     }
 
@@ -394,7 +394,7 @@ namespace CgsNetwork
                 RemovePlayer(maHostMigrationPlayerIDs[liArrayIndex]);
                 CGS_ASSERT_AT(maHostMigrationPlayerIDs[liArrayIndex] == KI_INVALID_PLAYER_ID,
                     "maHostMigrationPlayerIDs[liArrayIndex] == K_INVALID_PLAYER_ID",
-                        __FILE__, 849 /* ARTIST 0x8288F8AC */);
+                        CGS_ARTIST_FILE, 849 /* ARTIST 0x8288F8AC */);
 
             }
         }
@@ -470,7 +470,7 @@ namespace CgsNetwork
         {
             CGS_ASSERT_AT(maMessageData[liIndex].mOwnerPlayer != liPlayerID,
                 "maMessageData[liIndex].mOwnerPlayer != lPlayerID",
-                __FILE__, 879 /* ARTIST 0x828836AC */);
+                CGS_ARTIST_FILE, 879 /* ARTIST 0x828836AC */);
         }
 
         // DWARF CgsHostMigrationManager.cpp:869 liFreeEntry: a search loop, then the bound asserted
@@ -484,7 +484,7 @@ namespace CgsNetwork
             }
         }
         CGS_ASSERT_AT(liFreeEntry < KI_MAX_NETWORK_PLAYERS, "liFreeEntry<KI_MAX_NETWORK_PLAYERS",
-                      __FILE__, 892 /* ARTIST 0x8288370C */);
+                      CGS_ARTIST_FILE, 892 /* ARTIST 0x8288370C */);
 
         HostMigrationNetworkPlayerData& lData = maMessageData[liFreeEntry];
         lData.mOwnerPlayer = liPlayerID;
@@ -496,7 +496,7 @@ namespace CgsNetwork
         NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
         CGS_ASSERT_AT(lpNetPlayer != 0,
             "lpNetPlayer",
-            __FILE__, 901 /* ARTIST 0x82883824 */);
+            CGS_ARTIST_FILE, 901 /* ARTIST 0x82883824 */);
 
         // The lengths are the message sizes (console 0x20 / 0x44). Both messages are
         // unreliable, so the length is only range-checked; it is the byte count the reliable
@@ -516,7 +516,7 @@ namespace CgsNetwork
         NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
         CGS_ASSERT_AT(lpNetPlayer != 0,
             "lpNetPlayer",
-            __FILE__, 937 /* ARTIST 0x82883908 */);
+            CGS_ARTIST_FILE, 937 /* ARTIST 0x82883908 */);
 
         // DWARF CgsHostMigrationManager.cpp:934 liEntry: the work is done inside the search loop
         // and the bound asserted after it (ARTIST 0x82883988 re-tests liEntry after the store; no
@@ -536,17 +536,17 @@ namespace CgsNetwork
             }
         }
         CGS_ASSERT_AT(liEntry < KI_MAX_NETWORK_PLAYERS, "liEntry<KI_MAX_NETWORK_PLAYERS",
-                      __FILE__, 957 /* ARTIST 0x828839A8 */);
+                      CGS_ARTIST_FILE, 957 /* ARTIST 0x828839A8 */);
     }
 
     // -------------------------------------------------------------------------------
     void HostMigrationManager::SendHostKeepAliveMessage(NetworkPlayer* lpNetPlayer, u16 lu16CurrentFrame)
     {
         CGS_ASSERT_AT(lpNetPlayer != 0,
-            "lpNetPlayer", __FILE__, 430 /* ARTIST 0x828835A8 */);
+            "lpNetPlayer", CGS_ARTIST_FILE, 430 /* ARTIST 0x828835A8 */);
         CGS_ASSERT_AT(mHostPlayerID != KI_INVALID_PLAYER_ID,
             "mHostPlayerID != K_INVALID_PLAYER_ID",
-                __FILE__, 432 /* ARTIST 0x828835D0 */);
+                CGS_ARTIST_FILE, 432 /* ARTIST 0x828835D0 */);
 
 
         Message* lpMessage = lpNetPlayer->GetRegisteredSendMessage(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE);
@@ -561,14 +561,14 @@ namespace CgsNetwork
         {
             CGS_ASSERT_AT(!UInt16IsLargerWrapped(mu16LastHostKeepAliveSendTime, lu16CurrentFrame),
                 "!UInt16IsLargerWrapped( mu16LastHostKeepAliveSendTime, lu16CurrentFrame )",
-                __FILE__, 1261 /* ARTIST 0x82895144 */);
+                CGS_ARTIST_FILE, 1261 /* ARTIST 0x82895144 */);
             if (UInt16IsLargerWrapped(mu16LastHostKeepAliveSendTime, lu16CurrentFrame))
                 return;
         }
 
         CGS_ASSERT_AT(lu16CurrentFrame != KU16_INVALID_FRAME,
             "lu16CurrentFrame != KU16_INVALID_FRAME",
-            __FILE__, 1278 /* ARTIST 0x82895184 */);
+            CGS_ARTIST_FILE, 1278 /* ARTIST 0x82895184 */);
         mu16LastHostKeepAliveSendTime = lu16CurrentFrame;
 
         NetworkPlayerID liPlayerID = KI_INVALID_PLAYER_ID;
@@ -727,7 +727,7 @@ namespace CgsNetwork
                 {
                     CGS_ASSERT_AT(lpaReceivedClientsIDs[lnCheck2] == KI_INVALID_PLAYER_ID || lpaReceivedClientsIDs[lnCheck1] != lpaReceivedClientsIDs[lnCheck2],
                         "laBestReceivedClientsIDs[lnCheck2] == K_INVALID_PLAYER_ID || " "laBestReceivedClientsIDs[lnCheck1] != laBestReceivedClientsIDs[lnCheck2]",
-                        __FILE__, 493 /* ARTIST 0x82894B5C */);
+                        CGS_ARTIST_FILE, 493 /* ARTIST 0x82894B5C */);
                 }
             }
 
@@ -789,7 +789,7 @@ namespace CgsNetwork
         {
             CGS_ASSERT_AT(liIndex >= 0,
                 "i >= 0",
-                __FILE__, 562 /* ARTIST 0x82894DA4 */);
+                CGS_ARTIST_FILE, 562 /* ARTIST 0x82894DA4 */);
         }
 
         // Broadcast the new-host decision to every connected player. The received-clients list
@@ -816,7 +816,7 @@ namespace CgsNetwork
                 {
                     CGS_ASSERT_AT(laReceivedClientsIDs[liCheck2] == KI_INVALID_PLAYER_ID || laReceivedClientsIDs[liCheck1] != laReceivedClientsIDs[liCheck2],
                         "laReceivedClientsIDs[lnCheck2] == K_INVALID_PLAYER_ID || " "laReceivedClientsIDs[lnCheck1] != laReceivedClientsIDs[lnCheck2]",
-                        __FILE__, 605 /* ARTIST 0x82894ED4 */);
+                        CGS_ARTIST_FILE, 605 /* ARTIST 0x82894ED4 */);
                 }
             }
 
@@ -854,10 +854,10 @@ namespace CgsNetwork
 
         CGS_ASSERT_AT(liBestKeepAliveHostID != KI_INVALID_PLAYER_ID,
             "lBestKeepAliveHostID != K_INVALID_PLAYER_ID",
-            __FILE__, 669 /* ARTIST 0x82899A2C */);
+            CGS_ARTIST_FILE, 669 /* ARTIST 0x82899A2C */);
         CGS_ASSERT_AT(liBestNewHostID != KI_INVALID_PLAYER_ID,
             "lBestNewHostID != K_INVALID_PLAYER_ID",
-            __FILE__, 670 /* ARTIST 0x82899A54 */);
+            CGS_ARTIST_FILE, 670 /* ARTIST 0x82899A54 */);
 
         SendNewHostMessageIfRequired(lu16CurrentFrame, liBestNewHostID, laBestReceivedClientsIDs);
 

@@ -63,7 +63,7 @@ namespace CgsNetwork
             mfPingTime = lfPingTime;                                 // stfs @ +0x20
             Message::PrepareForSend(KI_E_MESSAGE_TYPE_PING, lu16Frame);
             CGS_ASSERT_AT(!IsReliable(),
-                "!IsReliable()", __FILE__, 88 /* ARTIST 0x82882684 */);              // vtable slot0
+                "!IsReliable()", CGS_ARTIST_FILE, 88 /* ARTIST 0x82882684 */);              // vtable slot0
         }
     }
 
@@ -121,7 +121,7 @@ namespace CgsNetwork
             mfPingTime = lfPingTime;                                 // stfs @ +0x20
             Message::PrepareForSend(KI_E_MESSAGE_TYPE_PING_REPLY, lu16Frame);
             CGS_ASSERT_AT(!IsReliable(),
-                "!IsReliable()", __FILE__, 253 /* ARTIST 0x8288271C */);              // vtable slot0
+                "!IsReliable()", CGS_ARTIST_FILE, 253 /* ARTIST 0x8288271C */);              // vtable slot0
         }
     }
 

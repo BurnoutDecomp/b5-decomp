@@ -1,6 +1,6 @@
 #include "GameSource/Network/Managers/BrnNetworkLiveRevengeRelationship.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLiveRevengeRelationship.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (streamed asserts)
 
@@ -32,11 +32,11 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(lpUniquePlayerID,
             "lpUniquePlayerID",
-            __FILE__, 63 /* ARTIST 0x82547A60 */);
+            CGS_ARTIST_FILE, 63 /* ARTIST 0x82547A60 */);
         // PlayerName::IsEmpty (inline): the first name character is the terminator.
         CGS_ASSERT_AT(lpUniquePlayerID->GetPlayerName()[0] != '\0',
             "!lpUniquePlayerID->GetPlayerName()->IsEmpty()",
-            __FILE__, 67 /* ARTIST 0x82547A88 */);
+            CGS_ARTIST_FILE, 67 /* ARTIST 0x82547A88 */);
 
         Clear();
         mLastTimeChanged.SetLocal(false);
@@ -45,7 +45,7 @@ namespace BrnNetwork
         // UniquePlayerID::IsValid (inline): a non-empty name and a non-zero XUID.
         CGS_ASSERT_AT(lpUniquePlayerID->GetPlayerName()[0] != '\0' && lpUniquePlayerID->mqXuid != 0,
             "lpUniquePlayerID->IsValid()",
-            __FILE__, 74 /* ARTIST 0x82547B4C */);
+            CGS_ARTIST_FILE, 74 /* ARTIST 0x82547B4C */);
 
         mUniqueID = *lpUniquePlayerID;
         return true;
@@ -211,33 +211,24 @@ namespace BrnNetwork
 
     bool LiveRevengeRelationship::Validate() const
     {
-        // UniquePlayerID::IsValid (inline): a non-empty name and a non-zero XUID.
-        if (!(mUniqueID.GetPlayerName()[0] != '\0' && mUniqueID.mqXuid != 0))
+        if (!mUniqueID.IsValid())
         {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "mUniqueID is not valid: " << mUniqueID.GetPlayerName()
-                       << ". If you delete your profile you will stop seeing this.\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
+            CGS_FAIL_STREAM_AT("mUniqueID is not valid: " << mUniqueID.GetPlayerName()
+                               << ". If you delete your profile you will stop seeing this.\n",
+                               CGS_ARTIST_FILE, 480);
             return false;
         }
 
         if (mOverallStats.mPlayerStats.miTakedowns + mOverallStats.mRivalStats.miTakedowns < 0)
         {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "number of takedowns are invalid player: " << mOverallStats.mPlayerStats.miTakedowns
-                       << " rival: " << mOverallStats.mRivalStats.miTakedowns
-                       << ". If you delete your profile you will stop seeing this.\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
+            CGS_FAIL_STREAM_AT("number of takedowns are invalid player: " << mOverallStats.mPlayerStats.miTakedowns
+                               << " rival: " << mOverallStats.mRivalStats.miTakedowns
+                               << ". If you delete your profile you will stop seeing this.\n",
+                               CGS_ARTIST_FILE, 486);
             return false;
         }
 
-        CGS_ASSERT(!mLastTimeChanged.IsZero(), "!mLastTimeChanged.IsZero()");
+        CGS_ASSERT_AT(!mLastTimeChanged.IsZero(), "!mLastTimeChanged.IsZero()", CGS_ARTIST_FILE, 490);
         return true;
     }
 
@@ -258,22 +249,27 @@ namespace BrnNetwork
             lbDetectedWrong = true;
         }
 
-        if (lbDetectedWrong && lbShouldWeAssert)
+        // ARTIST 0x825480D0: the asserting arm, else the warning line on the network log stream
+        // (ServerInterfaceDirtySock::mNetStreamLogChannelOutput, 0x82F335C8; strings 0x8207E5C8..).
+        if (lbDetectedWrong)
         {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "We are detecting " << lpcName << " wrong, pl: " << liLocalPlayerStat
-                       << " pr: " << liRemotePlayerStat << " rl: " << liLocalRivalStat
-                       << " rr: " << liRemoteRivalStat
-                       << ".  Step over, run an external or delete your profile to stop getting this every time you join a game with "
-                       << mUniqueID.GetPlayerName() << ".\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
+            if (lbShouldWeAssert)
+            {
+                CGS_FAIL_STREAM_AT("We are detecting " << lpcName << " wrong, pl: " << liLocalPlayerStat
+                                   << " pr: " << liRemotePlayerStat << " rl: " << liLocalRivalStat
+                                   << " rr: " << liRemoteRivalStat
+                                   << ".  Step over, run an external or delete your profile to stop getting this every time you join a game with "
+                                   << mUniqueID.GetPlayerName() << ".\n",
+                                   CGS_ARTIST_FILE, 533);
+            }
+            else
+            {
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
+                    << "WARNING: We are detecting " << lpcName << " wrong, pl: " << liLocalPlayerStat
+                    << " pr: " << liRemotePlayerStat << " rl: " << liLocalRivalStat
+                    << " rr: " << liRemoteRivalStat << "\n";
+            }
         }
-        // FLAG: the non-asserting branch writes "WARNING: We are detecting <name> wrong, pl: ..
-        // pr: .. rl: .. rr: ..\n" to the network log stream, which has no home in this tree;
-        // the line is dropped.
     }
 
     // Merge the rival's copy (already flipped to this side's point of view) into this one:

@@ -1,5 +1,5 @@
 #include "GameSource/Network/Managers/BrnNetworkSuspensionManager.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkSuspensionManager.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Network/BrnNetworkManager.h"
 
@@ -46,9 +46,9 @@ namespace BrnNetwork
     void SuspensionManager::Resume(Callback lpfCallback, void* lpUserData)
     {
         CGS_ASSERT_AT(lpfCallback,
-            "lCallback", __FILE__, 279 /* ARTIST 0x82544CB8 */);
+            "lCallback", CGS_ARTIST_FILE, 279 /* ARTIST 0x82544CB8 */);
         CGS_ASSERT_AT(meSubState == E_SUBSTATE_COUNT,
-            "meSubState == E_SUBSTATE_COUNT", __FILE__, 280 /* ARTIST 0x82544CE0 */);
+            "meSubState == E_SUBSTATE_COUNT", CGS_ARTIST_FILE, 280 /* ARTIST 0x82544CE0 */);
 
 
         mCallback = lpfCallback;
@@ -61,9 +61,9 @@ namespace BrnNetwork
                                     void* lpUserData)
     {
         // Inlined into its callers (no out-of-line ARTIST copy), e.g. StateManager::SuspendToLeaveGame.
-        CGS_ASSERT_AT(lpfCallback, "lCallback", __FILE__, 242 /* ARTIST 0x8256B350 */);
+        CGS_ASSERT_AT(lpfCallback, "lCallback", CGS_ARTIST_FILE, 242 /* ARTIST 0x8256B350 */);
         CGS_ASSERT_AT(meSubState == E_SUBSTATE_COUNT, "meSubState == E_SUBSTATE_COUNT",
-                      __FILE__, 243 /* ARTIST 0x8256B378 */);
+                      CGS_ARTIST_FILE, 243 /* ARTIST 0x8256B378 */);
         CGS_ASSERT(leSuspensionType >= E_SUSPENSION_TYPE_OFFLINE
                        && leSuspensionType < E_SUSPENSION_TYPE_COUNT,
                    "(leSuspensionType >= E_SUSPENSION_TYPE_OFFLINE) && "
@@ -109,8 +109,8 @@ namespace BrnNetwork
             else if (leStatus == BrnServerInterface::E_STATUS_IDLE)
                 Finished(true);
             else
-                CGS_ASSERT(leStatus == BrnServerInterface::E_STATUS_BUSY,
-                           "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in SuspensionManager::Update");
+                CGS_ASSERT_AT(leStatus == BrnServerInterface::E_STATUS_BUSY,
+                           "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in SuspensionManager::Update", CGS_ARTIST_FILE, 212);
             break;
 
         case E_SUBSTATE_WAIT_TO_RESUME:
@@ -139,8 +139,8 @@ namespace BrnNetwork
             }
             else
             {
-                CGS_ASSERT(leStatus == BrnServerInterface::E_STATUS_BUSY,
-                           "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in SuspensionManager::Update");
+                CGS_ASSERT_AT(leStatus == BrnServerInterface::E_STATUS_BUSY,
+                           "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in SuspensionManager::Update", CGS_ARTIST_FILE, 144);
             }
             break;
 

@@ -209,7 +209,7 @@ namespace BrnNetwork
             mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalNetworkPlayerID);
         CGS_ASSERT_AT(lbHasLocalPlayer,
             "mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID( &lLocalNetworkPlayerID )",
-            __FILE__, 282 /* ARTIST 0x82548D84 */);
+            CGS_ARTIST_FILE, 282 /* ARTIST 0x82548D84 */);
 
         BrnNetwork::PlayerMenuData* lpLocalMenuData = static_cast<BrnNetwork::PlayerMenuData*>(
             mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lLocalNetworkPlayerID));

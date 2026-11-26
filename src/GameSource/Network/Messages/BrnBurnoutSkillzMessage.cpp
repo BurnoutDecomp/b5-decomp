@@ -1,7 +1,8 @@
 #include "types.hpp"
 #include <float.h> // FLT_MAX: the native 0x7F7FFFFF float bound
 #include "GameSource/Network/Messages/BrnBurnoutSkillzMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnBurnoutSkillzMessage.cpp"   // ARTIST 0x82086900
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (streamed assert)
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h" // PackOrUnpackFloat / PackOrUnpackBool
 
@@ -15,7 +16,6 @@
 // plus an initial-data marker (@+0x60). Its immediate base is ReliableMessage; see the
 // header note for the evidence.
 
-// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Messages/BrnBurnoutSkillzMessage.cpp".
 
 namespace BrnNetwork
 {
@@ -47,16 +47,9 @@ namespace BrnNetwork
              leSkillType++)
         {
             f32 lfSkillValue = mSkillzData.GetBurnoutSkill(leSkillType);
-            if (!(lfSkillValue >= KF_MIN_SKILL_VALUE))
-            {
-                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                lStream << "Can't packet value " << lfSkillValue
-                        << " for skill type " << static_cast<s32>(leSkillType) << "\n";
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-                CgsDev::Assert::EndAssert();
-            }
+            CGS_ASSERT_STREAM_AT(lfSkillValue >= KF_MIN_SKILL_VALUE,
+                "Can't packet value " << lfSkillValue << " for skill type " << static_cast<s32>(leSkillType) << "\n",
+                CGS_ARTIST_FILE, 104);
 
             lxResult = CgsNetwork::PackOrUnpackFloat(this, &lfSkillValue, KF_MIN_SKILL_VALUE, KF_MAX_SKILL_VALUE,
                                                      mSkillzData.GetSkillAccuracy(leSkillType)) | lxResult;
@@ -79,10 +72,10 @@ namespace BrnNetwork
                                               bool lbInitialData)
     {
         CGS_ASSERT_AT(lpSkillzData,
-            "lpSkillzData", __FILE__, 146 /* ARTIST 0x8257F6FC */);
+            "lpSkillzData", CGS_ARTIST_FILE, 146 /* ARTIST 0x8257F6FC */);
         CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             "lu16FrameCount != KU16_INVALID_FRAME",
-                __FILE__, 147 /* ARTIST 0x8257F724 */);
+                CGS_ARTIST_FILE, 147 /* ARTIST 0x8257F724 */);
 
 
         // A slot already flagged VALID is being re-armed: clear the flag instead of
@@ -101,9 +94,9 @@ namespace BrnNetwork
                                         bool* lpbInitialData)
     {
         CGS_ASSERT_AT(lpSkillzData,
-            "lpSkillzData", __FILE__, 183 /* ARTIST 0x8257F7B0 */);
+            "lpSkillzData", CGS_ARTIST_FILE, 183 /* ARTIST 0x8257F7B0 */);
         CGS_ASSERT_AT(lpbInitialData,
-            "lpbInitialData", __FILE__, 184 /* ARTIST 0x8257F7D4 */);
+            "lpbInitialData", CGS_ARTIST_FILE, 184 /* ARTIST 0x8257F7D4 */);
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {

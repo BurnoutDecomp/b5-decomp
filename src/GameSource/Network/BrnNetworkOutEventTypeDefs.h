@@ -470,7 +470,7 @@ namespace BrnNetworkModuleIO
     struct NetworkOutFburnChallengeSuccessEvent : public NetworkEvent<68>
     {
         f32                 mafActionScores[2];             // +0x00
-        s32                 miChallengeUpdateFrame;         // +0x08
+        s32                 miFramesSinceNetworkStart;      // +0x08 (name: ARTIST assert text 0x82565398)
         EActiveRaceCarIndex meActiveRaceCarIndex;           // +0x0C
         bool                mabSuccessfulActions[2];        // +0x10
         bool                mabAccumulationThisFrame[2];    // +0x12
@@ -607,7 +607,7 @@ namespace BrnNetworkModuleIO
         CGS_STATIC_ASSERT((offsetof(NetworkOutFburnChallengeSuccessUpdateEvent, miChallengeUpdateFrame) == 0x0C), "tag 67 +0x0C");
         CGS_STATIC_ASSERT((offsetof(NetworkOutFburnChallengeSuccessUpdateEvent, miActionIndex) == 0x10), "tag 67 +0x10");
         CGS_STATIC_ASSERT((sizeof(NetworkOutFburnChallengeSuccessUpdateEvent) == 24), "tag 67 size");
-        CGS_STATIC_ASSERT((offsetof(NetworkOutFburnChallengeSuccessEvent, miChallengeUpdateFrame) == 0x08), "tag 68 +0x08");
+        CGS_STATIC_ASSERT((offsetof(NetworkOutFburnChallengeSuccessEvent, miFramesSinceNetworkStart) == 0x08), "tag 68 +0x08");
         CGS_STATIC_ASSERT((offsetof(NetworkOutFburnChallengeSuccessEvent, meActiveRaceCarIndex) == 0x0C), "tag 68 +0x0C");
         CGS_STATIC_ASSERT((offsetof(NetworkOutFburnChallengeSuccessEvent, mabSuccessfulActions) == 0x10), "tag 68 +0x10");
         CGS_STATIC_ASSERT((offsetof(NetworkOutFburnChallengeSuccessEvent, mabAccumulationThisFrame) == 0x12), "tag 68 +0x12");

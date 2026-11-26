@@ -9,7 +9,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 #include "lobbytagfield.h"                              // DirtySDK TagFieldFind / TagFieldSetNumber
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\X360\\CgsServerInterfaceGamesX360.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (CgsServerInterfaceGamesX360.cpp).
 //   Construct              @ 0x8287F738   (tail-call to base)
 //   OnEvent                @ 0x828997B8   (tail-call to base)
@@ -286,7 +286,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(IsLocalPlayerInGame(),
             "IsLocalPlayerInGame()",
-            __FILE__, 381 /* ARTIST 0x8288C5F8 */);
+            CGS_ARTIST_FILE, 381 /* ARTIST 0x8288C5F8 */);
 
         const ConnApiClientListT* lpClientList =
             ConnApiGetClientList(GetServerInterface()->GetConnAPIRef());
@@ -295,7 +295,7 @@ namespace CgsNetwork
         {
             CGS_FAIL_AT(
                 "We have no clients when trying to update stats",
-                __FILE__, 390 /* ARTIST 0x8288C62C */);
+                CGS_ARTIST_FILE, 390 /* ARTIST 0x8288C62C */);
             ConnApiStop(GetServerInterface()->GetConnAPIRef());
             return;
         }
@@ -367,12 +367,35 @@ namespace CgsNetwork
     // to the base.
     void ServerInterfaceGamesX360::ReceivedGameEvent(LobbyApiMsgT* lpMsg)
     {
-        if (static_cast<u32>(meCurrentAction) > 2u)
-            return ServerInterfaceGames::ReceivedGameEvent(lpMsg);
-
-        if (TagFieldFind(lpMsg->pData, "SESS") != 0)
+        // ARTIST 0x8288C828: a switch on the action, one case per action (the three-compare tree
+        // before the shared, tail-merged body); create / join / quick join each check the
+        // session reply; every other action goes to the base handler.
+        switch (meCurrentAction)
         {
-            EndAction(lpMsg->code);
+        case E_ACTION_CREATE_GAME:
+            if (TagFieldFind(lpMsg->pData, "SESS") != 0)
+            {
+                EndAction(lpMsg->code);
+            }
+            break;
+
+        case E_ACTION_JOIN_GAME:
+            if (TagFieldFind(lpMsg->pData, "SESS") != 0)
+            {
+                EndAction(lpMsg->code);
+            }
+            break;
+
+        case E_ACTION_QUICK_JOIN_GAME:
+            if (TagFieldFind(lpMsg->pData, "SESS") != 0)
+            {
+                EndAction(lpMsg->code);
+            }
+            break;
+
+        default:
+            ServerInterfaceGames::ReceivedGameEvent(lpMsg);
+            break;
         }
     }
 
@@ -382,19 +405,19 @@ namespace CgsNetwork
     {
         CGS_ASSERT_AT(IsLocalPlayerInGame(),
             "Calling GetPlayerXUIDByIndex when not in a game",
-            __FILE__, 574 /* ARTIST 0x8288C8C4 */);
+            CGS_ARTIST_FILE, 574 /* ARTIST 0x8288C8C4 */);
         CGS_ASSERT_AT(lpXUIDOut != 0,
             "No XUID pointer supplied to GetXUIDOfGamerInGame",
-            __FILE__, 575 /* ARTIST 0x8288C8E8 */);
+            CGS_ARTIST_FILE, 575 /* ARTIST 0x8288C8E8 */);
 
-        DirtySock::LobbyApiPlayT* lpRecord = GetLastGameRecord();
+        // No record local: ARTIST 0x8288C8F4 folds the record's offset into the slot address.
         for (s32 i = 0; i < KI_MAX_GAME_PLAYERS; ++i)
         {
-            if (lpRecord->aOpponents[i].iIdent == liPlayerID)
+            if (GetLastGameRecord()->aOpponents[i].iIdent == liPlayerID)
             {
                 // The player's machine address text carries the 8-byte secure XUID.
                 DirtyAddrToHostAddr(lpXUIDOut, 8,
-                                    reinterpret_cast<const DirtyAddrT*>(lpRecord->aOpponents[i].strMachineAddr));
+                                    reinterpret_cast<const DirtyAddrT*>(GetLastGameRecord()->aOpponents[i].strMachineAddr));
                 return true;
             }
         }

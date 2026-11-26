@@ -1,5 +1,5 @@
 #include "GameSource/Network/Managers/BrnNetworkLaunchManager.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLaunchManager.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Network/BrnNetworkManager.h"
 #include "GameSource/Network/Managers/BrnNetworkStateManager.h"
@@ -90,7 +90,7 @@ namespace BrnNetwork
         for (s32 liIndex = 0; liIndex < E_SUBSTATE_COUNT; ++liIndex)
             CGS_ASSERT_AT(maUpdateFunctions[liIndex] != 0,
                 "No update function supplied for this substate",
-                __FILE__, 72 /* ARTIST 0x8257115C */);
+                CGS_ARTIST_FILE, 72 /* ARTIST 0x8257115C */);
 
         mpNetworkManager       = lpNetworkManager;
         meSubState             = E_SUBSTATE_NONE;
@@ -129,7 +129,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(meSubState == E_SUBSTATE_NONE,
             "Already managing pre-launch!",
-            __FILE__, 580 /* ARTIST 0x82544244 */);
+            CGS_ARTIST_FILE, 580 /* ARTIST 0x82544244 */);
 
         meSubState             = E_SUBSTATE_RUNNING;
         miNumPlayersSetPlaying = 0;
@@ -173,7 +173,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT_AT(maUpdateFunctions[meSubState] != 0,
             "No update function supplied for the current substate",
-                __FILE__, 144 /* ARTIST 0x82543ED8 */);
+                CGS_ARTIST_FILE, 144 /* ARTIST 0x82543ED8 */);
 
 
         return (this->*maUpdateFunctions[meSubState])();
@@ -210,7 +210,7 @@ namespace BrnNetwork
 
         CGS_FAIL_AT(
             "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in LaunchManager::ServerInterfaceIdle",
-            __FILE__, 662 /* ARTIST 0x825443BC */);
+            CGS_ARTIST_FILE, 662 /* ARTIST 0x825443BC */);
         return false;
     }
 
@@ -375,7 +375,7 @@ namespace BrnNetwork
             mpNetworkManager->GetServerInterface()->GetGameComponent();
         CGS_ASSERT_AT(lpGames != 0,
             "lpGames",
-            __FILE__, 364 /* ARTIST 0x82566740 */);
+            CGS_ARTIST_FILE, 364 /* ARTIST 0x82566740 */);
 
         DebugLog("[LAUNCH MGR]: ");
         DebugLog("Updating unlock from error\n");
@@ -479,10 +479,10 @@ namespace BrnNetwork
 
             CGS_ASSERT_AT(mpNetworkManager != 0,
                 "mpNetworkManager",
-                __FILE__, 537 /* ARTIST 0x82558C68 */);
+                CGS_ARTIST_FILE, 537 /* ARTIST 0x82558C68 */);
             CGS_ASSERT_AT(mpNetworkManager->GetTimerStatus() != 0,
                 "mpNetworkManager->GetTimerStatus()",
-                __FILE__, 538 /* ARTIST 0x82558C9C */);
+                CGS_ARTIST_FILE, 538 /* ARTIST 0x82558C9C */);
 
             // Start the post-suspend settle window.
             const CgsSystem::Time lWaitDuration(KF_LAUNCH_WAIT_TIME);
@@ -498,10 +498,10 @@ namespace BrnNetwork
     LaunchManager::EStatus LaunchManager::UpdateWaiting()
     {
         CGS_ASSERT_AT(mpNetworkManager != 0,
-            "mpNetworkManager", __FILE__, 484 /* ARTIST 0x825440C4 */);
+            "mpNetworkManager", CGS_ARTIST_FILE, 484 /* ARTIST 0x825440C4 */);
         CGS_ASSERT_AT(mpNetworkManager->GetTimerStatus() != 0,
             "mpNetworkManager->GetTimerStatus()",
-                __FILE__, 485 /* ARTIST 0x825440F8 */);
+                CGS_ARTIST_FILE, 485 /* ARTIST 0x825440F8 */);
 
 
         const CgsSystem::Time lNow =

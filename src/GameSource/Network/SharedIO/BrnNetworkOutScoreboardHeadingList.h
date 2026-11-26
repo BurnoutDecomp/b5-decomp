@@ -35,6 +35,7 @@
 
 #include "types.hpp"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // NetworkEvent<N>
+#include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT_AT (GetHeadingType)
 
 #include <cstddef>   // offsetof (layout pins)
 
@@ -72,8 +73,19 @@ namespace BrnNetworkModuleIO
 
         // @ 0x823A62F8 -- read the heading-list discriminator (meHeadingType @ +4). Asserts the
         // type is not the E_HEADING_COUNT sentinel; the consumer (HandleScoreboardHeadingEvent)
-        // switches on category / index / variation.
-        EHeadingType GetHeadingType() const;
+        // switches on category / index / variation. Defined in the header as DWARF places it
+        // (BrnNetworkOutEventTypeDefs.h:1132; the assert names that header, line 1778). ARTIST
+        // calls its out-of-line copy from HandleScoreboardHeadingEvent (0x82585B5C) and
+        // BrnGameModule::TranslateNetworkEventsToGuiEvents.
+        EHeadingType GetHeadingType() const
+        {
+            CGS_ASSERT_AT(meHeadingType != E_HEADING_COUNT, "meHeadingType != E_HEADING_COUNT",
+                          "..\\..\\..\\GameSource\\Network/BrnNetworkOutEventTypeDefs.h", 1778);
+            return static_cast<EHeadingType>(meHeadingType);
+        }
+
+        // DWARF BrnNetworkOutEventTypeDefs.h:1116 (header inline; no ARTIST copy): heading slot liIndex.
+        const char* GetHeading(s32 liIndex) const { return maHeadings[liIndex]; }
 
         // DWARF BrnNetworkOutEventTypeDefs.h:1124 / :1128 (header inlines). Clear also resets the
         // console-only mb807: ARTIST CopyVariations 0x825626D8 stores +0, +0x806, +0x807, then

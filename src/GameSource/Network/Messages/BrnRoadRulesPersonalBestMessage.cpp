@@ -1,5 +1,5 @@
 #include "types.hpp"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnRoadRulesPersonalBestMessage.cpp"
 #include "GameSource/Network/Messages/BrnRoadRulesPersonalBestMessage.h"
 #include "SharedClasses/StreetData/BrnChallengeData.h"                                    // BrnStreetData::ScoreList::KAI_MIN/MAX_SCORES, E_SCORE_TYPE_COUNT
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -56,7 +56,7 @@ namespace BrnNetwork
         miStreetDataVersion = KI_STREET_DATA_VERSION;
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_ROAD_RULES_PERSONAL_BEST_MESSAGE_TYPE, lu16CurrentFrame);
-        CGS_ASSERT(IsReliable(), "IsReliable()");
+        CGS_ASSERT_AT(IsReliable(), "IsReliable()", CGS_ARTIST_FILE, 95);
     }
 
     // Hand back a pending personal best: the challenge index and a high-score entry holding

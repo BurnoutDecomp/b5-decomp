@@ -8,7 +8,7 @@
 #include "lobbyapi.h"       // LobbyApiStatus / LobbyApiInfo / LobbyApiRequestCB / LobbyApiSetCallback / ...
 #include "lobbytagfield.h"  // TagFieldFind / TagFieldGetEpoch / TagFieldSetString / TagFieldSetNumber
 #include "netconn.h"       // NetConnStatus
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceConnection.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::ServerInterfaceConnection::GetLoginStatus               @ 0x82876F18
 //   CgsNetwork::ServerInterfaceConnection::~ServerInterfaceConnection   @ 0x827DE118
@@ -257,7 +257,7 @@ void ServerInterfaceConnection::ConnectToServer(const char* lpcServerIP, s32 liS
     StartActionCore(KAPC_CONNECTION_ACTION_NAMES[E_ACTION_CONNECTTOSERVER]);
     mbConnecting = true;
 
-    CGS_ASSERT(mpServerInterface->GetLobbyLoginRef() != 0, "mpServerInterface->GetLobbyLoginRef() != NULL");
+    CGS_ASSERT_AT(mpServerInterface->GetLobbyLoginRef() != 0, "mpServerInterface->GetLobbyLoginRef() != NULL", CGS_ARTIST_FILE, 486);
     LobbyLoginReset(reinterpret_cast<LobbyLoginRefT*>(mpServerInterface->GetLobbyLoginRef()));
     LobbyLoginSetContextCB(reinterpret_cast<LobbyLoginRefT*>(mpServerInterface->GetLobbyLoginRef()),
                            LOBBYLOGIN_CONTEXT_CONNECT, 0, 0);
@@ -275,8 +275,8 @@ void ServerInterfaceConnection::ConnectToServer(const char* lpcServerIP, s32 liS
 
 void ServerInterfaceConnection::LogInToServer(const char* lpcUserName, const char* lpcPassword, void* /*lpUnused*/)
 {
-    CGS_ASSERT(mpServerInterface->GetLobbyLoginRef() != 0, "mpServerInterface->GetLobbyLoginRef() != NULL");
-    CGS_ASSERT(lpcUserName, "lpcUsername");
+    CGS_ASSERT_AT(mpServerInterface->GetLobbyLoginRef() != 0, "mpServerInterface->GetLobbyLoginRef() != NULL", CGS_ARTIST_FILE, 563);
+    CGS_ASSERT_AT(lpcUserName, "lpcUsername", CGS_ARTIST_FILE, 564);
 
     mbConnecting = true;
     const s32 liContext =

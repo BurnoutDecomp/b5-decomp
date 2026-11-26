@@ -95,7 +95,7 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(mapUpdateFunctions[li] != 0,
                 "No update function supplied for this substate",
-                __FILE__, 179 /* ARTIST 0x8255E8B0 */);
+                CGS_ARTIST_FILE, 179 /* ARTIST 0x8255E8B0 */);
         }
     }
 
@@ -110,7 +110,7 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(mapActionFunctions[li] != 0,
                 "No function supplied for this action",
-                __FILE__, 211 /* ARTIST 0x82557B40 */);
+                CGS_ARTIST_FILE, 211 /* ARTIST 0x82557B40 */);
         }
     }
 
@@ -405,10 +405,10 @@ namespace BrnNetwork
         {
             CGS_ASSERT_AT(luRequestingControllerPort != KU_NUMBER_OF_PADS,
                 "luRequestingControllerPort != CgsInput::KU_NUMBER_OF_PADS",
-                __FILE__, 694 /* ARTIST 0x8254D1E8 */);
+                CGS_ARTIST_FILE, 694 /* ARTIST 0x8254D1E8 */);
             CGS_ASSERT_AT(lPlayerXuid != 0,
                 "lPlayerXuid != 0",
-                __FILE__, 695 /* ARTIST 0x8254D20C */);
+                CGS_ARTIST_FILE, 695 /* ARTIST 0x8254D20C */);
 
             mRequestedGamerCardXUID    = lPlayerXuid;             // std r28, 0x78
             muRequestingControllerPort = luRequestingControllerPort; // stw r29, 0x80
