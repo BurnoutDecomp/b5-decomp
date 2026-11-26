@@ -140,8 +140,10 @@ namespace Camera
             bool                          Release();
             void                          GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo);
             void                          ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo);
-            void                          SetDebugArbitratorStateOwner(const ArbitratorState* lpOwner);
-            void                          SetMomentOwner(const Moment* lpOwner);
+            // DWARF h:286/290, defined in the class: ARTIST has no out-of-line body and stores
+            // straight into +0x170/+0x174 (NewBehaviour<BehaviourRig> 0x82260F60, 0x82260F98).
+            void                          SetDebugArbitratorStateOwner(const ArbitratorState* lpOwner) { mpDebugArbitratorStateOwner = lpOwner; }
+            void                          SetMomentOwner(const Moment* lpOwner) { mpDebugMomentOwner = lpOwner; }
             const ArbitratorState*        GetDebugArbitratorStateOwner() const { return mpDebugArbitratorStateOwner; }
             const Moment*                 GetDebugMomentOwner() const { return mpDebugMomentOwner; }
             const Camera&                 GetCamera() const { return mCamera; }
@@ -507,6 +509,21 @@ namespace Camera
         // complete).
         void SetUpdatesDuringPause(bool lbUpdatesDuringPause);
 
+        // DWARF BrnBehaviourManager.h:640 / :651 (X360 asserts at :654 / :665): record the
+        // owning arbitrator state / moment on this handle's helper slot. Inlined into every
+        // NewBehaviour<T> (e.g. 0x82260F50..0x82260F98: IsAllocated, operator[], one store).
+        void SetDebugArbitratorStateOwner(const ArbitratorState* lpOwner)
+        {
+            CGS_ASSERT(IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 654));
+            GetHelper().SetDebugArbitratorStateOwner(lpOwner);
+        }
+
+        void SetDebugMomentOwner(const Moment* lpOwner)
+        {
+            CGS_ASSERT(IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 665));
+            GetHelper().SetMomentOwner(lpOwner);
+        }
+
         // ADDITIVE GROW (the BehaviourHandle<BehaviourRig> instantiation TU): attach /
         // detach the manager's authoring tweaker to the behaviour this handle owns.
         // X360-attested handle-level wrappers (BrnBehaviourManager.h:623 / :633 --
@@ -689,12 +706,8 @@ namespace Camera
 
         lrHandle.Prepare(lHelperID, &mBehaviourHelperPool, this);
 
-        CGS_ASSERT(lrHandle.IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 654));
-        lrHandle.GetHelper().SetDebugArbitratorStateOwner(
-            static_cast<const ArbitratorState*>(lpOwningState));
-
-        CGS_ASSERT(lrHandle.IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 665));
-        lrHandle.GetHelper().SetMomentOwner(static_cast<const Moment*>(lpOwner));
+        lrHandle.SetDebugArbitratorStateOwner(static_cast<const ArbitratorState*>(lpOwningState));
+        lrHandle.SetDebugMomentOwner(static_cast<const Moment*>(lpOwner));
     }
 
     // ------------------------------------------------------------------------

@@ -664,16 +664,6 @@ namespace Camera
         return GetBehaviour()->PostCollisionUpdate(mCamera, lrSharedInfo);
     }
 
-    void BehaviourManager::BehaviourHelper::SetDebugArbitratorStateOwner(const ArbitratorState* lpOwner)
-    {
-        mpDebugArbitratorStateOwner = lpOwner;   // helper +0x170
-    }
-
-    void BehaviourManager::BehaviourHelper::SetMomentOwner(const Moment* lpOwner)
-    {
-        mpDebugMomentOwner = lpOwner;            // helper +0x174
-    }
-
     // ------------------------------------------------------------------------
     // BehaviourControllerLockInterface::Construct / SetBehaviourHelperIndex -- the two-word
     // block PrepareBehaviours / ReleaseBehaviours build on their own stack and re-stamp before

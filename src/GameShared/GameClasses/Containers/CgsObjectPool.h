@@ -96,17 +96,20 @@ public:
     }
 
     // Pop the next free slot index, mark it allocated, and return it (-1 when the pool is empty).
-    TIndex AllocateObject()
+    // DWARF CgsObjectPool.h: `int32_t AllocateObject()` for every TIndex (the
+    // <BehaviourHelper,28,BehaviourHelperIndex> pool too): ARTIST 0x821FC2B8 returns the
+    // index in r3, where a class-typed return would go through a hidden result slot.
+    s32 AllocateObject()
     {
         if (miNumObjectsFree > 0)
         {
-            const TIndex liFreeObjectIndex = maiObjectFreeQueue[--miNumObjectsFree];
+            const s32 liFreeObjectIndex = maiObjectFreeQueue[--miNumObjectsFree];
             CGS_ASSERT_STREAM_AT(liFreeObjectIndex < N, "Array index out of bounds: " << liFreeObjectIndex,
                                  CGS_ARTIST_CGSOBJECTPOOL_FILE, 193);
             mObjectsAllocated.SetBit(static_cast<u32>(liFreeObjectIndex));
             return liFreeObjectIndex;
         }
-        return static_cast<TIndex>(-1);
+        return -1;
     }
 
     // Number of currently-free slots (the pool's own running free counter). The X360 reads
