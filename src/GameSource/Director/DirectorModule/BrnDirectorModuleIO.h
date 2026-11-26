@@ -304,7 +304,9 @@ namespace DirectorIO
         bool GetStopGameIntroFlyby() const;      // @0x7ABF  (GUI command 478)
         bool GetRankUpThisFrame() const;         // @0x7ABC  (GUI command 303)
         s32  GetRankUpNewRank() const;           // @0x7AB4  (GUI command 303 payload)
-        s32  GetCameraType() const;              // @0x7AB8  (GUI command 591; -1 == none)
+        // X360-only (no DWARF member): no ARTIST copy and no lock assert -- DirectorModule::
+        // PostGuiUpdate reads the word in line (lwz 0x7AB8, 0x82250E6C).
+        s32  GetCameraType() const { return miCameraType; }   // @0x7AB8  (GUI command 591; -1 == none)
         bool GetEndOfCarSelect() const;          // @0x7AC2  (GUI command 192)
         bool HasNewDirectorProfileData() const;  // @0x7AC9  (GUI command 475)
         s32  GetDirectorProfileData() const;     // @0x7AA4  (GUI command 475 payload)

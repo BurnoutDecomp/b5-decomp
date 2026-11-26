@@ -433,11 +433,6 @@ namespace DirectorIO
         return miRankUpNewRank;
     }
 
-    s32 InputBuffer::GetCameraType() const
-    {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return miCameraType;
-    }
 
     bool InputBuffer::GetEndOfCarSelect() const
     {

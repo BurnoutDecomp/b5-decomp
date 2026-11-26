@@ -391,7 +391,7 @@ void DirectorModule::ProcessSceneQueryResults(
 // The final argument is the full BrnUpdateSet in r9. ARTIST 0x8225C7B0 extracts
 // bit 0x100 to obtain the replay flag; narrowing the argument to bool loses that bit.
 // ----------------------------------------------------------------------------
-s32 DirectorModule::PreSceneQueryUpdate(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+void DirectorModule::PreSceneQueryUpdate(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                                         const DirectorIO::InputBuffer* lpInputBuffer,
                                         DirectorIO::OutputBuffer* lpOutputBuffer,
                                         DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer,
@@ -495,11 +495,6 @@ s32 DirectorModule::PreSceneQueryUpdate(CgsModule::IOBufferStack* lpInputStack, 
     lpInputBuffer->UnlockForRead();
 
     CgsDev::PerfMonCpu::StopMonitor(miPerfCount_PreSQUpdate);
-
-    // The X360 returns StopMonitor's r3; the committed CgsDev::PerfMonCpu::StopMonitor is
-    // void, and no caller reads this return, so 0 is returned. FLAG: return value not
-    // reproduced (the callee's own signature differs).
-    return 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -522,7 +517,7 @@ s32 DirectorModule::PreSceneQueryUpdate(CgsModule::IOBufferStack* lpInputStack, 
 //      (mCgsCamera = <that director's CgsGraphics::Camera>);
 //   5. the replay RECORD leg + serialiser registration (GATED).
 // ----------------------------------------------------------------------------
-s32 DirectorModule::Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+void DirectorModule::Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                            const DirectorIO::InputBuffer* lpInputBuffer,
                            DirectorIO::OutputBuffer* lpOutputBuffer,
                            const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer,
@@ -620,7 +615,6 @@ s32 DirectorModule::Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IO
     lpSceneQueryOutputBuffer->UnlockForWrite();
 
     CgsDev::PerfMonCpu::StopMonitor(miPerfCount_MainUpdate);
-    return 0;   // see the return-value FLAG on PreSceneQueryUpdate
 }
 
 // ----------------------------------------------------------------------------
@@ -639,7 +633,7 @@ s32 DirectorModule::Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IO
 // all seven stores). So the whole post office is inert here and Clear() is a no-op; this
 // pass cannot issue or receive queries. Reproduced verbatim.
 // ----------------------------------------------------------------------------
-s32 DirectorModule::PostGuiUpdate(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+void DirectorModule::PostGuiUpdate(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                                   const DirectorIO::InputBuffer* lpInputBuffer,
                                   DirectorIO::OutputBuffer* lpOutputBuffer)
 {
@@ -685,7 +679,6 @@ s32 DirectorModule::PostGuiUpdate(CgsModule::IOBufferStack* lpInputStack, CgsMod
     lpInputBuffer->UnlockForRead();
 
     CgsDev::PerfMonCpu::StopMonitor(miPerfCount_PostGuiUpdate);
-    return 0;   // see the return-value FLAG on PreSceneQueryUpdate
 }
 
 }

@@ -524,7 +524,9 @@ namespace BrnGameState
         // OnBodyShop: count of cars newly wrecked-but-not-yet-repaired this frame -- the X360
         // computes (this+0x4B58) - (this+0x4B5C) and fires E_ACHIEVEMENT_REPAIR_FIRST_WRECKED_CAR
         // when it equals 1 in E_MODE_ROAD_RAGE.
-        s32 GetNewlyWreckedCarCount() const;
+        // Defined in the class: ARTIST has no out-of-line copy and OnBodyShop reads both words in
+        // line (0x8235AA9C / 0x8235AAA0).
+        s32 GetNewlyWreckedCarCount() const { return miMaximumPlayerCrashedNumber - miCurrentPlayerCrashedNumber; }
 
         // OnTakedown: takedowns the player has scored in the current (road-rage) mode; X360
         // reads this+0x4B40 and requires it >= 10 for the perfect-road-rage achievement.

@@ -336,8 +336,5 @@ namespace BrnGameState
     // been cleared, which is exactly "newly wrecked-but-not-yet-repaired" read from the other
     // end. No assert: the console has none and neither word is indexed.
     // ------------------------------------------------------------------------------------
-    s32 ScoringSystem::GetNewlyWreckedCarCount() const
-    {
-        return miMaximumPlayerCrashedNumber - miCurrentPlayerCrashedNumber;
-    }
+    // (GetNewlyWreckedCarCount is defined in the class: see BrnScoringSystem.h.)
 }
