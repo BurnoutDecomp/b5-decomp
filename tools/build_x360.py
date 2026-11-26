@@ -50,8 +50,19 @@ FLAGS = [
 #   all its literals from one anchor (GameManagerControl 0x82B1F36C..0x82B1F3B8: lis r11,-0x7d08;
 #   addi r11,r11,-0x213c; addi r3,r11,-0x7c / -0x28), the layout of an unpooled build. /O2 implies
 #   /GF, which gives each literal its own COMDAT and address load instead.
+#   src/GameShared/Jobs/PolygonSoupTester/: /Od /Ob0 (no optimisation, no inlining). ARTIST's
+#   PolygonSoupTester job (0x829157B8..0x829172DC) is unoptimised code: every parameter is spilled
+#   to its home slot and reloaded per statement (LineTestSS 0x829165C0 stores r3..r7 and returns;
+#   LoadPrimitive 0x82916AB8 reloads both through the stack), a local is stored and read straight
+#   back (PolygonSoupTesterEntry std/ld 0x50(r1) at 0x829157F4), constants are rematerialised per
+#   statement (Execute 0x82915944.. `li r11,-1` before each store, `lis r10,1; ori` for each
+#   0x19024.. offset), the /4 stays a divdu (0x829157F0; TrafficJobEntry 0x82917308 shifts), and
+#   one-line inlines are called, not inlined (GetJobThreadId 0x829158F8 -> ToJobThreadId
+#   0x82915920; GetTestNearest 0x82917088 -> its accessor 0x829170E8). The neighbouring job
+#   entries (TrafficJobEntry) are optimised and inline the same helpers: the setting is this folder's.
 PATH_FLAGS = {
     "vendor/dirtysdk/": ["/GF-"],
+    "src/GameShared/Jobs/PolygonSoupTester/": ["/Od", "/Ob0"],
 }
 
 
