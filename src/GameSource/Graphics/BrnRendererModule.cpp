@@ -743,10 +743,10 @@ bool BrnRendererModule::PrepareAgain(const renderengine::Texture* blobbyShadow,
         const_cast<renderengine::Texture*>(coronaAtlas));
     mpGlassFractureTexture = const_cast<renderengine::Texture*>(glassFracture);
     mGlassFractureTextureStateParams.mpTexture = const_cast<renderengine::Texture*>(glassFracture);
-    const rw::ResourceDescriptor descriptor =
-        renderengine::TextureState::GetResourceDescriptor(mGlassFractureTextureStateParams);
-    rw::IResourceAllocator* const allocator = mpGraphicsAllocator;
-    mGlassFractureTextureStateResource = allocator->DoAllocate(descriptor, 0);
+    // DWARF (_compile/BrnGraphicsUnity.cpp) calls rw::IResourceAllocator::Allocate with the
+    // descriptor temporary (ARTIST 0x823FF960 mr r5, r3; mpGraphicsAllocator read after the call).
+    mGlassFractureTextureStateResource = mpGraphicsAllocator->Allocate(
+        renderengine::TextureState::GetResourceDescriptor(mGlassFractureTextureStateParams), 0);
     mpGlassFractureTextureState = renderengine::TextureState::Initialize(
         mGlassFractureTextureStateResource, mGlassFractureTextureStateParams);
     CgsGraphics::gTextureScopeTable.SetTexturePurposeData(
