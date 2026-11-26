@@ -29,7 +29,8 @@ struct AmbienceEffect : public BrnSound::Logic::BrnEffectObject,
 {
     // AmbienceEffect() is implicit (DWARF BrnAmbienceEffect.h lists it without a line): ARTIST's
     // 0x826B9600 builds the bases and mParams and leaves mpAmbienceControl unset.
-    virtual ~AmbienceEffect();
+    // No user-declared destructor: DWARF declares ~AmbienceEffect without a line (implicit); ARTIST's
+    // deleting destructor stores no AmbienceEffect vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();

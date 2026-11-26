@@ -35,7 +35,8 @@ struct TrafficControl;
 struct TrafficSkid : public BrnSound::Logic::BrnEffectObject
 {
     TrafficSkid();
-    virtual ~TrafficSkid();
+    // No user-declared destructor: DWARF declares ~TrafficSkid without a line (implicit); ARTIST's
+    // deleting destructor stores no TrafficSkid vftable.
 
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;

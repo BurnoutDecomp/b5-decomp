@@ -43,7 +43,8 @@ struct CrashStreamEffect : public BrnSound::Logic::BrnEffectObject,
     };
 
     CrashStreamEffect();            // @ 0x826B9CB8
-    virtual ~CrashStreamEffect();   // anchor for the vector deleting destructor @ 0x826D0E98
+    // No user-declared destructor: DWARF declares ~CrashStreamEffect without a line (implicit); ARTIST's
+    // deleting destructor stores no CrashStreamEffect vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();

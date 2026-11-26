@@ -118,11 +118,7 @@ void Brn3DEffectControl::Notify(const CgsSound::Io::MessageHeader* apMessageHead
 // rather than reproducing the raw allocator vtable call (same treatment as the
 // BrnEffectControl / BrnEffectObject sibling homes).
 // ---------------------------------------------------------------------------
-Brn3DEffectControl::~Brn3DEffectControl()
-{
-    meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED; // stw 3, 0x24
-    meAttachState = CgsSound::Logic::EffectBase::E_ATTACH_STATE_NONE;     // stw 0, 0x20
-}
+// (~Brn3DEffectControl is implicit: see the header.)
 
 } // namespace Logic
 } // namespace BrnSound

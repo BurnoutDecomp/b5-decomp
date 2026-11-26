@@ -92,9 +92,7 @@ TrafficSkid::TrafficSkid()
 
 // The scalar deleting destructor is fully inlined on the console: the voice wrapper
 // destructor, then the BrnEffectObject settle.
-TrafficSkid::~TrafficSkid()
-{
-}
+// (~TrafficSkid is implicit: see the header.)
 
 // MemBase::operator new(0xB0, "TrafficSkid", flavour) + the constructor; returns the
 // EffectObject view (+0x04).

@@ -42,7 +42,8 @@ struct ReverbEffect : public BrnSound::Logic::BrnEffectObject
     };
 
     ReverbEffect();                 // @ 0x826BA458
-    virtual ~ReverbEffect();        // anchor for the vector deleting destructor @ 0x826BA4E8
+    // No user-declared destructor: DWARF declares ~ReverbEffect without a line (implicit); ARTIST's
+    // deleting destructor stores no ReverbEffect vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();

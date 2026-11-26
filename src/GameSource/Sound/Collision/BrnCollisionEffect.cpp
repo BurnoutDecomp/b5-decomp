@@ -663,9 +663,7 @@ CgsSound::Logic::EffectControl* Collision3DControl::CreateObject(u32 luType)
 // host toolchain (same treatment as the committed Brn3DEffectControl / Passby3DControl
 // homes).
 // ---------------------------------------------------------------------------
-Collision3DControl::~Collision3DControl()
-{
-}
+// (~Collision3DControl is implicit: see the header.)
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
 Collision3DControl::GetStaticTypeInfo()

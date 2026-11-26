@@ -166,9 +166,7 @@ Vector3 RightSide3dControl::GetPositionOffset() const
 }
 
 // ~Car3DControl  @ 0x826CF838  (the X360 `scalar deleting destructor')
-Car3DControl::~Car3DControl()
-{
-}
+// (~Car3DControl is implicit: see the header.)
 
 // ~Engine3dControl  @ 0x826E4D70  (the X360 `vector deleting destructor')
 // ARTIST 0x82F2F6A0: {0x100D0, "Engine3dControl", Car3DControl, CreateObject}, registered by
@@ -199,9 +197,7 @@ const char* Engine3dControl::GetTypeName() const
     return sTypeInfo.typeName;
 }
 
-Engine3dControl::~Engine3dControl()
-{
-}
+// (~Engine3dControl is implicit: see the header.)
 
 // ~Exhaust3dControl  @ 0x826E4E18  (the X360 `scalar deleting destructor')
 // ARTIST 0x82F2F6B0: {0x100C0, "Exhaust3dControl", Car3DControl, CreateObject}, registered by
@@ -232,9 +228,7 @@ const char* Exhaust3dControl::GetTypeName() const
     return sTypeInfo.typeName;
 }
 
-Exhaust3dControl::~Exhaust3dControl()
-{
-}
+// (~Exhaust3dControl is implicit: see the header.)
 
 // ~LeftSide3dControl  @ 0x826E4EC0  (the X360 `scalar deleting destructor')
 // ARTIST 0x82F2F6C0: {0x10080, "LeftSide3dControl", Car3DControl, CreateObject}, registered by
@@ -265,9 +259,7 @@ const char* LeftSide3dControl::GetTypeName() const
     return sTypeInfo.typeName;
 }
 
-LeftSide3dControl::~LeftSide3dControl()
-{
-}
+// (~LeftSide3dControl is implicit: see the header.)
 
 // ~RightSide3dControl  @ 0x826E4F68  (the X360 `vector deleting destructor')
 // ARTIST 0x82F2F6D0: {0x10090, "RightSide3dControl", Car3DControl, CreateObject}, registered by
@@ -298,9 +290,7 @@ const char* RightSide3dControl::GetTypeName() const
     return sTypeInfo.typeName;
 }
 
-RightSide3dControl::~RightSide3dControl()
-{
-}
+// (~RightSide3dControl is implicit: see the header.)
 
 } // namespace Vehicles
 } // namespace BrnSound

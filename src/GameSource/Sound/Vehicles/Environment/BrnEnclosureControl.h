@@ -73,7 +73,8 @@ struct EnclosureControl : public BrnSound::Logic::BrnEffectControl
         maTriggerInfo[E_TRIGGER_POSITION_AT_ENTITY].Reset();
         maTriggerInfo[E_TRIGGER_POSITION_AHEAD_OF_ENTITY].Reset();
     }
-    virtual ~EnclosureControl();    // anchor for the vector deleting destructor @ 0x826B94A8
+    // No user-declared destructor: DWARF declares ~EnclosureControl without a line (implicit); ARTIST's
+    // deleting destructor stores no EnclosureControl vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();

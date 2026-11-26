@@ -566,9 +566,7 @@ AIWheelControl::AIWheelControl()
 {
 }
 
-AIWheelControl::~AIWheelControl()
-{
-}
+// (~AIWheelControl is implicit: see the header.)
 
 } // namespace Wheels
 } // namespace Vehicles

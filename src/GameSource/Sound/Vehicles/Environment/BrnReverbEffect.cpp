@@ -281,9 +281,7 @@ void ReverbEffect::ProcessUpdate()
 // are compiler-synthesised from the virtual dtor declared in the header, so the leaf
 // body is empty. The (a2 & 1) allocator-free tail is left to the host toolchain.
 // ---------------------------------------------------------------------------
-ReverbEffect::~ReverbEffect()
-{
-}
+// (~ReverbEffect is implicit: see the header.)
 
 } // namespace Environment
 } // namespace Vehicles

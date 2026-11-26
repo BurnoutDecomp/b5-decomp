@@ -186,9 +186,7 @@ void SpeedStreamControl::UpdateDuckers()
     SetMixerInputValue(3, mBoostStreamOn.GetCurrent() ? 0x7FFF : 0);
 }
 
-SpeedStreamControl::~SpeedStreamControl()
-{
-}
+// (~SpeedStreamControl is implicit: see the header.)
 
 } // namespace Environment
 } // namespace Vehicles

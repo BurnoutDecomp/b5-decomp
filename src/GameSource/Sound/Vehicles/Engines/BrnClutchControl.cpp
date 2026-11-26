@@ -496,7 +496,7 @@ const char* AIClutchControl::GetTypeName() const
 }
 
 AIClutchControl::AIClutchControl() : ClutchControl() {}
-AIClutchControl::~AIClutchControl() {}
+// (~AIClutchControl is implicit: see the header.)
 
 CgsSound::Logic::EffectControl* AIClutchControl::CreateObject(u32 luType)
 {

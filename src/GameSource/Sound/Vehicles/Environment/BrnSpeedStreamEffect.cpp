@@ -187,9 +187,7 @@ void SpeedStreamEffect::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice
 // nothing. The (a2 & 1) allocator-free tail is left to the host toolchain (off_82FFB954
 // not homed here).
 // ---------------------------------------------------------------------------
-SpeedStreamEffect::~SpeedStreamEffect()
-{
-}
+// (~SpeedStreamEffect is implicit: see the header.)
 
 } // namespace Environment
 } // namespace Vehicles

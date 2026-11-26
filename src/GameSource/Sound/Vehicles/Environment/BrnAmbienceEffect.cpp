@@ -94,9 +94,7 @@ const char* AmbienceEffect::GetTypeName() const
 // ~AmbienceEffect  (the leaf vtable emission point). The teardown is the inherited
 // BrnEffectObject / IStreamUser chain; this leaf body adds nothing.
 // ---------------------------------------------------------------------------
-AmbienceEffect::~AmbienceEffect()
-{
-}
+// (~AmbienceEffect is implicit: see the header.)
 
 // Controller slot 0 is the ambience control.
 s32 AmbienceEffect::GetController(s32 aiIndex)

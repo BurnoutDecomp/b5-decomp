@@ -84,9 +84,7 @@ const char* StaticPassbyControl::GetTypeName() const
 // this leaf body is empty. The (a2 & 1) allocator-free tail is left to the host
 // toolchain (off_82FFB954 not homed here).
 // ---------------------------------------------------------------------------
-StaticPassbyControl::~StaticPassbyControl()
-{
-}
+// (~StaticPassbyControl is implicit: see the header.)
 
 // ---------------------------------------------------------------------------
 // PassbyHistory::Record  @ 0x8269B7D0

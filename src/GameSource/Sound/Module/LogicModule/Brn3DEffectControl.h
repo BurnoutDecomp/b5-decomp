@@ -98,7 +98,8 @@ struct Brn3DEffectControl : public CgsSound::Logic::Cgs3dEffectControl
     virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader) ;
 
     // Scalar deleting destructor @ 0x826C85F8 — out-of-line; see Brn3DEffectControl.cpp.
-    virtual ~Brn3DEffectControl();
+    // No user-declared destructor: DWARF declares ~Brn3DEffectControl without a line (implicit); ARTIST's
+    // deleting destructor stores no Brn3DEffectControl vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();

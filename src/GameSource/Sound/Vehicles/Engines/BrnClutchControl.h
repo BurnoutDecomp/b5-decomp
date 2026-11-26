@@ -108,7 +108,8 @@ private:
 struct AIClutchControl : public ClutchControl
 {
     AIClutchControl();
-    virtual ~AIClutchControl();
+    // No user-declared destructor: DWARF declares ~AIClutchControl without a line (implicit); ARTIST's
+    // deleting destructor stores no AIClutchControl vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();

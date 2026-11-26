@@ -79,7 +79,8 @@ namespace Engines { struct PhysicsControl; }
 struct Car3DControl : public BrnSound::Logic::Brn3DEffectControl
 {
     Car3DControl();
-    virtual ~Car3DControl();
+    // No user-declared destructor: DWARF declares ~Car3DControl without a line (implicit); ARTIST's
+    // deleting destructor stores no Car3DControl vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
@@ -104,7 +105,8 @@ protected:
 struct Engine3dControl : public Car3DControl
 {
     Engine3dControl() {}
-    virtual ~Engine3dControl();
+    // No user-declared destructor: DWARF declares ~Engine3dControl without a line (implicit); ARTIST's
+    // deleting destructor stores no Engine3dControl vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
@@ -119,7 +121,8 @@ protected:
 struct Exhaust3dControl : public Car3DControl
 {
     Exhaust3dControl() {}
-    virtual ~Exhaust3dControl();
+    // No user-declared destructor: DWARF declares ~Exhaust3dControl without a line (implicit); ARTIST's
+    // deleting destructor stores no Exhaust3dControl vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
@@ -134,7 +137,8 @@ protected:
 struct LeftSide3dControl : public Car3DControl
 {
     LeftSide3dControl() {}
-    virtual ~LeftSide3dControl();
+    // No user-declared destructor: DWARF declares ~LeftSide3dControl without a line (implicit); ARTIST's
+    // deleting destructor stores no LeftSide3dControl vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
@@ -149,7 +153,8 @@ protected:
 struct RightSide3dControl : public Car3DControl
 {
     RightSide3dControl() {}
-    virtual ~RightSide3dControl();
+    // No user-declared destructor: DWARF declares ~RightSide3dControl without a line (implicit); ARTIST's
+    // deleting destructor stores no RightSide3dControl vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();

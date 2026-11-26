@@ -30,7 +30,8 @@ struct SpeedStreamEffect : public BrnSound::Logic::BrnEffectObject,
                            public BrnSound::Logic::Streaming::IStreamUser
 {
     // SpeedStreamEffect() is implicit (DWARF: the class line h:152); ARTIST 0x826BA148.
-    virtual ~SpeedStreamEffect();   // anchor for the scalar deleting destructor @ 0x826BA1F8
+    // No user-declared destructor: DWARF declares ~SpeedStreamEffect without a line (implicit); ARTIST's
+    // deleting destructor stores no SpeedStreamEffect vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();

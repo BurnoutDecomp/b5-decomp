@@ -231,9 +231,7 @@ const char* EnclosureControl::GetTypeName() const
     return sTypeInfo.typeName;
 }
 
-EnclosureControl::~EnclosureControl()
-{
-}
+// (~EnclosureControl is implicit: see the header.)
 
 } // namespace Environment
 } // namespace Vehicles

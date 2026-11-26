@@ -68,9 +68,7 @@ u32 guEngineFinishedWitnesses = 0;
 
 // The vector deleting destructor tears mEngineDataAtrib and the base members down
 // through the Brn3DEffectControl destructor chain.
-Traffic3DControl::~Traffic3DControl()
-{
-}
+// (~Traffic3DControl is implicit: see the header.)
 
 // MemBase::operator new(0xD0, "Traffic3DControl", flavour), Brn3DEffectControl(), leaf vtable.
 CgsSound::Logic::EffectControl* Traffic3DControl::CreateObject(u32 luType)

@@ -258,9 +258,7 @@ bool CarStereoEffect::ShouldPlayMusic()
 // the compiler emits; this leaf body adds nothing. The (a2 & 1) allocator-free tail is
 // left to the host toolchain (off_82FFB954 not homed here).
 // ---------------------------------------------------------------------------
-CarStereoEffect::~CarStereoEffect()
-{
-}
+// (~CarStereoEffect is implicit: see the header.)
 
 } // namespace Environment
 } // namespace Vehicles

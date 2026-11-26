@@ -58,7 +58,8 @@ extern bool KB_DRAW_PASSBY_INFO;
 struct Passby3DControl : public BrnSound::Logic::Brn3DEffectControl
 {
     Passby3DControl() {}
-    virtual ~Passby3DControl();
+    // No user-declared destructor: DWARF declares ~Passby3DControl without a line (implicit); ARTIST's
+    // deleting destructor stores no Passby3DControl vftable.
 
     // BrnPassbyEffect.cpp:63 (DWARF) -- the RTTI surface. GetTypeInfo @0x82689008 returns
     // &sTypeInfo (0x82F2F97C), GetTypeName @0x82689018 "Passby3DControl", CreateObject

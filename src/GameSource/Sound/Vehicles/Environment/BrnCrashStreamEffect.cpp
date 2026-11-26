@@ -360,9 +360,7 @@ const CgsSound::Playback::Name CrashStreamEffect::GetContentSpecToPlay(bool bSho
 // delete from this class's MI base list + virtual destructor. The (a2 & 1) allocator-
 // free tail is left to the host toolchain (off_82FFB954 not homed here).
 // ---------------------------------------------------------------------------
-CrashStreamEffect::~CrashStreamEffect()
-{
-}
+// (~CrashStreamEffect is implicit: see the header.)
 
 } // namespace Environment
 } // namespace Vehicles

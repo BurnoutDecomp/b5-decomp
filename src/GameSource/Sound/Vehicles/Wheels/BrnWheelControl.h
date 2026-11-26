@@ -201,7 +201,8 @@ private:
 struct AIWheelControl : public WheelControl
 {
     AIWheelControl();                 // @ 0x826E55A8
-    virtual ~AIWheelControl();        // anchor for the vector deleting destructor @ 0x826E5608
+    // No user-declared destructor: DWARF declares ~AIWheelControl without a line (implicit); ARTIST's
+    // deleting destructor stores no AIWheelControl vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();

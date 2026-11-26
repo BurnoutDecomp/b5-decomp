@@ -188,7 +188,8 @@ struct Collision3DControl : public BrnSound::Logic::Brn3DUserSpaceEffectControl
     // The original ScrapeEffect writes this real config sub-object directly.
     using CgsSound::Logic::Cgs3dEffectControl::mDebugRenderingMessageData;
     Collision3DControl();          // @ 0x826E88D0
-    virtual ~Collision3DControl(); // @ 0x826F8168
+    // No user-declared destructor: DWARF declares ~Collision3DControl without a line (implicit); ARTIST's
+    // deleting destructor stores no Collision3DControl vftable.
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F90C)
 
     // BrnCollisionEffect.h:199 (DWARF) -- the RTTI factory hook (@ 0x826F80E8).

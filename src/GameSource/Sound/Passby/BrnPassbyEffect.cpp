@@ -122,9 +122,7 @@ u32 PassbyEffect::smuSampleIndex = 0;
 // is left to the host toolchain (the `delete` half of the X360 scalar deleting
 // destructor) rather than reproducing the raw allocator vtable call.
 // ---------------------------------------------------------------------------
-Passby3DControl::~Passby3DControl()
-{
-}
+// (~Passby3DControl is implicit: see the header.)
 
 // ---------------------------------------------------------------------------
 // Passby3DControl::CreateObject(u32)  @ 0x826E8E18

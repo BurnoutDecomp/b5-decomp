@@ -69,7 +69,8 @@ extern f32 KF_SPEED_STREAM_CROSSFADE_WIDTH;
 struct SpeedStreamControl : public BrnSound::Logic::BrnEffectControl
 {
     SpeedStreamControl();
-    virtual ~SpeedStreamControl();
+    // No user-declared destructor: DWARF declares ~SpeedStreamControl without a line (implicit); ARTIST's
+    // deleting destructor stores no SpeedStreamControl vftable.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();

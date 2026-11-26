@@ -39,7 +39,8 @@ struct TrafficControl;
 struct Traffic3DControl : public BrnSound::Logic::Brn3DEffectControl
 {
     Traffic3DControl() {}
-    virtual ~Traffic3DControl();
+    // No user-declared destructor: DWARF declares ~Traffic3DControl without a line (implicit); ARTIST's
+    // deleting destructor stores no Traffic3DControl vftable.
 
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
     virtual const char* GetTypeName() const ;
