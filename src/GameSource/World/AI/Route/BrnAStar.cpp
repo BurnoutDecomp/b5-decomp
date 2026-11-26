@@ -38,10 +38,10 @@
 
 namespace BrnAI
 {
-// ---- CPU-perf monitor handles (X360 file-static dword_*; -1 == unregistered) ----
-s32 dword_82F3023C = -1;   // "A*"
-s32 dword_8300D530 = -1;   // "A* Extract best open node"
-s32 dword_8300D534 = -1;   // "A* Find node"
+// ---- CPU-perf monitor handles (DWARF BrnAStar.cpp:27-29; -1 == unregistered) ----
+s32 AStar::miAStarPM                    = -1;   // "A*", ARTIST 0x82F3023C
+s32 AStar::miAStarExtractBestOpenNodePM = -1;   // "A* Extract best open node", ARTIST 0x8300D530
+s32 AStar::miAStarFindNodePM            = -1;   // "A* Find node", ARTIST 0x8300D534
 
 // ---- search tuning tables / constants -------------------------------------------
 // Distance-function dispatch table (off_820C47C8), in AStarDistanceFunction enum order.
@@ -164,10 +164,10 @@ AStarNode* AStarNodePool::NewNode(const AStarVector2& lPosition, u16 luLinkSecti
 // (compaction) and decrementing muOpenNodeCount, finally clearing the winner's mbOpen.
 // *lpuBestNodeIndex receives the winning node's *flat pool index* (mauOpenNodes value),
 // which Compute records as the parent index of every node it then expands. Returns the
-// winning node (NULL when the open set is empty). PerfMon-wrapped (dword_8300D530).
+// winning node (NULL when the open set is empty). PerfMon-wrapped (miAStarExtractBestOpenNodePM, ARTIST 0x8300D530).
 AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostWeight)
 {
-    CgsDev::PerfMonCpu::StartMonitor(dword_8300D530);
+    CgsDev::PerfMonCpu::StartMonitor(AStar::miAStarExtractBestOpenNodePM);
 
     // `fcmpu w,0 ; blt -> fire` 0x827677C4/0x827677CC then `fcmpu w,1 ; ble -> skip`
     // 0x827677D8/0x827677DC: an unordered weight skips the assert (FX-AINAN2).
@@ -221,7 +221,7 @@ AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostW
         }
     }
 
-    CgsDev::PerfMonCpu::StopMonitor(dword_8300D530);
+    CgsDev::PerfMonCpu::StopMonitor(AStar::miAStarExtractBestOpenNodePM);
     return lpBestNode;
 }
 
@@ -250,7 +250,7 @@ AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostW
 // bucket it was created in. Linear over the bucket's live prefix; NULL when absent.
 AStarNode* AStarNodePool::FindNode(u16 luSectionIndex, u8 luPortalIndex)
 {
-    CgsDev::PerfMonCpu::StartMonitor(dword_8300D534);
+    CgsDev::PerfMonCpu::StartMonitor(AStar::miAStarFindNodePM);
 
     AStarNode* lpResult = 0;
 
@@ -268,7 +268,7 @@ AStarNode* AStarNodePool::FindNode(u16 luSectionIndex, u8 luPortalIndex)
         }
     }
 
-    CgsDev::PerfMonCpu::StopMonitor(dword_8300D534);
+    CgsDev::PerfMonCpu::StopMonitor(AStar::miAStarFindNodePM);
     return lpResult;
 }
 
@@ -277,7 +277,7 @@ AStarNode* AStarNodePool::FindNode(u16 luSectionIndex, u8 luPortalIndex)
 // Bind the section graph and reset the per-search scratch. Stores lpAISectionsData,
 // seeds mfCostWeight from rodata flt_820037C8 (the default cost weight), clears
 // mpBestNode / mbInProgress / meRouteStatus / mpDistanceFunction, and -- once, on first
-// construction (the dword_82F3023C PerfMon handle still -1) -- registers the three CPU
+// construction (the miAStarPM PerfMon handle, 0x82F3023C, still -1) -- registers the three CPU
 // performance monitors used by Compute / ExtractBestOpenNode / FindNode.
 void AStar::Construct(const AISectionsData* lpAISectionsData)
 {
@@ -288,12 +288,12 @@ void AStar::Construct(const AISectionsData* lpAISectionsData)
     meRouteStatus      = Route::E_STATUS_UNINITIALISED;
     mpDistanceFunction = 0;
 
-    if (dword_82F3023C == -1)
+    if (miAStarPM == -1)
     {
-        dword_82F3023C = CgsDev::PerfMonCpu::AddMonitor("A*", CgsDev::E_PMP_7, false, 3.0f, true);
-        dword_8300D530 = CgsDev::PerfMonCpu::AddMonitor("A* Extract best open node",
+        miAStarPM = CgsDev::PerfMonCpu::AddMonitor("A*", CgsDev::E_PMP_7, false, 3.0f, true);
+        miAStarExtractBestOpenNodePM = CgsDev::PerfMonCpu::AddMonitor("A* Extract best open node",
                                                         CgsDev::E_PMP_7, false, 2.0f, true);
-        dword_8300D534 = CgsDev::PerfMonCpu::AddMonitor("A* Find node", CgsDev::E_PMP_7, false, 2.0f, true);
+        miAStarFindNodePM = CgsDev::PerfMonCpu::AddMonitor("A* Find node", CgsDev::E_PMP_7, false, 2.0f, true);
     }
 }
 
@@ -404,10 +404,10 @@ bool AStar::IsInProgress() const
 //        h(neighbour) = distfn(neighbourPos, mEndPosition)
 //      A NewNode failure (pool exhausted) => E_STATUS_PARTIAL, stop this pass.
 // On exit meStatus is set, mbInProgress cleared, and miIterationCount incremented.
-// PerfMon-wrapped (dword_82F3023C). Reconstructed from the asm store-for-store.
+// PerfMon-wrapped (miAStarPM, ARTIST 0x82F3023C). Reconstructed from the asm store-for-store.
 void AStar::Compute()
 {
-    CgsDev::PerfMonCpu::StartMonitor(dword_82F3023C);
+    CgsDev::PerfMonCpu::StartMonitor(miAStarPM);
 
     CGS_ASSERT_AT(muStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX,
                "muStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", CGS_ARTIST_UNITY_BRNASTAR_CPP_FILE, 302);
@@ -520,7 +520,7 @@ void AStar::Compute()
     next_iteration:;
     }
 
-    CgsDev::PerfMonCpu::StopMonitor(dword_82F3023C);
+    CgsDev::PerfMonCpu::StopMonitor(miAStarPM);
     ++miIterationCount;
 }
 

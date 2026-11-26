@@ -77,7 +77,7 @@ void RelocatorJob::ExecuteTestHijacks(CgsMemory::RelocationTestParams* lpParams,
         mResultPoster.AddResults(mResults, liCount);
         if (++liBatches >= 2000)
         {
-            CgsDev::StrStream lMessage(byte_83015F20, 8192);
+            CgsDev::StrStream lMessage(CgsCore::gacDebugPrintStringBuffer, 8192);
             lMessage << "Added crazy number of results\n";
             const char* lpcFile = "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\Relocator\\RelocatorJob.cpp";
             CGS_JOB_ASSERT_LOG(lpcFile, 252, lMessage.GetBuffer());

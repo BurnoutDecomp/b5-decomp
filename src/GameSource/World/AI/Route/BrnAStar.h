@@ -163,6 +163,13 @@ public:
     static const s32 KI_MAX_BLOCK_SECTION_COUNT = 16; // :195
     static const s32 KI_MAX_ITERATIONS          = 12; // :196
 
+    // CPU perf-monitor handles, DWARF BrnAStar.h:227/228/229 (public statics, defined
+    // BrnAStar.cpp:27/28/29; PS3 _ZN5BrnAI5AStar9miAStarPME and its two siblings). -1 until
+    // Construct registers them. ARTIST 0x82F3023C / 0x8300D530 / 0x8300D534 (IDA dword_*).
+    static s32 miAStarPM;                      // "A*" (the whole Compute pass)
+    static s32 miAStarExtractBestOpenNodePM;   // "A* Extract best open node"
+    static s32 miAStarFindNodePM;              // "A* Find node"
+
     void Construct(const AISectionsData* lpAISectionsData);
     bool Prepare(const AStarVector2& lStartPosition, const AStarVector2& lEndPosition,
                  u16 luStartSectionIndex, u16 luEndSectionIndex,
@@ -237,14 +244,6 @@ private:
     bool                 mbInProgress;         // :294
 };
 
-// ---- CPU-perf monitor handles (X360 file-static; shared across the AStar TUs) ----
-// AddMonitor returns a 0-based handle (or -1 when unbuilt); Construct registers them once.
-//   dword_82F3023C -- "A*"                      (whole Compute pass)
-//   dword_8300D530 -- "A* Extract best open node"
-//   dword_8300D534 -- "A* Find node"
-extern s32 dword_82F3023C;
-extern s32 dword_8300D530;
-extern s32 dword_8300D534;
 
 // @0x8276E0D8  straight Euclidean distance: Magnitude(a - b) (DecFIGS PS3 0xA260C0 builds the
 // difference in a temporary and calls rw::math::fpu::Magnitude<float>; ARTIST inlines both).

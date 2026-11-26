@@ -54,7 +54,7 @@ void TrafficJobEntry(EA::Jobs::Param, EA::Jobs::Param lJobData,
     const u64 luWorkerIndex = (luThreadId - 0xF8000088ull) >> 2;
     if (luWorkerIndex >= KU_MAX_TRAFFIC_JOB_WORKERS)
     {
-        CgsDev::StrStream lMessage(byte_83015F20, sizeof(byte_83015F20));
+        CgsDev::StrStream lMessage(CgsCore::gacDebugPrintStringBuffer, sizeof(CgsCore::gacDebugPrintStringBuffer));
         const u64 luReportedThreadId = static_cast<u64>(
             reinterpret_cast<uintptr_t>(EA::Thread::GetThreadId()));
         lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";

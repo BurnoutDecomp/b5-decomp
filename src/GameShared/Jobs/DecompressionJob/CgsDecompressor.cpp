@@ -10,8 +10,12 @@
 // Native EAThread id is the32-bit XDK thread handle (ARTIST82B42560).
 namespace EA { namespace Thread { void* GetThreadId(); } }
 
-// ARTIST byte_83015F20 is shared by native job assertion paths.
-char byte_83015F20[8192];
+// CgsCore::gacDebugPrintStringBuffer (ARTIST 0x83015F20), shared by the job assertion paths;
+// see CgsJobAssertBuffer.h. Its DWARF home is CgsCore.cpp:57, which this tree does not have.
+namespace CgsCore
+{
+    char gacDebugPrintStringBuffer[8192];
+}
 
 namespace CgsResource
 {
@@ -149,7 +153,7 @@ namespace CgsResource
         const u64 luJobThreadIndex = (luThreadId - 0xF8000088ull) >> 2;
         if (luJobThreadIndex >= 6)
         {
-            CgsDev::StrStream lMessage(byte_83015F20, sizeof(byte_83015F20));
+            CgsDev::StrStream lMessage(CgsCore::gacDebugPrintStringBuffer, sizeof(CgsCore::gacDebugPrintStringBuffer));
             const u64 luReportedThreadId = static_cast<u64>(reinterpret_cast<u32>(EA::Thread::GetThreadId()));
             lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";
             const char* lpcSource =

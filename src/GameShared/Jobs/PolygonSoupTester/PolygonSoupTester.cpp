@@ -16,7 +16,7 @@ void PolygonSoupTesterEntry(EA::Jobs::Param, EA::Jobs::Param lParam1,
     const u64 luJobThreadIndex = (luThreadId - 0xF8000088ull) / 4;
     if (luJobThreadIndex >= KI_NUM_POLYGON_SOUP_TESTER_JOBS)
     {
-        CgsDev::StrStream lMessage(byte_83015F20, sizeof(byte_83015F20));
+        CgsDev::StrStream lMessage(CgsCore::gacDebugPrintStringBuffer, sizeof(CgsCore::gacDebugPrintStringBuffer));
         const u64 luReportedThreadId = EA::Jobs::GetJobThreadId();
         lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";
         const char* lpcSource = "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\PolygonSoupTester\\PolygonSoupTester.cpp";

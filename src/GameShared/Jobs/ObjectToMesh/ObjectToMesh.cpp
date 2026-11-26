@@ -15,7 +15,7 @@ void ObjectToMeshEntry(EA::Jobs::Param, EA::Jobs::Param param,
     const u64 index = (id - 0xF8000088ull) >> 2;
     if (index >= 6)
     {
-        CgsDev::StrStream message(byte_83015F20, sizeof(byte_83015F20));
+        CgsDev::StrStream message(CgsCore::gacDebugPrintStringBuffer, sizeof(CgsCore::gacDebugPrintStringBuffer));
         const u64 reported = static_cast<u64>(reinterpret_cast<uintptr_t>(EA::Thread::GetThreadId()));
         message << "SPU Id out of range: " << reported << "\n";
         const char* const file = "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\ObjectToMesh\\ObjectToMesh.cpp";

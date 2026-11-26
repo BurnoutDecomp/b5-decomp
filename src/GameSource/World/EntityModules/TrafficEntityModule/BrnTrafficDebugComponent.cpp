@@ -98,24 +98,30 @@ namespace BrnTraffic
 {
     // ARTIST OnActivate @0x82762530 registers these global cells directly. Their exact
     // console addresses/defaults are retained; no extra traffic consumer is invented here.
-    f32 kfSideRamProportion = 0.15f; // X360 0x82F2FFEC
-    f32 kfSideRamStrength   = 0.04f; // X360 0x82F2FF94
-    f32 unk_8300D018        = 0.0f;  // X360 0x8300D018
-    f32 unk_82F2FFFC        = 0.01f; // X360 0x82F2FFFC
-    f32 unk_82F30000        = 0.05f; // X360 0x82F30000
-    f32 unk_82F30004        = 0.01f; // X360 0x82F30004
-    f32 unk_82F30008        = 0.05f; // X360 0x82F30008
-    f32 unk_82F3000C        = 0.15f; // X360 0x82F3000C
-    f32 unk_82F30010        = 0.4f;  // X360 0x82F30010
-    f32 unk_82F30014        = 1.0f;  // X360 0x82F30014
-    f32 unk_82F30018        = 0.04f; // X360 0x82F30018
-    f32 unk_82F3001C        = 0.06f; // X360 0x82F3001C
-    f32 unk_82F30020        = 0.07f; // X360 0x82F30020
-    f32 unk_82F30024        = 0.09f; // X360 0x82F30024
-    f32 unk_82F30028        = 0.5f;  // X360 0x82F30028
-    f32 unk_82F30030        = 20.0f; // X360 0x82F30030
-    f32 unk_82F30034        = 3.0f;  // X360 0x82F30034
-    f32 unk_82F30038        = 30.0f; // X360 0x82F30038
+    // Their names are the DWARF ones: separate float32_t globals of namespace BrnTraffic
+    // defined in BrnTrafficTweakConstants.cpp:27-57 (a file this tree does not have), not one
+    // table; the PS3 OnActivate (0x995684) registers the same names in the same order under
+    // the same labels. The unregistered DWARF neighbours fill the address gaps (e.g.
+    // KF_MAX_MASS_FOR_TRAFFIC_CHECKING :30 = 5000.0 at 0x82F2FFF0, KF_RACECAR_CHECK_KICK_BIAS
+    // :48 = -20.0 at 0x82F3002C).
+    f32 KF_CHECK_SIDE_RAM_PROPORTION = 0.15f;                            // X360 0x82F2FFEC, DWARF BrnTrafficTweakConstants.cpp:28
+    f32 KF_CHECK_SIDE_RAM_MIN_STRENGTH = 0.04f;                          // X360 0x82F2FF94, DWARF BrnTrafficTweakConstants.cpp:27
+    f32 KF_MIN_STRENGTH_STAT_FOR_TRAFFIC_CHECK = 0.0f;                   // X360 0x8300D018, DWARF BrnTrafficTweakConstants.cpp:29
+    f32 KF_AFTER_CHECK_FIRST_RAM_MIN_STRENGTH = 0.01f;                   // X360 0x82F2FFFC, DWARF BrnTrafficTweakConstants.cpp:35
+    f32 KF_AFTER_CHECK_FIRST_RAM_MAX_STRENGTH = 0.05f;                   // X360 0x82F30000, DWARF BrnTrafficTweakConstants.cpp:36
+    f32 KF_AFTER_SLAM_FIRST_RAM_MIN_STRENGTH = 0.01f;                    // X360 0x82F30004, DWARF BrnTrafficTweakConstants.cpp:37
+    f32 KF_AFTER_SLAM_FIRST_RAM_MAX_STRENGTH = 0.05f;                    // X360 0x82F30008, DWARF BrnTrafficTweakConstants.cpp:38
+    f32 KF_AFTER_CHECK_FIRST_RAM_DECAY = 0.15f;                          // X360 0x82F3000C, DWARF BrnTrafficTweakConstants.cpp:39
+    f32 KF_AFTER_CHECK_MIN_SWERVE_TIME = 0.4f;                           // X360 0x82F30010, DWARF BrnTrafficTweakConstants.cpp:40
+    f32 KF_AFTER_CHECK_MAX_SWERVE_TIME = 1.0f;                           // X360 0x82F30014, DWARF BrnTrafficTweakConstants.cpp:41
+    f32 KF_AFTER_CHECK_FLIPOUT_RAM_SPIN_MIN_STRENGTH = 0.04f;            // X360 0x82F30018, DWARF BrnTrafficTweakConstants.cpp:42
+    f32 KF_AFTER_CHECK_FLIPOUT_RAM_SPIN_MAX_STRENGTH = 0.06f;            // X360 0x82F3001C, DWARF BrnTrafficTweakConstants.cpp:43
+    f32 KF_AFTER_CHECK_FLIPOUT_RAM_FLIP_MIN_STRENGTH = 0.07f;            // X360 0x82F30020, DWARF BrnTrafficTweakConstants.cpp:44
+    f32 KF_AFTER_CHECK_FLIPOUT_RAM_FLIP_MAX_STRENGTH = 0.09f;            // X360 0x82F30024, DWARF BrnTrafficTweakConstants.cpp:45
+    f32 KF_RACECAR_CHECK_KICK = 0.5f;                                    // X360 0x82F30028, DWARF BrnTrafficTweakConstants.cpp:47
+    f32 KF_MAX_PLAYER_SPEED_FOR_TRAFFIC_JAMS_MPH = 20.0f;                // X360 0x82F30030, DWARF BrnTrafficTweakConstants.cpp:50
+    f32 KF_MAX_PLAYER_DRIVING_SLOW_TIME_FOR_TRAFFIC_JAM = 3.0f;          // X360 0x82F30034, DWARF BrnTrafficTweakConstants.cpp:51
+    f32 KF_MAX_TIME_SINCE_HULL_CHANGE_FOR_TRAFFIC_JAM = 30.0f;           // X360 0x82F30038, DWARF BrnTrafficTweakConstants.cpp:52
 
     namespace
     {
@@ -330,27 +336,27 @@ namespace BrnTraffic
         SetOptions(&miAirRamTypeToFire, KA_AIR_RAM_TYPE_OPTIONS);
         RegisterFunction(&DebugComponent::FireAirRam, this, "Air Rams", "Fire!");
 
-        RegisterVariable(&kfSideRamProportion, "Checking", "Side ram proportion");
-        RegisterVariable(&kfSideRamStrength, "Checking", "Side ram strength");
-        RegisterVariable(&unk_8300D018, "Checking", "Min strength stat for traffic check");
-        RegisterVariable(&unk_82F2FFFC, "Checking", "After check min first ram strength");
-        RegisterVariable(&unk_82F30000, "Checking", "After check max first ram strength");
-        RegisterVariable(&unk_82F30004, "Checking", "After slam min first ram strength");
-        RegisterVariable(&unk_82F30008, "Checking", "After slam max first ram strength");
-        RegisterVariable(&unk_82F3000C, "Checking", "After check first ram decay");
-        RegisterVariable(&unk_82F30010, "Checking", "After check min swerve time (seconds)");
-        RegisterVariable(&unk_82F30014, "Checking", "After check max swerve time (seconds)");
-        RegisterVariable(&unk_82F30018, "Checking", "After check flipout spin min ram strength");
-        RegisterVariable(&unk_82F3001C, "Checking", "After check flipout spin max ram strength");
-        RegisterVariable(&unk_82F30020, "Checking", "After check flipout flip min ram strength");
-        RegisterVariable(&unk_82F30024, "Checking", "After check flipout flip max ram strength");
-        RegisterVariable(&unk_82F30028, "Checking", "Racecar kick strength");
-        RegisterVariable(&unk_82F30030, "Traffic Jams", "Slow driving speed");
-        SetStep(&unk_82F30030, 0.5f);
-        RegisterVariable(&unk_82F30034, "Traffic Jams", "Max slow driving time");
-        SetStep(&unk_82F30034, 0.5f);
-        RegisterVariable(&unk_82F30038, "Traffic Jams", "Max time in one hull");
-        SetStep(&unk_82F30038, 0.5f);
+        RegisterVariable(&KF_CHECK_SIDE_RAM_PROPORTION, "Checking", "Side ram proportion");
+        RegisterVariable(&KF_CHECK_SIDE_RAM_MIN_STRENGTH, "Checking", "Side ram strength");
+        RegisterVariable(&KF_MIN_STRENGTH_STAT_FOR_TRAFFIC_CHECK, "Checking", "Min strength stat for traffic check");
+        RegisterVariable(&KF_AFTER_CHECK_FIRST_RAM_MIN_STRENGTH, "Checking", "After check min first ram strength");
+        RegisterVariable(&KF_AFTER_CHECK_FIRST_RAM_MAX_STRENGTH, "Checking", "After check max first ram strength");
+        RegisterVariable(&KF_AFTER_SLAM_FIRST_RAM_MIN_STRENGTH, "Checking", "After slam min first ram strength");
+        RegisterVariable(&KF_AFTER_SLAM_FIRST_RAM_MAX_STRENGTH, "Checking", "After slam max first ram strength");
+        RegisterVariable(&KF_AFTER_CHECK_FIRST_RAM_DECAY, "Checking", "After check first ram decay");
+        RegisterVariable(&KF_AFTER_CHECK_MIN_SWERVE_TIME, "Checking", "After check min swerve time (seconds)");
+        RegisterVariable(&KF_AFTER_CHECK_MAX_SWERVE_TIME, "Checking", "After check max swerve time (seconds)");
+        RegisterVariable(&KF_AFTER_CHECK_FLIPOUT_RAM_SPIN_MIN_STRENGTH, "Checking", "After check flipout spin min ram strength");
+        RegisterVariable(&KF_AFTER_CHECK_FLIPOUT_RAM_SPIN_MAX_STRENGTH, "Checking", "After check flipout spin max ram strength");
+        RegisterVariable(&KF_AFTER_CHECK_FLIPOUT_RAM_FLIP_MIN_STRENGTH, "Checking", "After check flipout flip min ram strength");
+        RegisterVariable(&KF_AFTER_CHECK_FLIPOUT_RAM_FLIP_MAX_STRENGTH, "Checking", "After check flipout flip max ram strength");
+        RegisterVariable(&KF_RACECAR_CHECK_KICK, "Checking", "Racecar kick strength");
+        RegisterVariable(&KF_MAX_PLAYER_SPEED_FOR_TRAFFIC_JAMS_MPH, "Traffic Jams", "Slow driving speed");
+        SetStep(&KF_MAX_PLAYER_SPEED_FOR_TRAFFIC_JAMS_MPH, 0.5f);
+        RegisterVariable(&KF_MAX_PLAYER_DRIVING_SLOW_TIME_FOR_TRAFFIC_JAM, "Traffic Jams", "Max slow driving time");
+        SetStep(&KF_MAX_PLAYER_DRIVING_SLOW_TIME_FOR_TRAFFIC_JAM, 0.5f);
+        RegisterVariable(&KF_MAX_TIME_SINCE_HULL_CHANGE_FOR_TRAFFIC_JAM, "Traffic Jams", "Max time in one hull");
+        SetStep(&KF_MAX_TIME_SINCE_HULL_CHANGE_FOR_TRAFFIC_JAM, 0.5f);
         RegisterVariable(&mpModule->mfTimeSincePlayerWasDrivingQuickly,
                          "Traffic Jams", "Player slow driving time");
         SetReadOnly(&mpModule->mfTimeSincePlayerWasDrivingQuickly, true);
@@ -360,20 +366,20 @@ namespace BrnTraffic
         RegisterVariable(&mpModule->mbDEBUGEnablePressureSystem,
                          "Traffic Jams", "Enable pressure system");
 
-        SetStep(&kfSideRamStrength, 0.01f);
-        SetStep(&kfSideRamProportion, 0.05f);
-        SetStep(&unk_8300D018, 0.05f);
-        SetStep(&unk_82F2FFFC, 0.05f);
-        SetStep(&unk_82F30000, 0.05f);
-        SetStep(&unk_82F30004, 0.05f);
-        SetStep(&unk_82F30008, 0.05f);
-        SetStep(&unk_82F3000C, 0.05f);
-        SetStep(&unk_82F30010, 0.1f);
-        SetStep(&unk_82F30014, 0.1f);
-        SetStep(&unk_82F30018, 0.01f);
-        SetStep(&unk_82F3001C, 0.01f);
-        SetStep(&unk_82F30020, 0.01f);
-        SetStep(&unk_82F30024, 0.01f);
+        SetStep(&KF_CHECK_SIDE_RAM_MIN_STRENGTH, 0.01f);
+        SetStep(&KF_CHECK_SIDE_RAM_PROPORTION, 0.05f);
+        SetStep(&KF_MIN_STRENGTH_STAT_FOR_TRAFFIC_CHECK, 0.05f);
+        SetStep(&KF_AFTER_CHECK_FIRST_RAM_MIN_STRENGTH, 0.05f);
+        SetStep(&KF_AFTER_CHECK_FIRST_RAM_MAX_STRENGTH, 0.05f);
+        SetStep(&KF_AFTER_SLAM_FIRST_RAM_MIN_STRENGTH, 0.05f);
+        SetStep(&KF_AFTER_SLAM_FIRST_RAM_MAX_STRENGTH, 0.05f);
+        SetStep(&KF_AFTER_CHECK_FIRST_RAM_DECAY, 0.05f);
+        SetStep(&KF_AFTER_CHECK_MIN_SWERVE_TIME, 0.1f);
+        SetStep(&KF_AFTER_CHECK_MAX_SWERVE_TIME, 0.1f);
+        SetStep(&KF_AFTER_CHECK_FLIPOUT_RAM_SPIN_MIN_STRENGTH, 0.01f);
+        SetStep(&KF_AFTER_CHECK_FLIPOUT_RAM_SPIN_MAX_STRENGTH, 0.01f);
+        SetStep(&KF_AFTER_CHECK_FLIPOUT_RAM_FLIP_MIN_STRENGTH, 0.01f);
+        SetStep(&KF_AFTER_CHECK_FLIPOUT_RAM_FLIP_MAX_STRENGTH, 0.01f);
 
         RegisterVariable(&mfRenderCullDistance, "DRAWING", "Cull distance");
         SetStep(&mfRenderCullDistance, 20.0f);

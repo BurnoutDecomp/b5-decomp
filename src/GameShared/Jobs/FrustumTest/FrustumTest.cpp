@@ -331,7 +331,7 @@ void FrustumTestEntry(EA::Jobs::Param, EA::Jobs::Param lData,
     const u64 luIndex = (luThreadId - 0xF8000088ull) >> 2;
     if (luIndex >= 6)
     {
-        CgsDev::StrStream lMessage(byte_83015F20, sizeof(byte_83015F20));
+        CgsDev::StrStream lMessage(CgsCore::gacDebugPrintStringBuffer, sizeof(CgsCore::gacDebugPrintStringBuffer));
         const u64 luReportedThreadId = static_cast<u64>(reinterpret_cast<u32>(EA::Thread::GetThreadId()));
         lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";
         CgsSceneManager::FrustumJobAssert(

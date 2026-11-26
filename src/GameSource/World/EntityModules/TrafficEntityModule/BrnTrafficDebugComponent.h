@@ -77,24 +77,25 @@ namespace BrnTraffic
     // File-scope ARTIST tuning cells registered by OnActivate. The bounded full-image reader
     // review confirms no behavior consumer yet; preserve the original menu cells and defaults
     // rather than binding unrelated fields. Export-hole limits are recorded in the traffic map.
-    extern f32 kfSideRamProportion; // X360 0x82F2FFEC, 0.15
-    extern f32 kfSideRamStrength;   // X360 0x82F2FF94, 0.04
-    extern f32 unk_8300D018;        // X360 0x8300D018, 0.0
-    extern f32 unk_82F2FFFC;        // X360 0x82F2FFFC, 0.01
-    extern f32 unk_82F30000;        // X360 0x82F30000, 0.05
-    extern f32 unk_82F30004;        // X360 0x82F30004, 0.01
-    extern f32 unk_82F30008;        // X360 0x82F30008, 0.05
-    extern f32 unk_82F3000C;        // X360 0x82F3000C, 0.15
-    extern f32 unk_82F30010;        // X360 0x82F30010, 0.4
-    extern f32 unk_82F30014;        // X360 0x82F30014, 1.0
-    extern f32 unk_82F30018;        // X360 0x82F30018, 0.04
-    extern f32 unk_82F3001C;        // X360 0x82F3001C, 0.06
-    extern f32 unk_82F30020;        // X360 0x82F30020, 0.07
-    extern f32 unk_82F30024;        // X360 0x82F30024, 0.09
-    extern f32 unk_82F30028;        // X360 0x82F30028, 0.5
-    extern f32 unk_82F30030;        // X360 0x82F30030, 20.0
-    extern f32 unk_82F30034;        // X360 0x82F30034, 3.0
-    extern f32 unk_82F30038;        // X360 0x82F30038, 30.0
+    // Names: DWARF BrnTrafficTweakConstants.cpp:27-52 (namespace BrnTraffic, float32_t).
+    extern f32 KF_CHECK_SIDE_RAM_PROPORTION;                             // X360 0x82F2FFEC, 0.15, DWARF BrnTrafficTweakConstants.cpp:28
+    extern f32 KF_CHECK_SIDE_RAM_MIN_STRENGTH;                           // X360 0x82F2FF94, 0.04, DWARF BrnTrafficTweakConstants.cpp:27
+    extern f32 KF_MIN_STRENGTH_STAT_FOR_TRAFFIC_CHECK;                   // X360 0x8300D018, 0.0, DWARF BrnTrafficTweakConstants.cpp:29
+    extern f32 KF_AFTER_CHECK_FIRST_RAM_MIN_STRENGTH;                    // X360 0x82F2FFFC, 0.01, DWARF BrnTrafficTweakConstants.cpp:35
+    extern f32 KF_AFTER_CHECK_FIRST_RAM_MAX_STRENGTH;                    // X360 0x82F30000, 0.05, DWARF BrnTrafficTweakConstants.cpp:36
+    extern f32 KF_AFTER_SLAM_FIRST_RAM_MIN_STRENGTH;                     // X360 0x82F30004, 0.01, DWARF BrnTrafficTweakConstants.cpp:37
+    extern f32 KF_AFTER_SLAM_FIRST_RAM_MAX_STRENGTH;                     // X360 0x82F30008, 0.05, DWARF BrnTrafficTweakConstants.cpp:38
+    extern f32 KF_AFTER_CHECK_FIRST_RAM_DECAY;                           // X360 0x82F3000C, 0.15, DWARF BrnTrafficTweakConstants.cpp:39
+    extern f32 KF_AFTER_CHECK_MIN_SWERVE_TIME;                           // X360 0x82F30010, 0.4, DWARF BrnTrafficTweakConstants.cpp:40
+    extern f32 KF_AFTER_CHECK_MAX_SWERVE_TIME;                           // X360 0x82F30014, 1.0, DWARF BrnTrafficTweakConstants.cpp:41
+    extern f32 KF_AFTER_CHECK_FLIPOUT_RAM_SPIN_MIN_STRENGTH;             // X360 0x82F30018, 0.04, DWARF BrnTrafficTweakConstants.cpp:42
+    extern f32 KF_AFTER_CHECK_FLIPOUT_RAM_SPIN_MAX_STRENGTH;             // X360 0x82F3001C, 0.06, DWARF BrnTrafficTweakConstants.cpp:43
+    extern f32 KF_AFTER_CHECK_FLIPOUT_RAM_FLIP_MIN_STRENGTH;             // X360 0x82F30020, 0.07, DWARF BrnTrafficTweakConstants.cpp:44
+    extern f32 KF_AFTER_CHECK_FLIPOUT_RAM_FLIP_MAX_STRENGTH;             // X360 0x82F30024, 0.09, DWARF BrnTrafficTweakConstants.cpp:45
+    extern f32 KF_RACECAR_CHECK_KICK;                                    // X360 0x82F30028, 0.5, DWARF BrnTrafficTweakConstants.cpp:47
+    extern f32 KF_MAX_PLAYER_SPEED_FOR_TRAFFIC_JAMS_MPH;                 // X360 0x82F30030, 20.0, DWARF BrnTrafficTweakConstants.cpp:50
+    extern f32 KF_MAX_PLAYER_DRIVING_SLOW_TIME_FOR_TRAFFIC_JAM;          // X360 0x82F30034, 3.0, DWARF BrnTrafficTweakConstants.cpp:51
+    extern f32 KF_MAX_TIME_SINCE_HULL_CHANGE_FOR_TRAFFIC_JAM;            // X360 0x82F30038, 30.0, DWARF BrnTrafficTweakConstants.cpp:52
 
     // ========================================================================
     // BrnTraffic::DebugComponent : public CgsDev::DebugComponent
