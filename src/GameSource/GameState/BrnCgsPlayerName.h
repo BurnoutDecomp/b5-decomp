@@ -30,6 +30,9 @@ namespace CgsNetwork
         // CgsAssert/CgsStrStream includes do not leak into this widely-included header.
         void Construct(const char* lpcPlayerName);
 
+        // DWARF CgsPlayerName.h:49; LegacySrc CgsPlayerName.h:98 defines it inline in the header.
+        void Clear() { macName[0] = '\0'; }
+
         const char* GetPlayerName() const { return macName; }
     };
 }

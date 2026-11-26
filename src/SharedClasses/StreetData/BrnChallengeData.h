@@ -145,6 +145,27 @@ namespace BrnStreetData
         static int32_t CompareScores( ScoreType leScoreType, int32_t liScore0, int32_t liScore1 );
     };
 
+    // DWARF BrnChallengeData.h:164: a header inline in the original (the network unities list it
+    // as an instance). ARTIST keeps an out-of-line copy (0x8231B8C8, 8 callers) and inlines it,
+    // range tests and all, where the arguments are constants
+    // (RoadRulesManagerDebugComponent::TriggerPersonalBest 0x8258AEB0). The score-type assert
+    // carries the header's own line (li r5,0x198 at 0x8231B8F8).
+#define CGS_ARTIST_BRNCHALLENGEDATA_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h"
+    inline void ChallengeData::SetScore( ScoreType leScoreType, int32_t liScore )
+    {
+        CGS_ASSERT_AT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
+                       "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT",
+                       CGS_ARTIST_BRNCHALLENGEDATA_H_FILE, 408 );
+
+        if ( liScore <= ScoreList::KAI_MAX_SCORES[ leScoreType ] &&
+             liScore >= ScoreList::KAI_MIN_SCORES[ leScoreType ] )
+        {
+            mValidScores.SetBit( static_cast<u32>( leScoreType ) );
+            mDirty.SetBit( static_cast<u32>( leScoreType ) );
+            mScoreList.SetScore( leScoreType, liScore );
+        }
+    }
+
     // BrnChallengeData.h:225 (DWARF). The local-player challenge record: a ChallengeData plus the
     // pair of car ids that scored it. Promoted out of the former file-local definition in
     // BrnChallengeData.cpp so callers outside that TU (e.g. the network road-rules debug component,
