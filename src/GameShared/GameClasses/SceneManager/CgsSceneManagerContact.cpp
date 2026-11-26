@@ -7,6 +7,11 @@
 // Populates one Contact from contact-point luContactPointIndex of a source
 // collision-pair result. Behaviour-faithful (semantic parity, not byte match).
 
+// ARTIST's __FILE__ for these asserts (string @0x820F27F8): the original body is the
+// header-inline Construct of CgsSceneManagerTypes.h, emitted out of line.
+#define CGS_ARTIST_SCENE_MANAGER_TYPES_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerTypes.h"
+
 namespace CgsSceneManager
 {
     // -------------------------------------------------------------------------
@@ -25,17 +30,18 @@ namespace CgsSceneManager
     //   this->mImpulse  = v0                   (stvx128 v0, r30, 0x10)
     //   this->muFieldA  = lpResult[+0x04]      (lwz r11,4(r31);  stw r11,0x38(r30))
     //   this->muFieldB  = lpResult[+0x0C]      (lwz r11,0xC(r31);stw r11,0x3C(r30))
-    //   return this
     //
     // The vspltisw/vslw/vxor triple is the standard VMX idiom for a per-component
     // float negation (flip bit 31 of each of the four lanes) — reproduced with the
     // corresponding vector intrinsics below.
     // -------------------------------------------------------------------------
-    Contact* Contact::Construct(const SourceResult* lpResult, u32 luContactPointIndex)
+    void Contact::Construct(const SourceResult* lpResult, u32 luContactPointIndex)
     {
-        CGS_ASSERT(lpResult != 0, "lpResult != NULL");                              // :157
-        CGS_ASSERT(luContactPointIndex < lpResult->muNumPoints,
-                   "luContactPointIndex < lpResult->numPoints");                          // :158
+        CGS_ASSERT_AT(lpResult != 0, "lpResult != NULL",
+                      CGS_ARTIST_SCENE_MANAGER_TYPES_FILE, 157);
+        CGS_ASSERT_AT(luContactPointIndex < lpResult->muNumPoints,
+                      "luContactPointIndex < lpResult->numPoints",
+                      CGS_ARTIST_SCENE_MANAGER_TYPES_FILE, 158);
 
         // -mNormal : VMX sign-bit flip on all four lanes.
         const __vector4 lSignMask = __vslw(__vspltisw(-1), __vspltisw(-1));
@@ -46,7 +52,5 @@ namespace CgsSceneManager
 
         muFieldA = lpResult->muFieldA;
         muFieldB = lpResult->muFieldB;
-
-        return this;
     }
 }

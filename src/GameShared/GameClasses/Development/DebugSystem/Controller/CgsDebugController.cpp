@@ -55,11 +55,6 @@ namespace CgsDev
 
     void DebugController::Destruct() {}
 
-    void DebugController::SetGamePad(DebugManagerPad* lpDebugManagerPad)
-    {
-        mpDebugManagerPad = lpDebugManagerPad;
-    }
-
     void DebugController::Update(f32 lfTimeStep)
     {
         UpdatePad();

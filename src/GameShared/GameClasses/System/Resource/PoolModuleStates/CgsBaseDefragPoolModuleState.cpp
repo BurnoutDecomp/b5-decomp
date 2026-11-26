@@ -23,6 +23,9 @@
 
 // Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsBaseDefragPoolModuleState.cpp".
 
+#define CGS_ARTIST_BASE_DEFRAG_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsBaseDefragPoolModuleState.cpp"
+
 namespace CgsResource
 {
     // Inlined ARTIST PoolModule::Construct 828FC0B8 for both strategies.
@@ -90,24 +93,17 @@ namespace CgsResource
     // a raw 16-byte stride from &node.muStatus; we index by node.
     s32 BaseDefragPoolModuleState::FindNextFreeNode(s32 liStartNode)
     {
-        CGS_ASSERT(mpLinearHeapNodes, "mpLinearHeapNodes");   // :307
+        CGS_ASSERT_AT(mpLinearHeapNodes, "mpLinearHeapNodes", CGS_ARTIST_BASE_DEFRAG_FILE, 307);
 
-        s32 liNumNodes = muNumLinearHeapNodes;                // v4 = *(a1+68) (lhz @ +0x44)
-        s32 liNode = liStartNode;                             // result = a2
-        if (liNode >= liNumNodes)
+        // DWARF local liIndex (cpp:309).
+        for (s32 liIndex = liStartNode; liIndex < muNumLinearHeapNodes; ++liIndex)
         {
-            return -1;
-        }
-
-        // i = &mpLinearHeapNodes[liStartNode].muStatus; advance one node per step.
-        for (; mpLinearHeapNodes[liNode].muStatus != LinearHeapNode::KU_STATUS_FREE; )
-        {
-            if (++liNode >= liNumNodes)
+            if (mpLinearHeapNodes[liIndex].muStatus == LinearHeapNode::KU_STATUS_FREE)
             {
-                return -1;
+                return liIndex;
             }
         }
-        return liNode;
+        return -1;
     }
 
     // -------- BuildFinalRelocationData @ 0x828DA2E8 --------

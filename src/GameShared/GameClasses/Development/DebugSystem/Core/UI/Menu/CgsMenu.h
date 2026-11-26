@@ -33,8 +33,9 @@ namespace CgsDev
             virtual void    GetDisplayName(char* lpcBuffer, s32 liBufferLen) const;
             virtual Window* OpenAsWindow();
 
-            const char* GetCaption() const;
-            Menu*       GetParent() const;
+            // Header-inline (DWARF CgsMenu.h:156/162); ARTIST has no out-of-line copy.
+            const char* GetCaption() const { return macCaption; }
+            Menu*       GetParent() const  { return mpParent; }
             void        GetPath(char* lpcBuffer, s32 liBufferLen);
 
             void      AddMenuItem(MenuItem* lpMenuItem);

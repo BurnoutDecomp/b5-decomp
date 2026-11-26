@@ -43,8 +43,6 @@ namespace CgsDev
                 mpCurrentMenuItem = lpMenuItem;
         }
 
-        const char* Menu::GetCaption() const { return macCaption; }
-        Menu*       Menu::GetParent() const  { return mpParent; }
 
         void Menu::Update(f32 /*lfTimeStep*/, InputEvent leEvent)
         {
@@ -83,12 +81,13 @@ namespace CgsDev
 
         void Menu::GetPath(char* lpcBuffer, s32 liBufferLen)
         {
-            if (!mpParent)
+            // ARTIST 0x82816434 tests the GetParent() value itself (signed cmpwi).
+            if (!GetParent())
             {
                 lpcBuffer[0] = '\0';
                 return;
             }
-            mpParent->GetPath(lpcBuffer, liBufferLen);
+            GetParent()->GetPath(lpcBuffer, liBufferLen);
             DebugUI::SafeStringCat(lpcBuffer, "/", liBufferLen);
             DebugUI::SafeStringCat(lpcBuffer, macCaption, liBufferLen);
         }

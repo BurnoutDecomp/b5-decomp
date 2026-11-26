@@ -93,6 +93,14 @@ namespace CgsInput
         {
             f32 mfSpringCoefficient;   // +0x00  DWARF name: mfStrength
             f32 mfSpringSaturation;    // +0x04  DWARF name: mfOffset
+
+            // Inlined by PostWorldInputBuffer::Construct (DecFIGS CgsInputModuleIO.cpp:91 call
+            // list) and the race-car output buffer's Construct.
+            void Construct()
+            {
+                mfSpringCoefficient = 0.0f;
+                mfSpringSaturation  = 0.0f;
+            }
         };
     }
 }

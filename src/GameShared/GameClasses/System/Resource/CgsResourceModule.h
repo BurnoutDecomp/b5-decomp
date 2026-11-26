@@ -132,6 +132,8 @@ namespace CgsResource
         // Accessor so the GameDataModule's CreatePools/CreateBanks can drive the embedded PoolModule
         // (the X360 reaches it through the resource-module vtable; here a by-name accessor).
         PoolModule&             GetPoolModule()   { return mPoolModule; }
+        // DWARF CgsResourceModule.h:303 / cpp:1154; ARTIST 0x828F4558.
+        void DebugReportPools(PoolModule::FPoolReportCallback lpfCallback, void* lpUserData);
         CgsMemory::MemoryModule& GetMemoryModule() { return mMemoryModule; }
 
         // Native asynchronous stream and patch request entry points.

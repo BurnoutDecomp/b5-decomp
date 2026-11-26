@@ -281,6 +281,8 @@ namespace Events
     // ID members of derived requests are 8-byte aligned, so this base occupies 12 bytes.
     struct PoolEvent : public Event
     {
+        CgsModule::BaseEventReceiverQueue* GetUser() const { return mpUser; }   // h:234
+
         CgsModule::BaseEventReceiverQueue* mpUser;   // +0
         s32                                miEventId; // +4
         s32                                miPoolId;  // +8

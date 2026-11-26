@@ -118,4 +118,12 @@ namespace CgsDev
 
         static const f32        KF_KEY_REPEAT_TIME;    // h:186
     };
+
+    // Header-inline: PS3 DebugManager::SetGamePad (0xB1798C) runs its store from
+    // CgsDebugController.h:227 (decfigs_inlining), and ARTIST DebugManager::SetGamePad
+    // @0x82815EF8 stores the pad straight into the controller; no out-of-line copy exists.
+    inline void DebugController::SetGamePad(DebugManagerPad* lpDebugManagerPad)
+    {
+        mpDebugManagerPad = lpDebugManagerPad;
+    }
 }

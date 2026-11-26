@@ -59,9 +59,6 @@ class AttribSysGarbageCollector : public Attrib::IGarbageCollector
 public:
     void Construct() { miTotalFreedSoFar = 0; }
 
-    // Out-of-line so MSVC emits the ??_G scalar deleting destructor @ X360 0x827DD340.
-    ~AttribSysGarbageCollector() ;
-
     // X360 0x827DD330 accumulates r7, the released block size. The native ABI
     // passes the 64-bit AssetID in r5, the data pointer in r6 and the size in r7.
     void ReleaseData(u8 luType, Attrib::Vault::AssetID lAssetId,

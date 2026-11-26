@@ -87,11 +87,13 @@ namespace CgsFileSystem
         // DeviceManager queues their work on the root physical device's worker while retaining
         // the logical device in Handle so its overrides still receive the operation.
         Device* GetParent() const { return mpParent; }
+        // Walks with GetParent(): ARTIST (DeviceManager::Write @0x828F1C40) tests the
+        // accessor's value itself (signed cmpwi). DWARF local lpPhysical, h:129.
         Device* GetPhysicalParent()
         {
             Device* lpPhysical = this;
-            while (lpPhysical->mpParent)
-                lpPhysical = lpPhysical->mpParent;
+            while (lpPhysical->GetParent())
+                lpPhysical = lpPhysical->GetParent();
             return lpPhysical;
         }
         void SetParent(Device* lpParent) { mpParent = lpParent; }

@@ -27,4 +27,6 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/LionBatch.h"
 
-template LionBatch& CgsContainers::Array<LionBatch, 512>::GetItem(u32);
+// The const overload: ARTIST 0x8290A250 asserts on CgsArray.h:538/539 (li r5,0x21A/0x21B),
+// the const GetItem's lines.
+template const LionBatch& CgsContainers::Array<LionBatch, 512>::GetItem(u32) const;

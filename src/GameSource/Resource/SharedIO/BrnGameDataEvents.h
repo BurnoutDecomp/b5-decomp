@@ -125,6 +125,14 @@ namespace GameDataIO
     {
         s32                                 miEventId;       // +0x00
         CgsModule::BaseEventReceiverQueue*  mpReceiverQueue; // +0x04
+
+        // DWARF BrnGameDataEvents.h:69 (protected in the original). ARTIST stores the
+        // queue before the id (RequestInterface<1024>::GetPropInstances @0x82303E3C).
+        void Construct(CgsModule::BaseEventReceiverQueue* lpReceiverQueue, s32 liEventId)
+        {
+            mpReceiverQueue = lpReceiverQueue;
+            miEventId       = liEventId;
+        }
     };
 
     // DWARF: BrnGameDataEvents.h:86. sizeof == 0x20 (the X360 typed-AddEvent size arg).
@@ -134,6 +142,19 @@ namespace GameDataIO
         CgsID     mId;         // +0x10 (u64, 8-aligned)
         EAssetSet meType;      // +0x18 (4-byte enum)
         bool      mbFailFlag;  // +0x1C
+
+        // DWARF BrnGameDataEvents.h:96. Store order as ARTIST's request builders show it
+        // (RequestInterface<3072>::GetVehicleList @0x82396A6C..0x82396AA0: queue, id, asset id,
+        // type, pool, flag; <1024>::GetPropInstances @0x82303E08 agrees).
+        void Construct(CgsModule::BaseEventReceiverQueue* lpReceiverQueue, s32 liEventId, s32 liPoolId,
+                       CgsID lId, EAssetSet leType, bool lbFailFlag)
+        {
+            GameDataEvent::Construct(lpReceiverQueue, liEventId);
+            mId        = lId;
+            meType     = leType;
+            miPoolId   = liPoolId;
+            mbFailFlag = lbFailFlag;
+        }
         // ADDITIVE GROW: the asset-id accessor the GameData event consumers read. The
         // X360 load-complete handlers read mId straight from +0x10 (e.g.
         // RaceCarBaseComponentStreamer::OnLoadComplete @0x822C0450 `ld r11,0x10(event)`),

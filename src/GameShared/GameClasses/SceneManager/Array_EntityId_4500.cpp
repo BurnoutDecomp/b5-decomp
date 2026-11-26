@@ -18,5 +18,6 @@ CGS_STATIC_ASSERT((sizeof(CgsSceneManager::EntityId) == 4),
               "EntityId must be 4 bytes (Array<...,4500> Append stride 4 / count offset 18000)");
 
 template void                       CgsContainers::Array<CgsSceneManager::EntityId, 4500>::Append(const CgsSceneManager::EntityId&);
-template CgsSceneManager::EntityId& CgsContainers::Array<CgsSceneManager::EntityId, 4500>::GetItem(u32);
+// The const overload: ARTIST 0x822AF9B0 asserts on CgsArray.h:538/539, the const GetItem's lines.
+template const CgsSceneManager::EntityId& CgsContainers::Array<CgsSceneManager::EntityId, 4500>::GetItem(u32) const;
 template u32                        CgsContainers::Array<CgsSceneManager::EntityId, 4500>::GetLength() const;

@@ -387,25 +387,27 @@ namespace CgsDev
         // Bounded string helpers (MakeFullPath/menu-path building use these). Always null-terminate
         // within the buffer. Mirrors the X360: on a NULL source or a buffer length <= 1 it still writes
         // the terminator byte (it never dereferences a NULL source), otherwise strncpy's up to len-1
-        // bytes and terminates.
-        void DebugUI::SafeStringCopy(char* lpcBuffer, const char* lpcSource, s32 liBufferLen)
+        // bytes and terminates. DWARF names the parameters lpcDst/lpcSrc/liSize and gives
+        // SafeStringCopy no local: the terminator index is the decremented size (ARTIST
+        // 0x82815FE0 keeps liSize - 1 in one register for strncpy and the store).
+        void DebugUI::SafeStringCopy(char* lpcDst, const char* lpcSrc, s32 liSize)
         {
-            if (lpcSource && liBufferLen > 1)
+            if (lpcSrc && liSize > 1)
             {
-                const s32 liCopyLength = liBufferLen - 1;
-                strncpy(lpcBuffer, lpcSource, liCopyLength);
-                lpcBuffer[liCopyLength] = '\0';
+                --liSize;
+                strncpy(lpcDst, lpcSrc, liSize);
+                lpcDst[liSize] = '\0';
             }
             else
             {
-                *lpcBuffer = '\0';
+                *lpcDst = '\0';
             }
         }
 
-        void DebugUI::SafeStringCat(char* lpcBuffer, const char* lpcSource, s32 liBufferLen)
+        void DebugUI::SafeStringCat(char* lpcDst, const char* lpcSrc, s32 liSize)
         {
-            const s32 liLength = static_cast<s32>(strlen(lpcBuffer));
-            SafeStringCopy(lpcBuffer + liLength, lpcSource, liBufferLen - liLength);
+            const s32 liLength = static_cast<s32>(strlen(lpcDst));
+            SafeStringCopy(lpcDst + liLength, lpcSrc, liSize - liLength);
         }
 
     }

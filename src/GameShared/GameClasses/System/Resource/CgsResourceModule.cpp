@@ -786,10 +786,11 @@ namespace CgsResource
         s32 liPoolEventId = lpPoolQueue->GetFirstEvent(&lpPoolEvent, &liPoolEventSize);
         while (liPoolEventSize > 0)
         {
-            CgsModule::BaseEventReceiverQueue* lpUser =
-                reinterpret_cast<const Events::PoolEvent*>(lpPoolEvent)->mpUser;
-            if (lpUser && liPoolEventId < 15)
-                lpUser->AddEvent(lpPoolEvent, kaiReceiverTags[liPoolEventId], liPoolEventSize);
+            // DWARF local lpResponse (cpp:980). ARTIST 0x828EC87C tests the GetUser() value
+            // itself (signed cmpwi), not a stored copy.
+            const Events::PoolEvent* lpResponse = reinterpret_cast<const Events::PoolEvent*>(lpPoolEvent);
+            if (lpResponse->GetUser() && liPoolEventId < 15)
+                lpResponse->GetUser()->AddEvent(lpPoolEvent, kaiReceiverTags[liPoolEventId], liPoolEventSize);
             liPoolEventId = lpPoolQueue->GetNextEvent(lpPoolEvent, &lpPoolEvent, &liPoolEventSize);
         }
         if (mbPatchRequestPending && !mFileSystem.GetPatchManager()->IsPatching())
@@ -1059,6 +1060,12 @@ namespace CgsResource
         lpOutput->GetFileSystemStatusInterface()->SetDiskErrorOccured(mFileSystem.HasDiskErrorOccured());
         lpOutput->UnlockForWrite();
         return leResult;
+    }
+
+    // ARTIST 0x828F4558: hand the visitor to the pool module.
+    void ResourceModule::DebugReportPools(PoolModule::FPoolReportCallback lpfCallback, void* lpUserData)
+    {
+        mPoolModule.DebugReport(lpfCallback, lpUserData);
     }
 
     // @ 0x829019F0 - forward the pool module's emitted resource-memory requests into the MemoryModule

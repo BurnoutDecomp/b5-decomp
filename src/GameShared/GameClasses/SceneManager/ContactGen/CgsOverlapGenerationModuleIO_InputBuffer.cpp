@@ -95,10 +95,11 @@ void InputBuffer::UpdateBody(u32 luIndex, const rw::collision::AABBox* lpAabb,
     InUpdateBody lEvent;
 
     // Same pinned two-corner-row image copy as AddBody above (rw::collision::AABBox is
-    // forward-declared only; see the header banner's Vector3-fork note).
+    // forward-declared only; see the header banner's Vector3-fork note). Assigned in
+    // ARTIST's store order (0x828BA458..0x828BA474): box, index, padding, volume id.
     lEvent.mAabb             = *reinterpret_cast<const AABBoxRows*>(lpAabb);
-    lEvent.mPadding          = lvPadding;
     lEvent.muIndex           = luIndex;
+    lEvent.mPadding          = lvPadding;
     lEvent.mVolumeInstanceID = lVolumeInstanceID;
 
     GetUpdateBodyQueue()->AddEvent(lEvent);

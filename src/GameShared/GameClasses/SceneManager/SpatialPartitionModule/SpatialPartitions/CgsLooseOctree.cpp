@@ -76,6 +76,10 @@
 #include <cmath>     // std::fabs
 #include <cstring>   // std::memcpy
 
+// ARTIST's __FILE__ for this source (string @0x820F32E8).
+#define CGS_ARTIST_LOOSE_OCTREE_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.cpp"
+
 // includes folded in from the CgsLooseOctree_w*.cpp partfiles (2026-09-15)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 
@@ -1223,12 +1227,12 @@ namespace CgsSceneManager
                                         u32 luJobIndex)
     {
         CGS_ASSERT_AT(luJobIndex < KU_NUM_FRUSTUM_TEST_JOBS,
-                      "luJobIndex < KU_NUM_FRUSTUM_TEST_JOBS", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.cpp", 3067);
+                      "luJobIndex < KU_NUM_FRUSTUM_TEST_JOBS", CGS_ARTIST_LOOSE_OCTREE_FILE, 3067);
         const u32 luQueryIndex = maFrustumTestJobData[luJobIndex].mQueryInfo.muNumQueries;
         // The query dispatcher fits every worker's payload slots. ARTIST's
         // diagnostic compares against the staging result buffer's run limit.
         CGS_ASSERT_AT(luQueryIndex < KU_JOB_BUFFER_MAX_NUM_QUERIES,
-                      "luQueryIndex < KU_JOB_BUFFER_MAX_NUM_QUERIES", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.cpp", 3069);
+                      "luQueryIndex < KU_JOB_BUFFER_MAX_NUM_QUERIES", CGS_ARTIST_LOOSE_OCTREE_FILE, 3069);
 
         FrustumJobQueryInfo& lrQueryInfo = maFrustumTestJobData[luJobIndex].mQueryInfo;
         lrQueryInfo.maViewProjection[luQueryIndex] = *lpViewProjection;
@@ -1287,33 +1291,33 @@ namespace CgsSceneManager
     // ===========================================================================
     void LooseOctree::WaitForFrustumTestJobResults(CoarseQueryResultBuffer<16384>* lpResultBufferOut)
     {
-        for (u32 luJob = 0; luJob < KU_NUM_FRUSTUM_TEST_JOBS; ++luJob)
+        // DWARF locals (CgsSceneManagerUnity): luI cpp:3123, lQueryInfo cpp:3130, luJ cpp:3131;
+        // no buffer or job-data reference.
+        for (u32 luI = 0; luI < KU_NUM_FRUSTUM_TEST_JOBS; ++luI)
         {
-            if (!mabFrustumJobActive[luJob])
+            if (mabFrustumJobActive[luI])
             {
-                continue;
+                maFrustumTestJobs[luI].WaitOn();
+                const FrustumJobQueryInfo& lQueryInfo = maFrustumTestJobData[luI].mQueryInfo;
+
+                for (u32 luJ = 0; luJ < lQueryInfo.muNumQueries; ++luJ)
+                {
+                    lpResultBufferOut->BeginResultsBatch();
+                    lpResultBufferOut->PushResults(
+                        maJobResultBuffers[luI].mpu16Buffer + maJobResultBuffers[luI].maQueryOffsets[luJ],
+                        maJobResultBuffers[luI].maQueryNumResults[luJ]);
+
+                    CGS_ASSERT_AT(lpResultBufferOut->GetNumResultsAttempted() ==
+                                  lpResultBufferOut->GetNumResultsWritten(),
+                                  "lpResultBufferOut->GetNumResultsAttempted() == lpResultBufferOut->GetNumResultsWritten()",
+                                  CGS_ARTIST_LOOSE_OCTREE_FILE, 3137 /* ARTIST 0x828B26B0 */);
+
+                    lpResultBufferOut->EndResultsBatch();
+                }
+
+                mabFrustumJobActive[luI]                          = false;
+                maFrustumTestJobData[luI].mQueryInfo.muNumQueries = 0;
             }
-
-            maFrustumTestJobs[luJob].WaitOn();
-            JobCoarseResultBuffer& lrBuffer = maJobResultBuffers[luJob];
-            FrustumTestJobData& lrJobData = maFrustumTestJobData[luJob];
-
-            for (u32 luQuery = 0; luQuery < lrJobData.mQueryInfo.muNumQueries; ++luQuery)
-            {
-                lpResultBufferOut->BeginResultsBatch();
-                lpResultBufferOut->PushResults(
-                    lrBuffer.mpu16Buffer + lrBuffer.maQueryOffsets[luQuery],
-                    lrBuffer.maQueryNumResults[luQuery]);
-
-                CGS_ASSERT(lpResultBufferOut->GetNumResultsAttempted() ==
-                           lpResultBufferOut->GetNumResultsWritten(),
-                           "lpResultBufferOut->GetNumResultsAttempted() == lpResultBufferOut->GetNumResultsWritten()");
-
-                lpResultBufferOut->EndResultsBatch();
-            }
-
-            mabFrustumJobActive[luJob]                = false;
-            lrJobData.mQueryInfo.muNumQueries         = 0;
         }
     }
 

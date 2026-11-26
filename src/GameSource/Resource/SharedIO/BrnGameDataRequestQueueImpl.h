@@ -43,12 +43,7 @@ namespace GameDataIO
             s32 liEventId, s32 liPoolId)
     {
         LoadGameDataEvent lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = liPoolId;                  // +0x08
-        lEvent.mId             = 0xB95B4FE36709E838ULL;     // +0x10
-        lEvent.meType          = E_ASSETSET_ATTRIBS;        // +0x18 (4)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, liPoolId, 0xB95B4FE36709E838ULL, E_ASSETSET_ATTRIBS, false);
 
         return mRequestQueue.AddEvent(lEvent, 26);
     }
@@ -61,12 +56,7 @@ namespace GameDataIO
             s32 liEventId)
     {
         GetVehicleListRequest lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = 5;                         // +0x08
-        lEvent.mId             = 0xC98B447411F97E38ULL;     // +0x10
-        lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, 5, 0xC98B447411F97E38ULL, E_ASSETSET_DATA, false);
 
         return mRequestQueue.AddEvent(lEvent, 49);
     }
@@ -127,12 +117,7 @@ namespace GameDataIO
             s32 liEventId, s32 liPoolId)
     {
         LoadGameDataEvent lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = liPoolId;                  // +0x08
-        lEvent.mId             = 0x7111805C01676561ULL;     // +0x10
-        lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, liPoolId, 0x7111805C01676561ULL, E_ASSETSET_DATA, false);
 
         return mRequestQueue.AddEvent(lEvent, 26);
     }
@@ -144,12 +129,7 @@ namespace GameDataIO
             s32 liEventId, s32 liPoolId)
     {
         LoadGameDataEvent lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = liPoolId;                  // +0x08
-        lEvent.mId             = 0xBEB7A3F7E9788FFFULL;     // +0x10
-        lEvent.meType          = E_ASSETSET_PHYSICS;        // +0x18 (1)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, liPoolId, 0xBEB7A3F7E9788FFFULL, E_ASSETSET_PHYSICS, false);
 
         return mRequestQueue.AddEvent(lEvent, 26);
     }
@@ -167,12 +147,7 @@ namespace GameDataIO
             BrnResource::EAssetSet leAssetSet)
     {
         LoadGameDataEvent lEvent;
-        lEvent.miEventId       = liEventId;                          // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;                    // +0x04
-        lEvent.miPoolId        = liPoolId;                           // +0x08
-        lEvent.mId             = MakeVehicleId(lpcVehicleName);      // +0x10
-        lEvent.meType          = leAssetSet;                         // +0x18
-        lEvent.mbFailFlag      = false;                              // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, liPoolId, MakeVehicleId(lpcVehicleName), leAssetSet, false);
 
         return mRequestQueue.AddEvent(lEvent, 26);
     }
@@ -186,12 +161,7 @@ namespace GameDataIO
             s32 liEventId, s32 liPoolId)
     {
         GetGameDataEvent lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = liPoolId;                  // +0x08
-        lEvent.mId             = 0x71117D7F4337FFFFULL;     // +0x10
-        lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, liPoolId, 0x71117D7F4337FFFFULL, E_ASSETSET_DATA, false);
 
         return mRequestQueue.AddEvent(lEvent, 49);
     }
@@ -209,12 +179,7 @@ namespace GameDataIO
             s32 liEventId, s32 liPoolId)
     {
         LoadGameDataEvent lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = liPoolId;                  // +0x08
-        lEvent.mId             = 0x71117D7F4337FFFFULL;     // +0x10
-        lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, liPoolId, 0x71117D7F4337FFFFULL, E_ASSETSET_DATA, false);
 
         return mRequestQueue.AddEvent(lEvent, 26);
     }
@@ -228,12 +193,7 @@ namespace GameDataIO
             s32 liEventId)
     {
         GetICEListRequest lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = 5;                         // +0x08
-        lEvent.mId             = 0x7DDFC0102EE70838ULL;     // +0x10
-        lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, 5, 0x7DDFC0102EE70838ULL, E_ASSETSET_DATA, false);
 
         return mRequestQueue.AddEvent(lEvent, 49);
     }
@@ -247,12 +207,7 @@ namespace GameDataIO
             s32 liEventId, s32 liPoolId)
     {
         LoadGameDataEvent lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = liPoolId;                  // +0x08
-        lEvent.mId             = 0xBEB7A76555FC1FFFULL;     // +0x10
-        lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, liPoolId, 0xBEB7A76555FC1FFFULL, E_ASSETSET_DATA, false);
 
         return mRequestQueue.AddEvent(lEvent, 26);
     }
@@ -276,12 +231,8 @@ namespace GameDataIO
         CgsCore::SPrintf(lacName, KI_CGSID_STRING_LEN, "PRP_INST_%d", liInstanceIndex);
 
         GetGameDataEvent lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = liPoolId;                  // +0x08
-        lEvent.mId             = CgsIDCompress(lacName);    // +0x10
-        lEvent.meType          = E_ASSETSET_PHYSICS;        // +0x18 (1)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, liPoolId, CgsIDCompress(lacName),
+                         E_ASSETSET_PHYSICS, false);
 
         return mRequestQueue.AddEvent(lEvent, 49);
     }
@@ -295,12 +246,7 @@ namespace GameDataIO
             s32 liEventId, s32 liPoolId)
     {
         LoadGameDataEvent lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = liPoolId;                  // +0x08
-        lEvent.mId             = 0xA773D7113DF454BFULL;     // +0x10
-        lEvent.meType          = E_ASSETSET_PHYSICS;        // +0x18 (1)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, liPoolId, 0xA773D7113DF454BFULL, E_ASSETSET_PHYSICS, false);
 
         return mRequestQueue.AddEvent(lEvent, 26);
     }
@@ -314,12 +260,7 @@ namespace GameDataIO
             s32 liEventId)
     {
         GetWheelListRequest lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = 5;                         // +0x08
-        lEvent.mId             = 0xCF5D625701228838ULL;     // +0x10
-        lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, 5, 0xCF5D625701228838ULL, E_ASSETSET_DATA, false);
 
         return mRequestQueue.AddEvent(lEvent, 49);
     }
@@ -333,12 +274,7 @@ namespace GameDataIO
             s32 liEventId)
     {
         GetFreeburnChallengeListRequest lEvent;
-        lEvent.miEventId       = liEventId;                 // +0x00
-        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
-        lEvent.miPoolId        = 5;                         // +0x08
-        lEvent.mId             = 0x5AF30CD3F949F838ULL;     // +0x10
-        lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
-        lEvent.mbFailFlag      = false;                     // +0x1C
+        lEvent.Construct(lpReceiverQueue, liEventId, 5, 0x5AF30CD3F949F838ULL, E_ASSETSET_DATA, false);
 
         return mRequestQueue.AddEvent(lEvent, 49);
     }

@@ -51,8 +51,7 @@ void PostWorldInputBuffer::Construct()
     mBindRequestQueue.Clear();
     mUnBindRequestQueue.Clear();
     mPadMappingQueue.Clear();
-    mWheelFFSpring.mfSpringCoefficient = 0.0f;
-    mWheelFFSpring.mfSpringSaturation = 0.0f;
+    mWheelFFSpring.Construct();
 }
 
 // ARTIST 0x828EF880. The original clears the three lengths in reverse order

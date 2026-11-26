@@ -91,11 +91,13 @@ void CgsIDConvertToString(CgsID lID, char* lpcString)
 {
     CgsIDUnCompress(lID, lpcString);
 
-    for (char* lpc = lpcString + (KI_CGSID_STRING_LEN - 2); *lpc == ' '; --lpc)
+    // DWARF local lpcTemp (CgsID.cpp:395). ARTIST 0x82815D54 tests the lower bound
+    // before each store.
+    char* lpcTemp = lpcString + (KI_CGSID_STRING_LEN - 2);
+    while (*lpcTemp == ' ' && lpcTemp >= lpcString)
     {
-        *lpc = '\0';
-        if (lpc <= lpcString)
-            break;
+        *lpcTemp = '\0';
+        --lpcTemp;
     }
 }
 

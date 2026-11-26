@@ -42,18 +42,10 @@ AttribSysModule::EPrepareStage operator++(AttribSysModule::EPrepareStage& leStag
     return leOld;
 }
 
-// @ 0x827DD340 -- AttribSysGarbageCollector's scalar deleting destructor (MSVC's ??_G thunk).
-// Defining the virtual destructor out-of-line here makes the compiler synthesise exactly that
-// thunk: it runs the derived destructor (which the X360 folds to a direct bl on the base
-// Attrib::IGarbageCollector::~IGarbageCollector), then -- when the low bit of the deleting
-// flag is set -- calls operator delete(this) and returns this on both paths. The class owns
-// only miTotalFreedSoFar (a plain s32) and holds no resources, so the destructor body is
-// empty; the observable effect is the base-vptr install and the conditional free the
-// synthesised thunk supplies. Mirrors the base sibling Attrib::IGarbageCollector
-// (attribgarbagecollector.cpp @ 0x827DBA70).
-AttribSysGarbageCollector::~AttribSysGarbageCollector()
-{
-}
+// @ 0x827DD340 -- AttribSysGarbageCollector's scalar deleting destructor. The destructor is
+// implicit (DWARF lists ~AttribSysGarbageCollector with no source line, like the implicit
+// constructors): ARTIST's thunk calls ~IGarbageCollector without re-storing this class's vptr,
+// which only the compiler-generated destructor omits.
 
 // @ 0x827DD330 -- account the released byte count. AssetID occupies one native
 // 64-bit GPR (r5); data is r6 and size is r7, which the ARTIST add consumes.

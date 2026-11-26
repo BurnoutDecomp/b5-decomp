@@ -25,6 +25,11 @@
 // own `this` straight into every pool call -- that is why the disassembly shows
 // `VolumeSlot,4608,int>::Clear(store)` rather than `(store+offset)`.
 
+// ARTIST's __FILE__ for these asserts (string @0x82002350): the template bodies are the
+// header's (CgsVolumeStore.h), emitted out of line.
+#define CGS_ARTIST_VOLUME_STORE_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsVolumeStore.h"
+
 namespace CgsSceneManager
 {
 
@@ -76,10 +81,10 @@ s32 VolumeStore<tiCapacity>::AddVolume(const VolRef::Volume* lpVolume)
 template <s32 tiCapacity>
 void VolumeStore<tiCapacity>::RemoveVolume(s32 liVolumeIndex)
 {
-    CGS_ASSERT(liVolumeIndex >= 0 && liVolumeIndex < tiCapacity,
-               "liVolumeIndex >= 0 && liVolumeIndex < BufferSize");
-    CGS_ASSERT(mVolumePool.IsObjectAllocated(liVolumeIndex),
-               "mVolumePool.IsObjectAllocated( liVolumeIndex )");
+    CGS_ASSERT_AT(liVolumeIndex >= 0 && liVolumeIndex < tiCapacity,
+                  "liVolumeIndex >= 0 && liVolumeIndex < BufferSize", CGS_ARTIST_VOLUME_STORE_FILE, 297);
+    CGS_ASSERT_AT(mVolumePool.IsObjectAllocated(liVolumeIndex),
+                  "mVolumePool.IsObjectAllocated( liVolumeIndex )", CGS_ARTIST_VOLUME_STORE_FILE, 298);
     mVolumePool.FreeObject(liVolumeIndex);
 }
 
@@ -141,7 +146,7 @@ VolumeStore<tiCapacity>::GetVolumeResourceDescriptor(const VolRef::Volume* lpVol
         luEntry0Align = 0x10u;   // 16-byte aligned
         break;
     default:
-        CGS_ASSERT(false, "Volume type not supported by CgsVolumeManager");
+        CGS_ASSERT_AT(false, "Volume type not supported by CgsVolumeManager", CGS_ARTIST_VOLUME_STORE_FILE, 366);
         luEntry0Size  = 0u;
         luEntry0Align = 1u;
         break;
@@ -186,12 +191,12 @@ bool VolumeStore<tiCapacity>::IsPrimitiveVolume(const VolRef::Volume* lpVolume) 
 template <s32 tiCapacity>
 bool VolumeStore<tiCapacity>::ReplaceVolume(s32 liVolumeIndex, const VolRef::Volume* lpVolume)
 {
-    CGS_ASSERT(liVolumeIndex >= 0 && liVolumeIndex < tiCapacity,
-               "liVolumeIndex >= 0 && liVolumeIndex < BufferSize");
+    CGS_ASSERT_AT(liVolumeIndex >= 0 && liVolumeIndex < tiCapacity,
+                  "liVolumeIndex >= 0 && liVolumeIndex < BufferSize", CGS_ARTIST_VOLUME_STORE_FILE, 320);
 
     if (!IsPrimitiveVolume(lpVolume))
     {
-        CGS_ASSERT(false, "Aggregate volumes are not supported by the scene manager");
+        CGS_ASSERT_AT(false, "Aggregate volumes are not supported by the scene manager", CGS_ARTIST_VOLUME_STORE_FILE, 325);
         return false;
     }
 
@@ -199,8 +204,8 @@ bool VolumeStore<tiCapacity>::ReplaceVolume(s32 liVolumeIndex, const VolRef::Vol
     // of bytes to copy into the slot.
     CgsResource::ResourceDescriptor lDescriptor = GetVolumeResourceDescriptor(lpVolume);
     const s32 liVolumeSize = static_cast<s32>(lDescriptor.m_baseResourceDescriptors[0].m_size);
-    CGS_ASSERT(liVolumeSize <= KI_VOLUME_SLOT_SIZE,
-               "liVolumeSize <= KI_VOLUME_SLOT_SIZE");
+    CGS_ASSERT_AT(liVolumeSize <= KI_VOLUME_SLOT_SIZE,
+                  "liVolumeSize <= KI_VOLUME_SLOT_SIZE", CGS_ARTIST_VOLUME_STORE_FILE, 331);
 
     mVolumePool[liVolumeIndex].SetVolume(lpVolume, liVolumeSize);
     return true;

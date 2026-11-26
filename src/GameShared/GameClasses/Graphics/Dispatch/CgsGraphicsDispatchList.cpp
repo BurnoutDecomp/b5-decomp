@@ -197,7 +197,9 @@ void DispatchList::ReconnectChainBlocks()
     }
 }
 
-// ARTIST827E9590..96A0: Append transfers ownership of the source chain.
+// ARTIST827E9590..96A0: Append transfers ownership of the source chain. Each branch takes
+// the source tail itself, as the PS3 DecFIGS body (._ZN11CgsGraphics12DispatchList6AppendEPS0_)
+// shows.
 void DispatchList::Append(DispatchList* lpListToAppend)
 {
     CGS_ASSERT_AT(lpListToAppend != 0, "lpListToAppend != NULL", KAC_ARTIST_ASSERT_CPP, 485);
@@ -209,13 +211,14 @@ void DispatchList::Append(DispatchList* lpListToAppend)
             CGS_ASSERT_AT(mpBlockListTail->mpNextBlock == 0, "mpBlockListTail->mpNextBlock == NULL",
                           KAC_ARTIST_ASSERT_CPP, 498);
             mpBlockListTail->mpNextBlock = lpListToAppend->mpBlockListHead;
+            mpBlockListTail = lpListToAppend->mpBlockListTail;
         }
         else
         {
             CGS_ASSERT_AT(mpBlockListHead == 0, "mpBlockListHead == NULL", KAC_ARTIST_ASSERT_CPP, 505);
             mpBlockListHead = lpListToAppend->mpBlockListHead;
+            mpBlockListTail = lpListToAppend->mpBlockListTail;
         }
-        mpBlockListTail = lpListToAppend->mpBlockListTail;
         muCount += lpListToAppend->muCount;
         lpListToAppend->muCount = 0;
         lpListToAppend->mpBlockListHead = 0;

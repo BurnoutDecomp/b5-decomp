@@ -101,7 +101,8 @@ namespace CgsSceneManager
         // Construct @ 0x828A9E30 — populate this contact from luContactPointIndex of
         // lpResult: copies the per-point position/impulse lanes, the sign-flipped
         // pair normal, and the two u32 fields. Asserts lpResult != NULL (157) and
-        // luContactPointIndex < lpResult->muNumPoints (158). Returns this.
-        Contact* Construct(const SourceResult* lpResult, u32 luContactPointIndex);
+        // luContactPointIndex < lpResult->muNumPoints (158). Returns nothing: ARTIST
+        // 0x828A9E30 leaves r3 unset (DWARF CgsSceneManagerTypes.h:102 is void).
+        void Construct(const SourceResult* lpResult, u32 luContactPointIndex);
     };
 }

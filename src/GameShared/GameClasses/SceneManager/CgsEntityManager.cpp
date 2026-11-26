@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsVolumeStore.h"     // KI_INVALID_VOLUME_INDEX
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"          // [DIAG wave Q5] CgsDev::Log::gpDebugPrint
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityManager.cpp"
+#define CGS_ARTIST_ENTITY_MANAGER_HEADER "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityManager.h"
 static const char KAC_ENTITY_MANAGER_ARTIST_HEADER[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityManager.h";
 // CgsSceneManager::EntityManager -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -344,16 +345,17 @@ s32 EntityManager::GetEntityIndexByID(EntityId lEntityId) const
 }
 
 // @ 0x828BA088 -- DWARF h:132 returns void (the X360 leaves the pool pointer in r3
-// after the padding store; nothing consumes it).
+// after the padding store; nothing consumes it). Its asserts name CgsEntityManager.h
+// 548-551 (string 0x820F5030): the header-inline body, emitted out of line.
 void EntityManager::SetVolumePadding(s32 liIndex, Vector3 lPadding)
 {
-    CGS_ASSERT(liIndex < KI_MAX_NUM_VOLUME_INSTANCES,
-               "liIndex < KI_MAX_NUM_VOLUME_INSTANCES");
-    CGS_ASSERT(liIndex != KI_INVALID_VOLUME_INSTANCE_INDEX,
-               "liIndex != KI_INVALID_VOLUME_INSTANCE_INDEX");
-    CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
-    CGS_ASSERT(mVolumeInstancePool.IsObjectAllocated(liIndex),
-               "mVolumeInstancePool.IsObjectAllocated( liIndex )");
+    CGS_ASSERT_AT(liIndex < KI_MAX_NUM_VOLUME_INSTANCES,
+                  "liIndex < KI_MAX_NUM_VOLUME_INSTANCES", CGS_ARTIST_ENTITY_MANAGER_HEADER, 548);
+    CGS_ASSERT_AT(liIndex != KI_INVALID_VOLUME_INSTANCE_INDEX,
+                  "liIndex != KI_INVALID_VOLUME_INSTANCE_INDEX", CGS_ARTIST_ENTITY_MANAGER_HEADER, 549);
+    CGS_ASSERT_AT(liIndex >= 0, "liIndex >= 0", CGS_ARTIST_ENTITY_MANAGER_HEADER, 550);
+    CGS_ASSERT_AT(mVolumeInstancePool.IsObjectAllocated(liIndex),
+                  "mVolumeInstancePool.IsObjectAllocated( liIndex )", CGS_ARTIST_ENTITY_MANAGER_HEADER, 551);
 
     mVolumeInstancePool[liIndex].mPadding = lPadding;
 }
@@ -590,3 +592,4 @@ s32 EntityManager::GetNextEntityIndex(s32 liCurrentIndex) const
 }
 
 #undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_ENTITY_MANAGER_HEADER

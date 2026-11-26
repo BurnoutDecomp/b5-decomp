@@ -49,7 +49,7 @@ namespace BrnResource
     void GameDataModule::DebugReportPools(CgsResource::PoolModule::FPoolReportCallback lpfCallback,
                                          void* lpUserData)
     {
-        mResourceModule.GetPoolModule().DebugReport(lpfCallback, lpUserData);
+        mResourceModule.DebugReportPools(lpfCallback, lpUserData);
     }
 
     void GameDataModule::AssertNativeLayout()

@@ -245,8 +245,10 @@ namespace CgsSceneManager
     //      CgsGui::EventInterpreterModule.cpp) it is reduced to the static string.
     void SceneSweeper::ForceNoPadding(u32 luObjectIndex)
     {
-        CGS_ASSERT(luObjectIndex < static_cast<u32>(KI_MAX_NUM_VOLUME_INSTANCES),
-                   "luObjectIndex < (uint32_t)KI_MAX_NUM_VOLUME_INSTANCES");
+        // ARTIST 0x828B059C: CgsSceneSweeper.h:328 (string 0x820F4058), the header-inline body.
+        CGS_ASSERT_AT(luObjectIndex < static_cast<u32>(KI_MAX_NUM_VOLUME_INSTANCES),
+                      "luObjectIndex < (uint32_t)KI_MAX_NUM_VOLUME_INSTANCES",
+                      "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\contactgen\\CgsSceneSweeper.h", 328);
 
 
         mabForceNoPadding.SetBit(luObjectIndex);
@@ -760,20 +762,21 @@ void SceneSweeper::UpdateObject(u32 luObjectIndex, const rw::collision::AABBox* 
 // which is precisely the shape below.
 void SceneSweeper::RemoveObject(u32 luObjectIndex)
 {
-    CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS, "luObjectIndex < KU_MAX_NUM_OBJECTS");  // :340
+    CGS_ASSERT_AT(luObjectIndex < KU_MAX_NUM_OBJECTS, "luObjectIndex < KU_MAX_NUM_OBJECTS",
+                  KAC_ARTIST_ASSERT_FILE, 340);
 
     const eObjectBodyState leBodyState =
         static_cast<eObjectBodyState>(maObjectData[luObjectIndex].mu8BodyState);
     if (leBodyState == E_DYNAMIC_BODY)
     {
-        CGS_ASSERT(mCollidingBodies.IsBitSet(luObjectIndex),
-                   "Non existing object being removed from the scene sweeper");            // :347
+        CGS_ASSERT_AT(mCollidingBodies.IsBitSet(luObjectIndex),
+                      "Non existing object being removed from the scene sweeper", KAC_ARTIST_ASSERT_FILE, 347);
         mDynamicIntervalList.RemoveObject(static_cast<u16>(luObjectIndex));
     }
     else if (leBodyState == E_INACTIVE_BODY)
     {
-        CGS_ASSERT(mCollidingBodies.IsBitSet(luObjectIndex),
-                   "Non existing object being removed from the scene sweeper");            // :352
+        CGS_ASSERT_AT(mCollidingBodies.IsBitSet(luObjectIndex),
+                      "Non existing object being removed from the scene sweeper", KAC_ARTIST_ASSERT_FILE, 352);
         mInactiveIntervalList.RemoveObject(static_cast<u16>(luObjectIndex));
         // The inactive list lost an entry, so it must be re-sorted before the next sweep.
         mbSortFrozenObjects = true;
@@ -985,7 +988,8 @@ namespace CgsSceneManager
     // element 128 bytes ahead. Pure PPC performance hint, no architectural effect.
     void SceneSweeper::BuildCollidingPairs(const EntityManager* lpEntityManager)
     {
-        CGS_ASSERT(lpEntityManager != NULL, "lpEntityManager != NULL");  // CgsSceneSweeper.cpp:521
+        CGS_ASSERT_AT(lpEntityManager != NULL, "lpEntityManager != NULL",
+                      KAC_ARTIST_ASSERT_FILE, 521 /* ARTIST 0x828C21D0 */);
 
         // The queue length is read ONCE, before the loop (0x828C21DC `lwz r25,0x20(r26)`,
         // cached in var_DC and only ever re-loaded from there) -- nothing inside the loop
@@ -1094,7 +1098,8 @@ namespace CgsSceneManager
     // muNumObjects -- the object indices are volume-instance slots, not a dense range.
     void SceneSweeper::Update(const EntityManager* lpEntityManager)
     {
-        CGS_ASSERT(lpEntityManager != NULL, "lpEntityManager != NULL");  // CgsSceneSweeper.cpp:218
+        CGS_ASSERT_AT(lpEntityManager != NULL, "lpEntityManager != NULL",
+                      KAC_ARTIST_ASSERT_FILE, 218 /* ARTIST 0x828D5AAC */);
 
         if (siUpdate_SortListsPerfMon > -1)
         {
