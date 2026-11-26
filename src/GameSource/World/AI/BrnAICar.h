@@ -166,6 +166,12 @@ namespace BrnAI
             return GetRoute()->GetStatus() != Route::E_STATUS_UNINITIALISED &&
                    GetRoute()->GetNodeCount() > 0;
         }
+        // DWARF BrnAICar.h:170/:173/:176, header-inline (no out-of-line copy in ARTIST or DecFIGS):
+        // AIDebugComponent::DrawResetOnTrackAISection 0x827671F8 re-zero-extends the u16 return
+        // (`clrlwi r4, r11, 16`) before GetAISection(uint32_t).
+        u16              GetResetOnTrackSectionIndex() const { return muResetOnTrackSectionIndex; }
+        u8               GetResetOnTrackStartPortal() const { return muResetOnTrackStartPortal; }
+        u8               GetResetOnTrackEndPortal() const { return muResetOnTrackEndPortal; }
         const RouteNode* GetNextRouteNode() const;           // DWARF BrnAICar.h:182 (Route::GetNode(miNextRouteNodeIndex), bounds-checked)
         s32              GetNextRouteNodeIndex() const { return miNextRouteNodeIndex; }  // DWARF BrnAICar.h:185 (== miNextRouteNodeIndex @+0x1524)
         f32              GetMaxPlayerSpeed() const;           // DWARF BrnAICar.h:287 (== mfMaxPlayerSpeed @+0x1504)

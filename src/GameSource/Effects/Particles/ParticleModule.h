@@ -143,9 +143,7 @@ namespace BrnParticle
         void Construct()
         {
             mTransform.SetIdentity();
-            mfVelocityX = 0.0f;   // +0x50
-            mfVelocityY = 0.0f;   // +0x54
-            mfVelocityZ = 0.0f;   // +0x58
+            mVelocity.SetZero();  // +0x50..+0x58 (DWARF ParticleModule.cpp: fpu::Vector3Template<float>::SetZero)
             muWorldIndex = 0;
             mfStateBlend = 0.0f;
             muFlags      = 0;
@@ -167,9 +165,9 @@ namespace BrnParticle
         // `ori r11, r11, 0x24` -- CHANGED | OVERRIDE_VELOCITY.
         void SetVelocity(const rw::math::vpu::Vector3& lrVelocity)
         {
-            mfVelocityX = lrVelocity.mV.x;
-            mfVelocityY = lrVelocity.mV.y;
-            mfVelocityZ = lrVelocity.mV.z;
+            mVelocity.X() = lrVelocity.mV.x;
+            mVelocity.Y() = lrVelocity.mV.y;
+            mVelocity.Z() = lrVelocity.mV.z;
             muFlags    |= static_cast<u16>(EPPE_FLAG_CHANGED | EPPE_FLAG_OVERRIDE_VELOCITY);
         }
 
@@ -200,9 +198,7 @@ namespace BrnParticle
         // puts muWorldIndex on +0x5C. ParticleModule::DispatchThreadUpdate @0x8229C5F0 reads the
         // three lanes individually (`*(v11+60)/+64/+68`) into a stack vector before pushing them
         // onto the locator, which is what a packed 3-float forces.
-        f32 mfVelocityX;                           // +0x50  DWARF mVelocity.x
-        f32 mfVelocityY;                           // +0x54  DWARF mVelocity.y
-        f32 mfVelocityZ;                           // +0x58  DWARF mVelocity.z
+        rw::math::fpu::Vector3Template<f32> mVelocity;  // +0x50  DWARF h:200 SmoothStep::Vector3
         u32 muWorldIndex;                          // +0x5C - world index (SetWorldIndex stores
                                                    //         here; slot +0x5C / module +0x544C)
         // +0x60 -- StartLionEffect's expiry stamp (`*(v19 + 21584) = 1.0e10` for an endless

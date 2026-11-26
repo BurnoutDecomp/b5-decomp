@@ -62,16 +62,13 @@ namespace
     // (this+0x10, this+0x118; RWMutex(NULL, true)), set the PVSModule vtable, clear the
     // flag byte (stb 0 @ +0x1B58), then run BaseResourcePtr's empty-state initialiser
     // (@ +0x1D78: three zero words then three self-pointers then a zero word). The base
-    // and member constructors handle the mutexes, the buffers and the resource pointer.
+    // and member constructors handle the mutexes, the buffers and the resource pointer. The stage
+    // members and mbDebugRestrictZoneLists have no initialiser (nothing is stored at +0x1D70 /
+    // +0x1D74 / +0x1FB0; Construct @0x822C3F50 seeds them).
     PVSModule::PVSModule()
-        : mePrepareStage( E_PREPARESTAGE_START )
-        , meReleaseStage( E_RELEASESTAGE_START )
-        , mZoneList()
+        : mZoneList()
         , mReceiverQueue()
-        , mbDebugRestrictZoneLists( false )
     {
-        // The stage members' real seeds are written by Construct @0x822C3F50 (below); the
-        // ctor itself only clears the flag byte and default-builds the resource pointer.
     }
 
     // X360 0x822C3F50.

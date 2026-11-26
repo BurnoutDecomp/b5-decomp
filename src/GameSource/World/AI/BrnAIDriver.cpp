@@ -1411,13 +1411,12 @@ namespace BrnAI
             return;
         }
 
-        const f32 lfPlayerSpeed = lpPlayerCar->GetSpeed();
-        const f32 lfDecentSpeed = mpCar->GetDecentSpeed();
-
         // 0x82770378 `fcmpu playerSpeed, decent ; bge` -> the decay arm WITHOUT asking
         // IsPlayerProtected. bge is bc 4,lt: taken on >= AND on unordered, so only an ordered
         // `speed < decent` gets as far as the protection test (FX-AINAN2; `>=` sent a NaN on).
-        if (!(lfPlayerSpeed < lfDecentSpeed) || IsPlayerProtected(lpPlayerCar))
+        // No locals: DWARF BrnAIDriver.cpp:440 lists none for this function (D18: the named
+        // speed locals swapped the timer fadds operands).
+        if (!(lpPlayerCar->GetSpeed() < mpCar->GetDecentSpeed()) || IsPlayerProtected(lpPlayerCar))
         {
             // decay, floored at 0 (fsel f0, f0, f0, 0.0)
             mfPlayerSlowSpeedTime = rw::math::fpu::Max(mfPlayerSlowSpeedTime - lfTimeStep, 0.0f);

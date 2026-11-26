@@ -816,9 +816,9 @@ namespace BrnParticle
                 && lpLocator != 0)
             {
                 // The record's +0x50 velocity into the locator's mVel (+0x40), then flag bit 1.
-                lpLocator->mVel.x = lrRecord.mfVelocityX;
-                lpLocator->mVel.y = lrRecord.mfVelocityY;
-                lpLocator->mVel.z = lrRecord.mfVelocityZ;
+                lpLocator->mVel.x = lrRecord.mVelocity.X();
+                lpLocator->mVel.y = lrRecord.mVelocity.Y();
+                lpLocator->mVel.z = lrRecord.mVelocity.Z();
                 lpLocator->mVel.w = 0.0f;
                 lpLocator->mFlags |= cParticleLocator::E_FLAG_EXTERNAL_VELOCITY;   // `|= 2`
             }

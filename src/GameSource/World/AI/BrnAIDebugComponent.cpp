@@ -491,11 +491,11 @@ void AIDebugComponent::DrawAICarRoute(CgsDev::Debug3DImmediateRender* lpDisplay)
 void AIDebugComponent::DrawResetOnTrackAISection(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     const AICar* lpAICar = &mpAIModule->maAICars[miCurrentAICar];                       // :1220
-    if (lpAICar->muResetOnTrackSectionIndex != 0x7FFF)
+    if (lpAICar->GetResetOnTrackSectionIndex() != 0x7FFF)
     {
-        const AISection* lpAISection = mpAISectionsData->GetAISection(lpAICar->muResetOnTrackSectionIndex); // :1224
-        Vector3 lStartPortalPosition = lpAISection->GetPortal(lpAICar->muResetOnTrackStartPortal)->GetPosition(); // :1225
-        Vector3 lEndPortalPosition = lpAISection->GetPortal(lpAICar->muResetOnTrackEndPortal)->GetPosition();     // :1226
+        const AISection* lpAISection = mpAISectionsData->GetAISection(lpAICar->GetResetOnTrackSectionIndex()); // :1224
+        Vector3 lStartPortalPosition = lpAISection->GetPortal(lpAICar->GetResetOnTrackStartPortal())->GetPosition(); // :1225
+        Vector3 lEndPortalPosition = lpAISection->GetPortal(lpAICar->GetResetOnTrackEndPortal())->GetPosition();     // :1226
         lpDisplay->DrawLine(lStartPortalPosition, lEndPortalPosition, rw::RGBA(255, 255, 0, 255));
         lpDisplay->DrawSolidBox(lStartPortalPosition - Vector3(3.0f, 3.0f, 3.0f),
                                 lStartPortalPosition + Vector3(3.0f, 3.0f, 3.0f), rw::RGBA(255, 0, 0, 255));

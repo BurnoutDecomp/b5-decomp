@@ -500,9 +500,9 @@ EffectsState JumpStateMachine::OnDetermineNextState(CarState& lCarState,
                             // unused w lane rides along exactly as it does on the console.
                             const __vector4 alongNormal = __vmsum3fp(lvNormal.mV, lvWheelVel.mV);
                             const Vector3 lvTangent(__vsubfp(lvWheelVel.mV, __vmulfp(lvNormal.mV, alongNormal)));
-                            lpEffect->mfVelocityX = lvTangent.mV.x;
-                            lpEffect->mfVelocityY = lvTangent.mV.y;
-                            lpEffect->mfVelocityZ = lvTangent.mV.z;
+                            lpEffect->mVelocity.X() = lvTangent.mV.x;
+                            lpEffect->mVelocity.Y() = lvTangent.mV.y;
+                            lpEffect->mVelocity.Z() = lvTangent.mV.z;
                             lpEffect->muFlags |= (BrnParticle::LionEffect::EPPE_FLAG_OVERRIDE_VELOCITY
                                                 | BrnParticle::LionEffect::EPPE_FLAG_CHANGED);
                             const Vector3 lvForward(__vmulfp(lvTangent.mV, ReciprocalSqrt2(__vmsum3fp(lvTangent.mV, lvTangent.mV))));
