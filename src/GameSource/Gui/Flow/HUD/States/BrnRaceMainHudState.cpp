@@ -683,11 +683,9 @@ namespace BrnGui
 
         if (lbFriendsList)
         {
-            CgsGui::GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
-            CGS_ASSERT(lpAccessPointers != 0, "mpAccessPointers != NULL");   // CgsGuiStateInterface.h:344
-            GuiCache* lpGuiCache = lpAccessPointers->GetGuiCache();
-            CGS_ASSERT(lpGuiCache != 0, "mpGuiCache");                       // CgsGuiShared.h:201
-            if (lpGuiCache->IsFriendsListOpen())   // X360 OnLeave: `ori r10,r10,0xB86C ; lbzx`
+            // The two inline accessors carry their asserts (CgsGuiStateInterface.h:344,
+            // CgsGuiShared.h:201; ARTIST 0x824797AC / 0x824797DC).
+            if (mpStateInterface->GetAccessPointers()->GetGuiCache()->IsFriendsListOpen())   // `ori r10,r10,0xB86C ; lbzx`
             {
                 mFriendsList.Close();
             }

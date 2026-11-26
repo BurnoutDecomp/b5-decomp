@@ -83,8 +83,8 @@ namespace BrnGui
         };
 
         // @ 0x82473580 -- latch the (non-NULL) GuiCache pointer and cache its far field.
-        // Returns `this`.
-        FriendsListComponent* SetGuiCachePointer(GuiCache* lpGuiCache);
+        // DWARF h:263 declares it void; the body is header-inline below (assert h:665).
+        void SetGuiCachePointer(GuiCache* lpGuiCache);
 
         // @ 0x8241F120 -- snapshot the current selection into the dirty region, raise the
         // dirty flag, and store the scroll-arrow indicator. Returns `this`.
@@ -202,6 +202,15 @@ namespace BrnGui
         s8    miDirtyCurrentlyActiveSlots;                          // +0x4119
         s8    miDirtyCurrentlyHighlightedSlot;                      // +0x411A
     };
+
+    // DWARF: defined in the header (ARTIST's COMDAT 0x82473580 asserts BrnFriendsList.h:665).
+    inline void FriendsListComponent::SetGuiCachePointer(GuiCache* lpGuiCache)
+    {
+        CGS_ASSERT_AT(lpGuiCache, "lpGuiCache",
+                      "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.h", 665);
+        mpGuiCache = lpGuiCache;
+        miPlayerCount = lpGuiCache->GetFriendsListCachedField();
+    }
 
     // Free post-increment / post-decrement over the friends-list branch enum
     // (DWARF BrnFriendsList.h:767 operator++ / h:764 operator--). Each writes the

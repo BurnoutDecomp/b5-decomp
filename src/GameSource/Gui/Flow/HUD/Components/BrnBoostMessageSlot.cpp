@@ -144,11 +144,10 @@ void BoostMessageSlot::Refresh(f32 lfTimeToLive, bool lbPlayRefreshAnim)
 
     if (lbPlayRefreshAnim && !mbInTransition && !mMessageItem.IsInTransition())
     {
-        // NOTE: the X360 tests the item's latch TWICE -- once off `this` (lbz
-        // 0x2C(r3) @0x82411F10) and once off a freshly formed &mMessageItem (lbz
-        // 0x20(r11) @0x82411F20, the head of the inlined item-side play helper).
-        // Same byte, same answer, so one source-level test reproduces it.
-        mMessageItem.PlayLabel("MessageRefresh");   // item mAptRef -> GotoAndPlayLabel @0x8246F3E8
+        // The X360 tests the item's latch twice: here (lbz 0x2C(r3) @0x82411F10) and
+        // again at the head of the inlined BoostMessageItem::MessageRefresh (DWARF h:120,
+        // lbz 0x20(r11) @0x82411F20).
+        mMessageItem.MessageRefresh();
     }
 }
 

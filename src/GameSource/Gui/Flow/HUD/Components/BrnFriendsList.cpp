@@ -41,14 +41,7 @@ namespace BrnGui
 //   stw lpGuiCache, 0x4100(this)             ; mpGuiCache = lpGuiCache
 //   lwzx r, lpGuiCache, 0xAC74 ; stw r,0x870 ; miPlayerCount = cache far field
 //   return this
-FriendsListComponent* FriendsListComponent::SetGuiCachePointer(GuiCache* lpGuiCache)
-{
-    CGS_ASSERT( lpGuiCache != 0, "lpGuiCache" );
-
-    mpGuiCache = lpGuiCache;
-    miPlayerCount = lpGuiCache->GetFriendsListCachedField();
-    return this;
-}
+// SetGuiCachePointer is header-inline (BrnFriendsList.h).
 
 // @ 0x8241F120
 //   snapshot current selection into the dirty region:

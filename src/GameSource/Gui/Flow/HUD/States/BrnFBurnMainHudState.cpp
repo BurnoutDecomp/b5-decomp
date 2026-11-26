@@ -419,11 +419,9 @@ namespace BrnGui
 
         if (mbFriendsListEnabled)
         {
-            CgsGui::GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
-            CGS_ASSERT(lpAccessPointers != 0, "mpAccessPointers != NULL");
-            GuiCache* lpGuiCache = static_cast<GuiCache*>(lpAccessPointers->GetGuiCache());
-            CGS_ASSERT(lpGuiCache != 0, "mpGuiCache");
-            if (GuiCache_FriendsListOverlayActive(lpGuiCache))
+            // The two inline accessors carry their asserts (CgsGuiStateInterface.h:344,
+            // CgsGuiShared.h:201), as in RaceMainHudState::OnLeave.
+            if (mpStateInterface->GetAccessPointers()->GetGuiCache()->IsFriendsListOpen())
             {
                 mFriendsList.Close();
             }

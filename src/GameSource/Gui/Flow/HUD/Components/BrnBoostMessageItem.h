@@ -61,7 +61,15 @@ namespace BrnGui
         // the "MessageRefresh" play on item +0x04):
         bool IsInTransition() const       { return mbInTransition; }
         void ClearInTransition()          { mbInTransition = false; }
-        void PlayLabel(const char* lpcLabel) { mAptRef.GotoAndPlayLabel(lpcLabel); }
+        // DWARF h:120, in the class: replay the refresh frame unless a transition runs
+        // (BoostMessageSlot::Refresh inlines it, 0x82411F1C..0x82411F38).
+        void MessageRefresh()
+        {
+            if (!mbInTransition)
+            {
+                mAptRef.GotoAndPlayLabel("MessageRefresh");
+            }
+        }
         const BrnFlapt::MovieClipRef& GetAptRef() const { return mAptRef; }
 
     private:
