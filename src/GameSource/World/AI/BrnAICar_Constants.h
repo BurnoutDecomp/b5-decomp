@@ -85,8 +85,8 @@ namespace BrnAI
 
     // GetMaxOvertakeSpeed @0x82771618 -- lerp(LO, HI, aggressionLevel)
     // (vmaddfp v0, (HI-LO), LO, aggression; IDA raw field order D,A,B,C => D = A*C + B).
-    extern f32 gfMarkedManMaxOvertakeSpeed;   // ARTIST 0x8300D714
-    extern f32 gfMarkedManMinOvertakeSpeed;   // ARTIST 0x8300D6F0
+    extern f32 KF_MAX_MAX_MARKED_MAN_OVERTAKE_SPEED;   // ARTIST 0x8300D714 (DWARF BrnAIAggression.cpp:74)
+    extern f32 KF_MAX_MIN_MARKED_MAN_OVERTAKE_SPEED;   // ARTIST 0x8300D6F0 (DWARF BrnAIAggression.cpp:75)
     extern f32 gfMarkedManMinAggression;      // ARTIST 0x82F30170
     extern f32 gfMarkedManMaxAggression;      // ARTIST 0x82F30174
 
@@ -107,10 +107,8 @@ namespace BrnAI
 
     // SetSlowOvertakingSpeed @0x8277DB38
 
-    // SetSlowFallbackSpeed @0x82770AB8 -- lerp(LO, HI, mpCar->mfRelativeSpeedForMatch).
-    // HI < LO here: the fall-back offset shrinks from 20 mph to 2 mph as the factor rises.
-    const f32 KF_SLOW_FALLBACK_RELSPEED_HI  =  0.894079983f;// 0x8300D7D8 = init 0x82C68BA0, flt_820C41F4 (  2) *  0.44704
-    const f32 KF_SLOW_FALLBACK_RELSPEED_LO  =  8.94079971f; // 0x8300D728 = init 0x82C68B80, flt_820C4890 ( 20) *  0.44704
+    // SetSlowFallbackSpeed @0x82770AB8: KF_EASY/HARD_RELATIVE_PASSING_SPEED, DWARF
+    // BrnAIAggression.cpp:48/49, defined there.
 
     // UpdateAggressionStateClipOff
 

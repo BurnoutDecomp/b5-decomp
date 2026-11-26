@@ -277,6 +277,9 @@ namespace BrnAI
 
         // Inlined-away discriminators the route-request brain reads directly.
         ERouteFindingStyle GetRouteFindingStyle() const { return meRouteFindingStyle; }   // +0x14C0
+        // DWARF BrnAICar.h:510; header-inline (ARTIST has no copy: GetMaxOvertakeSpeed
+        // 0x8277162C inlines `cmpwi meRouteFindingStyle, 6`; PS3 body 0x9B8BE0 is the == test).
+        bool               IsInMarkedMan() const        { return meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN; }
         bool               IsDrivenByPlayer() const     { return mbIsDrivenByPlayer; }     // +0x154A
         s32                GetCurrentCheckpoint() const  { return miCurrentCheckpoint; }    // +0x1520
 

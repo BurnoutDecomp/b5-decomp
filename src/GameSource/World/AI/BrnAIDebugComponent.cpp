@@ -594,8 +594,8 @@ void AIDebugComponent::OnActivate()
     RegisterVariable(&mbDrawPlayerSlowSpeedTimeOnCar, lpcStatesOnCar, "Draw player slow speed time on car");
 
     const char* const lpcMarkedMan = "Marked man tweaks";
-    RegisterVariable(&gfMarkedManMinOvertakeSpeed, lpcMarkedMan, "Min overtake speed");
-    RegisterVariable(&gfMarkedManMaxOvertakeSpeed, lpcMarkedMan, "Max overtake speed");
+    RegisterVariable(&KF_MAX_MIN_MARKED_MAN_OVERTAKE_SPEED, lpcMarkedMan, "Min overtake speed");
+    RegisterVariable(&KF_MAX_MAX_MARKED_MAN_OVERTAKE_SPEED, lpcMarkedMan, "Max overtake speed");
     RegisterVariable(&gfMarkedManMinAggression, lpcMarkedMan, "Min aggression");
     RegisterVariable(&gfMarkedManMaxAggression, lpcMarkedMan, "Max aggression");
     SetStep(&gfMarkedManMinAggression, 0.05f);

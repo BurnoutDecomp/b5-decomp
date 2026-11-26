@@ -1145,8 +1145,8 @@ namespace BrnAI
 
     Vector3 AICar::GetRight() const
     {
-        CGS_ASSERT(vpu::IsValid(mRight), "RwMath::IsValid( mUnitRight )");                  // BrnAICar.h:1320
-        CGS_ASSERT(BrnMath::IsNormal(mRight), "BrnMath::IsNormal( mUnitRight )");            // BrnAICar.h:1321
+        CGS_ASSERT_AT(vpu::IsValid(mRight), "RwMath::IsValid( mUnitRight )", KAC_ARTIST_ASSERT_FILE, 1320);       // ARTIST 0x8276BA28
+        CGS_ASSERT_AT(BrnMath::IsNormal(mRight), "BrnMath::IsNormal( mUnitRight )", KAC_ARTIST_ASSERT_FILE, 1321); // ARTIST 0x8276BA58
         return mRight;
     }
 

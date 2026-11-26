@@ -30,8 +30,6 @@ namespace BrnAI
 {
     namespace vpu = rw::math::vpu;
 
-    f32 gfMarkedManMaxOvertakeSpeed = 89.4079971f; // ARTIST initializer 0x82C68D40
-    f32 gfMarkedManMinOvertakeSpeed = 71.5263977f; // ARTIST initializer 0x82C68D60
 
 // =================================================================================================
 // [DIAG] NOT IN THE X360 BINARY -- the MARKED-MAN aggression witness (issue #24), opt-in via
@@ -108,17 +106,25 @@ const f32 KF_ACROSS_SEPARATION_DEGENERATE = FLT_MAX; // rodata 0x8204F664 == 0x7
 // proximity at 0x8278B6E4, i.e. threshold = lerp([0x42F0], [0x42EC], proximity); the leading
 // test does the same with [0x42E8] / [0x42E4] at 0x8278B758/0x8278B768. So the PROX0 members
 // really are the proximity==0 endpoints, and both of them are a genuine rodata 0.0.
-const f32 KF_SPEED_MATCH_LEAD_PROX1 = 40.0f; // rodata 0x820C42E4 == 0x42200000 (leading-sep upper, prox=1)
-const f32 KF_SPEED_MATCH_LEAD_PROX0 =  0.0f; // rodata 0x820C42E8 == 0x00000000 (leading-sep upper, prox=0)
-const f32 KF_SPEED_MATCH_SEP_PROX1  = 60.0f; // rodata 0x820C42EC == 0x42700000 (separation threshold, prox=1)
-const f32 KF_SPEED_MATCH_SEP_PROX0  =  0.0f; // rodata 0x820C42F0 == 0x00000000 (separation threshold, prox=0)
+// DWARF BrnAIAggression.cpp:126..129; PS3 GetSpeedMatchStartDistanceAhead/Behind 0x9BA844/0x9BA8A0
+// name the Lerp ends (Behind = Lerp(DIFFICULT, EASY), Ahead = Lerp(NEAR, FAR)). Definition order
+// is ARTIST's, not DecFIGS's (:126 EASY, :127 DIFFICULT, :128 FAR, :129 NEAR): the XDK lays a
+// TU's const floats out in definition order, and ARTIST's .rdata holds FAR 0x820C42E4, NEAR
+// 0x820C42E8, EASY 0x820C42EC, DIFFICULT 0x820C42F0 (addressed off one anchor:
+// OutOfSpeedMatchRange 0x8278B6B0..B8, GetSpeedMatchSpeed 0x8277E268/0x8277E2B8).
+const f32 KF_SPEEDMATCH_AHEAD_OF_PLAYER_FAR     = 40.0f; // rodata 0x820C42E4 == 0x42200000
+const f32 KF_SPEEDMATCH_AHEAD_OF_PLAYER_NEAR    =  0.0f; // rodata 0x820C42E8 == 0x00000000
+const f32 KF_SPEEDMATCH_BEHIND_PLAYER_EASY      = 60.0f; // rodata 0x820C42EC == 0x42700000
+const f32 KF_SPEEDMATCH_BEHIND_PLAYER_DIFFICULT =  0.0f; // rodata 0x820C42F0 == 0x00000000
 
 // DWARF BrnAIAggression.cpp:44..79: the mph tunables, each dynamically initialised as `mph *
 // CgsCore::KF_MPH_TO_MPS` by the CRT init bank in declaration order (0x82C68B28.., stored to .bss),
 // so their readers load them from storage. Names by that order and their readers:
 //   :44 KF_DROP_BACK_SPEED 60 (init 0x82C68B28 -> 0x8300D6F4; SetSlowFallbackSpeed,
 //       SetSlowOvertakingSpeed, GetSpeedMatchSpeed), :45 KF_DROP_BACK_RAPIDLY 40 (0x82C68B48 ->
-//       0x8300D784). Four initialisers follow for :44..:49's five names; :46..:49 are not read here.
+//       0x8300D784), :48 KF_EASY_RELATIVE_PASSING_SPEED 20 (0x82C68B68 -> 0x8300D728), :49
+//       KF_HARD_RELATIVE_PASSING_SPEED 2 (0x82C68B88 -> 0x8300D7D8; PS3 SetSlowFallbackSpeed 0x9C91B4
+//       names both; :46 KF_CLOSE_SO_ALMOST_MATCH_SPEED has no initialiser in the bank, unread here).
 //   :58 KF_SLOW_CLIP_SPEED 20 (0x82C68C28 -> 0x8300D754), :59 KF_RELATIVE_CLIP_AWAY_SPEED 10
 //       (0x82C68C48 -> 0x8300D7F0), :60 KF_MINIMUM_SLOW_CLIP 80 (0x82C68C68 -> 0x8300D720; ClipOffBehind),
 //   :69 KF_RELATIVE_FAST_OVERTAKING_SPEED 20 (0x82C68CA8 -> 0x8300DBE0), :70
@@ -126,9 +132,12 @@ const f32 KF_SPEED_MATCH_SEP_PROX0  =  0.0f; // rodata 0x820C42F0 == 0x00000000 
 //       190 (0x82C68CE8 -> 0x8300D7A0), :72 KF_MAX_MIN_OVERTAKE_SPEED 160 (0x82C68D08 -> 0x8300D970),
 //   :77 KF_MIN_OVERTAKE_SPEED 120 (0x82C68D68 -> 0x8300D71C), :79
 //       KF_EXCESS_SPEED_ALLOWED_FOR_SLOW_OVERTAKE 20 (0x82C68D88 -> 0x8300D778).
-// (:74/:75, the non-const marked-man overtake pair, stay gfMarkedManMax/MinOvertakeSpeed here.)
+//   :74/:75 KF_MAX_MAX/MIN_MARKED_MAN_OVERTAKE_SPEED 200/160 (0x82C68D28 -> 0x8300D714, 0x82C68D48 ->
+//       0x8300D6F0; mph at 0x820C4318/0x820C482C) are not const: the AI debug component registers them.
 const f32 KF_DROP_BACK_SPEED                        =  60.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_DROP_BACK_RAPIDLY                      =  40.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_EASY_RELATIVE_PASSING_SPEED            =  20.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_HARD_RELATIVE_PASSING_SPEED            =   2.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_SLOW_CLIP_SPEED                        =  20.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_RELATIVE_CLIP_AWAY_SPEED               =  10.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_MINIMUM_SLOW_CLIP                      =  80.0f * CgsCore::KF_MPH_TO_MPS;
@@ -136,6 +145,8 @@ const f32 KF_RELATIVE_FAST_OVERTAKING_SPEED         =  20.0f * CgsCore::KF_MPH_T
 const f32 KF_RELATIVE_SLOW_OVERTAKING_SPEED         =   5.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_MAX_MAX_OVERTAKE_SPEED                 = 190.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_MAX_MIN_OVERTAKE_SPEED                 = 160.0f * CgsCore::KF_MPH_TO_MPS;
+f32       KF_MAX_MAX_MARKED_MAN_OVERTAKE_SPEED      = 200.0f * CgsCore::KF_MPH_TO_MPS;
+f32       KF_MAX_MIN_MARKED_MAN_OVERTAKE_SPEED      = 160.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_MIN_OVERTAKE_SPEED                     = 120.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_EXCESS_SPEED_ALLOWED_FOR_SLOW_OVERTAKE =  20.0f * CgsCore::KF_MPH_TO_MPS;
 
@@ -491,10 +502,21 @@ bool AIAggression::FindTarget(const AICar* lpCandidateTarget)
 {
     mpTargetCar = NULL;
 
-    if (lpCandidateTarget == NULL ||
-        lpCandidateTarget == mpCar ||
-        (lpCandidateTarget->mbIsPlayer && !lpCandidateTarget->mbIsDrivenByPlayer) ||
-        OutOfSpeedMatchRange(mpCar, lpCandidateTarget))
+    // Separate rejections: ARTIST emits the first `return false` inline (0x82793C8C) and every
+    // later rejection branches back to it.
+    if (lpCandidateTarget == NULL)
+    {
+        return false;
+    }
+    if (lpCandidateTarget == mpCar)
+    {
+        return false;
+    }
+    if (lpCandidateTarget->mbIsPlayer && !lpCandidateTarget->mbIsDrivenByPlayer)
+    {
+        return false;
+    }
+    if (OutOfSpeedMatchRange(mpCar, lpCandidateTarget))
     {
         return false;
     }
@@ -539,8 +561,8 @@ f32 AIAggression::GetAcrossSeparation(const AICar* lpThisCar, const AICar* lpOth
     Vector3 lvAcross = lpOtherCar->GetPosition() - lpThisCar->GetPosition();
     lvAcross.mV.y = 0.0f;
 
-    const f32 lfAcross = rw::math::vpu::Dot(lvAcross, rw::math::vpu::Normalize(lpThisCar->GetRight()));
-    return std::fabs(lfAcross);
+    // DWARF: rw::math::vpu::Abs<VecFloat> on the Dot, then VecFloat::operator float.
+    return rw::math::vpu::Abs(rw::math::vpu::Dot(lvAcross, rw::math::vpu::Normalize(lpThisCar->GetRight())));
 }
 
 // BrnAI::AIAggression::GetAheadness @0x82771020.
@@ -602,29 +624,25 @@ f32 AIAggression::GetLeadingSeparation(const AICar* lpThisCar, const AICar* lpOt
 
 // BrnAI::AIAggression::GetMaxOvertakeSpeed @0x82771618.
 //
-// Returns the aggression-level-scaled maximum overtake speed. The X360 build reads the
-// AI car's aggression level (mpCar->GetAggressiveness()->GetAggressionLevel()) and
-// linearly interpolates between a (lo, hi) pair of rodata constants -- one pair for the
-// E_ROUTE_FINDING_MARKED_MAN route-finding style, another for everything else. The VMX vsubfp/vmaddfp
-// chain is the standard lerp lo + (hi - lo) * t. Endpoint values are unrecovered -> KF_.
+// The aggression-level-scaled maximum overtake speed: rw::math::vpu::Lerp between the
+// min/max overtake tunables, one pair for a marked-man car, another for everything else
+// (DWARF: three VecFloat(const float&) + Lerp per arm, then VecFloat::operator float; PS3
+// 0x9C02B8 tests AICar::IsInMarkedMan first and calls GetAggressionLevel in each arm, as
+// ARTIST does at 0x82771638/0x82771650).
 f32 AIAggression::GetMaxOvertakeSpeed() const
 {
-    const f32 lfAggressionLevel = mpCar->GetAggressiveness()->GetAggressionLevel();
-
-    f32 lfHi;
-    f32 lfLo;
-    if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)   // == 6
+    if (mpCar->IsInMarkedMan())
     {
-        lfHi = gfMarkedManMaxOvertakeSpeed;
-        lfLo = gfMarkedManMinOvertakeSpeed;
+        return vpu::Lerp(KF_MAX_MIN_MARKED_MAN_OVERTAKE_SPEED,
+                         KF_MAX_MAX_MARKED_MAN_OVERTAKE_SPEED,
+                         mpCar->GetAggressiveness()->GetAggressionLevel());
     }
     else
     {
-        lfHi = KF_MAX_MAX_OVERTAKE_SPEED;
-        lfLo = KF_MAX_MIN_OVERTAKE_SPEED;
+        return vpu::Lerp(KF_MAX_MIN_OVERTAKE_SPEED,
+                         KF_MAX_MAX_OVERTAKE_SPEED,
+                         mpCar->GetAggressiveness()->GetAggressionLevel());
     }
-
-    return lfLo + (lfHi - lfLo) * lfAggressionLevel;
 }
 
 // BrnAI::AIAggression::GetMinFallBackSpeed @0x82770A68.
@@ -814,17 +832,13 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
                 f32 lfClamped;
                 if (!(lfError < 0.0f))
                 {
-                    const f32 lfSpan = KF_SPEED_MATCH_LEAD_PROX0 +
-                                       (KF_SPEED_MATCH_LEAD_PROX1 - KF_SPEED_MATCH_LEAD_PROX0) * lfProximity;
-                    f32 lfRatio = lfError / lfSpan;
+                    f32 lfRatio = lfError / GetSpeedMatchStartDistanceAhead();
                     if (lfRatio < 0.2f) lfRatio = 0.2f;
                     lfClamped = (lfRatio <= 1.0f) ? lfRatio : 1.0f;
                 }
                 else
                 {
-                    const f32 lfSpan = KF_SPEED_MATCH_SEP_PROX0 +
-                                       (KF_SPEED_MATCH_SEP_PROX1 - KF_SPEED_MATCH_SEP_PROX0) * lfProximity;
-                    f32 lfRatio = lfError / lfSpan;
+                    f32 lfRatio = lfError / GetSpeedMatchStartDistanceBehind();
                     if (lfRatio < -1.0f) lfRatio = -1.0f;
                     lfClamped = (lfRatio <= -0.2f) ? lfRatio : -0.2f;
                 }
@@ -883,67 +897,76 @@ bool AIAggression::NotSuitableForAggression()
         || mpCar->IsOnStartLine();
 }
 
+// BrnAI::AIAggression::GetSpeedMatchStartDistanceAhead / Behind (DWARF BrnAIAggression.cpp:1536 /
+// :1553, local lfSpeedMatchInterp :1538/:1555). ARTIST inlines both everywhere (no copy); the
+// PS3 bodies 0x9BA844/0x9BA8A0 are rw::math::vpu::Lerp over the proximity-to-speed-match knob.
+f32 AIAggression::GetSpeedMatchStartDistanceAhead()
+{
+    f32 lfSpeedMatchInterp = mpCar->GetAggressiveness()->GetProximityToSpeedMatch();
+    return vpu::Lerp(KF_SPEEDMATCH_AHEAD_OF_PLAYER_NEAR, KF_SPEEDMATCH_AHEAD_OF_PLAYER_FAR, lfSpeedMatchInterp);
+}
+
+f32 AIAggression::GetSpeedMatchStartDistanceBehind()
+{
+    f32 lfSpeedMatchInterp = mpCar->GetAggressiveness()->GetProximityToSpeedMatch();
+    return vpu::Lerp(KF_SPEEDMATCH_BEHIND_PLAYER_DIFFICULT, KF_SPEEDMATCH_BEHIND_PLAYER_EASY, lfSpeedMatchInterp);
+}
+
 // BrnAI::AIAggression::OutOfSpeedMatchRange @0x8278B680.
 //
-// True when the candidate car (lpCarB) is too far from the AI car (mpCar) to be worth
-// speed-matching. Tests the lateral/total separation and the leading (along-direction)
-// separation against proximity-scaled thresholds. The threshold spans are lerped over the
-// shared speed-match RANGE tuning quad by mpCar's proximity-to-speed-match knob; the VMX
-// lerps are de-SIMD'd to lo + (hi-lo)*t.
-//
-// NOTE: the X360 asm references mpCar and lpCarB only -- lpCarA is in the DWARF signature
-// but unused here (it equals the AI car). See flags.
-bool AIAggression::OutOfSpeedMatchRange(const AICar* lpCarA, const AICar* lpCarB)
+// True when the target is too far from the AI car to be worth speed-matching: its separation
+// beyond the behind distance, or its leading separation outside [-behind, ahead]. DWARF locals
+// lfSeparation (:1582, a plain float), lfSeparationAhead (:1592), lfSeparationBehind (:1593).
+// ARTIST measures from mpCar (lwz r4, 8(this) before both separation calls); lpCar is unused.
+bool AIAggression::OutOfSpeedMatchRange(const AICar* lpCar, const AICar* lpTargetCar)
 {
-    (void)lpCarA;
+    (void)lpCar;
 
-    if (lpCarB == NULL)
+    if (lpTargetCar == NULL)
+    {
         return true;
+    }
 
-    const f32 lfProximity = mpCar->GetAggressiveness()->GetProximityToSpeedMatch();
-    const f32 lfSepThreshold = KF_SPEED_MATCH_SEP_PROX0 +
-                               (KF_SPEED_MATCH_SEP_PROX1 - KF_SPEED_MATCH_SEP_PROX0) * lfProximity;
-
-    const f32 lfSeparation = GetSeparation(mpCar, lpCarB);
-    if (lfSeparation > lfSepThreshold)
+    float lfSeparation = GetSeparation(mpCar, lpTargetCar);
+    if (lfSeparation > GetSpeedMatchStartDistanceBehind())
+    {
         return true;
+    }
 
-    const f32 lfLeadingSeparation = GetLeadingSeparation(mpCar, lpCarB);
-    const f32 lfLeadUpper = KF_SPEED_MATCH_LEAD_PROX0 +
-                            (KF_SPEED_MATCH_LEAD_PROX1 - KF_SPEED_MATCH_LEAD_PROX0) * lfProximity;
-
-    if (lfLeadingSeparation < -lfSepThreshold || lfLeadingSeparation > lfLeadUpper)
+    lfSeparation = GetLeadingSeparation(mpCar, lpTargetCar);
+    f32 lfSeparationAhead  = GetSpeedMatchStartDistanceAhead();
+    f32 lfSeparationBehind = GetSpeedMatchStartDistanceBehind();
+    if (lfSeparation < -lfSeparationBehind || lfSeparation > lfSeparationAhead)
+    {
         return true;
-
+    }
     return false;
 }
 
 // BrnAI::AIAggression::SetSlowFallbackSpeed @0x82770AB8.
 //
 // Sets mFixedPassingSpeed for a slow fall-back behind the player: the player's speed minus
-// a relative-speed-scaled drop, floored at GetMinFallBackSpeed(). Falls back to the
-// no-passing speed when there is no player car or the AI car is out of range. The VMX chain
-// is the lerp drop = lo + (hi-lo)*relSpeed; endpoints are rodata -> KF_.
-//
-// NOTE: the X360 GetSpeed() call has its argument elided by Hex-Rays; it reads the player
-// car (the car being fallen back from) -- see flags.
+// the DWARF local lfPassingSpeed (:650), rw::math::vpu::Lerp(easy, hard, relative speed for
+// match) through the implicit VecFloat(const float&) conversions, floored at
+// GetMinFallBackSpeed() (called twice, 0x82770B40/0x82770B4C). Otherwise the drop-back speed
+// (ARTIST lays that arm out last, 0x82770B68).
 void AIAggression::SetSlowFallbackSpeed()
 {
-    if (mpPlayerCar == NULL || mpCar->meCarState != E_AI_CAR_STATE_IN_RANGE)
+    if (mpPlayerCar != NULL && mpCar->meCarState == E_AI_CAR_STATE_IN_RANGE)
+    {
+        const f32 lfPassingSpeed = vpu::Lerp(KF_EASY_RELATIVE_PASSING_SPEED,
+                                             KF_HARD_RELATIVE_PASSING_SPEED,
+                                             mpCar->GetAggressiveness()->GetRelativeSpeedForMatch());
+        mFixedPassingSpeed = mpPlayerCar->GetSpeed() - lfPassingSpeed;
+        if (mFixedPassingSpeed < GetMinFallBackSpeed())
+        {
+            mFixedPassingSpeed = GetMinFallBackSpeed();
+        }
+    }
+    else
     {
         mFixedPassingSpeed = KF_DROP_BACK_SPEED;
-        return;
     }
-
-    const f32 lfRelSpeed = mpCar->GetAggressiveness()->GetRelativeSpeedForMatch();
-    const f32 lfDrop = KF_SLOW_FALLBACK_RELSPEED_LO +
-                       (KF_SLOW_FALLBACK_RELSPEED_HI - KF_SLOW_FALLBACK_RELSPEED_LO) * lfRelSpeed;
-
-    mFixedPassingSpeed = mpPlayerCar->GetSpeed() - lfDrop;
-
-    const f32 lfMinFallBack = GetMinFallBackSpeed();
-    if (mFixedPassingSpeed < lfMinFallBack)
-        mFixedPassingSpeed = lfMinFallBack;
 }
 
 // BrnAI::AIAggression::SetSlowOvertakingSpeed @0x8277DB38.
