@@ -38,26 +38,17 @@ namespace BrnGui
                                                CgsGui::StateInterface* lpStateInterface,
                                                const void* /*lpcParentName*/)
     {
-        CGS_ASSERT(lpStateInterface != 0, CGS_ASSERT_MESSAGE_AT("lpStateInterface", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 113 /* ARTIST 0x8241CFF4 */));
-
-        // Base init (the X360 inlined BrnFlaptComponent::Construct + MovieClipRef
-        // SetInvalid): bind the state channel and invalidate the base clip handle.
-        mpStateInterface        = lpStateInterface;
-        mAptRef.mpMovieClipInst = 0;
-        mAptRef.mpTransform     = 0;
-
-        // Invalidate the controlled clip handle.
-        mControlledMovieClip.mpMovieClipInst = 0;
-        mControlledMovieClip.mpTransform     = 0;
-
-        // Zero the colour and scale endpoints (X360: stvx128 of a zero vector).
+        // The header-inline base Construct (its assert is BrnGuiFlaptComponent.h:113), then the
+        // controlled clip's SetInvalid, the proportion sentinel, the flag and the four zeroed
+        // endpoints (ARTIST 0x8241CFDC..0x8241D044).
+        BrnFlaptComponent::Construct(lpStateInterface);
+        mControlledMovieClip.SetInvalid();
+        mfCurrentProportion = KF_INVALID_PROPORTION;
+        mbSetInterpValues   = false;
         mv4StartColour.SetZero();
         mv4EndColour.SetZero();
         mv2StartScale.SetZero();
         mv2EndScale.SetZero();
-
-        mfCurrentProportion = KF_INVALID_PROPORTION;
-        mbSetInterpValues   = false;
     }
 
     // @ 0x8241D060 -- bind the component's own clip through the base, then reset the

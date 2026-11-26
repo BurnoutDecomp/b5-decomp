@@ -75,12 +75,14 @@ void RivalTableCell::Update()
 // transition state.
 void RivalTableCell::SetWrecked(bool lbWrecked)
 {
-    const bool lbWasEmpty = mbEmpty;
+    // One AddOutputAptViewState per arm (ARTIST 0x82419094 / 0x824190A8, both tail calls).
     mbWrecked = lbWrecked;
-    if (!lbWasEmpty)
+    if (!mbEmpty)
     {
-        AddOutputAptViewState("apt_transitionState",
-                              lbWrecked ? "wrecked" : "unwrecked", false);
+        if (lbWrecked)
+            AddOutputAptViewState("apt_transitionState", "wrecked", false);
+        else
+            AddOutputAptViewState("apt_transitionState", "unwrecked", false);
     }
 }
 

@@ -92,23 +92,22 @@ namespace BrnGui
                                                const void* /*lpcParentName*/)
     {
         CGS_ASSERT_AT(lpStateInterface != 0, "lpStateInterface", CGS_ARTIST_FILE, 72);
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
-
-        mpStateInterface        = lpStateInterface;
-        mAptRef.mpMovieClipInst = 0;
-        mAptRef.mpTransform     = 0;
+        // The header-inline base Construct with its own BrnGuiFlaptComponent.h:113 assert
+        // (ARTIST 0x8241CBB4).
+        BrnFlaptComponent::Construct(lpStateInterface);
 
         mv2WorldPos.SetZero();
 
-        mRoadId       = 0;
+        // The scalars in ARTIST's store order (0x8241CBF0..0x8241CC04), then the post clip's
+        // SetInvalid (DWARF lists the two MovieClipRef::SetInvalid calls).
         meIconType    = E_ICON_TYPE_COUNT;
+        mRoadId       = 0;
         meSignColour  = E_SIGN_COLOUR_GREEN;
+        mbSignVisible = false;
         mbTimeRuled   = false;
         mbCrashRuled  = false;
-        mbSignVisible = false;
 
-        mPostMovieClip.mpMovieClipInst = 0;
-        mPostMovieClip.mpTransform     = 0;
+        mPostMovieClip.SetInvalid();
     }
 
     // @ 0x8241CC18 -- bind the named component clip, reset its timeline, then bind the

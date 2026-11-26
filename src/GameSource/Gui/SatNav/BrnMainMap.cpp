@@ -326,29 +326,6 @@ namespace BrnGui
         const GuiEventShowHideSatNav* lpSatNav =
             reinterpret_cast<const GuiEventShowHideSatNav*>(lpEvent);
 
-        // [DIAG-TEMP] NOT IN THE X360 BINARY -- [map-recv] what the component actually sees.
-        {
-            static s32 siEvents = 0;
-            static s32 siLeft213 = 8;
-            ++siEvents;
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                if (liEventType == 213 && siLeft213 > 0)
-                {
-                    --siLeft213;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[map-recv] 213 SEEN maptype=" << static_cast<s32>(lpSatNav->GetMapType())
-                        << " show=" << static_cast<s32>(lpSatNav->GetShow())
-                        << " (events so far " << siEvents << ")\n";
-                }
-                if (siEvents == 1 || siEvents == 500 || siEvents == 5000)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[map-recv] event #" << siEvents << " type=" << liEventType << "\n";
-                }
-            }
-        }
-
         if (liEventType == lpSatNav->GetEventType() &&
             lpSatNav->GetMapType() == GuiEventShowHideSatNav::E_MAPTYPE_MAIN)
         {

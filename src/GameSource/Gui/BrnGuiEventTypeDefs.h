@@ -1749,6 +1749,12 @@ public:
 };
 CGS_STATIC_ASSERT((sizeof(GuiDirtyTrickTriggerEvent) == 12), "X360 AddGuiEvent size 12 (id 179)");
 
+// DWARF :3798 -- the payback-award prompt, an EMPTY event (PS3 GuiEvent<365>; X360 id 370:
+// PaybackComponent::SendAwardTriggerableEvent 0x82437878 queues the bare {1, 370, 12} header).
+struct GuiDirtyTrickTriggerableEvent : public CgsGui::GuiEvent<370>
+{
+};
+
 class GuiDirtyTrickEndedEvent
 {
 public:

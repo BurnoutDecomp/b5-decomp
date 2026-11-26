@@ -504,18 +504,20 @@ void BoostBarRenderer::ForceSetBoostBarColours(BrnWorld::EBoostType leType)
 // +80/+96/+112 and the second to the outer block +32/+48/+64).
 void BoostBarRenderer::ForceSetBoostBarColours(Vector3 lv3InnerColour, Vector3 lv3OuterColour)
 {
-    mav3BoostOuterColours[0] = lv3OuterColour;
-    mav3BoostOuterColours[1] = lv3OuterColour;
-    mav3BoostOuterColours[2] = lv3OuterColour;
-    mav3BoostInnerColours[0] = lv3InnerColour;
-    mav3BoostInnerColours[1] = lv3InnerColour;
-    mav3BoostInnerColours[2] = lv3InnerColour;
+    // DWARF cpp:2378 `int liBoostType`: one loop over the three boost types, unrolled by the
+    // compiler into ARTIST's interleaved outer/inner stores (0x82446988..0x8244699C).
+    for (int liBoostType = 0; liBoostType < BrnWorld::E_BOOST_TYPE_COUNT; ++liBoostType)
+    {
+        mav3BoostOuterColours[liBoostType] = lv3OuterColour;
+        mav3BoostInnerColours[liBoostType] = lv3InnerColour;
+    }
 }
 
-// X360 @0x824468C0 -- the component's CgsID (the compressed "BoostBar", 0x740A1C80 == 1946688512).
+// X360 @0x824468C0 -- the component's full 64-bit CgsID (lis/ori/sldi/oris builds
+// 0x5585573A74081C00; the old 32-bit constant dropped the high word).
 CgsID BoostBarRenderer::GetID() const
 {
-    return 1946688512u;
+    return 0x5585573A74081C00ull;
 }
 
 // Faithful ports of X360 0x824EC750 / 0x824EC7D0: assert the current type is real, then return

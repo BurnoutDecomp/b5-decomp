@@ -498,7 +498,9 @@ namespace BrnGui
     // ---------------------------------------------------------------------------------------
     void ShowtimeInstantResultsState::UpdateSubstate()
     {
-        CGS_ASSERT(meCurrentState == E_RESULTS_STATE_ACTIVE, "Invalid state");   // cpp:599
+        // Both asserts are streamed in place (ARTIST 0x824DC400 / 0x824DC4A4).
+        CGS_ASSERT_STREAM_AT(meCurrentState == E_RESULTS_STATE_ACTIVE,
+                             "Invalid state (" << meCurrentState << ")", CGS_ARTIST_FILE, 599);
 
         switch (meActiveSubState)
         {
@@ -517,7 +519,8 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid substate");                     // cpp:627
+            CGS_ASSERT_STREAM_AT(false, "Invalid substate (" << meActiveSubState << ")",
+                                 CGS_ARTIST_FILE, 627);                // cpp:627
             break;
         }
     }

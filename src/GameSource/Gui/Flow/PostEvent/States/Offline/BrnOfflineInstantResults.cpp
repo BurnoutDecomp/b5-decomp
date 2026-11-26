@@ -834,7 +834,9 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::UpdateSubstate()
     {
-        CGS_ASSERT(meCurrentState == E_RESULTS_STATE_ACTIVE, "Invalid state");   // cpp:1632
+        // Both asserts are streamed in place (ARTIST 0x824DC1D0 / 0x824DC334).
+        CGS_ASSERT_STREAM_AT(meCurrentState == E_RESULTS_STATE_ACTIVE,
+                             "Invalid state (" << meCurrentState << ")", CGS_ARTIST_FILE, 1632);
 
         switch (meActiveSubState)
         {
@@ -846,15 +848,18 @@ namespace BrnGui
         case E_ACTIVE_SUBSTATE_EVENT_RESULTS:               UpdateEventResults();       break;
         case E_ACTIVE_SUBSTATE_EVENT_RESULTS_TWO:           UpdateSecondResultsPage();  break;
         case E_ACTIVE_SUBSTATE_EVENT_TAKE_PHOTO:            UpdateTakePhotoPage();      break;
+        // The case bodies in ARTIST's order (0x824DC2E0..0x824DC304): free car, car, rank up,
+        // licence.
+        case E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK:       UpdateFreeCarUnlock();      break;
+        case E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK:            UpdateCarUnlock();          break;
         case E_ACTIVE_SUBSTATE_EVENT_RANK_UP_TEXT:          UpdateRankUp();             break;
         case E_ACTIVE_SUBSTATE_EVENT_RANK_UP_LICENSE:       UpdateLicense();            break;
-        case E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK:            UpdateCarUnlock();          break;
-        case E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK:       UpdateFreeCarUnlock();      break;
         case E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS: UpdateShowingRivals();     break;
         case E_ACTIVE_SUBSTATE_EVENT_LEAVING:               UpdateLeaving();            break;
         case E_ACTIVE_SUBSTATE_EVENT_DONE:                  TriggerExitResults();       break;
         default:
-            CGS_ASSERT(false, "Invalid substate");                               // cpp:1706
+            CGS_ASSERT_STREAM_AT(false, "Invalid substate (" << meActiveSubState << ")",
+                                 CGS_ARTIST_FILE, 1706);                         // cpp:1706
             break;
         }
 

@@ -313,20 +313,6 @@ bool BoostMessageManager::AddMessage(MessageType leMessageType, const char* lpcT
     lpMessageSlot->SetMessage(lpcText, leMessageType, lfTimeToLive,
                               static_cast<s32>(meCurrentBoostType), liBoostAmount);
 
-    // [DIAG] BRN_BOOST_TICKER_DIAG -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    // THE LAST RUNG of the boost-ticker ladder, and the only one that is about PIXELS:
-    //     world producer   (BoostStrategy/AirTimeManager/NearMissManager AddEvent)
-    //     game state       "[boost-ticker] action <id>"   (GameStateModule_gUI_00.cpp)
-    //  -> HUD              "[boost-ticker] slot <type>"   (HERE)
-    // Without it, an action that reaches the translator but dies on a GUI gate (no free
-    // slot, a mid-shuffle slot, the wrong HUD state) is indistinguishable from one that was
-    // never produced -- exactly the ambiguity that let this whole chain be missing for
-    // months with both ends committed. Budgeted per call, not per type: a full strip is
-    // three slots, so a handful of lines is enough to prove the strip is being written.
-    {
-        static s32        siLines = 0;
-        const s32         KI_ADDMESSAGE_DIAG_MAX = 48;
-    }
     return true;
 }
 

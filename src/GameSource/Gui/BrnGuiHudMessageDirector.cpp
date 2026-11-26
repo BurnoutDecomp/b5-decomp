@@ -521,35 +521,6 @@ void HudMessageDirector::Update(CgsGui::ModelIO::InputBuffer* lpModelInputBuffer
         mpModelModule->AddGuiEvents(&mHudMessageQueue, lpModelInputBuffer);
         lpModelInputBuffer->UnlockForWrite();
 
-        // [DIAG] NOT IN THE X360 BINARY. The final rung of the gateui ladder (set
-        // BRN_PROP_DIAG -- one knob for the whole chain). This is the point the director
-        // hands its messages to the model/view layer.
-        // [gateui r3] The round-2 text here claimed the next hop was "still a Slice-B
-        // deferral in BrnFBurnMainHudState::RecvEvent case 154". IT IS NOT, and it was not
-        // then either: BrnFBurnMainHudState::UpdateRunning case 154 now calls
-        // InGameMessagesComponent::AddMessage @0x8243DC68 for real, the component is
-        // Constructed + Prepared in OnEnter, and its five missing private bodies
-        // (Construct/SetIcon/RefreshString/SendGameMessage/StartMessage/EndMessage) landed
-        // in round 3. Two things gated the Apt draw, and [gateui r4] BOTH ARE NOW CLOSED:
-        //   * GuiCache::mpHudMessageController had no writer, so the send path one file over
-        //     (FilterAndSendOffMessage's cpp:222 assert) rejected every message. The PRODUCER
-        //     landed in round 3 (GameDataModule::PrepareHudMessages) and the HAND-OFF landed
-        //     in round 4: BrnGui::GuiModule::Construct now takes the console's `a2`
-        //     (@0x82518028) from BrnGameModule::Construct and stores it through
-        //     GuiCache::SetHudMessageController.
-        //   * the shared InGameMessagesQueue -- a by-value BrnGui::GuiCache member at guest
-        //     +0x4080 -- is homed as BrnGuiCache.h :: mInGameMessagesQueue with a
-        //     GetInGameMessagesQueue() accessor, and FBurnMainHudState::OnEnter runs the
-        //     console's SetInGameMessagesQueue against it.
-        // (The round-3 banner pointed at a "gateui r3 report" that was never written; the
-        // measurement behind these two items is in
-        // scratch/gateui_wave/verify_r3_fix3hud/VERDICT.md.)
-        // First-N guarded (the latch is evaluated ONCE) so a busy HUD cannot flood the log.
-        {
-            static s32        siPrinted    = 0;
-            const s32         KI_DIAG_MAX  = 32;
-        }
-
         mHudMessageQueue.Clear();
     }
 }

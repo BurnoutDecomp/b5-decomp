@@ -69,27 +69,6 @@ static const PaybackComponent::EAwardTypes KAE_PAYBACKS_TO_AWARD_TYPE[KI_NUM_AWA
 // it. No symbol names it; modelled as a file-scope counter.
 static u32 suPaybackConstructSeedCounter = 123;
 
-namespace
-{
-    // FLAG: the fixed record BeginAwardAnimation posts carries an event whose id (370) has no
-    // recovered name and whose single payload byte the binary leaves uninitialised. Modelled
-    // as a 1-byte GetEventType()==370 payload.
-    struct GuiEventPaybackBeginAward
-    {
-        u8  muPayload;
-        s32 GetEventType() const { return 370; }
-    };
-
-    // The inlined StateInterface::OutputGuiEvent: the payload boxed in a GuiEventWrapper<T,40>
-    // ({1, 370, 12} + the payload byte) and queued on channel 40 at 16 bytes. Built here because
-    // the shared OutputGuiEvent template queues a raw payload type on its own id with no
-    // header, where the GUI-to-game bridge (channel 40 only) never reads it.
-    void PostPaybackBeginAward(CgsGui::StateInterface* lpStateInterface)
-    {
-        GuiEventPaybackBeginAward lEvent;   // payload left uninitialised, matching the binary
-        lpStateInterface->OutputGuiEvent(lEvent);
-    }
-}
 
 // @0x8242E3A8
 void PaybackComponent::Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
@@ -153,7 +132,8 @@ void PaybackComponent::UpdateState()
 void PaybackComponent::BeginAwardAnimation(BrnNetwork::EPaybackType /*lePaybackType*/,
                                            ::EActiveRaceCarIndex /*leVictimRaceCarIndex*/)
 {
-    PostPaybackBeginAward(mpStateInterface);
+    // ARTIST 0x8243E148 is byte-identical to SendAwardTriggerableEvent (the same empty event).
+    SendAwardTriggerableEvent();
 }
 
 // @0x8241FF40
@@ -257,7 +237,9 @@ void PaybackComponent::RespondToTransitionComplete()
 // header with a single uninitialised payload byte, and queues it on channel 40 at 16 bytes.
 void PaybackComponent::SendAwardTriggerableEvent()
 {
-    PostPaybackBeginAward(mpStateInterface);
+    // DWARF cpp:493 lTriggerableEvent, an empty event (no payload store in ARTIST).
+    GuiDirtyTrickTriggerableEvent lTriggerableEvent;
+    mpStateInterface->OutputGuiEvent(lTriggerableEvent);
 }
 
 // @0x824116C8

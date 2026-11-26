@@ -167,27 +167,30 @@ void FriendsListComponent::Highlight(s8 liSlotToHighlight)   // DWARF cpp:3535: 
 // @0x824149E8 --------------------------------------------------------------------
 void FriendsListComponent::SaveCurrentState()
 {
-    if (meCurrentState == 0)
+    // The saving arm first, the clear in the else (ARTIST 0x824149F4 beq to 0x82414A8C).
+    if (meCurrentState != 0)
+    {
+        s_abStateSavedFlag = 1;
+        s_aiSavedListType = meListType;
+        switch (meListType)
+        {
+            case 1:
+                s_amabSavedNames[0].Construct(
+                    maFullBuddyList[miCurrentlyHighlightedOption].mPlayerName.macName);
+                break;
+            case 2:
+                s_aiSavedShortcutOption = maeAvailableShortcutOptions[miCurrentlyHighlightedOption];
+                break;
+            case 3:
+                s_u64SavedChallengeUid = maChallengesAvailable[miCurrentlyHighlightedOption];
+                break;
+            default:
+                break;
+        }
+    }
+    else
     {
         s_abStateSavedFlag = 0;
-        return;
-    }
-    s_abStateSavedFlag = 1;
-    s_aiSavedListType = meListType;
-    switch (meListType)
-    {
-        case 1:
-            s_amabSavedNames[0].Construct(
-                maFullBuddyList[miCurrentlyHighlightedOption].mPlayerName.macName);
-            break;
-        case 2:
-            s_aiSavedShortcutOption = maeAvailableShortcutOptions[miCurrentlyHighlightedOption];
-            break;
-        case 3:
-            s_u64SavedChallengeUid = maChallengesAvailable[miCurrentlyHighlightedOption];
-            break;
-        default:
-            break;
     }
 }
 

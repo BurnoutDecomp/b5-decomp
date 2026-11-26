@@ -274,44 +274,57 @@ namespace BrnGui
     // ARTIST @0x824EADF8: asserts the collision world is currently VALID(0), then requests INVALIDATE(1).
     void MovieManager::RequestInvalidationOfCollisionWorld()
     {
-        CGS_ASSERT(meCollisionWorldState == E_COLLISIONWORLDSTATE_VALID,
-                   "Invalidation of collision world requested when collision world wasn't valid");
-        if (meCollisionWorldState == E_COLLISIONWORLDSTATE_VALID)
+        // The assert arm first, the request in the else (ARTIST 0x824EAE0C beq to the store).
+        if (meCollisionWorldState != E_COLLISIONWORLDSTATE_VALID)
+        {
+            CGS_ASSERT_AT(false, "Invalidation of collision world requested when collision world wasn't valid",
+                          CGS_ARTIST_FILE, 466);
+        }
+        else
+        {
             meCollisionWorldState = E_COLLISIONWORLDSTATE_INVALIDATE;
+        }
     }
 
     // ARTIST @0x824EAEB8: asserts the collision world is INVALID(3), then requests VALIDATE(4).
     void MovieManager::RequestValidationOfCollisionWorldState()
     {
-        if (meCollisionWorldState == E_COLLISIONWORLDSTATE_INVALID)
+        if (meCollisionWorldState != E_COLLISIONWORLDSTATE_INVALID)
         {
-            meCollisionWorldState = E_COLLISIONWORLDSTATE_VALIDATE;
+            CGS_ASSERT_AT(false, "Validation of collision world requested when collision world wasn't invalid",
+                          CGS_ARTIST_FILE, 524);
         }
         else
         {
-            CGS_ASSERT(false, "Validation of collision world requested when collision world wasn't invalid");
+            meCollisionWorldState = E_COLLISIONWORLDSTATE_VALIDATE;
         }
     }
 
     // ARTIST @0x824EAE58: asserts the car pool is currently VALID(0), then requests INVALIDATE(1).
     void MovieManager::RequestInvalidationOfCarPool()
     {
-        CGS_ASSERT(meCarPoolState == E_CARPOOLSTATE_VALID,
-                   "Invalidation of car pool requested when collision world wasn't valid");
-        if (meCarPoolState == E_CARPOOLSTATE_VALID)
+        if (meCarPoolState != E_CARPOOLSTATE_VALID)
+        {
+            CGS_ASSERT_AT(false, "Invalidation of car pool requested when collision world wasn't valid",
+                          CGS_ARTIST_FILE, 495);
+        }
+        else
+        {
             meCarPoolState = E_CARPOOLSTATE_INVALIDATE;
+        }
     }
 
     // ARTIST @0x824EAF18: asserts the car pool is INVALID(3), then requests VALIDATE(4).
     void MovieManager::RequestValidationOfCarPool()
     {
-        if (meCarPoolState == E_CARPOOLSTATE_INVALID)
+        if (meCarPoolState != E_CARPOOLSTATE_INVALID)
         {
-            meCarPoolState = E_CARPOOLSTATE_VALIDATE;
+            CGS_ASSERT_AT(false, "Validation of car pool requested when car pool wasn't invalid",
+                          CGS_ARTIST_FILE, 553);
         }
         else
         {
-            CGS_ASSERT(false, "Validation of car pool requested when car pool wasn't invalid");
+            meCarPoolState = E_CARPOOLSTATE_VALIDATE;
         }
     }
 

@@ -69,16 +69,17 @@ void FreeburnChallengeStartComponent::Hide()
 // @ 0x82439AF8
 void FreeburnChallengeStartComponent::HandleButtonPress(s32 liButton)
 {
-    if (liButton == KI_BUTTON_L2)
+    // A switch, like HandleButtonRelease: ARTIST tests 0x38 first and branches out to its arm
+    // (0x82439B08), falling into 0x39's; any other button returns.
+    switch (liButton)
     {
+    case KI_BUTTON_L2:
         mbDownL2 = true;   // stb 1, 0x8D
-    }
-    else if (liButton == KI_BUTTON_R2)
-    {
+        break;
+    case KI_BUTTON_R2:
         mbDownR2 = true;   // stb 1, 0x8E
-    }
-    else
-    {
+        break;
+    default:
         return;
     }
 
