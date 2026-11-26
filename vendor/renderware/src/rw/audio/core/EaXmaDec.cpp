@@ -101,7 +101,7 @@ static s32 EaXmaDecDecodeThunk(Decoder *decoder, DecoderBuffer *buffer, s32 coun
     return static_cast<EaXmaDec *>(decoder)->DecodeEvent(buffer, count);
 }
 
-extern "C" DecoderDesc off_82F89394 = {
+DecoderDesc EaXmaDec::sDecoderDesc = {   // ARTIST 0x82F89394 (IDA off_82F89394)
     &EaXmaDec::GetSize,
     &EaXmaDecCreateThunk,
     &EaXmaDecReleaseThunk,
@@ -280,7 +280,7 @@ void EaXmaDec::DeallocateResources()
 DecoderDesc *EaXmaDec::GetDecoderDesc()
 {
     AllocateResources();
-    return &off_82F89394;
+    return &sDecoderDesc;
 }
 
 // -------------------------------------------------------------------------------------

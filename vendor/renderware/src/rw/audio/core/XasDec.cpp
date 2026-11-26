@@ -41,7 +41,7 @@ static s32 XasDecDecodeThunk(Decoder *decoder, DecoderBuffer *buffer, s32 /*coun
     return static_cast<XasDec *>(decoder)->DecodeEvent(buffer);
 }
 
-extern "C" DecoderDesc off_82F8A528 = {
+DecoderDesc XasDec::sDecoderDesc = {   // ARTIST 0x82F8A528 (IDA off_82F8A528)
     &XasDec::GetSize,
     &XasDecCreateThunk,
     0,
@@ -85,7 +85,7 @@ u32 XasDec::GetSize(u32 /*uNumChannels*/, u32 *puAlignment)
 // -------------------------------------------------------------------------------------
 DecoderDesc *XasDec::GetDecoderDesc()
 {
-    return &off_82F8A528;
+    return &sDecoderDesc;
 }
 
 // -------------------------------------------------------------------------------------

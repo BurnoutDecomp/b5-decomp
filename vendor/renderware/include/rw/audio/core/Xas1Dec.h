@@ -53,6 +53,14 @@ public:
     // @0x82B91E90 -- return the address of this codec's static registration descriptor.
     static DecoderDesc *GetDecoderDesc();
 
+private:
+    // The codec's registration descriptor GetDecoderDesc returns: X360 audio MAP
+    // ?sDecoderDesc@Xas1Dec@core@audio@rw@@0UDecoderDesc@234@A (private static); PS3 _ZN2rw5audio4core7Xas1Dec12sDecoderDescE;
+    // ARTIST 0x82F8A544 (IDA off_82F8A544). Defined in Xas1Dec.cpp.
+    static DecoderDesc sDecoderDesc;
+
+public:
+
     // @0x82B94308 -- the codec's decode entry (installed as Decoder::mpDecodeCallback).
     // Pulls the next request when the current one is drained, decodes every interleaved
     // channel of one 128-sample block into `pOutput`, discards the samples that precede

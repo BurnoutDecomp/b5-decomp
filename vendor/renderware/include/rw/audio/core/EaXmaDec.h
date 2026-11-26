@@ -116,6 +116,14 @@ public:
     // the address of the static registration descriptor off_82F89394.
     static DecoderDesc *GetDecoderDesc();
 
+private:
+    // The codec's registration descriptor GetDecoderDesc returns: X360 audio MAP
+    // ?sDecoderDesc@EaXmaDec@core@audio@rw@@0UDecoderDesc@234@A (private static);
+    // ARTIST 0x82F89394 (IDA off_82F89394). Defined in EaXmaDec.cpp.
+    static DecoderDesc sDecoderDesc;
+
+public:
+
     // @0x82B93C78 -- report the codec's per-instance allocation footprint: writes the
     // required alignment (16) through *puAlignment and returns the instance size -- the
     // fixed header plus one pair record per stereo pair, ceil(channels/2), laid at the

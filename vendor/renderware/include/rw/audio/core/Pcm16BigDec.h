@@ -57,6 +57,14 @@ public:
     // @0x82B91E38 -- return the address of this codec's static registration descriptor.
     static DecoderDesc *GetDecoderDesc();
 
+private:
+    // The codec's registration descriptor GetDecoderDesc returns: X360 audio MAP
+    // ?sDecoderDesc@Pcm16BigDec@core@audio@rw@@0UDecoderDesc@234@A (private static); PS3 _ZN2rw5audio4core11Pcm16BigDec12sDecoderDescE;
+    // ARTIST 0x82F893CC (IDA off_82F893CC). Defined in Pcm16BigDec.cpp.
+    static DecoderDesc sDecoderDesc;
+
+public:
+
     // @0x82B951B8 -- the codec's decode entry (installed as Decoder::mpDecodeCallback).
     // Pulls the next request when the current run is drained, seeding the PCM cursor at the
     // request's start sample; then de-interleaves `iNumSamples` samples of every channel

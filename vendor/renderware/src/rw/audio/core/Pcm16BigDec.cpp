@@ -47,7 +47,7 @@ static s32 Pcm16BigDecDecodeThunk(Decoder *decoder, DecoderBuffer *buffer, s32 c
     return static_cast<Pcm16BigDec *>(decoder)->DecodeEvent(buffer, count);
 }
 
-extern "C" DecoderDesc off_82F893CC = {
+DecoderDesc Pcm16BigDec::sDecoderDesc = {   // ARTIST 0x82F893CC (IDA off_82F893CC)
     &Pcm16BigDec::GetSize,
     &Pcm16BigDecCreateThunk,
     0,
@@ -65,7 +65,7 @@ extern "C" DecoderDesc off_82F893CC = {
 // -------------------------------------------------------------------------------------
 DecoderDesc *Pcm16BigDec::GetDecoderDesc()
 {
-    return &off_82F893CC;
+    return &sDecoderDesc;
 }
 
 // -------------------------------------------------------------------------------------
