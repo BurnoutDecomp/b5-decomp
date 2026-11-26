@@ -60,9 +60,10 @@ namespace BrnNetwork
                                     Callback lpfCallback,
                                     void* lpUserData)
     {
-        CGS_ASSERT(lpfCallback, "lCallback");
-        CGS_ASSERT(meSubState == E_SUBSTATE_COUNT,
-                   "meSubState == E_SUBSTATE_COUNT");
+        // Inlined into its callers (no out-of-line ARTIST copy), e.g. StateManager::SuspendToLeaveGame.
+        CGS_ASSERT_AT(lpfCallback, "lCallback", __FILE__, 242 /* ARTIST 0x8256B350 */);
+        CGS_ASSERT_AT(meSubState == E_SUBSTATE_COUNT, "meSubState == E_SUBSTATE_COUNT",
+                      __FILE__, 243 /* ARTIST 0x8256B378 */);
         CGS_ASSERT(leSuspensionType >= E_SUSPENSION_TYPE_OFFLINE
                        && leSuspensionType < E_SUSPENSION_TYPE_COUNT,
                    "(leSuspensionType >= E_SUSPENSION_TYPE_OFFLINE) && "

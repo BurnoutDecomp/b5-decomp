@@ -403,10 +403,10 @@ void PlayerManager::Disconnected()
         maInactivePlayers[miNumInactivePlayers] = maActivePlayers[liPlayerIndex];
         ++miNumInactivePlayers;
 
-        NetworkPlayer* lpNetworkPlayer = maActivePlayers[liPlayerIndex].GetNetworkPlayer();
-        if (lpNetworkPlayer != 0)
+        // DWARF: liPlayerIndex is the only local; the accessor is tested directly (ARTIST cmpwi 0x828847F4).
+        if (maActivePlayers[liPlayerIndex].GetNetworkPlayer())
         {
-            lpNetworkPlayer->Release();
+            maActivePlayers[liPlayerIndex].GetNetworkPlayer()->Release();
         }
         maActivePlayers[liPlayerIndex].SetNetworkPlayer(0);
         maActivePlayers[liPlayerIndex].SetPlayerID(K_INVALID_PLAYER_ID);
@@ -1090,10 +1090,12 @@ void PlayerManager::AcceptMessage(Message* lpMessage)
         return;
     }
 
-    CGS_ASSERT(lRecvPlayerID >= 0, "lRecvPlayerID >= 0");
+    CGS_ASSERT_AT(lRecvPlayerID >= 0, "lRecvPlayerID >= 0", CGS_ARTIST_FILE, 970 /* ARTIST 0x8287357C */);
     lpAckMsg->PrepareAck(lpMessage, lSendPlayerID, lRecvPlayerID);
-    CGS_ASSERT(lpAckMsg->GetSendingPlayerID() >= 0, "lpAckMsg->GetSendingPlayerID() >= 0");
-    CGS_ASSERT(lpAckMsg->GetRecvingPlayerID() >= 0, "lpAckMsg->GetRecvingPlayerID() >= 0");
+    CGS_ASSERT_AT(lpAckMsg->GetSendingPlayerID() >= 0, "lpAckMsg->GetSendingPlayerID() >= 0",
+                  CGS_ARTIST_FILE, 981 /* ARTIST 0x828735BC */);
+    CGS_ASSERT_AT(lpAckMsg->GetRecvingPlayerID() >= 0, "lpAckMsg->GetRecvingPlayerID() >= 0",
+                  CGS_ARTIST_FILE, 982 /* ARTIST 0x828735E8 */);
 }
 
 // ---- ThrowAwayMessage ----------------------------------------------------------------

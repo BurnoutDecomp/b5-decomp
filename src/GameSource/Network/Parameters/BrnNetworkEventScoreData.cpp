@@ -3,103 +3,90 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 #include "lobbytagfield.h"   // TagFieldSetStructure
-#include <cstring>            // std::memset
+#include <xtl.h>              // XMemSet
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::EventScoreUploadData::Construct              @ 0x82584AE0
-//   BrnNetwork::EventScoreUploadData::SetScoreData           @ 0x82584AF0  (AddEventScore)
+//   BrnNetwork::EventScoreUploadData::SetScoreData           @ 0x82584AF0
 //   BrnNetwork::EventScoreUploadData::SerialiseToString      @ 0x82584CA0
 //   BrnNetwork::EventScoreUploadData::GetDataSize            @ 0x82584D38
 //   BrnNetwork::EventScoreUploadData::`vector deleting dtor' @ 0x8254B468
 
+// ARTIST's asserts name this file through the network unity TU (0x82584B28).
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkEventScoreData.cpp"
+
 namespace BrnNetwork
 {
-    EventScoreData::EventScoreData()
-    {
-        Construct();
-    }
-
-    EventScoreData::~EventScoreData()
-    {
-    }
-
     // Construct @ 0x82584AE0 -- zero the whole 184-byte payload after the vptr.
-    void EventScoreData::Construct()
+    void EventScoreUploadData::Construct()
     {
-        std::memset( &maScoreboardIndex[0], 0, 184 );
+        XMemSet( &mEventScoreData, 0, sizeof( mEventScoreData ) );
     }
 
-    // AddEventScore (X360 SetScoreData @ 0x82584AF0).
-    bool EventScoreData::AddEventScore( s32 liScoreboardIndex, s32 liScore, s32 liGameMode )
+    // SetScoreData @ 0x82584AF0.
+    bool EventScoreUploadData::SetScoreData( s32 liScoreboardIndex, s32 liScore, s32 liGameMode )
     {
-        CGS_ASSERT( liScoreboardIndex >= 0, "liScoreboardIndex >= 0" );
-        CGS_ASSERT( miNumScores >= 0, "mEventScoreData.miNumScores >= 0" );
-        CGS_ASSERT( miNumScores < KI_MAX_EVENT_SCORES_TO_UPLOAD,
-                    "mEventScoreData.miNumScores < KI_MAX_EVENT_SCORES_TO_UPLOAD" );
+        CGS_ASSERT_AT( liScoreboardIndex >= 0, "liScoreboardIndex >= 0", CGS_ARTIST_FILE, 75 );
+        CGS_ASSERT_AT( mEventScoreData.miNumScores >= 0, "mEventScoreData.miNumScores >= 0",
+                       CGS_ARTIST_FILE, 76 );
+        CGS_ASSERT_AT( mEventScoreData.miNumScores < KI_MAX_EVENT_SCORES_TO_UPLOAD,
+                       "mEventScoreData.miNumScores < KI_MAX_EVENT_SCORES_TO_UPLOAD", CGS_ARTIST_FILE, 77 );
 
-        if ( liGameMode == 5 )
+        // Stunt run (line 84) before burning route (line 90), the unsupported mode last (96).
+        switch ( liGameMode )
         {
-            CGS_ASSERT( liScoreboardIndex < 35,
-                        "liScoreboardIndex < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS" );
-        }
-        else if ( liGameMode == 7 )
-        {
-            CGS_ASSERT( liScoreboardIndex < 14,
-                        "liScoreboardIndex < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS" );
-        }
-        else
-        {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStream( lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE );
-            lStream << "Trying to upload score data for game mode without a leaderboard: "
-                    << liGameMode << "\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert( lacMessageBuffer,
-                                        CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Network/Parameters/BrnNetworkEventScoreData.cpp",
-                                        96) );
-            CgsDev::Assert::EndAssert();
+        case 7:
+            CGS_ASSERT_AT( liScoreboardIndex < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS,
+                           "liScoreboardIndex < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS", CGS_ARTIST_FILE, 84 );
+            break;
+        case 5:
+            CGS_ASSERT_AT( liScoreboardIndex < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS,
+                           "liScoreboardIndex < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS", CGS_ARTIST_FILE, 90 );
+            break;
+        default:
+            CGS_ASSERT_STREAM_AT( false, "Trying to upload score data for game mode without a leaderboard: "
+                                         << liGameMode << "\n", CGS_ARTIST_FILE, 96 );
+            break;
         }
 
-        maScoreboardIndex[miNumScores] = liScoreboardIndex;
-        maScore[miNumScores]           = liScore;
-        maGameMode[miNumScores]        = liGameMode;
-        ++miNumScores;
+        mEventScoreData.maScoreboardIndex[mEventScoreData.miNumScores] = liScoreboardIndex;
+        mEventScoreData.maScore[mEventScoreData.miNumScores]           = liScore;
+        mEventScoreData.maGameMode[mEventScoreData.miNumScores]        = liGameMode;
+        ++mEventScoreData.miNumScores;
 
-        return miNumScores == KI_MAX_EVENT_SCORES_TO_UPLOAD;
+        return mEventScoreData.miNumScores == KI_MAX_EVENT_SCORES_TO_UPLOAD;
     }
 
-    // SerialiseToString @ 0x82584CA0.
-    void EventScoreData::SerialiseToString( char* lpcRecord, s32 liRecLen )
+    // SerialiseToString @ 0x82584CA0. The virtuals are called right to left (GetPattern,
+    // GetDataSize, then the const GetData at slot +0x10), as the argument list evaluates.
+    void EventScoreUploadData::SerialiseToString( char* lpcRecord, s32 liRecLen ) const
     {
         lpcRecord[0] = 0;
-
-        const char* lpcPattern = GetPattern();
-        const s32   liLength   = static_cast<s32>( GetDataSize() );
-        void*       lpData     = GetData();
-        TagFieldSetStructure( lpcRecord, liRecLen, "EVSCORE", lpData, liLength, lpcPattern );
+        TagFieldSetStructure( lpcRecord, liRecLen, "EVSCORE",
+                              GetData(), static_cast<s32>( GetDataSize() ), GetPattern() );
     }
 
     // GetDataSize @ 0x82584D38 -- returns 184.
-    u32 EventScoreData::GetDataSize() const
+    u32 EventScoreUploadData::GetDataSize() const
     {
-        return 184;
+        return sizeof( EventScoreData );
     }
 
     // The serialisation pattern: one long field, repeated ("l*"). The vtable slot shares its body
     // with GameParams::GetPattern.
-    const char* EventScoreData::GetPattern() const
+    const char* EventScoreUploadData::GetPattern() const
     {
         return "l*";
     }
 
     // The payload the pattern describes starts right after the vptr (+0x04).
-    void* EventScoreData::GetData()
+    void* EventScoreUploadData::GetData()
     {
-        return maScoreboardIndex;
+        return &mEventScoreData;
     }
 
-    const void* EventScoreData::GetData() const
+    const void* EventScoreUploadData::GetData() const
     {
-        return maScoreboardIndex;
+        return &mEventScoreData;
     }
 }

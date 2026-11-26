@@ -1325,8 +1325,10 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::StartGame()
     {
-        CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
-        CGS_ASSERT(IsLocalPlayerHost(), "IsLocalPlayerHost()");
+        CGS_ASSERT_AT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()", CGS_ARTIST_SERVER_GAMES_FILE,
+                      1980 /* ARTIST 0x82887FFC */);
+        CGS_ASSERT_AT(IsLocalPlayerHost(), "IsLocalPlayerHost()", CGS_ARTIST_SERVER_GAMES_FILE,
+                      1981 /* ARTIST 0x8288802C */);
 
         mpServerInterface->GetMessageBuffer()[0] = 0;
         StartAction(E_ACTION_START_GAME, &DefaultCallback);

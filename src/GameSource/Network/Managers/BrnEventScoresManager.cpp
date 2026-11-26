@@ -346,7 +346,8 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------------------
     void EventScoresManager::UpdateLoggedIn()
     {
-        if ( maPendingUploads.GetLength() != 0 )
+        // u32 length tested `> 0`: ARTIST 0x82556C00 cmplwi + ble.
+        if ( maPendingUploads.GetLength() > 0 )
         {
             miUploadCount = 0;                          // *(this+0x320) = 0
             mUploadRetryTimer.SetFloatVal( 0.0f );      // SetFloatVal(this+0x318, 0.0)
@@ -354,9 +355,9 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
-            CGS_ASSERT( mpNetworkModule->GetNetworkManager() != 0,
-                        "mpNetworkModule->GetNetworkManager()" );
+            CGS_ASSERT_AT( mpNetworkModule != 0, "mpNetworkModule", __FILE__, 208 /* ARTIST 0x82556C44 */ );
+            CGS_ASSERT_AT( mpNetworkModule->GetNetworkManager() != 0,
+                           "mpNetworkModule->GetNetworkManager()", __FILE__, 209 /* ARTIST 0x82556C70 */ );
             mpNetworkModule->GetNetworkManager()->OnAutoLoginProcessComplete( KI_AUTOLOGIN_STAGE_SCORES_DONE );
             meState = KI_STATE_IDLE;
         }
@@ -393,7 +394,8 @@ namespace BrnNetwork
              && mpServerInterface->GetStatus( CgsNetwork::E_COMPONENTS_CUSTOM_COMMANDS )
                     == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE )
         {
-            EventScoreData lEventScoreData;
+            EventScoreUploadData lEventScoreUploadData;
+            lEventScoreUploadData.Construct();
 
             const u32 luCount = maPendingUploads.GetLength();
             for ( u32 luIndex = 0; luIndex < luCount; ++luIndex )
@@ -403,9 +405,9 @@ namespace BrnNetwork
                 const s32 liScoreboardIndex = GetScoreboardIndexForEvent( lrRecord.mu64EventID,
                                                                           lrRecord.meGameMode );
                 // SetScoreData(scoreboardIndex, score, gameMode); stops once the batch is full.
-                if ( lEventScoreData.AddEventScore( liScoreboardIndex,
-                                                    static_cast<s32>( lrRecord.muScore ),
-                                                    lrRecord.meGameMode ) )
+                if ( lEventScoreUploadData.SetScoreData( liScoreboardIndex,
+                                                         static_cast<s32>( lrRecord.muScore ),
+                                                         lrRecord.meGameMode ) )
                 {
                     break;
                 }
@@ -415,7 +417,7 @@ namespace BrnNetwork
             CGS_ASSERT( mpServerInterface->GetCustomCommandsComponent() != 0,
                         "mpServerInterface->GetCustomCommandsComponent()" );
             mpServerInterface->GetCustomCommandsComponent()->UploadEventScoreData(
-                &lEventScoreData, &EventScoresManager::_UploadEventScoreCallback, this );
+                &lEventScoreUploadData, &EventScoresManager::_UploadEventScoreCallback, this );
         }
         else
         {

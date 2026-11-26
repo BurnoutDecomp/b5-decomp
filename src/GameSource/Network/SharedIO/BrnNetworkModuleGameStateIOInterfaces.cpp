@@ -165,7 +165,8 @@ namespace BrnNetwork
             if (lNetworkPlayerID == -1)
             {
                 CGS_ASSERT(lNetworkPlayerID != -1,
-                           "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+                           CGS_ASSERT_MESSAGE_AT("lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                                                 __FILE__, 495 /* ARTIST 0x825421BC */));
             }
 
             for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)

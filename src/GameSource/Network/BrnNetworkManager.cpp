@@ -40,10 +40,10 @@ namespace BrnNetwork
     {
         CGS_ASSERT(GetServerInterface(), CGS_ASSERT_MESSAGE_AT(
             "GetServerInterface()",
-            __FILE__, 3121 /* ARTIST 0x825821B4 */));
+            __FILE__, 3138 /* ARTIST 0x82582230 */));
         CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(), CGS_ASSERT_MESSAGE_AT(
             "GetServerInterface()->GetTelemetryComponent()",
-            __FILE__, 3122 /* ARTIST 0x825821DC */));
+            __FILE__, 3139 /* ARTIST 0x82582258 */));
 
         char lacData[CgsNetwork::KI_MAX_TELEMETRY_DATA_SIZE];
         CgsCore::SPrintf(lacData, sizeof(lacData), "%i", liData);
@@ -1140,7 +1140,7 @@ namespace BrnNetwork
         PlayerInfoData lPlayerInfo;
         lPlayerInfo.Prepare();
         GetServerInterface()->GetPlayerInfoComponent()->GetLocalPlayerInfo(&lPlayerInfo);
-        return lPlayerInfo.GetID() == lPlayerID;
+        return lPlayerID == lPlayerInfo.GetID();   // ARTIST 0x82593CB0 subf ID - lPlayerID
     }
 
     // In a game whose session has not started: the free-burn lobby.

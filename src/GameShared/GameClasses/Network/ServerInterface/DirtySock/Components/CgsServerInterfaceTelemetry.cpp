@@ -102,7 +102,8 @@ namespace CgsNetwork
         mpServerInterface      = lpServerInterface;
         mpTelemetryNormalUsage = TelemetryApiCreate(liMaxNormalUsageBufferSize,
                                                     KI_TELEMETRY_BUFFERTYPE_CIRCULAROVERWRITE);
-        CGS_ASSERT(mpTelemetryNormalUsage != 0, "NULL != mpTelemetryNormalUsage");
+        CGS_ASSERT_AT(mpTelemetryNormalUsage != 0, "NULL != mpTelemetryNormalUsage",
+            __FILE__, 132 /* ARTIST 0x82888DD8 */);
 
         mpTelemetryCurrent = mpTelemetryNormalUsage;
         TelemetryApiControl(mpTelemetryNormalUsage, KI_TELEMETRY_CONTROL_DISABLED_COUNTRY, 0, lpDisabledCountryList);
@@ -111,7 +112,8 @@ namespace CgsNetwork
         if (lbUseFirstUsageBuffer)
         {
             mpTelemetryFirstUsage = TelemetryApiCreate(liMaxFirstUsageBufferSize, KI_TELEMETRY_BUFFERTYPE_FILLANDSTOP);
-            CGS_ASSERT(mpTelemetryFirstUsage != 0, "NULL != mpTelemetryFirstUsage");
+            CGS_ASSERT_AT(mpTelemetryFirstUsage != 0, "NULL != mpTelemetryFirstUsage",
+                __FILE__, 144 /* ARTIST 0x82888E50 */);
 
             // Record into the first-usage buffer until it fills; the normal buffer is held.
             mpTelemetryCurrent = mpTelemetryFirstUsage;

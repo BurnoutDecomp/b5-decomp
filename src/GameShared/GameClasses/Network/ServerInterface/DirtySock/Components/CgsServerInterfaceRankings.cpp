@@ -78,16 +78,16 @@ namespace CgsNetwork
 
     bool ServerInterfaceRankings::Prepare(ServerInterface* lpServerInterface)
     {
-        CGS_ASSERT(mpLobbyRank == 0, "!mpLobbyRank");
+        CGS_ASSERT_AT(mpLobbyRank == 0, "!mpLobbyRank", CGS_ARTIST_FILE, 106 /* ARTIST 0x8287B9FC */);
 
         mpServerInterface = lpServerInterface;
         meCurrentAction   = E_ACTION_COUNT;
         miUserType        = 0;
 
-        CGS_ASSERT(lpServerInterface != 0, "mpServerInterface");
+        CGS_ASSERT_AT(lpServerInterface != 0, "mpServerInterface", CGS_ARTIST_FILE, 112 /* ARTIST 0x8287BA34 */);
 
         mpLobbyRank = LobbyRankCreate(mpServerInterface->GetLobbyAPIRef(), 0);
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
+        CGS_ASSERT_AT(mpLobbyRank != 0, "mpLobbyRank", CGS_ARTIST_FILE, 117 /* ARTIST 0x8287BA6C */);
         return true;
     }
 
@@ -209,7 +209,7 @@ namespace CgsNetwork
 
     const char* ServerInterfaceRankings::GetVariationName(s32 liCategory, s32 liIndex, s32 liVariation)
     {
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
+        CGS_ASSERT_AT(mpLobbyRank != 0, "mpLobbyRank", CGS_ARTIST_FILE, 577 /* ARTIST 0x8287C128 */);
         return LobbyRankVariationName(mpLobbyRank, liCategory, liIndex, liVariation, 0, 0);
     }
 

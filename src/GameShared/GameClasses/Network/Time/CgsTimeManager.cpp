@@ -310,11 +310,11 @@ namespace CgsNetwork
         switch (meSyncTimePrepareStatus)
         {
         case E_SYNC_TIME_PREPARE_STATUS_HOST:
-            CGS_ASSERT(mSyncTimeHost.Release(), "mSyncTimeHost.Release()");
+            CGS_ASSERT_AT(mSyncTimeHost.Release(), "mSyncTimeHost.Release()", __FILE__, 565 /* ARTIST 0x8288B3F8 */);
             break;
 
         case E_SYNC_TIME_PREPARE_STATUS_CLIENT:
-            CGS_ASSERT(mSyncTimeClient.Release(), "mSyncTimeClient.Release()");
+            CGS_ASSERT_AT(mSyncTimeClient.Release(), "mSyncTimeClient.Release()", __FILE__, 570 /* ARTIST 0x8288B3B8 */);
             break;
 
         default:

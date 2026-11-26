@@ -115,7 +115,9 @@ namespace BrnNetwork
     NetworkPlayerStatsResults::Release()
     {
         miCacheSize = 0;
-        CGS_ASSERT(mStatsDebugComponent.Release(), "mStatsDebugComponent.Release()");
+        // Inlined into NetworkPlayerStatsManager::Release (ARTIST 0x82559F68, no out-of-line copy).
+        CGS_ASSERT_AT(mStatsDebugComponent.Release(), "mStatsDebugComponent.Release()",
+                      __FILE__, 100 /* ARTIST 0x82559F68 */);
         return true;
     }
 

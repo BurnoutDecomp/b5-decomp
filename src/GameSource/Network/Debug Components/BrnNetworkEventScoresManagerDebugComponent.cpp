@@ -60,8 +60,9 @@ namespace BrnNetwork
         EventScoresManagerDebugComponent* lpThis = static_cast<EventScoresManagerDebugComponent*>( lpData );
         CGS_ASSERT( lpThis != 0, "lpEventScoresManagerDebugCmpt" );
 
-        EventScoreData lEventScoreData;
-        lEventScoreData.AddEventScore( 6, 50000, 5 );
+        EventScoreUploadData lEventScoreUploadData;
+        lEventScoreUploadData.Construct();
+        lEventScoreUploadData.SetScoreData( 6, 50000, 5 );
 
         EventScoresManager* lpManager = lpThis->mpEventScoresManager;
         BrnServerInterfaceBase* lpServerInterface = lpManager->GetServerInterface();
@@ -71,7 +72,7 @@ namespace BrnNetwork
                     "lpEventScoresManagerDebugCmpt->mpEventScoresManager->mpServerInterface->GetCustomCommandsComponent()" );
 
         lpServerInterface->GetCustomCommandsComponent()->UploadEventScoreData(
-            &lEventScoreData,
+            &lEventScoreUploadData,
             &EventScoresManager::_UploadEventScoreCallback,
             lpManager );
     }

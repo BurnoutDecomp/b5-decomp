@@ -37,7 +37,7 @@ void UniquePlayerIDX360::Construct(const char* lpcPlayerName, u64 lqXuid)
 // The lobby player's machine address carries the XUID; decode it, then take the name.
 void UniquePlayerIDX360::Construct(ServerInterfacePlayerParamsBase* lpPlayerParams)
 {
-    CGS_ASSERT(lpPlayerParams != 0, "lpPlayerParams");
+    CGS_ASSERT_AT(lpPlayerParams, "lpPlayerParams", CGS_ARTIST_UNIQUE_PLAYER_ID_X360_H, 118 /* ARTIST 0x82541AE4 */);
 
     u64 lqXuid;
     DirtyAddrToHostAddr(&lqXuid, sizeof(lqXuid), static_cast<const DirtyAddrT*>(lpPlayerParams->GetDirtyAddrT()));

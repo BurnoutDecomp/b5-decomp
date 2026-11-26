@@ -789,18 +789,19 @@ int ServerInterfaceCustomCommands::ConvertEventScoreUploadError(int liMessageKin
 // ---------------------------------------------------------------------------
 // UploadEventScoreData @ 0x825905D8 -- stash the callback + user data, serialise the batch of
 // event scores into the message buffer, then post the 'event score data' upload (action 8).
-int ServerInterfaceCustomCommands::UploadEventScoreData(EventScoreData* lpEventScoreData,
-                                                        CustomCommandCallback lCallback, void* lpData)
+void ServerInterfaceCustomCommands::UploadEventScoreData(EventScoreUploadData* lpEventScoreUploadData,
+                                                         CustomCommandCallback lCallback, void* lpData)
 {
     mpCallbackData = lpData;     // a1[10] -- stw r6, 0x28
     mpCallback     = lCallback;  // a1[9]  -- stw r5, 0x24
 
-    CGS_ASSERT(lpEventScoreData != 0, "lpEventScoreUploadData");
+    CGS_ASSERT(lpEventScoreUploadData != 0, CGS_ASSERT_MESSAGE_AT("lpEventScoreUploadData",
+        __FILE__, 1071 /* ARTIST 0x82590604 */));
 
-    lpEventScoreData->SerialiseToString(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH);
+    lpEventScoreUploadData->SerialiseToString(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH);
 
+    // void: ARTIST 0x82590698 leaves SendCustomCommand's r3 (both callers ignore the result).
     SendCustomCommand(E_ACTION_UPLOAD_EVENT_SCORE_DATA, mpServerInterface->GetMessageBuffer());
-    return 0;  // SendCustomCommand is void (its r3 tail is ignored by every caller).
 }
 
 // ---------------------------------------------------------------------------

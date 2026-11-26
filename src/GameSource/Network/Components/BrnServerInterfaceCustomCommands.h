@@ -54,7 +54,7 @@ namespace BrnGameState
 namespace BrnNetwork
 {
     class RoadRulesUploadData;         // SetRoadRulesForLocalPlayer input (Parameters/BrnNetworkRoadRulesData.h)
-    class EventScoreData;              // UploadEventScoreData input (Parameters/BrnNetworkEventScoreData.h)
+    class EventScoreUploadData;        // UploadEventScoreData input (Parameters/BrnNetworkEventScoreData.h)
 
     // DWARF (BrnNetworkInEventTypeDefs.h:90) aliases the upload payload as
     // NetworkInOfflineProgression::OfflineProgressionT == the server-generated OFFPROG
@@ -155,8 +155,8 @@ namespace BrnNetwork
         // E_ACTION_UPLOAD_EVENT_SCORE_DATA (8). Driven by EventScoresManagerDebugComponent::
         // SetCalvalryBurningRouteBest @ 0x82591D00, which passes (this, &EventScoreData,
         // callback, manager-as-userdata) in r3..r6. Bodied in another TU.
-        int UploadEventScoreData(EventScoreData* lpEventScoreData,
-                                 CustomCommandCallback lCallback, void* lpData);
+        void UploadEventScoreData(EventScoreUploadData* lpEventScoreUploadData,
+                                  CustomCommandCallback lCallback, void* lpData);
 
         // E_ACTION_UPLOAD_FREEBURN_LOBBY_STATS (5): the finished free-burn lobby game's stats.
         void UploadFreeBurnLobbyStats(const BrnGameState::GameStateModuleIO::OnlineGameResults* lpResults,

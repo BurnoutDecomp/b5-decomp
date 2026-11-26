@@ -35,12 +35,13 @@
 
 template void CgsContainers::Array<BrnNetwork::LiveRevengeRelationship, 250>::Append(const BrnNetwork::LiveRevengeRelationship&);
 
-// const operator[]  @ 0x824F7388  (checked indexed accessor; called by ~15 LiveRevengeManager
+// GetItem  @ 0x824F7388  (checked indexed accessor; called by ~15 LiveRevengeManager
 // sites, e.g. GetNonConstRevengeRelation/OnRoundFinish/FindPlayerInTableByName/AddNewTableEntry).
-// The X360 body is the generic const operator[] (CgsArray.h:556/557): asserts miCount != the -1
+// The X360 body is the generic NON-const GetItem (its asserts carry CgsArray.h:556/557, the
+// non-const overload's lines; the const one asserts at 538/539): asserts miCount != the -1
 // sentinel ("Array used before Construct/Clear was called"), unsigned bounds-checks the index
 // against miCount @ +0x7530 (== 250 * 120 == N * sizeof(T)), then returns &maElements[i] (element
 // stride 0x78 == 120). The dynamic "Array index out of bounds. Index: <i>, length: <n>" StrStream
 // message is the documented generic-body parity gap (kept as the static CGS_ASSERT string).
-template const BrnNetwork::LiveRevengeRelationship&
-    CgsContainers::Array<BrnNetwork::LiveRevengeRelationship, 250>::operator[](u32) const;
+template BrnNetwork::LiveRevengeRelationship&
+    CgsContainers::Array<BrnNetwork::LiveRevengeRelationship, 250>::GetItem(u32);
