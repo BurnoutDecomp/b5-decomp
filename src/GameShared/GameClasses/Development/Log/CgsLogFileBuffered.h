@@ -21,11 +21,24 @@ namespace Log
     {
         // X360 0x826613A8. Default-construct a closed, unbuffered log stream: no file (miFile = -1),
         // no scratch buffer (mpcBuffer/miBufferLength = 0), empty filename, write position 0. The
-        // StrStreamBase base ctor sets mePrintMode = E_PRINTMODE_DECIMAL; the X360 then clears the
-        // remaining members word-for-word (the `BasePriorityQueue::Clear` the decompiler attributes
-        // is the folded mePrintMode=0 store, already covered by the base ctor).
-        LogFileBuffered();
-        ~LogFileBuffered();
+        // StrStreamBase base ctor calls Reset (0x82815E58, folded with BasePriorityQueue::Clear).
+        // DWARF CgsLogFileBuffered.h:118 and :142: both are defined in the class. ARTIST emits the
+        // constructor out of line once (0x826613A8, called from DumpStats 0x828EE100) and inlines
+        // the destructor into its callers (vptr store + Flush, DumpStats 0x828EE1B0..C0). The body
+        // clears the name first (stb +0x14 @0x826613E8, before the +0xC/+0x10/+0x214 words).
+        LogFileBuffered()
+            : miFile(INVALID_HANDLE_VALUE)
+        {
+            macFileName[0]   = '\0';
+            mpcBuffer        = 0;
+            miBufferLength   = 0;
+            miBufferPosition = 0;
+        }
+
+        ~LogFileBuffered()
+        {
+            Flush();
+        }
 
         bool Open(const char* lpcFileName, char* lpcBuffer, s32 liBufferLength);
         void Close();

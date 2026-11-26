@@ -11,27 +11,6 @@ namespace CgsDev
 {
 namespace Log
 {
-    // X360 0x826613A8. Member stores from the pseudocode map onto the DWARF layout:
-    //   *(this+8)  = -1   -> miFile
-    //   *(this+12) = 0    -> mpcBuffer
-    //   *(this+16) = 0    -> miBufferLength
-    //   *(this+20) = 0    -> macFileName[0] (clear the path)
-    //   *(this+532)= 0    -> miBufferPosition  (20 + 512 == 532)
-    // mePrintMode (this+4) and the vtable (this+0) are set by the StrStreamBase base ctor.
-    LogFileBuffered::LogFileBuffered()
-        : miFile(INVALID_HANDLE_VALUE)
-        , mpcBuffer(0)
-        , miBufferLength(0)
-        , miBufferPosition(0)
-    {
-        macFileName[0] = '\0';
-    }
-
-    LogFileBuffered::~LogFileBuffered()
-    {
-        Flush(); //inlined in ARTIST828EE1B0..828EE1C0
-    }
-
     // ARTIST82820978. Open truncates the file, closes the handle immediately,
     // and retains the name/buffer for subsequent append-mode flushes.
     bool LogFileBuffered::Open(const char* lpcFileName, char* lpcBuffer, s32 liBufferLength)
