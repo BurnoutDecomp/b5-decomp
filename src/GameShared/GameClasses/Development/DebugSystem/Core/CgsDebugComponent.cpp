@@ -63,15 +63,13 @@ namespace CgsDev
     // explicitly once registration is done.
     void DebugComponent::Register()
     {
-        DebugManager* lpManager = DebugManager::ThreadSafeAquire();
-        DebugInterface debugInterface(lpManager);
+        // DWARF local lDebugInterface (cpp:228): the automatic interface acquires and releases.
+        DebugInterface lDebugInterface;
 
         if (IsSimple())
-            debugInterface.GetDebugManager().RegisterComponentSimple(this, GetPath(), GetName());
+            lDebugInterface.GetDebugManager().RegisterComponentSimple(this, GetPath(), GetName());
         else
-            debugInterface.GetDebugManager().RegisterComponent(this, GetPath(), GetName());
-
-        DebugManager::ThreadSafeRelease(lpManager);
+            lDebugInterface.GetDebugManager().RegisterComponent(this, GetPath(), GetName());
     }
 
     // ---- path resolution -----------------------------------------------------------------------

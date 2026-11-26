@@ -22,16 +22,22 @@ namespace CgsDev
 
     struct DebugInterface
     {
-        // X360 DebugInterface() @ 0x821F1F20 - the AUTOMATIC (stack-scoped) handle: it sets the
-        // is-automatic flag, asserts the DebugManager singleton exists, ENTERS the per-manager
-        // debug critical section, and grabs the singleton into mpDebugManager. The matching
-        // inline release (when mbIsAutomaticClass) leaves the section.
-        DebugInterface();
-
-        explicit DebugInterface(DebugManager* lpDebugManager)
-            : mpDebugManager(lpDebugManager)
-            , mbIsAutomaticClass(false)
+        // The AUTOMATIC (stack-scoped) handle: set the is-automatic flag, then acquire the singleton
+        // (ThreadSafeAquire asserts it and enters the debug section); the destructor releases it.
+        // Header-inline with the body statements in this order (LegacySrc CgsDebugInterface.h:136;
+        // ARTIST's out-of-line copy 0x821F1F20 stores the flag, stb @0x821F1F40, before the inlined
+        // ThreadSafeAquire, and DebugComponent::Register 0x828331E4 inlines it the same way).
+        DebugInterface()
         {
+            mbIsAutomaticClass = true;
+            mpDebugManager = DebugManager::ThreadSafeAquire();
+        }
+
+        // LegacySrc CgsDebugInterface.h:143: the flag, then the borrowed manager.
+        explicit DebugInterface(DebugManager* lpDebugManager)
+        {
+            mbIsAutomaticClass = false;
+            mpDebugManager = lpDebugManager;
         }
 
         ~DebugInterface()
@@ -40,9 +46,14 @@ namespace CgsDev
                 DebugManager::ThreadSafeRelease(mpDebugManager);
         }
 
-        // X360 GetDebugManager @ 0x823A61B0 - assert the manager pointer is set, then return it.
-        // Bodied in CgsDebugInterface.cpp (the X360 asserts mpDebugManager, CgsDebugInterface.h:163).
-        DebugManager&     GetDebugManager();
+        // Header-inline: assert the manager pointer is set (CgsDebugInterface.h:163, ARTIST copy
+        // 0x823A61B0), then return it.
+        DebugManager&     GetDebugManager()
+        {
+            CGS_ASSERT_AT(mpDebugManager, "mpDebugManager",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Interface/CgsDebugInterface.h", 163);
+            return *mpDebugManager;
+        }
         DebugUI::DebugUI& GetUI();
 
         DebugRender& GetRender();

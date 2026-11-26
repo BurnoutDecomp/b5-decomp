@@ -9,6 +9,8 @@
 #include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonGpu.h"     // mDebugComponentPerfMonGpu (+0x118)
 #include "GameShared/GameClasses/Development/MessageSystem/DebugComponent/CgsDebugComponentMessageFilter.h" // mDebugComponentMessageFilter (+0x12C)
 #include "GameShared/GameClasses/Development/DebugSystem/Controller/CgsDebugController.h" // DebugManagerPad
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/core/debug/DebugCriticalSection.h"                                     // mMutex
 
 // CgsDev::DebugManager - the process-wide owner of the in-game debug systems (perfmon overlays,
 // debug menus, console, on-screen variables): it holds the DebugUI, the resource allocator, and
@@ -189,5 +191,26 @@ namespace CgsDev
         // gives no path (ARTIST .data 0x82F31990, reloaded by RegisterComponentSimple 0x8282E2A0).
         static const char* KPC_DEFAULTCOMPONENTPATH;
         static DebugManager* mpInstance;
+        // DWARF CgsDebugManager.h:311: the lock the thread-safe accessors bracket (ARTIST 0x83019264).
+        static rw::core::debug::detail::DebugCriticalSection mMutex;
     };
+
+#define CGS_ARTIST_CGSDEBUGMANAGER_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.h"
+    // Header-inline (asserts on CgsDebugManager.h:343 / :353; ARTIST out-of-line copies 0x821F1E50 and
+    // 0x821F1EB8): assert the singleton, enter the lock, hand the singleton back; Release leaves the
+    // lock first, then asserts the released pointer is the live singleton.
+    inline DebugManager* DebugManager::ThreadSafeAquire()
+    {
+        CGS_ASSERT_AT(mpInstance, "mpInstance", CGS_ARTIST_CGSDEBUGMANAGER_H_FILE, 343);
+        mMutex.Enter();
+        return mpInstance;
+    }
+
+    inline void DebugManager::ThreadSafeRelease(DebugManager* lpDebugManager)
+    {
+        mMutex.Leave();
+        CGS_ASSERT_AT(lpDebugManager == mpInstance, "lpDebugManager == mpInstance",
+            CGS_ARTIST_CGSDEBUGMANAGER_H_FILE, 353);
+    }
+#undef CGS_ARTIST_CGSDEBUGMANAGER_H_FILE
 }

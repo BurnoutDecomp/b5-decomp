@@ -16,36 +16,8 @@
 
 namespace CgsDev
 {
-    // Faithful port of X360 DebugInterface() @ 0x821F1F20:
-    //   *(this + 4) = 1;                                  // mbIsAutomaticClass = true
-    //   if (!mpInstance) { Begin/Fire/EndAssert("mpInstance", CgsDebugManager.h:343); }
-    //   DebugCriticalSection::Enter(dword_83019264);      // enter the per-manager debug section
-    //   *this = mpInstance;                               // mpDebugManager = the singleton
-    //
-    // DebugManager::ThreadSafeAquire() IS this assert-mpInstance + enter-section + return-singleton
-    // step (X360 ThreadSafeAquire 0x821F1E50), so the acquiring ctor forwards to it; the matching
-    // ~DebugInterface release (when mbIsAutomaticClass) leaves the section.
-    DebugInterface::DebugInterface()
-        : mpDebugManager(DebugManager::ThreadSafeAquire())
-        , mbIsAutomaticClass(true)
-    {
-    }
+    // DebugInterface() and GetDebugManager (ARTIST 0x821F1F20 / 0x823A61B0) are header-inline.
 
-
-    // Faithful port of X360 GetDebugManager @ 0x823A61B0:
-    //   if (!*this) { Begin/Fire/EndAssert("mpDebugManager", CgsDebugInterface.h:163); }
-    //   return *this;
-    DebugManager& DebugInterface::GetDebugManager()
-    {
-        CGS_ASSERT_AT(mpDebugManager,
-            "mpDebugManager",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Interface/CgsDebugInterface.h", 163 /* ARTIST 0x823A61D8 */);
-
-        return *mpDebugManager;
-    }
-
-    // ARTIST 0x82822660: the assert's BeginAssert/EndAssert are inlined (gAssertMutex Enter/Leave
-    // at 0x82822684), as CgsDevelopmentUnity defines them in the same TU (CgsAssertManager.cpp).
     DebugUI::DebugUI& DebugInterface::GetUI()
     {
         CGS_ASSERT_AT(mpDebugManager, "mpDebugManager", CGS_ARTIST_FILE, 158);

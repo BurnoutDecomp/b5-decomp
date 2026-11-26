@@ -56,7 +56,7 @@ namespace CgsDev
     // The per-DebugManager lock the thread-safe accessors bracket (X360 dword_83019264 - a file-static
     // rw DebugCriticalSection passed by &address to Enter/Leave). ThreadSafeAquire enters it, Release
     // leaves it. DebugManager::Construct @0x828332C0 Creates it (the console's own bring-up order).
-    static rw::core::debug::detail::DebugCriticalSection gDebugManagerSection = { 0 };
+    rw::core::debug::detail::DebugCriticalSection DebugManager::mMutex = { 0 };
 
     namespace
     {
@@ -179,7 +179,7 @@ namespace CgsDev
 
         mComponentList.Clear();
  // PC startup sidecar follows the component-list lifetime.
-        gDebugManagerSection.Create();
+        mMutex.Create();
 
         mp3dRender = 0;
         mp2dRender = 0;
@@ -308,23 +308,7 @@ namespace CgsDev
     static const char KAC_ARTIST_DEBUG_MANAGER_HEADER[] =
         "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.h";
 
-    // Faithful port of X360 0x821F1E50: assert the singleton exists, enter the per-manager debug
-    // critical section, then hand the singleton back. (Enter is a no-op until the section is Created.)
-    DebugManager* DebugManager::ThreadSafeAquire()
-    {
-        CGS_ASSERT_AT(mpInstance, "mpInstance", KAC_ARTIST_DEBUG_MANAGER_HEADER, 343);
-        gDebugManagerSection.Enter();
-        return mpInstance;
-    }
-
-    // Faithful port of X360 0x821F1EB8: leave the per-manager debug critical section FIRST (the X360
-    // calls Leave before the assert), then assert the released pointer is the live singleton.
-    void DebugManager::ThreadSafeRelease(DebugManager* lpDebugManager)
-    {
-        gDebugManagerSection.Leave();
-        CGS_ASSERT_AT(lpDebugManager == mpInstance, "lpDebugManager == mpInstance",
-            KAC_ARTIST_DEBUG_MANAGER_HEADER, 353);
-    }
+    // ThreadSafeAquire / ThreadSafeRelease (ARTIST 0x821F1E50 / 0x821F1EB8) are header-inline.
 
     DebugUI::DebugUI& DebugManager::GetUI()
     {
