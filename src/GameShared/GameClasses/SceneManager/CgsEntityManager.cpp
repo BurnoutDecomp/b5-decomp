@@ -149,7 +149,7 @@ s32 EntityManager::GetVolumeInstanceIndexByID(VolumeInstanceId lVolumeInstanceId
         CgsDev::Assert::BeginAssert();
         CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         lMessage << "Volume instance not found: ";
-        lMessage.SetPrintMode(CgsDev::E_PRINTMODE_HEX) << lVolumeInstanceId.muId;
+        lMessage << CgsDev::E_PRINTMODE_HEX << lVolumeInstanceId.muId;
         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                                   CGS_ASSERT_LOCATION(KAC_ENTITY_MANAGER_ARTIST_HEADER, 324));
         CgsDev::Assert::EndAssert();

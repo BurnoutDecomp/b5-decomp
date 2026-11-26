@@ -364,8 +364,8 @@ namespace CgsModule
             CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             CgsDev::StrStreamBase& lrMessage = lStrStream << "Prev entry is invalid, position: " << liPrevEntryPosition;
             lrMessage << " PrevEventPtr=0x";
-            (lrMessage.SetPrintMode(CgsDev::E_PRINTMODE_HEX) << reinterpret_cast<u32>(lpEvent))
-                .SetPrintMode(CgsDev::E_PRINTMODE_HEXONCE);
+            lrMessage << CgsDev::E_PRINTMODE_HEX << reinterpret_cast<u32>(lpEvent)
+                << CgsDev::E_PRINTMODE_HEXONCE;
             lrMessage << "\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(detail::KAC_VEQ_FILE, 410));
             CgsDev::Assert::EndAssert();

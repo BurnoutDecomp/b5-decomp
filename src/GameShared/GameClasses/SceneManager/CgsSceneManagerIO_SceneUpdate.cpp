@@ -180,8 +180,8 @@ namespace SceneManagerIO
             // then restores decimal mode on the shared assertion stream.
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-            ((lMessage << "Burnout Specific: Bad Volume Instance ").SetPrintMode(CgsDev::E_PRINTMODE_HEX)
-                << lVolumeInstanceId.muId).SetPrintMode(CgsDev::E_PRINTMODE_DECIMAL);
+            lMessage << "Burnout Specific: Bad Volume Instance " << CgsDev::E_PRINTMODE_HEX
+                << lVolumeInstanceId.muId << CgsDev::E_PRINTMODE_DECIMAL;
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                                        CGS_ASSERT_LOCATION(KAC_SCENE_UPDATE_ARTIST_FILE, 994));
             CgsDev::Assert::EndAssert();

@@ -283,7 +283,7 @@ void VolumeManager::RemoveVolume(VolumeId lVolumeId)
         CgsDev::Assert::BeginAssert();
         CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         lMessage << "Can't find volume ";
-        lMessage.SetPrintMode(CgsDev::E_PRINTMODE_HEX) << static_cast<u64>(lVolumeId);
+        lMessage << CgsDev::E_PRINTMODE_HEX << static_cast<u64>(lVolumeId);
         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                                   CGS_ASSERT_LOCATION(KAC_VOLUME_MANAGER_ARTIST_FILE, 236));
         CgsDev::Assert::EndAssert();

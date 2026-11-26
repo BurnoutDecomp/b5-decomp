@@ -12,50 +12,29 @@
 // the DecFIGS DWARF + the X360 StrStream bodies (CgsStrStream.cpp).
 namespace CgsDev
 {
-    const char* gpcHexFormat = "0x%X";   // ARTIST 0x82F31944
-    const char* gpcSignedFormat = "%d"; // ARTIST 0x82F3193C
-    const char* gpcUnsignedFormat = "%u"; // ARTIST 0x82F31940
+    // DWARF CgsStrStream.h:163-179, ARTIST .data 0x82F3193C..0x82F31974 (one pointer each).
+    const char* StrStreamBase::KAC_INTEGER = "%d";
+    const char* StrStreamBase::KAC_UNSIGNED = "%u";
+    const char* StrStreamBase::KAC_HEX = "0x%X";
+    const char* StrStreamBase::KAC_PADDED_HEX = "0x%08X";
+    const char* StrStreamBase::KAC_PADDED_HEX_NO_PREFIX = "%08X";
+    const char* StrStreamBase::KAC_FLOAT = "%f";
+    const char* StrStreamBase::KAC_CHAR = "%c";
+    const char* StrStreamBase::KAC_TRUE = "true";
+    const char* StrStreamBase::KAC_FALSE = "false";
+    const char* StrStreamBase::KAC_VECTOR2 = "(%f, %f)";
+    const char* StrStreamBase::KAC_VECTOR3 = "(%f, %f, %f)";
+    const char* StrStreamBase::KAC_VECTOR4 = "(%f, %f, %f, %f)";
+    const char* StrStreamBase::KAC_MATRIX33 = "\n(%f, %f, %f)\n(%f, %f, %f)\n(%f, %f, %f)\n";
+    const char* StrStreamBase::KAC_MATRIX44 =
+        "\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n";
+    const char* StrStreamBase::KAC_LF = "\n";
+    const s32 StrStreamBase::KI_FORMAT_BUFFER_SIZE = 256;
 
     // The StrStreamBase vtable at 0x82000D00 points to 0x82815E58.
     void StrStreamBase::Reset()
     {
-        mePrintMode = E_PRINTMODE_DECIMAL;
-    }
-
-    StrStreamBase& StrStreamBase::operator<<(u64 luValue)
-    {
-        switch (mePrintMode)
-        {
-        case E_PRINTMODE_HEX:
-        case E_PRINTMODE_HEXONCE:
-            Append64IntHex(luValue);
-            mePrintMode = mePrintMode == E_PRINTMODE_HEXONCE ? E_PRINTMODE_DECIMAL : mePrintMode;
-            break;
-        case E_PRINTMODE_DECIMAL:
-            Append64IntDecimal(luValue);
-            break;
-        }
-        return *this;
-    }
-
-    // ARTIST821F0F40: hexadecimal formats the original float's raw bits.
-    StrStreamBase& StrStreamBase::operator<<(f32 lfValue)
-    {
-        if (mePrintMode == E_PRINTMODE_DECIMAL)
-            AppendFormat("%f", lfValue);
-        else if (static_cast<u32>(mePrintMode) < 3)
-        {
-            u32 luBits;
-            std::memcpy(&luBits, &lfValue, sizeof(luBits));
-            AppendFormat("0x%X", luBits);
-            if (mePrintMode == E_PRINTMODE_HEXONCE) mePrintMode = E_PRINTMODE_DECIMAL;
-        }
-        return *this;
-    }
-
-    StrStreamBase& StrStreamBase::operator<<(bool lbValue)
-    {
-        return *this << (lbValue ? "true" : "false");
+        meCurrentPrintMode = E_PRINTMODE_DECIMAL;
     }
 
     // ARTIST 0x82817720 formats into 256 bytes, checks the result against the buffer
@@ -79,21 +58,6 @@ namespace CgsDev
         Append(lacBuffer);
     }
 
-    // ARTIST 0x82203F34..0x82203F54 inlines the decimal helper and
-    // sends the converted 64-bit value straight to the virtual sink.
-    inline void StrStreamBase::Append64IntDecimal(u64 luValue)
-    {
-        char lacBuffer[24];
-        rw::core::stdc::ConvertI64ToA(static_cast<s64>(luValue), lacBuffer, 10);
-        Append(lacBuffer);
-    }
-
-    void StrStreamBase::Append64IntHex(u64 luValue)
-    {
-        AppendFormat("0x%08X", static_cast<u32>(luValue >> 32));
-        AppendFormat("%08X", static_cast<u32>(luValue));
-    }
-
     // ARTIST 0x82815E80 scans through the terminator and gives strncat the full remaining count.
     void StrStream::Append(const char* lpcText)
     {
@@ -101,7 +65,7 @@ namespace CgsDev
     }
 
     // @ 0x827DB6E8-loop init. Resets the inline buffer to the empty string (the X360 `stb 0,8(this)`).
-    // The StrStreamBase() base ctor already set mePrintMode = E_PRINTMODE_DECIMAL.
+    // The StrStreamBase() base ctor already set meCurrentPrintMode = E_PRINTMODE_DECIMAL.
     SimpleStrStream::SimpleStrStream()
     {
         macCharBuffer[0] = '\0';

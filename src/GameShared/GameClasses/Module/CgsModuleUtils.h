@@ -8,23 +8,11 @@
 // zero to seven read-only sources. Check the buffers before taking or releasing locks.
 namespace CgsModule
 {
-    __forceinline void AssertIOBuffer(const void* lpBuffer,
-                                                     const char* lpcExpression, int liLine)
-    {
-        if (!lpBuffer)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lpcExpression,
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, liLine));
-            CgsDev::Assert::EndAssert();
-        }
-    }
-
     // ARTIST 823B6FE0 / 823B7060
     inline void LockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 259);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 260);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 259);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 260);
 
         lpInputBuffer->LockForWrite();
         lpOutputBuffer0->LockForRead();
@@ -32,8 +20,8 @@ namespace CgsModule
 
     inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 272);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 273);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 272);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 273);
 
         lpOutputBuffer0->UnlockForRead();
         lpInputBuffer->UnlockForWrite();
@@ -43,9 +31,9 @@ namespace CgsModule
     inline void LockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0,
         const IOBuffer* lpOutputBuffer1)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 286);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 287);
-        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 288);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 286);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 287);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 288);
 
         lpInputBuffer->LockForWrite();
         lpOutputBuffer0->LockForRead();
@@ -55,9 +43,9 @@ namespace CgsModule
     inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0,
         const IOBuffer* lpOutputBuffer1)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 302);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 303);
-        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 304);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 302);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 303);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 304);
 
         lpOutputBuffer1->UnlockForRead();
         lpOutputBuffer0->UnlockForRead();
@@ -68,10 +56,10 @@ namespace CgsModule
     inline void LockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0, const IOBuffer* lpOutputBuffer1,
         const IOBuffer* lpOutputBuffer2)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 319);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 320);
-        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 321);
-        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 322);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 319);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 320);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 321);
+        CGS_ASSERT_AT(lpOutputBuffer2, "lpOutputBuffer2", CGS_ARTIST_CGSMODULEUTILS_FILE, 322);
 
         lpInputBuffer->LockForWrite();
         lpOutputBuffer0->LockForRead();
@@ -82,10 +70,10 @@ namespace CgsModule
     inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0, const IOBuffer* lpOutputBuffer1,
         const IOBuffer* lpOutputBuffer2)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 338);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 339);
-        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 340);
-        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 341);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 338);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 339);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 340);
+        CGS_ASSERT_AT(lpOutputBuffer2, "lpOutputBuffer2", CGS_ARTIST_CGSMODULEUTILS_FILE, 341);
 
         lpOutputBuffer2->UnlockForRead();
         lpOutputBuffer1->UnlockForRead();
@@ -97,11 +85,11 @@ namespace CgsModule
     inline void LockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0, const IOBuffer* lpOutputBuffer1,
         const IOBuffer* lpOutputBuffer2, const IOBuffer* lpOutputBuffer3)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 358);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 359);
-        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 360);
-        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 361);
-        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 362);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 358);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 359);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 360);
+        CGS_ASSERT_AT(lpOutputBuffer2, "lpOutputBuffer2", CGS_ARTIST_CGSMODULEUTILS_FILE, 361);
+        CGS_ASSERT_AT(lpOutputBuffer3, "lpOutputBuffer3", CGS_ARTIST_CGSMODULEUTILS_FILE, 362);
 
         lpInputBuffer->LockForWrite();
         lpOutputBuffer0->LockForRead();
@@ -113,11 +101,11 @@ namespace CgsModule
     inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0, const IOBuffer* lpOutputBuffer1,
         const IOBuffer* lpOutputBuffer2, const IOBuffer* lpOutputBuffer3)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 380);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 381);
-        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 382);
-        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 383);
-        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 384);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 380);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 381);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 382);
+        CGS_ASSERT_AT(lpOutputBuffer2, "lpOutputBuffer2", CGS_ARTIST_CGSMODULEUTILS_FILE, 383);
+        CGS_ASSERT_AT(lpOutputBuffer3, "lpOutputBuffer3", CGS_ARTIST_CGSMODULEUTILS_FILE, 384);
 
         lpOutputBuffer3->UnlockForRead();
         lpOutputBuffer2->UnlockForRead();
@@ -131,12 +119,12 @@ namespace CgsModule
         const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2,
         const IOBuffer* lpOutputBuffer3, const IOBuffer* lpOutputBuffer4)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 403);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 404);
-        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 405);
-        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 406);
-        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 407);
-        AssertIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 408);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 403);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 404);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 405);
+        CGS_ASSERT_AT(lpOutputBuffer2, "lpOutputBuffer2", CGS_ARTIST_CGSMODULEUTILS_FILE, 406);
+        CGS_ASSERT_AT(lpOutputBuffer3, "lpOutputBuffer3", CGS_ARTIST_CGSMODULEUTILS_FILE, 407);
+        CGS_ASSERT_AT(lpOutputBuffer4, "lpOutputBuffer4", CGS_ARTIST_CGSMODULEUTILS_FILE, 408);
 
         lpInputBuffer->LockForWrite();
         lpOutputBuffer0->LockForRead();
@@ -150,12 +138,12 @@ namespace CgsModule
         const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2,
         const IOBuffer* lpOutputBuffer3, const IOBuffer* lpOutputBuffer4)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 428);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 429);
-        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 430);
-        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 431);
-        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 432);
-        AssertIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 433);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 428);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 429);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 430);
+        CGS_ASSERT_AT(lpOutputBuffer2, "lpOutputBuffer2", CGS_ARTIST_CGSMODULEUTILS_FILE, 431);
+        CGS_ASSERT_AT(lpOutputBuffer3, "lpOutputBuffer3", CGS_ARTIST_CGSMODULEUTILS_FILE, 432);
+        CGS_ASSERT_AT(lpOutputBuffer4, "lpOutputBuffer4", CGS_ARTIST_CGSMODULEUTILS_FILE, 433);
 
         lpOutputBuffer4->UnlockForRead();
         lpOutputBuffer3->UnlockForRead();
@@ -170,13 +158,13 @@ namespace CgsModule
         const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2,
         const IOBuffer* lpOutputBuffer3, const IOBuffer* lpOutputBuffer4, const IOBuffer* lpOutputBuffer5)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 454);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 455);
-        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 456);
-        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 457);
-        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 458);
-        AssertIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 459);
-        AssertIOBuffer(lpOutputBuffer5, "lpOutputBuffer5", 460);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 454);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 455);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 456);
+        CGS_ASSERT_AT(lpOutputBuffer2, "lpOutputBuffer2", CGS_ARTIST_CGSMODULEUTILS_FILE, 457);
+        CGS_ASSERT_AT(lpOutputBuffer3, "lpOutputBuffer3", CGS_ARTIST_CGSMODULEUTILS_FILE, 458);
+        CGS_ASSERT_AT(lpOutputBuffer4, "lpOutputBuffer4", CGS_ARTIST_CGSMODULEUTILS_FILE, 459);
+        CGS_ASSERT_AT(lpOutputBuffer5, "lpOutputBuffer5", CGS_ARTIST_CGSMODULEUTILS_FILE, 460);
 
         lpInputBuffer->LockForWrite();
         lpOutputBuffer0->LockForRead();
@@ -191,13 +179,13 @@ namespace CgsModule
         const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2,
         const IOBuffer* lpOutputBuffer3, const IOBuffer* lpOutputBuffer4, const IOBuffer* lpOutputBuffer5)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 482);
-        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 483);
-        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 484);
-        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 485);
-        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 486);
-        AssertIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 487);
-        AssertIOBuffer(lpOutputBuffer5, "lpOutputBuffer5", 488);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 482);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 483);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 484);
+        CGS_ASSERT_AT(lpOutputBuffer2, "lpOutputBuffer2", CGS_ARTIST_CGSMODULEUTILS_FILE, 485);
+        CGS_ASSERT_AT(lpOutputBuffer3, "lpOutputBuffer3", CGS_ARTIST_CGSMODULEUTILS_FILE, 486);
+        CGS_ASSERT_AT(lpOutputBuffer4, "lpOutputBuffer4", CGS_ARTIST_CGSMODULEUTILS_FILE, 487);
+        CGS_ASSERT_AT(lpOutputBuffer5, "lpOutputBuffer5", CGS_ARTIST_CGSMODULEUTILS_FILE, 488);
 
         lpOutputBuffer5->UnlockForRead();
         lpOutputBuffer4->UnlockForRead();
@@ -213,62 +201,14 @@ namespace CgsModule
         const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2, const IOBuffer* lpOutputBuffer3,
         const IOBuffer* lpOutputBuffer4, const IOBuffer* lpOutputBuffer5, const IOBuffer* lpOutputBuffer6)
     {
-        if (!lpInputBuffer)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpInputBuffer",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 511));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer0)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer0",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 512));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer1)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer1",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 513));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer2)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer2",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 514));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer3)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer3",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 515));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer4)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer4",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 516));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer5)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer5",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 517));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer6)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer6",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 518));
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 511);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 512);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 513);
+        CGS_ASSERT_AT(lpOutputBuffer2, "lpOutputBuffer2", CGS_ARTIST_CGSMODULEUTILS_FILE, 514);
+        CGS_ASSERT_AT(lpOutputBuffer3, "lpOutputBuffer3", CGS_ARTIST_CGSMODULEUTILS_FILE, 515);
+        CGS_ASSERT_AT(lpOutputBuffer4, "lpOutputBuffer4", CGS_ARTIST_CGSMODULEUTILS_FILE, 516);
+        CGS_ASSERT_AT(lpOutputBuffer5, "lpOutputBuffer5", CGS_ARTIST_CGSMODULEUTILS_FILE, 517);
+        CGS_ASSERT_AT(lpOutputBuffer6, "lpOutputBuffer6", CGS_ARTIST_CGSMODULEUTILS_FILE, 518);
         lpInputBuffer->LockForWrite();
         lpOutputBuffer0->LockForRead();
         lpOutputBuffer1->LockForRead();
@@ -284,62 +224,14 @@ namespace CgsModule
         const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2, const IOBuffer* lpOutputBuffer3,
         const IOBuffer* lpOutputBuffer4, const IOBuffer* lpOutputBuffer5, const IOBuffer* lpOutputBuffer6)
     {
-        if (!lpInputBuffer)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpInputBuffer",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 542));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer0)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer0",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 543));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer1)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer1",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 544));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer2)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer2",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 545));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer3)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer3",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 546));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer4)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer4",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 547));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer5)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer5",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 548));
-            CgsDev::Assert::EndAssert();
-        }
-        if (!lpOutputBuffer6)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer6",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 549));
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 542);
+        CGS_ASSERT_AT(lpOutputBuffer0, "lpOutputBuffer0", CGS_ARTIST_CGSMODULEUTILS_FILE, 543);
+        CGS_ASSERT_AT(lpOutputBuffer1, "lpOutputBuffer1", CGS_ARTIST_CGSMODULEUTILS_FILE, 544);
+        CGS_ASSERT_AT(lpOutputBuffer2, "lpOutputBuffer2", CGS_ARTIST_CGSMODULEUTILS_FILE, 545);
+        CGS_ASSERT_AT(lpOutputBuffer3, "lpOutputBuffer3", CGS_ARTIST_CGSMODULEUTILS_FILE, 546);
+        CGS_ASSERT_AT(lpOutputBuffer4, "lpOutputBuffer4", CGS_ARTIST_CGSMODULEUTILS_FILE, 547);
+        CGS_ASSERT_AT(lpOutputBuffer5, "lpOutputBuffer5", CGS_ARTIST_CGSMODULEUTILS_FILE, 548);
+        CGS_ASSERT_AT(lpOutputBuffer6, "lpOutputBuffer6", CGS_ARTIST_CGSMODULEUTILS_FILE, 549);
         lpOutputBuffer6->UnlockForRead();
         lpOutputBuffer5->UnlockForRead();
         lpOutputBuffer4->UnlockForRead();
@@ -353,13 +245,13 @@ namespace CgsModule
     // ARTIST 823B6F30 / 823B6F88
     inline void LockBuffersForIO(IOBuffer* lpInputBuffer)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 238);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 238);
         lpInputBuffer->LockForWrite();
     }
 
     inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer)
     {
-        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 248);
+        CGS_ASSERT_AT(lpInputBuffer, "lpInputBuffer", CGS_ARTIST_CGSMODULEUTILS_FILE, 248);
         lpInputBuffer->UnlockForWrite();
     }
 }

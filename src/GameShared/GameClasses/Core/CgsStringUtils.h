@@ -16,6 +16,12 @@ namespace CgsCore
     extern void SnPrintf(char* buffer, u32 len, const char* fmt, ...);
 #define CGS_ARTIST_STRING_UTILS_FILE "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h"
 
+    // DWARF CgsStringUtils.h:53/:63/:73 (header-inline; LegacySrc spells them plain inline). ARTIST
+    // inlines all three, asserts included, at every call site and holds no out-of-line copy; the XDK
+    // declines them as plain `inline` even under the D12 plain-if asserts (core round 3 A/B over all
+    // 3,395 objects: 28 functions leave exact, e.g. PatchManager::RemapFilename 0x828E9488,
+    // ShaderConstantTable::AddShaderConstant 0x823F4260, ServerInterfaceGameParamsBase::SetName
+    // 0x825411E8). Same case as D9 (BitArray): the directive stays until the cause is found.
     __forceinline void StrnCpy(char* lpcDest, const char* lpcSource, u32 luBytes)
     {
         CGS_ASSERT_STREAM_AT(strlen(lpcSource) < luBytes, "String too long: " << lpcSource,
@@ -25,17 +31,8 @@ namespace CgsCore
 
     __forceinline void StrCpy(char* lpcDest, u32 luBytes, const char* lpcSource)
     {
-        if (strlen(lpcSource) >= luBytes)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-            const u32 luLength = static_cast<u32>(strlen(lpcSource)); // ARTIST measures the length here at 0x828DE11C.
-            lStrStream << "String " << lpcSource << " is too long. Buffer size = " << luBytes
-                << ", string length = " << luLength << "\n";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                CGS_ASSERT_LOCATION(CGS_ARTIST_STRING_UTILS_FILE, 65));
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_STREAM_AT(strlen(lpcSource) < luBytes, "String " << lpcSource << " is too long. Buffer size = "
+            << luBytes << ", string length = " << strlen(lpcSource) << "\n", CGS_ARTIST_STRING_UTILS_FILE, 65);
         strcpy(lpcDest, lpcSource);
     }
 
