@@ -75,21 +75,23 @@ namespace BrnNetwork
         s32 liNumHulls = static_cast<s32>(mBufferedHullActivates.GetLength());
         lxResult = CgsNetwork::Message::PackOrUnpack(&liNumHulls, 0, 7) | lxResult;
 
-        if (mePackOrUnpack != E_PACK_INTO_BITSTREAM)
+        // The packing arm comes first in both tests: ARTIST falls through into it and
+        // branches out to the unpacking arm (bne at 0x82580368 / 0x825803EC).
+        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
         {
-            mBufferedHullActivates.Clear();
+            CGS_ASSERT_AT(mBufferedHullActivates.GetLength() > 0,
+                "maBufferedHullActivates.GetLength() > 0", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 203);
         }
         else
         {
-            CGS_ASSERT(mBufferedHullActivates.GetLength() > 0,
-                       "maBufferedHullActivates.GetLength() > 0");
+            mBufferedHullActivates.Clear();
         }
 
         for (s32 liHull = 0; liHull < liNumHulls; ++liHull)
         {
-            HullToActivateInfo* lpInfo = (mePackOrUnpack != E_PACK_INTO_BITSTREAM)
-                                             ? mBufferedHullActivates.Grow()
-                                             : &mBufferedHullActivates.Ge(static_cast<u32>(liHull));
+            HullToActivateInfo* lpInfo = (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
+                                             ? &mBufferedHullActivates.Ge(static_cast<u32>(liHull))
+                                             : mBufferedHullActivates.Grow();
             lxResult = CgsNetwork::Message::PackOrUnpack(&lpInfo->muTrafUpdateToActivate, 0, 0xFFFF) | lxResult;
             lxResult = CgsNetwork::Message::PackOrUnpack(&lpInfo->muFramesSinceStart, 0, 0xFFFF) | lxResult;
             lxResult = CgsNetwork::Message::PackOrUnpack(&lpInfo->muHull, 0, KU16_MAX_HULL_NUMBER) | lxResult;

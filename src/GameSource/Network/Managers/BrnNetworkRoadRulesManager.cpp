@@ -291,7 +291,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     // If logged in and not inside a started server game, start the local-scores download.
     // -----------------------------------------------------------------------------
-    u32 NetworkRoadRulesManager::AttemptToDownloadLocalRoadRulesHighScores()
+    // Void (DWARF h:320; ARTIST sets no r3), no locals (DWARF).
+    void NetworkRoadRulesManager::AttemptToDownloadLocalRoadRulesHighScores()
     {
         CGS_ASSERT_AT(mpServerInterface != 0,
             "mpServerInterface",
@@ -300,29 +301,19 @@ namespace BrnNetwork
             "mpServerInterface->GetConnectionComponent()",
             __FILE__, 1687 /* ARTIST 0x8254A724 */);
 
-        const bool lbLoggedIn = mpServerInterface->GetConnectionComponent()->IsLoggedIn();
-        if ( lbLoggedIn )
+        if ( mpServerInterface->GetConnectionComponent()->IsLoggedIn()
+             && !( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
+                   && mpServerInterface->GetGameComponent()->IsGameStarted() ) )
         {
-            if ( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() )
-            {
-                StartDownloadingLocalRoadRulesScoresFromServer();
-                return true;
-            }
-
-            if ( !mpServerInterface->GetGameComponent()->IsGameStarted() )
-            {
-                StartDownloadingLocalRoadRulesScoresFromServer();
-                return true;
-            }
+            StartDownloadingLocalRoadRulesScoresFromServer();
         }
-
-        return lbLoggedIn;
     }
 
     // -----------------------------------------------------------------------------
     // Same shape as AttemptToDownloadLocalRoadRulesHighScores, for the global high scores.
     // -----------------------------------------------------------------------------
-    u32 NetworkRoadRulesManager::AttemptToDownloadRoadRulesHighScores()
+    // Void (DWARF h:316; ARTIST sets no r3), no locals (DWARF).
+    void NetworkRoadRulesManager::AttemptToDownloadRoadRulesHighScores()
     {
         CGS_ASSERT_AT(mpServerInterface != 0,
             "mpServerInterface",
@@ -331,29 +322,19 @@ namespace BrnNetwork
             "mpServerInterface->GetConnectionComponent()",
             __FILE__, 1664 /* ARTIST 0x8254A644 */);
 
-        const bool lbLoggedIn = mpServerInterface->GetConnectionComponent()->IsLoggedIn();
-        if ( lbLoggedIn )
+        if ( mpServerInterface->GetConnectionComponent()->IsLoggedIn()
+             && !( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
+                   && mpServerInterface->GetGameComponent()->IsGameStarted() ) )
         {
-            if ( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() )
-            {
-                StartDownloadingRoadRulesScoresFromServer();
-                return true;
-            }
-
-            if ( !mpServerInterface->GetGameComponent()->IsGameStarted() )
-            {
-                StartDownloadingRoadRulesScoresFromServer();
-                return true;
-            }
+            StartDownloadingRoadRulesScoresFromServer();
         }
-
-        return lbLoggedIn;
     }
 
     // -----------------------------------------------------------------------------
     // If not inside a started server game and logged in, start the upload cycle.
+    // Void (DWARF h:219; ARTIST 0x82554BC8 returns without setting r3), no locals (DWARF).
     // -----------------------------------------------------------------------------
-    s32 NetworkRoadRulesManager::AttemptToUploadNewRoadRulesScores()
+    void NetworkRoadRulesManager::AttemptToUploadNewRoadRulesScores()
     {
         CGS_ASSERT_AT(mpServerInterface != 0,
             "mpServerInterface",
@@ -362,11 +343,8 @@ namespace BrnNetwork
             "mpServerInterface->GetGameComponent()",
             CGS_ARTIST_FILE, 764 /* ARTIST 0x82554B44 */);
 
-        const bool lbInStartedGame =
-            mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
-            && mpServerInterface->GetGameComponent()->IsGameStarted();
-
-        if ( !lbInStartedGame )
+        if ( !( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
+                && mpServerInterface->GetGameComponent()->IsGameStarted() ) )
         {
             CGS_ASSERT_AT(mpServerInterface->GetConnectionComponent() != 0,
                 "mpServerInterface->GetConnectionComponent()",
@@ -375,11 +353,8 @@ namespace BrnNetwork
             if ( mpServerInterface->GetConnectionComponent()->IsLoggedIn() )
             {
                 StartUploadingRoadRulesScoresToServer();
-                return true;
             }
         }
-
-        return false;
     }
 
     // -----------------------------------------------------------------------------
@@ -547,14 +522,14 @@ namespace BrnNetwork
             "( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() ) || " "( !mpServerInterface->GetGameComponent()->IsGameStarted() )",
             CGS_ARTIST_FILE, 1158 /* ARTIST 0x825614CC */);
 
-        s32 liNumToDownload = KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS - mIndexOfNextLocalChallengeToDownload;
-        if ( liNumToDownload > KI_NUM_SCORES_TO_DOWNLOAD_IN_A_BATCH )
-        {
-            liNumToDownload = KI_NUM_SCORES_TO_DOWNLOAD_IN_A_BATCH;
-        }
-
+        // DWARF: no locals; the count is rw::core::stdc::Min(int, int) inlined into the
+        // argument (rw/core/stdc/util.h is not in this tree; spelled in place, keeping the
+        // difference when it is <= the batch: ARTIST cmpwi/ble at 0x825614DC/0x825614E0).
         mpServerInterface->GetCustomCommandsComponent()->GetLocalRoadRulesHighScores(
-            liNumToDownload, mIndexOfNextLocalChallengeToDownload, macRoadRulesServerKey,
+            ( KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS - mIndexOfNextLocalChallengeToDownload > KI_NUM_SCORES_TO_DOWNLOAD_IN_A_BATCH )
+                ? KI_NUM_SCORES_TO_DOWNLOAD_IN_A_BATCH
+                : KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS - mIndexOfNextLocalChallengeToDownload,
+            mIndexOfNextLocalChallengeToDownload, macRoadRulesServerKey,
             &_DownloadLocalRoadRulesCallback, this );
     }
 

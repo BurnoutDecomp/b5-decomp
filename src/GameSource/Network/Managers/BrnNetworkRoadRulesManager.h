@@ -178,9 +178,9 @@ namespace BrnNetwork
         void UpdateLocalRoadRulesScoresWithNewPB( const BrnNetworkModuleIO::NetworkInRoadRulesPBEvent* lpNetworkRoadRulesPBEvent );
         void UpdateLocalLobbyScoresWithNewPB( const BrnNetworkModuleIO::NetworkInRoadRulesPBEvent* lpNetworkRoadRulesPBEvent );
         void SendPersonalBestScore();
-        s32  AttemptToUploadNewRoadRulesScores();
-        u32  AttemptToDownloadRoadRulesHighScores();
-        u32  AttemptToDownloadLocalRoadRulesHighScores();
+        void AttemptToUploadNewRoadRulesScores();   // DWARF h:219 void
+        void AttemptToDownloadRoadRulesHighScores();        // DWARF h:316 void
+        void AttemptToDownloadLocalRoadRulesHighScores();   // DWARF h:320 void
         void HandleSendingRoadRulesScores( bool lbAreWePlaying );
         // Fill lpRoadRulesMessageData with up to one message's worth of lobby scores from
         // lStartIndex on; returns how many challenge slots were walked.

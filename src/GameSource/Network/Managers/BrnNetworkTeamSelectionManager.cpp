@@ -308,7 +308,8 @@ namespace BrnNetwork
                                                    CompletionCallback lpfCompletionCallback,
                                                    void* lpUserData )
     {
-        s32 leProcess;
+        // One StartProcess per arm (no process local): ARTIST tail-merges the four calls onto
+        // one bl 0x8254BC3C and selects r4 per arm (li 2 / bne / li 3 for autobalance).
         switch (liLaunchType)
         {
             case KI_LAUNCH_TYPE_AUTOBALANCE: // 12
@@ -320,11 +321,10 @@ namespace BrnNetwork
                     "mpNetworkManager->GetServerInterface()",
                     CGS_ARTIST_FILE, 611 /* ARTIST 0x8254BC08 */);
 
-                const bool lbIsLocalPlayerHost =
-                    mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerHost();
-                leProcess = lbIsLocalPlayerHost ? KI_PROCESS_AUTOBALANCE_HOST    // 2
-                                                : KI_PROCESS_AUTOBALANCE_CLIENT; // 3
-                StartProcess(leProcess, lpfCompletionCallback, lpUserData);
+                if (mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerHost())
+                    StartProcess(KI_PROCESS_AUTOBALANCE_HOST, lpfCompletionCallback, lpUserData);   // 2
+                else
+                    StartProcess(KI_PROCESS_AUTOBALANCE_CLIENT, lpfCompletionCallback, lpUserData); // 3
                 return;
             }
             case KI_LAUNCH_TYPE_FFA: // 14

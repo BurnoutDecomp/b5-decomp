@@ -52,29 +52,6 @@ namespace BrnNetwork
         // the asm stores are named; unknown spans are reserved as pads so the byte
         // size posted to the queue stays exact.
 
-        // type 9, size 24. Two flavours share the 24-byte slot (built on overlapping
-        // stack storage in the asm):
-        //   - single buddy came online (miNotificationType==1, carries the name)
-        //   - several buddies came online summary (miNotificationType==2, count set)
-        struct BuddyOnlineNotificationEvent
-        {
-            s32                    miNotificationType;   // +0x00 (1 == single, 2 == summary)
-            s32                    miCount;              // +0x04 (single: 1; summary: GetNumOnlineBuddies)
-            CgsNetwork::PlayerName mBuddyName;           // +0x08 (16B -> 24 total)
-        };
-
-        // type 14, size 16 -- a buddy went offline / dropped; carries its name.
-        struct BuddyOfflineNotificationEvent
-        {
-            CgsNetwork::PlayerName mBuddyName;           // +0x00 (16B)
-        };
-
-        // type 10, size 1 -- "buddy list updated" poke (no payload past one byte).
-        struct BuddyListUpdatedEvent
-        {
-            u8 muUnused;                                 // +0x00
-        };
-
         // type 1, size 4 -- buddy-count reply (debug GetBuddyCount).
         struct BuddyCountEvent
         {
@@ -121,12 +98,6 @@ namespace BrnNetwork
         return static_cast<BrnServerInterface*>(lpServerInterface);
     }
 
-    // -- the network module's IN-event queue.
-    static BrnNetworkModuleIO::NetworkEventQueue* GetEventQueue(BrnNetworkModule* lpNetworkModule)
-    {
-        return lpNetworkModule->GetNetworkEventQueue();
-    }
-
     // =======================================================================
     // PopulateServerBuddyList -- the server's friends list is a run of 16-byte
     // name records ended by an empty one; copy it into maServerBuddyList.
@@ -163,12 +134,14 @@ namespace BrnNetwork
     // =======================================================================
     void BuddyManagerBase::ProcessDebugEvents()
     {
-        BrnNetworkModuleIO::NetworkEventQueue* lpDebugEventQueue = mDebugComponent.GetEventQueue();
-        if (lpDebugEventQueue != 0)
+        // DWARF cpp:871 lpEventQueue; the network queue is fetched with BrnNetworkModule::
+        // GetNetworkEventQueue directly (DWARF), ARTIST loading the vptr first (0x825548B8).
+        BrnNetworkModuleIO::NetworkEventQueue* lpEventQueue = mDebugComponent.GetEventQueue();
+        if (lpEventQueue != 0)
         {
-            ProcessNetworkQueue(lpDebugEventQueue, GetEventQueue(mpNetworkModule));
-            lpDebugEventQueue->Clear();
-            mDebugComponent.ProcessOutgoingEvents(GetEventQueue(mpNetworkModule));
+            ProcessNetworkQueue(lpEventQueue, mpNetworkModule->GetNetworkEventQueue());
+            lpEventQueue->Clear();
+            mDebugComponent.ProcessOutgoingEvents(mpNetworkModule->GetNetworkEventQueue());
         }
     }
 
@@ -178,10 +151,11 @@ namespace BrnNetwork
     // =======================================================================
     void BuddyManagerBase::StartInvite(BrnNetworkModuleIO::InviteOrJoinParams lInviteOrJoinParams)
     {
-        BrnNetworkModuleIO::NetworkOutInviteRequest lInviteRequest;
-        std::memcpy(&lInviteRequest.mInviteParams, &lInviteOrJoinParams, sizeof(lInviteRequest.mInviteParams));
-        GetEventQueue(mpNetworkModule)->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lInviteRequest),
-                                                 lInviteRequest.GetEventType(), sizeof(lInviteRequest));
+        // DWARF cpp:337 lRequestInviteEvent, posted through the typed NetworkEventQueue::
+        // AddEvent<T> (ARTIST li r6,0x9C / li r5,6 / addi r4 at 0x82563714..1C).
+        BrnNetworkModuleIO::NetworkOutInviteRequest lRequestInviteEvent;
+        lRequestInviteEvent.mInviteParams = lInviteOrJoinParams;
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lRequestInviteEvent);
 
         CGS_ASSERT_AT(mpNetworkModule,
             "mpNetworkModule",
@@ -622,7 +596,7 @@ namespace BrnNetwork
 
         if (miNextBuddyToSend < GetNumBuddies())
         {
-            SendBuddyInformation(GetEventQueue(mpNetworkModule));
+            SendBuddyInformation(mpNetworkModule->GetNetworkEventQueue());
         }
 
         if (mfBuddyListChangedTimer >= 0.0f)
@@ -744,7 +718,7 @@ namespace BrnNetwork
             {
                 BuddyCountEvent lEvent;
                 lEvent.miNumBuddies = GetNumBuddies();
-                GetEventQueue(mpNetworkModule)->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent), 1, 4);
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent), 1, 4);
                 break;
             }
             case 2:
@@ -752,7 +726,7 @@ namespace BrnNetwork
                 miNextBuddyToSend = 0;
                 if (GetNumBuddies() == 0)
                 {
-                    SendEmptyBuddyInformation(GetEventQueue(mpNetworkModule));
+                    SendEmptyBuddyInformation(mpNetworkModule->GetNetworkEventQueue());
                 }
                 break;
             }
@@ -782,71 +756,87 @@ namespace BrnNetwork
     // =======================================================================
     void BuddyManagerBase::BuddyListHasChanged()
     {
+        // DWARF locals cpp:939-941 (liBuddyIndex, liNumNewOnlineBuddies, lEvent), :959 lBuddyName,
+        // :984/985 and :998 the two lBuddyNotificationEvent records; every post is the typed
+        // NetworkEventQueue::AddEvent<T> (DWARF AddEvent<NetworkOutBuddyNotification> /
+        // AddEvent<NetworkOutBuddyListChanged>).
+        s32 liBuddyIndex;
+        s32 liNumNewOnlineBuddies;
+        BrnNetworkModuleIO::NetworkOutBuddyListChanged lEvent;
+
         CgsNetwork::BuddyManagerBase::BuddyListHasChanged();
 
-        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
-        CGS_ASSERT(GetEventQueue(mpNetworkModule), "GetEventQueue(mpNetworkModule)");
+        CGS_ASSERT_AT(mpNetworkModule,
+            "mpNetworkModule",
+            CGS_ARTIST_FILE, 945 /* ARTIST 0x82563B34 */);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkEventQueue(),
+            "mpNetworkModule->GetNetworkEventQueue()",
+            CGS_ARTIST_FILE, 946 /* ARTIST 0x82563B60 */);
 
-        if (meState != E_BUDDY_MANAGER_STATE_START)
-        {
-            mfBuddyListChangedTimer = KF_DELAY_HANDLING_BUDDY_CHANGE;
-        }
-        else
+        if (meState == E_BUDDY_MANAGER_STATE_START)
         {
             meState = E_BUDDY_MANAGER_STATE_START_GET_SERVER_BUDDIES;
             miCachedNumBuddiesAtLastChange = 0;
-            for (s32 liBuddyIndex = 0; liBuddyIndex < GetNumBuddies(); ++liBuddyIndex)
+            for (liBuddyIndex = 0; liBuddyIndex < GetNumBuddies(); ++liBuddyIndex)
             {
                 CgsNetwork::PlayerName lBuddyName;
                 GetBuddyName(liBuddyIndex, &lBuddyName);
                 if (IsFullBuddy(&lBuddyName))
                 {
-                    CGS_ASSERT(miCachedNumBuddiesAtLastChange < KI_MAX_BUDDIES,
-                               "miCachedNumBuddiesAtLastChange < CgsNetwork::KI_MAX_BUDDIES");
+                    CGS_ASSERT_AT(miCachedNumBuddiesAtLastChange < KI_MAX_BUDDIES,
+                        "miCachedNumBuddiesAtLastChange < CgsNetwork::KI_MAX_BUDDIES",
+                        CGS_ARTIST_FILE, 968);
                     maCachedBuddyListAtLastChange[miCachedNumBuddiesAtLastChange] = lBuddyName;
                     ++miCachedNumBuddiesAtLastChange;
                 }
             }
         }
-
-        const s32 liNumberOfNewOnlineBuddies = GetNumberOfNewOnlineBuddies();
-        if (liNumberOfNewOnlineBuddies == 1)
+        else
         {
+            mfBuddyListChangedTimer = KF_DELAY_HANDLING_BUDDY_CHANGE;
+        }
+
+        liNumNewOnlineBuddies = GetNumberOfNewOnlineBuddies();
+        if (liNumNewOnlineBuddies == 1)
+        {
+            BrnNetworkModuleIO::NetworkOutBuddyNotification lBuddyNotificationEvent;
             const s32 liIndexOfLastBuddyToComeOnline = GetIndexOfLastBuddyToComeOnline();
-            CGS_ASSERT(liIndexOfLastBuddyToComeOnline != CgsNetwork::BuddyManagerBase::KI_INVALID_BUDDY_INDEX,
-                       "liIndexOfLastBuddyToComeOnline != CgsNetwork::BuddyManager::KI_INVALID_BUDDY_INDEX");
-
-            BuddyOnlineNotificationEvent lBuddyNotificationEvent;
-            lBuddyNotificationEvent.miNotificationType = 1;
-            lBuddyNotificationEvent.miCount = 1;
-
-            CGS_ASSERT(GetBuddyName(liIndexOfLastBuddyToComeOnline, &lBuddyNotificationEvent.mBuddyName),
-                       "GetBuddyName( liIndexOfLastBuddyToComeOnline, &lBuddyNotificationEvent.mBuddyName )");
-
-            GetEventQueue(mpNetworkModule)->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lBuddyNotificationEvent), 9, 24);
+            CGS_ASSERT_AT(liIndexOfLastBuddyToComeOnline != CgsNetwork::BuddyManagerBase::KI_INVALID_BUDDY_INDEX,
+                "liIndexOfLastBuddyToComeOnline != CgsNetwork::BuddyManager::KI_INVALID_BUDDY_INDEX",
+                CGS_ARTIST_FILE, 988);
+            CGS_ASSERT_AT(GetBuddyName(liIndexOfLastBuddyToComeOnline, &lBuddyNotificationEvent.mBuddyName),
+                "GetBuddyName( liIndexOfLastBuddyToComeOnline, &lBuddyNotificationEvent.mBuddyName )",
+                CGS_ARTIST_FILE, 990);
+            lBuddyNotificationEvent.meBuddyNotification = 1;
+            lBuddyNotificationEvent.miNumBuddies        = 1;
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lBuddyNotificationEvent);
         }
-        else if (liNumberOfNewOnlineBuddies > 1)
+        else if (liNumNewOnlineBuddies > 1)
         {
-            BuddyOnlineNotificationEvent lBuddyNotificationEvent;
-            lBuddyNotificationEvent.miNotificationType = 2;
-            lBuddyNotificationEvent.miCount = GetNumOnlineBuddies();
+            BrnNetworkModuleIO::NetworkOutBuddyNotification lBuddyNotificationEvent;
+            lBuddyNotificationEvent.meBuddyNotification = 2;
+            // DWARF: CgsNetwork::PlayerName::Clear (not in this tree's PlayerName; same store),
+            // made before the count call (ARTIST 0x82563D0C).
             lBuddyNotificationEvent.mBuddyName.macName[0] = 0;
-
-            GetEventQueue(mpNetworkModule)->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lBuddyNotificationEvent), 9, 24);
+            lBuddyNotificationEvent.miNumBuddies        = GetNumOnlineBuddies();
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lBuddyNotificationEvent);
         }
 
-        BuddyListUpdatedEvent lUpdatedEvent;
-        GetEventQueue(mpNetworkModule)->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lUpdatedEvent), 10, 1);
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lEvent);
 
-        if (IsConnectedToNetworkService())
+        // ARTIST dispatches vtable slot +0x38 here (0x82563D58), BuddyManagerX360::
+        // AreAnyInvitesOpen 0x8287FF78 in the vtable at 0x820D0170 (+0x60 is
+        // IsConnectedToNetworkService 0x8287FF30, which the tree called before).
+        if (!AreAnyInvitesOpen())
+        {
+            if (mfTimeUntilRetryGetServerBuddies == -1.0f)
+            {
+                mfTimeUntilRetryGetServerBuddies = KF_RETRY_GET_SERVER_BUDDIES;
+            }
+        }
+        else
         {
             mfTimeUntilRetryGetServerBuddies = -1.0f;
-        }
-        else if (mfTimeUntilRetryGetServerBuddies == -1.0f)
-        {
-            mfTimeUntilRetryGetServerBuddies = KF_RETRY_GET_SERVER_BUDDIES;
         }
     }
 
@@ -855,29 +845,32 @@ namespace BrnNetwork
     // =======================================================================
     void BuddyManagerBase::HandleBuddyListChange()
     {
-        bool lbBuddyListChanged = false;
+        // DWARF locals (cpp:235/234, :251, :258): lbUpdateServerBuddies, liNumFullBuddies,
+        // liCachedBuddyIndex; a dropped buddy is posted as NetworkOutBuddyRemovedEvent through
+        // the typed NetworkEventQueue::AddEvent<T> (ARTIST li r6,16 / li r5,14 / addi r4 at
+        // 0x825635B0..B8).
+        bool lbUpdateServerBuddies = false;
 
         const s32 liNumFullBuddies = GetNumFullBuddies();
         if (miCachedNumBuddiesAtLastChange < liNumFullBuddies)
         {
-            lbBuddyListChanged = true;
+            lbUpdateServerBuddies = true;
         }
         else if (miCachedNumBuddiesAtLastChange > liNumFullBuddies)
         {
-            for (s32 li = 0; li < miCachedNumBuddiesAtLastChange; ++li)
+            for (s32 liCachedBuddyIndex = 0; liCachedBuddyIndex < miCachedNumBuddiesAtLastChange; ++liCachedBuddyIndex)
             {
-                if (!IsFullBuddy(&maCachedBuddyListAtLastChange[li]))
+                if (!IsFullBuddy(&maCachedBuddyListAtLastChange[liCachedBuddyIndex]))
                 {
-                    BuddyOfflineNotificationEvent lEvent;
-                    lEvent.mBuddyName = maCachedBuddyListAtLastChange[li];
-                    GetEventQueue(mpNetworkModule)->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lEvent), 14, 16);
+                    BrnNetworkModuleIO::NetworkOutBuddyRemovedEvent lBuddyRemovedEvent;
+                    lBuddyRemovedEvent.mRemovedBuddyName = maCachedBuddyListAtLastChange[liCachedBuddyIndex];
+                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(lBuddyRemovedEvent);
                 }
             }
-            lbBuddyListChanged = true;
+            lbUpdateServerBuddies = true;
         }
 
-        if (meState == E_BUDDY_MANAGER_STATE_SERVER_BUDDIES_UPDATED && lbBuddyListChanged)
+        if (meState == E_BUDDY_MANAGER_STATE_SERVER_BUDDIES_UPDATED && lbUpdateServerBuddies)
         {
             meState = E_BUDDY_MANAGER_STATE_START_GET_SERVER_BUDDIES;
         }

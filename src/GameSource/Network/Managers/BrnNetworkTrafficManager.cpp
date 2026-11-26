@@ -91,19 +91,14 @@ namespace BrnNetwork
 
     // =========================================================================
     // Constructor
-    // Per slot the console installs the eight message vtables (carried by the messages'
-    // explicit vtable member in this tree, not by a C++ constructor), marks the two
-    // hull-sync arrays and the slot's own buffered-hull array unconstructed (-1), and
-    // default-constructs the two 24-record CrashingTrafficData arrays (empty bodies).
+    // Per slot the console installs the message vtables, marks the two hull-sync arrays and
+    // the slot's own buffered-hull array unconstructed (-1) and default-constructs the two
+    // 24-record CrashingTrafficData arrays, all in the member constructors of one loop
+    // (ARTIST 0x827E2B6C..0x827E2BD4); the -1 stores are CgsContainers::Array's own
+    // constructor, so the body adds nothing (a second MarkUnconstructed pass is not there).
     // =========================================================================
     TrafficManager::TrafficManager()
     {
-        for (s32 liIndex = 0; liIndex < ::KI_MAX_NETWORK_PLAYERS; ++liIndex)
-        {
-            maTrafficData[liIndex].mHullSyncMessageSend.mBufferedHullActivates.MarkUnconstructed();
-            maTrafficData[liIndex].mHullSyncMessageRecv.mBufferedHullActivates.MarkUnconstructed();
-            maTrafficData[liIndex].mBufferedHullActivates.MarkUnconstructed();
-        }
     }
 
     // =========================================================================
@@ -1372,7 +1367,7 @@ namespace BrnNetwork
     // ConvertLocalFrameToReceivedMessageFrame -- one of our frames, re-expressed in the
     // frame count of a console running at the other frame rate.
     // =========================================================================
-    u16 TrafficManager::ConvertLocalFrameToReceivedMessageFrame(u16 lu16Frame,
+    u16 TrafficManager::ConvertLocalFrameToReceivedMessageFrame(u16 lu16LocalFrame,
                                                                 CgsSystem::EFrameRate leLocalConsoleFrameRate,
                                                                 CgsSystem::EFrameRate leRemoteConsoleFrameRate)
     {
@@ -1388,16 +1383,20 @@ namespace BrnNetwork
 
         if (leLocalConsoleFrameRate == leRemoteConsoleFrameRate)
         {
-            return lu16Frame;
+            return lu16LocalFrame;
         }
 
-        const u16 lu16NumWraps     = static_cast<u16>(mpTimeManager->GetFrameWrapCountSinceStart());
-        const u16 lu16CurrentFrame = mpTimeManager->GetU16FrameCountSinceStart();
+        // The frame queries are the translate calls' own arguments, evaluated per arm
+        // (ARTIST 0x82546400..1C / 0x82546428..44).
         if (leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ)
         {
-            return CgsNetwork::TranslateFrame50HzTo60Hz(lu16Frame, lu16CurrentFrame, lu16NumWraps);
+            return CgsNetwork::TranslateFrame50HzTo60Hz(lu16LocalFrame,
+                mpTimeManager->GetU16FrameCountSinceStart(),
+                static_cast<u16>(mpTimeManager->GetFrameWrapCountSinceStart()));
         }
-        return CgsNetwork::TranslateFrame60HzTo50Hz(lu16Frame, lu16CurrentFrame, lu16NumWraps);
+        return CgsNetwork::TranslateFrame60HzTo50Hz(lu16LocalFrame,
+            mpTimeManager->GetU16FrameCountSinceStart(),
+            static_cast<u16>(mpTimeManager->GetFrameWrapCountSinceStart()));
     }
 
     // =========================================================================

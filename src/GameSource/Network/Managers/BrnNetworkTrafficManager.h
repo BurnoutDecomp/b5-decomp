@@ -167,7 +167,7 @@ namespace BrnNetwork
         u16  ConvertReceivedMessageFrameToLocalFrame(u16 lu16Frame,
                                                      CgsSystem::EFrameRate leLocalConsoleFrameRate,
                                                      CgsSystem::EFrameRate leRemoteConsoleFrameRate);
-        u16  ConvertLocalFrameToReceivedMessageFrame(u16 lu16Frame,
+        u16  ConvertLocalFrameToReceivedMessageFrame(u16 lu16LocalFrame,
                                                      CgsSystem::EFrameRate leLocalConsoleFrameRate,
                                                      CgsSystem::EFrameRate leRemoteConsoleFrameRate);
         bool IsMessageFromBeforeTrafficReset(u16 lu16MessageFrame, NetworkPlayerID lPlayerID);

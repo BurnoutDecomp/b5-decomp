@@ -62,11 +62,13 @@ namespace BrnNetwork
             "mpNetworkManager",
             __FILE__, 70 /* ARTIST 0x8255FB44 */);
 
+        // The member stores precede ClearTopRivals (the PS3 body 0x5EDCB0 makes them before
+        // its out-of-line call; ARTIST 0x8255FB50..68 before the inlined loop).
         miNumberOfTopRivals = 0;
-        ClearTopRivals();
         mbProfileIsDirty                   = false;
         mbNeedToUpdateMarksForCurrentRound = false;
         meLiveRevengeUploadStatus          = E_LIVE_REVENGE_UPLOAD_STATUS_IDLE;
+        ClearTopRivals();
 
         mDebugComponent.Construct(this);
     }

@@ -1114,11 +1114,16 @@ namespace BrnNetwork
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "RG\nBefore : " << miCurrentViewOffset
                                    << "\nAfter : " << static_cast<s32>(liAfter) << "\n";
 
-        if (liAfter <= 0)
+        // One Scoreboard::AddNumberBeforeAndAfter per arm: ARTIST hoists the shared "before"
+        // store (0x8254746C) and gives each arm its own "after" store and epilogue.
+        if (liAfter > 0)
         {
-            liAfter = 0;
+            lpScoreboard->AddNumberBeforeAndAfter(static_cast<s8>(miCurrentViewOffset), liAfter);
         }
-        lpScoreboard->AddNumberBeforeAndAfter(static_cast<s8>(miCurrentViewOffset), liAfter);
+        else
+        {
+            lpScoreboard->AddNumberBeforeAndAfter(static_cast<s8>(miCurrentViewOffset), 0);
+        }
     }
 }
 

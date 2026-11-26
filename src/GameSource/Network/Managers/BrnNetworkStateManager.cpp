@@ -1277,21 +1277,24 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------------
     bool StateManager::HaveAllSelectedACar()
     {
-        GameParams lGameParams;
+        // DWARF locals cpp:4076-4079 (no player-manager local: ARTIST re-reads
+        // mpNetworkManager->GetPlayerManager() at each call, 0x82569DD8 / 0x82569E0C).
+        CgsNetwork::NetworkPlayer* lpPlayer;
+        PlayerMenuData*            lpMenuData;
+        NetworkPlayerID            lPlayerID;
+        GameParams                 lGameParams;
         lGameParams.Prepare();
         mpNetworkManager->GetServerInterface()->GetGameComponent()->GetGameParameters(&lGameParams);
 
-        CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
-
-        NetworkPlayerID lPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
-        while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
+        lPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
+        while (mpNetworkManager->GetPlayerManager()->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
         {
-            PlayerMenuData* lpMenuData = static_cast<PlayerMenuData*>(lpPlayerManager->GetMenuDataByID(lPlayerID));
+            lpMenuData = static_cast<PlayerMenuData*>(mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lPlayerID));
             CGS_ASSERT_AT(lpMenuData != 0,
                 "lpMenuData",
                 __FILE__, 4242 /* ARTIST 0x82569E04 */);
 
-            CgsNetwork::NetworkPlayer* lpPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
+            lpPlayer = mpNetworkManager->GetPlayerManager()->GetPlayerByID(lPlayerID);
             if (!lpMenuData->mbFinalCarSelection
                 && (lpPlayer == 0 || !lpPlayer->HasConnectionFailed()))
             {
