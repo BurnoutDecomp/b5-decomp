@@ -466,7 +466,14 @@ public:
     GameStateInviteManager*    GetGameStateInviteManager() { return (&mGameStateInviteManager); }
     GameStateImageManagerBase* GetImageManager()           { return (&mImageManager); }
 
-    FlybyManager*             GetFlybyManager();
+    // DWARF h:1034, header-inline: PS3 inlines h:1036..1038 and ARTIST holds no standalone copy
+    // (ModeManager::StartModeIntro 0x82343220..0x82343248, GetNumberOfCarsInFlyby 0x82311E48).
+    FlybyManager*             GetFlybyManager()
+    {
+        if (IsOnlineGameMode())
+            return (&mOnlineFlybyManager);
+        return &mOfflineFlybyManager;
+    }
     OnlineFlybyManager*        GetOnlineFlybyManager()     { return (&mOnlineFlybyManager); }
     RichPresenceManagerX360*   GetRichPresenceManager()    { return (&mRichPresenceManager); }
 private:

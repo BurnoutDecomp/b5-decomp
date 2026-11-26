@@ -33,20 +33,23 @@ public:
     void OnRoundStart();                                                       // X360 0x82358A68
     void PreparedForMode();                                                    // X360 (PreparedForMode)
 
-    const GameStateModuleIO::StartNetworkGameEvent*  GetNetworkGameEvent() const;
-    const GameStateModuleIO::StartNetworkRoundEvent* GetNetworkRoundEvent() const;
+    // DWARF h:82/:86/:90/:94/:106, header-inline: PS3 inlines BrnNetworkRoundManager.h:137..189 and
+    // ARTIST holds no standalone copy (OnlineFreeBurnLobbyMode::Start 0x8232235C reads the event
+    // at NRM+0; HandleLoadingScreenLoaded 0x8234B954 computes the round in place).
+    const GameStateModuleIO::StartNetworkGameEvent*  GetNetworkGameEvent() const  { return &mStartNetworkGameEvent; }
+    const GameStateModuleIO::StartNetworkRoundEvent* GetNetworkRoundEvent() const { return &mStartNetworkRoundEvent; }
     // [stuntrace waveB fix round, 2026-08-26] SEMANTICS RULED, BODIES LANDED (verify batch 5 MF4 --
     // these three were declare-only and the wave was spelling the same console expression two
     // contradictory ways). GetCurrentRound() is the ZERO-BASED CURRENT ROUND INDEX, i.e. the
     // console's `NRM+300 - NRM+296 - 1` (miTotalRounds - miRoundsRemaining - 1) -- see the full
     // ruling banner above the bodies in BrnNetworkRoundManager.cpp. It is NOT miRoundsRemaining;
     // callers that want the raw remaining count use GetRoundsRemaining().
-    s32  GetCurrentRound() const;
-    s32  GetTotalRounds() const;
+    s32  GetCurrentRound() const { return miTotalRounds - miRoundsRemaining - 1; }
+    s32  GetTotalRounds() const  { return miTotalRounds; }
     s32  GetRoundsRemaining() const;
     bool IsLastRound();
     bool IsRankedMatch();
-    bool GetStartingFreeburnLobbyDueToPlayerJoin();
+    bool GetStartingFreeburnLobbyDueToPlayerJoin() { return mbStartingGameDueToPlayerJoin; }
 
 private:
     GameStateModuleIO::StartNetworkGameEvent  mStartNetworkGameEvent;          // 0x000 (256 bytes)

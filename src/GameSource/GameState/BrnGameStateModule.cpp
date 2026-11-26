@@ -279,14 +279,6 @@ void GameStateModule::Construct()
     mActivePlayerWheelId = 0;
 }
 
-// ARTIST 82311E48..82311E70 and 82343220..82343248 inline this selector.
-FlybyManager* GameStateModule::GetFlybyManager()
-{
-    if (IsOnlineGameMode())
-        return (&mOnlineFlybyManager);
-    return &mOfflineFlybyManager;
-}
-
 // ARTIST 8238EF50. Original whole owner body; the PC bring-up pump still has
 // separate extracted legs until the full PreWorldUpdate caller is recovered.
 // ARTIST 823A5328. The full original pre-world chain; PC bring-up entry points
@@ -1587,8 +1579,8 @@ void GameStateModule::FinishStreaming(GameStateModuleIO::GameActionQueue* lpQueu
     u8 lu8Payload = 0;
     lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8Payload), 191, 1);
     RequestUnpause(1, lpQueue);
-    if (mModeManager.mbIsModePrepared)
-        mModeManager.mbIsModePrepared = false;
+    if (mModeManager.mbModeDataIsLoading)
+        mModeManager.mbModeDataIsLoading = false;
 }
 
 // ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] X360 0x8236B570 -- the three-instruction forward

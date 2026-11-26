@@ -1400,10 +1400,11 @@ namespace
             EnterEventStartLocationWire166 lEvent;
             lEvent.maPad06[0] = 0;
             lEvent.maPad06[1] = 0;
-            if (lpRegion->mbInStartRegion != 0)
+            if (lpRegion->mbInModeStartRegion)
             {
                 lEvent.muLeavingStartLocation = 0u;
-                lEvent.mu16StartLocationId    = lpRegion->mu16StartLocationId;
+                lEvent.mu16StartLocationId    =
+                    static_cast<u16>(static_cast<s32>(lpRegion->mCurrentLandmarkIndex));
             }
             else
             {

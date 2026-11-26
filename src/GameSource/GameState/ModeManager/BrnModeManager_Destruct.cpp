@@ -15,10 +15,10 @@ void ModeManager::Destruct()
         if (mapGameModes[i] != 0)
             mapGameModes[i]->Destruct();
     }
-    mbDistanceToFinishLineTransmitted = false;
-    mbModeIntroStarted = false;
+    mbReadyForModeIntro = false;
+    mbIsModePrepared = false;
     mbFinishedOnlineEvent = false;
-    mbInstantIntroSplash = false;
+    mbFinishedOnlineLobbyMode = false;
     mbStuntChallengeActive = false;
 }
 }

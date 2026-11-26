@@ -381,14 +381,7 @@ FlybyRivalData* FlybyData::GetFlybyRivalData(s32 liRivalIndex)
     return &mRivalsToShow[liRivalIndex];
 }
 
-// X360 0x821F2B08. Free predicate over EGameModeType. Returns true for exactly two mode values --
-// E_MODE_ONLINE_FREE_BURN_LOBBY (15) and E_MODE_ONLINE_SHOWTIME (16). FAITHFUL QUIRK: despite the
-// name, the online-showtime mode is also treated as a free-burn lobby (the X360 build groups them).
-bool IsOnlineFreeBurnLobby(EGameModeType leGameMode)
-{
-    return (leGameMode == E_MODE_ONLINE_FREE_BURN_LOBBY)
-        || (leGameMode == E_MODE_ONLINE_SHOWTIME);
-}
+// IsOnlineFreeBurnLobby (X360 0x821F2B08) is header-inline: see BrnGameStateSharedIO.h.
 
 // OnlineGameResults::operator= (X360 0x82311C30) moved to its DWARF home BrnGameActions.cpp
 // (re-homed onto typed members). It is no longer defined here.

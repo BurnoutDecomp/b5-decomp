@@ -1051,15 +1051,33 @@ namespace BrnGameState
         // assert needs no member access, so it stays here to pin the total record size.
         CGS_STATIC_ASSERT((sizeof(CarScoreData) == 296), "CarScoreData layout drift (0x128)");
 
-        // X360 0x821F2B08. Free predicate over EGameModeType: true for exactly
-        // E_MODE_ONLINE_FREE_BURN_LOBBY (15) and E_MODE_ONLINE_SHOWTIME (16).
-        bool IsOnlineFreeBurnLobby(EGameModeType leGameMode);
+        // True for exactly E_MODE_ONLINE_FREE_BURN_LOBBY (15) and E_MODE_ONLINE_SHOWTIME (16).
+        // Header-inline: PS3 DecFIGS has no out-of-line copy, and ARTIST inlines it in
+        // ModeManager::StopModeIntro 0x82343F80 / MarkedManLoaded (BrnGameStateScoringAndModesUnity)
+        // although its .cpp home is in BrnGameStateUnity; the standalone 0x821F2B08 is the COMDAT
+        // the callers that do not inline it emit (MugshotManager::ProcessTakedownEvents 0x82383270).
+        inline bool IsOnlineFreeBurnLobby(EGameModeType leGameMode)
+        {
+            return (leGameMode == E_MODE_ONLINE_FREE_BURN_LOBBY)
+                || (leGameMode == E_MODE_ONLINE_SHOWTIME);
+        }
 
         // Offline or online showtime. There is no out-of-line body: GameStateModule::
         // IsShowtimeGameMode compares its mode against 2 and 16 in place.
         inline bool IsShowtimeGameMode(EGameModeType leGameMode)
         {
             return leGameMode == E_MODE_OFFLINE_SHOWTIME || leGameMode == E_MODE_ONLINE_SHOWTIME;
+        }
+
+        // X360-only (no PS3 DWARF): ARTIST's assert texts name it "IsOnlineStuntRun( meEventType )"
+        // (OnlineGameResults::SetStuntResults 0x8230F370) and "GsmIO::IsOnlineStuntRun(
+        // meGameModeType )" (GuiCache); it has no standalone copy and every one of its 40 inlined
+        // sites (e.g. ModeManager::StartModeIntro 0x823432E8) tests 14, then 12, then 17 into a
+        // materialised bool.
+        inline bool IsOnlineStuntRun(EGameModeType leGameMode)
+        {
+            return leGameMode == E_MODE_ONLINE_FREE_BURN || leGameMode == E_MODE_ONLINE_FUGITIVE ||
+                   leGameMode == E_MODE_ONLINE_MODE_END;
         }
 
         // OnlineGameResults re-homed to its DWARF home BrnGameActions.h (typed members +

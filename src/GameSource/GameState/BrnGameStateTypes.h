@@ -159,6 +159,14 @@ private:
 
 };
 
+// DWARF BrnGameStateTypes.h:78/79 (LegacySrc spells them `static const LandmarkIndex X =
+// LandmarkIndex(n)` on the same lines). One internal-linkage object per unity TU: ARTIST reads
+// the 0xFFFF / 0xFFFE half-words from .data 0x82CDB7D4 / 0x82CDB7D8 in BrnModeManager.cpp's
+// ClearLandmarkAndFinishLineData (0x823285C0), PlayerTriggersLandmark (0x82311A8C) and
+// StartModeIntro, and from 0x82F25440 in the GUI unity.
+static const LandmarkIndex K_INVALID_LANDMARK = LandmarkIndex(-1);
+static const LandmarkIndex K_MULTIPLE_LANDMARKS = LandmarkIndex(-2);
+
 
 inline
 LandmarkIndex::LandmarkIndex(s32 lTriggerRegionIndex)

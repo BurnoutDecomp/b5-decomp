@@ -354,37 +354,28 @@ void OnlineGameResults::Clear()
 // X360 0x8230F220. Store one online-race round (time {seconds,fraction} + distance). Guards: result
 // must be an online-race, and liRoundIndex in range (the out-of-range guard streams a runtime
 // "index: N rounds M" message through CgsStrStream, matching the X360).
-void OnlineGameResults::SetRaceResults(s32 liRoundIndex, const f32* lpfRoundTime, f32 lfRoundDistance)
+void OnlineGameResults::SetRaceResults(s32 liRoundIndex, const CgsSystem::Time& lRoundTime, f32 lfRoundDistance)
 {
     CGS_ASSERT(E_MODE_ONLINE_RACE == miEventType, CGS_ASSERT_MESSAGE_AT("E_MODE_ONLINE_RACE == meEventType", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2131));
 
-    if (liRoundIndex >= miNumberOfRounds)
-    {
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-        lStrStream << "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n";
-        CGS_ASSERT(false, lacMessageBuffer);
-    }
+    CGS_ASSERT_STREAM_AT(liRoundIndex < miNumberOfRounds,
+                         "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n",
+                         CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2132);
 
-    maRoundTimes[liRoundIndex]      = CgsSystem::Time(static_cast<s32>(lpfRoundTime[0]), lpfRoundTime[1]);
+    maRoundTimes[liRoundIndex]      = lRoundTime;
     mafRoundDistances[liRoundIndex] = lfRoundDistance;
 }
 
 // X360 0x82580C60. Read back an online-race round result (same guards as SetRaceResults).
-void OnlineGameResults::GetRaceResults(s32 liRoundIndex, f32* lpfRoundTime, f32* lpfRoundDistance) const
+void OnlineGameResults::GetRaceResults(s32 liRoundIndex, CgsSystem::Time* lpRoundTime, f32* lpfRoundDistance) const
 {
     CGS_ASSERT(E_MODE_ONLINE_RACE == miEventType, CGS_ASSERT_MESSAGE_AT("E_MODE_ONLINE_RACE == meEventType", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2159));
 
-    if (liRoundIndex >= miNumberOfRounds)
-    {
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-        lStrStream << "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n";
-        CGS_ASSERT(false, lacMessageBuffer);
-    }
+    CGS_ASSERT_STREAM_AT(liRoundIndex < miNumberOfRounds,
+                         "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n",
+                         CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2160);
 
-    lpfRoundTime[0]   = static_cast<f32>(maRoundTimes[liRoundIndex].GetSeconds());
-    lpfRoundTime[1]   = maRoundTimes[liRoundIndex].GetFraction();
+    *lpRoundTime      = maRoundTimes[liRoundIndex];
     *lpfRoundDistance = mafRoundDistances[liRoundIndex];
 }
 
@@ -393,16 +384,12 @@ void OnlineGameResults::GetRaceResults(s32 liRoundIndex, f32* lpfRoundTime, f32*
 // liRoundIndex in range.
 void OnlineGameResults::SetStuntResults(s32 liRoundIndex, s32 liScore, s32 liMultiplier)
 {
-    CGS_ASSERT(miEventType == E_MODE_ONLINE_FUGITIVE || miEventType == E_MODE_ONLINE_FREE_BURN ||
-               miEventType == E_MODE_ONLINE_MODE_END, CGS_ASSERT_MESSAGE_AT("IsOnlineStuntRun( meEventType )", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2145));
+    CGS_ASSERT(IsOnlineStuntRun(static_cast<EGameModeType>(miEventType)),
+               CGS_ASSERT_MESSAGE_AT("IsOnlineStuntRun( meEventType )", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2145));
 
-    if (liRoundIndex >= miNumberOfRounds)
-    {
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-        lStrStream << "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n";
-        CGS_ASSERT(false, lacMessageBuffer);
-    }
+    CGS_ASSERT_STREAM_AT(liRoundIndex < miNumberOfRounds,
+                         "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n",
+                         CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2146);
 
     maiRoundStuntScores[liRoundIndex]      = liScore;
     maiRoundStuntMultipliers[liRoundIndex] = liMultiplier;
@@ -411,16 +398,12 @@ void OnlineGameResults::SetStuntResults(s32 liRoundIndex, s32 liScore, s32 liMul
 // X360 0x82580DA8. Read back an online-stunt round result (same guards as SetStuntResults).
 void OnlineGameResults::GetStuntResults(s32 liRoundIndex, s32* lpiScore, s32* lpiMultiplier) const
 {
-    CGS_ASSERT(miEventType == E_MODE_ONLINE_FUGITIVE || miEventType == E_MODE_ONLINE_FREE_BURN ||
-               miEventType == E_MODE_ONLINE_MODE_END, CGS_ASSERT_MESSAGE_AT("IsOnlineStuntRun( meEventType )", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2173));
+    CGS_ASSERT(IsOnlineStuntRun(static_cast<EGameModeType>(miEventType)),
+               CGS_ASSERT_MESSAGE_AT("IsOnlineStuntRun( meEventType )", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2173));
 
-    if (liRoundIndex >= miNumberOfRounds)
-    {
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-        lStrStream << "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n";
-        CGS_ASSERT(false, lacMessageBuffer);
-    }
+    CGS_ASSERT_STREAM_AT(liRoundIndex < miNumberOfRounds,
+                         "index: " << liRoundIndex << " rounds " << miNumberOfRounds << "\n",
+                         CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 2174);
 
     *lpiScore      = maiRoundStuntScores[liRoundIndex];
     *lpiMultiplier = maiRoundStuntMultipliers[liRoundIndex];

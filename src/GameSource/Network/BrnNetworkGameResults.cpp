@@ -162,9 +162,7 @@ namespace BrnNetwork
                     CgsSystem::Time lRoundTime;
                     lRoundTime.SetFloatVal(0.0f);
                     f32 lfRoundDistance = 0.0f;
-                    lpResults->GetRaceResults(liIndex,
-                                              reinterpret_cast<f32*>(&lRoundTime),
-                                              &lfRoundDistance);
+                    lpResults->GetRaceResults(liIndex, &lRoundTime, &lfRoundDistance);
 
                     const s32 liSeconds  = lRoundTime.GetSeconds();
                     const f32 lfFraction = lRoundTime.GetFraction();

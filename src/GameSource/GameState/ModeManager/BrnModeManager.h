@@ -351,8 +351,8 @@ public:
     void HandleBurningHomeRunRunnerSwitch(const GameStateModuleIO::BurningHomeRunSwitchRunnerEvent* lpEvent,
                                           GameStateModuleIO::OutputBuffer*                         lpOutputBuffer);
     // Debug info BrnModeManager.h. Inlined into ProcessGameEvents case 145: one store of 1 to
-    // ModeManager+0x9504, the byte this class names mbDistanceToFinishLineTransmitted.
-    void LeftOnlinePostEvent() { mbDistanceToFinishLineTransmitted = true; }
+    // ModeManager+0x9504, the byte this class names mbReadyForModeIntro.
+    void LeftOnlinePostEvent() { mbReadyForModeIntro = true; }
     // Debug-info accessor; OnlineBurningHomeRunMode::SwitchBurningHomeRunRunner asserts it non-null.
     HUDMessageLogic* GetHUDMessageLogic() { return &mHUDMessageLogic; }
 
@@ -390,15 +390,17 @@ public:
     // ===============================================================================================
     // QUERIES  (agent 9 bodies the small ones)
     // ===============================================================================================
-    bool IsInGameMode() const;                                     // DWARF :179
+    bool IsInGameMode() const { return (mpCurrentGameMode != 0); }   // DWARF :179, header-inline (no ARTIST copy)
     bool IsInProgress() const;                                     // DWARF :188
     bool IsInPreEvent() const;                                     // DWARF :192
     bool IsInPostEvent() const;                                    // DWARF :196 / X360 0x823113D0  (BODIED, BrnModeManager.cpp)
     GameStateModuleIO::EGameModeState GetCurrentGameModeState() const;                                      // DWARF :227
     u32  GetRoadRageTakedownTarget();                              // DWARF :587 / X360 0x82327518
     s32  GetNumberOfCarsInFlyby();                                 // DWARF :444 / X360 0x82311E38
-    bool HasPlayerFinished() const;                                // DWARF :847
-    bool IsWaitingForModeDataToLoad() const;                       // DWARF :429 -- returns mbModeDataIsLoading
+    // DWARF :847 / :429, header-inline (ARTIST holds no standalone copy of either; IntroState::Update
+    // 0x823164E0 reads mbModeDataIsLoading 0x9503 in place).
+    bool HasPlayerFinished() const          { return mbHasPlayerFinished; }
+    bool IsWaitingForModeDataToLoad() const { return mbModeDataIsLoading; }
     BrnResource::ChallengeListEntry::EFreeburnChallengeStyle GetChallengeStyle() const
     {
         return mChallengeManager.GetChallengeStyle();
@@ -414,7 +416,14 @@ public:
         return false;
     }
     f32  GetCountdownTimeForMode() const;                          // DWARF :448 / X360 0x82327D10
-    bool IsOnlineModeWithInstantIntro() const;                     // (mode == 15 || 16) && mbInstantIntroSplash
+    // DWARF h:435, header-inline: PS3 inlines its body (BrnModeManager.h:1447) in 118 functions
+    // and ARTIST holds no standalone copy; inlined it is the materialised bool `mode == 15 ||
+    // mode == 16` (StopModeIntro 0x82343F80, StartModeIntro 0x823430E8).
+    bool IsOnlineFreeBurnLobby() const
+    {
+        return meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
+               meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME;
+    }
     void OnDriveThruRepairAvailable();                             // FLAG: X360 vtbl+0x64 hook; name is conservative (DriveThruManager TU)
 
     GameStateModuleIO::EGameModeType GetCurrentGameModeType() const { return meCurrentGameModeType; }
@@ -457,7 +466,8 @@ public:
     GameStateModule*     GetGameStateModule();                            // asserts "mpGameStateModule"
     TriggerQueryManager* GetTriggerQueryManager() const { return mpTriggerQueryManager; }
     BrnProgression::ProgressionManager* GetProgressionManager() const;    // returns mpProgressionManager (+0x6D5C)
-    const NetworkRoundManager*          GetNetworkRoundManager() const;   // returns mpNetworkRoundManager (+0x6D64)
+    // DWARF h:310, header-inline (no ARTIST copy).
+    const NetworkRoundManager*          GetNetworkRoundManager() const { return mpNetworkRoundManager; }   // +0x6D64
     // A one-instruction forward to the embedded ChallengeManager (+0x6E00); ProcessGameEvents'
     // case-18 arm calls it before a network round starts.
     void CancelFreeburnChallenge(GameStateModuleIO::GameActionQueue* lpActionQueue);
@@ -627,6 +637,7 @@ private:
     friend class ModeManagerDebugComponent;
     friend class GameStateModule; // FinishStreaming clears the original +0x9503 latch
     friend class GameStateDebugComponent; // original HUD reads the private timer and landmark table
+    friend class IntroState; // OnEnter 0x82316420 reads +0x9508 itself; DWARF declares no accessor for it
     // ===============================================================================================
     // PRIVATE SPINE (agents 3, 6, 7, 8)
     // ===============================================================================================
@@ -799,7 +810,7 @@ private:
     // 0x82CDB7D4 == 0xFFFF (image-dumped this session: offset 0xCDB7D4 reads FF FF) -- i.e.
     // LandmarkIndex(-1), the canonical K_INVALID_LANDMARK. Its neighbour at 0x82CDB7D8 is 0xFFFE,
     // which is K_MULTIPLE_LANDMARKS.
-    u16 maLandmarkIndices[GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE];         // +32288  RENAMED from maLandmarkRegionIndexes.
+    LandmarkIndex maLandmarkIndices[GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE]; // +32288  DWARF :843 LandmarkIndex[16].
                                                                                 //   These ARE TriggerData REGION indexes:
                                                                                 //   PrepareForMode reads element
                                                                                 //   [muNumLandmarks-1] as one, and
@@ -895,145 +906,48 @@ private:
     bool mbIsWaitingForSecondPFM;                             // +38132  (C) = 0
 
     // ===============================================================================================
-    // [!][!] THE BOOL BLOCK +38133..+38157 (0x94F5..0x950D) -- 25 CONTIGUOUS BYTES, 25 NAMES.
-    //
-    // DWARF ORDER IS PROVEN WRONG INSIDE THIS BLOCK (two independent violations: the named assert
-    // "!mbIsInTimeUpOutro" pins 38156 while naive DWARF order lands it near 38154; the road-rage crash
-    // arm pins player-crashed semantics at 38154 while DWARF order says 38152). RULE FOR EVERY AGENT:
-    // a byte here may only be NAMED from a writer or reader whose semantics you can state -- otherwise
-    // it stays muUnkByte_0xNNNN. The verifier runs a cross-agent collision pass at the end of the wave:
-    // exactly one name per byte, and each name's comment must cite the function that pins it.
-    //
-    // Construct @0x82340008 zeroes 23 of the 25 -- all except 38138 and 38150, which PrepareForMode /
-    // StartGameMode zero instead. That store set is what fixes the block's extent at exactly 25.
+    // THE BOOL BLOCK +38133..+38157 (0x94F5..0x950D): DWARF BrnModeManager.h:996..1020 in declaration
+    // order, with two X360-only bytes (0x94F8, 0x94F9) after mbFinishCurrentModeNextUpdate and the
+    // X360-only mbStuntChallengeActive at the end. The order is pinned from both ends:
+    //   * UserCancelCurrentMode writes 0x94FB = 1 and 0x94FC = (state == INTRO): mbHasAborted /
+    //     mbAbortedDuringIntro (DWARF :1003/:1004);
+    //   * PlayerFinishedMode 0x823280D8 copies PlayerFinishedModeEvent::mbTimedOut / mbCarDestroyed
+    //     (setters SetTimedOut / SetCrashedOut) into 0x94FD / 0x94FE: mbHasTimedOut / mbHasCrashedOut;
+    //   * FinishCurrentMode raises 0x9501 and 0x950B: mbHasPlayerFinished / mbEventJustFinished;
+    //   * IntroState::Update 0x823164E0 reads 0x9503 through IsWaitingForModeDataToLoad (PS3 reads the
+    //     same byte as lobby-flag - 5, 0x6BA1): mbModeDataIsLoading;
+    //   * TransmitCheckPointDistancesToFinishLine latches 0x9506: mbDistanceToFinishLineTransmitted;
+    //   * StartModeIntro copies 0x9507 / 0x9508 into StartModeIntroAction::mbFinishedOnlineEvent /
+    //     mbFinishedOnlineLobbyMode (DWARF BrnGameActions.h:1177/1178);
+    //   * the "!mbIsInTimeUpOutro" assert pins 0x950C.
+    // Construct @0x82340008 zeroes 23 of the 25 bytes -- all except 0x94FA and 0x9506, which
+    // PrepareForMode / StartGameMode zero instead.
     // ===============================================================================================
-    bool mbInModeStartRegion;               // +38133  0x94F5  PROVISIONAL (DWARF order anchor-fit only)     (C)=0
-    bool mbLastInModeStartRegion;           // +38134  0x94F6  PROVISIONAL                                    (C)=0
-    bool mbFinishCurrentModeNextUpdate;     // +38135  0x94F7  PINNED BYTE -- SendModeResults @0x82343438 does
-                                            //                 `lbzx r11, r29, 0x94F7`. RENAMED this wave from the
-                                            //                 committed mbResultsPositionValid to the DWARF name
-                                            //                 (:1000): same byte, same use --
-                                            //                 FinishCurrentModeNextUpdateWithFinishPosition sets it
-                                            //                 together with miDebugFinishPosition, SendModeResults
-                                            //                 consumes both.                                 (C)=0
-    bool mbOnlineFinalStandingsShown;       // +38136  0x94F8  COMMITTED NAME KEPT (the verified
-                                            //                 TellGuiToShowOnlineFinalStandings latch). The
-                                            //                 DWARF-order candidate here is mbRivalShutDown --
-                                            //                 CONTESTED: do not mass-rename until
-                                            //                 SetRivalShutDown / HasRivalShutDown are read from asm.
-                                            //                                                                (C)=0
-    bool mbWinIfSecond;                     // +38137  0x94F9  debug toggle registered by ARTIST OnActivate   (C)=0
-    bool mbAbortedDuringIntro;              // +38138  0x94FA  PROVISIONAL -- [!] NOT zeroed by Construct;
-                                            //                 PrepareForMode zeroes it (semantics fit).
-    bool mbHasTimedOut;                     // +38139  0x94FB  PROVISIONAL: UpdateCurrentMode passes it to
-                                            //                 ExitCurrentMode as the bool argument.          (C)=0
-    bool mbHasCrashedOut;                   // +38140  0x94FC  PROVISIONAL                                    (C)=0
-    // UserCancelCurrentMode writes these two: +0x94FB = 1 and +0x94FC = (mode state == INTRO).
-    // That writer reads as "aborted" / "aborted during intro" (the original names mbHasAborted /
-    // mbAbortedDuringIntro, adjacent in its member order); the names are left until a reader confirms.
-    // [x] H4 ARBITRATION -- RULED 2026-08-26 (wave-B fix round), APPLIED 2026-08-26 (CLOSURE
-    // round). The two bytes below WERE spelled mbResultsTeamWon (+38141) and
-    // mbHasAbortedDueToDisconnect (+38142); both names were refuted by their own writer and both
-    // are now renamed, here and at all ~19 call sites (BrnModeManager.cpp,
-    // BrnModeManager_Finish.cpp, _Lifecycle.cpp, _Prepare.cpp, _UpdateMode.cpp).
-    // THE EVIDENCE, KEPT SO NOBODY RE-LITIGATES IT -- and re-derived from the export this pass:
-    // ModeManager::PlayerFinishedMode @0x823280D8 writes both straight out of the incoming
-    // PlayerFinishedModeEvent, with nothing in between:
-    //     0x82328118  lbz r11, 0(r30)   -> if set, `stbx r28(=1), r31, 0x94FD`  @0x82328130
-    //     0x82328134  lbz r11, 1(r30)   -> if set, `stbx r28(=1), r31, 0x94FE`  @0x82328148
-    // DWARF names event byte 0 mbTimedOut (setter SetTimedOut) and byte 1 mbCarDestroyed (setter
-    // SetCrashedOut), so BY WRITER these bytes are "the player finished because the clock ran out"
-    // and "...because the car was destroyed". What the old names got wrong:
-    //   * mbResultsTeamWon had NO writer anywhere -- the only asm behind it was "SendModeResults
-    //     reads 0x94FD and packs it into the 48-byte results record at +0x2D" (pseudocode
-    //     `v31 = *(a1 + 38141)`), which says nothing about teams.
-    //   * mbHasAbortedDueToDisconnect was refuted by its own reader: GetPlayersFinishPosition
-    //     @0x823281E8's MARKED_MAN arm is `lbzx 0x94FE / cntlzw / extrwi / xori / addi` ==
-    //     (byte != 0) ? 2 : 1, i.e. "car destroyed -> failed" -- a disconnect abort has no business
-    //     deciding a marked-man finish position.
-    // NOT A TWO-BYTE SHIFT: +38139 (mbHasTimedOut) is a DIFFERENT, equally real byte -- it is the
-    // MODE's time-up flag that UpdateCurrentMode hands to ExitCurrentMode -- while +38141 is the
-    // PLAYER's per-finish reason that travels in the results record. Both readers exist.
-    bool mbPlayerFinishedTimedOut;          // +38141  0x94FD  writer = PlayerFinishedModeEvent byte 0
-                                            //                 (DWARF mbTimedOut); reader = SendModeResults
-                                            //                 @0x82343438 `lbzx r11, r29, 0x94FD`.  (C)=0
-    bool mbPlayerFinishedCarDestroyed;      // +38142  0x94FE  writer = PlayerFinishedModeEvent byte 1
-                                            //                 (DWARF mbCarDestroyed); reader = the
-                                            //                 MARKED_MAN arm of GetPlayersFinishPosition.
-                                            //                                                       (C)=0
-    bool mbHasPlayerFinished;               // +38143  0x94FF  PROVISIONAL                                    (C)=0
-    // +0x9500. RENAMED (was the provisional mbModeStartFromRegionEnabled) to the original name, whose
-    // inline setter SetAbortedDueToDisconnect is GameStateModule's only store to this byte
-    // (ProcessGameEvents case 123, the local player losing the connection). SendModeStopMessages
-    // also forces it for a sub-two-player mode and posts it in the stop-mode action; its tail then
-    // quits the online mode (action 41) instead of finishing it. The original member order agrees: after
-    // mbHasTimedOut / mbHasCrashedOut (pinned at +0x94FD / +0x94FE by PlayerFinishedMode) come
-    // mbHasBeenEliminated and mbHasAbortedDueToDisconnect.
-    bool mbHasAbortedDueToDisconnect;       // +38144  0x9500                                                  (C)=0
-    bool mbModeDataIsLoading;               // +38145  0x9501  IsWaitingForModeDataToLoad() returns it        (C)=0
-    bool mbReadyForModeIntro;               // +38146  0x9502  PROVISIONAL                                    (C)=0
-    bool mbIsModePrepared;                  // +38147  0x9503  PROVISIONAL                                    (C)=0
-    bool mbDistanceToFinishLineTransmitted; // +38148  0x9504  PINNED: PrepareForMode computes exactly this
-                                            //                 semantics, and StartModeIntro's fire-once gate needs
-                                            //                 it true. A stunt run with ZERO checkpoints MUST still
-                                            //                 set it true in PrepareForMode or the intro never
-                                            //                 fires (hazards H6).                            (C)=0
-    bool mbModeIntroStarted;                // +38149  0x9505  PINNED SEMANTICS, name provisional. THE intro
-                                            //                 fire-once latch: UpdateCurrentMode does
-                                            //                 `if (!b38149 && AreAllRaceCarsSetup() && b38148)
-                                            //                  { b38149 = 1; StartModeIntro(); }`. The DWARF-order
-                                            //                 candidate (mbFinishedOnlineEvent) does NOT fit --
-                                            //                 do not use it.                                 (C)=0
-    // [!!] RENAMED 2026-08-26 by the wave-B fix round (H4; was the DWARF-order-only, writer-less
-    // `mbFinishedOnlineLobbyMode`). PINNED SEMANTICS, name provisional. Re-derived from the
-    // exports this pass, not taken from the report: a sweep of EVERY ModeManager export for the
-    // `addis r,r,1 / addi r,r,-0x6AFA` form (== this+38150) returns exactly two functions --
-    //   * TransmitCheckPointDistancesToFinishLine @0x82341FF8 -- the whole use:
-    //         0x8234200C  addi r29, r29, -0x6AFA        ; r29 = this + 38150
-    //         0x82342014  lbz  r11, 0(r29) / bne  -> return          (already sent: do nothing)
-    //         0x82342080  bl   AddEvent(q, rec, 0x76 /*118*/, 0x44)  (the waypoint payload)
-    //         0x82342084  li r11,1 / stb r11, 0(r29)                 (latch it)
-    //     i.e. this byte IS the fire-once latch guarding the action-118 waypoint
-    //     distance-to-finish post -- it is that function's only reader and its only SET;
-    //   * StartGameMode @0x8234FCE8, which only CLEARS it at mode start (PrepareForMode does too).
-    // Distinct from +38148 mbDistanceToFinishLineTransmitted, which UpdateCurrentMode reads via
-    // `ori r11,r11,0x9504` -- different byte, different consumer (the intro latch).
-    bool mbWayPointDistancesToFinishSent;   // +38150  0x9506  -- [!] NOT zeroed by Construct;
-                                            //                 StartGameMode and PrepareForMode zero it.
-    // [!!] RENAMED 2026-08-26 by the wave-B fix round (was the SUSPECT `u8 muUnkByte_0x9507`).
-    // SUSPECT RESOLVED -- three independent pins, all re-read from the exports this pass, and all
-    // three say the same thing:
-    //   * WRITER, SendModeStopMessages @0x8234BEC0: the byte is set exactly when an ONLINE,
-    //     non-lobby, non-showtime mode ended cleanly (not timed out, not a sub-two-player region
-    //     start) -- i.e. "the online EVENT finished".
-    //   * READER 1, PrepareForMode @0x82342930: `addis r27,r21,1 / addi r27,r27,-0x6AF9` (== this
-    //     + 38151), `lbz r11,0(r27)` @0x82342AB0 -> `stb r11, var_AF` == PrepareForModeAction
-    //     +0x8D1, which BrnGameActions.h already names mbFinishedOnlineEvent (its neighbour
-    //     var_AE == +0x8D2 takes NRM+0x130, mbStartingFreeburnDueToPlayerJoin -- the pair fixes
-    //     which slot is which). The same byte is re-read at 0x82342FB4 for the +0x9504 composite.
-    //   * READER 2, StartModeIntro @0x82343018: copied into StartModeIntroAction
-    //     ::mbFinishedOnlineEvent (DWARF BrnGameActions.h:1177).
-    // The DWARF-order candidate mbPersuitModeStartNextFrame is REFUTED by all three. NOTE the
-    // header's own note at +38149 -- "the DWARF-order candidate mbFinishedOnlineEvent does not fit
-    // THERE" -- is still true; it fits HERE, two bytes along.
-    bool mbFinishedOnlineEvent;             // +38151  0x9507                                     (C)=0
-    bool mbInstantIntroSplash;              // +38152  0x9508  PINNED SEMANTICS: the (mode == 15 || 16) && this
-                                            //                 composite behind IsOnlineModeWithInstantIntro,
-                                            //                 StopModeIntro's payload byte and the
-                                            //                 PrepareForModeAction argument. The DWARF-order
-                                            //                 candidate mbPlayerCrashedLastFrame is WRONG here
-                                            //                 (see +38154).                                  (C)=0
-    bool mbEventJustFinished;               // +38153  0x9509  PROVISIONAL                                    (C)=0
-    bool mbPlayerCrashedLastFrame;          // +38154  0x950A  PINNED SEMANTICS: UpdateCurrentMode's road-rage arm --
-                                            //                 `if (!IsInTakedownCamera() && this)
-                                            //                  ScoringSystem::OnRoadRagePlayerCrashed(...)`. (C)=0
-    u8   muUnkByte_0x950B;                  // +38155  0x950B  UNKNOWN: spare / pad, or a 23rd flag. Construct zeroes
-                                            //                 it; no reader identified anywhere.             (C)=0
-    bool mbIsInTimeUpOutro;                 // +38156  0x950C  PINNED: the console assert string names it.
-                                            //                 UpdateCurrentMode sets the 3.0 s timer on time-up;
-                                            //                 StartPlayingMode clears it.                    (C)=0
-    bool mbStuntChallengeActive;            // +38157  0x950D  PINNED (the committed Setup/EndStuntChallenge bodies).
-                                            //                 X360-ONLY member, absent from DWARF.           (C)=0
+    bool mbInModeStartRegion;               // +38133  0x94F5  DWARF :996                                     (C)=0
+    bool mbLastInModeStartRegion;           // +38134  0x94F6  DWARF :997                                     (C)=0
+    bool mbFinishCurrentModeNextUpdate;     // +38135  0x94F7  DWARF :1000; SendModeResults @0x82343438 reads it (C)=0
+    bool mbOnlineFinalStandingsShown;       // +38136  0x94F8  X360-only: the TellGuiToShowOnlineFinalStandings latch (C)=0
+    bool mbWinIfSecond;                     // +38137  0x94F9  X360-only debug toggle registered by ARTIST OnActivate (C)=0
+    bool mbRivalShutDown;                   // +38138  0x94FA  DWARF :1002 (not zeroed by Construct)
+    bool mbHasAborted;                      // +38139  0x94FB  DWARF :1003                                    (C)=0
+    bool mbAbortedDuringIntro;              // +38140  0x94FC  DWARF :1004                                    (C)=0
+    bool mbHasTimedOut;                     // +38141  0x94FD  DWARF :1005                                    (C)=0
+    bool mbHasCrashedOut;                   // +38142  0x94FE  DWARF :1006                                    (C)=0
+    bool mbHasBeenEliminated;               // +38143  0x94FF  DWARF :1007                                    (C)=0
+    bool mbHasAbortedDueToDisconnect;       // +38144  0x9500  DWARF :1008; GameStateModule's SetAbortedDueToDisconnect (C)=0
+    bool mbHasPlayerFinished;               // +38145  0x9501  DWARF :1009                                    (C)=0
+    bool mbModeStartFromRegionEnabled;      // +38146  0x9502  DWARF :1010                                    (C)=0
+    bool mbModeDataIsLoading;               // +38147  0x9503  DWARF :1011                                    (C)=0
+    bool mbReadyForModeIntro;               // +38148  0x9504  DWARF :1012                                    (C)=0
+    bool mbIsModePrepared;                  // +38149  0x9505  DWARF :1013                                    (C)=0
+    bool mbDistanceToFinishLineTransmitted; // +38150  0x9506  DWARF :1014 (not zeroed by Construct)
+    bool mbFinishedOnlineEvent;             // +38151  0x9507  DWARF :1015                                    (C)=0
+    bool mbFinishedOnlineLobbyMode;         // +38152  0x9508  DWARF :1016                                    (C)=0
+    bool mbPersuitModeStartNextFrame;       // +38153  0x9509  DWARF :1017                                    (C)=0
+    bool mbPlayerCrashedLastFrame;          // +38154  0x950A  DWARF :1018                                    (C)=0
+    bool mbEventJustFinished;               // +38155  0x950B  DWARF :1019                                    (C)=0
+    bool mbIsInTimeUpOutro;                 // +38156  0x950C  DWARF :1020                                    (C)=0
+    bool mbStuntChallengeActive;            // +38157  0x950D  X360-only (Setup/EndStuntChallenge)            (C)=0
 
     s32 miFramesUntilModeSwitchSend;        // +38160  PrepareForMode sets 30 for modes 2 / 16; UpdateCurrentMode
                                             //         decrements and posts action 143 (16 B) at EXACTLY 0.   (C)=0

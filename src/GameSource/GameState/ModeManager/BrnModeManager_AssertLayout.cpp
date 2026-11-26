@@ -163,12 +163,12 @@ void ModeManager::_AssertLayout()
     CGS_STATIC_ASSERT((offsetof(ModeManager, mbStuntChallengeActive) - offsetof(ModeManager, mbInModeStartRegion) == 24),
                   "the bool block is exactly 25 contiguous 1-byte slots (+38133..+38157); if this "
                   "fires, someone widened a flag or inserted/removed one -- re-read hazards H4");
-    CGS_STATIC_ASSERT((offsetof(ModeManager, mbDistanceToFinishLineTransmitted) - offsetof(ModeManager, mbInModeStartRegion) == 15),
-                  "mbDistanceToFinishLineTransmitted is +38148 (the PINNED intro pre-gate)");
-    CGS_STATIC_ASSERT((offsetof(ModeManager, mbModeIntroStarted) - offsetof(ModeManager, mbInModeStartRegion) == 16),
-                  "mbModeIntroStarted is +38149 (the PINNED intro fire-once latch)");
-    CGS_STATIC_ASSERT((offsetof(ModeManager, mbInstantIntroSplash) - offsetof(ModeManager, mbInModeStartRegion) == 19),
-                  "mbInstantIntroSplash is +38152 (IsOnlineModeWithInstantIntro's flag)");
+    CGS_STATIC_ASSERT((offsetof(ModeManager, mbReadyForModeIntro) - offsetof(ModeManager, mbInModeStartRegion) == 15),
+                  "mbReadyForModeIntro is +38148 (the PINNED intro pre-gate)");
+    CGS_STATIC_ASSERT((offsetof(ModeManager, mbIsModePrepared) - offsetof(ModeManager, mbInModeStartRegion) == 16),
+                  "mbIsModePrepared is +38149 (the PINNED intro fire-once latch)");
+    CGS_STATIC_ASSERT((offsetof(ModeManager, mbFinishedOnlineLobbyMode) - offsetof(ModeManager, mbInModeStartRegion) == 19),
+                  "mbFinishedOnlineLobbyMode is +38152 (IsOnlineModeWithInstantIntro's flag)");
     CGS_STATIC_ASSERT((offsetof(ModeManager, mbPlayerCrashedLastFrame) - offsetof(ModeManager, mbInModeStartRegion) == 21),
                   "mbPlayerCrashedLastFrame is +38154 (the road-rage crash arm), NOT +38152");
     CGS_STATIC_ASSERT((offsetof(ModeManager, mbIsInTimeUpOutro) - offsetof(ModeManager, mbInModeStartRegion) == 23),

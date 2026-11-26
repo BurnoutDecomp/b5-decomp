@@ -140,14 +140,13 @@ void OnlineShowtimeMode::Start(const StartGameModeParams* /*lpStartGameModeParam
       | GameModeParams::KU_FLAG_EASY_SMASH_PROPS
       | GameModeParams::KU_FLAG_DISABLE_PROP_PROGRESSION);
 
-    // Copy the eight per-player network ids from the start event (v5 words 30..37 == bytes 120..148
-    // == StartNetworkGameEvent::maNetworkPlayerID[8]) into the mode params
-    // (a3+280..308 == GameModeParams::maNetworkPlayerID[8]). After growing the committed home, both
-    // sides are BrnNetwork::NetworkPlayerID (typedef s32) -- the assignment is type-matched.
+    // The eight teams: event +0x78..+0x94 (maePlayerTeam) -> params +0x118..+0x134 (maePlayerTeam),
+    // ARTIST 0x823222E8..0x82322320, as OnlineFreeBurnLobbyMode::Start; SetOnlineRaceCars below
+    // copies every other per-car run.
     for (s32 liPlayer = 0; liPlayer < GameStateModuleIO::KI_MAX_RACE_CARS; ++liPlayer)
     {
-        lpGameModeParams->maNetworkPlayerID[liPlayer] =
-            lpStartNetworkGameEvent->maNetworkPlayerID[liPlayer];
+        lpGameModeParams->maePlayerTeam[liPlayer] =
+            static_cast<EPlayerTeam_Stub>(static_cast<s32>(lpStartNetworkGameEvent->maePlayerTeam[liPlayer]));
     }
 
     // Place the online race cars on the grid from the start event (DWARF-attested 2-arg const).

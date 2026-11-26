@@ -57,7 +57,7 @@ void ModeManager::PausedUpdate(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
     mePreviousGameModeState = static_cast<GameStateModuleIO::EGameModeState>(
         mpCurrentGameMode != 0 ? mpCurrentGameMode->GetCurrentState() : -1);
     if (mpCurrentGameMode != 0 && mpCurrentGameMode->HasFinished())
-        ExitCurrentMode(lpOutputBuffer, mbHasTimedOut,
+        ExitCurrentMode(lpOutputBuffer, mbHasAborted,
                         static_cast<GameStateModuleIO::EGameModeType>(18));
 }
 
@@ -441,7 +441,7 @@ void ModeManager::FillInRaceDistanceInterface(GameStateModuleIO::RaceCarRaceDist
 //   +0x24 miFinishPosition       (var_3C)
 //   +0x28 miEliminations         (var_38)
 //   +0x2C mbIsOnlineGameMode     (var_34 = mode+0xAC, 0 when there is no current mode)
-//   +0x2D mbTimedOut             (var_33 = `lbzx r29,0x94FD` == mbPlayerFinishedTimedOut)
+//   +0x2D mbTimedOut             (var_33 = `lbzx r29,0x94FD` == mbHasTimedOut)
 //   +0x2E mbWonRound             (var_32 = `lbz r11,0xD9(GetCarData)` == CarScoreData::mbEliminated)
 // [!] NAME MISMATCH, SEAT AGREED, DELIBERATELY NOT "FIXED" HERE: BrnGameActions.h spells the +0x2E
 // byte `mbWonRound` (a FLAGGED, unattested name taken from its CONSUMER, StandingsManager
@@ -485,7 +485,7 @@ void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOu
     // The eliminated flag (CarData+0xD9 == CarScoreData::mbEliminated) + the per-mode latch byte.
     lAction.mbWonRound         = mScoringSystem.GetCarData(lePlayer)->GetScoreData()->GetEliminated();
     lAction.meBeatenRivalIndex = E_GLOBAL_RACE_CAR_INDEX_INVALID;   // X360 `li r11,-1` -> var_48
-    lAction.mbTimedOut         = mbPlayerFinishedTimedOut;
+    lAction.mbTimedOut         = mbHasTimedOut;
 
     // Race position: the explicit override (mbFinishCurrentModeNextUpdate + a positive miDebugFinishPosition)
     // wins; otherwise the live scoring position.
@@ -657,9 +657,9 @@ void ModeManager::RaceCarFinishes(EGlobalRaceCarIndex leGlobalRaceCarIndex,
 // ARTIST 0x82311A68.
 void ModeManager::PlayerTriggersLandmark(LandmarkIndex lLandmarkIndex)
 {
-    CGS_ASSERT(static_cast<s32>(lLandmarkIndex) != -1, CGS_ASSERT_MESSAGE_AT("lLandmarkIndex != K_INVALID_LANDMARK", CGS_ARTIST_FILE, 2660));
+    CGS_ASSERT(lLandmarkIndex != K_INVALID_LANDMARK, CGS_ASSERT_MESSAGE_AT("lLandmarkIndex != K_INVALID_LANDMARK", CGS_ARTIST_FILE, 2660));
     mPlayerCurrentLandmark = lLandmarkIndex;
-    if (!mpCurrentGameMode && mbReadyForModeIntro &&
+    if (!mpCurrentGameMode && mbModeStartFromRegionEnabled &&
         mpGameStateModule->GetProgressionManager()->LandmarkHasAvailableRaces(lLandmarkIndex))
         mbInModeStartRegion = true;
 }
@@ -780,10 +780,6 @@ namespace BrnGameState
 //   `if ( !*(a1 + 3480) ) { ... FireAssert("IsInGameMode()", ".../BrnModeManager.cpp", 2521); }`
 // -- i.e. the whole of IsInGameMode() is the null test on mpCurrentGameMode (+0xD98). The same
 // shape leads IsOnlineGameMode @0x82311410 and IsInPostEvent @0x823113D0.
-bool ModeManager::IsInGameMode() const
-{
-    return (mpCurrentGameMode != 0);
-}
 
 // PINNED FROM ASM (two independent inlined call sites, both rendering identically):
 //   GameStateModule::ShouldStartShowtimeMode @0x82356B18:
@@ -838,34 +834,6 @@ GameStateModuleIO::EGameModeState ModeManager::GetCurrentGameModeState() const
         return GameStateModuleIO::E_GMS_INVALID;
     }
     return static_cast<GameStateModuleIO::EGameModeState>(mpCurrentGameMode->GetCurrentState());
-}
-
-// (mode == E_MODE_ONLINE_FREE_BURN_LOBBY(15) || mode == E_MODE_ONLINE_SHOWTIME(16)) && +0x9508.
-// PINNED SEMANTICS (header_grow_spec section 2, byte +38152): the same composite appears
-// open-coded in StopModeIntro @0x82343F38's action-30 payload byte and as the PrepareForModeAction
-// argument, and StartModeIntro @0x82343018 tests the mode half of it on its own
-// (`v10 = *(a1 + 3476); if ( v10 == 15 || v10 == 16 ) ...`).
-bool ModeManager::IsOnlineModeWithInstantIntro() const
-{
-    if ((meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
-        && (meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_SHOWTIME))
-    {
-        return false;
-    }
-    return mbInstantIntroSplash;
-}
-
-// DWARF BrnModeManager.h:429/:1207 -- the accessor's whole body is the byte at +38145 (0x9501).
-bool ModeManager::IsWaitingForModeDataToLoad() const
-{
-    return mbModeDataIsLoading;
-}
-
-// DWARF BrnModeManager.h:700/:1502 over the member DWARF :1009 names mbHasPlayerFinished
-// (X360 +38143, 0x94FF; Construct @0x82340008 zeroes it). Name-for-name accessor.
-bool ModeManager::HasPlayerFinished() const
-{
-    return mbHasPlayerFinished;
 }
 
 // ============================================================================================
@@ -929,10 +897,6 @@ BrnProgression::ProgressionManager* ModeManager::GetProgressionManager() const
 }
 
 // DWARF BrnModeManager.h:384. X360 +0x6D64.
-const NetworkRoundManager* ModeManager::GetNetworkRoundManager() const
-{
-    return mpNetworkRoundManager;
-}
 
 // A tail call into the embedded ChallengeManager (+0x6E00) -- the whole body.
 void ModeManager::CancelFreeburnChallenge(GameStateModuleIO::GameActionQueue* lpActionQueue)
@@ -1968,7 +1932,7 @@ static const f32 KF_NORMAL_TIMESTEP_MULTIPLIER = 1.0f;
 //
 // [!] FLAG -- 8..11 ARE NAMED FROM THEIR WRITERS, NOT FROM A STRING. 8 is written whenever the
 // +0x94FD latch is set. [!] NAME CORRECTED 2026-08-26 (CLOSURE round, H4 conductor ruling): that
-// byte is mbPlayerFinishedTimedOut, NOT the old "results-team-won" -- its writer is
+// byte is mbHasTimedOut, NOT the old "results-team-won" -- its writer is
 // ModeManager::PlayerFinishedMode @0x823280D8 storing PlayerFinishedModeEvent BYTE 0, which says
 // nothing about teams (full refutation at BrnModeManager.h:758-783). So arm 8 is "the run ended on
 // the mode clock", which is what this TU's own reads at :402/:435/:507 treat it as; 9/10 are the pass/fail pair
@@ -1980,7 +1944,7 @@ static const f32 KF_NORMAL_TIMESTEP_MULTIPLIER = 1.0f;
 // ---------------------------------------------------------------------------
 static const s32 KI_FINISH_TYPE_1ST      = BrnGui::E_FINISH_TYPE_1ST;        // 0
 static const s32 KI_FINISH_TYPE_8TH      = BrnGui::E_FINISH_TYPE_8TH;        // 7
-static const s32 KI_FINISH_TYPE_ABORTED  = BrnGui::E_FINISH_TYPE_TIMED_OUT;  // 8: the mbPlayerFinishedTimedOut (+0x94FD) arm of every mode
+static const s32 KI_FINISH_TYPE_ABORTED  = BrnGui::E_FINISH_TYPE_TIMED_OUT;  // 8: the mbHasTimedOut (+0x94FD) arm of every mode
 static const s32 KI_FINISH_TYPE_PASSED   = BrnGui::E_FINISH_TYPE_WON;        // 9: target met  (road rage / marked man / stunt run / showtime)
 static const s32 KI_FINISH_TYPE_FAILED   = BrnGui::E_FINISH_TYPE_LOST;       // 10: target missed
 static const s32 KI_FINISH_TYPE_UNKNOWN  = BrnGui::E_FINISH_TYPE_COUNT;      // 11: the default arm's value
@@ -2144,7 +2108,7 @@ s32 ModeManager::GetPlayersFinishPosition()
         // mbHasAbortedDueToDisconnect (a disconnect has no business deciding an OFFLINE mode's
         // finish position). Byte and name now agree; see the H4 block in BrnModeManager.h.
         case GameStateModuleIO::E_MODE_MARKED_MAN:
-            return (mbPlayerFinishedCarDestroyed ? 2 : 1);
+            return (mbHasCrashedOut ? 2 : 1);
 
         // jumptable default, cases 2,5,7,10 == mode 1,4,6,9 (FACE_OFF, PURSUIT and the two
         // authored-NULL slots ELIMINATOR / TRAFFIC_ATTACK).
@@ -2206,16 +2170,8 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
 
     // Two byte latches the console raises here, BEFORE the switch (`stbx r28, r31, 0x9501` and
     // `stbx r28, r31, 0x950B`).
-    // [!] BOOL-BLOCK FLAG (hazards H4), both reported for the verifier's cross-agent pass:
-    //   +38145 (0x9501) carries the DWARF-order name mbModeDataIsLoading and IsWaitingForModeDataToLoad()
-    //          returns it -- but its only proven WRITER (this one) raises it when a mode FINISHES,
-    //          which "mode data is loading" does not describe. Candidate semantics: "the mode has
-    //          finished / results are pending".
-    //   +38155 (0x950B) is the header's muUnkByte_0x950B ("no reader identified anywhere"). This is
-    //          its first proven writer: FinishCurrentMode sets it to 1. Still no reader, so the
-    //          name stays unknown -- but the byte is now known to be a live flag, not padding.
-    mbModeDataIsLoading = true;    // X360 +0x9501 = 1
-    muUnkByte_0x950B    = 1;       // X360 +0x950B = 1
+    mbHasPlayerFinished = true;    // X360 +0x9501 = 1
+    mbEventJustFinished = true;    // X360 +0x950B = 1
 
     // Cases 7 / 12 / 14 / 17 share the console's LABEL_39 tail (the stunt-run pass/fail test).
     bool lbEvaluateStuntRunOutcome = false;
@@ -2227,7 +2183,7 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
         case GameStateModuleIO::E_MODE_ONLINE_RACE:
         case GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY:
         {
-            if (mbPlayerFinishedTimedOut)                                   // X360 `lbzx r11, r31, 0x94FD`
+            if (mbHasTimedOut)                                   // X360 `lbzx r11, r31, 0x94FD`
             {
                 lbAttemptSucceeded = false;
                 liFinishType       = KI_FINISH_TYPE_ABORTED;
@@ -2258,9 +2214,9 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
         case GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME:
         case GameStateModuleIO::E_MODE_ONLINE_SHOWTIME:
         {
-            // `(mbPlayerFinishedTimedOut == 0) + 8` -- aborted -> 8, otherwise 9. Note the attempt is left
+            // `(mbHasTimedOut == 0) + 8` -- aborted -> 8, otherwise 9. Note the attempt is left
             // SUCCESSFUL either way (the console never touches r29 in this arm).
-            liFinishType = mbPlayerFinishedTimedOut ? KI_FINISH_TYPE_ABORTED : KI_FINISH_TYPE_PASSED;
+            liFinishType = mbHasTimedOut ? KI_FINISH_TYPE_ABORTED : KI_FINISH_TYPE_PASSED;
 
             // One uninitialised byte, action 43 / size 1 (E_ACTION_IMPACT_TIME_END).
             u8 lacImpactTimeEnd[1] = { 0 };
@@ -2328,7 +2284,7 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
 
         // ---- jumptable case 5: burning route ----------------------------------------------
         case GameStateModuleIO::E_MODE_BURNING_ROUTE:
-            if (mbPlayerFinishedTimedOut)
+            if (mbHasTimedOut)
             {
                 lbAttemptSucceeded = false;
                 liFinishType       = KI_FINISH_TYPE_ABORTED;
@@ -2350,7 +2306,7 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
             // mbPlayerTotalled (the byte between mauiMedalScores[4] and mOnlineRaceModeScoring
             // @ss+0x4B74, anchored by the header's own miMaximumPlayerCrashedNumber @+0x4B58 /
             // miCurrentPlayerCrashedNumber @+0x4B5C pair).
-            if (mbPlayerFinishedTimedOut || mScoringSystem.IsPlayerTotalled())
+            if (mbHasTimedOut || mScoringSystem.IsPlayerTotalled())
             {
                 liFinishType       = KI_FINISH_TYPE_FAILED;
                 lbAttemptSucceeded = false;
@@ -2364,7 +2320,7 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
         // ---- jumptable case 11: online road rage (team) ------------------------------------
         case GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE:
         {
-            if (mbPlayerFinishedTimedOut)
+            if (mbHasTimedOut)
             {
                 // NOTE: the console does NOT clear r29 on this arm (unlike the offline race bucket).
                 liFinishType = KI_FINISH_TYPE_ABORTED;
@@ -2428,7 +2384,7 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
 
         // ---- jumptable case 13: online burning home run ------------------------------------
         case GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN:
-            if (mbPlayerFinishedTimedOut)
+            if (mbHasTimedOut)
             {
                 liFinishType = KI_FINISH_TYPE_ABORTED;
             }
@@ -2603,9 +2559,9 @@ void ModeManager::ShowModeResults(
     lAction.mbIsOnlinePostEvent = static_cast<u8>(lbIsOnline ? 1 : 0);    // record+0xE4  (mode+0xAC)
     lAction.mbHasBlock58        = 0;                                      // record+0xDF
     lAction.mu8FieldDB          = 0;                                      // record+0xDB
-    lAction.mu8FieldE2          = static_cast<u8>(mbPlayerFinishedCarDestroyed ? 1 : 0);   // record+0xE2 (+0x94FE)
-    lAction.mu8FieldE3          = static_cast<u8>(mbHasPlayerFinished ? 1 : 0);           // record+0xE3 (+0x94FF)
-    lAction.mu8FieldE1          = static_cast<u8>(mbPlayerFinishedTimedOut ? 1 : 0);              // record+0xE1 (+0x94FD)
+    lAction.mu8FieldE2          = static_cast<u8>(mbHasCrashedOut ? 1 : 0);   // record+0xE2 (+0x94FE)
+    lAction.mu8FieldE3          = static_cast<u8>(mbHasBeenEliminated ? 1 : 0);           // record+0xE3 (+0x94FF)
+    lAction.mu8FieldE1          = static_cast<u8>(mbHasTimedOut ? 1 : 0);              // record+0xE1 (+0x94FD)
 
     if ((meCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME) ||
         (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME))
@@ -2731,7 +2687,7 @@ void ModeManager::ShowModeResults(
     }
 
     // ---- the finish-time field (record+0x0C) ----------------------------------------------------
-    if (mbPlayerFinishedTimedOut)
+    if (mbHasTimedOut)
     {
         lAction.mfField0C = KF_ABORTED_FINISH_TIME;   // flt_820282B4 == 1.0e8
     }
@@ -3036,12 +2992,7 @@ namespace BrnGameState
 // 3.0f and belongs to a different constant -- do not widen this to a pair.)
 static const f32 KF_PUSH_FORWARDS_DISTANCE_METRES = 35.0f;
 
-// The landmark "none" sentinel StartModeIntro posts in its action-44 payload. X360 @0x8234306C
-// `lhz r11, word_82CDB7D4`. IMAGE-CITED: image.bin offset 0xCDB7D4 reads FF FF (its neighbour at
-// 0xCDB7D8 reads FF FE == K_MULTIPLE_LANDMARKS). This is the same global BrnModeManager.h's
-// landmark-block banner and ClearLandmarkAndFinishLineData already cite -- LandmarkIndex(-1).
-// [!] A .bss ZERO WOULD BE A LIE HERE: 0 is a REAL landmark/region index.
-static const u16 KU_INVALID_LANDMARK_INDEX = 0xFFFFu;
+// (StartModeIntro posts K_INVALID_LANDMARK, BrnGameStateTypes.h:78, in its action-44 payload.)
 
 // StartModeIntro's online-stunt training request. X360 @0x82343318 `li r11, 0x4D` (77) into the
 // 4-byte action-149 payload, posted only for the online-stunt family {12, 14, 17}.
@@ -3207,8 +3158,8 @@ void ModeManager::SetStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCou
 // ============================================================================
 // ModeManager::StartModeIntro -- X360 0x82343018
 // ============================================================================
-// Fired ONCE per event by UpdateCurrentMode's intro latch (hazards H6: !mbModeIntroStarted &&
-// AreAllRaceCarsSetup() && mbDistanceToFinishLineTransmitted). It clears the GUI's
+// Fired ONCE per event by UpdateCurrentMode's intro latch (hazards H6: !mbIsModePrepared &&
+// AreAllRaceCarsSetup() && mbReadyForModeIntro). It clears the GUI's
 // "in a start region" state, walks the mode state machine into E_GMS_INTRO, builds the 604-byte
 // intro action (flyby roster + intro duration) and posts it.
 //
@@ -3221,26 +3172,12 @@ void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActio
     CGS_ASSERT(lpGameActionQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameActionQueue != NULL", CGS_ARTIST_FILE, 3069));   // :3069
 
     // ---- action 44, size 4: "the player is no longer in a mode-start region" ----------------
-    // X360 @0x82343058..0x8234307C. The console writes ONLY the half-word at +0 and the byte at
-    // +2 (`sth word_82CDB7D4` / `stb r23`); +3 is left as whatever the stack held, and the queue
-    // copies all four bytes.
-    //
-    // [!] DELIBERATE, NARROW DIVERGENCE (2026-08-26, stuntrace waveB CLOSURE round) -- the pad
-    // byte at +0x03 IS zeroed here, reversing this banner's earlier "do not 'helpfully' zero the
-    // pad" instruction. Same ruling, same reason, same shape as the one
-    // BrnModeManager_Start.cpp:791-797 already applies to the action-25 var_130 byte: posting an
-    // INDETERMINATE stack byte into the shared 13312-byte queue is not reproducible on the host,
-    // so it is a source of run-to-run divergence in every wire dump and every queue image, for no
-    // information gain. Cost of the divergence: exactly zero observable behaviour. The consumer
-    // arm @0x823EA948 reads only +0x00 (the u16 id) and +0x02 (mbInStartRegion) before posting
-    // GuiEventEnterEventStartLocation(166) -- nothing anywhere reads +0x03 (grep-verified: the
-    // record's only other producer is this function). Faithfulness is preserved where it can be
-    // observed; determinism wins where it cannot.
+    // X360 @0x82343058..0x8234307C: the half-word at +0 from this unit's K_INVALID_LANDMARK
+    // (.data 0x82CDB7D4) and false into the byte at +2; +3 is padding the console never writes.
     {
         GameStateModuleIO::SetInModeStartRegionAction lStartRegionAction;
-        lStartRegionAction.mu16StartLocationId = KU_INVALID_LANDMARK_INDEX;
-        lStartRegionAction.mbInStartRegion     = 0;
-        lStartRegionAction.maPad03[0]          = 0;   // see the divergence banner above
+        lStartRegionAction.mbInModeStartRegion   = false;   // first (PS3 0x205958 and ARTIST store order)
+        lStartRegionAction.mCurrentLandmarkIndex = K_INVALID_LANDMARK;
         lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStartRegionAction),
                                     GameStateModuleIO::E_ACTION_SET_IN_MODE_START_REGION,
                                     sizeof(lStartRegionAction));   // X360 li r5,0x2C; li r6,4
@@ -3258,66 +3195,60 @@ void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActio
                CGS_ASSERT_MESSAGE_AT("mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_INTRO", CGS_ARTIST_FILE, 3089));   // :3089
 
     // ---- the online-event fork ----------------------------------------------------------------
-    // X360 @0x823430D4..0x82343214. TWO conditions, and the compiler duplicates the second one:
-    //   (a) GameStateModule::IsOnlineGameMode() -- the MODULE's flag, not this manager's
-    //       IsOnlineGameMode() (which reads the current mode). The asm calls
-    //       BrnGameState__GameStateModule__IsOnlineGameMode on `lwz 0x6D58(this)`.
-    //   (b) the current mode is NOT one of the two "instant intro" online modes {15, 16}.
-    // Note this is the BARE mode test, WITHOUT the +0x9508 flag -- it is NOT
-    // IsOnlineModeWithInstantIntro() (which StopModeIntro below does use). Do not merge them.
-    const bool lbLobbyOrShowtimeMode =
-        (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
-         meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
-    const bool lbOnlineEventIntro = mpGameStateModule->IsOnlineGameMode() && !lbLobbyOrShowtimeMode;
-
-    // [x] header_request R1 (LANDED -- see the STATUS stamp at the top of this file): GameStateModuleIO::StartModeIntroAction (id 29, 604 bytes).
-    // The console builds it on the stack from var_2B0 (the f32) through var_56, and posts
-    // &var_2B0 with size 0x25C. Field identity is DWARF-exact (BrnGameActions.h:1170-1179).
+    // X360 @0x823430D4..0x8234326C. GameStateModule::IsOnlineGameMode() is called once (0x823430D8);
+    // the lobby test (ModeManager::IsOnlineFreeBurnLobby, header-inline) runs before the replay
+    // loop and again after it (0x823431F0), and both "offline" and "lobby" reach the one
+    // FlybyData::Prepare call (0x82343270): the online test encloses both lobby tests.
+    // PS3 0x205958 has the same shape (lines 2919..2946).
     GameStateModuleIO::StartModeIntroAction lIntroAction;
 
-    if (lbOnlineEventIntro)
+    if (mpGameStateModule->IsOnlineGameMode() && !IsOnlineFreeBurnLobby())
     {
-        // ---- replay every already-disconnected remote player to the new mode ------------------
-        // X360 @0x82343130..0x823431EC. The loop counter is an EActiveRaceCarIndex walked with the
-        // project post-increment operator, whose range guard IS the console's
-        // "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" assert (BurnoutConstants.h:39) -- so
-        // writing the loop this way reproduces that assert without restating it.
-        for (EActiveRaceCarIndex leRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
-             leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
-             leRaceCarIndex++)
         {
-            // sub_82326878 == ScoringSystem::GetPlayerDisconnected(EActiveRaceCarIndex): its own
-            // assert is BrnScoringSystem.h:1900 and its body is
-            // `GetCarData(i) ? GetCarData(i)->mbDisconnected(+0x69) : 0` -- exactly the declared
-            // accessor (DWARF :907). FLAG: the standalone body at 0x8231DA00 that func_index.tsv
-            // resolves to that NAME is the NetworkPlayerID overload (assert :1927); 0x82326878 is
-            // the active-index one, folded because it is a header inline.
-            if (mScoringSystem.GetPlayerDisconnected(leRaceCarIndex))
+            // ---- replay every already-disconnected remote player to the new mode --------------
+            for (EActiveRaceCarIndex leRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+                 leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+                 leRaceCarIndex++)
             {
-                CGS_ASSERT(mScoringSystem.GetCarData(leRaceCarIndex) != 0,
-                           CGS_ASSERT_MESSAGE_AT("mScoringSystem.GetCarData(leRaceCarIndex)", CGS_ARTIST_FILE, 3101));   // :3101
-
-                // The console re-calls GetCarData a THIRD time after the assert and re-tests it --
-                // the assert is non-fatal, so the null guard is real control flow, not a duplicate.
-                const CarData* lpCarData = mScoringSystem.GetCarData(leRaceCarIndex);
-                if (lpCarData != 0)
+                // sub_82326878 == ScoringSystem::GetPlayerDisconnected(EActiveRaceCarIndex): its own
+                // assert is BrnScoringSystem.h:1900 and its body is
+                // `GetCarData(i) ? GetCarData(i)->mbDisconnected(+0x69) : 0` -- exactly the declared
+                // accessor (DWARF :907). FLAG: the standalone body at 0x8231DA00 that func_index.tsv
+                // resolves to that NAME is the NetworkPlayerID overload (assert :1927); 0x82326878 is
+                // the active-index one, folded because it is a header inline.
+                if (mScoringSystem.GetPlayerDisconnected(leRaceCarIndex))
                 {
-                    GameStateModuleIO::RemotePlayerDisconnectedAction lDisconnectedAction;
-                    // X360 `lwz r4, 0x148(carData)` == CarData::mNetworkPlayerID.
-                    lDisconnectedAction.SetNetworkPlayerID(lpCarData->GetNetworkPlayerID());
-                    lDisconnectedAction.SetActiveRaceCarIndex(leRaceCarIndex);
-                    lpGameActionQueue->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lDisconnectedAction),
-                        GameStateModuleIO::E_ACTION_REMOTE_PLAYER_DISCONNECTED,
-                        sizeof(lDisconnectedAction));   // X360 li r5,0xB; li r6,8
+                    CGS_ASSERT(mScoringSystem.GetCarData(leRaceCarIndex) != 0,
+                               CGS_ASSERT_MESSAGE_AT("mScoringSystem.GetCarData(leRaceCarIndex)", CGS_ARTIST_FILE, 3101));   // :3101
+
+                    // ARTIST 0x8234317C..0x82343190: GetCarData is called again for the test and a
+                    // third time for the player id (DWARF lists no car-data local).
+                    if (mScoringSystem.GetCarData(leRaceCarIndex) != 0)
+                    {
+                        GameStateModuleIO::RemotePlayerDisconnectedAction lPlayerDisconnectedAction;
+                        lPlayerDisconnectedAction.SetNetworkPlayerID(
+                            mScoringSystem.GetCarData(leRaceCarIndex)->GetNetworkPlayerID());
+                        lPlayerDisconnectedAction.SetActiveRaceCarIndex(leRaceCarIndex);
+                        lpGameActionQueue->AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(&lPlayerDisconnectedAction),
+                            GameStateModuleIO::E_ACTION_REMOTE_PLAYER_DISCONNECTED,
+                            sizeof(lPlayerDisconnectedAction));   // X360 li r5,0xB; li r6,8
+                    }
                 }
             }
         }
 
-        // ARTIST 82343220..82343264: select the canonical manager, dispatch
-        // slot 0, then copy its complete 592-byte payload into action 29.
-        lIntroAction.mFlybyData =
-            *mpGameStateModule->GetFlybyManager()->CalculateFlybyRivals();
+        if (IsOnlineFreeBurnLobby())
+        {
+            lIntroAction.mFlybyData.Prepare();
+        }
+        else
+        {
+            // ARTIST 82343220..82343264: select the canonical manager, dispatch
+            // slot 0, then copy its complete 592-byte payload into action 29.
+            lIntroAction.mFlybyData =
+                *mpGameStateModule->GetFlybyManager()->CalculateFlybyRivals();
+        }
     }
     else
     {
@@ -3335,19 +3266,19 @@ void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActio
     // `lbzx r26,0x9508 -> var_57`, and the DWARF field order at BrnGameActions.h:1177/1178 fixes
     // which is which). That is a NAMING signal for two bytes the frozen header currently spells
     // mbFinishedOnlineEvent (renamed from muUnkByte_0x9507 by the fix round) and
-    // mbInstantIntroSplash (PINNED-semantics), and it COLLIDES with
+    // mbFinishedOnlineLobbyMode (PINNED-semantics), and it COLLIDES with
     // the header's provisional mbFinishedOnlineLobbyMode at +38150. The frozen header's names are
     // used verbatim below -- renaming is the conductor's call, not this agent's -- and the
     // collision is filed for the verifier's cross-agent bool-block pass.
     lIntroAction.mbFinishedOnlineEvent     = mbFinishedOnlineEvent;     // +38151 / 0x9507
-    lIntroAction.mbFinishedOnlineLobbyMode = mbInstantIntroSplash;      // +38152 / 0x9508
+    lIntroAction.mbFinishedOnlineLobbyMode = mbFinishedOnlineLobbyMode;      // +38152 / 0x9508
 
     // Mode vtbl+0x20 == slot 8 == GetIntroDurationSeconds (micro-check slot table). The console
     // keeps the result in f1, stores it to var_2B0 and then compares it against flt_82001CC0.
     // IMAGE-CITED: image.bin offset 0x1CC0 reads 00 00 00 00 == 0.0f, so the test is `> 0.0f`
     // (`fcmpu` + `bgt`, i.e. strictly greater -- a zero-length intro sets mbDoIntro FALSE).
     lIntroAction.mfDurationSeconds = mpCurrentGameMode->GetIntroDurationSeconds();
-    lIntroAction.mbDoIntro         = (lIntroAction.mfDurationSeconds > 0.0f);
+    lIntroAction.mbDoIntro         = (lIntroAction.mfDurationSeconds <= 0.0f) ? false : true;   // two stores, false first (0x823432C4/D0)
 
     lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lIntroAction),
                                 GameStateModuleIO::E_ACTION_START_MODE_INTRO,
@@ -3358,9 +3289,7 @@ void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActio
     // that all alias the ONE OnlineStuntRunMode object (BrnModeManager.h ORDER NOTE 2). 17 is
     // spelled E_MODE_ONLINE_MODE_END in this tree's enum (it aliases E_MODE_COUNT; see the
     // KI_GAME_MODE_SLOTS banner for why the enum is deliberately left at 17).
-    if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN ||
-        meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FUGITIVE ||
-        meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_MODE_END)
+    if (GameStateModuleIO::IsOnlineStuntRun(meCurrentGameModeType))
     {
         // [x] header_request R4 (LANDED -- see the STATUS stamp at the top of this file): GameStateModuleIO::RequestGameTrainingAction (DWARF
         // BrnGameActions.h:3523; one member, the ETrainingType). The id already exists
@@ -3393,11 +3322,11 @@ void ModeManager::StopModeIntro(GameStateModuleIO::GameActionQueue* lpGameAction
     // X360 @0x82343F7C `lwz r11, 0xD94(r31)` -> var_20.
     lAction.meGameMode = meCurrentGameModeType;
 
-    // X360 @0x82343F80..0x82343FC4 is the (mode == 15 || mode == 16) && *(this + 0x9508)
-    // composite -- byte for byte the same expression the frozen header documents behind
-    // IsOnlineModeWithInstantIntro(). De-inlined to that accessor rather than restated, so the
-    // two can never drift apart. (Agent 9 bodies it; the header declares it.)
-    lAction.mbMovingBetweenLobbyModes = IsOnlineModeWithInstantIntro();
+    // X360 @0x82343F80..0x82343FC4: (mode == 15 || mode == 16) && *(this + 0x9508), open-coded
+    // on the line after the mode store (PS3 0x1F3B84 attributes it to BrnModeManager.cpp:3753,
+    // no inlined BrnModeManager.h:1447).
+    lAction.mbMovingBetweenLobbyModes =
+        GameStateModuleIO::IsOnlineFreeBurnLobby(lAction.meGameMode) && mbFinishedOnlineLobbyMode;
 
     lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
                                 GameStateModuleIO::E_ACTION_STOP_MODE_INTRO,
@@ -3555,16 +3484,9 @@ namespace BrnGameState
 // TU-local constants, all image- or asm-cited. No invented values.
 // ----------------------------------------------------------------------------
 
-// The landmark "none" sentinel. ClearLandmarkAndFinishLineData loads it as a half-word from the
-// global at X360 0x82CDB7D4 and stores it into mPlayerCurrentLandmark and every maLandmarkIndices
-// slot. DUMPED FROM THE IMAGE THIS SESSION (scratch/postfx_step9_final/envfix/work/image.bin,
-// offset 0xCDB7D4 == VA - 0x82000000, big-endian): the half-word reads FF FF, i.e. -1 as s16.
-// That is the canonical BrnGameState::K_INVALID_LANDMARK the DecFIGS BrnGameStateTypes.h banner
-// names but this tree has not homed yet. (Its neighbour at 0x82CDB7D8 reads FF FE == -2, which is
-// K_MULTIPLE_LANDMARKS -- recorded here so nobody has to re-dump it.)
-// [!] A .bss ZERO WOULD HAVE BEEN A LIE HERE: clearing these to 0 makes landmark/region 0 look like
-// a live checkpoint. The image says -1.
-static const s32 KI_INVALID_LANDMARK = -1;
+// The landmark "none" sentinel is BrnGameState::K_INVALID_LANDMARK (BrnGameStateTypes.h:78): this
+// unit's copy is the half-word 0xFFFF at X360 .data 0x82CDB7D4 (K_MULTIPLE_LANDMARKS 0xFFFE at
+// 0x82CDB7D8), loaded by ClearLandmarkAndFinishLineData, PlayerTriggersLandmark and StartModeIntro.
 
 // The CgsID "none" sentinel ClearLandmarkAndFinishLineData stores into maLandmarkCgsIDs: the asm is
 // `li r7, -1` followed by `std r7, 0(r9)`, i.e. a sign-extended 64-bit all-ones, NOT zero.
@@ -3718,14 +3640,14 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     miNumUnsucessfulGameModeAttempts = 0;                                // +3496
     mpCurrentGameMode                = 0;                          // +3480
     mbFinishedOnlineEvent            = false;                            // +38151
-    mbInstantIntroSplash             = false;                            // +38152
+    mbFinishedOnlineLobbyMode             = false;                            // +38152
     meCurrentGameModeType            = GameStateModuleIO::E_MODE_NONE;   // +3476  = -1
     mePreviousGameModeType           = GameStateModuleIO::E_MODE_NONE;   // +3484  = -1
     meLastAttemptedGameModeType      = GameStateModuleIO::E_MODE_NONE;   // +3492  = -1
     mePreviousGameModeState          = GameStateModuleIO::E_GMS_INVALID; // +3488  = -1
-    mbEventJustFinished              = false;                            // +38153
+    mbPersuitModeStartNextFrame              = false;                            // +38153
     miFramesUntilModeSwitchSend      = 0;                                // +38160
-    muUnkByte_0x950B                 = 0;                                // +38155
+    mbEventJustFinished              = false;                            // +38155
     mbPlayerCrashedLastFrame         = false;                            // +38154
     mbIsInTimeUpOutro                = false;                            // +38156
     mfTimeUpStateTimer               = 0.0f;                             // +38164
@@ -3767,21 +3689,21 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     mfPlayerTotalledTime               = 0.0f;                           // +32808
     mbWinIfSecond                      = false;                          // +38137
     mfPFMSecondPhaseTimer              = 0.0f;                           // +38128
-    mbModeDataIsLoading                = false;                          // +38145
-    mbIsModePrepared                   = false;                          // +38147
+    mbHasPlayerFinished                = false;                          // +38145
+    mbModeDataIsLoading                   = false;                          // +38147
     mbIsWaitingForSecondPFM            = false;                          // +38132
     mbHasAbortedDueToDisconnect       = false;                          // +38144
     mbStuntChallengeActive             = false;                          // +38157
     mbInModeStartRegion                = false;                          // +38133
     mbLastInModeStartRegion            = false;                          // +38134
-    mbHasCrashedOut                    = false;                          // +38140
-    mbPlayerFinishedTimedOut                   = false;                          // +38141
-    mbDistanceToFinishLineTransmitted  = false;                          // +38148
-    mbModeIntroStarted                 = false;                          // +38149
-    mbReadyForModeIntro                = false;                          // +38146
-    mbHasTimedOut                      = false;                          // +38139
-    mbHasPlayerFinished                = false;                          // +38143
-    mbPlayerFinishedCarDestroyed        = false;                          // +38142
+    mbAbortedDuringIntro                    = false;                          // +38140
+    mbHasTimedOut                   = false;                          // +38141
+    mbReadyForModeIntro  = false;                          // +38148
+    mbIsModePrepared                 = false;                          // +38149
+    mbModeStartFromRegionEnabled                = false;                          // +38146
+    mbHasAborted                      = false;                          // +38139
+    mbHasBeenEliminated                = false;                          // +38143
+    mbHasCrashedOut        = false;                          // +38142
 
     // Console: `std r30, 0(this+0x8BF0)` / `std r30, 0(this+0x8BF8)` with r30 == 0 -- two 8-byte
     // zero stores. (Hex-Rays shows `*(a1+35824) = v29` with a bogus 64-bit v29 whose high half it
@@ -3861,13 +3783,13 @@ bool ModeManager::Prepare(const BrnResource::ChallengeList* lpFreeburnChallengeL
 void ModeManager::ClearLandmarkAndFinishLineData()
 {
     muNumLandmarks         = 0;                                          // +32796
-    mPlayerCurrentLandmark = LandmarkIndex(KI_INVALID_LANDMARK);         // +32800
+    mPlayerCurrentLandmark = K_INVALID_LANDMARK;                         // +32800
 
     ResetNextLandmarks(true);
 
     for (s32 liLandmark = 0; liLandmark < GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE; ++liLandmark)
     {
-        maLandmarkIndices[liLandmark]           = static_cast<u16>(KI_INVALID_LANDMARK); // 0xFFFF, not 0
+        maLandmarkIndices[liLandmark]           = K_INVALID_LANDMARK;   // re-read per pass (0x823285DC)
         maLandmarkCgsIDs[liLandmark]            = KU_INVALID_CGS_ID;
         mauLandmarkSectionIndices[liLandmark]   = 0;
     }
@@ -4445,14 +4367,14 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     // f32 clocks through flt_82001CC0 (DUMPED FROM THE IMAGE this session -- offset 0x1CC0 reads
     // 00 00 00 00, so the constant IS 0.0f, not a placeholder) and seven byte flags 0x94FB..0x9501.
     mfTimeInFreeBurn             = 0.0f;   // +0x951C
-    mbHasTimedOut                = false;  // +0x94FB
-    mbHasCrashedOut              = false;  // +0x94FC
+    mbHasAborted                = false;  // +0x94FB
+    mbAbortedDuringIntro              = false;  // +0x94FC
     mfTimeInMode                 = 0.0f;   // +0x9520
-    mbPlayerFinishedTimedOut             = false;  // +0x94FD
-    mbPlayerFinishedCarDestroyed  = false;  // +0x94FE
-    mbHasPlayerFinished          = false;  // +0x94FF
+    mbHasTimedOut             = false;  // +0x94FD
+    mbHasCrashedOut  = false;  // +0x94FE
+    mbHasBeenEliminated          = false;  // +0x94FF
     mbHasAbortedDueToDisconnect = false;  // +0x9500
-    mbModeDataIsLoading          = false;  // +0x9501
+    mbHasPlayerFinished          = false;  // +0x9501
 
     // First round of a (possibly multi-round) event: wipe the cumulative scoring.
     // DE-INLINED, EXACTLY: the console's sixteen stores (ss+0x5030 + k*0x158 -> {0, -1}, k = 0..7)
@@ -4467,25 +4389,25 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     mpCurrentGameMode->Initialise();      // vtbl+16 == slot 4
 
     // `lbRestart` is the NEGATION of the instant-intro composite: the console builds
-    // (mode == 15 || mode == 16) && mbInstantIntroSplash into r11 and passes r6 = !that. That
+    // (mode == 15 || mode == 16) && mbFinishedOnlineLobbyMode into r11 and passes r6 = !that. That
     // composite is exactly IsOnlineModeWithInstantIntro().
     //
     // ARTIST 0x8234B3CC..0x8234B3E0 supplies the total-round count in r7.
     mScoringSystem.OnModeStart(meCurrentGameModeType, lpGameModeParams,
-                              !IsOnlineModeWithInstantIntro(), mpNetworkRoundManager->GetTotalRounds());
+                              !(IsOnlineFreeBurnLobby() && mbFinishedOnlineLobbyMode), mpNetworkRoundManager->GetTotalRounds());
 
     // ------------------------------------------------------------------------------------------
     // THE STREAMING GATE. Console @0x8234B3E4..0x8234B420:
     //     lwz  r3, 0xD98(r31) / lwz r11, 0(r3) / lwz r11, 0x5C(r11) / mtctr / bctrl
     //         -- vtbl+0x5C == vtbl+92 == slot 23 == GameMode::RequiresStreaming()
     //     clrlwi r11, r3, 24 / cmplwi 0 / beq  -> skip
-    //     stbx r15(1), r31, 0x9503                       ; mbIsModePrepared = true
+    //     stbx r15(1), r31, 0x9503                       ; mbModeDataIsLoading = true
     //     bl   OutputBuffer::GetGameActionQueue / lwz r3, 0x6D58(r31)
     //     bl   GameStateModule::WaitForStreaming
     // [x] BLOCKER (1) DISCHARGED 2026-08-26 (fix round): BrnGameMode.h now carries the console
     // 26-slot order and declares `virtual bool RequiresStreaming() const;` at slot 23, so the GATE
     // AND ITS STORE ARE NOW EMITTED. They used to be lost together with the parked call, which meant
-    // mbIsModePrepared was never set on any streaming mode.
+    // mbModeDataIsLoading was never set on any streaming mode.
     // BEHAVIOURAL IMPACT ON THIS CAMPAIGN: NONE. StuntAttackMode's vtable (0x820D0720) carries the
     // folded `li r3,0; blr` leaf (0x827E2F38) at BOTH slot 23 and slot 24, so a stunt race enters
     // neither this arm nor the HandleLoadingScreenLoaded path. Base GameMode::RequiresStreaming()
@@ -4493,11 +4415,11 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     // [!] +0x9503 NAMING NOTE for the verifier's bool-block collision pass (hazards H4): this is
     // the ONLY writer of 0x9503 in the wave's four bodies here, and its semantics are "the mode
     // needs streaming and we have just asked for it", NOT "the mode is prepared". The frozen
-    // header's provisional `mbIsModePrepared` is CONTESTED by that; reported, not renamed here.
+    // header's provisional `mbModeDataIsLoading` is CONTESTED by that; reported, not renamed here.
     // ------------------------------------------------------------------------------------------
     if (mpCurrentGameMode->RequiresStreaming())   // vtbl+92 == slot 23
     {
-        mbIsModePrepared = true;                 // console stbx r15(1), r31, 0x9503
+        mbModeDataIsLoading = true;                 // console stbx r15(1), r31, 0x9503
         mpGameStateModule->WaitForStreaming(lpOutputBuffer->GetGameActionQueue());
     }
 
@@ -4633,12 +4555,12 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
 
     // Publish the mode's checkpoint table into the three parallel landmark arrays. STUNT NOTE:
     // stunt events author ZERO checkpoints, so this loop runs zero times -- that is DATA, not a bug
-    // (scout-proven), and PrepareForMode's mbDistanceToFinishLineTransmitted gate does not depend on
+    // (scout-proven), and PrepareForMode's mbReadyForModeIntro gate does not depend on
     // the count.
     for (u32 luCheckpoint = 0; luCheckpoint < muNumLandmarks; ++luCheckpoint)
     {
         const CheckpointData* lpCheckpointData = lpGameModeParams->GetCheckpointData(luCheckpoint);
-        maLandmarkIndices[luCheckpoint] = static_cast<u16>(lpCheckpointData->GetLandmarkIndex());
+        maLandmarkIndices[luCheckpoint] = lpCheckpointData->GetLandmarkIndex();
         maLandmarkCgsIDs[luCheckpoint] = lpTriggerData->GetLandmarkFromRegionIndex(
             static_cast<s16>(maLandmarkIndices[luCheckpoint]))->GetId();
         mauLandmarkSectionIndices[luCheckpoint] = lpCheckpointData->GetAISectionIndex();
@@ -4701,9 +4623,9 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
     CGS_ASSERT(lpGameActionQueue != NULL, CGS_ASSERT_MESSAGE_AT("lpGameActionQueue != NULL", CGS_ARTIST_FILE, 2920));
     CGS_ASSERT(lpStartGameModeParams != NULL, CGS_ASSERT_MESSAGE_AT("lpStartGameModeParams != NULL", CGS_ARTIST_FILE, 2921));
 
-    mbAbortedDuringIntro        = false;   // +0x94FA  (Construct does NOT zero this one)
-    mbPlayerFinishedCarDestroyed = false;   // +0x94FE
-    mbPlayerFinishedTimedOut            = false;   // +0x94FD
+    mbRivalShutDown        = false;   // +0x94FA  (Construct does NOT zero this one)
+    mbHasCrashedOut = false;   // +0x94FE
+    mbHasTimedOut            = false;   // +0x94FD
 
     // The record is a plain automatic. The export's pre-Construct `-1` stores (var_700, then sixteen
     // at var_6C8 + k*0x2C, then var_430 and var_118) are the INLINED DEFAULT CONSTRUCTORS of its
@@ -4713,8 +4635,8 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
     GameStateModuleIO::PrepareForModeAction lAction;
 
     // The composite the loop's line-2968 assert compares against (`stb r10, var_A00`): built as
-    // (mode == 15 || mode == 16) && mbInstantIntroSplash == IsOnlineModeWithInstantIntro().
-    const bool lbInstantIntro = IsOnlineModeWithInstantIntro();
+    // (mode == 15 || mode == 16) && mbFinishedOnlineLobbyMode == IsOnlineModeWithInstantIntro().
+    const bool lbInstantIntro = IsOnlineFreeBurnLobby() && mbFinishedOnlineLobbyMode;
 
     // [x] WITHDRAWN 2026-08-26 (fix round) -- THE "FIVE REGISTERS / lpStartGameModeParams IS
     // DROPPED" CLAIM THAT USED TO STAND HERE WAS FALSE, and so was the header_request it carried.
@@ -4736,7 +4658,7 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
     // record is `lbComingFromOnlineLobbyMode` (it lands on action+0x8D0), which is direct support
     // for +0x9508's PINNED-semantics reading in the frozen header -- (mode 15/16) is the
     // online-freeburn-lobby / online-showtime pair. Reported, not renamed here.
-    lAction.Construct(lpGameModeParams, liCurrentRound, mbInstantIntroSplash);
+    lAction.Construct(lpGameModeParams, liCurrentRound, mbFinishedOnlineLobbyMode);
 
     // Four fields the console pokes straight after Construct (asm 0x82342A90..0x82342ABC). Each is
     // de-inlined to the record's own named setter; every source offset is pinned by the tree's own
@@ -4940,9 +4862,9 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
     }
 
     mfPlayerTotalledTime = 0.0f;    // +0x8028
-    mbModeIntroStarted   = false;   // +0x9505 -- re-arms the StartModeIntro fire-once latch (H6)
+    mbIsModePrepared   = false;   // +0x9505 -- re-arms the StartModeIntro fire-once latch (H6)
 
-    // THE INTRO GATE (hazards H6): mbDistanceToFinishLineTransmitted is set TRUE unless we have just
+    // THE INTRO GATE (hazards H6): mbReadyForModeIntro is set TRUE unless we have just
     // finished an online event AND are entering the lobby/showtime pair. It does NOT depend on the
     // checkpoint count, which is exactly why a stunt run with ZERO checkpoints still lets
     // StartModeIntro fire. Console shape (asm 0x82342FB0..0x82343008):
@@ -4950,7 +4872,7 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
     const bool lbEnteringOnlineLobbyPair =
         (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY
          || meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
-    mbDistanceToFinishLineTransmitted = !(mbFinishedOnlineEvent && lbEnteringOnlineLobbyPair);
+    mbReadyForModeIntro = !(mbFinishedOnlineEvent && lbEnteringOnlineLobbyPair);
 }
 
 } // namespace BrnGameState
@@ -5245,7 +5167,7 @@ void ModeManager::StartGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
 
     // [stuntrace waveB fix round] renamed from mbFinishedOnlineLobbyMode -- same byte (+38150),
     // now named from its proven reader/writer TransmitCheckPointDistancesToFinishLine @0x82341FF8.
-    mbWayPointDistancesToFinishSent = false;                      // `stbx r27, r31, 0x9506`
+    mbDistanceToFinishLineTransmitted = false;                      // `stbx r27, r31, 0x9506`
 
     // `lfs f0, var_844(sp)` == the local GameModeParams + 0x6C. The mode's Start() has just
     // filled it in; the burning-route medal times sit at the three words below it (+96/+100/+104).
@@ -5415,7 +5337,7 @@ void ModeManager::ExitCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuffe
     // the GUI drops the intro splash on the way out.
     if ((meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
          meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME) &&
-        mbHasCrashedOut)   // `lbzx r11, r29, 0x94FC` -- see the FLAG below
+        mbAbortedDuringIntro)   // `lbzx r11, r29, 0x94FC` -- see the FLAG below
     {
         CGS_ASSERT(lpOutputBuffer != NULL, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 1744));
         CGS_ASSERT(lpOutputBuffer->GetGameActionQueue() != NULL, CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 1745));
@@ -5425,7 +5347,7 @@ void ModeManager::ExitCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuffe
         // `(mode == 15 || mode == 16) && *(this+0x9508)` -- that composite IS
         // ModeManager::IsOnlineModeWithInstantIntro() (agent 9 bodies it; the frozen header
         // spells the same composite in its declaration comment).
-        lStopModeIntro.mbMovingBetweenLobbyModes = IsOnlineModeWithInstantIntro() ? 1 : 0;
+        lStopModeIntro.mbMovingBetweenLobbyModes = IsOnlineFreeBurnLobby() && mbFinishedOnlineLobbyMode;
         lStopModeIntro.maPad05[0] = 0;
         lStopModeIntro.maPad05[1] = 0;
         lStopModeIntro.maPad05[2] = 0;
@@ -5605,10 +5527,10 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
          meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_SHOWTIME &&
          !lbTimedOut && !lbModeStartedFromRegion);
 
-    // +38152 (mbInstantIntroSplash): set when the LOBBY/SHOWTIME pair ended cleanly -- which is
+    // +38152 (mbFinishedOnlineLobbyMode): set when the LOBBY/SHOWTIME pair ended cleanly -- which is
     // what makes the next lobby entry skip its timed intro. Consistent with the frozen header's
     // reader-side pinning (StopModeIntro's payload byte + IsOnlineModeWithInstantIntro).
-    mbInstantIntroSplash =
+    mbFinishedOnlineLobbyMode =
         ((meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
           meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME) &&
          !lbTimedOut && !lbModeStartedFromRegion);
@@ -5616,7 +5538,7 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
     // "we are handing the online lobby/showtime pair straight on to another one of the pair" --
     // the console keeps this in r19 and uses it three times at the tail.
     const bool lbOnlineLobbyHandover =
-        mbInstantIntroSplash &&
+        mbFinishedOnlineLobbyMode &&
         (leNextGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
          leNextGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
 
@@ -6033,8 +5955,8 @@ CGS_STATIC_ASSERT((sizeof(SetWayPointDistancesToFinishActionRecord) == 68),
 // the two places a per-mode "already sent" latch must be re-armed: corroboration, not coincidence.
 // [OK] RESOLVED 2026-08-26: header_request #3 was APPLIED by the wave-B fix round after the
 // export sweep re-confirmed the finding independently. The member is now
-// mbWayPointDistancesToFinishSent and the call sites below use it.
-// [!] It is NOT the same byte as +38148 mbDistanceToFinishLineTransmitted (0x9504): that one is
+// mbDistanceToFinishLineTransmitted and the call sites below use it.
+// [!] It is NOT the same byte as +38148 mbReadyForModeIntro (0x9504): that one is
 // PrepareForMode's "the distance data is READY" gate that StartModeIntro's fire-once test needs.
 // Two adjacent but genuinely distinct flags -- do not collapse them.
 // ============================================================================================
@@ -6045,7 +5967,7 @@ void ModeManager::TransmitCheckPointDistancesToFinishLine(GameStateModuleIO::Out
     // mbCheckPointDistancesToFinishReady (ScoringSystem::ProcessFinishDistances @0x823124F0 sets
     // it, and GetCheckpointDistanceToFinish's own "Distance to finish not ready" assert guards on
     // it) -- reached through its named accessor, never by the raw offset (hazards H9).
-    if (mbWayPointDistancesToFinishSent)   // +38150 -- the fire-once "already sent" latch
+    if (mbDistanceToFinishLineTransmitted)   // +38150 -- the fire-once "already sent" latch
     {
         return;
     }
@@ -6075,7 +5997,7 @@ void ModeManager::TransmitCheckPointDistancesToFinishLine(GameStateModuleIO::Out
         GameStateModuleIO::E_ACTION_SET_WAYPOINT_DISTANCES_TO_FINISH,
         static_cast<s32>(sizeof(SetWayPointDistancesToFinishActionRecord)));
 
-    mbWayPointDistancesToFinishSent = true;   // X360 +38150 = 1 (the fire-once latch)
+    mbDistanceToFinishLineTransmitted = true;   // X360 +38150 = 1 (the fire-once latch)
 }
 
 // ============================================================================================
@@ -6418,7 +6340,7 @@ void ModeManager::CheckForOutOfRangeCarsReachingFinish(const GameStateModuleIO::
 // [X] hazards H2: none of the 16 committed BrnModeManager.cpp bodies is re-implemented here --
 //     SendModeResults is CALLED (in the online arm's banner), never re-written.
 // [X] hazards H6: all three fire-once latches are consume-and-clear IN THE SAME ARM.
-//     (1) mbModeIntroStarted gates StartModeIntro; (2) the GameMode latch bytes +174..+177 are
+//     (1) mbIsModePrepared gates StartModeIntro; (2) the GameMode latch bytes +174..+177 are
 //     cleared by the arm that consumes them; (3) miFramesUntilModeSwitchSend decrements to
 //     EXACTLY 0 to fire once.
 
@@ -6679,10 +6601,10 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     // ---- (5) THE INTRO FIRE-ONCE LATCH (hazards H6 latch 1) ------------------------------------
     // Losing the latch replays the intro every frame; losing the distance gate means the intro
     // never fires at all. A stunt run has ZERO checkpoints, and PrepareForMode is what must still
-    // set mbDistanceToFinishLineTransmitted true on that path.
-    if (!mbModeIntroStarted && mScoringSystem.AreAllRaceCarsSetup() && mbDistanceToFinishLineTransmitted)
+    // set mbReadyForModeIntro true on that path.
+    if (!mbIsModePrepared && mScoringSystem.AreAllRaceCarsSetup() && mbReadyForModeIntro)
     {
-        mbModeIntroStarted = true;
+        mbIsModePrepared = true;
         StartModeIntro(lpGameActionQueue);
     }
 
@@ -7073,7 +6995,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     if (ModeLatch::IsFinished(mpCurrentGameMode))
     {
         ExitCurrentMode(lpOutputBuffer,
-                        mbHasTimedOut,   // console lbzx this, 0x94FB
+                        mbHasAborted,   // console lbzx this, 0x94FB
                         static_cast<GameStateModuleIO::EGameModeType>(KI_NO_NEXT_GAME_MODE));
     }
 
@@ -7251,18 +7173,18 @@ void ModeManager::PlayerFinishedMode(const GameStateModuleIO::PlayerFinishedMode
     // [x] H4 SETTLED (closure round 2026-08-26) -- THIS BODY IS THE WRITER THAT DECIDED IT.
     // The console sets 0x94FD from the event's mbTimedOut and 0x94FE from its mbCarDestroyed, and
     // the PS3 DWARF names the two inlined setters SetTimedOut() / SetCrashedOut(); the header's
-    // bytes are now named for exactly that -- mbPlayerFinishedTimedOut (+38141) and
-    // mbPlayerFinishedCarDestroyed (+38142). This is NOT a two-byte shift onto the header's own
-    // mbHasTimedOut / mbHasCrashedOut at +38139 / +38140: those are the MODE's flags, and
+    // bytes are now named for exactly that -- mbHasTimedOut (+38141) and
+    // mbHasCrashedOut (+38142). This is NOT a two-byte shift onto the header's own
+    // mbHasAborted / mbAbortedDuringIntro at +38139 / +38140: those are the MODE's flags, and
     // UpdateCurrentMode independently reads +38139 as ExitCurrentMode's lbTimedOut argument. Both
     // readers are real and both bytes keep exactly one name. Evidence: BrnModeManager.h's H4 block.
     if (lpEvent->mbTimedOut)
     {
-        mbPlayerFinishedTimedOut = true;              // console stbx 1, this, 0x94FD  (DWARF: SetTimedOut)
+        mbHasTimedOut = true;              // console stbx 1, this, 0x94FD  (DWARF: SetTimedOut)
     }
     if (lpEvent->mbCarDestroyed)
     {
-        mbPlayerFinishedCarDestroyed = true;   // console stbx 1, this, 0x94FE  (DWARF: SetCrashedOut)
+        mbHasCrashedOut = true;   // console stbx 1, this, 0x94FE  (DWARF: SetCrashedOut)
     }
 
     if (lpEvent->mbCrossedFinishLine)
@@ -7678,7 +7600,7 @@ IsGameModeOnline(const GameMode* lpGameMode)
 //   ChallengeManager::PreWorldUpdate
 //   TransmitCheckPointDistancesToFinishLine / ...CheckPointsReached / ...FinishReached
 //   HUDMessageLogic::PreWorldUpdate
-//   muUnkByte_0x950B = 0; the two consume-and-clear latches
+//   mbEventJustFinished = 0; the two consume-and-clear latches
 //   the ShouldFinish / ShouldExit ladder
 //   publish the game-mode output block; roll the previous type/state; mpGameActionQueue = 0
 //   ScoringSystemDebugComponent::DebugRenderChainableStunts
@@ -7929,11 +7851,11 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
     // `default:` returns false), so appending them is inert until those arms land.
     mHUDMessageLogic.PreWorldUpdate(lpGameActionQueue);
 
-    // `stbx r27(=0), r31, 0x950B`. THIS IS THE ONLY WRITER OF muUnkByte_0x950B ANYWHERE: the byte
+    // `stbx r27(=0), r31, 0x950B`. THIS IS THE ONLY WRITER OF mbEventJustFinished ANYWHERE: the byte
     // is cleared unconditionally every pre-world tick, before the two latch arms below. The header
     // records "no reader identified anywhere" -- still true, but the byte now has a proven writer,
     // which is why it cannot be pad. Reported to the verifier's bool-block collision pass (H4).
-    muUnkByte_0x950B = 0;
+    mbEventJustFinished = 0;
 
     if (mpCurrentGameMode != NULL)
     {
@@ -7943,7 +7865,7 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         // +0x6DC8 / +0x6DCC == the SIM sub-status' mTime pair (seconds + fraction).
         if (mbFinishCurrentModeNextUpdate)
         {
-            if (!mbModeDataIsLoading)
+            if (!mbHasPlayerFinished)
             {
                 const CgsSystem::Time lTime = mTimerStatusInterface.GetSimTimerStatus()->GetTime();
                 FinishCurrentMode(lpOutputBuffer, lTime);
@@ -7978,7 +7900,7 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
             (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
              meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
 
-        if (!lbInstantIntroMode && !mbModeDataIsLoading &&
+        if (!lbInstantIntroMode && !mbHasPlayerFinished &&
             mpCurrentGameMode->ShouldFinish(&mScoringSystem))
         {
             const CgsSystem::Time lTime = mTimerStatusInterface.GetSimTimerStatus()->GetTime();
@@ -7988,7 +7910,7 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
     else if ((mpCurrentGameMode != NULL) &&
              (mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS))
     {
-        if (!mbModeDataIsLoading && mpCurrentGameMode->ShouldFinish(&mScoringSystem))
+        if (!mbHasPlayerFinished && mpCurrentGameMode->ShouldFinish(&mScoringSystem))
         {
             const CgsSystem::Time lTime = mTimerStatusInterface.GetSimTimerStatus()->GetTime();
             FinishCurrentMode(lpOutputBuffer, lTime);
@@ -8359,7 +8281,7 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
     {
         const bool lbInProgressOrNoMode =
             (mpCurrentGameMode == NULL) || IsGameModeInProgress(mpCurrentGameMode);
-        if (lbInProgressOrNoMode && !mbIsModePrepared)
+        if (lbInProgressOrNoMode && !mbModeDataIsLoading)
         {
             mScoringSystem.DetectPlayerStationary(lpActiveRaceCarOutput, lfDelta);
         }
@@ -8495,7 +8417,7 @@ void ModeManager::MarkedManLoaded(GameStateModuleIO::GameActionQueue* lpGameActi
 
     GameStateModuleIO::MarkedManLoadedAction lMarkedManLoadedAction;
     lMarkedManLoadedAction.meGameMode                = meCurrentGameModeType;
-    lMarkedManLoadedAction.mbMovingBetweenLobbyModes = IsOnlineModeWithInstantIntro();
+    lMarkedManLoadedAction.mbMovingBetweenLobbyModes = GameStateModuleIO::IsOnlineFreeBurnLobby(lMarkedManLoadedAction.meGameMode) && mbFinishedOnlineLobbyMode;
     lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lMarkedManLoadedAction),
                                 GameStateModuleIO::E_ACTION_MARKED_MAN_LOADED,
                                 static_cast<s32>(sizeof(lMarkedManLoadedAction)));
@@ -8754,8 +8676,8 @@ void ModeManager::UserCancelCurrentMode()
         return;
     }
 
-    mbHasTimedOut   = true;
-    mbHasCrashedOut = (mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_INTRO);
+    mbHasAborted   = true;
+    mbAbortedDuringIntro = (mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_INTRO);
     mpCurrentGameMode->SendEvent(E_GME_ABORT);
 }
 

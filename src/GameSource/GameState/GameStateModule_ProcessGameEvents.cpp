@@ -767,11 +767,6 @@ void GameStateModule::ProcessGameEvents_Group1(s32 liEventType, const CgsModule:
 
 namespace BrnGameState
 {
-namespace
-{
-    // The module's file-scope invalid landmark index (rodata 0xFFFF), the id case 18 posts in action 44.
-    const u16 KU_INVALID_LANDMARK_INDEX = 0xFFFFu;
-}
 
 void GameStateModule::ProcessGameEvents_Group2(s32                                           liEventType,
                                                const CgsModule::Event*                       lpEvent,
@@ -894,12 +889,11 @@ void GameStateModule::ProcessGameEvents_Group2(s32                              
         mNetworkRoundManager.NetworkRoundStarted(lpStartNetworkRoundEvent);
 
         GameStateModuleIO::SetInModeStartRegionAction lStartRegionAction;
-        lStartRegionAction.mbInStartRegion = 0;
+        lStartRegionAction.mbInModeStartRegion = false;
         mModeManager.ClearModeStartRegion();
-        lStartRegionAction.mu16StartLocationId = KU_INVALID_LANDMARK_INDEX;
-        // The console leaves +0x03 unwritten; zeroed for a deterministic queue image, as
-        // ModeManager::StartModeIntro does for the same record.
-        lStartRegionAction.maPad03[0] = 0;
+        // ARTIST 0x823A225C reads this unit's K_INVALID_LANDMARK (.data 0x82CDB9B0); +0x03 is
+        // padding the console never writes.
+        lStartRegionAction.mCurrentLandmarkIndex = K_INVALID_LANDMARK;
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStartRegionAction),
                                 GameStateModuleIO::E_ACTION_SET_IN_MODE_START_REGION,
                                 sizeof(lStartRegionAction));

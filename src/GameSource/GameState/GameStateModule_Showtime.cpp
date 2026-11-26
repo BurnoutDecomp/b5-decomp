@@ -139,31 +139,25 @@ namespace
 
         CGS_ASSERT(lpInput  != 0, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 5579));    // :5579
         CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", CGS_ARTIST_FILE, 5580));   // :5580
-        CGS_ASSERT(!IsOnlineGameMode() ||
-                       GameStateModuleIO::IsOnlineFreeBurnLobby(
-                           mModeManager.GetCurrentGameModeType()),
+        CGS_ASSERT(!IsOnlineGameMode() || mModeManager.IsOnlineFreeBurnLobby(),
                    CGS_ASSERT_MESSAGE_AT("!IsOnlineGameMode() || mModeManager.IsOnlineFreeBurnLobby()", CGS_ARTIST_FILE, 5582));   // :5582
 
         (void)lpInput;   // asserted above and then never read -- see the banner
 
-        // [GUARD] Not X360. The console dereferences lpOutput unconditionally after its assert;
-        // on a build whose asserts only log, that is an immediate null deref. The console's own
-        // precondition is the assert, so honouring it is not a behaviour change on any input the
-        // assert accepts.
-        if (lpOutput == 0)
+        // Two Construct calls: ARTIST 0x8236B670..0x8236B694 calls GetPlayerPosition in each arm
+        // (li r4, 0x10 / li r4, 2) and shares the Construct tail.
+        if (IsOnlineGameMode())
         {
-            return;
+            lStartGameModeParams.Construct(GameStateModuleIO::E_MODE_ONLINE_SHOWTIME,
+                                           mLastActiveRaceCarInterface.GetPlayerPosition(),
+                                           E_GAMEMODESTARTMECHANISM_DEFAULT);
         }
-
-        const GameStateModuleIO::EGameModeType leShowtimeMode =
-            IsOnlineGameMode() ? GameStateModuleIO::E_MODE_ONLINE_SHOWTIME     // li r4, 0x10
-                               : GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME;   // li r4, 2
-
-        const Vector3 lPlayerPosition = mLastActiveRaceCarInterface.GetPlayerPosition();
-
-        lStartGameModeParams.Construct(leShowtimeMode,
-                                       lPlayerPosition,
-                                       E_GAMEMODESTARTMECHANISM_DEFAULT);      // li r5, 0
+        else
+        {
+            lStartGameModeParams.Construct(GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME,
+                                           mLastActiveRaceCarInterface.GetPlayerPosition(),
+                                           E_GAMEMODESTARTMECHANISM_DEFAULT);
+        }
 
         mModeManager.StartGameMode(lpOutput, &lStartGameModeParams);
     }

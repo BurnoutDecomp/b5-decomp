@@ -100,19 +100,7 @@ void NetworkRoundManager::PreparedForMode()
     mbStartingGameDueToPlayerJoin = false;
 }
 
-// X360-INLINED at every call site (no standalone export). The 0-based index of the round being
-// played: with miTotalRounds seeded once and miRoundsRemaining decremented in OnRoundStart above,
-// the first round gives total - (total-1) - 1 == 0.
-s32 NetworkRoundManager::GetCurrentRound() const
-{
-    return miTotalRounds - miRoundsRemaining - 1;
-}
-
-// X360-INLINED. The raw counter at NRM+300.
-s32 NetworkRoundManager::GetTotalRounds() const
-{
-    return miTotalRounds;
-}
+// GetCurrentRound / GetTotalRounds are header-inline (BrnNetworkRoundManager.h).
 
 // X360-INLINED. The raw counter at NRM+296. ModeManager::SendModeStopMessages reads +296 directly
 // at four sites; this is the named reader so no caller has to re-derive it from the other two.
@@ -149,20 +137,8 @@ s32 NetworkRoundManager::GetRoundsRemaining() const
 // the run is self-checking). Reached BY NAME -- no offset arithmetic survives into the source.
 // ===================================================================================================
 
-const GameStateModuleIO::StartNetworkGameEvent* NetworkRoundManager::GetNetworkGameEvent() const
-{
-    return &mStartNetworkGameEvent;
-}
-
-const GameStateModuleIO::StartNetworkRoundEvent* NetworkRoundManager::GetNetworkRoundEvent() const
-{
-    return &mStartNetworkRoundEvent;
-}
-
-bool NetworkRoundManager::GetStartingFreeburnLobbyDueToPlayerJoin()
-{
-    return mbStartingGameDueToPlayerJoin;
-}
+// GetNetworkGameEvent / GetNetworkRoundEvent / GetStartingFreeburnLobbyDueToPlayerJoin are
+// header-inline (BrnNetworkRoundManager.h).
 
 }
 

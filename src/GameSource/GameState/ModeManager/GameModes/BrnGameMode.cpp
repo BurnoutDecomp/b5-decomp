@@ -377,22 +377,17 @@ f32 GameMode::GetIntroDurationSeconds() const
     const f32 KF_ONLINE_FREEBURN_INTRO_TIME_SECONDS = 2.0f;   // flt_820211CC
     const f32 KF_ONLINE_INTRO_TIME_SECONDS_PER_CAR  = 4.0f;   // flt_820211D4
 
-    const GameMode* const lpCurrentGameMode = mpModeManager->GetCurrentGameMode();
-    const bool lbOnlineModeRunning = (lpCurrentGameMode != 0) && lpCurrentGameMode->IsOnline();
-
-    const GameStateModuleIO::EGameModeType leGameModeType = mpModeManager->GetCurrentGameModeType();
-    const bool lbFreeBurnLobbyOrShowtime =
-        (leGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY) ||
-        (leGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
-
-    if (lbOnlineModeRunning && !lbFreeBurnLobbyOrShowtime)
+    // ModeManager::IsOnlineGameMode / IsOnlineFreeBurnLobby are header-inline (DWARF h:432/:435):
+    // ARTIST materialises both bools and evaluates the lobby test again on the fall-through
+    // (0x82315B24), as PS3 0x1D9F0C does.
+    if (mpModeManager->IsOnlineGameMode() && !mpModeManager->IsOnlineFreeBurnLobby())
     {
         // The player's own slot plus one per flyby car (FOR_PLAYER == PER_CAR == 4.0).
         const f32 lfNumberOfCarsInFlyby = static_cast<f32>(mpModeManager->GetNumberOfCarsInFlyby());
         return (lfNumberOfCarsInFlyby + 1.0f) * KF_ONLINE_INTRO_TIME_SECONDS_PER_CAR;
     }
 
-    return lbFreeBurnLobbyOrShowtime ? KF_ONLINE_FREEBURN_INTRO_TIME_SECONDS : KF_INTRO_TIME_SECONDS;
+    return mpModeManager->IsOnlineFreeBurnLobby() ? KF_ONLINE_FREEBURN_INTRO_TIME_SECONDS : KF_INTRO_TIME_SECONDS;
 }
 
 // ===========================================================================

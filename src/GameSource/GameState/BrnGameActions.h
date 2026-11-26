@@ -2229,8 +2229,9 @@ struct OnlineGameResults : public GameAction<E_ACTION_ONLINE_GAME_RESULT>
     static const s32 KI_MAX_ROUNDS = 10;   // per-round array capacity (Clear loops 10; bounds use miNumberOfRounds)
 
     void Clear();                                                                          // 0x8230F178
-    void SetRaceResults(s32 liRoundIndex, const f32* lpfRoundTime, f32 lfRoundDistance);    // 0x8230F220
-    void GetRaceResults(s32 liRoundIndex, f32* lpfRoundTime, f32* lpfRoundDistance) const;  // 0x82580C60
+    // The round time is a CgsSystem::Time copied word + float (ARTIST 0x8230F340..58, 0x82580D88..94).
+    void SetRaceResults(s32 liRoundIndex, const CgsSystem::Time& lRoundTime, f32 lfRoundDistance);   // 0x8230F220
+    void GetRaceResults(s32 liRoundIndex, CgsSystem::Time* lpRoundTime, f32* lpfRoundDistance) const; // 0x82580C60
     void SetStuntResults(s32 liRoundIndex, s32 liScore, s32 liMultiplier);                  // 0x8230F370
     void GetStuntResults(s32 liRoundIndex, s32* lpiScore, s32* lpiMultiplier) const;        // 0x82580DA8
     OnlineGameResults& operator=(const OnlineGameResults& lOther);                          // 0x82311C30
@@ -3223,10 +3224,8 @@ CGS_STATIC_ASSERT((sizeof(CarSelectReadyAction) == 4),
 // Consumer @0x823EA948 branches on +0x02 and emits GuiEventEnterEventStartLocation (id 166, size 8).
 struct SetInModeStartRegionAction : public GameAction<E_ACTION_SET_IN_MODE_START_REGION>
 {
-    u16 mu16StartLocationId;  // +0x00 FLAG: name from the consumer's use (it becomes the GUI
-                              //       record's id word); the producer sources it from word_82CDB7D4.
-    u8  mbInStartRegion;      // +0x02 0 == not in a start region (StartModeIntro always posts 0)
-    u8  maPad03[1];           // +0x03
+    LandmarkIndex mCurrentLandmarkIndex;   // +0x00 DWARF BrnGameActions.h:1695
+    bool          mbInModeStartRegion;     // +0x02 DWARF BrnGameActions.h:1696 (+0x03 is padding)
 };
 CGS_STATIC_ASSERT((sizeof(SetInModeStartRegionAction) == 4),
               "X360 StartModeIntro posts action 44 with size 4");

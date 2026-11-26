@@ -431,15 +431,13 @@ void ScoringSystem::SaveNetworkRoundData(BrnNetwork::NetworkPlayerID lID, CgsSys
                     // Timed out: zero finish time, real distance-to-finish.
                     const f32 lfDistanceToFinish = GetRaceCarDistanceToFinish(leRaceCarIndex);
                     const CgsSystem::Time lZeroTime(0.0f);
-                    const f32 lafRoundTime[2] = { static_cast<f32>(lZeroTime.GetSeconds()), lZeroTime.GetFraction() };
-                    mOnlineGameResults.SetRaceResults(liRoundIndex, lafRoundTime, lfDistanceToFinish);
+                    mOnlineGameResults.SetRaceResults(liRoundIndex, lZeroTime, lfDistanceToFinish);
                 }
                 else
                 {
                     // Finished: real finish time, zero distance.
                     const CgsSystem::Time lFinish = GetFinishTime(leRaceCarIndex);
-                    const f32 lafRoundTime[2] = { static_cast<f32>(lFinish.GetSeconds()), lFinish.GetFraction() };
-                    mOnlineGameResults.SetRaceResults(liRoundIndex, lafRoundTime, 0.0f);
+                    mOnlineGameResults.SetRaceResults(liRoundIndex, lFinish, 0.0f);
                 }
                 break;
             }
