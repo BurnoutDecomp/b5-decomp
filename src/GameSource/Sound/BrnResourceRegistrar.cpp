@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Sound/BrnResourceRegistrar.h"
+#define BRN_RESOURCEREGISTRAR_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/BrnResourceRegistrar.cpp"
 #include <cstring>   // strncpy
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([reg-pool] witness)
 
@@ -483,24 +484,27 @@ namespace Logic
     // The X360 reads the NODE pointer; the QueuedResource data lives at node+8, so Head[76] (node byte
     // 304) == data +0x128 == miResourceType and Head[80] (node byte 320) == data +0x138 == mpRequester.
     // Match: (!lbMatchType || liResourceType == miResourceType) && lpRequester == mpRequester.
-    bool ResourceRegistrar::SearchQueued(IResourceRequester* lpRequester, bool lbMatchType, s32 liResourceType)
+    bool ResourceRegistrar::SearchQueued(IResourceRequester* lpRequester, bool lbMatchType, u32 luResourceType)
     {
-        QueuedNode* lpNode = mLoadingQueuedResourceList.GetHead();
-        while (lpNode)
+        // DWARF BrnResourceRegistrar.h:249: the type is uint32_t (ARTIST cmplw at 0x826B0AD0). The assert
+        // is the node iterator's GetData() (node + 8, `addic.` at 0x826B0AA4) on the unity path cpp:478;
+        // the not-found result is a register zeroed before the walk (li r25,0 / mr r3,r25) while a match
+        // returns 1 directly, the threaded exit of a found-flag loop (local name not in the dump).
+        bool lbFound = false;
+        QueuedNode* lpIterator = mLoadingQueuedResourceList.GetHead();
+        while (lpIterator)
         {
-            // X360 BrnResourceRegistrar.cpp:478 asserts lpIterator->GetData() (the node's payload
-            // pointer is non-null). For a live pool node the payload is always present; assert the
-            // node pointer itself, which carries the same intent without the always-true &mData!=0.
-            CGS_ASSERT(lpNode != 0, "lpIterator->GetData()");
+            CGS_ASSERT_AT(&lpIterator->mData, "lpIterator->GetData()", BRN_RESOURCEREGISTRAR_CPP_FILE, 478);
 
-            if ((!lbMatchType || liResourceType == static_cast<s32>(lpNode->mData.muResourceNameHash)) &&
-                lpRequester == lpNode->mData.mpRequester)
+            if ((!lbMatchType || luResourceType == lpIterator->mData.muResourceNameHash) &&
+                lpRequester == lpIterator->mData.mpRequester)
             {
-                return true;
+                lbFound = true;
+                break;
             }
-            lpNode = static_cast<QueuedNode*>(lpNode->GetNextNode());
+            lpIterator = static_cast<QueuedNode*>(lpIterator->GetNextNode());
         }
-        return false;
+        return lbFound;
     }
 
     // 0x826B0B08 -- resolve (resource name, bundle name) -> ResourceHandle*, or 0.
@@ -933,11 +937,14 @@ namespace Logic
     CgsResource::ResourceHandle IResourceRequester::GetAsset(
         const char* lpcFilename, const char* lpcResourceName)
     {
-        CGS_ASSERT(lpcResourceName, "lpResourceName");
+        // Asserts on the unity path, cpp:1106 / :1110 (ARTIST 0x826B0C34 / 0x826B0C7C); DWARF local
+        // lpResourceHandle (cpp:1108). ARTIST returns *lpResourceHandle after the assert (0x826B0C90): no
+        // NULLResourceHandle fallback.
+        CGS_ASSERT_AT(lpcResourceName, "lpResourceName", BRN_RESOURCEREGISTRAR_CPP_FILE, 1106);
         CgsResource::ResourceHandle* lpResourceHandle =
             GetResourceRegistrar().GetResource(lpcFilename, lpcResourceName);
-        CGS_ASSERT(lpResourceHandle, "lpResourceHandle");
-        return lpResourceHandle ? *lpResourceHandle : CgsResource::NULLResourceHandle;
+        CGS_ASSERT_AT(lpResourceHandle, "lpResourceHandle", BRN_RESOURCEREGISTRAR_CPP_FILE, 1110);
+        return *lpResourceHandle;
     }
 }
 }

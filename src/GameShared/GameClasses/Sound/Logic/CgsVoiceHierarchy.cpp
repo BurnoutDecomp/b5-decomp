@@ -144,18 +144,17 @@ void VoiceHierarchyNode::FixUp(const rw::Resource& lrResource)
     {
         mpOtherSends = reinterpret_cast<const SendDescriptor*>(
             reinterpret_cast<uintptr_t>(mpOtherSends) + luDelta);
+    }
 
-        // Validate every other-send entry. The PS3 re-reads miNumOtherSends from
-        // memory on each pass (lwz r9,0x14 sits inside the loop), so the bound is
-        // re-evaluated each iteration. The two checks are the inlined GetOtherSend(i)
-        // guards (CgsVoiceHierarchy.h:764/765): the range check and the non-null
-        // check are both evaluated every pass and only fire on failure.
-        for (s32 liIndex = 0; liIndex < miNumOtherSends; ++liIndex)
-        {
-            CGS_ASSERT(liIndex < miNumOtherSends,
-                       "Requested other send number out of range\n");   // :764
-            CGS_ASSERT(mpOtherSends, "mpOtherSends");                    // :765
-        }
+    // Validate every other-send entry: ARTIST closes the relocation block first and runs this loop
+    // after it (0x826A5CB8 li r29,0 / cmpwi on the count already loaded). The bound is re-read each
+    // pass. The two checks are the inlined GetOtherSend(i) guards on CgsVoiceHierarchy.h:764/765
+    // (ARTIST li r5,0x2FC / 0x2FD), evaluated every pass and firing only on failure.
+    for (s32 liIndex = 0; liIndex < miNumOtherSends; ++liIndex)
+    {
+        CGS_ASSERT_AT(liIndex < miNumOtherSends,
+                      "Requested other send number out of range\n", CGS_ARTIST_FILE, 764);
+        CGS_ASSERT_AT(mpOtherSends, "mpOtherSends", CGS_ARTIST_FILE, 765);
     }
 }
 

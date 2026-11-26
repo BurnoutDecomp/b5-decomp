@@ -235,7 +235,7 @@ namespace Logic
 
         // 0x826B0A60 -- is there a queued item for `lpRequester` (optionally matching resource-type
         // `liResourceType` when `lbMatchType`)? Walks the loading queued list.
-        bool SearchQueued(IResourceRequester* lpRequester, bool lbMatchType, s32 liResourceType);
+        bool SearchQueued(IResourceRequester* lpRequester, bool lbMatchType, u32 luResourceType);   // DWARF h:249
 
         // 0x826B0560 -- resolve completed loads: walk the requested list, match each against an
         // attrib-sys/loading-queued entry, promote/recycle, and queue retired nodes for removal.

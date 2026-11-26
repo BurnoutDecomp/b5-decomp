@@ -58,6 +58,9 @@
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"                   // FindModelIndexByEntityID / GetDeformableObject
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h" // ClearStoredContacts
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+// These bodies live in BrnPhysicalTrafficManager.cpp on the original; ARTIST asserts on its unity path.
+#define BRN_PHYSICALTRAFFICMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnPhysicalTrafficManager.cpp"
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
     "../Physics/VehicleManager/BrnPhysicalTrafficManager.cpp";
@@ -364,29 +367,19 @@ void PhysicalTrafficManager::ClearSnappedNetworkTrafficContacts(
 // =================================================================================================
 void PhysicalTrafficManager::SetTrafficVehicleNotCrashing(EntityId lTrafficPhysicsId)
 {
-    const u16 lu16TrafficIndex =
-        static_cast<u16>((lTrafficPhysicsId.muValue >> 10) & 0x3FFFu);
-
-    if (GetTrafficVehicle(static_cast<s32>(lu16TrafficIndex))->mePhysicalTrafficState
-            != E_TRAFFIC_TYPE_CRASHING)
+    // DWARF locals lu16TrafficIndex (cpp:2186) and lpTrafficVehicle (cpp:2195); IsTrafficVehicleCrashed,
+    // IsFullyPhysical (its h:382 range assert), GetPhysics and SetPhysicalTrafficState are the header
+    // inlines; the IsFullyPhysical assert sits on the unity path cpp:2196.
+    // EntityId::GetEntityIndex (the global EntityId stand-in has no accessor): ARTIST rlwinm 22,18,31.
+    u16 lu16TrafficIndex = static_cast<u16>((lTrafficPhysicsId.muValue >> 10) & 0x3FFFu);
+    if (IsTrafficVehicleCrashed(lu16TrafficIndex))
     {
-        return;
+        PhysicalTrafficVehicle* lpTrafficVehicle = GetTrafficVehicle(lu16TrafficIndex);
+        CGS_ASSERT_AT(lpTrafficVehicle->IsFullyPhysical(), "lpTrafficVehicle->IsFullyPhysical()",
+                      BRN_PHYSICALTRAFFICMANAGER_CPP_FILE, 2196);
+        lpTrafficVehicle->SetPhysicalTrafficState(E_TRAFFIC_TYPE_PHYSICAL);
+        lpTrafficVehicle->GetPhysics()->ClearCrashing();             // vtable +4
     }
-
-    PhysicalTrafficVehicle* const lpVehicle =
-        GetTrafficVehicle(static_cast<s32>(lu16TrafficIndex));
-
-    CGS_ASSERT(static_cast<u32>(lpVehicle->mu8PhysicalType)
-                   < static_cast<u32>(PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_COUNT),
-               "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");            // BrnPhysicalTrafficVehicle.h:382
-    CGS_ASSERT(static_cast<u32>(lpVehicle->mu8PhysicalType)
-                   == static_cast<u32>(PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL),
-               "lpTrafficVehicle->IsFullyPhysical()");               // :2196
-
-    SimpleVehiclePhysics* const lpBody = lpVehicle->mpVehicleBody;
-    lpVehicle->mePhysicalTrafficState = E_TRAFFIC_TYPE_PHYSICAL;
-    lpBody->ClearCrashing();                                          // vtable +4
-
 }
 
 }   // namespace Vehicle

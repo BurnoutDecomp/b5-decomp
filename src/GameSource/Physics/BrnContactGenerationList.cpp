@@ -2,6 +2,9 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
+// Both AddEntry overloads assert on their header lines (BrnContactGenerationList.h:60 / :75,
+// BRN_CONTACTGENERATIONLIST_H_FILE in the header) while ARTIST keeps them out of line.
+
 // =====================================================================================================
 // BrnPhysics::ContactGenList::AddEntry(VolumeInstanceId, VolumeInstanceId, u8, u8)  @0x825B58F0
 //
@@ -26,13 +29,15 @@ namespace BrnPhysics
                                   u8 lu8IdAVolInstOffset,
                                   u8 lu8IdBVolInstOffset)
     {
-        CGS_ASSERT(miNumEntries < KI_MAX_ENTRIES, "miNumEntries < miMaxEntries");
+        CGS_ASSERT_AT(miNumEntries < KI_MAX_ENTRIES, "miNumEntries < miMaxEntries",
+                      BRN_CONTACTGENERATIONLIST_H_FILE, 60);
 
-        ContactGenEntry& lrEntry = maEntries[miNumEntries];
-        lrEntry.mIdA               = lIdA;
-        lrEntry.mIdB               = lIdB;
-        lrEntry.mIdAVolInstOffset  = lu8IdAVolInstOffset;
-        lrEntry.mIdBVolInstOffset  = lu8IdBVolInstOffset;
+        // No entry local: ARTIST re-reads miNumEntries and re-forms the element for every field
+        // store (0x825B5954.., 0x825B596C.., 0x825B5984..).
+        maEntries[miNumEntries].mIdA              = lIdA;
+        maEntries[miNumEntries].mIdB              = lIdB;
+        maEntries[miNumEntries].mIdAVolInstOffset = lu8IdAVolInstOffset;
+        maEntries[miNumEntries].mIdBVolInstOffset = lu8IdBVolInstOffset;
 
         ++miNumEntries;
     }
@@ -63,32 +68,17 @@ namespace BrnPhysics
     void ContactGenList::AddEntry(EntityId lIdA, EntityId lIdB,
                                   u8 lu8IdAVolInstOffset, u8 lu8IdBVolInstOffset)
     {
-        CGS_ASSERT(miNumEntries < KI_MAX_ENTRIES, "miNumEntries < miMaxEntries");   // :75
+        CGS_ASSERT_AT(miNumEntries < KI_MAX_ENTRIES, "miNumEntries < miMaxEntries",
+                      BRN_CONTACTGENERATIONLIST_H_FILE, 75);
 
-        ContactGenEntry& lrEntry = maEntries[miNumEntries];
-        lrEntry.mIdA.muId         = static_cast<u64>(lIdA.muValue) << 32;
-        lrEntry.mIdB.muId         = static_cast<u64>(lIdB.muValue) << 32;
-        lrEntry.mIdAVolInstOffset = lu8IdAVolInstOffset;
-        lrEntry.mIdBVolInstOffset = lu8IdBVolInstOffset;
+        // Per-field re-indexing as in the VolumeInstanceId overload (0x825B5A1C.., 0x825B5A34..).
+        maEntries[miNumEntries].mIdA.muId         = static_cast<u64>(lIdA.muValue) << 32;
+        maEntries[miNumEntries].mIdB.muId         = static_cast<u64>(lIdB.muValue) << 32;
+        maEntries[miNumEntries].mIdAVolInstOffset = lu8IdAVolInstOffset;
+        maEntries[miNumEntries].mIdBVolInstOffset = lu8IdBVolInstOffset;
 
         ++miNumEntries;
     }
 
-    // =================================================================================================
-    // The two read accessors -- declared since the
-    // class landed, never bodied (nothing read the list until AddContactResultsToQueue). The console
-    // inlines both everywhere; GetEntry's bounds tripwire is the header's own
-    // "liEntry < miNumEntries" (BrnContactGenerationList.h:89 -- the line the harvest asserts at on
-    // both consoles, per record).
-    // =================================================================================================
-    s32 ContactGenList::GetNumEntries() const
-    {
-        return miNumEntries;
-    }
-
-    const ContactGenList::ContactGenEntry& ContactGenList::GetEntry(s32 liIndex) const
-    {
-        CGS_ASSERT(liIndex < miNumEntries, "liEntry < miNumEntries");   // BrnContactGenerationList.h:89
-        return maEntries[liIndex];
-    }
+    // GetNumEntries / GetEntry are header-inline (BrnContactGenerationList.h).
 }

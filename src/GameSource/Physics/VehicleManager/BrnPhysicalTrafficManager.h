@@ -433,6 +433,13 @@ struct PhysicalTrafficVehicle
                               Vector3 lvCustomImpulse, Vector3 lvCustomPosition, f32 lfTimerTillFire);
     // @0x825B33B8: true iff this is a SIMPLE (non-full-physics) traffic vehicle.
     bool            IsSimple() const;
+    // DWARF BrnPhysicalTrafficVehicle.h:172 / :176 / :179 / :183, defined in the class: no ARTIST copies
+    // (PhysicalTrafficManager::SetTrafficVehicleNotCrashing 0x825CABDC..0x825CABE4 reads and writes the
+    // members in line).
+    SimpleVehiclePhysics*       GetPhysics()       { return mpVehicleBody; }
+    const SimpleVehiclePhysics* GetPhysics() const { return mpVehicleBody; }
+    ETrafficType GetPhysicalTrafficState() const { return mePhysicalTrafficState; }
+    void         SetPhysicalTrafficState(ETrafficType leState) { mePhysicalTrafficState = leState; }
     // DWARF BrnPhysicalTrafficVehicle.h:283, no ARTIST copy (header-inline). Its inlined copies
     // range-check the type on h:382 exactly as IsSimple does, then compare it with FULL (0):
     // PreparePhysical 0x826410AC..0x826410DC, GetFullTraffic 0x825C0160..0x825C0188.
@@ -572,6 +579,12 @@ public:
     // both the const and non-const GetTrafficVehicle return &mpaTrafficVehicles[idx].
     PhysicalTrafficVehicle*       GetTrafficVehicle(s32 liVehicle);
     const PhysicalTrafficVehicle* GetTrafficVehicle(s32 liVehicle) const;
+    // DWARF BrnPhysicalTrafficManager.h:275, defined in the class (ARTIST inlines it through the const
+    // GetTrafficVehicle 0x825B4800, e.g. SetTrafficVehicleNotCrashing 0x825CAB68..0x825CAB70).
+    bool IsTrafficVehicleCrashed(u16 lu16TrafficIndex) const
+    {
+        return GetTrafficVehicle(lu16TrafficIndex)->GetPhysicalTrafficState() == E_TRAFFIC_TYPE_CRASHING;
+    }
 
     // X360 @0x825EE5A0 (39 insns); home
     // BrnPhysicalTrafficManager.cpp:244 per its own baked assert path. Claims this manager's

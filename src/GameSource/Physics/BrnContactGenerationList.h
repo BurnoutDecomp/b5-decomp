@@ -18,6 +18,10 @@
 #include "BrnCommonTypes.h"                                       // ::EntityId
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"           // CgsModule::IOBuffer (base)
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h" // CgsSceneManager::VolumeInstanceId
+#include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT_AT
+
+// ARTIST asserts on this header's own path (string 0x82091448): AddEntry h:60 / h:75, GetEntry h:89.
+#define BRN_CONTACTGENERATIONLIST_H_FILE "..\\..\\..\\GameSource\\Physics/BrnContactGenerationList.h"
 
 namespace BrnPhysics
 {
@@ -49,8 +53,14 @@ namespace BrnPhysics
         // The 4-byte EntityId overload is a separate console symbol -- declared, not homed by this TU.
         void AddEntry(EntityId lIdA, EntityId lIdB, u8 lu8IdAVolInstOffset, u8 lu8IdBVolInstOffset);
 
-        s32                    GetNumEntries() const;
-        const ContactGenEntry& GetEntry(s32 liIndex) const;
+        // DWARF h:84 / h:88, defined in the class: ARTIST has no copy of either and reads the count in
+        // line (e.g. StartPartContactGeneration 0x8262C258..0x8262C260 `lwz 0xC08`).
+        s32 GetNumEntries() const { return miNumEntries; }
+        const ContactGenEntry& GetEntry(s32 liIndex) const
+        {
+            CGS_ASSERT_AT(liIndex < miNumEntries, "liEntry < miNumEntries", BRN_CONTACTGENERATIONLIST_H_FILE, 89);
+            return maEntries[liIndex];
+        }
 
     private:
         ContactGenEntry maEntries[KI_MAX_ENTRIES];   // +0x0008 (stride 24)
