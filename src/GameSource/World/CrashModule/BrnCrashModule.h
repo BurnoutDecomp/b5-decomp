@@ -198,7 +198,11 @@ namespace BrnWorld
         CgsContainers::FastBitArray<8>   mCrashingRaceCars;               // :263
         CgsContainers::FastBitArray<601> mCrashingTraffic;                // :264
         CgsContainers::FastBitArray<601> mCrashingNetworkTraffic;         // :265
-        s8                               maiSlammedTrafficOwners[601];    // :266
+        // :266 declares int8_t[601] on PS3; ARTIST's array is 600 bytes: Reset memsets 600 from +0x8A8
+        // (0x827BF38C) and maCrashingTrafficForPlayers starts right after it at +0xB00 (Reset clears
+        // set[0]'s count at +0xC40 = +0xB00 + 320, 0x827BF3A0/0x827BF3B8; PreSceneUpdate stores
+        // meLocalActiveRaceCarIndex at +0x1520, 0x827D3B20).
+        s8                               maiSlammedTrafficOwners[600];
 
         CgsContainers::Set<u16, 160>                    maCrashingTrafficForPlayers[8];  // :268
 

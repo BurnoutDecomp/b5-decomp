@@ -698,10 +698,10 @@ f32 AStar::ManhattanDistance(const AStarVector2& lA, const AStarVector2& lB)
 // Chebyshev-style diagonal heuristic: max(|dx|, |dy|). The X360 computes
 //   t = |dx| - |dy| ; result = fsel(t, |dx|, |dy|)
 // i.e. select |dx| when (|dx| - |dy|) >= 0 else |dy| -- the larger of the two axes.
+// That is rwmath's fpu Max<float>(Abs(dx), Abs(dy)) (scalar.h:208 fsel form); the XDK evaluates the
+// arguments right to left, so dy is formed first (ARTIST 0x8276E198..A0), as in DecFIGS PS3 0xA26094.
 f32 AStar::DiagonalDistance(const AStarVector2& lA, const AStarVector2& lB)
 {
-    const f32 lfAbsDX = fabsf(lB.X() - lA.X());
-    const f32 lfAbsDY = fabsf(lB.Y() - lA.Y());
-    return ((lfAbsDX - lfAbsDY) >= 0.0f) ? lfAbsDX : lfAbsDY;
+    return rw::math::fpu::Max(rw::math::fpu::Abs(lB.X() - lA.X()), rw::math::fpu::Abs(lB.Y() - lA.Y()));
 }
 }

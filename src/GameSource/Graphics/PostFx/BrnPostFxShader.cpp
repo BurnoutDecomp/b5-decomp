@@ -797,26 +797,6 @@ namespace
     const u32 KU_SAMPLER_TINT_3D = 3;
     const u32 KU_SAMPLER_DEPTH   = 4;
 
-    const char* const gaacVertexVariableNames[BrnPostFxShader::E_VS_VAR_COUNT] =
-    {
-        "VignetteCentreXyScaleXy",
-        "VignetteAngle",
-    };
-
-    const char* const gaacPixelVariableNames[BrnPostFxShader::E_PS_VAR_COUNT] =
-    {
-        "GlobalParams",
-        "DofParamsA",
-        "DofParamsB",
-        "BloomColour",
-        "VignetteInnerRgbPlusMul",
-        "VignetteOuterRgbPlusAdd",
-        "Tint2dColour",
-        "BlurMatrixX",
-        "BlurMatrixY",
-        "BlurMatrixW",
-    };
-
     struct PostFxVertex
     {
         f32 mfX, mfY, mfZ;
@@ -928,20 +908,44 @@ BrnPostFxShader::BrnPostFxShader()
     }
 }
 
+const char* const BrnPostFxShader::Shader::gaacVertexVariableNames[BrnPostFxShader::E_VS_VAR_COUNT] =
+{
+    "VignetteCentreXyScaleXy",
+    "VignetteAngle",
+};
+
+const char* const BrnPostFxShader::Shader::gaacPixelVariableNames[BrnPostFxShader::E_PS_VAR_COUNT] =
+{
+    "GlobalParams",
+    "DofParamsA",
+    "DofParamsB",
+    "BloomColour",
+    "VignetteInnerRgbPlusMul",
+    "VignetteOuterRgbPlusAdd",
+    "Tint2dColour",
+    "BlurMatrixX",
+    "BlurMatrixY",
+    "BlurMatrixW",
+};
+
 // ARTIST 823FD970..823FDAFC: each slot owns two allocator-backed native program buffers.
 void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
                                        const void* lpVertexProgram, u32 luVertexProgramSize,
                                        const void* lpPixelProgram, u32 luPixelProgramSize,
                                        u8 luPs3RegisterCount)
 {
+    // DWARF :189/:201 build each block with ProgramBuffer::Parameters() (which clears the microcode,
+    // constant-table and variable counts) and then SetBuffer/SetType/SetSize; the tree's plain
+    // ProgramBufferParameters spells that ctor as the four clears first (ARTIST stores them before
+    // the type, 0x823FD99C..0x823FD9B0 and 0x823FDA18..0x823FDA38).
     renderengine::ProgramBufferParameters lVsParameters;
-    lVsParameters.mpFunction = lpVertexProgram;
-    lVsParameters.miShaderType = 0;
-    lVsParameters.muProgramSize = luVertexProgramSize;
     lVsParameters.mMicrocodeParts.cbCachedPartSize = 0;
     lVsParameters.mMicrocodeParts.cbPhysicalPartSize = 0;
     lVsParameters.muConstantTableSize = 0;
     lVsParameters.muNumVariables = 0;
+    lVsParameters.mpFunction = lpVertexProgram;
+    lVsParameters.miShaderType = 0;
+    lVsParameters.muProgramSize = luVertexProgramSize;
     const rw::ResourceDescriptor lVsResDesc =
         renderengine::ProgramBuffer::GetResourceDescriptor(lVsParameters);
     rw::Resource lVsResource = lpAllocator->DoAllocate(lVsResDesc, 0);
@@ -949,13 +953,13 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
     CGS_ASSERT_AT(mpVertexProgram != 0, "NULL != mpVertexProgram", CGS_ARTIST_UNITY_BRNPOSTFXSHADER_CPP_FILE, 196);
 
     renderengine::ProgramBufferParameters lPsParameters;
-    lPsParameters.mpFunction = lpPixelProgram;
-    lPsParameters.miShaderType = 1;
-    lPsParameters.muProgramSize = luPixelProgramSize;
     lPsParameters.mMicrocodeParts.cbCachedPartSize = 0;
     lPsParameters.mMicrocodeParts.cbPhysicalPartSize = 0;
     lPsParameters.muConstantTableSize = 0;
     lPsParameters.muNumVariables = 0;
+    lPsParameters.mpFunction = lpPixelProgram;
+    lPsParameters.miShaderType = 1;
+    lPsParameters.muProgramSize = luPixelProgramSize;
     const rw::ResourceDescriptor lPsResDesc =
         renderengine::ProgramBuffer::GetResourceDescriptor(lPsParameters);
     rw::Resource lPsResource = lpAllocator->DoAllocate(lPsResDesc, 0);

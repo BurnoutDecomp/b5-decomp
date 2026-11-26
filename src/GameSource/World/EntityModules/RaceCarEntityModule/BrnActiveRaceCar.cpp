@@ -960,11 +960,6 @@ void ActiveRaceCar::UpdatePhysicsState(const BrnPhysics::Vehicle::RaceCarState* 
 // on the X360 (they are one load each); IsAttached is also emitted standalone
 // @0x822A1F10 and IsActive @0x822A1FB8, so both keep an out-of-line home here.
 // ----------------------------------------------------------------------------
-EActiveRaceCarIndex ActiveRaceCar::GetActiveRaceCarIndex() const
-{
-    return meActiveRaceCarIndex;
-}
-
 // IsAttached @ 0x822A1F10 (BrnActiveRaceCar.h:1289/1290, never inlined): the attached test is
 // on muState, not on the pointer -- an attached car is any state but E_STATE_INACTIVE.
 bool ActiveRaceCar::IsAttached() const

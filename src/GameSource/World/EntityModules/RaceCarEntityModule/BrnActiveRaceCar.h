@@ -136,8 +136,10 @@ class ActiveRaceCar
     friend struct RaceCarEntityModuleDebugComponent;   // reads mPrevTransforms / mvfLowestPointWorldSpace
 
 public:
-    // X360: returns meActiveRaceCarIndex (this+0x748). DWARF BrnActiveRaceCar.h:736.
-    EActiveRaceCarIndex GetActiveRaceCarIndex() const;
+    // X360: returns meActiveRaceCarIndex (this+0x748). DWARF BrnActiveRaceCar.h:701. Header-inline:
+    // ARTIST has no out-of-line copy and loads the member at every call site (e.g.
+    // RaceCarEntityModule::DetachActiveRaceCar 0x822FEF3C `lwz r30, 0x748(r29)`).
+    EActiveRaceCarIndex GetActiveRaceCarIndex() const { return meActiveRaceCarIndex; }
 
     // X360: returns mpRaceCar (this+0x6F0). DWARF BrnActiveRaceCar.h:742. Header-inline in the
     // original: ARTIST inlines it at every call site with its IsAttached() assert at h:1089

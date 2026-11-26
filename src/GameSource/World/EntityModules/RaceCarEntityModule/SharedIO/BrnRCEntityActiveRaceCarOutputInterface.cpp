@@ -291,8 +291,8 @@ bool RCEntityActiveRaceCarOutputInterface::IsRaceCarRival(EActiveRaceCarIndex le
 // TrafficEntityModule::UpdateParams_DoTimeSlicedLogic 0x827441AC.
 bool RCEntityActiveRaceCarOutputInterface::IsRaceCarPlayer(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_BRNRACECARENTITYMODULEOUTPUTINTERFACE_H_FILE, 887);
+    CGS_ASSERT_AT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_BRNRACECARENTITYMODULEOUTPUTINTERFACE_H_FILE, 888);
     return ((maxRaceCarFlags[leActiveRaceCarIndex] >> 1) & 1) != 0;
 }
 

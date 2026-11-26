@@ -294,8 +294,8 @@ void Param::SetShouldBeRemoved()
 // export hole is filled.
 void Param::SetDivorced()
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    CGS_ASSERT((mxFlags & E_FLAG_SHOULD_BE_REMOVED) == 0, "!ShouldBeRemoved()");
+    CGS_ASSERT_AT(IsAlive(), "IsAlive()", KAC_ARTIST_ASSERT_FILE, 847);
+    CGS_ASSERT_AT((mxFlags & E_FLAG_SHOULD_BE_REMOVED) == 0, "!ShouldBeRemoved()", KAC_ARTIST_ASSERT_FILE, 848);
 
     mxFlags |= E_FLAG_DIVORCED;
 }
@@ -505,7 +505,7 @@ void ParamTransform::Construct()
 // BrnTrafficParam.h:700. DELETE-WHEN 0x82712430 is exported and the body can be read directly.
 Vector3 ParamTransform::GetDeterministicPos() const
 {
-    CGS_ASSERT(rw::math::vpu::IsValid(mPos), "RwMath::IsValid( mPos )");
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(mPos), "RwMath::IsValid( mPos )", KAC_ARTIST_ASSERT_FILE, 560);
 
     return mPos;
 }

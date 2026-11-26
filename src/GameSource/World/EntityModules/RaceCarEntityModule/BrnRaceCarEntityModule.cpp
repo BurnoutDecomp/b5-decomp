@@ -1879,22 +1879,10 @@ void RaceCarEntityModule::DetachActiveRaceCar(
     CGS_ASSERT(lpRaceCarAIInterface != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarAIInterface != NULL", __FILE__, 2470));          // :2470
     CGS_ASSERT(lpSceneInputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpSceneInputInterface != NULL", __FILE__, 2471));        // :2471
 
-    // PC deviation, narrowed (verify F3): the console has no null tests here. A null car
-    // cannot proceed; a null AI interface must NOT skip the streamer release and the state
-    // transition below (that is the ghost fix itself) -- only the AI deactivate is gated on it.
-    if( lpRaceCar == 0 )
-    {
-        return;
-    }
-
     ActiveRaceCar* lpActiveRaceCar = lpRaceCar->GetActiveRaceCar();
     CGS_ASSERT(lpActiveRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCar != NULL", __FILE__, 2474));                    // :2474
-    if( lpActiveRaceCar == 0 )
-    {
-        return;
-    }
 
-    CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );                      // BrnActiveRaceCar.h:1089
+    // GetGlobalRaceCar's inlined IsAttached() assert (BrnActiveRaceCar.h:1089) is the only one.
     CGS_ASSERT( lpActiveRaceCar->GetGlobalRaceCar() == lpRaceCar,
                 CGS_ASSERT_MESSAGE_AT("lpActiveRaceCar->GetGlobalRaceCar() == lpRaceCar", __FILE__, 2475));                 // :2475
 
@@ -1906,7 +1894,7 @@ void RaceCarEntityModule::DetachActiveRaceCar(
 
     mRaceCarStreamer.RemoveVehicleData( static_cast<s32>( leActiveRaceCarIndex ) );
 
-    if( !lpActiveRaceCar->IsInactive() && lpRaceCarAIInterface != 0 )
+    if( !lpActiveRaceCar->IsInactive() )
     {
         const bool lbIsInAMode = lpRaceCar->IsInCurrentGameMode();
         lpRaceCarAIInterface->DeactivateRaceCar( lpRaceCar->GetGlobalRaceCarIndex(), lbIsInAMode );

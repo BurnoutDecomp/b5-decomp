@@ -23,6 +23,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
+#include "rw/math/fpu/scalar_operation.h"                     // rw::math::fpu::Max (CalcDesiredSpeed)
 
 #include <cstddef>   // offsetof / size_t
 #include <algorithm> // std::sort (RecalculateActiveHulls' std::_Sort of the active hulls)
@@ -126,9 +127,12 @@
 #include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"                       // KU_MAX_HULLS (ManageTriggers)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h" // BrnWorld::CheckVehicleForPowerPark (GenerateNearbyParkedTrafficOutput)
 
-static const char KAC_ARTIST_ASSERT_SOURCE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-    "../World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.cpp";
+// One literal (the original's __FILE__), not a named array: a named array is a separate .rdata
+// object the XDK anchors other TU constants on (CalcDesiredSpeed 0x82717A18 loads
+// KF_PARAM_BRAKE_LIGHT_ACCEL off its own lis, ours off the array base).
+#define KAC_ARTIST_ASSERT_SOURCE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\" \
+    "../World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.cpp"
 static const char KAC_ARTIST_ASSERT_HEADER[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\SharedIO/BrnTrafficToRaceCarInterface.h";
 
@@ -214,7 +218,7 @@ namespace BrnTraffic
     // list node's muPrevParam.
     u32 TrafficEntityModule::GetParamBehind(u32 luParam) const
     {
-        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+        CGS_ASSERT_AT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2619);
         return maParamListNodes[luParam].muPrevParam;
     }
 
@@ -8366,9 +8370,10 @@ void TrafficEntityModule::UpdateParams_CalcDesiredSpeed(
 
     Param* lpParam = &maParams[luParam];
 
-    CGS_ASSERT(mbAllowDivergentBehaviour || lpParam->miBehaviour != 0,
+    CGS_ASSERT_AT(mbAllowDivergentBehaviour || lpParam->miBehaviour != 0,
                "AllowDivergentBehaviour() || "
-               "( lpParam->miBehaviour != Param::E_BEHAVIOUR_SLOWING_FOR_CRASH )");
+               "( lpParam->miBehaviour != Param::E_BEHAVIOUR_SLOWING_FOR_CRASH )",
+               KAC_ARTIST_ASSERT_SOURCE, 11059);
 
     const f32 lfAcceleration =
         UpdateParams_CalcAcceleration(luParam, lpParam, lpSection, lrAvoidSet);
@@ -8376,11 +8381,8 @@ void TrafficEntityModule::UpdateParams_CalcDesiredSpeed(
     lpParam->mfLastSpeed    = lpParam->mfSpeed;
     lpParam->mfAcceleration = lfAcceleration;
 
-    f32 lfSpeed = mfSimTimeSinceLastDecision * lfAcceleration + lpParam->mfSpeed;
-    if (lfSpeed < 0.0f)
-    {
-        lfSpeed = 0.0f;
-    }
+    // rwmath fpu Max<float> (fsel, ARTIST 0x827179F8): a NaN speed comes back as 0.
+    f32 lfSpeed = rw::math::fpu::Max(mfSimTimeSinceLastDecision * lfAcceleration + lpParam->mfSpeed, 0.0f);
     if (lfAcceleration <= 0.0f && lfSpeed < mTweakValues.GetMinSpeedForCutoff())
     {
         lfSpeed = 0.0f;
@@ -18425,8 +18427,8 @@ void TrafficEntityModule::HandleStopModeAction(
     const BrnTrafficIO::InputBuffer_PostPhysics*           lpInput,
     const BrnGameState::GameStateModuleIO::StopModeAction* lpStopModeAction)
 {
-    CGS_ASSERT(lpInput != 0, "lpInput");                    // baked .cpp 6955
-    CGS_ASSERT(lpStopModeAction != 0, "lpStopModeAction");  // baked .cpp 6956
+    CGS_ASSERT_AT(lpInput != 0, "lpInput", KAC_ARTIST_ASSERT_SOURCE, 6955);
+    CGS_ASSERT_AT(lpStopModeAction != 0, "lpStopModeAction", KAC_ARTIST_ASSERT_SOURCE, 6956);
 
     if (!mbAllowDivergentBehaviour)
     {

@@ -292,6 +292,11 @@ public:
         u8                                  muPixelShaderRegisterCountOriginal;     // DWARF :179
         u8                                  muPixelShaderRegisterCountModified;     // DWARF :180
 
+        // DWARF :182/:183 -- the constant-name tables are Shader's static members (ARTIST
+        // 0x82043F88 / 0x82043F90; Construct 0x823FDA94 / 0x823FDAC8 addresses each by its own symbol).
+        static const char* const gaacVertexVariableNames[E_VS_VAR_COUNT];
+        static const char* const gaacPixelVariableNames[E_PS_VAR_COUNT];
+
     };
 
     // X360 0x82401538 -- zero the five {resource, state pointer} pairs and the two motion-blur

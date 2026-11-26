@@ -89,7 +89,7 @@ void TrafficJobStub::Destruct()
 // wait on the embedded job with sleep=-1, then clear the running flag.
 void TrafficJobStub::WaitOn()
 {
-    CGS_ASSERT(mbRunningJob, "mbRunningJob");
+    CGS_ASSERT_AT(mbRunningJob, "mbRunningJob", CGS_ARTIST_BRNTRAFFICJOB_CPP_FILE, 101); // DWARF :99
     mJob.WaitOn(0, 0, -1);
     mbRunningJob = false;
 }

@@ -23,6 +23,8 @@
 // console's own file, per the mirror-original-paths rule.
 // ============================================================================
 
+#define CGS_ARTIST_UNITY_WORLDBRIDGESCENETOOUTPUT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/Bridges/WorldBridgeSceneToOutput.cpp"
+
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToOutput.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
@@ -52,8 +54,8 @@ namespace WorldModule
         BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
         const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneOutputBuffer)
     {
-        CGS_ASSERT(lpOutputBuffer != 0,       "lpOutputBuffer != NULL");             // :42
-        CGS_ASSERT(lpSceneOutputBuffer != 0,  "lpSceneModuleOutputBuffer != NULL");  // :43
+        CGS_ASSERT_AT(lpOutputBuffer != 0, "lpOutputBuffer != NULL", CGS_ARTIST_UNITY_WORLDBRIDGESCENETOOUTPUT_CPP_FILE, 42);
+        CGS_ASSERT_AT(lpSceneOutputBuffer != 0, "lpSceneModuleOutputBuffer != NULL", CGS_ARTIST_UNITY_WORLDBRIDGESCENETOOUTPUT_CPP_FILE, 43);
 
         lpOutputBuffer->AppendTriangleCacheInterface(
             lpSceneOutputBuffer->GetTriangleCacheInterface());

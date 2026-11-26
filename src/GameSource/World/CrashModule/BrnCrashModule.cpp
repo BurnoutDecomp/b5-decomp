@@ -168,12 +168,11 @@ namespace BrnWorld
     // derived CrashModule slot, then stores -1 into the count word of each crash array
     // (mRaceCarCrashes @ +0x2F0, mTrafficCrashes @ +0x7F8) -- i.e. marks both arrays as
     // not-yet-constructed (the "Array used before Construct/Clear" sentinel). The base sub-object
-    // init and vtable stores are emitted by the compiler-generated base ctor + vtable setup; the
-    // CrashModule ctor body is just the two MarkUnconstructed() stores.
+    // init and vtable stores are emitted by the compiler-generated base ctor + vtable setup, and the
+    // two -1 stores are the arrays' own default constructors (CgsArray marks itself unconstructed);
+    // ARTIST stores each once, so the ctor body is empty.
     CrashModule::CrashModule()
     {
-        mRaceCarCrashes.MarkUnconstructed();
-        mTrafficCrashes.MarkUnconstructed();
     }
 
     // 0x827C6AD8. Walk every live RaceCarCrash record (mRaceCarCrashes, count @ +0xC0) and return
@@ -208,12 +207,12 @@ namespace BrnWorld
     {
         CGS_ASSERT_AT(luVehicle < 0x258u, "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_BRNCRASHMODULE_H_FILE, 467);
 
-        const s32 liCount = mRecycledTrafficQueue.GetLength();
-        for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
+        // DWARF (_compile/BrnWorldUnity.cpp) locals: liEvent (h:469) and the event reference
+        // lRecycledEvent (h:474); the length is re-read every pass (ARTIST 0x827BBB7C).
+        for (s32 liEvent = 0; liEvent < mRecycledTrafficQueue.GetLength(); ++liEvent)
         {
-            const BrnPhysics::Vehicle::TrafficRemovedEvent& lrEvent = mRecycledTrafficQueue.GetEvent(liEvent);
-            const u32 luEventVehicleIndex = (lrEvent.mRemovedVehicleEntityId.muValue >> 10) & 0x3FFFu;
-            if (luEventVehicleIndex == static_cast<u32>(luVehicle))
+            const BrnPhysics::Vehicle::TrafficRemovedEvent& lRecycledEvent = mRecycledTrafficQueue.GetEvent(liEvent);
+            if (((lRecycledEvent.mRemovedVehicleEntityId.muValue >> 10) & 0x3FFFu) == static_cast<u32>(luVehicle))
             {
                 return true;
             }
@@ -440,8 +439,8 @@ bool CrashModule::Release()
 // ⚠️ Written BY NAME, not by offset. The console offsets above are documentation: this build's
 // FastBitArray/Set/EventQueue sub-objects widen, and only the member ORDER is load-bearing
 // ([[reconstruction-gotchas]] -- parity by named members).
-// ⚠️ The memset length really is 600 (KU_MAX_TOTAL_TRAFFIC) while the array is [601]; the last
-// byte is left alone. Faithful, and it is the console's own off-by-one, not a transcription slip.
+// The memset length 600 is the whole array: ARTIST's maiSlammedTrafficOwners is int8_t[600]
+// (the sets follow at +0xB00), not the PS3 DWARF's [601].
 // =================================================================================================
 void CrashModule::Reset()
 {
@@ -1296,22 +1295,22 @@ void CrashModule::PreSceneUpdate( CgsModule::IOBufferStack* /*lpInputBufferStack
                                   CrashIO::OutputBuffer_PreScene* lpOutput,
                                   BrnUpdateSet lUpdateSet )
 {
+    // DWARF _compile/BrnWorldUnity.cpp: local `bool lbSimPaused` (BrnCrashModule.cpp:542), taken
+    // before the locks (ARTIST 0x827D3A7C clrlwi r26, r8, 31), and GetActiveRaceCarInterface()
+    // fetched for each of the two reads (ARTIST calls it twice, 0x827D3A90 / 0x827D3AEC).
+    const bool lbSimPaused = ( lUpdateSet & 1 ) != 0;
+
     lpOutput->LockForWrite();
     lpInput->LockForRead();
 
+    if( lpInput->GetActiveRaceCarInterface()->IsPlayerCarActive() )
     {
-        const RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface =
-            lpInput->GetActiveRaceCarInterface();
-
-        if( lpActiveRaceCarInterface->IsPlayerCarActive() )
-        {
-            meLocalActiveRaceCarIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
-        }
+        meLocalActiveRaceCarIndex = lpInput->GetActiveRaceCarInterface()->GetPlayerActiveRaceCarIndex();
     }
 
     HandleGameActions(lpInput, lpOutput);
 
-    if( ( lUpdateSet & 1 ) == 0 )
+    if( !lbSimPaused )
     {
         ClearUpRecycledTraffic(lpOutput);
 

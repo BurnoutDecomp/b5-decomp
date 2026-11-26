@@ -104,6 +104,11 @@ namespace fpu
     // Scalar magnitude (fabs).
     inline float Abs(float lfValue) { return std::fabs(lfValue); }
 
+    // scalar.h:289-297 -- Sqrt<float> is the XDK __fsqrts intrinsic (one fsqrts; e.g. inlined by
+    // Magnitude in BrnAI::AStar::EuclideanDistance 0x8276E0F8).
+    template <class T> inline T Sqrt(T lValue);
+    template <> inline float Sqrt<float>(float lfValue) { return __fsqrts(lfValue); }
+
     // Platform trig (radians).
     inline float Cos(float lfRadians) { return std::cos(lfRadians); }
     inline float Sin(float lfRadians) { return std::sin(lfRadians); }

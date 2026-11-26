@@ -1261,8 +1261,8 @@ namespace BrnAI
     // ================================================================================
     void NearbyVehicles::Next()
     {
-        CGS_ASSERT(miCount >= 0, "miCount >= 0");                                 // :2921
-        CGS_ASSERT(miCount < KI_MAX_NEARBY_VEHICLES, "miCount < KI_MAX_NEARBY_TRAFFIC");  // :2922
+        CGS_ASSERT_AT(miCount >= 0, "miCount >= 0", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 2921);
+        CGS_ASSERT_AT(miCount < KI_MAX_NEARBY_VEHICLES, "miCount < KI_MAX_NEARBY_TRAFFIC", CGS_ARTIST_UNITY_BRNAIDRIVER_CPP_FILE, 2922);
         ++miCount;                                                                // stw 0x700
     }
 
@@ -2193,8 +2193,8 @@ namespace BrnAI
     // ================================================================================
     void AIDriver::CalcDistanceFromPlayer(Vector3 lPlayerCarPosition)
     {
-        const Vector3 lPosition = mpCar->GetPosition();
-        mfDistanceToPlayer = rw::math::vpu::Magnitude(lPosition - lPlayerCarPosition);   // stfs 0x1D08
+        // No local: ARTIST subtracts straight off GetPosition's returned temporary (lvx128 0(r3)).
+        mfDistanceToPlayer = rw::math::vpu::Magnitude(mpCar->GetPosition() - lPlayerCarPosition);   // stfs 0x1D08
     }
 
     // ================================================================================

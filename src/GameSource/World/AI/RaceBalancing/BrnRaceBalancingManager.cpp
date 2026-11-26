@@ -181,17 +181,21 @@ void RaceBalancingManager::UpdateOpponentRoute(const AICar* lpAICar, const AISec
         return;
     }
 
-    CGS_ASSERT(!lpAICar->IsPlayerCar(), "!lpAICar->IsPlayerCar()");                                 // :183
-    CGS_ASSERT(lpAICar->GetOpponentIndex() >= 0, "lpAICar->GetOpponentIndex() >= 0");               // :184
-    CGS_ASSERT(lpAICar->GetOpponentIndex() < BrnWorld::KI_MAX_RIVALS_IN_MODE,
-               "lpAICar->GetOpponentIndex() < BrnWorld::KI_MAX_RIVALS_IN_MODE");                     // :185
+    CGS_ASSERT_AT(!lpAICar->IsPlayerCar(), "!lpAICar->IsPlayerCar()",
+                  CGS_ARTIST_UNITY_BRNRACEBALANCINGMANAGER_CPP_FILE, 183);
+    CGS_ASSERT_AT(lpAICar->GetOpponentIndex() >= 0, "lpAICar->GetOpponentIndex() >= 0",
+                  CGS_ARTIST_UNITY_BRNRACEBALANCINGMANAGER_CPP_FILE, 184);
+    CGS_ASSERT_AT(lpAICar->GetOpponentIndex() < BrnWorld::KI_MAX_RIVALS_IN_MODE,
+                  "lpAICar->GetOpponentIndex() < BrnWorld::KI_MAX_RIVALS_IN_MODE",
+                  CGS_ARTIST_UNITY_BRNRACEBALANCINGMANAGER_CPP_FILE, 185);
 
     const Route* lpRoute = lpAICar->GetRoute();
     if (lpRoute->GetNodeCount() > 1)
     {
-        const u32 luOpponentIndex = static_cast<u32>(static_cast<s32>(lpAICar->GetOpponentIndex()));
-        RaceBalancingRoute*       lpRaceBalancingRoute = &maRaceBalancingRoutes.GetItem(luOpponentIndex);
-        const RaceBalancingGraph* lpRaceBalancingGraph = &maRaceBalancingGraphs.GetItem(luOpponentIndex);
+        // DWARF :191/:192 -- both through Array::operator[] on GetOpponentIndex() (ARTIST re-reads
+        // and sign-extends the index for each, 0x82789CFC / 0x82789D0C).
+        RaceBalancingRoute* lpRaceBalancingRoute = &maRaceBalancingRoutes[lpAICar->GetOpponentIndex()];
+        RaceBalancingGraph* lpRaceBalancingGraph = &maRaceBalancingGraphs[lpAICar->GetOpponentIndex()];
 
         if (lpRaceBalancingRoute->mbValid)
         {
@@ -386,16 +390,17 @@ void RaceBalancingManager::CalculateScheduleOffset(const AICar* lpAICar,
 
     if (mbInRace)
     {
-        const RaceBalancingRoute& lrRoute =
-            maRaceBalancingRoutes[static_cast<u32>(lpAICar->GetOpponentIndex())];
+        // DWARF :318 local lpRaceBalancingRoute; GetNextRouteNodeIndex is called per GetTime
+        // (ARTIST reloads +0x1524 for each, 0x82789E84 / 0x82789EA4).
+        const RaceBalancingRoute* lpRaceBalancingRoute =
+            &maRaceBalancingRoutes[lpAICar->GetOpponentIndex()];
 
-        if (lpAICar->HasValidRoute() && lrRoute.mbValid)
+        if (lpAICar->HasValidRoute() && lpRaceBalancingRoute->mbValid)
         {
-            const s32 liNodeIndex = lpAICar->GetNextRouteNodeIndex();
             lafOutScheduleOffsets[E_GRAPH_TYPE_BEHIND] =
-                lrRoute.GetTime(E_GRAPH_TYPE_BEHIND, liNodeIndex) - mfRaceTime;
+                lpRaceBalancingRoute->GetTime(E_GRAPH_TYPE_BEHIND, lpAICar->GetNextRouteNodeIndex()) - mfRaceTime;
             lafOutScheduleOffsets[E_GRAPH_TYPE_AHEAD] =
-                lrRoute.GetTime(E_GRAPH_TYPE_AHEAD, liNodeIndex) - mfRaceTime;
+                lpRaceBalancingRoute->GetTime(E_GRAPH_TYPE_AHEAD, lpAICar->GetNextRouteNodeIndex()) - mfRaceTime;
         }
     }
 }

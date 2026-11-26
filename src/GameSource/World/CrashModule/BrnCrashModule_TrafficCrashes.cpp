@@ -2,6 +2,7 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // BrnCrashModule.cpp assert lines
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"   // CgsSceneManager::EntityId (ClearUpRecycledTraffic)
 #include <cstdlib>
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/CrashModule/BrnCrashModule.cpp"
 namespace BrnWorld
@@ -214,17 +215,28 @@ namespace BrnWorld
     // ARTIST827CE608 ignores the output argument (DWARF retains it).
     void CrashModule::ClearUpRecycledTraffic(CrashIO::OutputBuffer_PreScene* /*lpOutput*/)
     {
-        for (s32 i = 0; i < mRecycledTrafficQueue.GetLength(); ++i)
+        // DWARF (_compile/BrnWorldUnity.cpp) locals: liEvent :1886, luTrafficCrash :1891,
+        // luVehicle :1892, lRemovedVehicleEntityId :1893, lTrafficRemovedEvent :1896, leOwner :1918.
+        for (s32 liEvent = 0; liEvent < mRecycledTrafficQueue.GetLength(); ++liEvent)
         {
-            const EntityId id = mRecycledTrafficQueue.GetEvent(i).mRemovedVehicleEntityId;
-            CGS_ASSERT_AT((id.muValue >> 24) == 2, "lRemovedVehicleEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", CGS_ARTIST_FILE, 1902);
-            const u32 vehicle = (id.muValue >> 10) & 0x3fff;
-            const u32 index = FindCrashForTrafficVehicle(vehicle);
-            if (index != KU_INVALID_CRASH)
+            u32      luTrafficCrash;
+            u32      luVehicle;
+            // DWARF types this local (and TrafficRemovedEvent::mRemovedVehicleEntityId) as the scene
+            // manager's EntityId; its GetOwner/GetEntityIndex give ARTIST's copy + srwi/rlwinm
+            // (0x827CE64C..0x827CE658). The tree's event still carries the BrnCommonTypes.h word
+            // placeholder, hence the .muValue below.
+            CgsSceneManager::EntityId lRemovedVehicleEntityId;
+
+            const BrnPhysics::Vehicle::TrafficRemovedEvent& lTrafficRemovedEvent = mRecycledTrafficQueue.GetEvent(liEvent);
+            lRemovedVehicleEntityId = lTrafficRemovedEvent.mRemovedVehicleEntityId.muValue;
+            luVehicle = lRemovedVehicleEntityId.GetEntityIndex();
+            CGS_ASSERT_AT(lRemovedVehicleEntityId.GetOwner() == 2, "lRemovedVehicleEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", CGS_ARTIST_FILE, 1902);
+            luTrafficCrash = FindCrashForTrafficVehicle(luVehicle);
+            if (luTrafficCrash != KU_INVALID_CRASH)
             {
-                const EActiveRaceCarIndex owner = mTrafficCrashes.GetItem(index).GetOwner();
-                mTrafficCrashes.EraseFast(index);
-                OnTrafficCarRemovedFromCrash(vehicle, owner);
+                const EActiveRaceCarIndex leOwner = mTrafficCrashes[luTrafficCrash].GetOwner();
+                mTrafficCrashes.EraseFast(luTrafficCrash);
+                OnTrafficCarRemovedFromCrash(luVehicle, leOwner);
             }
         }
     }

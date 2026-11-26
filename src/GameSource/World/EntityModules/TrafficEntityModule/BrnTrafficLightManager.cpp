@@ -88,13 +88,15 @@ void TrafficLightManager::TrafficLightGotSmashed(const TrafficLightCollection* l
 void TrafficLightManager::TrafficLightGotRestored(const TrafficLightCollection* lpTrafficLightData,
                                                   u32 luInstanceID)
 {
-    CGS_ASSERT(lpTrafficLightData, "lpTrafficLightData");
+    CGS_ASSERT(lpTrafficLightData,
+        CGS_ASSERT_MESSAGE_AT("lpTrafficLightData", KAC_ARTIST_ASSERT_FILE, 443 /* ARTIST 0x82751A70 */));
 
     const s32 liInstanceIndex = lpTrafficLightData->GetInstanceIndexForInstanceID(luInstanceID);
     if (liInstanceIndex != -1)
     {
         TrafficLightRuntimeState* lpState = GetLightState(static_cast<u32>(liInstanceIndex));
-        CGS_ASSERT(lpState, "lpState");
+        CGS_ASSERT(lpState,
+            CGS_ASSERT_MESSAGE_AT("lpState", KAC_ARTIST_ASSERT_FILE, 451 /* ARTIST 0x82751AB8 */));
 
         lpState->mxStateBits &= 0x7Fu;
 

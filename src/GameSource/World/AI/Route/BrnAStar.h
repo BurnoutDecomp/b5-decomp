@@ -15,6 +15,7 @@
 #include <cmath>
 #include "types.hpp"
 #include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
+#include "rw/math/fpu/vector2_operation.h"   // rw::math::fpu::operator- / Magnitude (the distance heuristics)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu
 #include "SharedClasses/AI/AISectionsResourceType.h"   // BrnAI::AISection / AISectionsData
 
@@ -245,29 +246,28 @@ extern s32 dword_82F3023C;
 extern s32 dword_8300D530;
 extern s32 dword_8300D534;
 
-// @0x8276E0D8  straight Euclidean distance: sqrt(dx*dx + dy*dy).
+// @0x8276E0D8  straight Euclidean distance: Magnitude(a - b) (DecFIGS PS3 0xA260C0 builds the
+// difference in a temporary and calls rw::math::fpu::Magnitude<float>; ARTIST inlines both).
 inline f32 AStar::EuclideanDistance(const AStarVector2& lA, const AStarVector2& lB)
 {
-    const f32 lfDX = lA.X() - lB.X();
-    const f32 lfDY = lA.Y() - lB.Y();
-    return sqrtf((lfDX * lfDX) + (lfDY * lfDY));
+    return rw::math::fpu::Magnitude(lA - lB);
 }
 
 // @0x8276E100  X-amplified Euclidean: the x delta is scaled by 500 before the
 // magnitude, so paths that diverge along x cost far more (lane-bias heuristic).
 inline f32 AStar::EuclideanDistanceXBiased(const AStarVector2& lA, const AStarVector2& lB)
 {
-    const f32 lfDX = (lA.X() - lB.X()) * KF_EUCLIDEAN_BIAS;
-    const f32 lfDY = lA.Y() - lB.Y();
-    return sqrtf((lfDX * lfDX) + (lfDY * lfDY));
+    AStarVector2 lDelta(lA - lB);
+    lDelta.X() *= KF_EUCLIDEAN_BIAS;
+    return rw::math::fpu::Magnitude(lDelta);
 }
 
 // @0x8276E138  Y-amplified Euclidean: mirror of the X-biased form on the y axis.
 inline f32 AStar::EuclideanDistanceYBiased(const AStarVector2& lA, const AStarVector2& lB)
 {
-    const f32 lfDX = lA.X() - lB.X();
-    const f32 lfDY = (lA.Y() - lB.Y()) * KF_EUCLIDEAN_BIAS;
-    return sqrtf((lfDX * lfDX) + (lfDY * lfDY));
+    AStarVector2 lDelta(lA - lB);
+    lDelta.Y() *= KF_EUCLIDEAN_BIAS;
+    return rw::math::fpu::Magnitude(lDelta);
 }
 }
 
