@@ -68,12 +68,6 @@ namespace
     }
 }
 
-// The display name C-string (macVehicleName, char[64] at +0x30).
-const char* VehicleListEntry::GetName() const
-{
-    return macVehicleName;
-}
-
 // The default wheel-set name C-string (mDefaultWheelName, char[32] at +0x10) -- what the
 // streaming path hands to WheelList::FindWheelIndexFromName.
 const char* VehicleListEntry::GetDefaultWheelName() const

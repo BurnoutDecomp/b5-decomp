@@ -150,7 +150,7 @@ namespace BrnGameState
             mpGameStateModule->GetVehicleList()->GetVehicleData(miCurrentCarIndex);
 
         lStream.Reset();
-        lStream << "Vehicle name: " << lpVehicle->GetName();
+        lStream << "Vehicle name: " << lpVehicle->GetVehicleName();
         lpRender->DrawText(lStream.GetBuffer(), KF_X, 200.0f, KF_TEXT_SCALE, KU_COLOUR);
 
         char lacIdText[16];
@@ -292,7 +292,7 @@ namespace BrnGameState
             char* lpcLabel = maCarStrings[liKeptCount];
             lpcLabel[0] = '\0';
             CgsDev::StrStream lLabelStream(lpcLabel, KI_CAR_TEXT_LENGTH);
-            const char* lpcVehicleName = lpEntry->GetName();
+            const char* lpcVehicleName = lpEntry->GetVehicleName();
             lLabelStream << (lpcVehicleName != 0 ? lpcVehicleName : "<NULLSTRING>");
             lLabelStream << " - ";
             lLabelStream << lacCarId;
@@ -352,7 +352,7 @@ namespace BrnGameState
             char lacId[KI_CGSID_STRING_LEN];
             CgsIDUnCompress(lpEntry->GetId(), lacId);
             CgsDev::StrStream lLabel(maCarVersionStrings[liVersionCount], KI_CAR_TEXT_LENGTH);
-            lLabel << (lpEntry->GetName() ? lpEntry->GetName() : "<NULLSTRING>") << " - " << lacId;
+            lLabel << (lpEntry->GetVehicleName() ? lpEntry->GetVehicleName() : "<NULLSTRING>") << " - " << lacId;
             maCarVersionNames[liVersionCount].miValue = liVersionCount;
             maCarVersionNames[liVersionCount].mpcName = maCarVersionStrings[liVersionCount];
             maCarVersionIds[liVersionCount] = lpEntry->GetId();

@@ -699,7 +699,7 @@ namespace BrnGui
                 if (maSelectedCars[liSelected] == lCarId)
                 {
                     lapacCarNames[liNumNames++] =
-                        mpVehicleList->GetVehicleData(liVehicle)->GetName();
+                        mpVehicleList->GetVehicleData(liVehicle)->GetVehicleName();
                     break;
                 }
             }
@@ -745,7 +745,7 @@ namespace BrnGui
             lpSelectable->SetActive(true);                             // row slot 0
             lpSelectable->SetSelectable(true);                         // row slot 2
 
-            mCarSelector.SetItemText(liCar, lpVehicleData->GetName());
+            mCarSelector.SetItemText(liCar, lpVehicleData->GetVehicleName());
         }
 
         // A livery variant is highlighted under its PARENT car's row.

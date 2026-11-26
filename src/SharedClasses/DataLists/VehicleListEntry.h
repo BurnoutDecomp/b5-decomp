@@ -130,11 +130,10 @@ struct VehicleListEntry
     // (same precedent as GetLiveryType above). Returned as the raw byte.
     u8 GetCarType() const;
 
-    // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
-    // BrnGameState::ResetPlayerDebugComponent change-car menu label. The car's display name
-    // C-string. Per the Vehicle-List wiki macVehicleName is the char[64] at entry+0x30 (the X360
-    // OnChangeCarFilter streams `entry+0x30` into the menu label). Returns nullptr/empty-safe.
-    const char* GetName() const;
+    // The car's display name C-string, macVehicleName (char[64] at entry+0x30). DWARF h:368
+    // names it GetVehicleName and ARTIST has no copy: every caller reads entry+0x30 in line
+    // (CarSelectVehicle::SetupMenuComponents 0x824BED98 `addi r11,r3,0x30`).
+    const char* GetVehicleName() const { return macVehicleName; }
 
     // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
     // race-car streaming path. The car's default wheel-set NAME -- a char[32] at entry+0x10.

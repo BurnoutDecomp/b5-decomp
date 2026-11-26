@@ -753,7 +753,7 @@ namespace BrnGui
             lpSelectable->SetActive(true);       // item slot 0
             lpSelectable->SetSelectable(true);   // item slot 2
 
-            mCarSelector.SetItemText(static_cast<s32>(luLivery), lpVehicleData->GetName());
+            mCarSelector.SetItemText(static_cast<s32>(luLivery), lpVehicleData->GetVehicleName());
 
             if (lpVehicleData->GetId() == mCurrentSetupInfo.mCarId)
             {
