@@ -36,6 +36,12 @@
 // has been replaced.
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// XDK size optimization for the whole object: ARTIST's Send code uses the size form
+// throughout (cr0 null tests, e.g. ConnectByPointerHandler 0x82B9FF20 `cmplwi r10,0`); a
+// file-wide region measures 0 losses against the old per-function regions.
+#pragma optimize("s", on)
+#endif
 #include "rw/audio/core/Send.h"
 #include "rw/audio/core/SubMix.h" // SubMix (the real class; moved out of SubMixConnector.h)
 #include "rw/audio/core/PlugIn.h"      // rw::audio::core::System (deferred-command ring)
@@ -157,10 +163,6 @@ int Send::CreateInstance(Send* self)
 //
 // LegacySrc send.h and the Xbox 360 SDK map give the void member and release signatures.
 // -------------------------------------------------------------------------------------
-#if defined(_XBOX) && defined(_MSC_VER)
-// The original rwAudio plug-in object emits these scalar loops in its size form.
-#pragma optimize("s", on)
-#endif
 void Send::DisconnectImmediate()
 {
     const unsigned channels = mSubMixConnector.mNumSubMixChannels;
@@ -186,9 +188,6 @@ void Send::DisconnectImmediate()
     }
 }
 
-#if defined(_XBOX) && defined(_MSC_VER)
-#pragma optimize("s", off)
-#endif
 
 // -------------------------------------------------------------------------------------
 // ReleaseEvent @0x82BA3EF8 -- b DisconnectImmediate (tail call; `self` passes through).
@@ -211,10 +210,6 @@ void Send::ReleaseEvent()
 //   for (c<in) mDeClickValue[c] = srcPtr[c][255] * mfGain       ; last-sample foldback seed
 //   return 1
 // -------------------------------------------------------------------------------------
-#if defined(_XBOX) && defined(_MSC_VER)
-// The original rwAudio plug-in object emits these scalar loops in its size form.
-#pragma optimize("s", on)
-#endif
 BufferStatus Send::Process(PlugIn* plugIn, Mixer* ctx, bool resetRamp)
 {
     Send* self = reinterpret_cast<Send*>(plugIn);
@@ -260,9 +255,6 @@ BufferStatus Send::Process(PlugIn* plugIn, Mixer* ctx, bool resetRamp)
     }
     return BUFFERSTATUS_AVAILABLE;
 }
-#if defined(_XBOX) && defined(_MSC_VER)
-#pragma optimize("s", off)
-#endif
 
 
 // -------------------------------------------------------------------------------------

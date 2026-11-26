@@ -9,6 +9,7 @@
 #include "vendor/renderware/collision/Feature.hpp"  // Feature (the GetMaximumFeature out-parameter)
 #include "vendor/renderware/collision/GPInstance.hpp" // GPInstance + g_aGPVolumeMethods
 #include "rw/rwcore_structs.h"                      // rw::Resource (complete, for Initialize)
+#include "rw/math/vpu/matrix44affine_operation.h"  // Mult (the transformed frame)
 
 #include <cmath>   // fabs
 #include <new>     // placement new (Initialize constructs into the caller's block)
@@ -261,10 +262,12 @@ BoxVolume* BoxVolume::Initialize(const ::rw::Resource& arResource,
 //   cmplwi cr6, r4, 0 ; beq -> the NULL-transform arm
 //   [transform arm]  compose this->transform * (*lpTransform) into four rows:
 //        v12 = row0, v11 = row1, v10 = row2, v13 = row3   (0x82BA9FD4..0x82BAA05C)
+//        = rwmath's Mult(Matrix44Affine, Matrix44Affine) (splat-first, inlined)
 //   [NULL arm]       load this->transform's four rows into the same registers
 //                                                          (0x82BAA064..0x82BAA078)
 //   lvlx/vspltw +0x48 -> hy, +0x44 -> hx, +0x4C -> hz, +0x50 -> radius
-//   vandc row0/row1/row2 with the sign mask                ; |row|
+//   vandc row0/row1/row2 with the sign mask                ; |row|: three rwmath Abs(Vector3),
+//                                                          ; each with its own vslw mask
 //   v11 = |row1| * hy
 //   v12 = |row0| * hx + v11
 //   v0  = |row2| * hz + v12
@@ -279,41 +282,25 @@ BoxVolume* BoxVolume::Initialize(const ::rw::Resource& arResource,
 // ---------------------------------------------------------------------------
 RwBool BoxVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
 {
-    __vector4 lx = mTransform.xAxis.mV;
-    __vector4 ly = mTransform.yAxis.mV;
-    __vector4 lz = mTransform.zAxis.mV;
-    __vector4 lw = mTransform.wAxis.mV;
+    Matrix44Affine lTransform;
     if (lpTransform)
     {
-        const __vector4 tx = lpTransform->xAxis.mV;
-        const __vector4 ty = lpTransform->yAxis.mV;
-        const __vector4 tz = lpTransform->zAxis.mV;
-        const __vector4 tw = lpTransform->wAxis.mV;
-        __vector4 x = __vmulfp(__vspltw(lx, 0), tx);
-        __vector4 y = __vmulfp(__vspltw(ly, 0), tx);
-        __vector4 z = __vmulfp(__vspltw(lz, 0), tx);
-        __vector4 w = __vmaddfp(__vspltw(lw, 0), tx, tw);
-        x = __vmaddfp(__vspltw(lx, 1), ty, x);
-        y = __vmaddfp(__vspltw(ly, 1), ty, y);
-        z = __vmaddfp(__vspltw(lz, 1), ty, z);
-        w = __vmaddfp(__vspltw(lw, 1), ty, w);
-        lx = __vmaddfp(__vspltw(lx, 2), tz, x);
-        ly = __vmaddfp(__vspltw(ly, 2), tz, y);
-        lz = __vmaddfp(__vspltw(lz, 2), tz, z);
-        lw = __vmaddfp(__vspltw(lw, 2), tz, w);
+        lTransform = math::vpu::Mult(mTransform, *lpTransform);
     }
-    const __vector4 ones = __vspltisw(-1);
-    const __vector4 sign = __vslw(ones, ones);
-    const __vector4 hx = __vspltw(__lvlx(&mBoxData.mfHx, 0), 0);
-    const __vector4 hy = __vspltw(__lvlx(&mBoxData.mfHy, 0), 0);
-    const __vector4 hz = __vspltw(__lvlx(&mBoxData.mfHz, 0), 0);
-    const __vector4 radius = __vspltw(__lvlx(&mfRadius, 0), 0);
-    __vector4 extent = __vmulfp(__vandc(ly, sign), hy);
-    extent = __vmaddfp(__vandc(lx, sign), hx, extent);
-    extent = __vmaddfp(__vandc(lz, sign), hz, extent);
-    extent = __vaddfp(extent, radius);
-    arResult.mMin.mV = __vsubfp(lw, extent);
-    arResult.mMax.mV = __vaddfp(lw, extent);
+    else
+    {
+        lTransform = mTransform;
+    }
+    const math::vpu::VecFloat hx(mBoxData.mfHx);
+    const math::vpu::VecFloat hy(mBoxData.mfHy);
+    const math::vpu::VecFloat hz(mBoxData.mfHz);
+    const math::vpu::VecFloat radius(mfRadius);
+    __vector4 extent = __vmulfp(math::vpu::Abs(lTransform.yAxis).mV, hy.mV);
+    extent = __vmaddfp(math::vpu::Abs(lTransform.xAxis).mV, hx.mV, extent);
+    extent = __vmaddfp(math::vpu::Abs(lTransform.zAxis).mV, hz.mV, extent);
+    extent = __vaddfp(extent, radius.mV);
+    arResult.mMin.mV = __vsubfp(lTransform.wAxis.mV, extent);
+    arResult.mMax.mV = __vaddfp(lTransform.wAxis.mV, extent);
     return 1;
 }
 
@@ -385,7 +372,9 @@ SphereVolume* SphereVolume::Initialize(const ::rw::Resource& arResource, f32 afR
 //
 //   lvx128 v0, r3, 0x30                     ; this->transform.wAxis == the centre
 //   cmplwi cr6, r4, 0 ; beq -> skip the transform
-//   vmaddfp chains                          ; transform the centre as a POINT
+//   vmaddfp chains                          ; rwmath Mult(mTransform, *lpTransform).wAxis:
+//                                           ; splat-first, the three other rows dead (as
+//                                           ; CapsuleVolume::GetBBox)
 //   lvlx/vspltw +0x50 -> radius
 //   stvx128 (centre - radius), 0x00(r6) ; stvx128 (centre + radius), 0x10(r6)
 //   li r3, 1 ; blr
@@ -395,16 +384,19 @@ SphereVolume* SphereVolume::Initialize(const ::rw::Resource& arResource, f32 afR
 // ---------------------------------------------------------------------------
 RwBool SphereVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
 {
-    __vector4 centre = mTransform.wAxis.mV;
+    Vector3 centre;
     if (lpTransform)
     {
-        __vector4 result = __vmaddfp(__vspltw(centre, 0), lpTransform->xAxis.mV, lpTransform->wAxis.mV);
-        result = __vmaddfp(__vspltw(centre, 1), lpTransform->yAxis.mV, result);
-        centre = __vmaddfp(__vspltw(centre, 2), lpTransform->zAxis.mV, result);
+        const Matrix44Affine lTransform = math::vpu::Mult(mTransform, *lpTransform);
+        centre = lTransform.wAxis;
+    }
+    else
+    {
+        centre = mTransform.wAxis;
     }
     const __vector4 radius = __vspltw(__lvlx(&mfRadius, 0), 0);
-    arResult.mMin.mV = __vsubfp(centre, radius);
-    arResult.mMax.mV = __vaddfp(centre, radius);
+    arResult.mMin.mV = __vsubfp(centre.mV, radius);
+    arResult.mMax.mV = __vaddfp(centre.mV, radius);
     return 1;
 }
 
@@ -518,15 +510,18 @@ RwBool BoxVolume::GetMaximumFeature(RwBool /*abCcw*/, Vector3 /*aDir*/,
 // ---------------------------------------------------------------------------
 RwBool SphereVolume::CreateGPInstance(GPInstance& arInstance, const Matrix44Affine* lpTransform) const
 {
-    __vector4 centre = mTransform.wAxis.mV;
+    Vector3 centre;
     if (lpTransform)
     {
-        __vector4 result = __vmaddfp(__vspltw(centre, 0), lpTransform->xAxis.mV, lpTransform->wAxis.mV);
-        result = __vmaddfp(__vspltw(centre, 1), lpTransform->yAxis.mV, result);
-        centre = __vmaddfp(__vspltw(centre, 2), lpTransform->zAxis.mV, result);
+        const Matrix44Affine lTransform = math::vpu::Mult(mTransform, *lpTransform);
+        centre = lTransform.wAxis;
+    }
+    else
+    {
+        centre = mTransform.wAxis;
     }
     arInstance.mVolumeTag = static_cast<u32>(reinterpret_cast<uintptr_t>(this));
-    arInstance.mPos.mV = centre;
+    arInstance.mPos.mV = centre.mV;
     arInstance.mNumFaceNormals = 0;
     arInstance.mNumEdgeDirections = 0;
     arInstance.mVolumeType = GPInstance::SPHERE;
@@ -583,29 +578,19 @@ RwBool SphereVolume::CreateGPInstance(GPInstance& arInstance, const Matrix44Affi
 // ---------------------------------------------------------------------------
 RwBool BoxVolume::CreateGPInstance(GPInstance& arInstance, const Matrix44Affine* lpTransform) const
 {
-    __vector4 lx = mTransform.xAxis.mV;
-    __vector4 ly = mTransform.yAxis.mV;
-    __vector4 lz = mTransform.zAxis.mV;
-    __vector4 lw = mTransform.wAxis.mV;
+    Matrix44Affine lTransform;
     if (lpTransform)
     {
-        const __vector4 tx = lpTransform->xAxis.mV;
-        const __vector4 ty = lpTransform->yAxis.mV;
-        const __vector4 tz = lpTransform->zAxis.mV;
-        const __vector4 tw = lpTransform->wAxis.mV;
-        __vector4 x = __vmulfp(__vspltw(lx, 0), tx);
-        __vector4 y = __vmulfp(__vspltw(ly, 0), tx);
-        __vector4 z = __vmulfp(__vspltw(lz, 0), tx);
-        __vector4 w = __vmaddfp(__vspltw(lw, 0), tx, tw);
-        x = __vmaddfp(__vspltw(lx, 1), ty, x);
-        y = __vmaddfp(__vspltw(ly, 1), ty, y);
-        z = __vmaddfp(__vspltw(lz, 1), ty, z);
-        w = __vmaddfp(__vspltw(lw, 1), ty, w);
-        lx = __vmaddfp(__vspltw(lx, 2), tz, x);
-        ly = __vmaddfp(__vspltw(ly, 2), tz, y);
-        lz = __vmaddfp(__vspltw(lz, 2), tz, z);
-        lw = __vmaddfp(__vspltw(lw, 2), tz, w);
+        lTransform = math::vpu::Mult(mTransform, *lpTransform);
     }
+    else
+    {
+        lTransform = mTransform;
+    }
+    const __vector4 lx = lTransform.xAxis.mV;
+    const __vector4 ly = lTransform.yAxis.mV;
+    const __vector4 lz = lTransform.zAxis.mV;
+    const __vector4 lw = lTransform.wAxis.mV;
     const __vector4 hx = __vspltw(__lvlx(&mBoxData.mfHx, 0), 0);
     const __vector4 hy = __vspltw(__lvlx(&mBoxData.mfHy, 0), 0);
     const __vector4 hz = __vspltw(__lvlx(&mBoxData.mfHz, 0), 0);

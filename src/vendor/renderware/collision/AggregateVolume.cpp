@@ -16,6 +16,7 @@
 #include "vendor/renderware/collision/AggregateVolume.hpp"
 #include "vendor/renderware/collision/AABBox.hpp"
 #include "vendor/renderware/collision/Aggregate.hpp"
+#include "rw/math/vpu/matrix44affine_operation.h"   // Mult (the composed transform)
 
 namespace rw
 {
@@ -52,29 +53,10 @@ RwBool AggregateVolume::GetBBox(const math::vpu::Matrix44Affine* lpTransform,
     AABBox lResult;
     if (lpTransform != 0)
     {
-        // Mult(Matrix44Affine this-transform, Matrix44 arg): volume transform
-        // composed with the caller matrix, staged into the var_50 stack matrix.
-        math::vpu::Matrix44Affine lCombined;
-        const __vector4 lx = lpTransform->xAxis.mV;
-        const __vector4 ly = lpTransform->yAxis.mV;
-        const __vector4 lz = lpTransform->zAxis.mV;
-        const __vector4 lw = lpTransform->wAxis.mV;
-        const __vector4 ax = mTransform.xAxis.mV;
-        const __vector4 ay = mTransform.yAxis.mV;
-        const __vector4 az = mTransform.zAxis.mV;
-        const __vector4 aw = mTransform.wAxis.mV;
-        __vector4 vx = __vmulfp(__vspltw(ax, 0), lx);
-        __vector4 vy = __vmulfp(__vspltw(ay, 0), lx);
-        __vector4 vz = __vmulfp(__vspltw(az, 0), lx);
-        __vector4 vw = __vmaddfp(__vspltw(aw, 0), lx, lw);
-        vx = __vmaddfp(__vspltw(ax, 1), ly, vx);
-        vy = __vmaddfp(__vspltw(ay, 1), ly, vy);
-        vz = __vmaddfp(__vspltw(az, 1), ly, vz);
-        vw = __vmaddfp(__vspltw(aw, 1), ly, vw);
-        lCombined.xAxis.mV = __vmaddfp(__vspltw(ax, 2), lz, vx);
-        lCombined.yAxis.mV = __vmaddfp(__vspltw(ay, 2), lz, vy);
-        lCombined.zAxis.mV = __vmaddfp(__vspltw(az, 2), lz, vz);
-        lCombined.wAxis.mV = __vmaddfp(__vspltw(aw, 2), lz, vw);
+        // rwmath Mult (splat-first, 0x82BBBA80..0x82BBBAF0). Remaining difference (72.1):
+        // ARTIST makes ONE Transform call (0x82BBBB18) with the matrix pointer chosen per
+        // arm; pointer-select forms tried score 54.7..55.6 (box-copy scheduling differs).
+        const math::vpu::Matrix44Affine lCombined = math::vpu::Mult(mTransform, *lpTransform);
         lResult = lAggBox.Transform(&lCombined);
     }
     else

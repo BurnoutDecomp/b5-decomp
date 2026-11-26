@@ -44,6 +44,7 @@
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"             // AptMatrix::tx/ty (the drag grab offset)
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // mnClipActionFlags / mDisplayList
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"              // removeClonedObject
+#include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"  // gpValuesToRelease
 
 #include "types.hpp"
 
@@ -173,11 +174,6 @@ static const uint32_t KU_TYPETAG_LEVEL = 15u;
 // @0x82B07FB8 are homed members (AptCIHNativeFunctionHelper.cpp /
 // AptActionInterpreterInterpHelpers.cpp), called directly below.
 
-// Drain the deferred-release value vector (off_8324E51C) once the operand stack
-// empties -- homed in AptGC.cpp over the real gValuesToRelease vector. Shared with
-// the Var/Member/Control opcodes (declared there too).
-extern void AptFlushDeferredReleases();
-
 // The shared "undefined" value (off_8324D814) -- defined in AptGlobals.cpp, built
 // at AptInit.
 extern AptValue* gpUndefinedValue;
@@ -251,10 +247,10 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame(AptActionInterpreter* pIn
         static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst())->mbIsPlaying = 0;
     }
 
-    // Flush the AptGC deferred-release vector once the operand stack has drained
-    // (console: off_8324E51C->count != 0 && mOperandStack.mnTop == 0).
-    if (pInterp->mOperandStack.mnTop == 0)
-        AptFlushDeferredReleases();   // off_8324E51C drain (homed, AptGC.cpp)
+    // Flush the AptGC deferred-release vector once the operand stack has drained: ARTIST
+    // 0x82B0C558 tests the vector's count before mnTop, as the ControlOps handlers do.
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
+        gpValuesToRelease->ReleaseValues();
 }
 
 // ---------------------------------------------------------------------------

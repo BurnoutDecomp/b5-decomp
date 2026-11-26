@@ -84,8 +84,8 @@ public:
     {
         // Recover the leading saved-size word and free the whole block (X360:
         // Deallocate(off_8324D808, p - 1, *(p - 1) + 4)).
-        size_t* lpBlock = static_cast<size_t*>(p) - 1;
-        gpAptSharedPtrPool->Deallocate(lpBlock, *lpBlock + sizeof(size_t));
+        // ARTIST 0x82AE81B4/0x82AE81BC: both operands are formed from p (addi -4, lwz -4).
+        gpAptSharedPtrPool->Deallocate(static_cast<size_t*>(p) - 1, static_cast<size_t*>(p)[-1] + sizeof(size_t));
     }
 
     // ---- register file lifecycle -----------------------------------------

@@ -245,7 +245,7 @@ void AptDisplayList::removeClonedObject(AptCIH* pSource)
 {
     const int nDepth = pSource->GetCharacterInst()->GetDepth();   // pSource[8]->mpRenderItem->mDepth
 
-    AptCIH* pPrev  = 0;
+    AptCIH* pPrev;        // not initialised: ARTIST stores only pMatch's 0 (0x82AFD1C8)
     AptCIH* pMatch = 0;
     AsState()->findInst(nDepth, 0, &pPrev, &pMatch);
     removeObject(pMatch);

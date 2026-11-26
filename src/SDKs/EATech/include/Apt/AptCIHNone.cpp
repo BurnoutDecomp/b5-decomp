@@ -6,24 +6,15 @@
 // X360 @0x82B00DC8 (store-for-store):
 //     AptCIH::AptCIH(this, 0, 0);              // base node ctor: null char + null parent
 //     this->mnValueData = this->mnValueData & 0xFFFFFF80 | 0x25;
-//                                              // insrwi r10,0x25,7,25 -> set low 7 flags
+//                                              // insrwi r10,0x25,7,25: meValueType = 37
 //     *this = off_82145FF0;                    // (automatic) AptCIHNone vtable store
 //     AptValue::setIsDefined(this, 1);         // the "none" handle IS a defined value
 //     AptValue::setRefCount(this, 0xFFF);      // pin MAX_REFCOUNT -- the shared singleton
 //
-// The 0x25 write replaces the low 7 bits of the AptValue bitfield word with:
-//     bit0 mbIsAllocated         = 1
-//     bit1 mbHasRegisterReferenceMark = 0
-//     bit2 mbIsInDeferredVector  = 1
-//     bit3 mbDestroyedGC         = 0
-//     bit4 mbIsDefined           = 0   (immediately re-set to 1 by setIsDefined)
-//     bit5 mbAllowsDelayedDeletion = 1
-//     bit6 (low bit of mnReferenceCount) = 0  (overwritten by setRefCount)
-// It does NOT touch the high meValueType field, so the value-type tag the base
-// AptCIH ctor stored (AptVFT_CharacterInstHandle) is retained; the AptCIHNone
-// vtable pointer is what distinguishes the type. Reconstructed by NAMED bitfield
-// fields (no raw bitfield-word poke); the two named setters cover the bits they
-// own, and setIsDefined/setRefCount own mbIsDefined / mnReferenceCount.
+// The 0x25 write is meValueType = AptVFT_CIHNone (37): X360 allocates bit-fields from the
+// MSB, so the last-declared 7-bit type tag is the word's low 7 bits (getVtblIndex is
+// clrlwi 25; the tree's old reading of these as the x64 low flag bits was the LSB-first
+// layout). The base AptCIH ctor's AptVFT_CharacterInstHandle tag is replaced.
 // ===========================================================================
 
 // XDK size optimization matches ARTIST at 0x82B00E30.
@@ -37,14 +28,11 @@
 AptCIHNone::AptCIHNone()
     : AptCIH(/*pCharacter*/ 0, /*pParent*/ 0)
 {
-    // Low-7 AptValue flag set (the X360 `bitfield = bitfield & ~0x7F | 0x25`),
-    // written by named field. mbIsDefined (bit 4) is cleared here and re-set just
-    // below; mnReferenceCount's low bit (bit 6) is owned by setRefCount.
-    mValueBitfield.mbIsAllocated            = 1u;
-    mValueBitfield.mbHasRegisterReferenceMark = 0u;
-    mValueBitfield.mbIsInDeferredVector     = 1u;
-    mValueBitfield.mbDestroyedGC            = 0u;
-    SetAllowDelayedDeletion(true);   // bit 5 mbAllowsDelayedDeletion = 1
+    // ARTIST 0x82B00DF4 `rlwimi r10,0x25,0,25,31`: the low 7 bits of the word are
+    // meValueType (X360 bit-fields are allocated from the MSB; getVtblIndex is clrlwi 25),
+    // so the derived ctor retags the CIH as AptVFT_CIHNone (37), written directly as the
+    // base AptValue constructors do (no GC-flag lock, no other bit).
+    mValueBitfield.meValueType = AptVFT_CIHNone;
 
     setIsDefined(true);              // the AS "none" handle is a defined value
     setRefCount(MAX_REFCOUNT);       // pinned: the shared singleton is never freed

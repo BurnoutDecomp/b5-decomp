@@ -79,24 +79,21 @@ public:
     // delete[] -- which only receives the pointer -- can recover the size
     // DOGMA::Deallocate needs. This is the size-saving pool-array path the X360
     // emits inline in Initialize (Allocate(off_8324D808, size+4); *p = size) and in
-    // the deleting destructor (Deallocate(off_8324D808, p, *p+4)). Guarded for null
-    // until the Apt runtime wires the pool.
+    // the deleting destructor (Deallocate(off_8324D808, p, *p+4)). No null guards: ARTIST's
+    // `vector deleting destructor' 0x82AE7FE8 frees unconditionally, and its scalar arm
+    // 0x82AE801C frees the 12-byte slot through the pool (class operator delete), as
+    // AptRegister's.
+    static void  operator delete(void* p, size_t size) { gpAptSharedPtrPool->Deallocate(p, size); }
+
     static void* operator new[](size_t size)
     {
-        if (gpAptSharedPtrPool == 0)
-            return 0;
         size_t* lpBlock = static_cast<size_t*>(gpAptSharedPtrPool->Allocate(size + sizeof(size_t)));
-        if (lpBlock == 0)
-            return 0;
         *lpBlock = size;
         return lpBlock + 1;
     }
     static void operator delete[](void* p)
     {
-        if (p == 0 || gpAptSharedPtrPool == 0)
-            return;
-        size_t* lpHeader = static_cast<size_t*>(p) - 1;
-        gpAptSharedPtrPool->Deallocate(lpHeader, *lpHeader + sizeof(size_t));
+        gpAptSharedPtrPool->Deallocate(static_cast<size_t*>(p) - 1, static_cast<size_t*>(p)[-1] + sizeof(size_t));
     }
 
     // This entry's slot index in the pool.
