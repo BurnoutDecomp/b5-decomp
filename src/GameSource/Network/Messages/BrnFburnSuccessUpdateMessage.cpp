@@ -29,7 +29,7 @@ namespace BrnNetwork
     void FburnSuccessUpdateMessage::Construct()
     {
         CgsNetwork::Message::Construct();
-        mSuccessBitArray.mu64Bits = 0;
+        mSuccessBitArray.UnSetAll();
         miFramesSinceStart        = -1;
         miActionIndex             = -1;
     }
@@ -47,7 +47,7 @@ namespace BrnNetwork
 
     s32 FburnSuccessUpdateMessage::GetPackedMessageSize()
     {
-        mSuccessBitArray.mu64Bits = 0;
+        mSuccessBitArray.UnSetAll();
         miFramesSinceStart        = 0;
         miActionIndex             = 0;
         return CgsNetwork::Message::GetPackedMessageSize();
@@ -55,20 +55,17 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult FburnSuccessUpdateMessage::PackOrUnpack()
     {
-        const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::Message::PackOrUnpack();
-        const CgsNetwork::PackOrUnpackResult lxBuffer =
-            CgsNetwork::Message::PackOrUnpackBuffer(
-                                           reinterpret_cast<char*>(&mSuccessBitArray),
-                                           8) | lxBase;
-        const CgsNetwork::PackOrUnpackResult lxFrames =
-            CgsNetwork::Message::PackOrUnpack(&miFramesSinceStart, 0, 0x7FFFFFFF);
-        return CgsNetwork::Message::PackOrUnpack(&miActionIndex, 0, 2) | (lxFrames | lxBuffer);
+        CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::Message::PackOrUnpack();
+        lxResult |= CgsNetwork::Message::PackOrUnpackBuffer(reinterpret_cast<char*>(&mSuccessBitArray), 8);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&miFramesSinceStart, 0, 0x7FFFFFFF);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&miActionIndex, 0, 2);
+        return lxResult;
     }
 
     void FburnSuccessUpdateMessage::PrepareForSend(u16 lu16FrameCount,
                                                    s32 liFramesSinceStart,
                                                    s32 liActionIndex,
-                                                   const FburnSuccessUpdatePayload* lpSuccessBitArray)
+                                                   const LastSecondChallengeSuccess* lpSuccessBitArray)
     {
         CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             "lu16FrameCount != KU16_INVALID_FRAME",
@@ -76,16 +73,18 @@ namespace BrnNetwork
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
         {
+            // The bit set is read first (ARTIST 0x8257FB24 loads it ahead of the two int stores,
+            // which could alias it).
+            mSuccessBitArray   = *lpSuccessBitArray;   // 64-bit copy
             miFramesSinceStart = liFramesSinceStart;
             miActionIndex      = liActionIndex;
-            mSuccessBitArray   = *lpSuccessBitArray;   // 64-bit copy
             CgsNetwork::Message::PrepareForSend(KI_FBURN_SUCCESS_UPDATE_MESSAGE_TYPE, lu16FrameCount);
         }
     }
 
     bool FburnSuccessUpdateMessage::Retrieve(s32* lpiFramesSinceStart,
                                              s32* lpiActionIndex,
-                                             FburnSuccessUpdatePayload* lpSuccessBitArray)
+                                             LastSecondChallengeSuccess* lpSuccessBitArray)
     {
         // ARTIST 0x8257FB60 branches to a trailing `return false` (0x8257FB90): the copy-out is the body
         // of the valid test.

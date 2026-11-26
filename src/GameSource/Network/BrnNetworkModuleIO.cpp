@@ -22,7 +22,8 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"   // BrnGameState::GameStateModuleIO::GameEventQueue (OutputBuffer storage)
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
-#include <cstring>   // std::memcpy (SetActiveRaceCarInterface) / std::strncpy (SetGameName)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::StrnCpy (SetGameName)
+#include <cstring>   // std::memcpy (SetActiveRaceCarInterface)
 
 namespace BrnNetwork
 {
@@ -604,12 +605,11 @@ namespace BrnNetworkModuleIO
         return *this;
     }
 
-    // Computes strlen(lpcName) inline and asserts it is < 36 ("String too long"), then
-    // strncpy's into the 36-char macGameName.
+    // CgsCore::StrnCpy into the 36-char macGameName (ARTIST 0x82580FEC asserts
+    // CgsStringUtils.h:55, "String too long: " << lpcName).
     void InGamePlayerStatusInterface::SetGameName(const char* lpcName)
     {
-        CGS_ASSERT(std::strlen(lpcName) < 36, "String too long");
-        std::strncpy(macGameName, lpcName, 36);
+        CgsCore::StrnCpy(macGameName, lpcName, sizeof(macGameName));
     }
 
     // ========================================================================

@@ -1,4 +1,5 @@
 #include "types.hpp"
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnRoadRulesMessage.cpp"   // ARTIST 0x820858B4
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/Messages/BrnRoadRulesMessage.h"
@@ -66,24 +67,14 @@ namespace BrnNetwork
             return;
         }
 
-        if (liNumRoadRulesScores <= 0)
-        {
-            CgsDev::Assert::BeginAssert();
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Trying to send 0 or less road rules: " << liNumRoadRulesScores;
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
-        if (liNumRoadRulesScores > KI_MAX_ROAD_RULES_MESSAGE_ENTRIES)
-        {
-            CgsDev::Assert::BeginAssert();
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Trying to send too many road rules: " << liNumRoadRulesScores << "\n";
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
+        // Streamed asserts through the shared assert buffer (ARTIST 0x8257B690 / 0x8257B6EC; the
+        // first text has no newline).
+        CGS_ASSERT_STREAM_AT(liNumRoadRulesScores > 0,
+                             "Trying to send 0 or less road rules: " << liNumRoadRulesScores,
+                             CGS_ARTIST_FILE, 71);
+        CGS_ASSERT_STREAM_AT(liNumRoadRulesScores <= KI_MAX_ROAD_RULES_MESSAGE_ENTRIES,
+                             "Trying to send too many road rules: " << liNumRoadRulesScores << "\n",
+                             CGS_ARTIST_FILE, 72);
 
         miNumRoadRulesScores = liNumRoadRulesScores;
         XMemCpy(maRoadRulesMessageData, lpRoadRulesMessageData,
@@ -91,7 +82,7 @@ namespace BrnNetwork
         miStreetDataVersion = KI_EXPECTED_STREET_DATA_VERSION;
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_ROAD_RULES_MESSAGE_TYPE, lu16Frame);
-        CGS_ASSERT(IsReliable(), "IsReliable()");
+        CGS_ASSERT_AT(IsReliable(), "IsReliable()", CGS_ARTIST_FILE, 84);
     }
 
     // BrnNetwork::RoadRulesMessage::GetPackedMessageSize @ 0x8257B7C8
@@ -189,3 +180,5 @@ namespace BrnNetwork
         return false;
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

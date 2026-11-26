@@ -74,12 +74,8 @@ namespace BrnNetwork
         struct NetworkEventQueue;          // ProcessNetworkEvents param
     }
 
-    // The "last-second challenge success" 8-byte bit set the update message carries. Reuse the
-    // committed home (BrnFburnSuccessUpdateMessage.h spells it
-    // FburnChallengeSuccessUpdateAction::LastSecondChallengeSuccess); the manager stores/loads it
-    // whole (8-byte std/ld), so the typedef keeps every call site reading it by name.
-    typedef BrnGameState::FburnChallengeSuccessUpdateAction::LastSecondChallengeSuccess
-        LastSecondChallengeSuccess;
+    // LastSecondChallengeSuccess (the FastBitArray<60> the update message carries) is
+    // BrnFburnSuccessUpdateMessage.h's typedef of the GameState home.
 
 
     struct ChallengeSuccessManager

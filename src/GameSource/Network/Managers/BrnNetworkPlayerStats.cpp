@@ -3,7 +3,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"      // CgsSystem::Time
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"            // CGS_ASSERT / CgsDev::Assert
-#include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (the name-copy assert)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"       // CgsCore::StrnCpy (the name copy)
 #include "GameSource/GameState/BrnCgsPlayerName.h"            // CgsNetwork::KI_USERNAME_LENGTH
 
 #include <cstdlib>   // atoi
@@ -87,20 +87,12 @@ namespace BrnNetwork
     {
         Clear();
 
-        CGS_ASSERT(std::strlen(lpcName) < static_cast<u32>(CgsNetwork::KI_USERNAME_LENGTH),
-                   "strlen(lpcName) < static_cast<uint32_t>(CgsNetwork::KI_USERNAME_LENGTH)");
+        CGS_ASSERT_AT(std::strlen(lpcName) < static_cast<u32>(CgsNetwork::KI_USERNAME_LENGTH),
+                      "strlen(lpcName) < static_cast<uint32_t>(CgsNetwork::KI_USERNAME_LENGTH)",
+                      __FILE__, 99);
 
-        // The bounded string copy re-checks the length and names the offending string.
-        if (!(std::strlen(lpcName) < sizeof(macName)))
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "String too long: " << (lpcName != 0 ? lpcName : "<NULLSTRING>");
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
-        std::strncpy(macName, lpcName, sizeof(macName));
+        // CgsCore::StrnCpy (ARTIST 0x82546878 asserts CgsStringUtils.h:55).
+        CgsCore::StrnCpy(macName, lpcName, sizeof(macName));
 
         mTimeStamp       = lTimeStamp;
         meStatsStatus    = E_STATS_AGE_INVALID;

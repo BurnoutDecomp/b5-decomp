@@ -1440,7 +1440,8 @@ namespace BrnNetwork
         {
             lPlayerInfo.Prepare();
             GetServerInterface()->GetPlayerInfoComponent()->GetLocalPlayerInfo(&lPlayerInfo);
-            CGS_ASSERT(lPlayerInfo.GetID() == lPlayerID, "Can only get local player stats when not in a game");
+            CGS_ASSERT_AT(lPlayerInfo.GetID() == lPlayerID, "Can only get local player stats when not in a game",
+                          __FILE__, 2370 /* ARTIST 0x82595E3C */);
             lpcPlayerName = lPlayerInfo.GetName();
             liRank        = lPlayerInfo.GetRank();
         }
@@ -1451,8 +1452,8 @@ namespace BrnNetwork
             BrnGui::GuiEventNetworkPlayerStats lPlayerStatsEvent;
             mPlayerIDStatsGet = CgsNetwork::K_INVALID_PLAYER_ID;
 
-            CGS_ASSERT(std::strlen(lpcPlayerName) < sizeof(lPlayerStatsEvent.macPlayerName), "String too long: ");
-            std::strncpy(lPlayerStatsEvent.macPlayerName, lpcPlayerName, sizeof(lPlayerStatsEvent.macPlayerName));
+            // CgsCore::StrnCpy (ARTIST 0x82595F58 asserts CgsStringUtils.h:55).
+            CgsCore::StrnCpy(lPlayerStatsEvent.macPlayerName, lpcPlayerName, sizeof(lPlayerStatsEvent.macPlayerName));
             lPlayerStatsEvent.mPlayerID    = lPlayerID;
             static_cast<BrnNetwork::NetworkPlayerStats&>(lPlayerStatsEvent) = *lpPlayerStats;
             lPlayerStatsEvent.miWorldRank  = liRank;
@@ -1707,10 +1708,9 @@ namespace BrnNetwork
                 if (lpData != NULL)
                 {
                     const char* lpcReason = static_cast<const char*>(lpData);
-                    CGS_ASSERT(std::strlen(lpcReason) < CgsGui::GuiEventNetworkDisconnected::KI_MAX_REASON_LENGTH,
-                               "String too long: ");
-                    std::strncpy(lDisconnectedEvent.macReason, lpcReason,
-                                 CgsGui::GuiEventNetworkDisconnected::KI_MAX_REASON_LENGTH);
+                    // CgsCore::StrnCpy (ARTIST 0x82598EDC asserts CgsStringUtils.h:55).
+                    CgsCore::StrnCpy(lDisconnectedEvent.macReason, lpcReason,
+                                     CgsGui::GuiEventNetworkDisconnected::KI_MAX_REASON_LENGTH);
                 }
 
                 if (GetLoginManager()->GetSignInType() == LoginManagerBase::E_SIGN_IN_TYPE_SILENT)
@@ -1807,10 +1807,9 @@ namespace BrnNetwork
                 lpGamesComponent->GetFoundGame(liGamesIndex, &lGameParams);
 
                 const char* lpcGameName = lGameParams.GetName();
-                CGS_ASSERT(std::strlen(lpcGameName) < sizeof(lSearchResults.maacGameNames[liSearchGamesIndex]),
-                           "String too long: ");
-                std::strncpy(lSearchResults.maacGameNames[liSearchGamesIndex], lpcGameName,
-                             sizeof(lSearchResults.maacGameNames[liSearchGamesIndex]));
+                // CgsCore::StrnCpy (ARTIST 0x825990E4 asserts CgsStringUtils.h:55).
+                CgsCore::StrnCpy(lSearchResults.maacGameNames[liSearchGamesIndex], lpcGameName,
+                                 sizeof(lSearchResults.maacGameNames[liSearchGamesIndex]));
 
                 lSearchResults.maeGameMode[liSearchGamesIndex]         = lGameParams.GameMode();
                 lSearchResults.maePreviousGameMode[liSearchGamesIndex] = lGameParams.PreviousGameMode();

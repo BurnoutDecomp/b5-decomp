@@ -15,6 +15,7 @@
 // is by name; the row stride / base offset are produced by the committed Scoreboard layout, not by
 // raw-offset arithmetic.
 
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::StrnCpy
 #include "GameSource/Network/Managers/BrnNetworkScoreboard.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (the bounded-copy assert)
@@ -39,17 +40,8 @@ namespace BrnNetwork
     {
         if (lpcTitle != 0)
         {
-            // The bounded copy names the offending string when it does not fit, then copies anyway.
-            if (!(std::strlen(lpcTitle) < sizeof(macTitle)))
-            {
-                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                lStrStream << "String too long: " << lpcTitle;
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-                CgsDev::Assert::EndAssert();
-            }
-            std::strncpy(macTitle, lpcTitle, sizeof(macTitle));
+            // CgsCore::StrnCpy (ARTIST 0x82546F7C asserts CgsStringUtils.h:55).
+            CgsCore::StrnCpy(macTitle, lpcTitle, sizeof(macTitle));
         }
         else
         {
@@ -69,21 +61,12 @@ namespace BrnNetwork
     // Append one cell: length-check the text into the next 31-char cell and count it.
     void ScoreboardRow::AddCell(const char* lpcData)
     {
-        CGS_ASSERT(lpcData != 0, "lpcData");
-        CGS_ASSERT(miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS, "miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS");
+        CGS_ASSERT_AT(lpcData != 0, "lpcData", KAC_ARTIST_ASSERT_SOURCE, 330);
+        CGS_ASSERT_AT(miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS,
+                      "miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS", KAC_ARTIST_ASSERT_SOURCE, 331);
 
-        char* lpcCell = maacData[miNumberOfColumns];
-        // The bounded copy names the offending string when it does not fit, then copies anyway.
-        if (!(std::strlen(lpcData) < sizeof(maacData[0])))
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "String too long: " << (lpcData != 0 ? lpcData : "<NULLSTRING>");
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
-        std::strncpy(lpcCell, lpcData, sizeof(maacData[0]));
+        // CgsCore::StrnCpy (ARTIST 0x82547100 asserts CgsStringUtils.h:55).
+        CgsCore::StrnCpy(maacData[miNumberOfColumns], lpcData, sizeof(maacData[0]));
         ++miNumberOfColumns;
     }
 

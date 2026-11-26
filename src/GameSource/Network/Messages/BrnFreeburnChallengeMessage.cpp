@@ -56,21 +56,19 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult FreeburnChallengeMessage::PackOrUnpack()
     {
-        const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
-        const CgsNetwork::PackOrUnpackResult lxId =
-            CgsNetwork::Message::PackOrUnpack(&mChallengeID) | lxBase;
-        const CgsNetwork::PackOrUnpackResult lxAction =
-            CgsNetwork::Message::PackOrUnpack(&miActionIndex, 0, 2) | lxId;
+        CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mChallengeID);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&miActionIndex, 0, 2);
 
-        s32 liEventType = meEventType;
-        const CgsNetwork::PackOrUnpackResult lxEvent =
-            CgsNetwork::Message::PackOrUnpack(&liEventType, 0, 7) | lxAction;
-        meEventType = static_cast<BrnNetworkModuleIO::EChallengeEventType>(liEventType);
+        // One scratch int carries both enums (ARTIST 0x8257C5E0 / 0x8257C60C and PS3 0x64634C /
+        // 0x64637C reuse the same stack slot).
+        s32 liEnumValue = meEventType;
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&liEnumValue, 0, 7);
+        meEventType = static_cast<BrnNetworkModuleIO::EChallengeEventType>(liEnumValue);
 
-        s32 liStatus = meChallengeStatus;
-        const CgsNetwork::PackOrUnpackResult lxResult =
-            CgsNetwork::Message::PackOrUnpack(&liStatus, 0, 7) | lxEvent;
-        meChallengeStatus = static_cast<BrnGameState::EChallengeStatus>(liStatus);
+        liEnumValue = meChallengeStatus;
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&liEnumValue, 0, 7);
+        meChallengeStatus = static_cast<BrnGameState::EChallengeStatus>(liEnumValue);
         return lxResult;
     }
 
@@ -83,19 +81,15 @@ namespace BrnNetwork
     {
         const s32 KI_FREEBURN_CHALLENGE_MESSAGE_TYPE = 34;
 
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-                   "lu16FrameCount != KU16_INVALID_FRAME");
+        CGS_ASSERT_AT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
+                      "lu16FrameCount != KU16_INVALID_FRAME", CGS_ARTIST_FILE, 150);
 
-        if (IsMessageValid())
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStream << "Haven't yet sent event type : " << static_cast<s32>(meEventType)
-                    << " but trying to send new event type : " << static_cast<s32>(leEventType) << "\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
+        // ARTIST 0x8257C6C4: a streamed assert (the message is built in the shared assert buffer,
+        // 0x82F32260), line 152.
+        CGS_ASSERT_STREAM_AT(!IsMessageValid(),
+                             "Haven't yet sent event type : " << meEventType
+                             << " but trying to send new event type : " << leEventType << "\n",
+                             CGS_ARTIST_FILE, 152);
 
         mChallengeID      = lChallengeID;
         meEventType       = leEventType;

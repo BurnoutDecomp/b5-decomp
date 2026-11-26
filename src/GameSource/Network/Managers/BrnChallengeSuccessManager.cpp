@@ -31,7 +31,9 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameSource/Network/BrnNetworkModule.h"                       // BrnNetworkModule::GetNetworkManager / GetNetworkEventQueue
 #include "GameSource/Network/BrnNetworkManager.h"                      // BrnNetworkManager::GetLocalConsoleFrameRate
-#include "GameSource/Network/BrnNetworkModuleIO.h"                     // BrnNetworkModuleIO::PostSim, PostSimulationInputBuffer, NetworkEventQueue
+#include "GameSource/Network/BrnNetworkModuleIO.h"                     // BrnNetworkModuleIO::PostSim, PostSimulationInputBuffer, NetworkEventQueue (AddEvent<T>)
+#include "GameSource/Network/BrnNetworkInEventTypeDefs.h"              // NetworkInFreeburnChallenge / FburnSuccessUpdate / FburnChallengeSuccess (tags 38 / 40 / 41)
+#include "GameSource/Network/BrnNetworkOutEventTypeDefs.h"             // NetworkOutFburnChallengeSuccess(Update)Event (tags 67 / 68)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // GameStateToNetworkInterface::GetActiveRaceCarIndex
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"   // PlayerManager::GetPlayerByID / IsPlayerTurnToSendRoundRobinMessage
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"   // NetworkPlayer::RegisterMessageType / GetRemoteConsoleFrameRate, KI_INVALID_PLAYER_ID, EFrameRate
@@ -52,106 +54,6 @@ namespace BrnNetwork
     // The two console frame rates the relay translates between (X360 cmpwi 0x32 / 0x3C).
     static const s32 KI_FRAMERATE_50HZ = 50;
     static const s32 KI_FRAMERATE_60HZ = 60;
-
-    // GameState -> network in-event type ids walked by ProcessNetworkEvents (X360: cmpwi 0x26 /
-    // 0x28 / 0x29). They mirror BrnNetworkInEventTypeDefs.h's NetworkEvent<N> tags.
-    static const s32 KI_INEVENT_FREEBURN_CHALLENGE  = 0x26;  // 38 -- challenge lifecycle (clears the gate on ENDED)
-    static const s32 KI_INEVENT_FBURN_SUCCESS_UPDATE = 0x28; // 40 -- arms the gate + caches the pending update
-    static const s32 KI_INEVENT_FBURN_CHALLENGE_SUCCESS = 0x29; // 41 -- the reliable two-action result to send
-
-    // Network-out event type ids the relay produces onto the module network-event queue (X360:
-    // li r5,0x43 / li r5,0x44 to AddEvent). 67 == the received success-update event, 68 == the
-    // received reliable challenge-success result.
-    static const s32 KI_OUTEVENT_FBURN_SUCCESS_UPDATE  = 0x43;  // 67
-    static const s32 KI_OUTEVENT_FBURN_CHALLENGE_SUCCESS = 0x44; // 68
-    static const s32 KI_OUTEVENT_FBURN_SUCCESS_UPDATE_SIZE  = 24; // 0x18
-    static const s32 KI_OUTEVENT_FBURN_CHALLENGE_SUCCESS_SIZE = 20; // 0x14
-
-    namespace
-    {
-        // The network-event queue is BrnNetworkModuleIO::NetworkEventQueue itself: it derives
-        // from CgsModule::VariableEventQueue<14000, 16> and adds nothing (BrnNetworkModuleIO.h),
-        // so its accessors are called on it directly.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        // ---- in-event payloads consumed from the GameState network-event queue --------------
-        // Offsets are X360-AUTHORITATIVE from ProcessNetworkEvents @ 0x8255DDC8 (the raw event
-        // reads). They mirror the DWARF NetworkInFreeburnChallengeEvent<38> /
-        // NetworkInFburnSuccessUpdateEvent<40> / NetworkInFburnChallengeSuccessEvent<41> member
-        // lists; only the fields this relay reads are named, the rest are pinned with padding.
-
-        // NetworkEvent<38>: challenge lifecycle event. The relay reads only meEventType (@ +16)
-        // and clears the pending gate when it is E_CHALLENGE_EVENT_ENDED (== 5).
-        struct InFreeburnChallengeEvent
-        {
-            NetworkPlayerID mPlayerID;     // +0x00
-            u8              maPad4[4];      // +0x04 (CgsID is 8-aligned)
-            u64             mChallengeID;   // +0x08 (CgsID)
-            s32             meEventType;    // +0x10 (EChallengeEventType; lwz 0x10 -> cmpwi 5)
-        };
-
-        // NetworkEvent<40>: the cached success-update the relay re-broadcasts. The handler stores
-        // the 8-byte bit set whole (ld 0 -> mLastSecondChallengeSuccess) and the action index
-        // (lwz 8 -> miChallengeSuccessUpdateIndex).
-        struct InFburnSuccessUpdateEvent
-        {
-            LastSecondChallengeSuccess mChallengeSuccessUpdate; // +0x00 (8 bytes)
-            s32                        miActionIndex;           // +0x08
-        };
-
-        // NetworkEvent<41>: the reliable two-action result to send out. The relay forwards the
-        // three field pointers (scores @ +0, successful @ +8, accumulation @ +10) straight into
-        // HandleSendingChallengeSuccessMessage.
-        struct InFburnChallengeSuccessEvent
-        {
-            f32  mafActionScores[2];          // +0x00
-            bool mabSuccessfulActions[2];      // +0x08
-            bool mabAccumulationThisFrame[2];  // +0x0A
-        };
-
-        // ---- network-out event payloads produced onto the module network-event queue ---------
-        // X360-AUTHORITATIVE byte layouts from the AddEvent call sites (the relay builds the byte
-        // image on the stack, then AddEvent copies the leading N bytes). These are the ARTIST-era
-        // NetworkOut shapes; the PS3 DWARF NetworkOutFburnChallengeSuccess(Update)Event member
-        // order drifted across the merge window, so the asm stack layout is authoritative here.
-
-        // type 67 (0x43), 24 bytes -- built by HandleReceivedUpdateMessage @ 0x82565090.
-        // Stack proof: std v20=success bitset @ var_60(+0); stw GetActiveRa @ var_58(+8);
-        // stw frame index @ var_54(+0xC); stw action index @ var_50(+0x10).
-        struct OutFburnSuccessUpdateEvent
-        {
-            LastSecondChallengeSuccess mChallengeSuccessUpdate; // +0x00 (8 bytes)
-            s32                        meActiveRaceCarIndex;    // +0x08
-            s32                        miChallengeUpdateFrame;  // +0x0C
-            s32                        miActionIndex;           // +0x10
-            // (AddEvent copies 24 bytes; +0x14..+0x17 trail as alignment.)
-        };
-
-        // type 68 (0x44), 20 bytes -- built by _ChallengeSuccessMessageArrivedCallback
-        // @ 0x825652F8. Stack proof (buffer base = var_40 @ +0): Retrieve fills action scores
-        // @ +0 (var_40), frames-since-start @ +8 (var_38), successful flags @ +0x10 (var_30),
-        // accumulation flags @ +0x12 (var_2E); GetActiveRa is stw'd @ +0xC (var_34).
-        struct OutFburnChallengeSuccessEvent
-        {
-            f32  mafActionScores[2];           // +0x00
-            s32  miFramesSinceStart;           // +0x08
-            s32  meActiveRaceCarIndex;         // +0x0C
-            bool mabSuccessfulActions[2];       // +0x10
-            bool mabAccumulationThisFrame[2];   // +0x12
-        };
-    } // anonymous namespace
 
     // -------------------------------------------------------------------------------------------
     // Construct  @ 0x8255DCD8
@@ -259,16 +161,21 @@ namespace BrnNetwork
     ChallengeSuccessManager::ChallengeSuccessData*
     ChallengeSuccessManager::GetChallengeSuccessDataEntry(NetworkPlayerID lPlayerID)
     {
-        for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
+        // DWARF locals cpp:720 liIndex / :721 lpEntry; the found entry leaves the loop and meets
+        // the null assert (ARTIST 0x8254B38C tests the computed entry, line 733).
+        s32                   liIndex;
+        ChallengeSuccessData* lpEntry = 0;
+        for (liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
             if (maChallengeSuccessData[liIndex].mPlayerID == lPlayerID)
             {
-                return &maChallengeSuccessData[liIndex];
+                lpEntry = &maChallengeSuccessData[liIndex];
+                break;
             }
         }
 
-        CGS_FAIL("lpEntry");
-        return 0;
+        CGS_ASSERT_AT(lpEntry != 0, "lpEntry", __FILE__, 733);
+        return lpEntry;
     }
 
     // -------------------------------------------------------------------------------------------
@@ -416,9 +323,9 @@ namespace BrnNetwork
                 CGS_ASSERT_AT(!lpChallengeSuccessMessage->IsMessageValid(),
                            "!lpChallengeSuccessMessage->IsMessageValid()", __FILE__, 272);
 
-                const s32 liFramesSinceStart = mpTimeManager->GetFramesSinceStart();
+                // DWARF has no frames local here (cpp:255..257): the call is the argument.
                 lpChallengeSuccessMessage->PrepareForSend(lu16CurrentFrame,
-                                                          liFramesSinceStart,
+                                                          mpTimeManager->GetFramesSinceStart(),
                                                           lpaSuccessfulActions,
                                                           lpaAccumulationThisFrame,
                                                           lpaActionScores);
@@ -432,23 +339,27 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ChallengeSuccessManager::CheckForNewUpdateMessages()
     {
+        // DWARF locals cpp:310 / :315..:319 (the two ints are not initialised: ARTIST stores
+        // nothing before Retrieve fills them).
         for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
+            LastSecondChallengeSuccess lLastSecondChallengeSuccess;
+            s32                        liFramesSinceStart;
+            s32                        liReceivedActionIndex;
+
             ChallengeSuccessData* lpSuccessData = &maChallengeSuccessData[liIndex];
-            CGS_ASSERT(lpSuccessData != 0, "lpSuccessData");
+            CGS_ASSERT_AT(lpSuccessData != 0, "lpSuccessData", __FILE__, 322);
 
             FburnSuccessUpdateMessage* lpReceivedMessage = &lpSuccessData->mUpdateMessageRecv;
-            CGS_ASSERT(lpReceivedMessage != 0, "lpReceivedMessage");
+            CGS_ASSERT_AT(lpReceivedMessage != 0, "lpReceivedMessage", __FILE__, 324);
 
-            s32                        liFramesSinceStart = 0;
-            s32                        liActionIndex      = 0;
-            LastSecondChallengeSuccess lSuccessUpdate;
-            if (lpReceivedMessage->Retrieve(&liFramesSinceStart, &liActionIndex, &lSuccessUpdate))
+            if (lpReceivedMessage->Retrieve(&liFramesSinceStart, &liReceivedActionIndex,
+                                            &lLastSecondChallengeSuccess))
             {
                 HandleReceivedUpdateMessage(lpSuccessData->mPlayerID,
                                             liFramesSinceStart,
-                                            liActionIndex,
-                                            &lSuccessUpdate);
+                                            liReceivedActionIndex,
+                                            &lLastSecondChallengeSuccess);
             }
         }
     }
@@ -466,27 +377,27 @@ namespace BrnNetwork
         s32 liActionIndex,
         const LastSecondChallengeSuccess* lpSuccessUpdate)
     {
-        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
-                   "mpNetworkModule->GetNetworkManager()");
+        CGS_ASSERT_AT(mpNetworkModule != 0, "mpNetworkModule", __FILE__, 359);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager() != 0,
+                   "mpNetworkModule->GetNetworkManager()", __FILE__, 360);
 
         const s32 leLocalConsoleFrameRate =
             static_cast<s32>(mpNetworkModule->GetNetworkManager()->GetLocalConsoleFrameRate());
-        CGS_ASSERT(leLocalConsoleFrameRate == KI_FRAMERATE_50HZ
+        CGS_ASSERT_AT(leLocalConsoleFrameRate == KI_FRAMERATE_50HZ
                    || leLocalConsoleFrameRate == KI_FRAMERATE_60HZ,
                    "( leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ) || "
-                   "( leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ )");
+                   "( leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ )", __FILE__, 363);
 
-        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT_AT(mpPlayerManager != 0, "mpPlayerManager", __FILE__, 365);
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-        CGS_ASSERT(lpNetworkPlayer != 0, "lpNetworkPlayer");
+        CGS_ASSERT_AT(lpNetworkPlayer != 0, "lpNetworkPlayer", __FILE__, 367);
 
         const s32 leRemoteConsoleFrameRate =
             static_cast<s32>(lpNetworkPlayer->GetRemoteConsoleFrameRate());
-        CGS_ASSERT(leRemoteConsoleFrameRate == KI_FRAMERATE_50HZ
+        CGS_ASSERT_AT(leRemoteConsoleFrameRate == KI_FRAMERATE_50HZ
                    || leRemoteConsoleFrameRate == KI_FRAMERATE_60HZ,
                    "( leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ) || "
-                   "( leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ )");
+                   "( leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ )", __FILE__, 370);
 
         LastSecondChallengeSuccess lTranslatedSuccess;
         s32                        liTranslatedFrame = liFramesSinceNetworkStart;
@@ -500,7 +411,7 @@ namespace BrnNetwork
         {
             // Sender is 60 Hz, we are 50 Hz.
             TranslateSuccessUpdate60HzTo50Hz(&lTranslatedSuccess, lpSuccessUpdate);
-            CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
+            CGS_ASSERT_AT(mpTimeManager != 0, "mpTimeManager", __FILE__, 390);
             // Map a 60 Hz frame index onto the 50 Hz timeline (X360: 5 * frame / 6 - 50).
             liTranslatedFrame = 5 * liFramesSinceNetworkStart / 6 - KI_FRAMERATE_50HZ;
         }
@@ -508,25 +419,25 @@ namespace BrnNetwork
         {
             // Sender is 50 Hz, we are 60 Hz.
             TranslateSuccessUpdate50HzTo60Hz(&lTranslatedSuccess, lpSuccessUpdate);
-            CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
+            CGS_ASSERT_AT(mpTimeManager != 0, "mpTimeManager", __FILE__, 405);
             // Map a 50 Hz frame index onto the 60 Hz timeline (X360: 6 * frame / 5 - 60).
             liTranslatedFrame = 6 * liFramesSinceNetworkStart / 5 - KI_FRAMERATE_60HZ;
         }
 
-        BrnNetworkModuleIO::GameStateToNetworkInterface* lpInterface =
-            mpNetworkModule->GetGameStateToNetworkInterface();
+        // DWARF (cpp:350) NetworkOutFburnChallengeSuccessUpdateEvent lSuccessUpdateEvent, filled
+        // through the module's own GetActiveRaceCarIndex forward (DecFIGS BrnNetworkModule.h:545:
+        // no mbIsUpdating assert, ARTIST 0x82565290 adds mGameStateToNetworkInterface's offset in
+        // place) and posted with NetworkEventQueue::AddEvent<T> (BrnNetworkEvent.h:91; ARTIST's
+        // li r6,0x18 / li r5,0x43 / addi r4 at 0x825652E0).
+        BrnNetworkModuleIO::NetworkOutFburnChallengeSuccessUpdateEvent lSuccessUpdateEvent;
+        lSuccessUpdateEvent.mChallengeSuccessUpdate = lTranslatedSuccess;
+        lSuccessUpdateEvent.meActiveRaceCarIndex    = mpNetworkModule->GetActiveRaceCarIndex(lPlayerID);
+        lSuccessUpdateEvent.miChallengeUpdateFrame  = liTranslatedFrame;
+        lSuccessUpdateEvent.miActionIndex           = liActionIndex;
 
-        OutFburnSuccessUpdateEvent lOutEvent;
-        lOutEvent.mChallengeSuccessUpdate = lTranslatedSuccess;
-        lOutEvent.meActiveRaceCarIndex    = static_cast<s32>(lpInterface->GetActiveRaceCarIndex(lPlayerID));
-        lOutEvent.miChallengeUpdateFrame  = liTranslatedFrame;
-        lOutEvent.miActionIndex           = liActionIndex;
-
-        CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0,
-                   "mpNetworkModule->GetNetworkEventQueue()");
-        mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lOutEvent),
-            KI_OUTEVENT_FBURN_SUCCESS_UPDATE, KI_OUTEVENT_FBURN_SUCCESS_UPDATE_SIZE);
+        CGS_ASSERT_AT(mpNetworkModule->GetNetworkEventQueue() != 0,
+                   "mpNetworkModule->GetNetworkEventQueue()", __FILE__, 419);
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lSuccessUpdateEvent);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -538,48 +449,59 @@ namespace BrnNetwork
     void ChallengeSuccessManager::ProcessNetworkEvents(
         const BrnNetworkModuleIO::NetworkEventQueue* lpInputNetworkEventQueue)
     {
-        CGS_ASSERT(lpInputNetworkEventQueue != 0, "lpInputNetworkEventQueue");
+        // DWARF locals cpp:521..523; the cases in their DWARF line order (:536 success update,
+        // :553 freeburn challenge, :569 challenge success). ARTIST 0x8255DE44 compares 0x26 /
+        // 0x28 / 0x29 and GetNextEvent writes the next event back into lpEvent (var_60).
+        const CgsModule::Event* lpEvent;
+        s32                     liEventSize;
+        s32                     liEventType;
 
-        const BrnNetworkModuleIO::NetworkEventQueue* lpQueue = lpInputNetworkEventQueue;
+        CGS_ASSERT_AT(lpInputNetworkEventQueue != 0, "lpInputNetworkEventQueue", __FILE__, 526);
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 leEventType = lpQueue->GetFirstEvent(&lpEvent, &liSize);
-
+        liEventType = lpInputNetworkEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
         while (lpEvent != 0)
         {
-            if (leEventType == KI_INEVENT_FBURN_SUCCESS_UPDATE)
+            switch (liEventType)
             {
-                const InFburnSuccessUpdateEvent* lpSuccessEvent =
-                    reinterpret_cast<const InFburnSuccessUpdateEvent*>(lpEvent);
-                CGS_ASSERT(lpSuccessEvent != 0, "lpSuccessEvent");
+            case BrnNetworkModuleIO::NetworkInFburnSuccessUpdateEvent::KI_EVENT_TYPE:
+            {
+                const BrnNetworkModuleIO::NetworkInFburnSuccessUpdateEvent* lpSuccessEvent =
+                    reinterpret_cast<const BrnNetworkModuleIO::NetworkInFburnSuccessUpdateEvent*>(lpEvent);
+                CGS_ASSERT_AT(lpSuccessEvent != 0, "lpSuccessEvent", __FILE__, 540);
                 mbSendUpdateSuccessMessage    = true;
                 mLastSecondChallengeSuccess   = lpSuccessEvent->mChallengeSuccessUpdate;
                 miChallengeSuccessUpdateIndex = lpSuccessEvent->miActionIndex;
+                break;
             }
-            else if (leEventType == KI_INEVENT_FREEBURN_CHALLENGE)
+
+            case BrnNetworkModuleIO::NetworkInFreeburnChallengeEvent::KI_EVENT_TYPE:
             {
-                const InFreeburnChallengeEvent* lpChallengeEvent =
-                    reinterpret_cast<const InFreeburnChallengeEvent*>(lpEvent);
-                CGS_ASSERT(lpChallengeEvent != 0, "lpChallengeEvent");
+                const BrnNetworkModuleIO::NetworkInFreeburnChallengeEvent* lpChallengeEvent =
+                    reinterpret_cast<const BrnNetworkModuleIO::NetworkInFreeburnChallengeEvent*>(lpEvent);
+                CGS_ASSERT_AT(lpChallengeEvent != 0, "lpChallengeEvent", __FILE__, 557);
                 if (lpChallengeEvent->meEventType == BrnNetworkModuleIO::E_CHALLENGE_EVENT_ENDED)
                 {
                     mbSendUpdateSuccessMessage = false;
                 }
+                break;
             }
-            else if (leEventType == KI_INEVENT_FBURN_CHALLENGE_SUCCESS)
+
+            case BrnNetworkModuleIO::NetworkInFburnChallengeSuccessEvent::KI_EVENT_TYPE:
             {
-                const InFburnChallengeSuccessEvent* lpChallengeSuccessEvent =
-                    reinterpret_cast<const InFburnChallengeSuccessEvent*>(lpEvent);
-                CGS_ASSERT(lpChallengeSuccessEvent != 0, "lpChallengeSuccessEvent");
+                const BrnNetworkModuleIO::NetworkInFburnChallengeSuccessEvent* lpChallengeSuccessEvent =
+                    reinterpret_cast<const BrnNetworkModuleIO::NetworkInFburnChallengeSuccessEvent*>(lpEvent);
+                CGS_ASSERT_AT(lpChallengeSuccessEvent != 0, "lpChallengeSuccessEvent", __FILE__, 573);
                 HandleSendingChallengeSuccessMessage(lpChallengeSuccessEvent->mabSuccessfulActions,
                                                      lpChallengeSuccessEvent->mabAccumulationThisFrame,
                                                      lpChallengeSuccessEvent->mafActionScores);
+                break;
             }
 
-            const CgsModule::Event* lpNextEvent = 0;
-            leEventType = lpQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
-            lpEvent = lpNextEvent;
+            default:
+                break;
+            }
+
+            liEventType = lpInputNetworkEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }
     }
 
@@ -673,37 +595,33 @@ namespace BrnNetwork
         NetworkPlayerID liFromPlayerID,
         void* lpUserData)
     {
+        // DWARF locals (cpp:752..754); the image's assert texts name lChallengeSucessEvent.
+        BrnNetworkModuleIO::NetworkOutFburnChallengeSuccessEvent lChallengeSucessEvent;
         ChallengeSuccessManager* lpChallengeManager = static_cast<ChallengeSuccessManager*>(lpUserData);
-        CGS_ASSERT(lpChallengeManager != 0, "lpChallengeManager");
+        CGS_ASSERT_AT(lpChallengeManager != 0, "lpChallengeManager", __FILE__, 758);
 
         FburnChallengeSuccessMessage* lpChallengeSuccessMessage =
             reinterpret_cast<FburnChallengeSuccessMessage*>(lpMessage);
-        CGS_ASSERT(lpChallengeSuccessMessage != 0, "lpChallengeSuccessMessage");
+        CGS_ASSERT_AT(lpChallengeSuccessMessage != 0, "lpChallengeSuccessMessage", __FILE__, 762);
 
-        OutFburnChallengeSuccessEvent lChallengeSuccessEvent;
-        const bool lbRetrieved = lpChallengeSuccessMessage->Retrieve(
-            &lChallengeSuccessEvent.miFramesSinceStart,
-            lChallengeSuccessEvent.mabSuccessfulActions,
-            lChallengeSuccessEvent.mabAccumulationThisFrame,
-            lChallengeSuccessEvent.mafActionScores);
-        CGS_ASSERT(lbRetrieved,
+        // ARTIST's text names the frame member miFramesSinceNetworkStart; the shared event type
+        // still calls it miChallengeUpdateFrame (+0x08).
+        CGS_ASSERT_AT(lpChallengeSuccessMessage->Retrieve(&lChallengeSucessEvent.miChallengeUpdateFrame,
+                                                          lChallengeSucessEvent.mabSuccessfulActions,
+                                                          lChallengeSucessEvent.mabAccumulationThisFrame,
+                                                          lChallengeSucessEvent.mafActionScores),
                    "lpChallengeSuccessMessage->Retrieve( &lChallengeSucessEvent.miFramesSinceNetworkStart, "
                    "lChallengeSucessEvent.mabSuccessfulActions, lChallengeSucessEvent.mabAccumulationThisFrame, "
-                   "lChallengeSucessEvent.mafActionScores )");
+                   "lChallengeSucessEvent.mafActionScores )", __FILE__, 768);
 
-        CGS_ASSERT(lpChallengeManager->mpNetworkModule != 0,
-                   "lpChallengeManager->mpNetworkModule");
+        CGS_ASSERT_AT(lpChallengeManager->mpNetworkModule != 0,
+                   "lpChallengeManager->mpNetworkModule", __FILE__, 771);
+        lChallengeSucessEvent.meActiveRaceCarIndex =
+            lpChallengeManager->mpNetworkModule->GetActiveRaceCarIndex(liFromPlayerID);
 
-        BrnNetworkModuleIO::GameStateToNetworkInterface* lpInterface =
-            lpChallengeManager->mpNetworkModule->GetGameStateToNetworkInterface();
-        lChallengeSuccessEvent.meActiveRaceCarIndex =
-            static_cast<s32>(lpInterface->GetActiveRaceCarIndex(liFromPlayerID));
-
-        CGS_ASSERT(lpChallengeManager->mpNetworkModule->GetNetworkEventQueue() != 0,
-                   "lpChallengeManager->mpNetworkModule->GetNetworkEventQueue()");
-        lpChallengeManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lChallengeSuccessEvent),
-            KI_OUTEVENT_FBURN_CHALLENGE_SUCCESS, KI_OUTEVENT_FBURN_CHALLENGE_SUCCESS_SIZE);
+        CGS_ASSERT_AT(lpChallengeManager->mpNetworkModule->GetNetworkEventQueue() != 0,
+                   "lpChallengeManager->mpNetworkModule->GetNetworkEventQueue()", __FILE__, 775);
+        lpChallengeManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lChallengeSucessEvent);
     }
 
     // -------------------------------------------------------------------------------------------
