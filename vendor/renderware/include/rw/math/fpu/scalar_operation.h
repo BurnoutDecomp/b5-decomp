@@ -110,6 +110,13 @@ namespace fpu
     const float SMALL_FLOAT = (1.0f / 65536.0f);
     inline bool IsSimilar(float a, float b, float epsilon = SMALL_FLOAT) { return Abs(a - b) < epsilon; }
 
+    // rwmath 1.02.00 fpu/scalar.h:268: Lerp(a, b, t) = a + (b - a) * t. DWARF names Lerp<float> in
+    // BrnAI::SteeringFan::GetSpeedRatio (ARTIST 0x82779C08..0x82779C18: Lerp(1, 0, t) folds to 1 - t).
+    template <class T> inline T Lerp(T a, T b, T t)
+    {
+        return a + (b - a) * t;
+    }
+
     // scalar.h:289-297 -- Sqrt<float> is the XDK __fsqrts intrinsic (one fsqrts; e.g. inlined by
     // Magnitude in BrnAI::AStar::EuclideanDistance 0x8276E0F8).
     template <class T> inline T Sqrt(T lValue);
