@@ -86,39 +86,39 @@ namespace BrnReplays
     // every mode except E_MODE_PLAYING (5) from the frame path: {3,6}, then {1,4}, then
     // {7}, then the final {4,5,6} gate -- leaving only 5. The frame is read as a raw
     // 0xD7E0-byte blob into the live-frame region.
-    s32 RaceCarEntitySerialiser::Read()
+    // Read / Write return Unlock's bool unconverted (ARTIST 0x8264C688 returns r3 as is).
+    bool RaceCarEntitySerialiser::Read()
     {
         Lock();
         RaceCarEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
         CGS_ASSERT(lpLayout != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.cpp", 127));
 
-        if (meMode == E_MODE_PLAYING)
+        // ARTIST 0x8264C568..0x8264C5D8: the inlined DWARF predicates in this order.
+        if (!IsStalled() && !IsPreparing() && !IsRestoring() && IsPlaying())
         {
             BaseSerialiser::Read(&lpLayout->mLiveFrame, sizeof(RaceCarSerialiserFrame));
         }
 
-        return Unlock() ? 1 : 0;
+        return Unlock();
     }
 
     // @0x8264C618
     // Top-level record dispatch (the write mirror of Read). The X360 guards on a non-null
     // static buffer (no assert, unlike Read), then reaches the frame path only for the
     // recording family {1,2,3}. The live frame is written as a raw 0xD7E0-byte blob.
-    s32 RaceCarEntitySerialiser::Write()
+    bool RaceCarEntitySerialiser::Write()
     {
         Lock();
         RaceCarEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
 
         if (lpLayout != 0)
         {
-            if (meMode == E_MODE_RECORDING_PREPARING ||
-                meMode == E_MODE_RECORDING ||
-                meMode == E_MODE_RECORDING_STALLED)
+            if (IsRecording())
             {
                 BaseSerialiser::Write(&lpLayout->mLiveFrame, sizeof(RaceCarSerialiserFrame));
             }
         }
 
-        return Unlock() ? 1 : 0;
+        return Unlock();
     }
 }

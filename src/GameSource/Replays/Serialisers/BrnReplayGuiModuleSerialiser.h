@@ -11,8 +11,8 @@ class GuiModuleSerialiser : public BaseSerialiser
 public:
         void Construct();
     GuiModuleStaticLayout* GetStaticLayout();
-    s32 Read();
-    s32 Write();
+    bool Read();
+    bool Write();
 private:
     bool mbStaticLayoutReset;
 };

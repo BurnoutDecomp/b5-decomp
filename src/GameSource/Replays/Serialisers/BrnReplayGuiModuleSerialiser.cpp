@@ -17,13 +17,14 @@ namespace BrnReplays
         return reinterpret_cast<GuiModuleStaticLayout*>(GetStaticBuffer());
     }
 
-    int GuiModuleSerialiser::Read()
+    // Read / Write return Unlock's bool unconverted (no clrlwi before the epilogue,
+    // 0x82650828 / 0x8265072C): their return type is bool.
+    bool GuiModuleSerialiser::Read()
     {
         BaseSerialiser::Lock();
 
-        // X360 mode cascade (outer {4,5,6}, skipping {1,3,4,6,7}) reduces to
-        // PLAYING-only: read the static layout in during playback.
-        if (GetMode() == E_MODE_PLAYING)
+        // ARTIST tests the inlined DWARF predicates in turn (0x82650764..0x826507DC).
+        if (IsPlaying() && !IsStalled() && !IsPreparing() && !IsRestoring())
         {
             GuiModuleStaticLayout* lpStaticLayout = GetStaticLayout();
             CGS_ASSERT(lpStaticLayout != 0, CGS_ASSERT_MESSAGE_AT("lpStaticLayout", CGS_ARTIST_FILE, 199));
@@ -33,15 +34,13 @@ namespace BrnReplays
         return BaseSerialiser::Unlock();
     }
 
-    int GuiModuleSerialiser::Write()
+    bool GuiModuleSerialiser::Write()
     {
         BaseSerialiser::Lock();
 
         // X360 mode gate reduces to the RECORDING family: write the static
         // layout out during recording (preparing / recording / stalled).
-        if (GetMode() == E_MODE_RECORDING_PREPARING ||
-            GetMode() == E_MODE_RECORDING ||
-            GetMode() == E_MODE_RECORDING_STALLED)
+        if (IsRecording())
         {
             // Reset the static layout exactly once, on first use.
             if (!mbStaticLayoutReset)

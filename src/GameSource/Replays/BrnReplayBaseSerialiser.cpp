@@ -25,24 +25,6 @@
 
 namespace BrnReplays
 {
-    // @ 0x821F3440
-    // True while the serialiser is in any of the three playback sub-states.
-    bool BaseSerialiser::IsPlaying() const
-    {
-        return meMode == E_MODE_PLAYING_PREPARING
-            || meMode == E_MODE_PLAYING
-            || meMode == E_MODE_PLAYING_STALLED;
-    }
-
-    // @ 0x821F3470
-    // True while the serialiser is in any of the three recording sub-states.
-    bool BaseSerialiser::IsRecording() const
-    {
-        return meMode == E_MODE_RECORDING_PREPARING
-            || meMode == E_MODE_RECORDING
-            || meMode == E_MODE_RECORDING_STALLED;
-    }
-
     // @ 0x823A6718
     // Take the buffer lock. Asserts the serialiser is not already locked, then
     // raises mbLocked. Returns true (the X360 body always returns 1).

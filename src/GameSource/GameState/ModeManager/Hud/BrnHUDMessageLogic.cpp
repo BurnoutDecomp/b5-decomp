@@ -898,8 +898,9 @@ void HUDMessageLogic::GenerateCriticalDamageMessage(
         return;
     }
 
-    RoadRageModeScoring* lpRoadRageScoring = lpScoringSystem->GetRoadRageScoring();
-    if (lpRoadRageScoring->DoesDamageCriticalMessageNeedToBeSent())
+    // No local: ARTIST keeps the scoring system (r31 = r5, 0x82395BBC) and reads the flag at
+    // +0x4B54 through the inlined accessor each time.
+    if (lpScoringSystem->GetRoadRageScoring()->DoesDamageCriticalMessageNeedToBeSent())
     {
         GameStateModuleIO::DamageCriticalMessageAction lDamageAction;
         lDamageAction.mbPlayerCarIsDamageCritical = true;
@@ -907,7 +908,7 @@ void HUDMessageLogic::GenerateCriticalDamageMessage(
         // The typed overload: liSize == sizeof(DamageCriticalMessageAction) == 1 == `li r6, 1`.
         mActionQueue.AddEvent(&lDamageAction, GameStateModuleIO::E_ACTION_DAMAGE_CRITICAL, sizeof(lDamageAction));
 
-        lpRoadRageScoring->ResetDamageCriticalMessageFlag();
+        lpScoringSystem->GetRoadRageScoring()->ResetDamageCriticalMessageFlag();
     }
 }
 
@@ -951,12 +952,13 @@ void HUDMessageLogic::GenerateOnlineStuntRunEliminationMessages(
         lMessage.miTeam = 0;
     }
 
-    lMessage.mbLocalPlayerIsSubject = (meEliminationRaceCarIndex == leLocalPlayerIndex);
+    lMessage.mbLocalPlayerIsSubject = (leLocalPlayerIndex == meEliminationRaceCarIndex);
 
-    const GameStateModuleIO::EPlayerTeam leLocalTeam =
-        lpScoringSystem->GetPlayerTeam(leLocalPlayerIndex);
+    // ARTIST compares the local player's team straight off the call (0x82394B58) and clears
+    // the elimination index after it (0x82394B5C).
+    lMessage.mbLocalPlayerOnTeam =
+        (leEliminatedTeam == lpScoringSystem->GetPlayerTeam(leLocalPlayerIndex));
     meEliminationRaceCarIndex = static_cast<EActiveRaceCarIndex>(-1);
-    lMessage.mbLocalPlayerOnTeam = (static_cast<s32>(leLocalTeam) == static_cast<s32>(leEliminatedTeam));
 
     mActionQueue.AddEvent(&lMessage, E_HUD_MESSAGE_STUNT_RUN_ELIMINATION, sizeof(StuntRunTeamMessage));
 }

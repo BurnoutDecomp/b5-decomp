@@ -233,60 +233,6 @@ namespace BrnGameState
         }
     }
 
-    // ---- queries -------------------------------------------------------------------
-
-    // ScoringSystem::WriteDataToOutput 0x8232AE98: `lwz 0x4B40(ss)` inside the IsActive gate.
-    s32 RoadRageModeScoring::GetNumTakedownsAchieved() const
-    {
-        return miNumTakedownsAchieved;
-    }
-
-    // ScoringSystem::WriteDataToOutput 0x8232AE98: `lwz 0x4B4C(ss)` inside the IsActive gate.
-    s32 RoadRageModeScoring::GetTargetNumTakedowns() const
-    {
-        return miTargetNumTakedowns;
-    }
-
-    // FLAG no inline site found: no ARTIST export reads ss+0x4B56 (and none ever writes 1 to it).
-    // The DWARF name fixes the member; the getter is the only body such a name can have.
-    bool RoadRageModeScoring::PlayerCarWasDestroyed() const
-    {
-        return mbPlayerCarDestroyed;
-    }
-
-    // HUDMessageLogic::GenerateCriticalDamageMessage 0x82395BE8: `lbz r11, 0x4B54(ss)` gates the
-    // GUI post (VariableEventQueue<256,16>::AddEvent id 52, size 1).
-    bool RoadRageModeScoring::DoesDamageCriticalMessageNeedToBeSent() const
-    {
-        return mbDamageCriticalMessageNeedToBeSent;
-    }
-
-    // HUDMessageLogic::GenerateCriticalDamageMessage 0x82395C10: `stb 0, 0x4B54(ss)` right after
-    // that post.
-    void RoadRageModeScoring::ResetDamageCriticalMessageFlag()
-    {
-        mbDamageCriticalMessageNeedToBeSent = false;
-    }
-
-    // ScoringSystem::WriteDataToOutput 0x8232AE98: `lbz 0x4B57(ss)` selects the road-rage arm.
-    bool RoadRageModeScoring::IsActive()
-    {
-        return mbGameModeActive;
-    }
-
-    // ScoringSystem::CheckRoadRageMedalAwarded 0x823128FC: `stw r11, 0x4B4C(ss)` with r11 ==
-    // mauiMedalScores[meCurrentMedalTarget] (the committed body in BrnScoringSystem_UpdateB.cpp
-    // calls this setter at that point).
-    void RoadRageModeScoring::SetTakeDownTarget(s32 liTargetNumTakedowns)
-    {
-        miTargetNumTakedowns = liTargetNumTakedowns;
-    }
-
-    // ModeManager::FinishCurrentMode 0x8234BBB4..0x8234BBC4 (jumptable case E_MODE_ROAD_RAGE):
-    // `lwz 0x58F0(mm); lwz 0x58FC(mm); cmpw; bge` == miNumTakedownsAchieved >= miTargetNumTakedowns,
-    // SIGNED. ScoringSystem::HasBeatenRoadRageTarget forwards here (BrnScoringSystem_Lookup.cpp).
-    bool RoadRageModeScoring::HasBeatenRoadRageTarget() const
-    {
-        return miNumTakedownsAchieved >= miTargetNumTakedowns;
-    }
+    // The queries (DWARF BrnRoadRageModeScoring.h:86..108) are defined in the class: ARTIST has
+    // no out-of-line copy of any of them and reads the members in line at every site.
 }

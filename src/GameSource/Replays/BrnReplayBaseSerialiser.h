@@ -149,9 +149,39 @@ namespace BrnReplays
         bool Lock();
         bool Unlock();
 
-        // IsPlaying @ 0x821F3440 / IsRecording @ 0x821F3470. Mode-state predicates.
-        bool IsPlaying() const;
-        bool IsRecording() const;
+        // IsPlaying / IsRecording (DWARF BrnReplayBaseSerialiser.h:185/:188) are defined in the
+        // class: ARTIST inlines them (GuiModuleSerialiser::Write 0x82650698..0x826506C0) and
+        // keeps only COMDAT copies (0x821F3440 / 0x821F3470, each called once from the sound
+        // logic).
+        bool IsPlaying() const
+        {
+            return meMode == E_MODE_PLAYING_PREPARING
+                || meMode == E_MODE_PLAYING
+                || meMode == E_MODE_PLAYING_STALLED;
+        }
+
+        bool IsRecording() const
+        {
+            return meMode == E_MODE_RECORDING_PREPARING
+                || meMode == E_MODE_RECORDING
+                || meMode == E_MODE_RECORDING_STALLED;
+        }
+
+        // DWARF h:191 / :197 / :200, in the class like their siblings: GuiModuleSerialiser::Read
+        // 0x82650794..0x826507DC inlines them as the {3,6}, {1,4} and == 7 tests.
+        bool IsRestoring() const { return meMode == E_MODE_RESTORING; }
+
+        bool IsStalled() const
+        {
+            return meMode == E_MODE_RECORDING_STALLED
+                || meMode == E_MODE_PLAYING_STALLED;
+        }
+
+        bool IsPreparing() const
+        {
+            return meMode == E_MODE_RECORDING_PREPARING
+                || meMode == E_MODE_PLAYING_PREPARING;
+        }
 
         // GetId @ inline (BrnReplayBaseSerialiser.h:173) -- returns meId.
         ESerialiserId GetId() const { return meId; }

@@ -45,43 +45,44 @@ namespace BrnReplays
         return reinterpret_cast<EffectsSerialiserStaticLayout*>(mpStaticBuffer);
     }
 
-    s32 EffectsSerialiser::Read()
+    // Read / Write return Unlock's bool unconverted (ARTIST 0x82650660 returns r3 as is).
+    bool EffectsSerialiser::Read()
     {
         BaseSerialiser::Lock();
         EffectsSerialiserStaticLayout* lpStatic = GetStaticLayout();
         CGS_ASSERT(lpStatic != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.cpp", 69));
-        switch (meMode)
+        // ARTIST 0x82650558..0x826505C8: the inlined stalled / preparing / restoring predicates,
+        // then the recording / playing if-else chain.
+        if (!IsStalled() && !IsPreparing() && !IsRestoring())
         {
-        case E_MODE_RECORDING:
-            BaseSerialiser::Write(lpStatic, EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE);
-            break;
-        case E_MODE_PLAYING:
-            BaseSerialiser::Read(lpStatic, EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE);
-            break;
-        default:
-            break;
+            if (GetMode() == E_MODE_RECORDING)
+            {
+                BaseSerialiser::Write(lpStatic, EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE);
+            }
+            else if (GetMode() == E_MODE_PLAYING)
+            {
+                BaseSerialiser::Read(lpStatic, EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE);
+            }
         }
-        return BaseSerialiser::Unlock() ? 1 : 0;
+        return BaseSerialiser::Unlock();
     }
 
-    s32 EffectsSerialiser::Write()
+    bool EffectsSerialiser::Write()
     {
         BaseSerialiser::Lock();
         EffectsSerialiserStaticLayout* lpStatic = GetStaticLayout();
         if (lpStatic)
         {
-            switch (meMode)
+            // ARTIST 0x8265062C..0x8265064C: an if-else chain, recording first.
+            if (GetMode() == E_MODE_RECORDING)
             {
-            case E_MODE_RECORDING:
                 BaseSerialiser::Write(lpStatic, EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE);
-                break;
-            case E_MODE_PLAYING:
+            }
+            else if (GetMode() == E_MODE_PLAYING)
+            {
                 BaseSerialiser::Read(lpStatic, EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE);
-                break;
-            default:
-                break;
             }
         }
-        return BaseSerialiser::Unlock() ? 1 : 0;
+        return BaseSerialiser::Unlock();
     }
 }

@@ -73,14 +73,19 @@ namespace BrnGameState
                                          GameStateModuleIO::GameActionQueue* lpOutputActionQueue); // DWARF .h:83
 
         // ---- queries (const where the DWARF says const) ----
-        s32  GetNumTakedownsAchieved() const;              // DWARF .h:86
-        s32  GetTargetNumTakedowns() const;                // DWARF .h:89
-        bool PlayerCarWasDestroyed() const;                // DWARF .h:92
-        bool DoesDamageCriticalMessageNeedToBeSent() const; // DWARF .h:95
-        void ResetDamageCriticalMessageFlag();             // DWARF .h:98
-        bool IsActive();                                   // DWARF .h:101 (non-const per DWARF)
-        void SetTakeDownTarget(s32 liTargetNumTakedowns);  // DWARF .h:105
-        bool HasBeatenRoadRageTarget() const;              // DWARF .h:108
+        // Defined in the class as the DWARF places them (h:86..108): ARTIST has no copies and
+        // inlines each read, e.g. HUDMessageLogic::GenerateCriticalDamageMessage 0x82395BE8
+        // (lbz 0x4B54) / 0x82395C10 (stb 0), ScoringSystem::WriteDataToOutput 0x8232AE98 (lwz
+        // 0x4B40 / 0x4B4C, lbz 0x4B57), ModeManager::FinishCurrentMode 0x8234BBB4 (signed cmpw),
+        // ScoringSystem::CheckRoadRageMedalAwarded 0x823128FC (stw 0x4B4C).
+        s32  GetNumTakedownsAchieved() const               { return miNumTakedownsAchieved; }      // DWARF .h:86
+        s32  GetTargetNumTakedowns() const                 { return miTargetNumTakedowns; }        // DWARF .h:89
+        bool PlayerCarWasDestroyed() const                 { return mbPlayerCarDestroyed; }        // DWARF .h:92
+        bool DoesDamageCriticalMessageNeedToBeSent() const { return mbDamageCriticalMessageNeedToBeSent; } // DWARF .h:95
+        void ResetDamageCriticalMessageFlag()              { mbDamageCriticalMessageNeedToBeSent = false; } // DWARF .h:98
+        bool IsActive()                                    { return mbGameModeActive; }            // DWARF .h:101 (non-const per DWARF)
+        void SetTakeDownTarget(s32 liTargetNumTakedowns)   { miTargetNumTakedowns = liTargetNumTakedowns; } // DWARF .h:105
+        bool HasBeatenRoadRageTarget() const               { return miNumTakedownsAchieved >= miTargetNumTakedowns; } // DWARF .h:108
 
     private:
         // Full member run, DWARF-authoritative (BrnRoadRageModeScoring.h:112-122), in order.

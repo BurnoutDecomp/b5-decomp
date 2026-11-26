@@ -22,8 +22,8 @@ namespace BrnReplays
         // 0x8230DA90 does not consume the incidental value left in r3.
         void CheckStaticLayoutCleared();
         // @0x8264C518 / @0x8264C618 -- playback / record one frame (top-level dispatch).
-        s32 Read();
-        s32 Write();
+        bool Read();
+        bool Write();
 
     private:
         // X360: byte at this+0x5C, cleared by Construct, set by CheckStaticLayoutCleared

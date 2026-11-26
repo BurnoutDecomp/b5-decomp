@@ -176,8 +176,8 @@ namespace BrnReplays
 
         // X360 0x82650508 / 0x82650600 -- the per-update transfer of the static layout
         // (write it out while RECORDING, read it in while PLAYING).
-        s32 Read();
-        s32 Write();
+        bool Read();
+        bool Write();
     };
 }
 
