@@ -779,11 +779,19 @@ void DebugComponent::DrawSegments(CgsDev::Debug3DImmediateRender* lpDisplay) con
 void DebugComponent::DrawSections(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1012);
-    if (miHullToDrawFor != -1)
-        DrawSectionsInHull(miHullToDrawFor, lpDisplay);
+    // DWARF: the loop block's local is uint32_t luHull, through Set::operator[] / GetLength; ARTIST
+    // tests miHullToDrawFor == -1 first (bne to the single-hull call at the end).
+    if (miHullToDrawFor == -1)
+    {
+        for (u32 luHull = 0; luHull < mpModule->mActiveHulls.GetLength(); ++luHull)
+        {
+            DrawSectionsInHull(mpModule->mActiveHulls[luHull], lpDisplay);
+        }
+    }
     else
-        for (u32 luActive = 0; luActive < mpModule->mActiveHulls.GetLength(); ++luActive)
-            DrawSectionsInHull(mpModule->mActiveHulls.GetItem(luActive), lpDisplay);
+    {
+        DrawSectionsInHull(miHullToDrawFor, lpDisplay);
+    }
 }
 
 // ARTIST 0x82758888.
@@ -816,11 +824,19 @@ void DebugComponent::DrawSectionCurves(CgsDev::Debug3DImmediateRender* lpDisplay
 {
     CGS_ASSERT_AT(mpModule != 0, "mpModule", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1040);
     CGS_ASSERT_AT(lpDisplay != 0, "lpDisplay", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1041);
-    if (miHullToDrawFor != -1)
-        DrawSectionCurvesInHull(miHullToDrawFor, lpDisplay);
+    // DWARF: the loop block's local is uint32_t luHull, through Set::operator[] / GetLength; ARTIST
+    // tests miHullToDrawFor == -1 first (bne to the single-hull call at the end).
+    if (miHullToDrawFor == -1)
+    {
+        for (u32 luHull = 0; luHull < mpModule->mActiveHulls.GetLength(); ++luHull)
+        {
+            DrawSectionCurvesInHull(mpModule->mActiveHulls[luHull], lpDisplay);
+        }
+    }
     else
-        for (u32 luActive = 0; luActive < mpModule->mActiveHulls.GetLength(); ++luActive)
-            DrawSectionCurvesInHull(mpModule->mActiveHulls.GetItem(luActive), lpDisplay);
+    {
+        DrawSectionCurvesInHull(miHullToDrawFor, lpDisplay);
+    }
 }
 
 // ARTIST 0x82758A18.
@@ -860,11 +876,19 @@ void DebugComponent::DrawSectionCurvesInHull(s32 liHull, CgsDev::Debug3DImmediat
 void DebugComponent::DrawJunctions(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1240);
-    if (miHullToDrawFor != -1)
-        DrawJunctionsInHull(miHullToDrawFor, lpDisplay);
+    // DWARF: the loop block's local is uint32_t luHull, through Set::operator[] / GetLength; ARTIST
+    // tests miHullToDrawFor == -1 first (bne to the single-hull call at the end).
+    if (miHullToDrawFor == -1)
+    {
+        for (u32 luHull = 0; luHull < mpModule->mActiveHulls.GetLength(); ++luHull)
+        {
+            DrawJunctionsInHull(mpModule->mActiveHulls[luHull], lpDisplay);
+        }
+    }
     else
-        for (u32 luActive = 0; luActive < mpModule->mActiveHulls.GetLength(); ++luActive)
-            DrawJunctionsInHull(mpModule->mActiveHulls.GetItem(luActive), lpDisplay);
+    {
+        DrawJunctionsInHull(miHullToDrawFor, lpDisplay);
+    }
 }
 
 // ARTIST 0x82759068.
@@ -894,11 +918,19 @@ void DebugComponent::DrawJunctionsInHull(s32 liHull, CgsDev::Debug3DImmediateRen
 void DebugComponent::DrawStopLines(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 1344);
-    if (miHullToDrawFor != -1)
-        DrawStopLinesInHull(miHullToDrawFor, lpDisplay);
+    // DWARF: the loop block's local is uint32_t luHull, through Set::operator[] / GetLength; ARTIST
+    // tests miHullToDrawFor == -1 first (bne to the single-hull call at the end).
+    if (miHullToDrawFor == -1)
+    {
+        for (u32 luHull = 0; luHull < mpModule->mActiveHulls.GetLength(); ++luHull)
+        {
+            DrawStopLinesInHull(mpModule->mActiveHulls[luHull], lpDisplay);
+        }
+    }
     else
-        for (u32 luActive = 0; luActive < mpModule->mActiveHulls.GetLength(); ++luActive)
-            DrawStopLinesInHull(mpModule->mActiveHulls.GetItem(luActive), lpDisplay);
+    {
+        DrawStopLinesInHull(miHullToDrawFor, lpDisplay);
+    }
 }
 
 // ARTIST export hole 0x827595A0. r4=hull, r5=section, r6=local stop index.
@@ -1001,10 +1033,20 @@ namespace BrnTraffic
 // ARTIST export hole 0x827610D0.
 void DebugComponent::DrawAllKillZones(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule");
-    for (u32 luZone = 0; luZone < mpModule->mpData->muNumKillZones; ++luZone)
-        DrawKillZone(&mpModule->mpData->mpaKillZones[luZone],
-                     mpModule->mpData->mpaKillZoneIds[luZone], lpDisplay);
+    // DWARF :2515..:2517 declare the three locals at function scope, ahead of the assert on :2519
+    // (li r5, 0x9d7 at 0x827610F8); ARTIST forms the zone pointer before it loads the id (0x82761154 /
+    // 0x82761174).
+    u32 luKillZone;                                                                   // :2515
+    TrafficData::KillZoneId lId;                                                      // :2516
+    const KillZone* lpKillZone;                                                       // :2517
+
+    CGS_ASSERT_AT(mpModule != 0, "mpModule", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 2519);
+    for (luKillZone = 0; luKillZone < mpModule->mpData->muNumKillZones; ++luKillZone)
+    {
+        lpKillZone = &mpModule->mpData->mpaKillZones[luKillZone];
+        lId = mpModule->mpData->mpaKillZoneIds[luKillZone];
+        DrawKillZone(lpKillZone, lId, lpDisplay);
+    }
 }
 
 // ARTIST 0x827611A8.
@@ -2200,13 +2242,15 @@ void DebugComponent::DrawPlayerCarHullId(CgsDev::Debug2DImmediateRender* lpDispl
 {
     CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 3331);
     CGS_ASSERT_AT(lpDisplay != 0, "lpDisplay != NULL", CGS_ARTIST_UNITY_BRNTRAFFICDEBUGCOMPONENT_CPP_FILE, 3332);
-    if (mpModule->meLocalPlayerIndex != 0)
+    // The warning is shown in online modes: ARTIST tests mbIsOnlineGameMode (DWARF h:715, lbzx +0x717DC at
+    // 0x8275C9B4); DWARF :3329 names the buffer lacBuffer, the hull read goes through Array<u16,9>::operator[].
+    if (mpModule->mbIsOnlineGameMode)
         lpDisplay->DrawText("Warning: Hull ID is for car zero, not player",
                       40.0f, 100.0f, 16.0f, 0xFF0000FFu);
-    char lacText[256];
-    CgsCore::SPrintf(lacText, sizeof(lacText), "Traf Hull: %u",
-                    static_cast<u32>(mpModule->maaRaceCarHulls[0].GetItem(0)));
-    lpDisplay->DrawText(lacText, K_TRAFFIC_DEBUG_DISPLAY.mfDrawSize, 100.0f, 16.0f, 0xFFFFFFFFu);
+    char lacBuffer[256];
+    CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "Traf Hull: %u",
+                    static_cast<u32>(mpModule->maaRaceCarHulls[0][0]));
+    lpDisplay->DrawText(lacBuffer, K_TRAFFIC_DEBUG_DISPLAY.mfDrawSize, 100.0f, 16.0f, 0xFFFFFFFFu);
 }
 
 // ARTIST 0x82750AE8. stwu allocates 0x10C0 and the stream's capacity is 0x1000:

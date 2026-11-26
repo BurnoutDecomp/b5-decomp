@@ -459,25 +459,30 @@ void AIDebugComponent::DrawPortalTargets(CgsDev::Debug3DImmediateRender* lpDispl
     }
 }
 
-// ARTIST827735D8: the selected car marker and successive route-node segments.
+// ARTIST827735D8: a box on the current car (lifted by KF_CAR_YOFFSET) and its route as line segments
+// between the nodes (lifted by KF_ROUTE_YOFFSET), the next node's segment in the racing-line colour
+// (DWARF :1130..:1148 locals; the lifts through VecFloatRef<Y> + float and SetY).
 void AIDebugComponent::DrawAICarRoute(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    const AICar& lrCar = mpAIModule->maAICars[miCurrentAICar];
-    Vector3 lCarPosition = lrCar.GetPosition();
-    lCarPosition.mV.y += KF_CAR_YOFFSET;
-    lpDisplay->DrawSolidBox(lCarPosition + K_CURRENT_CAR_SIZE, lCarPosition - K_CURRENT_CAR_SIZE, KU_CURRENT_CAR_COLOUR);
-    const Route* lpRoute = lrCar.GetRoute();
-    Vector3 lPrevious(0.0f, 0.0f, 0.0f);
-    for (s32 i = 0; i < lpRoute->GetNodeCount(); ++i)
+    Vector3 lPreviousPosition(0.0f, 0.0f, 0.0f);                                       // :1133
+    const AICar* lpAICar = &mpAIModule->maAICars[miCurrentAICar];                      // :1131
+    const Route* lpRoute = lpAICar->GetRoute();                                        // :1132
+    Vector3 lPosition = lpAICar->GetPosition();                                        // :1134
+    lPosition.SetY(lPosition.GetY() + KF_CAR_YOFFSET);
+    lpDisplay->DrawSolidBox(lPosition + K_CURRENT_CAR_SIZE, lPosition - K_CURRENT_CAR_SIZE, KU_CURRENT_CAR_COLOUR);
+
+    for (s32 liNodeIndex = 0; liNodeIndex < lpRoute->GetNodeCount(); ++liNodeIndex)    // :1142
     {
-        const RouteNode* lpNode = lpRoute->GetNode(i);
-        const Vector3 lCurrent(lpNode->GetPositionX(), KF_ROUTE_YOFFSET, lpNode->GetPositionZ());
-        if (i)
+        const RouteNode* lpNode = lpRoute->GetNode(liNodeIndex);                       // :1146
+        Vector3 lNodePosition = lpNode->GetPositionWithZeroY();                        // :1148 (lPosition)
+        lNodePosition.SetY(lNodePosition.GetY() + KF_ROUTE_YOFFSET);
+        if (liNodeIndex != 0)
         {
-            lpDisplay->DrawLine(lPrevious, lCurrent,
-                                i == lrCar.miNextRouteNodeIndex ? KU_RACING_LINE_COLOUR1 : KU_ROUTE_LINE_COLOUR);
+            lpDisplay->DrawLine(lPreviousPosition, lNodePosition,
+                                liNodeIndex == lpAICar->miNextRouteNodeIndex ? KU_RACING_LINE_COLOUR1
+                                                                             : KU_ROUTE_LINE_COLOUR);
         }
-        lPrevious = lCurrent;
+        lPreviousPosition = lNodePosition;
     }
 }
 

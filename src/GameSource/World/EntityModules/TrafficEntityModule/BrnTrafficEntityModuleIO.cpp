@@ -433,17 +433,10 @@ namespace BrnTrafficIO
                       "mCrashTrafficOutputInterface @8");
         CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 233);
 
-        // Cleanup-traffic queue: clear then append the source's live events (X360 stw 0,miLength +
-        // BaseEventQueue<CleanupTrafficEvent>::Append @0x827A8490).
-        mCrashTrafficOutputInterface.GetCleanupTrafficEventQueue().Clear();
-        mCrashTrafficOutputInterface.GetCleanupTrafficEventQueue().Append(
-            lpInterface->GetCleanupTrafficEventQueue());
-
-        // Start-crashing network-traffic queue: clear then append (X360 stw 0,miLength +
-        // BaseEventQueue<NetworkTrafficCrashingEvent>::Append @0x827A8570).
-        mCrashTrafficOutputInterface.GetStartCrashingNetworkTrafficQueue().Clear();
-        mCrashTrafficOutputInterface.GetStartCrashingNetworkTrafficQueue().Append(
-            lpInterface->GetStartCrashingNetworkTrafficQueue());
+        // The implicit TrafficOutputInterface::operator= (the DWARF type declares none): each queue's
+        // EventQueue::operator= (length store + BaseEventQueue::Append, CgsEventQueue.h:194) on the queue's
+        // own this (ARTIST 0x827ACE84 `addi r31, r26, 8`, 0x827ACE98 `addi r3, r31, 0x510` before each store).
+        mCrashTrafficOutputInterface = *lpInterface;
     }
 
     // ========================================================================

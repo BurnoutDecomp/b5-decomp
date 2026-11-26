@@ -187,15 +187,16 @@ void Vehicle::SetSpeed(VecFloat lfSpeed)
 
 Vector3 Vehicle::CalcTowBarPos(Matrix44Affine lTransform, const VehicleTypeRuntime* lpTypeRuntime) const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    CGS_ASSERT(lpTypeRuntime != 0, "lpVehicleTypeRuntime");
-    CGS_ASSERT(rw::math::vpu::IsValid(lTransform), "RwMath::IsValid( lTransform )");
+    // Header-inline in the original (DWARF BrnTrafficVehicle.h:1373..:1378; ARTIST keeps this one copy):
+    // asserts li r5,0x55d/0x55e/0x55f at 0x8270F9F0/0x8270FA14/0x8270FBD4 name the header.
+    CGS_ASSERT_AT(IsAlive(), "IsAlive()", CGS_ARTIST_BRNTRAFFICVEHICLE_H_FILE, 1373);
+    CGS_ASSERT_AT(lpTypeRuntime != 0, "lpVehicleTypeRuntime", CGS_ARTIST_BRNTRAFFICVEHICLE_H_FILE, 1374);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(lTransform), "RwMath::IsValid( lTransform )", CGS_ARTIST_BRNTRAFFICVEHICLE_H_FILE, 1375);
 
-    // ARTIST 8270FBE8..8270FC04: pivot lane 0 * At + Pos, including W.
-    Vector3 lResult;
-    lResult.mV = __vmaddfp(lTransform.At().mV, lpTypeRuntime->GetCabPivotDistance().mV,
-                           lTransform.Pos().mV);
-    return lResult;
+    // DWARF h:1377 lLocalPos / h:1378 lWorldPos; ARTIST 0x8270FBE8..0x8270FC04: At * splat(pivot) + Pos.
+    const Vector3 lLocalPos = lTransform.At() * lpTypeRuntime->GetCabPivotDistance();
+    const Vector3 lWorldPos = lTransform.Pos() + lLocalPos;
+    return lWorldPos;
 }
 
 void VehicleAxles::UpdateRearAxleForRoadCollision(const Param* lpParam, Hull** lpapHulls)

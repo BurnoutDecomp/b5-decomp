@@ -582,20 +582,18 @@ void RaceCar::FillInOutputInterface(
 // UNsquared head-on radii the console squares at run time (`fmuls f0, f31, f31`).
 // ============================================================================
 
-// ---- ShouldBeInRange (0x822D3B00) -----------------------------------------------------
-// flt_8201C214. Both arms of the in-game-mode test; 180 m squared.
-static const f32 KF_IN_RANGE_DISTANCE_SQUARED = 32400.0f;
-// flt_8201495C / flt_8201C210. The free-burn head-on / not-head-on radii, squared at run time.
-static const f32 KF_IN_RANGE_HEAD_ON_DISTANCE = 700.0f;
-static const f32 KF_IN_RANGE_DISTANCE         = 350.0f;
-
-// ---- ShouldBeOutOfRange (0x822D3C48) --------------------------------------------------
-// flt_8201C220 / flt_8201C21C. 200 m squared ahead of the player, 230 m squared behind.
-static const f32 KF_OUT_OF_RANGE_IN_FRONT_DISTANCE_SQUARED = 40000.0f;
-static const f32 KF_OUT_OF_RANGE_BEHIND_DISTANCE_SQUARED   = 52900.0f;
-// flt_82014968 / flt_8201C218. The free-burn head-on / not-head-on radii.
-static const f32 KF_OUT_OF_RANGE_HEAD_ON_DISTANCE = 750.0f;
-static const f32 KF_OUT_OF_RANGE_DISTANCE         = 375.0f;
+// The DWARF radii (BrnRaceCar.h:293..:300). The game-mode arms compare against the squares the
+// compiler folds (180^2 both sides of the player in ShouldBeInRange, 200^2 ahead / 230^2 behind in
+// ShouldBeOutOfRange); the free-roam radius is squared at run time (`fmuls f0, f31, f31`) after the
+// not-head-on halving (700 -> 350, 750 -> 375): ARTIST loads the full radius into f31 before the
+// AreCarsHeadOn call (0x822D3BE8 / 0x822D3D50) and overwrites it with the half only when the call
+// returns false.
+const f32 RaceCar::KF_IN_RANGE_DISTANCE_RACE_AHEAD      = 180.0f;
+const f32 RaceCar::KF_IN_RANGE_DISTANCE_RACE_BEHIND     = 180.0f;
+const f32 RaceCar::KF_IN_RANGE_DISTANCE_FREE_ROAM       = 700.0f;
+const f32 RaceCar::KF_OUT_OF_RANGE_DISTANCE_RACE_AHEAD  = 200.0f;
+const f32 RaceCar::KF_OUT_OF_RANGE_DISTANCE_RACE_BEHIND = 230.0f;
+const f32 RaceCar::KF_OUT_OF_RANGE_DISTANCE_FREE_ROAM   = 750.0f;
 
 // ----------------------------------------------------------------------------
 // AreCarsHeadOn @ 0x822BEBE8. True when car 1 is AHEAD of car 0 along car 0's own heading
@@ -633,26 +631,27 @@ bool RaceCar::AreCarsHeadOn(const RaceCar* lpRaceCar0, const RaceCar* lpRaceCar1
 // ----------------------------------------------------------------------------
 bool RaceCar::ShouldBeInRange(const RaceCar* lpPlayerRaceCar) const
 {
-    // v127 = this position - player position (0x822D3B4C `vsubfp128 v127, v0, v127`).
-    const Vector3 lSeparation      = GetPosition() - lpPlayerRaceCar->GetPosition();
-    const f32     lfDistanceSquared = rw::math::vpu::Dot(lSeparation, lSeparation);
+    // DWARF BrnRaceCar.cpp:365..:381 locals.
+    const Vector3 lDisplacement = GetPosition() - lpPlayerRaceCar->GetPosition();
+    const f32 lfDistanceSquared = rw::math::vpu::MagnitudeSquared(lDisplacement);
 
     if (mbIsInGameMode)
     {
-        // 0x822D3B90..0x822D3BB0. The console computes this and DISCARDS it -- see the
-        // banner. Kept because the call is the console's; the branch it feeds was merged
-        // away by the compiler because both arms compare against the same pooled literal.
-        const bool lbInFrontOfPlayer =
-            rw::math::vpu::Dot(lpPlayerRaceCar->GetDirection(), lSeparation) >= 0.0f;
-
-        return lbInFrontOfPlayer ? (lfDistanceSquared < KF_IN_RANGE_DISTANCE_SQUARED)
-                                 : (lfDistanceSquared < KF_IN_RANGE_DISTANCE_SQUARED);
+        // 0x822D3B90..0x822D3BB0: computed, and both arms compare against the same folded 180^2.
+        const bool lbIsAheadOfPlayer = rw::math::vpu::Dot(lpPlayerRaceCar->GetDirection(), lDisplacement) >= 0.0f;
+        if (lbIsAheadOfPlayer)
+        {
+            return lfDistanceSquared < KF_IN_RANGE_DISTANCE_RACE_AHEAD * KF_IN_RANGE_DISTANCE_RACE_AHEAD;
+        }
+        return lfDistanceSquared < KF_IN_RANGE_DISTANCE_RACE_BEHIND * KF_IN_RANGE_DISTANCE_RACE_BEHIND;
     }
 
-    const f32 lfRange = AreCarsHeadOn(this, lpPlayerRaceCar) ? KF_IN_RANGE_HEAD_ON_DISTANCE
-                                                            : KF_IN_RANGE_DISTANCE;
-
-    return lfDistanceSquared < (lfRange * lfRange);
+    f32 lfInRangeDistanceFreeRoam = KF_IN_RANGE_DISTANCE_FREE_ROAM;
+    if (!AreCarsHeadOn(this, lpPlayerRaceCar))
+    {
+        lfInRangeDistanceFreeRoam *= 0.5f;
+    }
+    return lfDistanceSquared < lfInRangeDistanceFreeRoam * lfInRangeDistanceFreeRoam;
 }
 
 // ----------------------------------------------------------------------------
@@ -665,23 +664,26 @@ bool RaceCar::ShouldBeInRange(const RaceCar* lpPlayerRaceCar) const
 // ----------------------------------------------------------------------------
 bool RaceCar::ShouldBeOutOfRange(const RaceCar* lpPlayerRaceCar) const
 {
-    const Vector3 lSeparation      = GetPosition() - lpPlayerRaceCar->GetPosition();
-    const f32     lfDistanceSquared = rw::math::vpu::Dot(lSeparation, lSeparation);
+    // DWARF BrnRaceCar.cpp:403..:420 locals.
+    const Vector3 lDisplacement = GetPosition() - lpPlayerRaceCar->GetPosition();
+    const f32 lfDistanceSquared = rw::math::vpu::MagnitudeSquared(lDisplacement);
 
     if (mbIsInGameMode)
     {
-        const bool lbInFrontOfPlayer =
-            rw::math::vpu::Dot(lpPlayerRaceCar->GetDirection(), lSeparation) >= 0.0f;
-
-        return lbInFrontOfPlayer
-            ? (lfDistanceSquared > KF_OUT_OF_RANGE_IN_FRONT_DISTANCE_SQUARED)
-            : (lfDistanceSquared > KF_OUT_OF_RANGE_BEHIND_DISTANCE_SQUARED);
+        const bool lbIsAheadOfPlayer = rw::math::vpu::Dot(lpPlayerRaceCar->GetDirection(), lDisplacement) >= 0.0f;
+        if (lbIsAheadOfPlayer)
+        {
+            return lfDistanceSquared > KF_OUT_OF_RANGE_DISTANCE_RACE_AHEAD * KF_OUT_OF_RANGE_DISTANCE_RACE_AHEAD;
+        }
+        return lfDistanceSquared > KF_OUT_OF_RANGE_DISTANCE_RACE_BEHIND * KF_OUT_OF_RANGE_DISTANCE_RACE_BEHIND;
     }
 
-    const f32 lfRange = AreCarsHeadOn(this, lpPlayerRaceCar) ? KF_OUT_OF_RANGE_HEAD_ON_DISTANCE
-                                                             : KF_OUT_OF_RANGE_DISTANCE;
-
-    return lfDistanceSquared > (lfRange * lfRange);
+    f32 lfOutOfRangeDistanceFreeRoam = KF_OUT_OF_RANGE_DISTANCE_FREE_ROAM;
+    if (!AreCarsHeadOn(this, lpPlayerRaceCar))
+    {
+        lfOutOfRangeDistanceFreeRoam *= 0.5f;
+    }
+    return lfDistanceSquared > lfOutOfRangeDistanceFreeRoam * lfOutOfRangeDistanceFreeRoam;
 }
 
 }

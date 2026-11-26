@@ -238,6 +238,14 @@ public:
 private:
     bool AreCarsHeadOn(const RaceCar* lpRaceCar0, const RaceCar* lpRaceCar1) const;
 
+    // DWARF BrnRaceCar.h:293..:300, the in/out-of-range radii (defined in BrnRaceCar.cpp).
+    static const f32 KF_IN_RANGE_DISTANCE_RACE_AHEAD;        // :293
+    static const f32 KF_IN_RANGE_DISTANCE_RACE_BEHIND;       // :294
+    static const f32 KF_IN_RANGE_DISTANCE_FREE_ROAM;         // :295
+    static const f32 KF_OUT_OF_RANGE_DISTANCE_RACE_AHEAD;    // :298
+    static const f32 KF_OUT_OF_RANGE_DISTANCE_RACE_BEHIND;   // :299
+    static const f32 KF_OUT_OF_RANGE_DISTANCE_FREE_ROAM;     // :300
+
     // ---- Layout (176 bytes; offsets X360-asm-proven) -----------------------
     Matrix44Affine    mTransform;                 // +0x00  world transform (wAxis == position)
     Vector3           mPreviousPosition;          // +0x40

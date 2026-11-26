@@ -4,6 +4,12 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 #include "BrnCommonTypes.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
+// The header's recorded assertion path (ARTIST 0x820BB000).
+#ifndef CGS_ARTIST_ABS_BRNTRAFFICPARAM_H_FILE
+#define CGS_ARTIST_ABS_BRNTRAFFICPARAM_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficParam.h"
+#endif
 
 // ---------------------------------------------------------------------------
 // BrnTraffic::Param (and the ParamSoaData / ParamPlan it embeds)
@@ -233,6 +239,7 @@ public:
 
     // Helpers the asm inlines into the above (state predicates).
     bool IsAlive() const { return (mxFlags & E_FLAG_ALIVE) != 0; }
+    void SetNeedsNewPlan();   // DWARF h:389, header-inline (body below)
     bool IsDying() const { return (mxFlags & E_FLAG_DYING) != 0; }
     bool HasDied() const { return (mxEffectAndHistoryState & E_HISTORY_DIED) != 0; }
     bool IsInPurgatory() const { return (mxFlags & E_FLAG_IN_PURGATORY) != 0; }
@@ -322,6 +329,14 @@ struct ParamNeedToSlowData
     void Construct();    // :452
     void Clear();        // :456
 };
+
+// DWARF h:389; ARTIST inlines it with its IsAlive assert on the header's line 1092 (li r5, 0x444 at
+// TrafficEntityModule::EatParamsNextPlan 0x82708878, path string 0x820BB000).
+inline void Param::SetNeedsNewPlan()
+{
+    CGS_ASSERT_AT(IsAlive(), "IsAlive()", CGS_ARTIST_ABS_BRNTRAFFICPARAM_H_FILE, 1092);
+    mxEffectAndHistoryState |= E_HISTORY_NEEDS_NEW_PLAN;
+}
 }
 
 #endif

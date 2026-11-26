@@ -113,26 +113,11 @@ namespace RaceCarEntityModuleIO
         const CgsModule::EventQueue<CreateRivalInTrafficSystemEvent, 34>* GetCreateRivalQueue() const; // :166
         const CgsModule::EventQueue<RemoveRivalFromTrafficSystemEvent, 34>* GetRemoveRivalQueue() const; // :167
 
-        // ADDITIVE GROW (FLAG): the publish assignment. The recovered type declares no operator=; the
-        // console emits this body inside its one consumer,
-        // BrnTrafficIO::InputBuffer_PostScene::SetRaceCarToTrafficInterface, as four steps on the
-        // destination interface's own seats -- miLength = 0 then Append on the create-rival
-        // queue, miLength = 0 then Append on the remove-rival queue, then the flag word and the
-        // density scale copied straight across. It is homed here rather than in the setter
-        // because the two queues are this type's private members, and because it is the same
-        // Clear+Append-per-embedded-queue shape every peer IO interface in the fleet publishes
-        // with (a raw struct copy would leave the destination's mpEvents aimed at the SOURCE's
-        // inline storage).
-        RaceCarToTrafficInterface& operator=(const RaceCarToTrafficInterface& lrSource)
-        {
-            mCreateRivalQueue.Clear();
-            mCreateRivalQueue.Append(lrSource.mCreateRivalQueue);
-            mRemoveRivalQueue.Clear();
-            mRemoveRivalQueue.Append(lrSource.mRemoveRivalQueue);
-            muFlags                       = lrSource.muFlags;
-            mfShowtimeTrafficDensityScale = lrSource.mfShowtimeTrafficDensityScale;
-            return *this;
-        }
+        // No user-declared operator= (DWARF h:114..:175 declares none): the publish assignment in
+        // BrnTrafficIO::InputBuffer_PostScene::SetRaceCarToTrafficInterface is the implicit memberwise
+        // one, which runs each queue's EventQueue::operator= (Clear + Append, CgsEventQueue.h:194) on the
+        // queue's own `this` (ARTIST 0x827ACF60 `addi r3, r31, 0x670` before the length store through
+        // r3) and then copies the flag word and the density scale.
 
     private:
         CgsModule::EventQueue<CreateRivalInTrafficSystemEvent, 34>  mCreateRivalQueue;        // :171

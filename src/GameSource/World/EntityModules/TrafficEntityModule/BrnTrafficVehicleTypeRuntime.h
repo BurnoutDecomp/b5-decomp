@@ -82,10 +82,10 @@ namespace BrnTraffic
         Vector3 GetBBoxOffset() const { return mBBoxOffset; }
         Vector3 GetBBoxHalfSize() const { return mBBoxHalfSize; }
 
-        VecFloat GetCabPivotDistance() const { return VecFloat(__vspltw(mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV, 0)); }
-        VecFloat GetTrailerPivotDistance() const { return VecFloat(__vspltw(mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV, 1)); }
-        VecFloat GetBackAxleOffset() const { return VecFloat(__vspltw(mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV, 2)); }
-        VecFloat GetForwardAxleOffset() const { return VecFloat(__vspltw(mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV, 3)); }
+        VecFloat GetCabPivotDistance() const { return mCabPivot_TrailerPivot_BackAxle_FwdAxle.GetX(); }
+        VecFloat GetTrailerPivotDistance() const { return mCabPivot_TrailerPivot_BackAxle_FwdAxle.GetY(); }
+        VecFloat GetBackAxleOffset() const { return mCabPivot_TrailerPivot_BackAxle_FwdAxle.GetZ(); }
+        VecFloat GetForwardAxleOffset() const { return mCabPivot_TrailerPivot_BackAxle_FwdAxle.GetW(); }
         VecFloat GetMass() const { return VecFloat(__vspltw(mMass_WheelRadius_Z_W.mV, 0)); }
         VecFloat GetWheelRadius() const { return VecFloat(__vspltw(mMass_WheelRadius_Z_W.mV, 1)); }
 

@@ -1940,25 +1940,27 @@ void TrafficEntityModule::SetVehicleTransform(u32 luIndex, const Matrix44Affine&
 // startup writer), the 9 and the 1/63 slope are constants. The `> 0` test is NaN-false, as
 // the console's `ble` skip is.
 // ----------------------------------------------------------------------------
+// DWARF BrnTrafficEntityModule.cpp:274..:277 (file scope): the active-hull range is const (9 / 72 on PS3;
+// ARTIST reads the 9 from its TU block, 0x820BA8A0), the two densities are plain tweakable data
+// (.data 0x82F2FDDC = 0.3 / 0x82F2FDE0 = 0.7, in declaration order).
+const f32 KF_DENSITY_MIN_ACTIVE_HULLS = 9.0f;      // :274
+const f32 KF_DENSITY_MAX_ACTIVE_HULLS = 72.0f;     // :275
+static f32 KF_DENSITY_MIN_TRAFFIC_DENSITY = 0.3f;  // :276 (internal: ARTIST anchors both off one base)
+static f32 KF_DENSITY_MAX_TRAFFIC_DENSITY = 0.7f;  // :277
+
 void TrafficEntityModule::UpdateDensity()
 {
-    const f32 KF_ONLINE_DENSITY_AT_MAX_HULLS       = 0.30000001f;
-    const f32 KF_ONLINE_DENSITY_AT_MIN_HULLS       = 0.69999999f;
-    const f32 KF_ONLINE_DENSITY_MIN_HULLS          = 9.0f;
-    const f32 KF_ONLINE_DENSITY_RECIP_HULL_RANGE   = 0.015873017f;   // 1 / (72 - 9)
+    mfTrafficAmountScale = mfGameModeDensityScale;
 
-    const f32 lfGameModeDensityScale = mfGameModeDensityScale;
-    mfTrafficAmountScale = lfGameModeDensityScale;
-
-    if (!mbAllowDivergentBehaviour && lfGameModeDensityScale > 0.0f)
+    if (!mbAllowDivergentBehaviour && mfGameModeDensityScale > 0.0f)
     {
-        const f32 lfHullFraction =
-            (static_cast<f32>(mActiveHulls.GetLength()) - KF_ONLINE_DENSITY_MIN_HULLS)
-            * KF_ONLINE_DENSITY_RECIP_HULL_RANGE;
-
-        mfTrafficAmountScale =
-            KF_ONLINE_DENSITY_AT_MIN_HULLS
-            + (KF_ONLINE_DENSITY_AT_MAX_HULLS - KF_ONLINE_DENSITY_AT_MIN_HULLS) * lfHullFraction;
+        // DWARF :8209 / :8210 locals. ARTIST 0x82716370..0x827163B0: (MIN - MAX) first, then the
+        // proportion, then one fmadds onto MAX: rwmath fpu::Lerp(MAX, MIN, t).
+        const f32 lfNumActiveHulls = static_cast<f32>(mActiveHulls.GetLength());
+        const f32 lfActiveHullProportion = (lfNumActiveHulls - KF_DENSITY_MIN_ACTIVE_HULLS)
+                                         / (KF_DENSITY_MAX_ACTIVE_HULLS - KF_DENSITY_MIN_ACTIVE_HULLS);
+        mfTrafficAmountScale = rw::math::fpu::Lerp(KF_DENSITY_MAX_TRAFFIC_DENSITY, KF_DENSITY_MIN_TRAFFIC_DENSITY,
+                                                   lfActiveHullProportion);
     }
 }
 
@@ -8989,18 +8991,16 @@ void TrafficEntityModule::UpdateParams_HandleLaneChanges(u32 luParam,
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::EatParamsNextPlan(u32 luParam)
 {
-    CGS_ASSERT_AT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2350);
+    // DWARF .cpp:9333 / :9334 locals; GetParam and Param::SetNeedsNewPlan inlined.
+    u32 luPlan;
+    Param* lpParam = GetParam(luParam);
 
-    Param* lpParam = &maParams[luParam];
-
-    for (u32 luPlan = 1; luPlan < KU_PARAM_NUM_PLANS; ++luPlan)
+    for (luPlan = 1; luPlan < KU_PARAM_NUM_PLANS; ++luPlan)
     {
         lpParam->maPlans[luPlan - 1] = lpParam->maPlans[luPlan];
     }
     lpParam->maPlans[KU_PARAM_NUM_PLANS - 1].muType = ParamPlan::E_TYPE_NONE;
-
-    CGS_ASSERT_AT(lpParam->IsAlive(), "IsAlive()", CGS_ARTIST_ABS_BRNTRAFFICPARAM_H_FILE, 1092);
-    lpParam->mxEffectAndHistoryState |= Param::E_HISTORY_NEEDS_NEW_PLAN;
+    lpParam->SetNeedsNewPlan();
 }
 
 // ----------------------------------------------------------------------------
