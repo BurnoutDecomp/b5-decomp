@@ -101,85 +101,80 @@ inline VecFloat Dot(Vector4::InParam a, Vector4::InParam b)
     return VecFloat(__vmsum4fp(a.mV, b.mV));
 }
 
-inline Vector4 Mult(Vector4::InParam v, VecFloat::InParam s)
+// rwmath 1.02.00 detail/vector4_operation_inline.h (LegacySrc :97..:169 / :260 / :362..:672 / :678..:717): the Xenon
+// expansions of the VecFloat operator set (detail/vec_float_operation_inline.h header), as for Vector3.
+__forceinline Vector4 Mult(Vector4::InParam v, VecFloat::InParam s)
 {
-    const float a = s.mV.v[VectorAxisX];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * a;
-    return r;
+    VectorIntrinsic ret;
+    ret = __vmulfp((v.mV), (s.mV));
+    return Vector4( ret );
 }
 
-inline Vector4 operator * (Vector4::InParam v, Vector4::InParam s)
+__forceinline Vector4 operator * (Vector4::InParam v, Vector4::InParam s)
 {
-    // vmaddfp(v,s,0): per-lane multiply (component-wise).
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * s.mV.v[k];
-    return r;
+    VectorIntrinsic ret;
+    ret = __vmulfp((v.mV), (s.mV));
+    return Vector4( ret );
 }
 
-inline Vector4 operator / (Vector4::InParam v, Vector4::InParam s)
+__forceinline Vector4 operator / (Vector4::InParam v, Vector4::InParam s)
 {
-    // reciprocal of s (vrefp + Newton) then vmaddfp(reciprocal, v, 0): per-lane divide.
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] / s.mV.v[k];
-    return r;
+    VectorIntrinsic ret;
+    { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(s.mV);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (s.mV), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (s.mV), (vOne))), (secondEstimate)); }; ret = __vmulfp((reciprocal), (v.mV)); }
+    return Vector4( ret );
 }
 
-inline Vector4 Mult(Vector4::InParam v, float s)
+__forceinline Vector4 Mult(Vector4::InParam v, float s)
 {
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * s;
-    return r;
+    VectorIntrinsic result;
+    { ::rw::math::vpu::VectorIntrinsic floatVec; { ::rw::math::vpu::VectorIntrinsic u = { s }; floatVec = __vspltw(u, 0); }; result = __vmulfp((v.mV), (floatVec));; };
+    return Vector4( result );
 }
 
-template<VectorAxis INDEX>
-inline Vector4 Mult(Vector4::InParam v, VecFloatRef<INDEX> s)
+template<VectorAxis INDEX> Vector4 Mult(Vector4::InParam v, VecFloatRef<INDEX> s)
 {
-    const float a = s.mV.v[INDEX];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * a;
-    return r;
+    VectorIntrinsic result;
+    { ::rw::math::vpu::VectorIntrinsic splattedAxis = __vspltw(s.mV, (INDEX)); result = __vmulfp((v.mV), (splattedAxis)); };
+    return Vector4(result);
 }
 
-inline Vector4 Mult(Vector4::InParam v, VecFloatRefIndex::InParam s)
+__forceinline Vector4 Mult(Vector4::InParam v, VecFloatRefIndex::InParam s)
 {
-    const float a = s.mV.v[s.mIndex];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * a;
-    return r;
+    VectorIntrinsic result;
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(s.mIndex))), 0); sVI = __vperm(s.mV, s.mV, permConstant); };
+    result = __vmulfp((v.mV), (sVI));;
+    return Vector4(result);
 }
 
-inline Vector4 Divide(Vector4::InParam v, VecFloat::InParam s)
+__forceinline Vector4 Divide(Vector4::InParam v, VecFloat::InParam s)
 {
-    const float recip = 1.0f / s.mV.v[VectorAxisX];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * recip;
-    return r;
+    VectorIntrinsic result;
+    { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(s.mV);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (s.mV), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (s.mV), (vOne))), (secondEstimate)); }; result = __vmulfp((reciprocal), (v.mV)); };
+    return Vector4( result );
 }
 
-inline Vector4 Divide(Vector4::InParam v, float s)
+__forceinline Vector4 Divide(Vector4::InParam v, float s)
 {
-    const float recip = 1.0f / s;
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * recip;
-    return r;
+    VectorIntrinsic ret;
+    { ::rw::math::vpu::VectorIntrinsic reciprocal; float floatRecip = 1.0f/(s); { ::rw::math::vpu::VectorIntrinsic u = { floatRecip }; reciprocal = __vspltw(u, 0); }; ret = __vmulfp((reciprocal), (v.mV)); };
+    return Vector4( ret );
 }
 
-template<VectorAxis INDEX>
-inline Vector4 Divide(Vector4::InParam v, VecFloatRef<INDEX> s)
+template<VectorAxis INDEX> Vector4 Divide(Vector4::InParam v, VecFloatRef<INDEX> s)
 {
-    const float recip = 1.0f / s.mV.v[INDEX];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * recip;
-    return r;
+    VectorIntrinsic result;
+    { ::rw::math::vpu::VectorIntrinsic splattedAxis = __vspltw(s.mV, (INDEX)); { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(splattedAxis);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (splattedAxis), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (splattedAxis), (vOne))), (secondEstimate)); }; result = __vmulfp((reciprocal), (v.mV)); }; };
+    return Vector4(result);
 }
 
-inline Vector4 Divide(Vector4::InParam v, VecFloatRefIndex::InParam s)
+__forceinline Vector4 Divide(Vector4::InParam v, VecFloatRefIndex::InParam s)
 {
-    const float recip = 1.0f / s.mV.v[s.mIndex];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * recip;
-    return r;
+    VectorIntrinsic result;
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(s.mIndex))), 0); sVI = __vperm(s.mV, s.mV, permConstant); };
+    { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(sVI);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (sVI), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (sVI), (vOne))), (secondEstimate)); }; result = __vmulfp((reciprocal), (v.mV)); };
+    return Vector4(result);
 }
 
 // =====================================================================================
@@ -279,13 +274,11 @@ inline VecFloat NormalizeReturnMagnitude(Vector4::InParam v, Vector4& result)
 //  Lerp / NLerp (full-4)
 // =====================================================================================
 
-inline Vector4 Lerp(Vector4::InParam v0, Vector4::InParam v1, VecFloat::InParam t)
+__forceinline Vector4 Lerp(Vector4::InParam v0, Vector4::InParam v1, VecFloat::InParam t)
 {
-    // temp = vsubfp(v1,v0); ret = vmaddfp(temp, t, v0).
-    const float lfT = t.mV.v[VectorAxisX];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = (v1.mV.v[k] - v0.mV.v[k]) * lfT + v0.mV.v[k];
-    return r;
+    VectorIntrinsic ret;
+    { ::rw::math::vpu::VectorIntrinsic temp_lerp_v; temp_lerp_v = __vsubfp( v1.mV, v0.mV ); ret = __vmaddfp((temp_lerp_v), (t.mV), (v0.mV));; };
+    return Vector4(ret);
 }
 
 inline Vector4 NLerpEstimate(Vector4::InParam v0, Vector4::InParam v1, VecFloat::InParam t)
@@ -404,275 +397,359 @@ inline Vector4 CrossXYZ(Vector4::InParam v0, Vector4::InParam v1)
 //  Compound assignment + operators (VecFloat / float / VecFloatRef / VecFloatRefIndex)
 // =====================================================================================
 
-// ---- v op= VecFloat ---------------------------------------------------------------
-
-inline Vector4& operator *= (Vector4& v, VecFloat::InParam a)
+__forceinline Vector4& operator *= (Vector4& v, VecFloat::InParam a)
 {
-    const float s = a.mV.v[VectorAxisX];
-    for (int k = 0; k < 4; ++k) v.mV.v[k] *= s;
+    v.mV = __vmulfp((v.mV), (a.mV));;
     return v;
 }
 
-inline Vector4& operator /= (Vector4& v, VecFloat::InParam a)
+__forceinline Vector4& operator /= (Vector4& v, VecFloat::InParam a)
 {
-    const float recip = 1.0f / a.mV.v[VectorAxisX];
-    for (int k = 0; k < 4; ++k) v.mV.v[k] *= recip;
+    { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(a.mV);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (a.mV), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (a.mV), (vOne))), (secondEstimate)); }; v.mV = __vmulfp((reciprocal), (v.mV)); };
     return v;
 }
 
-inline Vector4& operator += (Vector4& v, VecFloat::InParam a)
+__forceinline Vector4& operator += (Vector4& v, VecFloat::InParam a)
 {
-    // vaddfp(v, a): a is a broadcast register, so every lane adds the same scalar.
-    for (int k = 0; k < 4; ++k) v.mV.v[k] += a.mV.v[k];
+    v.mV = __vaddfp(v.mV, a.mV);
     return v;
 }
 
-inline Vector4& operator -= (Vector4& v, VecFloat::InParam a)
+__forceinline Vector4& operator -= (Vector4& v, VecFloat::InParam a)
 {
-    for (int k = 0; k < 4; ++k) v.mV.v[k] -= a.mV.v[k];
+    v.mV = __vsubfp( v.mV, a.mV );
     return v;
 }
 
-inline Vector4 operator * (Vector4::InParam v, VecFloat::InParam s) { return Mult(v, s); }
-inline Vector4 operator * (VecFloat::InParam s, Vector4::InParam v) { return Mult(v, s); }
-inline Vector4 operator / (Vector4::InParam v, VecFloat::InParam s) { return Divide(v, s); }
-
-inline Vector4 operator + (Vector4::InParam v, VecFloat::InParam s)
+__forceinline Vector4 operator * (Vector4::InParam v, VecFloat::InParam s)
 {
-    // vaddfp(v, s): broadcast register, every lane adds s.
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] + s.mV.v[k];
-    return r;
+    VectorIntrinsic ret;
+    ret = __vmulfp((v.mV), (s.mV));
+    return Vector4( ret );
 }
 
-inline Vector4 operator - (Vector4::InParam v, VecFloat::InParam s)
+__forceinline Vector4 operator * (VecFloat::InParam s, Vector4::InParam v)
 {
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] - s.mV.v[k];
-    return r;
+    VectorIntrinsic ret;
+    ret = __vmulfp((s.mV), (v.mV));
+    return Vector4( ret );
 }
 
-inline Vector4 operator + (VecFloat::InParam s, Vector4::InParam v)
+__forceinline Vector4 operator / (Vector4::InParam v, VecFloat::InParam s)
 {
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] + s.mV.v[k];
-    return r;
+    VectorIntrinsic ret;
+    { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(s.mV);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (s.mV), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (s.mV), (vOne))), (secondEstimate)); }; ret = __vmulfp((reciprocal), (v.mV)); }
+    return Vector4( ret );
 }
 
-inline Vector4 operator - (VecFloat::InParam s, Vector4::InParam v)
+__forceinline Vector4 operator + (Vector4::InParam v, VecFloat::InParam s)
 {
-    // vsubfp(s, v): scalar register minus each lane.
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = s.mV.v[k] - v.mV.v[k];
-    return r;
+    return Vector4(__vaddfp(v.mV, s.mV));
 }
 
-// ---- v op= float ------------------------------------------------------------------
-
-inline Vector4& operator *= (Vector4& v, float a)
+__forceinline Vector4 operator - (Vector4::InParam v, VecFloat::InParam s)
 {
-    for (int k = 0; k < 4; ++k) v.mV.v[k] *= a;
+    return Vector4(__vsubfp( v.mV, s.mV ));
+}
+
+__forceinline Vector4 operator + (VecFloat::InParam s, Vector4::InParam v)
+{
+    return Vector4(__vaddfp(v.mV, s.mV));
+}
+
+__forceinline Vector4 operator - (VecFloat::InParam s, Vector4::InParam v)
+{
+    return Vector4(__vsubfp( s.mV, v.mV ));
+}
+
+__forceinline Vector4& operator *= (Vector4& v, float a)
+{
+    { ::rw::math::vpu::VectorIntrinsic floatVec; { ::rw::math::vpu::VectorIntrinsic u = { a }; floatVec = __vspltw(u, 0); }; v.mV = __vmulfp((v.mV), (floatVec));; };
     return v;
 }
 
-inline Vector4& operator /= (Vector4& v, float a)
+__forceinline Vector4& operator /= (Vector4& v, float a)
 {
-    const float recip = 1.0f / a;
-    for (int k = 0; k < 4; ++k) v.mV.v[k] *= recip;
+    { ::rw::math::vpu::VectorIntrinsic reciprocal; float floatRecip = 1.0f/(a); { ::rw::math::vpu::VectorIntrinsic u = { floatRecip }; reciprocal = __vspltw(u, 0); }; v.mV = __vmulfp((reciprocal), (v.mV)); };
     return v;
 }
 
-inline Vector4 operator * (Vector4::InParam v, float s) { return Mult(v, s); }
-inline Vector4 operator * (float s, Vector4::InParam v) { return Mult(v, s); }
-inline Vector4 operator / (Vector4::InParam v, float s) { return Divide(v, s); }
-
-inline Vector4 operator + (Vector4::InParam v, float s)
+__forceinline Vector4 operator * (Vector4::InParam v, float s)
 {
-    // broadcast(s) then vaddfp.
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] + s;
-    return r;
+    VectorIntrinsic result;
+    { ::rw::math::vpu::VectorIntrinsic floatVec; { ::rw::math::vpu::VectorIntrinsic u = { s }; floatVec = __vspltw(u, 0); }; result = __vmulfp((v.mV), (floatVec));; };
+    return Vector4( result );
 }
 
-inline Vector4 operator - (Vector4::InParam v, float s)
+__forceinline Vector4 operator * (float s, Vector4::InParam v)
 {
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] - s;
-    return r;
+    VectorIntrinsic result;
+    { ::rw::math::vpu::VectorIntrinsic floatVec; { ::rw::math::vpu::VectorIntrinsic u = { s }; floatVec = __vspltw(u, 0); }; result = __vmulfp((v.mV), (floatVec));; };
+    return Vector4( result );
 }
 
-inline Vector4 operator + (float s, Vector4::InParam v) { return v + s; }
-
-inline Vector4 operator - (float s, Vector4::InParam v)
+__forceinline Vector4 operator / (Vector4::InParam v, float s)
 {
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = s - v.mV.v[k];
-    return r;
+    VectorIntrinsic result;
+    { ::rw::math::vpu::VectorIntrinsic reciprocal; float floatRecip = 1.0f/(s); { ::rw::math::vpu::VectorIntrinsic u = { floatRecip }; reciprocal = __vspltw(u, 0); }; result = __vmulfp((reciprocal), (v.mV)); };
+    return Vector4(result);
 }
 
-// ---- v op= VecFloatRef<INDEX> -----------------------------------------------------
-
-template<VectorAxis INDEX>
-inline Vector4& operator *= (Vector4& v, VecFloatRef<INDEX> a)
+__forceinline Vector4 operator + (Vector4::InParam v, float s)
 {
-    const float s = a.mV.v[INDEX];
-    for (int k = 0; k < 4; ++k) v.mV.v[k] *= s;
-    return v;
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic u = { s }; sVI = __vspltw(u, 0); };
+    return Vector4(__vaddfp(v.mV, sVI));
 }
 
-template<VectorAxis INDEX>
-inline Vector4& operator /= (Vector4& v, VecFloatRef<INDEX> a)
+__forceinline Vector4 operator - (Vector4::InParam v, float s)
 {
-    const float recip = 1.0f / a.mV.v[INDEX];
-    for (int k = 0; k < 4; ++k) v.mV.v[k] *= recip;
-    return v;
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic u = { s }; sVI = __vspltw(u, 0); };
+    return Vector4(__vsubfp( v.mV, sVI ));
 }
 
-template<VectorAxis INDEX>
-inline Vector4& operator += (Vector4& v, VecFloatRef<INDEX> a)
+__forceinline Vector4 operator + (float s, Vector4::InParam v)
 {
-    const float s = a.mV.v[INDEX];
-    for (int k = 0; k < 4; ++k) v.mV.v[k] += s;
-    return v;
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic u = { s }; sVI = __vspltw(u, 0); };
+    return Vector4(__vaddfp(v.mV, sVI));
+}
+
+__forceinline Vector4 operator - (float s, Vector4::InParam v)
+{
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic u = { s }; sVI = __vspltw(u, 0); };
+    return Vector4(__vsubfp( sVI, v.mV ));
 }
 
 template<VectorAxis INDEX>
-inline Vector4& operator -= (Vector4& v, VecFloatRef<INDEX> a)
+__forceinline Vector4& operator *= (Vector4& v, VecFloatRef<INDEX> a)
 {
-    const float s = a.mV.v[INDEX];
-    for (int k = 0; k < 4; ++k) v.mV.v[k] -= s;
+    { ::rw::math::vpu::VectorIntrinsic splattedAxis = __vspltw(a.mV, (INDEX)); v.mV = __vmulfp((v.mV), (splattedAxis)); };
     return v;
 }
 
 template<VectorAxis INDEX>
-inline Vector4 operator * (Vector4::InParam v, VecFloatRef<INDEX> s) { return Mult(v, s); }
-template<VectorAxis INDEX>
-inline Vector4 operator * (VecFloatRef<INDEX> s, Vector4::InParam v) { return Mult(v, s); }
-template<VectorAxis INDEX>
-inline Vector4 operator / (Vector4::InParam v, VecFloatRef<INDEX> s) { return Divide(v, s); }
-
-template<VectorAxis INDEX>
-inline Vector4 operator + (Vector4::InParam v, VecFloatRef<INDEX> s)
+__forceinline Vector4& operator /= (Vector4& v, VecFloatRef<INDEX> a)
 {
-    const float a = s.mV.v[INDEX];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] + a;
-    return r;
-}
-
-template<VectorAxis INDEX>
-inline Vector4 operator - (Vector4::InParam v, VecFloatRef<INDEX> s)
-{
-    const float a = s.mV.v[INDEX];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] - a;
-    return r;
-}
-
-template<VectorAxis INDEX>
-inline Vector4 operator + (VecFloatRef<INDEX> s, Vector4::InParam v) { return v + s; }
-
-template<VectorAxis INDEX>
-inline Vector4 operator - (VecFloatRef<INDEX> s, Vector4::InParam v)
-{
-    const float a = s.mV.v[INDEX];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = a - v.mV.v[k];
-    return r;
-}
-
-// ---- v op= VecFloatRefIndex -------------------------------------------------------
-
-inline Vector4& operator *= (Vector4& v, VecFloatRefIndex::InParam a)
-{
-    const float s = a.mV.v[a.mIndex];
-    for (int k = 0; k < 4; ++k) v.mV.v[k] *= s;
+    { ::rw::math::vpu::VectorIntrinsic splattedAxis = __vspltw(a.mV, (INDEX)); { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(splattedAxis);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (splattedAxis), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (splattedAxis), (vOne))), (secondEstimate)); }; v.mV = __vmulfp((reciprocal), (v.mV)); }; };
     return v;
 }
 
-inline Vector4& operator /= (Vector4& v, VecFloatRefIndex::InParam a)
+template<VectorAxis INDEX>
+__forceinline Vector4& operator += (Vector4& v, VecFloatRef<INDEX> a)
 {
-    const float recip = 1.0f / a.mV.v[a.mIndex];
-    for (int k = 0; k < 4; ++k) v.mV.v[k] *= recip;
+    VectorIntrinsic aVI;
+    { aVI = __vspltw(a.mV, (int)(INDEX)); };
+    v.mV = __vaddfp(v.mV, aVI);
     return v;
 }
 
-inline Vector4& operator += (Vector4& v, VecFloatRefIndex::InParam a)
+template<VectorAxis INDEX>
+__forceinline Vector4& operator -= (Vector4& v, VecFloatRef<INDEX> a)
 {
-    const float s = a.mV.v[a.mIndex];
-    for (int k = 0; k < 4; ++k) v.mV.v[k] += s;
+    VectorIntrinsic aVI;
+    { aVI = __vspltw(a.mV, (int)(INDEX)); };
+    v.mV = __vsubfp( v.mV, aVI );
     return v;
 }
 
-inline Vector4& operator -= (Vector4& v, VecFloatRefIndex::InParam a)
+template<VectorAxis INDEX>
+__forceinline Vector4 operator * (Vector4::InParam v, VecFloatRef<INDEX> s)
 {
-    const float s = a.mV.v[a.mIndex];
-    for (int k = 0; k < 4; ++k) v.mV.v[k] -= s;
+    VectorIntrinsic result;
+    { ::rw::math::vpu::VectorIntrinsic splattedAxis = __vspltw(s.mV, (INDEX)); result = __vmulfp((v.mV), (splattedAxis)); };
+    return Vector4(result);
+}
+
+template<VectorAxis INDEX>
+__forceinline Vector4 operator * (VecFloatRef<INDEX> s, Vector4::InParam v)
+{
+    VectorIntrinsic result;
+    { ::rw::math::vpu::VectorIntrinsic splattedAxis = __vspltw(s.mV, (INDEX)); result = __vmulfp((v.mV), (splattedAxis)); };
+    return Vector4(result);
+}
+
+template<VectorAxis INDEX>
+__forceinline Vector4 operator / (Vector4::InParam v, VecFloatRef<INDEX> s)
+{
+    VectorIntrinsic result;
+    { ::rw::math::vpu::VectorIntrinsic splattedAxis = __vspltw(s.mV, (INDEX)); { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(splattedAxis);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (splattedAxis), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (splattedAxis), (vOne))), (secondEstimate)); }; result = __vmulfp((reciprocal), (v.mV)); }; };
+    return Vector4(result);
+}
+
+template<VectorAxis INDEX>
+__forceinline Vector4 operator + (Vector4::InParam v, VecFloatRef<INDEX> s)
+{
+    VectorIntrinsic sVI;
+    { sVI = __vspltw(s.mV, (int)(INDEX)); };
+    VectorIntrinsic ret = __vaddfp(v.mV, sVI);
+    return Vector4(ret);
+}
+
+template<VectorAxis INDEX>
+__forceinline Vector4 operator - (Vector4::InParam v, VecFloatRef<INDEX> s)
+{
+    VectorIntrinsic sVI;
+    { sVI = __vspltw(s.mV, (int)(INDEX)); };
+    VectorIntrinsic ret = __vsubfp( v.mV, sVI );
+    return Vector4(ret);
+}
+
+template<VectorAxis INDEX>
+__forceinline Vector4 operator + (VecFloatRef<INDEX> s, Vector4::InParam v)
+{
+    VectorIntrinsic sVI;
+    { sVI = __vspltw(s.mV, (int)(INDEX)); };
+    VectorIntrinsic ret = __vaddfp(v.mV, sVI);
+    return Vector4(ret);
+}
+
+template<VectorAxis INDEX>
+__forceinline Vector4 operator - (VecFloatRef<INDEX> s, Vector4::InParam v)
+{
+    VectorIntrinsic sVI;
+    { sVI = __vspltw(s.mV, (int)(INDEX)); };
+    VectorIntrinsic ret = __vsubfp( sVI, v.mV );
+    return Vector4(ret);
+}
+
+__forceinline Vector4& operator *= (Vector4& v, VecFloatRefIndex::InParam a)
+{
+    VectorIntrinsic aVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(a.mIndex))), 0); aVI = __vperm(a.mV, a.mV, permConstant); };
+    v.mV = __vmulfp((v.mV), (aVI));;
     return v;
 }
 
-inline Vector4 operator * (Vector4::InParam v, VecFloatRefIndex::InParam s) { return Mult(v, s); }
-inline Vector4 operator * (VecFloatRefIndex::InParam s, Vector4::InParam v) { return Mult(v, s); }
-inline Vector4 operator / (Vector4::InParam v, VecFloatRefIndex::InParam s) { return Divide(v, s); }
-
-inline Vector4 operator + (Vector4::InParam v, VecFloatRefIndex::InParam s)
+__forceinline Vector4& operator /= (Vector4& v, VecFloatRefIndex::InParam a)
 {
-    const float a = s.mV.v[s.mIndex];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] + a;
-    return r;
+    VectorIntrinsic aVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(a.mIndex))), 0); aVI = __vperm(a.mV, a.mV, permConstant); };
+    { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(aVI);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (aVI), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (aVI), (vOne))), (secondEstimate)); }; v.mV = __vmulfp((reciprocal), (v.mV)); };
+    return v;
 }
 
-inline Vector4 operator - (Vector4::InParam v, VecFloatRefIndex::InParam s)
+__forceinline Vector4& operator += (Vector4& v, VecFloatRefIndex::InParam a)
 {
-    const float a = s.mV.v[s.mIndex];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] - a;
-    return r;
+    VectorIntrinsic aVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(a.mIndex))), 0); aVI = __vperm(a.mV, a.mV, permConstant); };
+    v.mV = __vaddfp(v.mV, aVI);
+    return v;
 }
 
-inline Vector4 operator + (VecFloatRefIndex::InParam s, Vector4::InParam v) { return v + s; }
-
-inline Vector4 operator - (VecFloatRefIndex::InParam s, Vector4::InParam v)
+__forceinline Vector4& operator -= (Vector4& v, VecFloatRefIndex::InParam a)
 {
-    const float a = s.mV.v[s.mIndex];
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = a - v.mV.v[k];
-    return r;
+    VectorIntrinsic aVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(a.mIndex))), 0); aVI = __vperm(a.mV, a.mV, permConstant); };
+    v.mV = __vsubfp( v.mV, aVI );
+    return v;
+}
+
+__forceinline Vector4 operator * (Vector4::InParam v, VecFloatRefIndex::InParam s)
+{
+    VectorIntrinsic result;
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(s.mIndex))), 0); sVI = __vperm(s.mV, s.mV, permConstant); };
+    result = __vmulfp((v.mV), (sVI));;
+    return Vector4(result);
+}
+
+__forceinline Vector4 operator * (VecFloatRefIndex::InParam s, Vector4::InParam v)
+{
+    VectorIntrinsic result;
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(s.mIndex))), 0); sVI = __vperm(s.mV, s.mV, permConstant); };
+    result = __vmulfp((sVI), (v.mV));;
+    return Vector4(result);
+}
+
+__forceinline Vector4 operator / (Vector4::InParam v, VecFloatRefIndex::InParam s)
+{
+    VectorIntrinsic result;
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(s.mIndex))), 0); sVI = __vperm(s.mV, s.mV, permConstant); };
+    { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(sVI);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (sVI), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (sVI), (vOne))), (secondEstimate)); }; result = __vmulfp((reciprocal), (v.mV)); };
+    return Vector4(result);
+}
+
+__forceinline Vector4 operator + (Vector4::InParam v, VecFloatRefIndex::InParam s)
+{
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(s.mIndex))), 0); sVI = __vperm(s.mV, s.mV, permConstant); };
+    VectorIntrinsic ret = __vaddfp(v.mV, sVI);
+    return Vector4(ret);
+}
+
+__forceinline Vector4 operator - (Vector4::InParam v, VecFloatRefIndex::InParam s)
+{
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(s.mIndex))), 0); sVI = __vperm(s.mV, s.mV, permConstant); };
+    VectorIntrinsic ret = __vsubfp( v.mV, sVI );
+    return Vector4(ret);
+}
+
+__forceinline Vector4 operator + (VecFloatRefIndex::InParam s, Vector4::InParam v)
+{
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(s.mIndex))), 0); sVI = __vperm(s.mV, s.mV, permConstant); };
+    VectorIntrinsic ret = __vaddfp(v.mV, sVI);
+    return Vector4(ret);
+}
+
+__forceinline Vector4 operator - (VecFloatRefIndex::InParam s, Vector4::InParam v)
+{
+    VectorIntrinsic sVI;
+    { ::rw::math::vpu::VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(s.mIndex))), 0); sVI = __vperm(s.mV, s.mV, permConstant); };
+    VectorIntrinsic ret = __vsubfp( sVI, v.mV );
+    return Vector4(ret);
 }
 
 // =====================================================================================
 //  Vector-Vector operators
 // =====================================================================================
 
-inline Vector4 operator - (Vector4::InParam v) { return Negate(v); }
-
-inline Vector4& operator += (Vector4& v, Vector4::InParam b)
+__forceinline Vector4 operator - (Vector4::InParam v)
 {
-    for (int k = 0; k < 4; ++k) v.mV.v[k] += b.mV.v[k];
+    VectorIntrinsic result;
+    { ::rw::math::vpu::VectorIntrinsic signMask; signMask = __vspltisw(-1); signMask = __vslw(signMask, signMask);; result = __vxor(v.mV, signMask); };
+    return Vector4(result);
+}
+
+__forceinline Vector4& operator += (Vector4& v, Vector4::InParam b)
+{
+    v.mV = __vaddfp(v.mV, b.mV);
     return v;
 }
 
-inline Vector4& operator -= (Vector4& v, Vector4::InParam b)
+__forceinline Vector4& operator -= (Vector4& v, Vector4::InParam b)
 {
-    for (int k = 0; k < 4; ++k) v.mV.v[k] -= b.mV.v[k];
+    v.mV = __vsubfp( v.mV, b.mV );
     return v;
 }
 
-inline Vector4& operator *= (Vector4& v, Vector4::InParam b)
+__forceinline Vector4& operator *= (Vector4& v, Vector4::InParam b)
 {
-    for (int k = 0; k < 4; ++k) v.mV.v[k] *= b.mV.v[k];
+    v.mV = __vmulfp((v.mV), (b.mV));;
     return v;
 }
 
-inline Vector4& operator /= (Vector4& v, Vector4::InParam b)
+__forceinline Vector4& operator /= (Vector4& v, Vector4::InParam b)
 {
-    for (int k = 0; k < 4; ++k) v.mV.v[k] /= b.mV.v[k];
+    { ::rw::math::vpu::VectorIntrinsic reciprocal; { ::rw::math::vpu::VectorIntrinsic secondEstimate; { ::rw::math::vpu::VectorIntrinsic estimate, vOne; estimate = __vrefp(b.mV);; vOne = __vcfsx(__vspltisw(1), 0); ; secondEstimate = __vmaddfp((estimate), (__vnmsubfp((estimate), (b.mV), (vOne))), (estimate)); }; ::rw::math::vpu::VectorIntrinsic vOne; vOne = __vcfsx(__vspltisw(1), 0); ; reciprocal = __vmaddfp((secondEstimate), (__vnmsubfp((secondEstimate), (b.mV), (vOne))), (secondEstimate)); }; v.mV = __vmulfp((reciprocal), (v.mV)); };
     return v;
 }
 
-inline Vector4 operator - (Vector4::InParam a, Vector4::InParam b) { return Subtract(a, b); }
-inline Vector4 operator + (Vector4::InParam a, Vector4::InParam b) { return Add(a, b); }
+__forceinline Vector4 operator - (Vector4::InParam a,Vector4::InParam b)
+{
+    return Vector4(__vsubfp( a.mV, b.mV ));
+}
+
+__forceinline Vector4 operator + (Vector4::InParam a, Vector4::InParam b)
+{
+    return Vector4(__vaddfp(a.mV, b.mV));
+}
 
 // =====================================================================================
 //  void out-param variants -- thin wrappers over the value-returning forms
