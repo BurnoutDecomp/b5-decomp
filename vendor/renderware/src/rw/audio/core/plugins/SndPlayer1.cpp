@@ -161,23 +161,6 @@ namespace
             next = 0;
         return next;
     }
-
-    s32 StreamBytesBuffered(rw::core::filesys::Stream *stream)
-    {
-        return stream->miRemaining;
-    }
-
-    s32 StreamRequestBytesBuffered(rw::core::filesys::Stream *stream, u32 requestId)
-    {
-        rw::core::filesys::StreamState *state = stream->mpState;
-        const u32 slot = requestId & 0xFFu;
-        if (static_cast<s32>(slot) >= static_cast<s32>(state->muRequestCount))
-            return 0;
-        rw::core::filesys::Request &request = state->mpRequests[slot];
-        if (request.miId != requestId || request.miState == 0)
-            return 0;
-        return static_cast<s32>(request.muBufferedBytes);
-    }
 }
 
 // -------------------------------------------------------------------------------------
@@ -643,12 +626,11 @@ int SndPlayer1::Event(int aiEventId, void *apParam)
                             static_cast<f32>(static_cast<f64>(static_cast<u64>(index))) ==
                                 mAttribute[ATTRIBUTE_GETCURRENTREQUEST].f32)
                         {
-                            bytes = StreamBytesBuffered(stream);
+                            bytes = stream->Gettable();
                         }
                         else
                         {
-                            bytes = StreamRequestBytesBuffered(stream,
-                                                               external.streamerRequestId);
+                            bytes = stream->Gettable(external.streamerRequestId);
                         }
                         query->streamBytesBuffered =
                             static_cast<f32>(static_cast<f64>(bytes)) +

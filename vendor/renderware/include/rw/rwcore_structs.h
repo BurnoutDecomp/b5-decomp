@@ -779,6 +779,11 @@ struct Manager {  // sizeof = 1
     // Records the supplied resource allocator as the subsystem allocator, then constructs
     // the singleton IFormatter through it. Body in renderware/src/rw/core/debug/Manager.cpp.
     static int CreateInstance(::rw::IResourceAllocator* lpAllocator);
+
+    // DecFIGS manager.h:266/267 (PS3 _ZN2rw4core5debug7Manager10sAllocatorE / sFormatterE):
+    // the subsystem allocator (X360 0x8327F044) and the singleton formatter (0x8327F048).
+    static ::rw::IResourceAllocator* sAllocator;
+    static IFormatter* sFormatter;
 };
 RW_SIZE_ASSERT(rw::core::debug::Manager, 1);
 } } }  // namespace rw::core::debug

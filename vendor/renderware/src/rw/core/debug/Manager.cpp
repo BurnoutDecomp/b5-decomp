@@ -25,7 +25,7 @@
 //   return 0;
 //
 // off_8327F044 is the subsystem resource allocator slot (shared with IFormatter, see
-// ManagerAllocator.h). dword_8327F048 is the singleton IFormatter instance pointer. The
+// Manager::sAllocator). dword_8327F048 is the singleton IFormatter instance pointer. The
 // IFormatter operator new carves four bytes (one vptr on the X360's 32-bit build) through
 // that allocator; CreateInstance then stores the concrete formatter vtable (off_82181110 =
 // ??_7Formatter@debug@core@rw@@6B@, the rw::core::debug::Formatter implementation) into the
@@ -38,30 +38,26 @@
 // =====================================================================================
 
 #include "rw/rwcore_structs.h"  // rw::core::debug::Manager / IFormatter, rw::IResourceAllocator
-#include "rw/core/debug/ManagerAllocator.h"
 #include <new>
 
 namespace rw { namespace core { namespace debug {
 
-    namespace detail {
+    // X360 0x8327F044 / 0x8327F048.
+    ::rw::IResourceAllocator* Manager::sAllocator = 0;
+    IFormatter* Manager::sFormatter = 0;
 
-        // X360 off_8327F044 -- the resource allocator the debug subsystem carves through.
-        // Defined here (Manager owns it); IFormatter reads it via ManagerAllocatorSlot().
-        ::rw::IResourceAllocator*& ManagerAllocatorSlot()
-        {
-            static ::rw::IResourceAllocator* spAllocator = 0;
-            return spAllocator;
-        }
-
-        // X360 dword_8327F048 -- the singleton IFormatter instance published by CreateInstance.
-        ::rw::core::debug::IFormatter* spFormatterInstance = 0;
-
-    }  // namespace detail
+    // DecFIGS manager.h:284; ARTIST inlines it into the IFormatter/Formatter scalar deleting
+    // destructors 0x82BBCB78/0x82BBCBC8, emitted with the Manager code.
+    void IFormatter::operator delete(void* lpBlock)
+    {
+        // ARTIST 0x82BBCB78: Free through Manager::sAllocator, no null tests.
+        Manager::sAllocator->Free(lpBlock);
+    }
 
     // X360 0x82BBD380 -- record the allocator, carve + publish the singleton formatter.
     int Manager::CreateInstance(::rw::IResourceAllocator* lpAllocator)
     {
-        detail::ManagerAllocatorSlot() = lpAllocator;
+        sAllocator = lpAllocator;
 
         // operator new carves one IFormatter (4 bytes on the X360 build = one vptr) through
         // the subsystem allocator.
@@ -69,11 +65,11 @@ namespace rw { namespace core { namespace debug {
 
         if (lpStorage)
         {
-            detail::spFormatterInstance = ::new (lpStorage) Formatter;
+            sFormatter = ::new (lpStorage) Formatter;
         }
         else
         {
-            detail::spFormatterInstance = 0;
+            sFormatter = 0;
         }
 
         return 0;

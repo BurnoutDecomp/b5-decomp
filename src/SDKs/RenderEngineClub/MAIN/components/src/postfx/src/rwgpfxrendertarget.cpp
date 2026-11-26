@@ -285,8 +285,7 @@ RenderTarget::RenderTarget(const Parameters& parameters)
 RenderTarget* RenderTarget::Initialize(const Parameters& parameters)
 {
     rw::ResourceDescriptor descriptor;
-    descriptor.m_baseResourceDescriptors[0].m_size = sizeof(RenderTarget);
-    descriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+    descriptor.m_baseResourceDescriptors[0] = ::rw::BaseResourceDescriptor(sizeof(RenderTarget), 16);
     rw::IResourceAllocator* allocator = parameters.mpAllocator
         ? parameters.mpAllocator : rw::ResourceAllocatorRegistry::GetDefaultAllocator();
     const rw::Resource resource = allocator->DoAllocate(descriptor, 0);

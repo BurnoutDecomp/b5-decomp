@@ -12,12 +12,15 @@
 // ARTIST establishes the native offsets. DecFIGS stream.h:243 and :246-248
 // declare the EA mutex and the Filter, Tap and Chunk lists of the shared stream.
 //
-// The public API is a lightweight cursor object (`Stream`) that references a shared
-// streaming engine (`StreamState`, the object `Stream::mpState` points at). Both are
-// distinct byte layouts (a `Stream` handle's +0x08 is a cursor key, a `StreamState`'s
-// +0x08 is the engine mutex), so they are two structs; the private engine helpers are
-// static members of `Stream` that take the engine explicitly (matching the asm, which
-// passes the engine in r3 with no this-adjust).
+// DecFIGS stream.h:50 declares ONE struct Stream: the shared streaming engine (fields
+// stream.h:241..276, the offsets ARTIST reads). Its private helpers (stream.h:224-239:
+// decbufferusage, getfreerequest, queuerequest, freerequest, parsechunks, readcallback,
+// startnextrequest, restartstream) are non-static members; PS3 DecFIGS mangles them with an
+// implicit `this` (e.g. _ZN2rw4core7filesys6Stream14getfreerequestEv), and ARTIST sets r3 to
+// the engine before evaluating the arguments of each call (Stream::opencallback 0x82BBE4E4,
+// ReleaseChunk 0x82BC0A2C). The public API runs on a tap handle (CreateTap returns a
+// Stream*): the tap's +0x04 is its engine, which GetStreamHeaderFromHandle (stream.h:224,
+// PS3 0xE46818 `lwz r3,4(r4)`) returns.
 //
 //   rw::core::filesys::Stream::QueueFile        @0x82BC04A0
 //   rw::core::filesys::Stream::GetChunk         @0x82BBD878
@@ -46,7 +49,7 @@ namespace rw
     {
         namespace filesys
         {
-            struct StreamState;
+            struct Stream;
             struct ChunkNode;
 
             // The chunk-parse callback a queued request carries. It inspects the freshly
@@ -59,18 +62,18 @@ namespace rw
 
             // The public chunk descriptor GetChunk returns (the X360 hands back the node's
             // +0x04, i.e. &ChunkNode::mChunk) and ReleaseChunk takes back.
-            //   +0x00 muRequestId : owning request's id (low byte == its slot index)
+            //   +0x00 miRequestId : owning request's id (low byte == its slot index)
             //   +0x04 muSize      : chunk byte size
             //   +0x08 mpData      : chunk data pointer inside the ring buffer
             //   +0x0C miState     : 0 pending, 1 handed out, >=2 released/free-able
-            //   +0x10 muKey       : region ordinal this chunk belongs to
+            //   +0x10 miKey       : region ordinal this chunk belongs to
             struct Chunk
             {
-                u32  muRequestId;   // node +0x04
+                s32  miRequestId;   // node +0x04  (DWARF ChunkInfo::reqId int)
                 u32  muSize;        // node +0x08
                 u8*  mpData;        // node +0x0C
                 s32  miState;       // node +0x10
-                u32  muKey;         // node +0x14
+                s32  miKey;         // node +0x14  (tap id; ARTIST cmpw, CancelRequest 0x82BBFF94)
             };
 
             // A buffered chunk record. The engine keeps a singly-linked list of these
@@ -93,18 +96,21 @@ namespace rw
                 s32           miRegionIndex;  // +0x0C  1-based region ordinal on a match
             };
 
-            // A ring-buffer region. The engine tracks buffered-byte usage per region and the
-            // chunk currently occupying it; region ordinals are 1-based positions in the list.
-            struct BufferRegion
+            // A tap (DWARF stream.h:247 `ListSingle<TapStruct> tap`): one consumer of the
+            // shared stream. The public `Stream*` handle a client holds is a tap: GetChunk walks
+            // the chunks carrying its id, parsechunks charges each chunk's bytes to its tap,
+            // and GetStreamHeaderFromHandle reads the engine from +0x04. Tap ids are 1-based
+            // positions in the list.
+            struct TapStruct
             {
-                BufferRegion* mpNext;          // +0x00
-                u32           muField04;       // +0x04
-                u32           muKey;           // +0x08  region ordinal (== Chunk::muKey)
-                s32           miUsage;         // +0x0C  buffered bytes charged to this region
-                ChunkNode*    mpCurrentChunk;  // +0x10  chunk currently occupying the region
+                TapStruct*    mpNext;          // +0x00
+                Stream*       mpStream;        // +0x04  the shared engine
+                s32           miKey;           // +0x08  tap id (== Chunk::miKey)
+                s32           miUsage;         // +0x0C  buffered bytes left for this tap
+                ChunkNode*    mpCurrentChunk;  // +0x10  next chunk GetChunk hands out
             };
 
-            // A queued file request. Requests live in a fixed array (StreamState::mpRequests,
+            // A queued file request. Requests live in a fixed array (Stream::mpRequests,
             // X360 stride 0x140) plus an intrusive free list / active doubly-linked list.
             //   +0x00 miId          : request id (generation<<8 | slot index)
             //   +0x04 miState       : 0 free, 1 queued, 2/3 active, 4 cancelled/done
@@ -121,7 +127,7 @@ namespace rw
             //   +0x138 muBufferedBytes : bytes currently buffered for this request
             struct Request
             {
-                u32                miId;             // +0x00
+                s32                miId;             // +0x00  (int: ARTIST cmpw, Gettable 0x82BBD96C)
                 s32                miState;          // +0x04
                 Request*           mpPrev;           // +0x08
                 Request*           mpNext;           // +0x0C
@@ -138,16 +144,16 @@ namespace rw
                 u32                muBufferedBytes;  // +0x138
             };
 
-            // The shared streaming engine (the object a Stream cursor's mpState points at).
-            struct StreamState
+            // The shared streaming engine (DecFIGS stream.h:50).
+            struct Stream
             {
                 u32                muReserved00;         // X360 +0x00
                 u32                muFlags;              // X360 +0x04  (bit 0 = borrowed handle)
                 EA::Thread::Mutex  mLock;                // X360 +0x08
                 Request*           mpRequests;           // X360 +0x38  (fixed array; stride 0x140)
-                u32                muRequestCount;       // X360 +0x3C
+                s32                miRequestCount;       // X360 +0x3C  (DWARF stream.h:245 int requests)
                 detail::ListSingle<ChunkHandler> mFilters; // X360 +0x40
-                detail::ListSingle<BufferRegion> mTaps;     // X360 +0x4C
+                detail::ListSingle<TapStruct> mTaps;        // X360 +0x4C
                 detail::ListSingle<ChunkNode> mChunks;     // X360 +0x58
                 u8*                mpBufferBase;         // X360 +0x64
                 u8*                mpWritePtr;           // X360 +0x68
@@ -174,59 +180,54 @@ namespace rw
                 s64                mi64ChunkBytes;       // X360 +0x200
                 s32                miReadGranularity;    // X360 +0x208
                 u64                mu64FileSize;         // X360 +0x210
-            };
 
-            CGS_STATIC_ASSERT(offsetof(StreamState, mpRequests) == 0x38, "ARTIST request table");
-            CGS_STATIC_ASSERT(offsetof(StreamState, mFilters) == 0x40, "ARTIST chunk filter list");
-            CGS_STATIC_ASSERT(offsetof(StreamState, mTaps) == 0x4C, "ARTIST buffer tap list");
-            CGS_STATIC_ASSERT(offsetof(StreamState, mChunks) == 0x58, "ARTIST chunk list");
-            CGS_STATIC_ASSERT(offsetof(StreamState, miState) == 0x70, "ARTIST stream state");
-            CGS_STATIC_ASSERT(offsetof(StreamState, mAsyncOp) == 0x1B8, "ARTIST embedded operation");
-            CGS_STATIC_ASSERT(offsetof(StreamState, mu64FileSize) == 0x210, "ARTIST stream file size");
-            CGS_STATIC_ASSERT(sizeof(Request) == 0x140, "ARTIST stream request stride");
-
-            // The public streaming cursor. A thin handle over a shared StreamState engine.
-            //   +0x00 muReserved00
-            //   +0x04 mpState        : the shared engine
-            //   +0x08 muKey          : this cursor's chunk key (matched to Chunk::muKey)
-            //   +0x0C miRemaining    : bytes left for this cursor to consume
-            //   +0x10 mpCurrentChunk : the chunk node GetChunk will hand out next
-            struct Stream
-            {
-                u32          muReserved00;    // +0x00
-                StreamState* mpState;         // +0x04
-                u32          muKey;           // +0x08
-                s32          miRemaining;     // +0x0C
-                ChunkNode*   mpCurrentChunk;  // +0x10
-
-                // ---- public API (this == the cursor handle) --------------------------------
+                // ---- public API (this == a tap handle) ------------------------------------
                 s32    QueueFile(const char* lpcPath, Handle* lpPreOpenHandle, s64 li64Size,
                                  ChunkParseCallback lpfnParse, void* lpParseContext);
                 Chunk* GetChunk();
-                void    ReleaseChunk(Chunk* lpChunk);
-                void    CancelRequest(u32 luRequestId);
-                s32    GetRequestState(u32 luRequestId) const;
+                void   ReleaseChunk(Chunk* lpChunk);
+                void   CancelRequest(s32 liRequestId);
+                s32    Gettable() const;
+                s32    Gettable(s32 liRequestId) const;
+                s32    GetRequestState(s32 liRequestId) const;
                 s32    GetState() const;
                 bool   IsEndOfStream() const;
                 u64    GetFileSize() const;
-                void    Kill();
+                void   Kill();
 
-                // ---- private engine helpers (the asm passes the engine in r3) ---------------
-                static void         freerequest(StreamState* lpState, Request* lpReq);
-                static Request*     getfreerequest(StreamState* lpState);
-                static void         queuerequest(StreamState* lpState, Request* lpReq);
-                static void         decbufferusage(StreamState* lpState, s32 liBytes);
-                static s32          parsechunks(StreamState* lpState);
-                static void          readcallback(StreamState* lpState);
-                static void          restartstream(StreamState* lpState, s32 liPriority);
+                // stream.h:224 -- the engine behind a tap handle (inlined at every ARTIST use,
+                // e.g. QueueFile 0x82BC04AC `lwz r30,4(r3)`).
+                Stream* GetStreamHeaderFromHandle(const Stream* lpHandle) const
+                {
+                    return reinterpret_cast<const TapStruct*>(lpHandle)->mpStream;
+                }
 
-                static void          startnextrequest(StreamState* lpState, s32 liPriority);
+                // ---- private engine helpers (stream.h:225-237, this == the engine) ----------
+                void         decbufferusage(s32 liBytes);
+                Request*     getfreerequest();
+                Request*     locaterequest(s32 liRequestId);
+                void         queuerequest(Request* lpReq);
+                void         freerequest(Request* lpReq);
+                s32          parsechunks();
+                void         readcallback();
+                void         startnextrequest(s32 liPriority);
+                void         restartstream(s32 liPriority);
 
-                // ---- async-op completion callbacks (GetContext returns the engine) -------
-                static void          opencallback(AsyncOp* lpOp);
-                static void          closecallback(AsyncOp* lpOp);
-                static void          filereadcallback(AsyncOp* lpOp);
+                // ---- async-op completion callbacks (the op's context is the engine) --------
+                static void  opencallback(AsyncOp* lpOp);
+                static void  closecallback(AsyncOp* lpOp);
+                static void  filereadcallback(AsyncOp* lpOp);
             };
+
+            CGS_STATIC_ASSERT(offsetof(Stream, mpRequests) == 0x38, "ARTIST request table");
+            CGS_STATIC_ASSERT(offsetof(Stream, mFilters) == 0x40, "ARTIST chunk filter list");
+            CGS_STATIC_ASSERT(offsetof(Stream, mTaps) == 0x4C, "ARTIST buffer tap list");
+            CGS_STATIC_ASSERT(offsetof(Stream, mChunks) == 0x58, "ARTIST chunk list");
+            CGS_STATIC_ASSERT(offsetof(Stream, miState) == 0x70, "ARTIST stream state");
+            CGS_STATIC_ASSERT(offsetof(Stream, mAsyncOp) == 0x1B8, "ARTIST embedded operation");
+            CGS_STATIC_ASSERT(offsetof(Stream, mu64FileSize) == 0x210, "ARTIST stream file size");
+            CGS_STATIC_ASSERT(sizeof(Request) == 0x140, "ARTIST stream request stride");
+
         }
     }
 }

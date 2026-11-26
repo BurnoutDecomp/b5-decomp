@@ -162,10 +162,10 @@ int Resample::CreateInstance(Resample *self)
 void Resample::SetResampleIncrement(f32 ratio)
 {
     f32 scaled = ratio * 65536.0f;                                   // flt_8217F368
-    if (scaled < 0.0f)
-        scaled -= 0.5f;
-    else
+    if (scaled >= 0.0f)         // ARTIST 0x82B9A884: the round-up arm falls through
         scaled += 0.5f;
+    else
+        scaled -= 0.5f;
     int increment = static_cast<int>(scaled);                        // fctiwz (truncate)
 
     // 0x40000 == KU_RESAMPLE_UNITY * KU_MAX_RESAMPLE_RATIO (4x in 16.16).

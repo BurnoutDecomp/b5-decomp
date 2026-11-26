@@ -81,7 +81,7 @@ public:
 
     // Tear the service down: unregister the pump timer (if it was created), restore the Snd9
     // driver, and free the mix buffer. @0x82B9BB38.
-    static int ReleaseEvent(Snd9Service *self);
+    static void ReleaseEvent(Snd9Service *self);
 
     // The registered profiling-timer callback: force the Snd9 mixer to 48 kHz if it drifted,
     // then pump the mixer/packet-player in <=256-sample chunks for one 100 Hz service window,

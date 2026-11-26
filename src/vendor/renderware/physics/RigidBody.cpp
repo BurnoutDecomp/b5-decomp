@@ -292,12 +292,11 @@ void RigidBody::SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform)
 // quirk (proved from the image word at 0x82BC4E88 = 0x139D1C6E, whose VD/VA/VB/VC fields
 // decode field-for-field). Read left to right, every expression here comes out transposed.
 //
-// SIGNATURE: r3 is never reassigned, so the function RETURNS `this`. Settled by the caller:
-// BatchIntegrator does `lwz r3,0x2C(r3)` on the RESULT, and the Xbox One build's inlined
-// copy reads `mov rdi,[rdi+30h]` from the body it passed IN. BurnoutPR's Hex-Rays
-// `return *(a1+76)` (the Simulation*) is an artefact of the last value left in eax.
+// SIGNATURE: DecFIGS rigidbody.h:267 declares `void DynamicUpdate()`. r3 is never reassigned,
+// and ARTIST's BatchIntegrator 0x82BC2FE8 reads the next body through r3 after the call: the
+// compiler knew the callee keeps r3 (same bulk TU), not a returned value.
 // ---------------------------------------------------------------------------
-RigidBody* RigidBody::DynamicUpdate()
+void RigidBody::DynamicUpdate()
 {
     Simulation* const lpSim = mStasis;
     const f32 lfDt = lpSim->GetTimeStep();
@@ -391,7 +390,6 @@ RigidBody* RigidBody::DynamicUpdate()
     for (int i = 0; i != 4; ++i) lpAccum[i].mV = zero;
     __stvx(__vrlimi(lpSim->GetGravity().mV, __lvx(&mForce, 0), 1, 0), &mForce, 0);
     __stvx(__vrlimi(zero, __lvx(&mTorque, 0), 1, 0), &mTorque, 0);
-    return this;
 }
 
 } // namespace physics

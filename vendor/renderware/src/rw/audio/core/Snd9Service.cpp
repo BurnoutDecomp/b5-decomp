@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled this rw::audio::core file for size (record-form
+// cr0 null tests, e.g. Snd9Service::ReleaseEvent 0x82B9BB6C `cmplwi r4,0`).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::audio::core::Snd9Service bodies -- the Snd9 (Xbox/Win32) hardware audio service.
 //
@@ -165,25 +170,18 @@ int Snd9Service::Process(Snd9Service *self, AudioProcessContext *ctx)
 // -------------------------------------------------------------------------------------
 // ReleaseEvent @0x82B9BB38 -- unregister the pump timer (only if it was created), restore
 // the Snd9 driver, then free the mix buffer if it exists.
-//   if (mbTimerCreated == 1) System::RemoveTimer(mpSystem, &mTimerHandle);
-//   result = SNDSYS_restore();
-//   if (mpMixBufStart) off_83271928->Free(mpMixBufStart, 0);
-//   return result;
-// (System::RemoveTimer / System::Free are void here; the asm's r3 pass into SNDSYS_restore
-// and the returned r3 from Free are that void-return register left-over, so the meaningful
-// return is SNDSYS_restore's status -- preserved as `result`.)
+// void, like every other plug-in ReleaseEvent: ARTIST keeps no value across the calls
+// (SNDSYS_restore's r3 is dropped at 0x82B9BB68).
 // -------------------------------------------------------------------------------------
-int Snd9Service::ReleaseEvent(Snd9Service *self)
+void Snd9Service::ReleaseEvent(Snd9Service *self)
 {
     if (self->mbTimerCreated == 1)
         System::RemoveTimer(self->mpSystem, &self->mTimerHandle);
 
-    int result = SNDSYS_restore();
+    SNDSYS_restore();
 
     if (self->mpMixBufStart)
         off_83271928->Free(self->mpMixBufStart, 0);
-
-    return result;
 }
 
 // -------------------------------------------------------------------------------------

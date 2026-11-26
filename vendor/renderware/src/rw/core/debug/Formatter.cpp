@@ -14,7 +14,7 @@
 //   rw::core::debug::Formatter::Format                    @0x82BBC118
 //
 // operator new (@0x82BBCBF0) carves `size` bytes through the debug subsystem's resource
-// allocator (off_8327F044, shared with Manager -- see ManagerAllocator.h). It builds a
+// allocator (off_8327F044, Manager::sAllocator). It builds a
 // resource descriptor on the stack: five {m_size, m_alignment} entries default-initialised
 // to {0, 1}, then overwrites entry[0] with {m_size = size, m_alignment = 4}, and calls the
 // allocator's DoAllocate(descriptor, /*name*/ 0). It returns the first base resource pointer
@@ -36,7 +36,6 @@
 // =====================================================================================
 
 #include "rw/rwcore_structs.h"  // rw::core::debug::IFormatter, rw::IResourceAllocator, rw::ResourceDescriptor
-#include "rw/core/debug/ManagerAllocator.h"
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -99,37 +98,16 @@ namespace rw { namespace core { namespace debug {
     // X360 0x82BBCBF0 -- carve `luSize` bytes through the subsystem resource allocator.
     void* IFormatter::operator new(size_t luSize)
     {
-        // The asm (0x82BBCC40) loads off_8327F044 and dereferences it UNCONDITIONALLY -- there is
-        // no null-test on the allocator (CreateInstance always installs it before operator new is
-        // reachable), so we carve straight through it to match the binary's control flow.
-        ::rw::IResourceAllocator* lpAllocator = detail::ManagerAllocatorSlot();
-
         // Build the carve descriptor: every entry defaults to the identity {m_size = 0,
         // m_alignment = 1} (rw::BaseResourceDescriptor's ctor), then entry[0] requests the
-        // formatter's storage: { m_size = luSize, m_alignment = 4 }.
+        // formatter's storage: { m_size = luSize, m_alignment = 4 }. The allocator
+        // (Manager::sAllocator) is read at the call, unchecked (ARTIST 0x82BBCC40).
         ::rw::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<uint32_t>(luSize);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4u;
+        lDescriptor.m_baseResourceDescriptors[0] = ::rw::BaseResourceDescriptor(static_cast<uint32_t>(luSize), 4u);
 
         // DoAllocate carves the Resource; the formatter lives in the first base region.
-        ::rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, 0);
+        ::rw::Resource lResource = Manager::sAllocator->DoAllocate(lDescriptor, 0);
         return lResource.m_baseResources[0];
-    }
-
-    // X360 0x82BBCB50 (scalar deleting destructor, delete-flag path) -- release the block
-    // through the same subsystem allocator.
-    void IFormatter::operator delete(void* lpBlock)
-    {
-        if (!lpBlock)
-        {
-            return;
-        }
-
-        ::rw::IResourceAllocator* lpAllocator = detail::ManagerAllocatorSlot();
-        if (lpAllocator)
-        {
-            lpAllocator->Free(lpBlock);
-        }
     }
 
 }}}  // namespace rw::core::debug

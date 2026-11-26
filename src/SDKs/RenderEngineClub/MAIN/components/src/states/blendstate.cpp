@@ -68,8 +68,7 @@ namespace renderengine
     rw::ResourceDescriptor BlendState::GetResourceDescriptor(const Parameters&)
     {
         rw::ResourceDescriptor descriptor;
-        descriptor.m_baseResourceDescriptors[0].m_size = 0x4C;
-        descriptor.m_baseResourceDescriptors[0].m_alignment = 4;
+        descriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(0x4C, 4);
         return descriptor;
     }
 

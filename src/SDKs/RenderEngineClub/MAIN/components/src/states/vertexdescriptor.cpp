@@ -195,10 +195,9 @@ void VertexDescriptor::GetParameters(const void* lpData, Parameters* lpParamsOut
 rw::BaseResourceDescriptors<5> VertexDescriptor::GetResourceDescriptor(const Parameters& lrParameters)
 {
     u32 luElementCount = 0;
-    const Parameters::Element* lpElement = lrParameters.maElements;
-    for (u32 luRemaining = 16; luRemaining != 0; --luRemaining, ++lpElement)
+    for (u32 luIndex = 0; luIndex < 16; ++luIndex)
     {
-        if (lpElement->miOffset != VERTEXFORMAT_NA)
+        if (lrParameters.maElements[luIndex].miOffset != VERTEXFORMAT_NA)
             ++luElementCount;
     }
 

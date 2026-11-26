@@ -62,7 +62,7 @@ namespace physics
         //     the packed pointer lanes) are both retired -- see the banner above and the
         //     body's own transcription notes.
         RigidBody& operator=(const RigidBody& rOther);   // @ 0x825E3410
-        RigidBody* DynamicUpdate();                      // @ 0x82BC2B78
+        void DynamicUpdate();                            // @ 0x82BC2B78 (DWARF rigidbody.h:267, void)
 
         // ARTIST AddRigidBody @0x82BC35A8..365C computes the tensor and
         // refreshes mInvm. DynamicUpdate's corresponding block preserves mInvm.

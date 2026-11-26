@@ -11,8 +11,7 @@ namespace renderengine
 rw::ResourceDescriptor DepthStencilState::GetResourceDescriptor(const Parameters&)
 {
     rw::ResourceDescriptor descriptor;
-    descriptor.m_baseResourceDescriptors[0].m_size = 0x60;
-    descriptor.m_baseResourceDescriptors[0].m_alignment = 4;
+    descriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(0x60, 4);
     return descriptor;
 }
 

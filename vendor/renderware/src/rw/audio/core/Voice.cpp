@@ -1,3 +1,8 @@
+// XDK size optimization: ARTIST compiled this rw::audio::core file for size (record-form
+// cr0 null tests, e.g. Voice::ExpelAfterDecay 0x82B6BFDC `cmplwi r11,0`).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::audio::core::Voice -- member-function bodies.
 //
@@ -315,11 +320,10 @@ Voice *Voice::ExpelAfterDecay(Voice *self)
     if (self->mucState)
         return self;
 
-    System *system = self->mpSystem;
     self->mfFadeEnd = self->mfFadeStart;
     self->mucState = 1;
-    system->mpExpelAfterDecayList[system->muExpelAfterDecayCount] = self;
-    ++system->muExpelAfterDecayCount;
+    self->mpSystem->mpExpelAfterDecayList[self->mpSystem->muExpelAfterDecayCount] = self;
+    ++self->mpSystem->muExpelAfterDecayCount;
     return self;
 }
 

@@ -633,10 +633,11 @@ void Simulation::DriveBatchBuild()
 //     0x82BC2FF0  cmplw / bne loc_82BC2FE4
 //
 // Two faithfulness details the asm settles and a paraphrase would lose:
-//   * `lwz r3,0x2C(r3)` AFTER the call proves DynamicUpdate returns the body it was given
-//     (r3 is never reassigned inside it) -- so BurnoutPR's Hex-Rays `return *(a1+76)` is an
-//     artefact, and the Xbox One build agrees (its inlined copy at 0x1409B7308 reads
-//     `mov rdi,[rdi+30h]` from the body it passed IN).
+//   * `lwz r3,0x2C(r3)` AFTER the call reads the body through r3: DynamicUpdate is void
+//     (DecFIGS rigidbody.h:267) and never reassigns r3, which the compiler only exploits when
+//     the callee sits in the same TU (rwphysics is a bulk TU in ARTIST: RigidBody and
+//     Simulation functions interleave in 0x82BC0000..0x82BC6000). Ours keeps the body in a
+//     saved register until that bulk TU exists.
 //   * the anchor is re-loaded from `this` on EVERY iteration, not hoisted. Kept.
 //
 // It is a DO-WHILE: the list is never empty here because SimulationUpdate has already
@@ -647,7 +648,8 @@ void Simulation::BatchIntegrator()
     RigidBody* lpBody = m_ActiveRB_Anchor->mRight;
     do
     {
-        lpBody = lpBody->DynamicUpdate()->mRight;
+        lpBody->DynamicUpdate();
+        lpBody = lpBody->mRight;
     }
     while (lpBody != m_ActiveRB_Anchor);
 }
