@@ -58,7 +58,7 @@ namespace CgsDev
 
     DebugRender& DebugInterface::GetRender()
     {
-        CGS_ASSERT(mpDebugManager, "mpDebugManager");
+        CGS_ASSERT_AT(mpDebugManager, "mpDebugManager", CGS_ARTIST_FILE, 175);
         return mpDebugManager->mBufferedRenderer;
     }
 

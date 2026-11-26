@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunction.h"  // Function::Get*
-
+#define CGS_ARTIST_CGSMENUITEMFUNCTION_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/UI/Functions/CgsMenuItemFunction.cpp"
 // CgsDev::DebugUI::MenuItemFunction - the manager-path bodies (Prepare + the function accessor) and
 // the function-row render/update/size virtuals that drive the row's bound Function.
 
@@ -21,7 +21,7 @@ namespace CgsDev
         // X360 0x82822E58: bind the row to its Function.
         void MenuItemFunction::Prepare(Function* lpFunction)
         {
-            CGS_ASSERT(lpFunction, "lpFunction");
+            CGS_ASSERT_AT(lpFunction, "lpFunction", CGS_ARTIST_CGSMENUITEMFUNCTION_FILE, 56);
             mpFunction = lpFunction;
         }
 

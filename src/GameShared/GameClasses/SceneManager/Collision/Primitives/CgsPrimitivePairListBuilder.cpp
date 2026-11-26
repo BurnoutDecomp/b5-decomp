@@ -555,8 +555,8 @@ namespace CgsCollision
         const bool lbDims  = KF_BOX_NEAR_IDENTICAL_DISTANCE > rw::math::vpu::Magnitude(rw::math::vpu::Subtract(lvDimsA, lvDimsB)).GetFloat();
         const bool lbPos   = KF_BOX_NEAR_IDENTICAL_DISTANCE > rw::math::vpu::Magnitude(rw::math::vpu::Subtract(lFrameA.Pos(), lFrameB.Pos())).GetFloat();
 
-        CGS_ASSERT(!(lbAxis0 && lbAxis1 && lbAxis2 && lbDims && lbPos),
-                   "Attempting to collide two near-identical boxes\n");
+        CGS_ASSERT_AT(!(lbAxis0 && lbAxis1 && lbAxis2 && lbDims && lbPos),
+                   "Attempting to collide two near-identical boxes\n", KAC_ARTIST_ASSERT_FILE, 475);
 
         // Two-type (BOX/BOX) header for the pair record.
         AddCollisionHeader(E_VOLUME_TYPE_BOX, E_VOLUME_TYPE_BOX,

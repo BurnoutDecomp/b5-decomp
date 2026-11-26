@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"  // Pool::BeginEmergencyDefragmentation / GetHeapAlignment, AllocListSet
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint / gxMessageFilterFlags
-
+#define CGS_ARTIST_CGSEMERGENCYFRAGPOOLMODULESTATE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsEmergencyFragPoolModuleState.cpp"
 // The emergency defragmentation strategy: Begin / RunDefragAlgorithm / RunPoolDefragmentation /
 // Update. Members are referenced by name (offsets in the owning header). Base private state
 // (mpPool) is reached through the base's public GetPool() / GetHeapAlignment accessor rather than
@@ -52,7 +52,7 @@ namespace CgsResource
                                                           LinearHeapNode* lpNodes,
                                                           s32 liLastNode, s32 liMemType)
     {
-        CGS_ASSERT(GetPool(), "GetPool()");
+        CGS_ASSERT_AT(GetPool(), "GetPool()", CGS_ARTIST_CGSEMERGENCYFRAGPOOLMODULESTATE_FILE, 185);
 
         s32 liFreeNode = FindNextFreeNode(0);
         if (liFreeNode == -1)

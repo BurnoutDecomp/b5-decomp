@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsIntervalList.h"
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsSceneSweeper.h"
-
+#define CGS_ARTIST_CGSSCENESWEEPERDEBUGCOMPONENT_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\Contactgen/CgsSceneSweeperDebugComponent.cpp"
 namespace CgsSceneManager
 {
     // Inlined by OverlapGenerationModule::Construct in ARTIST.
@@ -67,8 +67,8 @@ namespace CgsSceneManager
 
             const Interval* lpMaxInterval = lpIntervalList->GetObjectInterval(
                 lpMinInterval->mu16ObjectIndex, IntervalList::KI_MAX_INDEX);
-            CGS_ASSERT(lpMaxInterval->mu16ObjectIndex == lpMinInterval->mu16ObjectIndex,
-                       "lpMaxInterval->GetObjectIndex() == lpMinInterval->GetObjectIndex()");
+            CGS_ASSERT_AT(lpMaxInterval->mu16ObjectIndex == lpMinInterval->mu16ObjectIndex,
+                       "lpMaxInterval->GetObjectIndex() == lpMinInterval->GetObjectIndex()", CGS_ARTIST_CGSSCENESWEEPERDEBUGCOMPONENT_FILE, 133);
 
             const Vector3 lMax(
                 lpMaxInterval->mfXInterval,

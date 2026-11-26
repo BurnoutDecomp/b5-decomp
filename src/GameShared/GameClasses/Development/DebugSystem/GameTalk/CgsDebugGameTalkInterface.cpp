@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface.h"  // full ScriptInterface (GetScriptInterface().Execute)
 #include "SDKs/EA/GameTalk/GameTalk.h"
-
+#define CGS_ARTIST_CGSDEBUGGAMETALKINTERFACE_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/GameTalk/CgsDebugGameTalkInterface.cpp"
 // ============================================================================
 // CgsDev::DebugGameTalkInterface -- see CgsDebugGameTalkInterface.h for the
 // layout map and X360 source addresses. Reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -20,7 +20,7 @@ namespace CgsDev
 // stores r4 into *r3 (offset 0) regardless of the assert outcome.
 void DebugGameTalkInterface::Construct(CgsGameTalk::GameTalk* lpGameTalk)
 {
-    CGS_ASSERT(lpGameTalk != 0, "lpGameTalk");
+    CGS_ASSERT_AT(lpGameTalk != 0, "lpGameTalk", CGS_ARTIST_CGSDEBUGGAMETALKINTERFACE_FILE, 52);
     mpGameTalk = lpGameTalk;
 }
 
@@ -30,7 +30,7 @@ bool DebugGameTalkInterface::Prepare()
     if (miStage > 1)
     {
         // Stage is neither 0 (unprepared) nor 1 (prepared): a misuse.
-        CGS_FAIL("Invalid stage\n");
+        CGS_FAIL_AT("Invalid stage\n", CGS_ARTIST_CGSDEBUGGAMETALKINTERFACE_FILE, 90);
         return false;
     }
 

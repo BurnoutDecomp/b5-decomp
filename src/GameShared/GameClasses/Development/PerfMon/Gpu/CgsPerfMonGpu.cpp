@@ -3,7 +3,7 @@
 #include <cstring>
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
+#define CGS_ARTIST_CGSPERFMONGPU_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/PerfMon/Gpu/CgsPerfMonGpu.cpp"
 namespace CgsDev
 {
     namespace
@@ -112,7 +112,7 @@ namespace CgsDev
 
     f32 PerfMonGpu::GetLastMonitorValue(s32 liMonitorId)
     {
-        CGS_ASSERT(liMonitorId < miMaxMonitor, "liMonitorId < miMaxMonitor");
+        CGS_ASSERT_AT(liMonitorId < miMaxMonitor, "liMonitorId < miMaxMonitor", CGS_ARTIST_CGSPERFMONGPU_FILE, 231);
         return ComputeValueFromTimer(liMonitorId);
     }
 }

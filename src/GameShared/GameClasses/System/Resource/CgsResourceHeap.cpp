@@ -1226,7 +1226,7 @@ namespace CgsResource
     // muMaxLinearHeapNodes -- so the parameter is unused here too.
     u16 Heap::GenerateLinearHeap(LinearHeapNode* lpInputLinearHeap, u16 /*luMaxLength*/)
     {
-        CGS_ASSERT_STREAM(lpInputLinearHeap != 0, "No linear heap passed in\n");
+        CGS_ASSERT_STREAM_AT(lpInputLinearHeap != 0, "No linear heap passed in\n", CGS_ARTIST_RESOURCE_HEAP_FILE, 1235);
 
         const s32      liNumNodes = mUsedNodes.CountElements();
         HeapEntryNode* lpNode     = mUsedNodes.GetHead();
@@ -1588,8 +1588,8 @@ namespace CgsResource
     {
         HeapEntryNode* lpNode  = &mpNodes[luNodeIndex];
         HeapEntry*     lpEntry = lpNode->GetData();
-        CGS_ASSERT(lpEntry->IsAllocated(), "lpNode->GetData()->IsAllocated()");                                       // :531
-        CGS_ASSERT(reinterpret_cast<uintptr_t>(lpEntry->GetOwner()) != 0xFFFFFFFFu, "reinterpret_cast<uintptr_t>(lpNode->GetData()->GetOwner()) != 0xFFFFFFFF");   // :532
+        CGS_ASSERT_AT(lpEntry->IsAllocated(), "lpNode->GetData()->IsAllocated()", CGS_ARTIST_RESOURCE_HEAP_FILE, 531);                                       // :531
+        CGS_ASSERT_AT(reinterpret_cast<uintptr_t>(lpEntry->GetOwner()) != 0xFFFFFFFFu, "reinterpret_cast<uintptr_t>(lpNode->GetData()->GetOwner()) != 0xFFFFFFFF", CGS_ARTIST_RESOURCE_HEAP_FILE, 532);   // :532
 
         const u32 luFreedSize = lpEntry->GetSize();
         lpEntry->SetAllocated(false);

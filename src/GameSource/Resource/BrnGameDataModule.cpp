@@ -292,7 +292,7 @@ namespace BrnResource
             lpOutputBuffer->UnlockForWrite();
             return true;
         default:
-            CGS_FAIL("Invalid stage");
+            CGS_FAIL_AT("Invalid stage", CGS_ARTIST_FILE, 637);
             goto Pending;
         }
     Pending:
@@ -488,7 +488,7 @@ namespace BrnResource
                 case 14:
                     break;
                 default:
-                    CGS_FAIL("Invalid event type\n");
+                    CGS_FAIL_AT("Invalid event type\n", CGS_ARTIST_FILE, 2560);
                     break;
                 }
                 liType = mReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
@@ -963,7 +963,7 @@ namespace BrnResource
         lAudioDescriptor.m_baseResourceDescriptors[0].m_size = 0xC0000;
         lAudioDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
         const rw::Resource lAudioResource = lpAllocator->DoAllocate(lAudioDescriptor, 0);
-        CGS_ASSERT(lAudioResource.m_baseResources[0] != 0, "Failed to allocate audio buffer\n");
+        CGS_ASSERT_AT(lAudioResource.m_baseResources[0] != 0, "Failed to allocate audio buffer\n", CGS_ARTIST_FILE, 2210);
         mAudioStreamAllocator.Create(lAudioResource.m_baseResources[0], 0xC0000);
     }
 
@@ -1331,8 +1331,8 @@ namespace BrnResource
         else
         {
             lpSlot = mGameDataEventSlotPool.Pop();
-            CGS_ASSERT(lpSlot != 0,
-                       "No space for new requests - extend size of game data event pool\n");
+            CGS_ASSERT_AT(lpSlot != 0,
+                       "No space for new requests - extend size of game data event pool\n", CGS_ARTIST_FILE, 2819);
             if (lpSlot == 0)
                 return 0;   // [marked deviation] the X360 assert is non-fatal and the next
                             // store would fault on a full pool; guard the host instead.
@@ -1513,7 +1513,7 @@ namespace BrnResource
         }
         else
         {
-            CGS_FAIL("Invalid id\n");   // X360 line 3157
+            CGS_FAIL_AT("Invalid id\n", CGS_ARTIST_FILE, 3157);   // X360 line 3157
         }
     }
 
@@ -1568,7 +1568,7 @@ namespace BrnResource
             if (memcmp(lacName + 4, "INST", 4) == 0)
                 ProcessUnloadPropInstancesRequest(lpResourceInput, lpEvent, 48, liIndex);
             else
-                CGS_FAIL("Invalid game data id: ");   // X360 streams the id (line 3014)
+                CGS_FAIL_AT("Invalid game data id: ", CGS_ARTIST_FILE, 3014);   // X360 streams the id (line 3014)
         }
         else if (memcmp(lacName, "TRK_", 4) == 0)
         {
@@ -1583,7 +1583,7 @@ namespace BrnResource
         }
         else
         {
-            CGS_FAIL("Invalid id\n");   // X360 line 3038
+            CGS_FAIL_AT("Invalid id\n", CGS_ARTIST_FILE, 3038);   // X360 line 3038
         }
     }
 
@@ -1595,10 +1595,10 @@ void GameDataModule::ProcessSwapOutCollisionWorldRequest(
     CgsResource::ResourceIO::InputBuffer* lpResourceInput,
     const GameDataIO::SwapOutCollisionWorldRequest* lpRequest)
 {
-    CGS_ASSERT(!mbCollisionWorldInvalidated, "Collision world already invalid\n");
+    CGS_ASSERT_AT(!mbCollisionWorldInvalidated, "Collision world already invalid\n", CGS_ARTIST_FILE, 5418);
     GameDataEventSlot* lpSlot = mGameDataEventSlotPool.Pop();
-    CGS_ASSERT(lpSlot != 0,
-        "No space for new requests - extend size of game data event pool\n");
+    CGS_ASSERT_AT(lpSlot != 0,
+        "No space for new requests - extend size of game data event pool\n", CGS_ARTIST_FILE, 5424);
     lpSlot->mEvent.mId = 0;
     lpSlot->mEvent.mbFailFlag = false;
     lpSlot->mEvent.miEventId = lpRequest->miEventId;
@@ -1610,8 +1610,8 @@ void GameDataModule::ProcessSwapOutCollisionWorldRequest(
 
     if (miCollisionWorldRefCount > 0)
     {
-        CGS_ASSERT(miCollisionWorldRefCount == 1,
-            "Currently only support swapping out collision world when it's ref count is 1\n");
+        CGS_ASSERT_AT(miCollisionWorldRefCount == 1,
+            "Currently only support swapping out collision world when it's ref count is 1\n", CGS_ARTIST_FILE, 5443);
         lpSlot->meStage = GameDataEventSlot::E_UNLOADING;
         CgsResource::Events::UnloadBundleRequest lRequest;
         lRequest.mpUser = &mReceiverQueue;
@@ -1638,10 +1638,10 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
     CgsResource::ResourceIO::InputBuffer* lpResourceInput,
     const GameDataIO::SwapInCollisionWorldRequest* lpRequest)
 {
-    CGS_ASSERT(mbCollisionWorldInvalidated, "Collision world already invalid\n");
+    CGS_ASSERT_AT(mbCollisionWorldInvalidated, "Collision world already invalid\n", CGS_ARTIST_FILE, 5472);
     GameDataEventSlot* lpSlot = mGameDataEventSlotPool.Pop();
-    CGS_ASSERT(lpSlot != 0,
-        "No space for new requests - extend size of game data event pool\n");
+    CGS_ASSERT_AT(lpSlot != 0,
+        "No space for new requests - extend size of game data event pool\n", CGS_ARTIST_FILE, 5478);
     lpSlot->mEvent.mId = 0;
     lpSlot->mEvent.mbFailFlag = false;
     lpSlot->mEvent.miEventId = lpRequest->miEventId;
@@ -1694,11 +1694,11 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         char lacVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacVehicleID);
 
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS
                        || lpEvent->meType == E_ASSETSET_PHYSICS
                        || lpEvent->meType == E_ASSETSET_SOUND
                        || lpEvent->meType == E_ASSETSET_ATTRIBS,
-                   "Invalid asset type for vehicles\n");   // X360 line 3938
+                   "Invalid asset type for vehicles\n", CGS_ARTIST_FILE, 3938);   // X360 line 3938
 
         // X360 0x8266EC44: `if (meType == 1) bundleAssetSet = 4;` -- and the SOUND branch
         // below tests the ORIGINAL meType, not the remapped one.
@@ -1711,7 +1711,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         if (lpEvent->meType == E_ASSETSET_SOUND)
         {
-            CGS_ASSERT(strstr(lacVehicleID, "VEH_") != 0, "strstr( lacVehicleID, \"VEH_\" )");   // X360 line 3951
+            CGS_ASSERT_AT(strstr(lacVehicleID, "VEH_") != 0, "strstr( lacVehicleID, \"VEH_\" )", CGS_ARTIST_FILE, 3951);   // X360 line 3951
 
             const VehicleListEntry* lpVehicleListEntry =
                 mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
@@ -1786,11 +1786,11 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
         char lacVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacVehicleID);
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS
                        || lpEvent->meType == E_ASSETSET_PHYSICS
                        || lpEvent->meType == E_ASSETSET_SOUND
                        || lpEvent->meType == E_ASSETSET_ATTRIBS,
-                   "Invalid asset type for vehicles\n");
+                   "Invalid asset type for vehicles\n", CGS_ARTIST_FILE, 5000);
         if (lpEvent->meType == E_ASSETSET_ATTRIBS)
         {
             PostAcquireVehicleAttribsRequest(lpResourceInput, lpEvent, liEventId, liSlotIndex);
@@ -1802,7 +1802,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         const VehicleListEntry* lpVehicle = 0;
         if (lpEvent->meType == E_ASSETSET_SOUND)
         {
-            CGS_ASSERT(strstr(lacVehicleID, "VEH_") != 0, "strstr( lacVehicleID, \"VEH_\" )");
+            CGS_ASSERT_AT(strstr(lacVehicleID, "VEH_") != 0, "strstr( lacVehicleID, \"VEH_\" )", CGS_ARTIST_FILE, 5026);
             lpVehicle = mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
             CGS_ASSERT_AT(lpVehicle != 0, "lpVehicleListEntry", CGS_ARTIST_FILE, 5031);
             CGS_ASSERT_AT(muLoadedSoundBundlesCount == 2, "muLoadedSoundBundlesCount == 2", CGS_ARTIST_FILE, 5034);
@@ -1852,8 +1852,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         char lacTrafficVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacTrafficVehicleID);
 
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
-                   "Invalid asset type for traffic vehicles\n");   // X360 line 4052
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for traffic vehicles\n", CGS_ARTIST_FILE, 4052);   // X360 line 4052
 
         // The in-place prefix swap: "TVEH<code>" -> "VEH_<code>" (0x8201594C == "VEH_").
         strncpy(lacTrafficVehicleID, "VEH_", 4);
@@ -1897,8 +1897,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         char lacTrafficVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacTrafficVehicleID);
 
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
-                   "Invalid asset type for traffic vehicle\n");   // X360 line 4804
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for traffic vehicle\n", CGS_ARTIST_FILE, 4804);   // X360 line 4804
 
         char lacResourceName[208];
         CgsCore::SPrintf(lacResourceName, 128, KPC_VEHICLE_RESOURCE_FORMAT,
@@ -1945,8 +1945,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         char lacWheelID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacWheelID);
 
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
-                   "Invalid asset type for vehicles\n");   // X360 line 4010
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for vehicles\n", CGS_ARTIST_FILE, 4010);   // X360 line 4010
 
         const u32 luAssetSet = static_cast<u32>(lpEvent->meType);
         const char* lpcSuffix =
@@ -1990,8 +1990,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         char lacTrafficVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacTrafficVehicleID);
 
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
-                   "Invalid asset type for traffic vehicles\n");   // X360 line 5186
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for traffic vehicles\n", CGS_ARTIST_FILE, 5186);   // X360 line 5186
 
         strncpy(lacTrafficVehicleID, "VEH_", 4);                   // "TVEH<code>" -> "VEH_<code>"
 
@@ -2017,8 +2017,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
         char lacWheelID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacWheelID);
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
-                   "Invalid asset type for wheels\n");
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for wheels\n", CGS_ARTIST_FILE, 5142);
 
         char lacFileName[128];
         CgsCore::SPrintf(lacFileName, 128, KPC_WHEEL_FILE_FORMAT, lacWheelID,
@@ -2064,11 +2064,11 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         char lacVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacVehicleID);
 
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS
                        || lpEvent->meType == E_ASSETSET_PHYSICS
                        || lpEvent->meType == E_ASSETSET_SOUND
                        || lpEvent->meType == E_ASSETSET_ATTRIBS,
-                   "Invalid asset type for vehicles\n");   // X360 line 4649
+                   "Invalid asset type for vehicles\n", CGS_ARTIST_FILE, 4649);   // X360 line 4649
 
         char lacResourceName[208];
 
@@ -2122,7 +2122,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                 return;
             }
 
-            CGS_FAIL("Tried to load too many sound bundles");   // X360 line 4721
+            CGS_FAIL_AT("Tried to load too many sound bundles", CGS_ARTIST_FILE, 4689);   // X360 line 4721
             return;
         }
 
@@ -2137,8 +2137,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             // CgsStringUtils.h:75 length tripwire the inline expansion carries).
             strncpy(lacResourceName, lacVehicleID + 4, 9);
             lacResourceName[9] = '\0';
-            CGS_ASSERT(strlen(lacResourceName) + 10 < 0x7F,
-                       "strlen(lpcDest) + strlen(lpcSrc) < liMaxLength");   // CgsStringUtils.h:75
+            CGS_ASSERT_AT(strlen(lacResourceName) + 10 < 0x7F,
+                       "strlen(lpcDest) + strlen(lpcSrc) < liMaxLength", CGS_ARTIST_FILE, 4721);   // CgsStringUtils.h:75
             strcat(lacResourceName, "_AttribSys");
         }
         else
@@ -2179,8 +2179,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         char lacWheelID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacWheelID);
 
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
-                   "Invalid asset type for wheel\n");   // X360 line 4764
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for wheel\n", CGS_ARTIST_FILE, 4764);   // X360 line 4764
 
         // [marked deviation] the X360 leaves lacResourceName UNINITIALISED when the (already
         // asserted) meType is not GRAPHICS and hashes it anyway; terminate it so the host
@@ -2221,8 +2221,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         // X360: `if (event->meType) assert` -- the streamer always asks for asset set 0.
         // The suffix lookup runs on meType regardless (the assert is a non-gating tripwire).
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
-                   "Invalid asset type for track units\n");   // X360 line 4256
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for track units\n", CGS_ARTIST_FILE, 4256);   // X360 line 4256
 
         const u32 luAssetSet = static_cast<u32>(lpEvent->meType);
         const char* lpcSuffix =
@@ -2346,8 +2346,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         // X360: `if (event->meType) assert` -- the streamer always asks for asset set 0.
         // The suffix lookup runs on meType regardless (the assert is a non-gating tripwire).
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
-                   "Invalid asset type for track units\n");   // X360 line 5337
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for track units\n", CGS_ARTIST_FILE, 5337);   // X360 line 5337
 
         const u32 luAssetSet = static_cast<u32>(lpEvent->meType);
         const char* lpcSuffix =
@@ -2430,8 +2430,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         CgsIDConvertToString(lpEvent->mId, lacResourceName);
 
         // X360: `if (event->meType) assert` -- track units are asset set 0 (GRAPHICS).
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
-                   "Invalid asset type for track units\n");   // X360 line 4897
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for track units\n", CGS_ARTIST_FILE, 4897);   // X360 line 4897
 
         // "<TRK_UNITn>_list" -- the unit's instance-list resource name (X360 SPrintf cap 128).
         char lacListName[128];
@@ -2460,8 +2460,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                                                const GameDataIO::GameDataAssetEvent* lpEvent,
                                                s32 liEventId, s32 liSlotIndex)
     {
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_DATA,
-                   "Invalid asset type for pvs\n");   // X360 line 4355
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_DATA,
+                   "Invalid asset type for pvs\n", CGS_ARTIST_FILE, 4355);   // X360 line 4355
 
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
 
@@ -2501,10 +2501,10 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         // X360 line 4326. The flag is a1+475940 -- committed as mbCollisionWorldInvalidated
         // with a FLAGged role name; this assert text is the first real attestation of what it
         // means ("invalidated"), so the role is now confirmed even though the identifier is not.
-        CGS_ASSERT(mbCollisionWorldInvalidated == 0,
-                   "Attempted collision world operation when it is invalidated\n");
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_PHYSICS,
-                   "Invalid asset type for world collision\n");   // X360 line 4327
+        CGS_ASSERT_AT(mbCollisionWorldInvalidated == 0,
+                   "Attempted collision world operation when it is invalidated\n", CGS_ARTIST_FILE, 4326);
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_PHYSICS,
+                   "Invalid asset type for world collision\n", CGS_ARTIST_FILE, 4327);   // X360 line 4327
 
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
 
@@ -2540,8 +2540,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                                                         const GameDataIO::GameDataAssetEvent* lpEvent,
                                                         s32 liEventId, s32 liSlotIndex)
     {
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_DATA,
-                   "Invalid asset type for traffic lanes\n");   // X360 line 4188 (0x105C)
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_DATA,
+                   "Invalid asset type for traffic lanes\n", CGS_ARTIST_FILE, 4188);   // X360 line 4188 (0x105C)
 
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
 
@@ -2568,8 +2568,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                                                    const GameDataIO::GameDataAssetEvent* lpEvent,
                                                    s32 liEventId, s32 liSlotIndex)
     {
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_DATA,
-                   "Invalid asset type for AI lanes\n");   // X360 line 4216 (0x1078)
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_DATA,
+                   "Invalid asset type for AI lanes\n", CGS_ARTIST_FILE, 4216);   // X360 line 4216 (0x1078)
 
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
 
@@ -2595,8 +2595,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                                                        const GameDataIO::GameDataAssetEvent* lpEvent,
                                                        s32 liEventId, s32 liSlotIndex)
     {
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_ATTRIBS,
-                   "Invalid asset type for surface list\n");   // X360 line 4285
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_ATTRIBS,
+                   "Invalid asset type for surface list\n", CGS_ARTIST_FILE, 4285);   // X360 line 4285
 
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
 
@@ -2675,8 +2675,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         lacFileName[0] = '\0';
         CgsDev::StrStream lStream(lacFileName, 100);
 
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_PHYSICS,
-                   "Invalid asset type for prop physics \n");   // X360 line 4149 (verbatim, incl. the space)
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_PHYSICS,
+                   "Invalid asset type for prop physics \n", CGS_ARTIST_FILE, 4149);   // X360 line 4149 (verbatim, incl. the space)
 
         char lacResourceName[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacResourceName);
@@ -2688,8 +2688,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         const u32 luZoneId = static_cast<u32>(atoi(&lacResourceName[KU_STRING_INDEX_OF_ZONE_NUMBER]));
         // X360 fires this guard TWICE (lines 4157 and 4160) inside one out-of-range branch;
         // both asserts are reproduced.
-        CGS_ASSERT(luZoneId < KU_MAX_ZONES, "luZoneId < KU_MAX_ZONES");
-        CGS_ASSERT(luZoneId < KU_MAX_ZONES, "luZoneId < KU_MAX_ZONES");
+        CGS_ASSERT_AT(luZoneId < KU_MAX_ZONES, "luZoneId < KU_MAX_ZONES", CGS_ARTIST_FILE, 4157);
+        CGS_ASSERT_AT(luZoneId < KU_MAX_ZONES, "luZoneId < KU_MAX_ZONES", CGS_ARTIST_FILE, 4160);
 
         lStream << KPC_PROP_INSTANCES_PATH << luZoneId << "_PropInstances.bundle";
 
@@ -2781,8 +2781,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                                                        const GameDataIO::GameDataAssetEvent* lpEvent,
                                                        s32 liEventId, s32 liSlotIndex)
     {
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_DATA,
-                   "Invalid asset type for traffic lanes\n");   // X360 line 4832 (0x12E0)
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_DATA,
+                   "Invalid asset type for traffic lanes\n", CGS_ARTIST_FILE, 4832);   // X360 line 4832 (0x12E0)
 
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
 
@@ -2808,8 +2808,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                                                   const GameDataIO::GameDataAssetEvent* lpEvent,
                                                   s32 liEventId, s32 liSlotIndex)
     {
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_DATA,
-                   "Invalid asset type for AI lanes\n");   // X360 line 4860 (0x12FC)
+        CGS_ASSERT_AT(lpEvent->meType == E_ASSETSET_DATA,
+                   "Invalid asset type for AI lanes\n", CGS_ARTIST_FILE, 4860);   // X360 line 4860 (0x12FC)
 
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
 
@@ -3197,12 +3197,12 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             break;
 
         case 29:   // AI lanes -- hop 2: AI.dat is resident, acquire "WorldMapData"
-            CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3238
+            CGS_ASSERT_AT(!lbFailed, "Failed to load\n", CGS_ARTIST_FILE, 3238);   // X360 line 3238
             ProcessGetAILanesRequest(lpResourceInput, &lpSlot->mEvent, 54, liSlotIndex);
             break;
 
         case 30:   // traffic lanes -- hop 2: B5Traffic.bndl is resident, acquire "BaseTraffic"
-            CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3245
+            CGS_ASSERT_AT(!lbFailed, "Failed to load\n", CGS_ARTIST_FILE, 3245);   // X360 line 3245
             ProcessGetTrafficLanesRequest(lpResourceInput, &lpSlot->mEvent, 55, liSlotIndex);
             break;
 
@@ -3218,25 +3218,25 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         case 32:   // world collision -- loaded is the terminal state (acquire rides the
                    // zone-collision AcquireResourceList protocol, not a GET here)
-            CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3268
+            CGS_ASSERT_AT(!lbFailed, "Failed to load\n", CGS_ARTIST_FILE, 3268);   // X360 line 3268
             ++miCollisionWorldRefCount;
             PostGameDataResponse(lpSlot, 32, false, 1 /*X360 +0x18 immediate*/, 0, 0);
             mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             break;
 
         case 33:   // PVS
-            CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3282
+            CGS_ASSERT_AT(!lbFailed, "Failed to load\n", CGS_ARTIST_FILE, 3282);   // X360 line 3282
             ProcessGetPVSRequest(lpResourceInput, &lpSlot->mEvent, 58, liSlotIndex);
             break;
 
         case 34:   // prop physics -- hop 2: PROPS/PROPPHYSICS.BUNDLE is resident, acquire
                    // "PRP_PHYSICS_" (X360 case 0x22 -> ProcessGetPropPhysicsRequest(...,61,...))
-            CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3302
+            CGS_ASSERT_AT(!lbFailed, "Failed to load\n", CGS_ARTIST_FILE, 3289);   // X360 line 3302
             ProcessGetPropPhysicsRequest(lpResourceInput, &lpSlot->mEvent, 61, liSlotIndex);
             break;
 
         case 35:   // prop instances
-            CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3309
+            CGS_ASSERT_AT(!lbFailed, "Failed to load\n", CGS_ARTIST_FILE, 3302);   // X360 line 3309
             ProcessGetPropInstancesRequest(lpResourceInput, &lpSlot->mEvent, 62, liSlotIndex);
             break;
 
@@ -3251,13 +3251,13 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             break;
 
         case 37:   // surface list
-            CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3316
+            CGS_ASSERT_AT(!lbFailed, "Failed to load\n", CGS_ARTIST_FILE, 3309);   // X360 line 3316
             ProcessGetSurfaceListRequest(lpResourceInput, &lpSlot->mEvent, 66, liSlotIndex);
             break;
 
         case 38:
         {
-            CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3289
+            CGS_ASSERT_AT(!lbFailed, "Failed to load\n", CGS_ARTIST_FILE, 3316);   // X360 line 3289
             GameDataIO::GameDataAssetEvent lReply;
             lReply.miEventId = 0;
             lReply.mpReceiverQueue = 0;
@@ -3281,7 +3281,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         }
 
         default:
-            CGS_FAIL("Invalid event type received\n");   // X360 line 3335
+            CGS_FAIL_AT("Invalid event type received\n", CGS_ARTIST_FILE, 3335);   // X360 line 3335
             break;
         }
     }
@@ -3346,8 +3346,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                 // the vault type off the "VEH_T" id prefix (prefix match -> RESIDENT 0,
                 // else STREAMED 1), then RegisterVault(queue = the attrib receiver, handle,
                 // miEventId = the slot index, type). Slot stays staged for the type-3 reply.
-                CGS_ASSERT(lpResponse->mpSourceEntry != 0,
-                           "Trying to register handling attrib vault before vault resource has been loaded");   // line 3409
+                CGS_ASSERT_AT(lpResponse->mpSourceEntry != 0,
+                           "Trying to register handling attrib vault before vault resource has been loaded", CGS_ARTIST_FILE, 3542);   // line 3409
                 char lacResourceName[16];
                 CgsIDUnCompress(lpSlot->mEvent.mId, lacResourceName);
                 lacResourceName[5] = 0;
@@ -3489,10 +3489,10 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(lpResponse->miEventId)];
         const s32 liSlotIndex = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
 
-        CGS_ASSERT(lpSlot->miResponseEventId == 67,
-                   "Should only receive invalidate responses to swapping out of collision world\n");   // line 3657
-        CGS_ASSERT(lpSlot->meStage == GameDataEventSlot::E_DONE,
-                   "Should only ever get invalidate responses for 'done' slots\n");   // line 3658
+        CGS_ASSERT_AT(lpSlot->miResponseEventId == 67,
+                   "Should only receive invalidate responses to swapping out of collision world\n", CGS_ARTIST_FILE, 3657);   // line 3657
+        CGS_ASSERT_AT(lpSlot->meStage == GameDataEventSlot::E_DONE,
+                   "Should only ever get invalidate responses for 'done' slots\n", CGS_ARTIST_FILE, 3658);   // line 3658
 
         if (lpResponse->GetResult() != CgsResource::Events::InvalidatePoolResponse::E_RESULT_SUCCESS)
         {
@@ -3534,18 +3534,18 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(lpResponse->miEventId)];
         const s32 liSlotIndex = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
 
-        CGS_ASSERT(lpSlot->miResponseEventId == 68,
-                   "Should only receive validate responses to swapping in of collision world\n");   // line 3738
-        CGS_ASSERT(lpSlot->meStage == GameDataEventSlot::E_DONE,
-                   "Should only ever get validate responses for 'done' slots\n");   // line 3739
+        CGS_ASSERT_AT(lpSlot->miResponseEventId == 68,
+                   "Should only receive validate responses to swapping in of collision world\n", CGS_ARTIST_FILE, 3738);   // line 3738
+        CGS_ASSERT_AT(lpSlot->meStage == GameDataEventSlot::E_DONE,
+                   "Should only ever get validate responses for 'done' slots\n", CGS_ARTIST_FILE, 3739);   // line 3739
 
         const s32 liRefCount = miCollisionWorldRefCount;
         mbCollisionWorldInvalidated = 0;
 
         if (liRefCount != 0)
         {
-            CGS_ASSERT(liRefCount == 1,
-                       "Currently only support swapping out collision world when it's ref count is 1\n");   // line 3754
+            CGS_ASSERT_AT(liRefCount == 1,
+                       "Currently only support swapping out collision world when it's ref count is 1\n", CGS_ARTIST_FILE, 3754);   // line 3754
             lpSlot->meStage = GameDataEventSlot::E_LOADING;   // X360 *slot = 0
 
             CgsResource::Events::LoadBundleRequest lRequest;

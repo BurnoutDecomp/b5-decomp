@@ -116,14 +116,14 @@ namespace CgsLanguage
     // diagnostic show-keys branch flagged above, not as a NULL fallback. Do not substitute the key.
     const u8* LanguageManager::FindString(const char* lpcKey) const
     {
-        CGS_ASSERT(lpcKey != 0, "NULL string passed in as hash ID to LanguageManager::FindString");
+        CGS_ASSERT_AT(lpcKey != 0, "NULL string passed in as hash ID to LanguageManager::FindString", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 228);
 
         // strlen, then guard against an overlong key (X360 compares the length against 0x80).
         const char* lpcScan = lpcKey;
         while (*lpcScan)
             ++lpcScan;
         int liLength = static_cast<int>(lpcScan - lpcKey);
-        CGS_ASSERT(liLength <= 128, "Overlong string passed as hash ID to LanguageManager::FindString");
+        CGS_ASSERT_AT(liLength <= 128, "Overlong string passed as hash ID to LanguageManager::FindString", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 229);
 
         // CalculateHash takes a non-const char* (the committed signature); the key is only read.
         unsigned int luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcKey), liLength);
@@ -568,15 +568,15 @@ namespace CgsLanguage
         mpGeneralThousandsSeparator = FindString(KAC_GENERAL_THOUSANDS_SEPARATOR);    // +0x6104
         mpGeneralPercentage         = FindString(KAC_GENERAL_PERCENTAGE_DISPLAY);     // +0x6108
         mpGeneralXOverY             = FindString(KAC_GENERAL_X_OVER_Y_DISPLAY);       // +0x610C
-        CGS_ASSERT(mpGeneralDecimalSeparator != 0,   KAC_GENERAL_DECIMAL_SEPARATOR);    // cpp:2318
-        CGS_ASSERT(mpGeneralThousandsSeparator != 0, KAC_GENERAL_THOUSANDS_SEPARATOR);  // cpp:2319
-        CGS_ASSERT(mpGeneralPercentage != 0,         KAC_GENERAL_PERCENTAGE_DISPLAY);   // cpp:2320
-        CGS_ASSERT(mpGeneralXOverY != 0,             KAC_GENERAL_X_OVER_Y_DISPLAY);     // cpp:2321
+        CGS_ASSERT_AT(mpGeneralDecimalSeparator != 0,   KAC_GENERAL_DECIMAL_SEPARATOR, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2318);    // cpp:2318
+        CGS_ASSERT_AT(mpGeneralThousandsSeparator != 0, KAC_GENERAL_THOUSANDS_SEPARATOR, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2319);  // cpp:2319
+        CGS_ASSERT_AT(mpGeneralPercentage != 0,         KAC_GENERAL_PERCENTAGE_DISPLAY, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2320);   // cpp:2320
+        CGS_ASSERT_AT(mpGeneralXOverY != 0,             KAC_GENERAL_X_OVER_Y_DISPLAY, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2321);     // cpp:2321
 
         mpGeneralCurrencySeparator = FindString(KAC_GENERAL_CURRENCY_SEPARATOR);      // +0x6110
         mpGeneralCurrency          = FindString(KAC_GENERAL_CURRENCY_NO_DECIMAL);     // +0x6114
-        CGS_ASSERT(mpGeneralCurrencySeparator != 0, KAC_GENERAL_CURRENCY_SEPARATOR);    // cpp:2327
-        CGS_ASSERT(mpGeneralCurrency != 0,          KAC_GENERAL_CURRENCY_NO_DECIMAL);   // cpp:2328
+        CGS_ASSERT_AT(mpGeneralCurrencySeparator != 0, KAC_GENERAL_CURRENCY_SEPARATOR, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2327);    // cpp:2327
+        CGS_ASSERT_AT(mpGeneralCurrency != 0,          KAC_GENERAL_CURRENCY_NO_DECIMAL, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2328);   // cpp:2328
 
         mpTimeFormatDate            = FindString(KAC_TIME_FORMAT_DATE);               // +0x6118
         mpTimeFormatAll             = FindString(KAC_TIME_FORMAT_ALL);                // +0x611C
@@ -588,19 +588,19 @@ namespace CgsLanguage
         mpTimeFormatSecsLong        = FindString(KAC_TIME_FORMAT_SECS_L);             // +0x6134
         mpTimeFormatMinSecsMidText  = FindString(KAC_TIME_FORMAT_MIN_SECS_MID_TEXT);  // +0x6138
         mpTimeFormatMinsSecsMidText = FindString(KAC_TIME_FORMAT_MINS_SECS_MID_TEXT); // +0x613C
-        CGS_ASSERT(mpTimeFormatDate != 0,            KAC_TIME_FORMAT_DATE);               // cpp:2355
-        CGS_ASSERT(mpTimeFormatAll != 0,             KAC_TIME_FORMAT_ALL);                // cpp:2356
-        CGS_ASSERT(mpTimeFormatHrsMinsSecs != 0,     KAC_TIME_FORMAT_HRS_MINS_SECS);      // cpp:2357
-        CGS_ASSERT(mpTimeFormatMinsSecsHnds != 0,    KAC_TIME_FORMAT_MINS_SECS_HNDS);     // cpp:2358
-        CGS_ASSERT(mpTimeFormatMinsSecs != 0,        KAC_TIME_FORMAT_MINS_SECS);          // cpp:2359
-        CGS_ASSERT(mpTimeFormatSecsHnds != 0,        KAC_TIME_FORMAT_SECS_HNDS);          // cpp:2360
-        CGS_ASSERT(mpTimeFormatSecs != 0,            KAC_TIME_FORMAT_SECS);               // cpp:2361
-        CGS_ASSERT(mpTimeFormatSecsLong != 0,        KAC_TIME_FORMAT_SECS_L);             // cpp:2362
-        CGS_ASSERT(mpTimeFormatMinSecsMidText != 0,  KAC_TIME_FORMAT_MIN_SECS_MID_TEXT);  // cpp:2363
-        CGS_ASSERT(mpTimeFormatMinsSecsMidText != 0, KAC_TIME_FORMAT_MINS_SECS_MID_TEXT); // cpp:2364
+        CGS_ASSERT_AT(mpTimeFormatDate != 0,            KAC_TIME_FORMAT_DATE, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2355);               // cpp:2355
+        CGS_ASSERT_AT(mpTimeFormatAll != 0,             KAC_TIME_FORMAT_ALL, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2356);                // cpp:2356
+        CGS_ASSERT_AT(mpTimeFormatHrsMinsSecs != 0,     KAC_TIME_FORMAT_HRS_MINS_SECS, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2357);      // cpp:2357
+        CGS_ASSERT_AT(mpTimeFormatMinsSecsHnds != 0,    KAC_TIME_FORMAT_MINS_SECS_HNDS, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2358);     // cpp:2358
+        CGS_ASSERT_AT(mpTimeFormatMinsSecs != 0,        KAC_TIME_FORMAT_MINS_SECS, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2359);          // cpp:2359
+        CGS_ASSERT_AT(mpTimeFormatSecsHnds != 0,        KAC_TIME_FORMAT_SECS_HNDS, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2360);          // cpp:2360
+        CGS_ASSERT_AT(mpTimeFormatSecs != 0,            KAC_TIME_FORMAT_SECS, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2361);               // cpp:2361
+        CGS_ASSERT_AT(mpTimeFormatSecsLong != 0,        KAC_TIME_FORMAT_SECS_L, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2362);             // cpp:2362
+        CGS_ASSERT_AT(mpTimeFormatMinSecsMidText != 0,  KAC_TIME_FORMAT_MIN_SECS_MID_TEXT, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2363);  // cpp:2363
+        CGS_ASSERT_AT(mpTimeFormatMinsSecsMidText != 0, KAC_TIME_FORMAT_MINS_SECS_MID_TEXT, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2364); // cpp:2364
 
         mpDistanceFormatIsMetric = FindString(KAC_DISTANCE_FORMAT_ISMETRIC);          // +0x6150
-        CGS_ASSERT(mpDistanceFormatIsMetric != 0, KAC_DISTANCE_FORMAT_ISMETRIC);          // cpp:2368
+        CGS_ASSERT_AT(mpDistanceFormatIsMetric != 0, KAC_DISTANCE_FORMAT_ISMETRIC, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2368);          // cpp:2368
 
         const u8 lu8IsMetric = mpDistanceFormatIsMetric[0];                            // lbz r11, 0(r11)
         if (lu8IsMetric == KU8_IS_METRIC_YES)
@@ -633,13 +633,13 @@ namespace CgsLanguage
                 mpDistanceFormatLongL  = FindString(KAC_DISTANCE_FORMAT_LONG_L);
                 return;
             }
-            CGS_FAIL("DISTANCE_FORMAT_ISMETRIC needs to be set to either 0 or 1");    // cpp:2407
+            CGS_FAIL_AT("DISTANCE_FORMAT_ISMETRIC needs to be set to either 0 or 1", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2407);    // cpp:2407
         }
 
-        CGS_ASSERT(mpDistanceFormatShort != 0,  KAC_DISTANCE_FORMAT_SHORT);               // cpp:2410
-        CGS_ASSERT(mpDistanceFormatShortL != 0, KAC_DISTANCE_FORMAT_SHORT_L);             // cpp:2411
-        CGS_ASSERT(mpDistanceFormatLong != 0,   KAC_DISTANCE_FORMAT_LONG);                // cpp:2412
-        CGS_ASSERT(mpDistanceFormatLongL != 0,  KAC_DISTANCE_FORMAT_LONG_L);              // cpp:2413
+        CGS_ASSERT_AT(mpDistanceFormatShort != 0,  KAC_DISTANCE_FORMAT_SHORT, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2410);               // cpp:2410
+        CGS_ASSERT_AT(mpDistanceFormatShortL != 0, KAC_DISTANCE_FORMAT_SHORT_L, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2411);             // cpp:2411
+        CGS_ASSERT_AT(mpDistanceFormatLong != 0,   KAC_DISTANCE_FORMAT_LONG, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2412);                // cpp:2412
+        CGS_ASSERT_AT(mpDistanceFormatLongL != 0,  KAC_DISTANCE_FORMAT_LONG_L, CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2413);              // cpp:2413
     }
 
 
@@ -765,9 +765,9 @@ namespace CgsLanguage
                                                      s32 liNumParams, const char* const* lppcParams,
                                                      const ParameterFormatType* lpeParamFormatTypes)
     {
-        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText");   // cpp:1127
-        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in TextField::SetLocalisedText");  // cpp:1128
-        CGS_ASSERT(liNumParams > 0 && liNumParams < 4, "Wrong number of Parameters int SetLocalisedText"); // cpp:1129
+        CGS_ASSERT_AT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1127);   // cpp:1127
+        CGS_ASSERT_AT(lpcSourceText != 0, "Text field is invalid in TextField::SetLocalisedText", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1128);  // cpp:1128
+        CGS_ASSERT_AT(liNumParams > 0 && liNumParams < 4, "Wrong number of Parameters int SetLocalisedText", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1129); // cpp:1129
 
         bool lbAnyParamFailed = false;
 
@@ -783,8 +783,8 @@ namespace CgsLanguage
             const u32   luParamFormat =
                 (lpeParamFormatTypes != 0) ? static_cast<u32>(lpeParamFormatTypes[liParam]) : 0;
 
-            CGS_ASSERT(lpcParamText != 0, "Invalid Text Pointer in Parameterised SetLocalisedText"); // cpp:1156
-            CGS_ASSERT(luParamFormat <= 0x14, "Invalid Parameter");                                   // cpp:1157
+            CGS_ASSERT_AT(lpcParamText != 0, "Invalid Text Pointer in Parameterised SetLocalisedText", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1156); // cpp:1156
+            CGS_ASSERT_AT(luParamFormat <= 0x14, "Invalid Parameter", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1157);                                   // cpp:1157
 
             const bool lbFormatted = FormatText(lacParamBuffers[liParam], 512, lpcParamText,
                                                 static_cast<ParameterFormatType>(luParamFormat));
@@ -1577,11 +1577,11 @@ namespace CgsLanguage
     bool LanguageManager::FormatText(char* lpacBuffer, u32 luBufferSize,
                                      const char* lpcSourceText, ParameterFormatType leType)
     {
-        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in TextField::FormatText");
-        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in TextField::FormatText");
-        CGS_ASSERT(std::strlen(lpcSourceText) < luBufferSize,
-                   "Text string too long in TextField::FormatText");
-        CGS_ASSERT(leType < 21, "Invalid Localisation Format supplied to TextField::FormatText");
+        CGS_ASSERT_AT(lpacBuffer != 0, "Target field is invalid in TextField::FormatText", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 697);
+        CGS_ASSERT_AT(lpcSourceText != 0, "Text field is invalid in TextField::FormatText", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 698);
+        CGS_ASSERT_AT(std::strlen(lpcSourceText) < luBufferSize,
+                   "Text string too long in TextField::FormatText", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 699);
+        CGS_ASSERT_AT(leType < 21, "Invalid Localisation Format supplied to TextField::FormatText", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 700);
 
         switch (leType)
         {
@@ -1607,9 +1607,9 @@ namespace CgsLanguage
             const u8* lpDatabaseString = FindString(lpcSourceText);
             if (lpDatabaseString != 0)
             {
-                CGS_ASSERT(std::strlen(reinterpret_cast<const char*>(lpDatabaseString)) <
+                CGS_ASSERT_AT(std::strlen(reinterpret_cast<const char*>(lpDatabaseString)) <
                                luBufferSize,
-                           "Database Text string too long in TextField::FormatText");
+                           "Database Text string too long in TextField::FormatText", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 721);
                 if (leType != 9)
                 {
                     CgsUnicode::ToUpperN(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
@@ -1640,7 +1640,7 @@ namespace CgsLanguage
         }
 
         default:
-            CGS_FAIL("Invalid Parameter sent to FormatText");
+            CGS_FAIL_AT("Invalid Parameter sent to FormatText", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 770);
             return false;
         }
     }

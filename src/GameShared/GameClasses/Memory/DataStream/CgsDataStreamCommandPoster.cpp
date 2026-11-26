@@ -49,16 +49,16 @@ namespace CgsMemory
                                             void* lpDataBuffer, s32 liDataBufferSize,
                                             s32 liInitialDataBufferUsed)
     {
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpCommandBuffer) % 128u) == 0,
-                   "Command buffer MUST be on a 128 byte boundary\n");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpDataBuffer) % 128u) == 0,
-                   "Data buffer MUST be on a 128 byte boundary\n");
-        CGS_ASSERT((liCommandBufferSize % 128) == 0,
-                   "Command buffer MUST be a multiple of 128 bytes\n");
-        CGS_ASSERT((liDataBufferSize % 128) == 0,
-                   "Data buffer MUST be a multiple of 128 bytes\n");
-        CGS_ASSERT((liCommandSize % 16) == 0,
-                   "Command size MUST be a multiple of 16 bytes\n");
+        CGS_ASSERT_AT((reinterpret_cast<uintptr_t>(lpCommandBuffer) % 128u) == 0,
+                   "Command buffer MUST be on a 128 byte boundary\n", CGS_ARTIST_FILE, 48);
+        CGS_ASSERT_AT((reinterpret_cast<uintptr_t>(lpDataBuffer) % 128u) == 0,
+                   "Data buffer MUST be on a 128 byte boundary\n", CGS_ARTIST_FILE, 49);
+        CGS_ASSERT_AT((liCommandBufferSize % 128) == 0,
+                   "Command buffer MUST be a multiple of 128 bytes\n", CGS_ARTIST_FILE, 50);
+        CGS_ASSERT_AT((liDataBufferSize % 128) == 0,
+                   "Data buffer MUST be a multiple of 128 bytes\n", CGS_ARTIST_FILE, 51);
+        CGS_ASSERT_AT((liCommandSize % 16) == 0,
+                   "Command size MUST be a multiple of 16 bytes\n", CGS_ARTIST_FILE, 52);
 
         mbStreaming = false;                 // 0x8286A074 stb r30, 40(this)
         mEncodedStatus.SetValue(0);          // 0x8286A078..0x8286A08C ldarx/stdcx. pair
@@ -84,15 +84,15 @@ namespace CgsMemory
         // ARTIST 82867BF8 emits the native lightweight barrier.
         __lwsync();
 
-        CGS_ASSERT(mbStreaming, "Not streaming\n");                 // :130
+        CGS_ASSERT_AT(mbStreaming, "Not streaming\n", CGS_ARTIST_FILE, 130);                 // :130
 
         // The console streams the count into the message ("Attempted to end stream while "
         // << n << " users connected\n", 0x82867CC8/0x82867CF0); CGS_ASSERT takes a literal,
         // so the two halves are joined and the count is dropped from the text only.
         const u8 lucNumUsers = static_cast<u8>(
             (GetEncodedStatus() >> KU_NUM_USERS_BIT) & KU_NUM_USERS_MAX);
-        CGS_ASSERT(lucNumUsers == 0,
-                   "Attempted to end stream while users connected\n"); // :137
+        CGS_ASSERT_AT(lucNumUsers == 0,
+                   "Attempted to end stream while users connected\n", CGS_ARTIST_FILE, 137); // :137
 
         mbStreaming = false;                                        // 0x82867D18
     }
@@ -149,7 +149,7 @@ namespace CgsMemory
     // the stream through the native lwsync at 82867BD8.
     void DataStreamCommandPoster::Begin()
     {
-        CGS_ASSERT(!mbStreaming, "Already streaming\n");
+        CGS_ASSERT_AT(!mbStreaming, "Already streaming\n", CGS_ARTIST_FILE, 94);
         mbStreaming = true;
         for (;;)
         {

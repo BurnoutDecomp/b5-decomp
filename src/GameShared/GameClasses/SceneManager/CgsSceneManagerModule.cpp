@@ -194,7 +194,7 @@ namespace
 // ===========================================================================
 void CullingGroupManager::CreateCullingTable(rw::IResourceAllocator* lpSceneAllocator)
 {
-    CGS_ASSERT(lpSceneAllocator != NULL, "lpSceneAllocator != NULL");
+    CGS_ASSERT_AT(lpSceneAllocator != NULL, "lpSceneAllocator != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1327);
 
     // Memory requirement for the 24x24 grid (the X360's inline 0x54/align-4 block).
     rw::BaseResourceDescriptor lDescriptor;
@@ -596,10 +596,10 @@ void SceneManagerModule::UpdateContactGeneration(CgsModule::IOBufferStack* lpInp
 {
     ScopedPerfMon lUpdate(siContactGen_UpdatePerfMon);
 
-    CGS_ASSERT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL");
-    CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");
-    CGS_ASSERT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL");
-    CGS_ASSERT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL");
+    CGS_ASSERT_AT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 468);
+    CGS_ASSERT_AT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 469);
+    CGS_ASSERT_AT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 470);
+    CGS_ASSERT_AT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 471);
 
     CgsModule::IOBufferStack* lpInStack  = lpInputBufferStack;
     CgsModule::IOBufferStack* lpOutStack = lpOutputBufferStack;
@@ -1284,10 +1284,10 @@ void SceneManagerModule::ProcessSceneQueries(CgsModule::IOBufferStack* lpInputBu
 {
     ScopedPerfMon lProcessSceneQueries(siProcessSceneQueriesPerfMon);
 
-    CGS_ASSERT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL");    // :806
-    CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");   // :807
-    CGS_ASSERT(lpQueryInput != NULL,        "lpSceneInputBuffer != NULL");    // :808
-    CGS_ASSERT(lpQueryOutput != NULL,       "lpSceneOutputBuffer != NULL");   // :809
+    CGS_ASSERT_AT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 806);    // :806
+    CGS_ASSERT_AT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 807);   // :807
+    CGS_ASSERT_AT(lpQueryInput != NULL,        "lpSceneInputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 808);    // :808
+    CGS_ASSERT_AT(lpQueryOutput != NULL,       "lpSceneOutputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 809);   // :809
 
     if (lpQueryOutput == NULL)
     {
@@ -1427,10 +1427,10 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
 {
     ScopedPerfMon lProcessSceneQueries(siProcessSceneQueriesPerfMon);
 
-    CGS_ASSERT(lpInputBufferStack != NULL, "lpInputBufferStack != NULL");
-    CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");
-    CGS_ASSERT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL");
-    CGS_ASSERT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL");
+    CGS_ASSERT_AT(lpInputBufferStack != NULL, "lpInputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1478);
+    CGS_ASSERT_AT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1479);
+    CGS_ASSERT_AT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1480);
+    CGS_ASSERT_AT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1481);
     (void)lpInputBufferStack;
 
     ScopedPerfMon lCoarse(siProcessCoarseQueriesPerfMon);
@@ -1472,7 +1472,7 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
 
             const u16* lpu16Results =
                 lpResults->GetBatchByOffset(luOffset, &luOffset, &luNumResults);
-            CGS_ASSERT(lpu16Results != NULL, "lpu16Results != NULL");
+            CGS_ASSERT_AT(lpu16Results != NULL, "lpu16Results != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1513);
             SceneManagerIO::OutCoarseQueryResult* lpEvent =
                 static_cast<SceneManagerIO::OutCoarseQueryResult*>(
                     lpSceneOutputBuffer->GetResultsQueue()->AllocateEvent(
@@ -1629,13 +1629,13 @@ void SceneManagerModule::ProcessAddForCollisionEvent(
     const SceneManagerIO::InEventAddForCollision& lrEvent,
     OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
 {
-    CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");  // :939
+    CGS_ASSERT_AT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 939);  // :939
 
     const s32 liVolumeInstanceIndex =
         mEntityManager.GetVolumeInstanceIndexByID(lrEvent.mVolumeInstanceId);
     if (liVolumeInstanceIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_FAIL("Volume instance not found for volume instance id ");             // :977
+        CGS_FAIL_AT("Volume instance not found for volume instance id ", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 955);             // :977
         return;
     }
 
@@ -1658,17 +1658,17 @@ void SceneManagerModule::ProcessAddForCollisionEvent(
     const bool lbTransformValid =
         rw::math::vpu::IsValid(lrTransform.xAxis) && rw::math::vpu::IsValid(lrTransform.yAxis) &&
         rw::math::vpu::IsValid(lrTransform.zAxis) && rw::math::vpu::IsValid(lrTransform.wAxis);
-    CGS_ASSERT(lbTransformValid, "Invalid transform for volume instance id ");               // :955
+    CGS_ASSERT_AT(lbTransformValid, "Invalid transform for volume instance id ", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 956);               // :955
 
-    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.mV.x - lBox.mMin.mV.x),
-               "Bounding box with zero width for volume instance id ");                      // :956
-    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.mV.y - lBox.mMin.mV.y),
-               "Bounding box with zero height for volume instance id ");                     // :957
-    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.mV.z - lBox.mMin.mV.z),
-               "Bounding box with zero depth for volume instance id ");                      // :958
-    CGS_ASSERT(lBox.mMin.mV.x <= lBox.mMax.mV.x, "Inside out bounding box for volume instance id ");// :959
-    CGS_ASSERT(lBox.mMin.mV.z <= lBox.mMax.mV.z, "Inside out bounding box for volume instance id ");// :960
-    CGS_ASSERT(lBox.mMin.mV.y <= lBox.mMax.mV.y, "Inside out bounding box for volume instance id ");// :961
+    CGS_ASSERT_AT(!rw::math::fpu::IsZero(lBox.mMax.mV.x - lBox.mMin.mV.x),
+               "Bounding box with zero width for volume instance id ", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 957);                      // :956
+    CGS_ASSERT_AT(!rw::math::fpu::IsZero(lBox.mMax.mV.y - lBox.mMin.mV.y),
+               "Bounding box with zero height for volume instance id ", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 958);                     // :957
+    CGS_ASSERT_AT(!rw::math::fpu::IsZero(lBox.mMax.mV.z - lBox.mMin.mV.z),
+               "Bounding box with zero depth for volume instance id ", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 959);                      // :958
+    CGS_ASSERT_AT(lBox.mMin.mV.x <= lBox.mMax.mV.x, "Inside out bounding box for volume instance id ", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 960);// :959
+    CGS_ASSERT_AT(lBox.mMin.mV.z <= lBox.mMax.mV.z, "Inside out bounding box for volume instance id ", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 961);// :960
+    CGS_ASSERT_AT(lBox.mMin.mV.y <= lBox.mMax.mV.y, "Inside out bounding box for volume instance id ", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 977);// :961
 
     AddBody(lpOverlapGenerationInput,
             static_cast<u32>(liVolumeInstanceIndex),
@@ -2732,10 +2732,10 @@ namespace CgsSceneManager
                                                 SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
                                                 SceneManagerIO::OutputBuffer* lpSceneOutputBuffer)
     {
-        CGS_ASSERT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL");    // :880
-        CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");   // :881
-        CGS_ASSERT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL");    // :882
-        CGS_ASSERT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL");   // :883
+        CGS_ASSERT_AT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 880);    // :880
+        CGS_ASSERT_AT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 881);   // :881
+        CGS_ASSERT_AT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 882);    // :882
+        CGS_ASSERT_AT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 883);   // :883
 
         SpatialPartitionIO::OutputBuffer*      lpSpatialPartitionOutputBuffer = 0;
         FineIntersectionTestIO::OutputBuffer*  lpFineTestOutputBuffer         = 0;

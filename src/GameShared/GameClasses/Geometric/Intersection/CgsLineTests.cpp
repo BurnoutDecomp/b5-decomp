@@ -22,7 +22,7 @@
 #include <xboxmath.h>
 #include "types.hpp"   // uintptr_t (TestLineSphere4's :308 alignment assert)
 #include <cstring>   // std::memcpy (the Mask4 lanes)
-
+#define CGS_ARTIST_CGSLINETESTS_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\geometric\\intersection\\CgsLineTests.cpp"
 namespace CgsGeometric
 {
     // ARTIST 0x82812460 compares the bounds as VMX masks. The x lane of the
@@ -154,9 +154,9 @@ namespace CgsGeometric
             lafReciprocal[liAxis] = NewtonRaphsonReciprocal3(lafDirection[liAxis]);
         }
 
-        CGS_ASSERT(!(lafReciprocal[0] == 0.0f), "Line reciprocal X is 0\n");   // :441
-        CGS_ASSERT(!(lafReciprocal[1] == 0.0f), "Line reciprocal Y is 0\n");   // :442
-        CGS_ASSERT(!(lafReciprocal[2] == 0.0f), "Line reciprocal Z is 0\n");   // :443
+        CGS_ASSERT_AT(!(lafReciprocal[0] == 0.0f), "Line reciprocal X is 0\n", CGS_ARTIST_CGSLINETESTS_FILE, 441);   // :441
+        CGS_ASSERT_AT(!(lafReciprocal[1] == 0.0f), "Line reciprocal Y is 0\n", CGS_ARTIST_CGSLINETESTS_FILE, 442);   // :442
+        CGS_ASSERT_AT(!(lafReciprocal[2] == 0.0f), "Line reciprocal Z is 0\n", CGS_ARTIST_CGSLINETESTS_FILE, 443);   // :443
 
         // The two endpoints, each inside iff inside on all three axes.
         bool lbStartInside = true;

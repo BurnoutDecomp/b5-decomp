@@ -8,7 +8,7 @@
 
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenu.h"
 #include <string.h>
-
+#define CGS_ARTIST_CGSFUNCTIONMANAGER_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/UI/Functions/CgsFunctionManager.cpp"
 // CgsDev::DebugUI::FunctionManager::RegisterFunction - X360 0x8282E7E0: resolve the menu path, pull a
 // Function + a MenuItemFunction from their pools, hang the row on the menu, fill the function with
 // (callback, userData, name), then bind the row to it.
@@ -47,7 +47,7 @@ namespace CgsDev
                 return;
 
             MenuItemFunction* lpMenuItem = mMenuItemPool.Allocate();
-            CGS_ASSERT(lpMenuItem, "lpMenuItem");
+            CGS_ASSERT_AT(lpMenuItem, "lpMenuItem", CGS_ARTIST_CGSFUNCTIONMANAGER_FILE, 120);
 
             lpMenu->AddMenuItem(lpMenuItem);
             lpFunction->Prepare(lpfCallback, lpUserData, lpcName);
@@ -99,7 +99,7 @@ namespace CgsDev
         void FunctionManager::CallFunction(const char* lpcPath)
         {
             Function* f = FindFunctionFromPath(lpcPath);
-            CGS_ASSERT(f, "lpFunctionToCall");
+            CGS_ASSERT_AT(f, "lpFunctionToCall", CGS_ARTIST_CGSFUNCTIONMANAGER_FILE, 272);
             if (f) f->Select();
         }
 

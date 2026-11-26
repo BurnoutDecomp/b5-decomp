@@ -151,11 +151,11 @@ namespace CgsGraphics
         rw::ResourceDescriptor lVertexBufferDescriptor;
         lVertexBufferDescriptor = renderengine::VertexBuffer::GetResourceDescriptor(lVertexBufferParameters);
         rw::Resource lVertexBufferResource = lpAllocator->DoAllocate(lVertexBufferDescriptor, 0);
-        CGS_ASSERT(lVertexBufferResource.m_baseResources[0],
-                   "couldn't allocate memory for vertex descriptor");
+        CGS_ASSERT_AT(lVertexBufferResource.m_baseResources[0],
+                   "couldn't allocate memory for vertex descriptor", KAC_ARTIST_ASSERT_SOURCE, 173);
 
         mpVertexBuffer = renderengine::VertexBuffer::Initialize(lVertexBufferResource, lVertexBufferParameters);
-        CGS_ASSERT(mpVertexBuffer, "couldn't create a mpVertexBuffer");
+        CGS_ASSERT_AT(mpVertexBuffer, "couldn't create a mpVertexBuffer", KAC_ARTIST_ASSERT_SOURCE, 180);
         mpVertexBuffer->Xbox2UnSet();
         u8* const lpVertexBufferBytes = static_cast<u8*>(D3DVertexBuffer_Lock(mpVertexBuffer, 0, 0, 0));
         for (u32 luVertex = 0u; luVertex < 8u; ++luVertex)
@@ -180,14 +180,14 @@ namespace CgsGraphics
         lIndexBufferDescriptor.m_baseResourceDescriptors[2].m_size = 0x30u;
         lIndexBufferDescriptor.m_baseResourceDescriptors[2].m_alignment = 4u;
         rw::Resource lIndexBufferResource = lpAllocator->DoAllocate(lIndexBufferDescriptor, 0);
-        CGS_ASSERT(lIndexBufferResource.m_baseResources[0],
-                   "couldn't allocate memory for index buffer");
+        CGS_ASSERT_AT(lIndexBufferResource.m_baseResources[0],
+                   "couldn't allocate memory for index buffer", KAC_ARTIST_ASSERT_SOURCE, 216);
 
         mpIndexBuffer = renderengine::IndexBuffer::Initialize(lIndexBufferResource, lIndexBufferParameters);
-        CGS_ASSERT(mpIndexBuffer, "couldn't create mpIndexBuffer");
+        CGS_ASSERT_AT(mpIndexBuffer, "couldn't create mpIndexBuffer", KAC_ARTIST_ASSERT_SOURCE, 223);
         renderengine::IndexBuffer::Locked lIndexBufferLockInfo;
         const bool lbIndexBufferLocked = mpIndexBuffer->Lock(2, lIndexBufferLockInfo);
-        CGS_ASSERT(lbIndexBufferLocked, "couldn't lock mpIndexBuffer");
+        CGS_ASSERT_AT(lbIndexBufferLocked, "couldn't lock mpIndexBuffer", KAC_ARTIST_ASSERT_SOURCE, 229);
         std::memcpy(lIndexBufferLockInfo.indices, mau16CubeIndices, sizeof(mau16CubeIndices));
         mpIndexBuffer->Unlock(lIndexBufferLockInfo);
 
@@ -215,12 +215,12 @@ namespace CgsGraphics
                 AllocateMemoryResource(lpAllocator, luTrivialBitBytes, 0x80u));
         }
 
-        CGS_ASSERT((reinterpret_cast<usize>(mpQueryList) & 0x7Fu) == 0u,
-                   "((uint32_t)mpQueryList) % 128 == 0");
-        CGS_ASSERT((reinterpret_cast<usize>(mpQueryList->mpBoxToClipMatrices) & 0x7Fu) == 0u,
-                   "((uint32_t)mpQueryList->mpBoxToClipMatrices) % 128 == 0");
-        CGS_ASSERT((reinterpret_cast<usize>(mpQueryList->mpuTrivialAcceptBits) & 0x7Fu) == 0u,
-                   "((uint32_t)mpQueryList->mpuTrivialAcceptBits ) % 128 == 0");
+        CGS_ASSERT_AT((reinterpret_cast<usize>(mpQueryList) & 0x7Fu) == 0u,
+                   "((uint32_t)mpQueryList) % 128 == 0", KAC_ARTIST_ASSERT_SOURCE, 264);
+        CGS_ASSERT_AT((reinterpret_cast<usize>(mpQueryList->mpBoxToClipMatrices) & 0x7Fu) == 0u,
+                   "((uint32_t)mpQueryList->mpBoxToClipMatrices) % 128 == 0", KAC_ARTIST_ASSERT_SOURCE, 265);
+        CGS_ASSERT_AT((reinterpret_cast<usize>(mpQueryList->mpuTrivialAcceptBits) & 0x7Fu) == 0u,
+                   "((uint32_t)mpQueryList->mpuTrivialAcceptBits ) % 128 == 0", KAC_ARTIST_ASSERT_SOURCE, 266);
     }
 
     // CgsGraphics::OcclusionCullManager::BeginQueries @ 0x827F25F0.
@@ -380,12 +380,12 @@ namespace CgsGraphics
     void OcclusionCullManager::RenderOccludeeBoundingBox(const rw::math::vpu::Matrix44* lpWorldViewProjection,
                                                          Matrix44 lOccludeeBoxMatrix)
     {
-        CGS_ASSERT(lpWorldViewProjection, "lpWorldViewProjection");
-        CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_QUERY, "meOcclusionMode == OCCLUSIONMODE_QUERY");
-        CGS_ASSERT(mbOcclusionEnabled, "mbOcclusionEnabled");
-        CGS_ASSERT(miOccludeeIndex < KI_MAX_NUM_QUERIES, "miOccludeeIndex < KI_MAX_NUM_QUERIES");
-        CGS_ASSERT(miNextQueryIndex <= KI_MAX_QUERY_INDEX && miNextQueryIndex >= KI_BASE_QUERY_INDEX,
-                   "miNextQueryIndex <= KI_MAX_QUERY_INDEX && miNextQueryIndex >= KI_BASE_QUERY_INDEX");
+        CGS_ASSERT_AT(lpWorldViewProjection, "lpWorldViewProjection", KAC_ARTIST_ASSERT_SOURCE, 488);
+        CGS_ASSERT_AT(meOcclusionMode == OCCLUSIONMODE_QUERY, "meOcclusionMode == OCCLUSIONMODE_QUERY", KAC_ARTIST_ASSERT_SOURCE, 489);
+        CGS_ASSERT_AT(mbOcclusionEnabled, "mbOcclusionEnabled", KAC_ARTIST_ASSERT_SOURCE, 490);
+        CGS_ASSERT_AT(miOccludeeIndex < KI_MAX_NUM_QUERIES, "miOccludeeIndex < KI_MAX_NUM_QUERIES", KAC_ARTIST_ASSERT_SOURCE, 491);
+        CGS_ASSERT_AT(miNextQueryIndex <= KI_MAX_QUERY_INDEX && miNextQueryIndex >= KI_BASE_QUERY_INDEX,
+                   "miNextQueryIndex <= KI_MAX_QUERY_INDEX && miNextQueryIndex >= KI_BASE_QUERY_INDEX", KAC_ARTIST_ASSERT_SOURCE, 492);
 
         rw::math::vpu::Matrix44 lBoxToClip;
         lBoxToClip.xAxis = TransformRow(lOccludeeBoxMatrix.xAxis, *lpWorldViewProjection);

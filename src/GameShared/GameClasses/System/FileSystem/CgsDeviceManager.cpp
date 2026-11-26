@@ -109,12 +109,12 @@ namespace CgsFileSystem
     {
         mDeviceListFutex.Lock();
 
-        CGS_ASSERT(FindDevice(lpcPrefix) == 0, "Device name already in use\n");
+        CGS_ASSERT_AT(FindDevice(lpcPrefix) == 0, "Device name already in use\n", CGS_DEVICE_MANAGER_ARTIST_FILE, 143);
 
         s32 liSlot = -1;
         for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
             if (!maPhysicalDevices[liIndex].mpDevice) { liSlot = liIndex; break; }
-        CGS_ASSERT(liSlot >= 0, "No free physical devices\n");
+        CGS_ASSERT_AT(liSlot >= 0, "No free physical devices\n", CGS_DEVICE_MANAGER_ARTIST_FILE, 154);
         if (liSlot < 0) { mDeviceListFutex.Unlock(); return; }
 
         PhysicalDeviceSlot& lrSlot = maPhysicalDevices[liSlot];
@@ -150,12 +150,12 @@ namespace CgsFileSystem
                                          const char* lpcParent, ErrorCallback lpfErrorCallback)
     {
         mDeviceListFutex.Lock();
-        CGS_ASSERT(FindDevice(lpcPrefix) == 0, "Device name already in use\n");
+        CGS_ASSERT_AT(FindDevice(lpcPrefix) == 0, "Device name already in use\n", CGS_DEVICE_MANAGER_ARTIST_FILE, 196);
         Device* lpParent = FindDevice(lpcParent);
-        CGS_ASSERT(lpParent != 0, "Parent device not found\n");
+        CGS_ASSERT_AT(lpParent != 0, "Parent device not found\n", CGS_DEVICE_MANAGER_ARTIST_FILE, 200);
         s32 liSlot = 0;
         while (liSlot < KI_MAX_VIRTUAL_DEVICES && maVirtualDevices[liSlot].mpDevice) ++liSlot;
-        CGS_ASSERT(liSlot < KI_MAX_VIRTUAL_DEVICES, "No free virtual devices\n");
+        CGS_ASSERT_AT(liSlot < KI_MAX_VIRTUAL_DEVICES, "No free virtual devices\n", CGS_DEVICE_MANAGER_ARTIST_FILE, 211);
         CgsCore::StrCpy(maVirtualDevices[liSlot].macPrefix,
                        sizeof(maVirtualDevices[liSlot].macPrefix), lpcPrefix);
         maVirtualDevices[liSlot].mpDevice = lpDevice;
@@ -165,7 +165,7 @@ namespace CgsFileSystem
         s32 liPhysical = 0;
         while (liPhysical < KI_MAX_PHYSICAL_DEVICES &&
                maPhysicalDevices[liPhysical].mpDevice != lpPhysical) ++liPhysical;
-        CGS_ASSERT(liPhysical < KI_MAX_PHYSICAL_DEVICES, "Physical device not found\n");
+        CGS_ASSERT_AT(liPhysical < KI_MAX_PHYSICAL_DEVICES, "Physical device not found\n", CGS_DEVICE_MANAGER_ARTIST_FILE, 232);
         Operation lOperation = Operation();
         lOperation.miType = E_OP_DISCONNECT;
         lOperation.mHandle = Handle::Make(lpDevice, 0);
@@ -473,7 +473,7 @@ namespace CgsFileSystem
                 lpDevice->Shutdown();
                 return 0;              // the worker thread exits
             default:
-                CGS_FAIL("Unrecognised operation\n");
+                CGS_FAIL_AT("Unrecognised operation\n", CGS_DEVICE_MANAGER_ARTIST_FILE, 945);
                 break;
             }
         }

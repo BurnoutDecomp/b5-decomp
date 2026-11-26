@@ -5,7 +5,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariable.h"  // Variable::Get*/edit
-
+#define CGS_ARTIST_CGSMENUITEMVARIABLE_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/UI/Variables/CgsMenuItemVariable.cpp"
 // CgsDev::DebugUI::MenuItemVariable - the manager-path bodies (Prepare + the variable accessor) and
 // the variable-row render/update/size virtuals that draw + edit the row's bound Variable. The row
 // displays "<name>: <value>" and edits the Variable on the left/right/select input events.
@@ -22,7 +22,7 @@ namespace CgsDev
         // X360 0x82822F68: bind the row to its Variable.
         void MenuItemVariable::Prepare(Variable* lpVariable)
         {
-            CGS_ASSERT(lpVariable, "lpVariable");
+            CGS_ASSERT_AT(lpVariable, "lpVariable", CGS_ARTIST_CGSMENUITEMVARIABLE_FILE, 56);
             mpVariable = lpVariable;
         }
 

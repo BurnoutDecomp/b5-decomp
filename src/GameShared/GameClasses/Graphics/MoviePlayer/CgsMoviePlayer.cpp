@@ -109,12 +109,12 @@ namespace CgsGraphics
         {
         case E_RW_MOVIE_PLAYER_NULL:
         {
-            CGS_ASSERT(lpAllocator, "lpResourceAllocator");
+            CGS_ASSERT_AT(lpAllocator, "lpResourceAllocator", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 111);
             mpRwAllocator = lpAllocator;
             PrepareResources(lpcLanguageCode);
 
             macMovieFileName[0] = 0;
-            CGS_ASSERT(lpMovieFileName, "lpMovieFileName");
+            CGS_ASSERT_AT(lpMovieFileName, "lpMovieFileName", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 119);
             CgsCore::StrCpy(macMovieFileName, sizeof(macMovieFileName), lpMovieFileName);
             for (u32 i = 0; i < std::strlen(macMovieFileName); ++i)
                 macMovieFileName[i] = static_cast<char>(std::toupper(macMovieFileName[i]));
@@ -166,18 +166,18 @@ namespace CgsGraphics
             for (s32 liVideoIndex = 0; liVideoIndex < miNumVideos; ++liVideoIndex)
             {
                 const VP6ChunkHeader& lrHeader = maVP6Headers[liVideoIndex];
-                CGS_ASSERT(lrHeader.mWidth == maVP6Headers[0].mWidth,
-                           "maVP6Headers[liVideoIndex].mWidth == maVP6Headers[0].mWidth");
-                CGS_ASSERT(lrHeader.mHeight % 16 == 0,
-                           "(maVP6Headers[liVideoIndex].mHeight % 16) == 0");
-                CGS_ASSERT(lrHeader.mTotalFrames == maVP6Headers[0].mTotalFrames,
-                           "maVP6Headers[liVideoIndex].mTotalFrames == maVP6Headers[0].mTotalFrames");
+                CGS_ASSERT_AT(lrHeader.mWidth == maVP6Headers[0].mWidth,
+                           "maVP6Headers[liVideoIndex].mWidth == maVP6Headers[0].mWidth", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 207);
+                CGS_ASSERT_AT(lrHeader.mHeight % 16 == 0,
+                           "(maVP6Headers[liVideoIndex].mHeight % 16) == 0", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 208);
+                CGS_ASSERT_AT(lrHeader.mTotalFrames == maVP6Headers[0].mTotalFrames,
+                           "maVP6Headers[liVideoIndex].mTotalFrames == maVP6Headers[0].mTotalFrames", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 209);
                 VP6_StartDecoder(&maVP6Decoders[liVideoIndex], lrHeader.mWidth, lrHeader.mHeight,
                                  true, CgsSystem::JobManager(), 63);
                 VP6_SetPbParam(maVP6Decoders[liVideoIndex], PBC_SET_POSTPROC, 0);
                 liTotalHeight += lrHeader.mHeight;
             }
-            CGS_ASSERT(liTotalHeight == 720, "liTotalHeight == 720");
+            CGS_ASSERT_AT(liTotalHeight == 720, "liTotalHeight == 720", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 214);
 
             miCurrentFrame = 0;
             muStartTimeInCycles = 0;
@@ -305,7 +305,7 @@ namespace CgsGraphics
                 const u64 luAdjustedFrames = luAdjustedCycles / CgsSystem::GetSystemTimerFrequency();
                 liNumFramesToDecode = static_cast<s32>(static_cast<u32>(luAdjustedFrames) -
                                                        static_cast<u32>(miCurrentFrame) + 1);
-                CGS_ASSERT(liNumFramesToDecode == 0, "liNumFramesToDecode == 0");
+                CGS_ASSERT_AT(liNumFramesToDecode == 0, "liNumFramesToDecode == 0", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 577);
             }
         }
 
@@ -339,7 +339,7 @@ namespace CgsGraphics
         if (mePlayerState != E_RW_MOVIE_PLAYER_PLAYING)
             return;
 
-        CGS_ASSERT(mpIm2dRenderBuffer, "mpIm2dRenderBuffer");
+        CGS_ASSERT_AT(mpIm2dRenderBuffer, "mpIm2dRenderBuffer", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 643);
         CgsDev::PerfMonCpu::StartMonitor(miVideoRender);
         if (mbReadyToRender)
         {
@@ -517,7 +517,7 @@ namespace CgsGraphics
 
         for (s32 liIndex = 0; liIndex < miNumVideos; ++liIndex)
         {
-            CGS_ASSERT(lBuffer.GetChunkId(liIndex)[0] == 'M', "lBuffer.GetChunkId(liIndex)[0] == 'M'");
+            CGS_ASSERT_AT(lBuffer.GetChunkId(liIndex)[0] == 'M', "lBuffer.GetChunkId(liIndex)[0] == 'M'", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 855);
 
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {

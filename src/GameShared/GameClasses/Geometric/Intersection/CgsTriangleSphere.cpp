@@ -14,7 +14,7 @@
 #include <cstdlib>
 #include <xtl.h>
 #include <xboxmath.h>
-
+#define CGS_ARTIST_CGSTRIANGLESPHERE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\geometric\\Intersection/CgsTriangleSphere.cpp"
 namespace CgsGeometric
 {
     // unk_83039220 -- ZERO in the image; written at static-init by sub_82C6DCF0
@@ -1957,27 +1957,27 @@ namespace CgsGeometric
         Vector3 lSphereTranslation;
         __stvx(__vmulfp(__lvx(&lDirectionAndLength, 0), XMVectorReplicate(lfSphereLength)), &lSphereTranslation, 0);
 
-        CGS_ASSERT(rw::math::vpu::IsValid(lTriVert0), "IsValid(lTriVert0)");
-        CGS_ASSERT(rw::math::vpu::IsValid(lTriVert1), "IsValid(lTriVert1)");
-        CGS_ASSERT(rw::math::vpu::IsValid(lTriVert2), "IsValid(lTriVert2)");
-        CGS_ASSERT(rw::math::vpu::IsValid(lSpherePos), "IsValid(lSpherePos)");
-        CGS_ASSERT(lfSphereRad == lfSphereRad, "IsValid(lSphereRad)");
-        CGS_ASSERT(rw::math::vpu::IsValid(lSphereDir), "IsValid(lSphereDir)");
-        CGS_ASSERT(lfSphereLength == lfSphereLength, "IsValid(lSphereLength)");
-        CGS_ASSERT(rw::math::vpu::IsValid(lSphereTranslation), "IsValid(lSphereTranslation)");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lTriVert0), "IsValid(lTriVert0)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1301);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lTriVert1), "IsValid(lTriVert1)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1302);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lTriVert2), "IsValid(lTriVert2)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1303);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lSpherePos), "IsValid(lSpherePos)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1304);
+        CGS_ASSERT_AT(lfSphereRad == lfSphereRad, "IsValid(lSphereRad)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1305);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lSphereDir), "IsValid(lSphereDir)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1306);
+        CGS_ASSERT_AT(lfSphereLength == lfSphereLength, "IsValid(lSphereLength)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1307);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lSphereTranslation), "IsValid(lSphereTranslation)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1308);
 
         // ---- the triangle's plane and the in-plane basis ----------------------------------------
         Vector3 lEdge01, lEdge12;
         __stvx(__vsubfp(__lvx(&lTriVert1, 0), __lvx(&lTriVert0, 0)), &lEdge01, 0);
         __stvx(__vsubfp(__lvx(&lTriVert2, 0), __lvx(&lTriVert1, 0)), &lEdge12, 0);
-        CGS_ASSERT(rw::math::vpu::IsValid(lEdge01), "IsValid(lEdge01)");
-        CGS_ASSERT(rw::math::vpu::IsValid(lEdge12), "IsValid(lEdge12)");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lEdge01), "IsValid(lEdge01)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1313);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lEdge12), "IsValid(lEdge12)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1314);
 
         const Vector3 lTriangleNormal = SweptNormalize(SweptCross(lEdge01, lEdge12));
-        CGS_ASSERT(rw::math::vpu::IsValid(lTriangleNormal), "IsValid(lTriangleNormal)");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lTriangleNormal), "IsValid(lTriangleNormal)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1318);
 
         const f32 lfPlaneOffset = SweptDot3(lTriangleNormal, lTriVert0);
-        CGS_ASSERT(lfPlaneOffset == lfPlaneOffset, "IsValid(lfPlaneOffset)");
+        CGS_ASSERT_AT(lfPlaneOffset == lfPlaneOffset, "IsValid(lfPlaneOffset)", CGS_ARTIST_CGSTRIANGLESPHERE_FILE, 1322);
 
         const Vector3& lBasisOrigin = lTriVert0;
         const Vector3  lBasisX      = SweptNormalize(lEdge01);

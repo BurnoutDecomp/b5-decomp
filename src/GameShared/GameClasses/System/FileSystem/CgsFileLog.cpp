@@ -8,7 +8,7 @@
 // declare-only here — their bodies are separate TUs.
 
 #include "GameShared/GameClasses/System/FileSystem/CgsFileLog.h"
-
+#define CGS_ARTIST_CGSFILELOG_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileLog.cpp"
 namespace CgsFileSystem
 {
     // The one global logger. External linkage; written by the constructor and
@@ -19,8 +19,8 @@ namespace CgsFileSystem
     // as the single global file-system logger. No instance members are touched.
     FileLog::FileLog()
     {
-        CGS_ASSERT(_mpThis == 0,
-                   "Already created a file system logger - can't create any more!\n");
+        CGS_ASSERT_AT(_mpThis == 0,
+                   "Already created a file system logger - can't create any more!\n", CGS_ARTIST_CGSFILELOG_FILE, 44);
         _mpThis = this;
     }
 

@@ -356,7 +356,7 @@ namespace CgsResource
     // and return false.
     bool Pool::Invalidate(SmallResource* lpResource, Entry::ResourceDescriptor* lpDescriptor)
     {
-        CGS_ASSERT(mbIsValid, "Pool is already invalid\n");
+        CGS_ASSERT_AT(mbIsValid, "Pool is already invalid\n", CGS_ARTIST_POOL_FILE, 424);
 
         for (u16 luIndex = 0; luIndex < muMaxResources; ++luIndex)
         {
@@ -961,10 +961,10 @@ namespace CgsResource
     // 828FEE68: keep the entry and its intrusive pointer ring during live replacement.
     void Pool::DeleteMemoryForEntry(ID lId)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        CGS_ASSERT_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 3124);
         s32 liSlot;
         Entry* lpEntry = FindResource(lId, false, 2, &liSlot);
-        CGS_ASSERT(lpEntry != 0, "Failed to find entry to delete memory for\n");
+        CGS_ASSERT_AT(lpEntry != 0, "Failed to find entry to delete memory for\n", CGS_ARTIST_POOL_FILE, 3132);
         for (s32 t = 0; t < 3; ++t)
         {
             void* lpMemory = lpEntry->mPtr.mResourceMemory.m_baseResources[t];
@@ -981,10 +981,10 @@ namespace CgsResource
     bool Pool::ReAllocateMemoryForEntry(ID lId, Entry::ResourceDescriptor* lpDescriptor,
                                         s32 liNumImports, SmallResource* lpResource)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        CGS_ASSERT_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 3165);
         s32 liSlot;
         Entry* lpEntry = FindResource(lId, false, 2, &liSlot);
-        CGS_ASSERT(lpEntry != 0, "Failed to find entry to delete memory for\n");
+        CGS_ASSERT_AT(lpEntry != 0, "Failed to find entry to delete memory for\n", CGS_ARTIST_POOL_FILE, 3177);
         SmallResource lResource;
         for (s32 t = 0; t < 3; ++t)
         {
@@ -995,7 +995,7 @@ namespace CgsResource
                 u16 luNode;
                 void* lpMemory = maHeaps[t].Malloc(luSize, "", reinterpret_cast<void*>(static_cast<uintptr_t>(liSlot)),
                     0xFFFF, &luNode, true, true, 0);
-                CGS_ASSERT(lpMemory != 0, "Failed to re-allocate memory\n");
+                CGS_ASSERT_AT(lpMemory != 0, "Failed to re-allocate memory\n", CGS_ARTIST_POOL_FILE, 3196);
                 lResource.m_baseResources[t] = lpMemory;
                 lpEntry->mauHeapIndices[t] = luNode;
             }
@@ -1162,8 +1162,8 @@ namespace CgsResource
     void Pool::BeginDefragmentation(ScratchPool* lpScratchPool, RelocateRequest* lpRequests,
                                     RelocateSource* lpSources, u32 luNum, s32 liMemType)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
-        CGS_ASSERT(mbAllowDefragmentation, "This pool does not have defragmentation enabled\n");
+        CGS_ASSERT_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1986);
+        CGS_ASSERT_AT(mbAllowDefragmentation, "This pool does not have defragmentation enabled\n", CGS_ARTIST_POOL_FILE, 1987);
 
         mpCurrentScratchPool = lpScratchPool;
         mpCurrentRelocator   = 0;          // this is the staging-pool route, not the relocator one
@@ -1189,8 +1189,8 @@ namespace CgsResource
                                              RelocateRequest* lpRequests, RelocateSource* lpSources,
                                              u32 luNum, s32 liMemType)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
-        CGS_ASSERT(mbAllowDefragmentation, "This pool does not have defragmentation enabled\n");
+        CGS_ASSERT_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 2027);
+        CGS_ASSERT_AT(mbAllowDefragmentation, "This pool does not have defragmentation enabled\n", CGS_ARTIST_POOL_FILE, 2028);
 
         mpCurrentRelocator = lpRelocator;
         miDefragFrame      = 0;
@@ -1263,7 +1263,7 @@ namespace CgsResource
     // ExecuteBatchRelocation has already assigned the request's destination node.
     bool Pool::AddResourceToScratchPool(u32 luIndex)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        CGS_ASSERT_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 2358);
         const s32 liEntryId = static_cast<s32>(reinterpret_cast<uintptr_t>(mpRelocateSources[luIndex].mpOwner));
         Entry* lpEntry = &mpResourceEntries[liEntryId];
         void* lpDestination = maHeaps[miDefragMemType].GetBaseAddress() + mpRelocateRequests[luIndex].muDestOffset;
@@ -1340,7 +1340,7 @@ namespace CgsResource
     // resource-specific assertion is continued by the original assert system.
     bool Pool::RebaseResourcesToScratchPool()
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        CGS_ASSERT_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 2672);
         for (u32 lu = 0; lu < mpCurrentScratchPool->GetNumEntries(); ++lu)
         {
             if (!RebaseResourceToScratchPool(lu))
@@ -1348,7 +1348,7 @@ namespace CgsResource
                 char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                 CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
                 lMessage << "Defragmentation failiure for scratch entry " << lu << "\n";
-                CGS_FAIL(lacMessage);
+                CGS_FAIL_AT(lacMessage, CGS_ARTIST_POOL_FILE, 2689);
             }
         }
         return true;
@@ -1356,7 +1356,7 @@ namespace CgsResource
 
     bool Pool::RebaseResourcesFromScratchPool()
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        CGS_ASSERT_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 2713);
         for (u32 lu = 0; lu < mpCurrentScratchPool->GetNumEntries(); ++lu)
         {
             if (!RebaseResourceFromScratchPool(lu))
@@ -1364,7 +1364,7 @@ namespace CgsResource
                 char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                 CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
                 lMessage << "Defragmentation failure for scratch entry " << lu << "\n";
-                CGS_FAIL(lacMessage);
+                CGS_FAIL_AT(lacMessage, CGS_ARTIST_POOL_FILE, 2730);
             }
         }
         return true;
@@ -1453,9 +1453,9 @@ namespace CgsResource
     // Deliberate fallthrough lets ready stages advance in the same update.
     void Pool::UpdateDefrag()
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
-        CGS_ASSERT(miNumResourcesInPurgatory == 0,
-                   "Can not defragment while resource in purgatory - defrag trigger should have picked this up\n");
+        CGS_ASSERT_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 2122);
+        CGS_ASSERT_AT(miNumResourcesInPurgatory == 0,
+                   "Can not defragment while resource in purgatory - defrag trigger should have picked this up\n", CGS_ARTIST_POOL_FILE, 2123);
         switch (meDefragStage)
         {
         case DEFRAGSTAGE_WAIT_FOR_INITIAL_DEATHS:
@@ -1502,7 +1502,7 @@ namespace CgsResource
                 *CgsDev::Log::gpDebugPrint << "End defragmenting on defrag frame " << siDefragDebugFrame << "\n";
             return;
         default:
-            CGS_FAIL("Invalid defrag stage\n");
+            CGS_FAIL_AT("Invalid defrag stage\n", CGS_ARTIST_POOL_FILE, 2262);
             break;
         }
         ++siDefragDebugFrame;

@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/SceneManager/TriangleCollision/CgsTriangleCollisionDebugComponent.h"
-
+#include <new>   // operator new[]: BuildSpacialMap's new char[] calls it (ARTIST 0x828AAD8C -> 0x82C08C00)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
@@ -25,7 +25,7 @@
 #include <vectorintrinsics.h>
 #include <cmath>
 #include <cstring>
-
+#define CGS_ARTIST_CGSTRIANGLECOLLISIONDEBUGCOMPONENT_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\TriangleCollision/CgsTriangleCollisionDebugComponent.cpp"
 namespace
 {
     using rw::math::vpu::Vector3;
@@ -209,7 +209,7 @@ namespace CgsSceneManager
     void TriangleCollisionDebugComponent::Construct(
         const TriangleCollisionManager* lpTriCollisionManager)
     {
-        CGS_ASSERT(lpTriCollisionManager != 0, "lpTriCollisionManager != NULL");
+        CGS_ASSERT_AT(lpTriCollisionManager != 0, "lpTriCollisionManager != NULL", CGS_ARTIST_CGSTRIANGLECOLLISIONDEBUGCOMPONENT_FILE, 90);
         mpTriCollisionManager = lpTriCollisionManager;
 
         mfSoupDrawDistance = 27.5f;
@@ -310,7 +310,7 @@ namespace CgsSceneManager
     void TriangleCollisionDebugComponent::UpdateViewFrustum(
         CgsDev::Debug3DImmediateRender* lpRenderer)
     {
-        CGS_ASSERT(lpRenderer != 0, "lpDisplay != NULL");
+        CGS_ASSERT_AT(lpRenderer != 0, "lpDisplay != NULL", CGS_ARTIST_CGSTRIANGLECOLLISIONDEBUGCOMPONENT_FILE, 1355);
 
         const rw::math::vpu::Matrix44 lViewProjection =
             lpRenderer->GetViewProjectionMatrix();
@@ -464,7 +464,7 @@ namespace CgsSceneManager
         u8 lu8Poly,
         bool lbCullPolys)
     {
-        CGS_ASSERT(lpRenderer != 0, "lpDisplay != NULL");
+        CGS_ASSERT_AT(lpRenderer != 0, "lpDisplay != NULL", CGS_ARTIST_CGSTRIANGLECOLLISIONDEBUGCOMPONENT_FILE, 1136);
 
         const CgsGeometric::PolygonSoupPoly* lpPoly =
             reinterpret_cast<const CgsGeometric::PolygonSoupPoly*>(
@@ -1178,30 +1178,30 @@ namespace CgsSceneManager
     // rebuilds rewind the same LinearMalloc arena before carving the map.
     void TriangleCollisionDebugComponent::BuildSpacialMap()
     {
-        if (miNumLevels == miLastNumLevels)
-            return;
-
-        miLastNumLevels = miNumLevels;
-        if (mpcSpacialBuffer == 0)
+        // PS3 0xC49588 / ARTIST (cmpw miLastNumLevels, miNumLevels @0x828AAD70) wrap the rebuild.
+        if (miLastNumLevels != miNumLevels)
         {
-            mpcSpacialBuffer = new char[KI_SPACIAL_BUFFER_SIZE];
-            mMalloc.Construct();
-            mMalloc.Create(mpcSpacialBuffer, KI_SPACIAL_BUFFER_SIZE);
-            mMalloc.SetAlignment(16);
+            miLastNumLevels = miNumLevels;
+            if (mpcSpacialBuffer == 0)
+            {
+                mpcSpacialBuffer = new char[KI_SPACIAL_BUFFER_SIZE];
+                mMalloc.Construct();
+                mMalloc.Create(mpcSpacialBuffer, KI_SPACIAL_BUFFER_SIZE);
+                mMalloc.SetAlignment(16);
+            }
+            else
+            {
+                mMalloc.FreeAll();
+            }
+            // The original member is const-qualified in DecFIGS, while ARTIST calls the
+            // map's mutating BuildSpacialPartition through that stored manager pointer.
+            // Remove only that qualification to reach the existing typed mutator.
+            TriangleCollisionManager* lpManager =
+                const_cast<TriangleCollisionManager*>(mpTriCollisionManager);
+            lpManager->GetPolySoupListSpacialMap()->BuildSpacialPartition(
+                &mMalloc, miNumLevels, 0x800);
+            miMemUse = static_cast<s32>(mMalloc.GetUsage());
         }
-        else
-        {
-            mMalloc.FreeAll();
-        }
-
-        // The original member is const-qualified in DecFIGS, while ARTIST calls the
-        // map's mutating BuildSpacialPartition through that stored manager pointer.
-        // Remove only that qualification to reach the existing typed mutator.
-        TriangleCollisionManager* lpManager =
-            const_cast<TriangleCollisionManager*>(mpTriCollisionManager);
-        lpManager->GetPolySoupListSpacialMap()->BuildSpacialPartition(
-            &mMalloc, miNumLevels, 0x800);
-        miMemUse = static_cast<s32>(mMalloc.GetUsage());
     }
 
     // ARTIST 0x828AAE08 repeats the first stored plane six times; the plane

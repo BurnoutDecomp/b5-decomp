@@ -157,14 +157,14 @@ namespace CgsFileSystem
         {
 
 
-            CGS_FAIL_STREAM("Can not open mem files for write\n");
+            CGS_FAIL_STREAM_AT("Can not open mem files for write\n", CGS_ARTIST_FILE, 166);
             return 0;
         }
         if (luFlags & 2)
         {
 
 
-            CGS_FAIL_STREAM("Can not open mem files for create\n");
+            CGS_FAIL_STREAM_AT("Can not open mem files for create\n", CGS_ARTIST_FILE, 173);
             return 0;
         }
         char lacName[256];
@@ -344,7 +344,7 @@ namespace CgsFileSystem
 
 
 
-            CGS_FAIL_STREAM("Invalid 'whence' value\n");
+            CGS_FAIL_STREAM_AT("Invalid 'whence' value\n", CGS_ARTIST_FILE, 353);
             break;
         }
         return lp->muPosition;

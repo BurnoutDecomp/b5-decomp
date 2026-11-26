@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Controller/CgsDebugController.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
+#define CGS_ARTIST_CGSDEBUGCONTROLLER_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Controller/CgsDebugController.cpp"
 namespace CgsDev
 {
     namespace
@@ -43,7 +43,7 @@ namespace CgsDev
     void DebugController::Construct(const DebugUI::Metrics* lpMetrics)
     {
         mpMetrics = lpMetrics;
-        CGS_ASSERT(mpMetrics, "mpMetrics");
+        CGS_ASSERT_AT(mpMetrics, "mpMetrics", CGS_ARTIST_CGSDEBUGCONTROLLER_FILE, 182);
         mpDebugManagerPad = 0;
         ClearPad();
         ClearKeyboard();
@@ -230,7 +230,7 @@ namespace CgsDev
 
     void DebugController::LockKeyboard()
     {
-        CGS_ASSERT(!mbKeyboardLocked, "!mbKeyboardLocked");
+        CGS_ASSERT_AT(!mbKeyboardLocked, "!mbKeyboardLocked", CGS_ARTIST_CGSDEBUGCONTROLLER_FILE, 798);
         // ARTIST 0x82823C54-0x82823C70 clears the key, special-key and modifier
         // fields as focus transfers to the command window.  Besides preserving
         // the original focus contract, this prevents the grave accent which
@@ -242,7 +242,7 @@ namespace CgsDev
 
     void DebugController::UnlockKeyboard()
     {
-        CGS_ASSERT(mbKeyboardLocked, "mbKeyboardLocked");
+        CGS_ASSERT_AT(mbKeyboardLocked, "mbKeyboardLocked", CGS_ARTIST_CGSDEBUGCONTROLLER_FILE, 815);
         mbKeyboardLocked = false;
         ClearKeyboard();
     }

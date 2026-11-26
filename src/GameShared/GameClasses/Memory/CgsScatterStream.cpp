@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <cstring>                                    // memcpy (XMemCpy)
 #include "types.hpp"                                    // uintptr_t
-
+#define CGS_ARTIST_CGSSCATTERSTREAM_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsScatterStream.cpp"
 // CgsMemory::ScatterStream / ScatterStreamBase - see the header. Faithful port; the
 // transfer is XMemCpy -> memcpy. Copies packed -> scattered.
 namespace CgsMemory
@@ -11,14 +11,14 @@ namespace CgsMemory
     // entry addresses, advancing the (entry, offset) cursor; true when the list is done.
     bool ScatterStreamBase::UpdateStream()
     {
-        CGS_ASSERT((mu32Flags & 1u) != 0, "Stream update called when not active");
+        CGS_ASSERT_AT((mu32Flags & 1u) != 0, "Stream update called when not active", CGS_ARTIST_CGSSCATTERSTREAM_FILE, 72);
 
         u32 luBudget = muBytesToStream;
         while (luBudget != 0)
         {
-            CGS_ASSERT(muCurrentEntry < muListLength, "Gone past end of distribution list length");
+            CGS_ASSERT_AT(muCurrentEntry < muListLength, "Gone past end of distribution list length", CGS_ARTIST_CGSSCATTERSTREAM_FILE, 82);
             const DistributionStreamEntry& lrEntry = mpList[muCurrentEntry];
-            CGS_ASSERT(muEntryOffset < lrEntry.muLength, "Gone past end of entry data");
+            CGS_ASSERT_AT(muEntryOffset < lrEntry.muLength, "Gone past end of entry data", CGS_ARTIST_CGSSCATTERSTREAM_FILE, 83);
 
             const u32 luOff       = muEntryOffset;
             const u32 luPackedPos = lrEntry.muPackedOffset + luOff;       // X360 v12

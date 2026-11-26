@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"  // LinearMalloc::SetAlignment (Prepare)
-
+#define CGS_ARTIST_CGSATTRIBSYSMEMORYMANAGER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysMemoryManager.cpp"
 namespace CgsAttribSys
 {
 // ---- static storage --------------------------------------------------------
@@ -57,11 +57,11 @@ bool AttribSysMemoryManager::Prepare(CgsMemory::LinearMalloc* lpLinearAllocator,
                                      CgsMemory::HeapMalloc* lpGameTalkHeap,
                                      CgsMemory::HeapMalloc* lpEaStlHeap)
 {
-    CGS_ASSERT(!sbHasLinearAllocator, "!sbHasLinearAllocator");                  // .cpp:139
-    CGS_ASSERT(lpLinearAllocator != NULL, "lpLinearAllocator != NULL");          // .cpp:142
-    CGS_ASSERT(lpAttribSysHeap != NULL, "lpAttribSysHeap != NULL");              // .cpp:143
-    CGS_ASSERT(lpGameTalkHeap != NULL, "lpGameTalkHeap != NULL");                // .cpp:144
-    CGS_ASSERT(lpEaStlHeap != NULL, "lpEaStlHeap != NULL");                      // .cpp:145
+    CGS_ASSERT_AT(!sbHasLinearAllocator, "!sbHasLinearAllocator", CGS_ARTIST_CGSATTRIBSYSMEMORYMANAGER_FILE, 139);                  // .cpp:139
+    CGS_ASSERT_AT(lpLinearAllocator != NULL, "lpLinearAllocator != NULL", CGS_ARTIST_CGSATTRIBSYSMEMORYMANAGER_FILE, 142);          // .cpp:142
+    CGS_ASSERT_AT(lpAttribSysHeap != NULL, "lpAttribSysHeap != NULL", CGS_ARTIST_CGSATTRIBSYSMEMORYMANAGER_FILE, 143);              // .cpp:143
+    CGS_ASSERT_AT(lpGameTalkHeap != NULL, "lpGameTalkHeap != NULL", CGS_ARTIST_CGSATTRIBSYSMEMORYMANAGER_FILE, 144);                // .cpp:144
+    CGS_ASSERT_AT(lpEaStlHeap != NULL, "lpEaStlHeap != NULL", CGS_ARTIST_CGSATTRIBSYSMEMORYMANAGER_FILE, 145);                      // .cpp:145
 
     spLinearAllocator = lpLinearAllocator;
     lpLinearAllocator->SetAlignment(KI_LINEAR_ALLOC_ALIGNMENT);

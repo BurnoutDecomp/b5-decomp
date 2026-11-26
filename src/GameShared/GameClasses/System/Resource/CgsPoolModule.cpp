@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // Events::AllocateResourceListResponse (live-update reply)
 #include "GameShared/GameClasses/System/Resource/CgsEntryListResource.h"
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"
-
+#define CGS_ARTIST_CGSPOOLMODULE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModule.cpp"
 // ======================================================================================
 // CgsResource::PoolModule -- reconstructed from BURNOUT_X360_ARTIST.XEX (source CgsPoolModule.cpp).
 //
@@ -191,11 +191,11 @@ namespace CgsResource
         const Events::FixUpAndResolveResourceListRequest* lpRequest, PoolIO::OutputBuffer* lpOutput)
     {
         const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
-        CGS_ASSERT(liPoolIndex != -1, "liPoolIndex != -1");
+        CGS_ASSERT_AT(liPoolIndex != -1, "liPoolIndex != -1", CGS_ARTIST_CGSPOOLMODULE_FILE, 1494);
         Pool& lrPool = maPools[liPoolIndex];
         s32 liListIndex;
         Entry* lpEntry = lrPool.FindResource(lpRequest->mListId, false, 3, &liListIndex);
-        CGS_ASSERT(lpEntry != 0, "lpResource");
+        CGS_ASSERT_AT(lpEntry != 0, "lpResource", CGS_ARTIST_CGSPOOLMODULE_FILE, 1498);
         lrPool.SetEntryStatus(liListIndex, 2);
         const EntryListResource* lpList = static_cast<const EntryListResource*>(lpEntry->GetResourceMemory().m_baseResources[0]);
         lrPool.FixUpAndResolveResourceList(lpList->mIds, lpList->muNumEntries,
@@ -217,10 +217,10 @@ namespace CgsResource
     void PoolModule::DoUnloadResourceListRequest(
         const Events::UnloadResourceListRequest* lpRequest, PoolIO::OutputBuffer* lpOutput)
     {
-        CGS_ASSERT(mProcessState == E_UPDATESTATE_IDLE || mProcessState == E_UPDATESTATE_DEALLOCATING_LIST,
-                   "Can only unload when idle or already unloading\n");
+        CGS_ASSERT_AT(mProcessState == E_UPDATESTATE_IDLE || mProcessState == E_UPDATESTATE_DEALLOCATING_LIST,
+                   "Can only unload when idle or already unloading\n", CGS_ARTIST_CGSPOOLMODULE_FILE, 1546);
         const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
-        CGS_ASSERT(liPoolIndex != -1, "liPoolIndex != -1");
+        CGS_ASSERT_AT(liPoolIndex != -1, "liPoolIndex != -1", CGS_ARTIST_CGSPOOLMODULE_FILE, 1554);
         mDeAllocateState.Begin(&maPools[liPoolIndex], lpRequest->mListId);
         mProcessState = E_UPDATESTATE_DEALLOCATING_LIST;
 
@@ -246,7 +246,7 @@ namespace CgsResource
         SmallResourceDescriptor lDescriptor;
 
         const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
-        CGS_ASSERT(liPoolIndex != -1, "liPoolIndex != -1");
+        CGS_ASSERT_AT(liPoolIndex != -1, "liPoolIndex != -1", CGS_ARTIST_CGSPOOLMODULE_FILE, 1592);
 
         const bool lbInvalidated = maPools[liPoolIndex].Invalidate(&lResource, &lDescriptor);
 
@@ -266,13 +266,13 @@ namespace CgsResource
     // ----------------------------------------------------------------------------------------------
     void PoolModule::DoValidatePoolRequest(const Events::ValidatePoolRequest* lpRequest, PoolIO::OutputBuffer* lpOutput)
     {
-        CGS_ASSERT(mProcessState == E_UPDATESTATE_IDLE, "Can only validate when idle\n");
+        CGS_ASSERT_AT(mProcessState == E_UPDATESTATE_IDLE, "Can only validate when idle\n", CGS_ARTIST_CGSPOOLMODULE_FILE, 1626);
 
         const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
-        CGS_ASSERT(liPoolIndex != -1, "liPoolIndex != -1");
+        CGS_ASSERT_AT(liPoolIndex != -1, "liPoolIndex != -1", CGS_ARTIST_CGSPOOLMODULE_FILE, 1634);
 
         const bool lbValidated = maPools[liPoolIndex].Validate();
-        CGS_ASSERT(lbValidated, "Failed to invalidate pool\n");
+        CGS_ASSERT_AT(lbValidated, "Failed to invalidate pool\n", CGS_ARTIST_CGSPOOLMODULE_FILE, 1638);
 
         Events::ValidatePoolResponse lResponse;
         lResponse.mpUser    = lpRequest->mpUser;
@@ -289,13 +289,13 @@ namespace CgsResource
     // ----------------------------------------------------------------------------------------------
     void PoolModule::SendDeletePoolMemoryRequest(const Events::DeletePoolRequest* lpRequest, PoolIO::OutputBuffer* lpOutput)
     {
-        CGS_ASSERT(lpOutput != 0, "lpOutputBuffer");
+        CGS_ASSERT_AT(lpOutput != 0, "lpOutputBuffer", CGS_ARTIST_CGSPOOLMODULE_FILE, 1217);
 
         CgsMemory::MemoryIO::DestroyBankRequest lRequest;
         lRequest.Construct(&mReceiverQueue, lpRequest->miPoolId);
 
         const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
-        CGS_ASSERT(liPoolIndex >= 0, "Attempt to delete pool that doesn't exist!\n");
+        CGS_ASSERT_AT(liPoolIndex >= 0, "Attempt to delete pool that doesn't exist!\n", CGS_ARTIST_CGSPOOLMODULE_FILE, 1226);
 
         Pool& lrPool = maPools[liPoolIndex];
         lrPool.ResetPool();
@@ -472,7 +472,7 @@ namespace CgsResource
             break;
         }
         default:
-            CGS_FAIL("Intellifrag state returned invalid result code\n");   // :714
+            CGS_FAIL_AT("Intellifrag state returned invalid result code\n", CGS_ARTIST_CGSPOOLMODULE_FILE, 714);   // :714
             break;
         }
     }
@@ -494,7 +494,7 @@ namespace CgsResource
             CGS_FAIL("Emergency defragment failed - time to commit suicide :(\n");
             break;
         default:
-            CGS_FAIL("Emergency defragment state returned invalid result code\n");
+            CGS_FAIL_AT("Emergency defragment state returned invalid result code\n", CGS_ARTIST_CGSPOOLMODULE_FILE, 839);
             break;
         }
     }

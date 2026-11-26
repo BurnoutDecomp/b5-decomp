@@ -114,11 +114,11 @@ namespace CgsResource
     // capacity, the node index range, and that each named node is actually USED.
     s32 BaseDefragPoolModuleState::BuildFinalRelocationData()
     {
-        CGS_ASSERT(mpRelocateRequests, "mpRelocateRequests");   // :337
-        CGS_ASSERT(mpRelocateSources,  "mpRelocateSources");    // :338
-        CGS_ASSERT(mpLinearHeapNodes,  "mpLinearHeapNodes");    // :339
-        CGS_ASSERT(muRelocationCount < muMaxRelocateSources,
-                   "Too many relocation entries to fill out relocate sources array\n");  // :340
+        CGS_ASSERT_AT(mpRelocateRequests, "mpRelocateRequests", CGS_ARTIST_BASE_DEFRAG_FILE, 337);   // :337
+        CGS_ASSERT_AT(mpRelocateSources,  "mpRelocateSources", CGS_ARTIST_BASE_DEFRAG_FILE, 338);    // :338
+        CGS_ASSERT_AT(mpLinearHeapNodes,  "mpLinearHeapNodes", CGS_ARTIST_BASE_DEFRAG_FILE, 339);    // :339
+        CGS_ASSERT_AT(muRelocationCount < muMaxRelocateSources,
+                   "Too many relocation entries to fill out relocate sources array\n", CGS_ARTIST_BASE_DEFRAG_FILE, 340);  // :340
 
         s32 liTotalSize = 0;                       // v4
         RelocateRequest* lpRequest = mpRelocateRequests;   // v5
@@ -127,11 +127,11 @@ namespace CgsResource
         for (u32 luIndex = 0; luIndex < muRelocationCount; ++luIndex)
         {
             u32 luNode = lpRequest->muNode;        // v8 = *v5 (u16 node index)
-            CGS_ASSERT(luNode < muNumLinearHeapNodes, "Linear node out of range\n");   // :357
+            CGS_ASSERT_AT(luNode < muNumLinearHeapNodes, "Linear node out of range\n", CGS_ARTIST_BASE_DEFRAG_FILE, 357);   // :357
 
             const LinearHeapNode& lNode = mpLinearHeapNodes[luNode];   // 16 * v8 + mpLinearHeapNodes
-            CGS_ASSERT(lNode.muStatus == LinearHeapNode::KU_STATUS_USED,
-                       "Can't relocate unused node\n");                // :358
+            CGS_ASSERT_AT(lNode.muStatus == LinearHeapNode::KU_STATUS_USED,
+                       "Can't relocate unused node\n", CGS_ARTIST_BASE_DEFRAG_FILE, 358);                // :358
 
             lpRequest->muNode      = lNode.muNode;     // *v5 = node+10
             lpSource->mpOwner      = lNode.mpOwner;    // v7[1] = node+12
@@ -347,8 +347,8 @@ namespace CgsResource
         }
 
         // The console streams the memory type into the message; the fixed prefix is used here.
-        CGS_ASSERT(lSet.maeAllocRequestResults[miCurrentMemType] == E_BATCHALLOCRESULT_SUCCESS,
-                   "Failed to allocate even after defragmentation (MemType=");
+        CGS_ASSERT_AT(lSet.maeAllocRequestResults[miCurrentMemType] == E_BATCHALLOCRESULT_SUCCESS,
+                   "Failed to allocate even after defragmentation (MemType=", CGS_ARTIST_BASE_DEFRAG_FILE, 273);
 
         return true;
     }

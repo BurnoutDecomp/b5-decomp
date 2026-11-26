@@ -5,12 +5,12 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStreamBase (operator<< dump)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"       // CgsCore::SPrintf (resource-id hex)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"    // LinearMalloc::Malloc (Prepare's slot carve)
-
+#define CGS_ARTIST_CGSATTRIBSYSVAULTARRAY_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultArray.cpp"
 namespace CgsAttribSys
 {
 void VaultArray::Construct(Attrib::IGarbageCollector* lpGarbageCollector)
 {
-    CGS_ASSERT(lpGarbageCollector != 0, "lpGarbageCollector != NULL");
+    CGS_ASSERT_AT(lpGarbageCollector != 0, "lpGarbageCollector != NULL", CGS_ARTIST_CGSATTRIBSYSVAULTARRAY_FILE, 45);
 
     mpaSlots = 0;
     mpGarbageCollector = lpGarbageCollector;
@@ -110,8 +110,8 @@ CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lStream, const VaultArr
 // free slot; asserts when the array is unprepared or exhausted.
 s32 VaultArray::GetFreeSlotIndex(CgsResource::ResourceHandle lVaultResHandle) const
 {
-    CGS_ASSERT(mbPrepared,
-               "Trying to access a vault slot before Prepare() has been called");   // .cpp:126
+    CGS_ASSERT_AT(mbPrepared,
+               "Trying to access a vault slot before Prepare() has been called", CGS_ARTIST_CGSATTRIBSYSVAULTARRAY_FILE, 126);   // .cpp:126
 
     s32 liFirstFree = -1;
     for (s32 liSlot = 0; liSlot < GetNumSlots(); ++liSlot)
@@ -130,7 +130,7 @@ s32 VaultArray::GetFreeSlotIndex(CgsResource::ResourceHandle lVaultResHandle) co
         }
     }
 
-    CGS_ASSERT(liFirstFree >= 0, "Ran out of free vault slots");                     // .cpp:147
+    CGS_ASSERT_AT(liFirstFree >= 0, "Ran out of free vault slots", CGS_ARTIST_CGSATTRIBSYSVAULTARRAY_FILE, 147);                     // .cpp:147
     return liFirstFree;
 }
 }

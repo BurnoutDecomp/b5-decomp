@@ -191,8 +191,8 @@ namespace CgsDev
         mViewProjectionMatrix = lrViewProjection;
         mCameraPosition = lCameraPosition;
         miIm3dVertsHead = 0;
-        CGS_ASSERT(mpRenderBuffer != 0, "mpRenderBuffer");
-        CGS_ASSERT(!mpRenderBuffer->IsInARenderingBlock(), "!mpRenderBuffer->IsInARenderingBlock()");
+        CGS_ASSERT_AT(mpRenderBuffer != 0, "mpRenderBuffer", CGS_ARTIST_FILE, 185);
+        CGS_ASSERT_AT(!mpRenderBuffer->IsInARenderingBlock(), "!mpRenderBuffer->IsInARenderingBlock()", CGS_ARTIST_FILE, 186);
         mpRenderBuffer->BeginRendering();
         mpRenderBuffer->SetState(sgBlend);
         mpRenderBuffer->SetState(sgRasterizer);
@@ -205,8 +205,8 @@ namespace CgsDev
     {
         if (miIm3dVertsHead > 0) DispatchVertices();
         miIm3dVertsHead = 0;
-        CGS_ASSERT(mpRenderBuffer != 0, "mpRenderBuffer");
-        CGS_ASSERT(mpRenderBuffer->IsInARenderingBlock(), "mpRenderBuffer->IsInARenderingBlock()");
+        CGS_ASSERT_AT(mpRenderBuffer != 0, "mpRenderBuffer", CGS_ARTIST_FILE, 221);
+        CGS_ASSERT_AT(mpRenderBuffer->IsInARenderingBlock(), "mpRenderBuffer->IsInARenderingBlock()", CGS_ARTIST_FILE, 222);
         mpRenderBuffer->EndRendering();
     }
 

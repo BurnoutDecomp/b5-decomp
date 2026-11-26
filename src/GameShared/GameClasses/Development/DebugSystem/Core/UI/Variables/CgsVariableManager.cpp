@@ -176,10 +176,10 @@ namespace CgsDev
             Variable* lpVariable = FindVariable(lpValue);
             if (!lpVariable)
                 return;
-            CGS_ASSERT(lrMin.meType == lpVariable->GetValue().GetDereferenceType(),
-                       "lMin.meType == lpVariable->GetValue().GetDereferenceType()");
-            CGS_ASSERT(lrMax.meType == lpVariable->GetValue().GetDereferenceType(),
-                       "lMax.meType == lpVariable->GetValue().GetDereferenceType()");
+            CGS_ASSERT_AT(lrMin.meType == lpVariable->GetValue().GetDereferenceType(),
+                       "lMin.meType == lpVariable->GetValue().GetDereferenceType()", CGS_ARTIST_FILE, 114);
+            CGS_ASSERT_AT(lrMax.meType == lpVariable->GetValue().GetDereferenceType(),
+                       "lMax.meType == lpVariable->GetValue().GetDereferenceType()", CGS_ARTIST_FILE, 115);
             SetMetadata(lpVariable, lrMin, VariableMetadata::E_TYPE_MIN);
             SetMetadata(lpVariable, lrMax, VariableMetadata::E_TYPE_MAX);
         }
@@ -189,8 +189,8 @@ namespace CgsDev
             Variable* lpVariable = FindVariable(lpValue);
             if (!lpVariable)
                 return;
-            CGS_ASSERT(lrStep.meType == lpVariable->GetValue().GetDereferenceType(),
-                       "lStep.meType == lpVariable->GetValue().GetDereferenceType()");
+            CGS_ASSERT_AT(lrStep.meType == lpVariable->GetValue().GetDereferenceType(),
+                       "lStep.meType == lpVariable->GetValue().GetDereferenceType()", CGS_ARTIST_FILE, 143);
             SetMetadata(lpVariable, lrStep, VariableMetadata::E_TYPE_STEP);
         }
 

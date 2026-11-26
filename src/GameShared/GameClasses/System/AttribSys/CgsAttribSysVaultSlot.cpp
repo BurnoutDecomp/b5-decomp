@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                  // CGS_ASSERT
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle::GetResourceId
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h" // AttribSysIO::RegisterVaultRequest
-
+#define CGS_ARTIST_CGSATTRIBSYSVAULTSLOT_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultSlot.cpp"
 // CgsAttribSys::VaultSlot member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // A VaultSlot tracks one loaded (or free) vault: a live reference count, an optional
 // streamed-vault index, and the loaded vault's resource id. A slot is "occupied" when
@@ -60,13 +60,13 @@ bool VaultSlot::ContainsVaultResource(CgsResource::ResourceHandle lVaultResHandl
 s32 VaultSlot::RegisterVault(const AttribSysIO::RegisterVaultRequest* lpRegisterRequest,
                             Attrib::IGarbageCollector* lpGarbageCollector)
 {
-    CGS_ASSERT(lpRegisterRequest != 0, "lpRegisterRequest != NULL");
-    CGS_ASSERT(lpGarbageCollector != 0, "lpGarbageCollector != NULL");
+    CGS_ASSERT_AT(lpRegisterRequest != 0, "lpRegisterRequest != NULL", CGS_ARTIST_CGSATTRIBSYSVAULTSLOT_FILE, 89);
+    CGS_ASSERT_AT(lpGarbageCollector != 0, "lpGarbageCollector != NULL", CGS_ARTIST_CGSATTRIBSYSVAULTSLOT_FILE, 90);
 
     CgsResource::ResourceHandle lVaultResHandle = lpRegisterRequest->mVaultResourceHandle;
 
-    CGS_ASSERT(!(IsOccupied() && !ContainsVaultResource(lVaultResHandle)),
-        "!( IsOccupied() && !ContainsVaultResource( lVaultResHandle ) )");
+    CGS_ASSERT_AT(!(IsOccupied() && !ContainsVaultResource(lVaultResHandle)),
+        "!( IsOccupied() && !ContainsVaultResource( lVaultResHandle ) )", CGS_ARTIST_CGSATTRIBSYSVAULTSLOT_FILE, 96);
 
     if (ContainsVaultResource(lVaultResHandle))
         IncreaseRefCount();

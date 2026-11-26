@@ -84,15 +84,15 @@ void* DispatchBin::AllocateMemoryFast(u32 luQwords)
 }
 
 // ARTIST827FA698..714: align the current address, allocating only the padding.
-void DispatchBin::Align(u32 luAlignment)
+void DispatchBin::Align(u32 luAlignmentSize)   // DWARF cpp:114: locals lCurrent, lCurrentAligned, luBytesToAlign
 {
-    const uintptr_t luCurrent = reinterpret_cast<uintptr_t>(m_pNextWord);
-    const uintptr_t luAligned = (luCurrent + luAlignment - 1u) & ~uintptr_t(luAlignment - 1u);
-    if (luAligned != luCurrent)
+    uintptr_t lCurrent = reinterpret_cast<uintptr_t>(GetBinCurrent());
+    uintptr_t lCurrentAligned = (lCurrent + luAlignmentSize - 1u) & ~uintptr_t(luAlignmentSize - 1u);
+    u32 luBytesToAlign = static_cast<u32>(lCurrentAligned - lCurrent);   // ARTIST tests it: cmplwi @0x827FA6CC
+    if (luBytesToAlign)
     {
-        AllocateMemoryFast(static_cast<u32>((luAligned - luCurrent) / sizeof(DispatchCommand)));
-        CGS_ASSERT(reinterpret_cast<uintptr_t>(m_pNextWord) % luAlignment == 0,
-                   "uintptr_t(m_pNextWord) % luAlignment == 0");
+        AllocateMemoryFast(luBytesToAlign / sizeof(DispatchCommand));
+        CGS_ASSERT_AT(reinterpret_cast<uintptr_t>(GetBinCurrent()) % luAlignmentSize == 0, "uintptr_t(GetBinCurrent()) % luAlignmentSize == 0", KAC_ARTIST_ASSERT_CPP, 125);
     }
 }
 
@@ -326,8 +326,8 @@ void DispatchBin::HandleMemoryOverflow(u32 luRequestedQuadWords)
 
     if (mpSharedBinStart != 0)
     {
-        CGS_ASSERT(m_pSharedNextFreeAtomic != NULL,
-                   "mpSharedBinBlockNextFree_Atomic != NULL");
+        CGS_ASSERT_AT(m_pSharedNextFreeAtomic != NULL,
+                   "mpSharedBinBlockNextFree_Atomic != NULL", KAC_ARTIST_ASSERT_CPP, 421);
 
         // Claim the next block; the index is (new counter value - 1).
         const u32 luBlockIndex = ClaimNextSharedBlock(m_pSharedNextFreeAtomic) - 1u;

@@ -43,7 +43,7 @@
 #include <cstring>   // memcpy
 namespace CgsGraphics
 {
-
+#define CGS_ARTIST_CGSDISPATCHERCOMMANDS_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/CgsDispatcherCommands.cpp"
 // The clip-space OOBB frustum test (CgsDrawRenderableFrustumTest.cpp @0x827EE478).
 unsigned int FrustumTest(const rw::math::vpu::Matrix44& lrClipRows);
 
@@ -543,10 +543,10 @@ void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32
 {
     u32* lpWords = reinterpret_cast<u32*>(lpCommand);
     u32  luCommandId = CommandIdOf(lpWords[0]);
-    CGS_ASSERT(luCommandId == DispatchCommand::E_DRAWRENDERABLEMESH
+    CGS_ASSERT_AT(luCommandId == DispatchCommand::E_DRAWRENDERABLEMESH
                    || luCommandId == DispatchCommand::E_DRAWRENDERABLEMESHZONLY,
                "pCommand->GetCommandID() == DRAWRENDERABLEMESH || "
-               "pCommand->GetCommandID() == DRAWRENDERABLEMESHZONLY");
+               "pCommand->GetCommandID() == DRAWRENDERABLEMESHZONLY", CGS_ARTIST_CGSDISPATCHERCOMMANDS_FILE, 2085);
 
     const RenderableMesh* lpMesh =
         reinterpret_cast<const RenderableMesh*>(lpWords[2]);
@@ -570,7 +570,7 @@ void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32
         liTechnique = liLastTechnique;
 
     const MaterialTechnique* lpMaterial = lpAssembly->GetMaterial(static_cast<u32>(liTechnique));
-    CGS_ASSERT(lpMaterial, "lpMaterial");
+    CGS_ASSERT_AT(lpMaterial, "lpMaterial", CGS_ARTIST_CGSDISPATCHERCOMMANDS_FILE, 2102);
 
     // *lpMaterial (+0x00 u32 slot) is the ShaderTechnique image; its external object vertex
     // constants are the serialised {count, instance-index array} block at +0x1C.
@@ -578,9 +578,9 @@ void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32
         lpMaterial->mpShaderTechnique->mExternalObjectVertexShaderConstants;
     const u32* lpaConstantsInstanceData =
         reinterpret_cast<const u32*>(objectConstants.mppaConstantsInstanceData);
-    CGS_ASSERT(lpaConstantsInstanceData[0] == KU_SHADER_CONSTANT_WORLD_MATRIX,
+    CGS_ASSERT_AT(lpaConstantsInstanceData[0] == KU_SHADER_CONSTANT_WORLD_MATRIX,
                "lpMaterial->GetShaderTechnique()->GetExternalObjectVertexShaderConstants()"
-               ".mppaConstantsInstanceData[0] == ShaderConstantTable::E_WORLD_MATRIX");
+               ".mppaConstantsInstanceData[0] == ShaderConstantTable::E_WORLD_MATRIX", CGS_ARTIST_CGSDISPATCHERCOMMANDS_FILE, 2103);
 
     const rw::math::vpu::Matrix44& lrWorld =
         *reinterpret_cast<const rw::math::vpu::Matrix44*>(lppConstScratch[0]);
@@ -849,9 +849,9 @@ DispatchCommand* DispatchList::DispatchAllObjectToMesh(DispatchPacketInterpreter
                 for (s32 liKey = liFrom; liKey < liTo; ++liKey)
                 {
                     u32* lpPacket = PacketFromRecord(m_pBinBase, lpBlock->mpKeyArray[liKey].mu64Whole);
-                    CGS_ASSERT(lpPacket != 0, "pPacket");
-                    CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLE,
-                               "pCommand->GetCommandID() == DRAWRENDERABLE");
+                    CGS_ASSERT_AT(lpPacket != 0, "pPacket", CGS_ARTIST_CGSDISPATCHERCOMMANDS_FILE, 2804);
+                    CGS_ASSERT_AT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLE,
+                               "pCommand->GetCommandID() == DRAWRENDERABLE", CGS_ARTIST_CGSDISPATCHERCOMMANDS_FILE, 2809);
                     DrawRenderable::Interpret(reinterpret_cast<DispatchCommand*>(lpPacket),
                                               lpMeshOnlyFrame, lpContext, 0.0f);
                     lpLast = reinterpret_cast<DispatchCommand*>(lpPacket);

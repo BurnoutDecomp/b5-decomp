@@ -7,7 +7,7 @@
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the FixUp body
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramBuffer
 #include <cstring>               // strstr (PostFixUp's profile classification)
-
+#define CGS_ARTIST_CGSSHADERTECHNIQUERESOURCETYPE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Resources/CgsShaderTechniqueResourceType.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::ShaderTechniqueResourceType::GetTypeID        @ 0x827E9C28
 //   CgsResource::ShaderTechniqueResourceType::GetImportPointer @ 0x827E9D00
@@ -243,11 +243,11 @@ namespace CgsResource
             }
         }
 
-        CGS_ASSERT(lbFirstIsInstancing || lbFirstIsWorld,
+        CGS_ASSERT_AT(lbFirstIsInstancing || lbFirstIsWorld,
                    "Warning: shader technique does not have WORLD or INSTANCING_MATRIX_ARRAY"
-                   " (required) as first constant");
-        CGS_ASSERT(!lbHasWorldViewProjection,
-                   "Warning: shader technique has WORLD_VIEW_PROJECTION (unsupported) as first constant");
+                   " (required) as first constant", CGS_ARTIST_CGSSHADERTECHNIQUERESOURCETYPE_FILE, 695);
+        CGS_ASSERT_AT(!lbHasWorldViewProjection,
+                   "Warning: shader technique has WORLD_VIEW_PROJECTION (unsupported) as first constant", CGS_ARTIST_CGSSHADERTECHNIQUERESOURCETYPE_FILE, 700);
     }
 
     // --- GetConstantHashTableSerialisedResourceDescriptorSize @ 0x827E9D38 ------------

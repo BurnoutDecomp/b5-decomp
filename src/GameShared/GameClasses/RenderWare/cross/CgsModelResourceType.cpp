@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"        // PostFixUp walks the graph
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"    // mu8InstanceCount / mpMaterialAssembly
 #include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"        // GetLength()
-
+#define CGS_ARTIST_CGSMODELRESOURCETYPE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsModelResourceType.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::ModelResourceType::FixDown                       @ 0x828A8548
 //   CgsResource::ModelResourceType::GetImportCount                @ 0x828A7D48
@@ -54,8 +54,8 @@ namespace CgsResource
         uintptr_t lBase = reinterpret_cast<uintptr_t>(lpResource);
         const u32 luDelta = CgsResource::GetLoadBase(lrResource);
 
-        CGS_ASSERT(*reinterpret_cast<const u8*>(lBase + 19) == 2,   // serialised blob
-                   "Model data version mismatch. Code version = ");
+        CGS_ASSERT_AT(*reinterpret_cast<const u8*>(lBase + 19) == 2,   // serialised blob
+                   "Model data version mismatch. Code version = ", CGS_ARTIST_CGSMODELRESOURCETYPE_FILE, 219);
 
         u32 luP1 = *reinterpret_cast<u32*>(lBase + 4) + luDelta;   // serialised blob
         u32 luP2 = *reinterpret_cast<u32*>(lBase + 8) + luDelta;   // serialised blob
@@ -117,8 +117,8 @@ namespace CgsResource
             {
                 const RenderableMesh* lpMesh = lpRenderable->mppMeshes[luMesh];
                 const CgsGraphics::MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
-                CGS_ASSERT(lpMesh->mu8NumVertexDescriptors == lpAssembly->GetLength(),
-                           "lpMesh->GetNumVertexDescriptors() == lpMesh->mpMaterialAssembly->GetLength()");
+                CGS_ASSERT_AT(lpMesh->mu8NumVertexDescriptors == lpAssembly->GetLength(),
+                           "lpMesh->GetNumVertexDescriptors() == lpMesh->mpMaterialAssembly->GetLength()", CGS_ARTIST_CGSMODELRESOURCETYPE_FILE, 261);
 
                 if (lpMesh->mu8InstanceCount != 0)
                 {

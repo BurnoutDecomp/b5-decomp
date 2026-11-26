@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"
 #include "GameShared/GameClasses/System/Resource/CgsEntryListResource.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-
+#define CGS_ARTIST_CGSDEALLOCATEPOOLMODULESTATE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsDeAllocatePoolModuleState.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // THIS TU (GameShared/.../PoolModuleStates/CgsDeAllocatePoolModuleState.cpp) -- the polled
@@ -29,8 +29,8 @@ namespace CgsResource
     // countdown. RemoveReference's immediate native cleanup is not this path.
     void DeAllocatePoolModuleState::Begin(Pool* lpPool, ID lListId)
     {
-        CGS_ASSERT(muState == E_STATE_IDLE || muState == E_STATE_COUNTING,
-                   "Can not de-allocate unless in idle/de-allocating state\n");
+        CGS_ASSERT_AT(muState == E_STATE_IDLE || muState == E_STATE_COUNTING,
+                   "Can not de-allocate unless in idle/de-allocating state\n", CGS_ARTIST_CGSDEALLOCATEPOOLMODULESTATE_FILE, 66);
         muState = E_STATE_COUNTING;
         const s32 liDelay = lpPool->GetRefCountThreshold();
         if (miFramesRemaining < liDelay)
@@ -38,10 +38,10 @@ namespace CgsResource
 
         s32 liListIndex;
         Entry* lpListEntry = lpPool->FindResource(lListId, false, 2, &liListIndex);
-        CGS_ASSERT(lpListEntry != 0, "Dynamically created list resource is not loaded\n");
+        CGS_ASSERT_AT(lpListEntry != 0, "Dynamically created list resource is not loaded\n", CGS_ARTIST_CGSDEALLOCATEPOOLMODULESTATE_FILE, 82);
         const EntryListResource* lpList = static_cast<const EntryListResource*>(
             lpListEntry->GetResourceMemory().m_baseResources[0]);
-        CGS_ASSERT(lpPool->GetEntryRefCount(liListIndex) > 0, "Decrementing ref count on zero count resource\n");
+        CGS_ASSERT_AT(lpPool->GetEntryRefCount(liListIndex) > 0, "Decrementing ref count on zero count resource\n", CGS_ARTIST_CGSDEALLOCATEPOOLMODULESTATE_FILE, 88);
         lpPool->DecEntryRefCount(liListIndex);
 
         for (u32 lu = 0; lu < lpList->muNumEntries; ++lu)
@@ -50,8 +50,8 @@ namespace CgsResource
             s32 liIndex;
             Entry* lpEntry = lpPool->FindResourceWithDependencies(
                 lpList->mIds[lu], &lpOwner, false, 2, &liIndex);
-            CGS_ASSERT(lpEntry != 0, "Could not unload resource as it wasn't found in the pool\n");
-            CGS_ASSERT(lpOwner->GetEntryRefCount(liIndex) > 0, "Decrementing ref count on zero count resource\n");
+            CGS_ASSERT_AT(lpEntry != 0, "Could not unload resource as it wasn't found in the pool\n", CGS_ARTIST_CGSDEALLOCATEPOOLMODULESTATE_FILE, 113);
+            CGS_ASSERT_AT(lpOwner->GetEntryRefCount(liIndex) > 0, "Decrementing ref count on zero count resource\n", CGS_ARTIST_CGSDEALLOCATEPOOLMODULESTATE_FILE, 124);
             lpOwner->DecEntryRefCount(liIndex);
         }
     }

@@ -12,7 +12,7 @@
 #ifdef SendMessage
 #undef SendMessage
 #endif
-
+#define CGS_ARTIST_CGSGAMETALK_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\CgsGameTalk.cpp"
 // =====================================================================================
 // CgsGameTalk::GameTalk -- game-side GameTalk front door.
 //   Reconstructed from BURNOUT_X360_ARTIST.XEX. Source files (from the asm asserts):
@@ -130,9 +130,9 @@ namespace CgsGameTalk
     // X360 @0x828376C0.
     void GameTalk::Update()
     {
-        CGS_ASSERT(mbPrepared,
-                   "Call GameTalk::Prepare() before calling GameTalk::Update()\n");
-        CGS_ASSERT(mpGameTalkManager != 0, "mpGameTalkManager != NULL");
+        CGS_ASSERT_AT(mbPrepared,
+                   "Call GameTalk::Prepare() before calling GameTalk::Update()\n", CGS_ARTIST_CGSGAMETALK_FILE, 119);
+        CGS_ASSERT_AT(mpGameTalkManager != 0, "mpGameTalkManager != NULL", CGS_ARTIST_CGSGAMETALK_FILE, 120);
 
         // The asm pumps the process-wide singleton (off_8303577C) rather than the member
         // copy; both reference the same GameTalkManager.

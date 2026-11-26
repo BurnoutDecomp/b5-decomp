@@ -18,7 +18,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsMenuItemVariable.h"  // MenuItemVariable
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenuWindow.h"             // MenuWindow
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariable.h"          // VariableMetadata
-
+#define CGS_ARTIST_CGSDEBUGUI_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/UI/CgsDebugUI.cpp"
 // CgsDev::DebugUI::DebugUI - the manager accessors every DebugComponent / manager reaches through
 // GetUI(). The X360 reads them as fixed sub-objects of the UI singleton (MenuManager@+228,
 // VariableManager@+272, FunctionManager@+332); here they are the named by-value members. The rest of
@@ -154,7 +154,7 @@ namespace CgsDev
         {
             Window* lpPrevious = mpActiveWindow;
             if (lpWindow)
-                CGS_ASSERT(lpWindow->CanActivate(), "lpWindow->CanActivate()");
+                CGS_ASSERT_AT(lpWindow->CanActivate(), "lpWindow->CanActivate()", CGS_ARTIST_CGSDEBUGUI_FILE, 672);
 
             if (mpActiveWindow && mpActiveWindow->IsModal())
                 return;

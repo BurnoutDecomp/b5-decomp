@@ -6,7 +6,7 @@
 
 #include <cstddef>   // offsetof
 #include <cstring>   // std::memcpy (models the X360 inlined field-by-field block copy)
-
+#define CGS_ARTIST_CGSINPUTMODULEIO_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.cpp"
 // Pin the X360-proven PadOutputInformation field offsets (the controller bridges read these by
 // name; the record must stay 932 bytes so OutputBuffer::maPadOutputInformation[7] does not move).
 namespace CgsInput { namespace InputIO {
@@ -92,7 +92,7 @@ const PostWorldInputBuffer::PadMappingQueue* PostWorldInputBuffer::GetPadMapping
 // Callers: BrnGameModule::BindInputToPort / BridgeGameStateToController.
 void PostWorldInputBuffer::PostBindRequest(s32 liPlayer, s32 liPort)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_CGSINPUTMODULEIO_FILE, 326);
     BaseInputEvent lRequest;
     lRequest.miPlayer = liPlayer;
     lRequest.miPort   = liPort;
@@ -103,7 +103,7 @@ void PostWorldInputBuffer::PostBindRequest(s32 liPlayer, s32 liPort)
 // Callers: BrnGameModule::BridgeGameStateToController / DoUpdate_InputPostWorld.
 void PostWorldInputBuffer::PostUnbindRequest(s32 liPlayer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_CGSINPUTMODULEIO_FILE, 364);
     BaseInputEvent lRequest;
     lRequest.miPlayer = liPlayer;
     lRequest.miPort   = 0;
@@ -115,7 +115,7 @@ void PostWorldInputBuffer::PostUnbindRequest(s32 liPlayer)
 // BrnGameModule::PrepareInitialInputMapping, passes port -1 (every pad).
 void PostWorldInputBuffer::PostMappingRequest(const ActionMapping* lpMapping, s32 liPortId)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_CGSINPUTMODULEIO_FILE, 384);
     PadMapping lMapping;
     std::memcpy(lMapping.maMapping, lpMapping, sizeof(lMapping.maMapping));
     lMapping.miPortId = liPortId;
@@ -313,8 +313,8 @@ void PreWorldInputBuffer::Destruct()
 void PreWorldInputBuffer::PostPlayJoltEffectByPlayer(s32 liPlayer, s32 liRumblePriority,
                                                      const JoltEffect& lJoltEffect)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    CGS_ASSERT(liPlayer >= 0, "Player must be greater than -1\n");
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_CGSINPUTMODULEIO_FILE, 114);
+    CGS_ASSERT_AT(liPlayer >= 0, "Player must be greater than -1\n", CGS_ARTIST_CGSINPUTMODULEIO_FILE, 115);
     PlayJoltEffectEvent lEvent;
     lEvent.miPlayer         = liPlayer;
     lEvent.miPort           = -1;
@@ -329,8 +329,8 @@ void PreWorldInputBuffer::PostPlayRumbleEffectByPlayer(s32 liPlayer, s32 liRumbl
                                                        const JoltEffect& lJoltEffect, s32 liRumbleId,
                                                        f32 lfRumbleVolume)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    CGS_ASSERT(liPlayer >= 0, "Player must be greater than -1\n");
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_CGSINPUTMODULEIO_FILE, 165);
+    CGS_ASSERT_AT(liPlayer >= 0, "Player must be greater than -1\n", CGS_ARTIST_CGSINPUTMODULEIO_FILE, 166);
     PlayRumbleEffectEvent lEvent;
     lEvent.miPlayer         = liPlayer;
     lEvent.miPort           = -1;
@@ -346,8 +346,8 @@ void PreWorldInputBuffer::PostPlayRumbleEffectByPlayer(s32 liPlayer, s32 liRumbl
 void PreWorldInputBuffer::PostChangeVolumeRumbleEffectByPlayer(s32 liPlayer, const JoltEffect& lJoltEffect,
                                                                s32 liRumbleId, f32 lfRumbleVolume)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    CGS_ASSERT(liPlayer >= 0, "Player must be greater than -1\n");
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_CGSINPUTMODULEIO_FILE, 214);
+    CGS_ASSERT_AT(liPlayer >= 0, "Player must be greater than -1\n", CGS_ARTIST_CGSINPUTMODULEIO_FILE, 215);
     ChangeVolumeRumbleEffectEvent lEvent;
     lEvent.miPlayer       = liPlayer;
     lEvent.miPort         = -1;
@@ -361,8 +361,8 @@ void PreWorldInputBuffer::PostChangeVolumeRumbleEffectByPlayer(s32 liPlayer, con
 // EventQueue<StopRumbleEffectEvent,4>::AddEvent @0x82367D40 on this+808.
 void PreWorldInputBuffer::PostStopRumbleEffectByPlayer(s32 liPlayer, s32 liRumbleId)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    CGS_ASSERT(liPlayer >= 0, "Player must be greater than -1\n");
+    CGS_ASSERT_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_CGSINPUTMODULEIO_FILE, 259);
+    CGS_ASSERT_AT(liPlayer >= 0, "Player must be greater than -1\n", CGS_ARTIST_CGSINPUTMODULEIO_FILE, 260);
     StopRumbleEffectEvent lEvent;
     lEvent.miPlayer   = liPlayer;
     lEvent.miPort     = -1;

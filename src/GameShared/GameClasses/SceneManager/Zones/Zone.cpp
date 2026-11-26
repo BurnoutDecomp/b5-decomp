@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/SceneManager/Zones/Zone.h"
-
+#define CGS_ARTIST_ZONE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\Zones/Zone.cpp"
 // CgsSceneManager::Zone / Neighbour out-of-line member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. This TU homes the X360-emitted functions:
 //
@@ -94,8 +94,8 @@ namespace CgsSceneManager
     // X360 0x828CBAE8. Rebase the zone's absolute pointers to base-relative offsets.
     void Zone::FixDown(void* lpBaseAddress)
     {
-        CGS_ASSERT(mpPoints != 0,
-                   "Points have not yet been specified for zone so can't fix it down!\n");
+        CGS_ASSERT_AT(mpPoints != 0,
+                   "Points have not yet been specified for zone so can't fix it down!\n", CGS_ARTIST_ZONE_FILE, 164);
 
         const usize luBase = reinterpret_cast<usize>(lpBaseAddress);
 

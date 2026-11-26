@@ -266,7 +266,7 @@ bool OverlapCullingModule::Prepare(EntityManager* lpEntityManager, VolumeManager
         {
             if (mePrepareStage >= 3)
             {
-                CGS_FAIL("Unrecognised prepare stage");
+                CGS_FAIL_AT("Unrecognised prepare stage", KAC_ARTIST_ASSERT_FILE, 129);
                 return false;
             }
             // PREPARESTAGE_DONE: restart the handshake.
@@ -287,8 +287,8 @@ bool OverlapCullingModule::Prepare(EntityManager* lpEntityManager, VolumeManager
         return false;
     }
 
-    CGS_ASSERT(lpVolumeManager != 0, "lpVolManager");
-    CGS_ASSERT(lpEntityManager != 0, "lpEntityManager");
+    CGS_ASSERT_AT(lpVolumeManager != 0, "lpVolManager", KAC_ARTIST_ASSERT_FILE, 115);
+    CGS_ASSERT_AT(lpEntityManager != 0, "lpEntityManager", KAC_ARTIST_ASSERT_FILE, 116);
 
     mpVolumeManager = lpVolumeManager;  // a1[140]
     mpEntityManager = lpEntityManager;  // a1[141]
@@ -333,7 +333,7 @@ bool OverlapCullingModule::Release()
         {
             if (leStage >= 3)
             {
-                CGS_FAIL("Bad prepare state");
+                CGS_FAIL_AT("Bad prepare state", KAC_ARTIST_ASSERT_FILE, 174);
                 return false;
             }
             // RELEASESTAGE_DONE: drop straight to the reset (LABEL_9).
@@ -595,7 +595,7 @@ void OverlapCullingModule::ProcessRemoveInternalVolumeQueue(const OverlapCulling
 void OverlapCullingModule::ProcessOverlap(OverlappingPair& lrOverlappingPair,
                                           OverlapCullingIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // :382
+    CGS_ASSERT_AT(lpOutputBuffer != 0, "lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 382);   // :382
 
     const s32 liVolumeInstanceIndexA = static_cast<s32>(lrOverlappingPair.muVolumeInstanceA);
     const s32 liVolumeInstanceIndexB = static_cast<s32>(lrOverlappingPair.muVolumeInstanceB);
@@ -607,16 +607,16 @@ void OverlapCullingModule::ProcessOverlap(OverlappingPair& lrOverlappingPair,
     }
 
     VolumeInstance* lpVolInstA = mpEntityManager->GetVolumeInstance(liVolumeInstanceIndexA);
-    CGS_ASSERT(lpVolInstA != 0, "lpVolInstA");   // :400
+    CGS_ASSERT_AT(lpVolInstA != 0, "lpVolInstA", KAC_ARTIST_ASSERT_FILE, 400);   // :400
 
     VolumeInstance* lpVolInstB = mpEntityManager->GetVolumeInstance(liVolumeInstanceIndexB);
-    CGS_ASSERT(lpVolInstB != 0, "lpVolInstB");   // :403
+    CGS_ASSERT_AT(lpVolInstB != 0, "lpVolInstB", KAC_ARTIST_ASSERT_FILE, 403);   // :403
 
     const VolRef::Volume* lpVolA = mpVolumeManager->GetRwVolume(lpVolInstA->miVolumeIndex);
     const VolRef::Volume* lpVolB = mpVolumeManager->GetRwVolume(lpVolInstB->miVolumeIndex);
 
-    CGS_ASSERT(lpVolA != 0, "lpVolA");   // :408
-    CGS_ASSERT(lpVolB != 0, "lpVolB");   // :409
+    CGS_ASSERT_AT(lpVolA != 0, "lpVolA", KAC_ARTIST_ASSERT_FILE, 408);   // :408
+    CGS_ASSERT_AT(lpVolB != 0, "lpVolB", KAC_ARTIST_ASSERT_FILE, 409);   // :409
 
     // Two volume instances of the SAME entity never reach the narrow phase.
     if (lpVolInstA->mu16EntityIndex == lpVolInstB->mu16EntityIndex)
@@ -775,7 +775,7 @@ void OverlapCullingModule::DoPairQuery(OverlapCullingIO::OutputBuffer* lpOutputB
         const u32 luNumIntersections =
             static_cast<u32>(mpVolVolQuery->GetPrimitiveIntersections());
 
-        CGS_ASSERT(luNumIntersections <= 100, "luNumIntersections <= 100");   // :547
+        CGS_ASSERT_AT(luNumIntersections <= 100, "luNumIntersections <= 100", KAC_ARTIST_ASSERT_FILE, 547);   // :547
 
         if (luNumIntersections == 0)
         {

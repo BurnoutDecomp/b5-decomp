@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // LinearMalloc::Malloc/GetAlignment (Prepare)
-
+#define CGS_ARTIST_CGSATTRIBSYSVAULTALLOCATOR_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultAllocator.cpp"
 // Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultAllocator.cpp".
 
 namespace CgsAttribSys
@@ -36,13 +36,13 @@ void StreamedVaultAllocator::Prepare(CgsMemory::LinearMalloc* lpAllocator)
 // restored here as the logical guard + container call.
 u8* StreamedVaultAllocator::GetSlotMemory(s32 liSlotIndex)
 {
-    CGS_ASSERT(liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS,
-               "liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS");
+    CGS_ASSERT_AT(liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS,
+               "liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS", CGS_ARTIST_CGSATTRIBSYSVAULTALLOCATOR_FILE, 165);
 
     // Inlined BitArray<24u>::IsBitSet bounds check (CgsBitArray.h:203).
 
-    CGS_ASSERT(mUsedStreamedVaults.IsBitSet(liSlotIndex),
-               "Trying to access memory for a slot that isn't in use");
+    CGS_ASSERT_AT(mUsedStreamedVaults.IsBitSet(liSlotIndex),
+               "Trying to access memory for a slot that isn't in use", CGS_ARTIST_CGSATTRIBSYSVAULTALLOCATOR_FILE, 166);
 
     return mpau8VaultMemory + liSlotIndex * KI_MAX_STREAMED_VAULT_BIN_SIZE;
 }
@@ -52,13 +52,13 @@ u8* StreamedVaultAllocator::GetSlotMemory(s32 liSlotIndex)
 // restored here as logical container calls.
 void StreamedVaultAllocator::ReleaseSlot(s32 liSlotIndex)
 {
-    CGS_ASSERT(liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS,
-               "liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS");
+    CGS_ASSERT_AT(liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS,
+               "liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS", CGS_ARTIST_CGSATTRIBSYSVAULTALLOCATOR_FILE, 137);
 
     // Inlined BitArray<24u>::IsBitSet bounds check (CgsBitArray.h:203).
 
-    CGS_ASSERT(mUsedStreamedVaults.IsBitSet(liSlotIndex),
-               "Trying to free a streamed vault slot that isn't in use");
+    CGS_ASSERT_AT(mUsedStreamedVaults.IsBitSet(liSlotIndex),
+               "Trying to free a streamed vault slot that isn't in use", CGS_ARTIST_CGSATTRIBSYSVAULTALLOCATOR_FILE, 138);
 
     // Inlined BitArray<24u>::UnSetBit bounds check (CgsBitArray.h:241).
 

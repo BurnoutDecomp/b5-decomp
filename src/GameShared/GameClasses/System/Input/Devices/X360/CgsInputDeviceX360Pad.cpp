@@ -27,7 +27,7 @@
 #include "types.hpp"
 
 #include <cmath>     // pow (SetRumble's pad-arm left-motor curve, the CRT pow the X360 calls at 0x828E7A48)
-
+#define CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\Devices/X360/CgsInputDeviceX360Pad.cpp"
 // ---- Xbox 360 XDK entry points (real prototypes live in <xinput.h>/<xtl.h>). Declared as
 // extern "C" free functions, mirroring the System/X360 precedent (CgsXOverlappedX360.cpp). The
 // effect / overlapped arguments are passed by the void* address of the embedded members.
@@ -147,9 +147,9 @@ namespace CgsInput
         mFFOverlappedSpring.mhEvent = reinterpret_cast<u32>(CreateEventA(0, 0, 0, 0));
         mFFOverlappedGain.mhEvent   = reinterpret_cast<u32>(CreateEventA(0, 0, 0, 0));
 
-        CGS_ASSERT(mFFOverlappedRumble.mhEvent != 0, "mFFOverlappedRumble.hEvent != NULL");   // line 127
-        CGS_ASSERT(mFFOverlappedGain.mhEvent   != 0, "mFFOverlappedGain.hEvent != NULL");     // line 128
-        CGS_ASSERT(mFFOverlappedSpring.mhEvent != 0, "mFFOverlappedSpring.hEvent != NULL");   // line 129
+        CGS_ASSERT_AT(mFFOverlappedRumble.mhEvent != 0, "mFFOverlappedRumble.hEvent != NULL", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 127);   // line 127
+        CGS_ASSERT_AT(mFFOverlappedGain.mhEvent   != 0, "mFFOverlappedGain.hEvent != NULL", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 128);     // line 128
+        CGS_ASSERT_AT(mFFOverlappedSpring.mhEvent != 0, "mFFOverlappedSpring.hEvent != NULL", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 129);   // line 129
 
         mfRumbleY = KF_ZERO;   // 0xC
         mfRumbleX = KF_ZERO;   // 0x8
@@ -186,7 +186,7 @@ namespace CgsInput
     // ============================================================================
     bool DeviceX360Pad::IsButtonPressed(u32 luControl) const
     {
-        CGS_ASSERT(luControl <= KU_VALID_BUTTON_MAX, "lbValidControl");   // line 455
+        CGS_ASSERT_AT(luControl <= KU_VALID_BUTTON_MAX, "lbValidControl", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 455);   // line 455
         if (luControl > KU_VALID_BUTTON_MAX)
             return false;
         return mabButtons[luControl] != 0;            // lbz r3, 0x2E(this + luControl)
@@ -197,7 +197,7 @@ namespace CgsInput
     // ============================================================================
     f32 DeviceX360Pad::GetAxisValue(u32 luAxis) const
     {
-        CGS_ASSERT(luAxis <= KU_VALID_AXIS_MAX, "lbValidControl");        // line 548
+        CGS_ASSERT_AT(luAxis <= KU_VALID_AXIS_MAX, "lbValidControl", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 548);        // line 548
         if (luAxis > KU_VALID_AXIS_MAX)
             return KF_ZERO;                            // invalid path returns flt_82001CC0 == 0.0
         return mafAxisValues[luAxis];                  // lfsx f1, this + (luAxis+47)*4 == mafAxisValues[luAxis]
@@ -290,7 +290,7 @@ namespace CgsInput
     // ============================================================================
     void DeviceX360Pad::SetRumble(f32 lfLeftMotor, f32 lfRightMotor)
     {
-        CGS_ASSERT(IsConnected(), "IsConnected()");                                // line 679
+        CGS_ASSERT_AT(IsConnected(), "IsConnected()", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 679);                                // line 679
         if (mbConnected == 0)
         {
             return;
@@ -351,7 +351,7 @@ namespace CgsInput
     // ============================================================================
     bool DeviceX360Pad::BindToPort(u32 luPort, s32 leType)
     {
-        CGS_ASSERT(luPort <= KU_VALID_PORT_MAX, "lbValidPort");           // line 1121
+        CGS_ASSERT_AT(luPort <= KU_VALID_PORT_MAX, "lbValidPort", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 1121);           // line 1121
         if (luPort > KU_VALID_PORT_MAX)
             return false;
 
@@ -374,10 +374,10 @@ namespace CgsInput
                     static_cast<u32>(mePort),
                     static_cast<u32>(mfGain * KF_GAIN_SCALE),
                     0);
-                CGS_ASSERT(luGain == 0, "Wheel Error");                   // line 1155
+                CGS_ASSERT_AT(luGain == 0, "Wheel Error", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 1155);                   // line 1155
 
                 const u32 luMotors = XInputFFEnableMotors(static_cast<u32>(mePort), 1, 0);
-                CGS_ASSERT(luMotors == 0, "Wheel Error");                 // line 1159
+                CGS_ASSERT_AT(luMotors == 0, "Wheel Error", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 1159);                 // line 1159
 
                 while (true)
                 {
@@ -391,7 +391,7 @@ namespace CgsInput
                         const u32 lauOp[2] = { 1u, 3u };
                         const u32 luOp = XInputFFEffectOperation(
                             static_cast<u32>(mePort), lauOp, 1u, 1u, 0);
-                        CGS_ASSERT(luOp == 0, "Wheel Error");             // line 1185
+                        CGS_ASSERT_AT(luOp == 0, "Wheel Error", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 1185);             // line 1185
                         return true;
                     }
                 }
@@ -412,10 +412,10 @@ namespace CgsInput
     {
         const GamepadState& lrState = *static_cast<const GamepadState*>(lpState);
 
-        CGS_ASSERT(lbConnected, "lbConnected");                          // line 754
-        CGS_ASSERT(IsConnected(), "IsConnected()");                      // line 755
-        CGS_ASSERT(mePort == lePort, "mePort == lePort");                // line 756
-        CGS_ASSERT(meType == leType, "meType == leType");                // line 757
+        CGS_ASSERT_AT(lbConnected, "lbConnected", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 754);                          // line 754
+        CGS_ASSERT_AT(IsConnected(), "IsConnected()", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 755);                      // line 755
+        CGS_ASSERT_AT(mePort == lePort, "mePort == lePort", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 756);                // line 756
+        CGS_ASSERT_AT(meType == leType, "meType == leType", CGS_ARTIST_CGSINPUTDEVICEX360PAD_FILE, 757);                // line 757
 
         // -- latch the 14 mapped digital buttons (wButtons bits) into mafControls[0..13] --
         // bit order matches the rlwinm masks: 0,1,2,3,4,5,6,7,12,13,14,15,8,9.

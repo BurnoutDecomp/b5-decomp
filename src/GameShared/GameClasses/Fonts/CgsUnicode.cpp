@@ -238,8 +238,8 @@ namespace CgsUnicode
                     const u32 luTrailing = lUtf8TrailingBytes(*lpUtf8ThousandsSeparator);
                     // (X360 streams "Character supplied is not a valid start UTF8 character
                     // (<byte>)" at CgsUnicode.cpp:549 when the table returns 255.)
-                    CGS_ASSERT(luTrailing != 255u,
-                               "Character supplied is not a valid start UTF8 character");
+                    CGS_ASSERT_AT(luTrailing != 255u,
+                               "Character supplied is not a valid start UTF8 character", CGS_ARTIST_UNICODE_CPP_FILE, 549);
                     if (luTrailing <= 3u)
                     {
                         // Written back-to-front so the final reverse copy restores the order.
@@ -305,7 +305,7 @@ namespace CgsUnicode
             lfAbsValue    = -lfAbsValue;
         }
 
-        CGS_ASSERT(lu8DecimalPlaces < 10u, "luDecimalPlaces < 10");   // cpp:606
+        CGS_ASSERT_AT(lu8DecimalPlaces < 10u, "luDecimalPlaces < 10", CGS_ARTIST_UNICODE_CPP_FILE, 606);   // cpp:606
 
         const s32 liFraction = static_cast<s32>(
             (lfAbsValue - static_cast<f32>(liIntegerPart)) * KAF_DECIMAL_SCALE[lu8DecimalPlaces]);
@@ -318,8 +318,8 @@ namespace CgsUnicode
             const u32 luTrailing = lUtf8TrailingBytes(*lpUtf8DecimalPointCharacter);
             // (The console streams "Character supplied is not a valid start UTF8 character
             // (<byte>)" at CgsUnicode.cpp:620 when the table answers 255.)
-            CGS_ASSERT(luTrailing != 255u,
-                       "Character supplied is not a valid start UTF8 character");
+            CGS_ASSERT_AT(luTrailing != 255u,
+                       "Character supplied is not a valid start UTF8 character", CGS_ARTIST_UNICODE_CPP_FILE, 620);
 
             for (u32 luByte = 0; luByte <= luTrailing; ++luByte)
                 *lpOut++ = lpUtf8DecimalPointCharacter[luByte];
@@ -516,12 +516,12 @@ namespace CgsUnicode
                     s32 lnTargetStringSize, const CgsUtf8* const* lppUtf8Arguments,
                     u8 luNumArguments)
     {
-        CGS_ASSERT(lpUtf8SourceString != 0, "lpUtf8SourceString != NULL");   // cpp:654
-        CGS_ASSERT(lpUtf8TargetString != 0, "lpUtf8TargetString != NULL");   // cpp:655
+        CGS_ASSERT_AT(lpUtf8SourceString != 0, "lpUtf8SourceString != NULL", CGS_ARTIST_UNICODE_CPP_FILE, 654);   // cpp:654
+        CGS_ASSERT_AT(lpUtf8TargetString != 0, "lpUtf8TargetString != NULL", CGS_ARTIST_UNICODE_CPP_FILE, 655);   // cpp:655
         // The console checks zero (cpp:656) then non-positive (cpp:657) separately; a
         // zero size fires both, a negative one only the second -- reproduced exactly.
-        CGS_ASSERT(lnTargetStringSize != 0, "lnTargetStringSize != NULL");
-        CGS_ASSERT(lnTargetStringSize > 0, "lnTargetStringSize > 0");
+        CGS_ASSERT_AT(lnTargetStringSize != 0, "lnTargetStringSize != NULL", CGS_ARTIST_UNICODE_CPP_FILE, 656);
+        CGS_ASSERT_AT(lnTargetStringSize > 0, "lnTargetStringSize > 0", CGS_ARTIST_UNICODE_CPP_FILE, 657);
 
         const CgsUtf8* lpChar    = lpUtf8SourceString;
         CgsUtf8*       lpOut     = lpUtf8TargetString;
@@ -550,8 +550,8 @@ namespace CgsUnicode
                     ++lpChar;   // now at the argument-selecting digit
                     // cpp:677 -- the X360 streams "Only <count> argument(s) supplied for
                     // string <source>"; folded static per convention.
-                    CGS_ASSERT(static_cast<u8>(*lpChar - '0') <= luNumArguments,
-                               "Only <n> argument(s) supplied for string");
+                    CGS_ASSERT_AT(static_cast<u8>(*lpChar - '0') <= luNumArguments,
+                               "Only <n> argument(s) supplied for string", CGS_ARTIST_UNICODE_CPP_FILE, 677);
 
                     // %1 selects lppUtf8Arguments[0] (the console indexes digit-1).
                     const CgsUtf8* lpArg = lppUtf8Arguments[(*lpChar - '0') - 1];

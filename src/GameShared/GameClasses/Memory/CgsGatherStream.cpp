@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <cstring>                                    // memcpy (XMemCpy)
 #include "types.hpp"                                    // uintptr_t
-
+#define CGS_ARTIST_CGSGATHERSTREAM_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsGatherStream.cpp"
 // CgsMemory::GatherStream / GatherStreamBase - see the header. Faithful port; the
 // transfer is XMemCpy -> memcpy. Copies scattered -> packed (mirror of ScatterStream).
 namespace CgsMemory
@@ -11,14 +11,14 @@ namespace CgsMemory
     // the packed base buffer, advancing the (entry, offset) cursor; true when done.
     bool GatherStreamBase::UpdateStream()
     {
-        CGS_ASSERT((mu32Flags & 1u) != 0, "Stream update called when not active");
+        CGS_ASSERT_AT((mu32Flags & 1u) != 0, "Stream update called when not active", CGS_ARTIST_CGSGATHERSTREAM_FILE, 76);
 
         u32 luBudget = muBytesToStream;
         while (luBudget != 0)
         {
-            CGS_ASSERT(muCurrentEntry < muListLength, "Gone past end of distribution list length");
+            CGS_ASSERT_AT(muCurrentEntry < muListLength, "Gone past end of distribution list length", CGS_ARTIST_CGSGATHERSTREAM_FILE, 84);
             const DistributionStreamEntry& lrEntry = mpList[muCurrentEntry];
-            CGS_ASSERT(muEntryOffset < lrEntry.muLength, "Gone past end of entry data");
+            CGS_ASSERT_AT(muEntryOffset < lrEntry.muLength, "Gone past end of entry data", CGS_ARTIST_CGSGATHERSTREAM_FILE, 85);
 
             const u32 luOff       = muEntryOffset;
             const u32 luPackedPos = lrEntry.muPackedOffset + luOff;       // X360 v11
@@ -26,7 +26,7 @@ namespace CgsMemory
             u8* const lpDst       = mpBaseAddress + luPackedPos;          // X360 v13 (memcpy dst)
             u8* const lpSrc       = lrEntry.mpScatteredAddress + luOff;   // X360 v14 (memcpy src)
             muStreamPosition      = luPackedPos;                          // X360 a1[7] = v11
-            CGS_ASSERT(lpSrc != 0, "lpSrc");
+            CGS_ASSERT_AT(lpSrc != 0, "lpSrc", CGS_ARTIST_CGSGATHERSTREAM_FILE, 99);
 
             u32 luMoved;
             if (luRemaining <= luBudget)        // the whole rest of this entry fits in the budget

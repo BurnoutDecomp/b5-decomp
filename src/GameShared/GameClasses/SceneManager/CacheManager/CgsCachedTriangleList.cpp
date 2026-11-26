@@ -3,7 +3,7 @@
 #include "rw/rwcore_structs.h"                              // rw::IResourceAllocator / Resource / BaseResourceDescriptors
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags
-
+#define CGS_ARTIST_CGSCACHEDTRIANGLELIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CacheManager/CgsCachedTriangleList.cpp"
 // =================================================================================================
 // GameShared/GameClasses/SceneManager/CacheManager/CgsCachedTriangleList.cpp
 //
@@ -71,7 +71,7 @@ namespace CgsSceneManager
     bool CachedTriangleList::Prepare(rw::IResourceAllocator* lpAllocator, s32 liNumTriangleBatches)
     {
         // 0x828BE53C..0x828BE560 -- baked CgsCachedTriangleList.cpp:84.
-        CGS_ASSERT(lpAllocator != NULL, "lpAllocator != NULL");
+        CGS_ASSERT_AT(lpAllocator != NULL, "lpAllocator != NULL", CGS_ARTIST_CGSCACHEDTRIANGLELIST_FILE, 84);
 
         // 0x828BE568 `mulli r30, r31, 224`.
         const s32 liNumBytes = liNumTriangleBatches * static_cast<s32>(sizeof(CgsGeometric::Triangle4));
@@ -114,7 +114,7 @@ namespace CgsSceneManager
 
         // 0x828BE630..0x828BE64C -- baked CgsCachedTriangleList.cpp:103. The console stores the
         // pointer BEFORE testing it, which is reproduced above.
-        CGS_ASSERT(mpaTriangleCache != NULL, "mpaTriangleCache != NULL");
+        CGS_ASSERT_AT(mpaTriangleCache != NULL, "mpaTriangleCache != NULL", CGS_ARTIST_CGSCACHEDTRIANGLELIST_FILE, 103);
 
         // 0x828BE650 `li r3, 1` -- the body has no failure path.
         return true;

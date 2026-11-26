@@ -7,7 +7,7 @@
 #include "SDKs/EA/GameTalk/GameTalk.h"                                     // EA::GameTalk::GameTalkMessage
 
 #include <cstring>   // strncpy, strlen
-
+#define CGS_ARTIST_CGSLIVEUPDATEMODULE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsLiveUpdateModule.cpp"
 // ============================================================================
 // CgsResource::LiveUpdateModule -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //   Construct          @ 0x828E6548
@@ -83,7 +83,7 @@ namespace CgsResource
         }
         else if (meReleaseStage != 1)
         {
-            CGS_FAIL("Invalid stage\n");
+            CGS_FAIL_AT("Invalid stage\n", CGS_ARTIST_CGSLIVEUPDATEMODULE_FILE, 140);
             return false;
         }
 
@@ -160,7 +160,7 @@ namespace CgsResource
             const bool lbQueued = lpRequestQueue->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lRequest), 2,
                 (s32)sizeof(Events::LoadBundleRequest));
-            CGS_ASSERT(lbQueued, "lpRequestQueue->LoadBundle(lBundleLoadRequest)");
+            CGS_ASSERT_AT(lbQueued, "lpRequestQueue->LoadBundle(lBundleLoadRequest)", CGS_ARTIST_CGSLIVEUPDATEMODULE_FILE, 204);
 
             miUpdateState = 3;
             // fall through into the await-response check
@@ -173,7 +173,7 @@ namespace CgsResource
             const s32 liNumResponses = mReceiverQueue.GetCount();
             if (liNumResponses > 0)
             {
-                CGS_ASSERT(liNumResponses == 1, "mReceiverQueue.GetLength()==1");
+                CGS_ASSERT_AT(liNumResponses == 1, "mReceiverQueue.GetLength()==1", CGS_ARTIST_CGSLIVEUPDATEMODULE_FILE, 215);
 
                 // Read the loader's response. The X360 reads the s32 at offset +140 of the
                 // first event payload (the BundleLoaderEvent base's miPoolId slot, which the

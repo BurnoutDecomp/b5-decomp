@@ -328,7 +328,7 @@ namespace CgsSceneManager
     void LooseOctree::AllocRecursive(rw::IResourceAllocator* lpAllocator, u32 luDepth, u16 lu16NodeIndex,
                                      u16 lu16ParentIndex)
     {
-        CGS_ASSERT(lu16NodeIndex != KU_INVALID_NODE, "Can't allocate invalid node\n");
+        CGS_ASSERT_AT(lu16NodeIndex != KU_INVALID_NODE, "Can't allocate invalid node\n", CGS_ARTIST_LOOSE_OCTREE_FILE, 388);
 
         LooseOctreeNode* lpNode = &mpNodes[lu16NodeIndex];
         lpNode->SetParentIndex(lu16ParentIndex);
@@ -340,7 +340,7 @@ namespace CgsSceneManager
         }
 
         LooseOctreeNodeAllocation* lpAllocation = mFreeNodeGroupPool.Pop();
-        CGS_ASSERT(lpAllocation != 0, "Failed to allocate node children\n");
+        CGS_ASSERT_AT(lpAllocation != 0, "Failed to allocate node children\n", CGS_ARTIST_LOOSE_OCTREE_FILE, 406);
         lpNode->SetFirstChildIndex(lpAllocation->muFirstChildIndex);
 
         for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
@@ -369,7 +369,7 @@ namespace CgsSceneManager
     // ===========================================================================
     void LooseOctree::PrepareRecursive(u16 lu16NodeIndex, Vector3 lPosition, f32 lfSize)
     {
-        CGS_ASSERT(lu16NodeIndex != KU_INVALID_NODE, "Can't prepare invalid node\n");
+        CGS_ASSERT_AT(lu16NodeIndex != KU_INVALID_NODE, "Can't prepare invalid node\n", CGS_ARTIST_LOOSE_OCTREE_FILE, 330);
         if (lu16NodeIndex == KU_INVALID_NODE)
         {
             return;
@@ -469,7 +469,7 @@ namespace CgsSceneManager
     // ===========================================================================
     u32 LooseOctree::CalcNextSubNode(const LooseOctreeNode* lpNode, const Vector4& lrPosition) const
     {
-        CGS_ASSERT(lpNode->HasChildren(), "lpNode->HasChildren()");
+        CGS_ASSERT_AT(lpNode->HasChildren(), "lpNode->HasChildren()", CGS_ARTIST_LOOSE_OCTREE_FILE, 519);
         u32 luChild = 0;
         if (!(lpNode->mPosition.mV.x > lrPosition.mV.x)) { luChild |= 1u; }
         if (!(lpNode->mPosition.mV.z > lrPosition.mV.z)) { luChild |= 2u; }
@@ -1063,10 +1063,10 @@ namespace CgsSceneManager
             return;
         }
 
-        CGS_ASSERT(lpNode->CountElements() > muAdaptiveNodeSplitThreshold,
-                   "(uint32_t)lpNode->mEntityList.CountElements() > muAdaptiveNodeSplitThreshold");
-        CGS_ASSERT(mFreeNodeGroupPool.GetNumFree() > 0, "mFreeNodeGroupPool.GetNumFree() > 0");
-        CGS_ASSERT(luDepth >= muDepth - 1, "luDepth >= muDepth-1");
+        CGS_ASSERT_AT(lpNode->CountElements() > muAdaptiveNodeSplitThreshold,
+                   "(uint32_t)lpNode->mEntityList.CountElements() > muAdaptiveNodeSplitThreshold", CGS_ARTIST_LOOSE_OCTREE_FILE, 814);
+        CGS_ASSERT_AT(mFreeNodeGroupPool.GetNumFree() > 0, "mFreeNodeGroupPool.GetNumFree() > 0", CGS_ARTIST_LOOSE_OCTREE_FILE, 815);
+        CGS_ASSERT_AT(luDepth >= muDepth - 1, "luDepth >= muDepth-1", CGS_ARTIST_LOOSE_OCTREE_FILE, 816);
 
         SplitAndPropogateRecursive(lu16NodeIndex, luDepth);
     }

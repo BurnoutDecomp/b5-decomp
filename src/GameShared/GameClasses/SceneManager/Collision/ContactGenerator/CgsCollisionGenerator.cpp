@@ -27,7 +27,7 @@
 #include "rw/math/vpu/vector4_operation.h"                                            // vpu::operator+ / operator- (the sphere's box)
 #include <cstring>   // std::memcpy (the 14-qword result copy)
 #include <vectorintrinsics.h> // native line-box vminfp / vmaxfp
-
+#define CGS_ARTIST_CGSCOLLISIONGENERATOR_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\collision\\ContactGenerator/CgsCollisionGenerator.cpp"
 // GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.cpp
 //
 // BaseCollisionGenerator lifecycle + collision-batch ring management. Reconstructed from the
@@ -132,8 +132,8 @@ void BaseCollisionGenerator::Finish()
 // actually in use first.
 void BaseCollisionGenerator::FinishBatch(u16 lu16BatchIndex)
 {
-    CGS_ASSERT(mabUsedBatches[lu16BatchIndex],
-               "Attempting to finsh a batch that hasn't been started");
+    CGS_ASSERT_AT(mabUsedBatches[lu16BatchIndex],
+               "Attempting to finsh a batch that hasn't been started", CGS_ARTIST_CGSCOLLISIONGENERATOR_FILE, 184);
     maCollisionBatches[lu16BatchIndex].WaitOn();
     mabUsedBatches[lu16BatchIndex] = false;
 }
@@ -149,7 +149,7 @@ u16 BaseCollisionGenerator::CreateNewBatch()
 
     ++mu16NumUsedBatches;
 
-    CGS_ASSERT(!mabUsedBatches[lu16BatchIndex], "Trying to use a job thats already in use");
+    CGS_ASSERT_AT(!mabUsedBatches[lu16BatchIndex], "Trying to use a job thats already in use", CGS_ARTIST_CGSCOLLISIONGENERATOR_FILE, 324);
 
     mabUsedBatches[lu16BatchIndex] = true;
     return lu16BatchIndex;

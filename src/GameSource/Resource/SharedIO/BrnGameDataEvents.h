@@ -348,8 +348,8 @@ namespace GameDataIO
         const VehicleList* GetVehicleListPtr() const { return mpVehicleList; }
         void Construct(s32 liEventId, const VehicleList* lpList, bool lbFailFlag)
         {
-            miEventId = liEventId; mpReceiverQueue = 0; miPoolId = 5;
-            mId = 0xC98B447411F97E38ull; meType = static_cast<EAssetSet>(3); mbFailFlag = lbFailFlag;
+            // DWARF BrnGameDataEvents.h:96: the base Construct, as the request builders do.
+            GameDataAssetEvent::Construct(0, liEventId, 5, 0xC98B447411F97E38ull, static_cast<EAssetSet>(3), lbFailFlag);
             mpVehicleList = lpList;
         }
     private:
@@ -361,8 +361,8 @@ namespace GameDataIO
         const ICEList* GetICEListPtr() const { return mpICEList; }
         void Construct(s32 liEventId, const ICEList* lpList, bool lbFailFlag)
         {
-            miEventId = liEventId; mpReceiverQueue = 0; miPoolId = 5;
-            mId = 0x7DDFC0102EE70838ull; meType = static_cast<EAssetSet>(3); mbFailFlag = lbFailFlag;
+            // DWARF BrnGameDataEvents.h:96: the base Construct, as the request builders do.
+            GameDataAssetEvent::Construct(0, liEventId, 5, 0x7DDFC0102EE70838ull, static_cast<EAssetSet>(3), lbFailFlag);
             mpICEList = lpList;
         }
     private:
@@ -374,8 +374,8 @@ namespace GameDataIO
         const WheelList* GetWheelListPtr() const { return mpWheelList; }
         void Construct(s32 liEventId, const WheelList* lpList, bool lbFailFlag)
         {
-            miEventId = liEventId; mpReceiverQueue = 0; miPoolId = 5;
-            mId = 0xCF5D625701228838ull; meType = static_cast<EAssetSet>(3); mbFailFlag = lbFailFlag;
+            // DWARF BrnGameDataEvents.h:96: the base Construct, as the request builders do.
+            GameDataAssetEvent::Construct(0, liEventId, 5, 0xCF5D625701228838ull, static_cast<EAssetSet>(3), lbFailFlag);
             mpWheelList = lpList;
         }
     private:
@@ -387,8 +387,8 @@ namespace GameDataIO
         const ChallengeList* GetFreeburnChallengeListPtr() const { return mpChallengeList; }
         void Construct(s32 liEventId, const ChallengeList* lpList, bool lbFailFlag)
         {
-            miEventId = liEventId; mpReceiverQueue = 0; miPoolId = 5;
-            mId = 0x5AF30CD3F949F838ull; meType = static_cast<EAssetSet>(3); mbFailFlag = lbFailFlag;
+            // DWARF BrnGameDataEvents.h:96: the base Construct, as the request builders do.
+            GameDataAssetEvent::Construct(0, liEventId, 5, 0x5AF30CD3F949F838ull, static_cast<EAssetSet>(3), lbFailFlag);
             mpChallengeList = lpList;
         }
     private:

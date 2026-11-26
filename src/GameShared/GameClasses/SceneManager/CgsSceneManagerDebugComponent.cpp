@@ -21,7 +21,7 @@
 #include <vectorintrinsics.h>
 #include <cmath>
 #include <cstring>
-
+#define CGS_ARTIST_CGSSCENEMANAGERDEBUGCOMPONENT_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerDebugComponent.cpp"
 // CgsSceneManager::SceneManagerDebugComponent -- GetName, DrawPrimitives and the collision-volume
 // draw it drives.
 
@@ -130,7 +130,7 @@ namespace CgsSceneManager
     // triangle-test branch; it stores the current camera position only when that test is off.
     void SceneManagerDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
     {
-        CGS_ASSERT(lpRender != NULL, "lpDisplay != NULL");
+        CGS_ASSERT_AT(lpRender != NULL, "lpDisplay != NULL", CGS_ARTIST_CGSSCENEMANAGERDEBUGCOMPONENT_FILE, 193);
 
         if (mbDrawCachedTriangles)
             DrawCachedObjectTriangles(lpRender);
@@ -496,7 +496,7 @@ namespace CgsSceneManager
             break;
 
             default:
-                CGS_FAIL("Collision volume very confused about what type it is... corrupted?");
+                CGS_FAIL_AT("Collision volume very confused about what type it is... corrupted?", CGS_ARTIST_CGSSCENEMANAGERDEBUGCOMPONENT_FILE, 596);
                 break;
         }
     }

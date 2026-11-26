@@ -3,7 +3,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // ConvertUtf8CharToUtf16Char
 #include "rw/rwcore_structs.h"                          // rw::IResourceAllocator
-
+#define CGS_ARTIST_CGSFONT_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fonts\\CgsFont.cpp"
 // CgsResource::Font glyph lookup. Faithful ports of the X360 ARTIST bodies:
 //   FindFontChar          0x827E6D40  (hash + binary search over the bucket)
 //   GetFontChar(CgsUtf8*) 0x827EC588  (UTF-8 -> UTF-16, then FindFontChar + fallback)
@@ -128,7 +128,7 @@ namespace CgsResource
     // queued line (newlines render as gaps in the scrolling ribbon).
     float Font::GetStringWidthIgnoringNewlines(const CgsUtf8* lpUtf8String) const
     {
-        CGS_ASSERT(lpUtf8String != 0, "Invalid string pointer");   // CgsFont.cpp:128
+        CGS_ASSERT_AT(lpUtf8String != 0, "Invalid string pointer", CGS_ARTIST_CGSFONT_FILE, 128);   // CgsFont.cpp:128
         if (lpUtf8String == 0 || *lpUtf8String == 0)
             return 0.0f;
 

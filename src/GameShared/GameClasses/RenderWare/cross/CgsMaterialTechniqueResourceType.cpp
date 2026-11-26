@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h" // renderengine::BlendState::GetParameters
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"          // ShaderConstantsExternal::HasShaderConstant
-
+#define CGS_ARTIST_CGSMATERIALTECHNIQUERESOURCETYPE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsMaterialTechniqueResourceType.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::MaterialTechniqueResourceType::FixDown          @ 0x828A8740
 //   CgsResource::MaterialTechniqueResourceType::FixUp            @ 0x828A8770
@@ -159,9 +159,9 @@ namespace CgsResource
         SerialisedMaterialTechnique* const lpTechnique =
             static_cast<SerialisedMaterialTechnique*>(lpResource);
 
-        CGS_ASSERT(lpTechnique->muMaterialState != 0, "lpMaterial->mpMaterialState");
+        CGS_ASSERT_AT(lpTechnique->muMaterialState != 0, "lpMaterial->mpMaterialState", CGS_ARTIST_CGSMATERIALTECHNIQUERESOURCETYPE_FILE, 266);
         const u32* lpuMaterialState = PointerFromU32<const u32>(lpTechnique->muMaterialState);
-        CGS_ASSERT(lpuMaterialState[0] != 0, "lpMaterial->mpMaterialState->mpBlendState"); // u32 slot @+0
+        CGS_ASSERT_AT(lpuMaterialState[0] != 0, "lpMaterial->mpMaterialState->mpBlendState", CGS_ARTIST_CGSMATERIALTECHNIQUERESOURCETYPE_FILE, 267); // u32 slot @+0
         if (lpuMaterialState[0] == 0)
         {
             return;   // same gate: the blend state never arrived

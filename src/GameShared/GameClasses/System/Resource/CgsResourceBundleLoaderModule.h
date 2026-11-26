@@ -56,7 +56,7 @@ public:
     };
 
     // ARTIST827DD270: embedded jobs construct normally; the cache starts unconstructed.
-    BundleLoaderModule() : mStreamJob(0) { mPoolReceiveQueueCache.MarkUnconstructed(); }
+    BundleLoaderModule() : mStreamJob(0) {}   // ARTIST 0x827DD270 stores the queue flag once (its own ctor)
     static const u32 KU_SECONDARY_STREAM_BUFFER_SIZE = 0x80000;
     void Construct();
     virtual void Construct(const InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,

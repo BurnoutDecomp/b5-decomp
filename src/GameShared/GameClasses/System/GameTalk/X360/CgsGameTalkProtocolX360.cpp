@@ -5,7 +5,7 @@
 
 #include <cstring>   // strlen
 #include <xtl.h>
-
+#define CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp"
 // =====================================================================================
 // CgsGameTalk::GameTalkProtocol -- Xbox 360 GameTalk transport backend.
 //   Reconstructed from BURNOUT_X360_ARTIST.XEX. Source file (from the asm asserts):
@@ -104,7 +104,7 @@ void GameTalkProtocol::Construct(bool /*lbInitialiseNetwork*/, s32 liPort)
     if (liXNetError)
     {
         gDebugStream << "XNetStartup failed, liError " << liXNetError << "\n";
-        CGS_ASSERT(liXNetError == 0, "XNetStartup failed");
+        CGS_ASSERT_AT(liXNetError == 0, "XNetStartup failed", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 90);
     }
 
     WSADATA lWinsockData;
@@ -112,15 +112,15 @@ void GameTalkProtocol::Construct(bool /*lbInitialiseNetwork*/, s32 liPort)
     if (liWsaError)
     {
         gDebugStream << "WSAStartup failed (error " << liWsaError << ").\n";
-        CGS_ASSERT(liWsaError == 0, "WSAStartup failed");
+        CGS_ASSERT_AT(liWsaError == 0, "WSAStartup failed", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 101);
     }
 
     if (lWinsockData.wVersion != static_cast<short>(KU_WINSOCK_VERSION))
     {
         gDebugStream << "Failed to get proper version of Winsock, got "
                      << (lWinsockData.wVersion & 0xFF) << "." << ((lWinsockData.wVersion >> 8) & 0xFF) << "\n";
-        CGS_ASSERT(lWinsockData.wVersion == static_cast<short>(KU_WINSOCK_VERSION),
-                   "Wrong Winsock version");
+        CGS_ASSERT_AT(lWinsockData.wVersion == static_cast<short>(KU_WINSOCK_VERSION),
+                   "Wrong Winsock version", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 107);
     }
 
     sInactivityTimer.Prepare(KF_DEFAULT_UPDATE_STEP);
@@ -138,7 +138,7 @@ void GameTalkProtocol::SetListeningMode(s32 liPort)
     if (meConnectionState == E_CONNECTIONSTATE_OBTAINED_IP && closesocket(mClientSocket))
     {
         gDebugStream << "Failed to close active client socket (error " << WSAGetLastError() << ").\n";
-        CGS_FAIL("Failed to close active client socket");
+        CGS_FAIL_AT("Failed to close active client socket", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 374);
     }
 
     sInactivityTimer.Reset();
@@ -155,33 +155,33 @@ void GameTalkProtocol::SetListeningMode(s32 liPort)
     if (mListeningSocket == KI_INVALID_SOCKET)
     {
         gDebugStream << "Failed to create listening socket (error " << WSAGetLastError() << ").\n";
-        CGS_FAIL("Failed to create listening socket");
+        CGS_FAIL_AT("Failed to create listening socket", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 401);
     }
 
     char lcReuse = 1;
     if (setsockopt(mListeningSocket, KI_SOL_SOCKET, KI_SO_REUSEADDR, &lcReuse, 1))
     {
         gDebugStream << "Failed to reuse listening socket address (error " << WSAGetLastError() << ").\n";
-        CGS_FAIL("Failed to reuse listening socket address");
+        CGS_FAIL_AT("Failed to reuse listening socket address", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 410);
     }
 
     if (bind(mListeningSocket, reinterpret_cast<const sockaddr*>(&lAddress), KI_SOCKADDR_LEN) == KI_INVALID_SOCKET)
     {
         gDebugStream << "Failed to bind listening socket (error " << WSAGetLastError() << ").\n";
-        CGS_FAIL("Failed to bind listening socket");
+        CGS_FAIL_AT("Failed to bind listening socket", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 417);
     }
 
     if (listen(mListeningSocket, KI_LISTEN_BACKLOG) == KI_INVALID_SOCKET)
     {
         gDebugStream << "Listening to client failed.\n";
-        CGS_FAIL("Listening to client failed");
+        CGS_FAIL_AT("Listening to client failed", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 423);
     }
 
     unsigned long luNonBlocking = 1;
     if (ioctlsocket(mListeningSocket, KI_FIONBIO, &luNonBlocking))
     {
         gDebugStream << "Failed to set non-blocking listening socket (error " << WSAGetLastError() << ").\n";
-        CGS_FAIL("Failed to set non-blocking listening socket");
+        CGS_FAIL_AT("Failed to set non-blocking listening socket", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 433);
     }
 
     meConnectionState = E_CONNECTIONSTATE_OBTAINING_IP; // stw 0,0x4014(this)
@@ -211,7 +211,7 @@ bool GameTalkProtocol::AcceptIncomingConnection()
         {
             gDebugStream << "Failed to close listening socket after establishing connection (error "
                          << WSAGetLastError() << ").\n";
-            CGS_FAIL("Failed to close listening socket after connecting");
+            CGS_FAIL_AT("Failed to close listening socket after connecting", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 332);
         }
 
         meConnectionState = E_CONNECTIONSTATE_OBTAINED_IP; // a1[4101] = 1
@@ -243,7 +243,7 @@ bool GameTalkProtocol::Connect()
         }
         else
         {
-            CGS_FAIL("Invalid connection state");
+            CGS_FAIL_AT("Invalid connection state", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 285);
         }
     }
 
@@ -284,7 +284,7 @@ bool GameTalkProtocol::Send(void* lpaBuffer, s32 liMsgSize)
         lSocketDescriptors.fd_array[0] = mClientSocket;
         if (!select(0, 0, &lSocketDescriptors, 0, 0))
         {
-            CGS_FAIL("select(0, NULL, &lSocketDescriptors, NULL, NULL)");
+            CGS_FAIL_AT("select(0, NULL, &lSocketDescriptors, NULL, NULL)", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 524);
         }
     }
 
@@ -298,7 +298,7 @@ bool GameTalkProtocol::Send(void* lpaBuffer, s32 liMsgSize)
     if (WSAGetLastError() == KI_WSAENOTCONN)
     {
         gDebugStream << "Attempted to send data when not connected (error " << WSAGetLastError() << ").\n";
-        CGS_FAIL("Attempted to send data when not connected");
+        CGS_FAIL_AT("Attempted to send data when not connected", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 509);
     }
     return false;
 }
@@ -331,7 +331,7 @@ void GameTalkProtocol::Poll()
         else if (WSAGetLastError() == KI_WSAENOTCONN)
         {
             gDebugStream << "Attempted to receive data when not connected (error " << WSAGetLastError() << ").\n";
-            CGS_FAIL("Attempted to receive data when not connected");
+            CGS_FAIL_AT("Attempted to receive data when not connected", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 571);
         }
     }
 }
@@ -342,8 +342,8 @@ void GameTalkProtocol::Poll()
 // -------------------------------------------------------------------------------------
 void GameTalkProtocol::DigestReceivedData(const char* lpacReceivedBytes, u32 luNumReceivedBytes)
 {
-    CGS_ASSERT((luNumReceivedBytes + muBufferMsgSize) < static_cast<u32>(KI_GAMETALK_BUFFER_SIZE),
-               "(luNumReceivedBytes + muBufferMsgSize) < KI_GAMETALK_BUFFER_SIZE");
+    CGS_ASSERT_AT((luNumReceivedBytes + muBufferMsgSize) < static_cast<u32>(KI_GAMETALK_BUFFER_SIZE),
+               "(luNumReceivedBytes + muBufferMsgSize) < KI_GAMETALK_BUFFER_SIZE", CGS_ARTIST_CGSGAMETALKPROTOCOLX360_FILE, 598);
 
     XMemCpy(&macReceiveBuffer[muBufferMsgSize], lpacReceivedBytes, luNumReceivedBytes);
     muBufferMsgSize += luNumReceivedBytes;

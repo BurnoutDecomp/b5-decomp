@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (RenderDropShadow's two console asserts)
 
 #include <cmath>    // fabsf
-
+#define CGS_ARTIST_CGSFONTRENDERER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Font/CgsFontRenderer.cpp"
 // CgsGraphics::TextObject + TextRenderer bodies (faithful X360 ARTIST ports):
 //   TextObject::Construct       0x827EEE70
 //   TextRenderer::RenderString  0x82801998
@@ -106,7 +106,7 @@ namespace CgsGraphics
         const CgsUtf8* lpCursor = mpUtf8String;
         u32 luNumLines = 1;
 
-        CGS_ASSERT(lppLine != 0, "lppLine != NULL");
+        CGS_ASSERT_AT(lppLine != 0, "lppLine != NULL", CGS_ARTIST_CGSFONTRENDERER_FILE, 176);
         *lppLine = lpCursor;
 
         const CgsResource::Font* lpFont = mpFont.operator->();
@@ -433,7 +433,7 @@ namespace CgsGraphics
         const Im2dVertex* lpInVert = mapaVertices[leType];
         const u32 luVertexCount = mauVertexCount[leType];
 
-        CGS_ASSERT(lpInVert != 0, "lpInVert");
+        CGS_ASSERT_AT(lpInVert != 0, "lpInVert", CGS_ARTIST_CGSFONTRENDERER_FILE, 1513);
         if (lpInVert == 0)
             return;
 
@@ -444,7 +444,7 @@ namespace CgsGraphics
             Im3dVertex* const lpOut3d = mpIm3dRenderBuffer->RenderStart(luVertexCount);
             if (lpOut3d == 0)
                 return;
-            CGS_ASSERT(luVertexCount < KU_MAX_VERTICES, "luVertexCount<KU_MAX_VERTICES");
+            CGS_ASSERT_AT(luVertexCount < KU_MAX_VERTICES, "luVertexCount<KU_MAX_VERTICES", CGS_ARTIST_CGSFONTRENDERER_FILE, 1523);
             for (u32 luI = 0; luI < luVertexCount; ++luI)
             {
                 lpOut3d[luI].mv3Pos = rw::math::vpu::Vector3(rw::math::vpu::Vector4(
@@ -461,7 +461,7 @@ namespace CgsGraphics
         if (lpOutVert == 0)
             return;   // the stream is full (RenderStart's graceful-fail path)
 
-        CGS_ASSERT(luVertexCount < KU_MAX_VERTICES, "luVertexCount < KU_MAX_VERTICES");
+        CGS_ASSERT_AT(luVertexCount < KU_MAX_VERTICES, "luVertexCount < KU_MAX_VERTICES", CGS_ARTIST_CGSFONTRENDERER_FILE, 1545);
 
         for (u32 luI = 0; luI < luVertexCount; ++luI)
         {

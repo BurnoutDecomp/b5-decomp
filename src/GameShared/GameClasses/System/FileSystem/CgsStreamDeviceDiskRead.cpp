@@ -391,10 +391,10 @@ namespace CgsFileSystem
 
 
 
-        CGS_ASSERT_STREAM(meStatus == E_STATUS_OPEN, "Attempting to service a none-open stream\n");
+        CGS_ASSERT_STREAM_AT(meStatus == E_STATUS_OPEN, "Attempting to service a none-open stream\n", CGS_ARTIST_FILE, 410);
 
 
-        CGS_ASSERT_STREAM(maBlocks[miInputBlock].muFlags == KU_RSBFLAG_EMPTY, "Should never be loading into a none-empty block\n");
+        CGS_ASSERT_STREAM_AT(maBlocks[miInputBlock].muFlags == KU_RSBFLAG_EMPTY, "Should never be loading into a none-empty block\n", CGS_ARTIST_FILE, 413);
 
         ReadStreamBlock& lrBlock = maBlocks[miInputBlock];
         lrBlock.muFilePos = muInputPosition;
@@ -873,8 +873,8 @@ namespace CgsFileSystem
 
 
 
-        CGS_ASSERT_STREAM(meStatus == E_STATUS_OPENING, "Incorrect stream state\n");
-        CGS_ASSERT_STREAM(miPendingOperationCount > 0, "Received stream event with 0 pending operations\n");
+        CGS_ASSERT_STREAM_AT(meStatus == E_STATUS_OPENING, "Incorrect stream state\n", CGS_ARTIST_FILE, 908);
+        CGS_ASSERT_STREAM_AT(miPendingOperationCount > 0, "Received stream event with 0 pending operations\n", CGS_ARTIST_FILE, 909);
 
         if (liResult == -2)
         {

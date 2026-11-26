@@ -753,7 +753,7 @@ namespace CgsResource
             else if (liTag == 18)
                 AddCloseReadStreamRequest(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent));
             else
-                CGS_FAIL("Unexpected request from bundle loader\n");
+                CGS_FAIL_AT("Unexpected request from bundle loader\n", CGS_ARTIST_FILE, 858);
             const CgsModule::Event* lpNext = 0;
             liTag = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
@@ -1087,7 +1087,7 @@ namespace CgsResource
             if (liId == 10 || liId == 13)   // CreatePool / DeletePool memory requests
                 lpMemQ->AddEvent(lpEvent, 1, liSize);
             else
-                CGS_FAIL("Unexpected request from bundle loader\n");
+                CGS_FAIL_AT("Unexpected request from bundle loader\n", CGS_ARTIST_FILE, 913);
 
             const CgsModule::Event* lpNext = 0;
             liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);

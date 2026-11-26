@@ -282,12 +282,12 @@ u16 EntityManager::AddEntity(EntityId lEntityId)
 {
     const s32 liIndex = mEntityPool.AllocateObject();
 
-    CGS_ASSERT(liIndex < KI_MAX_NUM_ENTITIES,
-               "Out of bounds index coming back from EntityPool.AllocateObject: ");
+    CGS_ASSERT_AT(liIndex < KI_MAX_NUM_ENTITIES,
+               "Out of bounds index coming back from EntityPool.AllocateObject: ", CGS_ARTIST_FILE, 133);
 
     if (liIndex == -1)
     {
-        CGS_FAIL("Failed to allocate entity ");
+        CGS_FAIL_AT("Failed to allocate entity ", CGS_ARTIST_FILE, 146);
         return KU16_INVALID_ENTITY_INDEX;
     }
 
@@ -405,7 +405,7 @@ s32 EntityManager::AddVolumeInstance(VolumeInstanceId lVolumeInstanceId,
     const s32 liVolumeInstanceIndex = mVolumeInstancePool.AllocateObject();   // cpp:191
     if (liVolumeInstanceIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_FAIL("liVolumeInstanceIndex != -1");                    // cpp:218
+        CGS_FAIL_AT("liVolumeInstanceIndex != -1", CGS_ARTIST_FILE, 200);                    // cpp:218
         return liVolumeInstanceIndex;
     }
 
@@ -430,10 +430,10 @@ s32 EntityManager::AddVolumeInstance(VolumeInstanceId lVolumeInstanceId,
     // cpp:198 -- the VolumeManager pool index for this volume id.
     const s32 liVolumeIndex = mpVolumeManager->GetVolumeIndexByID(lVolumeId);
 
-    CGS_ASSERT(liVolumeIndex != KI_INVALID_VOLUME_INDEX,
-               "liVolumeIndex != KI_INVALID_VOLUME_INDEX");                  // cpp:200
-    CGS_ASSERT(lu16EntityIndex != KU16_INVALID_ENTITY_INDEX,
-               "lu16EntityIndex != KU16_INVALID_ENTITY_INDEX");              // cpp:201
+    CGS_ASSERT_AT(liVolumeIndex != KI_INVALID_VOLUME_INDEX,
+               "liVolumeIndex != KI_INVALID_VOLUME_INDEX", CGS_ARTIST_FILE, 201);                  // cpp:200
+    CGS_ASSERT_AT(lu16EntityIndex != KU16_INVALID_ENTITY_INDEX,
+               "lu16EntityIndex != KU16_INVALID_ENTITY_INDEX", CGS_ARTIST_FILE, 218);              // cpp:201
 
     lrVolumeInstance.mUserID                     = lVolumeInstanceId;
     lrVolumeInstance.mu16EntityIndex             = lu16EntityIndex;

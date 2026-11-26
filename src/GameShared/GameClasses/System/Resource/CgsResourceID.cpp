@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStreamBase::operator<<(const char*)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"        // CgsCore::SPrintf
-
+#define CGS_ARTIST_CGSRESOURCEID_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceID.cpp"
 // CgsResource::ID::HashString -- faithful to ARTIST 0x828D84A8: a reflected CRC32 (polynomial 0xEDB88320,
 // init 0xFFFFFFFF, final bitwise-NOT) over the string LOWERCASED (A-Z -> a-z first). The X360 uses a
 // precomputed table (dword_820F71F0 = the standard reflected CRC32 table); the bit-by-bit form here is
@@ -19,7 +19,7 @@ namespace CgsResource
 {
     u64 ID::HashString(const u8* lpString)
     {
-        CGS_ASSERT(lpString != 0, "lpcString != NULL");
+        CGS_ASSERT_AT(lpString != 0, "lpcString != NULL", CGS_ARTIST_CGSRESOURCEID_FILE, 104);
 
         if (*lpString == 0)
             return 0;

@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"  // Pool::BeginDefragmentation / GetHeapAlignment, AllocListSet
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint / gxMessageFilterFlags
-
+#define CGS_ARTIST_CGSINTELLIFRAGPOOLMODULESTATE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsIntelliFragPoolModuleState.cpp"
 // The intelligent (linear-merge) defragmentation strategy: Begin, RunDefragAlgorithm,
 // RunPoolDefragmentation and Update. Base private state (mpPool / miMaxToMove) is reached through
 // the base's public GetPool()/GetHeapAlignment/SetMaxToMove accessors rather than raw offsets.
@@ -28,7 +28,7 @@ namespace CgsResource
     {
         BaseDefragPoolModuleState::Begin(lpParams);
 
-        CGS_ASSERT(meState == E_STATE_IDLE, "Can not defrag unless in idle state\n");
+        CGS_ASSERT_AT(meState == E_STATE_IDLE, "Can not defrag unless in idle state\n", CGS_ARTIST_CGSINTELLIFRAGPOOLMODULESTATE_FILE, 63);
 
         meState       = E_STATE_START_DEFRAGMENTING;
         SetMaxToMove(0x200000);                  // cap one pass at 2MB (the base's miMaxToMove)
@@ -77,7 +77,7 @@ namespace CgsResource
         for (u32 luIndex = 0; luIndex < luNumRequests; )
         {
             // Tripwire: a merge must never run off the end of the node list.
-            CGS_ASSERT(liNode <= liLastNode, "Gone past end of heap\n");
+            CGS_ASSERT_AT(liNode <= liLastNode, "Gone past end of heap\n", CGS_ARTIST_CGSINTELLIFRAGPOOLMODULESTATE_FILE, 222);
 
             u32 luAlignedSize = (lpRequest->muSize + luAlignment - 1) & luAlignMask;
 

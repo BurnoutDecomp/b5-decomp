@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsSpatialPartition.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
-
+#define CGS_ARTIST_CGSSPATIALPARTITION_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\SpatialPartitionModule/SpatialPartitions/CgsSpatialPartition.cpp"
 // CgsSceneManager::SpatialPartition member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. The partition owns a fixed pool of broad-phase entity
 // links (X360 this + 0x80, 8-byte stride) and a parallel pool of bounding spheres
@@ -43,7 +43,7 @@ void SpatialPartition::AddEntity(u16 lu16Id, u32 lxTypeFlags, Vector3 lPosition,
 SpatialPartitionEntityLink*
 SpatialPartition::AllocEntity(u16 lu16Id, u32 lxTypeFlags, Vector3 lPosition, float32_t lfRadius)
 {
-    CGS_ASSERT(lu16Id < KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES");
+    CGS_ASSERT_AT(lu16Id < KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES", CGS_ARTIST_CGSSPATIALPARTITION_FILE, 121);
     if (lu16Id >= KI_MAX_NUM_ENTITIES)
     {
         return 0;

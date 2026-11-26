@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // CalcTextWidth
 
 #include <cmath>
-
+#define CGS_ARTIST_CGSWINDOW_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/UI/CgsWindow.cpp"
 // CgsDev::DebugUI::Window -- the debug-window base: caption/flags/transparency, the screen rect,
 // the intrusive list link, and the update/render virtual protocol the DebugUI window stack drives.
 //
@@ -70,7 +70,7 @@ namespace CgsDev
 
             if ((mxFlags & KX_FLAGNOCAPTION) == 0)
             {
-                CGS_ASSERT(mpcCaption, "mpcCaption");
+                CGS_ASSERT_AT(mpcCaption, "mpcCaption", CGS_ARTIST_CGSWINDOW_FILE, 87);
 
                 const f32 lfCaptionWidth = CalcCaptionWidth();
                 if (mfWidth < lfCaptionWidth)
@@ -203,7 +203,7 @@ namespace CgsDev
             if ((mxFlags & KX_FLAGNOCAPTION) != 0)
                 return 0.0f;
 
-            CGS_ASSERT(GetCaption(), "GetCaption()");
+            CGS_ASSERT_AT(GetCaption(), "GetCaption()", CGS_ARTIST_CGSWINDOW_FILE, 483);
 
             return Get2DRenderer()->CalcTextWidth(GetCaption(), GetMetrics().mfTextSize);
         }

@@ -39,7 +39,7 @@ namespace CgsGraphics
 {
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRendererAddProgram.inl"
-
+#define CGS_ARTIST_CGSIM3D_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\ImmediateMode/CgsIm3d.cpp"
 template <typename V>
 void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
                               const void* const* lapVertexProgramBinary,
@@ -320,7 +320,7 @@ void Im3d::SaveMaskShaderConstants(const BasicColouredTexturedVertex* lpVertices
 
 void Im3d::SetMaskPixelShaderState()
 {
-    CGS_ASSERT(mu32NumMasks > 0, "mu32NumMasks > 0");
+    CGS_ASSERT_AT(mu32NumMasks > 0, "mu32NumMasks > 0", CGS_ARTIST_CGSIM3D_FILE, 375);
     Im3dMask& lrMask = maMask[(mi8CurrentProgram - 1) / 2];
     Im3dMask::Im3dMaskLayer& lrLayer = lrMask.maPixelMaskHandles[mu32NumMasks - 1];
     renderengine::FloatShaderStateIterator lIterator;

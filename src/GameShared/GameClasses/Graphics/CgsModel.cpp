@@ -309,7 +309,7 @@ namespace ModelInstanceCollector
                                  u8 lu8PreZList,
                                  bool lbEnableZOnlyRenderPath)
     {
-        CGS_ASSERT(!sbIsDuringInstanceCollection, "!sbIsDuringInstanceCollection");
+        CGS_ASSERT_AT(!sbIsDuringInstanceCollection, "!sbIsDuringInstanceCollection", KAC_ARTIST_ASSERT_CPP, 668);
 
         spDispatchFrame                 = lpDispatchFrame;
         spCameraViewProjection          = lpCameraViewProjection;
@@ -335,7 +335,7 @@ namespace ModelInstanceCollector
                      const rw::math::vpu::Matrix44Affine* lpMatrix,
                      Model::State leLodState)
     {
-        CGS_ASSERT(sbIsDuringInstanceCollection, "sbIsDuringInstanceCollection");
+        CGS_ASSERT_AT(sbIsDuringInstanceCollection, "sbIsDuringInstanceCollection", KAC_ARTIST_ASSERT_CPP, 689);
 
         ModelInstanceInfo& lrInfo =
             saInstanceRenderingBufferArray[siInstanceRenderingBufferLength];

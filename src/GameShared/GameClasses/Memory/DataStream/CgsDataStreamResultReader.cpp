@@ -22,17 +22,17 @@ namespace CgsMemory
         // negation (== 0).
         if (liResultSize != 0)
         {
-            CGS_ASSERT((reinterpret_cast<uintptr_t>(lpResultBuffer) % 128) == 0,
-                       "Result buffer MUST be on a 128 byte boundary\n");
+            CGS_ASSERT_AT((reinterpret_cast<uintptr_t>(lpResultBuffer) % 128) == 0,
+                       "Result buffer MUST be on a 128 byte boundary\n", CGS_ARTIST_FILE, 46);
         }
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpDataBuffer) % 128) == 0,
-                   "Data buffer MUST be on a 128 byte boundary\n");
-        CGS_ASSERT((liResultBufferSize % 128) == 0,
-                   "Result buffer MUST be a multiple of 128 bytes\n");
-        CGS_ASSERT((liDataBufferSize % 128) == 0,
-                   "Data buffer MUST be a multiple of 128 bytes\n");
-        CGS_ASSERT((liResultSize % 128) == 0,
-                   "Result size MUST be a multiple of 128 bytes\n");
+        CGS_ASSERT_AT((reinterpret_cast<uintptr_t>(lpDataBuffer) % 128) == 0,
+                   "Data buffer MUST be on a 128 byte boundary\n", CGS_ARTIST_FILE, 47);
+        CGS_ASSERT_AT((liResultBufferSize % 128) == 0,
+                   "Result buffer MUST be a multiple of 128 bytes\n", CGS_ARTIST_FILE, 48);
+        CGS_ASSERT_AT((liDataBufferSize % 128) == 0,
+                   "Data buffer MUST be a multiple of 128 bytes\n", CGS_ARTIST_FILE, 49);
+        CGS_ASSERT_AT((liResultSize % 128) == 0,
+                   "Result size MUST be a multiple of 128 bytes\n", CGS_ARTIST_FILE, 50);
 
         mbStreaming = false;                    // *(this+32) = 0
 
@@ -101,7 +101,7 @@ namespace CgsMemory
     // reader's ReadResult pass observes the latched state.
     void DataStreamResultReader::End()
     {
-        CGS_ASSERT(mbStreaming, "Not streaming\n");
+        CGS_ASSERT_AT(mbStreaming, "Not streaming\n", CGS_ARTIST_FILE, 137);
 
         const u64 luStatus     = mEncodedStatus.GetValue();
         const u32 luNumResults = static_cast<u32>(luStatus & KU_NUM_RESULTS_MASK);

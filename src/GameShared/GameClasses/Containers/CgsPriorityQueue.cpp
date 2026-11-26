@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Containers/CgsPriorityQueue.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsPriorityQueue.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
-
+#define CGS_ARTIST_CGSPRIORITYQUEUE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\CgsPriorityQueue.cpp"
 namespace CgsContainers
 {
 // Inlined BundleLoaderModule::Construct828EBAF8 (load and unload queues).
@@ -49,7 +49,7 @@ void BasePriorityQueue::RemoveEntry(u32 luEntryIndex)
     }
 
 NotFound:
-    CGS_ASSERT(luIter < muNumEntries, "Entry not found in queue\n");
+    CGS_ASSERT_AT(luIter < muNumEntries, "Entry not found in queue\n", CGS_ARTIST_CGSPRIORITYQUEUE_FILE, 84);
 
     for (luIter = luIndex + 1; luIter < muNumEntries; ++luIter)
     {

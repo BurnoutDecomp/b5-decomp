@@ -380,7 +380,7 @@ void BundleLoaderModule::ProcessReceiverQueue(
 
 
 
-            CGS_FAIL_STREAM("Unexpected event received\n");
+            CGS_FAIL_STREAM_AT("Unexpected event received\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 379);
         }
         const CgsModule::Event* lpNext = 0;
         liTag = mReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
@@ -554,7 +554,7 @@ void BundleLoaderModule::ProcessPoolResponses(BundleLoaderIO::OutputBuffer*)
 
 
 
-                    CGS_FAIL_STREAM("Could not store loaded bundle info - out of bundles. Should have caught this during load\n");
+                    CGS_FAIL_STREAM_AT("Could not store loaded bundle info - out of bundles. Should have caught this during load\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 553);
                 ++miNumLoadedBundles;
             }
         }
@@ -600,7 +600,7 @@ void BundleLoaderModule::ProcessBundleHeader() // 828D7A90
 
 
 
-    CGS_ASSERT_STREAM(mCurrentBundle.muPlatform == BundleV2::KU_PLATFORM, "Invalid platform");
+    CGS_ASSERT_STREAM_AT(mCurrentBundle.muPlatform == BundleV2::KU_PLATFORM, "Invalid platform", CGS_ARTIST_BUNDLE_LOADER_FILE, 599);
 
 
 
@@ -608,11 +608,11 @@ void BundleLoaderModule::ProcessBundleHeader() // 828D7A90
 
 
 
-    CGS_ASSERT_STREAM(mCurrentBundle.muVersion == BundleV2::KU_VERSION, "Bundle version is out of date\n");
+    CGS_ASSERT_STREAM_AT(mCurrentBundle.muVersion == BundleV2::KU_VERSION, "Bundle version is out of date\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 607);
 
 
-    CGS_ASSERT_STREAM(mCurrentBundle.muResourceEntriesCount <= static_cast<u32>(miMaxResourcesPerBundle), "Bundle contains more resources than maximum defined in init options\n");
-    CGS_ASSERT_STREAM(mCurrentBundle.mauResourceDataOffset[0] <= static_cast<u32>(miBundleHeaderBufferSize), "Bundle header is larger than buffer size provided\n");
+    CGS_ASSERT_STREAM_AT(mCurrentBundle.muResourceEntriesCount <= static_cast<u32>(miMaxResourcesPerBundle), "Bundle contains more resources than maximum defined in init options\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 610);
+    CGS_ASSERT_STREAM_AT(mCurrentBundle.mauResourceDataOffset[0] <= static_cast<u32>(miBundleHeaderBufferSize), "Bundle header is larger than buffer size provided\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 611);
 }
 void BundleLoaderModule::ProcessBundleEntryList(void* lpOutputBuffer) // 828FAF58
 {
@@ -654,7 +654,7 @@ void BundleLoaderModule::ProcessBundleEntryList(void* lpOutputBuffer) // 828FAF5
 
 
 
-    CGS_ASSERT(lpOutputBuffer, "lpOutput");
+    CGS_ASSERT_AT(lpOutputBuffer, "lpOutput", CGS_ARTIST_BUNDLE_LOADER_FILE, 653);
     char lacName[256];
     CGS_ASSERT(std::strlen(mLoadRequest.macFileName) < sizeof(lacName), "String too long");
     std::strncpy(lacName, mLoadRequest.macFileName, sizeof(lacName));
@@ -1035,7 +1035,7 @@ bool BundleLoaderModule::StreamHeaderFunc() // 829042A0
 
 
 
-    CGS_ASSERT_STREAM(std::memcmp(mpcHeaderBuffer, "bnd2", 4) == 0, mLoadRequest.GetFileName() << " was an invalid bundle\n");
+    CGS_ASSERT_STREAM_AT(std::memcmp(mpcHeaderBuffer, "bnd2", 4) == 0, mLoadRequest.GetFileName() << " was an invalid bundle\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 1032);
     ProcessBundleHeader();
     return true;
 }
@@ -1549,7 +1549,7 @@ bool BundleLoaderModule::StreamDoneFunc(void* lpOutputBuffer) // 828FB178
 
 
 
-    CGS_ASSERT(lpOutputBuffer, "lpOutput");
+    CGS_ASSERT_AT(lpOutputBuffer, "lpOutput", CGS_ARTIST_BUNDLE_LOADER_FILE, 1544);
     Events::FixUpAndResolveResourceListRequest lRequest = Events::FixUpAndResolveResourceListRequest();
     lRequest.miPoolId = mAllocationResponse.miPoolId;
     lRequest.mListId = mAllocationResponse.mListId;
@@ -1972,7 +1972,7 @@ void BundleLoaderModule::SendPartialFixupRequest(void* lpOutputBuffer) // 828FBF
 
 
 
-    CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
+    CGS_ASSERT_AT(lpOutputBuffer, "lpOutputBuffer", CGS_ARTIST_BUNDLE_LOADER_FILE, 1969);
     Events::FixUpAndResolveResourceListRequest lRequest = Events::FixUpAndResolveResourceListRequest();
     lRequest.miPoolId = mAllocationResponse.miPoolId;
     lRequest.mListId = mAllocationResponse.mListId;

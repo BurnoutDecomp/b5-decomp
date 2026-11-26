@@ -148,7 +148,7 @@ namespace CgsDev
     // the CGS_ASSERT macro supplies THIS file/line instead.
     DebugManager::DebugManager()
     {
-        CGS_ASSERT(mpInstance == 0, "mpInstance == NULL");
+        CGS_ASSERT_AT(mpInstance == 0, "mpInstance == NULL", CGS_ARTIST_FILE, 107);
         mpInstance = this;
     }
 
@@ -196,7 +196,7 @@ namespace CgsDev
         {
             lpBuffer = AllocateMemoryResource(lpParameters->mpRwAllocator,
                                               static_cast<u32>(lpParameters->miPerfMonLogBufferSize), 16u);
-            CGS_ASSERT(lpBuffer != 0, "lpBuffer != NULL");
+            CGS_ASSERT_AT(lpBuffer != 0, "lpBuffer != NULL", CGS_ARTIST_FILE, 189);
             liLogBufferSize = lpParameters->miPerfMonLogBufferSize;
         }
 
@@ -444,7 +444,7 @@ namespace CgsDev
     // submenu, and retires the one-shot function registration.
     void DebugManager::ActivateComponent(DebugComponent* lpComponent)
     {
-        CGS_ASSERT(lpComponent, "lpComponent");
+        CGS_ASSERT_AT(lpComponent, "lpComponent", CGS_ARTIST_FILE, 899);
         if (!lpComponent)
             return;
         // FLAG: ARTIST 0x8283213C-0x82832160 guards the whole activation on "if (mbActive == 0)" --
@@ -515,7 +515,7 @@ namespace CgsDev
         const f32 lfLineHeight = lrMetrics.mfScreenBorderBottom;    // X360 UI+124
         const f32 lfX          = lrMetrics.mfScreenWidth * 0.33f;   // X360 UI+104 * 0.33
 
-        CGS_ASSERT(lfLowFramerate < lfHighFramerate, "lfLowFramerate < lfHighFramerate");
+        CGS_ASSERT_AT(lfLowFramerate < lfHighFramerate, "lfLowFramerate < lfHighFramerate", CGS_ARTIST_FILE, 529);
 
         const f32 lfRange    = (lfHighFramerate - lfLowFramerate) * 0.5f;
         const f32 lfMidpoint = lfLowFramerate + lfRange;
@@ -529,8 +529,8 @@ namespace CgsDev
         CgsCore::SPrintf(lacFramerate, KU_STACK_STRING_LENGTH,
                          lbIsRealtime ? "%d fps" : "%d fps & simulation not real time",
                          static_cast<s32>(lfFramerate + 0.5f));
-        CGS_ASSERT(std::strlen(lacFramerate) < KU_STACK_STRING_LENGTH,
-                   "strlen( lacFramerate ) < KU_STACK_STRING_LENGTH");
+        CGS_ASSERT_AT(std::strlen(lacFramerate) < KU_STACK_STRING_LENGTH,
+                   "strlen( lacFramerate ) < KU_STACK_STRING_LENGTH", CGS_ARTIST_FILE, 559);
         mBufferedRenderer.Draw2DText(lacFramerate, lfX,
                                      lrMetrics.mfScreenHeight - (lfLineHeight + 10.0f), 20.0f, luColour);
 
@@ -541,8 +541,8 @@ namespace CgsDev
 
         CgsCore::SPrintf(lacFramerate, KU_STACK_STRING_LENGTH, "%d fps %s",
                          static_cast<s32>(lfAverageFramerate + 0.5f), lpcAverageText);
-        CGS_ASSERT(std::strlen(lacFramerate) < KU_STACK_STRING_LENGTH,
-                   "strlen( lacFramerate ) < KU_STACK_STRING_LENGTH");
+        CGS_ASSERT_AT(std::strlen(lacFramerate) < KU_STACK_STRING_LENGTH,
+                   "strlen( lacFramerate ) < KU_STACK_STRING_LENGTH", CGS_ARTIST_FILE, 582);
         mBufferedRenderer.Draw2DText(lacFramerate, lfX,
                                      lrMetrics.mfScreenHeight - (lfLineHeight - 10.0f), 20.0f, luAverageColour);
 
@@ -638,8 +638,8 @@ namespace CgsDev
     void DebugManager::Render(const Matrix44& lViewProjection, Vector3 lCameraPosition,
                              CgsGraphics::Im3dRenderBuffer* lp3dRenderBuffer, CgsGraphics::Im2dRenderBuffer* lp2dRenderBuffer)
     {
-        CGS_ASSERT(mp3dRender != 0, "mp3dRender");
-        CGS_ASSERT(mp2dRender != 0, "mp2dRender");
+        CGS_ASSERT_AT(mp3dRender != 0, "mp3dRender", CGS_ARTIST_FILE, 379);
+        CGS_ASSERT_AT(mp2dRender != 0, "mp2dRender", CGS_ARTIST_FILE, 380);
 
         CGS_ASSERT(lp3dRenderBuffer != 0, "lpRenderBuffer != NULL");   // CgsDebug3DImmediateRender.h:282
         mp3dRender->SetRenderBuffer(lp3dRenderBuffer);
@@ -656,7 +656,7 @@ namespace CgsDev
     // console's.) lCameraPosition is carried for the components' distance culls.
     void DebugManager::RenderWorld(const Matrix44& lViewProjection, Vector3 lCameraPosition)
     {
-        CGS_ASSERT(mp3dRender != 0, "must call ConstructRenderer");
+        CGS_ASSERT_AT(mp3dRender != 0, "must call ConstructRenderer", CGS_ARTIST_FILE, 723);
 
         mp3dRender->Begin(lViewProjection, lCameraPosition);
         mBufferedRenderer.Dispatch3D(mp3dRender, true);

@@ -20,7 +20,7 @@ namespace CgsResource
         // CgsResourceHandle.h:93 (DWARF). The resource's identity hash, read from the
         // source pool entry. Out-of-line in the X360 ARTIST build (@0x828D8438); declared
         // here, defined in CgsResourceHandle.cpp.
-        ID GetResourceId() const;
+        ID GetResourceId() const;   SmallResource* GetResource() const { return static_cast<SmallResource*>(mpResourceMemory); }   // DWARF h:64 (Resource = SmallResource, h:59)
 
         // CgsResourceHandle.h:61 (DWARF Construct(ResourceHandle::Resource*, Entry*)); the
         // inline body sits at h:220-221. DecFIGS Pool::InitManagementData (PS3 0xCE3C5C) runs

@@ -4,7 +4,7 @@
 
 #include <xtl.h>   // QueryPerformanceCounter / QueryPerformanceFrequency
                        // -- the console calls QueryPerformanceCounter directly at 0x828D778C.
-
+#define CGS_ARTIST_CGSFRAMERATE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\Timer/CgsFrameRate.cpp"
 // ARTIST FrameRateManager: Prepare 0x828D7730, StartUpdateFrame 0x828D7760,
 // UpdatePostRenderWait 0x828D7770. One simulation step is required per display frame.
 namespace CgsSystem
@@ -170,8 +170,8 @@ namespace CgsSystem
             }
 
             liNumSimulationStepsRequired += miNumExtraSimulationUpdatesRequested;
-            CGS_ASSERT(liNumSimulationStepsRequired <= liMaxSimulationSteps,
-                       "liNumSimulationStepsRequired <= liMaxSimulationSteps");
+            CGS_ASSERT_AT(liNumSimulationStepsRequired <= liMaxSimulationSteps,
+                       "liNumSimulationStepsRequired <= liMaxSimulationSteps", CGS_ARTIST_CGSFRAMERATE_FILE, 228);
 
             // asm 0x828D7944-5C: charge the inserted steps to the clock so they are not
             // handed back again next frame.

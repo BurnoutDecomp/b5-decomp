@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Graphics/Instances/CgsInstance.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (GetInstance bounds check)
-
+#define CGS_ARTIST_CGSINSTANCE_FILE "..\\..\\..\\GameShared\\GameClasses\\Graphics/Instances/CgsInstance.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsGraphics::InstanceList::FixUp       @ 0x827F9318 (load-time fix-up)
 //   CgsGraphics::InstanceList::FixDown     @ 0x827F9478 (inverse load-time fix-up)
@@ -29,7 +29,7 @@ namespace CgsGraphics
         {
             muaInstances += static_cast<u32>(delta);
         }
-        CGS_ASSERT(muVersionNumber == 1, "Instance data version mismatch. Code version = ");
+        CGS_ASSERT_AT(muVersionNumber == 1, "Instance data version mismatch. Code version = ", CGS_ARTIST_CGSINSTANCE_FILE, 166);
         return this;
     }
 

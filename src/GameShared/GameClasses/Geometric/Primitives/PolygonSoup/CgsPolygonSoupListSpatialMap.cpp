@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
+#include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"   // SmallResource::GetMemoryResource
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. CgsGeometric::PolygonSoupListSpatialMap:
 //   Construct       @ 0x82839600 — zero the handle pointer + active count.
 //   Prepare         @ 0x82839610 — adopt a caller-owned handle array + count.
@@ -64,26 +64,26 @@ namespace CgsGeometric
         miNumSoupLists = 0; // = the (zero) invalid-handle dword the X360 copies into the count
     }
 
-    // GetPolySoupList @0x8283AB40 (const accessor)
+#define CGS_ARTIST_SPATIAL_MAP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\geometric\\Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.cpp"
     // X360 deref chain is `**(8*index + mpaPolySoupListHandles)`:
     //   first deref  = handle.mpResourceMemory (the resource memory; committed member),
     //   second deref = the resource's first pointer member (its GetMemoryResource()).
     const PolygonSoupList* PolygonSoupListSpatialMap::GetPolySoupList(s32 liPolySoupListIndex) const
     {
-        CGS_ASSERT(liPolySoupListIndex >= 0 && liPolySoupListIndex < miNumSoupLists,
-                   "liPolySoupListIndex >= 0 && liPolySoupListIndex < miNumSoupLists");
+        // ARTIST's lines 125/129/130, DWARF local lPolySoupListHandle (cpp:127); the accessors are
+        // tested and re-read directly (signed cmpwi on GetResource() @0x8283AB98).
+        CGS_ASSERT_AT(liPolySoupListIndex >= 0 && liPolySoupListIndex < miNumSoupLists,
+                   "liPolySoupListIndex >= 0 && liPolySoupListIndex < miNumSoupLists", CGS_ARTIST_SPATIAL_MAP_FILE, 125);
+        const CgsResource::ResourceHandle& lPolySoupListHandle = mpaPolySoupListHandles[liPolySoupListIndex];
+        CGS_ASSERT_AT(lPolySoupListHandle.GetResource() != NULL,
+                   "lPolySoupListHandle.GetResource() != NULL", CGS_ARTIST_SPATIAL_MAP_FILE, 129);
+        CGS_ASSERT_AT(lPolySoupListHandle.GetResource()->GetMemoryResource() != NULL,
+                   "lPolySoupListHandle.GetResource()->GetMemoryResource() != NULL", CGS_ARTIST_SPATIAL_MAP_FILE, 130);
 
-        const CgsResource::ResourceHandle& lrHandle = mpaPolySoupListHandles[liPolySoupListIndex];
-        CGS_ASSERT(lrHandle.mpResourceMemory != 0,
-                   "lPolySoupListHandle.GetResource() != NULL");
 
-        // GetResource() == mpResourceMemory; GetMemoryResource() == the resource's first
-        // pointer member (raw deref of the resource memory).
-        void* lpMemoryResource = *reinterpret_cast<void* const*>(lrHandle.mpResourceMemory);
-        CGS_ASSERT(lpMemoryResource != 0,
-                   "lPolySoupListHandle.GetResource()->GetMemoryResource() != NULL");
 
-        return reinterpret_cast<const PolygonSoupList*>(lpMemoryResource);
+
+        return static_cast<const PolygonSoupList*>(lPolySoupListHandle.GetResource()->GetMemoryResource());
     }
 
     // AddList @0x82839680 — X360: `++*(result + 4); return result;`

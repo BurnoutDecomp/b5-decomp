@@ -492,21 +492,21 @@ namespace
                                  rw::physics::BodyState leBodyState,
                                  VolumeInstanceId lVolumeInstanceId)
     {
-        CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS,
-                   "luObjectIndex < KU_MAX_NUM_OBJECTS");                    // :274
+        CGS_ASSERT_AT(luObjectIndex < KU_MAX_NUM_OBJECTS,
+                   "luObjectIndex < KU_MAX_NUM_OBJECTS", KAC_ARTIST_ASSERT_FILE, 274);                    // :274
 
-        CGS_ASSERT(!mCollidingBodies.IsBitSet(luObjectIndex),
-                   "object being added to the scene sweeper twice ID=");     // :275
+        CGS_ASSERT_AT(!mCollidingBodies.IsBitSet(luObjectIndex),
+                   "object being added to the scene sweeper twice ID=", KAC_ARTIST_ASSERT_FILE, 275);     // :275
 
-        CGS_ASSERT(maObjectData[luObjectIndex].mu8BodyState == E_INVALID_BODY,
-                   "maObjectData[luObjectIndex].mu8BodyState == E_INVALID_BODY");  // :276
+        CGS_ASSERT_AT(maObjectData[luObjectIndex].mu8BodyState == E_INVALID_BODY,
+                   "maObjectData[luObjectIndex].mu8BodyState == E_INVALID_BODY", KAC_ARTIST_ASSERT_FILE, 276);  // :276
 
         // The world box, read as its two corner rows (see the AABBoxRows note above).
         const AABBoxRows& lrBox = *reinterpret_cast<const AABBoxRows*>(lpAABBox);
 
-        CGS_ASSERT(lrBox.mMax.GetX().GetFloat() >= lrBox.mMin.GetX().GetFloat(), "Bad AABBox ");   // :278  (lane 0)
-        CGS_ASSERT(lrBox.mMax.GetZ().GetFloat() >= lrBox.mMin.GetZ().GetFloat(), "Bad AABBox ");   // :279  (lane 2)
-        CGS_ASSERT(lrBox.mMax.GetY().GetFloat() >= lrBox.mMin.GetY().GetFloat(), "Bad AABBox ");   // :280  (lane 1)
+        CGS_ASSERT_AT(lrBox.mMax.GetX().GetFloat() >= lrBox.mMin.GetX().GetFloat(), "Bad AABBox ", KAC_ARTIST_ASSERT_FILE, 278);   // :278  (lane 0)
+        CGS_ASSERT_AT(lrBox.mMax.GetZ().GetFloat() >= lrBox.mMin.GetZ().GetFloat(), "Bad AABBox ", KAC_ARTIST_ASSERT_FILE, 279);   // :279  (lane 2)
+        CGS_ASSERT_AT(lrBox.mMax.GetY().GetFloat() >= lrBox.mMin.GetY().GetFloat(), "Bad AABBox ", KAC_ARTIST_ASSERT_FILE, 280);   // :280  (lane 1)
 
         if ((leBodyState & rw::physics::ACTIVE_BODY) != 0)
         {
@@ -525,8 +525,8 @@ namespace
         }
         else
         {
-            CGS_ASSERT((leBodyState & rw::physics::STATIC_BODY) != 0,
-                       "(leBodyState & rw::physics::STATIC_BODY) != 0");     // :304
+            CGS_ASSERT_AT((leBodyState & rw::physics::STATIC_BODY) != 0,
+                       "(leBodyState & rw::physics::STATIC_BODY) != 0", KAC_ARTIST_ASSERT_FILE, 304);     // :304
             return;   // faithful: a static body joins no list and is not counted
         }
 
@@ -675,9 +675,9 @@ namespace
 void SceneSweeper::UpdateObject(u32 luObjectIndex, const rw::collision::AABBox* lpBox,
                                 Vector3 lPadding, VolumeInstanceId lVolumeInstanceID)
 {
-    CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS, "Object index is invalid: ");   // :392
-    CGS_ASSERT(mCollidingBodies.IsBitSet(luObjectIndex),
-               "mCollidingBodies.IsBitSet( luObjectIndex )");                      // :393
+    CGS_ASSERT_AT(luObjectIndex < KU_MAX_NUM_OBJECTS, "Object index is invalid: ", KAC_ARTIST_ASSERT_FILE, 392);   // :392
+    CGS_ASSERT_AT(mCollidingBodies.IsBitSet(luObjectIndex),
+               "mCollidingBodies.IsBitSet( luObjectIndex )", KAC_ARTIST_ASSERT_FILE, 393);                      // :393
 
     (void)lVolumeInstanceID;   // console: streamed into the :403 assert message only
 
@@ -694,9 +694,9 @@ void SceneSweeper::UpdateObject(u32 luObjectIndex, const rw::collision::AABBox* 
     const Vector3 lPaddedMin = lrBox.mMin + rw::math::vpu::Min(lMinPaddingLimit, lPadding);
     const Vector3 lPaddedMax = lrBox.mMax + rw::math::vpu::Max(lMaxPaddingLimit, lPadding);
 
-    CGS_ASSERT(lPaddedMin.GetX().GetFloat() < lPaddedMax.GetX().GetFloat()
+    CGS_ASSERT_AT(lPaddedMin.GetX().GetFloat() < lPaddedMax.GetX().GetFloat()
                || lPaddedMin.GetY().GetFloat() < lPaddedMax.GetY().GetFloat()
-               || lPaddedMin.GetZ().GetFloat() < lPaddedMax.GetZ().GetFloat(), "\n Bad AABBox \n");                // :403
+               || lPaddedMin.GetZ().GetFloat() < lPaddedMax.GetZ().GetFloat(), "\n Bad AABBox \n", KAC_ARTIST_ASSERT_FILE, 403);                // :403
 
     const eObjectBodyState leBodyState =
         static_cast<eObjectBodyState>(maObjectData[luObjectIndex].mu8BodyState);
@@ -722,7 +722,7 @@ void SceneSweeper::UpdateObject(u32 luObjectIndex, const rw::collision::AABBox* 
     {
         // E_STATIC_BODY -- and, per the oddity in this file's banner, E_INVALID_BODY too:
         // the console asserts and then takes this arm regardless.
-        CGS_ASSERT(leBodyState == E_STATIC_BODY, "leBodyState == E_STATIC_BODY");   // :426
+        CGS_ASSERT_AT(leBodyState == E_STATIC_BODY, "leBodyState == E_STATIC_BODY", KAC_ARTIST_ASSERT_FILE, 426);   // :426
         mStaticIntervalList.UpdateObject(static_cast<u16>(luObjectIndex), lPaddedMin, lPaddedMax);
         mbSortStaticObjects = true;                                  // stbx 1 -> +0xDC4B8
     }

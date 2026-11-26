@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags
-
+#define CGS_ARTIST_CGSALLOCATEPOOLMODULESTATE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsAllocatePoolModuleState.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // THIS TU (GameShared/.../PoolModuleStates/CgsAllocatePoolModuleState.cpp) -- the working steps of the
@@ -114,7 +114,7 @@ namespace CgsResource
             Entry* lpList = CreateEntryListResource();
             if (!lpList)
             {
-                CGS_FAIL("Could not create resource to hold entry list with entries\n");
+                CGS_FAIL_AT("Could not create resource to hold entry list with entries\n", CGS_ARTIST_CGSALLOCATEPOOLMODULESTATE_FILE, 238);
                 meState = E_STATE_IDLE;
                 return E_RESULT_ERROR;
             }
@@ -124,7 +124,7 @@ namespace CgsResource
             return E_RESULT_SUCCESS;
         }
         default:
-            CGS_FAIL("Allocate internal state is invalid\n");
+            CGS_FAIL_AT("Allocate internal state is invalid\n", CGS_ARTIST_CGSALLOCATEPOOLMODULESTATE_FILE, 256);
             return E_RESULT_ERROR;
         }
     }
@@ -269,8 +269,8 @@ namespace CgsResource
             return false;
         }
 
-        CGS_ASSERT(miNeedCount <= PoolModule::KI_MAX_ALLOCATION_REQUESTS,
-                   "There are more entries in this bundle than there are allocation requests - increment KI_MAX_ALLOCATION_REQUESTS\n");   // :390
+        CGS_ASSERT_AT(miNeedCount <= PoolModule::KI_MAX_ALLOCATION_REQUESTS,
+                   "There are more entries in this bundle than there are allocation requests - increment KI_MAX_ALLOCATION_REQUESTS\n", CGS_ARTIST_CGSALLOCATEPOOLMODULESTATE_FILE, 390);   // :390
 
         miNeedCount = 0;
 
@@ -294,7 +294,7 @@ namespace CgsResource
                 lNewResource.mResourceDescriptor.m_baseResourceDescriptors[luMemType].m_alignment = lrEntry.GetUncompresssedAlignment(luMemType);
             }
             lNewResource.mpResourceType = mpPoolModule->FindResourceType(lrEntry.muResourceTypeId);
-            CGS_ASSERT(lNewResource.mpResourceType != 0, "Invalid resource type on resource ");   // :407
+            CGS_ASSERT_AT(lNewResource.mpResourceType != 0, "Invalid resource type on resource ", CGS_ARTIST_CGSALLOCATEPOOLMODULESTATE_FILE, 407);   // :407
             lNewResource.miNumImports        = lrEntry.muImportCount;
             lNewResource.muImportTableOffset = lrEntry.muImportOffset;
 
@@ -352,7 +352,7 @@ namespace CgsResource
     {
         s32    liIndex;
         Entry* lpResource = mpPool->FindResource(mListId, true, 3, &liIndex);
-        CGS_ASSERT(lpResource != 0, "Could not find entry list resource\n");   // :527
+        CGS_ASSERT_AT(lpResource != 0, "Could not find entry list resource\n", CGS_ARTIST_CGSALLOCATEPOOLMODULESTATE_FILE, 527);   // :527
 
         if (mbCreateEntryListResource)
         {
@@ -386,7 +386,7 @@ namespace CgsResource
             s32   liResourceIndex;
             Entry* lpResource = mpPool->FindResourceWithDependencies(mpEntries[i].mResourceId, &lpContainingPool,
                                                                      true, 3, &liResourceIndex);
-            CGS_ASSERT(lpResource != 0, "Could not find resourc even though it was there last frame\n");   // :573
+            CGS_ASSERT_AT(lpResource != 0, "Could not find resourc even though it was there last frame\n", CGS_ARTIST_CGSALLOCATEPOOLMODULESTATE_FILE, 573);   // :573
 
             mpPool->DecEntryRefCount(liResourceIndex);
         }

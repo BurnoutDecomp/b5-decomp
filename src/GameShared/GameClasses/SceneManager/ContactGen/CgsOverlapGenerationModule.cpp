@@ -133,7 +133,7 @@ bool OverlapGenerationModule::Prepare(u8* lpaVolumeInstanceCullingGroup,
         return true;
 
     default:
-        CGS_FAIL("Unknown prepare state");
+        CGS_FAIL_AT("Unknown prepare state", KAC_ARTIST_ASSERT_FILE, 119);
         return false;
     }
 }
@@ -164,7 +164,7 @@ bool OverlapGenerationModule::Release()
         return true;
 
     default:
-        CGS_FAIL("Unrecognised release state\n");
+        CGS_FAIL_AT("Unrecognised release state\n", KAC_ARTIST_ASSERT_FILE, 177);
         return false;
     }
 }
@@ -256,8 +256,8 @@ void OverlapGenerationModule::Update(const OverlapGenerationIO::InputBuffer* lpI
 void OverlapGenerationModule::GenerateOverlaps(OverlapGenerationIO::OutputBuffer* lpOutputBuffer,
                                               const EntityManager* lpEntityManager)
 {
-    CGS_ASSERT(lpOutputBuffer != NULL,  "lpOutputBuffer != NULL");
-    CGS_ASSERT(lpEntityManager != NULL, "lpEntityManager != NULL");
+    CGS_ASSERT_AT(lpOutputBuffer != NULL,  "lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 246);
+    CGS_ASSERT_AT(lpEntityManager != NULL, "lpEntityManager != NULL", KAC_ARTIST_ASSERT_FILE, 247);
 
     // Sort -> sweep -> build the colliding-pair array (and auto-freeze whatever did not move).
     mSweeper.Update(lpEntityManager);

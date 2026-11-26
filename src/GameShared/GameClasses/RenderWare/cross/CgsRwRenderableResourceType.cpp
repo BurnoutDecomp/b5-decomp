@@ -57,10 +57,10 @@ namespace CgsResource
         const uintptr_t luPointerBase = reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]);
 
         // CgsRwRenderableResourceType.cpp:490 / :492 -- the two halves of the version tripwire.
-        CGS_ASSERT(lpRenderable->mu16VersionNumber >= KU_RENDERABLE_DATA_VERSION,
-                   "Error loading renderable. Data is out of date. Data version : ");
-        CGS_ASSERT(lpRenderable->mu16VersionNumber <= KU_RENDERABLE_DATA_VERSION,
-                   "Error loading renderable. Code is out of date. Data version : ");
+        CGS_ASSERT_AT(lpRenderable->mu16VersionNumber >= KU_RENDERABLE_DATA_VERSION,
+                   "Error loading renderable. Data is out of date. Data version : ", KAC_ARTIST_ASSERT_FILE, 490);
+        CGS_ASSERT_AT(lpRenderable->mu16VersionNumber <= KU_RENDERABLE_DATA_VERSION,
+                   "Error loading renderable. Code is out of date. Data version : ", KAC_ARTIST_ASSERT_FILE, 492);
 
         // 2) the mesh pointer table (X360 `lwz r10,0x14` / `add` / `stw` -- unconditional).
         lpRenderable->mppMeshes = RebaseSlot(lpRenderable->mppMeshes, luPointerBase);
@@ -149,7 +149,7 @@ namespace CgsResource
                 // mu8NumMaterials technique count (natural x64 home @+0x0C; by NAME).
                 if (lpAssembly->mu8NumMaterials == 0)                        // lbz 8(v4)
                 {
-                    CGS_FAIL("Mesh material assembly is empty");                 // line 1273
+                    CGS_FAIL_AT("Mesh material assembly is empty", KAC_ARTIST_ASSERT_FILE, 1273);                 // line 1273
                     return false;                                                         // result = 0
                 }
                 // X360 assembly[0] = the technique-table pointer (mappMaterials); its first
@@ -158,7 +158,7 @@ namespace CgsResource
                 {
                     // X360 breaks out of the loop here, then fires the NULL-material
                     // assert; flattened to the in-loop assert + return (same result).
-                    CGS_FAIL("Material assembly contains a NULL material");      // line 1278
+                    CGS_FAIL_AT("Material assembly contains a NULL material", KAC_ARTIST_ASSERT_FILE, 1278);      // line 1278
                     return false;                                                         // result = 0
                 }
             }

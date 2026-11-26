@@ -50,7 +50,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"     // CgsResource::ResourcePtr<T>
 #include "SDKs/EATech/rwcollision/volume_debug_access.h"               // rw::collision::Volume (GetBBox)
 #include "rw/math/fpu/scalar_operation.h"                              // rw::math::fpu::IsZero
-
+#define CGS_ARTIST_CGSVOLUMEMANAGER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsVolumeManager.cpp"
 // rw::collision::AABBox is only NAMED here (GetBBox's out-parameter). Its real home,
 // vendor/renderware/collision/AABBox.hpp, pulls the SDK rw::math::vpu::Vector3 CLASS into
 // a TU that already has the vendor 4-lane POD via BrnCommonTypes.h, and the two cannot
@@ -187,22 +187,22 @@ s32 VolumeManager::AddDynamicVolume(VolumeId lVolumeId,
 
     const f32 lfMinX = lAabb.mMin.GetX();
     const f32 lfMaxX = lAabb.mMax.GetX();
-    CGS_ASSERT(!rw::math::fpu::IsZero(lfMaxX - lfMinX),
-               "Bounding box with zero width for volume instance id ");
+    CGS_ASSERT_AT(!rw::math::fpu::IsZero(lfMaxX - lfMinX),
+               "Bounding box with zero width for volume instance id ", CGS_ARTIST_CGSVOLUMEMANAGER_FILE, 144);
     const f32 lfMinY = lAabb.mMin.GetY();
     const f32 lfMaxY = lAabb.mMax.GetY();
-    CGS_ASSERT(!rw::math::fpu::IsZero(lfMaxY - lfMinY),
-               "Bounding box with zero height for volume instance id ");
+    CGS_ASSERT_AT(!rw::math::fpu::IsZero(lfMaxY - lfMinY),
+               "Bounding box with zero height for volume instance id ", CGS_ARTIST_CGSVOLUMEMANAGER_FILE, 145);
     const f32 lfMinZ = lAabb.mMin.GetZ();
     const f32 lfMaxZ = lAabb.mMax.GetZ();
-    CGS_ASSERT(!rw::math::fpu::IsZero(lfMaxZ - lfMinZ),
-               "Bounding box with zero depth for volume instance id ");
-    CGS_ASSERT(lfMinX <= lfMaxX, "Inside out bounding box for volume instance id ");
-    CGS_ASSERT(lfMinZ <= lfMaxZ, "Inside out bounding box for volume instance id ");
-    CGS_ASSERT(lfMinY <= lfMaxY, "Inside out bounding box for volume instance id ");
+    CGS_ASSERT_AT(!rw::math::fpu::IsZero(lfMaxZ - lfMinZ),
+               "Bounding box with zero depth for volume instance id ", CGS_ARTIST_CGSVOLUMEMANAGER_FILE, 146);
+    CGS_ASSERT_AT(lfMinX <= lfMaxX, "Inside out bounding box for volume instance id ", CGS_ARTIST_CGSVOLUMEMANAGER_FILE, 147);
+    CGS_ASSERT_AT(lfMinZ <= lfMaxZ, "Inside out bounding box for volume instance id ", CGS_ARTIST_CGSVOLUMEMANAGER_FILE, 148);
+    CGS_ASSERT_AT(lfMinY <= lfMaxY, "Inside out bounding box for volume instance id ", CGS_ARTIST_CGSVOLUMEMANAGER_FILE, 149);
 
     const s32 liIndex = mVolumePool.AllocateObject();          // DWARF liIndex (:153)
-    CGS_ASSERT(liIndex != KI_INVALID_VOLUME_INDEX, "Exceeded Scene Manager Volume allocation");
+    CGS_ASSERT_AT(liIndex != KI_INVALID_VOLUME_INDEX, "Exceeded Scene Manager Volume allocation", CGS_ARTIST_CGSVOLUMEMANAGER_FILE, 154);
 
     const s32 liStoreIndex = mVolumeStore.AddVolume(lpVolume); // DWARF liStoreIndex (:156)
 

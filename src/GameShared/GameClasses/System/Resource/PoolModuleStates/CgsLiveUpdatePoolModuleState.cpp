@@ -10,7 +10,7 @@
 
 #include <cstddef>   // offsetof (layout pin for the entry-list resource-memory view)
 #include <cstring>   // memset (clear caller's "needs" flags when no pool holds the list)
-
+#define CGS_ARTIST_CGSLIVEUPDATEPOOLMODULESTATE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsLiveUpdatePoolModuleState.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // THIS TU (GameShared/.../PoolModuleStates/CgsLiveUpdatePoolModuleState.cpp) -- the working steps of the
@@ -345,8 +345,8 @@ namespace
                 s32    liResourceIndex;
                 Entry* lpFound = mpPool->FindResourceWithDependencies(lrEntry.mResourceId, &lpContainingPool,
                                                                       false, 2, &liResourceIndex);
-                CGS_ASSERT(lpFound != 0, "Failed to find entry to delete memory for\n");                        // :423
-                CGS_ASSERT(lpFound->mpResourceType->GetCachedId() == lrEntry.muResourceTypeId, "Type mismatch during live upate\n");   // :425
+                CGS_ASSERT_AT(lpFound != 0, "Failed to find entry to delete memory for\n", CGS_ARTIST_CGSLIVEUPDATEPOOLMODULESTATE_FILE, 423);                        // :423
+                CGS_ASSERT_AT(lpFound->mpResourceType->GetCachedId() == lrEntry.muResourceTypeId, "Type mismatch during live upate\n", CGS_ARTIST_CGSLIVEUPDATEPOOLMODULESTATE_FILE, 425);   // :425
 
                 if (CgsDev::Message::gxMessageFilterFlags & 1)
                 {

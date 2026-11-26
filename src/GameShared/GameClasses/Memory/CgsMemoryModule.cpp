@@ -30,7 +30,7 @@ namespace CgsMemory
     // index table InitBanks fills with KU_INVALID_BANK(255); CreateBank/DestroyBank test the result == 255.]
     u8 MemoryModule::GetBankIndexFromId(u32 luBankId) const
     {
-        CGS_ASSERT(luBankId <= muHighestId, "Bank id out of range");
+        CGS_ASSERT_AT(luBankId <= muHighestId, "Bank id out of range", CGS_ARTIST_FILE, 780);
         return mpu8IdMap[luBankId];
     }
 
@@ -419,12 +419,12 @@ namespace CgsMemory
         MemoryIO::ResultCodes leResult;
         if (liParentId < 0 || liParentId >= static_cast<s32>(muMaxBanks))
         {
-            CGS_FAIL("Parent bank id out of range");
+            CGS_FAIL_AT("Parent bank id out of range", CGS_ARTIST_FILE, 764);
             leResult = MemoryIO::E_RESULT_BANK_OUT_OF_RANGE;
         }
         else if (GetBankIndexFromId(static_cast<u32>(liParentId)) == MemoryBank::KU_INVALID_BANK)
         {
-            CGS_FAIL("Parent bank does not exist");
+            CGS_FAIL_AT("Parent bank does not exist", CGS_ARTIST_FILE, 770);
             leResult = MemoryIO::E_RESULT_BANK_ID_NOT_FOUND;
         }
         else
@@ -464,7 +464,7 @@ namespace CgsMemory
                 }
                 else
                 {
-                    CGS_FAIL("Allocator not set");
+                    CGS_FAIL_AT("Allocator not set", CGS_ARTIST_FILE, 813);
                     leResult = MemoryIO::E_RESULT_ALLOCATOR_NOT_SET;
                 }
             }
@@ -621,10 +621,10 @@ namespace CgsMemory
         meReleaseStage = E_RELEASE_DONE;
         mePrepareStage = E_PREPARE_START;
 
-        CGS_ASSERT(lpInitOptions->muMaxBanks <= 0xFFu,
-                   "For memory foot print reasons you can't have more than 255 simultaneous banks");
-        CGS_ASSERT(lpInitOptions->muHighestId <= 0x800u,
-                   "You have more than 2048 potential bank ids - this is possible but INSANE!");
+        CGS_ASSERT_AT(lpInitOptions->muMaxBanks <= 0xFFu,
+                   "For memory foot print reasons you can't have more than 255 simultaneous banks", CGS_ARTIST_FILE, 57);
+        CGS_ASSERT_AT(lpInitOptions->muHighestId <= 0x800u,
+                   "You have more than 2048 potential bank ids - this is possible but INSANE!", CGS_ARTIST_FILE, 58);
 
         const u32 luMaxBanks  = lpInitOptions->muMaxBanks;
         const u32 luMaxBlocks = lpInitOptions->muMaxBlocks;
@@ -778,8 +778,8 @@ namespace CgsMemory
     bool MemoryModule::AllocateBlocks(u16 lu16Count, u16 lu16BankId, u16 lu16Type, bool lbMarkUsed,
                                       u32* lpuOutFirstBlock, u32* lpuOutLastBlock)
     {
-        CGS_ASSERT(lpuOutFirstBlock != 0 && lpuOutLastBlock != 0, "Invalid First/Last block output pointers");
-        CGS_ASSERT(lu16BankId < 0xFFu, "Invalid bank index");
+        CGS_ASSERT_AT(lpuOutFirstBlock != 0 && lpuOutLastBlock != 0, "Invalid First/Last block output pointers", CGS_ARTIST_FILE, 1355);
+        CGS_ASSERT_AT(lu16BankId < 0xFFu, "Invalid bank index", CGS_ARTIST_FILE, 1356);
 
         if (lu16Count > muNumFreeBlocks)
         {
@@ -793,8 +793,8 @@ namespace CgsMemory
         u32 luLast  = luBlock;
         for (u16 lu = 0; lu < lu16Count; ++lu)
         {
-            CGS_ASSERT(luBlock != MemoryBlock::KU_INVALID_BLOCK,
-                       "Block layout has become corrupt - free list does not match free count");
+            CGS_ASSERT_AT(luBlock != MemoryBlock::KU_INVALID_BLOCK,
+                       "Block layout has become corrupt - free list does not match free count", CGS_ARTIST_FILE, 1383);
             MemoryBlock& lrBlock  = mpBlocks[luBlock];
             lrBlock.mu8ChildBank  = static_cast<u8>(MemoryBank::KU_INVALID_BANK);
             lrBlock.mu8ParentBank = static_cast<u8>(lu16BankId);
@@ -829,7 +829,7 @@ namespace CgsMemory
     {
         if (liBankId < 0 || liBankId >= static_cast<s32>(muMaxBanks))
         {
-            CGS_FAIL("Bank id out of range");
+            CGS_FAIL_AT("Bank id out of range", CGS_ARTIST_FILE, 1190);
             return 1;
         }
         const u8    lu8Index  = GetBankIndexFromId(static_cast<u32>(liBankId));
@@ -837,17 +837,17 @@ namespace CgsMemory
         const u8    lu8Parent = lrBank.GetParent();
         if (lu8Parent == static_cast<u8>(MemoryBank::KU_INVALID_BANK))
         {
-            CGS_FAIL("Cannot destroy a bank with no parent (the root)");
+            CGS_FAIL_AT("Cannot destroy a bank with no parent (the root)", CGS_ARTIST_FILE, 1208);
             return 8;
         }
 
         if (lbLeafMode)
         {
-            if (!lrBank.GetIsLeaf()) { CGS_FAIL("Bank is not a leaf bank"); return 12; }
+            if (!lrBank.GetIsLeaf()) { CGS_FAIL_AT("Bank is not a leaf bank", CGS_ARTIST_FILE, 1215); return 12; }
         }
         else
         {
-            if (lrBank.GetIsLeaf()) { CGS_FAIL("Bank is a leaf bank"); return 11; }
+            if (lrBank.GetIsLeaf()) { CGS_FAIL_AT("Bank is a leaf bank", CGS_ARTIST_FILE, 1222); return 11; }
 
             // non-leaf: it must hold no live allocations (its children must already be destroyed)
             for (s32 lt = 0; lt < MemoryBank::KI_NUM_TYPES; ++lt)
@@ -859,7 +859,7 @@ namespace CgsMemory
                 {
                     if (mpBlocks[luBlock].mxStatus.IsBitSet(1))
                     {
-                        CGS_FAIL("Can not destroy non-empty bank");
+                        CGS_FAIL_AT("Can not destroy non-empty bank", CGS_ARTIST_FILE, 1248);
                         return 9;
                     }
                     luBlock = mpBlocks[luBlock].muNextBlock;
@@ -968,12 +968,12 @@ namespace CgsMemory
     // allocated to a child bank: stamp each block's child-bank id and set its allocated status bit.
     void MemoryModule::MarkRangeAsUsed(u8 lu8ChildBankId, u32 luStartBlock, u32 luCount)
     {
-        CGS_ASSERT(lu8ChildBankId < 0xFFu, "Invalid bank index");
+        CGS_ASSERT_AT(lu8ChildBankId < 0xFFu, "Invalid bank index", CGS_ARTIST_FILE, 1662);
         u32 luBlock = luStartBlock;
         while (luCount != 0)
         {
-            CGS_ASSERT(luBlock != MemoryBlock::KU_INVALID_BLOCK, "Can't mark invalid block as allocated");
-            CGS_ASSERT(!mpBlocks[luBlock].mxStatus.IsBitSet(1), "Block is already allocated");
+            CGS_ASSERT_AT(luBlock != MemoryBlock::KU_INVALID_BLOCK, "Can't mark invalid block as allocated", CGS_ARTIST_FILE, 1671);
+            CGS_ASSERT_AT(!mpBlocks[luBlock].mxStatus.IsBitSet(1), "Block is already allocated", CGS_ARTIST_FILE, 1672);
             --luCount;
             mpBlocks[luBlock].mu8ChildBank = lu8ChildBankId;
             mpBlocks[luBlock].mxStatus.Clear();

@@ -2,7 +2,7 @@
 
 #include "rw/rwcore_structs.h"                       // rw::IResourceAllocator / Resource / ResourceDescriptor
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-
+#define CGS_ARTIST_CGSTRIANGLECACHEMANAGER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CacheManager/CgsTriangleCacheManager.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsSceneManager::TriangleCacheManager::Prepare  @ 0x828BE738
 //
@@ -40,7 +40,7 @@ namespace CgsSceneManager
 {
     bool TriangleCacheManager::Prepare(rw::IResourceAllocator* lpAllocator)
     {
-        CGS_ASSERT(lpAllocator != NULL, "lpAllocator != NULL");
+        CGS_ASSERT_AT(lpAllocator != NULL, "lpAllocator != NULL", CGS_ARTIST_CGSTRIANGLECACHEMANAGER_FILE, 140);
 
         // ⚠️ 13112 is a BATCH COUNT, not a byte count --
         // KU_MAX_CACHED_OBJECTS(298) * KU_TRIANGLE_BATCHES_PER_CACHED_OBJECT(44) -- and the callee
@@ -76,7 +76,7 @@ namespace CgsSceneManager
             reinterpret_cast<const rw::ResourceDescriptor&>(lCachedObjSlotsResDesc), "CachedObjectSlots");
         mpaCachedObjectSlots = static_cast<CacheSlot*>(lCachedObjSlotsRes.m_baseResources[0]);
 
-        CGS_ASSERT(mpaCachedObjectSlots != NULL, "mpaCachedObjectSlots != NULL");
+        CGS_ASSERT_AT(mpaCachedObjectSlots != NULL, "mpaCachedObjectSlots != NULL", CGS_ARTIST_CGSTRIANGLECACHEMANAGER_FILE, 164);
 
         // Initialise every slot: clear the cached sphere, set the running triangle-
         // cache window index (slot N -> N*44), zero the batch/overflow counters.

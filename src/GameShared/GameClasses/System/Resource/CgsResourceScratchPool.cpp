@@ -82,8 +82,8 @@ namespace CgsResource
         ImportHashTableValue* lpValues = static_cast<ImportHashTableValue*>(
             mAllocator.Malloc(sizeof(ImportHashTableValue) * luHashLength));
         mImportHashTable.Initialize(lpKeys, lpValues, static_cast<s32>(luHashLength));
-        CGS_ASSERT(mpEntries != 0 && mpDistributionEntries != 0 && mpEntryIds != 0,
-                   "Failiure to allocate\n");
+        CGS_ASSERT_AT(mpEntries != 0 && mpDistributionEntries != 0 && mpEntryIds != 0,
+                   "Failiure to allocate\n", CGS_ARTIST_SCRATCH_POOL_FILE, 187);
         muNumEntries = 0;
         muMaxEntries = lpOptions->muMaxEntries;
         miBankId = lpOptions->miBankId;
@@ -99,7 +99,7 @@ namespace CgsResource
             const u32 luSize = lDescriptor.m_baseResourceDescriptors[li].m_size;
             if (luSize != 0)
             {
-                CGS_ASSERT(lResource.m_baseResources[li] != 0, "Allocator has NULL pointer\n");
+                CGS_ASSERT_AT(lResource.m_baseResources[li] != 0, "Allocator has NULL pointer\n", CGS_ARTIST_SCRATCH_POOL_FILE, 212);
                 maResourceAllocators[li].Create(lResource.m_baseResources[li], luSize);
             }
         }

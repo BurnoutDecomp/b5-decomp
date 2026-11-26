@@ -148,23 +148,23 @@ namespace CgsGraphics
                                                      u32* lpPixels)
     {
         typedef rw::movie::VideoRenderable VideoRenderable;
-        CGS_ASSERT(lpVideoRenderable, "lpVideoRenderable");
+        CGS_ASSERT_AT(lpVideoRenderable, "lpVideoRenderable", CGS_ARTIST_MOVIE_RENDERER_CPP_FILE, 241);
         const VideoRenderable::VideoFormat leFormat = lpVideoRenderable->GetFormat();
-        CGS_ASSERT(leFormat == VideoRenderable::VIDEOFORMAT_YV12 ||
+        CGS_ASSERT_AT(leFormat == VideoRenderable::VIDEOFORMAT_YV12 ||
                    leFormat == VideoRenderable::VIDEOFORMAT_YV12_BORDER48,
-                   "lpVideoRenderable->GetFormat()");
-        CGS_ASSERT(lpVideoRenderable->GetNumBuffersUsed() == 3,
-                   "lpVideoRenderable->GetNumBuffersUsed() == 3");
+                   "lpVideoRenderable->GetFormat()", CGS_ARTIST_MOVIE_RENDERER_CPP_FILE, 245);
+        CGS_ASSERT_AT(lpVideoRenderable->GetNumBuffersUsed() == 3,
+                   "lpVideoRenderable->GetNumBuffersUsed() == 3", CGS_ARTIST_MOVIE_RENDERER_CPP_FILE, 247);
 
         u32 laBufSizes[3];
         VideoRenderable::GetDataBufSizes(lpVideoRenderable->GetWidth(), lpVideoRenderable->GetHeight(),
                                         leFormat, lpVideoRenderable->GetNumBuffersUsed(), laBufSizes);
-        CGS_ASSERT(laBufSizes[0] == 4 * laBufSizes[1] && laBufSizes[0] == 4 * laBufSizes[2],
-                   "laBufSizes[0] == 4 * laBufSizes[1] && laBufSizes[0] == 4 * laBufSizes[2]");
+        CGS_ASSERT_AT(laBufSizes[0] == 4 * laBufSizes[1] && laBufSizes[0] == 4 * laBufSizes[2],
+                   "laBufSizes[0] == 4 * laBufSizes[1] && laBufSizes[0] == 4 * laBufSizes[2]", CGS_ARTIST_MOVIE_RENDERER_CPP_FILE, 265);
 
         const u32 KU_PIXELS_PER_LOOP = 8;
-        CGS_ASSERT(lpVideoRenderable->GetWidth() % KU_PIXELS_PER_LOOP == 0,
-                   "lpVideoRenderable->GetWidth() % KU_PIXELS_PER_LOOP == 0");
+        CGS_ASSERT_AT(lpVideoRenderable->GetWidth() % KU_PIXELS_PER_LOOP == 0,
+                   "lpVideoRenderable->GetWidth() % KU_PIXELS_PER_LOOP == 0", CGS_ARTIST_MOVIE_RENDERER_CPP_FILE, 274);
 
         const u8* lpLuma = lpVideoRenderable->GetData(0);
         const u8* lpChroma0 = lpVideoRenderable->GetData(1);
@@ -193,7 +193,7 @@ namespace CgsGraphics
     // ARTIST 0x827FB060
     void MovieVideoRenderer::Render(s32 liStartRow, rw::movie::VideoRenderable* lpRenderable, bool lbStep)
     {
-        CGS_ASSERT(lpRenderable, "lpNewVideoRenderable");
+        CGS_ASSERT_AT(lpRenderable, "lpNewVideoRenderable", CGS_ARTIST_MOVIE_RENDERER_CPP_FILE, 395);
 
         TextureInfoType& lrTexture = maTextureInfoTypes[muTextureIndex];
         if (lbStep)
@@ -202,7 +202,7 @@ namespace CgsGraphics
         const u32 luWidth = lrTexture.mpTexture->GetWidth();
         EncodeYuvOntoRgbaTexture(lpRenderable, lrTexture.mpPixelData + luWidth * liStartRow);
 
-        CGS_ASSERT(mpParentMoviePlayer->mpIm2dRenderBuffer, "mpParentMoviePlayer->mpIm2dRenderBuffer");
+        CGS_ASSERT_AT(mpParentMoviePlayer->mpIm2dRenderBuffer, "mpParentMoviePlayer->mpIm2dRenderBuffer", CGS_ARTIST_MOVIE_RENDERER_CPP_FILE, 463);
         Im2dRenderBuffer* lpBuffer = mpParentMoviePlayer->mpIm2dRenderBuffer;
         const ImRendererBase::StateLibrary& lrStateLibrary = ImRendererBase::GetStateLibrary();
         lpBuffer->BeginRendering();

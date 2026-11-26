@@ -11,7 +11,7 @@
 
 #include <cmath>    // tanf/atanf (SetFovHorizontal -- the XMVectorTan/ATan lowering), sqrt (LookAt / frustum normalizes)
 #include <cstring>  // memcpy (Clone)
-
+#define CGS_ARTIST_CGSCAMERA_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\CgsCamera.cpp"
 // ----------------------------------------------------------------------------
 // Camera defaults (DWARF ::-scope globals, CgsCamera.h:32-35).
 //
@@ -787,14 +787,14 @@ namespace CgsGraphics
 
         // The X360 has four native assertion tripwires here. The fourth deliberately
         // repeats [1][2] with the same source message as the second assertion.
-        CGS_ASSERT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.xAxis.GetZ()), 0.0f),
-                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(0, 2), 0.0f )");
-        CGS_ASSERT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.yAxis.GetZ()), 0.0f),
-                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(1, 2), 0.0f )");
-        CGS_ASSERT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.xAxis.GetW()), 0.0f),
-                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(0, 3), 0.0f )");
-        CGS_ASSERT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.yAxis.GetZ()), 0.0f),
-                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(1, 2), 0.0f )");
+        CGS_ASSERT_AT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.xAxis.GetZ()), 0.0f),
+                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(0, 2), 0.0f )", CGS_ARTIST_CGSCAMERA_FILE, 182);
+        CGS_ASSERT_AT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.yAxis.GetZ()), 0.0f),
+                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(1, 2), 0.0f )", CGS_ARTIST_CGSCAMERA_FILE, 183);
+        CGS_ASSERT_AT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.xAxis.GetW()), 0.0f),
+                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(0, 3), 0.0f )", CGS_ARTIST_CGSCAMERA_FILE, 184);
+        CGS_ASSERT_AT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.yAxis.GetZ()), 0.0f),
+                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(1, 2), 0.0f )", CGS_ARTIST_CGSCAMERA_FILE, 185);
 
         #undef RWMATH_IS_SIMILAR
 

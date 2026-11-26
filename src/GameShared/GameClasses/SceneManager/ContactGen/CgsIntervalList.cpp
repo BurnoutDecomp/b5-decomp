@@ -83,24 +83,24 @@ namespace CgsSceneManager
     {
         const u32 luNewObjectMin = muNumIntervals;
         muNumIntervals = luNewObjectMin + 1;
-        CGS_ASSERT(luNewObjectMin < muMaxNumIntervals, "luNewObjectMin < muMaxNumIntervals");
+        CGS_ASSERT_AT(luNewObjectMin < muMaxNumIntervals, "luNewObjectMin < muMaxNumIntervals", KAC_ARTIST_ASSERT_FILE, 162);
 
         const u32 luNewObjectMax = muNumIntervals;
         muNumIntervals = luNewObjectMax + 1;
-        CGS_ASSERT(luNewObjectMax < muMaxNumIntervals, "luNewObjectMax < muMaxNumIntervals");
+        CGS_ASSERT_AT(luNewObjectMax < muMaxNumIntervals, "luNewObjectMax < muMaxNumIntervals", KAC_ARTIST_ASSERT_FILE, 164);
 
         // Per-axis extent = |min-endpoint bound - max-endpoint bound|; asserted non-degenerate.
         //   width  =  lrMin.mfXInterval        - lrMax.mfXInterval
         //   height = -lrMax.mfMinusYMaxInterval - lrMin.mfYMinInterval
         //   depth  = -lrMax.mfMinusZMaxInterval - lrMin.mfZMinInterval
         const f32 lfWidth  =  lrMin.mfXInterval        - lrMax.mfXInterval;
-        CGS_ASSERT(!rw::math::fpu::IsZero(lfWidth), "Bounding box added with zero width");
+        CGS_ASSERT_AT(!rw::math::fpu::IsZero(lfWidth), "Bounding box added with zero width", KAC_ARTIST_ASSERT_FILE, 167);
 
         const f32 lfHeight = -lrMax.mfMinusYMaxInterval - lrMin.mfYMinInterval;
-        CGS_ASSERT(!rw::math::fpu::IsZero(lfHeight), "Bounding box added with zero height");
+        CGS_ASSERT_AT(!rw::math::fpu::IsZero(lfHeight), "Bounding box added with zero height", KAC_ARTIST_ASSERT_FILE, 168);
 
         const f32 lfDepth  = -lrMax.mfMinusZMaxInterval - lrMin.mfZMinInterval;
-        CGS_ASSERT(!rw::math::fpu::IsZero(lfDepth), "Bounding box added with zero depth");
+        CGS_ASSERT_AT(!rw::math::fpu::IsZero(lfDepth), "Bounding box added with zero depth", KAC_ARTIST_ASSERT_FILE, 169);
 
         // Copy the two 24-byte Interval records into their slots (the X360 6-dword copy loops).
         mpaIntervals[luNewObjectMin] = lrMin;
@@ -119,7 +119,7 @@ namespace CgsSceneManager
     // The moved slot's role selector is (mu16Flags == 1) -> KI_MAX_INDEX else KI_MIN_INDEX.
     void IntervalList::RemoveInterval(u16 luIntervalIndex)
     {
-        CGS_ASSERT(luIntervalIndex < muNumIntervals, "luIntervalIndex < muNumIntervals");
+        CGS_ASSERT_AT(luIntervalIndex < muNumIntervals, "luIntervalIndex < muNumIntervals", KAC_ARTIST_ASSERT_FILE, 242);
 
         const u32 luLastInterval = muNumIntervals - 1;
         if (luIntervalIndex != luLastInterval)
@@ -142,13 +142,13 @@ namespace CgsSceneManager
         ObjectToIntervalMap& lrMap = mpaObjectToIntervalMap[luObjectIndex];
 
         u16 luRemoveInterval = lrMap.GetIntervalIndex(KI_MIN_INDEX);
-        CGS_ASSERT(mpaIntervals[luRemoveInterval].mu16ObjectIndex == luObjectIndex,
-                   "mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex");
+        CGS_ASSERT_AT(mpaIntervals[luRemoveInterval].mu16ObjectIndex == luObjectIndex,
+                   "mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex", KAC_ARTIST_ASSERT_FILE, 289);
         RemoveInterval(luRemoveInterval);
 
         luRemoveInterval = lrMap.GetIntervalIndex(KI_MAX_INDEX);
-        CGS_ASSERT(mpaIntervals[luRemoveInterval].mu16ObjectIndex == luObjectIndex,
-                   "mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex");
+        CGS_ASSERT_AT(mpaIntervals[luRemoveInterval].mu16ObjectIndex == luObjectIndex,
+                   "mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex", KAC_ARTIST_ASSERT_FILE, 294);
         RemoveInterval(luRemoveInterval);
 
         lrMap.Construct();
@@ -188,8 +188,8 @@ namespace CgsSceneManager
     // (min-role stores lMin.x, max-role stores lMax.x). Asserts both input vectors are valid.
     void IntervalList::UpdateObject(u16 luObjectIndex, Vector3 lMin, Vector3 lMax)
     {
-        CGS_ASSERT(rw::math::vpu::IsValid(lMin), "rw::math::IsValid( lMin )");
-        CGS_ASSERT(rw::math::vpu::IsValid(lMax), "rw::math::IsValid( lMax )");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lMin), "rw::math::IsValid( lMin )", KAC_ARTIST_ASSERT_FILE, 360);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lMax), "rw::math::IsValid( lMax )", KAC_ARTIST_ASSERT_FILE, 361);
 
         const f32 lfMinX      =  lMin.GetX();
         const f32 lfMaxX      =  lMax.GetX();
@@ -241,7 +241,7 @@ namespace CgsSceneManager
     void IntervalList::AddSentinelInterval()
     {
         const u32 luNewObjectMax = muNumIntervals;
-        CGS_ASSERT(luNewObjectMax < muMaxNumIntervals, "luNewObjectMax < muMaxNumIntervals");
+        CGS_ASSERT_AT(luNewObjectMax < muMaxNumIntervals, "luNewObjectMax < muMaxNumIntervals", KAC_ARTIST_ASSERT_FILE, 408);
 
         Interval& lrInterval = mpaIntervals[luNewObjectMax];
         lrInterval.mfXInterval         =  KF_SENTINEL_INTERVAL;

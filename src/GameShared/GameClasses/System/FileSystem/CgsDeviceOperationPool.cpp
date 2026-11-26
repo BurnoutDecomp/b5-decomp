@@ -58,8 +58,8 @@ namespace CgsFileSystem
         RtlEnterCriticalSection(&mFutex.mCriticalSection);
 
         // Sequence-counter exhaustion guard (asm: ld @0x4E60 compared to (u64)-1).
-        CGS_ASSERT(muNextOperationNumber != static_cast<u64>(-1),
-                   "Out of operations - sounds crazy, means we must have done a million billion ticks...\n");
+        CGS_ASSERT_AT(muNextOperationNumber != static_cast<u64>(-1),
+                   "Out of operations - sounds crazy, means we must have done a million billion ticks...\n", CGS_ARTIST_OPERATION_POOL_FILE, 101);
 
         // Find the first free slot.
         s32 liIndex = 0;

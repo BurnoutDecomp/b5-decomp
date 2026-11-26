@@ -25,7 +25,7 @@
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManagerIO.h"          // SpatialPartitionIO::InputBuffer_Update
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsSpatialPartition.h"  // SpatialPartition
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.h"       // LooseOctree
-
+#define CGS_ARTIST_CGSSPATIALPARTITIONMANAGER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\SpatialPartitionModule/CgsSpatialPartitionManager.cpp"
 namespace CgsSceneManager
 {
 namespace
@@ -179,7 +179,7 @@ bool SpatialPartitionManager::Release()
             return true;
 
         default:
-            CGS_FAIL("Unrecognised release state");
+            CGS_FAIL_AT("Unrecognised release state", CGS_ARTIST_CGSSPATIALPARTITIONMANAGER_FILE, 216);
             return false;
     }
 }
@@ -198,7 +198,7 @@ bool SpatialPartitionManager::Release()
 // ===========================================================================
 void SpatialPartitionManager::ProcessUpdateQueue(const SpatialPartitionIO::InputBuffer_Update* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != NULL, "lpInputBuffer != NULL");
+    CGS_ASSERT_AT(lpInputBuffer != NULL, "lpInputBuffer != NULL", CGS_ARTIST_CGSSPATIALPARTITIONMANAGER_FILE, 285);
 
     SpatialPartition* lpPartition = mpSpatialPartition;
     if (lpPartition == NULL)
@@ -245,7 +245,7 @@ void SpatialPartitionManager::ProcessUpdateQueue(const SpatialPartitionIO::Input
                 break;
             }
             default:
-                CGS_FAIL("Unrecognised event in update queue");
+                CGS_FAIL_AT("Unrecognised event in update queue", CGS_ARTIST_CGSSPATIALPARTITIONMANAGER_FILE, 342);
                 break;
         }
         liId = lpInputBuffer->GetSpatialPartitionUpdateQueue()->GetNextEvent(lpEvent, &lpEvent, &liSize);
@@ -263,7 +263,7 @@ void SpatialPartitionManager::ProcessUpdateQueue(const SpatialPartitionIO::Input
 // ===========================================================================
 void SpatialPartitionManager::UpdateScene(SpatialPartitionIO::InputBuffer_Update* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != NULL, "lpInputBuffer != NULL");
+    CGS_ASSERT_AT(lpInputBuffer != NULL, "lpInputBuffer != NULL", CGS_ARTIST_CGSSPATIALPARTITIONMANAGER_FILE, 256);
     if (lpInputBuffer == NULL)
     {
         return;

@@ -3,7 +3,7 @@
 #include <string.h>  // _stricmp - SetValueFromString matches option names case-insensitively
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
-
+#define CGS_ARTIST_CGSVARIABLE_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/UI/Variables/CgsVariable.cpp"
 // CgsDev::DebugUI::Variable - a registered debug variable: the value Variant, its display name,
 // and the intrusive VariableMetadata attribute chain (min / max / step / read-only / save-enabled /
 // visible / option list / change+select callbacks).
@@ -186,8 +186,8 @@ namespace CgsDev
         // (0x828232B8 and 0x82823280 are identical), so a duplicate is reported and still linked.
         void Variable::AddMetadata(VariableMetadata* lpMetadata)
         {
-            CGS_ASSERT(lpMetadata, "lpMetadata");
-            CGS_ASSERT(FindMetadata(lpMetadata->meType) == 0, "same metadata added twice");
+            CGS_ASSERT_AT(lpMetadata, "lpMetadata", CGS_ARTIST_CGSVARIABLE_FILE, 551);
+            CGS_ASSERT_AT(FindMetadata(lpMetadata->meType) == 0, "same metadata added twice", CGS_ARTIST_CGSVARIABLE_FILE, 552);
 
             lpMetadata->mpNextMetadata = mpMetadata;
             mpMetadata                 = lpMetadata;
@@ -200,7 +200,7 @@ namespace CgsDev
         // inlined sequence at CgsVariable.cpp:571.
         void Variable::RemoveMetadata(VariableMetadata* lpMetadata)
         {
-            CGS_ASSERT(lpMetadata, "lpMetadata");
+            CGS_ASSERT_AT(lpMetadata, "lpMetadata", CGS_ARTIST_CGSVARIABLE_FILE, 571);
 
             if (lpMetadata == mpMetadata)
             {
@@ -421,8 +421,8 @@ namespace CgsDev
             const StringList* lpStringList = GetStringList();
             if (lpStringList != 0)
             {
-                CGS_ASSERT(mVariant.meType == Variant::E_TYPE_PTR_INT32,
-                           "mVariant.meType == Variant::E_TYPE_PTR_INT32");
+                CGS_ASSERT_AT(mVariant.meType == Variant::E_TYPE_PTR_INT32,
+                           "mVariant.meType == Variant::E_TYPE_PTR_INT32", CGS_ARTIST_CGSVARIABLE_FILE, 221);
 
                 while (lpStringList->mpcName != 0 && _stricmp(lpStringList->mpcName, lpcValue) != 0)
                     ++lpStringList;
@@ -461,8 +461,8 @@ namespace CgsDev
             const StringList* lpStringList = GetStringList();
             if (lpStringList != 0)
             {
-                CGS_ASSERT(mVariant.meType == Variant::E_TYPE_PTR_INT32,
-                           "mVariant.meType == Variant::E_TYPE_PTR_INT32");
+                CGS_ASSERT_AT(mVariant.meType == Variant::E_TYPE_PTR_INT32,
+                           "mVariant.meType == Variant::E_TYPE_PTR_INT32", CGS_ARTIST_CGSVARIABLE_FILE, 175);
                 if (mVariant.meType == Variant::E_TYPE_PTR_INT32)
                 {
                     while (lpStringList->mpcName != 0)
