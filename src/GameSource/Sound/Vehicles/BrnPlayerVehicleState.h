@@ -37,7 +37,6 @@ struct PlayerVehicleState : public BrnSound::Vehicles::VehicleState
     // MemBase base vtable, and (deleting flavour) frees the storage through the sound
     // allocator (host `delete` stands in). Bodied out-of-line in
     // BrnPlayerVehicleState.cpp.
-    virtual ~PlayerVehicleState();
 
     // -- per-class RTTI. DEFERRED bodies (declared for the state vtable shape).
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetTypeInfo() const;

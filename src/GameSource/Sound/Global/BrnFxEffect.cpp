@@ -6,6 +6,9 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameSource/Sound/Collision/BrnCollisionStateManager.h" // Notify case 8: the collision splice bank
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+
+// ARTIST's assert path for this unity member (__FILE__ inside BrnSoundUnity).
+#define BRN_FXEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Global/BrnFxEffect.cpp"
 // =============================================================================
 // BrnSound::Logic::FxEffect - out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnFxEffect.h for the dual-base
@@ -181,9 +184,9 @@ bool FxEffect::Attach()
         mafVolumes[liVoice]       = 1.0f;
     }
 
-    mpGlobalStateManager = static_cast<GlobalStateManager*>(
-        GetStateBase() ? GetStateBase()->GetStateManager() : 0);
-    CGS_ASSERT(mpGlobalStateManager != 0, "mpGlobalStateManager");
+    // No null test of the state: ARTIST reads it straight through (0x8269E1B0/B4).
+    mpGlobalStateManager = static_cast<GlobalStateManager*>(GetStateBase()->GetStateManager());
+    CGS_ASSERT_AT(mpGlobalStateManager != 0, "mpGlobalStateManager", BRN_FXEFFECT_CPP_FILE, 213);
 
     miFrameCountBeforeRetrigger = 0;
     return true;
@@ -562,3 +565,5 @@ void FxEffect::UpdateParams(f32 /*af32DeltaTime*/)
 
 } // namespace Logic
 } // namespace BrnSound
+
+#undef BRN_FXEFFECT_CPP_FILE

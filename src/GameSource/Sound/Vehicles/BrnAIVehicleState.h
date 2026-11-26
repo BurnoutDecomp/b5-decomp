@@ -34,7 +34,6 @@ namespace Vehicles
 struct AIVehicleState : public BrnSound::Vehicles::VehicleState
 {
     AIVehicleState() {}
-    virtual ~AIVehicleState();                       // @ 0x826CA8F8 (scalar deleting destructor)
 
     // -- per-class RTTI (DWARF h:37 / cpp:27).
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetTypeInfo() const;

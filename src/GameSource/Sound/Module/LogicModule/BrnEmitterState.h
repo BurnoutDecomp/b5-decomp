@@ -75,7 +75,8 @@ struct EmitterState : public BrnSound::Logic::BrnState
 
     const BrnSound::World::StaticSoundEntity& GetSoundEntity() const
     {
-        CGS_ASSERT(IsAttached(), "IsAttached()");
+        // The original header's line (ARTIST string 0x820ACBF8, li r5 0x9D in EmitterStateManager::GetFreeState).
+        CGS_ASSERT_AT(IsAttached(), "IsAttached()", "..\\..\\..\\GameSource\\Sound/World/BrnEmitterState.h", 157);
         return mEntity;
     }
 

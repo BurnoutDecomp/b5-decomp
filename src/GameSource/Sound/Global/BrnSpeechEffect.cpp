@@ -22,6 +22,9 @@
 #include <cstdlib>   // getenv -- [DIAG] only
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GenericRwacFactory::SK_NAME (ARTIST reads the static, 0x83008650)
 
+// ARTIST's assert path for this unity member (__FILE__ inside BrnSoundUnity).
+#define BRN_SPEECHEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Global/BrnSpeechEffect.cpp"
+
 namespace BrnSound
 {
 namespace Logic
@@ -214,7 +217,7 @@ bool SpeechEffect::Detach()
         static_cast<Streaming::StreamingStateManager*>(
             static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
                 ->GetEnvironment().GetStateManager(6));
-    CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");   // 826F7F90.. (cpp:225)
+    CGS_ASSERT_AT(lpStreamingStateMan != 0, "lpStreamingStateMan", BRN_SPEECHEFFECT_CPP_FILE, 225);   // 826F7F90.. (cpp:225)
 
     // 826F7FB0..826F7FEC -- unconditional. .rdata 0x82003F40 == 0.25f.
     lpStreamingStateMan->PostStreamRequest(Streaming::StreamStopRequest(this, 0.25f));
@@ -813,3 +816,5 @@ const char* SpeechEffect::GameModeToString(int, int aiMode)
 
 } // namespace Logic
 } // namespace BrnSound
+
+#undef BRN_SPEECHEFFECT_CPP_FILE

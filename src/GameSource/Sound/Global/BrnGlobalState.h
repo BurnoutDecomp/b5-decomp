@@ -41,7 +41,6 @@ struct GlobalState : public BrnSound::Logic::BrnState
     // is the DestroyEffects() call; the vtable re-installs and allocator-routed
     // free are the compiler-synthesised deleting-destructor parts (host `delete`
     // stands in for off_82FFB954). Bodied out-of-line in BrnGlobalState.cpp.
-    virtual ~GlobalState();
 
     // — per-class RTTI. DEFERRED bodies (declared for the
     // state vtable shape; sTypeInfo static-init lives in its own recon slice).

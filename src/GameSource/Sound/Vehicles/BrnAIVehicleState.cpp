@@ -25,14 +25,6 @@ namespace BrnSound
 namespace Vehicles
 {
 
-// @ 0x826CA8F8 -- the single source-level side effect is DestroyEffects(); the
-// vtable re-installs and the allocator-routed free are the compiler's
-// deleting-destructor thunk.
-AIVehicleState::~AIVehicleState()
-{
-    DestroyEffects();
-}
-
 // Descriptor 0x82F2E89C: {0x20000, "AIVehicleState", base BrnState (0x82F2E7DC),
 // &CreateObject}. The base descriptor is passed as null here like the committed
 // sibling PlayerVehicleState (BrnState has no in-tree descriptor); the base chain

@@ -94,12 +94,10 @@ StreamStopRequest::StreamStopRequest(const IStreamUser* apAttachment, f32 afFade
 // builds NO sub-objects with their own vtables / refcounts beyond the inherited
 // IResourceRequester, so there is nothing for the dtor to release.)
 // ---------------------------------------------------------------------------
+// The request counters (DWARF h:233..237) are not written here: ARTIST's ctor ends at the table
+// clear (0x826FBFE0, 464 B); Construct sets them.
 StreamingStateManager::StreamingStateManager()
     : BrnSound::Logic::BrnStateManager()
-    , muPlayRequestCount(0)
-    , muStopRequestCount(0)
-    , muNumRePostRequests(0)
-    , muUniqueId(0)
 {
 }
 

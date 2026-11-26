@@ -9,6 +9,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "SharedClasses/Trigger/BrnGenericRegion.h"
 
+// ARTIST's assert path for this unity member (__FILE__ inside BrnSoundUnity).
+#define BRN_REVERBEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Environment/BrnReverbEffect.cpp"
+
 // =============================================================================
 // BrnSound::Vehicles::Environment::ReverbEffect -- out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Recon'd function set:
@@ -94,7 +97,7 @@ bool ReverbEffect::Attach()
     if (!CgsSound::Logic::EffectBase::Attach())
         return false;
 
-    CGS_ASSERT(mpEnclosureControl != 0, "mpEnclosureControl");
+    CGS_ASSERT_AT(mpEnclosureControl != 0, "mpEnclosureControl", BRN_REVERBEFFECT_CPP_FILE, 87);
     mfTime       = 0.0f;
     mfSpaceSize  = 15.0f;
     mfBrightness = 1.0f;
@@ -285,3 +288,5 @@ ReverbEffect::~ReverbEffect()
 } // namespace Environment
 } // namespace Vehicles
 } // namespace BrnSound
+
+#undef BRN_REVERBEFFECT_CPP_FILE

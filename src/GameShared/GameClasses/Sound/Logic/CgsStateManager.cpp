@@ -369,28 +369,28 @@ State* StateManager::CreateState(s32 liStateType)
     return lpState;
 }
 
-template <typename TEffect>
-static EffectBase* CreateEffectFromRegistry(StateManager* apManager,
-                                            s32 liInstanceId, s32 liEffectId)
+// @ 0x826A5460 (604 B): the registry search is this function's own body; ARTIST calls it out of line
+// from State::NewSFXObj / NewSFXCtrl (0x826C4640) rather than inlining a shared helper.
+EffectBase* StateManager::CreateEffectObject(s32 liInstanceId, s32 liEffectId)
 {
-    ClassTypeInfo<TEffect>* lpMatch = 0;
-    for (u32 luSlot = 0; luSlot < TEffect::KU_SIZEOF_CLASS_ARRAY; ++luSlot)
+    ClassTypeInfo<EffectObject>* lpMatch = 0;
+    for (u32 luSlot = 0; luSlot < EffectObject::KU_SIZEOF_CLASS_ARRAY; ++luSlot)
     {
-        ClassTypeInfo<TEffect>* lpDescriptor = TEffect::GetRegisteredTypeInfo(luSlot);
+        ClassTypeInfo<EffectObject>* lpDescriptor = EffectObject::GetRegisteredTypeInfo(luSlot);
         if (!lpDescriptor)
             break;
         if (((lpDescriptor->ObjectID >> 4) & 0x7F) != liEffectId)
             continue;
         const s32 liDescriptorState = (lpDescriptor->ObjectID >> 16) & 0xFF;
-        if (apManager->IsStateAlias(liDescriptorState) && !lpMatch)
+        if (IsStateAlias(liDescriptorState) && !lpMatch)
             lpMatch = lpDescriptor;
-        if (liDescriptorState == apManager->GetStateType())
+        if (liDescriptorState == GetStateType())
         {
             if (!lpMatch || ((lpMatch->ObjectID >> 16) & 0xFF) != liDescriptorState)
                 lpMatch = lpDescriptor;
             else
             {
-                for (ClassTypeInfo<TEffect>* lpBase = lpDescriptor->baseTypeInfo;
+                for (ClassTypeInfo<EffectObject>* lpBase = lpDescriptor->baseTypeInfo;
                      lpBase; lpBase = lpBase->baseTypeInfo)
                 {
                     if (lpBase == lpMatch)
@@ -405,20 +405,52 @@ static EffectBase* CreateEffectFromRegistry(StateManager* apManager,
     CGS_ASSERT(lpMatch != 0, "Failed to find Effect Object");
     if (!lpMatch)
         return 0;
-    TEffect* lpEffect = lpMatch->CreateObject(0);
+    EffectObject* lpEffect = lpMatch->CreateObject(0);
     if (lpEffect)
-        lpEffect->SetId(16 * ((((32 * apManager->GetStateType()) | liInstanceId) << 7) | liEffectId));
+        lpEffect->SetId(16 * ((((32 * GetStateType()) | liInstanceId) << 7) | liEffectId));
     return lpEffect;
 }
 
-EffectBase* StateManager::CreateEffectObject(s32 liInstanceId, s32 liEffectId)
-{
-    return CreateEffectFromRegistry<EffectObject>(this, liInstanceId, liEffectId);
-}
-
+// @ 0x826A56C0 (604 B): the registry search is this function's own body; ARTIST calls it out of line
+// from State::NewSFXObj / NewSFXCtrl (0x826C4640) rather than inlining a shared helper.
 EffectBase* StateManager::CreateEffectControl(s32 liInstanceId, s32 liEffectId)
 {
-    return CreateEffectFromRegistry<EffectControl>(this, liInstanceId, liEffectId);
+    ClassTypeInfo<EffectControl>* lpMatch = 0;
+    for (u32 luSlot = 0; luSlot < EffectControl::KU_SIZEOF_CLASS_ARRAY; ++luSlot)
+    {
+        ClassTypeInfo<EffectControl>* lpDescriptor = EffectControl::GetRegisteredTypeInfo(luSlot);
+        if (!lpDescriptor)
+            break;
+        if (((lpDescriptor->ObjectID >> 4) & 0x7F) != liEffectId)
+            continue;
+        const s32 liDescriptorState = (lpDescriptor->ObjectID >> 16) & 0xFF;
+        if (IsStateAlias(liDescriptorState) && !lpMatch)
+            lpMatch = lpDescriptor;
+        if (liDescriptorState == GetStateType())
+        {
+            if (!lpMatch || ((lpMatch->ObjectID >> 16) & 0xFF) != liDescriptorState)
+                lpMatch = lpDescriptor;
+            else
+            {
+                for (ClassTypeInfo<EffectControl>* lpBase = lpDescriptor->baseTypeInfo;
+                     lpBase; lpBase = lpBase->baseTypeInfo)
+                {
+                    if (lpBase == lpMatch)
+                    {
+                        lpMatch = lpDescriptor;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    CGS_ASSERT(lpMatch != 0, "Failed to find Effect Object");
+    if (!lpMatch)
+        return 0;
+    EffectControl* lpEffect = lpMatch->CreateObject(0);
+    if (lpEffect)
+        lpEffect->SetId(16 * ((((32 * GetStateType()) | liInstanceId) << 7) | liEffectId));
+    return lpEffect;
 }
 
 // ---------------------------------------------------------------------------

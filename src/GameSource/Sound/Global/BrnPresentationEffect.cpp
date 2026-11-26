@@ -15,6 +15,9 @@
 #include <cstring>
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GenericRwacFactory::SK_NAME (ARTIST reads the static, 0x83008650)
 
+// ARTIST's assert path for this unity member (__FILE__ inside BrnSoundUnity).
+#define BRN_PRESENTATIONEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Global/BrnPresentationEffect.cpp"
+
 // =============================================================================
 // BrnSound::Logic::PresentationEffect -- out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
@@ -561,7 +564,7 @@ bool PresentationEffect::Detach()
         static_cast<Streaming::StreamingStateManager*>(
             lpModule->GetEnvironment().GetStateManager(6));
     // 826F786C..826F7888 -- the console's own expression string; NO guard follows it.
-    CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
+    CGS_ASSERT_AT(lpStreamingStateMan != 0, "lpStreamingStateMan", BRN_PRESENTATIONEFFECT_CPP_FILE, 234);
 
     // 826F788C..826F78C4
     lpStreamingStateMan->PostStreamRequest(
@@ -572,3 +575,5 @@ bool PresentationEffect::Detach()
 
 } // namespace Logic
 } // namespace BrnSound
+
+#undef BRN_PRESENTATIONEFFECT_CPP_FILE

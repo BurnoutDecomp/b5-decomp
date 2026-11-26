@@ -153,7 +153,7 @@ bool SpeedStreamEffect::Detach()
         static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
             static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
                 ->GetEnvironment().GetStateManager(6));
-    CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
+    CGS_ASSERT_AT(lpStreamingStateMan != 0, "lpStreamingStateMan", BRN_SPEEDSTREAMEFFECT_CPP_FILE, 415);
     lpStreamingStateMan->PostStreamRequest(
         BrnSound::Logic::Streaming::StreamStopRequest(this, 0.25f));
     return true;

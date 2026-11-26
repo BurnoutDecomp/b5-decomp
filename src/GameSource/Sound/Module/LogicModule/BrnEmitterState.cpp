@@ -60,9 +60,11 @@ inline u16 EntityTypeHighWord(f32 lfPackedW)
 // a separate un-homed sound-logic recon slice). It is called BY NAME here to match
 // the X360 `bl` exactly; no body is fabricated for it.
 // ---------------------------------------------------------------------------
+// The body is empty: ~State (CgsState.cpp) stores State's vftable and calls DestroyEffects once
+// (every State-derived scalar deleting destructor in ARTIST makes exactly that one call, e.g.
+// GlobalState 0x826D2278 after storing 0x820AE1F4, State's vftable).
 EmitterState::~EmitterState()
 {
-    DestroyEffects();
 }
 
 // ARTIST 0x82F2F83C.

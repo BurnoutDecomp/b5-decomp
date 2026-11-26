@@ -67,9 +67,11 @@ StreamingState::StreamingState()
 // slice, recovered call target CgsSound::Logic::State::DestroyEffects @ the
 // 0x826C9B50 bl); declaration-only in CgsState.h -- no body is fabricated here.
 // ---------------------------------------------------------------------------
+// The body is empty: ~State (CgsState.cpp) stores State's vftable and calls DestroyEffects once
+// (every State-derived scalar deleting destructor in ARTIST makes exactly that one call, e.g.
+// GlobalState 0x826D2278 after storing 0x820AE1F4, State's vftable).
 StreamingState::~StreamingState()
 {
-    DestroyEffects();
 }
 
 // ---------------------------------------------------------------------------

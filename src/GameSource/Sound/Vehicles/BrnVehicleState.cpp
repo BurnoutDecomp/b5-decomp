@@ -95,8 +95,8 @@ void VehicleState::Clear()
     mAttachInfo.Clear();
     mcaEngineComponentName[E_ENGINE][0] = '\0';
     mcaEngineComponentName[E_EXHAUST][0] = '\0';
-    std::memset(mEngineComponentKey, 0, sizeof(mEngineComponentKey));
     mfMaxRpm = 0.0f;
+    std::memset(mEngineComponentKey, 0, sizeof(mEngineComponentKey));
 }
 
 void VehicleState::UpdateParams(f32 af32DeltaTime)

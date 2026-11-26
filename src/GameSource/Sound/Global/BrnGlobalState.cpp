@@ -19,12 +19,6 @@ const char* GlobalState::GetTypeName() const
     return sTypeInfo.typeName; // ARTIST 0x82686808
 }
 
-// ARTIST 0x826D2250 installs the class vtable before tearing down the effects.
-GlobalState::~GlobalState()
-{
-    DestroyEffects();
-}
-
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GlobalState::GetStaticTypeInfo()
 {
     return &sTypeInfo;

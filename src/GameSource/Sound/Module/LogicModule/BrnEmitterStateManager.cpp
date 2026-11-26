@@ -4,6 +4,9 @@
 #include "GameSource/Sound/World/BrnEmitterEffect.h"   // KB_DEBUG_WORLD_EMITTERS (Query's lbDrawDebug)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
+// ARTIST's assert path for this unity member (__FILE__ inside BrnSoundUnity).
+#define BRN_EMITTERSTATEMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/World/BrnEmitterStateManager.cpp"
+
 // =============================================================================
 // BrnSound::Logic::World::EmitterStateManager — out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnEmitterStateManager.h for the
@@ -283,7 +286,7 @@ CgsSound::Logic::State* EmitterStateManager::GetFreeState(void* lpvAttachment)
     if (lpFree)
         return lpFree;
 
-    CGS_ASSERT(lpvAttachment != 0, "lpvObjectPtr");
+    CGS_ASSERT_AT(lpvAttachment != 0, "lpvObjectPtr", BRN_EMITTERSTATEMANAGER_CPP_FILE, 212);
     const BrnSound::World::StaticSoundEntity* lpNewEntity =
         static_cast<const BrnSound::World::StaticSoundEntity*>(lpvAttachment);
     const Vector3 lNewPos = lpNewEntity->GetPos();
@@ -295,7 +298,7 @@ CgsSound::Logic::State* EmitterStateManager::GetFreeState(void* lpvAttachment)
          lpState; lpState = lpState->GetNextState())
     {
         EmitterState* lpEmitterState = static_cast<EmitterState*>(lpState);
-        CGS_ASSERT(lpEmitterState->IsAttached(), "lpEmitterState->IsAttached()");   // l.220
+        CGS_ASSERT_AT(lpEmitterState->IsAttached(), "lpEmitterState->IsAttached()", BRN_EMITTERSTATEMANAGER_CPP_FILE, 220);   // l.220
         const Vector3 lOldPos = lpEmitterState->GetSoundEntity().GetPos();
         const rw::math::vpu::VectorIntrinsic lOldDelta = __vsubfp(mCameraPos.mV, lOldPos.mV);
         const rw::math::vpu::VectorIntrinsic lOldSquared = __vmsum3fp(lOldDelta, lOldDelta);
@@ -309,3 +312,5 @@ CgsSound::Logic::State* EmitterStateManager::GetFreeState(void* lpvAttachment)
 } // namespace World
 } // namespace Logic
 } // namespace BrnSound
+
+#undef BRN_EMITTERSTATEMANAGER_CPP_FILE
