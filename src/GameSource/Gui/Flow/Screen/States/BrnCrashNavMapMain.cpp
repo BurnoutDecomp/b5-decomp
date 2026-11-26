@@ -234,7 +234,7 @@ namespace BrnGui
     // X360 off_82F26EF8 -- the audio label both zoom arms pass (IDA renders the string
     // inline at the load: `lwz r6, off_82F26EF8@l(r11)  # "CodeMapZoom"`). The DWARF
     // names the constant KPC_SOUND_MAP_ZOOM (BrnCrashNavMapMain.cpp:56).
-    const char* const CrashNavMapMain::KPC_SOUND_MAP_ZOOM = "CodeMapZoom";
+    const char* CrashNavMapMain::KPC_SOUND_MAP_ZOOM = "CodeMapZoom";   // DWARF `const char *` (.data)
 
     // =================================================================================
     //  Construct  @0x824B75D8  (cpp:75)
@@ -584,7 +584,10 @@ namespace BrnGui
         const s32 liAction =
             *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpEvent) + 4);
 
-        if (liAction == KI_ACTION_GUI_LTRIGGER)          // 56
+        // A switch: ARTIST tests 56 first and branches to that arm placed last (0x824CCDA8).
+        switch (liAction)
+        {
+        case KI_ACTION_GUI_LTRIGGER:          // 56
         {
             mMainMapComponent.SetZoom(MainMapComponent::E_ZOOMFACTOR_MEDIUM,
                                       KF_MAP_ZOOM_UNUSED_CUSTOM, false);
@@ -603,8 +606,9 @@ namespace BrnGui
             mpStateInterface->OutputGuiEvent(lPayload);
 
             meCursorMode = E_CURSORMODE_SELECTING_ICONS;   // `li r11, 1 ; stw 0x5F50`
+            break;
         }
-        else if (liAction == KI_ACTION_GUI_RTRIGGER)     // 57
+        case KI_ACTION_GUI_RTRIGGER:     // 57
         {
             // `stw r30(=0), 0x609C(r31)` -- clear muInspectingEventID FIRST, then post
             // the same { 4, 558, 12, 0 } record on channel 41 and again on channel 42.
@@ -620,6 +624,8 @@ namespace BrnGui
                                       KF_MAP_ZOOM_UNUSED_CUSTOM, false);
 
             meCursorMode = E_CURSORMODE_SELECTING_ICONS;
+            break;
+        }
         }
     }
 }

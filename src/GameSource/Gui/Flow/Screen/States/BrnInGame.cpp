@@ -186,22 +186,6 @@ namespace BrnGui
             lpInterface->OutputGuiEvent(lWire.mRequest);
         }
 
-        // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> wire record
-        // (@0x82476E98): { 8, 188, 16, <pad>, CgsID }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire
-        {
-            GuiOverlayWaitFinishRequest mRequest;   // the OutputGuiEvent payload
-            GuiOverlayWaitFinishWire() {}
-        };
-
-        void PostOverlayWaitFinishRequest(CgsGui::StateInterface* lpInterface,
-                                          const char* lpcOverlayId)
-        {
-            GuiOverlayWaitFinishWire lWire;
-            lWire.mRequest.Construct(lpcOverlayId);
-            lpInterface->OutputGuiEvent(lWire.mRequest);
-        }
-
         // The OutputGuiEvent<BrnGui::GuiEventNetworkSplashEvent> wire record
         // (@0x82493880): { 4, 269, 12, state }, channel 40, 16 bytes.
         struct GuiNetworkSplashWire16 : public CgsGui::GuiEvent<269>
@@ -217,10 +201,6 @@ namespace BrnGui
         //      GetInEventColouringGate / GetTimeStep / AreAllAptComponentsInitialised).
         //      Each helper names the X360 member + offset so the GuiCache TU can absorb
         //      it as a real accessor. ---------------------------------------------------
-
-        // ARTIST SelectOnlineMenuOption 0x824D0C9C: restore the return-to-EasyDrive latch.
-        // The existing cache accessor has the earlier consumer name OnlineStartPending.
-        void CacheSetEnteredOnlineViaEasyDrive(GuiCache* lpCache) { lpCache->SetOnlineStartPending(true); }
 
         // The five PauseAllowed @0x824B8DF8 gate bytes, read off the cache BY NAME
         // (issue #29 wave, 2026-09-15). These used to be five `return false` leaves, which
@@ -336,8 +316,6 @@ namespace BrnGui
         mbIsInEventStartLocation        = false;
         mbIsGuideVisible                = false;
         meSelectedOnlineMainMenuOption  = E_MAIN_MENU_OPTIONS_COUNT;
-        mpGuiCache                      = 0;
-        mpProfile                       = 0;
 
         // DWARF local cpp:147: the HUD components come up on the internal channel (the
         // mbShow = false twin is ShutDownHudComponents).
@@ -355,32 +333,51 @@ namespace BrnGui
         GuiEventNetworkPlayerImageWire lViewReset(0, -1);
         mpStateInterface->OutputViewState(lViewReset);
 
+        // Cleared after the view reset, as the DecFIGS PS3 body (0x4F2780) orders them.
+        mpGuiCache = 0;
+        mpProfile  = 0;
+
         // { 8, 191, 12, 1, 0 } -- activate the CrashNav (front-end map) flow.
         GuiEventActivateCrashNav lActivateCrashNav;
         lActivateCrashNav.muActivate = 1u;
         lActivateCrashNav.muParam = 0;
         mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
-        PostCommand16<261>(mpStateInterface);
-        PostCommand16<145>(mpStateInterface);
+        GuiEventNetworkReadyToJoinGameSession lReadyToJoinGameSessionEvent;   // DWARF cpp:164
+        mpStateInterface->OutputGuiEvent(lReadyToJoinGameSessionEvent);
+        GuiEventStartedGame lStartedGameEvent;                                  // DWARF cpp:167
+        mpStateInterface->OutputGuiEvent(lStartedGameEvent);
         // DWARF local cpp:170.
         GuiRequestCarControlChangeEvent lChangeEvent;
         lChangeEvent.mbPlayerShouldHaveControl = true;
         mpStateInterface->OutputGuiEvent(lChangeEvent);
 
         // The wait-finish registrations: each overlay that must finish hiding before
-        // its flow transition proceeds (X360 posts the 24-byte 188 record per name).
-        PostOverlayWaitFinishRequest(mpStateInterface, "CNOnlLvgGame");
-        PostOverlayWaitFinishRequest(mpStateInterface, "CNOnlLvGmQn");
-        PostOverlayWaitFinishRequest(mpStateInterface, "CNOnlLvChaQn");
-        PostOverlayWaitFinishRequest(mpStateInterface, "GMOnlLvGmQn");
-        PostOverlayWaitFinishRequest(mpStateInterface, "CNOnlEntGame");
-        PostOverlayWaitFinishRequest(mpStateInterface, "CNOnlLchGame");
-        PostOverlayWaitFinishRequest(mpStateInterface, "CNOnlLchGmH");
-        PostOverlayWaitFinishRequest(mpStateInterface, "OnHReturnOn");
-        PostOverlayWaitFinishRequest(mpStateInterface, "OnCReturnOn");
-        PostOverlayWaitFinishRequest(mpStateInterface, "OnHEnterOn");
-        PostOverlayWaitFinishRequest(mpStateInterface, "OnCEnterOn");
+        // its flow transition proceeds (X360 posts the 24-byte 188 record per name), all
+        // through the one DWARF local lOverlayFinished (cpp:174).
+        GuiOverlayWaitFinishRequest lOverlayFinished;
+        lOverlayFinished.Construct("CNOnlLvgGame");
+        mpStateInterface->OutputGuiEvent(lOverlayFinished);
+        lOverlayFinished.Construct("CNOnlLvGmQn");
+        mpStateInterface->OutputGuiEvent(lOverlayFinished);
+        lOverlayFinished.Construct("CNOnlLvChaQn");
+        mpStateInterface->OutputGuiEvent(lOverlayFinished);
+        lOverlayFinished.Construct("GMOnlLvGmQn");
+        mpStateInterface->OutputGuiEvent(lOverlayFinished);
+        lOverlayFinished.Construct("CNOnlEntGame");
+        mpStateInterface->OutputGuiEvent(lOverlayFinished);
+        lOverlayFinished.Construct("CNOnlLchGame");
+        mpStateInterface->OutputGuiEvent(lOverlayFinished);
+        lOverlayFinished.Construct("CNOnlLchGmH");
+        mpStateInterface->OutputGuiEvent(lOverlayFinished);
+        lOverlayFinished.Construct("OnHReturnOn");
+        mpStateInterface->OutputGuiEvent(lOverlayFinished);
+        lOverlayFinished.Construct("OnCReturnOn");
+        mpStateInterface->OutputGuiEvent(lOverlayFinished);
+        lOverlayFinished.Construct("OnHEnterOn");
+        mpStateInterface->OutputGuiEvent(lOverlayFinished);
+        lOverlayFinished.Construct("OnCEnterOn");
+        mpStateInterface->OutputGuiEvent(lOverlayFinished);
 
     }
 
@@ -443,31 +440,36 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(lpNetworkSplashEvent != 0, "lpNetworkSplashEvent", CGS_ARTIST_FILE, 851);   // cpp:851
 
-        const u32 luSplashState = *reinterpret_cast<const u32*>(lpNetworkSplashEvent);
-        if (luSplashState == KU_SPLASH_STATE_SHOW)
+        // A switch on the DWARF event's state (ARTIST 0x824D0904: cmplwi 1, blt SHOW, bne out),
+        // with the DWARF block locals lOverlayRequest (cpp:858) and lOverlayFinishRequest (cpp:882).
+        switch (reinterpret_cast<const GuiEventNetworkSplashEvent*>(lpNetworkSplashEvent)->meSplashState)
+        {
+        case GuiEventNetworkSplashEvent::E_SPLASH_STATE_SHOW:
         {
             CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 862);                   // cpp:862
-            const s32 liGameModeType = mpGuiCache->GetGameMode();
+            GuiOverlayRequest lOverlayRequest;
+            const BrnGameState::GameStateModuleIO::EGameModeType leGameModeType = mpGuiCache->GetGameMode();
             // X360 bounds: > -1 (E_MODE_NONE) and < 18 (its E_MODE_COUNT -- one mode
             // more than the committed DecFIGS enum's 17; named form kept).
-            CGS_ASSERT_AT(liGameModeType > BrnGameState::GameStateModuleIO::E_MODE_NONE,
+            CGS_ASSERT_AT(leGameModeType > BrnGameState::GameStateModuleIO::E_MODE_NONE,
                        "leGameModeType > GsmIO::E_MODE_NONE", CGS_ARTIST_FILE, 864);           // cpp:864
-            CGS_ASSERT_AT(liGameModeType < BrnGameState::GameStateModuleIO::E_MODE_COUNT + 1,
+            CGS_ASSERT_AT(leGameModeType < BrnGameState::GameStateModuleIO::E_MODE_COUNT + 1,
                        "leGameModeType < GsmIO::E_MODE_COUNT", CGS_ARTIST_FILE, 865);          // cpp:865
 
-            const char* lpcSplashScreenID = GetSplashScreenIDForGameMode(
-                static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(liGameModeType));
+            const char* lpcSplashScreenID = GetSplashScreenIDForGameMode(leGameModeType);
             CGS_ASSERT_AT(lpcSplashScreenID != 0, "lpcSplashScreenID != NULL", CGS_ARTIST_FILE, 870);   // cpp:870
-            PostOverlayRequest(mpStateInterface, lpcSplashScreenID);
+            lOverlayRequest.Construct(lpcSplashScreenID);
+            mpStateInterface->OutputGuiEvent(lOverlayRequest);
+            break;
         }
-        else if (luSplashState == KU_SPLASH_STATE_STOP)
-        {
-            const s32 liGameModeType = mpGuiCache->GetGameMode();
-            if (liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
-                liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+        case GuiEventNetworkSplashEvent::E_SPLASH_STATE_STOP:
+            if (BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(mpGuiCache->GetGameMode()))
             {
-                PostOverlayWaitFinishRequest(mpStateInterface, "OnSplshFreeB");
+                GuiOverlayWaitFinishRequest lOverlayFinishRequest;
+                lOverlayFinishRequest.Construct("OnSplshFreeB");
+                mpStateInterface->OutputGuiEvent(lOverlayFinishRequest);
             }
+            break;
         }
     }
 
@@ -477,38 +479,42 @@ namespace BrnGui
     // overlay-complete handshake.
     void InGame::HandlePerformOnlineMainMenuOption(const CgsModule::Event* lpEvent)
     {
-        const EMainMenuOptions leOption =
+        // DWARF locals cpp:911..913. The join options are tested one by one (ARTIST
+        // 0x824DA3AC..0x824DA3F0: 0, 1, 2, 5..10). STUCK: ARTIST builds both requests in
+        // one stack slot (0x180, frame 0x2C0); these function-scope locals get two (0x3E0).
+        GuiOverlayRequest lPrivilegeOverlayRequest;
+        GuiOverlayRequest lExitOfflineOverlayRequest;
+        const EMainMenuOptions leMainMenuOption =
             reinterpret_cast<const GuiEventMainMenuOptionPayload*>(lpEvent)->meMainMenuOption;
 
-        if (!CheckPrivileges(leOption))
+        if (CheckPrivileges(leMainMenuOption))
         {
-            PostOverlayRequest(mpStateInterface, "CNOnlPrivErr");
-            return;
-        }
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 919);   // cpp:919
 
-        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 919);   // cpp:919
-
-        // The non-join options (gallery / challenges / scoreboards / news) go straight
-        // through.
-        const bool lbJoinOption =
-            leOption <= E_MAIN_MENU_OPTIONS_FREEBURN_CREATE ||
-            (leOption >= E_MAIN_MENU_OPTIONS_UNRANKED_PLAY_NOW &&
-             leOption <= E_MAIN_MENU_OPTIONS_RANKED_CREATE);
-        if (!lbJoinOption)
-        {
-            SelectOnlineMenuOption(leOption);
-            return;
-        }
-
-        if (!mpGuiCache->IsOnline() &&
-            mpGuiCache->GetGameMode() != BrnGameState::GameStateModuleIO::E_MODE_NONE)
-        {
-            PostOverlayRequest(mpStateInterface, "CNOnlStrtQn");
-            meSelectedOnlineMainMenuOption = leOption;
+            if ((leMainMenuOption == E_MAIN_MENU_OPTIONS_FREEBURN_PLAY_NOW ||
+                 leMainMenuOption == E_MAIN_MENU_OPTIONS_FREEBURN_CUSTOM_MATCH ||
+                 leMainMenuOption == E_MAIN_MENU_OPTIONS_FREEBURN_CREATE ||
+                 leMainMenuOption == E_MAIN_MENU_OPTIONS_UNRANKED_PLAY_NOW ||
+                 leMainMenuOption == E_MAIN_MENU_OPTIONS_UNRANKED_CUSTOM_MATCH ||
+                 leMainMenuOption == E_MAIN_MENU_OPTIONS_UNRANKED_CREATE ||
+                 leMainMenuOption == E_MAIN_MENU_OPTIONS_RANKED_PLAY_NOW ||
+                 leMainMenuOption == E_MAIN_MENU_OPTIONS_RANKED_CUSTOM_MATCH ||
+                 leMainMenuOption == E_MAIN_MENU_OPTIONS_RANKED_CREATE) &&
+                mpGuiCache->IsOfflineGameMode())
+            {
+                lExitOfflineOverlayRequest.Construct("CNOnlStrtQn");
+                mpStateInterface->OutputGuiEvent(lExitOfflineOverlayRequest);
+                meSelectedOnlineMainMenuOption = leMainMenuOption;
+            }
+            else
+            {
+                SelectOnlineMenuOption(leMainMenuOption);
+            }
         }
         else
         {
-            SelectOnlineMenuOption(leOption);
+            lPrivilegeOverlayRequest.Construct("CNOnlPrivErr");
+            mpStateInterface->OutputGuiEvent(lPrivilegeOverlayRequest);
         }
     }
 
@@ -517,7 +523,10 @@ namespace BrnGui
     // HandleOverlayComplete).
     void InGame::HandleInstantFreeburnSearchFail()
     {
-        PostOverlayRequest(mpStateInterface, "GMSrchFail");
+        // DWARF cpp:965 local; ARTIST reads mpStateInterface after the build (0x824D0A6C).
+        GuiOverlayRequest lCreateGameQnOverlay;
+        lCreateGameQnOverlay.Construct("GMSrchFail");
+        mpStateInterface->OutputGuiEvent(lCreateGameQnOverlay);
     }
 
     // @ 0x824DA4C8 -- DWARF param: const GuiOverlayCompleteEvent* (payload: id @+0,
@@ -681,48 +690,57 @@ namespace BrnGui
     // mark the easy-drive entry.
     void InGame::SelectOnlineMenuOption(EMainMenuOptions leMainMenuOption)
     {
-        // The X360 streams "Invalid Cache pointer selecting an online menu(<option>)"
-        // into the assert buffer; the plain condition string is kept per policy.
-        CGS_ASSERT(mpGuiCache != 0, "Invalid Cache pointer selecting an online menu");   // cpp:1308
+        CGS_ASSERT_STREAM_AT(mpGuiCache != 0,
+            "Invalid Cache pointer selecting an online menu(" << leMainMenuOption << ")",
+            CGS_ARTIST_FILE, 1308);   // cpp:1308, the option through operator<<(int32_t) 0x821F0E50
 
         SendStateEvent(KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[leMainMenuOption]);
 
-        bool lbJoinRequest = true;
+        // Each join arm posts its own DWARF lEvent (cpp:1322 / 1335 / 1348); ARTIST
+        // tail-merges the three identical reset+post tails (0x824D0C5C).
         switch (leMainMenuOption)
         {
         case E_MAIN_MENU_OPTIONS_FREEBURN_PLAY_NOW:
         case E_MAIN_MENU_OPTIONS_FREEBURN_CUSTOM_MATCH:
         case E_MAIN_MENU_OPTIONS_FREEBURN_CREATE:
+        {
             mpGuiCache->SetDoJoinOnlineRankedGame(false);
             mpGuiCache->SetDoJoinOnlineFreeburnGame(true);
+            mpGuiCache->SetResetOnlineGameOptions(true);
+            GuiNetworkPrepareGameEvent lEvent;
+            mpStateInterface->OutputGuiEvent(lEvent);
             break;
+        }
 
         case E_MAIN_MENU_OPTIONS_UNRANKED_PLAY_NOW:
         case E_MAIN_MENU_OPTIONS_UNRANKED_CUSTOM_MATCH:
         case E_MAIN_MENU_OPTIONS_UNRANKED_CREATE:
+        {
             mpGuiCache->SetDoJoinOnlineRankedGame(false);
             mpGuiCache->SetDoJoinOnlineFreeburnGame(false);
+            mpGuiCache->SetResetOnlineGameOptions(true);
+            GuiNetworkPrepareGameEvent lEvent;
+            mpStateInterface->OutputGuiEvent(lEvent);
             break;
+        }
 
         case E_MAIN_MENU_OPTIONS_RANKED_PLAY_NOW:
         case E_MAIN_MENU_OPTIONS_RANKED_CUSTOM_MATCH:
         case E_MAIN_MENU_OPTIONS_RANKED_CREATE:
+        {
             mpGuiCache->SetDoJoinOnlineRankedGame(true);
             mpGuiCache->SetDoJoinOnlineFreeburnGame(false);
+            mpGuiCache->SetResetOnlineGameOptions(true);
+            GuiNetworkPrepareGameEvent lEvent;
+            mpStateInterface->OutputGuiEvent(lEvent);
             break;
+        }
 
         default:   // gallery / challenges / scoreboards / news: no join bookkeeping
-            lbJoinRequest = false;
             break;
         }
 
-        if (lbJoinRequest)
-        {
-            mpGuiCache->SetResetOnlineGameOptions(true);
-            PostCommand16<268>(mpStateInterface);
-        }
-
-        CacheSetEnteredOnlineViaEasyDrive(mpGuiCache);
+        mpGuiCache->SetEnteredOnlineViaEasyDrive(true);
     }
 
     // @ 0x824E0ED0 -- two-pass in-queue drain (cache latch, then the 30-event dispatch),

@@ -806,6 +806,23 @@ namespace BrnGui
     // the DWARF local lGuiEventLeavePostEvent at BrnShowtimeInstantResults.cpp:937).
     typedef CgsGui::GuiEvent<292> GuiEventLeavePostEvent;
 
+    // DWARF CgsGuiEvent.h dump: `typedef GuiEvent<259> GuiEventNetworkReadyToJoinGameSession` and
+    // `typedef GuiEvent<143> GuiEventStartedGame` (PS3 ids); 261 and 145 on the X360 (InGame::OnEnter
+    // posts {1, 261, 12} @0x824D05B0 and {1, 145, 12} @0x824D05D8; DWARF locals cpp:164 / cpp:167).
+    typedef CgsGui::GuiEvent<261> GuiEventNetworkReadyToJoinGameSession;
+    typedef CgsGui::GuiEvent<145> GuiEventStartedGame;
+
+    // DWARF BrnGuiEventTypeDefs.h `struct GuiNetworkPrepareGameEvent : public GuiEvent<266> {}` (PS3
+    // id); 268 on the X360 (InGame::SelectOnlineMenuOption posts {1, 268, 12} @0x824D0C80).
+    struct GuiNetworkPrepareGameEvent : public CgsGui::GuiEvent<268>
+    {
+    };
+
+    // DWARF CgsGuiEvent.h dump: `typedef GuiEvent<306> GuiEventGameCompleteRequest` (PS3 id); 308
+    // on the X360 (FBurnMainHudState::OnEnter posts {1, 308, 12} @0x8247B640; DWARF local
+    // lIsGameComplete, BrnFBurnMainHudState.cpp:479).
+    typedef CgsGui::GuiEvent<308> GuiEventGameCompleteRequest;
+
     class GuiPlayerInfoResponse : public CgsGui::GuiEvent<406>
     {
     public:

@@ -927,6 +927,12 @@ namespace BrnGui
         // mbIsPerformInviteReceived, mbIsConnectedToNetwork, mbDoJoinOnlineRankedGame,
         // mbDoJoinOnlineFreeburnGame). InGame reads and writes the bytes through these names.
         bool IsOnline() const                 { return mbOnlineStartInProgress; }  // +0x4B4C
+        // DWARF h:996; ARTIST inlines it as a materialised bool (InGame::
+        // HandlePerformOnlineMainMenuOption 0x824DA3F4..0x824DA420).
+        bool IsOfflineGameMode() const
+        {
+            return !IsOnline() && meGameModeType != BrnGameState::GameStateModuleIO::E_MODE_NONE;
+        }
         bool IsPreparingForInvite() const     { return mbInviteInProgress; }       // +0x4B4D
         bool IsPerformInviteReceived() const  { return mbPerformingInvite; }       // +0x4B4F
         void SetDoJoinOnlineRankedGame(bool lbRanked)     { mbOnlineMatchRanked = lbRanked; }      // +0x4B51
@@ -937,6 +943,8 @@ namespace BrnGui
         s32 GetDoDisconnectPopupError() const { return meLastDisconnectedError; }
         // SetResetOnlineGameOptions: the byte after the params mirror (+0xA9E0).
         void SetResetOnlineGameOptions(bool lbReset) { mbOnlineGameOptionsChanged = lbReset; }
+        // DWARF h:989: the +0x4B53 byte InGame::SelectOnlineMenuOption sets last (0x824D0C9C).
+        void SetEnteredOnlineViaEasyDrive(bool lbEntered) { mbOnlineStartPending = lbEntered; }
         s32 GetPlayerActiveRaceCarIndex() const                  { return mGuiPlayerInfo.mePlayerActiveRaceCarIndex; }  // DWARF h:924
 
         // [hud reveal gate 2026-08-25] The console spells this accessor out by name in its own

@@ -72,7 +72,9 @@ namespace BrnGui
 
         // ---- methods bodied by sibling TUs (declared for a coherent class) ---
         void HandleTransitionComplete(const char* lpcComponentName, s32 liUniqueId);
-        bool IsShowingStartHint();
+        // DWARF h:115, in the class: ARTIST reads the byte in place (FBurnMainHudState
+        // 0x8247C27C `lbz r4,0x5299(r31)` == +0x5178 + 0x121).
+        bool IsShowingStartHint() { return mbShowingStartHint; }
         void SetGameComplete(bool lbComplete);
 
     private:

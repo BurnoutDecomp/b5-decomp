@@ -291,8 +291,10 @@ namespace BrnGui
 
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        GuiOptionEvent20 lOption(1);
-        mpStateInterface->OutputViewState(lOption);
+        CgsGui::GuiEventClearScreenSet lClearScreen;   // DWARF cpp:303
+        lClearScreen.meClearScreen = CgsGui::GuiEventClearScreenSet::E_CLEAR_SCREEN_INACTIVE;
+        lClearScreen.mfAlpha       = 1.0f;
+        mpStateInterface->OutputViewState(lClearScreen);
 
         // The FLAPT persistent HUD file: access pointers -> FlaptManager -> file 0 ->
         // root movie clip -> the RaceMainHUD_mc child, shown + timeline-reset.
@@ -368,12 +370,16 @@ namespace BrnGui
         mRoadRuleComponent.Construct("RoadRule_mc", mpStateInterface, 0, 1);
         mRoadRuleComponent.Prepare("RoadRule_mc", lFile);
 
+        // ARTIST 0x8247B488..0x8247B4C8: the change icon is built between the list's
+        // Construct and Prepare (as RaceMainHudState::OnEnter does).
         mFriendsList.Construct("friendList", mpStateInterface, 0);
-        mFriendsList.Prepare("friendList", lFile);
         mFriendsListChangeIcon.FriendsListChangeIconComponent::Construct("FriendListChange_mc", mpStateInterface, 0);
         mFriendsListChangeIcon.Prepare("FriendListChange_mc", lFile);
+        mFriendsList.Prepare("friendList", lFile);
 
-        PostCommand16<94>(mpStateInterface, 0);
+        GuiEventFriendListShowing lFriendListShowingEvent;   // DWARF cpp:407
+        lFriendListShowingEvent.mbNowShowing = false;
+        mpStateInterface->OutputGuiEvent(lFriendListShowingEvent);
 
         // [H1] X360 OnEnter @0x8247B0E8 (asm h1_dump.txt): JunctionInfo then Odometer,
         // between the {1,94} post and the Ident animator. The X360 Odometer call carries
@@ -387,16 +393,21 @@ namespace BrnGui
         mIdentAnimator.Construct("Ident_Animator", mpStateInterface, 0);
         mIdentAnimator.Prepare("Ident_Animator", lFile, 0);
 
-        mbPpToggleActive    = false;   // +0x53C8 := 0
-        miPpToggleRunCount  = 0;       // +0x53D0 := 0
-        mfPpToggleNextTime  = 0.0f;    // +0x53CC := 0.0
-        mfBoostAmountPrev   = 0.0f;    // +0x53D4 := 0.0
+        mbIdentRunning    = false;   // +0x53C8 := 0
+        miNumIdentAnimations  = 0;       // +0x53D0 := 0
+        mfNextIdentTransInTime  = 0.0f;    // +0x53CC := 0.0
+        mfBlackBarsCurrentValue   = 0.0f;    // +0x53D4 := 0.0
 
-        PostViewState16<215>(mpStateInterface, 1);
-        PostCommand16<96>(mpStateInterface, 1);
-        PostCommand16<308>(mpStateInterface, 0);
+        GuiEventShowHideAboveCar lShowHideAboveCar;           // DWARF cpp:458
+        lShowHideAboveCar.mbShow = true;
+        mpStateInterface->OutputViewState(lShowHideAboveCar);
+        GuiSetEasyDriveNotAllowedEvent lAllow;                // DWARF cpp:473
+        lAllow.mbAllowed = true;
+        mpStateInterface->OutputGuiEvent(lAllow);
+        GuiEventGameCompleteRequest lIsGameComplete;          // DWARF cpp:479
+        mpStateInterface->OutputGuiEvent(lIsGameComplete);
 
-        mbTrophyUnlockScanned = false;   // +0x53D8 := 0
+        mbCheckedForNewTrophyUnlocks = false;   // +0x53D8 := 0
     }
 
     // =======================================================================
@@ -896,7 +907,7 @@ namespace BrnGui
             case 221:   // GuiEventSetBlackBars (f32 black-bar amount, posted by BridgeDirectorToGui)
             {
                 const f32 lfBoost = *reinterpret_cast<const f32*>(lpiPayload);
-                if (mfBoostAmountPrev != lfBoost)
+                if (mfBlackBarsCurrentValue != lfBoost)
                 {
                     if (lfBoost >= 0.0099999998f)
                     {
@@ -932,7 +943,7 @@ namespace BrnGui
                                 reinterpret_cast<const CgsModule::Event*>(&lMirror), 213);
                         }
                     }
-                    mfBoostAmountPrev = lfBoost;
+                    mfBlackBarsCurrentValue = lfBoost;
                 }
                 break;
             }
@@ -943,16 +954,16 @@ namespace BrnGui
                     if (lpiPayload[0] == 1)
                     {
                         mIdentAnimator.Run("transIn");
-                        mbPpToggleActive   = true;
-                        miPpToggleRunCount = 1;
-                        mfPpToggleNextTime = mpGuiCache->GetTime() + 32.0f;
+                        mbIdentRunning   = true;
+                        miNumIdentAnimations = 1;
+                        mfNextIdentTransInTime = mpGuiCache->GetTime() + 32.0f;
                     }
                     else
                     {
                         mIdentAnimator.Run("invisible");
-                        mfPpToggleNextTime = 0.0f;
-                        mbPpToggleActive   = false;
-                        miPpToggleRunCount = 0;
+                        mfNextIdentTransInTime = 0.0f;
+                        mbIdentRunning   = false;
+                        miNumIdentAnimations = 0;
                     }
                 }
                 break;
@@ -972,7 +983,7 @@ namespace BrnGui
                     mJunctionInfoComponent.HandleJunctionChange(
                         reinterpret_cast<const GuiEventJunctionInfo*>(lpEvent),
                         mpGuiCache->GetLocalPlayerOriginalCarId());
-                    mDistrictMarker.SetHideCountyIcon(mbCountyIconHidden);
+                    mDistrictMarker.SetHideCountyIcon(mJunctionInfoComponent.IsShowingStartHint());
                 }
                 if (mbOdometerEnabled)
                 {
@@ -1063,7 +1074,7 @@ namespace BrnGui
                 const BrnProgression::ProgressionData* lpProgressionData =
                     lpProfileData->mpProgressionData;
 
-                if (!mbTrophyUnlockScanned)
+                if (!mbCheckedForNewTrophyUnlocks)
                 {
                     const u32 luTrophyUnlockCount = lpProgressionData->GetTrophyUnlockCount();
                     for (u32 luIndex = 0; luIndex < luTrophyUnlockCount; ++luIndex)
@@ -1094,7 +1105,7 @@ namespace BrnGui
                             break;
                         }
                     }
-                    mbTrophyUnlockScanned = true;
+                    mbCheckedForNewTrophyUnlocks = true;
                 }
                 break;
             }
@@ -1213,20 +1224,20 @@ namespace BrnGui
         {
             mOdometer.Update();   // [H1] the per-frame mileage/flash tick
         }
-        if (mbPpToggleEnabled && mbPpToggleActive)
+        if (mbPpToggleEnabled && mbIdentRunning)
         {
             const f32 lfTimeNow = mpGuiCache->GetTime();
             CGS_ASSERT(lfTimeNow != -FLT_MAX, "mfTimeNow!=-FLT_MAX");
-            if (lfTimeNow > mfPpToggleNextTime)
+            if (lfTimeNow > mfNextIdentTransInTime)
             {
                 mIdentAnimator.Run("invisible");
                 mIdentAnimator.Run("transIn");
-                ++miPpToggleRunCount;
+                ++miNumIdentAnimations;
                 // The X360 fsel: max(0, runCount*20 - 300) extra delay + 12s base.
-                f32 lfExtra = miPpToggleRunCount * 20.0f - 300.0f;
+                f32 lfExtra = miNumIdentAnimations * 20.0f - 300.0f;
                 if (lfExtra < 0.0f)
                     lfExtra = 0.0f;
-                mfPpToggleNextTime = lfTimeNow + lfExtra + 12.0f;
+                mfNextIdentTransInTime = lfTimeNow + lfExtra + 12.0f;
             }
         }
     }

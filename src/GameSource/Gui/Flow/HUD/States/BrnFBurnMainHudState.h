@@ -167,12 +167,13 @@ namespace BrnGui
 
         FlaptAnimatorComponent mIdentAnimator;     // +0x5390 ("Ident_Animator")
 
-        bool mbCountyIconHidden;                   // +0x5279 (SetHideCountyIcon arg mirror)
-        bool mbTrophyRoadMarker;                   // +0x527B (profile==data marker)
-        bool mbPpToggleActive;                     // +0x53C8
-        f32  mfPpToggleNextTime;                   // +0x53CC
-        s32  miPpToggleRunCount;                   // +0x53D0
-        f32  mfBoostAmountPrev;                    // +0x53D4
-        bool mbTrophyUnlockScanned;                // +0x53D8 (OnEnter zeroes)
+        // DWARF BrnFBurnMainHudState.h:260..277 (the tree's invented mbCountyIconHidden /
+        // mbTrophyRoadMarker pair that pushed these two bytes on is gone: ARTIST reads the
+        // county-icon flag from the junction panel, 0x8247C27C `lbz r4,0x5299(r31)`).
+        bool mbIdentRunning;                     // +0x53C8
+        f32  mfNextIdentTransInTime;                   // +0x53CC
+        s32  miNumIdentAnimations;                   // +0x53D0
+        f32  mfBlackBarsCurrentValue;                    // +0x53D4
+        bool mbCheckedForNewTrophyUnlocks;                // +0x53D8 (OnEnter zeroes)
     };
 }

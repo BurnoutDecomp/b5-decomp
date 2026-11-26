@@ -117,7 +117,7 @@ namespace BrnGui
 
         // DWARF BrnCrashNavMapMain.cpp:56 -- the audio label both zoom arms pass to
         // GuiAudioTriggerEvent::Construct (X360 off_82F26EF8 -> "CodeMapZoom").
-        static const char* const KPC_SOUND_MAP_ZOOM;
+        static const char* KPC_SOUND_MAP_ZOOM;
 
         // ---- data (DWARF BrnCrashNavMapMain.h:76) -----------------------------------
         // The one-shot "centre the map on the player" gate. X360 +24928 == exactly
