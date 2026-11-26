@@ -1262,8 +1262,9 @@ namespace BrnNetwork
     {
         if (lbFakeNack)
         {
-            // FLAG: "WARNING: Fack Nack found in <function>\n" goes to the network log stream,
-            // which has no home in this tree; the line is dropped.
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: Fack Nack found in ";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
         }
     }
 } // namespace BrnNetwork

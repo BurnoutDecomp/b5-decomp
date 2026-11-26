@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Players/CgsConnectionStatusMessage.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
@@ -18,7 +19,7 @@ namespace CgsNetwork
     void ConnectionStatusMessage::PrepareForSend(const PlayerConnectionData* lpaConnectionData,
                                                  u16 lu16Frame)
     {
-        *CgsDev::Log::gpDebugPrint << "Preparing ConnectionStatusMessage\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Preparing ConnectionStatusMessage\n";
         CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
             "lu16Frame != KU16_INVALID_FRAME",
             __FILE__, 80 /* ARTIST 0x82883194 */));
@@ -35,21 +36,22 @@ namespace CgsNetwork
     // nothing arrived.
     bool ConnectionStatusMessage::Retrieve(PlayerConnectionData* lpaConnectionData)
     {
-        if (!IsMessageValid())
+        // ARTIST 0x82883210 branches over the whole body when the message is invalid.
+        if (IsMessageValid())
         {
-            return false;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Retrieving ConnectionStatusMessage\n";
+            for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
+            {
+                lpaConnectionData[liIndex] = maConnectionData[liIndex];
+            }
+
+            SetMessageInvalid();
+            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
+                "!IsMessageValid()",
+                __FILE__, 121 /* ARTIST 0x82883294 */));
+            return true;
         }
 
-        *CgsDev::Log::gpDebugPrint << "Retrieving ConnectionStatusMessage\n";
-        for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
-        {
-            lpaConnectionData[liIndex] = maConnectionData[liIndex];
-        }
-
-        SetMessageInvalid();
-        CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
-            "!IsMessageValid()",
-            __FILE__, 121 /* ARTIST 0x82883294 */));
-        return true;
+        return false;
     }
 }

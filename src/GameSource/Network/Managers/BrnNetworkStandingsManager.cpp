@@ -15,6 +15,7 @@
 // observable effect and is folded into the CGS_ASSERT at each site.
 // ===================================================================================
 #include "GameSource/Network/Managers/BrnNetworkStandingsManager.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStandingsManager.cpp"
 #include "GameSource/Network/BrnNetworkModule.h"                                // BrnNetworkModule::GetNetworkManager / GetGameStateToNetworkInterface
 #include "GameSource/Network/BrnNetworkManager.h"                               // BrnNetworkManager::GetPlayerManager / GetRound
@@ -511,9 +512,9 @@ namespace BrnNetwork
     {
         if (lbFakeNack)
         {
-            *CgsDev::Log::gpDebugPrint << "WARNING: Fack Nack found in ";
-            *CgsDev::Log::gpDebugPrint << "BrnNetwork::StandingsManager::_RoundFinishedMessageDeliveredCallback";
-            *CgsDev::Log::gpDebugPrint << "\n";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: Fack Nack found in ";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
         }
     }
 } // namespace BrnNetwork

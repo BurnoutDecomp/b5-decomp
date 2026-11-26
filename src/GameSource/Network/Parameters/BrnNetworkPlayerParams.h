@@ -71,12 +71,9 @@ namespace BrnNetwork
             u32  muCarColourIndex;      // +24  (X360 obj +0x9C) h:175
         };
 
-        // DWARF declares both; the X360 inlines them at every construction site
-        // (the ctor's surviving store is the leaf vptr, the dtor's the base
-        // chain's). Empty out-of-line bodies in the .cpp anchor the vtable
-        // (StructureInterface convention).
-        PlayerParamsBase();
-        virtual ~PlayerParamsBase();
+        // The constructor and the virtual destructor are implicit: DWARF places both at
+        // BrnNetworkPlayerParams.h:53, the class line, and the X360 inlines them at every
+        // construction site (GetUniqueIDByPlayerID 0x8256BD9C stores only the leaf vptr).
 
         // --- ServerInterfaceStructureInterface implementation over mData ------------
         // @ 0x8258A818 -- platform prepare, then reset the payload's bookkeeping.

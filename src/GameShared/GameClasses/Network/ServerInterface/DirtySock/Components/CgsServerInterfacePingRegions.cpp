@@ -54,13 +54,6 @@ namespace CgsNetwork
     };
 
     // The console object is laid out by Construct; the constructor only installs the vtable.
-    ServerInterfacePingRegions::ServerInterfacePingRegions()
-    {
-    }
-
-    ServerInterfacePingRegions::~ServerInterfacePingRegions()
-    {
-    }
 
     s32 ServerInterfacePingRegions::GetPingValue(s32 liRegion) const
     {

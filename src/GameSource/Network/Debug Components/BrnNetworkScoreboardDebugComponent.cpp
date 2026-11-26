@@ -24,6 +24,7 @@
 // sub_8282D720 is DebugComponent::RegisterVariable(s32*, name); sub_8282F598 is DebugComponent::SetRange.
 
 #include "GameSource/Network/Debug Components/BrnNetworkScoreboardDebugComponent.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameSource/Network/Managers/BrnNetworkScoreboardManager.h"   // ScoreboardManager::HandleScoreboardEvent
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original streamed assert messages
@@ -294,26 +295,26 @@ namespace BrnNetwork
     // column titles, then one tab-separated line per row.
     void ScoreboardDebugComponent::PrintScoreboard()
     {
-        *CgsDev::Log::gpDebugPrint << "************************************ ";
-        *CgsDev::Log::gpDebugPrint << mScoreboard.GetTitle();
-        *CgsDev::Log::gpDebugPrint << "******************************************\n";
-        *CgsDev::Log::gpDebugPrint << "\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "************************************ ";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << mScoreboard.GetTitle();
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "******************************************\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
 
         for (s32 liColumn = 0; liColumn < mScoreboard.GetNumberOfColumns(); ++liColumn)
         {
-            *CgsDev::Log::gpDebugPrint << mScoreboard.GetColumn(liColumn)->GetTitle();
-            *CgsDev::Log::gpDebugPrint << "\t";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << mScoreboard.GetColumn(liColumn)->GetTitle();
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\t";
         }
-        *CgsDev::Log::gpDebugPrint << "\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
 
         for (s32 liRow = 0; liRow < mScoreboard.GetNumberOfRows(); ++liRow)
         {
             for (s32 liColumn = 0; liColumn < mScoreboard.GetNumberOfColumns(); ++liColumn)
             {
-                *CgsDev::Log::gpDebugPrint << mScoreboard.GetRow(liRow)->GetData(liColumn);
-                *CgsDev::Log::gpDebugPrint << "\t";
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << mScoreboard.GetRow(liRow)->GetData(liColumn);
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\t";
             }
-            *CgsDev::Log::gpDebugPrint << "\n";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
         }
     }
 }

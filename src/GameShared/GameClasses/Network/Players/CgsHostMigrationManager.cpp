@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Players/CgsHostMigrationManager.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 
 // ===================================================================================
 // CgsNetwork::HostMigrationManager -- peer-to-peer host migration.
@@ -107,7 +108,7 @@ namespace CgsNetwork
             break;
 
         default:
-            *CgsDev::Log::gpDebugPrint << "Invalid frame rate " << static_cast<s32>(meFrameRate);
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Invalid frame rate " << static_cast<s32>(meFrameRate);
             CGS_ASSERT(false, "Invalid frame rate");
             break;
         }
@@ -293,7 +294,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT(liPlayerID != KI_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID");
 
-        *CgsDev::Log::gpDebugPrint << "CgsNetwork::HostMigrationManager::AddPlayer"
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "CgsNetwork::HostMigrationManager::AddPlayer"
                                    << ": id " << static_cast<s32>(liPlayerID) << "\n";
 
         if (liPlayerID != mpPlayerManager->GetLocalPlayerID())
@@ -438,7 +439,7 @@ namespace CgsNetwork
     // Register the two host-migration messages (keep-alive + new-host) for a player slot.
     void HostMigrationManager::RegisterMessages(NetworkPlayerID liPlayerID)
     {
-        *CgsDev::Log::gpDebugPrint << "CgsNetwork::HostMigrationManager::RegisterMessages"
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "CgsNetwork::HostMigrationManager::RegisterMessages"
                                    << ": id " << static_cast<s32>(liPlayerID) << "\n";
 
         for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
@@ -736,7 +737,7 @@ namespace CgsNetwork
             const NetworkPlayerID liCandidate = maHostMigrationPlayerIDs[liIndex];
             if (liCandidate == liLocalPlayerID)
             {
-                *CgsDev::Log::gpDebugPrint
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
                     << "We are the next player in the list of host migration IDs\n";
                 lbFoundCandidate = true;
                 liNextHostID = liCandidate;
@@ -746,7 +747,7 @@ namespace CgsNetwork
             NetworkPlayer* lpCandidate = mpPlayerManager->GetPlayerByID(liCandidate);
             if (lpCandidate != 0)
             {
-                *CgsDev::Log::gpDebugPrint << "Network player " << static_cast<s32>(liCandidate)
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Network player " << static_cast<s32>(liCandidate)
                                            << " is the next player in the list of host migration IDs\n";
                 lbFoundCandidate = true;
                 liNextHostID = liCandidate;
@@ -757,7 +758,7 @@ namespace CgsNetwork
         if (!lbFoundCandidate)
         {
             // No connected successor: migrate the host to ourselves.
-            *CgsDev::Log::gpDebugPrint << "Current host is the last choice - migrating host to me ("
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Current host is the last choice - migrating host to me ("
                                        << static_cast<s32>(liLocalPlayerID) << ")\n";
             liNextHostID = liLocalPlayerID;
         }
@@ -846,7 +847,7 @@ namespace CgsNetwork
         {
             lbResult = true;
             SetNewHost(liChosenHostID, lpTimerStatus, lu16CurrentFrame);
-            *CgsDev::Log::gpDebugPrint << "[HOST MIGRATION] Set host to "
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "[HOST MIGRATION] Set host to "
                                        << static_cast<s32>(liChosenHostID) << "\n";
         }
 

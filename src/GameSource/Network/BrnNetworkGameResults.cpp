@@ -72,10 +72,6 @@ namespace BrnNetwork
     // out-of-line virtual destructor itself (the thunk is compiler-generated);
     // no own members are released (the payload is plain bytes). Mirrors the
     // committed sibling BrnNetwork::GameSearchParams::~GameSearchParams.
-    GameResults::~GameResults()
-    {
-    }
-
     // Zero the whole game-result payload: the GEN block (+0x04, 12
     // bytes), the STAT block (+0x10, 48 bytes), then per index the RACE record
     // (+0x40 + 8i) and the STUNT record (+0x90 + 8i), 8 bytes each, for ten indices.

@@ -23,6 +23,7 @@
 // ===================================================================================
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMarkedManManager.cpp"
 #include "GameSource/Network/Managers/BrnNetworkMarkedManManager.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"
@@ -291,8 +292,9 @@ namespace BrnNetwork
             "lpMarkedManMessage",
             CGS_ARTIST_FILE, 339 /* ARTIST 0x82548E74 */));
 
-        NetworkPlayerID lMarkedManPlayerID = KI_INVALID_PLAYER_ID;
-        bool            lbIsFinal          = false;
+        // DWARF (cpp:330/331) gives both locals no initialiser; ARTIST stores none (0x82548E7C).
+        NetworkPlayerID lMarkedManPlayerID;
+        bool            lbIsFinal;
         lpMarkedManMessage->Retrieve(&lMarkedManPlayerID, &lbIsFinal);
 
         lpMenuData->mMarkedManID = lMarkedManPlayerID;
@@ -306,11 +308,17 @@ namespace BrnNetwork
     // The DWARF body is purely a debug StrStream log (__FUNCTION__ + delivery status) with no
     // state side-effects, so the reconstructed delivery callback does nothing.
     void MarkedManManager::_MarkedManMessageDeliveredCallback(bool /*lbSuccess*/,
-                                                              bool /*lbFakeNack*/,
+                                                              bool lbFakeNack,
                                                               CgsNetwork::SignalMessage* /*lpAck*/,
                                                               NetworkPlayerID /*lRecvingPlayerID*/,
                                                               void* /*lpUserData*/)
     {
+        if (lbFakeNack)
+        {
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: Fack Nack found in ";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
+        }
     }
 } // namespace BrnNetwork
 

@@ -65,13 +65,6 @@ namespace CgsNetwork
     };
 
     // The console object is laid out by Construct; the constructor only installs the vtable.
-    ServerInterfaceRankings::ServerInterfaceRankings()
-    {
-    }
-
-    ServerInterfaceRankings::~ServerInterfaceRankings()
-    {
-    }
 
     void ServerInterfaceRankings::Construct()
     {

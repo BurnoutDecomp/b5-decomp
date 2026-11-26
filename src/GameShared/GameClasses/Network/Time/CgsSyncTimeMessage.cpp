@@ -83,16 +83,17 @@ namespace CgsNetwork
             "lpHostTime",
             __FILE__, 108 /* ARTIST 0x8288B1F8 */));
 
-        if (!IsMessageValid())
+        // ARTIST 0x8288B20C branches to a trailing `return false` (0x8288B258): the copy-out is the body
+        // of the valid test.
+        if (IsMessageValid())
         {
-            return false;
+            *lpClientID   = mClientPlayerID;
+            *lpHostID     = mHostPlayerID;
+            *lpClientTime = mClientSendTime;
+            *lpHostTime   = mHostTime;
+            SetMessageInvalid();
+            return true;
         }
-
-        *lpClientID   = mClientPlayerID;
-        *lpHostID     = mHostPlayerID;
-        *lpClientTime = mClientSendTime;
-        *lpHostTime   = mHostTime;
-        SetMessageInvalid();
-        return true;
+        return false;
     }
 }

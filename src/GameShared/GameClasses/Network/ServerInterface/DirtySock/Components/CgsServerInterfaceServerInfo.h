@@ -52,11 +52,10 @@ namespace CgsNetwork
         // CgsServerInterfaceServerInfo.h:75
         static const s32 KI_URL_LENGTH = 256;
 
-        ServerInterfaceServerInfo();
         // Establishes the vtable slot at offset 0 (the X360 type is polymorphic;
         // Construct/OnEvent/dtor are virtual). The data members below therefore
         // start at +0x04, matching the asm.
-        virtual ~ServerInterfaceServerInfo();
+        // Constructor and virtual destructor implicit (DWARF: defined at the class line h:72).
 
         // Lifecycle (CgsServerInterfaceServerInfo.cpp).
         virtual void Construct();

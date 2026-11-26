@@ -28,13 +28,6 @@
 
 namespace CgsNetwork
 {
-    DefaultPlayerInfoData::DefaultPlayerInfoData()
-    {
-    }
-
-    DefaultPlayerInfoData::~DefaultPlayerInfoData()
-    {
-    }
 
     // The base reset.
     bool DefaultPlayerInfoData::Prepare()

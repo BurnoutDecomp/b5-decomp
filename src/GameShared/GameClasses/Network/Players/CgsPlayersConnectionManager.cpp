@@ -1,4 +1,5 @@
 #include "CgsPlayersConnectionManager.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayersConnectionManager.cpp"
 
 namespace CgsNetwork
@@ -173,7 +174,7 @@ bool PlayersConnectionManager::AreAllConnectionsSuccessful() const
 
         if (lData.meConnectionStatus != E_CONNECTION_SUCCESS)
         {
-            *CgsDev::Log::gpDebugPrint
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
                 << "PlayersConnectionManager::AreAllConnectionsSuccessful: We haven't connected to player "
                 << laPlayerID[liNumPlayers - 1] << "\n";
             return false;
@@ -197,7 +198,7 @@ bool PlayersConnectionManager::AreAllConnectionsSuccessful() const
                 {
                     if (lEntryA.maLastFinaliseStateRecvd[liIndex].meConnectionStatus != E_CONNECTION_SUCCESS)
                     {
-                        *CgsDev::Log::gpDebugPrint
+                        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
                             << "PlayersConnectionManager::AreAllConnectionsSuccessful: "
                             << laPlayerID[liPlayerA] << " hasn't connected to player "
                             << laPlayerID[liPlayerB] << "\n";
@@ -209,7 +210,7 @@ bool PlayersConnectionManager::AreAllConnectionsSuccessful() const
 
             if (liIndex == KI_CONNECTION_STATUS_PLAYER_COUNT)
             {
-                *CgsDev::Log::gpDebugPrint
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
                     << "PlayersConnectionManager::AreAllConnectionsSuccessful: Couldn't find connection entry for "
                     << laPlayerID[liPlayerB] << " in player " << laPlayerID[liPlayerA]
                     << "'s connection list\n";

@@ -1,4 +1,5 @@
 #include "GameSource/Network/Managers/X360/BrnNetworkCameraX360.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
@@ -562,10 +563,17 @@ namespace BrnNetwork
                                                     void* /*lpCamera*/)
     { /* BLOCKED: stream-engine vtable + response send */ }
 
-    void CameraX360::_RequestMessageDeliveredCallback(bool /*lbDelivered*/, bool /*lbWasReliable*/,
-                                                      CgsNetwork::SignalMessage* /*lpMessage*/,
-                                                      s32 /*liToPlayerID*/, void* /*lpUserData*/)
-    { /* BLOCKED: un-homed debug log sink */ }
+    void CameraX360::_RequestMessageDeliveredCallback(bool /*lbSuccess*/, bool lbFakeNack,
+                                                      CgsNetwork::SignalMessage* /*lpAck*/,
+                                                      s32 /*lRecvingPlayerID*/, void* /*lpUserData*/)
+    {
+        if (lbFakeNack)
+        {
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: Fack Nack found in ";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
+        }
+    }
 
     void CameraX360::_RequestResponseMessageArrivedCallback(CgsNetwork::ReliableMessage* /*lpMessage*/,
                                                             s32 /*liFromPlayerID*/,

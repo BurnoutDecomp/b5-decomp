@@ -24,14 +24,6 @@
 
 namespace CgsNetwork
 {
-    ServerInterfaceComponent::ServerInterfaceComponent()
-        : mpcCurrentAction(0)
-        , meStatus(2)        // ServerInterfaceDirtySock::EStatus "no error"
-        , miLastError(0)
-    {
-    }
-
-    ServerInterfaceComponent::~ServerInterfaceComponent()
-    {
-    }
+    // The constructor is implicit and the destructor inline in the header (DWARF h:48 / h:55);
+    // the deleting destructor 0x827DB3E8 is emitted with the vtable wherever a component is built.
 }

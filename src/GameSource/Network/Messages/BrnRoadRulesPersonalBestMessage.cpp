@@ -64,25 +64,28 @@ namespace BrnNetwork
     bool RoadRulesPersonalBestMessage::Retrieve(PlayerName* lpPlayerName, Road::ChallengeIndex* lpChallengeIndex,
                                                 BrnStreetData::ChallengeHighScoreEntry* lpPbScore)
     {
-        if (!IsMessageValid())
+        // ARTIST 0x8257EAE4 branches to a trailing `return false` (0x8257EBA0): the copy-out is the body
+        // of the valid test.
+        if (IsMessageValid())
         {
-            return false;
-        }
-
-        *lpChallengeIndex = mChallengeIndex;
-        lpPbScore->Construct();
-        for (BrnStreetData::ScoreType leScoreType = BrnStreetData::E_SCORE_TYPE_START;
-             leScoreType < BrnStreetData::E_SCORE_TYPE_COUNT; leScoreType++)
-        {
-            if (maiScores[leScoreType] != 0)
+            *lpChallengeIndex = mChallengeIndex;
+            lpPbScore->Construct();
+            for (BrnStreetData::ScoreType leScoreType = BrnStreetData::E_SCORE_TYPE_START;
+                 leScoreType < BrnStreetData::E_SCORE_TYPE_COUNT; leScoreType++)
             {
-                lpPbScore->SetScore(leScoreType, maiScores[leScoreType], lpPlayerName);
+                if (maiScores[leScoreType] != 0)
+                {
+                    lpPbScore->SetScore(leScoreType, maiScores[leScoreType], lpPlayerName);
+                }
             }
-        }
 
-        SetMessageInvalid();
-        CGS_ASSERT(!IsMessageValid(), "!CgsNetwork::ReliableMessage::IsMessageValid()");
-        return true;
+            SetMessageInvalid();
+            CGS_ASSERT_AT(!IsMessageValid(), "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                          "..\\..\\..\\GameSource\\Network/Messages/BrnRoadRulesPersonalBestMessage.cpp",
+                          141 /* ARTIST 0x8257EB7C */);
+            return true;
+        }
+        return false;
     }
 
     // BrnNetwork::RoadRulesPersonalBestMessage::Construct @ 0x8257B988

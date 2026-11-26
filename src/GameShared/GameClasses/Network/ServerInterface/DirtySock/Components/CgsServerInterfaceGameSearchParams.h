@@ -39,8 +39,7 @@ namespace CgsNetwork
     struct ServerInterfaceGameSearchParamsBase : public ServerInterfaceStructureInterface
     {
     public:
-        ServerInterfaceGameSearchParamsBase();
-        virtual ~ServerInterfaceGameSearchParamsBase();
+        // Constructor and virtual destructor implicit (DWARF: defined at the class line h:48).
 
         // its own TU
         virtual bool Prepare();
@@ -89,7 +88,6 @@ namespace CgsNetwork
     struct ServerInterfaceGameSearchParamsX360 : public ServerInterfaceGameSearchParamsBase
     {
     public:
-        ServerInterfaceGameSearchParamsX360();
 
         // X360 @ 0x82878B20 -- seed base fields + zero the X360 payload, return true.
         virtual bool Prepare();

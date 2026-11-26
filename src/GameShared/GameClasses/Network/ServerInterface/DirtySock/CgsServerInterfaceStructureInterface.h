@@ -35,10 +35,11 @@ namespace CgsNetwork
     struct ServerInterfaceStructureInterface
     {
     public:
-        ServerInterfaceStructureInterface();
-
-        // CgsServerInterfaceStructureInterface.h:47
-        virtual ~ServerInterfaceStructureInterface();
+        // CgsServerInterfaceStructureInterface.h:47, inline: DWARF emits the destructor in every
+        // unity CU that uses it (CgsNetworkUnity, BrnNetworkManagerUnity, BrnMain), and the
+        // constructor is implicit (h:43, the class line). ARTIST's leaf deleting destructors
+        // (e.g. PlayerParams 0x825662D8) store only this class's vtable 0x8207C88C.
+        virtual ~ServerInterfaceStructureInterface() {}
 
         // CgsServerInterfaceStructureInterface.h:50
         virtual const char* GetPattern() const = 0;

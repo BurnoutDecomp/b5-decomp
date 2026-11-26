@@ -79,21 +79,22 @@ namespace CgsNetwork
     bool StartTimeMessage::Retrieve(StartTime* lpStartTime,
                                     MessageWithPlayerIDs::NetworkPlayerID* lpaReceivedClientsIDs)
     {
-        if (!IsMessageValid())
+        // ARTIST 0x8288A570 branches to a trailing `return false` (0x8288A61C): the copy-out is the body
+        // of the valid test.
+        if (IsMessageValid())
         {
-            return false;
-        }
+            *lpStartTime = mStartTime;
+            for (s32 liClient = 0; liClient < KI_START_TIME_CLIENT_COUNT; ++liClient)
+            {
+                lpaReceivedClientsIDs[liClient] = maReceivedClientsIDs[liClient];
+            }
 
-        *lpStartTime = mStartTime;
-        for (s32 liClient = 0; liClient < KI_START_TIME_CLIENT_COUNT; ++liClient)
-        {
-            lpaReceivedClientsIDs[liClient] = maReceivedClientsIDs[liClient];
+            SetMessageInvalid();
+            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
+                "!IsMessageValid()",
+                __FILE__, 159 /* ARTIST 0x8288A600 */));
+            return true;
         }
-
-        SetMessageInvalid();
-        CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
-            "!IsMessageValid()",
-            __FILE__, 159 /* ARTIST 0x8288A600 */));
-        return true;
+        return false;
     }
 }

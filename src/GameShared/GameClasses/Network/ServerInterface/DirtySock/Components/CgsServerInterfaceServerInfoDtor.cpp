@@ -25,8 +25,4 @@
 // its vtable slot is emitted exactly once.
 
 namespace CgsNetwork
-{
-    ServerInterfaceServerInfo::~ServerInterfaceServerInfo()
-    {
-    }
-}
+{}

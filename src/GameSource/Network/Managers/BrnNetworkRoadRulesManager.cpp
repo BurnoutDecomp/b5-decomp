@@ -11,6 +11,7 @@
 // ===================================================================================
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp"
 #include "GameSource/Network/Managers/BrnNetworkRoadRulesManager.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -1491,7 +1492,7 @@ namespace BrnNetwork
 
                     if ( lacName[0] != 0 && !lpNetworkManager->GetBuddyManager()->IsFullBuddy( &lPlayerName ) )
                     {
-                        *CgsDev::Log::gpDebugPrint << "Discarding downloaded road rule for " << lacName
+                        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Discarding downloaded road rule for " << lacName
                                                    << " because he is no longer our friend\n";
                     }
                     else
@@ -1500,7 +1501,7 @@ namespace BrnNetwork
                         lDownloadEvent.maPlayerNames[leScoreType].Construct( lacName );
                         if ( lacName[0] != 0 )
                         {
-                            *CgsDev::Log::gpDebugPrint << "Downloaded road rule for " << lacName
+                            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Downloaded road rule for " << lacName
                                                        << " because he is still our friend\n";
                         }
                     }
@@ -1729,9 +1730,9 @@ namespace BrnNetwork
 
         if ( lbFakeNack )
         {
-            *CgsDev::Log::gpDebugPrint << "WARNING: Fack Nack found in ";
-            *CgsDev::Log::gpDebugPrint << "BrnNetwork::NetworkRoadRulesManager::_RoadRulesMessageDeliveredCallback";
-            *CgsDev::Log::gpDebugPrint << "\n";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: Fack Nack found in ";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
         }
     }
 
@@ -1812,9 +1813,9 @@ namespace BrnNetwork
 
         if ( lbFakeNack )
         {
-            *CgsDev::Log::gpDebugPrint << "WARNING: Fack Nack found in ";
-            *CgsDev::Log::gpDebugPrint << "BrnNetwork::NetworkRoadRulesManager::_RoadRulesPersonalBestDeliveredCallback";
-            *CgsDev::Log::gpDebugPrint << "\n";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: Fack Nack found in ";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
         }
     }
 

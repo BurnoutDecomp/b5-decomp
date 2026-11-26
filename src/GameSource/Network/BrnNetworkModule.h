@@ -149,9 +149,13 @@ namespace BrnNetwork
             return &mGameEventQueue;
         }
 
+        // DecFIGS BrnNetworkModule.h:446, streamed assert h:448 (ARTIST 0x82542B38 li r5,0x1C0;
+        // never inlined: its 64 callers call 0x82542AB8).
         BrnNetworkManager* GetNetworkManager()
         {
-            CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+                "Can not use this function unless module is updating\n",
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 448));
             return &mNetworkManager;
         }
 

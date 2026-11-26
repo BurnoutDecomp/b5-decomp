@@ -810,9 +810,6 @@ int ServerInterfaceCustomCommands::UploadEventScoreData(EventScoreData* lpEventS
 // virtual makes the compiler synthesise exactly that thunk; there are no owned resources to
 // release (Construct only nulls the POD members), so the body is empty. Mirrors the committed
 // CgsNetwork::ServerInterfaceEndGameDataBase virtual-destructor pattern.
-ServerInterfaceCustomCommands::~ServerInterfaceCustomCommands()
-{
-}
 
 // ---------------------------------------------------------------------------
 // _CustomCommandSentCallback @ 0x8258F020 -- LobbyApiRequestCB completion trampoline:

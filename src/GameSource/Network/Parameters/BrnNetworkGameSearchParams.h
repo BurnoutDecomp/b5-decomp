@@ -110,7 +110,7 @@ namespace BrnNetwork
     class GameSearchParams : public GameSearchParamsBase
     {
     public:
-        virtual ~GameSearchParams();
+        // Virtual destructor implicit (DWARF BrnServerInterface.h:51, the class line).
 
         // X360 GameSearchParamsX360::AreRivalsInSameGame @ 0x82590FC0.
         // Fills lpbRivalInSameGame[i] for each stored revenge rival with whether that

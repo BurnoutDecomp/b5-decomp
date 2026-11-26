@@ -107,7 +107,7 @@ namespace CgsNetwork
 
         // Establishes the vtable slot at +0 (the X360 type is polymorphic).
         // Empty: the leaf's deleting destructor only restores the component vtable.
-        virtual ~ServerInterfaceGames() {}
+        // Virtual destructor implicit (DWARF: defined at the class line h:78).
 
         // ---- Lifecycle ------------------------------------------------------------
         // Vtable: after the five component slots the games component appends Destruct,

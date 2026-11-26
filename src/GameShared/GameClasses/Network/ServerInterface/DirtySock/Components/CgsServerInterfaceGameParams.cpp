@@ -30,14 +30,6 @@
 
 namespace CgsNetwork
 {
-    ServerInterfaceGameParamsBase::ServerInterfaceGameParamsBase()
-    {
-    }
-
-    ServerInterfaceGameParamsBase::~ServerInterfaceGameParamsBase()
-    {
-    }
-
     // SetName @ 0x825411E8 -- strncpy(this+4, src, 16); assert if strlen >= 16.
     void ServerInterfaceGameParamsBase::SetName(const char* lpcName)
     {

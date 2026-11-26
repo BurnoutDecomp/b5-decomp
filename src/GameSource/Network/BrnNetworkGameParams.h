@@ -101,10 +101,9 @@ namespace BrnNetwork
             u32 muUser5;         // +0x1C
         };
 
-        // X360 @ 0x82567338 (`scalar deleting destructor'). Reinstalls the seven
-        // embedded sub-object vtables + the primary vtable as the object dies.
-        // Implicitly virtual via the base's virtual destructor.
-        virtual ~GameParams();
+        // The virtual destructor is implicit (DWARF: defined at the class line h:57); the
+        // X360 deleting destructor 0x82567338 stores the structure base vtable into the seven
+        // embedded records and this object.
 
         // Member-wise copy. X360 @ 0x82566A00: chain to the X360 base operator=
         // then copy the leaf's +0x150 block and the seven +0x170 slot records.

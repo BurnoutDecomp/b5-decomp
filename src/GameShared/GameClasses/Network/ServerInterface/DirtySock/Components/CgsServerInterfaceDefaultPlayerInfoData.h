@@ -19,12 +19,11 @@ namespace CgsNetwork
 {
     struct DefaultPlayerInfoData : public ServerInterfacePlayerInfoDataBase
     {
-        DefaultPlayerInfoData();
 
         // X360 scalar deleting destructor @ 0x82890218 (vptr-install + conditional
         // operator delete is the compiler-synthesised thunk half; the source body is
         // the empty out-of-line virtual destructor).
-        virtual ~DefaultPlayerInfoData();
+        // Constructor and virtual destructor implicit (DWARF: defined at the class line).
 
         // Vtable slot 6: reset the record to its defaults before a new game.
         virtual bool Prepare();

@@ -940,7 +940,8 @@ namespace BrnNetwork
                 "lpServerInterface->GetCustomCommandsComponent()",
                 CGS_ARTIST_FILE, 1222 /* ARTIST 0x82549DAC */));
             ServerInterfaceCustomCommands* lpCustomCommands = lpServerInterface->GetCustomCommandsComponent();
-            if (lpCustomCommands->GetLastError() == CgsNetwork::E_BUDDY_ERROR_CODES_PENDING)
+            // ARTIST 0x82549DB8 reads meStatus (+8): the component's status, not its error code.
+            if (lpCustomCommands->GetStatus() == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
             {
                 lpCustomCommands->ClearLastError();
             }

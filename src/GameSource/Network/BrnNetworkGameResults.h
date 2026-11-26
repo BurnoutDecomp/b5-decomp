@@ -50,7 +50,7 @@ namespace BrnNetwork
         // X360 @ 0x827DFB60 (`scalar deleting destructor'). Installs the shared
         // ServerInterfaceStructureInterface base vptr (off_8207C88C) as the object
         // dies. Implicitly virtual via the base's virtual destructor.
-        virtual ~GameResults();
+        // Virtual destructor implicit (DWARF: defined at the class line h:47).
 
         // Serialise the GEN block, each per-entry RACE/STUNT record, and the STAT
         // block into the lobby message record.

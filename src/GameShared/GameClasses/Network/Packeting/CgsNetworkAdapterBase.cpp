@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Packeting/CgsNetworkAdapterBase.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
@@ -151,7 +152,7 @@ bool NetworkAdapterBase::SendTo(void* lpData, s32 liLength, ConnectionData lConn
 
     char lacIPAddress[32];
     IPAddressIntToString(lacIPAddress, lConnectionData.miIPAddress);
-    *CgsDev::Log::gpDebugPrint << "NetGameLinkSend failed to " << lacIPAddress << "\n";
+    CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "NetGameLinkSend failed to " << lacIPAddress << "\n";
     return false;
 }
 

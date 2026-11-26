@@ -33,7 +33,7 @@ MessageWithPlayerIDs::NetworkPlayerID MessageWithPlayerIDs::GetRecvingPlayerID()
 {
     if (mRecvingPlayerID < 0)
     {
-        *CgsDev::Log::gpDebugPrint << "We have received a message with recv player index "
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "We have received a message with recv player index "
                                    << mRecvingPlayerID << ", the message is of type "
                                    << static_cast<s32>(mi8Type) << "\n";
     }

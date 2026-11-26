@@ -255,7 +255,7 @@ namespace BrnNetwork
             "lpStatsDebugComponent",
             CGS_ARTIST_FILE, 332 /* ARTIST 0x8258545C */));
 
-        *CgsDev::Log::gpDebugPrint << "Got stat debug get callback\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Got stat debug get callback\n";
 
         lpStatsDebugComponent->SetStep(&lpStatsDebugComponent->miRaceElo, 100);
         lpStatsDebugComponent->SetStep(&lpStatsDebugComponent->miRoadRageElo, 100);
@@ -293,7 +293,7 @@ namespace BrnNetwork
             "lpStatsDebugComponent",
             CGS_ARTIST_FILE, 374 /* ARTIST 0x8258559C */));
 
-        *CgsDev::Log::gpDebugPrint << "Got stat debug set callback\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Got stat debug set callback\n";
 
         lpStatsDebugComponent->SetReadOnly(&lpStatsDebugComponent->miRaceElo, false);
         lpStatsDebugComponent->SetReadOnly(&lpStatsDebugComponent->miRoadRageElo, false);

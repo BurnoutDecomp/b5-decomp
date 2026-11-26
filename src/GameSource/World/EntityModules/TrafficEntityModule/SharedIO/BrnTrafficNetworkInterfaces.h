@@ -34,9 +34,11 @@ namespace BrnTrafficIO
         // ActivateHullEvent and AddEventSafe it onto the queue (X360 0x82558AB8).
         void ActivateHull(EActiveRaceCarIndex leActiveRaceCarIndex,
                           u32 luNewActiveHull, u32 luUpdateFrame);               // :83
-        const ActivateHullQueue& GetActivateHullQueue() const;                   // :88
-        void SetDiverged(bool lbDiverged);                                       // :92
-        bool HasDiverged() const;                                                // :95
+        // :88/:92/:95 -- header inline: DWARF has no .cpp for this interface and ARTIST emits
+        // no copy of any of the three (its callers inline the member access).
+        const ActivateHullQueue& GetActivateHullQueue() const { return mActivateHullQueue; }
+        void SetDiverged(bool lbDiverged) { mbDiverged = lbDiverged; }
+        bool HasDiverged() const { return mbDiverged; }
 
     private:
         ActivateHullQueue mActivateHullQueue;   // :100 (offset 0)
@@ -63,8 +65,10 @@ namespace BrnTrafficIO
         void SetDataHash(u32 luUpdateFrame, u16 luHash);                             // :135
         void SetActiveHull(EActiveRaceCarIndex leActiveRaceCarIndex, u16 luHull);    // :141
         void SetDetectedHullSyncDivergence(bool lbDivergence);                       // :146
-        const ActivateHullQueue& GetActivateHullQueue() const;                       // :151
-        bool HasHashBeenSet() const;                                                 // :155
+        // :151/:155 -- header inline (no ARTIST copy: TrafficManager::UpdateHullSync 0x8255EDF0
+        // appends the queue at the interface's own address).
+        const ActivateHullQueue& GetActivateHullQueue() const { return mActivateHullQueue; }
+        bool HasHashBeenSet() const { return mbHashValid; }
         u16  GetDataHash() const;                                                    // :159  (X360 0x82542438)
         u32  GetUpdateFrameForHash() const;                                          // :163  (X360 0x82542490)
         const u16* GetActiveHulls() const;                                           // :167  (X360 0x825424E8)

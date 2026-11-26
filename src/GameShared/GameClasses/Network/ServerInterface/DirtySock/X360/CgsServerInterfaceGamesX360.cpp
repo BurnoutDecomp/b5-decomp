@@ -401,11 +401,6 @@ namespace CgsNetwork
         return false;
     }
 
-    // ===================================================================
-    // scalar deleting destructor @ 0x827DFC88 -- empty; the leaf owns no heap
-    // members. MSVC synthesises the vptr-restore + conditional operator delete.
-    // ===================================================================
-    ServerInterfaceGamesX360::~ServerInterfaceGamesX360()
-    {
-    }
+    // The scalar deleting destructor @ 0x827DFC88 is compiler-generated from the implicit
+    // virtual destructor (it stores the component base vtable only).
 }

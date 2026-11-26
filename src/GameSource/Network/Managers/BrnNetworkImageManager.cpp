@@ -1,4 +1,5 @@
 #include <xtl.h>
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 // ===================================================================================
 // BrnNetwork::NetworkImageManager -- sibling .cpp
@@ -108,14 +109,16 @@ namespace BrnNetwork
 
         for ( s32 liIndex = 0; liIndex < KI_MAX_MUGSHOT_PLAYERS; ++liIndex )
         {
+            // PS3 0x5E04F0 calls BitArray<50u>::Construct; both builds store the two flags before
+            // the packet counters (ARTIST 0x8255D844, PS3 0x5E050C), as Prepare does.
             maMugshotData[liIndex].mPicture.Construct();
-            maMugshotData[liIndex].mReceivedPhotoPackets.UnSetAll();
+            maMugshotData[liIndex].mReceivedPhotoPackets.Construct();
             maMugshotData[liIndex].mTakedownAggressorPlayerID = -1;
             maMugshotData[liIndex].mTakedownVictimPlayerID    = -1;
-            maMugshotData[liIndex].miLastPacketSent           = 0;
-            maMugshotData[liIndex].miNumberOfPacketsToSend    = 0;
             maMugshotData[liIndex].mbPictureValid             = false;
             maMugshotData[liIndex].mbPhotoFinishValid         = false;
+            maMugshotData[liIndex].miLastPacketSent           = 0;
+            maMugshotData[liIndex].miNumberOfPacketsToSend    = 0;
         }
 
         mTakedownAggressorPlayerID    = -1;
@@ -151,19 +154,24 @@ namespace BrnNetwork
 
         for ( s32 liIndex = 0; liIndex < KI_MAX_MUGSHOT_PLAYERS; ++liIndex )
         {
+            // PS3 0x5E69F8 calls BitArray<50u>::Destruct; flags before counters (ARTIST 0x8255D91C).
             maMugshotData[liIndex].mPicture.Destruct();
-            maMugshotData[liIndex].mReceivedPhotoPackets.UnSetAll();
+            maMugshotData[liIndex].mReceivedPhotoPackets.Destruct();
             maMugshotData[liIndex].mTakedownAggressorPlayerID = -1;
             maMugshotData[liIndex].mTakedownVictimPlayerID    = -1;
-            maMugshotData[liIndex].miLastPacketSent           = 0;
-            maMugshotData[liIndex].miNumberOfPacketsToSend    = 0;
             maMugshotData[liIndex].mbPictureValid             = false;
             maMugshotData[liIndex].mbPhotoFinishValid         = false;
+            maMugshotData[liIndex].miLastPacketSent           = 0;
+            maMugshotData[liIndex].miNumberOfPacketsToSend    = 0;
         }
 
+        // ARTIST 0x8255D94C-54 (PS3 0x5E6A58-64) also clear the three per-frame flags.
         mTakedownAggressorPlayerID    = -1;
         mTakedownVictimPlayerID       = -1;
         mbOutputMugshotData           = false;
+        mbBroadcastCurrentImage       = false;
+        mbAbortCaptureThisFrame       = false;
+        mbAbortShowThisFrame          = false;
         mRoadRuleBeatenID             = 0;
         meState                       = E_IMAGE_MANAGER_STATE_COUNT;
         meImageTypeToSend             = BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT;
@@ -583,10 +591,13 @@ namespace BrnNetwork
             "mpNetworkModule->GetNetworkEventQueue()",
             __FILE__, 794 /* ARTIST 0x82564A2C */));
 
+        // The queue is fetched before the event address is formed (ARTIST 0x82564A4C `addi r4,r1,0x50`
+        // after the GetNetworkEventQueue call), as StateManager::PostGameProcessingFinished does.
         BrnNetworkModuleIO::NetworkOutAbortImageCaptureEvent lAbortEvent;
         lAbortEvent.mbCapture = true;
-        mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAbortEvent),
-                                                          lAbortEvent.GetEventType(), sizeof(lAbortEvent));
+        BrnNetworkModuleIO::NetworkEventQueue* lpNetworkEventQueue = mpNetworkModule->GetNetworkEventQueue();
+        lpNetworkEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAbortEvent),
+                                      lAbortEvent.GetEventType(), sizeof(lAbortEvent));
 
         mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(0, -1);
 
@@ -612,8 +623,9 @@ namespace BrnNetwork
 
         BrnNetworkModuleIO::NetworkOutAbortImageCaptureEvent lAbortEvent;
         lAbortEvent.mbCapture = false;
-        mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAbortEvent),
-                                                          lAbortEvent.GetEventType(), sizeof(lAbortEvent));
+        BrnNetworkModuleIO::NetworkEventQueue* lpNetworkEventQueue = mpNetworkModule->GetNetworkEventQueue();
+        lpNetworkEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAbortEvent),
+                                      lAbortEvent.GetEventType(), sizeof(lAbortEvent));
 
         mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(0, -1);
 
@@ -631,22 +643,29 @@ namespace BrnNetwork
     //   the picture valid (and a photo finish when it is a victory mugshot) unless the sender's
     //   mugshots are disabled, in which case both flags are cleared.
     // ----------------------------------------------------------------------------------
-    void NetworkImageManager::HandleReceivedCameraPic(NetworkPlayerID lSenderID, MugshotData* lpMugshotData,
-                                                      BrnGameState::GameStateModuleIO::EImageType leImageType)
+    // DWARF (BrnNetworkImageManager.cpp) lists no local: the call is tested directly. The photo
+    // finish flag is a branch (ARTIST 0x82555B1C cmpwi/beq around one stb, PS3 0x61CD98 likewise).
+    void NetworkImageManager::HandleReceivedCameraPic(NetworkPlayerID lSendingPlayerID, MugshotData* lpMugshotData,
+                                                      BrnGameState::GameStateModuleIO::EImageType leReceivedImageType)
     {
-        const bool lbMugshotsDisabled = AreMugshotsDisabledForPlayer(lSenderID);
-        lpMugshotData->mTakedownVictimPlayerID = lSenderID;
-
-        if ( lbMugshotsDisabled )
+        if ( AreMugshotsDisabledForPlayer(lSendingPlayerID) )
         {
-            lpMugshotData->mbPictureValid     = false;
-            lpMugshotData->mbPhotoFinishValid = false;
+            lpMugshotData->mTakedownVictimPlayerID = lSendingPlayerID;
+            lpMugshotData->mbPictureValid          = false;
+            lpMugshotData->mbPhotoFinishValid      = false;
         }
         else
         {
-            lpMugshotData->mbPictureValid     = true;
-            lpMugshotData->mbPhotoFinishValid =
-                (leImageType == BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
+            lpMugshotData->mTakedownVictimPlayerID = lSendingPlayerID;
+            lpMugshotData->mbPictureValid          = true;
+            if ( leReceivedImageType == BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT )
+            {
+                lpMugshotData->mbPhotoFinishValid = true;
+            }
+            else
+            {
+                lpMugshotData->mbPhotoFinishValid = false;
+            }
         }
     }
 
@@ -657,11 +676,17 @@ namespace BrnNetwork
     //   BrnNetwork::NetworkImageManager::_ImageMessageDeliveredCallback" to the network dev-log
     //   stream, which has no home in this tree.
     // ----------------------------------------------------------------------------------
-    void NetworkImageManager::_ImageMessageDeliveredCallback(bool /*lbDelivered*/, bool /*lbWasReliable*/,
-                                                             CgsNetwork::SignalMessage* /*lpMessage*/,
-                                                             NetworkPlayerID /*liToPlayerID*/,
+    void NetworkImageManager::_ImageMessageDeliveredCallback(bool /*lbSuccess*/, bool lbFakeNack,
+                                                             CgsNetwork::SignalMessage* /*lpAck*/,
+                                                             NetworkPlayerID /*lRecvingPlayerID*/,
                                                              void* /*lpUserData*/)
     {
+        if (lbFakeNack)
+        {
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: Fack Nack found in ";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
+        }
     }
 
     // ----------------------------------------------------------------------------------

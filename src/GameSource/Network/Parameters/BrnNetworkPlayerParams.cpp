@@ -41,17 +41,6 @@ namespace BrnNetwork
     CGS_STATIC_ASSERT((sizeof(PlayerParamsBase::CLobbyPlayerParamsData) == 28),
                   "CLobbyPlayerParamsData is the 28-byte wire record GetDataSize advertises");
 
-    // DWARF declares both; every X360 construction/destruction is inlined (only the
-    // vptr stores survive), so the out-of-line bodies are empty. Defining them here
-    // anchors PlayerParamsBase's vtable to this TU (StructureInterface convention).
-    PlayerParamsBase::PlayerParamsBase()
-    {
-    }
-
-    PlayerParamsBase::~PlayerParamsBase()
-    {
-    }
-
     // PreparePattern @ 0x82584148 -- build the shared pattern string once.
     //   The destination size comes from the virtual GetPatternLength() (vtable slot
     //   +0x08; the X360 default body @ 0x82876410 returns 20 == sizeof(macPattern)),

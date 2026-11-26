@@ -3,16 +3,11 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::PlayerInfoData::`scalar deleting destructor'  @ 0x8255EA38
 //
-// Stores the class vptr (off_8207C88C) at this+0 then conditionally calls
-// operator delete -- the thunk emitted for a virtual destructor. Reconstructed
-// as the out-of-line virtual dtor.
+// Stores the base chain's vptr (off_8207C88C) at this+0 then conditionally calls
+// operator delete: compiler-generated from the implicit virtual destructor.
 
 namespace BrnNetwork
 {
-    PlayerInfoData::~PlayerInfoData()
-    {
-    }
-
     // Chain to the platform prepare; true on success.
     bool PlayerInfoData::Prepare()
     {

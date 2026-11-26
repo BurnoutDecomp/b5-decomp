@@ -58,9 +58,8 @@ namespace CgsNetwork
         // CgsServerInterfacePingRegions.h -- max number of ping regions (asm literal 0x32).
         static const s32 KI_MAX_PING_REGIONS = 50;
 
-        ServerInterfacePingRegions();
 
-        virtual ~ServerInterfacePingRegions();
+        // Constructor and virtual destructor implicit (DWARF: defined at the class line).
 
         // The recorded ping for liRegion (0 <= liRegion < miCurrentRegion).
         s32 GetPingValue(s32 liRegion) const;

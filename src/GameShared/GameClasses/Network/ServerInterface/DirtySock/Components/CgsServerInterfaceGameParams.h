@@ -70,7 +70,7 @@ namespace CgsNetwork
     struct ServerInterfaceGameParamsBase : public ServerInterfaceStructureInterface
     {
     public:
-        ServerInterfaceGameParamsBase();
+        // Constructor and virtual destructor implicit (DWARF: defined at the class line h:55).
 
         // CgsServerInterfaceGameParams.h:282
         void SetName(const char* lpcName);
@@ -123,8 +123,6 @@ namespace CgsNetwork
         // Pure here: the base slot is never emitted on the console (every concrete leaf
         // overrides it), so no base body can be recovered.
         virtual void SetRankedGame(bool lbRanked) = 0;
-
-        virtual ~ServerInterfaceGameParamsBase();
 
         // Member-wise copy (asm @ 0x825504C8). Out-of-line: the X360 build emits a
         // hand-rolled byte-copy of the four char buffers followed by the 11 scalar

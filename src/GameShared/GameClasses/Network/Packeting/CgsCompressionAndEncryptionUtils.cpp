@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Packeting/CgsCompressionAndEncryptionUtils.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"          // CgsSystem::TimerStatus
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"
@@ -223,8 +224,8 @@ bool CompressionAndEncryptionUtils::Pack(NetworkPlayerID liPlayerID,
 
     if (liNumMessagesInArray >= KI_MAX_MESSAGES_TO_PACK_TOGETHER)
     {
-        *CgsDev::Log::gpDebugPrint << "---- Start ----\n";
-        *CgsDev::Log::gpDebugPrint << "liNumMessagesInArray = " << liNumMessagesInArray << "\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "---- Start ----\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "liNumMessagesInArray = " << liNumMessagesInArray << "\n";
         for (s32 liType = 0; liType < KI_E_MESSAGE_TYPE_COUNT; ++liType)
         {
             s32 liNumOfType = 0;
@@ -238,11 +239,11 @@ bool CompressionAndEncryptionUtils::Pack(NetworkPlayerID liPlayerID,
             }
             if (liNumOfType > 0)
             {
-                *CgsDev::Log::gpDebugPrint << "Message Type " << liType << " has " << liNumOfType
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Message Type " << liType << " has " << liNumOfType
                                            << " entries to send\n";
             }
         }
-        *CgsDev::Log::gpDebugPrint << "---- Done ----\n";
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "---- Done ----\n";
         CGS_ASSERT(false, "Too many messages to send! Please see TTY output for more details");
     }
 

@@ -23,6 +23,7 @@
 // ===================================================================================
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp"
 #include "GameSource/Network/Managers/BrnNetworkPlayerStatsManager.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 
 #include <cstring>  // std::memcpy
 
@@ -915,16 +916,17 @@ namespace BrnNetwork
             "mpServerInterface",
             __FILE__, 450 /* ARTIST 0x82546B10 */));
 
-        if (mpServerInterface->GetStatus(leComponent) != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
+        // ARTIST 0x82546B28 branches to the shared `return false` tail: the error case is the body.
+        if (mpServerInterface->GetStatus(leComponent) == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
         {
-            return false;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "An Error occurred in the server interface: "
+                                       << mpServerInterface->GetLastError(leComponent) << "\n";
+            mpServerInterface->ClearLastError(leComponent);
+            meCurrentStatus = E_STATS_STATUS_IDLE;
+            return true;
         }
 
-        *CgsDev::Log::gpDebugPrint << "An Error occurred in the server interface: "
-                                   << mpServerInterface->GetLastError(leComponent) << "\n";
-        mpServerInterface->ClearLastError(leComponent);
-        meCurrentStatus = E_STATS_STATUS_IDLE;
-        return true;
+        return false;
     }
 
     // -----------------------------------------------------------------------------
@@ -1015,7 +1017,7 @@ namespace BrnNetwork
         }
         else
         {
-            *CgsDev::Log::gpDebugPrint << "RECIEVED STATS UPDATE FOR PLAYER WE HAVE NO STATS FOR" << lPlayerID;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "RECIEVED STATS UPDATE FOR PLAYER WE HAVE NO STATS FOR" << lPlayerID;
         }
     }
 

@@ -11,6 +11,7 @@
 // shapes; member access is BY NAME against the reconstructed header.
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboardManager.cpp"
 #include "GameSource/Network/Managers/BrnNetworkScoreboardManager.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -1110,7 +1111,7 @@ namespace BrnNetwork
     {
         s8 liAfter = static_cast<s8>(liCurrentRows - miCurrentViewOffset - 9);
 
-        *CgsDev::Log::gpDebugPrint << "RG\nBefore : " << miCurrentViewOffset
+        CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "RG\nBefore : " << miCurrentViewOffset
                                    << "\nAfter : " << static_cast<s32>(liAfter) << "\n";
 
         if (liAfter <= 0)

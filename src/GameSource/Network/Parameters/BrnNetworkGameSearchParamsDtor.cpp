@@ -12,8 +12,4 @@
 // vptr and conditionally frees the object.
 
 namespace BrnNetwork
-{
-    GameSearchParams::~GameSearchParams()
-    {
-    }
-}
+{}

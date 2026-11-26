@@ -28,6 +28,7 @@
 // between 50 Hz and 60 Hz consoles via the FastBitArray<60> success bit sets.
 
 #include "GameSource/Network/Managers/BrnChallengeSuccessManager.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameSource/Network/BrnNetworkModule.h"                       // BrnNetworkModule::GetNetworkManager / GetNetworkEventQueue
 #include "GameSource/Network/BrnNetworkManager.h"                      // BrnNetworkManager::GetLocalConsoleFrameRate
 #include "GameSource/Network/BrnNetworkModuleIO.h"                     // BrnNetworkModuleIO::PostSim, PostSimulationInputBuffer, NetworkEventQueue
@@ -724,10 +725,9 @@ namespace BrnNetwork
 
         if (lbWasReliable)
         {
-            *CgsDev::Log::gpDebugPrint << "WARNING: Fack Nack found in ";
-            *CgsDev::Log::gpDebugPrint
-                << "BrnNetwork::ChallengeSuccessManager::_ChallengeSuccessMessageDeliveredCallback";
-            *CgsDev::Log::gpDebugPrint << "\n";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: Fack Nack found in ";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
         }
     }
 } // namespace BrnNetwork

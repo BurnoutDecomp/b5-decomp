@@ -21,28 +21,14 @@
 // global operator delete when bit0 of the hidden flag is set (delete-expression
 // path) versus a plain scalar destructor (stack / placement path).
 //
-// There are NO observable member stores -- the class has no data members beyond
-// the vptr -- so the only hand-written source for this TU is the out-of-line
-// virtual destructor body (empty). MSVC regenerates the vptr-install + the
-// conditional `operator delete` half of the thunk automatically from the
-// virtual-destructor declaration in the header; that half is compiler codegen,
-// not source, so it is intentionally not hand-reproduced (matches the
-// established deleting-destructor convention in this tree).
-//
-// Defining the destructor out-of-line here also anchors the vtable emission to
-// this TU, mirroring where the X360 build placed off_8207C88C.
+// The class has no data members beyond the vptr. Its destructor is inline in the
+// header (DWARF: emitted in every unity CU that uses it) and its constructor is
+// implicit, so this thunk is compiler-generated wherever a vtable is needed; the
+// only out-of-line member is GetPatternLength (DWARF .cpp:41).
 // ---------------------------------------------------------------------------
 
 namespace CgsNetwork
 {
-    ServerInterfaceStructureInterface::ServerInterfaceStructureInterface()
-    {
-    }
-
-    ServerInterfaceStructureInterface::~ServerInterfaceStructureInterface()
-    {
-    }
-
     // GetPatternLength @ 0x82876410 (DWARF CgsServerInterfaceStructureInterface.cpp:41).
     // The default pattern-buffer length every structure subclass inherits: the X360
     // vtable slot +0x08 of off_8207C88C holds a real `li r3, 0x14 ; blr` body

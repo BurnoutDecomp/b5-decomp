@@ -27,7 +27,7 @@
 #include "GameSource/Network/Managers/BrnNetworkDirtyTrickManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // CgsDev::Log::gpDebugPrint (nack warning)
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (nack warning, 0x82F335C8)
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"         // RegisterMessageType / GetRegisteredSendMessage
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"         // GetPlayerByID / GetNextPlayerID
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"              // GetU16FrameCount
@@ -264,9 +264,9 @@ namespace BrnNetwork
     {
         if (lbFakeNack)
         {
-            *CgsDev::Log::gpDebugPrint << "WARNING: Fack Nack found in ";
-            *CgsDev::Log::gpDebugPrint << "BrnNetwork::NetworkDirtyTrickManager::_DirtyTrickDeliveredCallback";
-            *CgsDev::Log::gpDebugPrint << "\n";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: Fack Nack found in ";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
         }
     }
 } // namespace BrnNetwork

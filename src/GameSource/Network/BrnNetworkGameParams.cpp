@@ -11,7 +11,6 @@
 // (mGameData @ +0x150, seven PlayerParams maPlayerParams @ +0x170).
 //
 // This TU SHIPS:
-//   ~GameParams  (the `scalar deleting destructor' @ 0x82567338 forwards to it)
 //   operator=    @ 0x82566A00
 // =============================================================================
 
@@ -20,18 +19,8 @@
 namespace BrnNetwork
 {
 
-// X360 @ 0x82567338 (`scalar deleting destructor'). As the object tears down,
-// the Xenon codegen reinstalls the shared ServerInterfaceStructureInterface base
-// vtable (off_8207C88C) into each of the seven embedded 0xA0-stride sub-objects
-// (this+0x170 .. this+0x530) and then the primary vtable at this+0, before the
-// delete-expression's conditional operator delete. That whole vtable walk + the
-// conditional free are compiler-synthesised from this trivial out-of-line virtual
-// destructor; only the empty body is hand-written, matching the committed
-// convention (BrnNetwork::GameResults::~GameResults @ 0x827DFB60). Defining it
-// out-of-line here also anchors this class's vtable to this TU.
-GameParams::~GameParams()
-{
-}
+// The `scalar deleting destructor' @ 0x82567338 is compiler-generated from GameParams'
+// implicit virtual destructor (DWARF h:57).
 
 // Member-wise copy: chain to the platform base operator=, then copy the game leaf's own
 // storage in the console order -- the 0x20-byte GameData block (eight words), then each

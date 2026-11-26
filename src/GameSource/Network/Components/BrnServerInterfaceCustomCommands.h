@@ -108,7 +108,7 @@ namespace BrnNetwork
         // vtable) and conditionally `delete this`. Emitting the destructor as virtual makes the
         // compiler synthesise exactly that thunk; the body is empty (Construct only nulls POD
         // members). Overrides the virtual ~ServerInterfaceComponent() base dtor.
-        virtual ~ServerInterfaceCustomCommands();
+        // Virtual destructor implicit (DWARF: defined at the class line h:68).
 
         // Non-virtual lifecycle (DWARF: Prepare/Release/Destruct are non-virtual).
         bool Prepare(CgsNetwork::ServerInterfaceDirtySock* lpServerInterface); // @ 0x82583770

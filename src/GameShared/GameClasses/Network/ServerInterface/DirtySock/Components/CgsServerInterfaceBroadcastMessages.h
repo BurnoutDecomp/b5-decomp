@@ -116,10 +116,9 @@ namespace CgsNetwork
             E_ACTION_COUNT             = 1,
         };
 
-        ServerInterfaceBroadcastMessages();
 
         // CgsServerInterfaceBroadcastMessages.h:107 -- scalar deleting destructor @ 0x827DE1A8.
-        virtual ~ServerInterfaceBroadcastMessages();
+        // Constructor and virtual destructor implicit (DWARF: defined at the class line).
 
         // ---- Lifecycle ------------------------------------------------------------
         // (Non-virtual in this build, matching the LegacySrc interface; BrnServerInterfaceBase

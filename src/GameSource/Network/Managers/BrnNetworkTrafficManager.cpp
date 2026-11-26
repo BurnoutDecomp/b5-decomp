@@ -24,6 +24,7 @@
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessageWithPlayerIDs.h"    // GetSendingPlayerID
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"                      // CgsNetwork::NetworkPlayer
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"                      // CgsNetwork::PlayerManager
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput (0x82F335C8)
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"                           // CgsNetwork::TimeManager
 #include "GameSource/Network/BrnNetworkModule.h"                                          // BrnNetworkModule accessors
 #include "GameSource/Network/BrnNetworkManager.h"                                         // GetLocalConsoleFrameRate / GetPlayerManager
@@ -658,22 +659,31 @@ namespace BrnNetwork
     }
 
     // =========================================================================
-    // Delivery callbacks -- both only log ("WARNING: Fack Nack found in <function>") on the
-    // console, and the test is on the SECOND flag (lbWasReliable), not lbDelivered; there is
-    // no state to update, so neither flag is read here.
+    // Delivery callbacks -- both only log "WARNING: Fack Nack found in <function>" to the
+    // network log stream (ARTIST 0x82545BD0: the object 0x82F335C8) on the SECOND flag.
     // =========================================================================
-    void TrafficManager::_HullSyncMessageDeliveredCallback(bool lbDelivered, bool /*lbWasReliable*/,
-                                                           CgsNetwork::SignalMessage* /*lpMessage*/,
-                                                           NetworkPlayerID /*lPlayerID*/, void* /*lpUserData*/)
+    void TrafficManager::_HullSyncMessageDeliveredCallback(bool /*lbSuccess*/, bool lbFakeNack,
+                                                           CgsNetwork::SignalMessage* /*lpAck*/,
+                                                           NetworkPlayerID /*lRecvingPlayerID*/, void* /*lpUserData*/)
     {
-        (void)lbDelivered;
+        if (lbFakeNack)
+        {
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: Fack Nack found in ";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
+        }
     }
 
-    void TrafficManager::_RestartTrafficMessageDeliveredCallback(bool lbDelivered, bool /*lbWasReliable*/,
-                                                                 CgsNetwork::SignalMessage* /*lpMessage*/,
-                                                                 NetworkPlayerID /*lPlayerID*/, void* /*lpUserData*/)
+    void TrafficManager::_RestartTrafficMessageDeliveredCallback(bool /*lbSuccess*/, bool lbFakeNack,
+                                                                 CgsNetwork::SignalMessage* /*lpAck*/,
+                                                                 NetworkPlayerID /*lRecvingPlayerID*/, void* /*lpUserData*/)
     {
-        (void)lbDelivered;
+        if (lbFakeNack)
+        {
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "WARNING: Fack Nack found in ";
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__;
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "\n";
+        }
     }
 
     // =========================================================================

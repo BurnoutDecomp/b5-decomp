@@ -64,7 +64,7 @@ namespace CgsNetwork
     public:
         // Compiler-emitted scalar deleting destructor @ 0x827DFC88 stands in for the
         // plain virtual dtor (rebinds vptr to the X360 leaf vtable, frees this).
-        virtual ~ServerInterfaceGamesX360();
+        // Virtual destructor implicit, as for every component leaf (0x827DFC88 stores the base vtable).
 
         // ---- Forwarding lifecycle overrides (tail-call the base) ----------------
         virtual void Construct();                                          // 0x8287F738

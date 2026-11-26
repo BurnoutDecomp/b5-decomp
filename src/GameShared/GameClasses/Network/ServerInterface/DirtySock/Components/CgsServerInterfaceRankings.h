@@ -41,9 +41,8 @@ namespace CgsNetwork
             E_ACTION_COUNT                = 2,
         };
 
-        ServerInterfaceRankings();
 
-        virtual ~ServerInterfaceRankings();
+        // Constructor and virtual destructor implicit (DWARF: defined at the class line).
 
         virtual void Construct();
         virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);

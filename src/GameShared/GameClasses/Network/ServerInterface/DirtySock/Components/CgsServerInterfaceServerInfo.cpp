@@ -47,11 +47,6 @@ namespace CgsNetwork
 namespace CgsNetwork
 {
 
-// The console object is laid out by Construct; the constructor only installs the vtable.
-ServerInterfaceServerInfo::ServerInterfaceServerInfo()
-{
-}
-
 // Server info reacts to no server-interface event.
 void ServerInterfaceServerInfo::OnEvent(EServerInterfaceEvent /*leEvent*/, void* /*lpData*/)
 {

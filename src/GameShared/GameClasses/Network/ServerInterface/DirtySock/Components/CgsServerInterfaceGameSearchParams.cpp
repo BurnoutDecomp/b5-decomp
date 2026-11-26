@@ -31,14 +31,6 @@ namespace CgsNetwork
 namespace CgsNetwork
 {
 
-ServerInterfaceGameSearchParamsBase::ServerInterfaceGameSearchParamsBase()
-{
-}
-
-ServerInterfaceGameSearchParamsBase::~ServerInterfaceGameSearchParamsBase()
-{
-}
-
 bool ServerInterfaceGameSearchParamsBase::Prepare()
 {
     // Base virtual; the X360 leaf override below is the one bodied in this group.
@@ -92,10 +84,6 @@ void ServerInterfaceGameSearchParamsBase::SerialiseToString(char* lpcRecord, s32
 //   stw -1  @+0x08 (miRoomID)          stw 0   @+0x10 (muGameFlagsValue)
 //   stb 0   @+0x14 (mbReturnPlayers)   stw 0   @+0x68 (muX360Field_68)
 //   memset(this+0x18, 0, 80)           return 1
-ServerInterfaceGameSearchParamsX360::ServerInterfaceGameSearchParamsX360()
-{
-}
-
 bool ServerInterfaceGameSearchParamsX360::Prepare()
 {
     muGameFlagsMask  = 0;       // stw 0  @+0x0C

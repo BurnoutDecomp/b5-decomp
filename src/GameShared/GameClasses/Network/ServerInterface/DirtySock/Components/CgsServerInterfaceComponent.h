@@ -52,7 +52,8 @@ namespace CgsNetwork
     class ServerInterfaceComponent
     {
     public:
-        ServerInterfaceComponent();
+        // The constructor is implicit (DWARF h:48, the class line): ARTIST constructs
+        // components with vtable stores only (BrnServerInterfaceBase ctor 0x827E1668).
 
         // Vtable order (five slots): Construct, the deleting destructor, OnEvent,
         // StartActionCore, EndActionCore. The OnEvent slot is pure; every leaf component
@@ -60,7 +61,8 @@ namespace CgsNetwork
         virtual void Construct();
 
         // CgsServerInterfaceComponent.h:55 -- vector deleting destructor @ 0x827DB3E8.
-        virtual ~ServerInterfaceComponent();
+        // Inline in the header (no out-of-line definition in the DWARF).
+        virtual ~ServerInterfaceComponent() {}
 
         // CgsServerInterfaceComponent.h:61
         virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData) = 0;

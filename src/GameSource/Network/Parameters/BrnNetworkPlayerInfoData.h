@@ -47,7 +47,9 @@ namespace BrnNetwork
     class PlayerInfoData : public CgsNetwork::ServerInterfacePlayerInfoDataX360
     {
     public:
-        virtual ~PlayerInfoData();
+        // The constructor and the virtual destructor are implicit (DWARF places both at
+        // BrnNetworkPlayerInfoData.h:45, the class line); the X360 emits the scalar deleting
+        // destructor 0x8255EA38 with the vtable.
 
         // X360 BrnNetwork::PlayerInfoData::Prepare -- bring the record to its prepared (cleared)
         // state before GetLocalPlayerInfo fills it. Returns true on success (the X360 asserts the

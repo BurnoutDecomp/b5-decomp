@@ -57,14 +57,6 @@ namespace CgsNetwork
     // frees -- the compiler synthesises that from this trivial body. (The behavioural
     // member init lives in Construct() below, called by the server-interface owner, not in
     // the C++ constructor.)
-    ServerInterfaceBroadcastMessages::ServerInterfaceBroadcastMessages()
-        : ServerInterfaceComponent()
-    {
-    }
-
-    ServerInterfaceBroadcastMessages::~ServerInterfaceBroadcastMessages()
-    {
-    }
 
     // ===========================================================================
     // Lifecycle

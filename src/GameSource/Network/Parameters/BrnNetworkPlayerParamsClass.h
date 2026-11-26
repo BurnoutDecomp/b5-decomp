@@ -33,12 +33,12 @@
 
 namespace BrnNetwork
 {
+    // DWARF BrnServerInterface.h:50: every member (constructor, copy, virtual destructor)
+    // is implicit. The X360 inlines the constructor at every stack construction site
+    // (only the vptr store survives) and emits the scalar deleting destructor 0x825662D8
+    // with the vtable.
     class PlayerParams : public PlayerParamsBase
     {
-    public:
-        // Inlined at every stack construction site (only the vptr store survives).
-        PlayerParams() {}
-        virtual ~PlayerParams();
     };
 }
 
