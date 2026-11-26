@@ -678,10 +678,7 @@ s32 ProgressionManager::GetCollectedStuntElementCount(BrnGameState::StuntElement
 // ⚠️ FLAG (PC bring-up, pre-existing): nothing in the mounted set calls Prepare2 yet, so this
 // answers NULL today. That is the console's own contract -- every caller asserts non-null
 // first -- so it surfaces as the game's own assert rather than a silent dereference.
-BrnGameState::AchievementManagerBase* ProgressionManager::GetAchievementManager()
-{
-    return mpAchievementManager;
-}
+// (GetAchievementManager is header-inline.)
 
 // ============================================================================================
 // FindLandmarkAISectionIndex (X360 0x82359AE0) -- DWARF BrnProgressionManager.h:385
@@ -774,20 +771,10 @@ u16 ProgressionManager::FindLandmarkAISectionIndex(CgsID lLandmarkId) const
 // The loaded ProgressionData resource (X360: the ResourcePtr at this+133348). Every caller
 // null-tests the answer, so the raw HasMemoryResource() test is used rather than operator->
 // (whose own assert would pre-empt the caller's).
-const ProgressionData* ProgressionManager::GetProgressionData() const
-{
-    if (!mpProgressionData.HasMemoryResource())
-    {
-        return 0;
-    }
-    return mpProgressionData.operator->();
-}
+// (GetProgressionData is header-inline.)
 
 // The CarData record for the car the player is currently in (X360 this+133328).
-CarData* ProgressionManager::GetCurrentCarData()
-{
-    return mpCurrentCarData;
-}
+// (GetCurrentCarData is header-inline.)
 
 // The chosen-livery record for that car (X360 this+133332). See the header for the two
 // console readers that inline this adjust (AddDistanceDriven @0x823668F0 writes

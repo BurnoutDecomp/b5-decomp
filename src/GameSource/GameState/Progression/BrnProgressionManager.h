@@ -395,7 +395,8 @@ public:
 
     // The player's currently-selected car record (NULL when none). DriveThruManager body/paint
     // shops read its id and write its colour/palette.
-    CarData* GetCurrentCarData();
+    // DWARF h:373, header-inline (no ARTIST copy).
+    CarData* GetCurrentCarData() { return mpCurrentCarData; }
 
     // The chosen-livery record for that car (NULL when none). ADDITIVE GROW (A9 scoring-feed
     // wave 2026-08-27): the console has no out-of-line accessor -- every reader inlines the
@@ -410,7 +411,16 @@ public:
     LiveryData* GetCurrentLiveryData();
 
     // The loaded ProgressionData resource (the event-junction table UnlockCarChallengeForCar walks).
-    const ProgressionData* GetProgressionData() const;
+    // DWARF h:415, header-inline: no ARTIST copy; StreetManager::FindRivalsByDistrict 0x82336378
+    // inlines the HasMemoryResource test and the operator-> call.
+    const ProgressionData* GetProgressionData() const
+    {
+        if (!mpProgressionData.HasMemoryResource())
+        {
+            return 0;
+        }
+        return mpProgressionData.operator->();
+    }
 
     // X360 0x8237C0D8. Read car lCarId's current colour + palette indices into the two out-params.
     void GetCarColourAndPalette(CgsID lCarId, s32* lpiColour, s32* lpiPalette);
@@ -435,7 +445,9 @@ public:
     // StuntManager_gUI_00.cpp reproduces that assert -- so a null shows up as the console's
     // own diagnostic, not a silent deref.
     // (Body in BrnProgressionManager.cpp, next to its bodied accessor siblings.)
-    BrnGameState::AchievementManagerBase* GetAchievementManager();
+    // DWARF h:647, header-inline: no ARTIST copy; DriveThruManager::HandleDriveThru loads
+    // +0x20938 directly (0x8239B174).
+    BrnGameState::AchievementManagerBase* GetAchievementManager() { return mpAchievementManager; }
 
     // ------------------------------------------------------------------------
     // ADDITIVE GROW (declare-only) for the BrnGameState::CarSelectManager (junkyard car-select) TUs.
