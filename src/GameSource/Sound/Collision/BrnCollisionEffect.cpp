@@ -496,14 +496,14 @@ void CollisionEffect::ProcessUpdate()
 
 bool CollisionEffect::Detach()
 {
-    if (mCrashVoice.GetVoiceObject())
-    {
-        mCrashVoice.Stop();
-        mCrashVoice.Detach(static_cast<s32>(
-            CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Slot~")));
-    }
-    if (GetDMixIOPtr())
-        GetDMixIOPtr()->SetDMixInput(1, 0);
+    // ARTIST 0x826F8370: the crash voice is stopped and detached unconditionally (no voice-object
+    // test), and the DMix endpoint member is tested directly (cmplwi on +0x30; the inline
+    // GetDMixIOPtr() would give cmpwi).
+    mCrashVoice.Stop();
+    mCrashVoice.Detach(static_cast<s32>(
+        CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Slot~")));
+    if (mpDynamicMixIo)
+        mpDynamicMixIo->SetDMixInput(1, 0);
     return BrnSound::Logic::BrnEffectObject::Detach();
 }
 

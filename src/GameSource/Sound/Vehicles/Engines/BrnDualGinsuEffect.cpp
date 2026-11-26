@@ -8,6 +8,8 @@
 #include "GameSource/Sound/Vehicles/BrnAIVehicleStateManager.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"          // PlayerVoice::SK_PLAYER_SLOT_NAME
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"  // GenericRwacFactory::SK_NAME
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
 #include "GameSource/Sound/BrnDebugComponent.h"
@@ -56,11 +58,8 @@ s32 KI_DEBUG_SPEW_AI_ENGINE_INFO = -1;          // dword_82F2CCFC
 f32 KF_DEBUG_SHUFFLE_PITCH = 1.0f;              // flt_82F2CD00
 f32 KF_HARDCODE_RPM = 0.0f;                     // flt_82FFB8A0
 
-// X360 dword_830080A8 is initialized by sub_82C65270 from this literal.
-static const s32 guLoopModelSlotName = static_cast<s32>(
-    CgsSound::Playback::Name::MakeHash("~PlayerVoice::SK_PLAYER_SLOT_NAME~"));
-static const u32 guGenericRwacFactoryName = static_cast<u32>(
-    CgsSound::Playback::Name::MakeHash("~GenericRwacFactory::SK_NAME~"));
+// ARTIST reads the interned slot / factory names from their statics PlayerVoice::SK_PLAYER_SLOT_NAME
+// (0x830080A8) and GenericRwacFactory::SK_NAME (0x83008650) at every use; no file-scope copies.
 static const u32 guSend01Name = static_cast<u32>(
     CgsSound::Playback::Name::MakeHash("Send01"));
 static const u32 guReverbSendName = static_cast<u32>(
@@ -364,7 +363,7 @@ void DualGinsuEffect::AttachPartialToVoice(s32 liPartial, s32 liVoice)
     CGS_ASSERT(lpContent != 0, "mapLoopContentSpecs[liPartial]");
     if (!lpContent)
         return;
-    lpVoice->Attach(guLoopModelSlotName, *lpContent);
+    lpVoice->Attach(static_cast<s32>(CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue()), *lpContent);
 
     lpVoice->Play(0);
 }
@@ -379,41 +378,36 @@ void DualGinsuEffect::AttachPartialToVoice(s32 liPartial, s32 liVoice)
 // The scan stops early at the first maiVoiceToPartial[i] == -1 (an unused slot),
 // returning that slot, and only evicts once all KI_LOOP_VOICE_COUNT slots are examined.
 // ---------------------------------------------------------------------------
-s32 DualGinsuEffect::GetFreeLoopModelVoice(f32 afThreshold)
+s32 DualGinsuEffect::GetFreeLoopModelVoice(f32 lfGain)
 {
-    s32 liBestSlot = -1;
-    f32 lfMinGain  = 1.0f;
-    s32 liSlot     = 0;
-
-    const s32* lpiVoiceToPartial = &maiVoiceToPartial[0];
-    while (*lpiVoiceToPartial != -1)
+    // DWARF (BrnSoundUnity, BrnDualGinsuEffect.h:396..399): liVoiceWithLeastGain, lfLeastGainOnVoice and the
+    // loop's liVoiceIndex. A free slot is returned at once (ARTIST 0x826E0FA8 branches out with r3 = the
+    // index); the eviction writes the voice's Stop/Detach and both map clears in line, detaching by the
+    // PlayerVoice::SK_PLAYER_SLOT_NAME static (0x830080A8).
+    s32 liVoiceWithLeastGain = -1;
+    f32 lfLeastGainOnVoice   = 1.0f;
+    for (s32 liVoiceIndex = 0; liVoiceIndex < KI_LOOP_VOICE_COUNT; ++liVoiceIndex)
     {
-        const f32 lfGain = mLoopModelOutput[*lpiVoiceToPartial].mafOutputs[LoopOutputs::E_GAIN];
-        if (lfGain < lfMinGain)
+        if (maiVoiceToPartial[liVoiceIndex] == -1)
+            return liVoiceIndex;
+
+        if (mLoopModelOutput[maiVoiceToPartial[liVoiceIndex]].mafOutputs[LoopOutputs::E_GAIN] < lfLeastGainOnVoice)
         {
-            lfMinGain  = lfGain;
-            liBestSlot = liSlot;
-        }
-
-        ++liSlot;
-        ++lpiVoiceToPartial;
-        if (liSlot >= KI_LOOP_VOICE_COUNT)
-        {
-            if (afThreshold <= lfMinGain)
-                return -1;
-
-            CgsSound::Logic::Voice* lpVoice = &mLoopModelVoice[liBestSlot];
-            lpVoice->Stop();
-            lpVoice->Detach(guLoopModelSlotName);
-
-            const s32 liPartial = maiVoiceToPartial[liBestSlot];
-            maiPartialToVoice[liPartial]  = -1;
-            maiVoiceToPartial[liBestSlot] = -1;
-            return liBestSlot;
+            lfLeastGainOnVoice   = mLoopModelOutput[maiVoiceToPartial[liVoiceIndex]].mafOutputs[LoopOutputs::E_GAIN];
+            liVoiceWithLeastGain = liVoiceIndex;
         }
     }
 
-    return liSlot;
+    if (lfGain > lfLeastGainOnVoice)
+    {
+        mLoopModelVoice[liVoiceWithLeastGain].Stop();
+        mLoopModelVoice[liVoiceWithLeastGain].Detach(
+            static_cast<s32>(CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue()));
+        maiPartialToVoice[maiVoiceToPartial[liVoiceWithLeastGain]] = -1;
+        maiVoiceToPartial[liVoiceWithLeastGain] = -1;
+        return liVoiceWithLeastGain;
+    }
+    return -1;
 }
 
 // ---------------------------------------------------------------------------
@@ -512,12 +506,12 @@ bool DualGinsuEffect::Attach()
         if (GetStateId() == 2)
         {
             mAICarReverbSubmix.Construct(lpModule, lpModule->GetUniqueId(),
-                guGenericRwacFactoryName,
+                static_cast<u32>(CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue()),
                 static_cast<u32>(CgsSound::Playback::Name::MakeHash(
                     "AIReverbSubmixvoiceSpec")));
             mSubmixIdent = static_cast<u32>(mAICarReverbSubmix.GetIdent());
             mCarSubmix.Construct(lpModule, lpModule->GetUniqueId(),
-                guGenericRwacFactoryName,
+                static_cast<u32>(CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue()),
                 static_cast<u32>(CgsSound::Playback::Name::MakeHash(
                     "AICarSubmixVoiceSpec")));
             miCarSubmixSend01Index = 0;
@@ -537,7 +531,7 @@ bool DualGinsuEffect::Attach()
         else if (GetStateId() == 1)
         {
             mCarSubmix.Construct(lpModule, lpModule->GetUniqueId(),
-                guGenericRwacFactoryName,
+                static_cast<u32>(CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue()),
                 static_cast<u32>(CgsSound::Playback::Name::MakeHash(
                     "PlayerCarSubmixVoiceSpec")));
             miCarSubmixSend01Index = 0;
@@ -642,7 +636,7 @@ bool DualGinsuEffect::Attach()
         for (s32 liVoice = 0; liVoice < KI_LOOP_VOICE_COUNT; ++liVoice)
         {
             mLoopModelVoice[liVoice].Construct(lpModule, lpModule->GetUniqueId(),
-                                               guGenericRwacFactoryName,
+                                               static_cast<u32>(CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue()),
                                                luLoopVoiceSpec);
             maiVoiceToPartial[liVoice] = -1;
         }
@@ -657,7 +651,7 @@ bool DualGinsuEffect::Attach()
             else
             {
                 maLoopContentSpecs[liPartial].Construct(
-                    lpModule, guGenericRwacFactoryName,
+                    lpModule, static_cast<u32>(CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue()),
                     lpLoopModel->mpaPartials[liPartial].mWaveName.mHash);
                 mapLoopContentSpecs[liPartial] = &maLoopContentSpecs[liPartial];
             }
@@ -665,7 +659,7 @@ bool DualGinsuEffect::Attach()
 
         CgsSound::Logic::VoiceWrapper::CreateParams lParams;
         lParams.mpLogicModule = lpModule;
-        lParams.mFactoryName = guGenericRwacFactoryName;
+        lParams.mFactoryName = static_cast<u32>(CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
         lParams.mVoiceSpecName = static_cast<u32>(
             CgsSound::Playback::Name::MakeHash("GinsuVoiceSpec"));
         lParams.mSlotName = guGinsuSlotName;
@@ -863,7 +857,7 @@ void DualGinsuEffect::DetachPartialFromVoice(s32 aiVoice)
         return;
 
     mLoopModelVoice[aiVoice].Stop();
-    mLoopModelVoice[aiVoice].Detach(guLoopModelSlotName);
+    mLoopModelVoice[aiVoice].Detach(static_cast<s32>(CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue()));
     maiPartialToVoice[liPartial] = -1;
     maiVoiceToPartial[aiVoice] = -1;
 }
