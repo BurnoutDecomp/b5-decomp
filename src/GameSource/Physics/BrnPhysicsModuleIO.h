@@ -49,7 +49,8 @@
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT (the two inline write-lock queue getters, 2026-08-19)
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<13312,16> (mGameActionQueue)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<13312,16> (mGameActionQueue's base)
+#include "GameSource/GameState/BrnBaseGameActionQueue.h"          // BrnGameState::GameStateModuleIO::BaseGameActionQueue<13312> (mGameActionQueue)
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (mTimerInterface, retyped 2026-08-09)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                 // CgsModule::EventQueue<T,N> (the two unfolded input queues, 2026-08-09)
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"          // SceneManagerIO::PotentialContact (mPotentialContactQueue element)
@@ -386,7 +387,10 @@ namespace PhysicsModuleIO
         // buffer grows 13327 bytes (the update input stack is 16 MB).
         // The name is kept as a typedef so the four accessors' signatures do not change; the
         // two bridges' reinterpret_casts are now casts to the same type and can be retired.
-        typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueStorage;
+        // DWARF BrnPhysicsModuleIO.h:176 `typedef InputBuffer::GameActionQueue GameActionQueue`:
+        // the game-state action queue, BaseGameActionQueue<13312> (BrnGameActions.h:492), whose
+        // base is VariableEventQueue<13312,16>.
+        typedef BrnGameState::GameStateModuleIO::BaseGameActionQueue<13312> GameActionQueueStorage;
 
         // ---- getters (read-lock: status bit 4) ----
         const CameraStorage*                        GetCameraInput() const;                 // 0x8259F7F8 :272

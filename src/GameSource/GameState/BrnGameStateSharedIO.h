@@ -10,7 +10,8 @@
 #include "GameSource/BurnoutConstants.h"                        // EActiveRaceCarIndex (FlybyRivalData)
 #include "GameSource/GameState/BrnCgsPlayerName.h"              // CgsNetwork::PlayerName (shared 16-byte home)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"        // CgsSystem::Time (CarScoreData)
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<13312,16> (GameActionQueue home)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<13312,16> (GameActionQueue's base)
+#include "GameSource/GameState/BrnBaseGameActionQueue.h"         // BaseGameActionQueue<N> (DWARF BrnGameActions.h:492)
 #include "GameShared/GameClasses/Containers/CgsArray.h"         // Array<T,N> (CarScoreData::GetChainableStuntMultipliers)
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // BrnGameState::StuntToDisplay (ScoringOutputInterface::maStunts[1] by value); clean header (types.hpp + BrnCommonTypes.h + BrnGameStateTypes.h only, no cycle back here)
 
@@ -35,14 +36,14 @@ namespace BrnGameState
         //         : public VariableEventQueue<13312,16> {};
         // and BrnGameStateModuleIO.h spells the OutputBuffer member / accessors as
         // `InputBuffer::GameActionQueue` (the typedef lives on GameStateModuleIO::
-        // InputBuffer and OutputBuffer re-uses it).
+        // InputBuffer and OutputBuffer re-uses it); LegacySrc BrnGameActions.h:307
+        // `typedef BaseGameActionQueue<KI_EVENT_MANAGER_DEFAULT_ACTION_QUEUE_LENGTH> GameActionQueue`.
         //
-        // BaseGameActionQueue<13312> adds NOTHING to its base, so the repo models the
-        // queue AS the base: that keeps ONE type across the GameState -> Director bridge
-        // (BrnGameModule::BridgeGameStateToDirector @0x823CD170 calls
-        // CgsModule::VariableEventQueue<13312,16>::Append<13312,16> with the director
-        // input buffer's queue and the game-state output buffer's queue -- the X360
-        // itself proves the two are the SAME instantiated type).
+        // BaseGameActionQueue<13312> adds no data to its base, only the AddGameAction<T>
+        // member template (h:501; BrnBaseGameActionQueue.h). The bridges still see one
+        // queue image: BrnGameModule::BridgeGameStateToDirector @0x823CD170 calls the
+        // base's CgsModule::VariableEventQueue<13312,16>::Append<13312,16> with the
+        // director input buffer's queue and the game-state output buffer's queue.
         //
         // REPLACES a global-scope `namespace InputBuffer { class GameActionQueue; }`
         // forward declaration that used to sit in BrnCarSelectManager.h /
@@ -50,7 +51,7 @@ namespace BrnGameState
         // defined by any TU, so every signature mangled with it was permanently
         // unsatisfiable -- the same fork shape as the DebugPrinter::ActualPrint trap.
         // ====================================================================
-        typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueue;
+        typedef BaseGameActionQueue<13312> GameActionQueue;
 
         // Identifies which game mode is active. Recovered verbatim from the DecFIGS DWARF
         // (BrnGameStateSharedIO.h:51); the X360 build attests these values via the mode

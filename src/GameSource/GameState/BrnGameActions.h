@@ -1118,9 +1118,14 @@ enum EGameActionType
 };
 
 // DecFIGS BrnGameActions.h:475. The empty Event base lets the queue take
-// the action directly, as in the call at ARTIST 0x82399CE8.
-template <EGameActionType T>
-struct GameAction : public CgsModule::Event { };
+// the action directly, as in the call at ARTIST 0x82399CE8. h:478 mseType is the static type
+// tag BaseGameActionQueue::AddGameAction posts (LegacySrc BrnGameActions.h:273 initialises it
+// in the class).
+template <EGameActionType leActionType>
+struct GameAction : public CgsModule::Event
+{
+    static const EGameActionType mseType = leActionType;
+};
 
 // DecFIGS BrnGameActions.h:3189. ARTIST 823A58F0..823A5900 copies the
 // empty record's one object-representation byte without assigning it a value.

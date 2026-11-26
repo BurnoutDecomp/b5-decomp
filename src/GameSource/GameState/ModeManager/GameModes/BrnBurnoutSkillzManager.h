@@ -65,7 +65,8 @@ namespace GameStateModuleIO
     // `class GameActionQueue;` / `struct NetworkToGameStateInterface;` forward declaration
     // here names a DIFFERENT type and collides with every TU that also pulls the real IO
     // headers, which is what kept this TU off the build.
-    typedef CgsModule::VariableEventQueue<13312, 16>                     GameActionQueue;
+    template <s32 liBufferSize> class BaseGameActionQueue;          // BrnBaseGameActionQueue.h (DWARF BrnGameActions.h:492)
+    typedef BaseGameActionQueue<13312>                                   GameActionQueue;
     typedef BrnNetwork::BrnNetworkModuleIO::NetworkToGameStateInterface  NetworkToGameStateInterface;
 }
 }
