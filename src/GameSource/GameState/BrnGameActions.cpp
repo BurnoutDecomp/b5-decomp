@@ -202,23 +202,11 @@ void PrepareForModeAction::Construct(const GameModeParams* lpGameModeParams,
     miNumPlayersDisconnected = 0;
 }
 
-// ⭐ [gateui] ADDED 2026-08-20 (round 8). DWARF BrnGameActions.h:874
-// (`const GameModeParams* GetGameModeParams() const`); inlined by the X360 compiler at every
-// call site, so it has no standalone export. It was declaration-only here, which is WHY the
-// world bridge read the embedded params at raw console byte offsets -- and those offsets land
-// in garbage on the host, because this record's x64 layout deliberately diverges (see the
-// PrepareForModeAction declaration in BrnGameActions.h: "parity is by named member").
-//
-// The console's own arithmetic is what identifies the member: mGameModeParams sits at
-// action+0x30 on the X360, and WorldModule::BridgeInputToEntityModules @0x827ADF88 reads
-// `lwz r11, 0x178(r31)` (0x178 - 0x30 == 0x148 == the offset GameModeParams::Construct
-// @0x8231C374 stores its EGameModeType argument to) and `ld r11, 0x890(r31)` (0x890 - 0x30 ==
-// 0x860 == the offset GameModeParams::GetFlag @0x821F2C88 loads muFlags from). Both are this
-// member; both now go through it by name.
-const GameModeParams* PrepareForModeAction::GetGameModeParams() const
-{
-    return &mGameModeParams;
-}
+// PrepareForModeAction::GetGameModeParams is header-inline (DWARF BrnGameActions.h:874): the
+// console's mGameModeParams sits at action+0x30 (WorldModule::BridgeInputToEntityModules 0x827ADF88
+// reads `lwz r11,0x178(r31)` = GameModeParams +0x148, the EGameModeType GameModeParams::Construct
+// 0x8231C374 stores, and `ld r11,0x890(r31)` = +0x860, the muFlags GameModeParams::GetFlag 0x821F2C88
+// loads).
 
 // X360 0x822A0198. Linear search of the disconnected-player table: true iff lNetworkPlayerID is one
 // of the miNumPlayersDisconnected recorded ids. The two asserts bound the count to [0, 8).

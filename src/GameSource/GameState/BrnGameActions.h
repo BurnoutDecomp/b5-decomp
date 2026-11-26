@@ -2098,7 +2098,10 @@ struct PrepareForModeAction : public GameAction<E_ACTION_PREPARE_FOR_MODE>
 
     void                  Construct(const GameModeParams* lpGameModeParams, s32 liCurrentRound,
                                     bool lbComingFromOnlineLobbyMode);   // X360 0x8230FDF0 (defined)
-    const GameModeParams* GetGameModeParams() const;                     // [gateui] DEFINED in BrnGameActions.cpp (round 8)
+    // DWARF BrnGameActions.h:874: defined in the header. ARTIST has no out-of-line copy and folds
+    // the address into each caller (VehicleManager::OnPrepareGameMode 0x825B57B0 `addic. r11,r30,0x30`,
+    // then `lwz 0x178(r30)` for the mode type; WorldModule::BridgeInputToEntityModules 0x827ADF88).
+    const GameModeParams* GetGameModeParams() const { return &mGameModeParams; }
     // ⭐ [evt-flow E1] THE FOUR TRIVIAL GETTERS BELOW WERE DECLARED-ONLY AND ARE NOW INLINE.
     // TranslateGameActionsToGuiEvents' case-23 arm (@0x823EAD80, the PrepareForModeStart /
     // RunFsm arm) reads exactly these four fields off the action record, and the X360 compiler
