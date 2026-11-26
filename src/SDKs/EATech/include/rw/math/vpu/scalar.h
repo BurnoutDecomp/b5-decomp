@@ -13,6 +13,10 @@ template <class T> inline T Max(const T& a, const T& b) { return (a > b? a : b);
 // sign-mask specialisation in detail/scalar_operation_inline.h.
 template <class T> inline T Abs(const T& a) { return a >= static_cast<T>(0.0f) ? a : -a; }
 template <> inline VecFloat Abs<VecFloat>(const VecFloat& a);
+// DecFIGS scalar_operation_inline.h (rwmath 1.02.00 :88/:105): VecFloat has the vminfp / vmaxfp
+// specialisations of Min/Max.
+template <> inline VecFloat Min<VecFloat>(const VecFloat& a, const VecFloat& b);
+template <> inline VecFloat Max<VecFloat>(const VecFloat& a, const VecFloat& b);
 }}}
 
 #include "SDKs/EATech/include/rw/math/vpu/detail/scalar_operation_inline.h"

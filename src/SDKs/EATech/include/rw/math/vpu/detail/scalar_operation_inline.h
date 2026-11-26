@@ -16,6 +16,23 @@ inline VecFloat Abs<VecFloat>(const VecFloat& a)
     const VectorIntrinsic signBitMask = __vslw(mask, mask);
     return VecFloat(__vandc(a.mV, signBitMask));
 }
+// rwmath 1.02.00 detail/scalar_operation_inline.h:88..:111 (DecFIGS DWARF lists both): one vminfp /
+// vmaxfp on the broadcast registers. ARTIST BrnTraffic ParamTransform::UpdateLerpedPosition 0x82712B78
+// `vmaxfp v0,v0,v12` (Max(speed, GetVecFloat_Zero())).
+template <>
+inline VecFloat Min<VecFloat>(const VecFloat& a, const VecFloat& b)
+{
+    VectorIntrinsic result;
+    result = __vminfp(a.mV, b.mV);
+    return VecFloat(result);
+}
+template <>
+inline VecFloat Max<VecFloat>(const VecFloat& a, const VecFloat& b)
+{
+    VectorIntrinsic result;
+    result = __vmaxfp(a.mV, b.mV);
+    return VecFloat(result);
+}
 // DecFIGS scalar_operation_inline.h:163.
 inline VecFloat Lerp(VecFloat::InParam a, VecFloat::InParam b, VecFloat::InParam t)
 {
