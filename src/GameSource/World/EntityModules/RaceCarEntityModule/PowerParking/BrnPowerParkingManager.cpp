@@ -450,6 +450,8 @@ namespace BrnWorld
 // 0x82540530). That is the perpendicular distance for a unit direction -- the traffic transform's
 // Z row and ActiveRaceCar::GetDirection -- and the console's answer, not a distance, otherwise.
 // ============================================================================
+// ARTIST's assert names the function's DWARF home (string 0x8207BFF8, li r5, 0x76 at 0x825404CC).
+#define CGS_ARTIST_UNITY_BRNMATHUTILS_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Math/BrnMathUtils.cpp"
 namespace BrnMath
 {
     f32 GetPointToInfiniteLineDistance(Vector3 lPoint, Vector3 lPointOnLine1, Vector3 lPointOnLine2)
@@ -458,7 +460,8 @@ namespace BrnMath
 
         // 0x825404A8 vmsum3fp128 ; 0x825404B0 vcmpgtfp. against 0.0 (flt_82001CC0) ; bne all-true
         // skips. So a zero-length or NaN direction fires.
-        CGS_ASSERT(rw::math::vpu::MagnitudeSquared(lLineDir) > 0.0f, "RwMath::MagnitudeSquared( lLineDir ) > 0.0f");
+        CGS_ASSERT_AT(rw::math::vpu::MagnitudeSquared(lLineDir) > 0.0f, "RwMath::MagnitudeSquared( lLineDir ) > 0.0f",
+                      CGS_ARTIST_UNITY_BRNMATHUTILS_CPP_FILE, 118);
 
         const Vector3 lLineToPoint = lPoint - lPointOnLine1;                         // 0x825404E4 vsubfp128
         const f32 lfDelta = rw::math::vpu::Dot(lLineDir, lLineToPoint);              // 0x82540504 vmsum3fp128

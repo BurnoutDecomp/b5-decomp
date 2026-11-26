@@ -49,7 +49,7 @@ namespace BrnAI
         // out-of-line copy and loads the member at each site, e.g. lhz 0x10(portal) for the link).
         u8            GetNumBoundryLines() const { return mu8NumBoundaryLines; }   // :243
         // Inlined at ARTIST 82783E68 / 82783E98 (three floats, zero fourth lane).
-        Vector3       GetPosition() const { { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = {mPositionX, mPositionY, mPositionZ, 0.0f}; const Vector3 lResult(lResultIntrinsic); return lResult; } }
+        Vector3       GetPosition() const { return Vector3(mPositionX, mPositionY, mPositionZ); }   // :177
         Vector2       GetPosition2D() const;                          // :253
         f32           GetPositionX() const { return mPositionX; }      // :256
         f32           GetPositionY() const { return mPositionY; }      // :259

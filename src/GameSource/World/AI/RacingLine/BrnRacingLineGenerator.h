@@ -303,6 +303,11 @@ private:
     static s32  miHNGMapGenerationPM3;                                               // :384
     static s32  miFarAheadPM;                                                        // :385
     static bool mbDrawAvoidanceDebug;                                                // :393
+
+    // The AI debug component registers the private mbDrawAvoidanceDebug with the debug menu
+    // (PS3 AIDebugComponent::OnActivate 0x9BF268 takes &RacingLineGenerator::mbDrawAvoidanceDebug;
+    // ARTIST 0x8277EC40), so the original granted it access.
+    friend class AIDebugComponent;
 };
 }
 

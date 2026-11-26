@@ -12,6 +12,7 @@
 #include "GameSource/World/AI/BrnAIBuzzBy.h"
 #include "GameSource/BurnoutConstants.h"                                           // EActiveRaceCarIndex operator++
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"                      // CgsCore::KF_MPS_TO_MPH (.bss 0x830180B0)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                       // CgsDev::SimpleStrStream
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
@@ -37,6 +38,104 @@
 
 namespace BrnAI
 {
+    // DWARF BrnAIDebugComponent.cpp:34..:183, in declaration order, with the image's values.
+    // The class constants (declared h:200..:231): the two sizes are dynamically initialised
+    // (K_CURRENT_CAR_SIZE .bss 0x8300D730, read by DrawAICarRoute 0x82773674), the colours are .data
+    // 0x82F3039C..0x82F303DC, read from storage (r, g, b, a from the PS3 initialiser 0x9BC1B4), and the
+    // scalars are ARTIST's AI unity .rdata 0x820C4350..0x820C4378 word for word.
+    const Vector3  AIDebugComponent::K_CAR_SIZE(2.0f, 200.0f, 2.0f);                          // :34
+    const Vector3  AIDebugComponent::K_CURRENT_CAR_SIZE(3.0f, 200.0f, 3.0f);                  // :35
+    const rw::RGBA AIDebugComponent::KU_CAR_COLOUR(255, 68, 34, 255);                         // :36
+    const rw::RGBA AIDebugComponent::KU_STATE_TEXT_COLOUR(255, 98, 64, 255);                  // :37
+    const rw::RGBA AIDebugComponent::KU_HIGHLIGHT_TEXT_COLOUR(255, 255, 64, 255);             // :38
+    const rw::RGBA AIDebugComponent::KU_UBER_HIGHLIGHT_TEXT_COLOUR(255, 255, 184, 255);       // :39
+    const rw::RGBA AIDebugComponent::KU_CURRENT_CAR_COLOUR(170, 170, 170, 255);               // :40
+    const rw::RGBA AIDebugComponent::KU_ROUTE_LINE_COLOUR(240, 0, 0, 255);                    // :41
+    const rw::RGBA AIDebugComponent::KU_ROUTE_NODE_COLOUR(170, 0, 0, 255);                    // :42
+    const rw::RGBA AIDebugComponent::KU_RACING_LINE_COLOUR1(0, 0, 255, 255);                  // :43
+    const rw::RGBA AIDebugComponent::KU_RACING_LINE_COLOUR2(128, 128, 255, 255);              // :44
+    const rw::RGBA AIDebugComponent::KU_TARGET_LINE_COLOUR(136, 136, 255, 255);               // :45
+    const rw::RGBA AIDebugComponent::KU_CURRENT_NODE_COLOUR(0, 0, 0, 255);                    // :46
+    const rw::RGBA AIDebugComponent::KU_VELOCITY_LINE_COLOUR(255, 0, 255, 255);               // :47
+    const rw::RGBA AIDebugComponent::KU_LOOKAHEAD_LINE_COLOUR(255, 255, 0, 255);              // :48
+    const rw::RGBA AIDebugComponent::KU_DRIVER_TARGET_LINE_COLOUR(0, 255, 255, 255);          // :49
+    const rw::RGBA AIDebugComponent::KU_AGGRESSIVE_COLOUR(255, 0, 0, 255);                    // :50
+    const rw::RGBA AIDebugComponent::KU_TRAFFIC_LINE_COLOUR(0, 255, 255, 255);                // :51
+    const rw::RGBA AIDebugComponent::KU_BRAKING_COLOUR(0, 0, 0, 255);                         // :52
+    const s32      AIDebugComponent::KI_NUM_SECTIONS_DISPLAYED;                               // :53  0x820C4350
+    const f32      AIDebugComponent::KF_ROUTE_NODE_SIZE = 2.0f;                               // :54  0x820C4354
+    const f32      AIDebugComponent::KF_CAR_YOFFSET = -2.0f;                                  // :55  0x820C4358
+    const f32      AIDebugComponent::KF_ROUTE_YOFFSET = 2.0f;                                 // :56  0x820C435C
+    const f32      AIDebugComponent::KF_AT_DISPLAY_VECTOR_LENGTH = 15.0f;                     // :57  0x820C4360
+    bool           AIDebugComponent::msbDriversStayStill = false;                             // :59  .bss 0x8300D604
+    bool           AIDebugComponent::msbDriversMaxAggression = false;                         // :60  .bss 0x8300D605
+    const f32      AIDebugComponent::KF_STATE_TABLE_X = 50.0f;                                // :63  0x820C4364
+    const f32      AIDebugComponent::KF_STATE_TABLE_Y = 50.0f;                                // :64  0x820C4368
+    const f32      AIDebugComponent::KF_STATE_TABLE_SPACING_X = 130.0f;                       // :65  0x820C436C
+    const f32      AIDebugComponent::KF_STATE_TABLE_HEADER_SPACING_X = 180.0f;                // :66  0x820C4370
+    const f32      AIDebugComponent::KF_STATE_TABLE_SPACING_Y = 20.0f;                        // :67  0x820C4374
+    const f32      AIDebugComponent::KF_STATE_TABLE_FONT_SIZE = 16.0f;                        // :68  0x820C4378
+
+    // The PID graph's reference lines (OnActivate's AddFloat): :70 .bss 0x8300D608, :71/:72 .data
+    // 0x82F30180/0x82F30184 (PS3 OnActivate 0x9BF268 names all three). The dump marks only :182/:183
+    // `extern`: these file-scope variables and the pointer tables below are internal (static), which is
+    // why ARTIST addresses the tables off one anchor (DrawAIStatesOnCar 0x8277ECA8: r25 = 0x82F30218,
+    // KAPC_BEHAVIOUR at r25 - 0x90).
+    static f32 KF_ZERO_FLOAT = 0.0f;                                                                  // :70
+    static f32 KF_MINUS_ONE_FLOAT = -1.0f;                                                            // :71
+    static f32 KF_ONE_FLOAT = 1.0f;                                                                   // :72
+
+    const f32 KF_STRAIGHT_ANGLE = 180.0f;                                                      // :74  0x820C437C
+    const f32 KF_RIGHT_ANGLE = 90.0f;                                                          // :75  0x820C4380
+    const f32 KF_DEFAULT_CRUISE_SPEED = 80.0f;                                                 // :76  0x820C4384
+
+    // The state table's name tables (DWARF types): the char[N][64] ones are .rdata (0x820C4388 /
+    // 0x820C4548 / 0x820C4688), the `const char *[N]` ones arrays of non-const pointers in .data
+    // (0x82F30188 / 0x82F301B4 / 0x82F301DC / 0x82F30218 / 0x82F30230), reloaded on each use.
+    const s32 KI_MAX_ROUTE_FIND_STRING_LENGTH = 64;                                            // :78
+    const char KAAC_ROUTE_FINDING_STYLE[7][KI_MAX_ROUTE_FIND_STRING_LENGTH] =                  // :79
+    {
+        "FreeRoam", "Race", "RoadRage", "Pursuit", "AvoidPlayer", "AlwaysStraight", "MarkedMan",
+    };
+    const char KAAC_SPEED_SELECTION_METHOD[5][KI_MAX_ROUTE_FIND_STRING_LENGTH] =               // :92
+    {
+        "FreeRoam", "Race", "MatchPlayer", "Personality", "Top",
+    };
+    static const char* KAPC_BEHAVIOUR[11] =                                                           // :102
+    {
+        "Stop", "RollingStart", "DriveThru", "Cruising", "Fighting", "QuickTurn", "SlowTurn",
+        "Crashing", "Donut", "PostRaceWin", "PostRaceLose",
+    };
+    const char KAAC_DRIFT_BEHAVIOUR[4][KI_MAX_ROUTE_FIND_STRING_LENGTH] =                      // :118
+    {
+        "Normal", "Start", "Drift", "Exit",
+    };
+    static const char* KAPC_BIAS_NAMES[10] =                                                          // :127
+    {
+        "Race", "RaceDangerous", "Slam", "RoadRage", "CloseToPlayer", "SlamRivals", "HitOncoming",
+        "SlamDangerous", "NoHNGCentering", "VeerAwayFromPlayer",
+    };
+    static const char* KAPC_AGGRESSION_STATE_NAMES[15] =                                              // :144
+    {
+        "OutOfRange", "OvertakeToSlam", "DropBackToSlam", "AttackSlam", "Wait", "Veer", "Passive",
+        "FallPast", "BeFodder", "ClipOffBehind", "OvertakeFast", "OvertakeSlowly", "SpurtForward",
+        "VeerExtreme", "HangAroundAhead",
+    };
+    static const char* KAPC_SPEED_MATCHING_NAMES[6] =                                                 // :164
+    {
+        "Disabled", "Enabled", "Slower", "SlowToClip", "OvertakeFast", "OvertakeSlowly",
+    };
+    static const char* KAPC_PERSONALITY_TYPE_NAMES[2] =                                               // :175
+    {
+        "Racing", "Aggression",
+    };
+
+    // DWARF :182/:183: non-const namespace globals. K_DRIFT_TEXT_POSITION is dynamically initialised
+    // into .bss 0x8300D760 (CRT 0x82C69148: 400 from 0x8200889C, 500 from 0x820C478C); KF_DRIFT_TEXT_SIZE
+    // is .data 0x82F30238 (20.0), read from storage by RenderHUD's inlined DrawDriftingDebug (0x8277E52C).
+    Vector2 K_DRIFT_TEXT_POSITION(400.0f, 500.0f);                                             // :182
+    f32 KF_DRIFT_TEXT_SIZE = 20.0f;                                                            // :183
+
     // The marked-man tunables OnActivate registers (PS3 0x9BF268 names all four): DWARF
     // BrnAICar.cpp:111/:112 and BrnAIAggression.cpp:74/:75, the non-const file-scope globals of
     // those unity members (.data 0x82F30170/0x82F30174, .bss 0x8300D6F0/0x8300D714). The unity TU
@@ -47,67 +146,66 @@ namespace BrnAI
     extern f32 KF_MAX_MIN_MARKED_MAN_OVERTAKE_SPEED;
 
 
-// ARTIST82773B48: active fighting drivers with an aggression target draw both primitives.
+// ARTIST82773B48: active fighting drivers with an aggression target draw both primitives
+// (DWARF :1458..:1472 locals).
 void AIDebugComponent::DrawAggressiveTargetPoints(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    for (s32 i = 0; i < KI_MAX_ACTIVE_RACE_CARS; ++i)
+    for (s32 liDriverIndex = 0; liDriverIndex < KI_MAX_ACTIVE_RACE_CARS; ++liDriverIndex)
     {
-        const AIDriver& lrDriver = mpAIModule->maAIDrivers[i];
-        if (lrDriver.mbIsActive && lrDriver.mpCar->meBehaviour == E_AI_BEHAVIOUR_FIGHTING &&
-            lrDriver.mAggression.mbTargetPosValid)
+        const AIDriver* lpDriver = &mpAIModule->maAIDrivers[liDriverIndex];            // :1462
+        if (lpDriver->mbIsActive && lpDriver->GetCar()->meBehaviour == E_AI_BEHAVIOUR_FIGHTING &&
+            lpDriver->mAggression.mbTargetPosValid)
         {
-            const Vector3 lPosition = lrDriver.mpCar->GetPosition();
-            rw::RGBA lColour; lColour.m_rgba = 0xFF0000FFu;
-            lpDisplay->DrawSphere(lrDriver.mAggression.mTargetPos, 1.5f, lColour);
-            lpDisplay->DrawLine(lPosition, lrDriver.mAggression.mTargetPos, lColour);
+            Vector3 lCarPos = lpDriver->GetCar()->GetPosition();                       // :1471
+            Vector3 lTargetPos = lpDriver->mAggression.mTargetPos;                     // :1472
+            lpDisplay->DrawSphere(lTargetPos, 1.5f, KU_AGGRESSIVE_COLOUR);
+            lpDisplay->DrawLine(lCarPos, lTargetPos, KU_AGGRESSIVE_COLOUR);
         }
     }
 }
 
-// ARTIST82773C18: warn over the targeted car while the fighting driver is in its slam state.
+// ARTIST82773C18: warn over the targeted car while the fighting driver is in its slam state
+// (DWARF :1492..:1506 locals; the target's height through VecFloatRef<Y> + float and SetY).
 void AIDebugComponent::DrawAggressiveWarning(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    for (s32 i = 0; i < KI_MAX_ACTIVE_RACE_CARS; ++i)
+    for (s32 liDriverIndex = 0; liDriverIndex < KI_MAX_ACTIVE_RACE_CARS; ++liDriverIndex)
     {
-        const AIDriver& lrDriver = mpAIModule->maAIDrivers[i];
-        if (lrDriver.mbIsActive && lrDriver.mpCar->meBehaviour == E_AI_BEHAVIOUR_FIGHTING &&
-            lrDriver.mAggression.meAggressionState == E_AI_AGGRESSION_STATE_ATTACK_SLAM &&
-            lrDriver.mAggression.mpTargetCar)
+        const AIDriver* lpDriver = &mpAIModule->maAIDrivers[liDriverIndex];            // :1496
+        if (lpDriver->mbIsActive && lpDriver->GetCar()->meBehaviour == E_AI_BEHAVIOUR_FIGHTING &&
+            lpDriver->mAggression.meAggressionState == E_AI_AGGRESSION_STATE_ATTACK_SLAM &&
+            lpDriver->mAggression.mpTargetCar)
         {
-            Vector3 lPosition = lrDriver.mAggression.mpTargetCar->GetPosition();
-            lPosition.mV.y += 2.0f;
-            rw::RGBA lColour; lColour.m_rgba = 0xFF0000FFu;
-            lpDisplay->DrawText(lPosition, "DANGER", 40.0f, lColour);
+            Vector3 lTargetPos = lpDriver->mAggression.mpTargetCar->GetPosition();     // :1506
+            lTargetPos.SetY(lTargetPos.GetY() + 2.0f);
+            lpDisplay->DrawText(lTargetPos, "DANGER", 40.0f, KU_AGGRESSIVE_COLOUR);
         }
     }
 }
 
-// ARTIST827743A0: the active-driver ordinal is the printed index, with * for speed matching.
+// ARTIST827743A0: each active driver's index over its car ("%d", "%d*" while speed matching), in the
+// aggressive colour while fighting (DWARF :1665..:1672 locals).
 void AIDebugComponent::DrawCarIndices(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    for (s32 i = 0; i < KI_MAX_ACTIVE_RACE_CARS; ++i)
+    for (s32 liDriverIndex = 0; liDriverIndex < KI_MAX_ACTIVE_RACE_CARS; ++liDriverIndex)
     {
-        const AIDriver& lrDriver = mpAIModule->maAIDrivers[i];
-        if (lrDriver.mbIsActive)
+        const AIDriver* lpDriver = &mpAIModule->maAIDrivers[liDriverIndex];            // :1670
+        if (lpDriver->mbIsActive)
         {
-            const Vector3 lPosition = lrDriver.mpCar->GetPosition();
-            char lacText[16];
-            CgsCore::SPrintf(lacText, 10, "%d", i);
-            rw::RGBA lColour;
-            f32 lfSize;
-            if (lrDriver.mpCar->meBehaviour == E_AI_BEHAVIOUR_FIGHTING)
+            Vector3 lCarPos = lpDriver->GetCar()->GetPosition();                       // :1671
+            char lacBuff[10];                                                          // :1672
+            CgsCore::SPrintf(lacBuff, sizeof(lacBuff), "%d", liDriverIndex);
+            if (lpDriver->GetCar()->meBehaviour == E_AI_BEHAVIOUR_FIGHTING)
             {
-                if (lrDriver.mAggression.meSpeedMatchType != 0)
-                    CgsCore::SPrintf(lacText, 10, "%d*", i);
-                lfSize = 40.0f;
-                lColour.m_rgba = 0xFF0000FFu;
+                if (lpDriver->mAggression.meSpeedMatchType != 0)
+                {
+                    CgsCore::SPrintf(lacBuff, sizeof(lacBuff), "%d*", liDriverIndex);
+                }
+                lpDisplay->DrawText(lCarPos, lacBuff, 40.0f, KU_AGGRESSIVE_COLOUR);
             }
             else
             {
-                lfSize = 24.0f;
-                lColour.m_rgba = 0xFF4062FFu;
+                lpDisplay->DrawText(lCarPos, lacBuff, 24.0f, KU_STATE_TEXT_COLOUR);
             }
-            lpDisplay->DrawText(lPosition, lacText, lfSize, lColour);
         }
     }
 }
@@ -239,7 +337,7 @@ void AIDebugComponent::DrawChevrons(CgsDev::Debug3DImmediateRender* lpDisplay) c
                     const Vector3 lToPortal = lPortalPosition - lCarPosition;
                     const f32 lfForwardAngle = XboxMath::XMVectorACos(DebugClampedDot3(
                         NormalizeDebugVectorOne(lToPortal), NormalizeDebugVectorOne(lCarDirection))) * 57.295780181884766f;
-                    if (!(lfForwardAngle > 90.0f))
+                    if (!(lfForwardAngle > KF_RIGHT_ANGLE))
                     {
                         const BoundaryLine* lpBoundary = lpSection->GetPortal(static_cast<u8>(j))->GetBoundaryLine(0);
                         CGS_ASSERT(lpBoundary != 0, "lpBoundry != NULL");
@@ -248,10 +346,10 @@ void AIDebugComponent::DrawChevrons(CgsDev::Debug3DImmediateRender* lpDisplay) c
                         const Vector3 lBoundaryDirection = NormalizeDebugVectorOne(NormalizeDebugVector(lBoundary));
                         f32 lfAngle = std::fabs(XboxMath::XMVectorACos(DebugClampedDot3(
                             lBoundaryDirection, NormalizeDebugVectorOne(lCarDirection))) * 57.295780181884766f);
-                        CGS_ASSERT(lfAngle <= 180.0f, "lfAlphaProportion <= KF_STRAIGHT_ANGLE");
-                        if (lfAngle > 90.0f) lfAngle = 180.0f - lfAngle;
+                        CGS_ASSERT(lfAngle <= KF_STRAIGHT_ANGLE, "lfAlphaProportion <= KF_STRAIGHT_ANGLE");
+                        if (lfAngle > KF_RIGHT_ANGLE) lfAngle = KF_STRAIGHT_ANGLE - lfAngle;
                         __vector4 lScale; lScale.x = 128.0f; lScale.y = lScale.z = lScale.w = 128.0f;
-                        __vector4 lFraction; lFraction.x = lfAngle * 0.011111111380159855f;
+                        __vector4 lFraction; lFraction.x = lfAngle / KF_RIGHT_ANGLE;
                         lFraction.y = lFraction.z = lFraction.w = lFraction.x;
                         const __vector4 lZero = __vspltisw(0);
                         const s32 liAlpha = static_cast<s32>(__vmaddfp(lScale, lFraction, lZero).x);
@@ -287,8 +385,7 @@ void AIDebugComponent::DrawNearbyVehicles(CgsDev::Debug3DImmediateRender* lpDisp
                     const Vector3 lStart(lrLine.mfStartX, lfStartHeight, lrLine.mfStartY);
                     const f32 lfEndHeight = lrDriver.mpCar->GetPosition().mV.y + 0.3f;
                     const Vector3 lEnd(lrLine.mfEndX, lfEndHeight, lrLine.mfEndY);
-                    rw::RGBA lColour; lColour.m_rgba = 0xFFFFFF00u;
-                    lpDisplay->DrawLine(lStart, lEnd, lColour);
+                    lpDisplay->DrawLine(lStart, lEnd, KU_TRAFFIC_LINE_COLOUR);
                 }
             }
         }
@@ -313,30 +410,29 @@ namespace
     }
 }
 
-// ARTIST827738F8: draw steering-target and velocity directions for ready drivers.
+// ARTIST827738F8: each active driver's steering target and ground-plane velocity as lines from its
+// car (DWARF :1408..:1436 locals; the SDK Normalize and the VecFloat operators).
 void AIDebugComponent::DrawCarControlData(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    for (s32 i = 0; i < KI_MAX_ACTIVE_RACE_CARS; ++i)
+    for (s32 liDriverIndex = 0; liDriverIndex < KI_MAX_ACTIVE_RACE_CARS; ++liDriverIndex)
     {
-        const AIDriver& lrDriver = mpAIModule->maAIDrivers[i];
-        if (lrDriver.mpCar)
+        AIDriver* lpDriver = &mpAIModule->maAIDrivers[liDriverIndex];                  // :1412
+        if (lpDriver->mpCar)
         {
-            const Vector3 lPosition = lrDriver.mpCar->GetPosition();
-            if (lrDriver.mbIsActive && lrDriver.mbIsRacingLineInitialised)
+            Vector3 lCarPos = lpDriver->mpCar->GetPosition();                         // :1417
+            Vector3 lLineStart = lCarPos;                                             // :1418
+            Vector3 lLineEnd;                                                         // :1419
+            if (lpDriver->mbIsActive && lpDriver->mbIsRacingLineInitialised)
             {
-                Vector3 lDirection(lrDriver.mSteeringTargetVector.mV.x, 0.0f,
-                    lrDriver.mSteeringTargetVector.mV.y);
-                lDirection = NormalizeDebugVector(NormalizeDebugVector(lDirection));
-                const __vector4 lLength = __vspltw(__vcfsx(__vspltisw(15), 0), 0);
-                Vector3 lEnd; lEnd.mV = __vmaddfp(lDirection.mV, lLength, lPosition.mV);
-                rw::RGBA lSteeringColour; lSteeringColour.m_rgba = 0xFFFFFF00u;
-                lpDisplay->DrawLine(lPosition, lEnd, lSteeringColour);
-                Vector3 lVelocity = lrDriver.mpCar->GetVelocity();
-                lVelocity.mV.y = 0.0f;
-                lVelocity = NormalizeDebugVector(lVelocity);
-                lEnd.mV = __vmaddfp(lVelocity.mV, lLength, lPosition.mV);
-                rw::RGBA lVelocityColour; lVelocityColour.m_rgba = 0xFFFF00FFu;
-                lpDisplay->DrawLine(lPosition, lEnd, lVelocityColour);
+                Vector3 lTargetVector = rw::math::vpu::Normalize(lpDriver->GetDirectVector3D()); // :1429
+                lLineEnd = lLineStart + lTargetVector * KF_AT_DISPLAY_VECTOR_LENGTH;
+                lpDisplay->DrawLine(lLineStart, lLineEnd, KU_DRIVER_TARGET_LINE_COLOUR);
+
+                Vector3 lVelocityVector = lpDriver->mpCar->GetVelocity();             // :1436
+                lVelocityVector.SetY(0.0f);
+                lVelocityVector = rw::math::vpu::Normalize(lVelocityVector);
+                lLineEnd = lLineStart + lVelocityVector * KF_AT_DISPLAY_VECTOR_LENGTH;
+                lpDisplay->DrawLine(lLineStart, lLineEnd, KU_VELOCITY_LINE_COLOUR);
             }
         }
     }
@@ -357,8 +453,7 @@ void AIDebugComponent::DrawPortalTargets(CgsDev::Debug3DImmediateRender* lpDispl
                 const SectionData* lpSection = lrDriver.mRacingLineGenerator.GetSectionPointer(&lrLine, j);
                 const Vector3 lTarget(lpSection->mPortalEntranceAndExit.mV.z,
                     lCarPosition.mV.y + 8.0f, lpSection->mPortalEntranceAndExit.mV.w);
-                rw::RGBA lColour; lColour.m_rgba = 0xFF0000F0u;
-                lpDisplay->DrawSolidSphere(lTarget, 2.0f, lColour);
+                lpDisplay->DrawSolidSphere(lTarget, 2.0f, KU_ROUTE_LINE_COLOUR);
             }
         }
     }
@@ -369,44 +464,38 @@ void AIDebugComponent::DrawAICarRoute(CgsDev::Debug3DImmediateRender* lpDisplay)
 {
     const AICar& lrCar = mpAIModule->maAICars[miCurrentAICar];
     Vector3 lCarPosition = lrCar.GetPosition();
-    lCarPosition.mV.y -= 2.0f;
-    // ARTIST CRT initializer 82C69108 sets 8300D730 to {3, 200, 3, 0}.
-    const Vector3 lExtent(3.0f, 200.0f, 3.0f);
-    rw::RGBA lMarker; lMarker.m_rgba = 0xFFAAAAAAu;
-    lpDisplay->DrawSolidBox(lCarPosition + lExtent, lCarPosition - lExtent, lMarker);
+    lCarPosition.mV.y += KF_CAR_YOFFSET;
+    lpDisplay->DrawSolidBox(lCarPosition + K_CURRENT_CAR_SIZE, lCarPosition - K_CURRENT_CAR_SIZE, KU_CURRENT_CAR_COLOUR);
     const Route* lpRoute = lrCar.GetRoute();
     Vector3 lPrevious(0.0f, 0.0f, 0.0f);
     for (s32 i = 0; i < lpRoute->GetNodeCount(); ++i)
     {
         const RouteNode* lpNode = lpRoute->GetNode(i);
-        const Vector3 lCurrent(lpNode->GetPositionX(), 2.0f, lpNode->GetPositionZ());
+        const Vector3 lCurrent(lpNode->GetPositionX(), KF_ROUTE_YOFFSET, lpNode->GetPositionZ());
         if (i)
         {
-            rw::RGBA lColour;
-            lColour.m_rgba = i == lrCar.miNextRouteNodeIndex ? 0xFFFF0000u : 0xFF0000F0u;
-            lpDisplay->DrawLine(lPrevious, lCurrent, lColour);
+            lpDisplay->DrawLine(lPrevious, lCurrent,
+                                i == lrCar.miNextRouteNodeIndex ? KU_RACING_LINE_COLOUR1 : KU_ROUTE_LINE_COLOUR);
         }
         lPrevious = lCurrent;
     }
 }
 
-// ARTIST827671C8: draw the current car's reset section portal pair and their boxes.
+// ARTIST827671C8: draw the current car's reset-on-track section: the line between its two portals and
+// a box on each (DWARF :1220..:1226 locals; the four extents are Vector3 temporaries).
 void AIDebugComponent::DrawResetOnTrackAISection(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    const AICar& lrCar = mpAIModule->maAICars[miCurrentAICar];
-    if (lrCar.muResetOnTrackSectionIndex != 0x7FFF)
+    const AICar* lpAICar = &mpAIModule->maAICars[miCurrentAICar];                       // :1220
+    if (lpAICar->muResetOnTrackSectionIndex != 0x7FFF)
     {
-        const AISection* lpSection = mpAISectionsData->GetAISection(lrCar.muResetOnTrackSectionIndex);
-        const Vector3 lStart = lpSection->GetPortal(lrCar.muResetOnTrackStartPortal)->GetPosition();
-        const Vector3 lEnd = lpSection->GetPortal(lrCar.muResetOnTrackEndPortal)->GetPosition();
-        rw::RGBA lLine; lLine.m_rgba = 0xFF00FFFFu;
-        rw::RGBA lStartColour; lStartColour.m_rgba = 0xFF0000FFu;
-        rw::RGBA lEndColour; lEndColour.m_rgba = 0xFFFF0000u;
-        const Vector3 lStartExtent(3.0f, 3.0f, 3.0f);
-        const Vector3 lEndExtent(0.25f, 0.25f, 0.25f);
-        lpDisplay->DrawLine(lStart, lEnd, lLine);
-        lpDisplay->DrawSolidBox(lStart - lStartExtent, lStart + lStartExtent, lStartColour);
-        lpDisplay->DrawSolidBox(lEnd - lEndExtent, lEnd + lEndExtent, lEndColour);
+        const AISection* lpAISection = mpAISectionsData->GetAISection(lpAICar->muResetOnTrackSectionIndex); // :1224
+        Vector3 lStartPortalPosition = lpAISection->GetPortal(lpAICar->muResetOnTrackStartPortal)->GetPosition(); // :1225
+        Vector3 lEndPortalPosition = lpAISection->GetPortal(lpAICar->muResetOnTrackEndPortal)->GetPosition();     // :1226
+        lpDisplay->DrawLine(lStartPortalPosition, lEndPortalPosition, rw::RGBA(255, 255, 0, 255));
+        lpDisplay->DrawSolidBox(lStartPortalPosition - Vector3(3.0f, 3.0f, 3.0f),
+                                lStartPortalPosition + Vector3(3.0f, 3.0f, 3.0f), rw::RGBA(255, 0, 0, 255));
+        lpDisplay->DrawSolidBox(lEndPortalPosition - Vector3(0.25f, 0.25f, 0.25f),
+                                lEndPortalPosition + Vector3(0.25f, 0.25f, 0.25f), rw::RGBA(0, 0, 255, 255));
     }
 }
 
@@ -418,7 +507,7 @@ void AIDebugComponent::DrawAICarSection(CgsDev::Debug3DImmediateRender* lpDispla
     {
         const Route* lpRoute = lrCar.GetRoute();
         const s32 liRemaining = lpRoute->GetNodeCount() - lrCar.miNextRouteNodeIndex;
-        const s32 liCount = liRemaining < 2 ? liRemaining : 2;
+        const s32 liCount = liRemaining < KI_NUM_SECTIONS_DISPLAYED ? liRemaining : KI_NUM_SECTIONS_DISPLAYED;
         const s32 liEnd = lrCar.miNextRouteNodeIndex + liCount;
         for (s32 i = lrCar.miNextRouteNodeIndex; i < liEnd; ++i)
         {
@@ -442,8 +531,7 @@ void AIDebugComponent::DrawDirectDestinationVector(CgsDev::Debug3DImmediateRende
             const AISectionsData* lpSections = mpAIModule->GetAISectionsData();
             const Vector3 lPortal = lpSections->GetAISection(luSection)->GetPortal(0)->GetPosition();
             const Vector3 lCar = lpCar->GetPosition();
-            rw::RGBA lColour; lColour.m_rgba = 0xFFFFFF00u;
-            lpDisplay->DrawLine(lPortal, lCar, lColour);
+            lpDisplay->DrawLine(lPortal, lCar, KU_DRIVER_TARGET_LINE_COLOUR);
         }
     }
 }
@@ -540,7 +628,7 @@ void AIDebugComponent::Construct(AIModule* lpAIModule)
     mbDrawDriftingDebug = false;
     mbAlwaysWantToDrift = false;
     mbShowDriftTarget = false;
-    mfCruisingSpeed = 80.0f;
+    mfCruisingSpeed = KF_DEFAULT_CRUISE_SPEED;
     mPIDDebugData.meCoefficientToBeTuned = E_COEFFICIENT_COUNT;
     mPIDDebugData.mfPCoefficient = 0.0f;
     mPIDDebugData.mfICoefficient = 0.0f;
@@ -615,14 +703,11 @@ void AIDebugComponent::OnActivate()
     SetRange(&KF_MARKED_MAN_MIN_AGGRESSION, 0.0f, 1.0f);
     SetRange(&KF_MARKED_MAN_MAX_AGGRESSION, 0.0f, 1.0f);
 
-    static bool sbDriversStayStill;      // ARTIST 0x8300D604
-    static bool sbDriversMaxAggression;  // ARTIST 0x8300D605
-    static bool sbDrawAvoidanceDebug;    // ARTIST 0x8300D606
     RegisterVariable(&mpAIModule->mbHighTakenDownPenalty, "Easy mode");
     RegisterVariable(&mbDrawCarUnderSection, "Draw section under car");
     RegisterFunction(&DeactiveateDriversCallback, mpAIModule, "Turn Drivers On / Off");
-    RegisterVariable(&sbDriversStayStill, "Drivers stay still");
-    RegisterVariable(&sbDriversMaxAggression, "Drivers Max Aggression");
+    RegisterVariable(&msbDriversStayStill, "Drivers stay still");
+    RegisterVariable(&msbDriversMaxAggression, "Drivers Max Aggression");
     RegisterVariable(&mbDrawDestinationVector, "Draw vector to destination");
     RegisterVariable(&mbDrawAggressiveTargetPoints, "Draw aggression target pos");
     RegisterVariable(&mbDrawAggressiveWarning, "Draw aggression warning");
@@ -658,94 +743,24 @@ void AIDebugComponent::OnActivate()
     mPIDCoefficientsGraph.AddFloat(&mPIDDebugData.mfICoefficient);
     mPIDCoefficientsGraph.AddFloat(&mPIDDebugData.mfDCoefficient);
 
-    static f32 sfGraphZero;             // ARTIST 0x8300D608
-    static f32 sfGraphNegativeOne = -1.0f; // ARTIST 0x82F30180
-    static f32 sfGraphPositiveOne = 1.0f;  // ARTIST 0x82F30184
     AIDriver& lrDriver = mpAIModule->maAIDrivers[0];
     mSteerAngleVsPIDOutputGraph.Prepare();
     RegisterVariable(&lrDriver.mfCalculatedSteeringAngle, lpcPID, "Error (steer)");
     RegisterVariable(&lrDriver.mfPIDOutput, lpcPID, "PID Output 1");
     AddMenuItem("PID/SteerAngle vs PID Graph", &mSteerAngleVsPIDOutputGraph);
-    mSteerAngleVsPIDOutputGraph.AddFloat(&sfGraphZero);
-    mSteerAngleVsPIDOutputGraph.AddFloat(&sfGraphNegativeOne);
-    mSteerAngleVsPIDOutputGraph.AddFloat(&sfGraphPositiveOne);
+    mSteerAngleVsPIDOutputGraph.AddFloat(&KF_ZERO_FLOAT);
+    mSteerAngleVsPIDOutputGraph.AddFloat(&KF_MINUS_ONE_FLOAT);
+    mSteerAngleVsPIDOutputGraph.AddFloat(&KF_ONE_FLOAT);
     mSteerAngleVsPIDOutputGraph.AddFloat(&lrDriver.mfCalculatedSteeringAngle);
     mSteerAngleVsPIDOutputGraph.AddFloat(&mPIDDebugData.mfPCoefficient);
 
     SetRange(&miCurrentAICar, 0, KI_MAX_OUT_OF_RANGE_RACE_CARS - 1);
     RegisterVariable(&mbDrawChevrons, "Legacy", "Draw chevrons");
-    RegisterVariable(&sbDrawAvoidanceDebug, "Legacy", "Draw avoidance debug");
+    RegisterVariable(&RacingLineGenerator::mbDrawAvoidanceDebug, "Legacy", "Draw avoidance debug");
 }
 
 namespace
 {
-    // The debug read-out names for the AI enums, in enumerator order.
-    const char* const KAPC_AI_BEHAVIOUR_NAMES[E_AI_BEHAVIOUR_COUNT] =
-    {
-        "Stop", "RollingStart", "DriveThru", "Cruising", "Fighting", "QuickTurn", "SlowTurn",
-        "Crashing", "Donut", "PostRaceWin", "PostRaceLose",
-    };
-
-    const char* const KAPC_BIAS_MODE_NAMES[eBiasMode_Count] =
-    {
-        "Race", "RaceDangerous", "Slam", "RoadRage", "CloseToPlayer", "SlamRivals", "HitOncoming",
-        "SlamDangerous", "NoHNGCentering", "VeerAwayFromPlayer",
-    };
-
-    const char* const KAPC_AGGRESSION_STATE_NAMES[E_AI_AGGRESSION_STATE_COUNT] =
-    {
-        "OutOfRange", "OvertakeToSlam", "DropBackToSlam", "AttackSlam", "Wait", "Veer", "Passive",
-        "FallPast", "BeFodder", "ClipOffBehind", "OvertakeFast", "OvertakeSlowly", "SpurtForward",
-        "VeerExtreme", "HangAroundAhead",
-    };
-
-    const char* const KAPC_SPEED_MATCH_NAMES[ESpeedMatch_Count] =
-    {
-        "Disabled", "Enabled", "Slower", "SlowToClip", "OvertakeFast", "OvertakeSlowly",
-    };
-
-    const char* const KAPC_PERSONALITY_TYPE_NAMES[E_PERSONALITY_TYPE_COUNT] =
-    {
-        "Racing", "Aggression",
-    };
-
-    const char KAAC_DRIFT_STATE_NAMES[E_DRIFT_STATE_COUNT][64] =
-    {
-        "Normal", "Start", "Drift", "Exit",
-    };
-
-    // m/s to mph: 1 / 0.44704.
-    const f32 KF_MPS_TO_MPH = 1.0f / 0.44704f;
-
-    // The state-table speed-method and route-finding-style names, in enumerator order.
-    const char KAAC_SPEED_SELECTION_METHOD_NAMES[E_AI_SPEED_SELECTION_METHOD_COUNT][64] =
-    {
-        "FreeRoam", "Race", "MatchPlayer", "Personality", "Top",
-    };
-
-    const char KAAC_ROUTE_FINDING_STYLE_NAMES[E_ROUTE_FINDING_MARKED_MAN + 1][64] =
-    {
-        "FreeRoam", "Race", "RoadRage", "Pursuit", "AvoidPlayer", "AlwaysStraight", "MarkedMan",
-    };
-
-    // State table layout: the label column is wider than the per-car columns.
-    const f32 KF_STATE_TABLE_ORIGIN       = 50.0f;
-    const f32 KF_STATE_TABLE_LABEL_WIDTH  = 180.0f;
-    const f32 KF_STATE_TABLE_COLUMN_WIDTH = 130.0f;
-    const f32 KF_STATE_TABLE_ROW_HEIGHT   = 20.0f;
-    const s32 KI_STATE_TABLE_MAX_CARS     = 8;
-    const u32 KU_STATE_TABLE_LABEL_COLOUR = 0xFF4062FFu;
-
-    // Route status words of the state table.
-    const char* const KPC_ROUTE_STATUS_COMPLETE = "Complete";
-    const char* const KPC_ROUTE_STATUS_PARTIAL  = "Partial";
-    const char* const KPC_ROUTE_STATUS_BLOCK    = "Blocked";
-    const char* const KPC_ROUTE_STATUS_UNKNOWN  = "Unknown";
-    const char* const KPC_ROUTE_INVALID_BLOCK   = "Blocked ";
-
-    // A car's checkpoint distance holds this until it has a checkpoint to measure to.
-    const f32 KF_NO_CHECKPOINT_DISTANCE = 3.4028234663852886e+38f;
-
     // The route section after the car's next route node, 0x7FFF when there is none.
     u16 GetNextNextRouteSectionIndex(const AICar* lpCar)
     {
@@ -762,21 +777,14 @@ namespace
 
 }
 
-// DWARF BrnAIDebugComponent.cpp:182/:183: non-const namespace globals. K_DRIFT_TEXT_POSITION is
-// dynamically initialised into .bss 0x8300D760 (CRT 0x82C69148: 400 from 0x8200889C, 500 from
-// 0x820C478C); KF_DRIFT_TEXT_SIZE is .data 0x82F30238 (20.0), read from storage by RenderHUD's
-// inlined DrawDriftingDebug (0x8277E52C).
-Vector2 K_DRIFT_TEXT_POSITION(400.0f, 500.0f);
-f32 KF_DRIFT_TEXT_SIZE = 20.0f;   // DWARF float32_t
-
 // The index of the AI section under the player car (or "Invalid"), the drift state of the current
 // AI car, the AI state table and the buzz-by timer.
 void AIDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
 {
     if (mbDrawCarUnderSection)
     {
-        const AICar* lpPlayerCar = mpAIModule->GetAICar(mpAIModule->mePlayerGlobalRaceCarIndex);
-        if (lpPlayerCar->muBestSectionIndex == 0x7FFF)
+        AICar* lpAICar = mpAIModule->GetPlayerCar();   // DWARF :389
+        if (lpAICar->muBestSectionIndex == 0x7FFF)
         {
             lpDisplay->DrawText("Invalid", K_DRIFT_TEXT_POSITION, 40.0f, 0xFFFFFFFFu, false);
         }
@@ -784,7 +792,7 @@ void AIDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
         {
             CgsDev::SimpleStrStream lStream;
             lStream.Reset();
-            lStream << static_cast<s32>(lpPlayerCar->muBestSectionIndex);
+            lStream << static_cast<s32>(lpAICar->muBestSectionIndex);
             lpDisplay->DrawText(lStream.GetBuffer(), K_DRIFT_TEXT_POSITION, 40.0f, 0xFFFFFFFFu, false);
         }
     }
@@ -811,7 +819,7 @@ void AIDebugComponent::DrawDriftingDebug(CgsDev::Debug2DImmediateRender* lpDispl
     const AICar& lrCar = mpAIModule->maAICars[miCurrentAICar];
     if (lrCar.meCarState == E_AI_CAR_STATE_IN_RANGE)
     {
-        lpDisplay->DrawText(KAAC_DRIFT_STATE_NAMES[lrCar.GetDriver()->GetDriftState()], K_DRIFT_TEXT_POSITION,
+        lpDisplay->DrawText(KAAC_DRIFT_BEHAVIOUR[lrCar.GetDriver()->GetDriftState()], K_DRIFT_TEXT_POSITION,
                             KF_DRIFT_TEXT_SIZE, 0xFFFFFFFFu, false);
     }
 }
@@ -853,17 +861,17 @@ void AIDebugComponent::DrawAIStatesOnCar(CgsDev::Debug3DImmediateRender* lpDispl
         }
         if (mbDrawBehaviourOnCar)
         {
-            lStream << KAPC_AI_BEHAVIOUR_NAMES[lpCar->meBehaviour];
+            lStream << KAPC_BEHAVIOUR[lpCar->meBehaviour];
             lStream << " ";
         }
         if (mbDrawSpeedOnCar)
         {
-            lStream << lpCar->GetSpeed() * KF_MPS_TO_MPH;
+            lStream << lpCar->GetSpeed() * CgsCore::KF_MPS_TO_MPH;
             lStream << "mph ";
         }
         if (mbDrawFanModeOnCar)
         {
-            lStream << KAPC_BIAS_MODE_NAMES[lpDriver->mSteeringFan.meBiasMode];
+            lStream << KAPC_BIAS_NAMES[lpDriver->mSteeringFan.meBiasMode];
             lStream << " ";
         }
         if (mbDrawAggressionStateOnCar)
@@ -901,7 +909,7 @@ void AIDebugComponent::DrawAIStatesOnCar(CgsDev::Debug3DImmediateRender* lpDispl
         }
         if (mbDrawSpeedMatchingOnCar)
         {
-            lStream << KAPC_SPEED_MATCH_NAMES[lrAggression.meSpeedMatchType];
+            lStream << KAPC_SPEED_MATCHING_NAMES[lrAggression.meSpeedMatchType];
             lStream << " ";
         }
 
@@ -915,33 +923,36 @@ void AIDebugComponent::DrawAIStatesOnCar(CgsDev::Debug3DImmediateRender* lpDispl
 
 // One cell of the state table at the running cursor, every other row dimmed to two thirds (and
 // made opaque), then the cursor moves down a row.
-void AIDebugComponent::StateTableDrawEntry(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText, RGBA lColour)
+void AIDebugComponent::StateTableDrawEntry(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText, rw::RGBA lColour)
 {
-    const s32 liRow = static_cast<s32>(mfStateTableY * 0.05f);
+    const s32 liRow = static_cast<s32>(mfStateTableY / KF_STATE_TABLE_SPACING_Y);
     if (liRow % 2 == 0)
     {
-        const u32 luRed   = ((lColour & 0xFFu) * 2) / 3;
-        const u32 luGreen = (((lColour >> 8) & 0xFFu) * 2) / 3;
-        const u32 luBlue  = (((lColour >> 16) & 0xFFu) * 2) / 3;
-        lColour = 0xFF000000u | ((luBlue & 0xFFu) << 16) | ((luGreen & 0xFFu) << 8) | (luRed & 0xFFu);
+        lColour = rw::RGBA(lColour.GetRed() * 2 / 3, lColour.GetGreen() * 2 / 3, lColour.GetBlue() * 2 / 3, 255);
     }
 
-    lpDisplay->DrawText(lpcText, mfStateTableX, mfStateTableY, 16.0f, lColour);
-    mfStateTableY += KF_STATE_TABLE_ROW_HEIGHT;
+    lpDisplay->DrawText(lpcText, mfStateTableX, mfStateTableY, KF_STATE_TABLE_FONT_SIZE, lColour.m_rgba);
+    mfStateTableY += KF_STATE_TABLE_SPACING_Y;
 }
 
 void AIDebugComponent::StateTableBegin()
 {
-    mfStateTableX = KF_STATE_TABLE_ORIGIN;
-    mfStateTableY = KF_STATE_TABLE_ORIGIN;
+    mfStateTableX = KF_STATE_TABLE_X;
+    mfStateTableY = KF_STATE_TABLE_Y;
 }
 
+// The header column is wider than the per-car columns (PS3 0x9B5854 folds the header step to 230).
 void AIDebugComponent::StateTableNextColumn()
 {
-    const f32 lfColumnWidth = (mfStateTableX == KF_STATE_TABLE_ORIGIN) ? KF_STATE_TABLE_LABEL_WIDTH
-                                                                        : KF_STATE_TABLE_COLUMN_WIDTH;
-    mfStateTableY  = KF_STATE_TABLE_ORIGIN;
-    mfStateTableX += lfColumnWidth;
+    if (mfStateTableX == KF_STATE_TABLE_X)
+    {
+        mfStateTableX += KF_STATE_TABLE_HEADER_SPACING_X;
+    }
+    else
+    {
+        mfStateTableX += KF_STATE_TABLE_SPACING_X;
+    }
+    mfStateTableY = KF_STATE_TABLE_Y;
 }
 
 // The label column, then one column per active AI car (up to eight): indices, range state, speeds,
@@ -974,50 +985,50 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
     }
 
     StateTableBegin();
-    StateTableDrawEntry(lpDisplay, "Global Index", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Active Index", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "State", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Opponent index", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Speed", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Desired speed", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Racing line", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Route status", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Current checkpoint", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Behaviour", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Route finding style", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Route finding modifiers", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Speed matching", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Distance to player", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Misc state", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Aggression level", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Aggression", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Position", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Current section", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Next route section", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Destination section", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Distance to checkpoint", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Buzz time", KU_STATE_TABLE_LABEL_COLOUR);
-    StateTableDrawEntry(lpDisplay, "Wrong way time", KU_STATE_TABLE_LABEL_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Global Index", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Active Index", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "State", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Opponent index", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Speed", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Desired speed", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Racing line", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Route status", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Current checkpoint", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Behaviour", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Route finding style", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Route finding modifiers", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Speed matching", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Distance to player", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Misc state", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Aggression level", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Aggression", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Position", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Current section", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Next route section", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Destination section", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Distance to checkpoint", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Buzz time", KU_STATE_TEXT_COLOUR);
+    StateTableDrawEntry(lpDisplay, "Wrong way time", KU_STATE_TEXT_COLOUR);
     if (mbDrawSpeedCalculationStateOnTable)
     {
-        StateTableDrawEntry(lpDisplay, "Hard shoulder speed", KU_STATE_TABLE_LABEL_COLOUR);
-        StateTableDrawEntry(lpDisplay, "Proximity speed", KU_STATE_TABLE_LABEL_COLOUR);
-        StateTableDrawEntry(lpDisplay, "Cornering speed", KU_STATE_TABLE_LABEL_COLOUR);
-        StateTableDrawEntry(lpDisplay, "Fan Lerp", KU_STATE_TABLE_LABEL_COLOUR);
-        StateTableDrawEntry(lpDisplay, "Top Speed", KU_STATE_TABLE_LABEL_COLOUR);
-        StateTableDrawEntry(lpDisplay, "Accelerator", KU_STATE_TABLE_LABEL_COLOUR);
+        StateTableDrawEntry(lpDisplay, "Hard shoulder speed", KU_STATE_TEXT_COLOUR);
+        StateTableDrawEntry(lpDisplay, "Proximity speed", KU_STATE_TEXT_COLOUR);
+        StateTableDrawEntry(lpDisplay, "Cornering speed", KU_STATE_TEXT_COLOUR);
+        StateTableDrawEntry(lpDisplay, "Fan Lerp", KU_STATE_TEXT_COLOUR);
+        StateTableDrawEntry(lpDisplay, "Top Speed", KU_STATE_TEXT_COLOUR);
+        StateTableDrawEntry(lpDisplay, "Accelerator", KU_STATE_TEXT_COLOUR);
     }
     if (mbDrawrPersonalityOnTable)
     {
-        StateTableDrawEntry(lpDisplay, "Personality aggression", KU_STATE_TABLE_LABEL_COLOUR);
-        StateTableDrawEntry(lpDisplay, "Personality speed", KU_STATE_TABLE_LABEL_COLOUR);
-        StateTableDrawEntry(lpDisplay, "Personality skill", KU_STATE_TABLE_LABEL_COLOUR);
-        StateTableDrawEntry(lpDisplay, "Personality overtake", KU_STATE_TABLE_LABEL_COLOUR);
+        StateTableDrawEntry(lpDisplay, "Personality aggression", KU_STATE_TEXT_COLOUR);
+        StateTableDrawEntry(lpDisplay, "Personality speed", KU_STATE_TEXT_COLOUR);
+        StateTableDrawEntry(lpDisplay, "Personality skill", KU_STATE_TEXT_COLOUR);
+        StateTableDrawEntry(lpDisplay, "Personality overtake", KU_STATE_TEXT_COLOUR);
     }
 
     for (EGlobalRaceCarIndex leCar = E_GLOBAL_RACE_CAR_INDEX_0; leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT; leCar++)
     {
-        if (liCarColumns >= KI_STATE_TABLE_MAX_CARS)
+        if (liCarColumns >= KI_MAX_ACTIVE_RACE_CARS)
         {
             break;
         }
@@ -1033,22 +1044,22 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
         ++liCarColumns;
         StateTableNextColumn();
 
-        RGBA lColour;
+        rw::RGBA lColour;   // DWARF :674 RGBA
         if (lpCar->mbIsPlayer)
         {
-            lColour = 0xFF40C440u;
+            lColour = rw::RGBA(64, 196, 64, 255);
         }
         else if (leNearestCar == leCar)
         {
-            lColour = 0xFFDCDCDCu;
+            lColour = rw::RGBA(220, 220, 220, 255);
         }
         else if (lpCar->meCarState == E_AI_CAR_STATE_IN_RANGE)
         {
-            lColour = 0xFF4060FFu;
+            lColour = rw::RGBA(255, 96, 64, 255);
         }
         else
         {
-            lColour = 0xFF40C4C4u;
+            lColour = rw::RGBA(196, 196, 64, 255);
         }
 
         // Global index
@@ -1086,14 +1097,14 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
         }
         else
         {
-            lStream << lpCar->GetSpeed() * KF_MPS_TO_MPH;
+            lStream << lpCar->GetSpeed() * CgsCore::KF_MPS_TO_MPH;
             lStream << "mph";
         }
         StateTableDrawEntry(lpDisplay, lStream.GetBuffer(), lColour);
 
         // Desired speed
         lStream.Reset();
-        lStream << lpCar->GetDesiredSpeed() * KF_MPS_TO_MPH;
+        lStream << lpCar->GetDesiredSpeed() * CgsCore::KF_MPS_TO_MPH;
         lStream << "mph";
         StateTableDrawEntry(lpDisplay, lStream.GetBuffer(), lColour);
 
@@ -1112,10 +1123,10 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
         {
             switch (lpRoute->GetStatus())
             {
-            case Route::E_STATUS_COMPLETE: lStream << KPC_ROUTE_STATUS_COMPLETE; break;
-            case Route::E_STATUS_PARTIAL:  lStream << KPC_ROUTE_STATUS_PARTIAL;  break;
-            case Route::E_STATUS_BLOCKED:  lStream << KPC_ROUTE_STATUS_BLOCK;    break;
-            default:                       lStream << KPC_ROUTE_STATUS_UNKNOWN;  break;
+            case Route::E_STATUS_COMPLETE: lStream << "Complete"; break;
+            case Route::E_STATUS_PARTIAL:  lStream << "Partial";  break;
+            case Route::E_STATUS_BLOCKED:  lStream << "Blocked";    break;
+            default:                       lStream << "Unknown";  break;
             }
             lStream << " (";
             lrStream << lpRoute->GetNodeCount();
@@ -1126,7 +1137,7 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
             lStream << "Invalid ";
             if (lpRoute->GetStatus() == Route::E_STATUS_BLOCKED)
             {
-                lStream << KPC_ROUTE_INVALID_BLOCK;
+                lStream << "Blocked ";
             }
         }
         if (lpCar->NeedsNewRoute())
@@ -1141,11 +1152,11 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
         StateTableDrawEntry(lpDisplay, lStream.GetBuffer(), lColour);
 
         // Behaviour
-        StateTableDrawEntry(lpDisplay, KAPC_AI_BEHAVIOUR_NAMES[lpCar->meBehaviour], lColour);
+        StateTableDrawEntry(lpDisplay, KAPC_BEHAVIOUR[lpCar->meBehaviour], lColour);
 
         // Route finding style
         lStream.Reset();
-        lStream << KAAC_ROUTE_FINDING_STYLE_NAMES[lpCar->GetRouteFindingStyle()];
+        lStream << KAAC_ROUTE_FINDING_STYLE[lpCar->GetRouteFindingStyle()];
         StateTableDrawEntry(lpDisplay, lStream.GetBuffer(), lColour);
 
         // Route finding modifiers
@@ -1172,7 +1183,7 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
         StateTableDrawEntry(lpDisplay, lStream.GetBuffer(), lColour);
 
         // Speed matching (the speed selection method)
-        StateTableDrawEntry(lpDisplay, KAAC_SPEED_SELECTION_METHOD_NAMES[lpCar->meSpeedSelectionMethod], lColour);
+        StateTableDrawEntry(lpDisplay, KAAC_SPEED_SELECTION_METHOD[lpCar->meSpeedSelectionMethod], lColour);
 
         // Distance to player
         lStream.Reset();
@@ -1265,7 +1276,7 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
 
         // Distance to checkpoint
         lStream.Reset();
-        if (lpCar->mfDistanceToCheckpoint != KF_NO_CHECKPOINT_DISTANCE)
+        if (lpCar->mfDistanceToCheckpoint != FLT_MAX)
         {
             lStream << lpCar->mfDistanceToCheckpoint;
             lStream << "m";
@@ -1291,7 +1302,7 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
         if (mbDrawSpeedCalculationStateOnTable && lpDriver != 0)
         {
             lStream.Reset();
-            lStream << lpDriver->mfTopSpeed * KF_MPS_TO_MPH;
+            lStream << lpDriver->mfTopSpeed * CgsCore::KF_MPS_TO_MPH;
             lStream << "mph";
             StateTableDrawEntry(lpDisplay, lStream.GetBuffer(), lColour);
 

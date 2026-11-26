@@ -14715,7 +14715,9 @@ namespace
 // (fold: an identical definition of KU_ENTITY_INDEX_SHIFT was dropped here -- this TU defines it once, above)
 // (fold: an identical definition of KU_ENTITY_INDEX_MASK was dropped here -- this TU defines it once, above)
 
-    inline u32 EntityOwnerOf(EntityId lId) { return lId.muValue >> KU_ENTITY_OWNER_SHIFT; }
+    // uint8_t, as CgsSceneManager::EntityId::GetOwner (DWARF CgsEntityId.h:57) returns it: ARTIST reads the
+    // owner of an id in memory as one byte (DEBUG_RenderContactPoint 0x82708304 lbz).
+    inline u8 EntityOwnerOf(EntityId lId) { return static_cast<u8>(lId.muValue >> KU_ENTITY_OWNER_SHIFT); }
 // (fold: an identical definition of EntityIndexOf was dropped here -- this TU defines it once, above)
 
     // The 64-bit VolumeInstanceId's embedded entity word lives in its HIGH dword

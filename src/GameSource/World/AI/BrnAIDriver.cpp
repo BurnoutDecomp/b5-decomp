@@ -1653,28 +1653,23 @@ namespace BrnAI
     // ================================================================================
     bool AIDriver::CheckForSpeedMatch(f32 lfTimeStep)
     {
-        u8 lbUseForced = 0;
-
-        if (mpCar->meSpeedSelectionMethod != 0                       // lwz 0x14BC(car)
-            && GetAggression()->IsSpeedMatchingType())                       // lwz 0x1C58 != 0
+        // DWARF :1529 (no locals; GetCar, rw::math::vpu::Max<float>). PS3 0xA04874 / ARTIST: the flag is
+        // stored on both paths and returned from the member.
+        if (GetCar()->meSpeedSelectionMethod != 0 && mAggression.IsSpeedMatchingType())
         {
-            // X360 @0x82793058: f1 = mfDesiredSpeed, f2 = dt (the FIRST float slot carries the
-            // target speed, the second the time step -- read off the register set-up, not the
-            // DWARF parameter names).
-            const f32 lfMatched = GetAggression()->CalcSpeedMatchSpeed(mfDesiredSpeed, lfTimeStep);
-            const f32 lfDecent  = mpCar->GetDecentSpeed();
-            const bool lbBelowTop = (mfDesiredSpeed < mfTopSpeed);       // 0x1D10 < 0x1D14
-
-            // fsel f0, (decent - matched), decent, matched == max(decent, matched)
-            const f32 lfSpeed = ((lfDecent - lfMatched) >= 0.0f) ? lfDecent : lfMatched;
-            mfForcedSpeed = lfSpeed;                                     // 0x1D18
-            if (lbBelowTop)
-                mfDesiredSpeed = lfSpeed;                                // 0x1D10
-            lbUseForced = 1;
+            mfForcedSpeed = rw::math::vpu::Max(GetCar()->GetDecentSpeed(),
+                                               mAggression.CalcSpeedMatchSpeed(mfDesiredSpeed, lfTimeStep));
+            if (mfDesiredSpeed < mfTopSpeed)
+            {
+                mfDesiredSpeed = mfForcedSpeed;
+            }
+            mbUseForcedSpeed = true;
         }
-
-        mbUseForcedSpeed = lbUseForced;                                  // stb 0x1D66
-        return lbUseForced != 0;
+        else
+        {
+            mbUseForcedSpeed = false;
+        }
+        return mbUseForcedSpeed;
     }
 
     // ================================================================================

@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/MenuItems/CgsMenuItemVariableLineGraph.h"
 #include "BrnCommonTypes.h"                                                       // Vector2 / Vector3 (rw::math::vpu aliases)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent (base), Debug2D/3DImmediateRender fwd
+#include "rw/rwcore_structs.h"                                                    // rw::RGBA (the class colours)
 
 // BrnAI::AIDebugComponent -- the in-game "Main AI" debug overlay (the per-car AI state tables,
 // route/section/portal/chevron/control-data world overlays, the racing-line and reset-on-track
@@ -77,13 +78,45 @@ protected:
     virtual void OnActivate();
 
 private:
+    // ---- class constants: DWARF BrnAIDebugComponent.h:200..:231, defined in the .cpp (:34..:68) ----
+    static const Vector3  K_CAR_SIZE;                         // :200
+    static const Vector3  K_CURRENT_CAR_SIZE;                 // :201
+    static const rw::RGBA KU_CAR_COLOUR;                      // :202
+    static const rw::RGBA KU_STATE_TEXT_COLOUR;               // :203
+    static const rw::RGBA KU_HIGHLIGHT_TEXT_COLOUR;           // :204
+    static const rw::RGBA KU_UBER_HIGHLIGHT_TEXT_COLOUR;      // :205
+    static const rw::RGBA KU_CURRENT_CAR_COLOUR;              // :206
+    static const rw::RGBA KU_ROUTE_LINE_COLOUR;               // :207
+    static const rw::RGBA KU_ROUTE_NODE_COLOUR;               // :208
+    static const rw::RGBA KU_RACING_LINE_COLOUR1;             // :209
+    static const rw::RGBA KU_RACING_LINE_COLOUR2;             // :210
+    static const rw::RGBA KU_TARGET_LINE_COLOUR;              // :211
+    static const rw::RGBA KU_CURRENT_NODE_COLOUR;             // :212
+    static const rw::RGBA KU_VELOCITY_LINE_COLOUR;            // :213
+    static const rw::RGBA KU_LOOKAHEAD_LINE_COLOUR;           // :214
+    static const rw::RGBA KU_DRIVER_TARGET_LINE_COLOUR;       // :215
+    static const rw::RGBA KU_AGGRESSIVE_COLOUR;               // :216
+    static const rw::RGBA KU_TRAFFIC_LINE_COLOUR;             // :217
+    static const rw::RGBA KU_BRAKING_COLOUR;                  // :218
+    static const s32      KI_NUM_SECTIONS_DISPLAYED = 2;      // :219 (DWARF const_value 2)
+    static const f32      KF_ROUTE_NODE_SIZE;                 // :220
+    static const f32      KF_CAR_YOFFSET;                     // :221
+    static const f32      KF_ROUTE_YOFFSET;                   // :222
+    static const f32      KF_AT_DISPLAY_VECTOR_LENGTH;        // :223
+    static const f32      KF_STATE_TABLE_X;                   // :226
+    static const f32      KF_STATE_TABLE_Y;                   // :227
+    static const f32      KF_STATE_TABLE_SPACING_X;           // :228
+    static const f32      KF_STATE_TABLE_HEADER_SPACING_X;    // :229
+    static const f32      KF_STATE_TABLE_SPACING_Y;           // :230
+    static const f32      KF_STATE_TABLE_FONT_SIZE;           // :231
+
     static void AssertNativeLayout();
 
     // ---- helpers bodied in this TU ----
 
     // @0x82767360  Draw one AI state-table cell as 2D text, fading every other row, then advance the
-    // running table Y by one row.
-    void StateTableDrawEntry(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText, RGBA lColour);
+    // running table Y by one row. DWARF :1610 takes the colour as rw::RGBA (mangled N2rw4RGBAE).
+    void StateTableDrawEntry(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText, rw::RGBA lColour);
 
     // @0x827735D8  Draw the current car's route as a line strip through its route nodes (the
     // current node highlighted).
@@ -185,6 +218,9 @@ private:
 
     f32             mfStateTableX;                      // :282
     f32             mfStateTableY;                      // :283
+
+    static bool     msbDriversStayStill;                // DWARF class static, defined .cpp:59
+    static bool     msbDriversMaxAggression;            // DWARF class static, defined .cpp:60
 
     CgsDev::DebugUI::MenuItemVariableLineGraph mPIDCoefficientsGraph;
     CgsDev::DebugUI::MenuItemVariableLineGraph mSteerAngleVsPIDOutputGraph;

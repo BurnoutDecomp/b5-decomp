@@ -91,8 +91,9 @@ namespace
     // and DrawPortals @0x82775280. The image word is 0x47742400 == 62500.0f (a 250-unit radius).
     const f32  KF_PORTAL_CULL_DIST_SQ = 62500.0f;
 
-    // ARTIST table @0x82F30240, indexed in RenderHUD @0x82794110..118.
-    const char* const KAPC_ASTAR_DISTANCE_FUNCTION_NAMES[] = {
+    // ARTIST table @0x82F30240 (.data), indexed in RenderHUD @0x82794110..118: DWARF :4 `const char *[5]`,
+    // an array of non-const pointers that ARTIST reloads from .data.
+    const char* KAPC_ASTAR_DISTANCE_FUNCTION_NAMES[5] = {
         "Euclidean", "EuclideanXBiased", "EuclideanYBiased", "Manhattan", "Diagonal"
     };
 }

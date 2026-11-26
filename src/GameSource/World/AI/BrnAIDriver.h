@@ -307,17 +307,18 @@ namespace BrnAI
         f32 mfPlayerSlowSpeedTime;                      // +0x1D58 (7512) DWARF :603
         s32 mActiveRouteTimeStamp;                      // +0x1D5C (7516) DWARF :605
         s32 miCurrentRacingLineNodeIndex;               // +0x1D60 (7520) DWARF :607
-        u8  mbWantToExitDrift;                          // +0x1D64 (7524) DWARF :610
-        u8  mbWantToEnterDrift;                         // +0x1D65 (7525) DWARF :611
-        u8  mbUseForcedSpeed;                           // +0x1D66 (7526) DWARF :612 -- drive at mfForcedSpeed
-        u8  mbDriftingRequired;                         // +0x1D67 (7527) DWARF :613
-        u8  mbIsRacingLineInitialised;                  // +0x1D68 (7528) DWARF :615 -- CalculateSteeringAngle gate
-        u8  mbIsActive;                                 // +0x1D69 (7529) DWARF :616 -- Update top-level gate
-        u8  mbCurrentRouteComplete;                     // +0x1D6A (7530) DWARF :617
-        u8  mbBoosting;                                 // +0x1D6B (7531) DWARF :619 -- AttemptToDriveAtDesiredSpeed sets it
+        bool mbWantToExitDrift;                         // +0x1D64 (7524) DWARF :610
+        bool mbWantToEnterDrift;                        // +0x1D65 (7525) DWARF :611
+        bool mbUseForcedSpeed;                          // +0x1D66 (7526) DWARF :612 -- drive at mfForcedSpeed
+        bool mbDriftingRequired;                        // +0x1D67 (7527) DWARF :613
+        bool mbIsRacingLineInitialised;                  // +0x1D68 (7528) DWARF :615 -- CalculateSteeringAngle gate
+        bool mbIsActive;                                // +0x1D69 (7529) DWARF :616 -- Update top-level gate
+        bool mbCurrentRouteComplete;                    // +0x1D6A (7530) DWARF :617
+        bool mbBoosting;                                // +0x1D6B (7531) DWARF :619 -- AttemptToDriveAtDesiredSpeed sets it
 
         // Typed accessors -- the de-inlined form of the X360 `*(this+0x1CE0)` etc.
         AICar* GetCar() const               { return mpCar; }
+        Vector3 GetDirectVector3D();        // DWARF h:242, header-inline (body h:898, below)
         void   SetCar(AICar* lpCar)         { mpCar = lpCar; }
         s32    GetAggressionVictim() const  { return meAggressionVictim; }
         void   SetAggressionVictim(s32 li)  { meAggressionVictim = li; }
@@ -353,6 +354,15 @@ namespace BrnAI
         }
 
         return mfInvulnerableTime > 0.0f;               // ahead of player: timer only
+    }
+
+    // Header-inline (DWARF h:242; body h:898 with its local lDir): the steering target on the ground
+    // plane as a unit vector. No ARTIST copy; DrawCarControlData 0x827738F8 inlines it (the {x, 0, y}
+    // build from +0x1C70/+0x1C74, then the rsqrt pipeline).
+    inline Vector3 AIDriver::GetDirectVector3D()
+    {
+        Vector3 lDir(mSteeringTargetVector.mV.x, 0.0f, mSteeringTargetVector.mV.y);
+        return rw::math::vpu::Normalize(lDir);
     }
 
     CGS_STATIC_ASSERT((sizeof(AIDriver) == 0x1D70), "AIDriver native stride");
