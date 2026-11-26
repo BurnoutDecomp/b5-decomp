@@ -1158,13 +1158,23 @@ const BrnSound::Vehicles::VehicleData* PhysicsControl::GetRawPhysicsData() const
 // class identity / the adjacent GetTypeName @ 0x82684378 tag (not proven in-scope,
 // mirrors the ExplosionState precedent's inferred-typeName flag).
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F578: {0x10000, "PhysicsControl", BrnEffectControl, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> PhysicsControl::sTypeInfo(
+    65536, "PhysicsControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &PhysicsControl::CreateObject);
+
+// ARTIST 0x826CB4E0: the effect factory hook, allocated through the sound MemBase under the
+// descriptor's type name (permanent when allocator != 0).
+CgsSound::Logic::EffectControl* PhysicsControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) PhysicsControl();
+    else
+        return new (sTypeInfo.typeName, true) PhysicsControl();
+}
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* PhysicsControl::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
-        0,                // ObjectID         (FLAG: EffectControl-side id unrecovered)
-        "PhysicsControl", // mpcTypeName      (FLAG: inferred from class / adjacent GetTypeName tag)
-        0,          // mpBaseTypeInfo   (DEFERRED -- EffectControl RTTI chain un-homed)
-        0);         // mpfnCreateObject (DEFERRED -- CreateObject not homed in this slice)
     return &sTypeInfo;
 }
 

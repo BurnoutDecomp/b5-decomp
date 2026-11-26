@@ -53,6 +53,34 @@ namespace Explosion
 // DECLARATION-ONLY (see header FLAG) and are NOT fabricated as named fields and
 // NOT raw-offset-hacked here; only the base + VoiceWrapper construction is bodied.
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F99C: {0x80000, "ExplosionEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> ExplosionEffect::sTypeInfo(
+    0x80000, "ExplosionEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &ExplosionEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* ExplosionEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) ExplosionEffect();
+    else
+        return new (sTypeInfo.typeName, true) ExplosionEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* ExplosionEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* ExplosionEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* ExplosionEffect::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 ExplosionEffect::ExplosionEffect()
     : BrnEffectObject()   // installs the base vptrs + zero-inits the base members (BY NAME)
     , mVoiceWrapper()     // tail `bl CgsSound::Logic::VoiceWrapper::VoiceWrapper(this+0x38)`

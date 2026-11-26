@@ -64,6 +64,34 @@ f32 Approach(f32 afCurrent, f32 afTarget, f32 afRise, f32 afFall)
 }
 }
 
+// ARTIST 0x82F2F740: {0x10010, "WheelControl", BrnEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> WheelControl::sTypeInfo(
+    0x10010, "WheelControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &WheelControl::CreateObject);
+
+CgsSound::Logic::EffectControl* WheelControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) WheelControl();
+    else
+        return new (sTypeInfo.typeName, true) WheelControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* WheelControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* WheelControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* WheelControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 WheelControl::WheelControl()
     : mWheelAttribs()
     , mWheelData()
@@ -493,6 +521,34 @@ f32 WheelControl::GetTargetRPM()
 f32 WheelControl::GetRiseFromRPM()
 {
     return mpEngineControl->GetAudioRPM().GetCurrent() - KF_DRIFT_SHIFT_RISE_FROM_RPM;
+}
+
+// ARTIST 0x82F2F750: {0x20010, "AIWheelControl", WheelControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> AIWheelControl::sTypeInfo(
+    0x20010, "AIWheelControl", &BrnSound::Vehicles::Wheels::WheelControl::sTypeInfo, &AIWheelControl::CreateObject);
+
+CgsSound::Logic::EffectControl* AIWheelControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) AIWheelControl();
+    else
+        return new (sTypeInfo.typeName, true) AIWheelControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* AIWheelControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* AIWheelControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* AIWheelControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
 }
 
 AIWheelControl::AIWheelControl()

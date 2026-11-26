@@ -42,7 +42,10 @@ namespace Logic
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectControl* Brn3DUserSpaceEffectControl::CreateObject(u32 luType)
 {
-    return new ("Brn3DUserSpaceEffectControl", luType != 0) Brn3DUserSpaceEffectControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) Brn3DUserSpaceEffectControl();
+    else
+        return new (sTypeInfo.typeName, true) Brn3DUserSpaceEffectControl();
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +73,26 @@ CgsSound::Logic::EffectControl* Brn3DUserSpaceEffectControl::CreateObject(u32 lu
 // the object; that allocator is not homed here, so operator-delete dispatch is left to
 // the host toolchain (the `delete` half of the X360 vector deleting destructor).
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2E82C: {0xFFFFFFFF, "Brn3DUserSpaceEffectControl", Brn3DEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> Brn3DUserSpaceEffectControl::sTypeInfo(
+    -1, "Brn3DUserSpaceEffectControl", &BrnSound::Logic::Brn3DEffectControl::sTypeInfo, &Brn3DUserSpaceEffectControl::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Brn3DUserSpaceEffectControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Brn3DUserSpaceEffectControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* Brn3DUserSpaceEffectControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 Brn3DUserSpaceEffectControl::~Brn3DUserSpaceEffectControl()
 {
 }

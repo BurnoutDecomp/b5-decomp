@@ -31,6 +31,10 @@ struct CarStereoEffect : public BrnSound::Logic::BrnEffectObject
 {
     CarStereoEffect();              // @ 0x826D1858
     virtual ~CarStereoEffect();     // anchor for the scalar deleting destructor @ 0x826E62F8
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F808)
 
     // @ 0x826E6298 -- RTTI factory hook.
     static CgsSound::Logic::EffectObject* CreateObject( u32 luType );

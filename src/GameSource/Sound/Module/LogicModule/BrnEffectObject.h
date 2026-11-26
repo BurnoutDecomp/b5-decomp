@@ -49,6 +49,7 @@ struct BrnEffectObject : public IResourceRequester,
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char*                                                    GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2E7FC)
     static CgsSound::Logic::EffectObject* CreateObject(u32 luFlavour);
 
     // BrnEffectObject.h:139 — IResourceRequester override, bodied inline in this

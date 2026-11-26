@@ -182,9 +182,32 @@ RoadnoiseEffect::~RoadnoiseEffect()
 {
 }
 
+// ARTIST 0x82F2F760: {0x100A0, "RoadnoiseEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> RoadnoiseEffect::sTypeInfo(
+    0x100A0, "RoadnoiseEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &RoadnoiseEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* RoadnoiseEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) RoadnoiseEffect();
+    else
+        return new (sTypeInfo.typeName, true) RoadnoiseEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* RoadnoiseEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* RoadnoiseEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
 const char* RoadnoiseEffect::GetTypeName() const
 {
-    return "RoadnoiseEffect";
+    return sTypeInfo.typeName;
 }
 
 s32 RoadnoiseEffect::GetController(s32 aiSlot)

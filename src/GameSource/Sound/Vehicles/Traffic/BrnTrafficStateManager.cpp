@@ -71,7 +71,10 @@ TrafficStateManager::~TrafficStateManager()
 // the descriptor before MemBase::operator new(0xCD0, name, flavour).
 CgsSound::Logic::StateManager* TrafficStateManager::CreateObject(u32 luType)
 {
-    return new (sTypeInfo.typeName, luType != 0) TrafficStateManager();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) TrafficStateManager();
+    else
+        return new (sTypeInfo.typeName, true) TrafficStateManager();
 }
 
 // The direct class-static descriptor and typed registrar reproduce ARTIST's data

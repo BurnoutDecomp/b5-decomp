@@ -26,27 +26,30 @@ BrnEffectObject::BrnEffectObject()
     mbEnabled = false;
 }
 
+// ARTIST 0x82F2E7FC: {0xFFFFFFFF, "BrnEffectObject", EffectObject, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> BrnEffectObject::sTypeInfo(
+    -1, "BrnEffectObject", &CgsSound::Logic::EffectObject::sTypeInfo, &BrnEffectObject::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* BrnEffectObject::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        -1, "BrnEffectObject", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &BrnEffectObject::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* BrnEffectObject::GetTypeInfo() const
 {
-    return GetStaticTypeInfo(); // ARTIST 0x82682BE8
+    return &sTypeInfo;
 }
 
 CgsSound::Logic::EffectObject* BrnEffectObject::CreateObject(u32 luFlavour)
 {
-    return new (GetStaticTypeInfo()->typeName, luFlavour != 0) BrnEffectObject(); // ARTIST 0x826AF570
+    if (luFlavour == 0)
+        return new (sTypeInfo.typeName, false) BrnEffectObject(); // ARTIST 0x826AF570
+    else
+        return new (sTypeInfo.typeName, true) BrnEffectObject();
 }
 
 // ARTIST 0x82C61B68 registers descriptor 0x82F2E7FC.
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpBrnEffectObjectReg =
-    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(BrnEffectObject::GetStaticTypeInfo());
 
 // ---------------------------------------------------------------------------
 // GetTypeName  @ 0x82682BF8
@@ -62,7 +65,7 @@ static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpBr
 // ---------------------------------------------------------------------------
 const char* BrnEffectObject::GetTypeName() const
 {
-    return GetStaticTypeInfo()->typeName;
+    return sTypeInfo.typeName;
 }
 
 // ---------------------------------------------------------------------------

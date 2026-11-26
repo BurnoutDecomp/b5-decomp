@@ -39,7 +39,7 @@ f32 KF_SPEED_STREAM_CROSSFADE_WIDTH = 40.0f;
 // ---------------------------------------------------------------------------
 BrnSound::Logic::IResourceRequester* SpeedStreamEffect::Create(int flavour)
 {
-    SpeedStreamEffect* lpEffect = new ("SpeedStreamEffect", flavour != 0) SpeedStreamEffect();
+    SpeedStreamEffect* lpEffect = new (sTypeInfo.typeName, flavour != 0) SpeedStreamEffect();
     if ( lpEffect == 0 )
     {
         return 0;
@@ -49,6 +49,34 @@ BrnSound::Logic::IResourceRequester* SpeedStreamEffect::Create(int flavour)
 }
 
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F7E8: {0x10070, "SpeedStreamEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> SpeedStreamEffect::sTypeInfo(
+    0x10070, "SpeedStreamEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &SpeedStreamEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* SpeedStreamEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) SpeedStreamEffect();
+    else
+        return new (sTypeInfo.typeName, true) SpeedStreamEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SpeedStreamEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SpeedStreamEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* SpeedStreamEffect::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 // SpeedStreamEffect::SpeedStreamEffect()  @ 0x826BA148   (MINIMAL -- see FLAGs)
 //
 // MSVC's INLINED full-object constructor: it does NOT `bl` a base ctor -- it inlines the

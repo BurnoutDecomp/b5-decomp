@@ -37,6 +37,26 @@ namespace Environment
 // hand-written tail effect is the embedded mVoice construction. The leaf scalar
 // zero-inits DWARF does not pin are covered by the member inits below / value-init.
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F808: {0x200E0, "CarStereoEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> CarStereoEffect::sTypeInfo(
+    0x200E0, "CarStereoEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &CarStereoEffect::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* CarStereoEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* CarStereoEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* CarStereoEffect::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 CarStereoEffect::CarStereoEffect()
     : BrnEffectObject()   // installs the base dual vptrs + zero-inits base members (BY NAME)
     , mVoice()            // tail `bl CgsSound::Logic::VoiceWrapper::VoiceWrapper(this+0x38)`
@@ -55,7 +75,10 @@ CarStereoEffect::CarStereoEffect()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectObject* CarStereoEffect::CreateObject(u32 luType)
 {
-    return new ("CarStereoEffect", luType != 0) CarStereoEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) CarStereoEffect();
+    else
+        return new (sTypeInfo.typeName, true) CarStereoEffect();
 }
 
 // At most this many car stereos play at once.

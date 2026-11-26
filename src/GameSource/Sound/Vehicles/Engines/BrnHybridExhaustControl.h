@@ -52,6 +52,11 @@ struct HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
 
     HybridExhaustControl();             // @ 0x826AF938
     virtual ~HybridExhaustControl();    // anchor for the vector deleting destructor @ 0x826AFA60
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F5A8)
 
     virtual s32 GetController(s32 aiSlot); // @ 0x826849B0
     virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684A20

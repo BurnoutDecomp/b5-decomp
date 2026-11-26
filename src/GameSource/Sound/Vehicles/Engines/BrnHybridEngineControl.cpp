@@ -61,7 +61,10 @@ void HybridEngineControl::UpdateGinsuRPM()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectControl* HybridEngineControl::CreateObject(u32 luType)
 {
-    return new ("HybridEngineControl", luType != 0) HybridEngineControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) HybridEngineControl();
+    else
+        return new (sTypeInfo.typeName, true) HybridEngineControl();
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +73,26 @@ CgsSound::Logic::EffectControl* HybridEngineControl::CreateObject(u32 luType)
 // no member teardown of its own, so this leaf body is empty. The (a2 & 1) allocator-free
 // tail is re-synthesised by the host toolchain (off_82FFB954 not homed here).
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F5B8: {0x10060, "HybridEngineControl", HybridExhaustControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> HybridEngineControl::sTypeInfo(
+    0x10060, "HybridEngineControl", &BrnSound::Vehicles::Engines::HybridExhaustControl::sTypeInfo, &HybridEngineControl::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* HybridEngineControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* HybridEngineControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* HybridEngineControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 HybridEngineControl::~HybridEngineControl()
 {
 }

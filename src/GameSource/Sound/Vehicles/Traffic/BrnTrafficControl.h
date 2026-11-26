@@ -39,6 +39,7 @@ struct TrafficControl : public BrnSound::Logic::BrnEffectControl
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
     virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2E910)
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
 
     virtual s32  GetController( s32 liIndex ) ;

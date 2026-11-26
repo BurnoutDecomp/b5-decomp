@@ -44,6 +44,7 @@ struct Traffic3DControl : public BrnSound::Logic::Brn3DEffectControl
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
     virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2E8AC)
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
 };
 
@@ -55,6 +56,7 @@ struct TrafficEngine : public BrnSound::Logic::BrnEffectObject
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2E8BC)
     static CgsSound::Logic::EffectObject* CreateObject( u32 luType );
 
     virtual s32  GetController( s32 liIndex );

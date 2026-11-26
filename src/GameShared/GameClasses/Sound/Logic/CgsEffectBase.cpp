@@ -23,6 +23,7 @@
 
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Numeric/CgsBranchlessOperations.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"        // the REAL State (mpStateManager @ X360 +0x24)
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h" // the REAL StateManager (GetLogicModule / +0x2C)
@@ -35,42 +36,6 @@ namespace Logic
 static ClassTypeInfo<EffectControl>* gapEffectControlTypeInfo[EffectControl::KU_SIZEOF_CLASS_ARRAY] = { 0 };
 static ClassTypeInfo<EffectObject>*  gapEffectObjectTypeInfo[EffectObject::KU_SIZEOF_CLASS_ARRAY] = { 0 };
 
-// ---------------------------------------------------------------------------
-// AddToClassTypeInfoArray scan helper.
-//
-// The X360 pair @ 0x8268DD48 (EffectControl, array dword_82FFBB10) and
-// 0x8268DE28 (EffectObject, array dword_82FFBA10) are the same routine over a
-// per-class static array of KU_SIZEOF_CLASS_ARRAY (64) descriptor slots:
-//   scan from slot 0 for the first NULL slot (index counter held 16-bit);
-//   if no NULL slot is found within the 0x40 cap and the counter is still < 0x100,
-//   fall through WITHOUT storing (the array is full but under the hard limit);
-//   only past 0x100 does it fire the "Too Many Class registations" assert
-//   (CgsEffectBase.h:363). On finding a NULL slot it stores the descriptor there.
-// Reproduced generically by member/array NAME; no raw-offset cast.
-// ---------------------------------------------------------------------------
-template <typename T>
-static ClassTypeInfo<T>* RegisterClassTypeInfo(ClassTypeInfo<T>** apArray,
-                                               ClassTypeInfo<T>* apTypeInfo)
-{
-    u32 lu32Index = 0;
-
-    // Scan for the first empty slot, capped at the class array size (0x40).
-    for (lu32Index = 0; lu32Index < 0x40u; ++lu32Index)
-    {
-        if (apArray[lu32Index] == 0)
-        {
-            apArray[lu32Index] = apTypeInfo;
-            return apTypeInfo;
-        }
-    }
-
-    // No empty slot within the cap. The X360 only asserts once the (16-bit) counter
-    // reaches 0x100; between 0x40 and 0x100 it silently does nothing. Since the loop
-    // above stops at the 0x40 cap, the counter here is 0x40 (< 0x100) so no store and
-    // no assert -- matching the fall-through path.
-    CGS_ASSERT(lu32Index < 0x100u, "Too Many Class registations. Increase KU_SIZEOF_CLASS_ARRAY");
-    return apTypeInfo;
-}
 
 // ---------------------------------------------------------------------------
 // EffectBase::Attach()  @ 0x826A1138
@@ -166,21 +131,40 @@ void EffectBase::SetDMixIOPtr(Nicotine::DMixIO* apDmixIO)
 // ---------------------------------------------------------------------------
 // EffectControl::GetTypeName()  @ 0x8268CEB8  -> "EffectControl"
 // ---------------------------------------------------------------------------
+// ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray @ 0x8268DD48 (array dword_82FFBB10): the State routine
+// (0x8268DF08) over this class's 64-slot array; the streamed assert compares the u16
+// index with the array's byte size (CgsEffectBase.h:363).
+template<>
+void ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray()
+{
+    u16 luIndex = 0;
+    do
+    {
+        if (!gapEffectControlTypeInfo[luIndex])
+        {
+            gapEffectControlTypeInfo[luIndex] = this;
+            return;
+        }
+        ++luIndex;
+    }
+    while (luIndex < EffectControl::KU_SIZEOF_CLASS_ARRAY);
+
+    CGS_ASSERT_STREAM_AT(luIndex < sizeof(gapEffectControlTypeInfo),
+        "Too Many Class registations. Increase KU_SIZEOF_CLASS_ARRAY",
+        "..\..\..\GameShared\GameClasses\Sound/Logic/CgsEffectBase.h", 363);
+}
+
+// ARTIST 0x82F2FA70.
+ClassTypeInfo<EffectControl> EffectControl::sTypeInfo(-1, "EffectControl", 0, 0);
+
 ClassTypeInfo<EffectControl>* EffectControl::GetStaticTypeInfo()
 {
-    static ClassTypeInfo<EffectControl> sTypeInfo(0, "EffectControl", 0, 0);
     return &sTypeInfo;
 }
 
 const char* EffectControl::GetTypeName() const
 {
-    return GetStaticTypeInfo()->typeName;
-}
-
-// EffectControl::AddToClassTypeInfoArray @ 0x8268DD48 (array dword_82FFBB10).
-ClassTypeInfo<EffectControl>* EffectControl::AddToClassTypeInfoArray(ClassTypeInfo<EffectControl>* apTypeInfo)
-{
-    return RegisterClassTypeInfo<EffectControl>(gapEffectControlTypeInfo, apTypeInfo);
+    return sTypeInfo.typeName; // ARTIST 0x8268CEB8
 }
 
 // ---------------------------------------------------------------------------
@@ -208,22 +192,40 @@ ClassTypeInfo<EffectControl>* EffectControl::GetRegisteredTypeInfo(u32 auIndex)
 // ---------------------------------------------------------------------------
 // EffectObject::GetTypeName()  @ 0x8268CE98  -> "EffectObject"
 // ---------------------------------------------------------------------------
+// ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray @ 0x8268DE28 (array dword_82FFBA10): the State routine
+// (0x8268DF08) over this class's 64-slot array; the streamed assert compares the u16
+// index with the array's byte size (CgsEffectBase.h:363).
+template<>
+void ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray()
+{
+    u16 luIndex = 0;
+    do
+    {
+        if (!gapEffectObjectTypeInfo[luIndex])
+        {
+            gapEffectObjectTypeInfo[luIndex] = this;
+            return;
+        }
+        ++luIndex;
+    }
+    while (luIndex < EffectObject::KU_SIZEOF_CLASS_ARRAY);
+
+    CGS_ASSERT_STREAM_AT(luIndex < sizeof(gapEffectObjectTypeInfo),
+        "Too Many Class registations. Increase KU_SIZEOF_CLASS_ARRAY",
+        "..\..\..\GameShared\GameClasses\Sound/Logic/CgsEffectBase.h", 363);
+}
+
+// ARTIST 0x82F2FA60.
+ClassTypeInfo<EffectObject> EffectObject::sTypeInfo(-1, "EffectObject", 0, 0);
+
 ClassTypeInfo<EffectObject>* EffectObject::GetStaticTypeInfo()
 {
-    static ClassTypeInfo<EffectObject> sTypeInfo(-1, "EffectObject", 0, 0); // ARTIST 0x82F2FA60
     return &sTypeInfo;
 }
 
 const char* EffectObject::GetTypeName() const
 {
-    return GetStaticTypeInfo()->typeName;
-}
-
-// EffectObject::AddToClassTypeInfoArray @ 0x8268DE28 (array dword_82FFBA10 -- a
-// separate static array from EffectControl's).
-ClassTypeInfo<EffectObject>* EffectObject::AddToClassTypeInfoArray(ClassTypeInfo<EffectObject>* apTypeInfo)
-{
-    return RegisterClassTypeInfo<EffectObject>(gapEffectObjectTypeInfo, apTypeInfo);
+    return sTypeInfo.typeName; // ARTIST 0x8268CE98
 }
 
 ClassTypeInfo<EffectObject>* EffectObject::GetRegisteredTypeInfo(u32 auIndex)

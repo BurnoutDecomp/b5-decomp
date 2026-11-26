@@ -247,7 +247,10 @@ PassbyStateManager::~PassbyStateManager()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::StateManager* PassbyStateManager::CreateObject(u32 luType)
 {
-    return new ("PassbyStateManager", luType != 0) PassbyStateManager();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) PassbyStateManager();
+    else
+        return new (sTypeInfo.typeName, true) PassbyStateManager();
 }
 
 // ARTIST descriptor 0x82F2F96C: { ID 4, "PassbyStateManager",

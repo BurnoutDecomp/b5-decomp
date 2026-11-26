@@ -68,9 +68,14 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetStaticTy
 // allocator, and the observable result -- a constructed PassbyState* handed back
 // to StateManager::CreateState -- matches.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::State* PassbyState::CreateObject(u32 luType)
+CgsSound::Logic::State* PassbyState::CreateObject(u32 luAllocator)
 {
-    return new (sTypeInfo.typeName, luType != 0) PassbyState();
+    // DWARF (BrnSoundUnity: CreateObject(uint32_t allocator)) has two new-expressions; ARTIST
+    // 0x826D4978 keeps both operator new calls (permanent flag false / true).
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) PassbyState();
+    else
+        return new (sTypeInfo.typeName, true) PassbyState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetTypeInfo() const

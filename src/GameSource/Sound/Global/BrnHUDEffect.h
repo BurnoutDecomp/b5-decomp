@@ -171,6 +171,7 @@ struct HUDEffect : public BrnSound::Logic::BrnEffectObject
     // @ 0x826E1E00 vector deleting destructor + @ 0x826E1BC0 adjustor{4} forward to
     // this virtual dtor (compiler-synthesised; the leaf anchor is @0x826E1BC8).
     virtual ~HUDEffect();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F88C)
 
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
     const char* GetTypeName() const ;

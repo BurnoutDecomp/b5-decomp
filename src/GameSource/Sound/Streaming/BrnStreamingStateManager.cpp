@@ -135,7 +135,10 @@ StreamingStateManager::~StreamingStateManager()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::StateManager* StreamingStateManager::CreateObject(u32 luType)
 {
-    return new (sTypeInfo.typeName, luType != 0) StreamingStateManager();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) StreamingStateManager();
+    else
+        return new (sTypeInfo.typeName, true) StreamingStateManager();
 }
 
 // ARTIST descriptor 0x82F2E84C: ObjectID 6, name "StreamingStateManager", base

@@ -115,7 +115,10 @@ GlobalStateManager::~GlobalStateManager()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::StateManager* GlobalStateManager::CreateObject(u32 luType)
 {
-    return new ("GlobalStateManager", luType != 0) GlobalStateManager();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) GlobalStateManager();
+    else
+        return new (sTypeInfo.typeName, true) GlobalStateManager();
 }
 
 // ARTIST descriptor 0x82F2F85C; the CRT thunk registers this preinitialized object.

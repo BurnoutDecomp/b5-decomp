@@ -153,6 +153,8 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
     // EffectControl>), the committed per-class GetStaticTypeInfo() accessor form
     // (ExplosionState::GetStaticTypeInfo precedent).
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);   // ARTIST 0x826CB4E0
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2F578)
 
     const BrnSound::Vehicles::VehicleData* mpVehiclePhysicsData;
     PhysicsData mProcessedPhysicsData;

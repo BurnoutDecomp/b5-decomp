@@ -49,14 +49,30 @@ Cgs3dEffectControl::Cgs3dEffectControl()
 
 ClassTypeInfo<EffectControl>* Cgs3dEffectControl::GetTypeInfo() const
 {
-    static ClassTypeInfo<EffectControl> sTypeInfo(
-        0, "Cgs3dEffectControl", EffectControl::GetStaticTypeInfo(), 0);
+    return &sTypeInfo;
+}
+
+// ARTIST 0x82F2FA80: {0x0, "Cgs3dEffectControl", EffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> Cgs3dEffectControl::sTypeInfo(
+    0x0, "Cgs3dEffectControl", &CgsSound::Logic::EffectControl::sTypeInfo, &Cgs3dEffectControl::CreateObject);
+
+CgsSound::Logic::EffectControl* Cgs3dEffectControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) Cgs3dEffectControl();
+    else
+        return new (sTypeInfo.typeName, true) Cgs3dEffectControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Cgs3dEffectControl::GetStaticTypeInfo()
+{
     return &sTypeInfo;
 }
 
 const char* Cgs3dEffectControl::GetTypeName() const
 {
-    return "Cgs3dEffectControl";
+    return sTypeInfo.typeName;
 }
 
 void Cgs3dEffectControl::AttachEmitterPosition(

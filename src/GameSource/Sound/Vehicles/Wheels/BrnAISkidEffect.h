@@ -57,6 +57,7 @@ struct AISkidEffect : public BrnSound::Logic::BrnEffectObject
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const; // @ 0x82685D18
     virtual const char* GetTypeName() const;                          // @ 0x82685D28
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2F774)
     static CgsSound::Logic::EffectObject* CreateObject( u32 luType ); // @ 0x826D0840
 
     virtual s32  GetController( s32 aiSlot );                         // @ 0x82685D38

@@ -44,6 +44,10 @@ struct CrashStreamEffect : public BrnSound::Logic::BrnEffectObject,
 
     CrashStreamEffect();            // @ 0x826B9CB8
     virtual ~CrashStreamEffect();   // anchor for the vector deleting destructor @ 0x826D0E98
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F7C8)
 
     // @ 0x826B9E50 -- RTTI factory hook. Returns the EffectObject* base view.
     static CgsSound::Logic::EffectObject* CreateObject( u32 luType );

@@ -50,10 +50,33 @@ static const f32 KF_POSITION_TOLERANCE = 0.0000152587890625f;
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectControl* StaticPassbyControl::CreateObject(u32 luType)
 {
-    return new ("StaticPassbyControl", luType != 0) StaticPassbyControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) StaticPassbyControl();
+    else
+        return new (sTypeInfo.typeName, true) StaticPassbyControl();
 }
 
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F7B8: {0x100E0, "StaticPassbyControl", BrnEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> StaticPassbyControl::sTypeInfo(
+    0x100E0, "StaticPassbyControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &StaticPassbyControl::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* StaticPassbyControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* StaticPassbyControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* StaticPassbyControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 // StaticPassbyControl::StaticPassbyControl()  @ 0x826B9A90
 //
 // After the (X360-inlined) BrnEffectControl base ctor chain installs the two leaf vptrs

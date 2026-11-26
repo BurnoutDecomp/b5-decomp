@@ -255,7 +255,10 @@ CollisionStateManager::~CollisionStateManager()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::StateManager* CollisionStateManager::CreateObject(u32 luType)
 {
-    return new ("CollisionStateManager", luType != 0) CollisionStateManager();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) CollisionStateManager();
+    else
+        return new (sTypeInfo.typeName, true) CollisionStateManager();
 }
 
 // ARTIST descriptor 0x82F2F94C: { ID 5, "CollisionStateManager",

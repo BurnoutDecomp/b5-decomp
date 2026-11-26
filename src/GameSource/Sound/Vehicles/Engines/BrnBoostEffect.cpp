@@ -78,7 +78,32 @@ BoostEffect::BoostEffect()
 
 BoostEffect::~BoostEffect() {}
 
-const char* BoostEffect::GetTypeName() const { return "BoostEffect"; }
+// ARTIST 0x82F2F628: {0x10050, "BoostEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> BoostEffect::sTypeInfo(
+    0x10050, "BoostEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &BoostEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* BoostEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) BoostEffect();
+    else
+        return new (sTypeInfo.typeName, true) BoostEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* BoostEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* BoostEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* BoostEffect::GetTypeName() const {
+    return sTypeInfo.typeName;
+}
 
 s32 BoostEffect::GetController(s32 aiSlot)
 {

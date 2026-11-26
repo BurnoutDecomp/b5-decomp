@@ -29,6 +29,7 @@ struct EmitterEffect : public BrnEffectObject
 {
     EmitterEffect();
     virtual ~EmitterEffect();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F81C)
 
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
         GetTypeInfo() const;

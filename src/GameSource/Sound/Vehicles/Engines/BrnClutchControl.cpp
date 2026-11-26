@@ -44,6 +44,26 @@ f32 Component(const Vector4& lrValue, s32 liIndex)
 }
 }
 
+// ARTIST 0x82F2F5C8: {0x10030, "ClutchControl", BrnEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> ClutchControl::sTypeInfo(
+    0x10030, "ClutchControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &ClutchControl::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* ClutchControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* ClutchControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* ClutchControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 ClutchControl::ClutchControl()
     : mpPhysicsControl(0)
     , mpEngineControl(0)
@@ -69,7 +89,10 @@ ClutchControl::~ClutchControl() {}
 
 CgsSound::Logic::EffectControl* ClutchControl::CreateObject(u32 luType)
 {
-    return new ("ClutchControl", luType != 0) ClutchControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) ClutchControl();
+    else
+        return new (sTypeInfo.typeName, true) ClutchControl();
 }
 
 s32 ClutchControl::GetController(s32 aiSlot)
@@ -454,12 +477,35 @@ void ClutchControl::Notify(const CgsSound::Io::MessageHeader* apkMessage)
     }
 }
 
+// ARTIST 0x82F2F5D8: {0x20030, "AIClutchControl", ClutchControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> AIClutchControl::sTypeInfo(
+    0x20030, "AIClutchControl", &BrnSound::Vehicles::Engines::ClutchControl::sTypeInfo, &AIClutchControl::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* AIClutchControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* AIClutchControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* AIClutchControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 AIClutchControl::AIClutchControl() : ClutchControl() {}
 AIClutchControl::~AIClutchControl() {}
 
 CgsSound::Logic::EffectControl* AIClutchControl::CreateObject(u32 luType)
 {
-    return new ("AIClutchControl", luType != 0) AIClutchControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) AIClutchControl();
+    else
+        return new (sTypeInfo.typeName, true) AIClutchControl();
 }
 
 } // namespace Engines

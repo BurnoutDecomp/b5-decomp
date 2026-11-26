@@ -384,26 +384,31 @@ void MusicEffect::JumpHpf::Update(f32 afDeltaTime)
 
 CgsSound::Logic::EffectObject* MusicEffect::CreateObject(u32 luType)
 {
-    return new ("MusicEffect", luType != 0) MusicEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) MusicEffect();
+    else
+        return new (sTypeInfo.typeName, true) MusicEffect();
 }
+
+// ARTIST 0x82F2F8AC: {0x20, "MusicEffect", BrnEffectObject, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> MusicEffect::sTypeInfo(
+    32, "MusicEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &MusicEffect::CreateObject);
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* MusicEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x20, "MusicEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &MusicEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* MusicEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
-const char* MusicEffect::GetTypeName() const { return "MusicEffect"; }
+const char* MusicEffect::GetTypeName() const {
+    return sTypeInfo.typeName;
+}
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpMusicEffectReg =
-    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(MusicEffect::GetStaticTypeInfo());
 
 // X360 0x82687408. The PC build has no XMP (dashboard music player) session, so the
 // console's `XMPTitleHasPlaybackControl(&lb); return lb == 0;` is constant false here.

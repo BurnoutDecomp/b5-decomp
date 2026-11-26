@@ -54,6 +54,7 @@ struct SingleGinsuEffect : public BrnSound::Logic::BrnEffectObject
 
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2F608)
     static CgsSound::Logic::EffectObject* CreateObject(u32 luFlavour);
 
     // @ 0x82685098 — per-class RTTI type name. Bodied.

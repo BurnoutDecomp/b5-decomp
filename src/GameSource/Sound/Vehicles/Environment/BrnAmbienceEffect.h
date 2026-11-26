@@ -29,6 +29,11 @@ struct AmbienceEffect : public BrnSound::Logic::BrnEffectObject,
 {
     AmbienceEffect();
     virtual ~AmbienceEffect();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F7A8)
 
     // Effect-object factory hook. Returns the IResourceRequester view.
     static BrnSound::Logic::IResourceRequester* CreateObj( u32 luFlavour );

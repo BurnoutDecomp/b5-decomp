@@ -37,6 +37,26 @@ f32 EvaluateCurveY(const Matrix44& lrCurve, f32 lfX)
 }
 }
 
+// ARTIST 0x82F2F598: {0x10020, "ShiftControl", BrnEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> ShiftControl::sTypeInfo(
+    0x10020, "ShiftControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &ShiftControl::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* ShiftControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* ShiftControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* ShiftControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 ShiftControl::ShiftControl()
     : mpPhysicsControl(0)
     , mpEngineControl(0)
@@ -63,7 +83,10 @@ ShiftControl::~ShiftControl() {}
 
 CgsSound::Logic::EffectControl* ShiftControl::CreateObject(u32 luType)
 {
-    return new ("ShiftControl", luType != 0) ShiftControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) ShiftControl();
+    else
+        return new (sTypeInfo.typeName, true) ShiftControl();
 }
 
 s32 ShiftControl::GetController(s32 aiSlot)

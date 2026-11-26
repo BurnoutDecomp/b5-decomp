@@ -83,9 +83,32 @@ SkidEffect::~SkidEffect()
 {
 }
 
+// ARTIST 0x82F2F6E0: {0x10040, "SkidEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> SkidEffect::sTypeInfo(
+    0x10040, "SkidEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &SkidEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* SkidEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) SkidEffect();
+    else
+        return new (sTypeInfo.typeName, true) SkidEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SkidEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SkidEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
 const char* SkidEffect::GetTypeName() const
 {
-    return "SkidEffect";
+    return sTypeInfo.typeName;
 }
 
 s32 SkidEffect::GetController(s32 aiSlot)

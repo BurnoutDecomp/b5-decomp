@@ -66,7 +66,10 @@ const char* ExplosionState::GetTypeName() const
 
 CgsSound::Logic::State* ExplosionState::CreateObject(u32 luFlavour)
 {
-    return new (sTypeInfo.typeName, luFlavour != 0) ExplosionState(); // ARTIST 0x826D55F8
+    if (luFlavour == 0)
+        return new (sTypeInfo.typeName, false) ExplosionState(); // ARTIST 0x826D55F8
+    else
+        return new (sTypeInfo.typeName, true) ExplosionState();
 }
 
 } // namespace Explosion

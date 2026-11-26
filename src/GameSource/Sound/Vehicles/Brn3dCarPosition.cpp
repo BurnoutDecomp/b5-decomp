@@ -40,6 +40,34 @@ namespace BrnSound
 namespace Vehicles
 {
 
+// ARTIST 0x82F2F690: {0x10070, "Car3DControl", Brn3DEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> Car3DControl::sTypeInfo(
+    0x10070, "Car3DControl", &BrnSound::Logic::Brn3DEffectControl::sTypeInfo, &Car3DControl::CreateObject);
+
+CgsSound::Logic::EffectControl* Car3DControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) Car3DControl();
+    else
+        return new (sTypeInfo.typeName, true) Car3DControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Car3DControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Car3DControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* Car3DControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 Car3DControl::Car3DControl()
     : BrnSound::Logic::Brn3DEffectControl()
     , mpPhysicsControl(0)
@@ -143,21 +171,133 @@ Car3DControl::~Car3DControl()
 }
 
 // ~Engine3dControl  @ 0x826E4D70  (the X360 `vector deleting destructor')
+// ARTIST 0x82F2F6A0: {0x100D0, "Engine3dControl", Car3DControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> Engine3dControl::sTypeInfo(
+    0x100D0, "Engine3dControl", &BrnSound::Vehicles::Car3DControl::sTypeInfo, &Engine3dControl::CreateObject);
+
+CgsSound::Logic::EffectControl* Engine3dControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) Engine3dControl();
+    else
+        return new (sTypeInfo.typeName, true) Engine3dControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Engine3dControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Engine3dControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* Engine3dControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 Engine3dControl::~Engine3dControl()
 {
 }
 
 // ~Exhaust3dControl  @ 0x826E4E18  (the X360 `scalar deleting destructor')
+// ARTIST 0x82F2F6B0: {0x100C0, "Exhaust3dControl", Car3DControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> Exhaust3dControl::sTypeInfo(
+    0x100C0, "Exhaust3dControl", &BrnSound::Vehicles::Car3DControl::sTypeInfo, &Exhaust3dControl::CreateObject);
+
+CgsSound::Logic::EffectControl* Exhaust3dControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) Exhaust3dControl();
+    else
+        return new (sTypeInfo.typeName, true) Exhaust3dControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Exhaust3dControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Exhaust3dControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* Exhaust3dControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 Exhaust3dControl::~Exhaust3dControl()
 {
 }
 
 // ~LeftSide3dControl  @ 0x826E4EC0  (the X360 `scalar deleting destructor')
+// ARTIST 0x82F2F6C0: {0x10080, "LeftSide3dControl", Car3DControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> LeftSide3dControl::sTypeInfo(
+    0x10080, "LeftSide3dControl", &BrnSound::Vehicles::Car3DControl::sTypeInfo, &LeftSide3dControl::CreateObject);
+
+CgsSound::Logic::EffectControl* LeftSide3dControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) LeftSide3dControl();
+    else
+        return new (sTypeInfo.typeName, true) LeftSide3dControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* LeftSide3dControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* LeftSide3dControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* LeftSide3dControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 LeftSide3dControl::~LeftSide3dControl()
 {
 }
 
 // ~RightSide3dControl  @ 0x826E4F68  (the X360 `vector deleting destructor')
+// ARTIST 0x82F2F6D0: {0x10090, "RightSide3dControl", Car3DControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> RightSide3dControl::sTypeInfo(
+    0x10090, "RightSide3dControl", &BrnSound::Vehicles::Car3DControl::sTypeInfo, &RightSide3dControl::CreateObject);
+
+CgsSound::Logic::EffectControl* RightSide3dControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) RightSide3dControl();
+    else
+        return new (sTypeInfo.typeName, true) RightSide3dControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* RightSide3dControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* RightSide3dControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* RightSide3dControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 RightSide3dControl::~RightSide3dControl()
 {
 }

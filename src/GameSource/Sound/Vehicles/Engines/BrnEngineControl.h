@@ -66,6 +66,11 @@ struct EngineControl : public BrnSound::Logic::BrnEffectControl,
 
     EngineControl();
     virtual ~EngineControl();   // anchor for the vector deleting destructor @ 0x826B2BA0
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F588)
 
     virtual s32 GetController(s32 aiSlot); // @ 0x826845C0
     virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684628

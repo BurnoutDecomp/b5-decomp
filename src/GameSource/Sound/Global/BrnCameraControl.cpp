@@ -23,29 +23,32 @@ namespace Logic
 
 CgsSound::Logic::EffectControl* CameraControl::CreateObject(u32 luType)
 {
-    return new ("CameraControl", luType != 0) CameraControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) CameraControl();
+    else
+        return new (sTypeInfo.typeName, true) CameraControl();
 }
+
+// ARTIST 0x82F2F89C: {0x10, "CameraControl", BrnEffectControl, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> CameraControl::sTypeInfo(
+    16, "CameraControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &CameraControl::CreateObject);
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* CameraControl::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
-        0x10, "CameraControl", CgsSound::Logic::EffectControl::GetStaticTypeInfo(),
-        &CameraControl::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* CameraControl::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* CameraControl::GetTypeName() const
 {
-    return "CameraControl";
+    return sTypeInfo.typeName;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const gpCameraControlReg =
-    CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(CameraControl::GetStaticTypeInfo());
 
 // ---------------------------------------------------------------------------
 // ~CameraControl  (the out-of-line destructor that anchors the vtable)

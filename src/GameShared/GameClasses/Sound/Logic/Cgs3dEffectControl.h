@@ -83,6 +83,9 @@ struct Cgs3dEffectControl : public CgsSound::Logic::EffectControl
     // Out-of-line so the deleting-destructor thunk @ 0x826C3E70 is emitted in this
     // class's own TU (Cgs3dEffectControl.cpp). DWARF declares the dtor LAST.
     virtual ~Cgs3dEffectControl();           // Cgs3dEffectControl.h:36 (DWARF)
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2FA80)
 
     // Cgs3dEffectControl.h:99 (DWARF `DataPoint<Vector3> GetEmitterPosition() const`), header
     // inline: the emitter-position history UpdateParams pushes from mpEmitterPosition. Its

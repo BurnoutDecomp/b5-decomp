@@ -103,6 +103,7 @@ struct PresentationEffect : public BrnEffectObject,
 
     PresentationEffect();          // @ 0x826E7628
     virtual ~PresentationEffect(); // out-of-line anchor; @ 0x826E78A8 vector deleting
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F8CC)
                                    // destructor + @ 0x826E7728 adjustor{4} forward to it
 
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;

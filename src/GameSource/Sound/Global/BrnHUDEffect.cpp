@@ -41,29 +41,32 @@ bool KB_HUD_SPEW_MESSAGES = false; // ARTIST82FFB8D0, DecFIGS BrnHUDEffect.cpp:2
 
 CgsSound::Logic::EffectObject* HUDEffect::CreateObject(u32 luType)
 {
-    return new ("HUDEffect", luType != 0) HUDEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) HUDEffect();
+    else
+        return new (sTypeInfo.typeName, true) HUDEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* HUDEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x10, "HUDEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &HUDEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* HUDEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
+
+// ARTIST 0x82F2F88C: {0x10, "HUDEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> HUDEffect::sTypeInfo(
+    0x10, "HUDEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &HUDEffect::CreateObject);
 
 const char* HUDEffect::GetTypeName() const
 {
-    return "HUDEffect";
+    return sTypeInfo.typeName;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpHUDEffectReg =
-    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(HUDEffect::GetStaticTypeInfo());
 
 // ---------------------------------------------------------------------------
 // HUDEffect::GameModeData::GameModeData  @ 0x826AFE88  (the DWARF Construct)

@@ -62,6 +62,7 @@ struct CameraControl : public BrnSound::Logic::BrnEffectControl
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
     const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2F89C)
     static CgsSound::Logic::EffectControl* CreateObject(u32 auType);
 
     // ---- EffectBase virtuals. X360 vtable @0x820B2334, slots 5 / 6 / 7 / 9 --------

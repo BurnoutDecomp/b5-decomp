@@ -150,9 +150,32 @@ InAirEffect::~InAirEffect()
 {
 }
 
+// ARTIST 0x82F2F6F0: {0x10090, "InAirEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> InAirEffect::sTypeInfo(
+    0x10090, "InAirEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &InAirEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* InAirEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) InAirEffect();
+    else
+        return new (sTypeInfo.typeName, true) InAirEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* InAirEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* InAirEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
 const char* InAirEffect::GetTypeName() const
 {
-    return "InAirEffect";
+    return sTypeInfo.typeName;
 }
 
 s32 InAirEffect::GetController(s32 aiSlot)
@@ -629,27 +652,24 @@ void InAirEffect::PlayJumpCamLanding()
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 TrafficInAir::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x30030, "TrafficInAir", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &TrafficInAir::CreateObject);
     return &sTypeInfo;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
-    gpTrafficInAirReg = CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
-        TrafficInAir::GetStaticTypeInfo());
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 TrafficInAir::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 // MemBase::operator new(0x3F8, "TrafficInAir", flavour) + the constructor; returns
 // the EffectObject view (+0x04).
 CgsSound::Logic::EffectObject* TrafficInAir::CreateObject(u32 luType)
 {
-    return new ("TrafficInAir", luType != 0) TrafficInAir();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) TrafficInAir();
+    else
+        return new (sTypeInfo.typeName, true) TrafficInAir();
 }
 
 TrafficInAir::TrafficInAir()
@@ -662,9 +682,14 @@ TrafficInAir::~TrafficInAir()
 {
 }
 
+// ARTIST 0x82F2F710: {0x30030, "TrafficInAir", InAirEffect, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> TrafficInAir::sTypeInfo(
+    0x30030, "TrafficInAir", &BrnSound::Vehicles::Wheels::InAirEffect::sTypeInfo, &TrafficInAir::CreateObject);
+
 const char* TrafficInAir::GetTypeName() const
 {
-    return "TrafficInAir";
+    return sTypeInfo.typeName;
 }
 
 bool TrafficInAir::Attach()

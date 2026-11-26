@@ -102,6 +102,11 @@ struct DualGinsuEffect : public BrnSound::Logic::BrnEffectObject
 
     DualGinsuEffect();               // @ 0x826C8980
     virtual ~DualGinsuEffect();      // @ 0x826E0EF0 (scalar deleting destructor anchor)
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F5E8)
 
     virtual s32 GetController(s32 aiSlot); // @ 0x82684E88
     virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684EC0

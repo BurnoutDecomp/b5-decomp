@@ -71,6 +71,43 @@ inline ClassTypeInfo<State>::ClassTypeInfo(s32 aiObjectID,
     AddToClassTypeInfoArray();
 }
 
+// The effect descriptors follow the same pattern: ARTIST registers each preinitialised
+// ClassTypeInfo<EffectControl> / <EffectObject> from its startup thunk through the member
+// AddToClassTypeInfoArray (0x8268DD48 / 0x8268DE28, e.g. the MusicEffect thunk 0x82C62E80).
+struct EffectControl;
+struct EffectObject;
+
+template<>
+void ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray();
+template<>
+void ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray();
+
+template<>
+inline ClassTypeInfo<EffectControl>::ClassTypeInfo(s32 aiObjectID,
+                                          const char* apcTypeName,
+                                          ClassTypeInfo<EffectControl>* apBaseTypeInfo,
+                                          EffectControl* (*apfnCreateObject)(u32))
+    : ObjectID(aiObjectID)
+    , typeName(apcTypeName)
+    , baseTypeInfo(apBaseTypeInfo)
+    , createObject(apfnCreateObject)
+{
+    AddToClassTypeInfoArray();
+}
+
+template<>
+inline ClassTypeInfo<EffectObject>::ClassTypeInfo(s32 aiObjectID,
+                                          const char* apcTypeName,
+                                          ClassTypeInfo<EffectObject>* apBaseTypeInfo,
+                                          EffectObject* (*apfnCreateObject)(u32))
+    : ObjectID(aiObjectID)
+    , typeName(apcTypeName)
+    , baseTypeInfo(apBaseTypeInfo)
+    , createObject(apfnCreateObject)
+{
+    AddToClassTypeInfoArray();
+}
+
 } // namespace Logic
 } // namespace CgsSound
 

@@ -41,6 +41,26 @@ static const CgsSound::Playback::Name K_MusicVoiceSpecName("MusicVoiceSpec");
 static const CgsSound::Playback::Name K_CrashStreamVoiceSpecName("CrashStreamVoiceSpec");
 
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F7C8: {0x10060, "CrashStreamEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> CrashStreamEffect::sTypeInfo(
+    0x10060, "CrashStreamEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &CrashStreamEffect::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* CrashStreamEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* CrashStreamEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* CrashStreamEffect::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 // CrashStreamEffect::CrashStreamEffect()  @ 0x826B9CB8
 //
 // MSVC's INLINED full-object constructor: it inlines the base member zero-inits and
@@ -290,7 +310,10 @@ void CrashStreamEffect::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectObject* CrashStreamEffect::CreateObject(u32 luType)
 {
-    return new ("CrashStreamEffect", luType != 0) CrashStreamEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) CrashStreamEffect();
+    else
+        return new (sTypeInfo.typeName, true) CrashStreamEffect();
 }
 
 // ---------------------------------------------------------------------------

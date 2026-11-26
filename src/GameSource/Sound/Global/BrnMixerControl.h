@@ -80,6 +80,7 @@ struct MixerControl : public BrnSound::Logic::BrnEffectControl
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
     const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2F87C)
     static CgsSound::Logic::EffectControl* CreateObject(u32 auType);
 
     void SetupLoadData() ;

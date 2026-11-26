@@ -35,6 +35,9 @@ struct BrnEffectControl : public IResourceRequester,
 {
     BrnEffectControl();
     virtual ~BrnEffectControl();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2E80C)
 
     // BrnEffectControl.cpp:38 — per-class RTTI (DEFERRED bodies; declared for the
     // control vtable shape).

@@ -53,6 +53,7 @@ struct CollisionControl : public BrnSound::Logic::BrnEffectControl
 {
     CollisionControl();
     virtual ~CollisionControl();   // out-of-line anchor (empty); vector deleting
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F92C)
                                    // destructor @ 0x826BD4D8 forwards to it
 
     // BrnCollisionControl.cpp:32 -- the RTTI factory hook (@ 0x826D34B0). STATIC (the

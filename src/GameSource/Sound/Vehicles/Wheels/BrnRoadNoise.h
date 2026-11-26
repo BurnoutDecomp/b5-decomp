@@ -88,6 +88,10 @@ struct RoadnoiseEffect : public BrnSound::Logic::BrnEffectObject
 
     RoadnoiseEffect();               // @ 0x826E56C0
     virtual ~RoadnoiseEffect();      // anchor for the vector deleting destructor @ 0x826E5AC8
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F760)
 
     virtual const char* GetTypeName() const ;
     virtual s32 GetController(s32 aiSlot) ;

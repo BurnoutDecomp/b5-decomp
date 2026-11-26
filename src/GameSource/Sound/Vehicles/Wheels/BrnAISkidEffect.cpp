@@ -95,31 +95,33 @@ AISkidEffect::~AISkidEffect()
 // @ 0x826D0840: MemBase::operator new(200, "AISkidEffect", flavour) + ctor.
 CgsSound::Logic::EffectObject* AISkidEffect::CreateObject(u32 luType)
 {
-    return new ("AISkidEffect", luType != 0) AISkidEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) AISkidEffect();
+    else
+        return new (sTypeInfo.typeName, true) AISkidEffect();
 }
 
 // Descriptor 0x82F2F774: {0x20040, "AISkidEffect", base BrnEffectObject (0x82F2E7FC),
 // &CreateObject}.
+// ARTIST 0x82F2F774: {0x20040, "AISkidEffect", BrnEffectObject, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> AISkidEffect::sTypeInfo(
+    131136, "AISkidEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &AISkidEffect::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* AISkidEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x20040, "AISkidEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &AISkidEffect::CreateObject );
     return &sTypeInfo;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
-    gpAISkidEffectReg = CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
-        AISkidEffect::GetStaticTypeInfo() );
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* AISkidEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* AISkidEffect::GetTypeName() const
 {
-    return "AISkidEffect";
+    return sTypeInfo.typeName;
 }
 
 // @ 0x82685D38: `subfic r11, r4, 0 ; subfe r3, r11, r11` == (slot == 0) ? 0 : -1

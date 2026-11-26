@@ -63,7 +63,32 @@ TurboEffect::TurboEffect()
 
 TurboEffect::~TurboEffect() {}
 
-const char* TurboEffect::GetTypeName() const { return "TurboEffect"; }
+// ARTIST 0x82F2F648: {0x100B0, "TurboEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> TurboEffect::sTypeInfo(
+    0x100B0, "TurboEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &TurboEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* TurboEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) TurboEffect();
+    else
+        return new (sTypeInfo.typeName, true) TurboEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* TurboEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* TurboEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* TurboEffect::GetTypeName() const {
+    return sTypeInfo.typeName;
+}
 
 s32 TurboEffect::GetController(s32 aiSlot)
 {

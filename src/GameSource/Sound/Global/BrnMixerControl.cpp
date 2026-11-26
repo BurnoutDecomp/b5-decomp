@@ -32,29 +32,32 @@ namespace Logic
 
 CgsSound::Logic::EffectControl* MixerControl::CreateObject(u32 luType)
 {
-    return new ("MixerControl", luType != 0) MixerControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) MixerControl();
+    else
+        return new (sTypeInfo.typeName, true) MixerControl();
 }
+
+// ARTIST 0x82F2F87C: {0x0, "MixerControl", BrnEffectControl, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> MixerControl::sTypeInfo(
+    0, "MixerControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &MixerControl::CreateObject);
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* MixerControl::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
-        0x00, "MixerControl", CgsSound::Logic::EffectControl::GetStaticTypeInfo(),
-        &MixerControl::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* MixerControl::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* MixerControl::GetTypeName() const
 {
-    return "MixerControl";
+    return sTypeInfo.typeName;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const gpMixerControlReg =
-    CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(MixerControl::GetStaticTypeInfo());
 
 void MixerControl::SetupLoadData()
 {

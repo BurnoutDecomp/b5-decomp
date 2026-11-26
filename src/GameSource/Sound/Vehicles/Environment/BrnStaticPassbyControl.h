@@ -56,6 +56,10 @@ struct StaticPassbyControl : public BrnSound::Logic::BrnEffectControl
 
     StaticPassbyControl();          // @ 0x826B9A90
     virtual ~StaticPassbyControl(); // anchor for the vector deleting destructor @ 0x826B9B48
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F7B8)
 
     // @ 0x826D0E38 -- RTTI factory hook.
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );

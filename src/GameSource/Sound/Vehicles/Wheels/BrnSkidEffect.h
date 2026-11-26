@@ -24,6 +24,10 @@ struct SkidEffect : public BrnSound::Logic::BrnEffectObject
 {
     SkidEffect();
     virtual ~SkidEffect();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F6E0)
 
     virtual const char* GetTypeName() const ;
     virtual s32 GetController(s32 aiSlot) ;

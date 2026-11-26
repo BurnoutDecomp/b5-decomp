@@ -44,32 +44,34 @@ TrafficControl::~TrafficControl()
 // construction inlined; returns the EffectControl view (+0x04).
 CgsSound::Logic::EffectControl* TrafficControl::CreateObject(u32 luType)
 {
-    return new ("TrafficControl", luType != 0) TrafficControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) TrafficControl();
+    else
+        return new (sTypeInfo.typeName, true) TrafficControl();
 }
 
 // Descriptor {0x30000, "TrafficControl", BrnEffectControl::sTypeInfo, &CreateObject}.
 // FLAG: BrnEffectControl's own descriptor is not homed, so the chain starts at
 // EffectControl's (the CollisionControl precedent).
+// ARTIST 0x82F2E910: {0x30000, "TrafficControl", BrnEffectControl, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> TrafficControl::sTypeInfo(
+    196608, "TrafficControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &TrafficControl::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* TrafficControl::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
-        0x30000, "TrafficControl",
-        CgsSound::Logic::EffectControl::GetStaticTypeInfo(),
-        &TrafficControl::CreateObject );
     return &sTypeInfo;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const gpTrafficControlReg =
-    CgsSound::Logic::EffectControl::AddToClassTypeInfoArray( TrafficControl::GetStaticTypeInfo() );
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* TrafficControl::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* TrafficControl::GetTypeName() const
 {
-    return "TrafficControl";
+    return sTypeInfo.typeName;
 }
 
 // One controller: control 1, the Traffic3DControl (identical code to

@@ -97,7 +97,10 @@ PlayerVehicleStateManager::~PlayerVehicleStateManager()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::StateManager* PlayerVehicleStateManager::CreateObject(u32 luType)
 {
-    return new ("PlayerVehicleStateManager", luType != 0) PlayerVehicleStateManager();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) PlayerVehicleStateManager();
+    else
+        return new (sTypeInfo.typeName, true) PlayerVehicleStateManager();
 }
 
 // ARTIST 0x82F2E87C: {1, name, &StateManager::sTypeInfo, &CreateObject}.

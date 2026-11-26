@@ -28,6 +28,10 @@ struct WhineEffect : public BrnSound::Logic::BrnEffectObject
 {
     WhineEffect();
     virtual ~WhineEffect();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F658)
 
     virtual const char* GetTypeName() const;
     virtual s32 GetController(s32 aiSlot);

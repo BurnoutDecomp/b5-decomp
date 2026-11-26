@@ -42,6 +42,11 @@ struct DualGinsuExhaustEffect : public DualGinsuEffect
 
     DualGinsuExhaustEffect();           // @ 0x826E0E90
     virtual ~DualGinsuExhaustEffect();  // anchor for the vector deleting destructor @ 0x826EC000
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F5F8)
 
     virtual s32 GetController(s32 aiSlot); // @ 0x82684F88
     virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684FC0

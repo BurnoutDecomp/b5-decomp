@@ -38,6 +38,10 @@ struct HybridEngineControl : public HybridExhaustControl
 {
     HybridEngineControl() : mpHybridExhaustControl(0) {}
     virtual ~HybridEngineControl();     // anchor for the scalar deleting destructor @ 0x826CC7F0
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F5B8)
 
     // @ 0x826CC738 -- RTTI factory hook.
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );

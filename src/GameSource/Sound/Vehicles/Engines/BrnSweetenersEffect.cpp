@@ -39,6 +39,34 @@ f32 VectorElement(const Vector4& arValue, s32 aiIndex)
 }
 }
 
+// ARTIST 0x82F2F670: {0x10100, "SweetenersEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> SweetenersEffect::sTypeInfo(
+    0x10100, "SweetenersEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &SweetenersEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* SweetenersEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) SweetenersEffect();
+    else
+        return new (sTypeInfo.typeName, true) SweetenersEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SweetenersEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SweetenersEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* SweetenersEffect::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 SweetenersEffect::SweetenersEffect()
     : BrnEffectObject()
     , mbEnableSweetners(false)
@@ -77,7 +105,7 @@ SweetenersEffect::~SweetenersEffect()
 
 BrnSound::Logic::IResourceRequester* SweetenersEffect::CreateObjec(u32 flavour)
 {
-    return static_cast<BrnSound::Logic::IResourceRequester*>(new ("SweetenersEffect", flavour != 0) SweetenersEffect());
+    return static_cast<BrnSound::Logic::IResourceRequester*>(new (sTypeInfo.typeName, flavour != 0) SweetenersEffect());
 }
 
 s32 SweetenersEffect::GetController(s32 aiSlot)

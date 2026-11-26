@@ -116,26 +116,31 @@ SpeechEffect::~SpeechEffect() {}
 
 CgsSound::Logic::EffectObject* SpeechEffect::CreateObject(u32 luType)
 {
-    return new ("SpeechEffect", luType != 0) SpeechEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) SpeechEffect();
+    else
+        return new (sTypeInfo.typeName, true) SpeechEffect();
 }
+
+// ARTIST 0x82F2F8EC: {0x50, "SpeechEffect", BrnEffectObject, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> SpeechEffect::sTypeInfo(
+    80, "SpeechEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &SpeechEffect::CreateObject);
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SpeechEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x50, "SpeechEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &SpeechEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SpeechEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
-const char* SpeechEffect::GetTypeName() const { return "SpeechEffect"; }
+const char* SpeechEffect::GetTypeName() const {
+    return sTypeInfo.typeName;
+}
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpSpeechEffectReg =
-    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(SpeechEffect::GetStaticTypeInfo());
 
 bool SpeechEffect::Attach()
 {

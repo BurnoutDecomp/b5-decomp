@@ -66,6 +66,11 @@ struct ExplosionEffect : public BrnEffectObject
 {
     ExplosionEffect();
     virtual ~ExplosionEffect();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F99C)
 
     // +0x38 (X360). The embedded per-effect voice wrapper the ctor constructs last
     // (its tail `bl CgsSound::Logic::VoiceWrapper::VoiceWrapper(this+0x38)`). Reused

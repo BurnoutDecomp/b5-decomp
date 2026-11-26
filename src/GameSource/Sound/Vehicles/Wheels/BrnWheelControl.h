@@ -119,6 +119,11 @@ struct WheelControl : public BrnSound::Logic::BrnEffectControl,
 
     WheelControl();
     virtual ~WheelControl();   // anchor for the vector deleting destructor @ 0x826D00A0
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F740)
 
     virtual s32 GetController(s32 aiSlot) ;
     virtual void AttachController(CgsSound::Logic::EffectBase* apController) ;
@@ -191,6 +196,11 @@ struct AIWheelControl : public WheelControl
 {
     AIWheelControl();                 // @ 0x826E55A8
     virtual ~AIWheelControl();        // anchor for the vector deleting destructor @ 0x826E5608
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F750)
 };
 
 } // namespace Wheels

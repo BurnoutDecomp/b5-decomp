@@ -263,17 +263,13 @@ struct EffectControl : public EffectBase
     // helper EffectBase::ResetOnDestroy() so no raw-offset cast is needed.
     virtual ~EffectControl();
 
-    virtual ClassTypeInfo<EffectControl>* GetTypeInfo() const { return GetStaticTypeInfo(); }
+    virtual ClassTypeInfo<EffectControl>* GetTypeInfo() const { return &sTypeInfo; }
     virtual const char* GetTypeName() const;
     static ClassTypeInfo<EffectControl>* GetStaticTypeInfo();
+    static ClassTypeInfo<EffectControl> sTypeInfo;   // ARTIST 0x82F2FA70
 
     static const u16 KU_SIZEOF_CLASS_ARRAY = 64; // CgsEffectBase.h:765 (DWARF)
 
-    // CgsEffectBase.h:363 (DWARF) @ 0x8268DD48. Register a per-class RTTI descriptor
-    // into this class's static ClassTypeInfo array. Scans for the first empty slot
-    // (cap KU_SIZEOF_CLASS_ARRAY); asserts "Too Many Class registations" only past
-    // 0x100. Returns the registered descriptor.
-    static ClassTypeInfo<EffectControl>* AddToClassTypeInfoArray(ClassTypeInfo<EffectControl>* apTypeInfo);
     static ClassTypeInfo<EffectControl>* GetRegisteredTypeInfo(u32 auIndex);
 };
 
@@ -287,16 +283,13 @@ struct EffectObject : public EffectBase
     // EffectControl (identical store sequence in the X360 build).
     virtual ~EffectObject();
 
-    virtual ClassTypeInfo<EffectObject>* GetTypeInfo() const { return GetStaticTypeInfo(); }
+    virtual ClassTypeInfo<EffectObject>* GetTypeInfo() const { return &sTypeInfo; }
     virtual const char* GetTypeName() const;
     static ClassTypeInfo<EffectObject>* GetStaticTypeInfo();
+    static ClassTypeInfo<EffectObject> sTypeInfo;   // ARTIST 0x82F2FA60
 
     static const u16 KU_SIZEOF_CLASS_ARRAY = 64; // CgsEffectBase.h:774 (DWARF)
 
-    // CgsEffectBase.h:363 (DWARF) @ 0x8268DE28. Register a per-class RTTI descriptor
-    // into this class's static ClassTypeInfo array (separate array from EffectControl's).
-    // Same scan/assert logic as EffectControl::AddToClassTypeInfoArray.
-    static ClassTypeInfo<EffectObject>* AddToClassTypeInfoArray(ClassTypeInfo<EffectObject>* apTypeInfo);
     static ClassTypeInfo<EffectObject>* GetRegisteredTypeInfo(u32 auIndex);
 };
 

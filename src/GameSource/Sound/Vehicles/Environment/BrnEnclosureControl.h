@@ -74,6 +74,11 @@ struct EnclosureControl : public BrnSound::Logic::BrnEffectControl
         maTriggerInfo[E_TRIGGER_POSITION_AHEAD_OF_ENTITY].Reset();
     }
     virtual ~EnclosureControl();    // anchor for the vector deleting destructor @ 0x826B94A8
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F784)
 
     // @ 0x82685FA0 -- map a region type (19..31) to an enclosure index (pure; `this` unused).
     int ConvertRegionTypeToIndex( int liRegionType ) const;

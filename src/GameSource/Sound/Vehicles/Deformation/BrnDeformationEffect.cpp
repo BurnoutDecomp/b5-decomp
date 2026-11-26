@@ -65,9 +65,7 @@ DeformationEffect::~DeformationEffect()
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 DeformationEffect::GetTypeInfo() const
 {
-    // The original returns DeformationEffect::sTypeInfo.  The native build keeps
-    // the same descriptor in EffectObject's registration slot 15.
-    return CgsSound::Logic::EffectObject::GetRegisteredTypeInfo(15);
+    return &sTypeInfo;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,9 +74,27 @@ DeformationEffect::GetTypeInfo() const
 //   CreateObject's operator new / RTTI uses) and returns it. Mirrors the
 //   committed PlayerVehicleStateManager / TrafficStateManager GetTypeName leaves.
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F680: {0x100F0, "DeformationEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> DeformationEffect::sTypeInfo(
+    0x100F0, "DeformationEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &DeformationEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* DeformationEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) DeformationEffect();
+    else
+        return new (sTypeInfo.typeName, true) DeformationEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* DeformationEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
 const char* DeformationEffect::GetTypeName() const
 {
-    return "DeformationEffect";
+    return sTypeInfo.typeName;
 }
 
 // ---------------------------------------------------------------------------

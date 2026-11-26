@@ -50,7 +50,10 @@ const char* BrnStateManager::GetTypeName() const
 // ---------------------------------------------------------------------------
 CgsSound::Logic::StateManager* BrnStateManager::CreateObject(u32 luType)
 {
-    return new ("BrnStateManager", luType != 0) BrnStateManager();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) BrnStateManager();
+    else
+        return new (sTypeInfo.typeName, true) BrnStateManager();
 }
 
 // ARTIST descriptor 0x82F2E7EC; the CRT thunk registers this preinitialized object.

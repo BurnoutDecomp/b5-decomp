@@ -125,6 +125,34 @@ static inline bool IsZero( f32 afValue )
     return !(afValue > KF_FLT_EPSILON) && !(afValue < -KF_FLT_EPSILON);
 }
 
+// ARTIST 0x82F2F5E8: {0x10000, "DualGinsuEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> DualGinsuEffect::sTypeInfo(
+    0x10000, "DualGinsuEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &DualGinsuEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* DualGinsuEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) DualGinsuEffect();
+    else
+        return new (sTypeInfo.typeName, true) DualGinsuEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* DualGinsuEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* DualGinsuEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* DualGinsuEffect::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 DualGinsuEffect::DualGinsuEffect()
     : BrnSound::Logic::BrnEffectObject()
     , mpHybridControl(0)

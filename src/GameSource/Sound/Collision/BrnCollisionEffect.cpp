@@ -107,28 +107,32 @@ CollisionEffect::~CollisionEffect()
 
 CgsSound::Logic::EffectObject* CollisionEffect::CreateObject(u32 luType)
 {
-    return new ("CollisionEffect", luType != 0) CollisionEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) CollisionEffect();
+    else
+        return new (sTypeInfo.typeName, true) CollisionEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 CollisionEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x50000, "CollisionEffect",
-        CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &CollisionEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 CollisionEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
+
+// ARTIST 0x82F2F91C: {0x50000, "CollisionEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> CollisionEffect::sTypeInfo(
+    0x50000, "CollisionEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &CollisionEffect::CreateObject);
 
 const char* CollisionEffect::GetTypeName() const
 {
-    return "CollisionEffect";
+    return sTypeInfo.typeName;
 }
 
 s32 CollisionEffect::GetController(s32 aiIndex)
@@ -595,10 +599,6 @@ f32 CollisionEffect::GetPitch() const
     return lfSizePitch * lfMixerOutput;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
-    gpCollisionEffectReg =
-        CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
-            CollisionEffect::GetStaticTypeInfo());
 
 // =============================================================================
 // BrnSound::Logic::Collision::Collision3DControl -- out-of-line bodies.
@@ -653,7 +653,10 @@ Collision3DControl::Collision3DControl()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectControl* Collision3DControl::CreateObject(u32 luType)
 {
-    return new ("Collision3DControl", luType != 0) Collision3DControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) Collision3DControl();
+    else
+        return new (sTypeInfo.typeName, true) Collision3DControl();
 }
 
 // ---------------------------------------------------------------------------
@@ -688,28 +691,25 @@ Collision3DControl::~Collision3DControl()
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
 Collision3DControl::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
-        0x50010, "Collision3DControl",
-        CgsSound::Logic::EffectControl::GetStaticTypeInfo(),
-        &Collision3DControl::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
 Collision3DControl::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
+
+// ARTIST 0x82F2F90C: {0x50010, "Collision3DControl", Brn3DUserSpaceEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> Collision3DControl::sTypeInfo(
+    0x50010, "Collision3DControl", &BrnSound::Logic::Brn3DUserSpaceEffectControl::sTypeInfo, &Collision3DControl::CreateObject);
 
 const char* Collision3DControl::GetTypeName() const
 {
-    return "Collision3DControl";
+    return sTypeInfo.typeName;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const
-    gpCollision3DControlReg =
-        CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(
-            Collision3DControl::GetStaticTypeInfo());
 
 } // namespace Collision
 } // namespace Logic

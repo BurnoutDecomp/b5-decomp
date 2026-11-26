@@ -24,30 +24,32 @@ namespace Wheels
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 JunkyardInAirEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x60, "JunkyardInAirEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &JunkyardInAirEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 JunkyardInAirEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
+
+// ARTIST 0x82F2F700: {0x60, "JunkyardInAirEffect", InAirEffect, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> JunkyardInAirEffect::sTypeInfo(
+    0x60, "JunkyardInAirEffect", &BrnSound::Vehicles::Wheels::InAirEffect::sTypeInfo, &JunkyardInAirEffect::CreateObject);
 
 const char* JunkyardInAirEffect::GetTypeName() const
 {
-    return "JunkyardInAirEffect";
+    return sTypeInfo.typeName;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
-    gpJunkyardInAirEffectReg = CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
-        JunkyardInAirEffect::GetStaticTypeInfo());
 
 CgsSound::Logic::EffectObject* JunkyardInAirEffect::CreateObject(u32 luType)
 {
-    return new ("JunkyardInAirEffect", luType != 0) JunkyardInAirEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) JunkyardInAirEffect();
+    else
+        return new (sTypeInfo.typeName, true) JunkyardInAirEffect();
 }
 
 JunkyardInAirEffect::JunkyardInAirEffect()

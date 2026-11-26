@@ -33,7 +33,10 @@ namespace Environment
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectObject* ReverbEffect::CreateObject(u32 luType)
 {
-    return new ("ReverbEffect", luType != 0) ReverbEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) ReverbEffect();
+    else
+        return new (sTypeInfo.typeName, true) ReverbEffect();
 }
 
 // ---------------------------------------------------------------------------
@@ -50,6 +53,26 @@ CgsSound::Logic::EffectObject* ReverbEffect::CreateObject(u32 luType)
 // only leaf effects are the two embedded-member default constructions (InterpolateLine
 // @+0x48 with mbComplete=true -> stb 1, and DataPoint @+0x68 zeroed).
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F7F8: {0x100D0, "ReverbEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> ReverbEffect::sTypeInfo(
+    0x100D0, "ReverbEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &ReverbEffect::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* ReverbEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* ReverbEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* ReverbEffect::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 ReverbEffect::ReverbEffect()
     : BrnSound::Logic::BrnEffectObject()  // installs both vptrs + zero-inits the base region (BY NAME)
     // mInterpolateReverb: default-constructed -> stores @+0x48..+0x60 (mbComplete=true -> stb 1)

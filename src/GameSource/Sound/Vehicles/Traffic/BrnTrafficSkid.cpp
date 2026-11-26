@@ -101,30 +101,32 @@ TrafficSkid::~TrafficSkid()
 // EffectObject view (+0x04).
 CgsSound::Logic::EffectObject* TrafficSkid::CreateObject(u32 luType)
 {
-    return new ("TrafficSkid", luType != 0) TrafficSkid();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) TrafficSkid();
+    else
+        return new (sTypeInfo.typeName, true) TrafficSkid();
 }
 
 // Descriptor {0x30020, "TrafficSkid", BrnEffectObject::sTypeInfo, &CreateObject}.
+// ARTIST 0x82F2E8E0: {0x30020, "TrafficSkid", BrnEffectObject, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> TrafficSkid::sTypeInfo(
+    196640, "TrafficSkid", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &TrafficSkid::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* TrafficSkid::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x30020, "TrafficSkid",
-        CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &TrafficSkid::CreateObject );
     return &sTypeInfo;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpTrafficSkidReg =
-    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray( TrafficSkid::GetStaticTypeInfo() );
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* TrafficSkid::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* TrafficSkid::GetTypeName() const
 {
-    return "TrafficSkid";
+    return sTypeInfo.typeName;
 }
 
 // One controller: control 0, the TrafficControl (identical code to

@@ -36,6 +36,34 @@ f32 KF_REDLINING_VOLUME_BOOST = 1.2f;           // flt_82F2CC4C
 f32 KF_REDLINING_VOLUME_DUCK = 0.9f;             // flt_82F2CC50
 bool KB_TURN_ON_RPM_RAMPING = false;             // byte_82FFB84B
 
+// ARTIST 0x82F2F588: {0x10040, "EngineControl", BrnEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> EngineControl::sTypeInfo(
+    0x10040, "EngineControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &EngineControl::CreateObject);
+
+CgsSound::Logic::EffectControl* EngineControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) EngineControl();
+    else
+        return new (sTypeInfo.typeName, true) EngineControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* EngineControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* EngineControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* EngineControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 EngineControl::EngineControl()
     : mpPhysicsControl(0)
     , mpShiftControl(0)

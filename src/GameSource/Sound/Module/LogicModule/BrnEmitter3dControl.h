@@ -17,6 +17,7 @@ class Emitter3dControl : public CgsSound::Logic::Cgs3dEffectControl
 public:
     Emitter3dControl();
     virtual ~Emitter3dControl();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F82C)
 
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
         GetTypeInfo() const;

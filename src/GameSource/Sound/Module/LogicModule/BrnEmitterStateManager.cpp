@@ -114,7 +114,10 @@ EmitterStateManager::~EmitterStateManager()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::StateManager* EmitterStateManager::CreateObject(u32 luType)
 {
-    return new ("EmitterStateManager", luType != 0) EmitterStateManager();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) EmitterStateManager();
+    else
+        return new (sTypeInfo.typeName, true) EmitterStateManager();
 }
 
 // ARTIST descriptor 0x82F2F84C; the CRT thunk registers this preinitialized object.

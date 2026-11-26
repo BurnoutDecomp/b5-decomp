@@ -32,6 +32,34 @@ namespace Vehicles
 namespace Engines
 {
 
+// ARTIST 0x82F2F618: {0x10020, "LoopModelEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> LoopModelEffect::sTypeInfo(
+    0x10020, "LoopModelEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &LoopModelEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* LoopModelEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) LoopModelEffect();
+    else
+        return new (sTypeInfo.typeName, true) LoopModelEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* LoopModelEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* LoopModelEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* LoopModelEffect::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 LoopModelEffect::~LoopModelEffect()
 {
 }

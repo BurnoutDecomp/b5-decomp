@@ -40,6 +40,34 @@ namespace Vehicles
 namespace Environment
 {
 
+// ARTIST 0x82F2F7D8: {0x100F0, "SpeedStreamControl", BrnEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> SpeedStreamControl::sTypeInfo(
+    0x100F0, "SpeedStreamControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &SpeedStreamControl::CreateObject);
+
+CgsSound::Logic::EffectControl* SpeedStreamControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) SpeedStreamControl();
+    else
+        return new (sTypeInfo.typeName, true) SpeedStreamControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* SpeedStreamControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* SpeedStreamControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* SpeedStreamControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 SpeedStreamControl::SpeedStreamControl()
     : BrnSound::Logic::BrnEffectControl()
     , mpPhysicsControl(0)

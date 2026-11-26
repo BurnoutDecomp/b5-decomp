@@ -42,7 +42,7 @@ f32 KF_MAX_REVERSE_PITCH = 1.2f;   // ARTIST flt_82F2CD0C
 // ---------------------------------------------------------------------------
 BrnSound::Logic::IResourceRequester* DualGinsuExhaustEffect::Creat(s32 flavour)
 {
-    DualGinsuExhaustEffect* lpEffect = new ("DualGinsuExhaustEffect", flavour != 0) DualGinsuExhaustEffect();
+    DualGinsuExhaustEffect* lpEffect = new (sTypeInfo.typeName, flavour != 0) DualGinsuExhaustEffect();
     if ( lpEffect == 0 )
     {
         return 0;
@@ -66,6 +66,34 @@ BrnSound::Logic::IResourceRequester* DualGinsuExhaustEffect::Creat(s32 flavour)
 // virtual dtor), zero-seeds meState (E_CONSTRUCTED), and constructs the embedded
 // VoiceWrapper member mReverseWhineVoice.
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F5F8: {0x10030, "DualGinsuExhaustEffect", DualGinsuEffect, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> DualGinsuExhaustEffect::sTypeInfo(
+    0x10030, "DualGinsuExhaustEffect", &BrnSound::Vehicles::Engines::DualGinsuEffect::sTypeInfo, &DualGinsuExhaustEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* DualGinsuExhaustEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) DualGinsuExhaustEffect();
+    else
+        return new (sTypeInfo.typeName, true) DualGinsuExhaustEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* DualGinsuExhaustEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* DualGinsuExhaustEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* DualGinsuExhaustEffect::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 DualGinsuExhaustEffect::DualGinsuExhaustEffect()
     : DualGinsuEffect()          // bl DualGinsuEffect::DualGinsuEffect()
     , meState(E_CONSTRUCTED)     // stw 0, +0x2EC(r31)

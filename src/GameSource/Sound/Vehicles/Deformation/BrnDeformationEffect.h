@@ -56,6 +56,9 @@ struct DeformationEffect : public BrnSound::Logic::BrnEffectObject
 
     DeformationEffect();            // @ 0x826CF6C0
     virtual ~DeformationEffect();   // anchor for the X360 deleting destructor (DEFERRED body)
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F680)
 
     // ---- effect vtable overrides (only the four this TU bodies are defined; the
     //      rest are declared for the vtable shape and bodied in their own slices) ----

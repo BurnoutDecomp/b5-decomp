@@ -45,7 +45,32 @@ WhineEffect::WhineEffect()
 
 WhineEffect::~WhineEffect() {}
 
-const char* WhineEffect::GetTypeName() const { return "WhineEffect"; }
+// ARTIST 0x82F2F658: {0x100C0, "WhineEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> WhineEffect::sTypeInfo(
+    0x100C0, "WhineEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &WhineEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* WhineEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) WhineEffect();
+    else
+        return new (sTypeInfo.typeName, true) WhineEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* WhineEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* WhineEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* WhineEffect::GetTypeName() const {
+    return sTypeInfo.typeName;
+}
 
 s32 WhineEffect::GetController(s32 aiSlot)
 {

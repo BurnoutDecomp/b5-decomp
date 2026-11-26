@@ -36,6 +36,10 @@ struct AmbienceControl : public BrnSound::Logic::BrnEffectControl
     // Attach binds the map/resource and initializes the update timer.
     AmbienceControl() : mRegion(0) {}
     virtual ~AmbienceControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F798)
 
     // RTTI factory hook.
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );

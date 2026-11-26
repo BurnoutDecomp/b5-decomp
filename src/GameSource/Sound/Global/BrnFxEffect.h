@@ -128,6 +128,7 @@ struct FxEffect : public BrnEffectObject
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
     const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2F8BC)
     static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
 
     // +0x38 (X360), stride 0x50 per element. The do/while loop (r29 = 3 -> 0)

@@ -80,6 +80,11 @@ struct Car3DControl : public BrnSound::Logic::Brn3DEffectControl
 {
     Car3DControl();
     virtual ~Car3DControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F690)
 
     virtual s32 GetController(s32 aiIndex) ;
     virtual void AttachController(CgsSound::Logic::EffectBase* apController) ;
@@ -100,6 +105,11 @@ struct Engine3dControl : public Car3DControl
 {
     Engine3dControl() {}
     virtual ~Engine3dControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F6A0)
 
 protected:
     virtual Vector3 GetPositionOffset() const ;
@@ -110,6 +120,11 @@ struct Exhaust3dControl : public Car3DControl
 {
     Exhaust3dControl() {}
     virtual ~Exhaust3dControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F6B0)
 
 protected:
     virtual Vector3 GetPositionOffset() const ;
@@ -120,6 +135,11 @@ struct LeftSide3dControl : public Car3DControl
 {
     LeftSide3dControl() {}
     virtual ~LeftSide3dControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F6C0)
 
 protected:
     virtual Vector3 GetPositionOffset() const ;
@@ -130,6 +150,11 @@ struct RightSide3dControl : public Car3DControl
 {
     RightSide3dControl() {}
     virtual ~RightSide3dControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F6D0)
 
 protected:
     virtual Vector3 GetPositionOffset() const ;

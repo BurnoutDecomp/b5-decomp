@@ -45,6 +45,10 @@ struct ClutchControl : public BrnSound::Logic::BrnEffectControl,
 
     ClutchControl();
     virtual ~ClutchControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F5C8)
 
     virtual s32 GetController(s32 aiSlot);
     virtual void AttachController(CgsSound::Logic::EffectBase* apController);
@@ -105,6 +109,10 @@ struct AIClutchControl : public ClutchControl
 {
     AIClutchControl();
     virtual ~AIClutchControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F5D8)
     static CgsSound::Logic::EffectControl* CreateObject(u32 luType);
     virtual void UpdateParams(f32 /*afTimeStep*/) {}
 };

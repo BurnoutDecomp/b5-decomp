@@ -70,6 +70,11 @@ struct SpeedStreamControl : public BrnSound::Logic::BrnEffectControl
 {
     SpeedStreamControl();
     virtual ~SpeedStreamControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F7D8)
 
     virtual s32 GetController(s32 aiSlot);
     virtual void AttachController(CgsSound::Logic::EffectBase* apController);

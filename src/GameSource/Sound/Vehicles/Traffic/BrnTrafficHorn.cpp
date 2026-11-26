@@ -81,30 +81,32 @@ TrafficHorn::~TrafficHorn()
 // EffectObject view (+0x04).
 CgsSound::Logic::EffectObject* TrafficHorn::CreateObject(u32 luType)
 {
-    return new ("TrafficHorn", luType != 0) TrafficHorn();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) TrafficHorn();
+    else
+        return new (sTypeInfo.typeName, true) TrafficHorn();
 }
 
 // Descriptor {0x30010, "TrafficHorn", BrnEffectObject::sTypeInfo, &CreateObject}.
+// ARTIST 0x82F2E8D0: {0x30010, "TrafficHorn", BrnEffectObject, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> TrafficHorn::sTypeInfo(
+    196624, "TrafficHorn", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &TrafficHorn::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* TrafficHorn::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x30010, "TrafficHorn",
-        CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &TrafficHorn::CreateObject );
     return &sTypeInfo;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpTrafficHornReg =
-    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray( TrafficHorn::GetStaticTypeInfo() );
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* TrafficHorn::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* TrafficHorn::GetTypeName() const
 {
-    return "TrafficHorn";
+    return sTypeInfo.typeName;
 }
 
 // One controller: control 0, the TrafficControl (identical code to

@@ -58,7 +58,7 @@ int EnclosureControl::ConvertRegionTypeToIndex( int liRegionType ) const
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectControl* EnclosureControl::Create( bool lbFlavour )
 {
-    return new ("EnclosureControl", lbFlavour) EnclosureControl();
+    return new (sTypeInfo.typeName, lbFlavour) EnclosureControl();
 }
 
 // ARTIST debug-menu backing cells. These exact globals are registered by the Sound page.
@@ -216,6 +216,34 @@ void EnclosureControl::DrawDebug() const
 // (byte-identical to the sibling SpeedStreamControl @ 0x826BA0A0), so this leaf body is
 // empty. The (a2 & 1) allocator-free tail is left to the host toolchain.
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F784: {0x100A0, "EnclosureControl", BrnEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> EnclosureControl::sTypeInfo(
+    0x100A0, "EnclosureControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &EnclosureControl::CreateObject);
+
+CgsSound::Logic::EffectControl* EnclosureControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) EnclosureControl();
+    else
+        return new (sTypeInfo.typeName, true) EnclosureControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* EnclosureControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* EnclosureControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* EnclosureControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 EnclosureControl::~EnclosureControl()
 {
 }

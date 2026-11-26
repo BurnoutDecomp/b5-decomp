@@ -22,6 +22,34 @@ namespace BrnSound
 namespace Logic
 {
 
+// ARTIST 0x82F2E81C: {0xFFFFFFFF, "Brn3DEffectControl", Cgs3dEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> Brn3DEffectControl::sTypeInfo(
+    -1, "Brn3DEffectControl", &CgsSound::Logic::Cgs3dEffectControl::sTypeInfo, &Brn3DEffectControl::CreateObject);
+
+CgsSound::Logic::EffectControl* Brn3DEffectControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) Brn3DEffectControl();
+    else
+        return new (sTypeInfo.typeName, true) Brn3DEffectControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Brn3DEffectControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Brn3DEffectControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* Brn3DEffectControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 Brn3DEffectControl::Brn3DEffectControl()
     : CgsSound::Logic::Cgs3dEffectControl()
     , mEngineDataAtrib(0, 0)

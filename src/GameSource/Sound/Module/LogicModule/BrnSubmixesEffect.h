@@ -89,6 +89,7 @@ struct SubmixesEffect : public BrnSound::Logic::BrnEffectObject
         , mbIsSurround(false)
         , mbHoldVolumes(false) {}
     virtual ~SubmixesEffect();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F8DC)
 
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
     const char* GetTypeName() const ;

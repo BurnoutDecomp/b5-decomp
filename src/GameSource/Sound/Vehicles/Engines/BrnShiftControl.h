@@ -47,6 +47,10 @@ struct ShiftControl : public BrnSound::Logic::BrnEffectControl
 
     ShiftControl();
     virtual ~ShiftControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F598)
 
     virtual s32 GetController(s32 aiSlot);
     virtual void AttachController(CgsSound::Logic::EffectBase* apController);

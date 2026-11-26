@@ -55,7 +55,10 @@ static const Vector2 KV_AMBIENCE_MAP_WORLD_SIZE( 8270.0f, 6101.0f );
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectControl* AmbienceControl::CreateObject(u32 luType)
 {
-    return new ("AmbienceControl", luType != 0) AmbienceControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) AmbienceControl();
+    else
+        return new (sTypeInfo.typeName, true) AmbienceControl();
 }
 
 // Controller slot 0 is the enclosure control.
@@ -241,6 +244,26 @@ bool AmbienceControl::SelectSpecialAmbience(u8& aru8Ambience) const
 // mbResourcesReady) is owned by the BrnEffectControl base, so this leaf body adds
 // nothing; the allocator-free tail is left to the host toolchain.
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F798: {0x10100, "AmbienceControl", BrnEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> AmbienceControl::sTypeInfo(
+    0x10100, "AmbienceControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &AmbienceControl::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* AmbienceControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* AmbienceControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* AmbienceControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 AmbienceControl::~AmbienceControl()
 {
 }

@@ -60,6 +60,34 @@ static const CgsSound::Playback::Name KA_AMBIENCE_NAMES[22] =
 // their own constructors; the leaf zero words and the -1 are mParams' default
 // construction.
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F7A8: {0x10080, "AmbienceEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> AmbienceEffect::sTypeInfo(
+    0x10080, "AmbienceEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &AmbienceEffect::CreateObject);
+
+CgsSound::Logic::EffectObject* AmbienceEffect::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) AmbienceEffect();
+    else
+        return new (sTypeInfo.typeName, true) AmbienceEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* AmbienceEffect::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* AmbienceEffect::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* AmbienceEffect::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 AmbienceEffect::AmbienceEffect()
     : BrnSound::Logic::BrnEffectObject()
     , BrnSound::Logic::Streaming::IStreamUser()
@@ -82,7 +110,7 @@ AmbienceEffect::~AmbienceEffect()
 // ---------------------------------------------------------------------------
 BrnSound::Logic::IResourceRequester* AmbienceEffect::CreateObj(u32 flavour)
 {
-    return static_cast<BrnSound::Logic::IResourceRequester*>( new ("AmbienceEffect", flavour != 0) AmbienceEffect() );
+    return static_cast<BrnSound::Logic::IResourceRequester*>( new (sTypeInfo.typeName, flavour != 0) AmbienceEffect() );
 }
 
 // Controller slot 0 is the ambience control.

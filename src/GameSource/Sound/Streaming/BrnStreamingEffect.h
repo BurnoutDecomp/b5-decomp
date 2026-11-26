@@ -71,6 +71,7 @@ struct StreamingEffect : public BrnSound::Logic::BrnEffectObject
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2E85C)
     static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
 
     virtual bool Attach();

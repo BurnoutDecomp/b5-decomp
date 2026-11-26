@@ -33,12 +33,30 @@ BrnEffectControl::BrnEffectControl()
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
 BrnEffectControl::GetTypeInfo() const
 {
-    return CgsSound::Logic::EffectControl::GetStaticTypeInfo();
+    return &sTypeInfo;
+}
+
+// ARTIST 0x82F2E80C: {0xFFFFFFFF, "BrnEffectControl", EffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> BrnEffectControl::sTypeInfo(
+    -1, "BrnEffectControl", &CgsSound::Logic::EffectControl::sTypeInfo, &BrnEffectControl::CreateObject);
+
+CgsSound::Logic::EffectControl* BrnEffectControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) BrnEffectControl();
+    else
+        return new (sTypeInfo.typeName, true) BrnEffectControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* BrnEffectControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
 }
 
 const char* BrnEffectControl::GetTypeName() const
 {
-    return "BrnEffectControl";
+    return sTypeInfo.typeName;
 }
 
 void BrnEffectControl::ResourcesAreReady()

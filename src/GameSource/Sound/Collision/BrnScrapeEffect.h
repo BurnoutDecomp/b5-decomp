@@ -55,6 +55,7 @@ struct ScrapeEffect : public BrnSound::Logic::BrnEffectObject
 {
     ScrapeEffect();
     virtual ~ScrapeEffect();   // BrnScrapeEffect.cpp:73 (DWARF virtual); anchor in .cpp
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F93C)
 
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
     virtual const char* GetTypeName() const ;

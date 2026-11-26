@@ -85,7 +85,7 @@ f32 SmoothTowards(f32 lfCurrent, f32 lfTarget, f32 lfStep)
 // ---------------------------------------------------------------------------
 BrnSound::Logic::IResourceRequester* HybridExhaustControl::Create(bool flavour)
 {
-    return static_cast<BrnSound::Logic::IResourceRequester*>( new ("HybridExhaustControl", flavour != 0) HybridExhaustControl() );
+    return static_cast<BrnSound::Logic::IResourceRequester*>( new (sTypeInfo.typeName, flavour != 0) HybridExhaustControl() );
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +97,34 @@ BrnSound::Logic::IResourceRequester* HybridExhaustControl::Create(bool flavour)
 // Average<3,f32> / three DataPoint<f32> (default-zeroed), the Graph over its embedded
 // Vector2[6] table, the two EngineMix values, and the mfPercentOf* thresholds.
 // ---------------------------------------------------------------------------
+// ARTIST 0x82F2F5A8: {0x10050, "HybridExhaustControl", BrnEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> HybridExhaustControl::sTypeInfo(
+    0x10050, "HybridExhaustControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &HybridExhaustControl::CreateObject);
+
+CgsSound::Logic::EffectControl* HybridExhaustControl::CreateObject(u32 luAllocator)
+{
+    if (luAllocator == 0)
+        return new (sTypeInfo.typeName, false) HybridExhaustControl();
+    else
+        return new (sTypeInfo.typeName, true) HybridExhaustControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* HybridExhaustControl::GetStaticTypeInfo()
+{
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* HybridExhaustControl::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* HybridExhaustControl::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
 HybridExhaustControl::HybridExhaustControl()
     : mpPhysicsControl(0)
     , mpEngineControl(0)

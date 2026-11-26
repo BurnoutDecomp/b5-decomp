@@ -76,7 +76,10 @@ const char* EmitterState::GetTypeName() const
 
 CgsSound::Logic::State* EmitterState::CreateObject(u32 luType)
 {
-    return new (sTypeInfo.typeName, luType != 0) EmitterState();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) EmitterState();
+    else
+        return new (sTypeInfo.typeName, true) EmitterState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*

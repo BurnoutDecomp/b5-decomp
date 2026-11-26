@@ -121,28 +121,32 @@ ScrapeEffect::~ScrapeEffect()
 
 CgsSound::Logic::EffectObject* ScrapeEffect::CreateObject(u32 luType)
 {
-    return new ("ScrapeEffect", luType != 0) ScrapeEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) ScrapeEffect();
+    else
+        return new (sTypeInfo.typeName, true) ScrapeEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 ScrapeEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x50010, "ScrapeEffect",
-        CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &ScrapeEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 ScrapeEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
+
+// ARTIST 0x82F2F93C: {0x50010, "ScrapeEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> ScrapeEffect::sTypeInfo(
+    0x50010, "ScrapeEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &ScrapeEffect::CreateObject);
 
 const char* ScrapeEffect::GetTypeName() const
 {
-    return "ScrapeEffect";
+    return sTypeInfo.typeName;
 }
 
 s32 ScrapeEffect::GetController(s32 aiIndex)
@@ -413,10 +417,6 @@ bool ScrapeEffect::Detach()
     return BrnSound::Logic::BrnEffectObject::Detach();
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
-    gpScrapeEffectReg =
-        CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
-            ScrapeEffect::GetStaticTypeInfo());
 
 } // namespace Collision
 } // namespace Logic

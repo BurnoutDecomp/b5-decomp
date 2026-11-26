@@ -40,6 +40,7 @@ struct TrafficSkid : public BrnSound::Logic::BrnEffectObject
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2E8E0)
     static CgsSound::Logic::EffectObject* CreateObject( u32 luType );
 
     virtual s32  GetController( s32 liIndex );

@@ -51,7 +51,10 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PlayerVehicleState::GetS
 
 CgsSound::Logic::State* PlayerVehicleState::CreateObject(u32 luType)
 {
-    return new (sTypeInfo.typeName, luType != 0) PlayerVehicleState();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) PlayerVehicleState();
+    else
+        return new (sTypeInfo.typeName, true) PlayerVehicleState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*

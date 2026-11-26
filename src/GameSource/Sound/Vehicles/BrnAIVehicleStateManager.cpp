@@ -168,7 +168,10 @@ AIVehicleStateManager::~AIVehicleStateManager()
 // flavour) + ctor; the int argument only picks the operator-new flavour.
 CgsSound::Logic::StateManager* AIVehicleStateManager::CreateObject(u32 luType)
 {
-    return new ("AIVehicleStateManager", luType != 0) AIVehicleStateManager();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) AIVehicleStateManager();
+    else
+        return new (sTypeInfo.typeName, true) AIVehicleStateManager();
 }
 
 // Descriptor 0x82F2E88C: {ObjectID 2, "AIVehicleStateManager", base

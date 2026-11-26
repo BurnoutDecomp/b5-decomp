@@ -125,32 +125,35 @@ AIPhysicsControl::~AIPhysicsControl()
 // @ 0x826E4558: MemBase::operator new(1264, "AIPhysicsControl", flavour) + ctor.
 CgsSound::Logic::EffectControl* AIPhysicsControl::CreateObject(u32 luType)
 {
-    return new ("AIPhysicsControl", luType != 0) AIPhysicsControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) AIPhysicsControl();
+    else
+        return new (sTypeInfo.typeName, true) AIPhysicsControl();
 }
 
 // Descriptor 0x82F2F638: {0x20000, "AIPhysicsControl", base PhysicsControl
 // (0x82F2F578), &CreateObject}.
+// ARTIST 0x82F2F638: {0x20000, "AIPhysicsControl", PhysicsControl, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> AIPhysicsControl::sTypeInfo(
+    131072, "AIPhysicsControl", &BrnSound::Vehicles::Engines::PhysicsControl::sTypeInfo, &AIPhysicsControl::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* AIPhysicsControl::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
-        0x20000, "AIPhysicsControl", PhysicsControl::GetStaticTypeInfo(), &AIPhysicsControl::CreateObject );
     return &sTypeInfo;
 }
 
 // CRT init bank @0x82C62560: `addi r3, r11, 82F2F638 ; b EffectControl::AddToClassTypeInfoArray`.
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const
-    gpAIPhysicsControlReg = CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(
-        AIPhysicsControl::GetStaticTypeInfo() );
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* AIPhysicsControl::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 // @ 0x82685300: returns off_82F2F63C == the descriptor's name.
 const char* AIPhysicsControl::GetTypeName() const
 {
-    return "AIPhysicsControl";
+    return sTypeInfo.typeName;
 }
 
 // ---------------------------------------------------------------------------

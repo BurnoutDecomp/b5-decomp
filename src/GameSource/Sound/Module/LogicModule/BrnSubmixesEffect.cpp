@@ -51,29 +51,32 @@ CgsSound::Logic::EffectObject* SubmixesEffect::CreateObject(u32 luType)
     // established that the Attach/ProcessUpdate lane below is LIVE rather than dead code,
     // back when neither was declared on this leaf and the base's do-nothing versions ran.
     // Kept as the lane's liveness witness.
-    return new ("SubmixesEffect", luType != 0) SubmixesEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) SubmixesEffect();
+    else
+        return new (sTypeInfo.typeName, true) SubmixesEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SubmixesEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x40, "SubmixesEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &SubmixesEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SubmixesEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
+
+// ARTIST 0x82F2F8DC: {0x40, "SubmixesEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> SubmixesEffect::sTypeInfo(
+    0x40, "SubmixesEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &SubmixesEffect::CreateObject);
 
 const char* SubmixesEffect::GetTypeName() const
 {
-    return "SubmixesEffect";
+    return sTypeInfo.typeName;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpSubmixesEffectReg =
-    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(SubmixesEffect::GetStaticTypeInfo());
 
 SubmixesEffect::~SubmixesEffect()
 {

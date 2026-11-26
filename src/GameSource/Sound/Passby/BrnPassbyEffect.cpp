@@ -133,7 +133,10 @@ Passby3DControl::~Passby3DControl()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectControl* Passby3DControl::CreateObject(u32 luType)
 {
-    return new ("Passby3DControl", luType != 0) Passby3DControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) Passby3DControl();
+    else
+        return new (sTypeInfo.typeName, true) Passby3DControl();
 }
 
 // sTypeInfo @0x82F2F97C: {0x40000, "Passby3DControl", &Brn3DEffectControl::sTypeInfo, CreateObject}.
@@ -141,28 +144,27 @@ CgsSound::Logic::EffectControl* Passby3DControl::CreateObject(u32 luType)
 // EffectControl's -- the Collision3DControl precedent. CreateEffectFromRegistry only walks the
 // base chain to break a tie between two descriptors of the same state and effect id, and
 // 0x40000 has no rival.
+// ARTIST 0x82F2F97C: {0x40000, "Passby3DControl", Brn3DEffectControl, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> Passby3DControl::sTypeInfo(
+    262144, "Passby3DControl", &BrnSound::Logic::Brn3DEffectControl::sTypeInfo, &Passby3DControl::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Passby3DControl::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
-        0x40000, "Passby3DControl",
-        CgsSound::Logic::EffectControl::GetStaticTypeInfo(),
-        &Passby3DControl::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* Passby3DControl::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* Passby3DControl::GetTypeName() const
 {
-    return "Passby3DControl";
+    return sTypeInfo.typeName;
 }
 
 // The CRT registration at 0x82C633A4.
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const gpPassby3DControlReg =
-    CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(Passby3DControl::GetStaticTypeInfo());
 
 // ---------------------------------------------------------------------------
 // PassbyEffect::PassbyEffect  @ 0x826AFDC8
@@ -208,35 +210,37 @@ PassbyEffect::~PassbyEffect()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectObject* PassbyEffect::CreateObject(u32 luType)
 {
-    return new ("PassbyEffect", luType != 0) PassbyEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) PassbyEffect();
+    else
+        return new (sTypeInfo.typeName, true) PassbyEffect();
 }
 
 // sTypeInfo @0x82F2F98C: {0x40000, "PassbyEffect", &BrnEffectObject::sTypeInfo, CreateObject}.
 // FLAG: BrnEffectObject's descriptor (0x82F2E7FC) is not homed, so the chain starts at
 // EffectObject's -- the CollisionEffect precedent (see Passby3DControl above).
+// ARTIST 0x82F2F98C: {0x40000, "PassbyEffect", BrnEffectObject, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> PassbyEffect::sTypeInfo(
+    262144, "PassbyEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &PassbyEffect::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* PassbyEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x40000, "PassbyEffect",
-        CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &PassbyEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* PassbyEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* PassbyEffect::GetTypeName() const
 {
-    return "PassbyEffect";
+    return sTypeInfo.typeName;
 }
 
 // The CRT registration at 0x82C633B4. Without it StateManager::CreateEffectObject finds no
 // ObjectID 0x40000 and every PassbyState's CreateSFXObjs fires "Failed to find Effect Object".
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpPassbyEffectReg =
-    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(PassbyEffect::GetStaticTypeInfo());
 
 // ---------------------------------------------------------------------------
 // GetController  @ 0x82685D38: `subfic r11, r4, 0 ; subfe r3, r11, r11` -- controller 0 is

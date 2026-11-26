@@ -61,7 +61,10 @@ CollisionControl::CollisionControl()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::EffectControl* CollisionControl::CreateObject(u32 luType)
 {
-    return new ("CollisionControl", luType != 0) CollisionControl();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) CollisionControl();
+    else
+        return new (sTypeInfo.typeName, true) CollisionControl();
 }
 
 // ---------------------------------------------------------------------------
@@ -84,22 +87,23 @@ CollisionControl::~CollisionControl()
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
 CollisionControl::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
-        0x50000, "CollisionControl",
-        CgsSound::Logic::EffectControl::GetStaticTypeInfo(),
-        &CollisionControl::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
 CollisionControl::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
+
+// ARTIST 0x82F2F92C: {0x50000, "CollisionControl", BrnEffectControl, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> CollisionControl::sTypeInfo(
+    0x50000, "CollisionControl", &BrnSound::Logic::BrnEffectControl::sTypeInfo, &CollisionControl::CreateObject);
 
 const char* CollisionControl::GetTypeName() const
 {
-    return "CollisionControl";
+    return sTypeInfo.typeName;
 }
 
 s32 CollisionControl::GetController(s32 aiIndex)
@@ -186,10 +190,6 @@ void CollisionControl::UpdateParams(f32 /*afDeltaTime*/)
     }
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const
-    gpCollisionControlReg =
-        CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(
-            CollisionControl::GetStaticTypeInfo());
 
 } // namespace Collision
 } // namespace Logic

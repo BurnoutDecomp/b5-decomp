@@ -61,6 +61,10 @@ struct Brn3DUserSpaceEffectControl : public BrnSound::Logic::Brn3DEffectControl
 
     // Vector deleting destructor @ 0x826E0D60 -- out-of-line; see .cpp (empty body).
     virtual ~Brn3DUserSpaceEffectControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2E82C)
 
     virtual void UpdateParams(f32 afDeltaTime) ;
     virtual void AttachEmitterPosition(const Vector3* apPosition) ;

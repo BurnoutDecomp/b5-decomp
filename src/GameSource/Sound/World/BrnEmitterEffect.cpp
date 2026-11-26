@@ -52,36 +52,36 @@ EmitterEffect::~EmitterEffect()
 {
 }
 
+// ARTIST 0x82F2F81C: {0x70000, "EmitterEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> EmitterEffect::sTypeInfo(
+    0x70000, "EmitterEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &EmitterEffect::CreateObject);
+
 const char* EmitterEffect::GetTypeName() const
 {
-    return "EmitterEffect";
+    return sTypeInfo.typeName;
 }
 
 CgsSound::Logic::EffectObject* EmitterEffect::CreateObject(u32 luType)
 {
-    return new ("EmitterEffect", luType != 0) EmitterEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) EmitterEffect();
+    else
+        return new (sTypeInfo.typeName, true) EmitterEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 EmitterEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>
-        sTypeInfo(0x70000, "EmitterEffect",
-                  CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-                  &EmitterEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 EmitterEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
-    gpEmitterEffectReg =
-        CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
-            EmitterEffect::GetStaticTypeInfo());
 
 s32 EmitterEffect::GetController(s32 aiIndex)
 {

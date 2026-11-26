@@ -80,6 +80,7 @@ struct CollisionEffect : public BrnSound::Logic::BrnEffectObject
     // dtor); this leaf adds nothing of its own. Out-of-line so the deleting-destructor
     // thunk is emitted in this class's own TU.
     virtual ~CollisionEffect();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F91C)
 
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
     virtual const char* GetTypeName() const ;
@@ -188,6 +189,7 @@ struct Collision3DControl : public BrnSound::Logic::Brn3DUserSpaceEffectControl
     using CgsSound::Logic::Cgs3dEffectControl::mDebugRenderingMessageData;
     Collision3DControl();          // @ 0x826E88D0
     virtual ~Collision3DControl(); // @ 0x826F8168
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F90C)
 
     // BrnCollisionEffect.h:199 (DWARF) -- the RTTI factory hook (@ 0x826F80E8).
     // Non-virtual, non-const; returns the EffectControl* base view.

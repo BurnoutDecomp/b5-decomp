@@ -119,7 +119,10 @@ StreamingStateManager* StreamingState::GetStreamingStateManager() const
 
 CgsSound::Logic::State* StreamingState::CreateObject(u32 luType)
 {
-    return new (sTypeInfo.typeName, luType != 0) StreamingState();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) StreamingState();
+    else
+        return new (sTypeInfo.typeName, true) StreamingState();
 }
 
 // ARTIST 0x82F2E83C.

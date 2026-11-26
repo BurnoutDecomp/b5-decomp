@@ -66,6 +66,7 @@ struct Passby3DControl : public BrnSound::Logic::Brn3DEffectControl
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
     virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();   // h:35
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2F97C)
     static CgsSound::Logic::EffectControl* CreateObject(u32 auAllocator);
 };
 
@@ -94,6 +95,7 @@ struct PassbyEffect : public BrnSound::Logic::BrnEffectObject
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
     virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();    // h:43
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2F98C)
     static CgsSound::Logic::EffectObject* CreateObject(u32 auAllocator);
 
     virtual s32  GetController(s32 aiIndex) ;                                // cpp:106

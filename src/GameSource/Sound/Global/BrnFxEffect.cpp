@@ -30,29 +30,32 @@ namespace Logic
 
 CgsSound::Logic::EffectObject* FxEffect::CreateObject(u32 luType)
 {
-    return new ("FxEffect", luType != 0) FxEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) FxEffect();
+    else
+        return new (sTypeInfo.typeName, true) FxEffect();
 }
+
+// ARTIST 0x82F2F8BC: {0x30, "FxEffect", BrnEffectObject, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> FxEffect::sTypeInfo(
+    48, "FxEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &FxEffect::CreateObject);
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* FxEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x30, "FxEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &FxEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* FxEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* FxEffect::GetTypeName() const
 {
-    return "FxEffect";
+    return sTypeInfo.typeName;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpFxEffectReg =
-    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(FxEffect::GetStaticTypeInfo());
 
 // ---------------------------------------------------------------------------
 // FxEffect::FxEffect  @ 0x826C9288

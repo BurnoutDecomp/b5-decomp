@@ -64,6 +64,7 @@ struct AIPhysicsControl : public PhysicsControl
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;                                             // @ 0x82685300
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2F638)
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );                   // @ 0x826E4558
 
     virtual bool Attach();                                                               // @ 0x826CE860 (DWARF cpp:118)

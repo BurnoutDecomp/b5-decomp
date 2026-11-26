@@ -103,32 +103,34 @@ PresentationEffect::~PresentationEffect()
 
 CgsSound::Logic::EffectObject* PresentationEffect::CreateObject(u32 luType)
 {
-    return new ("PresentationEffect", luType != 0) PresentationEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) PresentationEffect();
+    else
+        return new (sTypeInfo.typeName, true) PresentationEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 PresentationEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x00, "PresentationEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &PresentationEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
 PresentationEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
+
+// ARTIST 0x82F2F8CC: {0x0, "PresentationEffect", BrnEffectObject, CreateObject}, registered by
+// its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> PresentationEffect::sTypeInfo(
+    0x0, "PresentationEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &PresentationEffect::CreateObject);
 
 const char* PresentationEffect::GetTypeName() const
 {
-    return "PresentationEffect";
+    return sTypeInfo.typeName;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
-    gpPresentationEffectReg = CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
-        PresentationEffect::GetStaticTypeInfo());
 
 bool PresentationEffect::Attach()
 {

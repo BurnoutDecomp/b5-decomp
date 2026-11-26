@@ -36,7 +36,10 @@ const char* BrnState::GetTypeName() const
 
 CgsSound::Logic::State* BrnState::CreateObject(u32 luFlavour)
 {
-    return new (sTypeInfo.typeName, luFlavour != 0) BrnState(); // ARTIST 0x826C8390
+    if (luFlavour == 0)
+        return new (sTypeInfo.typeName, false) BrnState(); // ARTIST 0x826C8390
+    else
+        return new (sTypeInfo.typeName, true) BrnState();
 }
 
 } // namespace Logic

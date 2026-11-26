@@ -62,6 +62,10 @@ struct InAirEffect : public BrnSound::Logic::BrnEffectObject
 
     InAirEffect();
     virtual ~InAirEffect();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F6F0)
 
     const char* GetTypeName() const ;
     s32 GetController(s32 aiSlot) ;
@@ -108,6 +112,7 @@ struct TrafficInAir : public InAirEffect
 {
     TrafficInAir();
     virtual ~TrafficInAir();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F710)
 
     static CgsSound::Logic::EffectObject* CreateObject(u32 luType);
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
@@ -128,6 +133,7 @@ struct JunkyardInAirEffect : public InAirEffect
 {
     JunkyardInAirEffect();
     virtual ~JunkyardInAirEffect();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F700)
 
     static CgsSound::Logic::EffectObject* CreateObject(u32 luType);
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;

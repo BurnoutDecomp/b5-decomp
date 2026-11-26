@@ -65,6 +65,11 @@ struct SweetenersEffect : public BrnSound::Logic::BrnEffectObject
 
     SweetenersEffect();
     virtual ~SweetenersEffect();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F670)
 
     virtual s32 GetController(s32 aiSlot);
     virtual void AttachController(CgsSound::Logic::EffectBase* apController);

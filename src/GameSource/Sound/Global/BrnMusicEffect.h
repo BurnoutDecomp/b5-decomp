@@ -262,6 +262,7 @@ public:
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
     const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF: static data member (ARTIST 0x82F2F8AC)
     static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
     bool Attach() ;
     void UpdateParams(f32 afDeltaTime) ;

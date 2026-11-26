@@ -99,6 +99,11 @@ struct Brn3DEffectControl : public CgsSound::Logic::Cgs3dEffectControl
 
     // Scalar deleting destructor @ 0x826C85F8 — out-of-line; see Brn3DEffectControl.cpp.
     virtual ~Brn3DEffectControl();
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2E81C)
 
     // BrnEffectControl.h:149 (DWARF) — generated globalenginedata attribute handle.
     // Modelled as the Attrib::Instance sub-object slice the destructor tears down.

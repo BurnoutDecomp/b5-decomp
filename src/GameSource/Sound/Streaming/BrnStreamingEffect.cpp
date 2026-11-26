@@ -118,29 +118,32 @@ StreamingEffect::~StreamingEffect()
 
 CgsSound::Logic::EffectObject* StreamingEffect::CreateObject(u32 luType)
 {
-    return new ("StreamingEffect", luType != 0) StreamingEffect();
+    if (luType == 0)
+        return new (sTypeInfo.typeName, false) StreamingEffect();
+    else
+        return new (sTypeInfo.typeName, true) StreamingEffect();
 }
+
+// ARTIST 0x82F2E85C: {0x60000, "StreamingEffect", BrnEffectObject, CreateObject}, registered
+// by its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> StreamingEffect::sTypeInfo(
+    393216, "StreamingEffect", &BrnSound::Logic::BrnEffectObject::sTypeInfo, &StreamingEffect::CreateObject);
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* StreamingEffect::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        0x60000, "StreamingEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &StreamingEffect::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* StreamingEffect::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* StreamingEffect::GetTypeName() const
 {
-    return "StreamingEffect";
+    return sTypeInfo.typeName;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpStreamingEffectReg =
-    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(StreamingEffect::GetStaticTypeInfo());
 
 bool StreamingEffect::Attach()
 {
