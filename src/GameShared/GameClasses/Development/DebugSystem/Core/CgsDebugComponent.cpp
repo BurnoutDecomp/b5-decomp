@@ -340,17 +340,16 @@ namespace CgsDev
 
     // ARTIST 0x82831F70: expand the one-shot component row, then open the component menu that its
     // OnActivate registration just created.
-    void DebugComponent::DebugUISectionCallback(void* lpUserData)
+    // DWARF (CgsDevelopmentUnity) names only lpThis (cpp:158) and lacFullPath (cpp:165); ARTIST
+    // reads mpInstance again after GetComponentPath (0x82831FA8) and inlines the path overload of
+    // MenuManager::Open (no ARTIST body of its own).
+    void DebugComponent::DebugUISectionCallback(void* lpParam)
     {
-        DebugComponent* lpComponent = static_cast<DebugComponent*>(lpUserData);
-        DebugManager* lpManager = DebugManager::GetInstance();
-        lpManager->ActivateComponent(lpComponent);
+        DebugComponent* lpThis = static_cast<DebugComponent*>(lpParam);
+        DebugManager::GetInstance()->ActivateComponent(lpThis);
 
-        char lacPath[256];
-        lpComponent->GetComponentPath(lacPath, sizeof(lacPath));
-        DebugUI::MenuManager& lrMenuManager = lpManager->GetUI().GetMenuManager();
-        DebugUI::Menu* lpMenu = lrMenuManager.GetMenuFromPath(lacPath, 0);
-        if (lpMenu)
-            lrMenuManager.Open(lpMenu);
+        char lacFullPath[256];
+        lpThis->GetComponentPath(lacFullPath, sizeof(lacFullPath));
+        DebugManager::GetInstance()->GetUI().GetMenuManager().Open(lacFullPath, 0);
     }
 }

@@ -197,7 +197,7 @@ namespace CgsDev
     private:
         // Static so it can be registered as a DebugUI::Function callback (X360 RegisterComponent
         // passes &DebugUISectionCallback with the component as the user-data).
-        static void DebugUISectionCallback(void* lpUserData);
+        static void DebugUISectionCallback(void* lpParam);
 
         bool            mbActive;
         DebugComponent* mpDebugLinkedListNext;
