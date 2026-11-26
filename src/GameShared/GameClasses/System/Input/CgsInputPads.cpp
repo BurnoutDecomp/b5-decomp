@@ -88,12 +88,14 @@ namespace CgsInput
         for (u32 luPadIndex = 0; luPadIndex < KU_NUMBER_OF_PADS; ++luPadIndex)
         {
             // per-player bind record + per-port resolved-player id + override ptr
-            maPlayers[luPadIndex].mbBound = false;          // +1928 + 8*i
-            maPlayers[luPadIndex].miPort  = -1;             // +1932 + 8*i
+            maPlayers[luPadIndex].Construct();               // +1928 + 8*i
             maiPortToPlayer[luPadIndex]   = -1;             // +1960 + 4*i
             mauOverrideDeviceState[luPadIndex] = 0;          // X360 const DeviceState* (4-byte slot), null   // +3328 + 4*i
 
-            std::memset(maaMapping[luPadIndex], -1, sizeof(maaMapping[luPadIndex]));
+            for (u32 j = 0; j < InputIO::PadMapping::KI_NUM_ACTION_MAPPINGS; ++j)
+            {
+                maaMapping[luPadIndex][j].Construct();
+            }
         }
 
         // action-down bitmap: 2 * KU_NUMBER_OF_PADS * 112 bytes cleared (0x380 == 896)
@@ -105,14 +107,14 @@ namespace CgsInput
         {
             for (u32 luIdx = 0; luIdx < KU_MAX_NUMBER_OF_JOLT_EFFECTS; ++luIdx)
             {
-                mafJoltTime[luPort][luIdx]             = 0.0f;
                 maiJoltEffectPriorities[luPort][luIdx] = -1;
+                mafJoltTime[luPort][luIdx]             = 0.0f;
             }
             for (u32 luIdx = 0; luIdx < KU_MAX_NUMBER_OF_RUMBLE_EFFECTS; ++luIdx)
             {
-                mafRumbleTime[luPort][luIdx]              = 0.0f;
                 maiRumbleIds[luPort][luIdx]               = -1;
                 maiRumbleEffectPriorities[luPort][luIdx]  = -1;
+                mafRumbleTime[luPort][luIdx]              = 0.0f;
             }
         }
 
@@ -137,18 +139,20 @@ namespace CgsInput
             mbPrepared = true;
         }
 
+        // The -1 stores precede the time in each row, as in the PS3 body (DecFIGS 0xCFD2B4); ARTIST
+        // bases each row on its highest array (0x828E72DC addi r11,r6,0x10b0).
         for (u32 luPort = 0; luPort < KU_NUMBER_OF_PADS; ++luPort)
         {
             for (u32 luIdx = 0; luIdx < KU_MAX_NUMBER_OF_JOLT_EFFECTS; ++luIdx)
             {
-                mafJoltTime[luPort][luIdx]             = 0.0f;
                 maiJoltEffectPriorities[luPort][luIdx] = -1;
+                mafJoltTime[luPort][luIdx]             = 0.0f;
             }
             for (u32 luIdx = 0; luIdx < KU_MAX_NUMBER_OF_RUMBLE_EFFECTS; ++luIdx)
             {
-                mafRumbleTime[luPort][luIdx]             = 0.0f;
                 maiRumbleIds[luPort][luIdx]              = -1;
                 maiRumbleEffectPriorities[luPort][luIdx] = -1;
+                mafRumbleTime[luPort][luIdx]             = 0.0f;
             }
         }
 
@@ -347,46 +351,41 @@ namespace CgsInput
     //   t >= attack+decay+sustain+release   -> 0
     //   otherwise (release)                 -> lerp sustain->0 over the release window
     // ------------------------------------------------------------------------------------------------
-    // The two `>=` tests are each ONE condition bit on the console, `fcmpu ; bge` (bc 4,lt), which is
-    // TAKEN on an unordered compare, so they are spelled `!(t < x)`: a NaN time skips the assert
-    // (0x828E7640 fcmpu t, 0.0 (flt_82001CC0) ; 0x828E7644 bge -> 0x828E7668) and leaves through the
-    // last test to 0.0 (0x828E76D4 fcmpu t, end ; 0x828E76D8 bge -> 0x828E76F4 fmr f1, f30 (0.0)).
-    // The three `<` tests branch past their arm with a bge too (0x828E7670, 0x828E7688, 0x828E76B8):
-    // a NaN skips each arm, as the PC `<` does. Both lerps are ONE fmadds (0x828E76A0, 0x828E76EC),
-    // so the native XDK must keep each scalar expression fused to one fmadds.
+    // The assert's `>=` is ONE condition bit on the console, `fcmpu ; bge` (bc 4,lt), which is TAKEN on
+    // an unordered compare, so it is spelled `!(t < x)`: a NaN time skips the assert (0x828E7640
+    // fcmpu t, 0.0 (flt_82001CC0) ; 0x828E7644 bge -> 0x828E7668). Every `<` test branches past its
+    // arm with a bge (0x828E7670, 0x828E7688, 0x828E76B8, 0x828E76D8), so a NaN time ends at 0.0
+    // (0x828E76F4 fmr f1, f30).
     f32 InputPads::UpdateJoltEnvelope(const InputIO::JoltEnvelope& lEnvelope, f32 lfTime)
     {
-        CGS_ASSERT(!(lfTime < 0.0f), "lfTime >= 0.0f");                       // cpp :843 (0x34B)
+        CGS_ASSERT_AT(!(lfTime < 0.0f), "lfTime >= 0.0f", CGS_ARTIST_FILE, 843);
 
-        const f32 lfAttack  = lEnvelope.mfAttackTime;
-        const f32 lfDecay   = lEnvelope.mfDecayTime;
-        const f32 lfSustain = lEnvelope.mfSustainTime;
-        const f32 lfRelease = lEnvelope.mfReleaseTime;
-        const f32 lfPeak    = lEnvelope.mfPeakSpeedValue;
-        const f32 lfLevel   = lEnvelope.mfSustainSpeedValue;
-
-        if (lfTime < lfAttack)
+        // DWARF cpp:844 declares lfTimeParam, and the two ramps are rw::math::fpu::Lerp<float>
+        // (a + (b - a) * t, one fmadds each: 0x828E76A0, 0x828E76EC). ARTIST reads every envelope
+        // field where its test needs it (0x828E7668..0x828E76E0).
+        f32 lfTimeParam;
+        if (lfTime < lEnvelope.mfAttackTime)
         {
-            return lfPeak;
+            return lEnvelope.mfPeakSpeedValue;
         }
-        if (lfTime < lfDecay + lfAttack)
+        if (lfTime < lEnvelope.mfDecayTime + lEnvelope.mfAttackTime)
         {
-            // 0x828E768C fsubs t-attack ; 0x828E7698 fdivs /decay ; 0x828E769C fsubs level-peak ;
-            // 0x828E76A0 fmadds f1 = ratio * (level - peak) + peak.
-            return ((lfTime - lfAttack) / lfDecay) * (lfLevel - lfPeak) + lfPeak;
+            lfTimeParam = (lfTime - lEnvelope.mfAttackTime) / lEnvelope.mfDecayTime;
+            return lEnvelope.mfPeakSpeedValue
+                 + (lEnvelope.mfSustainSpeedValue - lEnvelope.mfPeakSpeedValue) * lfTimeParam;
         }
-        const f32 lfSustainEnd = (lfSustain + lfDecay) + lfAttack;
-        if (lfTime < lfSustainEnd)
+        if (lfTime < lEnvelope.mfSustainTime + lEnvelope.mfDecayTime + lEnvelope.mfAttackTime)
         {
-            return lfLevel;
+            return lEnvelope.mfSustainSpeedValue;
         }
-        if (!(lfTime < ((lfRelease + lfSustain) + lfDecay) + lfAttack))
+        if (lfTime < lEnvelope.mfReleaseTime + lEnvelope.mfSustainTime + lEnvelope.mfDecayTime
+                     + lEnvelope.mfAttackTime)
         {
-            return 0.0f;
+            lfTimeParam = (lfTime - (lEnvelope.mfSustainTime + lEnvelope.mfDecayTime + lEnvelope.mfAttackTime))
+                        / lEnvelope.mfReleaseTime;
+            return lEnvelope.mfSustainSpeedValue + (0.0f - lEnvelope.mfSustainSpeedValue) * lfTimeParam;
         }
-        // 0x828E76DC fsubs t-sustainEnd ; 0x828E76E4 fneg level ; 0x828E76E8 fdivs /release ;
-        // 0x828E76EC fmadds f1 = ratio * -level + level.
-        return ((lfTime - lfSustainEnd) / lfRelease) * (-lfLevel) + lfLevel;
+        return 0.0f;
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -408,19 +407,18 @@ namespace CgsInput
             liPort = maPlayers[liPlayer].miPort;
         }
 
-        u32 luJoltIndex = 0;
-        while (lJoltEvent.miRumblePriority <= maiJoltEffectPriorities[liPort][luJoltIndex])
+        // DWARF cpp:527 scopes luJoltIndex to the loop; ARTIST takes the first slot the new
+        // priority beats and returns from inside the loop (0x828DC188 bgt -> 0x828DC1A4).
+        for (u32 luJoltIndex = 0; luJoltIndex < KU_MAX_NUMBER_OF_JOLT_EFFECTS; ++luJoltIndex)
         {
-            ++luJoltIndex;
-            if (luJoltIndex >= KU_MAX_NUMBER_OF_JOLT_EFFECTS)
+            if (lJoltEvent.miRumblePriority > maiJoltEffectPriorities[liPort][luJoltIndex])
             {
+                maJoltEffects[liPort][luJoltIndex]           = lJoltEvent.mJoltEffect;
+                mafJoltTime[liPort][luJoltIndex]             = 0.0f;
+                maiJoltEffectPriorities[liPort][luJoltIndex] = lJoltEvent.miRumblePriority;
                 return;
             }
         }
-
-        maJoltEffects[liPort][luJoltIndex]           = lJoltEvent.mJoltEffect;
-        mafJoltTime[liPort][luJoltIndex]             = 0.0f;
-        maiJoltEffectPriorities[liPort][luJoltIndex] = lJoltEvent.miRumblePriority;
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -441,21 +439,20 @@ namespace CgsInput
             liPort = maPlayers[liPlayer].miPort;
         }
 
-        u32 luRumbleIndex = 0;
-        while (lRumbleEvent.miRumblePriority <= maiRumbleEffectPriorities[liPort][luRumbleIndex])
+        // DWARF cpp:570 scopes luRumbleIndex to the loop; ARTIST fills the first slot the new
+        // priority beats and returns from inside the loop (0x828DC268 bgt -> 0x828DC284).
+        for (u32 luRumbleIndex = 0; luRumbleIndex < KU_MAX_NUMBER_OF_RUMBLE_EFFECTS; ++luRumbleIndex)
         {
-            ++luRumbleIndex;
-            if (luRumbleIndex >= KU_MAX_NUMBER_OF_RUMBLE_EFFECTS)
+            if (lRumbleEvent.miRumblePriority > maiRumbleEffectPriorities[liPort][luRumbleIndex])
             {
+                maRumbleEffects[liPort][luRumbleIndex]           = lRumbleEvent.mJoltEffect;
+                mafRumbleTime[liPort][luRumbleIndex]             = 0.0f;
+                maiRumbleEffectPriorities[liPort][luRumbleIndex] = lRumbleEvent.miRumblePriority;
+                maiRumbleIds[liPort][luRumbleIndex]              = lRumbleEvent.miRumbleId;
+                mafRumbleVolume[liPort][luRumbleIndex]           = lRumbleEvent.mfRumbleVolume;
                 return;
             }
         }
-
-        maRumbleEffects[liPort][luRumbleIndex]           = lRumbleEvent.mJoltEffect;
-        mafRumbleTime[liPort][luRumbleIndex]             = 0.0f;
-        maiRumbleEffectPriorities[liPort][luRumbleIndex] = lRumbleEvent.miRumblePriority;
-        maiRumbleIds[liPort][luRumbleIndex]              = lRumbleEvent.miRumbleId;
-        mafRumbleVolume[liPort][luRumbleIndex]           = lRumbleEvent.mfRumbleVolume;
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -480,18 +477,17 @@ namespace CgsInput
             liPort = maPlayers[liPlayer].miPort;
         }
 
-        u32 luRumbleIndex = 0;
-        while (lChangeVolumeRumbleEvent.miRumbleId != maiRumbleIds[liPort][luRumbleIndex])
+        // DWARF cpp:617 scopes luRumbleIndex to the loop; ARTIST updates the matching slot and
+        // returns from inside the loop (0x828DC364 beq -> 0x828DC37C).
+        for (u32 luRumbleIndex = 0; luRumbleIndex < KU_MAX_NUMBER_OF_RUMBLE_EFFECTS; ++luRumbleIndex)
         {
-            ++luRumbleIndex;
-            if (luRumbleIndex >= KU_MAX_NUMBER_OF_RUMBLE_EFFECTS)
+            if (lChangeVolumeRumbleEvent.miRumbleId == maiRumbleIds[liPort][luRumbleIndex])
             {
+                mafRumbleVolume[liPort][luRumbleIndex] = lChangeVolumeRumbleEvent.mfRumbleVolume;
+                maRumbleEffects[liPort][luRumbleIndex] = lChangeVolumeRumbleEvent.mJoltEffect;
                 return;
             }
         }
-
-        mafRumbleVolume[liPort][luRumbleIndex] = lChangeVolumeRumbleEvent.mfRumbleVolume;
-        maRumbleEffects[liPort][luRumbleIndex] = lChangeVolumeRumbleEvent.mJoltEffect;
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -506,48 +502,42 @@ namespace CgsInput
     // ------------------------------------------------------------------------------------------------
     EBindResult InputPads::BindPlayerToPort(s32 liPlayer, s32 liPort)
     {
-        if (static_cast<u32>(liPlayer) > KU_NUMBER_OF_PADS - 1)
+        // Both bounds asserts stream into the shared assert buffer (DWARF lStrStream at cpp:432
+        // and :437; gpcMessageBuffer 0x82F32260), the bound through the u32 operator<<
+        // (0x821F0EC8, the index through 0x821F0E50).
+        if (liPlayer < 0 || liPlayer >= static_cast<s32>(KU_NUMBER_OF_PADS))
         {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Player out of bounds. 0 <= " << liPlayer << " < " << static_cast<s32>(KU_NUMBER_OF_PADS) << "\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage,
-                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 432));
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT_STREAM_AT(false,
+                "Player out of bounds. 0 <= " << liPlayer << " < " << KU_NUMBER_OF_PADS << "\n",
+                CGS_ARTIST_FILE, 432);
             return E_BINDRESULTINVALIDPLAYER;
         }
-        if (static_cast<u32>(liPort) > KU_NUMBER_OF_PADS - 1)
+        if (liPort < 0 || liPort >= static_cast<s32>(KU_NUMBER_OF_PADS))
         {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Port out of bounds. 0 <= " << liPort << " < " << static_cast<s32>(KU_NUMBER_OF_PADS) << "\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage,
-                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 437));
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT_STREAM_AT(false,
+                "Port out of bounds. 0 <= " << liPort << " < " << KU_NUMBER_OF_PADS << "\n",
+                CGS_ARTIST_FILE, 437);
             return E_BINDRESULTINVALIDPORT;
         }
 
-        InputPlayer& lrPlayer = maPlayers[liPlayer];
-        if (lrPlayer.mbBound)
+        if (maPlayers[liPlayer].mbBound)
         {
             if (maiPortToPlayer[liPort] == liPlayer)
             {
                 return E_BINDRESULTOK;
             }
-            CGS_ASSERT(false, "Player is already bound to another port. Unbind first");   // :448
+            CGS_ASSERT_AT(false, "Player is already bound to another port. Unbind first", CGS_ARTIST_FILE, 448);
             return E_BINDRESULTPLAYERALREADYBOUND;
         }
         if (maiPortToPlayer[liPort] != -1)
         {
-            CGS_ASSERT(false, "Port is already bound. Unbind first");                     // :453
+            CGS_ASSERT_AT(false, "Port is already bound. Unbind first", CGS_ARTIST_FILE, 453);
             return E_BINDRESULTPORTALREADYBOUND;
         }
 
-        lrPlayer.miPort           = liPort;
-        lrPlayer.mbBound          = true;
-        maiPortToPlayer[liPort]   = liPlayer;
+        // DWARF: InputPlayer::Bind then InputPort::Bind (the port's player slot here).
+        maPlayers[liPlayer].Bind(liPort);
+        maiPortToPlayer[liPort] = liPlayer;
         return E_BINDRESULTOK;
     }
 
@@ -560,28 +550,27 @@ namespace CgsInput
     // ------------------------------------------------------------------------------------------------
     EUnbindResult InputPads::UnBindPlayer(s32 liPlayer)
     {
-        if (static_cast<u32>(liPlayer) > KU_NUMBER_OF_PADS - 1)
+        // ARTIST 0x828E7544: the shared assert stream (gpcMessageBuffer) at cpp:479, the bound
+        // streamed through a different operator<< from the player's (0x821F0EC8 vs 0x821F0E50),
+        // so it goes in as the u32 constant.
+        if (liPlayer < 0 || liPlayer >= static_cast<s32>(KU_NUMBER_OF_PADS))
         {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Player out of bounds. 0 <= " << liPlayer << " < " << static_cast<s32>(KU_NUMBER_OF_PADS) << "\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage,
-                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 479));
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT_STREAM_AT(false,
+                "Player out of bounds. 0 <= " << liPlayer << " < " << KU_NUMBER_OF_PADS << "\n",
+                CGS_ARTIST_FILE, 479);
             return E_UNBINDRESULTINVALIDPLAYER;
         }
 
-        InputPlayer& lrPlayer = maPlayers[liPlayer];
-        if (!lrPlayer.mbBound)
+        if (!maPlayers[liPlayer].mbBound)
         {
-            CGS_ASSERT(false, "Player is already unbound");
+            CGS_ASSERT_AT(false, "Player is already unbound", CGS_ARTIST_FILE, 484);
             return E_UNBINDRESULTPLAYERNOTBOUND;
         }
 
-        const s32 liPort = lrPlayer.miPort;
-        lrPlayer.mbBound = false;
-        lrPlayer.miPort  = -1;
+        // DWARF cpp:487 liPort, then InputPlayer::UnBind and InputPort::UnBind (the port record
+        // is the -1 player slot here).
+        const s32 liPort = maPlayers[liPlayer].GetPort();
+        maPlayers[liPlayer].UnBind();
         maiPortToPlayer[liPort] = -1;
         return E_UNBINDRESULTOK;
     }
@@ -627,20 +616,19 @@ namespace CgsInput
             liPort = maPlayers[liPlayer].miPort;
         }
 
-        u32 luRumbleIndex = 0;
-        while (lStopRumbleEvent.miRumbleId != maiRumbleIds[liPort][luRumbleIndex])
+        // DWARF cpp:661 scopes luRumbleIndex to the loop; ARTIST clears the matching slot and
+        // returns from inside the loop.
+        for (u32 luRumbleIndex = 0; luRumbleIndex < KU_MAX_NUMBER_OF_RUMBLE_EFFECTS; ++luRumbleIndex)
         {
-            ++luRumbleIndex;
-            if (luRumbleIndex >= KU_MAX_NUMBER_OF_RUMBLE_EFFECTS)
+            if (lStopRumbleEvent.miRumbleId == maiRumbleIds[liPort][luRumbleIndex])
             {
+                mafRumbleTime[liPort][luRumbleIndex]             = 0.0f;
+                mafRumbleVolume[liPort][luRumbleIndex]           = 0.0f;
+                maiRumbleEffectPriorities[liPort][luRumbleIndex] = -1;
+                maiRumbleIds[liPort][luRumbleIndex]              = -1;
                 return;
             }
         }
-
-        mafRumbleTime[liPort][luRumbleIndex]             = 0.0f;
-        mafRumbleVolume[liPort][luRumbleIndex]           = 0.0f;
-        maiRumbleEffectPriorities[liPort][luRumbleIndex] = -1;
-        maiRumbleIds[liPort][luRumbleIndex]              = -1;
     }
 
     // ------------------------------------------------------------------------------------------------

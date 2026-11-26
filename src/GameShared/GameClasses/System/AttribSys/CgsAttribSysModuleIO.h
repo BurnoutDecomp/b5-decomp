@@ -47,9 +47,25 @@ namespace AttribSysIO
     // so the first data member sits at the event payload's offset 0 (matches the X360 asm
     // reading the request fields from a2[0..4]).
 
+    // ARTIST's __FILE__ for the request events' Construct asserts (string 0x82002820): the
+    // original declares these events in CgsAttribSysSharedIO_Events.h.
+#define CGS_ARTIST_ATTRIBSYS_EVENTS_FILE "..\\..\\..\\GameShared\\GameClasses\\System/AttribSys/CgsAttribSysSharedIO_Events.h"
+
     // type 0
     struct RegisterVaultRequest : public Event
     {
+        // DWARF CgsAttribSysSharedIO_Events.h:87; its assert is the header's line 322
+        // (RegisterVault @0x8229D780).
+        void Construct(BaseEventReceiverQueue* lpUserReceiverQueue, ResourceHandle lVaultResourceHandle,
+                       s32 liEventId, EAttribSysVaultType leVaultType)
+        {
+            CGS_ASSERT_AT(lpUserReceiverQueue, "lpUserReceiverQueue", CGS_ARTIST_ATTRIBSYS_EVENTS_FILE, 322);
+            mpUserReceiverQueue  = lpUserReceiverQueue;
+            mVaultResourceHandle = lVaultResourceHandle;
+            miEventId            = liEventId;
+            meVaultType          = leVaultType;
+        }
+
         BaseEventReceiverQueue* mpUserReceiverQueue;
         ResourceHandle          mVaultResourceHandle;
         s32                     miEventId;
@@ -59,6 +75,19 @@ namespace AttribSysIO
     // type 1
     struct RegisterSchemaRequest : public Event
     {
+        // DWARF CgsAttribSysSharedIO_Events.h:160; its assert is the header's line 380
+        // (RegisterSchema @0x826731A0).
+        void Construct(BaseEventReceiverQueue* lpUserReceiverQueue, void* lpSchemaVltData,
+                       s32 liSchemaVltDataSize, void* lpSchemaBinData, s32 liSchemaBinDataSize)
+        {
+            CGS_ASSERT_AT(lpUserReceiverQueue, "lpUserReceiverQueue", CGS_ARTIST_ATTRIBSYS_EVENTS_FILE, 380);
+            mpUserReceiverQueue = lpUserReceiverQueue;
+            mpSchemaVltData     = lpSchemaVltData;
+            miSchemaVltDataSize = liSchemaVltDataSize;
+            mpSchemaBinData     = lpSchemaBinData;
+            miSchemaBinDataSize = liSchemaBinDataSize;
+        }
+
         BaseEventReceiverQueue* mpUserReceiverQueue;   // a2[0] -- AddEvent target queue
         void*                   mpSchemaVltData;       // a2[1] -- serialised vault image
         s32                     miSchemaVltDataSize;   // a2[2]
@@ -69,6 +98,17 @@ namespace AttribSysIO
     // type 2
     struct UnregisterVaultRequest : public Event
     {
+        // DWARF CgsAttribSysSharedIO_Events.h:226; its assert is the header's line 480
+        // (UnregisterVault @0x82673214).
+        void Construct(BaseEventReceiverQueue* lpUserReceiverQueue, ResourceHandle lVaultResourceHandle,
+                       s32 liEventId)
+        {
+            CGS_ASSERT_AT(lpUserReceiverQueue, "lpUserReceiverQueue", CGS_ARTIST_ATTRIBSYS_EVENTS_FILE, 480);
+            mpUserReceiverQueue  = lpUserReceiverQueue;
+            mVaultResourceHandle = lVaultResourceHandle;
+            miEventId            = liEventId;
+        }
+
         BaseEventReceiverQueue* mpUserReceiverQueue;
         ResourceHandle          mVaultResourceHandle;
         s32                     miEventId;

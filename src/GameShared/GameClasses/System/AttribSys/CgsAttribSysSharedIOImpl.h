@@ -22,6 +22,10 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+// ARTIST's __FILE__ for the request builders' asserts (RegisterSchema @0x826730EC passes this
+// spelling of CgsAttribSysSharedIO.h, the original home of these template bodies).
+#define CGS_ARTIST_ATTRIBSYS_SHARED_IO_FILE "..\\..\\..\\GameShared\\GameClasses\\System/AttribSys/CgsAttribSysSharedIO.h"
+
 namespace CgsAttribSys
 {
 namespace AttribSysIO
@@ -36,21 +40,19 @@ namespace AttribSysIO
             void* lpSchemaVltData, s32 liSchemaVltDataSize,
             void* lpSchemaBinData, s32 liSchemaBinDataSize)
     {
-        CGS_ASSERT(lpUserReceiverQueue != 0, "lpEventReceiverQueue != NULL");
-        CGS_ASSERT(lpSchemaVltData != 0, "lpSchemaVltData != NULL");
-        CGS_ASSERT(liSchemaVltDataSize > 0, "liSchemaVltDataSize > 0");
-        CGS_ASSERT(lpSchemaBinData != 0, "lpSchemaBinData != NULL");
-        CGS_ASSERT(liSchemaBinDataSize > 0, "liSchemaBinDataSize > 0");
-        CGS_ASSERT(lpUserReceiverQueue != 0, "lpUserReceiverQueue");
+        CGS_ASSERT_AT(lpUserReceiverQueue != 0, "lpEventReceiverQueue != NULL", CGS_ARTIST_ATTRIBSYS_SHARED_IO_FILE, 335);
+        CGS_ASSERT_AT(lpSchemaVltData != 0, "lpSchemaVltData != NULL", CGS_ARTIST_ATTRIBSYS_SHARED_IO_FILE, 336);
+        CGS_ASSERT_AT(liSchemaVltDataSize > 0, "liSchemaVltDataSize > 0", CGS_ARTIST_ATTRIBSYS_SHARED_IO_FILE, 337);
+        CGS_ASSERT_AT(lpSchemaBinData != 0, "lpSchemaBinData != NULL", CGS_ARTIST_ATTRIBSYS_SHARED_IO_FILE, 338);
+        CGS_ASSERT_AT(liSchemaBinDataSize > 0, "liSchemaBinDataSize > 0", CGS_ARTIST_ATTRIBSYS_SHARED_IO_FILE, 339);
 
+        // The event's own Construct asserts the queue again (ARTIST 0x826731A0) and the
+        // builder returns true whatever AddEvent returns (li r3,1 @0x826731DC).
         RegisterSchemaRequest lEvent;
-        lEvent.mpUserReceiverQueue  = lpUserReceiverQueue;   // +0x00 (var_60)
-        lEvent.mpSchemaVltData      = lpSchemaVltData;       // +0x04 (var_5C)
-        lEvent.miSchemaVltDataSize  = liSchemaVltDataSize;   // +0x08 (var_58)
-        lEvent.mpSchemaBinData      = lpSchemaBinData;       // +0x0C (var_54)
-        lEvent.miSchemaBinDataSize  = liSchemaBinDataSize;   // +0x10 (var_50)
-
-        return mRequestQueue.AddEvent(lEvent, 1);
+        lEvent.Construct(lpUserReceiverQueue, lpSchemaVltData, liSchemaVltDataSize,
+                         lpSchemaBinData, liSchemaBinDataSize);
+        mRequestQueue.AddEvent(lEvent, 1);
+        return true;
     }
 
     // -------- RegisterVault @ X360 0x8229D6C8 (<2048>) --------
@@ -72,17 +74,15 @@ namespace AttribSysIO
             s32 liEventId,
             EAttribSysVaultType leVaultType)
     {
-        CGS_ASSERT(lVaultResourceHandle.mpResourceMemory != 0,
-            "Trying to register a vault from a NULL resource handle");
-        CGS_ASSERT(lpUserReceiverQueue != 0, "lpUserReceiverQueue");
+        // ARTIST 0x8229D6EC tests the handle's source entry (its second word) and streams the
+        // message (CgsAttribSysSharedIO.h:303); the event's Construct asserts the queue.
+        CGS_ASSERT_STREAM_AT(lVaultResourceHandle.mpSourceEntry != 0,
+            "Trying to register a vault from a NULL resource handle", CGS_ARTIST_ATTRIBSYS_SHARED_IO_FILE, 303);
 
         RegisterVaultRequest lEvent;
-        lEvent.mpUserReceiverQueue  = lpUserReceiverQueue;   // +0x00 (var_60)
-        lEvent.mVaultResourceHandle = lVaultResourceHandle;  // +0x04 (var_5C, 8 bytes)
-        lEvent.miEventId            = liEventId;             // +0x0C (var_54)
-        lEvent.meVaultType          = leVaultType;           // +0x10 (var_50)
-
-        return mRequestQueue.AddEvent(lEvent, 0);
+        lEvent.Construct(lpUserReceiverQueue, lVaultResourceHandle, liEventId, leVaultType);
+        mRequestQueue.AddEvent(lEvent, 0);
+        return true;
     }
 
     // -------- UnregisterVault @ X360 0x826731E8 (<2048>) --------
@@ -96,14 +96,12 @@ namespace AttribSysIO
             CgsResource::ResourceHandle lVaultResourceHandle,
             s32 liEventId)
     {
-        CGS_ASSERT(lpUserReceiverQueue != 0, "lpUserReceiverQueue");
-
+        // ARTIST 0x826731E8: the event's Construct carries the only assert, and the builder
+        // returns true whatever AddEvent returns (li r3,1 @0x82673248).
         UnregisterVaultRequest lEvent;
-        lEvent.mpUserReceiverQueue  = lpUserReceiverQueue;   // +0x00 (var_40)
-        lEvent.mVaultResourceHandle = lVaultResourceHandle;  // +0x04 (var_3C, 8 bytes)
-        lEvent.miEventId            = liEventId;             // +0x0C
-
-        return mRequestQueue.AddEvent(lEvent, 2);
+        lEvent.Construct(lpUserReceiverQueue, lVaultResourceHandle, liEventId);
+        mRequestQueue.AddEvent(lEvent, 2);
+        return true;
     }
 }
 }

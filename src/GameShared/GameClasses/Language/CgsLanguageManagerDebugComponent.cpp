@@ -118,12 +118,13 @@ namespace CgsLanguage
                                                   const char* lpcLabel, const char* lpcValue,
                                                   f32 lfX, f32& lrY ) const
     {
-        lpRender->DrawText( lpcLabel, lfX, lrY, mrTextSize, KU_TEXT_COLOUR );
-
-        const f32 lfScale = mrTextSize;
-        const f32 lfY = lrY;
-        const f32 lfLabelWidth = lpRender->CalcTextWidth( lpcLabel, lfScale );
-        lpRender->DrawText( lpcValue, lfX + lfLabelWidth, lfY, lfScale, KU_TEXT_COLOUR );
+        // DWARF (CgsLanguageUnity) local lTextColour (cpp:333), held in one register across both
+        // calls (ARTIST r27); the second call's arguments are read right to left, the scale and Y
+        // before the label width (0x82860EBC..0x82860ED0).
+        CgsDev::RGBA lTextColour = KU_TEXT_COLOUR;
+        lpRender->DrawText( lpcLabel, lfX, lrY, mrTextSize, lTextColour );
+        lpRender->DrawText( lpcValue, lfX + lpRender->CalcTextWidth( lpcLabel, mrTextSize ), lrY,
+                            mrTextSize, lTextColour );
 
         lrY += mrTextSpacing * mrTextSize;
     }

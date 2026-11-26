@@ -62,9 +62,9 @@ namespace AttribSysIO
     }
 
     // @ 0x82256428 -- AttribSysRequestInterface<512>::RegisterVault (DWARF
-    // CgsAttribSysSharedIO.h:273). Assert the resource handle's memory pointer and the receiver
-    // queue are non-NULL, then enqueue a type-0 RegisterVaultRequest into the interface's request
-    // queue. Provided as an explicit member specialization so exactly the X360-attested <512>
+    // CgsAttribSysSharedIO.h:273). Assert the resource handle's source entry (streamed, the
+    // header's line 303), build the request through its Construct (which asserts the queue on
+    // CgsAttribSysSharedIO_Events.h:322), then enqueue it as type 0 and return true. Provided as an explicit member specialization so exactly the X360-attested <512>
     // symbol is emitted (an explicit `template struct ...<512>;` instantiation would also pull in
     // the not-yet-reconstructed Construct/Clear/etc. members, so it is deliberately omitted).
     //
@@ -79,16 +79,12 @@ namespace AttribSysIO
         s32 liEventId,
         EAttribSysVaultType leVaultType)
     {
-        CGS_ASSERT(lVaultResourceHandle.mpResourceMemory != 0,
-                   "Trying to register a vault from a NULL resource handle");
-        CGS_ASSERT(lpUserReceiverQueue != 0, "lpUserReceiverQueue");
+        CGS_ASSERT_STREAM_AT(lVaultResourceHandle.mpSourceEntry != 0,
+            "Trying to register a vault from a NULL resource handle",
+            CGS_ARTIST_ATTRIBSYS_SHARED_IO_FILE, 303);
 
         RegisterVaultRequest lRequest;
-        lRequest.mpUserReceiverQueue  = lpUserReceiverQueue;
-        lRequest.mVaultResourceHandle = lVaultResourceHandle;
-        lRequest.miEventId            = liEventId;
-        lRequest.meVaultType          = leVaultType;
-
+        lRequest.Construct(lpUserReceiverQueue, lVaultResourceHandle, liEventId, leVaultType);
         mRequestQueue.AddEvent<RegisterVaultRequest>(lRequest, 0);
         return true;
     }

@@ -31,6 +31,16 @@ namespace CgsInput
         // CgsInputModuleIO.h -- one action's game-id slots (four signed bytes).
         struct ActionMapping
         {
+            // DWARF CgsInputModuleIO.h:413: every slot unmapped. InputPads::Construct runs it per
+            // action (PS3 0xCFCE04; ARTIST fuses the rows into one 0x70-byte loop, 0x828EFB2C).
+            void Construct()
+            {
+                for (u32 i = 0; i < 4; ++i)
+                {
+                    maiGameIds[i] = -1;
+                }
+            }
+
             s8 maiGameIds[4];
         };
 

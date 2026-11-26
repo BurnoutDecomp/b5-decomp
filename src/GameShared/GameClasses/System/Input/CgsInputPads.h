@@ -43,6 +43,28 @@ namespace CgsInput
     // (`+1932+8*player`) to resolve a player id to its bound physical port.
     struct InputPlayer
     {
+        // DWARF CgsInputPlayer.h:44 (InputPads::Construct runs it per player, PS3 0xCFCE04;
+        // ARTIST walks the records from +0x788, 0x828EFB0C).
+        void Construct()
+        {
+            mbBound = false;
+            miPort  = -1;
+        }
+
+        // DWARF CgsInputPlayer.h:64, :68 and :72 (BindPlayerToPort 0x828DBFC0..C8, UnBindPlayer
+        // 0x828E7510..0x828E752C).
+        s32 GetPort() const { return miPort; }
+        void Bind(s32 liPort)
+        {
+            miPort  = liPort;
+            mbBound = true;
+        }
+        void UnBind()
+        {
+            mbBound = false;
+            miPort  = -1;
+        }
+
         bool mbBound;   // +0x00  set false in Construct/Destruct
         u8   mau8Pad01[3];
         s32  miPort;    // +0x04  resolved physical port, -1 when unbound
