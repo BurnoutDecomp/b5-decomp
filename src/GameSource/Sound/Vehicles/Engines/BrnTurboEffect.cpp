@@ -32,7 +32,8 @@ const f32 KF_TURBO_HEAVY_BLOWOFF = 32000.0f;
 const f32 KF_TURBO_LIGHT_BLOWOFF = 10000.0f;
 const f32 KF_Q15_MAX = 32767.0f;
 
-const u32 KU_AEMS_PARAMETERS[9] =
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found (per-effect AEMS parameter names).
+const u32 KAU_TURBO_PARAMETERS[9] =
 {
     static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_spoolFrequency")),
     static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_pitch")),
@@ -44,7 +45,8 @@ const u32 KU_AEMS_PARAMETERS[9] =
     static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_blowOffLightVolume")),
     static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_startBlowOffLight")),
 };
-const u32 KU_SEND01 = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; the turbo voice's own send name (ARTIST 0x830060A4).
+const u32 KU_TURBO_SEND = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
 }
 
 TurboEffect::TurboEffect()
@@ -174,7 +176,7 @@ bool TurboEffect::Attach()
     lParams.mVoiceSpecName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_TurboClass"));
     lParams.mContentSpecName = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lacContent));
     lParams.mSlotName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_Slot"));
-    lParams.mSendName = KU_SEND01;
+    lParams.mSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));  // ARTIST hashes it here (0x826F2BB8)
     lParams.mSubMixVoiceID = 1;
     lParams.miSendIndex = 0;
     mTurboVoice.Create(lParams);
@@ -239,30 +241,30 @@ void TurboEffect::ProcessUpdate()
     if (!mbHasLoadedData)
         return;
 
-    mTurboVoice.SetParameter(3, mfTurboVolume * GetMixerOutputValue(0, 0), &KU_AEMS_PARAMETERS[3]);
-    mTurboVoice.SetParameter(8, GetMixerOutputValue(3, 0), &KU_AEMS_PARAMETERS[8]);
-    mTurboVoice.SetParameter(7, mfTurboVolume * GetMixerOutputValue(3, 0), &KU_AEMS_PARAMETERS[7]);
-    mTurboVoice.SetParameter(5, mfTurboVolume * GetMixerOutputValue(3, 0), &KU_AEMS_PARAMETERS[5]);
-    mTurboVoice.SetParameter(2, GetMixerOutputValue(1, 3), &KU_AEMS_PARAMETERS[2]);
-    mTurboVoice.SetParameter(1, GetMixerOutputValue(2, 1), &KU_AEMS_PARAMETERS[1]);
-    mTurboVoice.SetParameter(0, mfTurboSpool, &KU_AEMS_PARAMETERS[0]);
-    mTurboVoice.SetGain(0, 1.0f, &KU_SEND01);
-    mTurboVoice.SetParameter(4, 1.0f, &KU_AEMS_PARAMETERS[4]);
+    mTurboVoice.SetParameter(3, mfTurboVolume * GetMixerOutputValue(0, 0), &KAU_TURBO_PARAMETERS[3]);
+    mTurboVoice.SetParameter(8, GetMixerOutputValue(3, 0), &KAU_TURBO_PARAMETERS[8]);
+    mTurboVoice.SetParameter(7, mfTurboVolume * GetMixerOutputValue(3, 0), &KAU_TURBO_PARAMETERS[7]);
+    mTurboVoice.SetParameter(5, mfTurboVolume * GetMixerOutputValue(3, 0), &KAU_TURBO_PARAMETERS[5]);
+    mTurboVoice.SetParameter(2, GetMixerOutputValue(1, 3), &KAU_TURBO_PARAMETERS[2]);
+    mTurboVoice.SetParameter(1, GetMixerOutputValue(2, 1), &KAU_TURBO_PARAMETERS[1]);
+    mTurboVoice.SetParameter(0, mfTurboSpool, &KAU_TURBO_PARAMETERS[0]);
+    mTurboVoice.SetGain(0, 1.0f, &KU_TURBO_SEND);
+    mTurboVoice.SetParameter(4, 1.0f, &KAU_TURBO_PARAMETERS[4]);
 
     if (mu8TurboBlowoff == 1)
     {
-        mTurboVoice.SetParameter(8, 1.0f, &KU_AEMS_PARAMETERS[8]);
+        mTurboVoice.SetParameter(8, 1.0f, &KAU_TURBO_PARAMETERS[8]);
         mu8TurboBlowoff = 0;
     }
     else if (mu8TurboBlowoff == 2)
     {
-        mTurboVoice.SetParameter(6, 1.0f, &KU_AEMS_PARAMETERS[6]);
+        mTurboVoice.SetParameter(6, 1.0f, &KAU_TURBO_PARAMETERS[6]);
         mu8TurboBlowoff = 0;
     }
     else
     {
-        mTurboVoice.SetParameter(6, 0.0f, &KU_AEMS_PARAMETERS[6]);
-        mTurboVoice.SetParameter(8, 0.0f, &KU_AEMS_PARAMETERS[8]);
+        mTurboVoice.SetParameter(6, 0.0f, &KAU_TURBO_PARAMETERS[6]);
+        mTurboVoice.SetParameter(8, 0.0f, &KAU_TURBO_PARAMETERS[8]);
     }
 }
 

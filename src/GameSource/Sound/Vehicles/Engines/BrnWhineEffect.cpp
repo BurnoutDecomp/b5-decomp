@@ -24,7 +24,8 @@ namespace Engines
 
 namespace
 {
-const u32 KU_AEMS_PARAMETERS[5] =
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found (per-effect AEMS parameter names).
+const u32 KAU_WHINE_PARAMETERS[5] =
 {
     static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_spoolFrequency")),
     static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_pitch")),
@@ -32,7 +33,8 @@ const u32 KU_AEMS_PARAMETERS[5] =
     static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_spoolVolume")),
     static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_startSpool")),
 };
-const u32 KU_SEND01 = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; the whine voice's own send name (ARTIST 0x8300835C).
+const u32 KU_WHINE_SEND = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
 }
 
 WhineEffect::WhineEffect()
@@ -137,7 +139,7 @@ bool WhineEffect::Attach()
     lParams.mVoiceSpecName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_GearWhineClass"));
     lParams.mContentSpecName = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lacContent));
     lParams.mSlotName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_Slot"));
-    lParams.mSendName = KU_SEND01;
+    lParams.mSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));  // ARTIST hashes it here (0x826F2D2C)
     lParams.mSubMixVoiceID = 1;
     lParams.miSendIndex = 0;
     mWhineVoice.Create(lParams);
@@ -158,16 +160,16 @@ void WhineEffect::ProcessUpdate()
     if (!mbHasLoadedData || !mpPhysicsControl)
         return;
 
-    mWhineVoice.SetParameter(3, mfWhineVolume * GetMixerOutputValue(0, 0), &KU_AEMS_PARAMETERS[3]);
-    mWhineVoice.SetParameter(2, GetMixerOutputValue(1, 3), &KU_AEMS_PARAMETERS[2]);
-    mWhineVoice.SetParameter(1, GetMixerOutputValue(2, 1), &KU_AEMS_PARAMETERS[1]);
-    mWhineVoice.SetGain(0, 1.0f, &KU_SEND01);
-    mWhineVoice.SetParameter(4, 1.0f, &KU_AEMS_PARAMETERS[4]);
+    mWhineVoice.SetParameter(3, mfWhineVolume * GetMixerOutputValue(0, 0), &KAU_WHINE_PARAMETERS[3]);
+    mWhineVoice.SetParameter(2, GetMixerOutputValue(1, 3), &KAU_WHINE_PARAMETERS[2]);
+    mWhineVoice.SetParameter(1, GetMixerOutputValue(2, 1), &KAU_WHINE_PARAMETERS[1]);
+    mWhineVoice.SetGain(0, 1.0f, &KU_WHINE_SEND);
+    mWhineVoice.SetParameter(4, 1.0f, &KAU_WHINE_PARAMETERS[4]);
 
     const f32 lfWhineFrequency = rw::math::fpu::Max(
         mpPhysicsControl->GetPhysicsData().mSpeedMPH.GetCurrent() / 180.0f - 1.0f,
         0.0f) * 32767.0f;
-    mWhineVoice.SetParameter(0, lfWhineFrequency, &KU_AEMS_PARAMETERS[0]);
+    mWhineVoice.SetParameter(0, lfWhineFrequency, &KAU_WHINE_PARAMETERS[0]);
 }
 
 bool WhineEffect::Detach()

@@ -1,3 +1,4 @@
+#include "GameSource/Sound/Module/LogicModule/BrnLogicConstants.h"  // K_ReverbSendName
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnBoostEffect.h"
@@ -178,7 +179,7 @@ bool BoostEffect::Attach()
     lParams.mSlotName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_Slot"));
     lParams.mSendName = KU_SEND01;
     lParams.mSubMixVoiceID = 1;
-    lParams.mReverbSendName = KU_REVERB_SEND;
+    lParams.mReverbSendName = static_cast<u32>(BrnSound::Logic::K_ReverbSendName.GetValue());  // 0x83008170 (0x826F2988)
     lParams.mReverbSubMixVoiceID = 2;
     lParams.miSendIndex = 0;
     mBoostVoice.Create(lParams);

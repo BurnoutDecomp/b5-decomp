@@ -1,3 +1,4 @@
+#include "GameSource/Sound/Module/LogicModule/BrnLogicConstants.h"  // K_ReverbSendName
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficHorn.h"
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficControl.h"
 #include "GameSource/Sound/Traffic/BrnTrafficState.h"
@@ -50,14 +51,9 @@ const u32 KAU_TRAFFIC_HORN_SENDS[2] =
     static_cast<u32>( CgsSound::Playback::Name::MakeHash( "ReverbSend" ) ),
 };
 
-// The shared CRT-hashed "ReverbSend" every traffic voice's CreateParams reads.
-const u32 KU_REVERB_SEND = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "ReverbSend" ) );
-
 // The AEMS patch mode an alarm plays with; a horn plays with mode 0.
 const f32 KF_ALARM_PATCH_MODE = 3.0f;
 
-// The Q15 unit scale applied to the reverb-send mixer output.
-const f32 KF_Q15_TO_UNIT = 3.0518509e-05f;
 
 u32 guHornVoiceWitnesses = 0;
 u32 guHornReleaseWitnesses = 0;
@@ -243,7 +239,7 @@ bool TrafficHorn::Attach()
     lParams.mSlotName            = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_Slot" ) );
     lParams.mSendName            = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "Send01" ) );
     lParams.mSubMixVoiceID       = 1;
-    lParams.mReverbSendName      = KU_REVERB_SEND;
+    lParams.mReverbSendName      = static_cast<u32>(BrnSound::Logic::K_ReverbSendName.GetValue());  // 0x83008170 (0x826F0A64)
     lParams.mReverbSubMixVoiceID = 2;
     lParams.miSendIndex          = 0;
     mHornVoice.Create( lParams );

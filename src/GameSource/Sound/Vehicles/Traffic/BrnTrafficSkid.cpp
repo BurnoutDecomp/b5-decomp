@@ -1,3 +1,4 @@
+#include "GameSource/Sound/Module/LogicModule/BrnLogicConstants.h"  // K_ReverbSendName
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficSkid.h"
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficControl.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
@@ -58,8 +59,6 @@ const u32 KAU_TRAFFIC_SKID_SENDS[2] =
     static_cast<u32>( CgsSound::Playback::Name::MakeHash( "Send01" ) ),
     static_cast<u32>( CgsSound::Playback::Name::MakeHash( "ReverbSend" ) ),
 };
-
-const u32 KU_REVERB_SEND = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "ReverbSend" ) );
 
 u32 guSkidVoiceWitnesses = 0;
 u32 guSkidReleaseWitnesses = 0;
@@ -168,7 +167,7 @@ bool TrafficSkid::Attach()
     lParams.mSendName            = static_cast<u32>(
         CgsSound::Playback::K_DefaultSendName.GetValue());
     lParams.mSubMixVoiceID       = 1;
-    lParams.mReverbSendName      = KU_REVERB_SEND;
+    lParams.mReverbSendName      = static_cast<u32>(BrnSound::Logic::K_ReverbSendName.GetValue());  // 0x83008170 (0x826F0C34)
     lParams.mReverbSubMixVoiceID = 2;
     lParams.miSendIndex          = 0;
     mSkidVoice.Create( lParams );

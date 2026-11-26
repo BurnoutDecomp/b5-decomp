@@ -45,7 +45,8 @@ const f32 KF_COMPRESSION_MAX_RATE = 0.15f;
 const f32 KF_COMPRESSION_MAX_VOLUME = 2.0f;
 const f32 KF_MIN_TIME_SINCE_RESET = 0.5f;
 
-const u32 KU_SEND01 = static_cast<u32>(
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; the in-air voices' send name.
+const u32 KU_INAIR_SEND = static_cast<u32>(
     CgsSound::Playback::Name::MakeHash("Send01"));
 const u32 KU_SPLICE_PITCH = static_cast<u32>(
     CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Pitch~"));
@@ -96,7 +97,7 @@ void SetSplicerVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
     if (!arVoice.IsPlaying())
         return;
 
-    arVoice.SetGain(0, afGain, &KU_SEND01);
+    arVoice.SetGain(0, afGain, &KU_INAIR_SEND);
     arVoice.SetParameter(0, afPitch, &KU_SPLICE_PITCH);
     arVoice.SetParameter(1, afAzimuth, &KU_SPLICE_AZIMUTH);
 }
@@ -317,7 +318,7 @@ void InAirEffect::ProcessUpdate()
     const f32 lfAzimuth =
         GetMixerOutputValue(2, Nicotine::DMixIO::DMX_VOL) / 32767.0f;
 
-    mLandingVoices.SetGain(0, lfLandingGain, CgsSound::Playback::Name(static_cast<uintptr_t>(KU_SEND01)));
+    mLandingVoices.SetGain(0, lfLandingGain, CgsSound::Playback::Name(static_cast<uintptr_t>(KU_INAIR_SEND)));
     mLandingVoices.SetParameter(0, lfPitch, CgsSound::Playback::Name(static_cast<uintptr_t>(KU_SPLICE_PITCH)));
     mLandingVoices.SetParameter(1, lfAzimuth, CgsSound::Playback::Name(static_cast<uintptr_t>(KU_SPLICE_AZIMUTH)));
 

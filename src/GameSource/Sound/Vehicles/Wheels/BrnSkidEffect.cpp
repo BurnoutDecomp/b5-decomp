@@ -1,3 +1,4 @@
+#include "GameSource/Sound/Module/LogicModule/BrnLogicConstants.h"  // K_ReverbSendName
 #include "GameSource/Sound/Vehicles/Wheels/BrnSkidEffect.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -54,8 +55,13 @@ const u32 KAU_SKID_PARAMETERS[26] =
     static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_lat_azimuth")),
 };
 
-const u32 KU_SEND01 = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
-const u32 KU_REVERB_SEND = static_cast<u32>(CgsSound::Playback::Name::MakeHash("ReverbSend"));
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; the skid voice's send names {Send01, ReverbSend}
+// (ARTIST reads them as one pair, 0x83008388 / 0x8300838C, in ProcessUpdate 0x826E5234 / 0x826E524C).
+const u32 KAU_SKID_SENDS[2] =
+{
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01")),
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("ReverbSend")),
+};
 
 inline s32 MixerValue(f32 afValue)
 {
@@ -155,9 +161,9 @@ bool SkidEffect::Attach()
     lParams.mVoiceSpecName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_Skids"));
     lParams.mpContent = lpSkidsContent;
     lParams.mSlotName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_Slot"));
-    lParams.mSendName = KU_SEND01;
+    lParams.mSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));  // ARTIST hashes it here (0x826F3DD8)
     lParams.mSubMixVoiceID = 1;
-    lParams.mReverbSendName = KU_REVERB_SEND;
+    lParams.mReverbSendName = static_cast<u32>(BrnSound::Logic::K_ReverbSendName.GetValue());  // 0x83008170 (0x826F3E94)
     lParams.mReverbSubMixVoiceID = 2;
     lParams.miSendIndex = 0;
     mSkidsVoice.Create(lParams);
@@ -274,8 +280,8 @@ void SkidEffect::ProcessUpdate()
     mSkidsVoice.SetParameter(3, lfPeelVolume, &KAU_SKID_PARAMETERS[3]);
     mSkidsVoice.SetParameter(0, lfPitch, &KAU_SKID_PARAMETERS[0]);
     mSkidsVoice.SetParameter(25, mfSkidAzimuth, &KAU_SKID_PARAMETERS[25]);
-    mSkidsVoice.SetGain(0, 1.0f, &KU_SEND01);
-    mSkidsVoice.SetGain(1, lfReverbSend, &KU_REVERB_SEND);
+    mSkidsVoice.SetGain(0, 1.0f, &KAU_SKID_SENDS[0]);
+    mSkidsVoice.SetGain(1, lfReverbSend, &KAU_SKID_SENDS[1]);
     mSkidsVoice.Update();
 }
 

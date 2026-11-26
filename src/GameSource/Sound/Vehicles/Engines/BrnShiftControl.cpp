@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "rw/math/fpu/scalar_operation.h"  // rw::math::fpu::Clamp
 #include "GameSource/Sound/Vehicles/Engines/BrnShiftControl.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -24,10 +25,6 @@ namespace Engines
 
 namespace
 {
-f32 ClampRpm(f32 lfRpm)
-{
-    return (std::max)(1000.0f, (std::min)(10000.0f, lfRpm));
-}
 
 f32 EvaluateCurveY(const Matrix44& lrCurve, f32 lfX)
 {
@@ -198,8 +195,8 @@ void ShiftControl::BeginDownShift(IShiftingActivator* lpShiftingActivator)
     mfRPMAtShift = lpShiftingActivator->GetStartRPM();
     mfLastUpShift = mfRunningTime;
 
-    const f32 lfFinish = ClampRpm(lpShiftingActivator->GetTargetRPM() -
-                                  mShiftingPatternData.DownDisengageFallRpm());
+    const f32 lfFinish = rw::math::fpu::Clamp(lpShiftingActivator->GetTargetRPM() -
+                                  mShiftingPatternData.DownDisengageFallRpm(), 1000.0f, 10000.0f);
     mInterpShiftRPM.Initialize(mfRPMAtShift, lfFinish,
         mShiftingPatternData.DownDisengageFallTime(), CgsSound::Utils::Curve::E_LINEAR);
     mInterpShiftVol.Initialize(1.0f, 0.0f, 1.0f, CgsSound::Utils::Curve::E_LINEAR);
@@ -235,9 +232,9 @@ void ShiftControl::UpdateRPM(f32 afTimeStep)
             ? mInterpShiftRPM.GetElapsedTime() / mInterpShiftRPM.GetTotalDuration() : 1.0f;
         const f32 lfCurve = EvaluateCurveY(mShiftingPatternData.UpDisengageFallCurve(),
             (std::max)(0.0f, (std::min)(1.0f, lfProgress)));
-        mInterpShiftRPM.Update(afTimeStep, ClampRpm(
+        mInterpShiftRPM.Update(afTimeStep, rw::math::fpu::Clamp(
             mpShiftingActivator->GetTargetRPM() +
-            mShiftingPatternData.UpEngageRpm() * lfCurve));
+            mShiftingPatternData.UpEngageRpm() * lfCurve, 1000.0f, 10000.0f));
     }
     else if (meShiftState == E_SHFT_UP_LFO ||
              meShiftState == E_SHFT_DOWN_ENGAGING_REATTACH)
@@ -309,7 +306,7 @@ void ShiftControl::UpdateGearShiftState(f32 afTimeStep)
         if (mInterpShiftRPM.IsFinished())
         {
             meShiftState = meShiftStageChanged = E_SHFT_UP_ENGAGING;
-            const f32 lfTarget = ClampRpm(mpShiftingActivator->GetTargetRPM());
+            const f32 lfTarget = rw::math::fpu::Clamp(mpShiftingActivator->GetTargetRPM(), 1000.0f, 10000.0f);
             f32 lfTime = mShiftingPatternData.UpEngageTime();
             if (mpPhysicsControl->GetPhysicsData().IsBoosting.GetCurrent())
                 lfTime *= 0.7f;
@@ -340,8 +337,8 @@ void ShiftControl::UpdateGearShiftState(f32 afTimeStep)
             if (mpPhysicsControl->GetPhysicsData().mGear.GetCurrent() < 2)
                 lfTime *= 0.7f;
             mInterpShiftRPM.Initialize(mInterpShiftRPM.GetValueFloat(),
-                ClampRpm(mpShiftingActivator->GetTargetRPM() +
-                         mShiftingPatternData.DownEngageRiseRpm()),
+                rw::math::fpu::Clamp(mpShiftingActivator->GetTargetRPM() +
+                         mShiftingPatternData.DownEngageRiseRpm(), 1000.0f, 10000.0f),
                 lfTime, CgsSound::Utils::Curve::E_POWER);
             mInterpShiftThrottle.Initialize(0.0f, 1.0f, 215.0f,
                 CgsSound::Utils::Curve::E_LINEAR);

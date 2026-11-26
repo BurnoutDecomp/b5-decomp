@@ -566,9 +566,10 @@ template void PathLine<3u>::Update(f32, f32);
 
 // @ 0x82690D40 -- FindResult timestamp comparator (std::sort predicate). 2-arg / no-this leaf:
 //   lhz timestamps, subfc/subfe/clrlwi == (left.mTimeStamp < right.mTimeStamp).
-bool SelectionHistory<512u, u16, u16, 65536ull>::LessThanTimeStamp(
-    const SelectionHistory<512u, u16, u16, 65536ull>::FindResult& lkrLeft,
-    const SelectionHistory<512u, u16, u16, 65536ull>::FindResult& lkrRight)
+template <u32 tuSize, typename StoredType, typename TimeStampType, u64 tuModulo>
+bool SelectionHistory<tuSize, StoredType, TimeStampType, tuModulo>::LessThanTimeStamp(
+    const FindResult& lkrLeft,
+    const FindResult& lkrRight)
 {
     return lkrLeft.mTimeStamp < lkrRight.mTimeStamp;
 }
@@ -580,7 +581,8 @@ bool SelectionHistory<512u, u16, u16, 65536ull>::LessThanTimeStamp(
 // 0x826C5B1C rldicl -> the OLD seed's high word, 0x826C5B2C clrlwi 23 -> & 0x1FF, i.e. % 512 with
 // the constant luMod = (KU_SIZE - 1) - 0 + 1 (so no "luMod > 0" assert); the step is stored at
 // 0x826C5B44. The (0, KU_SIZE) spelling only gave % 512 while RandomUInt(min, max) was one short.
-void SelectionHistory<512u, u16, u16, 65536ull>::Randomize(unsigned int luSeed)
+template <u32 tuSize, typename StoredType, typename TimeStampType, u64 tuModulo>
+void SelectionHistory<tuSize, StoredType, TimeStampType, tuModulo>::Randomize(unsigned int luSeed)
 {
     mRandom.SetSeed(luSeed);
 
@@ -605,7 +607,8 @@ void SelectionHistory<512u, u16, u16, 65536ull>::Randomize(unsigned int luSeed)
 // @ 0x826DC9C8 -- default ctor: clear the running timestamp and the whole history table, then
 // default-prime the embedded Random (X360 inlines Random::Construct) and reshuffle via Randomize
 // with the fixed 0xDEADF00D seed literal. CONFIDENCE medium (shares the inlined-PRNG caveat).
-SelectionHistory<512u, u16, u16, 65536ull>::SelectionHistory()
+template <u32 tuSize, typename StoredType, typename TimeStampType, u64 tuModulo>
+SelectionHistory<tuSize, StoredType, TimeStampType, tuModulo>::SelectionHistory()
 {
     mCurrentTimeStamp = 0;
 
@@ -621,7 +624,8 @@ SelectionHistory<512u, u16, u16, 65536ull>::SelectionHistory()
 // @ 0x826C6800 -- stamp maHistory[lSelection] with the current monotonic timestamp and advance
 // it; re-randomise when the timestamp is about to wrap (mCurrentTimeStamp == 0xFFFE). The asm's
 // CgsDev::Assert trio collapses to one CGS_ASSERT (path + line-number args dropped).
-void SelectionHistory<512u, u16, u16, 65536ull>::Update(u16 lSelection)
+template <u32 tuSize, typename StoredType, typename TimeStampType, u64 tuModulo>
+void SelectionHistory<tuSize, StoredType, TimeStampType, tuModulo>::Update(TimeStampType lSelection)
 {
     CGS_ASSERT(lSelection < KU_SIZE, "lSelection < KU_SIZE");
 
@@ -680,6 +684,11 @@ StoredType SelectionHistory<tuSize, StoredType, TimeStampType, tuModulo>::FindRa
     u16 luRandomOldest = laOldest[luRandomIndex].mIndex;
     return luRandomOldest;
 }
+
+// The X360-attested instance (DWARF CgsSoundUtils.h:965). The class template's members are written
+// generically, as the original's header templates are (DWARF h:665..), so that a TU which used the
+// instance before this point (the BrnSoundUnity members) still gets these bodies.
+template class SelectionHistory<512u, u16, u16, 65536ull>;
 
 // X360-attested member-template instantiation: FindRandomOldest<unsigned short, 32>.
 template u16

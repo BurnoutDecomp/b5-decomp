@@ -1,5 +1,6 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnClutchControl.h"
 
+#include "rw/math/fpu/scalar_operation.h"  // rw::math::fpu::Clamp
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"
@@ -27,10 +28,6 @@ namespace Engines
 
 namespace
 {
-f32 ClampRpm(f32 lfRpm)
-{
-    return (std::max)(1000.0f, (std::min)(10000.0f, lfRpm));
-}
 
 f32 Component(const Vector4& lrValue, s32 liIndex)
 {
@@ -298,7 +295,7 @@ void ClutchControl::UpdateClutchState(f32 afTimeStep)
     case E_CLUTCH_STATE_ATTACK_BEGIN:
         mfLastClutchAttack = mfRunningTime;
         mInterpThrottle.Initialize(1.0f, 0.0f, 10.0f, CgsSound::Utils::Curve::E_LINEAR);
-        mInterpRPM.Initialize(ClampRpm(mpEngineControl->GetAudioRPM().GetCurrent() + 1000.0f),
+        mInterpRPM.Initialize(rw::math::fpu::Clamp(mpEngineControl->GetAudioRPM().GetCurrent() + 1000.0f, 1000.0f, 10000.0f),
             lrPhysics.mNormalizedRpm.GetCurrent(), 190.0f, CgsSound::Utils::Curve::E_POWER);
         mInterpVol.Initialize(1.4f, 1.0f, 190.0f, CgsSound::Utils::Curve::E_ONE_MINUS_EQPWR);
         meClutchState = E_CLUTCH_STATE_ATTACK_UPDATE;
@@ -316,7 +313,7 @@ void ClutchControl::UpdateClutchState(f32 afTimeStep)
         mInterpThrottle.Initialize(lrPhysics.mThrottle.GetCurrent(), 1.0f, 200.0f,
             CgsSound::Utils::Curve::E_LINEAR);
         mInterpRPM.Initialize(mpEngineControl->GetAudioRPM().GetCurrent(),
-            ClampRpm(mpEngineControl->GetAudioRPM().GetCurrent() + 7000.0f),
+            rw::math::fpu::Clamp(mpEngineControl->GetAudioRPM().GetCurrent() + 7000.0f, 1000.0f, 10000.0f),
             350.0f, CgsSound::Utils::Curve::E_EQ_PWR_SQ);
         mInterpVol.Initialize(1.3f, 1.0f, 100.0f, CgsSound::Utils::Curve::E_LINEAR);
         meClutchState = E_CLUTCH_STATE_IDLE_REVING;

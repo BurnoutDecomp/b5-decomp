@@ -1,3 +1,4 @@
+#include "GameSource/Sound/Module/LogicModule/BrnLogicConstants.h"  // K_ReverbSendName
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficEngine.h"
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficControl.h"
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficStateManager.h"
@@ -51,14 +52,9 @@ const u32 KAU_TRAFFIC_ENGINE_SENDS[2] =
     static_cast<u32>( CgsSound::Playback::Name::MakeHash( "ReverbSend" ) ),
 };
 
-// The shared CRT-hashed "ReverbSend" every traffic voice's CreateParams reads.
-const u32 KU_REVERB_SEND = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "ReverbSend" ) );
-
 // One mph in metres per second.
 const f32 KF_MPH_TO_METRES_PER_SECOND = 0.44704f;
 
-// The Q15 unit scale applied to the reverb-send mixer output.
-const f32 KF_Q15_TO_UNIT = 3.0518509e-05f;
 
 u32 guEngineVoiceWitnesses = 0;
 u32 guEngineReleaseWitnesses = 0;
@@ -212,7 +208,7 @@ bool TrafficEngine::Attach()
         lParams.mSlotName            = su32SlotName;
         lParams.mSendName            = su32SendName;
         lParams.mSubMixVoiceID       = 1;
-        lParams.mReverbSendName      = KU_REVERB_SEND;
+        lParams.mReverbSendName      = static_cast<u32>(BrnSound::Logic::K_ReverbSendName.GetValue());  // 0x83008170 (0x826F03EC)
         lParams.mReverbSubMixVoiceID = 2;
         lParams.miSendIndex          = 0;
         mTrafficEngineVoice.Create( lParams );

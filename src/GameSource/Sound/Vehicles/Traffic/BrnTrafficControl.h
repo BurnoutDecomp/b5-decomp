@@ -27,6 +27,11 @@ namespace Logic
 namespace Traffic
 {
 
+// The Q15 unit scale the traffic effects apply to their reverb-send mixer output. One definition
+// for the traffic members (TrafficEngine and TrafficHorn both use it; they share one unity TU, so the
+// original cannot have defined it in both .cpp files). No DWARF name survives for it.
+const f32 KF_Q15_TO_UNIT = 3.0518509e-05f;
+
 extern s32 KI_SPEW_TRAFFIC_PASS_CULLS;
 
 struct Traffic3DControl;

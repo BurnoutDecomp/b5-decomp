@@ -1,3 +1,4 @@
+#include "GameSource/Sound/Module/LogicModule/BrnLogicConstants.h"  // K_ReverbSendName
 #include "GameSource/Sound/Vehicles/Wheels/BrnRoadNoise.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -51,8 +52,13 @@ const u32 KAU_ROADNOISE_PARAMETERS[9] =
     static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_volume_transition")),
 };
 
-const u32 KU_SEND01 = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
-const u32 KU_REVERB_SEND = static_cast<u32>(CgsSound::Playback::Name::MakeHash("ReverbSend"));
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; the road-noise voices' send names {Send01, ReverbSend}
+// (ARTIST reads them as one pair, 0x830083F4 / 0x830083F8, in ProcessUpdate 0x826B8F98 / 0x826B8F70).
+const u32 KAU_ROADNOISE_SENDS[2] =
+{
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01")),
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("ReverbSend")),
+};
 const u64 KU_SURFACE_LIST_COLLECTION = Attrib::StringToKey("340654");
 
 Attrib::Gen::audiosurface GetAudioSurface(const Attrib::Gen::surfacelist& arSurfaceList,
@@ -265,9 +271,9 @@ bool RoadnoiseEffect::Attach()
     lParams.mpContent = lpSurfaceContent;
     lParams.mSlotName =
         static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_Slot"));
-    lParams.mSendName = KU_SEND01;
+    lParams.mSendName = KAU_ROADNOISE_SENDS[0];
     lParams.mSubMixVoiceID = 1;
-    lParams.mReverbSendName = KU_REVERB_SEND;
+    lParams.mReverbSendName = static_cast<u32>(BrnSound::Logic::K_ReverbSendName.GetValue());  // 0x83008170
     lParams.mReverbSubMixVoiceID = 2;
     lParams.miSendIndex = 0;
 
@@ -387,8 +393,8 @@ void RoadnoiseEffect::ProcessUpdate()
         lrVoice.SetParameter(4, lfSurface, &KAU_ROADNOISE_PARAMETERS[4]);
         lrVoice.SetParameter(5, lfSurface, &KAU_ROADNOISE_PARAMETERS[5]);
         lrVoice.SetParameter(7, lfPreviousSurface, &KAU_ROADNOISE_PARAMETERS[7]);
-        lrVoice.SetGain(1, lfReverbSend, &KU_REVERB_SEND);
-        lrVoice.SetGain(0, 2.0f, &KU_SEND01);
+        lrVoice.SetGain(1, lfReverbSend, &KAU_ROADNOISE_SENDS[1]);
+        lrVoice.SetGain(0, 2.0f, &KAU_ROADNOISE_SENDS[0]);
     }
 }
 
