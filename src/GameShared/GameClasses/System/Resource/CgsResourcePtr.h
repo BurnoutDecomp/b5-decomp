@@ -654,7 +654,7 @@ namespace CgsResource
     inline bool
     ResourcePtr<Type>::operator==(const BaseResourcePtr& lrOther) const
     {
-        return IsEqual(&lrOther);
+        return lrOther.IsEqual(&mResourceMemory);
     }
 
 
@@ -702,7 +702,7 @@ namespace CgsResource
     inline bool
     ResourcePtr<Type>::operator!=(const BaseResourcePtr& lrOther) const
     {
-        return !IsEqual(&lrOther);
+        return !lrOther.IsEqual(&mResourceMemory);
     }
 
 
