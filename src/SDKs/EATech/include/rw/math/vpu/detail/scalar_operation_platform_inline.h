@@ -30,6 +30,15 @@ namespace vpu
         const float test = a - b;
         return static_cast<float>(__fsel(test, a, b));
     }
+
+    // rwmath 1.02.00 :56 (LegacySrc ps3/ppu: one `fabs`); the Xenon body is the XDK's __fabs
+    // (ppcintrinsics.h), the `fabs` ARTIST inlines for DecFIGS's Abs<float> in
+    // RoadRageMode::UpdateMaxActiveCars (0x82315F3C).
+    template <>
+    inline float Abs<float>(const float& a)
+    {
+        return static_cast<float>(__fabs(a));
+    }
 }
 }
 }

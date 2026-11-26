@@ -28,6 +28,7 @@
 //                          BrnGameModule::TranslateGuiInterfaceToGuiEvents @0x823E1D90)
 //   AppendRaceCarCrashes  @ 0x82379980   (FX-GS2 2026-09-23, G11-D5, with Construct's ninth leg)
 //   SetPlayerRaceCarIndex (no own body; inlined into GameStateModule::PreWorldUpdate @0x823A5594)
+// The members with no own body are defined in the class (the header), as DWARF places them.
 // =============================================================================
 
 namespace BrnGameState
@@ -162,118 +163,6 @@ void GameStateToGuiInterface::AddFinishedRaceEvent(BrnGui::EFinishType leFinishT
 }
 
 // -----------------------------------------------------------------------------
-// AddDirtyTrickEnding (declared in BrnGameStateToGuiIOInterfaces.h) -- publish "this dirty trick
-// ended" to the GUI. No out-of-line console body: PaybackManager::ProcessDirtyTrickEventQueue
-// inlines it at both of its call sites (dirty-trick status 3 and 4). Each site builds the
-// 16-byte record on the stack -- aggressor at +0x0, victim at +0x4, trick type at +0x8, the
-// survived byte at +0xC (1 for status 3, 0 for status 4) -- and appends it to the queue at
-// interface +0x7C, i.e. mDirtyTrickEndingQueue.
-// -----------------------------------------------------------------------------
-void GameStateToGuiInterface::AddDirtyTrickEnding(::EActiveRaceCarIndex leAggressor,
-                                                  ::EActiveRaceCarIndex leVictim,
-                                                  BrnNetwork::EPaybackType leTrickType,
-                                                  bool lbSurvived)
-{
-    GameStateToGuiEndingDirtyTrick lEvent;
-    lEvent.meAggressorActiveRaceCarIndex = leAggressor;   // record +0x0
-    lEvent.meVictimActiveRaceCarIndex    = leVictim;      // record +0x4
-    lEvent.meTrickType                   = leTrickType;   // record +0x8
-    lEvent.mbSurvived                    = lbSurvived;    // record +0xC
-
-    mDirtyTrickEndingQueue.AddEvent(lEvent);              // this + 0x7C
-}
-
-// -----------------------------------------------------------------------------
-// AddDirtyTrickTriggered (DWARF BrnGameStateToGuiIOInterfaces.h:83) -- publish "a dirty trick was
-// triggered" to the GUI. [FX-GS 2026-09-23, crash-parity G12-D2] No out-of-line console body:
-// PaybackManager::HandleTriggeringPayback @0x82397C08 inlines it at 0x82397C58..0x82397C74:
-//     bl   0x8231D8A8            ; OutputBuffer::GetGameStateToGuiInterface (write lock)
-//     addi r3, r3, 0x40          ; mDirtyTrickTriggeredQueue
-//     stw  r27, var_48           ; aggressor  -> record +0x0
-//     stw  r28, var_44           ; victim     -> record +0x4
-//     stw  r29, var_40           ; trick type -> record +0x8
-//     bl   GameStateToGuiTriggeredDirtyTrick AddEvent 0x82368940   (a 12-byte copy, length++)
-// The PS3 twin (DecFIGS 0x2592B8, PaybackManager::DirtyTrickTriggered) calls this member by name.
-// -----------------------------------------------------------------------------
-void GameStateToGuiInterface::AddDirtyTrickTriggered(::EActiveRaceCarIndex leAggressor,
-                                                     ::EActiveRaceCarIndex leVictim,
-                                                     BrnNetwork::EPaybackType leTrickType)
-{
-    GameStateToGuiTriggeredDirtyTrick lEvent;
-    lEvent.meAggressorActiveRaceCarIndex = leAggressor;   // record +0x0
-    lEvent.meVictimActiveRaceCarIndex    = leVictim;      // record +0x4
-    lEvent.meTrickType                   = leTrickType;   // record +0x8
-
-    mDirtyTrickTriggeredQueue.AddEvent(lEvent);           // this + 0x40
-}
-
-// -----------------------------------------------------------------------------
-// AddNewDirtyTrick (DWARF BrnGameStateToGuiIOInterfaces.h:76) -- publish "a dirty trick was
-// awarded" to the GUI. [FX-GS2 2026-09-23, crash-parity G12-D6] No out-of-line console body:
-// PaybackManager::HandleAwardingPayback @0x82397970 inlines it (through DirtyTrickAwarded) at
-// 0x82397A4C..0x82397A64:
-//     bl   0x8231D8A8            ; OutputBuffer::GetGameStateToGuiInterface (write lock)
-//     addi r3, r3, 4             ; mNewDirtyTrickQueue
-//     stw  r28, var_50           ; aggressor  -> record +0x0
-//     stw  r29, var_4C           ; victim     -> record +0x4
-//     stw  r30, var_48           ; trick type -> record +0x8
-//     bl   GameStateToGuiNewDirtyTrick AddEvent 0x823687E8   (a 12-byte copy, length++)
-// The PS3 twin (DecFIGS 0x258614, PaybackManager::DirtyTrickAwarded) appends the same record to
-// mNewDirtyTrickQueue.
-// -----------------------------------------------------------------------------
-void GameStateToGuiInterface::AddNewDirtyTrick(::EActiveRaceCarIndex leAggressor,
-                                               ::EActiveRaceCarIndex leVictim,
-                                               BrnNetwork::EPaybackType leTrickType)
-{
-    GameStateToGuiNewDirtyTrick lEvent;
-    lEvent.meAggressorActiveRaceCarIndex = leAggressor;   // record +0x0
-    lEvent.meVictimActiveRaceCarIndex    = leVictim;      // record +0x4
-    lEvent.meTrickType                   = leTrickType;   // record +0x8
-
-    mNewDirtyTrickQueue.AddEvent(lEvent);                 // this + 4
-}
-
-// -----------------------------------------------------------------------------
-// AddOnTailEvent (DWARF BrnGameStateToGuiIOInterfaces.h:121) -- publish "this rival is on the
-// player's tail" to the GUI. [FX-GS2 2026-09-23, crash-parity G10-D11] No out-of-line console
-// body: GameStateModule::CheckForTailingRivals @0x82375F90 inlines it at 0x82376350..0x82376378:
-//     bl   RCEntityActiveRaceCarOutputInterface::GetRivalId  ; the rival's car id (u64)
-//     bl   0x8231D8A8            ; OutputBuffer::GetGameStateToGuiInterface (write lock)
-//     stw  r30, var_B8           ; the slot  -> record +0x8
-//     addi r3, r3, 0x160         ; mOnTailEventQueue
-//     std  r31, var_C0           ; the id    -> record +0x0
-//     bl   GameStateToGuiOnTailEvent AddEvent 0x82368E80   (a 16-byte copy, length++)
-// -----------------------------------------------------------------------------
-void GameStateToGuiInterface::AddOnTailEvent(CgsID lOfflineRivalCarID, ::EActiveRaceCarIndex leActiveRaceCarIndex)
-{
-    GameStateToGuiOnTailEvent lEvent;
-    lEvent.mOfflineRivalCarID         = lOfflineRivalCarID;     // record +0x0
-    lEvent.meOnTailActiveRaceCarIndex = leActiveRaceCarIndex;   // record +0x8
-
-    mOnTailEventQueue.AddEvent(lEvent);                         // this + 0x160
-}
-
-// -----------------------------------------------------------------------------
-// AddOvertakeEvent (DWARF BrnGameStateToGuiIOInterfaces.h:97) -- publish "the player gained a
-// place" to the GUI. [FX-FLOW 2026-09-24, crash-parity NEW-EMMTAIL] No out-of-line console body:
-// GameStateModule::EmmPreWorldUpdate @0x8238EF50 inlines it at 0x8238F324..0x8238F33C:
-//     bl   0x8231D8A8            ; OutputBuffer::GetGameStateToGuiInterface (write lock)
-//     addi r3, r3, 0xC8          ; mOvertakeEventQueue
-//     stb  r31, var_88           ; the new race position (u8) -> record +0x0
-//     stw  r30, var_84           ; the car slot               -> record +0x4
-//     bl   GameStateToGuiOvertakeEvent AddEvent 0x82368BF0   (an 8-byte copy, length++)
-// Its one reader is TranslateGuiInterfaceToGuiEvents (GUI 371).
-// -----------------------------------------------------------------------------
-void GameStateToGuiInterface::AddOvertakeEvent(u8 lu8NewPosition, ::EActiveRaceCarIndex leActiveRaceCarIndex)
-{
-    GameStateToGuiOvertakeEvent lEvent;
-    lEvent.mu8NewPosition       = lu8NewPosition;         // record +0x0
-    lEvent.meActiveRaceCarIndex = leActiveRaceCarIndex;   // record +0x4
-
-    mOvertakeEventQueue.AddEvent(lEvent);                 // this + 0xC8
-}
-
-// -----------------------------------------------------------------------------
 // AppendRaceCarCrashes (X360 @ 0x82379980, DWARF BrnGameStateToGuiIOInterfaces.h:126) -- copy the
 // frame's race-car crash events into the interface's own crash queue. [FX-GS2 2026-09-23,
 // crash-parity G11-D5] The console body, whole:
@@ -294,71 +183,6 @@ void GameStateToGuiInterface::AppendRaceCarCrashes(
             "../GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp", 247 /* ARTIST 0x823799AC */);   // line 247
 
     mRaceCarCrashEventQueue.Append(*lpRaceCarCrashEventQueue);                // this + 0x1E0
-}
-
-// -----------------------------------------------------------------------------
-// SetPlayerRaceCarIndex (DWARF BrnGameStateToGuiIOInterfaces.h:137). No out-of-line console body:
-// GameStateModule::PreWorldUpdate inlines it as `stw r28, 0(r11)` @0x823A5594, r11 being the
-// write-locked GetGameStateToGuiInterface() and r28 GetPlayerActiveRaceCarIndex().
-// -----------------------------------------------------------------------------
-void GameStateToGuiInterface::SetPlayerRaceCarIndex(s32 liPlayerRaceCarIndex)
-{
-    miPlayerRaceCarIndex = liPlayerRaceCarIndex;   // this + 0
-}
-
-// -----------------------------------------------------------------------------
-// The eight const queue accessors (DWARF BrnGameStateToGuiIOInterfaces.h:128-135). [FX-GS2
-// 2026-09-23, crash-parity G10-D11 part 2] No out-of-line console bodies: their one reader,
-// BrnGameModule::TranslateGuiInterfaceToGuiEvents @0x823E1D90, inlines all eight in its prologue
-// as plain address arithmetic on the interface pointer (r5), 0x823E1D9C..0x823E1DC4:
-//     addi r30, r5, 4       ; GetNewDirtyTrickQueue
-//     addi r28, r5, 0x40    ; GetDirtyTrickTriggeredQueue
-//     addi r25, r5, 0x7C    ; GetDirtyTrickEndingQueue
-//     addi r22, r5, 0xC8    ; GetOvertakeEventQueue
-//     addi r20, r5, 0xF4    ; GetFinishedRaceEventQueue
-//     addi r18, r5, 0x120   ; GetTookLeadEventQueue
-//     addi r15, r5, 0x140   ; GetTookLastEventQueue
-//     addi r11, r5, 0x160   ; GetOnTailEventQueue
-// -- the same eight offsets Construct walks above, so each accessor is `return &member;`.
-// -----------------------------------------------------------------------------
-const GameStateToGuiInterface::NewDirtyTrickQueue* GameStateToGuiInterface::GetNewDirtyTrickQueue() const
-{
-    return &mNewDirtyTrickQueue;         // this + 4
-}
-
-const GameStateToGuiInterface::DirtyTrickTriggeredQueue* GameStateToGuiInterface::GetDirtyTrickTriggeredQueue() const
-{
-    return &mDirtyTrickTriggeredQueue;   // this + 0x40
-}
-
-const GameStateToGuiInterface::DirtyTrickEndingQueue* GameStateToGuiInterface::GetDirtyTrickEndingQueue() const
-{
-    return &mDirtyTrickEndingQueue;      // this + 0x7C
-}
-
-const GameStateToGuiInterface::OvertakeEventQueue* GameStateToGuiInterface::GetOvertakeEventQueue() const
-{
-    return &mOvertakeEventQueue;         // this + 0xC8
-}
-
-const GameStateToGuiInterface::FinishedRaceEventQueue* GameStateToGuiInterface::GetFinishedRaceEventQueue() const
-{
-    return &mFinishedRaceEventQueue;     // this + 0xF4
-}
-
-const GameStateToGuiInterface::TookLeadEventQueue* GameStateToGuiInterface::GetTookLeadEventQueue() const
-{
-    return &mTookLeadEventQueue;         // this + 0x120
-}
-
-const GameStateToGuiInterface::TookLastEventQueue* GameStateToGuiInterface::GetTookLastEventQueue() const
-{
-    return &mTookLastEventQueue;         // this + 0x140
-}
-
-const GameStateToGuiInterface::OnTailEventQueue* GameStateToGuiInterface::GetOnTailEventQueue() const
-{
-    return &mOnTailEventQueue;           // this + 0x160
 }
 
 }

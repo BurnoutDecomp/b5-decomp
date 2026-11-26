@@ -3,6 +3,7 @@
 #include <cmath>                                                        // std::fabs (the `fabs` in UpdateMaxActiveCars)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "SDKs/EATech/include/rw/math/vpu/scalar.h"                     // rw::math::vpu::Lerp(VecFloat, VecFloat, VecFloat)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // GameActionQueue::AddEvent<T>, CgsModule::Event
@@ -79,9 +80,15 @@ namespace
     const s32 KI_ROAD_RAGE_AI_SPEED_SELECTION_METHOD  = 2;
     const s32 KI_ROAD_RAGE_AI_AGGRESSIVE_CAR_COUNT    = 2;
 
-    // ---- UpdateMaxActiveCars @0x82315E58 -----------------------------------------------------
+    // ---- UpdateMaxActiveCars @0x82315E58 / UpdateHiddenRivals @0x82315DC0 ----------------------
+    // In DWARF declaration order (cpp:31..41), the order ARTIST's .rdata holds them from the anchor
+    // 0x820211FC (UpdateMaxActiveCars addresses +0x1C/+0x18/+0x14/+0x10/+0x0C off it).
     // DWARF :31. 0x82315F40 `lfs f13, flt_820211FC`; image.bin @0x211FC == 3B 23 D7 0A == 0.0025f.
     const f32 KF_BROADCAST_MADNESS_TRESHOLD = 0.0025f;              // (sic -- the DWARF's spelling)
+    // DWARF :33/:34. unk_82021200 == 3F 00 00 00 == 0.5f, unk_82021204 == 00 00 00 00 == 0.0f.
+    // The hidden-time cap lerps from MAX (madness 0) down to MIN (madness 1).
+    const f32 KF_MAX_HIDDEN_TIME = 0.5f;
+    const f32 KF_MIN_HIDDEN_TIME = 0.0f;
     // DWARF :36/:37. unk_82021208 == 3D CC CC CD == 0.1f, unk_8202120C == 3F 80 00 00 == 1.0f.
     // The madness ceiling lerps from EARLY (rank ratio 0) to LATE (rank ratio 1).
     const f32 KF_EARLY_RANK_MAX_MADNESS = 0.1f;
@@ -93,53 +100,10 @@ namespace
     // Seconds for the madness ratio to reach 1.0, lerped EARLY -> LATE on the rank ratio.
     const f32 KF_EARLY_TIME_TO_REACH_MAX_MADNESS = 30.0f;
     const f32 KF_LATE_TIME_TO_REACH_MAX_MADNESS  = 10.0f;
-    // 0x82315F7C `lfs f0, flt_820054D0`; @0x54D0 == 40 E0 00 00 == 7.0f -- the upper end of the
-    // "allowed rivals" lerp while in progress. Modelled as the float form of the rival-count
-    // ceiling (7); the constant's own name is not attested (shared pool word).
-    const f32 KF_MAX_ROAD_RAGE_RIVAL_COUNT_F = 7.0f;
-
-    // ---- UpdateHiddenRivals @0x82315DC0 ------------------------------------------------------
-    // DWARF :33/:34. unk_82021200 == 3F 00 00 00 == 0.5f, unk_82021204 == 00 00 00 00 == 0.0f.
-    // The hidden-time cap lerps from MAX (madness 0) down to MIN (madness 1).
-    const f32 KF_MAX_HIDDEN_TIME = 0.5f;
-    const f32 KF_MIN_HIDDEN_TIME = 0.0f;
 
     // ---- OnPlayerInShortCut @0x823160A0 ------------------------------------------------------
     // DWARF :28. 0x823160A4 `lis r9, 0x40A0` -> 0x40A00000 == 5.0f stored into all eight timers.
     const f32 KF_HIDE_TIME_IF_PLAYER_IN_SHORTCUT = 5.0f;
-
-    // ---- the two outbound game actions (BroadcastEventsToRivals @0x82344798) ------------------
-    // [!] HEADER REQUEST (interim TU-local mirrors, the same carrier the committed
-    // StuntAttackMode.cpp uses for action 170 until BrnGameActions.h grows the enumerators).
-    //   * X360 0x82344818 `li r5, 0x81` (129) / `li r6, 8`:  DWARF E_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE
-    //     = 124, in the +5 band BrnGameActions.h already records for OVERHEAD_SIGN_HIT (DWARF 123 ->
-    //     X360 128). 124 + 5 == 129. Record (dwarfdump BrnGameActions.h:5670)
-    //     AllowCarToJoinRoadRageAction { EActiveRaceCarIndex mActiveRaceCarIndex; bool mbAllowedInRoadRage; }
-    //     -- the console writes `stw idx -> +0x00`, `stb allowed -> +0x04` and posts 8 bytes; the
-    //     three tail bytes are stack residue on the wire. Reproduced (not zeroed).
-    //   * X360 0x82344884 `li r5, 0x83` (131) / `li r6, 8`:  DWARF E_ACTION_UPDATE_ROAD_RAGE_MADNESS
-    //     = 126, same +5 band -> 131. Record (dwarfdump BrnGameActions.h:3550)
-    //     UpdateRoadRageMadnessAction { EActiveRaceCarIndex mActiveRaceCarID; float32_t mRoadRageMadnesss; }
-    //     -- `stw idx -> +0x00`, `stfs madness -> +0x04`, 8 bytes.
-    // (Between them sits DWARF 125 HIDE_CAR_IN_ROAD_RAGE -> X360 130, not posted by this TU.)
-    const s32 KI_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE = 129;
-    const s32 KI_ACTION_UPDATE_ROAD_RAGE_MADNESS    = 131;
-
-    struct AllowCarToJoinRoadRageActionRecord
-    {
-        // [!] EXPLICITLY GLOBAL-QUALIFIED for the same reason BrnStuntAttackMode.cpp:113 spells its
-        // record member `::EActiveRaceCarIndex` (two distinct enums of that name are visible here).
-        ::EActiveRaceCarIndex mActiveRaceCarIndex;   // +0x00
-        bool                  mbAllowedInRoadRage;   // +0x04  (+0x05..+0x07 not written by the console)
-    };
-    CGS_STATIC_ASSERT((sizeof(AllowCarToJoinRoadRageActionRecord) == 8), "X360 posts action 129 as 8 bytes (li r6,8)");
-
-    struct UpdateRoadRageMadnessActionRecord
-    {
-        ::EActiveRaceCarIndex mActiveRaceCarID;      // +0x00
-        f32                   mRoadRageMadnesss;     // +0x04  (sic -- the DWARF's spelling)
-    };
-    CGS_STATIC_ASSERT((sizeof(UpdateRoadRageMadnessActionRecord) == 8), "X360 posts action 131 as 8 bytes (li r6,8)");
 
     // ---- the one inbound game event (HandleGameEvents @0x82315FF8) --------------------------
     // [!] HEADER REQUEST (interim TU-local mirror). X360 0x8231600C `cmpwi cr6, r5, 0x28` (40).
@@ -147,7 +111,7 @@ namespace
     // enum carries the -1 drift the committed BrnGameEvents.h already pins for 32/33/35/36
     // (PS3 33/34/36/37): 41 - 1 == 40, and the payload the handler reads -- `lwz r10, 0(r11)`
     // (car index) / `lfs f0, 4(r11)` (hidden time) -- is exactly the DWARF record
-    // RaceCarNeedsHidingEvent { int32_t miActiveRaceCarIndex; float32_t mfHiddenTime; }
+    // RaceCarNeedsHidingEvent { int32_t miActiveRaceCarIndex; f32 mfHiddenTime; }
     // (dwarfdump BrnGameEvents.h:371), which the debug string "<AI> Race car N has been hidden
     // for T seconds" corroborates.
     const s32 KI_EVENT_RACE_CAR_NEEDS_HIDING = 40;
@@ -158,12 +122,6 @@ namespace
         f32 mfHiddenTime;           // +0x04
     };
 
-    // Straight-line interpolation, the shape the console's `vsubfp / vmaddfp` pairs compute:
-    // (lfTo - lfFrom) * lfT + lfFrom. Kept as a helper so each de-SIMD'd site reads as the lerp it is.
-    inline f32 Lerp(f32 lfFrom, f32 lfTo, f32 lfT)
-    {
-        return (lfTo - lfFrom) * lfT + lfFrom;
-    }
 }
 
 // X360: BrnGameState::RoadRageMode::GetName (0x827E24D8). Trivial virtual override of
@@ -378,17 +336,14 @@ void RoadRageMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
     // 0x823448E0..0x823448E4 PreWorldInputBuffer::GetTimerStatusInterface (0x8231CE28), then
     // 0x823448E8..0x823448F4 `lwz r11, 0x28(r31) ; cmpwi 2` -- GameMode::meCurrentState ==
     // E_GMS_IN_PROGRESS gates both updates.
-    const GameStateModuleIO::TimerStatusInterface* lpTimerStatus = lpInput->GetTimerStatusInterface();
+    // DWARF local lpSimTimerStatus (cpp:459); ARTIST reads the step product afresh for each call
+    // (0x823448F8..0x82344918), [+0x1C] * [+0x20] = base step * multiplier.
+    const CgsSystem::TimerStatus* lpSimTimerStatus = lpInput->GetTimerStatusInterface()->GetSimTimerStatus();
     if (GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS)
     {
-        // The words at +0x1C and +0x20 of the interface: the sim timer status's base step *
-        // multiplier, the same per-frame delta StuntAttackMode::PreWorldUpdate reads.
-        // The console recomputes the product for the second call (rematerialisation); one value.
-        const f32 lfDeltaTime = lpTimerStatus->GetSimTimerStatus()->GetCurrentTimeStep();
-
         // 0x823448FC `addi r5, r29, 0x4B40` == &lpScoringSystem->mRoadRageModeScoring.
-        UpdateMaxActiveCars(lfDeltaTime, lpScoringSystem->GetRoadRageScoring());
-        UpdateHiddenRivals(lfDeltaTime);
+        UpdateMaxActiveCars(lpSimTimerStatus->GetCurrentTimeStep(), lpScoringSystem->GetRoadRageScoring());
+        UpdateHiddenRivals(lpSimTimerStatus->GetCurrentTimeStep());
     }
 
     // 0x82344920..0x82344928.
@@ -505,8 +460,15 @@ void RoadRageMode::FillInGameModeSpecificResults(const ScoringSystem* lpScoringS
 {
     const RoadRageModeScoring* lpRoadRageScoring = lpScoringSystem->GetRoadRageScoring();
 
-    lpAction->miFinishPosition =
-        (lpRoadRageScoring->GetNumTakedownsAchieved() < lpRoadRageScoring->GetTargetNumTakedowns()) ? 2 : 1;
+    // ARTIST 0x82315D4C..0x82315D54 (li 1 ; bge ; li 2): the reached-target arm first.
+    if (lpRoadRageScoring->GetNumTakedownsAchieved() >= lpRoadRageScoring->GetTargetNumTakedowns())
+    {
+        lpAction->miFinishPosition = 1;
+    }
+    else
+    {
+        lpAction->miFinishPosition = 2;
+    }
 }
 
 // ============================================================================================
@@ -522,56 +484,42 @@ void RoadRageMode::FillInGameModeSpecificResults(const ScoringSystem* lpScoringS
 //   3. 0x82315F6C..0x82315FB8  Lerp(7.0,  n+1,  mfRoadRageMadnessRatio)    -> allowed rivals
 // The two `fsel f, (1.0 - x), x, 1.0` sequences are min(x, 1.0).
 // ============================================================================================
-void RoadRageMode::UpdateMaxActiveCars(f32 lfDeltaTime, const RoadRageModeScoring* lpRoadRageScoring)
+// DWARF locals lfTimeToReachMaxMadness / liExcessTakedowns / lfMaxMadness (cpp:393/394/400); the
+// call list is the SDK's VecFloat Lerp (x3, each read back through VecFloat::operator float),
+// Min<float> (x2, `fsel` on 1.0 - x: Min(1.0f, x)) and Abs<float>.
+void RoadRageMode::UpdateMaxActiveCars(f32 lfTimeStep, const RoadRageModeScoring* lpRoadRageScoring)
 {
-    // ---- 1. ratio += dt / timeToMax, capped at 1.0 (0x82315EA4..0x82315EC0) ----------------------
-    const f32 lfTimeToReachMaxMadness =
-        Lerp(KF_EARLY_TIME_TO_REACH_MAX_MADNESS, KF_LATE_TIME_TO_REACH_MAX_MADNESS, mfProgressionRankAsRatio);
+    f32 lfTimeToReachMaxMadness = rw::math::vpu::Lerp(KF_EARLY_TIME_TO_REACH_MAX_MADNESS,
+                                                            KF_LATE_TIME_TO_REACH_MAX_MADNESS,
+                                                            mfProgressionRankAsRatio);
+    mfRoadRageMadnessRatio = rw::math::vpu::Min(1.0f, lfTimeStep / lfTimeToReachMaxMadness + mfRoadRageMadnessRatio);
 
-    f32 lfMadnessRatio = lfDeltaTime / lfTimeToReachMaxMadness + mfRoadRageMadnessRatio;
-    if (1.0f - lfMadnessRatio < 0.0f)
-    {
-        lfMadnessRatio = 1.0f;
-    }
-    mfRoadRageMadnessRatio = lfMadnessRatio;
-
-    // ---- 2. the madness ceiling for this rank, raised per takedown past the target -------------
     // 0x82315EC8 `lwz r9, 0(r5)` / 0x82315EE0 `lwz r10, 0xC(r5)` / `subf` -- achieved - target, SIGNED.
-    f32 lfMaxMadness = Lerp(KF_EARLY_RANK_MAX_MADNESS, KF_LATE_RANK_MAX_MADNESS, mfProgressionRankAsRatio);
-
-    const s32 liTakedownsPastTarget =
+    int32_t liExcessTakedowns =
         lpRoadRageScoring->GetNumTakedownsAchieved() - lpRoadRageScoring->GetTargetNumTakedowns();
-    if (liTakedownsPastTarget > 0)
+
+    f32 lfMaxMadness = rw::math::vpu::Lerp(KF_EARLY_RANK_MAX_MADNESS, KF_LATE_RANK_MAX_MADNESS,
+                                                 mfProgressionRankAsRatio);
+    if (liExcessTakedowns > 0)
     {
-        // 0x82315F04..0x82315F24 `extsw / std / lfd / fcfid / frsp / fmadds / fsubs / fsel`.
-        lfMaxMadness = static_cast<f32>(liTakedownsPastTarget) * KF_POST_TARGET_TAKEDOWN_MADNESS_INCREASE + lfMaxMadness;
-        if (1.0f - lfMaxMadness < 0.0f)
-        {
-            lfMaxMadness = 1.0f;
-        }
+        lfMaxMadness = rw::math::vpu::Min(1.0f, static_cast<f32>(liExcessTakedowns) * KF_POST_TARGET_TAKEDOWN_MADNESS_INCREASE + lfMaxMadness);
     }
 
-    // ---- 3. the madness level, and the broadcast latch when it has moved enough ---------------
-    // 0x82315F28..0x82315F50.
-    const f32 lfMadness = lfMadnessRatio * lfMaxMadness;
-    mfRoadRageMadness = lfMadness;
-    if (std::fabs(lfMadness - mfMadnessBroadcastLevel) > KF_BROADCAST_MADNESS_TRESHOLD)
+    mfRoadRageMadness = mfRoadRageMadnessRatio * lfMaxMadness;
+    if (rw::math::vpu::Abs(mfRoadRageMadness - mfMadnessBroadcastLevel) > KF_BROADCAST_MADNESS_TRESHOLD)
     {
-        mfMadnessBroadcastLevel = lfMadness;
+        mfMadnessBroadcastLevel = mfRoadRageMadness;
         mbUpdateMadnessLevel    = true;
     }
 
-    // ---- 4. how many rivals may be active (0x82315F54..0x82315FD4) ----------------------------
-    // `lwz r11, 0x28(r3) ; cmpwi 2` -- in progress: lerp from (rivals + 1) up to the ceiling on the
-    // madness ratio (`fcfid` of miNumberOfRivals + 1, then the third lerp, `fctiwz`); otherwise the
-    // start-line count.
+    // In progress: lerp from the rival-count ceiling (DWARF KI_MAX_ROAD_RAGE_RIVAL_COUNT, cpp:44, as a
+    // float temporary: ARTIST 0x82315F7C..0x82315F88 spills the pooled 7.0 for the VecFloat) to the
+    // rivals + 1 on the madness ratio, truncated (fctiwz/stfiwx); otherwise the start-line count.
     if (GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS)
     {
-        miNumberOfAllowedRoadRageRivals = static_cast<s32>(
-            // [verify V1 2026-09-02] FROM 7 TO n+1: 0x82315FB0 `vsubfp v12, v12, v0` = (n+1) - 7, then
-            // `vmaddfp v0, v12, v0, v13` = ((n+1) - 7) * ratio + 7 -- continuous with the 7 that Start
-            // (`stw r28(7), 0xC0` @0x823309DC) and the not-in-progress arm below both store.
-            Lerp(KF_MAX_ROAD_RAGE_RIVAL_COUNT_F, static_cast<f32>(miNumberOfRivals + 1), mfRoadRageMadnessRatio));
+        miNumberOfAllowedRoadRageRivals = static_cast<int32_t>(static_cast<float>(
+            rw::math::vpu::Lerp(static_cast<f32>(KI_MAX_ROAD_RAGE_RIVAL_COUNT),
+                                static_cast<f32>(miNumberOfRivals + 1), mfRoadRageMadnessRatio)));
     }
     else
     {
@@ -598,20 +546,24 @@ void RoadRageMode::UpdateMaxActiveCars(f32 lfDeltaTime, const RoadRageModeScorin
 //   lfs ; fsubs f1 ; stfs                                -- then subtract the frame delta
 //   fcmpu 0.0 ; bgt next ; stb 1 -> 0xF4                 -- expired -> mbUpdateRivals
 // ============================================================================================
-void RoadRageMode::UpdateHiddenRivals(f32 lfDeltaTime)
+// DWARF locals liIndex (cpp:288) and float lfMaxHiddenTime (cpp:290); its call list is the SDK's
+// rw::math::vpu::Lerp over VecFloat with VecFloat::operator float (ARTIST lvlx/vspltw, vsubfp,
+// vmaddfp, stvx and lfs back, 0x82315DD8..0x82315E08).
+void RoadRageMode::UpdateHiddenRivals(f32 lfTimeStep)
 {
-    const f32 lfMaxHiddenTime = Lerp(KF_MAX_HIDDEN_TIME, KF_MIN_HIDDEN_TIME, mfRoadRageMadness);
+    int32_t liIndex;
+    float   lfMaxHiddenTime = rw::math::vpu::Lerp(KF_MAX_HIDDEN_TIME, KF_MIN_HIDDEN_TIME, mfRoadRageMadness);
 
-    for (s32 liRival = 0; liRival < 8; ++liRival)
+    for (liIndex = 0; liIndex < 8; liIndex++)
     {
-        if (mfHiddenTime[liRival] > 0.0f)
+        if (mfHiddenTime[liIndex] > 0.0f)
         {
-            if (mfHiddenTime[liRival] > lfMaxHiddenTime)
+            if (mfHiddenTime[liIndex] > lfMaxHiddenTime)
             {
-                mfHiddenTime[liRival] = lfMaxHiddenTime;
+                mfHiddenTime[liIndex] = lfMaxHiddenTime;
             }
-            mfHiddenTime[liRival] -= lfDeltaTime;
-            if (mfHiddenTime[liRival] <= 0.0f)
+            mfHiddenTime[liIndex] -= lfTimeStep;
+            if (mfHiddenTime[liIndex] <= 0.0f)
             {
                 mbUpdateRivals = true;
             }
@@ -634,31 +586,41 @@ void RoadRageMode::UpdateHiddenRivals(f32 lfDeltaTime)
 // The loop bound is re-read from the member each iteration on the console; miNumberOfRivals is not
 // written inside either loop, so a hoisted bound is the same program.
 // ============================================================================================
+// DWARF (BrnGameStateScoringAndModesUnity): liIndex (cpp:332) and lAllowToJoin (cpp:336, inside the
+// loop) in the first arm; lUpdateRoadRageMadnessAction (cpp:363) declared before its loop's liIndex
+// (cpp:365) in the second; both post through AddGameAction<T> (ids 129 / 131, 8 bytes each).
 void RoadRageMode::BroadcastEventsToRivals(GameStateModuleIO::OutputBuffer* lpOutput)
 {
     if (mbUpdateRivals)
     {
-        for (s32 liRival = 0; liRival < miNumberOfRivals + 1; ++liRival)
+        for (int32_t liIndex = 0; liIndex < miNumberOfRivals + 1; liIndex++)
         {
-            AllowCarToJoinRoadRageActionRecord lAllowAction;
-            lAllowAction.mActiveRaceCarIndex = static_cast<::EActiveRaceCarIndex>(liRival);
-            lAllowAction.mbAllowedInRoadRage = (mfHiddenTime[liRival] <= 0.0f) &&
-                                               (liRival < miNumberOfAllowedRoadRageRivals);
-            // +0x05..+0x07 deliberately left unwritten (console posts stack residue there).
+            GameStateModuleIO::AllowCarToJoinRoadRageAction lAllowToJoin;
+            lAllowToJoin.mActiveRaceCarIndex = static_cast<::EActiveRaceCarIndex>(liIndex);
+            // A still-hidden rival is not allowed (ARTIST 0x823447E8 `ble`, not-greater, to the count
+            // test; the false store falls through).
+            if (mfHiddenTime[liIndex] > 0.0f)
+            {
+                lAllowToJoin.mbAllowedInRoadRage = false;
+            }
+            else
+            {
+                lAllowToJoin.mbAllowedInRoadRage = liIndex < miNumberOfAllowedRoadRageRivals;
+            }
 
-            lpOutput->GetGameActionQueue()->AddEvent(lAllowAction, KI_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE); // li r5,0x81 ; li r6,8
+            lpOutput->GetGameActionQueue()->AddGameAction(lAllowToJoin);
         }
         mbUpdateRivals = false;
     }
     else if (mbUpdateMadnessLevel)
     {
-        for (s32 liRival = 0; liRival < miNumberOfRivals + 1; ++liRival)
+        GameStateModuleIO::UpdateRoadRageMadnessAction lUpdateRoadRageMadnessAction;
+        for (int32_t liIndex = 0; liIndex < miNumberOfRivals + 1; liIndex++)
         {
-            UpdateRoadRageMadnessActionRecord lMadnessAction;
-            lMadnessAction.mActiveRaceCarID  = static_cast<::EActiveRaceCarIndex>(liRival);
-            lMadnessAction.mRoadRageMadnesss = mfRoadRageMadness;
+            lUpdateRoadRageMadnessAction.mActiveRaceCarID  = static_cast<::EActiveRaceCarIndex>(liIndex);
+            lUpdateRoadRageMadnessAction.mRoadRageMadnesss = mfRoadRageMadness;
 
-            lpOutput->GetGameActionQueue()->AddEvent(lMadnessAction, KI_ACTION_UPDATE_ROAD_RAGE_MADNESS); // li r5,0x83 ; li r6,8
+            lpOutput->GetGameActionQueue()->AddGameAction(lUpdateRoadRageMadnessAction);
         }
         mfMadnessBroadcastLevel = mfRoadRageMadness;
         mbUpdateMadnessLevel    = false;

@@ -61,36 +61,77 @@ namespace GameStateModuleIO
         void Construct();                                                   // DWARF :65
         void Clear();                                                       // DWARF :69
 
-        // The de-inlined dirty-trick publishers. The X360 PaybackManager bodies inline these as a
-        // direct write of the three/four fields into the matching sub-queue followed by AddEvent.
+        // The publishers are defined in the class (DWARF :76..:138, one definition every few lines).
+        // ARTIST holds no out-of-line copy of AddNewDirtyTrick / AddDirtyTrickTriggered /
+        // AddDirtyTrickEnding / AddOvertakeEvent / AddOnTailEvent, the eight Get*Queue accessors or
+        // SetPlayerRaceCarIndex, and inlines each at its callers as the record build + the sub-queue's
+        // AddEvent (e.g. PaybackManager::HandleCrashDueToPayback 0x82397DD4..0x82397DF4: +0x7C queue,
+        // {aggressor, victim, type, survived}; HandleTriggeringPayback 0x82397C58: +0x40;
+        // HandleAwardingPayback 0x82397A4C: +4; CheckForTailingRivals 0x82376350: +0x160;
+        // EmmPreWorldUpdate 0x8238F324: +0xC8; TranslateGuiInterfaceToGuiEvents 0x823E1D9C: the
+        // accessors; GameStateModule::PreWorldUpdate 0x823A5594: SetPlayerRaceCarIndex).
         void AddNewDirtyTrick(::EActiveRaceCarIndex leAggressor, ::EActiveRaceCarIndex leVictim,
-                              BrnNetwork::EPaybackType leTrickType);                          // DWARF :76
+                              BrnNetwork::EPaybackType leTrickType)                           // DWARF :76
+        {
+            GameStateToGuiNewDirtyTrick lEvent;
+            lEvent.meAggressorActiveRaceCarIndex = leAggressor;
+            lEvent.meVictimActiveRaceCarIndex    = leVictim;
+            lEvent.meTrickType                   = leTrickType;
+            mNewDirtyTrickQueue.AddEvent(lEvent);
+        }
         void AddDirtyTrickTriggered(::EActiveRaceCarIndex leAggressor, ::EActiveRaceCarIndex leVictim,
-                                    BrnNetwork::EPaybackType leTrickType);                     // DWARF :83
+                                    BrnNetwork::EPaybackType leTrickType)                      // DWARF :83
+        {
+            GameStateToGuiTriggeredDirtyTrick lEvent;
+            lEvent.meAggressorActiveRaceCarIndex = leAggressor;
+            lEvent.meVictimActiveRaceCarIndex    = leVictim;
+            lEvent.meTrickType                   = leTrickType;
+            mDirtyTrickTriggeredQueue.AddEvent(lEvent);
+        }
         void AddDirtyTrickEnding(::EActiveRaceCarIndex leAggressor, ::EActiveRaceCarIndex leVictim,
-                                 BrnNetwork::EPaybackType leTrickType, bool lbSurvived);       // DWARF :91
+                                 BrnNetwork::EPaybackType leTrickType, bool lbSurvived)        // DWARF :91
+        {
+            GameStateToGuiEndingDirtyTrick lEvent;
+            lEvent.meAggressorActiveRaceCarIndex = leAggressor;
+            lEvent.meVictimActiveRaceCarIndex    = leVictim;
+            lEvent.meTrickType                   = leTrickType;
+            lEvent.mbSurvived                    = lbSurvived;
+            mDirtyTrickEndingQueue.AddEvent(lEvent);
+        }
 
-        void AddOvertakeEvent(u8 lu8NewPosition, ::EActiveRaceCarIndex leActiveRaceCarIndex);    // DWARF :97
+        void AddOvertakeEvent(u8 lu8NewPosition, ::EActiveRaceCarIndex leActiveRaceCarIndex)     // DWARF :97
+        {
+            GameStateToGuiOvertakeEvent lEvent;
+            lEvent.mu8NewPosition       = lu8NewPosition;
+            lEvent.meActiveRaceCarIndex = leActiveRaceCarIndex;
+            mOvertakeEventQueue.AddEvent(lEvent);
+        }
         void AddFinishedRaceEvent(BrnGui::EFinishType leFinishType, ::EActiveRaceCarIndex leActiveRaceCarIndex); // DWARF :103
         void AddTookLeadEvent(CgsID lOfflineRivalCarID, ::EActiveRaceCarIndex leActiveRaceCarIndex);  // DWARF :109
         void AddTookLastEvent(CgsID lOfflineRivalCarID, ::EActiveRaceCarIndex leActiveRaceCarIndex);  // DWARF :115
-        void AddOnTailEvent(CgsID lOfflineRivalCarID, ::EActiveRaceCarIndex leActiveRaceCarIndex);    // DWARF :121
+        void AddOnTailEvent(CgsID lOfflineRivalCarID, ::EActiveRaceCarIndex leActiveRaceCarIndex)     // DWARF :121
+        {
+            GameStateToGuiOnTailEvent lEvent;
+            lEvent.mOfflineRivalCarID         = lOfflineRivalCarID;
+            lEvent.meOnTailActiveRaceCarIndex = leActiveRaceCarIndex;
+            mOnTailEventQueue.AddEvent(lEvent);
+        }
 
         // DWARF :126, X360 @0x82379980 (out of line). The parameter's DWARF type is
         // VehicleManagerOutputInterface::RaceCarCrashEventQueue == EventQueue<RaceCarCrashEvent,8>.
         void AppendRaceCarCrashes(
             const CgsModule::EventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent, 8>* lpRaceCarCrashEventQueue);
 
-        const NewDirtyTrickQueue*       GetNewDirtyTrickQueue() const;        // DWARF :128
-        const DirtyTrickTriggeredQueue* GetDirtyTrickTriggeredQueue() const;  // DWARF :129
-        const DirtyTrickEndingQueue*    GetDirtyTrickEndingQueue() const;     // DWARF :130
-        const OvertakeEventQueue*       GetOvertakeEventQueue() const;        // DWARF :131
-        const FinishedRaceEventQueue*   GetFinishedRaceEventQueue() const;    // DWARF :132
-        const TookLeadEventQueue*       GetTookLeadEventQueue() const;        // DWARF :133
-        const TookLastEventQueue*       GetTookLastEventQueue() const;        // DWARF :134
-        const OnTailEventQueue*         GetOnTailEventQueue() const;          // DWARF :135
+        const NewDirtyTrickQueue*       GetNewDirtyTrickQueue() const       { return &mNewDirtyTrickQueue; }        // DWARF :128
+        const DirtyTrickTriggeredQueue* GetDirtyTrickTriggeredQueue() const { return &mDirtyTrickTriggeredQueue; }  // DWARF :129
+        const DirtyTrickEndingQueue*    GetDirtyTrickEndingQueue() const    { return &mDirtyTrickEndingQueue; }     // DWARF :130
+        const OvertakeEventQueue*       GetOvertakeEventQueue() const       { return &mOvertakeEventQueue; }        // DWARF :131
+        const FinishedRaceEventQueue*   GetFinishedRaceEventQueue() const   { return &mFinishedRaceEventQueue; }    // DWARF :132
+        const TookLeadEventQueue*       GetTookLeadEventQueue() const       { return &mTookLeadEventQueue; }        // DWARF :133
+        const TookLastEventQueue*       GetTookLastEventQueue() const       { return &mTookLastEventQueue; }        // DWARF :134
+        const OnTailEventQueue*         GetOnTailEventQueue() const         { return &mOnTailEventQueue; }          // DWARF :135
 
-        void SetPlayerRaceCarIndex(s32 liPlayerRaceCarIndex);                 // DWARF :137
+        void SetPlayerRaceCarIndex(s32 liPlayerRaceCarIndex) { miPlayerRaceCarIndex = liPlayerRaceCarIndex; }      // DWARF :137
         s32  GetPlayerRaceCarIndex() const;                                  // DWARF :138
 
     private:

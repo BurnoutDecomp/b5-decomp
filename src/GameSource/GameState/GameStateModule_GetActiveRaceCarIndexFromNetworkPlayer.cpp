@@ -47,14 +47,15 @@ namespace BrnGameState
 // ----------------------------------------------------------------------------
 ::EActiveRaceCarIndex GameStateModule::GetActiveRaceCarIndex(BrnNetwork::NetworkPlayerID lPlayerID)
 {
-    const CarData* lpCarData = mModeManager.GetScoringSystem()->GetCarData(lPlayerID);
+    // ARTIST tests the record and returns its index first (0x82363990 beq to -1).
+    const CarData* lpData = mModeManager.GetScoringSystem()->GetCarData(lPlayerID);
 
-    if (lpCarData == NULL)
+    if (lpData)
     {
-        return E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        return lpData->GetActiveRaceCarIndex();
     }
 
-    return lpCarData->GetActiveRaceCarIndex();
+    return E_ACTIVE_RACE_CAR_INDEX_INVALID;
 }
 
 // ----------------------------------------------------------------------------
@@ -69,15 +70,16 @@ namespace BrnGameState
 // ----------------------------------------------------------------------------
 BrnNetwork::NetworkPlayerID GameStateModule::GetNetworkPlayerID(::EActiveRaceCarIndex leActiveRaceCarIndex)
 {
+    // DWARF local lpData (cpp:6569); ARTIST tests it and returns the id first (0x823639D8 beq to -1).
     const ScoringSystem& lrScoringSystem = *mModeManager.GetScoringSystem();
-    const CarData* lpCarData = lrScoringSystem.GetCarData(leActiveRaceCarIndex);
+    const CarData* lpData = lrScoringSystem.GetCarData(leActiveRaceCarIndex);
 
-    if (lpCarData == NULL)
+    if (lpData)
     {
-        return -1;
+        return lpData->GetNetworkPlayerID();
     }
 
-    return lpCarData->GetNetworkPlayerID();
+    return -1;
 }
 
 } // namespace BrnGameState

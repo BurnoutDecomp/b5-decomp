@@ -1312,13 +1312,13 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
             const UpdateRoadRageMadnessAction* const lpMadness =
                 reinterpret_cast<const UpdateRoadRageMadnessAction*>(lpAction);
 
-            AIDriver* const lpDriver = GetAIDriver(lpMadness->meActiveRaceCarIndex);
+            AIDriver* const lpDriver = GetAIDriver(lpMadness->mActiveRaceCarID);
             if (lpDriver == 0 || !lpDriver->IsActive())                                     // 0x82792388
             {
                 break;
             }
             AICar* const lpCar = lpDriver->GetCar();                                        // 0x82792398
-            lpCar->SetRoadRageMadness(lpMadness->mfMadness);                                // 0x8279239C
+            lpCar->SetRoadRageMadness(lpMadness->mRoadRageMadnesss);                                // 0x8279239C
 
 
             break;

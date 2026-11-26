@@ -47,18 +47,6 @@ namespace BrnGameState
         const s32 KI_GUI_EVENT_PAYBACK_STATE_CHANGE = 176; // 0xB0, 4-byte s32 flag payload
         const s32 KI_GUI_EVENT_PAYBACK_COUNTDOWN    = 235; // 0xEB, 4-byte f32 payload
 
-        // output-buffer GUI/action queue (VariableEventQueue<13312,16>) tags
-        const s32 KI_GUI_EVENT_HAVE_PAYBACK         = 212; // 0xD4, 1-byte bool payload
-        const s32 KI_GUI_EVENT_DT_ENDED_ON_YOU      = 217; // 0xD9, 8-byte {aggressor,victim} payload
-        // PaybackOverAction (DWARF name, AddGameAction<PaybackOverAction> in both victim end arms):
-        // `li r5,0xD8 ; li r6,1` @0x82397E80 (HandleCrashDueToPayback) and @0x82397FA0
-        // (HandleSurvivingPayback) -- the same id and size in both.
-        const s32 KI_ACTION_PAYBACK_OVER            = 216; // 0xD8, 1-byte payload
-        // PaybackLostAction (DWARF `typedef GameAction<E_ACTION_PAYBACK_LOST> PaybackLostAction`,
-        // DWARF value 203 -- the PS3 twin posts 203 -- and +8 on the X360): `li r5,0xD3 ; li r6,1`
-        // @0x82397AD8/0x82397AD4 (HandleAwardingPayback). A local constant, not the shared enum:
-        // BrnGameActions.h still carries the unshifted E_ACTION_ONLINE_PLAYER_ADDED at 211.
-        const s32 KI_ACTION_PAYBACK_LOST            = 211; // 0xD3, 1-byte payload
 
         // The dirty-trick statuses the manager broadcasts. BrnNetwork::EDirtyTrickStatus's shared
         // home names only E_DIRTY_TRICK_NONE, so the X360 immediates are named here after the PS3
@@ -78,40 +66,10 @@ namespace BrnGameState
             s32 miShow;
         };
 
-        // The type-217 record: the aggressor + victim active-race-car indices of a dirty trick that
-        // just ended on the local player (X360 stores {aggressor,victim} as two s32s; see below).
-        struct DirtyTrickEndedOnYouEvent : public CgsModule::Event
-        {
-            ::EActiveRaceCarIndex meAggressorRaceCarIndex;
-            ::EActiveRaceCarIndex meVictimRaceCarIndex;
-        };
-
-        // The type-212 record: 1-byte "you have a payback available / lost it" flag.
-        struct HavePaybackEvent : public CgsModule::Event
-        {
-            u8 mu8Flag;
-        };
-
         // The type-235 record: the remaining countdown time (f32).
         struct PaybackCountdownEvent : public CgsModule::Event
         {
             f32 mfRemaining;
-        };
-
-        // The type-216 record (PaybackOverAction). The console posts a one-byte stack local it never
-        // writes (`addi r4, r1, var_50` with no store to var_50 in either victim end arm): the type id
-        // carries the whole meaning, so the byte stays uninitialised here too.
-        struct PaybackOverAction : public CgsModule::Event
-        {
-            u8 muUnused;
-        };
-
-        // The type-211 record (PaybackLostAction). Same shape as the one above: HandleAwardingPayback
-        // posts `addi r4, r1, var_60` (0x82397ADC) and never stores to var_60, so the byte stays
-        // uninitialised here too.
-        struct PaybackLostAction : public CgsModule::Event
-        {
-            u8 muUnused;
         };
 
     }
@@ -638,9 +596,8 @@ namespace BrnGameState
         {
             CGS_ASSERT_AT(lpOutput, "lpOutput", CGS_ARTIST_FILE, 437);
 
-            PaybackLostAction lPaybackLost;
-            lpOutput->GetGuiOutputQueue()->AddEvent(
-                &lPaybackLost, KI_ACTION_PAYBACK_LOST, sizeof(PaybackLostAction));
+            // DWARF AddGameAction<PaybackLostAction> (no local: the never-written byte is posted).
+            lpOutput->GetGameActionQueue()->AddGameAction(GameStateModuleIO::PaybackLostAction());
 
             meAwardedDirtyTrick         = KE_NO_DIRTY_TRICK;                   // +0x258 = 3
             mePaybackVictimRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;   // +0x244 = -1
@@ -659,26 +616,20 @@ namespace BrnGameState
     void
     PaybackManager::HandleHavingPayback(GameStateModuleIO::OutputBuffer* lpOutput)
     {
-        if (mpGameStateModule->IsActiveRaceCarStillPresent(mePaybackVictimRaceCarIndex))
-            return;   // victim car still in play -- keep waiting
+        // The victim left the game once its network player id reads -1 (PS3 0x29D370 calls
+        // GameStateModule::GetNetworkPlayerID by name; ARTIST inlines it from the unity TU,
+        // GetCarData then +0x148 against -1, 0x82397B4C..0x82397B6C), then ChangeState(IDLE)
+        // inlined (0x82397B70..0x82397BAC).
+        if (mpGameStateModule->GetNetworkPlayerID(mePaybackVictimRaceCarIndex) == -1)
+        {
+            meAwardedDirtyTrick = KE_NO_DIRTY_TRICK;
+            ChangeState(E_PAYBACK_AGGRESSOR_STATE_IDLE);
 
-        mfPaybackAggTimer       = -1.0f;
-        meAwardedDirtyTrick     = KE_NO_DIRTY_TRICK;   // 3
-        mePaybackAggressorState = E_PAYBACK_AGGRESSOR_STATE_IDLE;
-        mbPaybackAwarded        = false;
+            CGS_ASSERT_AT(lpOutput, "lpOutput", CGS_ARTIST_FILE, 464);
 
-        PaybackStateChangeEvent lHide;
-        lHide.miShow = 1;
-        mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
-            &lHide, KI_GUI_EVENT_PAYBACK_STATE_CHANGE, sizeof(s32));
-
-        CGS_ASSERT_AT(lpOutput, "lpOutput", CGS_ARTIST_FILE, 464);
-
-        // PaybackVictimLeftGameAction (X360 game-action tag 0xD4, 1-byte payload).
-        HavePaybackEvent lVictimLeft;
-        lVictimLeft.mu8Flag = 1;
-        lpOutput->GetGuiOutputQueue()->AddEvent(
-            &lVictimLeft, KI_GUI_EVENT_HAVE_PAYBACK, 1);
+            // DWARF AddGameAction<PaybackVictimLeftGameAction> (0xD4, the never-written byte posted).
+            lpOutput->GetGameActionQueue()->AddGameAction(GameStateModuleIO::PaybackVictimLeftGameAction());
+        }
     }
 
     // -----------------------------------------------------------------------------------
@@ -690,36 +641,21 @@ namespace BrnGameState
     void
     PaybackManager::HandleTriggeringPayback(GameStateModuleIO::OutputBuffer* lpOutput)
     {
-        const BrnNetwork::EPaybackType leAwarded     = meAwardedDirtyTrick;
-        const ::EActiveRaceCarIndex    leVictimIndex = mePaybackVictimRaceCarIndex;
-        const ::EActiveRaceCarIndex    lePlayerIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
+        // The members are passed directly (no DWARF locals): ARTIST evaluates the arguments right
+        // to left, +0x258 and +0x244 before the GetPlayerActiveRaceCarIndex call (0x82397C1C..0x82397C28),
+        // and re-reads all three for the inlined DirtyTrickTriggered (+0x40 queue, 0x82397C44..0x82397C74).
+        SendNetworkDirtyTrickMessage(mpGameStateModule->GetPlayerActiveRaceCarIndex(), mePaybackVictimRaceCarIndex,
+                                     meAwardedDirtyTrick, static_cast<BrnNetwork::EDirtyTrickStatus>(2));
 
-        SendNetworkDirtyTrickMessage(lePlayerIndex, leVictimIndex, leAwarded,
-                                     static_cast<BrnNetwork::EDirtyTrickStatus>(2));
+        DirtyTrickTriggered(lpOutput, mpGameStateModule->GetPlayerActiveRaceCarIndex(), mePaybackVictimRaceCarIndex,
+                            meAwardedDirtyTrick);
 
-        // X360 0x82397C44..0x82397C74 re-reads the three values (+0x258, +0x244, the player) and
-        // writes the GUI "dirty trick triggered" record {player, victim, trick} into the output
-        // buffer's GameStateToGuiInterface (+0x40 queue) -- the PS3 twin calls
-        // DirtyTrickTriggered(lpOutput, player, victim, trick) here, which the X360 inlines.
-        const BrnNetwork::EPaybackType leAwarded2     = meAwardedDirtyTrick;
-        const ::EActiveRaceCarIndex    leVictimIndex2 = mePaybackVictimRaceCarIndex;
-        const ::EActiveRaceCarIndex    lePlayerIndex2 = mpGameStateModule->GetPlayerActiveRaceCarIndex();
-
-        DirtyTrickTriggered(lpOutput, lePlayerIndex2, leVictimIndex2, leAwarded2);
-
-        // X360 @0x82397C08 end-stores (asm order): timer off, clear the awarded trick, drop the victim
-        // index, return the aggressor FSM to IDLE, clear the awarded flag. The earlier reconstruction
-        // wrongly left the state at READY_TO_TRIGGER and dropped the meAwardedDirtyTrick reset.
-        mfPaybackAggTimer              = -1.0f;                              // +588
-        meAwardedDirtyTrick            = KE_NO_DIRTY_TRICK;                  // +600 = 3
-        mePaybackVictimRaceCarIndex    = ::E_ACTIVE_RACE_CAR_INDEX_INVALID; // +580 = -1
-        mePaybackAggressorState        = E_PAYBACK_AGGRESSOR_STATE_IDLE;     // +604 = 0
-        mbPaybackAwarded               = false;                             // +614 = 0
-
-        PaybackStateChangeEvent lHide;
-        lHide.miShow = 1;
-        mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
-            &lHide, KI_GUI_EVENT_PAYBACK_STATE_CHANGE, sizeof(s32));
+        // X360 0x82397C78..0x82397CBC: clear the awarded trick (+0x258 = 3) and the victim index
+        // (+0x244 = -1), then ChangeState(IDLE) inlined (-1.0 -> +0x24C, +0x25C = 0, +0x266 = 0, GUI
+        // 176), as HandleAwardingPayback's tail.
+        meAwardedDirtyTrick         = KE_NO_DIRTY_TRICK;
+        mePaybackVictimRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        ChangeState(E_PAYBACK_AGGRESSOR_STATE_IDLE);
     }
 
     // -----------------------------------------------------------------------------------
@@ -775,11 +711,12 @@ namespace BrnGameState
 
         // PaybackActivatedAction (DWARF record, BrnGameActions.h): {type, aggressor, victim} in
         // THIS order (`stw +0x254, var_50 ; stw +0x240, var_4C ; stw player, var_48`), 12 bytes.
-        GameStateModuleIO::PaybackActivatedAction lActivated;
-        lActivated.mePaybackType           = meActiveDirtyTrickType;
-        lActivated.mePaybackAggressorIndex = mePaybackAggressorRaceCarIndex;
-        lActivated.mePaybackVictimIndex    = mpGameStateModule->GetPlayerActiveRaceCarIndex();
-        lpOutput->GetGuiOutputQueue()->AddEvent(lActivated, GameStateModuleIO::E_ACTION_PAYBACK_ACTIVATED);
+        // DWARF local lPaybackActivatedAction (cpp:473), AddGameAction<PaybackActivatedAction>.
+        GameStateModuleIO::PaybackActivatedAction lPaybackActivatedAction;
+        lPaybackActivatedAction.mePaybackType           = meActiveDirtyTrickType;
+        lPaybackActivatedAction.mePaybackAggressorIndex = mePaybackAggressorRaceCarIndex;
+        lPaybackActivatedAction.mePaybackVictimIndex    = mpGameStateModule->GetPlayerActiveRaceCarIndex();
+        lpOutput->GetGameActionQueue()->AddGameAction(lPaybackActivatedAction);
 
         StartCountdown();                            // +0x248 = 10.0
         ChangeState(E_PAYBACK_VICTIM_STATE_ACTIVE);  // +0x260 = 2
@@ -845,9 +782,7 @@ namespace BrnGameState
         CGS_ASSERT_AT(lpOutput, "lpOutput", CGS_ARTIST_FILE, 609);
         CGS_ASSERT_AT(lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 610);
 
-        PaybackOverAction lPaybackOver;
-        lpOutput->GetGuiOutputQueue()->AddEvent(
-            &lPaybackOver, KI_ACTION_PAYBACK_OVER, sizeof(PaybackOverAction));
+        lpOutput->GetGameActionQueue()->AddGameAction(GameStateModuleIO::PaybackOverAction());
 
         meActiveDirtyTrickType = KE_NO_DIRTY_TRICK;     // +0x254 = 3
         ChangeState(E_PAYBACK_VICTIM_STATE_IDLE);       // +0x260 = 0
@@ -877,9 +812,7 @@ namespace BrnGameState
         CGS_ASSERT_AT(lpOutput, "lpOutput", CGS_ARTIST_FILE, 650);
         CGS_ASSERT_AT(lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 651);
 
-        PaybackOverAction lPaybackOver;
-        lpOutput->GetGuiOutputQueue()->AddEvent(
-            &lPaybackOver, KI_ACTION_PAYBACK_OVER, sizeof(PaybackOverAction));
+        lpOutput->GetGameActionQueue()->AddGameAction(GameStateModuleIO::PaybackOverAction());
 
         meActiveDirtyTrickType = KE_NO_DIRTY_TRICK;     // +0x254 = 3
         ChangeState(E_PAYBACK_VICTIM_STATE_IDLE);       // +0x260 = 0
@@ -999,11 +932,11 @@ namespace BrnGameState
                         leAggressor, leVictim, leType, /*lbSurvived=*/false);
                     if (leAggressor == mpGameStateModule->GetPlayerActiveRaceCarIndex())
                     {
-                        DirtyTrickEndedOnYouEvent lEndedOnYou;
-                        lEndedOnYou.meAggressorRaceCarIndex = leAggressor;
-                        lEndedOnYou.meVictimRaceCarIndex    = leVictim;
-                        lpOutput->GetGuiOutputQueue()->AddEvent(
-                            &lEndedOnYou, KI_GUI_EVENT_DT_ENDED_ON_YOU, 2 * static_cast<s32>(sizeof(s32)));
+                        // DWARF local lSucceededAction (cpp:678), AddGameAction<PaybackSucceededAction> (0xD9).
+                        GameStateModuleIO::PaybackSucceededAction lSucceededAction;
+                        lSucceededAction.mePaybackAggressorIndex = leAggressor;
+                        lSucceededAction.mePaybackVictimIndex    = leVictim;
+                        lpOutput->GetGameActionQueue()->AddGameAction(lSucceededAction);
                     }
                     break;
 

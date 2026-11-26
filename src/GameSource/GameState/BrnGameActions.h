@@ -1075,10 +1075,16 @@ enum EGameActionType
     E_ACTION_BURNOUT_SKILLZ                              = 168,
     //   209 band +8: the achievement manager's WriteAchievements posts it.
     E_ACTION_ACHIEVEMENTS_EARNED                         = 209,
-    //   213..217 band +8: the MugshotManager posts 213 (32 bytes) and 214 (16 bytes).
+    //   211..217 band +8 (DWARF 203..209): the PaybackManager posts 211 (HandleAwardingPayback
+    //   `li r5,0xD3` 0x82397AD8), 212 (HandleHavingPayback `li r5,0xD4` 0x82397BE4) and 216 (both
+    //   victim end arms `li r5,0xD8` 0x82397E80 / 0x82397FA0), one byte each; the MugshotManager
+    //   posts 213 (32 bytes) and 214 (16 bytes).
+    E_ACTION_PAYBACK_LOST                                = 211,
+    E_ACTION_PAYBACK_VICTIM_LEFT_GAME                    = 212,
     E_ACTION_PAYBACK_MUGSHOT                             = 213,
     E_ACTION_ABORT_MUGSHOT_CAPTURE                       = 214,
     E_ACTION_PAYBACK_ACTIVATED                           = 215,
+    E_ACTION_PAYBACK_OVER                                = 216,
     E_ACTION_PAYBACK_SUCCEEDED                           = 217,
     //   225 / 226 / 236 band +8: BrnGameModule::TranslateNetworkEventsToWorld posts all three
     //   (225 and 226 as one byte, 236 as the 16-byte hull list).
@@ -3983,10 +3989,11 @@ CGS_STATIC_ASSERT((sizeof(DriveThruJunkYardAction) == 1),
 // ---- 131 ------------------------------------------------------------------------------------
 // AIModule::HandleGameActions jump-table case 124 (== type 131), asm 0x8279237C..0x8279239C:
 // `lwz r4, 0(r27)` -> AIModule::GetAIDriver, `lfs f1, 4(r27)` -> AICar::SetRoadRageMadness.
+// DWARF h:3550 (members h:3552/:3553, the DWARF's own spellings).
 struct UpdateRoadRageMadnessAction : public GameAction<E_ACTION_UPDATE_ROAD_RAGE_MADNESS>
 {
-    ::EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00
-    f32                   mfMadness;              // +0x04
+    ::EActiveRaceCarIndex mActiveRaceCarID;       // +0x00
+    f32                   mRoadRageMadnesss;      // +0x04
 };
 CGS_STATIC_ASSERT((sizeof(UpdateRoadRageMadnessAction) == 8),
               "the AI consumer of action 131 reads +0 (s32) and +4 (f32)");
@@ -4117,6 +4124,15 @@ struct PaybackActivatedAction : public GameAction<E_ACTION_PAYBACK_ACTIVATED>
     BrnNetwork::EPaybackType mePaybackType;                    // +0x00
     EActiveRaceCarIndex      mePaybackAggressorIndex;          // +0x04
     EActiveRaceCarIndex      mePaybackVictimIndex;             // +0x08
+};
+
+// 211 / 212 -- empty signals, posted as one byte (DWARF typedefs).
+typedef GameAction<E_ACTION_PAYBACK_LOST>             PaybackLostAction;
+typedef GameAction<E_ACTION_PAYBACK_VICTIM_LEFT_GAME> PaybackVictimLeftGameAction;
+
+// 216 -- a payback on the local player is over (DWARF h:3147, no members).
+struct PaybackOverAction : public GameAction<E_ACTION_PAYBACK_OVER>
+{
 };
 
 // 217 -- a payback succeeded.

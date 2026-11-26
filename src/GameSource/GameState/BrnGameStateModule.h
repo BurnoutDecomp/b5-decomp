@@ -19,7 +19,10 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CGS_ASSERT_STREAM_AT
 #include "GameShared/GameClasses/Containers/CgsStack.h"
+
+#define CGS_ARTIST_BRNGAMESTATEMODULE_H_FILE "..\\..\\..\\GameSource\\GameState/BrnGameStateModule.h"
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 #include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h"
@@ -95,9 +98,12 @@ class GameStateModule : public CgsModule::ModuleSingleBuffered
 public:
     GameStateModule();
 
+    // ARTIST 0x82311570 (54 callers call it out of line): a streamed assert on gpcMessageBuffer at this
+    // header's line 971 (`li r5,0x3CB`, file 0x8202292C).
     EActiveRaceCarIndex GetPlayerActiveRaceCarIndex()
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+        CGS_ASSERT_STREAM_AT(mbIsUpdating, "Can not use this function unless module is updating\n",
+                             CGS_ARTIST_BRNGAMESTATEMODULE_H_FILE, 971);
         return mePlayerActiveRaceCarIndex;
     }
 
@@ -282,8 +288,6 @@ public:
     DeveloperChallengeManager* GetDeveloperChallengeManager();
 
     CgsModule::VariableEventQueue<18432, 16>* GetOutputGuiEventQueue();
-
-    bool IsActiveRaceCarStillPresent(::EActiveRaceCarIndex leActiveRaceCarIndex) const;
 
     ModeManager* GetModeManager() { return &mModeManager; }   // header-inline (DWARF h:1068)
 

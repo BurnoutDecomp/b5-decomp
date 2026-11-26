@@ -137,15 +137,26 @@ void SurvivorMode::UpdateOpponents(GameStateModuleIO::OutputBuffer* lpOutput, s3
 {
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "<AI> Allowed in Marked man :";
-    for (::EActiveRaceCarIndex leIndex = ::E_ACTIVE_RACE_CAR_INDEX_0;
-         leIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT; leIndex++)
+    // DWARF locals leActiveRaceCarIndex (cpp:273) and lAllowToJoin (cpp:279), AddGameAction<
+    // AllowCarToJoinRoadRageAction>; ARTIST tests the bool first and the message filter in each arm
+    // (0x82345298..0x823452B0), the shape of one filtered debug print per arm.
+    for (::EActiveRaceCarIndex leActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT; leActiveRaceCarIndex++)
     {
-        GameStateModuleIO::AllowCarToJoinRoadRageAction lAction;
-        lAction.mActiveRaceCarIndex = leIndex;
-        lAction.mbAllowedInRoadRage = leIndex < liOpponentCount + 1;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << (lAction.mbAllowedInRoadRage ? "Yes," : "No,");
-        lpOutput->GetGameActionQueue()->AddEvent(lAction, GameStateModuleIO::E_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE);
+        GameStateModuleIO::AllowCarToJoinRoadRageAction lAllowToJoin;
+        lAllowToJoin.mActiveRaceCarIndex = leActiveRaceCarIndex;
+        lAllowToJoin.mbAllowedInRoadRage = leActiveRaceCarIndex < liOpponentCount + 1;
+        if (lAllowToJoin.mbAllowedInRoadRage)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "Yes,";
+        }
+        else
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "No,";
+        }
+        lpOutput->GetGameActionQueue()->AddGameAction(lAllowToJoin);
     }
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "\n";
