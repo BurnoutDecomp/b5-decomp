@@ -355,7 +355,7 @@ void ReliableMessageManager::ClearPlayersSendReliableMessages(NetworkPlayerID lP
 
     miReliableMessageSendIndex = 0;
 
-    NetworkPlayerID lLocalPlayerID;
+    NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
     mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
 
     for (s32 liIndex = mabValidSendData.GetFirstBitSet();
@@ -418,7 +418,7 @@ void ReliableMessageManager::CheckForReliableMessageTimeout()
                 << static_cast<s32>(lpSendMessageData->mu16FrameFirstSent) << "> "
                 << KI_FRAMES_TO_DISCARD_RELIABLE_MESSAGE << ")\n";
 
-            NetworkPlayerID lLocalPlayerID;
+            NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
             mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
             FakeNackMessage(lpSendMessageData->mpMsg, lLocalPlayerID,
                             lpSendMessageData->mPlayerID, false);

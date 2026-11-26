@@ -55,9 +55,8 @@ void PlayersConnectionManager::Update(const CgsSystem::TimerStatus* lpTimerStatu
 // The handshake state of a remote player (never ask about ourselves).
 EConnectionStatus PlayersConnectionManager::GetConnectionStatus(NetworkPlayerID lPlayerID) const
 {
-    NetworkPlayerID lNextLocalPlayerID;
-    const NetworkPlayerID lLocalPlayerID = mpPlayerManager->GetNextLocalPlayerID(&lNextLocalPlayerID)
-        ? lNextLocalPlayerID : K_INVALID_PLAYER_ID;
+    NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
+    mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
 
     CGS_ASSERT_AT(lPlayerID != K_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 1574);
     CGS_ASSERT_AT(lPlayerID != lLocalPlayerID, "lPlayerID != lLocalPlayerID", CGS_ARTIST_FILE, 1575);
@@ -81,7 +80,7 @@ bool PlayersConnectionManager::HavePlayersFailedToConnect(NetworkPlayerID lPlaye
         "lPlayerID2 != K_INVALID_PLAYER_ID",
         __FILE__, 733 /* ARTIST 0x82884B70 */);
 
-    NetworkPlayerID lLocalPlayerID;
+    NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
     mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
 
     // Player 1's view of player 2.
@@ -328,11 +327,8 @@ PlayersConnectionManager::AddPlayer(const CgsSystem::TimerStatus* lpTimerStatus,
 // player also loses its message types and frees its connection entry.
 void PlayersConnectionManager::RemovePlayer(NetworkPlayerID lPlayerID)
 {
-    NetworkPlayerID lLocalPlayerID;
-    if (!mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID))
-    {
-        lLocalPlayerID = K_INVALID_PLAYER_ID;
-    }
+    NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
+    mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
 
     if (lPlayerID == lLocalPlayerID)
     {

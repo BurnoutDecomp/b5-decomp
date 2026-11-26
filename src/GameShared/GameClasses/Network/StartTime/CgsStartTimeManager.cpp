@@ -151,6 +151,8 @@ void StartTimeManager::Update(const CgsSystem::TimerStatus* lpTimerStatus)
     {
         StartTime lStartTime;
         lStartTime.mStartTime = mpTimeManager->GetNetworkTime() + mGapToLeaveBeforeStartTime;
+        // The walk is seeded with the invalid id (PS3 0xC1F21C..0xC1F224 stores -1 to mHostID).
+        lStartTime.mHostID = K_INVALID_PLAYER_ID;
         mpPlayerManager->GetNextLocalPlayerID(&lStartTime.mHostID);
 
         SendStartTime(&lStartTime);
@@ -245,7 +247,7 @@ bool StartTimeManager::Release()
 void StartTimeManager::OnHostMigration(const CgsSystem::TimerStatus* lpTimerStatus,
                                        NetworkPlayerID lOldHostID, NetworkPlayerID lNewHostID)
 {
-    NetworkPlayerID lLocalPlayerID;
+    NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
     mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
     CGS_ASSERT_AT(lLocalPlayerID != K_INVALID_PLAYER_ID,
         "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
@@ -290,9 +292,10 @@ void StartTimeManager::AddPlayer(NetworkPlayerID lPlayerID)
 {
     CGS_ASSERT_AT(mpTimeManager, "mpTimeManager", CGS_ARTIST_FILE, 839);
 
-    NetworkPlayerID lLocalPlayerID;
+    NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
+    mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
     bool lbIAmHost = false;
-    if (mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID))
+    if (lLocalPlayerID != K_INVALID_PLAYER_ID)   // the id, not the result (ARTIST 0x82898E04)
     {
         lbIAmHost = mpPlayerManager->AmIHost();
     }
@@ -312,11 +315,8 @@ void StartTimeManager::RemovePlayer(NetworkPlayerID lPlayerID)
 
     mpTimeManager->RemovePlayer(lPlayerID);
 
-    NetworkPlayerID lLocalPlayerID;
-    if (!mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID))
-    {
-        lLocalPlayerID = K_INVALID_PLAYER_ID;
-    }
+    NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
+    mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
     if (lPlayerID != lLocalPlayerID)
     {
         UnregisterMessages(lPlayerID);
@@ -532,7 +532,7 @@ void StartTimeManager::PrepareHostWaitForClientsReady()
 // start.
 bool StartTimeManager::UpdateHostWaitForClientsReady(const CgsSystem::TimerStatus* lpTimerStatus)
 {
-    NetworkPlayerID lLocalPlayerID;
+    NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
     mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
 
     if (IsStartTimeValid() && mpHostMigrationManager->ABecomesHostBeforeB(lLocalPlayerID, mStartTime.mHostID))
@@ -609,11 +609,8 @@ bool StartTimeManager::UpdateClientWaitStartTimeArrive(const CgsSystem::TimerSta
     {
         StartTime lStartTime;
         lStartTime.mStartTime = mpTimeManager->GetNetworkTime() + K_TIME_GAP_TO_LEAVE_BEFORE_START_TIME;
-        NetworkPlayerID lLocalPlayerID;
-        if (!mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID))
-        {
-            lLocalPlayerID = K_INVALID_PLAYER_ID;
-        }
+        NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
+        mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
         lStartTime.mHostID = lLocalPlayerID;
 
         SetStartTime(&lStartTime);

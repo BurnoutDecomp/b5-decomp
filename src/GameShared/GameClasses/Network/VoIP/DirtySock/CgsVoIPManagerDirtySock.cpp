@@ -270,7 +270,7 @@ namespace CgsNetwork
 
             if (mbIsLocalPlayerInGame)
             {
-                NetworkPlayerID lLocalPlayerID;
+                NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
                 CGS_ASSERT_AT(mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID),
                     "mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID)",
                     __FILE__, 329 /* ARTIST 0x828991DC */);

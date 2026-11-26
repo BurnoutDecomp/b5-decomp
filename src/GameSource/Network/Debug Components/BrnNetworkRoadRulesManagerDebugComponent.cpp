@@ -60,11 +60,7 @@ namespace BrnNetwork
 
     // @ 0x8258AEB0. Build a synthetic personal-best record (score type TIME = 10) on the stack and push
     // it through the manager's normal new-personal-best path - a developer shortcut for testing the
-    // online road-rules score flow. The decompiler's raw `v4 |= 1 / v5 |= 1` are the dirty/valid bit-0
-    // sets on the two CgsContainers::BitArray<2u> sub-objects; reconstructed as named SetBit calls.
-    // ARTIST checks the TIME bounds before setting valid then dirty and calling SetScore.
-    // Its fixed payload10 is inside the immutable0..600000 bounds, so this bounded
-    // reconstruction retains the same event and stores for that original constant.
+    // online road-rules score flow.
     void RoadRulesManagerDebugComponent::TriggerPersonalBest( void* lpData )
     {
         CGS_ASSERT_AT(lpData != 0,
@@ -81,9 +77,10 @@ namespace BrnNetwork
         BrnStreetData::ChallengePlayerScoreEntry& lScoreEntry = lPBEvent.mPersonalBestScore;
         lScoreEntry.Construct();
 
-        lScoreEntry.mValidScores.SetBit( 0 );    // v5 |= 1 at +0x08: mark the TIME score valid
-        lScoreEntry.mDirty.SetBit( 0 );          // v4 |= 1 at +0x00: mark the TIME score dirty
-        lScoreEntry.mScoreList.SetScore( BrnStreetData::E_SCORE_TYPE_TIME, 10 );
+        // ChallengeData::SetScore is the DWARF header inline (BrnChallengeData.h:164): ARTIST
+        // inlines it here with its KAI_MAX/KAI_MIN range tests (0x8258AF18..0x8258AF34) before
+        // the valid/dirty bit sets and ScoreList::SetScore.
+        lScoreEntry.SetScore( BrnStreetData::E_SCORE_TYPE_TIME, 10 );
 
         lPBEvent.mChallengeIndex     = 0;
         lPBEvent.mbLobbyPersonalBest = false;

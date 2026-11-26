@@ -222,6 +222,9 @@ namespace BrnNetwork
         void TellNetworkCarAboutRecievedUpdateMessage(u16 lu16CurrentFrame, UpdateMessage* lpUpdateMessage);
         void TellNetworkCarAboutBufferedUpdateMessage(u16 lu16CurrentFrame, UpdateMessage* lpUpdateMessage);
         void HandleSendingUpdateMessage();
+        bool IsFreeBurnLobby();
+        bool IsCurrentRoundNumberOdd();
+        void WrapFrameToValidRange(u16* lpu16Frame);
         void HandleSendingFburnChallengeMessages(f32 lfTimeStep);
 
         // ---- reliable-message delivered callbacks (all one empty body) -----------------
@@ -380,6 +383,17 @@ namespace BrnNetwork
         BRN_NP_AT(mbIsOnStartLine,                         0x2237);
         CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(BrnNetworkPlayer) == 0x2240), "sizeof(BrnNetworkPlayer) == 0x2240");
 #undef BRN_NP_AT
+    }
+
+    // DWARF BrnNetworkPlayer.h:504: a header inline (Update calls it three times, CheckForNewMessages
+    // once). It folds the reserved invalid frame back to 0 IN PLACE: ARTIST Update 0x8259A158 stores
+    // the new mu16LastBufferedUpdateAppliedFrame before testing it (PS3 0x672138..0x67214C, the same).
+    inline void BrnNetworkPlayer::WrapFrameToValidRange(u16* lpu16Frame)
+    {
+        if (*lpu16Frame == CgsNetwork::KU16_INVALID_FRAME)
+        {
+            *lpu16Frame = 0;
+        }
     }
 }
 

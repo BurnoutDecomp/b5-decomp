@@ -171,12 +171,24 @@ namespace CgsNetwork
         // Iterate player ids: seed *lpPlayerID with -1, then call repeatedly; false when the
         // walk is exhausted.
         bool GetNextPlayerID(NetworkPlayerID* lpPlayerID, EPlayersToConsider leConsider) const;
-        // Header-inline on the console: every caller reads +0x23FC and tests it against the
-        // invalid id.
+        // DWARF CgsPlayerManager.h:217; the body is a header inline at h:642-650 (PS3 line info):
+        // the one-step walk over the local players. A walk not yet started (*lpPlayerID holds the
+        // invalid id, as every caller seeds it) yields the local player when there is one (h:642
+        // both tests, h:645 the store); anything else ends the walk with the invalid id (h:650).
+        // PS3 HostMigrationDebugComponent::UpdateLocalPlayerID 0xBE1EB0..0xBE1EE8 (tests *lpPlayerID,
+        // then mLocalPlayerID); StateManager::StartGameMode 0x611FAC..0x61259C (seed -1, then
+        // store mLocalPlayerID or -1); ARTIST keeps the arms (BrnNetworkPlayer::
+        // HandleSendingUpdateMessage 0x8258EAAC: li r28,-1 on the invalid arm).
         bool GetNextLocalPlayerID(NetworkPlayerID* lpPlayerID) const
         {
-            *lpPlayerID = mLocalPlayerID;
-            return mLocalPlayerID != K_INVALID_PLAYER_ID;
+            if (*lpPlayerID == K_INVALID_PLAYER_ID && mLocalPlayerID != K_INVALID_PLAYER_ID)
+            {
+                *lpPlayerID = mLocalPlayerID;
+                return true;
+            }
+
+            *lpPlayerID = K_INVALID_PLAYER_ID;
+            return false;
         }
         bool GetNextRemotePlayerID(NetworkPlayerID* lpPlayerID) const;
 

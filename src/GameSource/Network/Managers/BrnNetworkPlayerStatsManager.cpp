@@ -518,8 +518,12 @@ namespace BrnNetwork
     // entry for a resend.
     void NetworkPlayerStatsManager::UpdateLocalPlayersStat(NetworkPlayerStats::EStatsValue leStatType, s32 liValue)
     {
-        NetworkPlayerID lLocalPlayerID;
-        if (mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalPlayerID))
+        // The walk's id is tested, not its result: ARTIST 0x82552964 compares the loaded local id
+        // with -1 and passes it on (no materialised bool), as PS3 StateManager::StartGameMode tests
+        // the id after the walk (0x6125A0).
+        NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
+        mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalPlayerID);
+        if (lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID)
         {
             NetworkPlayerStats* lpPlayerStats = mPlayerStatsCache.GetPlayerStats(lLocalPlayerID);
             if (lpPlayerStats != 0)

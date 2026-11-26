@@ -183,7 +183,7 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_MAX_BUDDIES; ++li)
         {
-            maServerBuddyList[li].macName[0] = 0;
+            maServerBuddyList[li].Clear();
         }
 
         meState = E_BUDDY_MANAGER_STATE_START;
@@ -194,7 +194,7 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_MAX_BUDDIES; ++li)
         {
-            maCachedBuddyListAtLastChange[li].macName[0] = 0;
+            maCachedBuddyListAtLastChange[li].Clear();
         }
 
         miCachedNumBuddiesAtLastChange = 0;
@@ -212,7 +212,7 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_MAX_BUDDIES; ++li)
         {
-            maCachedBuddyListAtLastChange[li].macName[0] = 0;
+            maCachedBuddyListAtLastChange[li].Clear();
         }
 
         miCachedNumBuddiesAtLastChange = 0;
@@ -223,7 +223,7 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_MAX_BUDDIES; ++li)
         {
-            maServerBuddyList[li].macName[0] = 0;
+            maServerBuddyList[li].Clear();
         }
 
         mpNetworkModule = NULL;
@@ -248,11 +248,11 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_MAX_BUDDIES; ++li)
         {
-            maServerBuddyList[li].macName[0] = 0;
+            maServerBuddyList[li].Clear();
         }
         for (s32 li = 0; li < KI_MAX_BUDDIES; ++li)
         {
-            maCachedBuddyListAtLastChange[li].macName[0] = 0;
+            maCachedBuddyListAtLastChange[li].Clear();
         }
 
         miCachedNumBuddiesAtLastChange = 0;
@@ -815,9 +815,8 @@ namespace BrnNetwork
         {
             BrnNetworkModuleIO::NetworkOutBuddyNotification lBuddyNotificationEvent;
             lBuddyNotificationEvent.meBuddyNotification = 2;
-            // DWARF: CgsNetwork::PlayerName::Clear (not in this tree's PlayerName; same store),
-            // made before the count call (ARTIST 0x82563D0C).
-            lBuddyNotificationEvent.mBuddyName.macName[0] = 0;
+            // DWARF: CgsNetwork::PlayerName::Clear, made before the count call (ARTIST 0x82563D0C).
+            lBuddyNotificationEvent.mBuddyName.Clear();
             lBuddyNotificationEvent.miNumBuddies        = GetNumOnlineBuddies();
             mpNetworkModule->GetNetworkEventQueue()->AddEvent(lBuddyNotificationEvent);
         }

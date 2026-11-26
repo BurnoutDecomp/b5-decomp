@@ -240,6 +240,19 @@ namespace BrnNetwork
         mBurningHomeRunSwitchRunnerMessageRecv.Construct();
     }
 
+    // DWARF BrnNetworkPlayer.cpp:1263 / :1277 (PS3 bodies 0x65C328 / 0x65C230: the network
+    // manager's round, == -1 and & 1). ARTIST holds no out-of-line copy: every caller inlines them
+    // (Update 0x8259A1E4..0x8259A238).
+    bool BrnNetworkPlayer::IsFreeBurnLobby()
+    {
+        return mpNetworkModule->GetNetworkManager()->GetRound() == -1;
+    }
+
+    bool BrnNetworkPlayer::IsCurrentRoundNumberOdd()
+    {
+        return ( mpNetworkModule->GetNetworkManager()->GetRound() & 1 ) != 0;
+    }
+
     // The per-frame pump: the base update, the buffered-update catch-up, the pause check,
     // then (once the start frame is known) receive, apply the buffered update due this
     // frame, and send the update / challenge / skillz / collectable messages.
@@ -260,21 +273,17 @@ namespace BrnNetwork
                 "mu16LastAnyUpdateAppliedFrame != KU16_INVALID_FRAME",
                 __FILE__, 1326 /* ARTIST 0x8259A118 */);
 
-            u16 lu16OldestAllowedFrame =
+            // DWARF BrnNetworkPlayer.cpp:1308 lu16BuffMsgPlusSome; both frames fold back through
+            // WrapFrameToValidRange (h:504), the member in place.
+            u16 lu16BuffMsgPlusSome =
                 static_cast<u16>(mu16LastBufferedUpdateAppliedFrame + KU16_MAX_BUFFERED_UPDATE_LAG);
-            if (lu16OldestAllowedFrame == CgsNetwork::KU16_INVALID_FRAME)
-            {
-                lu16OldestAllowedFrame = 0;
-            }
+            WrapFrameToValidRange(&lu16BuffMsgPlusSome);
 
-            if (CgsNetwork::UInt16IsLargerWrapped(mu16LastAnyUpdateAppliedFrame, lu16OldestAllowedFrame))
+            if (CgsNetwork::UInt16IsLargerWrapped(mu16LastAnyUpdateAppliedFrame, lu16BuffMsgPlusSome))
             {
                 mu16LastBufferedUpdateAppliedFrame =
                     static_cast<u16>(mu16LastAnyUpdateAppliedFrame - KU16_MAX_BUFFERED_UPDATE_LAG);
-                if (mu16LastBufferedUpdateAppliedFrame == CgsNetwork::KU16_INVALID_FRAME)
-                {
-                    mu16LastBufferedUpdateAppliedFrame = 0;
-                }
+                WrapFrameToValidRange(&mu16LastBufferedUpdateAppliedFrame);
             }
         }
 
@@ -285,36 +294,29 @@ namespace BrnNetwork
             return;
         }
 
-        const u16 lu16FramesSinceStart = mpTimeManager->GetU16FrameCountSinceStart();
-
-        u16 lu16BufferedFrame = static_cast<u16>(lu16FramesSinceStart - miLatencyFrames
-                                                 - KU16_UPDATE_BUFFER_EXTRA_FRAMES);
-        if (lu16BufferedFrame == CgsNetwork::KU16_INVALID_FRAME)
-        {
-            lu16BufferedFrame = 0;
-        }
+        // DWARF BrnNetworkPlayer.cpp:1332..1334.
+        u16 lu16FramesSinceStart = mpTimeManager->GetU16FrameCountSinceStart();
+        u16 lu16LatencyAffectedFrame = static_cast<u16>(lu16FramesSinceStart - miLatencyFrames
+                                                        - KU16_UPDATE_BUFFER_EXTRA_FRAMES);
+        WrapFrameToValidRange(&lu16LatencyAffectedFrame);
 
         CheckForNewMessages(lu16FramesSinceStart);
 
-        UpdateMessage* lpBufferedMessage = RetrieveBufferedMessage(lu16BufferedFrame);
-        if (lpBufferedMessage != 0)
+        UpdateMessage* lpUpdateMessage = RetrieveBufferedMessage(lu16LatencyAffectedFrame);
+        if (lpUpdateMessage != 0)
         {
             // Only apply an update sent from the same lobby / round as ours.
-            const s32 liRoundNumber = mpNetworkModule->GetNetworkManager()->GetRound();
-            if (lpBufferedMessage->GetUpdateData()->mbIsFreeBurnLobby == (liRoundNumber == -1))
+            if (lpUpdateMessage->GetUpdateData()->mbIsFreeBurnLobby == IsFreeBurnLobby()
+                && lpUpdateMessage->GetUpdateData()->mbIsRoundNumberOdd == IsCurrentRoundNumberOdd())
             {
-                const s32 liCurrentRound = mpNetworkModule->GetNetworkManager()->GetRound();
-                if (static_cast<s32>(lpBufferedMessage->GetUpdateData()->mbIsRoundNumberOdd) == (liCurrentRound & 1))
+                if (mu16LastBufferedUpdateAppliedFrame == CgsNetwork::KU16_INVALID_FRAME
+                    || CgsNetwork::UInt16IsLargerWrapped(lpUpdateMessage->mu16Frame,
+                                                         mu16LastBufferedUpdateAppliedFrame))
                 {
-                    if (mu16LastBufferedUpdateAppliedFrame == CgsNetwork::KU16_INVALID_FRAME
-                        || CgsNetwork::UInt16IsLargerWrapped(lpBufferedMessage->mu16Frame,
-                                                             mu16LastBufferedUpdateAppliedFrame))
-                    {
-                        TellNetworkCarAboutBufferedUpdateMessage(lu16FramesSinceStart, lpBufferedMessage);
-                    }
+                    TellNetworkCarAboutBufferedUpdateMessage(lu16FramesSinceStart, lpUpdateMessage);
                 }
             }
-            RemoveBufferedMessage(lpBufferedMessage);
+            RemoveBufferedMessage(lpUpdateMessage);
         }
 
         HandleSendingUpdateMessage();
@@ -1347,85 +1349,74 @@ namespace BrnNetwork
     // side (network event 63).
     void BrnNetworkPlayer::CheckForNewMessages(u16 lu16FramesSinceStart)
     {
-        CGS_ASSERT(lu16FramesSinceStart != CgsNetwork::KU16_INVALID_FRAME,
-                   "lu16FramesSinceStart != KU16_INVALID_FRAME");
-        CGS_ASSERT(GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
-                   || GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ,
-                   "GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ");
-        CGS_ASSERT(GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
-                   || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ,
-                   "GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ");
+        CGS_ASSERT_AT(lu16FramesSinceStart != CgsNetwork::KU16_INVALID_FRAME,
+                      "lu16FramesSinceStart != KU16_INVALID_FRAME", CGS_ARTIST_FILE, 741);
+        CGS_ASSERT_AT(GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
+                      || GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ,
+                      "GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ",
+                      CGS_ARTIST_FILE, 743);
+        CGS_ASSERT_AT(GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ
+                      || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ,
+                      "GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ || GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_60HZ",
+                      CGS_ARTIST_FILE, 745);
 
+        // DWARF BrnNetworkPlayer.cpp:722/723.
         u16 lu16LatencyAffectedFrame = static_cast<u16>(lu16FramesSinceStart - miLatencyFrames
                                                         - KU16_UPDATE_BUFFER_EXTRA_FRAMES);
-        s32 liNumWraps = mpTimeManager->GetFrameWrapCountSinceStart();
-        if (lu16LatencyAffectedFrame == CgsNetwork::KU16_INVALID_FRAME)
-        {
-            lu16LatencyAffectedFrame = 0;
-        }
+        s32 liLatencyAffectedFrameWrapCount = mpTimeManager->GetFrameWrapCountSinceStart();
+        WrapFrameToValidRange(&lu16LatencyAffectedFrame);
         if (lu16LatencyAffectedFrame > lu16FramesSinceStart)
         {
-            --liNumWraps;
+            --liLatencyAffectedFrameWrapCount;
         }
 
-        s16 li16FrameDiff = static_cast<s16>(lu16FramesSinceStart - lu16LatencyAffectedFrame);
-        if (li16FrameDiff < 0)
-        {
-            li16FrameDiff = static_cast<s16>(-li16FrameDiff);
-        }
-        if (!(li16FrameDiff < KI16_MAX_LATENCY_AFFECTED_FRAME_DIFF))
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStream << "miLatencyFrames=" << miLatencyFrames
-                    << " lu16FramesSinceStart=" << static_cast<s32>(lu16FramesSinceStart)
-                    << " lu16LatencyAffectedFrame=" << static_cast<s32>(lu16LatencyAffectedFrame);
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
+        // The frame distance goes through rwmath's generic Abs<int16_t> (the DWARF unity lists the
+        // instance beside this function; ARTIST 0x82599D84..0x82599D98).
+        CGS_ASSERT_STREAM_AT(rw::math::vpu::Abs<s16>(static_cast<s16>(lu16FramesSinceStart - lu16LatencyAffectedFrame))
+                                 < KI16_MAX_LATENCY_AFFECTED_FRAME_DIFF,
+                             "miLatencyFrames=" << miLatencyFrames
+                                 << " lu16FramesSinceStart=" << lu16FramesSinceStart
+                                 << " lu16LatencyAffectedFrame=" << lu16LatencyAffectedFrame,
+                             CGS_ARTIST_FILE, 758);
 
         if (mUpdateMessageRecv.IsMessageValid())
         {
             if (mpTimeManager->HasStartFrameBeenSetValid())
             {
-                const s32 liRoundNumber = mpNetworkModule->GetNetworkManager()->GetRound();
-                if (mUpdateMessageRecv.GetUpdateData()->mbIsFreeBurnLobby == (liRoundNumber == -1))
+                if (mUpdateMessageRecv.GetUpdateData()->mbIsFreeBurnLobby == IsFreeBurnLobby()
+                    && mUpdateMessageRecv.GetUpdateData()->mbIsRoundNumberOdd == IsCurrentRoundNumberOdd())
                 {
-                    const s32 liCurrentRound = mpNetworkModule->GetNetworkManager()->GetRound();
-                    if (static_cast<s32>(mUpdateMessageRecv.GetUpdateData()->mbIsRoundNumberOdd) == (liCurrentRound & 1))
+                    mu16LastPacketReceivedFrame = mpTimeManager->GetU16FrameCount();
+                    CGS_ASSERT_AT(mUpdateMessageRecv.mu16Frame != CgsNetwork::KU16_INVALID_FRAME,
+                                  "mUpdateMessageRecv.GetU16Frame() != KU16_INVALID_FRAME", CGS_ARTIST_FILE, 772);
+
+                    UpdateLatencyValue(mUpdateMessageRecv.GetU16FramesSinceStart(), lu16FramesSinceStart);
+
+                    if (mu16LastBufferedUpdateAppliedFrame == CgsNetwork::KU16_INVALID_FRAME
+                        || CgsNetwork::UInt16IsLargerWrapped(mUpdateMessageRecv.mu16Frame,
+                                                             mu16LastBufferedUpdateAppliedFrame))
                     {
-                        mu16LastPacketReceivedFrame = mpTimeManager->GetU16FrameCount();
-                        CGS_ASSERT(mUpdateMessageRecv.mu16Frame != CgsNetwork::KU16_INVALID_FRAME,
-                                   "mUpdateMessageRecv.GetU16Frame() != KU16_INVALID_FRAME");
+                        const bool lbRemoteIs50Hz = GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ;
+                        const bool lbLocalIs50Hz  = GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ;
+                        // The time between the latency-affected frame and the update's send
+                        // frame is computed and not used further.
+                        CgsNetwork::GetTimeDiffWrapped16(lu16LatencyAffectedFrame,
+                                                         mUpdateMessageRecv.GetU16FramesSinceStart(),
+                                                         liLatencyAffectedFrameWrapCount, lbLocalIs50Hz, lbRemoteIs50Hz);
 
-                        UpdateLatencyValue(mUpdateMessageRecv.GetU16FramesSinceStart(), lu16FramesSinceStart);
-
-                        if (mu16LastBufferedUpdateAppliedFrame == CgsNetwork::KU16_INVALID_FRAME
+                        if (mu16LastAnyUpdateAppliedFrame == CgsNetwork::KU16_INVALID_FRAME
                             || CgsNetwork::UInt16IsLargerWrapped(mUpdateMessageRecv.mu16Frame,
-                                                                 mu16LastBufferedUpdateAppliedFrame))
+                                                                 mu16LastAnyUpdateAppliedFrame))
                         {
-                            const bool lbRemoteIs50Hz = GetRemoteConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ;
-                            const bool lbLocalIs50Hz  = GetLocalConsoleFrameRate() == CgsSystem::E_FRAMERATE_50HZ;
-                            // The time between the latency-affected frame and the update's send
-                            // frame is computed and not used further.
-                            CgsNetwork::GetTimeDiffWrapped16(lu16LatencyAffectedFrame,
-                                                             mUpdateMessageRecv.GetU16FramesSinceStart(),
-                                                             liNumWraps, lbLocalIs50Hz, lbRemoteIs50Hz);
-
-                            if (mu16LastAnyUpdateAppliedFrame == CgsNetwork::KU16_INVALID_FRAME
-                                || CgsNetwork::UInt16IsLargerWrapped(mUpdateMessageRecv.mu16Frame,
-                                                                     mu16LastAnyUpdateAppliedFrame))
-                            {
-                                TellNetworkCarAboutRecievedUpdateMessage(lu16FramesSinceStart, &mUpdateMessageRecv);
-                            }
+                            TellNetworkCarAboutRecievedUpdateMessage(lu16FramesSinceStart, &mUpdateMessageRecv);
                         }
                     }
                 }
             }
 
             mUpdateMessageRecv.Release();
-            CGS_ASSERT(!mUpdateMessageRecv.IsMessageValid(), "!mUpdateMessageRecv.IsMessageValid()");
+            CGS_ASSERT_AT(!mUpdateMessageRecv.IsMessageValid(), "!mUpdateMessageRecv.IsMessageValid()",
+                          CGS_ARTIST_FILE, 849);
         }
 
         if (mShowtimeUpdateMessageRecv.IsMessageValid())
@@ -1439,7 +1430,8 @@ namespace BrnNetwork
             }
 
             mShowtimeUpdateMessageRecv.SetMessageInvalid();
-            CGS_ASSERT(!mShowtimeUpdateMessageRecv.IsMessageValid(), "!mShowtimeUpdateMessageRecv.IsMessageValid()");
+            CGS_ASSERT_AT(!mShowtimeUpdateMessageRecv.IsMessageValid(), "!mShowtimeUpdateMessageRecv.IsMessageValid()",
+                          CGS_ARTIST_FILE, 866);
         }
     }
 
@@ -1487,8 +1479,9 @@ namespace BrnNetwork
             "lpRaceCarState != NULL",
             __FILE__, 1503 /* ARTIST 0x8258EB58 */);
 
-        mbHasResetCarTransformSinceLastUpdateSent = mbHasResetCarTransformSinceLastUpdateSent || lpRaceCarState->mbResetCarTransform;
-        mbHasBeenSlammedSinceLastUpdateSent       = mbHasBeenSlammedSinceLastUpdateSent || lpRaceCarState->mbJustBeenSlammed;
+        // Latched with a bitwise or (ARTIST 0x8258EB70 / 0x8258EB7C: `or`, no branch).
+        mbHasResetCarTransformSinceLastUpdateSent |= lpRaceCarState->mbResetCarTransform;
+        mbHasBeenSlammedSinceLastUpdateSent       |= lpRaceCarState->mbJustBeenSlammed;
 
         if (!IsOurTurnToSend())
         {
@@ -1527,9 +1520,9 @@ namespace BrnNetwork
         lUpdateData.mbIsCrashing               = lpRaceCarState->mbCrashing;
         lUpdateData.mbReceivingPlayerCrashedUs = (mLocalPlayerRaceCarCrasherID == GetPlayerID());
         lUpdateData.mbIsEliminated             = mbIsEliminated;
-        lUpdateData.mbSnap                     = mbHasBeenSlammedSinceLastUpdateSent || mbHasResetCarTransformSinceLastUpdateSent;
-        lUpdateData.mbIsFreeBurnLobby          = (mpNetworkModule->GetNetworkManager()->GetRound() == -1);
-        lUpdateData.mbIsRoundNumberOdd         = (mpNetworkModule->GetNetworkManager()->GetRound() & 1) != 0;
+        lUpdateData.mbSnap                     = mbHasBeenSlammedSinceLastUpdateSent | mbHasResetCarTransformSinceLastUpdateSent;
+        lUpdateData.mbIsFreeBurnLobby          = IsFreeBurnLobby();
+        lUpdateData.mbIsRoundNumberOdd         = IsCurrentRoundNumberOdd();
         lUpdateData.mbIsInCarSelect            = mpNetworkModule->GetGameStateToNetworkInterface()->GetIsInCarSelect();
         lUpdateData.meCameraStatus             =
             static_cast<ECameraStatus>(mpNetworkModule->GetNetworkManager()->GetCamera()->GetLocalCameraStatus());
@@ -1539,18 +1532,6 @@ namespace BrnNetwork
         mbHasResetCarTransformSinceLastUpdateSent = false;
         mbHasBeenSlammedSinceLastUpdateSent       = false;
 
-        // [PC HARNESS, NOT X360] bounded witness: the first update sent in each 210-frame bucket of
-        // the round clock (frames since start), with that clock value, the local car's slot and its
-        // position. The receiving side samples on the SAME clock value (the sender's), so the two
-        // logs name the same messages.
-        {
-            static s32 siLastBucket = -1;
-            const s32 liBucket = static_cast<s32>(lUpdateData.mu16FramesSinceStart) / 210;
-            if (liBucket != siLastBucket)
-            {
-                siLastBucket = liBucket;
-            }
-        }
     }
 
     // Drive this player's network car from a received update: the transform, velocities and

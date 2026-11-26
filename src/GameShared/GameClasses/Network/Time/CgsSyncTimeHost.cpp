@@ -87,7 +87,7 @@ namespace CgsNetwork
             "mpSyncTimeMessageManager",
             __FILE__, 96 /* ARTIST 0x8289297C */);
 
-        NetworkPlayerID lLocalPlayerID;
+        NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
         mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
 
         SyncTimeMessage* lpMessage;

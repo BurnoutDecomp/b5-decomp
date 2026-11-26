@@ -720,8 +720,9 @@ namespace BrnNetwork
             CGS_ASSERT_AT(mpPlayerManager,
                 "mpPlayerManager",
                 __FILE__, 297 /* ARTIST 0x8256F828 */);
-            NetworkPlayerID lLocalPlayerID;
-            if ( mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID) )
+            NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
+            mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
+            if ( lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID )   // the id, not the result (ARTIST 0x8256F834)
             {
                 const CgsNetwork::NetworkTexture* lpTexture = lpCamera->GetCameraPicture(lLocalPlayerID);
                 if ( lpTexture == 0 )
@@ -766,7 +767,7 @@ namespace BrnNetwork
             CGS_ASSERT_AT(mpPlayerManager,
                 "mpPlayerManager",
                 __FILE__, 356 /* ARTIST 0x8256F99C */);
-            NetworkPlayerID lLocalPlayerID;
+            NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
             mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
             CGS_ASSERT_AT(CgsNetwork::K_INVALID_PLAYER_ID != lLocalPlayerID,
                 "CgsNetwork::K_INVALID_PLAYER_ID != lLocalPlayerID",
@@ -817,7 +818,7 @@ namespace BrnNetwork
             CGS_ASSERT_AT(mpPlayerManager,
                 "mpPlayerManager",
                 __FILE__, 438 /* ARTIST 0x8256FB78 */);
-            NetworkPlayerID lLocalPlayerID;
+            NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
             mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
             CGS_ASSERT_AT(CgsNetwork::K_INVALID_PLAYER_ID != lLocalPlayerID,
                 "CgsNetwork::K_INVALID_PLAYER_ID != lLocalPlayerID",
@@ -874,7 +875,7 @@ namespace BrnNetwork
             CGS_ASSERT_AT(mpPlayerManager,
                 "mpPlayerManager",
                 __FILE__, 1868 /* ARTIST 0x8254AD3C */);
-            NetworkPlayerID lLocalPlayerID;
+            NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
             mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
             CGS_ASSERT_AT(lLocalPlayerID != -1,
                 "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
@@ -1206,10 +1207,17 @@ namespace BrnNetwork
     //   Mugshots only go out while the reliable-message send buffer holds fewer than
     //   KI_MAX_BUFFERED_RELIABLE_MESSAGES_TO_SEND_MUGSHOT messages.
     // ----------------------------------------------------------------------------------
+    // PS3 0x5E0610 (BrnNetworkImageManager.cpp:2434..2443, out of line there) returns !(n > 20); ARTIST
+    // inlines it with the bool materialised, false on the taken branch (SendMugshotPicture 0x82564CD0):
+    // the early return false.
     inline bool NetworkImageManager::IsThereEnoughBandwidthToSend()
     {
-        return mpPlayerManager->mReliableMessageManager.miNumBufferedReliableMessages
-               < KI_MAX_BUFFERED_RELIABLE_MESSAGES_TO_SEND_MUGSHOT;
+        if (mpPlayerManager->mReliableMessageManager.miNumBufferedReliableMessages
+               >= KI_MAX_BUFFERED_RELIABLE_MESSAGES_TO_SEND_MUGSHOT)
+        {
+            return false;
+        }
+        return true;
     }
 
     // ----------------------------------------------------------------------------------
@@ -1250,10 +1258,13 @@ namespace BrnNetwork
              !AreMugshotsDisabledForPlayer(lRemotePlayerID) &&
              IsThereEnoughBandwidthToSend() )
         {
-            lpRemoteMugshotData->miLastPacketSent        = 0;
+            // The packet count is computed before the zeroed send index: ARTIST 0x82564CEC..0x82564D00
+            // loads the texture geometry before the +0x30 store, which the compiler could not hoist
+            // over a store through another MugshotData pointer.
             lpRemoteMugshotData->miNumberOfPacketsToSend =
                 ( lpAggressorMugshotData->mPicture.GetTextureSize() + ImageMessage::KI_PHOTO_SEGMENT_SIZE - 1 )
                 / ImageMessage::KI_PHOTO_SEGMENT_SIZE;
+            lpRemoteMugshotData->miLastPacketSent        = 0;
 
             CGS_ASSERT_AT(mpNetworkModule->GetNetworkManager(),
                 "mpNetworkModule->GetNetworkManager()",
@@ -1293,7 +1304,7 @@ namespace BrnNetwork
         CGS_ASSERT_AT(mpPlayerManager,
             "mpPlayerManager",
             __FILE__, 1109 /* ARTIST 0x82555A04 */);
-        NetworkPlayerID lLocalPlayerID;
+        NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
         CGS_ASSERT_AT(lLocalPlayerID != -1,
             "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
@@ -1344,7 +1355,7 @@ namespace BrnNetwork
         u16                                         lu16PhotoBytes;
         NetworkPlayerID                             lTakedownVictimPlayerID;
         NetworkPlayerID                             lTakedownAggressorPlayerID;
-        NetworkPlayerID                             lLocalPlayerID;
+        NetworkPlayerID                             lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
 
         CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
         CGS_ASSERT(lpImageMessageRecv, "lpImageMessageRecv");
@@ -1446,7 +1457,7 @@ namespace BrnNetwork
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
         CGS_ASSERT(lpNetworkManager, "lpNetworkManager");
 
-        NetworkPlayerID lMugshotDataPlayerID;
+        NetworkPlayerID lMugshotDataPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         if ( !lbShowMyMugshot )
         {
             CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
@@ -1472,7 +1483,7 @@ namespace BrnNetwork
             return;
         }
 
-        NetworkPlayerID lDisplayPictureID;
+        NetworkPlayerID lDisplayPictureID = CgsNetwork::K_INVALID_PLAYER_ID;
         if ( lbShowMyMugshot )
         {
             CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
@@ -1509,7 +1520,7 @@ namespace BrnNetwork
                                                   &NetworkImageManager::_GetCompressedCameraPicCallback, this);
 
         CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
-        NetworkPlayerID lLocalPlayerID;
+        NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
         CGS_ASSERT(lLocalPlayerID != -1, "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
 
@@ -1601,8 +1612,9 @@ namespace BrnNetwork
             "lpPlayerManager",
             __FILE__, 2249 /* ARTIST 0x82565010 */);
 
-        NetworkPlayerID lLocalPlayerID;
-        if ( lpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID) &&
+        NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
+        lpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
+        if ( lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID &&
              lpImageManager->mTakedownAggressorPlayerID != -1 )
         {
             const NetworkPlayerID lTakedownAggressorPlayerID = lpImageManager->mTakedownAggressorPlayerID;
@@ -1643,8 +1655,10 @@ namespace BrnNetwork
         CGS_ASSERT_AT(lpPlayerManager,
             "lpPlayerManager", __FILE__, 2311 /* ARTIST 0x8256FDD4 */);
 
-        NetworkPlayerID lLocalPlayerID;
-        if ( lpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID) )
+        // The walk's id is tested, not its result (ARTIST 0x8256FDE8: the loaded local id against -1).
+        NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
+        lpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
+        if ( lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID )
         {
             MugshotData* lpMugshotData = lpImageManager->GetMugshotDataEntry(lLocalPlayerID);
             CGS_ASSERT_AT(lpMugshotData,

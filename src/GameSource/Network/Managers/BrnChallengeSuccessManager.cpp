@@ -362,23 +362,23 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ChallengeSuccessManager::HandleSendingUpdateMessage()
     {
-        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
-        CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
+        CGS_ASSERT_AT(mpPlayerManager != 0, "mpPlayerManager", __FILE__, 191);
+        CGS_ASSERT_AT(mpTimeManager != 0, "mpTimeManager", __FILE__, 192);
 
         const u16 lu16CurrentFrame = mpTimeManager->GetU16FrameCount();
 
         for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
             ChallengeSuccessData* lpSuccessData = &maChallengeSuccessData[liIndex];
-            CGS_ASSERT(lpSuccessData != 0, "lpSuccessData");
+            CGS_ASSERT_AT(lpSuccessData != 0, "lpSuccessData", __FILE__, 204);
 
             const NetworkPlayerID lPlayerID = lpSuccessData->mPlayerID;
             if (lPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID
                 && mpPlayerManager->IsPlayerTurnToSendRoundRobinMessage(lPlayerID, false, 0))
             {
                 FburnSuccessUpdateMessage* lpUpdateMessage = &lpSuccessData->mUpdateMessageSend;
-                CGS_ASSERT(lpUpdateMessage != 0, "lpUpdateMessage");
-                CGS_ASSERT(!lpUpdateMessage->IsMessageValid(), "!lpUpdateMessage->IsMessageValid()");
+                CGS_ASSERT_AT(lpUpdateMessage != 0, "lpUpdateMessage", __FILE__, 220);
+                CGS_ASSERT_AT(!lpUpdateMessage->IsMessageValid(), "!lpUpdateMessage->IsMessageValid()", __FILE__, 221);
 
                 const s32 liFramesSinceStart = mpTimeManager->GetFramesSinceStart();
                 lpUpdateMessage->PrepareForSend(lu16CurrentFrame,
@@ -398,23 +398,23 @@ namespace BrnNetwork
                                                                        const bool* lpaAccumulationThisFrame,
                                                                        const f32*  lpaActionScores)
     {
-        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
-        CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
+        CGS_ASSERT_AT(mpPlayerManager != 0, "mpPlayerManager", __FILE__, 247);
+        CGS_ASSERT_AT(mpTimeManager != 0, "mpTimeManager", __FILE__, 248);
 
         const u16 lu16CurrentFrame = mpTimeManager->GetU16FrameCount();
 
         for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
             ChallengeSuccessData* lpSuccessData = &maChallengeSuccessData[liIndex];
-            CGS_ASSERT(lpSuccessData != 0, "lpSuccessData");
+            CGS_ASSERT_AT(lpSuccessData != 0, "lpSuccessData", __FILE__, 261);
 
             if (lpSuccessData->mPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID)
             {
                 FburnChallengeSuccessMessage* lpChallengeSuccessMessage =
                     &lpSuccessData->mChallengeSuccessMessageSend;
-                CGS_ASSERT(lpChallengeSuccessMessage != 0, "lpChallengeSuccessMessage");
-                CGS_ASSERT(!lpChallengeSuccessMessage->IsMessageValid(),
-                           "!lpChallengeSuccessMessage->IsMessageValid()");
+                CGS_ASSERT_AT(lpChallengeSuccessMessage != 0, "lpChallengeSuccessMessage", __FILE__, 271);
+                CGS_ASSERT_AT(!lpChallengeSuccessMessage->IsMessageValid(),
+                           "!lpChallengeSuccessMessage->IsMessageValid()", __FILE__, 272);
 
                 const s32 liFramesSinceStart = mpTimeManager->GetFramesSinceStart();
                 lpChallengeSuccessMessage->PrepareForSend(lu16CurrentFrame,

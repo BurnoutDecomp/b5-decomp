@@ -305,11 +305,8 @@ namespace CgsNetwork
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "CgsNetwork::HostMigrationManager::AddPlayer"
                                    << ": id " << static_cast<s32>(liPlayerID) << "\n";
 
-        NetworkPlayerID lLocalPlayerID;
-        if (!mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID))
-        {
-            lLocalPlayerID = KI_INVALID_PLAYER_ID;
-        }
+        NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
+        mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
         if (liPlayerID != lLocalPlayerID)
         {
             RegisterMessages(liPlayerID);

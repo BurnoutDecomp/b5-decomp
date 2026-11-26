@@ -462,7 +462,7 @@ namespace BrnNetwork
             return false;
         }
 
-        NetworkPlayerID lLocalPlayerID;
+        NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         const bool lbHaveLocal =
             mpNetworkModule->GetNetworkManager()->GetPlayerManager()->GetNextLocalPlayerID(&lLocalPlayerID);
         CGS_ASSERT_AT(lbHaveLocal,
@@ -586,7 +586,7 @@ namespace BrnNetwork
             return false;
         }
 
-        NetworkPlayerID lLocalPlayerID;
+        NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         const bool lbHaveLocal =
             mpNetworkModule->GetNetworkManager()->GetPlayerManager()->GetNextLocalPlayerID(&lLocalPlayerID);
         CGS_ASSERT(lbHaveLocal,
@@ -906,7 +906,7 @@ namespace BrnNetwork
                 }
                 case E_AGGRESSIVE_MOVE_BATTLING:
                 {
-                    NetworkPlayerID lLocalPlayerID;
+                    NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
                     const bool lbHaveLocal = mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
                     CGS_ASSERT(lbHaveLocal, "mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID)");
 

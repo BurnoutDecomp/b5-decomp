@@ -4014,7 +4014,7 @@ namespace BrnNetwork
     {
         GsmIO::StartNetworkRoundEvent lEvent;
         GsmIO::SpecificGameModeEventInterface::Event laEvents[GsmIO::KU_MAX_ONLINE_ROUNDS_IN_MODE];
-        NetworkPlayerID lPlayerID;
+        NetworkPlayerID lPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
 
         mpNetworkManager->GetSelectedRoutesManager()->GetRouteData(laEvents);
 
@@ -4302,7 +4302,7 @@ namespace BrnNetwork
         f32                          lfTimeLimit;
         u16                          lu16FirstCarColourIndex      = PlayerMenuData::KU_INVALID_COLOUR_INDEX;
         u16                          lu16FirstCarPaintFinishIndex = PlayerMenuData::KU_INVALID_PAINT_FINISH_INDEX;
-        NetworkPlayerID              lLocalPlayerID;
+        NetworkPlayerID              lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
         NetworkPlayerID              lPlayerID                    = CgsNetwork::K_INVALID_PLAYER_ID;
 
         for (s32 liSlot = 0; liSlot < CurrentPlayerXUIDs::KI_NUM_SLOTS; ++liSlot)
@@ -4731,7 +4731,7 @@ namespace BrnNetwork
                 {
                     // A client toggles its ready flag.
                     PlayerParams    lPlayerParams;
-                    NetworkPlayerID lLocalNetworkPlayerID;
+                    NetworkPlayerID lLocalNetworkPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
 
                     const bool lbHaveLocalPlayer = mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalNetworkPlayerID);
                     CGS_ASSERT(lbHaveLocalPlayer, "mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID( &lLocalNetworkPlayerID )");
@@ -4798,7 +4798,7 @@ namespace BrnNetwork
                         // player already marked clears it.
                         PlayerParams    lLocalPlayerParams;
                         PlayerParams    lPlayerParams;
-                        NetworkPlayerID lLocalNetworkPlayerID;
+                        NetworkPlayerID lLocalNetworkPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
 
                         const bool lbHaveLocalPlayer = mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalNetworkPlayerID);
                         CGS_ASSERT(lbHaveLocalPlayer, "mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID( &lLocalNetworkPlayerID )");
@@ -4821,7 +4821,7 @@ namespace BrnNetwork
                     else if (mpNetworkManager->GetServerInterface()->GetGameComponent()->IsGameStarted())
                     {
                         // In a game the mark lives in the local menu data and goes to everyone.
-                        NetworkPlayerID lLocalNetworkPlayerID;
+                        NetworkPlayerID lLocalNetworkPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
                         PlayerMenuData* lpMenuData;
 
                         const bool lbHaveLocalPlayer = mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalNetworkPlayerID);
@@ -5084,7 +5084,7 @@ namespace BrnNetwork
                            CgsNetwork::E_COMPONENTS_GAMES) == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE
                     && !mpNetworkManager->GetServerInterface()->GetGameComponent()->IsGameStarted())
                 {
-                    NetworkPlayerID lLocalPlayerID;
+                    NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
                     PlayerParams    lPlayerParams;
 
                     lPlayerParams.Prepare();
@@ -5139,7 +5139,7 @@ namespace BrnNetwork
 
                 if (lpSplashEvent->meSplashState == BrnGui::GuiEventNetworkSplashEvent::E_SPLASH_STATE_FINISHED)
                 {
-                    NetworkPlayerID lLocalPlayerID;
+                    NetworkPlayerID lLocalPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
 
                     CGS_ASSERT(mpNetworkManager, "mpNetworkManager");
                     CGS_ASSERT(mpNetworkManager->GetServerInterface(), "mpNetworkManager->GetServerInterface()");
