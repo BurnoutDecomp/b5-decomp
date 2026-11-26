@@ -35,10 +35,10 @@ namespace CgsDev
     {
     }
 
-    bool DebugComponent::IsActive() const
-    {
-        return mbActive;
-    }
+    // IsActive is header-inline (DWARF CgsDebugComponent.h:41).
+
+
+
 
     // ---- lifecycle -----------------------------------------------------------------------------
 

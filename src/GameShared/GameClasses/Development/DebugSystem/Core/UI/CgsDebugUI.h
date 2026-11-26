@@ -100,16 +100,16 @@ namespace CgsDev
             void          GetCascadePosition(const Window* lpWindow, f32& lrfX, f32& lrfY);
             void          DockWindow(Window* lpWindow, DockEdge leEdge);
 
-            const Palette&   GetPalette() const;
-            const Metrics&   GetMetrics() const;
-            MenuManager&     GetMenuManager();
-            VariableManager& GetVariableManager();
-            FunctionManager& GetFunctionManager();
-            Console&         GetConsole();
-            ScriptInterface& GetScriptInterface();
-            LogWindow&       GetLogWindow();
-            CommandWindow&   GetCommandWindow();
-            CgsDev::DebugController& GetController();
+            const Palette&   GetPalette() const   { return mPalette; }
+            const Metrics&   GetMetrics() const   { return mMetrics; }
+            MenuManager&     GetMenuManager()     { return mMenuManager; }
+            VariableManager& GetVariableManager() { return mVariableManager; }
+            FunctionManager& GetFunctionManager() { return mFunctionManager; }
+            Console&         GetConsole()         { return mConsole; }
+            ScriptInterface& GetScriptInterface() { return mScriptInterface; }
+            LogWindow&       GetLogWindow()       { return mConsole; }
+            CommandWindow&   GetCommandWindow()   { return mCommandWindow; }
+            CgsDev::DebugController& GetController() { return mController; }
             bool             IsVisible();
 
             void ShowErrorMessage(const char* lpcMessage);

@@ -144,7 +144,7 @@ namespace CgsDev
         virtual void RenderWorld(Debug3DImmediateRender* lpRender);
         virtual void RenderHUD(Debug2DImmediateRender* lpRender);
 
-        bool IsActive() const;
+        bool IsActive() const { return mbActive; }   // DWARF h:41; no ARTIST or PS3 body: inlined at every site
 
         // Register a member/global variable with the debug menu, with or without a group path.
         void RegisterVariable(f32* lpfValue, const char* lpcGroup, const char* lpcName);

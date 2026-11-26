@@ -28,16 +28,16 @@ namespace CgsDev
 {
     namespace DebugUI
     {
-        MenuManager&     DebugUI::GetMenuManager()     { return mMenuManager; }
-        VariableManager& DebugUI::GetVariableManager() { return mVariableManager; }
-        FunctionManager& DebugUI::GetFunctionManager() { return mFunctionManager; }
-        const Palette&   DebugUI::GetPalette() const   { return mPalette; }
-        const Metrics&   DebugUI::GetMetrics() const   { return mMetrics; }
-        CgsDev::DebugController& DebugUI::GetController() { return mController; }
-        Console&         DebugUI::GetConsole()         { return mConsole; }
-        LogWindow&       DebugUI::GetLogWindow()       { return mConsole; }
-        ScriptInterface& DebugUI::GetScriptInterface() { return mScriptInterface; }
-        CommandWindow&   DebugUI::GetCommandWindow()   { return mCommandWindow; }
+        // The accessors are header-inline: neither ARTIST nor PS3 DecFIGS holds a body for any of them.
+
+
+
+
+
+
+
+
+
 
         // X360 0x8282FA50. Copy the default palette/metrics, seed the cascade position, construct the
         // controller and managers, initialize the console/script/command members, then register the
