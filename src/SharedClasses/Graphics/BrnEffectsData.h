@@ -75,12 +75,20 @@ struct BloomData
         mv4Scale = kv4DefScale;
     }
 
-    // 2-way per-member weighted blend (DWARF BrnEffectsData.h:113). Inlined by the X360
-    // compiler; recovered from EvalEffectData<BloomData> @0x823F9C0C-0x823F9CB4.
     // @0x82678070 -- the ASSET-KEYED Construct (the bloomasset collection named by a PFX group). Body in BrnEffectsData.cpp.
     void Construct(const u64& lruAssetKey);
-    void SetToBlend(const BloomData& lA, f32 lfWa,
-                    const BloomData& lB, f32 lfWb);
+    // 2-way per-member weighted blend (DWARF BrnEffectsData.h:113, parameter names from
+    // _compile/BrnGuiUnity.cpp), header-inline: ARTIST holds no copy and inlines it in two unity
+    // TUs, EvalEffectData<BloomData> 0x823F9C0C (BrnGraphicsUnity) and
+    // PfxContainer<BloomData>::Add 0x824F68BC (BrnGuiUnity), the vector through the rwmath
+    // operator* / operator+ that DWARF lists inlined there (the XDK fuses them into vmaddfp).
+    void SetToBlend(const BloomData& lValue0, f32 lfWeight0,
+                    const BloomData& lValue1, f32 lfWeight1)
+    {
+        mfLuminance = lValue0.mfLuminance * lfWeight0 + lValue1.mfLuminance * lfWeight1;
+        mfThreshold = lValue0.mfThreshold * lfWeight0 + lValue1.mfThreshold * lfWeight1;
+        mv4Scale    = lValue0.mv4Scale * lfWeight0 + lValue1.mv4Scale * lfWeight1;
+    }
 
     // 4-way per-member weighted blend (DWARF :120, X360 @0x823F34B0). Each scalar and each
     // lane of mv4Scale is the linear combination of the four sources.
@@ -293,8 +301,13 @@ struct TintData2d
     // EvalEffectData<TintData2d> @0x823FA7F8 (2-way) and @0x823FA700 (4-way).
     // @0x82678268 -- the ASSET-KEYED Construct (the tint2dasset collection named by a PFX group). Body in BrnEffectsData.cpp.
     void Construct(const u64& lruAssetKey);
-    void SetToBlend(const TintData2d& lA, f32 lfWa,
-                    const TintData2d& lB, f32 lfWb);
+    // 2-way (DWARF :314), header-inline as BloomData's: no ARTIST copy, inlined in
+    // EvalEffectData<TintData2d> and PfxContainer<TintData2d>::Add 0x824F6DFC.
+    void SetToBlend(const TintData2d& lValue0, f32 lfWeight0,
+                    const TintData2d& lValue1, f32 lfWeight1)
+    {
+        mv4Colour = lValue0.mv4Colour * lfWeight0 + lValue1.mv4Colour * lfWeight1;
+    }
     void SetToBlend(const TintData2d& lA, f32 lfWa,
                     const TintData2d& lB, f32 lfWb,
                     const TintData2d& lC, f32 lfWc,

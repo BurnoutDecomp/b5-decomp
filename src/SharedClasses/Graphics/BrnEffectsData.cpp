@@ -110,15 +110,7 @@ static inline void Blend4(V& lrOut,
 }
 
 // ---- BloomData -----------------------------------------------------------
-// 2-way: inlined, from EvalEffectData<BloomData>'s two-slot arm -- `fmadds f12, f10, f13, f12`
-// (lum), `fmadds f0, f9, f13, f0` (thr), `vmaddfp v0, v13, v0, v11` (mv4Scale).
-void BloomData::SetToBlend(const BloomData& lA, f32 lfWa,
-                           const BloomData& lB, f32 lfWb)
-{
-    mfLuminance = lA.mfLuminance * lfWa + lB.mfLuminance * lfWb;
-    mfThreshold = lA.mfThreshold * lfWa + lB.mfThreshold * lfWb;
-    Blend2(mv4Scale, lA.mv4Scale, lfWa, lB.mv4Scale, lfWb);
-}
+// The 2-way form is header-inline (BrnEffectsData.h).
 
 // 4-way @0x823F34B0: scalars mfLuminance/mfThreshold folded individually (lfs 0(r4)/0(r6)/
 // 0(r8)/0(r10) then three fmadds); mv4Scale via the 4-source vmaddfp chain + stvx128 r3,16.
@@ -354,12 +346,6 @@ void BlurData::SetToBlend(const BlurData& lA, f32 lfWa,
 // ---- TintData2d ----------------------------------------------------------
 // One 16-byte member. 2-way: `vmulfp128 v0, v0, v12` + `vmaddfp v0, v13, v0, v11`
 // (@0x823FA85C/0x823FA86C). 4-way: the same with three vmaddfp (@0x823FA7B0..0x823FA7EC).
-void TintData2d::SetToBlend(const TintData2d& lA, f32 lfWa,
-                            const TintData2d& lB, f32 lfWb)
-{
-    Blend2(mv4Colour, lA.mv4Colour, lfWa, lB.mv4Colour, lfWb);
-}
-
 void TintData2d::SetToBlend(const TintData2d& lA, f32 lfWa,
                             const TintData2d& lB, f32 lfWb,
                             const TintData2d& lC, f32 lfWc,
