@@ -5,7 +5,6 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarBaseComponentStreamer.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"           // CgsDev::Log::gpDebugPrint
 
 // ============================================================================
 // BrnWorld::RaceCarBaseComponentStreamer
@@ -33,6 +32,9 @@
 
 namespace BrnWorld
 {
+
+// DWARF BrnRaceCarBaseComponentStreamer.cpp:28.
+CgsDev::Log::LogChannelOutput gRaceCarLogOutput;
 
 // @ 0x822D4C08. Forward the base streamer Construct (8 slots, lbAllowFailure from the
 // caller -- the X360 always passes 1/true) and clear both per-car asset tables to 0,
@@ -203,16 +205,16 @@ void RaceCarBaseComponentStreamer::OnLoadComplete( const BrnResource::GameDataIO
 
     if( !mAddedEntries.IsBitSet( static_cast<u32>( liActiveRaceCar ) ) )
     {
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "(base) Completed load of asset for racecar: "
-                                   << static_cast<s32>( GetUserId( liListIndex ) )
+        gRaceCarLogOutput << "STRM: " << "(base) Completed load of asset for racecar: "
+                          << static_cast<s32>( GetUserId( liListIndex ) )
                                    << ", but racecar is no longer added\n";
         return;
     }
 
     if( maDesiredAssets[liActiveRaceCar] != maLoadedAssets[liActiveRaceCar] )
     {
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "(base) Completed load of asset for racecar: "
-                                   << static_cast<s32>( GetUserId( liListIndex ) )
+        gRaceCarLogOutput << "STRM: " << "(base) Completed load of asset for racecar: "
+                          << static_cast<s32>( GetUserId( liListIndex ) )
                                    << ", but desired resource has changed\n";
         return;
     }
@@ -226,7 +228,7 @@ void RaceCarBaseComponentStreamer::OnUnloadComplete( const BrnResource::GameData
 {
     (void)lpEvent;
 
-    *CgsDev::Log::gpDebugPrint << "STRM: " << "(base) Completed unload of asset for racecar: "
+    gRaceCarLogOutput << "STRM: " << "(base) Completed unload of asset for racecar: "
                                << static_cast<s32>( GetUserId( liListIndex ) ) << "\n";
 }
 

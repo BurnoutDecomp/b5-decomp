@@ -1282,7 +1282,9 @@ void Vehicle::SetCurrentManoeuvre(Manoeuvre leManoeuvre)
                "(int32_t)leManoeuvre >= E_MANOEUVRE_NONE", CGS_ARTIST_BRNTRAFFICVEHICLE_H_FILE, 861);
     CGS_ASSERT_AT(static_cast<s32>(leManoeuvre) < E_MANOEUVRE_COUNT,
                "(int32_t)leManoeuvre < E_MANOEUVRE_COUNT", CGS_ARTIST_BRNTRAFFICVEHICLE_H_FILE, 862);
-    if (miManoeuvre != static_cast<s8>(leManoeuvre))
+    // ARTIST 0x8270E6D8..E0: the sign-extended int8_t member against the whole enum (no extsb
+    // of the argument).
+    if (miManoeuvre != leManoeuvre)
     {
         miManoeuvrePhase = 0;
     }

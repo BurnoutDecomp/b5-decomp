@@ -1159,11 +1159,18 @@ u32 EffectsModule::GetJunkyardEffectHandle(u32 luIndex) const
 // GetPlayerRaceCarState  @0x822803C0  (DWARF :2946)
 // =============================================================================
 const RaceCarState*
-EffectsModule::GetPlayerRaceCarState(const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars)
+EffectsModule::GetPlayerRaceCarState(const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
 {
-    if (!lpActiveRaceCars->IsPlayerCarActive())
-        return 0;
-    return lpActiveRaceCars->GetRaceCarState(lpActiveRaceCars->GetPlayerActiveRaceCarIndex());
+    // DWARF locals lpRaceCarState (:2948) and lePlayerActiveRaceCarIndex (:2952); ARTIST keeps
+    // the null result in r29 from the prologue (0x822803D0).
+    const RaceCarState* lpRaceCarState = 0;
+    if (lpActiveRaceCarInterface->IsPlayerCarActive())
+    {
+        const EActiveRaceCarIndex lePlayerActiveRaceCarIndex =
+            lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
+        lpRaceCarState = lpActiveRaceCarInterface->GetRaceCarState(lePlayerActiveRaceCarIndex);
+    }
+    return lpRaceCarState;
 }
 
 // =============================================================================

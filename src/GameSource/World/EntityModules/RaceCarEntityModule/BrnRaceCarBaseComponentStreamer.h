@@ -38,9 +38,16 @@
 #include "GameSource/World/BrnBaseStreamer.h"                        // BrnWorld::BaseStreamer<N>, StreamerTargetEntry
 #include "GameSource/Resource/SharedIO/BrnAssetIds.h"                // BrnResource::EAssetSet
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"          // BrnResource::GameDataIO::GameDataAssetEvent
+#include "GameShared/GameClasses/Development/Log/CgsLogChannelOutput.h" // CgsDev::Log::LogChannelOutput (gRaceCarLogOutput)
 
 namespace BrnWorld
 {
+
+// DWARF BrnRaceCarBaseComponentStreamer.h:38 / .cpp:28: the race-car streamers' own log channel.
+// Every "STRM: " print of the race-car streamers streams into it unconditionally (ARTIST loads its
+// address, 0x82CDB63C, and calls its Append through the vtable, e.g. OnUnloadComplete 0x822A5538;
+// the static initialiser 0x82C4C0C0 constructs it unchannelled, miChannel = -1).
+extern CgsDev::Log::LogChannelOutput gRaceCarLogOutput;
 
 // The shared asset streamer for the per-race-car components. Abstract: the two
 // OnAsset* hooks are pure-virtual and supplied by RaceCarAudioStreamer/RaceCarStreamer.

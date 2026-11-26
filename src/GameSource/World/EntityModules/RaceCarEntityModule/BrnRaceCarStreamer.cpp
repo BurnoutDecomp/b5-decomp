@@ -214,14 +214,11 @@ void RaceCarStreamer::OnResourceUnloading( s32 liActiveRaceCar, u8 lxResourceFla
     CGS_ASSERT_AT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" , KAC_ARTIST_ASSERT_FILE, 791);
     CGS_ASSERT_AT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" , KAC_ARTIST_ASSERT_FILE, 792);
 
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-    {
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Unloading resource "
-                                   << CgsDev::E_PRINTMODE_HEX << static_cast<u32>( lxResourceFlag )
-                                   << ". Flags were "
-                                   << static_cast<u32>( maxLoadFlags[liActiveRaceCar] )
-                                   << CgsDev::E_PRINTMODE_DECIMAL << "\n";
-    }
+    gRaceCarLogOutput << "STRM: " << "Unloading resource "
+                    << CgsDev::E_PRINTMODE_HEX << static_cast<u32>( lxResourceFlag )
+                    << ". Flags were "
+                    << static_cast<u32>( maxLoadFlags[liActiveRaceCar] )
+                    << CgsDev::E_PRINTMODE_DECIMAL << "\n";
 }
 
 // ----------------------------------------------------------------------------
@@ -232,8 +229,7 @@ void RaceCarStreamer::OnResourceUnloading( s32 liActiveRaceCar, u8 lxResourceFla
 // @ 0x822CC818.
 void RaceCarStreamer::OnGraphicsLoaded( s32 liActiveRaceCar, GraphicsResourcePtr lResource )
 {
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Graphics loaded: " << liActiveRaceCar << "\n";
+    gRaceCarLogOutput << "STRM: " << "Graphics loaded: " << liActiveRaceCar << "\n";
 
     OnResourceLoaded( liActiveRaceCar, E_LOADFLAG_LOADEDGFX );
 
@@ -244,8 +240,7 @@ void RaceCarStreamer::OnGraphicsLoaded( s32 liActiveRaceCar, GraphicsResourcePtr
 // @ 0x822CC930.
 void RaceCarStreamer::OnPhysicsLoaded( s32 liActiveRaceCar, PhysicsResourcePtr lResource )
 {
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Physics loaded: " << liActiveRaceCar << "\n";
+    gRaceCarLogOutput << "STRM: " << "Physics loaded: " << liActiveRaceCar << "\n";
 
     OnResourceLoaded( liActiveRaceCar, E_LOADFLAG_LOADEDPHYSICS );
 
@@ -256,8 +251,7 @@ void RaceCarStreamer::OnPhysicsLoaded( s32 liActiveRaceCar, PhysicsResourcePtr l
 // @ 0x822B73E8. Attributes carry no resource pointer; fold the bit + flag mabAttribsLoaded.
 void RaceCarStreamer::OnAttributesLoaded( s32 liActiveRaceCar )
 {
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Attributes loaded: " << liActiveRaceCar << "\n";
+    gRaceCarLogOutput << "STRM: " << "Attributes loaded: " << liActiveRaceCar << "\n";
 
     OnResourceLoaded( liActiveRaceCar, E_LOADFLAG_LOADEDATTRS );
     mabAttribsLoaded[liActiveRaceCar] = true;
@@ -266,8 +260,7 @@ void RaceCarStreamer::OnAttributesLoaded( s32 liActiveRaceCar )
 // @ 0x822CCA48.
 void RaceCarStreamer::OnWheelGraphicsLoaded( s32 liActiveRaceCar, WheelGraphicsResourcePtr lResource )
 {
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Wheel graphics loaded: " << liActiveRaceCar << "\n";
+    gRaceCarLogOutput << "STRM: " << "Wheel graphics loaded: " << liActiveRaceCar << "\n";
 
     OnResourceLoaded( liActiveRaceCar, E_LOADFLAG_LOADEDWHEELGFX );
 
@@ -279,8 +272,7 @@ void RaceCarStreamer::OnWheelGraphicsLoaded( s32 liActiveRaceCar, WheelGraphicsR
 // it is not already set (avoids the loaded-twice assert); always mark mabAudioLoaded.
 void RaceCarStreamer::OnAudioLoaded( s32 liActiveRaceCar )
 {
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Audio loaded: " << liActiveRaceCar << "\n";
+    gRaceCarLogOutput << "STRM: " << "Audio loaded: " << liActiveRaceCar << "\n";
 
     if( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_LOADEDAUDIO ) != E_LOADFLAG_LOADEDAUDIO )
         OnResourceLoaded( liActiveRaceCar, E_LOADFLAG_LOADEDAUDIO );
@@ -291,8 +283,7 @@ void RaceCarStreamer::OnAudioLoaded( s32 liActiveRaceCar )
 // @ 0x822B7538.
 void RaceCarStreamer::OnGraphicsUnloading( s32 liActiveRaceCar )
 {
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Graphics unloading: " << liActiveRaceCar << "\n";
+    gRaceCarLogOutput << "STRM: " << "Graphics unloading: " << liActiveRaceCar << "\n";
 
     OnResourceUnloading( liActiveRaceCar, E_LOADFLAG_LOADEDGFX );
     maGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
@@ -301,8 +292,7 @@ void RaceCarStreamer::OnGraphicsUnloading( s32 liActiveRaceCar )
 // @ 0x822B75E8.
 void RaceCarStreamer::OnPhysicsUnloading( s32 liActiveRaceCar )
 {
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Physics unloading: " << liActiveRaceCar << "\n";
+    gRaceCarLogOutput << "STRM: " << "Physics unloading: " << liActiveRaceCar << "\n";
 
     OnResourceUnloading( liActiveRaceCar, E_LOADFLAG_LOADEDPHYSICS );
     maPhysicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
@@ -311,8 +301,7 @@ void RaceCarStreamer::OnPhysicsUnloading( s32 liActiveRaceCar )
 // @ 0x822B7698.
 void RaceCarStreamer::OnAttributesUnloading( s32 liActiveRaceCar )
 {
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Attributes unloading: " << liActiveRaceCar << "\n";
+    gRaceCarLogOutput << "STRM: " << "Attributes unloading: " << liActiveRaceCar << "\n";
 
     OnResourceUnloading( liActiveRaceCar, E_LOADFLAG_LOADEDATTRS );
     mabAttribsLoaded[liActiveRaceCar] = false;
@@ -321,8 +310,7 @@ void RaceCarStreamer::OnAttributesUnloading( s32 liActiveRaceCar )
 // @ 0x822B7738.
 void RaceCarStreamer::OnWheelGraphicsUnloading( s32 liActiveRaceCar )
 {
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Wheel graphics unloading: " << liActiveRaceCar << "\n";
+    gRaceCarLogOutput << "STRM: " << "Wheel graphics unloading: " << liActiveRaceCar << "\n";
 
     OnResourceUnloading( liActiveRaceCar, E_LOADFLAG_LOADEDWHEELGFX );
     maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
@@ -331,8 +319,7 @@ void RaceCarStreamer::OnWheelGraphicsUnloading( s32 liActiveRaceCar )
 // @ 0x822B77E8.
 void RaceCarStreamer::OnAudioUnloading( s32 liActiveRaceCar )
 {
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Audio unloading: " << liActiveRaceCar << "\n";
+    gRaceCarLogOutput << "STRM: " << "Audio unloading: " << liActiveRaceCar << "\n";
 
     OnResourceUnloading( liActiveRaceCar, E_LOADFLAG_LOADEDAUDIO );
     mabAudioLoaded[liActiveRaceCar] = false;
@@ -507,16 +494,13 @@ void RaceCarStreamer::AddVehicleData( s32 liActiveRaceCar, CgsID lModelId, CgsID
         CGS_ASSERT_AT( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0,
                     "( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0" , KAC_ARTIST_ASSERT_SOURCE, 156);
 
-        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint << "STRM: " << "Removing racecar for streaming: car="
-                                       << liActiveRaceCar << ", model=" << lModelId
-                                       << ", wheel=" << lWheelId << "\n";
-            *CgsDev::Log::gpDebugPrint << "STRM: " << "  Previous flags were "
-                                       << CgsDev::E_PRINTMODE_HEX
-                                       << static_cast<u32>( maxLoadFlags[liActiveRaceCar] )
-                                       << CgsDev::E_PRINTMODE_DECIMAL << "\n";
-        }
+        gRaceCarLogOutput << "STRM: " << "Removing racecar for streaming: car="
+                        << liActiveRaceCar << ", model=" << lModelId
+                        << ", wheel=" << lWheelId << "\n";
+        gRaceCarLogOutput << "STRM: " << "  Previous flags were "
+                        << CgsDev::E_PRINTMODE_HEX
+                        << static_cast<u32>( maxLoadFlags[liActiveRaceCar] )
+                        << CgsDev::E_PRINTMODE_DECIMAL << "\n";
 
         mGraphicsStreamer.RemoveEntry( liActiveRaceCar );
         mPhysicsStreamer.RemoveEntry( liActiveRaceCar );
@@ -532,84 +516,73 @@ void RaceCarStreamer::AddVehicleData( s32 liActiveRaceCar, CgsID lModelId, CgsID
     CgsIDUnCompress( lModelId, lacModelName );
     CgsIDUnCompress( lWheelId, lacWheelName );
 
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-    {
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "Adding racecar for streaming: car="
-                                   << liActiveRaceCar
-                                   << ", model=" << lacModelName
-                                   << ", wheel=" << lacWheelName
-                                   << ", model id=" << lModelId
-                                   << ", wheel id=" << lWheelId << "\n";
-    }
+    gRaceCarLogOutput << "STRM: " << "Adding racecar for streaming: car="
+                    << liActiveRaceCar
+                    << ", model=" << lacModelName
+                    << ", wheel=" << lacWheelName
+                    << ", model id=" << lModelId
+                    << ", wheel id=" << lWheelId << "\n";
 
     u8 lxLoadFlags = E_LOADFLAG_ACTIVE;
 
     if( mGraphicsStreamer.IsVehicleAssetLoaded( lModelId, liActiveRaceCar )
         && maGraphicsResources[liActiveRaceCar] != CgsResource::NULLResourcePtr )
     {
-        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-            *CgsDev::Log::gpDebugPrint << "STRM: " << "  Gfx already loaded\n";
+        gRaceCarLogOutput << "STRM: " << "  Gfx already loaded\n";
         lxLoadFlags |= E_LOADFLAG_LOADEDGFX;
     }
-    else if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    else
     {
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Need to load Gfx\n";
+        gRaceCarLogOutput << "STRM: " << "  Need to load Gfx\n";
     }
 
     if( mPhysicsStreamer.IsVehicleAssetLoaded( lModelId, liActiveRaceCar )
         && maPhysicsResources[liActiveRaceCar] != CgsResource::NULLResourcePtr )
     {
-        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-            *CgsDev::Log::gpDebugPrint << "STRM: " << "  Phys already loaded\n";
+        gRaceCarLogOutput << "STRM: " << "  Phys already loaded\n";
         lxLoadFlags |= E_LOADFLAG_LOADEDPHYSICS;
     }
-    else if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    else
     {
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Need to load Phys\n";
+        gRaceCarLogOutput << "STRM: " << "  Need to load Phys\n";
     }
 
     if( mAttributeStreamer.IsVehicleAssetLoaded( lModelId, liActiveRaceCar )
         && mabAttribsLoaded[liActiveRaceCar] )
     {
-        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-            *CgsDev::Log::gpDebugPrint << "STRM: " << "  Attrs already loaded\n";
+        gRaceCarLogOutput << "STRM: " << "  Attrs already loaded\n";
         lxLoadFlags |= E_LOADFLAG_LOADEDATTRS;
     }
-    else if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    else
     {
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Need to load Attrs\n";
+        gRaceCarLogOutput << "STRM: " << "  Need to load Attrs\n";
     }
 
     if( mWheelGraphicsStreamer.IsVehicleAssetLoaded( lWheelId, liActiveRaceCar )
         && maWheelGraphicsResources[liActiveRaceCar] != CgsResource::NULLResourcePtr )
     {
-        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-            *CgsDev::Log::gpDebugPrint << "STRM: " << "  WheelGfx already loaded\n";
+        gRaceCarLogOutput << "STRM: " << "  WheelGfx already loaded\n";
         lxLoadFlags |= E_LOADFLAG_LOADEDWHEELGFX;
     }
-    else if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    else
     {
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Need to load WheelGfx\n";
+        gRaceCarLogOutput << "STRM: " << "  Need to load WheelGfx\n";
     }
 
     if( mAudioStreamer.IsVehicleAssetLoaded( lModelId, liActiveRaceCar, lbActive )
         && mabAudioLoaded[liActiveRaceCar] )
     {
-        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-            *CgsDev::Log::gpDebugPrint << "STRM: " << "  Audio already loaded\n";
+        gRaceCarLogOutput << "STRM: " << "  Audio already loaded\n";
         lxLoadFlags |= E_LOADFLAG_LOADEDAUDIO;
     }
-    else if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    else
     {
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Need to load Audio\n";
+        gRaceCarLogOutput << "STRM: " << "  Need to load Audio\n";
     }
 
-    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
-    {
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Flags are "
-                                   << CgsDev::E_PRINTMODE_HEX << static_cast<u32>( lxLoadFlags )
-                                   << CgsDev::E_PRINTMODE_DECIMAL << "\n";
-    }
+    gRaceCarLogOutput << "STRM: " << "  Flags are "
+                    << CgsDev::E_PRINTMODE_HEX << static_cast<u32>( lxLoadFlags )
+                    << CgsDev::E_PRINTMODE_DECIMAL << "\n";
 
     maxLoadFlags[liActiveRaceCar] = lxLoadFlags;
 

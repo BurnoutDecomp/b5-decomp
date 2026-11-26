@@ -174,32 +174,13 @@ extern CgsNumeric::Random mRandom;
 // ============================================================================================
 // GetPlayerRaceCar @ 0x822BA068
 //
-// Three instructions of body: the player's active slot, the console's IsAttached() assert
-// (BrnActiveRaceCar.h:1089), and `lwz r3, 0x6F0(r31)` == ActiveRaceCar::mpRaceCar.
-//
-// [GUARD] the two null tests are NOT the console's. The console indexes maActiveRaceCars with
-// the raw word, so mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID would read
-// 7376 bytes in front of the array; and it reaches this function only with a player car
-// present. On this build the caller chain is still being assembled, and a null here would be
-// a fault rather than a skipped range test. Both callers below treat null as "no player car,
-// do nothing", which is the console's behaviour with a player car that is not there.
+// Three instructions of body: the player's active slot, the inlined ActiveRaceCar::
+// GetGlobalRaceCar() (its IsAttached() assert, BrnActiveRaceCar.h:1089, and `lwz r3, 0x6F0(r31)`
+// == mpRaceCar). The console has no null tests here (the PC bring-up [GUARD]s are gone).
 // ============================================================================================
 RaceCar* RaceCarEntityModule::GetPlayerRaceCar()
 {
-    if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
-    {
-        return 0;   // [GUARD], see banner
-    }
-
-    ActiveRaceCar* lpPlayerActiveRaceCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
-    if (lpPlayerActiveRaceCar == 0)
-    {
-        return 0;   // [GUARD], see banner
-    }
-
-    CGS_ASSERT_AT(lpPlayerActiveRaceCar->IsAttached(), "IsAttached()", CGS_ARTIST_ABS_BRNACTIVERACECAR_H_FILE, 1089);   // BrnActiveRaceCar.h:1089
-
-    return lpPlayerActiveRaceCar->GetGlobalRaceCar();
+    return GetActiveRaceCar(mePlayerActiveRaceCarIndex)->GetGlobalRaceCar();
 }
 
 // ============================================================================================

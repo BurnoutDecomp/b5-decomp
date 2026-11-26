@@ -492,17 +492,11 @@ void RouteRequestManager::Update(
         // BrnAICar.h, but the subscript stays correct even if that ever changes).
         AICar* lpAICar = &lpaAICars[liAICarIndex];
 
-        // Eligible cars are IN_RANGE(0) or OUT_OF_RANGE(1); INACTIVE cars are skipped.
-        // (X360 0x82797FDC: `lwz r11, -0x6C(car+0x1534)` == meCarState @+0x14C8; `beq`/`cmpwi 1`.)
-        const EAICarState leState = lpAICar->GetState();
-        const bool lbStateEligible =
-            (leState == E_AI_CAR_STATE_IN_RANGE || leState == E_AI_CAR_STATE_OUT_OF_RANGE);
-
-        // ARTIST 0x8279800C..20 short-circuits before reading the section.
-        const bool lbRequesting = lbStateEligible && lpAICar->NeedsNewRoute()
-            && lpAICar->GetBestSectionIndex() != AICar::KI_INVALID_SECTION_INDEX;
-
-        if (lbRequesting)
+        // Eligible cars are IN_RANGE(0) or OUT_OF_RANGE(1) (the inlined AICar::IsActive(),
+        // X360 0x82797FDC..0x82797FF8); then NeedsNewRoute() and a valid best section, tested
+        // straight into the branches (0x82798000..0x82798034; DWARF names no flag local).
+        if (lpAICar->IsActive() && lpAICar->NeedsNewRoute()
+            && lpAICar->GetBestSectionIndex() != AICar::KI_INVALID_SECTION_INDEX)
         {
             GenerateRoute(lpAICar, lpPlayerCar, lpaAICars, lpAISectionData,
                           lpRouteInputBuffer, lpBuzzByManager);

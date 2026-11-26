@@ -60,7 +60,7 @@ public:
 
     // @ 0x827B0CB8 -- index of the current entry streaming the given zone
     // number (the low 32 bits of muUserId), or -1.
-    s32 GetIndexFromId( s32 liZoneNumber ) const;
+    s32 GetIndexFromId( s32 lId ) const;
 
     // @ 0x827B0D00 -- forwards InternalBaseStreamer::IsEntryReady.
     bool IsListLoaded( s32 liIndex ) const

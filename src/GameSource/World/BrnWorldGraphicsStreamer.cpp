@@ -38,14 +38,18 @@ WorldGraphicsStreamer::Construct( WorldEntityModule* lpWorldEntityModule )
 // ---------------------------------------------------------------------------
 // GetIndexFromId  @ 0x827B0CB8
 // ---------------------------------------------------------------------------
+// DWARF (BrnWorldGraphicsStreamer.cpp:169..172): int32_t lId, locals liCount /
+// liEntryListLength. ARTIST compares the whole u64 user id with the sign-extended
+// id (extsw + cmpld at 0x827B0CCC / 0x827B0CD8).
 s32
-WorldGraphicsStreamer::GetIndexFromId( s32 liZoneNumber ) const
+WorldGraphicsStreamer::GetIndexFromId( s32 lId ) const
 {
-    for ( s32 liEntry = 0; liEntry < GetEntryListLength(); liEntry++ )
+    const s32 liEntryListLength = GetEntryListLength();
+    for ( s32 liCount = 0; liCount < liEntryListLength; liCount++ )
     {
-        if ( static_cast<u32>( GetUserId( liEntry ) ) == static_cast<u32>( liZoneNumber ) )
+        if ( lId == GetUserId( liCount ) )
         {
-            return liEntry;
+            return liCount;
         }
     }
 

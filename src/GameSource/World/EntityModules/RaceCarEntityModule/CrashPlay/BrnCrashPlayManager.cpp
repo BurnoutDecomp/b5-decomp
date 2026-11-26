@@ -61,7 +61,6 @@
 #include "rw/math/vpu/vector3_operation.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "rw/math/fpu/scalar_operation.h"
-#include <cstdlib>   // getenv -- the [crashplay] witness only
 #include <cmath>     // std::fabs (IsZeroVmx)
 #include <cfloat>    // FLT_MAX, original Construct debounce initial value
 
@@ -162,42 +161,13 @@ static f32 KF_MAX_TRAFFIC_DENSITY             =    1.0f;   // 0x82CDB558
 static f32 KF_LOWER_LIMIT_VEHICLE_SCORE       = 1000.0f;   // 0x82CDB55C
 static f32 KF_UPPER_LIMIT_VEHICLE_SCORE       = 5000.0f;   // 0x82CDB560
 
-// The game-event ids this TU posts. Each is the literal in the `li r5,<id>` immediately before the
-// AddEvent call, paired with the `li r6,<size>` that follows it -- which is also what pins each
-// payload's size. They are NOT in the tree's EGameEventType enum yet (no consumer arm exists), so
-// they are spelled here rather than invented into that enum.
-static const s32 KI_EVENT_TRIGGER_CRASH_BREAKER   = 44;   // size 32, UpdateTrafficStomp
-static const s32 KI_EVENT_VEHICLE_LEAPT           = 47;   // size 4,  UpdateCarLeaping
-static const s32 KI_EVENT_ENTER_NEW_ROAD          = 48;   // size 1,  UpdateNewRoad (both posts)
-static const s32 KI_EVENT_SHOWTIME_BOUNCE_PROMPT  = 51;   // size 1,  SetBouncePromptNeeded
-
-// The three payloads. Each is exactly the frame the console hands to AddEvent, store for store; the
-// sizes are the `li r6` operands. The two single-bool records are posted with size 1, so they carry
-// no padding of their own.
-struct VehicleLeaptEvent            { s32  miNumVehiclesLeapt; };   // 47, size 4
-struct EnterNewRoadEvent            { bool mbIsJunction;       };   // 48, size 1
-struct ShowtimeBouncePromptEvent    { bool mbPromptNeeded;     };   // 51, size 1
-
-// 44, size 32. Built at var_D0 in UpdateTrafficStomp @0x822F9088..0x822F90A8:
-//   stvx128 (player position)      -> +0x00   16 bytes
-//   stw     (ActiveRaceCarIndex)   -> +0x10
-//   stfs    1.0f                   -> +0x14
-//   stfs    0.0f                   -> +0x18
-//   stfs    1.0f                   -> +0x1C
-// ⚠️ FLAG: only the first two fields have attested NAMES (the position comes straight from
-// ActiveRaceCar::GetPosition, the index from meActiveRaceCarIndex @+0x748). The three trailing
-// floats are stored as bare literals with no name evidence anywhere in ARTIST, so they keep
-// FieldNN names per this tree's convention rather than being guessed. DELETE-WHEN
-// CrashModeScoringRecentCrash::DealWithCrashbreakerRequest @0x82320EB8 is reconstructed -- it is
-// the consumer and it will name them.
-struct TriggerCrashBreakerEvent
-{
-    Vector3               mEpicentre;              // +0x00
-    ::EActiveRaceCarIndex meActiveRaceCarIndex;    // +0x10
-    f32                   mfField14;               // +0x14  literal 1.0f
-    f32                   mfField18;               // +0x18  literal 0.0f
-    f32                   mfField1C;               // +0x1C  literal 1.0f
-};
+// The game events this TU posts are the game-state module's own records (BrnGameEvents.h:
+// TriggerCrashBreakerEvent 44, VehicleLeaptEvent 47, EnterNewRoadEvent 48,
+// ShowtimeBouncePromptEvent 51), posted with GameEventQueue::AddGameEvent (DWARF
+// BrnCrashPlayManager.cpp locals lCrashBreakerGameEvent / lLeaptEvent / lEnterRoadEvent /
+// lEnterJunctionEvent / lPromptEvent; PS3 calls AddGameEvent<T> out of line, ARTIST inlines it
+// into li r6,sizeof / li r5,id / addi r4 before VariableEventQueue<1536,16>::AddEvent).
+namespace GsIO = BrnGameState::GameStateModuleIO;
 
 // =================================================================================================
 // Construct  (DWARF BrnCrashPlayManager.h:58) -- NO out-of-line X360 symbol: ARTIST inlines it into
@@ -311,53 +281,6 @@ void CrashPlayManager::ClampBoostLevel()
 }
 
 // =================================================================================================
-// [crashplay] THE WITNESS  (BRN_CRASHPLAY_TRACE=1; flow_run.ps1 -DiagEnv "BRN_CRASHPLAY_TRACE=1")
-// Opt-in harness instrument, NOT console code.
-//
-// It ACCUMULATES and never samples. Every quantity below is a running total taken on the frame the
-// thing happens, so nothing can fall between two sampling periods -- the failure mode that has
-// already cost this cluster one wave. The periodic line exists only to show the CURRENT meter
-// alongside those totals; if the totals move and the meter does not, that is a real finding and
-// not an artefact of the print period.
-//
-// The counters, and what each one PROVES if it is zero:
-//   frames        Update ran at all (0 => the PrePhysicsUpdate call site never fires)
-//   showtime      the showtime branch ran (0 => mbIsInShowtime is still false: the arming half)
-//   press         mbBoostBounce arrived from the pad (0 => THE STIMULUS NEVER HAPPENED -- the
-//                 harness, not the game, and no conclusion about the meter is admissible)
-//   arm           a press was ACCEPTED (press > 0 but arm == 0 => every press landed inside the
-//                 KF_MINIMUM_BOUNCE_BOOST_TIME re-arm window; pulse slower)
-//   charge        OnBounce actually spent boost (arm > 0 but charge == 0 => the bounce game action
-//                 never reaches OnBounce, i.e. the HandleGameActions arm is still parked)
-//   ground        frames the player was charged KF_COST_FOR_BEING_ON_GROUND
-//   spent         total percentage points removed by the ground cost
-//   hits          OnVehicleHitConfirmed ran, i.e. action 140 reached this manager (0 while the
-//                 GameState answers VEHICLE_HITs => the RaceCarEntityModule 140 arm is not relayed)
-//   paid          of those, the unchained hits that paid the per-vehicle award (hitAward = total)
-//   everyN        every-KI_AWARD_BOOST_EVERY_N_VEHICLES awards paid
-// =================================================================================================
-namespace
-{
-
-    struct CrashPlayWitness
-    {
-        u32 muFrames;
-        u32 muShowtimeFrames;
-        u32 muPresses;
-        u32 muArms;
-        u32 muCharges;
-        u32 muGroundFrames;
-        f32 mfGroundSpent;
-        f32 mfChargeSpent;
-        u32 muHits;
-        u32 muHitsPaid;
-        u32 muEveryNAwards;
-        f32 mfHitAward;
-    };
-    CrashPlayWitness gCrashPlayWitness = { 0u, 0u, 0u, 0u, 0u, 0u, 0.0f, 0.0f, 0u, 0u, 0u, 0.0f };
-}
-
-// =================================================================================================
 // Update  @ 0x82306530  -- the per-frame spine, called from RaceCarEntityModule::PrePhysicsUpdate.
 //
 // ⭐ SIGNATURE RECOVERED FROM THE PROLOGUE, NOT THE PSEUDOCODE. Hex-Rays renders this as a nullary
@@ -391,35 +314,8 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
     mfTimeSinceLastTrafficStomp    += lfSimTimerTimeStep;
     mfTimeSinceLastHitOverheadSign += lfSimTimerTimeStep;
 
-    // ⚠️⚠️ THE CONSOLE'S OWN :278 ASSERT, RAISED ONCE -- the same treatment, for the same reason,
-    // that PrePhysicsUpdate's :1726 assert already carries in BrnRaceCarEntityModule.cpp.
-    //
-    // It is genuine console code and it is CORRECT: mPlayerCarVolumeInstanceID is invalid here
-    // because NOTHING IN THIS TREE ASSIGNS IT. Construct() calls SetInvalid() (the DWARF's own
-    // callee list) and no writer has landed, so the id stays -1 for the whole session. Before
-    // Construct landed, the member held whatever the module's raw storage did -- usually 0, which
-    // IsValid() happily accepts -- so the gap was INVISIBLE, not absent.
-    //
-    // Measured 2026-08-29 (scratch/flow_run/cp2): as a verbatim per-frame CGS_ASSERT this fires
-    // 7,102 times in a 130 s run and the PC assert manager BLOCKS on each one, which starves the
-    // harness poll loop badly enough that a 1 Hz input schedule delivered ONE press instead of 90.
-    // An assert that stops the run from producing evidence is worse than useless.
-    //
-    // The consumer is UpdateTrafficStomp's air ram (CreateAirRamEvent::mVolumeId), which is
-    // already unreachable on this build for an unrelated reason (mbTrafficStomp has no writer
-    // until OnCarCrash lands), so nothing downstream is misled by the invalid id.
-    // DELETE-WHEN the player car's volume instance is published to the crash-play manager.
-    if( !mPlayerCarVolumeInstanceID.IsValid() )
-    {
-        static bool sbReportedInvalidVolumeId = false;
-        if( !sbReportedInvalidVolumeId )
-        {
-            sbReportedInvalidVolumeId = true;
-            if( CgsDev::Log::gpDebugPrint != 0 )
-            {
-            }
-        }
-    }
+    CGS_ASSERT(mPlayerCarVolumeInstanceID.IsValid(),
+               CGS_ASSERT_MESSAGE_AT("mPlayerCarVolumeInstanceID.IsValid()", __FILE__, 278));   // :278 (ARTIST 0x82306648..0x82306690)
 
     // The camera basis, flattened into the ground plane. The console builds both by storing the
     // matrix row to the stack, zeroing its Y word in place, reloading it, and running the two-step
@@ -466,13 +362,6 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
     {
         mfAftertouchPower = GetMaxAftertouchPower();
         mfBoostPercentage = rw::math::fpu::Max( mfBoostPercentage, KF_INITIAL_MIN_BOOST );
-    }
-
-    // [crashplay] witness -- see the banner above the function. Not console code.
-    ++gCrashPlayWitness.muFrames;
-    if( mbIsInShowtime )
-    {
-        ++gCrashPlayWitness.muShowtimeFrames;
     }
 
     // ARTIST tail-calls the debug component's vtable slot 0 through `lwz r11,0(r30) / lwz r11,0(r11)
@@ -548,9 +437,6 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
             // -(K * dt - boost), ONE rounding == fmaf(-K, dt, boost) (round-to-nearest is symmetric).
             // [FX-AIBUZZ 2026-09-24: was `-= K * dt`, two roundings]
             mfBoostPercentage = ((mfBoostPercentage) - (KF_COST_FOR_BEING_ON_GROUND) * (lfSimTimerTimeStep));
-            ++gCrashPlayWitness.muGroundFrames;                                       // [crashplay]
-            volatile f32 lfWitnessCost = KF_COST_FOR_BEING_ON_GROUND;
-            gCrashPlayWitness.mfGroundSpent += lfWitnessCost * lfSimTimerTimeStep;
         }
 
         if( mfTimeSinceLastInAir > KF_TIME_ON_GROUND_PROMPT_NEEDED )
@@ -645,12 +531,6 @@ void CrashPlayManager::UpdateBounceBoost( f32 lfSimTimerTimeStep,
     {
         mfBounceBoostTimer   = KF_MAXIMUM_BOUNCE_BOOST_TIME;
         mbBoostChargePending = true;
-        ++gCrashPlayWitness.muArms;                                                   // [crashplay]
-    }
-
-    if( lpPlayerControls->mbBoostBounce )
-    {
-        ++gCrashPlayWitness.muPresses;                                                // [crashplay]
     }
 
     if( mfBounceBoostTimer > 0.0f )
@@ -679,16 +559,13 @@ void CrashPlayManager::UpdateTrafficStomp( f32 /*lfSimTimerTimeStep*/,
     {
         mbTrafficStomp = false;
 
-        TriggerCrashBreakerEvent lCrashBreakerGameEvent;
-        lCrashBreakerGameEvent.mEpicentre           = lpPlayerActiveRaceCar->GetPosition();
-        lCrashBreakerGameEvent.meActiveRaceCarIndex = lpPlayerActiveRaceCar->GetActiveRaceCarIndex();
-        lCrashBreakerGameEvent.mfField14            = 1.0f;
-        lCrashBreakerGameEvent.mfField18            = 0.0f;
-        lCrashBreakerGameEvent.mfField1C            = 1.0f;
-        lpOutput->GetGameEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lCrashBreakerGameEvent ),
-                KI_EVENT_TRIGGER_CRASH_BREAKER,
-                32 );
+        GsIO::TriggerCrashBreakerEvent lCrashBreakerGameEvent;
+        lCrashBreakerGameEvent.mPosition        = lpPlayerActiveRaceCar->GetPosition();
+        lCrashBreakerGameEvent.meRaceCarIndex   = lpPlayerActiveRaceCar->GetActiveRaceCarIndex();
+        lCrashBreakerGameEvent.mfNormMagnitude  = 1.0f;
+        lCrashBreakerGameEvent.mfTimeUntilStart = 0.0f;
+        lCrashBreakerGameEvent.mfDurationTime   = 1.0f;
+        lpOutput->GetGameEventQueue()->AddGameEvent( lCrashBreakerGameEvent );
 
         // A stomp refills the meter completely and restores full aftertouch.
         mfBoostPercentage   = KF_MAX_BOOST;
@@ -734,12 +611,9 @@ void CrashPlayManager::UpdateCarLeaping( f32 /*lfSimTimerTimeStep*/,
 {
     if( miCarsLeaptThisFrame > 0 )
     {
-        VehicleLeaptEvent lLeaptEvent;
-        lLeaptEvent.miNumVehiclesLeapt = miCarsLeaptThisFrame;
-        lpOutput->GetGameEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lLeaptEvent ),
-                KI_EVENT_VEHICLE_LEAPT,
-                4 );
+        GsIO::VehicleLeaptEvent lLeaptEvent;
+        lLeaptEvent.miVehicleLeaptCount = miCarsLeaptThisFrame;
+        lpOutput->GetGameEventQueue()->AddGameEvent( lLeaptEvent );
         miCarsLeaptThisFrame = 0;
     }
 }
@@ -753,23 +627,17 @@ void CrashPlayManager::UpdateNewRoad( f32 /*lfSimTimerTimeStep*/,
 {
     if( mbSendNewRoadMessage )
     {
-        EnterNewRoadEvent lEnterRoadEvent;
+        GsIO::EnterNewRoadEvent lEnterRoadEvent;
         lEnterRoadEvent.mbIsJunction = false;
-        lpOutput->GetGameEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lEnterRoadEvent ),
-                KI_EVENT_ENTER_NEW_ROAD,
-                1 );
+        lpOutput->GetGameEventQueue()->AddGameEvent( lEnterRoadEvent );
         mbSendNewRoadMessage = false;
     }
 
     if( mbSendNewJunctionMessage )
     {
-        EnterNewRoadEvent lEnterJunctionEvent;
+        GsIO::EnterNewRoadEvent lEnterJunctionEvent;
         lEnterJunctionEvent.mbIsJunction = true;
-        lpOutput->GetGameEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lEnterJunctionEvent ),
-                KI_EVENT_ENTER_NEW_ROAD,
-                1 );
+        lpOutput->GetGameEventQueue()->AddGameEvent( lEnterJunctionEvent );
         mbSendNewJunctionMessage = false;
     }
 }
@@ -782,12 +650,9 @@ void CrashPlayManager::SetBouncePromptNeeded( bool lbPromptNeeded,
 {
     if( lbPromptNeeded != mbBouncePromptNeeded )
     {
-        ShowtimeBouncePromptEvent lPromptEvent;
+        GsIO::ShowtimeBouncePromptEvent lPromptEvent;
         lPromptEvent.mbPromptNeeded = lbPromptNeeded;
-        lpOutput->GetGameEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lPromptEvent ),
-                KI_EVENT_SHOWTIME_BOUNCE_PROMPT,
-                1 );
+        lpOutput->GetGameEventQueue()->AddGameEvent( lPromptEvent );
         mbBouncePromptNeeded = lbPromptNeeded;
     }
 }
@@ -932,17 +797,11 @@ void CrashPlayManager::OnBounce( const BrnGameState::GameStateModuleIO::JustBoun
         const f32 lfBoostCost = ((KF_COST_FOR_BOUNCE_BOOST_HARD - KF_COST_FOR_BOUNCE_BOOST_EASY) * (mfDifficultyLevel) + (KF_COST_FOR_BOUNCE_BOOST_EASY));
         mfBoostPercentage -= lfBoostCost;
         ClampBoostLevel();
-        ++gCrashPlayWitness.muCharges;                                                // [crashplay]
-        gCrashPlayWitness.mfChargeSpent += lfBoostCost;
     }
 
-    if( lpBounceAction->mbOnCar )
-    {
-        // Bouncing off another car does not count as being on the ground at all.
-        miConsecutiveBouncesOnGround = 0;
-        mbAboutToLoseBoost           = false;
-    }
-    else
+    // ARTIST 0x822A7F98 branches on mbOnCar to the reset arm placed last (0x822A7FEC): the
+    // ground-bounce arm is the source's first.
+    if( !lpBounceAction->mbOnCar )
     {
         ++miConsecutiveBouncesOnGround;
         CGS_ASSERT(miConsecutiveBouncesOnGround > 0, CGS_ASSERT_MESSAGE_AT("miConsecutiveBouncesOnGround > 0", __FILE__, 814));   // X360 :814
@@ -952,6 +811,12 @@ void CrashPlayManager::OnBounce( const BrnGameState::GameStateModuleIO::JustBoun
             mfLoseBoostGracePeriod = KF_LOSE_BOOST_GRACE_PERIOD;
             mbAboutToLoseBoost     = true;
         }
+    }
+    else
+    {
+        // Bouncing off another car does not count as being on the ground at all.
+        miConsecutiveBouncesOnGround = 0;
+        mbAboutToLoseBoost           = false;
     }
 
     if( lpBounceAction->mbFromStationary )
@@ -1036,8 +901,6 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
                                               s32 liVehicleChainBonus,
                                               s32 liTotalVehiclesHit )
 {
-    ++gCrashPlayWitness.muHits;                                                       // [crashplay]
-
     // Only an UNCHAINED hit pays the per-vehicle award.
     if( liVehicleChainBonus == 0 )
     {
@@ -1051,8 +914,6 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
         const f32 lfBoost = ((lfScaledScore) * (KF_BOOST_FOR_VEHICLE_IMPACT_HIGH - KF_BOOST_FOR_VEHICLE_IMPACT_LOW) + (KF_BOOST_FOR_VEHICLE_IMPACT_LOW));
         mfBoostPercentage += lfBoost;
         ClampBoostLevel();
-        ++gCrashPlayWitness.muHitsPaid;                                               // [crashplay]
-        gCrashPlayWitness.mfHitAward += lfBoost;
     }
 
     if( liTotalVehiclesHit > 0 )
@@ -1074,7 +935,6 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
             mfBoostPercentage = ((KF_BOOST_FOR_EVERY_10_CARS_HIT_HI - KF_BOOST_FOR_EVERY_10_CARS_HIT_LO) * (mfDifficultyLevel) + (mfBoostPercentage))
                               + KF_BOOST_FOR_EVERY_10_CARS_HIT_LO;
             ClampBoostLevel();
-            ++gCrashPlayWitness.muEveryNAwards;                                       // [crashplay]
         }
     }
 }
