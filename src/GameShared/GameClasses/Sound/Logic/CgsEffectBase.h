@@ -101,7 +101,8 @@ struct EffectBase : public CgsSound::MemBase
         mu16AttachCount = 0;
     }
 
-    virtual ~EffectBase() {}
+    // DWARF CgsEffectBase.cpp:80: defined out of line in CgsEffectBase.cpp.
+    virtual ~EffectBase();
 
     virtual s32 GetController(s32 /*aiIndex*/) { return -1; }
     virtual void AttachController(EffectBase* /*apController*/) {}
@@ -150,19 +151,6 @@ struct EffectBase : public CgsSound::MemBase
         mfRunningTime = lfCurrentTime;
     }
 
-    // Recovered teardown reset shared by the EffectControl/EffectObject deleting
-    // destructors (@ 0x826963D8 / 0x826965D0). The X360 thunks store, by member:
-    //   meDetachState = E_DETACH_STATE_FINISHED (stw 3, 0x24)
-    //   meAttachState = E_ATTACH_STATE_NONE     (stw 0, 0x20)
-    //   mbHasLoadedData = false                 (stb 0, 0x2D)
-    // (the MemBase base vtable re-install + conditional allocator free are the
-    // compiler-synthesised parts of the thunk). Done by name; no offset cast.
-    void ResetOnDestroy()
-    {
-        meDetachState   = E_DETACH_STATE_FINISHED;
-        meAttachState   = E_ATTACH_STATE_NONE;
-        mbHasLoadedData = false;
-    }
 
     // DWARF CgsEffectBase.h:571 / :575 / :579, header-inline (no ARTIST copy). Derived
     // effects reach the private mbEnabled through these, e.g. WhineEffect::UpdateParams
@@ -240,15 +228,10 @@ public:
     // is non-null, "lpDmixIO", CgsEffectBase.h:916). Stored at +0x30 by name.
     void SetDMixIOPtr(Nicotine::DMixIO* apDmixIO);
 
-    // @ 0x82680720. Read a single dynamic-mixer output value through the latched
-    // DMixIO handle. Returns 0.0f when no handle is connected; otherwise reads the
-    // mixer-output slot (aiSlot) under preset aiPreset via DMixIO::GetDMixOutput and
-    // converts that signed integer result to an f32 (X360 extsw -> fcfid -> frsp).
-    f32 GetMixerOutputValue(int aiSlot, int aiPreset);
-
-    // @ 0x82680778. Read and convert a dynamic-mixer output to the units expected
-    // by a RenderWare Audio Core voice (Q15 gain/depth, Q12 pitch, Hz, or degrees).
-    f32 GetRWACMixerOutputValue(int aiSlot, int aiPreset);
+    // DWARF CgsEffectBase.h:852 / :874, const, defined in this header below the classes
+    // (ARTIST COMDAT copies 0x82680720 / 0x82680778).
+    f32 GetMixerOutputValue(s32 lSlotIndex, Nicotine::DMixIO::DMX_PRESET_TYPE leType) const;
+    f32 GetRWACMixerOutputValue(s32 lSlotIndex, Nicotine::DMixIO::DMX_PRESET_TYPE leType) const;
 
     // @ 0x82680610. Clamp a game-side mixer input to the Q15 range and write it
     // through the effect's connected DMixIO handle. A not-yet-connected effect
@@ -270,11 +253,9 @@ struct EffectControl : public EffectBase
 {
     EffectControl() {}
 
-    // Out-of-line so the deleting-destructor thunk @ 0x826963D8 is emitted in this
-    // class's own TU (CgsEffectControlDtor.cpp). The recovered teardown body resets
-    // the EffectBase attach/detach state machine; bodied via the protected base
-    // helper EffectBase::ResetOnDestroy() so no raw-offset cast is needed.
-    virtual ~EffectControl();
+    // No user-declared destructor: DWARF lists ~EffectControl without a declaration line and
+    // places its body on the class line (CgsEffectBase.h:763); ARTIST's scalar deleting
+    // destructor 0x826963D8 is ~EffectBase's reset with no EffectControl vftable store.
 
     virtual ClassTypeInfo<EffectControl>* GetTypeInfo() const { return &sTypeInfo; }
     virtual const char* GetTypeName() const;
@@ -291,10 +272,8 @@ struct EffectObject : public EffectBase
 {
     EffectObject() {}
 
-    // Out-of-line so the deleting-destructor thunk @ 0x826965D0 is emitted in this
-    // class's own TU (CgsEffectObjectDtor.cpp). Same recovered teardown as
-    // EffectControl (identical store sequence in the X360 build).
-    virtual ~EffectObject();
+    // No user-declared destructor: DWARF places ~EffectObject's body on the class line
+    // (CgsEffectBase.h:772); ARTIST 0x826965D0 is ~EffectBase's reset.
 
     virtual ClassTypeInfo<EffectObject>* GetTypeInfo() const { return &sTypeInfo; }
     virtual const char* GetTypeName() const;
@@ -315,6 +294,41 @@ namespace CgsSound
 {
 namespace Logic
 {
+
+// DWARF CgsEffectBase.h:852. A dynamic-mixer output read through the latched DMixIO handle,
+// 0.0f when none is connected; the signed result converts to f32 (extsw -> fcfid -> frsp).
+inline f32 EffectBase::GetMixerOutputValue(s32 lSlotIndex, Nicotine::DMixIO::DMX_PRESET_TYPE leType) const
+{
+    if (mpDynamicMixIo)
+        return static_cast<f32>(mpDynamicMixIo->GetDMixOutput(lSlotIndex, leType));
+
+    return 0.0f;
+}
+
+// DWARF CgsEffectBase.h:874. A dynamic-mixer output converted to the units a RenderWare Audio
+// Core voice expects (Q15 gain/depth, Q12 pitch, Hz, degrees); ARTIST 0x82680778.
+inline f32 EffectBase::GetRWACMixerOutputValue(s32 lSlotIndex, Nicotine::DMixIO::DMX_PRESET_TYPE leType) const
+{
+    if (mpDynamicMixIo)
+    {
+        const s32 liOutput = mpDynamicMixIo->GetDMixOutput(lSlotIndex, leType);
+        switch (leType)
+        {
+        case Nicotine::DMixIO::DMX_VOL:
+        case Nicotine::DMixIO::DMX_DEPTH:
+            return static_cast<f32>(liOutput) * 0.000030518509f;
+        case Nicotine::DMixIO::DMX_PITCH:
+            return static_cast<f32>(liOutput) * 0.00024414062f;
+        case Nicotine::DMixIO::DMX_FREQ:
+            if (liOutput > 24900)
+                return 96000.0f;
+            return static_cast<f32>(liOutput);
+        case Nicotine::DMixIO::DMX_AZIM:
+            return static_cast<f32>(liOutput) * 0.0054932479f;
+        }
+    }
+    return 0.0f;
+}
 
 // DWARF CgsEffectBase.h:953, defined in the header below the classes. ARTIST reads the
 // state's instance number directly, with no null test (WheelControl::UpdateDriftingRPM

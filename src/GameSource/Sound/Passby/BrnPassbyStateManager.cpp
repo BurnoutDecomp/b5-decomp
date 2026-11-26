@@ -225,9 +225,7 @@ PassbyStateManager::PassbyStateManager()
 // from this virtual destructor. The held splicer-bank Content is released in
 // Release() (0x826D4CC8). No member teardown beyond the implicit base/members.
 // ---------------------------------------------------------------------------
-PassbyStateManager::~PassbyStateManager()
-{
-}
+// (implicit destructor: see the header)
 
 // ---------------------------------------------------------------------------
 // PassbyStateManager::CreateObject(u32)  @ 0x82702030   (the factory hook)

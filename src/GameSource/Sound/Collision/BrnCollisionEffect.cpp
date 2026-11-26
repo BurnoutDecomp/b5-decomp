@@ -544,24 +544,11 @@ bool CollisionEffect::Detach()
 // ---------------------------------------------------------------------------
 f32 CollisionEffect::GetGain() const
 {
-    // flt_820AA8F8 = 3.0518509e-05 (0x38000100): the Q15 -> [0,1] scale.
-    const f32 KF_Q15_TO_NORMALISED = 0.000030518509f;
-
-    f32 lfMixerOutput;
-    Nicotine::DMixIO* lpDmix = GetDMixIOPtr();   // lwz r3,0x34(this): the effect's own endpoint
-    if (lpDmix != 0) // cmplwi; beq
-    {
-        // GetDMixOutput(slot, preset): preset 0 == DMX_VOL. extsw -> signed s32.
-        const s32 liOutput =
-            lpDmix->GetDMixOutput(meNicotineVolumeSlider, Nicotine::DMixIO::DMX_VOL);
-        lfMixerOutput = static_cast<f32>(liOutput) * KF_Q15_TO_NORMALISED;
-    }
-    else
-    {
-        lfMixerOutput = 0.0f; // lfs f0, flt_82001CC0
-    }
-
-    return mSizeSettings.mfVolume * lfMixerOutput; // fmuls f1, f13, f0
+    // DWARF local lf32Volume (BrnCollisionEffect.cpp:233); the inlined EffectBase::
+    // GetRWACMixerOutputValue (CgsEffectBase.h:874) folds to its DMX_VOL (Q15) case.
+    const f32 lf32Volume = mSizeSettings.mfVolume *
+        GetRWACMixerOutputValue(meNicotineVolumeSlider, Nicotine::DMixIO::DMX_VOL);
+    return lf32Volume;
 }
 
 // ---------------------------------------------------------------------------
@@ -581,22 +568,14 @@ f32 CollisionEffect::GetGain() const
 // ---------------------------------------------------------------------------
 f32 CollisionEffect::GetPitch() const
 {
-    // flt_820AA8F4 = 0.000244140625 (0x39800000): the Q12 pitch-multiplier scale.
-    const f32 KF_Q12_TO_PITCH = 0.000244140625f;
-
-    Nicotine::DMixIO* lpDmix = GetDMixIOPtr();   // lwz r3,0x34(r31): the effect's own endpoint
-    f32 lfMixerOutput = 0.0f;                    // flt_82001CC0
-    if (lpDmix)
-    {
-        lfMixerOutput = static_cast<f32>(lpDmix->GetDMixOutput(
-            meNicotinePitchSlider, Nicotine::DMixIO::DMX_PITCH)) *
-            KF_Q12_TO_PITCH;
-    }
-
-    f32 lfSizePitch = mSizeSettings.mfPitch;     // lfs f0,0x60(r31)
-    if (lfSizePitch == 0.0f)                     // fcmpu f0,f31 ; bne (NaN keeps its value)
-        lfSizePitch = 1.0f;                      // flt_82001C98
-    return lfSizePitch * lfMixerOutput;
+    // DWARF local lf32Pitch (BrnCollisionEffect.cpp:252) and the inlined EffectBase::
+    // GetRWACMixerOutputValue (CgsEffectBase.h:874, DMX_PITCH: Q12). A size pitch of 0.0
+    // is taken as 1.0 (flt_82001C98).
+    const f32 lf32Pitch = GetRWACMixerOutputValue(meNicotinePitchSlider, Nicotine::DMixIO::DMX_PITCH);
+    f32 lfSizePitch = mSizeSettings.mfPitch;
+    if (lfSizePitch == 0.0f)
+        lfSizePitch = 1.0f;
+    return lfSizePitch * lf32Pitch;
 }
 
 

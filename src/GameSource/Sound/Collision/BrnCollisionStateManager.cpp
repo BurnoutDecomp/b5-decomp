@@ -234,9 +234,7 @@ CollisionStateManager::CollisionStateManager()
 // The generated attributes, Content handles, histories, and base pool are RAII members
 // on PC, so their recovered teardown order is synthesized by the host compiler.
 // ---------------------------------------------------------------------------
-CollisionStateManager::~CollisionStateManager()
-{
-}
+// (implicit destructor: see the header)
 
 // ---------------------------------------------------------------------------
 // CollisionStateManager::CreateObject(u32)  @ 0x82701FA8   (the factory hook)

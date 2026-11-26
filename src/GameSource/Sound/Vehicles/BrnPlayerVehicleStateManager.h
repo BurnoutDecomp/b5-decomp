@@ -63,8 +63,8 @@ public:
     // ctor and builds the seven content sub-objects.
     PlayerVehicleStateManager();
 
-    // ~PlayerVehicleStateManager @ 0x82700D30 (the X360 `vector deleting destructor`).
-    virtual ~PlayerVehicleStateManager();
+    // No user-declared destructor: DWARF lists ~PlayerVehicleStateManager without a declaration line and places its body
+    // on the class line (BrnPlayerVehicleStateManager.h:51), the compiler's implicit one; ARTIST 0x82700D30 restores no vftable.
 
     // ---- RTTI hooks (the per-class descriptor + factory). STATIC GetStaticTypeInfo
     // / CreateObject so &CreateObject is storable in ClassTypeInfo<StateManager>::

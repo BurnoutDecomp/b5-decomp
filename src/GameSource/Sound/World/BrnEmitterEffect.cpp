@@ -215,15 +215,15 @@ void EmitterEffect::ProcessUpdate()
     // rw::math::fpu::Clamp: ARTIST fsel(0 - x) then fsel(1 - x') (0x826E6CFC..D04).
     const f32 lfFraction = rw::math::fpu::Clamp(lfDistance * lfInvRadius, 0.0f, 1.0f);
 
-    const f32 lfVolume = GetRWACMixerOutputValue(0, 0);
-    const f32 lfReverb = GetRWACMixerOutputValue(4, 0);
+    const f32 lfVolume = GetRWACMixerOutputValue(0, Nicotine::DMixIO::DMX_VOL);
+    const f32 lfReverb = GetRWACMixerOutputValue(4, Nicotine::DMixIO::DMX_VOL);
     const f32 lfDistanceGain = CgsSound::Utils::Curve::GetOutput(
         1.0f - lfFraction, CgsSound::Utils::Curve::E_ONE_MINUS_EQPWR);
 
     CGS_ASSERT(mi16PitchOutput < E_WORLD_EMITTER_EFFECT_OUTPUT_AZIMUTH,
                "mi16PitchOutput < E_WORLD_EMITTER_EFFECT_OUTPUT_AZIMUTH");
-    const f32 lfPitch = GetRWACMixerOutputValue(mi16PitchOutput, 1);
-    const f32 lfAzimuth = GetRWACMixerOutputValue(3, 3);
+    const f32 lfPitch = GetRWACMixerOutputValue(mi16PitchOutput, Nicotine::DMixIO::DMX_PITCH);
+    const f32 lfAzimuth = GetRWACMixerOutputValue(3, Nicotine::DMixIO::DMX_AZIM);
 
     const u32 luAzimuth = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("SimplePanningAzimuth"));

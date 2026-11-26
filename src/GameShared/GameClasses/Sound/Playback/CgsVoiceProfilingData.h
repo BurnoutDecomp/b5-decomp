@@ -93,7 +93,7 @@ namespace Playback
             // this+0x1FC downward for N-1 iterations summing *(p-1) into the running
             // total seeded with lf32Time, copying *(p-1) into *p.)
             f32 lf32Sum = lf32Time;
-            for (u32 lu = N - 1; lu != 0; --lu)
+            for (u32 lu = N - 1; lu > 0; --lu)   // ARTIST 0x8268EE60: a counted (bdnz) loop
             {
                 const f32 lf32Prev = mafAveragingHistory[lu - 1];
                 mafAveragingHistory[lu] = lf32Prev;

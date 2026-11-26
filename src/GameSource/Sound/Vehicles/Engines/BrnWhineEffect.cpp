@@ -160,9 +160,9 @@ void WhineEffect::ProcessUpdate()
     if (!mbHasLoadedData || !mpPhysicsControl)
         return;
 
-    mWhineVoice.SetParameter(3, mfWhineVolume * GetMixerOutputValue(0, 0), &KAU_WHINE_PARAMETERS[3]);
-    mWhineVoice.SetParameter(2, GetMixerOutputValue(1, 3), &KAU_WHINE_PARAMETERS[2]);
-    mWhineVoice.SetParameter(1, GetMixerOutputValue(2, 1), &KAU_WHINE_PARAMETERS[1]);
+    mWhineVoice.SetParameter(3, mfWhineVolume * GetMixerOutputValue(0, Nicotine::DMixIO::DMX_VOL), &KAU_WHINE_PARAMETERS[3]);
+    mWhineVoice.SetParameter(2, GetMixerOutputValue(1, Nicotine::DMixIO::DMX_AZIM), &KAU_WHINE_PARAMETERS[2]);
+    mWhineVoice.SetParameter(1, GetMixerOutputValue(2, Nicotine::DMixIO::DMX_PITCH), &KAU_WHINE_PARAMETERS[1]);
     mWhineVoice.SetGain(0, 1.0f, &KU_WHINE_SEND);
     mWhineVoice.SetParameter(4, 1.0f, &KAU_WHINE_PARAMETERS[4]);
 

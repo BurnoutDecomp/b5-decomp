@@ -61,8 +61,17 @@ struct StreamRequest
     u32          mu32UniqueId;   // +0x10  (stamped in PostStreamRequest)
     bool         mbDirty;        // +0x14  (+3 pad -> 24)
 
-    StreamRequest();
-    StreamRequest(IStreamUser* apAttachment, u32 auPriority, f32 afLagTolerance);
+    // DWARF BrnStreamingStateManager.h:53 / :59: defined in this header (ARTIST has no copies).
+    StreamRequest()
+        : mpAttachment(0), mu32Priority(0), mfLagTolerance(0.0f), mfTimeStamp(0.0f),
+          mu32UniqueId(0), mbDirty(false)
+    {
+    }
+    StreamRequest(IStreamUser* apAttachment, u32 auPriority, f32 afLagTolerance)
+        : mpAttachment(apAttachment), mu32Priority(auPriority), mfLagTolerance(afLagTolerance),
+          mfTimeStamp(0.0f), mu32UniqueId(0), mbDirty(false)
+    {
+    }
 };
 
 // BrnStreamingStateManager.h:81 (DWARF) -- 16-byte stop-request ring element.
@@ -73,8 +82,15 @@ struct StreamStopRequest
     f32                mfTimeStamp;  // +0x08
     u32                mu32UniqueId; // +0x0C
 
-    StreamStopRequest();
-    StreamStopRequest(const IStreamUser* apAttachment, f32 afFadeOut);
+    // DWARF BrnStreamingStateManager.h:85 / :90: defined in this header (ARTIST has no copies).
+    StreamStopRequest()
+        : mpAttachment(0), mfFadeOut(0.0f), mfTimeStamp(0.0f), mu32UniqueId(0)
+    {
+    }
+    StreamStopRequest(const IStreamUser* apAttachment, f32 afFadeOut)
+        : mpAttachment(apAttachment), mfFadeOut(afFadeOut), mfTimeStamp(0.0f), mu32UniqueId(0)
+    {
+    }
 };
 
 class StreamingStateManager : public BrnSound::Logic::BrnStateManager

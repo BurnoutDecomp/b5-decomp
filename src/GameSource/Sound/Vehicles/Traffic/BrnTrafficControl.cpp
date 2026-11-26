@@ -10,6 +10,11 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/math/vpu/vector3_operation.h"
 
+// ARTIST 0x820AF128: the assert file (__FILE__) of this unity member, a literal.
+#define KAC_ARTIST_ASSERT_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\" \
+    "../Sound/Vehicles/Traffic/BrnTrafficControl.cpp"
+
 // =============================================================================
 // BrnSound::Logic::Traffic::TrafficControl -- out-of-line bodies.
 //
@@ -94,9 +99,9 @@ bool TrafficControl::Attach()
     CgsSound::Logic::EffectBase::Attach();
 
     TrafficState* lpState = static_cast<TrafficState*>( GetStateBase() );
-    CGS_ASSERT( lpState != 0, "lpState" );
-    mbPassbyTriggered = false;
+    CGS_ASSERT_AT( lpState != 0, "lpState", KAC_ARTIST_ASSERT_FILE, 154 );
     mpTrafficEntity = lpState->GetTrafficEntity();
+    mbPassbyTriggered = false;   // ARTIST 0x82698C98: stored after the entity load
     mpTraffic3dControl->AttachEmitterPosition( &mpTrafficEntity->mLocalTransform.Pos() );
     return true;
 }
@@ -161,3 +166,5 @@ void TrafficControl::UpdateParams( f32 /*lfTimeStep*/ )
 } // namespace Traffic
 } // namespace Logic
 } // namespace BrnSound
+
+#undef KAC_ARTIST_ASSERT_FILE

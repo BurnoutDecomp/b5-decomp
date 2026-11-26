@@ -76,9 +76,7 @@ PlayerVehicleStateManager::PlayerVehicleStateManager()
 // for the seven Content objects and then the VehicleStateManager/base teardown, which
 // is the semantic equivalent of the explicit console deleting-destructor sequence.
 // ---------------------------------------------------------------------------
-PlayerVehicleStateManager::~PlayerVehicleStateManager()
-{
-}
+// (implicit destructor: see the header)
 
 // ---------------------------------------------------------------------------
 // PlayerVehicleStateManager::CreateObject(u32)  @ 0x827022D8   (the factory hook)

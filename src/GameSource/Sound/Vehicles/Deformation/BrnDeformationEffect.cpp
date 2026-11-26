@@ -218,9 +218,9 @@ void DeformationEffect::UpdateParams(f32 afTimeStep)
     BrnSound::Module::SoundLogicModule* lpModule = static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
     const BrnSound::Module::Io::LogicInputBuffer* lpInput = lpModule->GetBrnInputStructure();
     const BrnSound::Logic::FrameInformation& lFrame = lpModule->GetFrameInformation();
-    const f32 lfVolume = GetMixerOutputValue(0, 0);
-    const f32 lfPitch = GetMixerOutputValue(2, 1);
-    const f32 lfAzimuth = GetMixerOutputValue(1, 3);
+    const f32 lfVolume = GetMixerOutputValue(0, Nicotine::DMixIO::DMX_VOL);
+    const f32 lfPitch = GetMixerOutputValue(2, Nicotine::DMixIO::DMX_PITCH);
+    const f32 lfAzimuth = GetMixerOutputValue(1, Nicotine::DMixIO::DMX_AZIM);
 
     // ARTIST 826B5508..5854, live simulation branch. SoundLogicModule's replay
     // serialiser binding (826B54D0..5504 / 5858..587C) remains unhomed.

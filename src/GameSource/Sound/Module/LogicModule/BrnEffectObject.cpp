@@ -139,9 +139,7 @@ bool BrnEffectObject::GetSampleTag(u32 eTag, u32 uIndex, u32 uSelection,
 // ---------------------------------------------------------------------------
 BrnEffectObject::~BrnEffectObject()
 {
-    meDetachState    = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED;
-    mbHasLoadedData = false;
-    meAttachState    = CgsSound::Logic::EffectBase::E_ATTACH_STATE_NONE;
+    // DWARF BrnEffectObject.cpp:55; the state reset is ~EffectBase's (CgsEffectBase.cpp:80).
 }
 
 // ---------------------------------------------------------------------------

@@ -87,7 +87,8 @@ public:
     // ctor @ 0x82700EB8 (export-set hole; CreateObject @0x82702358 `bl`s it after
     // an 880-byte MemBase::operator new tagged "AIVehicleStateManager").
     AIVehicleStateManager();
-    virtual ~AIVehicleStateManager();                                     // @ 0x82700FE0
+    // No user-declared destructor: DWARF lists ~AIVehicleStateManager without a declaration line and places its body
+    // on the class line (BrnAIVehicleStateManager.h:40), the compiler's implicit one; ARTIST 0x82700FE0 restores no vftable.
 
     // ---- RTTI hooks. STATIC GetStaticTypeInfo / CreateObject so &CreateObject is
     // storable in ClassTypeInfo<StateManager>::mpfnCreateObject. ----

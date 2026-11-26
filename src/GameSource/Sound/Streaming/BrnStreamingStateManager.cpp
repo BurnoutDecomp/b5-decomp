@@ -46,28 +46,6 @@ namespace
     const u32 KU_DIAG_REFUSAL_CAP = 40;
 }
 
-StreamRequest::StreamRequest()
-    : mpAttachment(0), mu32Priority(0), mfLagTolerance(0.0f), mfTimeStamp(0.0f),
-      mu32UniqueId(0), mbDirty(false)
-{
-}
-
-StreamRequest::StreamRequest(IStreamUser* apAttachment, u32 auPriority, f32 afLagTolerance)
-    : mpAttachment(apAttachment), mu32Priority(auPriority), mfLagTolerance(afLagTolerance),
-      mfTimeStamp(0.0f), mu32UniqueId(0), mbDirty(false)
-{
-}
-
-StreamStopRequest::StreamStopRequest()
-    : mpAttachment(0), mfFadeOut(0.0f), mfTimeStamp(0.0f), mu32UniqueId(0)
-{
-}
-
-StreamStopRequest::StreamStopRequest(const IStreamUser* apAttachment, f32 afFadeOut)
-    : mpAttachment(apAttachment), mfFadeOut(afFadeOut), mfTimeStamp(0.0f), mu32UniqueId(0)
-{
-}
-
 // ---------------------------------------------------------------------------
 // StreamingStateManager::StreamingStateManager()  ctor @ 0x826FBFE0
 //

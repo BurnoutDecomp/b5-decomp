@@ -127,37 +127,38 @@ void AmbienceEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 // ---------------------------------------------------------------------------
 void AmbienceEffect::UpdateParams(f32 /*afTimeStep*/)
 {
-    CGS_ASSERT(mpAmbienceControl != 0, "mpAmbienceControl");
+    CGS_ASSERT_AT(mpAmbienceControl != 0, "mpAmbienceControl", BRN_AMBIENCEEFFECT_CPP_FILE, 475);
 
-    const CgsSound::Utils::DataPoint<u8>& lrRegion = mpAmbienceControl->GetRegion();
-    if (!lrRegion.HasChanged())
-        return;
+    // DWARF locals (BrnAmbienceEffect.cpp:476/480/491/500/501): lAmbienceRegion,
+    // lpStreamingStateMan, lu8StreamIndex, lStopRequest, lRequest. ARTIST builds both
+    // requests before posting either (0x8269B6A8..0x8269B718).
+    const CgsSound::Utils::DataPoint<u8>& lAmbienceRegion = mpAmbienceControl->GetRegion();
+    if (lAmbienceRegion.HasChanged())
+    {
+        BrnSound::Logic::Streaming::StreamingStateManager* lpStreamingStateMan =
+            static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
+                static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
+                    ->GetEnvironment().GetStateManager(6));
+        CGS_ASSERT_AT(lpStreamingStateMan != 0, "lpStreamingStateMan", BRN_AMBIENCEEFFECT_CPP_FILE, 482);
 
-    BrnSound::Logic::Streaming::StreamingStateManager* lpStreamingStateMan =
-        static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
-            static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
-                ->GetEnvironment().GetStateManager(6));
-    CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
+        mParams.mpLogicModule = mpLogicModule;
+        mParams.mFactoryName = static_cast<u32>(
+            CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
+        mParams.mVoiceSpecName = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("MusicVoiceSpec"));
+        mParams.mSlotName = static_cast<u32>(
+            CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
+        const u8 lu8StreamIndex = lAmbienceRegion.GetCurrent();
+        mParams.mContentSpecName = static_cast<u32>(KA_AMBIENCE_NAMES[lu8StreamIndex].GetValue());
+        mParams.mSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
+        mParams.mSubMixVoiceID = 1;
+        mParams.miSendIndex = 0;
 
-    mParams.mpLogicModule = mpLogicModule;
-    mParams.mFactoryName = static_cast<u32>(
-        CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
-    mParams.mVoiceSpecName = static_cast<u32>(
-        CgsSound::Playback::Name::MakeHash("MusicVoiceSpec"));
-    mParams.mSlotName = static_cast<u32>(
-        CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
-    mParams.mContentSpecName = static_cast<u32>(
-        KA_AMBIENCE_NAMES[lrRegion.GetCurrent()].GetValue());
-    mParams.mSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
-    mParams.mSubMixVoiceID = 1;
-    mParams.miSendIndex = 0;
-
-    lpStreamingStateMan->PostStreamRequest(
-        BrnSound::Logic::Streaming::StreamStopRequest(this, KF_AMBIENCE_FADE_TIME));
-    lpStreamingStateMan->PostStreamRequest(
-        BrnSound::Logic::Streaming::StreamRequest(this, 0, 0.1f));
-
-    static s32 siDiagPlay = 0;
+        BrnSound::Logic::Streaming::StreamStopRequest lStopRequest(this, KF_AMBIENCE_FADE_TIME);
+        BrnSound::Logic::Streaming::StreamRequest lRequest(this, 0, 0.1f);
+        lpStreamingStateMan->PostStreamRequest(lStopRequest);
+        lpStreamingStateMan->PostStreamRequest(lRequest);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +178,7 @@ bool AmbienceEffect::Detach()
             static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
                 static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
                     ->GetEnvironment().GetStateManager(6));
-        CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
+        CGS_ASSERT_AT(lpStreamingStateMan != 0, "lpStreamingStateMan", BRN_AMBIENCEEFFECT_CPP_FILE, 531);
         lpStreamingStateMan->PostStreamRequest(
             BrnSound::Logic::Streaming::StreamStopRequest(this, KF_AMBIENCE_FADE_TIME));
     }
@@ -190,9 +191,8 @@ bool AmbienceEffect::Detach()
         meDetachState = E_DETACH_STATE_FINISHED;
         return true;
     default:
-        CGS_ASSERT(meDetachState >= E_DETACH_STATE_NONE &&
-                       meDetachState <= E_DETACH_STATE_FINISHED,
-                   "Unexpected state");
+        // ARTIST 0x826F5170: an unconditional assert (line 557).
+        CGS_FAIL_AT("Unexpected state", BRN_AMBIENCEEFFECT_CPP_FILE, 557);
         return false;
     }
 }

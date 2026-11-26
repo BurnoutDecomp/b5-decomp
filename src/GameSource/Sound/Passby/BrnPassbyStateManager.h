@@ -181,7 +181,8 @@ public:
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );
 
     PassbyStateManager();
-    virtual ~PassbyStateManager();
+    // No user-declared destructor: DWARF lists ~PassbyStateManager without a declaration line and places its body
+    // on the class line (BrnPassbyStateManager.h:45), the compiler's implicit one; ARTIST 0x82700050 (scalar deleting) restores no vftable.
 
     virtual bool Prepare();
     virtual bool Release();

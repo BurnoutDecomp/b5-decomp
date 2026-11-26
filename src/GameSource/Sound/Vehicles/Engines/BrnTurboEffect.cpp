@@ -241,12 +241,12 @@ void TurboEffect::ProcessUpdate()
     if (!mbHasLoadedData)
         return;
 
-    mTurboVoice.SetParameter(3, mfTurboVolume * GetMixerOutputValue(0, 0), &KAU_TURBO_PARAMETERS[3]);
-    mTurboVoice.SetParameter(8, GetMixerOutputValue(3, 0), &KAU_TURBO_PARAMETERS[8]);
-    mTurboVoice.SetParameter(7, mfTurboVolume * GetMixerOutputValue(3, 0), &KAU_TURBO_PARAMETERS[7]);
-    mTurboVoice.SetParameter(5, mfTurboVolume * GetMixerOutputValue(3, 0), &KAU_TURBO_PARAMETERS[5]);
-    mTurboVoice.SetParameter(2, GetMixerOutputValue(1, 3), &KAU_TURBO_PARAMETERS[2]);
-    mTurboVoice.SetParameter(1, GetMixerOutputValue(2, 1), &KAU_TURBO_PARAMETERS[1]);
+    mTurboVoice.SetParameter(3, mfTurboVolume * GetMixerOutputValue(0, Nicotine::DMixIO::DMX_VOL), &KAU_TURBO_PARAMETERS[3]);
+    mTurboVoice.SetParameter(8, GetMixerOutputValue(3, Nicotine::DMixIO::DMX_VOL), &KAU_TURBO_PARAMETERS[8]);
+    mTurboVoice.SetParameter(7, mfTurboVolume * GetMixerOutputValue(3, Nicotine::DMixIO::DMX_VOL), &KAU_TURBO_PARAMETERS[7]);
+    mTurboVoice.SetParameter(5, mfTurboVolume * GetMixerOutputValue(3, Nicotine::DMixIO::DMX_VOL), &KAU_TURBO_PARAMETERS[5]);
+    mTurboVoice.SetParameter(2, GetMixerOutputValue(1, Nicotine::DMixIO::DMX_AZIM), &KAU_TURBO_PARAMETERS[2]);
+    mTurboVoice.SetParameter(1, GetMixerOutputValue(2, Nicotine::DMixIO::DMX_PITCH), &KAU_TURBO_PARAMETERS[1]);
     mTurboVoice.SetParameter(0, mfTurboSpool, &KAU_TURBO_PARAMETERS[0]);
     mTurboVoice.SetGain(0, 1.0f, &KU_TURBO_SEND);
     mTurboVoice.SetParameter(4, 1.0f, &KAU_TURBO_PARAMETERS[4]);

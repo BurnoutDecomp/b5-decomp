@@ -38,6 +38,19 @@ static ClassTypeInfo<EffectObject>*  gapEffectObjectTypeInfo[EffectObject::KU_SI
 
 
 // ---------------------------------------------------------------------------
+// EffectBase::~EffectBase()  (DWARF CgsEffectBase.cpp:80; no ARTIST copy of its own)
+// Every effect destructor expands it (EffectControl 0x826963D8, Cgs3dEffectControl
+// 0x826C3E70, Car3DControl 0x826CF838, ...): the detach state finishes, the loaded-data
+// flag drops and the attach state clears (stw 3,0x24 / stb 0,0x2D / stw 0,0x20).
+// ---------------------------------------------------------------------------
+EffectBase::~EffectBase()
+{
+    meDetachState   = E_DETACH_STATE_FINISHED;
+    mbHasLoadedData = false;
+    meAttachState   = E_ATTACH_STATE_NONE;
+}
+
+// ---------------------------------------------------------------------------
 // EffectBase::Attach()  @ 0x826A1138
 //   v2 = mu16AttachCount; meDetachState = 0; mu16AttachCount = v2 + 1; return 1;
 // (asm: lhz r10,0xE ; stw 0,0x24 ; sth r10+1,0xE ; li r3,1)
@@ -64,48 +77,6 @@ bool EffectBase::Prepare(State* apState)
     mpState       = apState;                                    // stw r4, 8(this)
     mpLogicModule = apState->mpStateManager->GetLogicModule();  // 0x24 then 0x2C, by name
     return true;                                                // li r3, 1
-}
-
-// ---------------------------------------------------------------------------
-// EffectBase::GetMixerOutputValue(slot, preset)  @ 0x82680720
-//   if (!mpDynamicMixIo) return 0.0f;
-//   return (f32)(s32)mpDynamicMixIo->GetDMixOutput(slot, preset);
-// (asm: lwz r3,0x30(this); cmplwi; beq -> lfs f1, flt_82001CC0 [== 0.0]; else
-//  bl GetDMixOutput; extsw r11,r3; std; lfd; fcfid; frsp f1 -- signed-int -> f32.)
-// ---------------------------------------------------------------------------
-f32 EffectBase::GetMixerOutputValue(int aiSlot, int aiPreset)
-{
-    if (mpDynamicMixIo)
-        return static_cast<f32>(mpDynamicMixIo->GetDMixOutput(aiSlot, aiPreset));
-
-    return 0.0f;
-}
-
-// ---------------------------------------------------------------------------
-// EffectBase::GetRWACMixerOutputValue(slot, preset) @ 0x82680778
-// ---------------------------------------------------------------------------
-f32 EffectBase::GetRWACMixerOutputValue(int aiSlot, int aiPreset)
-{
-    if (!mpDynamicMixIo)
-        return 0.0f;
-
-    const s32 liOutput = mpDynamicMixIo->GetDMixOutput(aiSlot, aiPreset);
-    switch (aiPreset)
-    {
-    case Nicotine::DMixIO::DMX_VOL:
-    case Nicotine::DMixIO::DMX_DEPTH:
-        return static_cast<f32>(liOutput) * 0.000030518509f;
-    case Nicotine::DMixIO::DMX_PITCH:
-        return static_cast<f32>(liOutput) * 0.00024414062f;
-    case Nicotine::DMixIO::DMX_FREQ:
-        if (liOutput > 24900)
-            return 96000.0f;
-        return static_cast<f32>(liOutput);
-    case Nicotine::DMixIO::DMX_AZIM:
-        return static_cast<f32>(liOutput) * 0.0054932479f;
-    default:
-        return 0.0f;
-    }
 }
 
 // ---------------------------------------------------------------------------

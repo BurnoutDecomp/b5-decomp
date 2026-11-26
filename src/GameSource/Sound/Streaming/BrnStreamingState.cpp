@@ -21,30 +21,14 @@ namespace Streaming
 {
 
 // ---------------------------------------------------------------------------
-// StreamingState::StreamingState  @ 0x826B0CB0
+// StreamingState::StreamingState  @ 0x826B0CB0  (DWARF BrnStreamingState.cpp:50)
 //
-// Zeroes the embedded request field-for-field -- the ctor's five word stores +
-// one byte store land exactly on StreamRequest's members at +84..+104:
-//   stw 0, +84  -> mRequest.mpAttachment
-//   stw 0, +88  -> mRequest.mu32Priority
-//   stfs 0,+92  -> mRequest.mfLagTolerance
-//   stfs 0,+96  -> mRequest.mfTimeStamp
-//   stw 0, +100 -> mRequest.mu32UniqueId
-//   stb 0, +104 -> mRequest.mbDirty
-// mfFadeOut (+108) is NOT stored by the X360 ctor; it is value-defined here on
-// the host (0.0f) so the member is never read uninitialised -- no behavioural
-// reliance on the pre-SetFadeOut value is attested.
+// The base BrnState ctor, then mRequest's header-inline StreamRequest() zeroes the request
+// (+0x54..+0x68). mfFadeOut (+0x6C) is not stored: ARTIST's ctor ends at the mbDirty byte.
 // ---------------------------------------------------------------------------
 StreamingState::StreamingState()
     : BrnSound::Logic::BrnState()
-    , mfFadeOut(0.0f)
 {
-    mRequest.mpAttachment   = 0;      // stw 0, +84
-    mRequest.mu32Priority   = 0u;     // stw 0, +88
-    mRequest.mfLagTolerance = 0.0f;   // stfs 0, +92
-    mRequest.mfTimeStamp    = 0.0f;   // stfs 0, +96
-    mRequest.mu32UniqueId   = 0u;     // stw 0, +100
-    mRequest.mbDirty        = false;  // stb 0, +104
 }
 
 // ---------------------------------------------------------------------------

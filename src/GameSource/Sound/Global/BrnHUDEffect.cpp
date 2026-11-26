@@ -1124,27 +1124,24 @@ bool HUDEffect::FindEventMapping(const Attrib::Gen::presentationcomponent& arCom
 // ---------------------------------------------------------------------------
 s32 HUDEffect::GetFreeVoice(u8 au8ChokeGroup)
 {
-    s32 liFreeVoice = -1;
+    // DWARF locals liFreeIndex (cpp:482) / liVoice (cpp:484); the busy test is the inlined
+    // VoiceWrapper::IsAlive (CgsVoice.h:816).
+    s32 liFreeIndex = -1;
     for (s32 liVoice = 0; liVoice < E_NUM_VOICES; ++liVoice)
     {
-        const s32 liState = maVoices[liVoice].GetState();
-        const bool lbBusy =
-            liState != CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_FINISHED &&
-            liState != CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_IDLE;
-
-        if (!lbBusy)
+        if (!maVoices[liVoice].IsAlive())
         {
-            liFreeVoice = liVoice;
+            liFreeIndex = liVoice;
             continue;
         }
         if (au8ChokeGroup != 0 && mau8ChokeGroups[liVoice] == au8ChokeGroup)
         {
             maVoices[liVoice].Release();
-            if (liFreeVoice == -1)
-                liFreeVoice = liVoice;
+            if (liFreeIndex == -1)
+                liFreeIndex = liVoice;
         }
     }
-    return liFreeVoice;
+    return liFreeIndex;
 }
 
 // ---------------------------------------------------------------------------

@@ -22,9 +22,6 @@
 // (BrnAIVehicleStateManager::maLoopContentSpecs et al.), so this revision is
 // stride/ODR-compatible with the prior {mpContent, muTrailing} model.
 //
-// CONSOLIDATOR NOTE: CgsLogicContentDtor.cpp is updated in this same change to drop
-// the ref via mContentHandle (identical single observable side effect).
-//
 // DISTINCT from CgsSound::Playback::Content (the refcounted spec in
 // Playback/CgsContent.h).
 // ============================================================================
@@ -67,9 +64,8 @@ namespace Logic
         // CgsContent.cpp:54. Null-initialise the handle + owning module.
         Content() : mContentHandle(), mpModule(0) {}
 
-        // CgsContent.cpp:72. Virtual destructor -- drops the held reference. Bodied
-        // out-of-line (CgsLogicContentDtor.cpp) so this class emits the single ~Content
-        // symbol the X360 vector-deleting destructor @0x826DC378 is synthesised from.
+        // CgsContent.cpp:72. Virtual destructor -- drops the held reference (ARTIST vector
+        // deleting destructor 0x826DC378).
         virtual ~Content();
 
         // CgsContent.cpp:92 @ 0x826C4CA0. Create/replace the held content from the module.

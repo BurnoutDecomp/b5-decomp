@@ -42,9 +42,20 @@ public:
     // dependents can name it; any guard assert is unverified and omitted.
     void Acquire() { ++mu32RefCount; }
 
-    // CgsObject.h:115 / ARTIST @ 0x82680938. Assert a live reference, drop it,
-    // and dispose the object through the virtual hook when the count reaches zero.
-    void Release();
+    // CgsObject.h:115 (DWARF: defined in this header). Assert a live reference, drop it,
+    // and dispose the object through the virtual hook when the count reaches zero. ARTIST
+    // calls its COMDAT copy 0x82680938 from 54 sites and expands it inside the content-pool
+    // destructor's element loop (~ObjectPool<RegisteredContent,4,int> 0x826EAC90, assert
+    // line 117 at 0x826EACE4).
+    void Release()
+    {
+        CGS_ASSERT_AT(mu32RefCount > 0, "mu32RefCount > 0",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.h", 117);
+
+        --mu32RefCount;
+        if (mu32RefCount == 0)
+            DoDispose();
+    }
 
     // CgsObject.h:82. Subsystem dispose hook (overridden by Content & friends).
     virtual void DoDispose() {}

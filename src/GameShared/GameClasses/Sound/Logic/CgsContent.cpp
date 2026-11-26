@@ -12,6 +12,16 @@ namespace CgsSound
 namespace Logic
 {
 
+// DWARF CgsContent.cpp:72 (this file, so the sound unity sees it). ARTIST's vector deleting
+// destructor 0x826DC378 installs the vtable and drops the held reference through Object::Release;
+// ~ObjectPool<StateManager::RegisteredContent,4,int> 0x826EAC90 expands it per element.
+Content::~Content()
+{
+    // X360 a1[1] (+0x04) is the Handle<Content>'s mpObject (Playback::Content is incomplete here).
+    if (mContentHandle.GetObject() != 0)
+        reinterpret_cast<CgsSound::Playback::Object*>(mContentHandle.GetObject())->Release();
+}
+
 // ---------------------------------------------------------------------------
 // CgsSound::Logic::Content::Construct  @ 0x826C4CA0
 //

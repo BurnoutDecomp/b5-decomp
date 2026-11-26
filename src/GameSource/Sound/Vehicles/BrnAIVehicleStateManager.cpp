@@ -159,9 +159,7 @@ AIVehicleStateManager::AIVehicleStateManager()
 // Release if refcount hits 0`), then the base RegisteredContent pool. The host
 // compiler emits the same reverse member destruction from the Content destructor.
 // ---------------------------------------------------------------------------
-AIVehicleStateManager::~AIVehicleStateManager()
-{
-}
+// (implicit destructor: see the header)
 
 // CreateObject @ 0x82702358: MemBase::operator new(880, "AIVehicleStateManager",
 // flavour) + ctor; the int argument only picks the operator-new flavour.

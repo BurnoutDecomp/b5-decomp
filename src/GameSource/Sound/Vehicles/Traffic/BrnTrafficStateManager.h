@@ -87,7 +87,8 @@ namespace Traffic
         static const s32 KI_TRAFFIC_STATE_EFFECT_MASK = 15;
 
         TrafficStateManager();
-        virtual ~TrafficStateManager();
+        // No user-declared destructor: DWARF lists ~TrafficStateManager without a declaration line and places its body
+        // on the class line (BrnTrafficStateManager.h:54), the compiler's implicit one; ARTIST 0x826FC308 restores no vftable.
 
         // ---- RTTI hooks. STATIC GetStaticTypeInfo / CreateObject so &CreateObject is
         // storable in ClassTypeInfo<StateManager>::createObject. ----

@@ -638,8 +638,8 @@ void SweetenersEffect::ProcessUpdate()
         CgsSound::Playback::Name::MakeHash("Send01"));
     const u32 luReverbName = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("ReverbSend"));
-    const f32 lfReverbGain = GetRWACMixerOutputValue(9, 0);
-    const f32 lfPitch = GetRWACMixerOutputValue(6, 1);
+    const f32 lfReverbGain = GetRWACMixerOutputValue(9, Nicotine::DMixIO::DMX_VOL);
+    const f32 lfPitch = GetRWACMixerOutputValue(6, Nicotine::DMixIO::DMX_PITCH);
 
     struct VoiceUpdate
     {
@@ -664,7 +664,7 @@ void SweetenersEffect::ProcessUpdate()
 
     lUpdateVoice(mExhaustPopsVoice,
         maSweetenerInfo[E_SWEETENER_BANK_ELEMENT_EXHAUST_POP].mfVolume *
-        GetRWACMixerOutputValue(4, 0) * 4.0f);
+        GetRWACMixerOutputValue(4, Nicotine::DMixIO::DMX_VOL) * 4.0f);
 
     CGS_ASSERT(GetCurrentBankElement() < E_SWEETENER_BANK_ELEMENT_COUNT,
                "E_SWEETENER_BANK_ELEMENT_COUNT > GetCurrentBankElement()");
@@ -672,16 +672,16 @@ void SweetenersEffect::ProcessUpdate()
     {
         lUpdateVoice(mSweetenerVoice,
             maSweetenerInfo[GetCurrentBankElement()].mfVolume *
-            GetRWACMixerOutputValue(mi16SweetenerSlot, 0));
+            GetRWACMixerOutputValue(mi16SweetenerSlot, Nicotine::DMixIO::DMX_VOL));
     }
 
     lUpdateVoice(mCarStarting,
-        mFadeOutEngine.mfCurrentValue * GetRWACMixerOutputValue(5, 0) *
+        mFadeOutEngine.mfCurrentValue * GetRWACMixerOutputValue(5, Nicotine::DMixIO::DMX_VOL) *
         maSweetenerInfo[E_SWEETENER_BANK_ELEMENT_STARTING].mfVolume);
     lUpdateVoice(mDamageBangVoice,
-        mfDamageBangVolume * GetRWACMixerOutputValue(4, 0));
+        mfDamageBangVolume * GetRWACMixerOutputValue(4, Nicotine::DMixIO::DMX_VOL));
     lUpdateVoice(mDamagePopVoice,
-        mfDamagePopVolume * GetRWACMixerOutputValue(4, 0));
+        mfDamagePopVolume * GetRWACMixerOutputValue(4, Nicotine::DMixIO::DMX_VOL));
 }
 
 bool SweetenersEffect::Detach()

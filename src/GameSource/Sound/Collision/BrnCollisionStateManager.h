@@ -258,8 +258,8 @@ public:
     // CollisionStateManager @ 0x826FFAC0.
     CollisionStateManager();
 
-    // ~CollisionStateManager @ 0x826FFD48 (the X360 `vector deleting destructor`).
-    virtual ~CollisionStateManager();
+    // No user-declared destructor: DWARF lists ~CollisionStateManager without a declaration line and places its body
+    // on the class line (BrnCollisionStateManager.h:563), the compiler's implicit one; ARTIST 0x826FFD48 restores no vftable.
 
     // ---- RTTI hooks (the per-class descriptor + factory). STATIC GetStaticTypeInfo
     // / CreateObject so &CreateObject is storable in ClassTypeInfo<StateManager>::

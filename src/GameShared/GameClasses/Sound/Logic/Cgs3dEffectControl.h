@@ -80,9 +80,8 @@ struct Cgs3dEffectControl : public CgsSound::Logic::EffectControl
     virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader);        // Cgs3dEffectControl.cpp:289
     virtual bool Detach();                                       // Cgs3dEffectControl.cpp:331
 
-    // Out-of-line so the deleting-destructor thunk @ 0x826C3E70 is emitted in this
-    // class's own TU (Cgs3dEffectControl.cpp). DWARF declares the dtor LAST.
-    virtual ~Cgs3dEffectControl();           // Cgs3dEffectControl.h:36 (DWARF)
+    // No user-declared destructor: DWARF places ~Cgs3dEffectControl's body on the class line
+    // (Cgs3dEffectControl.h:36); ARTIST 0x826C3E70 is ~EffectBase's reset.
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2FA80)

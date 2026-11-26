@@ -140,9 +140,7 @@ bool BrnEffectControl::Detach()
 // ---------------------------------------------------------------------------
 BrnEffectControl::~BrnEffectControl()
 {
-    meDetachState    = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED; // stw 3, 0x28
-    mbHasLoadedData = false;                                               // stb 0, 0x31
-    meAttachState    = CgsSound::Logic::EffectBase::E_ATTACH_STATE_NONE;     // stw 0, 0x24
+    // DWARF BrnEffectControl.cpp:66; the state reset is ~EffectBase's (CgsEffectBase.cpp:80).
 }
 
 // ---------------------------------------------------------------------------

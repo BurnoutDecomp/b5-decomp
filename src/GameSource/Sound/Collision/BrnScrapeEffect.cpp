@@ -396,7 +396,7 @@ void ScrapeEffect::ProcessUpdate()
         mScrapeVoice.SetParameter(4, mfParam_AEMS_time_scraping, &KU_SCRAPE_PARAMETERS[4]);
         mScrapeVoice.SetParameter(5, mfParam_AEMS_material_a, &KU_SCRAPE_PARAMETERS[5]);
     }
-    const f32 lfAzimuth = GetMixerOutputValue(0, 3);
+    const f32 lfAzimuth = GetMixerOutputValue(0, Nicotine::DMixIO::DMX_AZIM);
     if (mScrapeVoice.HasLiveVoice())
     {
         mScrapeVoice.SetParameter(8, lfAzimuth, &KU_SCRAPE_PARAMETERS[8]);

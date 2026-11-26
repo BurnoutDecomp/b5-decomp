@@ -52,15 +52,17 @@ struct DataPoint
 
     const T& GetCurrent() const  { return mCurrentValue; }
     const T& GetPrevious() const { return mPreviousValue; }
-    bool     HasChanged() const  { return mCurrentValue != mPreviousValue; }
+    // ARTIST compares the previous value against the current one (AmbienceEffect::UpdateParams
+    // 0x8269B614 cmplw prev,cur; FxEffect::UpdateParams 0x826BC444).
+    bool     HasChanged() const  { return mPreviousValue != mCurrentValue; }
 
     // DWARF CgsSoundUtils.h:43 / :46. "It changed, and it changed TO this value" --
     // FxEffect::UpdateParams @0x826BC444..0x826BC468 is the attested shape:
     //   cmp prev,cur ; beq -> skip ; cmpwi cur,1 ; bne -> skip
     bool HasChangedTo(const T& lValue) const
-    { return mCurrentValue != mPreviousValue && mCurrentValue == lValue; }
+    { return mPreviousValue != mCurrentValue && mCurrentValue == lValue; }
     bool HasChangedFrom(const T& lValue) const
-    { return mCurrentValue != mPreviousValue && mPreviousValue == lValue; }
+    { return mPreviousValue != mCurrentValue && mPreviousValue == lValue; }
 
     // DecFIGS CgsSoundUtils.h:896 takes the sample by value. A caller can pass
     // GetPrevious(), so the sample must be captured before rotating the history.

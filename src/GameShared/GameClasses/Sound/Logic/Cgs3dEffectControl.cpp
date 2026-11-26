@@ -357,31 +357,7 @@ void Cgs3dEffectControl::Generate3DParams(s32 /*aiUnused*/)
     }
 }
 
-// ---------------------------------------------------------------------------
-// Cgs3dEffectControl::~Cgs3dEffectControl  @ 0x826C3E70  (scalar deleting destructor)
-//
-// MSVC's scalar-deleting-destructor for Cgs3dEffectControl. Decoded from the asm:
-//   stw  off_820AA820, 0(this)   ; re-install the MemBase base-subobject vtable
-//   stb  0, 0x2D(this)           ; mbHasLoadedData = false
-//   stw  3, 0x24(this)           ; meDetachState  = E_DETACH_STATE_FINISHED
-//   stw  0, 0x20(this)           ; meAttachState  = E_ATTACH_STATE_NONE
-//   if (flags & 1)               ; deleting flavour -> allocator Free via off_82FFB954
-//
-// The three explicit member stores are the source-level teardown, reproduced by
-// name through EffectBase::ResetOnDestroy(). Cgs3dEffectControl's own members are
-// trivially destructible PODs (DataPoint<f32>/DataPoint<Vector3>/pointers/POD
-// sub-struct), so the asm emits NO member-dtor calls -- consistent with a body that
-// is just the EffectBase reset. The store sequence is byte-identical to the
-// committed EffectControl/EffectObject deleting-destructor thunks
-// (0x826963D8 / 0x826965D0). The MemBase vptr re-install (off_820AA820) and the
-// conditional allocator-routed free (off_82FFB954) are the compiler-synthesised
-// parts of the thunk; the host toolchain's `delete` stands in for the custom
-// allocator dispatch.
-// ---------------------------------------------------------------------------
-Cgs3dEffectControl::~Cgs3dEffectControl()
-{
-    ResetOnDestroy();
-}
+// (~Cgs3dEffectControl is implicit: see the header.)
 
 } // namespace Logic
 } // namespace CgsSound

@@ -578,7 +578,7 @@ void PassbyEffect::ProcessUpdate()
         if (GetDMixIOPtr())
             lfPitch = static_cast<f32>(GetDMixIOPtr()->GetDMixOutput(1, 1)) * KF_MIXER_Q12_TO_PITCH;
 
-        const f32 lfGain = mfVolumeScale * GetRWACMixerOutputValue(lrPassby.meType, 0) * lrPassby.mfVolumeModifier;
+        const f32 lfGain = mfVolumeScale * GetRWACMixerOutputValue(lrPassby.meType, Nicotine::DMixIO::DMX_VOL) * lrPassby.mfVolumeModifier;
         lfPitch = mfPitchScale * lfPitch;
         if (lrPassby.meType == AttribSys::Enums::ePassbyTypes::Collision)
         {

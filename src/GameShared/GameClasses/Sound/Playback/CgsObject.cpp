@@ -22,20 +22,7 @@ namespace CgsSound
 namespace Playback
 {
 
-// @ 0x82680938. The reference-count release is also the playback object's
-// ownership boundary: the final reference dispatches the class-specific
-// DoDispose hook, which destroys the allocator-backed carve and returns it to
-// the owning sound Environment.
-void Object::Release()
-{
-    CGS_ASSERT_AT(mu32RefCount > 0,
-        "mu32RefCount > 0",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.h", 117 /* ARTIST 0x82680960 */);
-
-    --mu32RefCount;
-    if (mu32RefCount == 0)
-        DoDispose();
-}
+// Object::Release (ARTIST COMDAT 0x82680938) is defined in CgsObject.h (DWARF CgsObject.h:115).
 
 }
 }

@@ -62,8 +62,8 @@ public:
     // builds the two global-Voice + two Content sub-objects.
     GlobalStateManager();
 
-    // ~GlobalStateManager @ 0x826FBBE8 (the X360 `vector deleting destructor`).
-    virtual ~GlobalStateManager();
+    // No user-declared destructor: DWARF lists ~GlobalStateManager without a declaration line and places its body
+    // on the class line (BrnGlobalStateManager.h:38), the compiler's implicit one; ARTIST 0x826FBBE8 restores no vftable.
 
     // ---- RTTI hooks (the per-class descriptor + factory). STATIC GetStaticTypeInfo
     // / CreateObject so &CreateObject is storable in ClassTypeInfo<StateManager>::

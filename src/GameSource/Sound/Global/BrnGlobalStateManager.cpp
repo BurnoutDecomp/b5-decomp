@@ -95,9 +95,7 @@ GlobalStateManager::GlobalStateManager()
 // destructor + the base ~BrnStateManager. NOT a member-for-member faithful body --
 // the Voice/Content release legs are deferred with the global audio domain.
 // ---------------------------------------------------------------------------
-GlobalStateManager::~GlobalStateManager()
-{
-}
+// (implicit destructor: see the header)
 
 // ---------------------------------------------------------------------------
 // GlobalStateManager::CreateObject(u32)  @ 0x826FE380   (the factory hook)

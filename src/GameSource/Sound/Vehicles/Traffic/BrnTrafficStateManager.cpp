@@ -62,9 +62,7 @@ TrafficStateManager::TrafficStateManager()
 
 // The four bank Content destructors release their objects in reverse order, then the
 // base StateManager tears its content pool down.
-TrafficStateManager::~TrafficStateManager()
-{
-}
+// (implicit destructor: see the header)
 
 // ARTIST descriptor 0x82F2E900 supplies ID 3, the TrafficStateManager name, base
 // descriptor 0x82F2FAA0 and factory 0x82701208. The factory's name tag is read from
