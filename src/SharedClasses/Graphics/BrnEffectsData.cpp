@@ -46,7 +46,7 @@ namespace BrnEffects
 // The header declares these statics and every <Data>::Construct() reads them; nothing defined them, so
 // the first TU to instantiate a Construct() (EnvironmentManager::GenerateEffects @0x827BE698's default
 // arm, BrnEffectsFrame::Construct @0x822791E8) failed to link. Values are NOT invented:
-//   * the scalars are the same KF_DEF_* immediates the header already carries (Hex-Rays resolves the
+//   * the scalars are read from the image (DWARF BrnEffectsData.cpp:39..:65 defines them; the
 //     .rdata slots flt_820A3A14 = 0.98 / flt_820A3A98 = 0.77 / flt_820A3A9C = 0.0 / flt_820A3AA0 = 0.33,
 //     and 0x820A3AA4..0x820A3AC7 == 0.0f x9 -- idat dump 2026-08-15, control dword_82F24240 == 1280);
 //   * the vectors live in .data (unk_82FFxxxx, ALL ZERO in the image) and are written by the CRT static
@@ -60,24 +60,24 @@ namespace BrnEffects
 //       kv2DefBlendAmount @82FFAFC0, kv2DefBlurAmount @82FFAE90, kv2DefBlendCentre @82FFB030,
 //       kv2DefBlurCentre  @82FFB180, TintData2d::kv4DefaultColour @82FFB230 <- flt_82001CC0 0.0 x4
 //     (they are ALSO the values BrnEffectsFrame::Construct's stvx128 stores broadcast into every frame).
-const f32     BloomData::kfDefLuminance        = KF_DEF_BLOOM_LUMINANCE;             // 0.98f  flt_820A3A14
-const f32     BloomData::kfDefThreshold        = KF_DEF_BLOOM_THRESHOLD;             // 0.77f  flt_820A3A98
+const f32     BloomData::kfDefLuminance        = 0.98f;   // flt_820A3A14
+const f32     BloomData::kfDefThreshold        = 0.77f;   // flt_820A3A98
 const Vector4 BloomData::kv4DefScale           (0.2627f, 0.298f, 1.0f, 1.0f);    // unk_82FFAED0 (init @0x82C60AA0)
-const f32     VignetteData::kfDefAngle         = KF_DEF_VIGNETTE_ANGLE;              // 0.0f   flt_820A3A9C
-const f32     VignetteData::kfDefSharpness     = KF_DEF_VIGNETTE_SHARPNESS;          // 0.33f  flt_820A3AA0
+const f32     VignetteData::kfDefAngle         = 0.0f;    // flt_820A3A9C
+const f32     VignetteData::kfDefSharpness     = 0.33f;   // flt_820A3AA0
 const Vector2 VignetteData::kv2DefAmount       (0.5f, 0.6f);         // unk_82FFAE20 (init @0x82C60AE0)
 const Vector2 VignetteData::kv2DefCentre       (0.5f, 0.7f);         // unk_82FFAEC0 (init @0x82C60B20)
 const Vector4 VignetteData::kv4DefInnerColour  (0.9765f, 0.9882f, 1.0f, 0.0f);   // unk_82FFB220 (init @0x82C60B60)
 const Vector4 VignetteData::kv4DefOuterColour  (0.0549f, 0.2078f, 0.3765f, 1.0f);// unk_82FFB1A0 (init @0x82C60BA8)
-const f32     DepthOfFieldData::kfDefNearPlane   = KF_DEF_DEPTH_OF_FIELD_NEAR_PLANE;   // 0.0f  0x820A3AA4..
-const f32     DepthOfFieldData::kfDefFocalPlane  = KF_DEF_DEPTH_OF_FIELD_FOCAL_PLANE;  // 0.0f
-const f32     DepthOfFieldData::kfDefFocalPlane2 = KF_DEF_DEPTH_OF_FIELD_FOCAL_PLANE2; // 0.0f
-const f32     DepthOfFieldData::kfDefFarPlane    = KF_DEF_DEPTH_OF_FIELD_FAR_PLANE;    // 0.0f
-const f32     BlurData::kfDefOpacity           = KF_DEF_BLUR_OPACITY;                // 0.0f
-const f32     BlurData::kfDefVelocity          = KF_DEF_BLUR_VELOCITY;               // 0.0f
-const f32     BlurData::kfDefSharpness         = KF_DEF_BLUR_SHARPNESS;              // 0.0f
-const f32     BlurData::kfDefNoise             = KF_DEF_BLUR_NOISE;                  // 0.0f
-const f32     BlurData::kfDefAngle             = KF_DEF_BLUR_ANGLE;                  // 0.0f
+const f32     DepthOfFieldData::kfDefNearPlane   = 0.0f;  // 0x820A3AA4
+const f32     DepthOfFieldData::kfDefFocalPlane  = 0.0f;  // 0x820A3AA8
+const f32     DepthOfFieldData::kfDefFocalPlane2 = 0.0f;  // 0x820A3AAC
+const f32     DepthOfFieldData::kfDefFarPlane    = 0.0f;  // 0x820A3AB0
+const f32     BlurData::kfDefOpacity           = 0.0f;    // 0x820A3AB4
+const f32     BlurData::kfDefVelocity          = 0.0f;    // 0x820A3AB8
+const f32     BlurData::kfDefSharpness         = 0.0f;    // 0x820A3ABC
+const f32     BlurData::kfDefNoise             = 0.0f;    // 0x820A3AC0
+const f32     BlurData::kfDefAngle             = 0.0f;    // 0x820A3AC4
 const Vector2 BlurData::kv2DefBlendAmount      (0.0f, 0.0f);         // unk_82FFAFC0 (init @0x82C60BF0)
 const Vector2 BlurData::kv2DefBlurAmount       (0.0f, 0.0f);         // unk_82FFAE90 (init @0x82C60C28)
 const Vector2 BlurData::kv2DefBlendCentre      (0.0f, 0.0f);         // unk_82FFB030 (init @0x82C60C60)

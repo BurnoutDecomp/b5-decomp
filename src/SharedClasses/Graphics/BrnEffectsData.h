@@ -16,25 +16,13 @@ namespace rw { namespace graphics { namespace postfx { struct ColourCube; } } }
 // copied verbatim from it). Member ORDER/offsets stay pinned by the X360 asm, which is
 // unchanged by this file's 2026-08-15 edit -- see the static_asserts at the bottom.
 
+// The defaults every Construct() reads are the class statics the DWARF declares (h:86/:87,
+// :128/:129, :176..:179, :225..:229), defined once in BrnEffectsData.cpp: ARTIST's inlined
+// Construct()s load each from its own slot (BrnEffectsFrame::Construct 0x822791E8 reads
+// 0x820A3A14 / 0x820A3A98 / 0x820A3A9C..0x820A3AC4), and LegacySrc's BrnEffectsData.h bodies
+// read them by name. The header holds no TU-local copies of their values.
 namespace BrnEffects
 {
-namespace
-{
-const f32 KF_DEF_BLOOM_LUMINANCE = 0.98f;
-const f32 KF_DEF_BLOOM_THRESHOLD = 0.77f;
-const f32 KF_DEF_VIGNETTE_ANGLE = 0.0f;
-const f32 KF_DEF_VIGNETTE_SHARPNESS = 0.33f;
-const f32 KF_DEF_DEPTH_OF_FIELD_NEAR_PLANE = 0.0f;
-const f32 KF_DEF_DEPTH_OF_FIELD_FOCAL_PLANE = 0.0f;
-const f32 KF_DEF_DEPTH_OF_FIELD_FOCAL_PLANE2 = 0.0f;
-const f32 KF_DEF_DEPTH_OF_FIELD_FAR_PLANE = 0.0f;
-const f32 KF_DEF_DEPTH_OF_FIELD_AMOUNT = 1.0f;
-const f32 KF_DEF_BLUR_OPACITY = 0.0f;
-const f32 KF_DEF_BLUR_VELOCITY = 0.0f;
-const f32 KF_DEF_BLUR_SHARPNESS = 0.0f;
-const f32 KF_DEF_BLUR_NOISE = 0.0f;
-const f32 KF_DEF_BLUR_ANGLE = 0.0f;
-}
 
 // ====================================================================================
 // ⭐ SetToBlend IS A NON-STATIC MEMBER TAKING (A, wA, B, wB [, C, wC, D, wD]).
@@ -82,8 +70,8 @@ struct BloomData
 
     void Construct()
     {
-        mfLuminance = KF_DEF_BLOOM_LUMINANCE;
-        mfThreshold = KF_DEF_BLOOM_THRESHOLD;
+        mfLuminance = kfDefLuminance;
+        mfThreshold = kfDefThreshold;
         mv4Scale = kv4DefScale;
     }
 
@@ -120,8 +108,8 @@ struct VignetteData
 
     void Construct()
     {
-        mfAngle = KF_DEF_VIGNETTE_ANGLE;
-        mfSharpness = KF_DEF_VIGNETTE_SHARPNESS;
+        mfAngle = kfDefAngle;
+        mfSharpness = kfDefSharpness;
         mv2Amount = kv2DefAmount;
         mv2Centre = kv2DefCentre;
         mv4InnerColour = kv4DefInnerColour;
@@ -162,11 +150,13 @@ struct DepthOfFieldData
 
     void Construct()
     {
-        mfNearPlane = KF_DEF_DEPTH_OF_FIELD_NEAR_PLANE;
-        mfFocalPlane = KF_DEF_DEPTH_OF_FIELD_FOCAL_PLANE;
-        mfFocalPlane2 = KF_DEF_DEPTH_OF_FIELD_FOCAL_PLANE2;
-        mfFarPlane = KF_DEF_DEPTH_OF_FIELD_FAR_PLANE;
-        mfDofAmount = KF_DEF_DEPTH_OF_FIELD_AMOUNT;
+        mfNearPlane = kfDefNearPlane;
+        mfFocalPlane = kfDefFocalPlane;
+        mfFocalPlane2 = kfDefFocalPlane2;
+        mfFarPlane = kfDefFarPlane;
+        // A literal, as in LegacySrc's body: the DWARF declares no default for the amount and
+        // ARTIST stores the 1.0 of the global pool (0x82001C98 at 0x82279310).
+        mfDofAmount = 1.0f;
     }
 
     // DWARF :210 / :217. Both were inlined on X360 -- recovered from
@@ -209,11 +199,11 @@ struct BlurData
 
     void Construct()
     {
-        mfOpacity = KF_DEF_BLUR_OPACITY;
-        mfVelocity = KF_DEF_BLUR_VELOCITY;
-        mfSharpness = KF_DEF_BLUR_SHARPNESS;
-        mfNoise = KF_DEF_BLUR_NOISE;
-        mfAngle = KF_DEF_BLUR_ANGLE;
+        mfOpacity = kfDefOpacity;
+        mfVelocity = kfDefVelocity;
+        mfSharpness = kfDefSharpness;
+        mfNoise = kfDefNoise;
+        mfAngle = kfDefAngle;
         mv2BlendAmount = kv2DefBlendAmount;
         mv2BlurAmount = kv2DefBlurAmount;
         mv2BlendCentre = kv2DefBlendCentre;
