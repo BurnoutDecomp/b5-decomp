@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnBootLegal.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootLegal.cpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface (Register/OutputGuiEvent/PlayAptMovie/GetOutputEventQueue)
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>, CgsModule::Event
 #include <cstddef>                                                        // offsetof
@@ -488,7 +488,7 @@ namespace BrnGui
             break;
 
         case E_STAGE_FADE_IN:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 363);
             // Wait until every expected apt component has initialised, then fade the HD composite
             // in (unless already faded) and show/hide the ESRB panel.
             if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD))
@@ -506,7 +506,7 @@ namespace BrnGui
             break;
 
         case E_STAGE_WAIT_START:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 393);
             // Hold for the wait-start dwell unless a sign-out is up, then post the
             // GuiEvent<90> command and advance.
             if (mbSignOutPending ||
@@ -517,7 +517,7 @@ namespace BrnGui
             break;
 
         case E_STAGE_PRESTART_OR_IDLE:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 416);
             // If start was already pressed -- or the cache forces it via *(cache+77578)/
             // *(cache+77579) (0x82477A1C / 0x82477A2C) -- transin the start message and jump
             // to the menu path; otherwise idle until the attract timeout, then play the attract loop.
@@ -557,7 +557,7 @@ namespace BrnGui
                 // same follow-on as BootVideos. (The prior raw 112-byte def was never filled
                 // -- a garbage id that hung the manager, killing press-start after the 25s
                 // attract timeout.)
-                CGS_ASSERT(muCurrentAttractMovieIdx < 1u, "muCurrentAttractMovieIdx<ATTRACT_MOVIE_COUNT");
+                CGS_ASSERT_AT(muCurrentAttractMovieIdx < 1u, "muCurrentAttractMovieIdx<ATTRACT_MOVIE_COUNT", CGS_ARTIST_FILE, 453);
                 BrnGui::GuiEventPlayVideo lPlay;
                 lPlay.mVideo.Prepare();
                 lPlay.mVideo.mVideoResourceId = static_cast<u32>(CgsResource::ID::HashString(
@@ -609,7 +609,7 @@ namespace BrnGui
             else if (mbWaitForStartPressed &&
                      mpGuiCache->GetTime() > (mfStageStartTime + KF_ATTRACT_IDLE_TIMEOUT))
             {
-                CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");
+                CGS_ASSERT_AT(mpStateInterface != 0, "mpStateInterface", CGS_ARTIST_FILE, 509);
                 mpStateInterface->PlayAptMovie("", 1);
                 muCurrentAttractMovieIdx = 0;
                 meUpdateStage = E_STAGE_ATTRACT_PREPARE;
@@ -619,7 +619,7 @@ namespace BrnGui
             if (gpBurnoutGame->HasGameBeenRebootedDueToInvite())
             {
                 const BrnHW::System360HW* lpSoftRebootData = gpBurnoutGame->GetSoftRebootData();
-                CGS_ASSERT(lpSoftRebootData != 0, "lpLaunchData");
+                CGS_ASSERT_AT(lpSoftRebootData != 0, "lpLaunchData", CGS_ARTIST_FILE, 527);
                 SetPlayer0ControllerPortPayload lPort;
                 lPort.miPort = static_cast<s32>(lpSoftRebootData->mLaunchData.mdwUserIndex);
                 mpStateInterface->OutputGuiEvent(lPort);

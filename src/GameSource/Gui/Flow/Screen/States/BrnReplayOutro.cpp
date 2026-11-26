@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnReplayOutro.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/Replays/BrnReplayOutro.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>, CgsModule::Event
@@ -129,7 +129,7 @@ void ReplayOutro::OnLeave()
 // ------------------------------------------------ UpdateLoadResources @ 0x824D5038
 bool ReplayOutro::UpdateLoadResources()
 {
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 190);
 
     // Stream the outro's static resource list; keep waiting until it is fully loaded.
     if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))

@@ -25,7 +25,7 @@ namespace {
     typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
     struct GuiEventCache : CgsModule::Event { GuiCache* mpGuiCache; };
     const char* const KAPC_CRASH_RUNNING_STATES[] = {"default", "transin", "tallyscore", "transout"};
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnCrashedStuntHudState.cpp"
     inline f32 FusedMultiplyAdd(f32 lfA, f32 lfB, f32 lfC)
     {
         return __vmaddfp(XMVectorReplicate(lfA), XMVectorReplicate(lfB),
@@ -136,14 +136,14 @@ bool CrashedStuntHudState::UpdateLoading()
 }
 bool CrashedStuntHudState::UpdateWFInit()
 {
-    CGS_ASSERT(mpCache != 0, "mpCache");
+    CGS_ASSERT_AT(mpCache != 0, "mpCache", CGS_ARTIST_FILE, 272);
     return mpCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD);
 }
 
 // ARTIST 0x82475910, inline helper sub_824F87C0 hashes and appends each name.
 void CrashedStuntHudState::SetExpectedAptComponentList()
 {
-    CGS_ASSERT(mpCache != 0, "mpCache");
+    CGS_ASSERT_AT(mpCache != 0, "mpCache", CGS_ARTIST_FILE, 762);
     mpCache->ClearExpectedAptComponentList(E_GUIFLOW_HUD);
     const char* lapcNames[] = { mStuntScoreAnimator.GetName(), mStuntMultiplierAnimator.GetName(),
         mScoreTallyAnimator.GetName(), mStuntRunScoreText.GetName(), mStuntRunMultiplierText.GetName() };

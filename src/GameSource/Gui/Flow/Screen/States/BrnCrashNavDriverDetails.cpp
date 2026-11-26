@@ -36,7 +36,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavDriverDetails.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavDriverDetails.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                     // CgsCore::SnPrintf
@@ -409,7 +409,7 @@ void CrashNavDriverDetails::Update()
         if (CgsDev::Log::gpDebugPrint != 0)
             *CgsDev::Log::gpDebugPrint << "Invalid internal state : "
                                        << static_cast<s32>(meInternalState) << "\n";
-        CGS_ASSERT(false, "Invalid internal state");   // cpp:358
+        CGS_ASSERT_AT(false, "Invalid internal state", CGS_ARTIST_FILE, 358);   // cpp:358
         break;
     }
 
@@ -436,7 +436,7 @@ void CrashNavDriverDetails::Update()
 // data-owning components, and fire the two profile queries.
 bool CrashNavDriverDetails::UpdateInitSetup()
 {
-    CGS_ASSERT(mpGuiCache == 0, "NULL == mpGuiCache");   // cpp:394
+    CGS_ASSERT_AT(mpGuiCache == 0, "NULL == mpGuiCache", CGS_ARTIST_FILE, 394);   // cpp:394
 
     bool lbGotCache = false;
 
@@ -451,8 +451,8 @@ bool CrashNavDriverDetails::UpdateInitSetup()
             continue;
 
         const GuiEventCache* lpCacheEvent = reinterpret_cast<const GuiEventCache*>(lpEvent);
-        CGS_ASSERT(lpCacheEvent->mpCachePointer != 0,
-                   "NULL != lpCacheEvent->mpCachePointer");      // cpp:404
+        CGS_ASSERT_AT(lpCacheEvent->mpCachePointer != 0,
+                   "NULL != lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 404);      // cpp:404
 
         lbGotCache = true;
         mpGuiCache = lpCacheEvent->mpCachePointer;
@@ -470,7 +470,7 @@ bool CrashNavDriverDetails::UpdateInitSetup()
         break;
     }
 
-    CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:428
+    CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 428);   // cpp:428
     return lbGotCache;
 }
 
@@ -479,7 +479,7 @@ bool CrashNavDriverDetails::UpdateInitSetup()
 // LicenseComponent, then pick the DMV photo-booth style.
 bool CrashNavDriverDetails::UpdateSetupLicense()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:451
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 451);   // cpp:451
 
     bool lbSetUp = false;
 
@@ -518,7 +518,7 @@ bool CrashNavDriverDetails::UpdateSetupLicense()
         }
 
         const BrnProgression::Profile* lpProgressionProfile = mpGuiCache->GetProfile();
-        CGS_ASSERT(lpProgressionProfile != 0, "lpProgressionProfile");   // cpp:477
+        CGS_ASSERT_AT(lpProgressionProfile != 0, "lpProgressionProfile", CGS_ARTIST_FILE, 477);   // cpp:477
 
         // lbElite is the SENTINEL ITSELF (the X360 computes it as cntlzw(rank+1)>>5, i.e.
         // "the response carried -1"); lbFinishedGame is the profile's completion byte.
@@ -538,7 +538,7 @@ bool CrashNavDriverDetails::UpdateSetupLicense()
         break;
     }
 
-    CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:499
+    CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 499);   // cpp:499
     return lbSetUp;
 }
 
@@ -548,7 +548,7 @@ bool CrashNavDriverDetails::UpdateSetupLicense()
 // START THE SCREEN'S APT MOVIE.
 bool CrashNavDriverDetails::UpdateLoadResources()
 {
-    CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:519
+    CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 519);   // cpp:519
 
     // [ddetails] change-only bring-up trace: which of the three resource gates is still
     // holding the ladder. Cheap and change-only, in the tree's dev-trace idiom.
@@ -612,7 +612,7 @@ bool CrashNavDriverDetails::UpdateLoadResources()
 // exists.
 bool CrashNavDriverDetails::UpdateWFInit()
 {
-    CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:581
+    CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 581);   // cpp:581
 
     bool lbInitialised = false;
 

@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/BrnBaseFlow.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/BrnBaseFlow.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"         // CgsGui::State (PreWorldUpdate)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // GuiCache (UpdateStreaming's unload/ensure pair)
@@ -176,8 +176,8 @@ namespace BrnGui
 
         // 3. @0x824FFD98 -- the indexed state must BE the current state.
         const CgsGui::State* lpState = mStateMachine.GetStateByIndex(liStateIndex);
-        CGS_ASSERT(lpState == mStateMachine.GetCurrentState(),
-                   "GetStateMachine().GetCurrentState()==lpState");   // BrnBaseFlow.cpp:334
+        CGS_ASSERT_AT(lpState == mStateMachine.GetCurrentState(),
+                   "GetStateMachine().GetCurrentState()==lpState", CGS_ARTIST_FILE, 334);   // BrnBaseFlow.cpp:334
         if (lpState == 0)
             return;
 

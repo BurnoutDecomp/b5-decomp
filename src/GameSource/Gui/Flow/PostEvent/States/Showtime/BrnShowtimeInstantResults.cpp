@@ -34,7 +34,7 @@
 // (0x824C5F50, same lwz 0xA78) is the second, independent attestation.
 // ===================================================================================
 #include "GameSource/Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
@@ -536,8 +536,8 @@ namespace BrnGui
     // ---------------------------------------------------------------------------------------
     void ShowtimeInstantResultsState::UpdateEventResults()
     {
-        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RESULTS,
-                   "E_ACTIVE_SUBSTATE_EVENT_RESULTS == meActiveSubState");        // cpp:644
+        CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RESULTS,
+                   "E_ACTIVE_SUBSTATE_EVENT_RESULTS == meActiveSubState", CGS_ARTIST_FILE, 644);        // cpp:644
 
         switch (meSubStateState)
         {
@@ -651,8 +651,8 @@ namespace BrnGui
             break;
 
         case E_TOTALLING_SUBSTATE_SHOWING_MULTIPLICATION:
-            CGS_ASSERT(mResults.miScoreMultiplier > 0,
-                       "mResults.miScoreMultiplier > 0");                // cpp:819
+            CGS_ASSERT_AT(mResults.miScoreMultiplier > 0,
+                       "mResults.miScoreMultiplier > 0", CGS_ARTIST_FILE, 819);                // cpp:819
 
             if (miBankingScoreMultiplier > 0)
             {
@@ -669,8 +669,8 @@ namespace BrnGui
                     miBankingDollarTotal     += liBanked;
                 }
 
-                CGS_ASSERT(miBankingScoreMultiplier >= 0,
-                           "miBankingScoreMultiplier >= 0");             // cpp:843
+                CGS_ASSERT_AT(miBankingScoreMultiplier >= 0,
+                           "miBankingScoreMultiplier >= 0", CGS_ARTIST_FILE, 843);             // cpp:843
 
                 const s32 liMultiplier = CalculateMultiplier();
                 if (liMultiplier != miCurrentMultiplier)
@@ -717,15 +717,15 @@ namespace BrnGui
     // ---------------------------------------------------------------------------------------
     bool ShowtimeInstantResultsState::TickSubstateAndEndIfDone()
     {
-        CGS_ASSERT(meActiveSubState > E_ACTIVE_SUBSTATE_EVENT_NONE
+        CGS_ASSERT_AT(meActiveSubState > E_ACTIVE_SUBSTATE_EVENT_NONE
                        && meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT,
                    "(E_ACTIVE_SUBSTATE_EVENT_NONE < meActiveSubState) && "
-                   "(E_ACTIVE_SUBSTATE_EVENT_COUNT > meActiveSubState)");     // cpp:894
-        CGS_ASSERT(meSubStateState == E_SUBSTATE_TOTALLING
+                   "(E_ACTIVE_SUBSTATE_EVENT_COUNT > meActiveSubState)", CGS_ARTIST_FILE, 894);     // cpp:894
+        CGS_ASSERT_AT(meSubStateState == E_SUBSTATE_TOTALLING
                        || meSubStateState == E_SUBSTATE_SUMMARY,
                    "E_SUBSTATE_TOTALLING == meSubStateState || "
-                   "E_SUBSTATE_SUMMARY == meSubStateState");                  // cpp:896
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");                                 // cpp:900
+                   "E_SUBSTATE_SUMMARY == meSubStateState", CGS_ARTIST_FILE, 896);                  // cpp:896
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 900);                                 // cpp:900
 
         mfTimeRemaining -= mpGuiCache->GetTimeStep();
 
@@ -858,9 +858,9 @@ namespace BrnGui
                 lHideHud.maData[0] = 0;
                 mpStateInterface->OutputInternalState(lHideHud);
 
-                CGS_ASSERT(*reinterpret_cast<const s32*>(lpEvent) == 2,
+                CGS_ASSERT_AT(*reinterpret_cast<const s32*>(lpEvent) == 2,
                            "static_cast<const GuiCarSelectStartEvent*>( lpEvent )"
-                           "->meCarSelectType == GsmIO::E_CAR_SELECT_TYPE_ONLINE_EVENT_START");
+                           "->meCarSelectType == GsmIO::E_CAR_SELECT_TYPE_ONLINE_EVENT_START", CGS_ARTIST_FILE, 438);
                                                                               // cpp:438
                 SendStateEvent("TO_ON_CARSEL");
                 break;
@@ -872,11 +872,11 @@ namespace BrnGui
                 // mpStateInterface->GetAccessPointers()->mpGuiCache by hand (four asserts on
                 // the way) rather than using its own mpGuiCache, because this arm can run
                 // before the cache event has been latched.
-                CGS_ASSERT(mpStateInterface, "mpStateInterface");             // cpp:450
+                CGS_ASSERT_AT(mpStateInterface, "mpStateInterface", CGS_ARTIST_FILE, 450);             // cpp:450
                 CGS_ASSERT(mpStateInterface->GetAccessPointers(),
                            "mpStateInterface->GetAccessPointers()");          // cpp:451
                 GuiCache* lpGuiCache = mpStateInterface->GetAccessPointers()->GetGuiCache();
-                CGS_ASSERT(lpGuiCache, "lpGuiCache");                         // cpp:453
+                CGS_ASSERT_AT(lpGuiCache, "lpGuiCache", CGS_ARTIST_FILE, 453);                         // cpp:453
 
                 if (lpGuiCache->GetGameMode()
                         != BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME)

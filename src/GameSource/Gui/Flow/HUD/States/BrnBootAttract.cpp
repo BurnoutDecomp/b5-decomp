@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // the state in-queue
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootAttract.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (OnEnter @0x82473048, OnLeave @0x82473060,
 // Update @0x82476608). BootAttract registers for the single GUI event it watches when
 // the attract state is entered, drains its in-queue each frame (tolerating only that
@@ -58,7 +58,7 @@ namespace BrnGui
              liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             if (liEventId != 14)
-                CGS_ASSERT(false, "Unexpected event in IntroHudState::Update");
+                CGS_ASSERT_AT(false, "Unexpected event in IntroHudState::Update", CGS_ARTIST_FILE, 91);
         }
         lpInQueue->Clear();
     }

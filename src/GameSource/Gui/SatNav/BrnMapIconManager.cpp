@@ -44,7 +44,7 @@
 // All branch conditions and the compared constants come from the X360 asm/pseudocode; the
 // game-mode and icon-type literals are resolved to their canonical enumerators (DecFIGS
 // DWARF): EGameModeType (BrnGameStateSharedIO.h) and SatNavIconType (BrnGuiEventTypeDefs.h).
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapIconManager.cpp"
 #include "rw/math/vpu/vector2_operation.h"
 #include "GameSource/Gui/SatNav/BrnMapIconManager.h"
 #include "GameSource/Gui/BrnGuiCache.h"               // BrnGui::GuiCache accessors (drive-throughs / team / mode)
@@ -197,7 +197,7 @@ const GuiEventUpdateSatNav::SatNavIconInfo* MapIconManager::GetDriveThroughOrJun
         liRemaining = liIndex - GetNumRivalIcons();
     }
 
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2668);
 
     const bool lbSkipPaintShop =
         (mpGuiCache->GetGameMode() == E_MODE_ROAD_RAGE ||
@@ -269,7 +269,7 @@ void MapIconManager::AppendExpectedAptComponents()
 // really does read it twice on the console.
 s32 MapIconManager::GetDriveThroughAndJunkyardCount() const
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :2720 (non-gating)
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2720);   // :2720 (non-gating)
 
     const bool lbSkipPaintShop = (mpGuiCache->GetGameMode() == E_MODE_ROAD_RAGE
                                   || mpGuiCache->GetGameMode() == E_MODE_MARKED_MAN);
@@ -363,9 +363,9 @@ u32 MapIconManager::GetEventIDAtIndex(s32 liIndex) const
 // rival-family records (network rival / marked man / rival) and returns the liIndex'th.
 const GuiEventUpdateSatNav::SatNavIconInfo* MapIconManager::GetRivalIconAtIndex(s32 liIndex)
 {
-    CGS_ASSERT(mbAllowRivalSelection, "mbAllowRivalSelection");                 // :2558
-    CGS_ASSERT(liIndex >= 0, "liIndex >= 0");                                   // :2559
-    CGS_ASSERT(liIndex < GetNumRivalIcons(), "liIndex < GetNumRivalIcons()");   // :2560
+    CGS_ASSERT_AT(mbAllowRivalSelection, "mbAllowRivalSelection", CGS_ARTIST_FILE, 2558);                 // :2558
+    CGS_ASSERT_AT(liIndex >= 0, "liIndex >= 0", CGS_ARTIST_FILE, 2559);                                   // :2559
+    CGS_ASSERT_AT(liIndex < GetNumRivalIcons(), "liIndex < GetNumRivalIcons()", CGS_ARTIST_FILE, 2560);   // :2560
 
     s32 liRivalsSeen = 0;
 
@@ -551,8 +551,8 @@ MapIconManager::OwnerId MapIconManager::SetOwnerParameters(
     GuiEventDrawEventIcons::EIconDisplayType leEventIconDisplayType,
     const char* lpcIconParentName)
 {
-    CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");   // :263 (non-gating)
-    CGS_ASSERT(lpcComponentName != 0, "lpcComponentName");   // :264 (non-gating)
+    CGS_ASSERT_AT(lpStateInterface != 0, "lpStateInterface", CGS_ARTIST_FILE, 263);   // :263 (non-gating)
+    CGS_ASSERT_AT(lpcComponentName != 0, "lpcComponentName", CGS_ARTIST_FILE, 264);   // :264 (non-gating)
 
     // Owner handshake: a repeat claim by the CURRENT owner is a no-op (the X360's
     // "SetOwnerParameters called with OwnerID X when current OwnerID is Y" debug trace
@@ -631,14 +631,14 @@ MapIconManager::OwnerId MapIconManager::SetOwnerParameters(
         mbAllowRivalSelection     = false;                            // +0x7081
         mbAllowPlayerSelection    = (leOwnerId != E_CRASHNAV_MAP_ONLINE_SELECT_ROUTE); // +0xA1B1
 
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :313 (non-gating)
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 313);   // :313 (non-gating)
         mRoadSignIconManager.Prepare(lpStateInterface, mpGuiCache);
         mRoadSignIconManager.SetSignsVisible(lbUseRoadSigns);
         mbUseRoadSigns = lbUseRoadSigns;                              // +0xA1B0
 
         if (leEventIconDisplayType != GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT)
         {
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :321 (non-gating)
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 321);   // :321 (non-gating)
             // The console passes the constant display type 0 (offline events), no fade and
             // no ignore list here, whatever leEventIconDisplayType is; the requested type is
             // only latched below.
@@ -714,7 +714,7 @@ void MapIconManager::SetIconsVisible(bool lbVisible)
 // are bounds-tested only in LARGE mode; only the rival filter can skip a record outright.
 void MapIconManager::UpdateSatNavInfo(const GuiEventUpdateSatNav* lpSatNavEvent)
 {
-    CGS_ASSERT(lpSatNavEvent != 0, "NULL != lpSatNavInfo");   // :354 (non-gating)
+    CGS_ASSERT_AT(lpSatNavEvent != 0, "NULL != lpSatNavInfo", CGS_ARTIST_FILE, 354);   // :354 (non-gating)
 
     if (mbShowingOnlineRoute || mbShowingPreRaceRoute)        // +0xAA1F / +0xAA20
         return;
@@ -905,10 +905,10 @@ s32 MapIconManager::GetSatNavIconStateForRival(const GuiEventUpdateSatNav::SatNa
 
     if (li8Type == GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL)
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :2253 (non-gating)
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2253);   // :2253 (non-gating)
         const s32 liRaceCarIndex = lpIcon->GetActiveRaceCarIndex();
-        CGS_ASSERT(liRaceCarIndex >= 0, "leRivalActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");   // :2256
-        CGS_ASSERT(liRaceCarIndex < 8,  "leRivalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT"); // :2257
+        CGS_ASSERT_AT(liRaceCarIndex >= 0, "leRivalActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 2256);   // :2256
+        CGS_ASSERT_AT(liRaceCarIndex < 8,  "leRivalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 2257); // :2257
 
         // The network-rival arm: find the in-game player record driving this car. No record,
         // or a player not in the local game world, is invisible (state 0); the marked man is
@@ -1016,7 +1016,7 @@ MapIconBrnBase::IconState MapIconManager::GetCrashNavIconStateForRival(
     if (liType != SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL)
         return MapIconBrnBase::E_ICONSTATE_RIVAL;
 
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp2419
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2419);   // cpp2419
     const EActiveRaceCarIndex leCar =
         static_cast<EActiveRaceCarIndex>(lpIcon->GetActiveRaceCarIndex());
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = 0;
@@ -1052,8 +1052,8 @@ MapIconBrnBase::IconState MapIconManager::GetCrashNavIconStateForRival(
 // centre (the record's other bytes keep what the slot last held, as on the console).
 void MapIconManager::UpdateFreeburnChallengeIcons()
 {
-    CGS_ASSERT(mpGuiCache->GetGameMode() == E_MODE_ONLINE_FREE_BURN_LOBBY,
-               "mpGuiCache->GetGameMode() == GsmIO::E_MODE_ONLINE_FREE_BURN_LOBBY");   // :683 (non-gating)
+    CGS_ASSERT_AT(mpGuiCache->GetGameMode() == E_MODE_ONLINE_FREE_BURN_LOBBY,
+               "mpGuiCache->GetGameMode() == GsmIO::E_MODE_ONLINE_FREE_BURN_LOBBY", CGS_ARTIST_FILE, 683);   // :683 (non-gating)
 
     const FreeburnChallengeManager* lpChallengeManager = mpGuiCache->GetFreeburnChallengeManager();
     if (!lpChallengeManager->IsActive())
@@ -1090,12 +1090,12 @@ void MapIconManager::UpdateFreeburnChallengeIcons()
 // ARTIST 0x824F49E0.
 bool MapIconManager::IsTrackedIcon(const SatNavIconInfo* lpIcon)
 {
-    CGS_ASSERT(lpIcon != 0, "lpSatNavIconInfo");
+    CGS_ASSERT_AT(lpIcon != 0, "lpSatNavIconInfo", CGS_ARTIST_FILE, 2769);
     bool lbTracked = false;
     if (mpGuiCache)
     {
         GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
-        CGS_ASSERT(lpTracker != 0, "Invalid tracker pointer");
+        CGS_ASSERT_AT(lpTracker != 0, "Invalid tracker pointer", CGS_ARTIST_FILE, 2788);
         const s32 liMode = mpGuiCache->GetGameMode();
         if (liMode == 15 || liMode == 16)
         {
@@ -1155,9 +1155,9 @@ bool MapIconManager::IsFinishIcon(const SatNavIconInfo* lpIcon)
             static_cast<s32>(mpGuiCache->GetEventFinishLandmark()) == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
     if (mbIsDisplayingEventInfo && mpGuiCache->GetNumPresetRaces() > 0)
     {
-        CGS_ASSERT(mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces(), "Invalid preset race index");
+        CGS_ASSERT_AT(mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces(), "Invalid preset race index", CGS_ARTIST_FILE, 2925);
         const PresetRace* lpRace = mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
-        CGS_ASSERT(lpRace != 0, "lpPresetRace");
+        CGS_ASSERT_AT(lpRace != 0, "lpPresetRace", CGS_ARTIST_FILE, 2927);
         return static_cast<s32>(lpRace->GetFinishLandmarkIndex()) == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
     }
     return false;
@@ -1182,7 +1182,7 @@ bool MapIconManager::IsActiveLandmark(const SatNavIconInfo* lpIcon)
         else if (static_cast<u32>(liMode) <= 9 || mpGuiCache->GetInEventColouringGate())
         {
             GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
-            CGS_ASSERT(lpTracker != 0, "lpGuiTracker");
+            CGS_ASSERT_AT(lpTracker != 0, "lpGuiTracker", CGS_ARTIST_FILE, 3098);
             const s32 liCurrent = lpTracker->GetCurrentlyTrackedIndex();
             luCount = liCurrent == -1 ? 0 : static_cast<u8>(lpTracker->GetNumTracked() - liCurrent);
             const BrnGameState::LandmarkIndex* lpTracked = lpTracker->GetActivelyTrackedLandmarks();
@@ -1199,7 +1199,7 @@ bool MapIconManager::IsActiveLandmark(const SatNavIconInfo* lpIcon)
                 mpGuiCache->GetLandmarkInfoAtPositionInList(li, &lInfo);
                 if (lInfo.GetIconType() == SatNavIconInfo::E_SATNAVICON_LANDMARK)
                 {
-                    CGS_ASSERT(liCount < 512, "Landmark list capacity exceeded");
+                    CGS_ASSERT_AT(liCount < 512, "Landmark list capacity exceeded", CGS_ARTIST_FILE, 3014);
                     laBuiltLandmarks[liCount++] = static_cast<u16>(lInfo.GetLandmarkIndexHalf());
                 }
             }
@@ -1235,7 +1235,7 @@ bool MapIconManager::ShouldDisplayLandmark(const SatNavIconInfo* lpIcon)
 // @ 0x82511C88 -- refresh the world-derived icons into the used set.
 void MapIconManager::UpdateWorldIcons()
 {
-    CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // :478 (non-gating)
+    CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 478);   // :478 (non-gating)
 
     const Vector4& lv4Bounds = MapTransform::GetZoomedWorldRect();   // @0x82FB3440 {minX, maxZ, maxX, minZ}
     const s32 liGameMode = mpGuiCache->GetGameMode();
@@ -1379,7 +1379,7 @@ void MapIconManager::UpdateSatNavIcons()
 
     s32 liExtraIcons = 0;   // X360 v96 -- the route start-point icon reserves pool slot 0
 
-    CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // :1533 (non-gating)
+    CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 1533);   // :1533 (non-gating)
 
     if (mbUseRoadSigns)                                   // +0xA1B0
         mRoadSignIconManager.Update();
@@ -1387,9 +1387,9 @@ void MapIconManager::UpdateSatNavIcons()
         UpdateFreeburnChallengeIcons();
     UpdateWorldIcons();
 
-    CGS_ASSERT(miNumUsedIcons >= 0, "miNumUsedIcons >= 0");                       // :1552 (non-gating)
-    CGS_ASSERT(miNumUsedIcons <= KI_SATNAV_MAX_ICONS,
-               "miNumUsedIcons <= KI_SATNAV_MAX_ICONS");                          // :1553 (non-gating)
+    CGS_ASSERT_AT(miNumUsedIcons >= 0, "miNumUsedIcons >= 0", CGS_ARTIST_FILE, 1552);                       // :1552 (non-gating)
+    CGS_ASSERT_AT(miNumUsedIcons <= KI_SATNAV_MAX_ICONS,
+               "miNumUsedIcons <= KI_SATNAV_MAX_ICONS", CGS_ARTIST_FILE, 1553);                          // :1553 (non-gating)
     CGS_ASSERT(miMaxNumberIcons >= 0, "Max icons is negative");                   // :1554 (non-gating)
 
     const s32 liNumIcons = (miNumUsedIcons >= miMaxNumberIcons) ? miMaxNumberIcons
@@ -1769,7 +1769,7 @@ void MapIconManager::UpdateCrashNavIcons()
 
     s32 liExtraIcons = 0;   // X360 v93 -- the route start-point icon reserves pool slot 0
 
-    CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // :877 (non-gating)
+    CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 877);   // :877 (non-gating)
 
     if (mbUseRoadSigns)                                  // +0xA1B0
         mRoadSignIconManager.Update();
@@ -1777,9 +1777,9 @@ void MapIconManager::UpdateCrashNavIcons()
         UpdateFreeburnChallengeIcons();
     UpdateWorldIcons();
 
-    CGS_ASSERT(miNumUsedIcons >= 0, "miNumUsedIcons >= 0");                        // :896
-    CGS_ASSERT(miNumUsedIcons <= KI_SATNAV_MAX_ICONS,
-               "miNumUsedIcons <= KI_SATNAV_MAX_ICONS");                           // :897
+    CGS_ASSERT_AT(miNumUsedIcons >= 0, "miNumUsedIcons >= 0", CGS_ARTIST_FILE, 896);                        // :896
+    CGS_ASSERT_AT(miNumUsedIcons <= KI_SATNAV_MAX_ICONS,
+               "miNumUsedIcons <= KI_SATNAV_MAX_ICONS", CGS_ARTIST_FILE, 897);                           // :897
     CGS_ASSERT(miMaxNumberIcons >= 0, "Max icons is negative");                    // :898
 
     const s32 liNumIcons = (miNumUsedIcons >= miMaxNumberIcons) ? miMaxNumberIcons
@@ -2246,7 +2246,7 @@ void MapIconManager::SetUseEventIcons(GuiEventDrawEventIcons::EIconDisplayType l
                                       u32* lpuUnknown,
                                       s32 liUnknown)
 {
-    CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");   // cpp:3493
+    CGS_ASSERT_AT(lpStateInterface != 0, "lpStateInterface", CGS_ARTIST_FILE, 3493);   // cpp:3493
 
     if (meEventIconDisplayType != leIconDisplayType)
     {

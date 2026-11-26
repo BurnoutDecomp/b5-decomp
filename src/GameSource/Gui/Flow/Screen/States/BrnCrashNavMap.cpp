@@ -404,7 +404,7 @@ namespace BrnGui
             // reads are the local car id (+0x4AF0) and the active-race-car index (+0x4B00),
             // both of which have their own committed accessors.
             const Vector3& lrv4PlayerWorldPos = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;
-            CGS_ASSERT(&lrv4PlayerWorldPos != 0, "lpPlayerInfo");   // cpp:2183 (non-fatal)
+            CGS_ASSERT_AT(&lrv4PlayerWorldPos != 0, "lpPlayerInfo", CGS_ARTIST_FILE, 2183);   // cpp:2183 (non-fatal)
 
             // -----------------------------------------------------------------
             // World -> device, then onto the cursor.
@@ -494,7 +494,7 @@ namespace BrnGui
 
                 // Scheduled below the store above by the X360 (the cache is dereferenced
                 // either way); non-fatal, so the position is behaviourally irrelevant.
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:2208
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2208);   // cpp:2208
 
                 // Name the player from the online roster, matched on the local player's
                 // active-race-car index. "Changed" means: the roster row's name differs from
@@ -1173,7 +1173,7 @@ namespace BrnGui
         // The X360 re-reads the PAYLOAD's cache here, and stores the manager before it
         // tests it.
         mpIconManager = lpPayload->mpGuiCache->GetMapIconManager();
-        CGS_ASSERT(mpIconManager != 0, "mpIconManager");   // cpp:1411 (non-fatal)
+        CGS_ASSERT_AT(mpIconManager != 0, "mpIconManager", CGS_ARTIST_FILE, 1411);   // cpp:1411 (non-fatal)
 
         // ...whereas the display-set gate reads the STATE's own cache (`lwz r11,0x48`),
         // which Update latched from this same event just before calling in.
@@ -1313,7 +1313,7 @@ namespace BrnGui
     {
         // cpp:576 -- non-fatal on the X360; the cache pointer is dereferenced either way
         // below.
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 576);
 
         if (mbIsScreenLoaded || mbIsExiting)
         {
@@ -1574,7 +1574,7 @@ namespace BrnGui
     // the apt movie will be asked for, and zero the scroll/sound bookkeeping.
     void CrashNavMap::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
-        CGS_ASSERT(lpFsm != 0, "lpFsm");                                   // cpp:133
+        CGS_ASSERT_AT(lpFsm != 0, "lpFsm", CGS_ARTIST_FILE, 133);                                   // cpp:133
 
         CgsGui::State::Construct(liId, lpFsm);
 
@@ -2378,8 +2378,8 @@ namespace BrnGui
 
         // cpp:2120 / cpp:2121 -- both non-fatal on the console; both pointers are used
         // regardless, exactly as below.
-        CGS_ASSERT(lpEventStart, "lpEventStart");
-        CGS_ASSERT(lpRaceEventData, "lpRaceEventData");
+        CGS_ASSERT_AT(lpEventStart, "lpEventStart", CGS_ARTIST_FILE, 2120);
+        CGS_ASSERT_AT(lpRaceEventData, "lpRaceEventData", CGS_ARTIST_FILE, 2121);
 
         // Seed the bounding box with the event start marker. The console does the
         // world -> map-plane swizzle with one vperm (see the mask note in the banner);
@@ -2480,7 +2480,7 @@ namespace BrnGui
     void CrashNavMap::UpdateEvent()
     {
         // cpp:1890 -- non-fatal on the X360; the cache is dereferenced either way.
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 1890);
 
         UpdateEventInfoPanel();
 
@@ -3276,7 +3276,7 @@ namespace BrnGui
                         mpGuiCache = lpPayload->mpGuiCache;
                         ResetIconManager(lpEvent);
 
-                        CGS_ASSERT(mpIconManager != 0, "NULL != mpIconManager");  // cpp:339
+                        CGS_ASSERT_AT(mpIconManager != 0, "NULL != mpIconManager", CGS_ARTIST_FILE, 339);  // cpp:339
 
                         mpIconManager->SetIconsVisible(true);
 
@@ -3350,7 +3350,7 @@ namespace BrnGui
 
         CheckForLoadComplete();
 
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:417 (non-fatal)
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 417);   // cpp:417 (non-fatal)
 
         // One-shot: the frame the cache first reports every expected apt component
         // initialised, wire the components up and paint the button prompts.
@@ -3385,7 +3385,7 @@ namespace BrnGui
         if (mpIconManager == 0)
             return;
 
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1123 (non-fatal)
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1123);   // cpp:1123 (non-fatal)
 
         // Icons are authored at a reference world scale; the manager needs the ratio
         // against the map's current zoom. X360: `lfs f13, mMainMapComponent+1632` /
@@ -3498,7 +3498,7 @@ namespace BrnGui
                         // The X360 schedules this test below the stores above (the cache
                         // is dereferenced by the lvx either way); non-fatal, so the
                         // position is behaviourally irrelevant -- kept where the asm has it.
-                        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1222
+                        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1222);   // cpp:1222
 
                         // Name the player from the online roster, matched on the local
                         // player's active-race-car index.
@@ -3528,7 +3528,7 @@ namespace BrnGui
                             mLockedIconInfo.SetIconType(
                                 GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL);
 
-                            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1252
+                            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1252);   // cpp:1252
 
                             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
                                 lpPlayerInfo = mpGuiCache->GetOnlinePlayerInfo(
@@ -3654,7 +3654,7 @@ namespace BrnGui
                             const u64 lu64EventId = luEventId;
                             std::memcpy(lRequest.maData, &lu64EventId, sizeof(lu64EventId));
 
-                            CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");  // cpp:1321
+                            CGS_ASSERT_AT(mpStateInterface != 0, "mpStateInterface", CGS_ARTIST_FILE, 1321);  // cpp:1321
 
                             mpStateInterface->OutputGuiEvent(lRequest);
                         }

@@ -330,14 +330,14 @@ static const u32 KU_PARAM_BUFFER_SIZE = 64;
 // lbSelect is set, also post a GuiChallengeSelectedEvent with selector action 2.
 void ChallengeSelector::SelectAvailableChallenge(s32 liAvailableChallengeIndex, bool lbSelect)
 {
-    CGS_ASSERT(mpChallengeList, "mpChallengeList");   // line 212 (asm `li r5, 0xD4`)
+    CGS_ASSERT_AT(mpChallengeList, "mpChallengeList", CGS_ARTIST_FILE, 212);   // line 212 (asm `li r5, 0xD4`)
 
     const s32 liChallengeIndex = GetChallengeIndex(liAvailableChallengeIndex);
 
     const BrnResource::ChallengeListEntry* lpChallengeEntry =
         mpChallengeList->GetChallengeData(liChallengeIndex);
 
-    CGS_ASSERT(lpChallengeEntry, "lpChallengeEntry");   // line 215 (asm `li r5, 0xD7`)
+    CGS_ASSERT_AT(lpChallengeEntry, "lpChallengeEntry", CGS_ARTIST_FILE, 215);   // line 215 (asm `li r5, 0xD7`)
 
     miCurrentAvailableChallengeIndex = liAvailableChallengeIndex;   // stw r31, 0x1158(r27)
 

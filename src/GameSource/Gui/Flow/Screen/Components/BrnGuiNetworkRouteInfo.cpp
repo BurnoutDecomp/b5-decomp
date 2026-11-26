@@ -333,12 +333,12 @@ namespace BrnGui
     {
         const GuiEventCachePayload* lpCacheEvent = reinterpret_cast<const GuiEventCachePayload*>(lpEvent);
 
-        CGS_ASSERT(lpCacheEvent->mpGuiCache != 0, "Invalid cache in HandleGuiCacheEvent::Update");
+        CGS_ASSERT_AT(lpCacheEvent->mpGuiCache != 0, "Invalid cache in HandleGuiCacheEvent::Update", CGS_ARTIST_FILE, 419);
 
         if (mpGuiCache == 0)
         {
             mpGuiCache = lpCacheEvent->mpGuiCache;
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 422);
 
             mpIconManager = mpGuiCache->GetMapIconManager();
             CGS_ASSERT(mpIconManager != 0, "mpIconManager");
@@ -363,7 +363,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid state");
+            CGS_ASSERT_AT(false, "Invalid state", CGS_ARTIST_FILE, 455);
             return;
         }
 
@@ -378,9 +378,9 @@ namespace BrnGui
             return;
         }
 
-        CGS_ASSERT(liCurrentRound >= 0, "liCurrentRound >= 0");
-        CGS_ASSERT(liCurrentRound < static_cast<s32>(GSM::KU_MAX_ONLINE_ROUNDS_IN_MODE),
-                   "liCurrentRound < (int32_t) BrnGameState::GameStateModuleIO::KU_MAX_ONLINE_ROUNDS_IN_MODE");
+        CGS_ASSERT_AT(liCurrentRound >= 0, "liCurrentRound >= 0", CGS_ARTIST_FILE, 481);
+        CGS_ASSERT_AT(liCurrentRound < static_cast<s32>(GSM::KU_MAX_ONLINE_ROUNDS_IN_MODE),
+                   "liCurrentRound < (int32_t) BrnGameState::GameStateModuleIO::KU_MAX_ONLINE_ROUNDS_IN_MODE", CGS_ARTIST_FILE, 482);
 
         mEvent = lpCreateMatchEvent->maEvents[liCurrentRound];
 
@@ -394,7 +394,7 @@ namespace BrnGui
                 break;
             }
         }
-        CGS_ASSERT(liModeIndex < KI_NUM_GAME_MODES, "Can't find game mode string");
+        CGS_ASSERT_AT(liModeIndex < KI_NUM_GAME_MODES, "Can't find game mode string", CGS_ARTIST_FILE, 493);
 
         const s32* lpiMappingTable;
 
@@ -582,7 +582,7 @@ namespace BrnGui
     {
         const SatNavEventDisplayInfo* const lpEventStart =
             mpGuiCache->GetPresetEventDisplayInfo(mEvent.GetTrafficLightTriggerId());
-        CGS_ASSERT(lpEventStart != 0, "lpEventStart");
+        CGS_ASSERT_AT(lpEventStart != 0, "lpEventStart", CGS_ARTIST_FILE, 744);
 
         Vector2 lv2Min = MapTransform::Flatten(lpEventStart->mv3Position);
         Vector2 lv2Max = lv2Min;

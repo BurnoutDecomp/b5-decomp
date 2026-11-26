@@ -28,7 +28,7 @@
 namespace BrnGui {
 namespace {
     typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnCrashedHudState.cpp"
     // The ticker records go out on the GUI-out channel, boxed in the 12-byte wrapper header.
     const s32 KI_CHANNEL_GUI_OUT = 40;
 
@@ -215,7 +215,7 @@ void CrashedHudState::UpdateGetCache()
 
     const CgsModule::Event* lpEvent;
     s32 liSize;
-    CGS_ASSERT(mpCache == 0, "mpCache == NULL");
+    CGS_ASSERT_AT(mpCache == 0, "mpCache == NULL", CGS_ARTIST_FILE, 367);
     for (s32 liId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
          liId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
     {
@@ -227,7 +227,7 @@ void CrashedHudState::UpdateGetCache()
             break;
         }
     }
-    CGS_ASSERT(mpCache != 0, "mpCache != NULL");
+    CGS_ASSERT_AT(mpCache != 0, "mpCache != NULL", CGS_ARTIST_FILE, 382);
 }
 
 // ARTIST 0x8247CE98.
@@ -249,7 +249,7 @@ bool CrashedHudState::UpdateLoading()
 // ARTIST 0x824753A8 / 0x82475428.
 bool CrashedHudState::UpdateWFInit()
 {
-    CGS_ASSERT(mpCache != 0, "mpCache");
+    CGS_ASSERT_AT(mpCache != 0, "mpCache", CGS_ARTIST_FILE, 447);
     return mpCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD);
 }
 void CrashedHudState::SetExpectedAptComponentList()
@@ -261,7 +261,7 @@ void CrashedHudState::SetExpectedAptComponentList()
     SetExpectedComponent(mImpactTimeButton.GetName());
     SetExpectedComponent(mShowTimeButton1.GetName());
     SetExpectedComponent(mShowTimeButton2.GetName());
-    CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM, "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM");
+    CGS_ASSERT_AT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM, "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM", CGS_ARTIST_FILE, 1039);
     mpCache->SetExpectedAptComponentList(E_GUIFLOW_HUD, mauExpectedComponentIds, muNumExpectedComponents);
 }
 

@@ -390,7 +390,7 @@ namespace BrnGui
     // components and play the movie.
     bool ImageGalleryState::UpdateLoadResources()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 328);
         if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
             return false;
@@ -765,7 +765,7 @@ namespace BrnGui
     // clear the cache's export-in-progress flag.
     void ImageGalleryState::HandleOverlayComplete(const CgsModule::Event* lpOverlayCompleteEvent)
     {
-        CGS_ASSERT(lpOverlayCompleteEvent != 0, "lpOverlayCompleteEvent");
+        CGS_ASSERT_AT(lpOverlayCompleteEvent != 0, "lpOverlayCompleteEvent", CGS_ARTIST_FILE, 996);
 
         const OverlayCompletePayload* lpPayload =
             reinterpret_cast<const OverlayCompletePayload*>(lpOverlayCompleteEvent);
@@ -786,7 +786,7 @@ namespace BrnGui
         else if (lpPayload->mOverlayId == CgsIDCompress("LineUpExport"))
         {
             miRequestsLeftPending = 0;
-            CGS_ASSERT(mpGuiCache, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 1023);
             mpGuiCache->SetImageExportInProgress(false);
         }
     }

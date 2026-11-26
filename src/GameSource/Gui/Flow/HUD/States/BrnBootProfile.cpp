@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnBootProfile.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootProfile.cpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
@@ -238,7 +238,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Unhandled number of options in profile message displayer\n");   // cpp:177
+            CGS_ASSERT_AT(false, "Unhandled number of options in profile message displayer\n", CGS_ARTIST_FILE, 177);   // cpp:177
             break;
         }
     }
@@ -248,8 +248,8 @@ namespace BrnGui
     void ProfileMessageComponent::ShowMessage(const char* lpcMessage, u32 luNumberOfOptions,
                                               const char** lpacOptions)
     {
-        CGS_ASSERT(lpcMessage != 0, "lpMessage != NULL");           // cpp:197
-        CGS_ASSERT(luNumberOfOptions <= 2, "luOptionCount <= 2");   // cpp:199
+        CGS_ASSERT_AT(lpcMessage != 0, "lpMessage != NULL", CGS_ARTIST_FILE, 197);           // cpp:197
+        CGS_ASSERT_AT(luNumberOfOptions <= 2, "luOptionCount <= 2", CGS_ARTIST_FILE, 199);   // cpp:199
 
         miNumOptions     = static_cast<s32>(luNumberOfOptions);
         mbHasMessage     = true;
@@ -290,7 +290,7 @@ namespace BrnGui
     void ProfileMessageComponent::ShowNoSpaceMessage(const char* lpcMessage, u32 luRequiredKb,
                                                      u32 luFreeKb)
     {
-        CGS_ASSERT(lpcMessage != 0, "lpMessage != NULL");   // cpp:237
+        CGS_ASSERT_AT(lpcMessage != 0, "lpMessage != NULL", CGS_ARTIST_FILE, 237);   // cpp:237
 
         muSaveDataSizeKb = luRequiredKb;
         muGameDataSizeKb = luFreeKb;
@@ -478,7 +478,7 @@ namespace BrnGui
             break;
 
         case E_INTERNALSTATE_WAIT_RESOURCES:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache != NULL");   // cpp:376
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache != NULL", CGS_ARTIST_FILE, 376);   // cpp:376
             if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
             {
                 mpInGuiEventQueue->Clear();
@@ -509,7 +509,7 @@ namespace BrnGui
             break;
 
         case E_INTERNALSTATE_WAIT_INITIALISE:
-            CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:410
+            CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 410);   // cpp:410
             if (!CacheAreAllAptComponentsInitialised(mpGuiCache))
             {
                 mpInGuiEventQueue->Clear();
@@ -554,7 +554,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid internal state");   // cpp:464
+            CGS_ASSERT_AT(false, "Invalid internal state", CGS_ARTIST_FILE, 464);   // cpp:464
             mpInGuiEventQueue->Clear();
             break;
         }

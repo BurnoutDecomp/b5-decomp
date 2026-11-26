@@ -37,7 +37,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnMainMapRenderer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnMainMapRenderer.cpp"
 #include "GameSource/Gui/BrnGuiCache.h"                     // BrnGui::GuiCache (GetTime)
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"           // BrnGui::MapTransform
 #include "GameSource/Gui/SatNav/BrnMapManager.h"            // MapManager::sActiveTextures / SatNavTile::sTexture
@@ -407,7 +407,7 @@ CgsID MainMapRenderer::GetID() const
 // ---------------------------------------------------------------------------
 void MainMapRenderer::StartFade(bool lbFadeIn, f32 lfDuration)
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // console line 1160
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1160);   // console line 1160
     if (mpGuiCache == 0)
         return;
 
@@ -439,7 +439,7 @@ void MainMapRenderer::ClearFadeState()
 // ---------------------------------------------------------------------------
 void MainMapRenderer::UpdateAlphaForFadeState()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // console line 1206
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1206);   // console line 1206
     if (mpGuiCache == 0)
         return;
 
@@ -496,7 +496,7 @@ void MainMapRenderer::UpdateAlphaForFadeState()
 // ---------------------------------------------------------------------------
 void MainMapRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType)
 {
-    CGS_ASSERT(lpEvent != 0, " null event passed ");   // console line 270
+    CGS_ASSERT_AT(lpEvent != 0, " null event passed ", CGS_ARTIST_FILE, 284);   // console line 270
     if (lpEvent == 0)
         return;
 
@@ -526,15 +526,15 @@ void MainMapRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType
             lpTexture = *reinterpret_cast<void* const*>(
                 lpcNotification->mResourceHandle.mpResourceMemory);
         }
-        CGS_ASSERT(lpTexture != 0,
-                   "Invalid resource data sent MainMapRenderer::RecvEvent");   // console line 294
+        CGS_ASSERT_AT(lpTexture != 0,
+                   "Invalid resource data sent MainMapRenderer::RecvEvent", CGS_ARTIST_FILE, 305);   // console line 294
 
         if (static_cast<s32>(lpcNotification->meRequestType) != KI_REQUESTTYPE_TEXTURE)
             break;   // `lwz r11,8(r22); cmpwi 0xB; bne default`
 
         if (lpcNotification->muLoadRequestId == KU_LOADID_BACKGROUND_MASK)
         {
-            CGS_ASSERT(lpTexture != 0, "lpTexture!=NULL");   // console line 305
+            CGS_ASSERT_AT(lpTexture != 0, "lpTexture!=NULL", CGS_ARTIST_FILE, 323);   // console line 305
             if (lpTexture == 0)
                 break;
             mpBackgroundMaskTextureState =

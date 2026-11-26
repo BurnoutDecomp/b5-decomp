@@ -1,7 +1,7 @@
 // BrnGui::ReplayCredits -- the "RE_CREDITS" screen state, reconstructed from the console build.
 
 #include "GameSource/Gui/Flow/Screen/States/Replays/BrnReplayCredits.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/Replays/BrnReplayCredits.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                     // CgsCore::SnPrintf / StrCat
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                         // CgsGui::GuiEvent<N>
@@ -207,7 +207,7 @@ void ReplayCredits::Update()
 
 bool ReplayCredits::UpdateLoadResources()
 {
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 255);
 
     if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         return false;

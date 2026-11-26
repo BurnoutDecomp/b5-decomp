@@ -70,7 +70,7 @@
 // CgsGui::State::SendStateEvent, CgsIDCompress -- all already bodied and mounted.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMapEvent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMapEvent.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT / Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream (streamed asserts)
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent
@@ -373,8 +373,8 @@ namespace BrnGui
             CgsDev::Assert::EndAssert();
         }
 
-        CGS_ASSERT(mpGuiCache->GetNumPresetRaces() > 0,
-                   "mpGuiCache->GetNumPresetRaces() > 0");
+        CGS_ASSERT_AT(mpGuiCache->GetNumPresetRaces() > 0,
+                   "mpGuiCache->GetNumPresetRaces() > 0", CGS_ARTIST_FILE, 638);
 
         const PresetRace* lpPresetRace = mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
 
@@ -384,10 +384,10 @@ namespace BrnGui
         // The console asserts on the local's own count byte AFTER storing it -- it reads
         // the value back off the frame slot -- so the two asserts read lAcceptEventStart,
         // not the race.
-        CGS_ASSERT(lAcceptEventStart.muNumLandmarks >= 2,
-                   "lAcceptEventStart.muNumLandmarks >= 2");
-        CGS_ASSERT(lAcceptEventStart.muNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE,
-                   "lAcceptEventStart.muNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE");
+        CGS_ASSERT_AT(lAcceptEventStart.muNumLandmarks >= 2,
+                   "lAcceptEventStart.muNumLandmarks >= 2", CGS_ARTIST_FILE, 644);
+        CGS_ASSERT_AT(lAcceptEventStart.muNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE,
+                   "lAcceptEventStart.muNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE", CGS_ARTIST_FILE, 645);
 
         // Two `memcpy(dst, src, 2 * muNumLandmarks)` calls: the LIVE landmarks only, not
         // the whole 16-slot arrays. The trailing slots keep whatever the frame held on the
@@ -458,8 +458,8 @@ namespace BrnGui
         }
         else
         {
-            CGS_ASSERT(mpGuiCache->GetNumPresetRaces() > 0,
-                       "mpGuiCache->GetNumPresetRaces() > 0");
+            CGS_ASSERT_AT(mpGuiCache->GetNumPresetRaces() > 0,
+                       "mpGuiCache->GetNumPresetRaces() > 0", CGS_ARTIST_FILE, 540);
 
             const PresetRace* lpPresetRace =
                 mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
@@ -575,7 +575,7 @@ namespace BrnGui
             break;
 
         case E_CREATE_EVENT_EDIT_MODIFIER:
-            CGS_ASSERT(mpGuiKeyboard != 0, "mpGuiKeyboard");               // cpp:493
+            CGS_ASSERT_AT(mpGuiKeyboard != 0, "mpGuiKeyboard", CGS_ARTIST_FILE, 493);               // cpp:493
             meCreateEventStage = E_CREATE_EVENT_KEYBOARD;
 
             mpGuiKeyboard->Show(KAC16_DEFAULT_EVENT_NAME, KAC16_DIALOG_TITLE,
@@ -680,8 +680,8 @@ namespace BrnGui
         // ---- the name dialog came back ----------------------------------------------
         if (mKeyboardListener.HasJustClosed())
         {
-            CGS_ASSERT(meCreateEventStage == E_CREATE_EVENT_KEYBOARD,
-                       "meCreateEventStage == E_CREATE_EVENT_KEYBOARD");    // cpp:187
+            CGS_ASSERT_AT(meCreateEventStage == E_CREATE_EVENT_KEYBOARD,
+                       "meCreateEventStage == E_CREATE_EVENT_KEYBOARD", CGS_ARTIST_FILE, 187);    // cpp:187
 
             char* lpcTempString = mKeyboardListener.FillString();           // cpp:188
             if (lpcTempString != 0 && lpcTempString[0] != '\0')
@@ -726,7 +726,7 @@ namespace BrnGui
     // =================================================================================
     char* CrashNavMapEventKeyboardListener::FillString()
     {
-        CGS_ASSERT(mbKeyboardClosed, "mbKeyboardClosed");                  // cpp:709
+        CGS_ASSERT_AT(mbKeyboardClosed, "mbKeyboardClosed", CGS_ARTIST_FILE, 709);                  // cpp:709
 
         const bool lbNewData = mbNewData;
         mbKeyboardClosed = false;

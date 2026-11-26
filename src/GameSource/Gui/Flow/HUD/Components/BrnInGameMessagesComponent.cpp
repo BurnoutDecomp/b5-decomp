@@ -562,9 +562,10 @@ namespace
 
         for (s32 liIter = 0; liIter < 3; ++liIter)
         {
-            maiCurrentStringParamCount[liIter] = 0;
+            // String id first (ARTIST: the memset, then the count store @0x824370F8).
             std::memset(maacCurrentStringStringId[liIter], 0,
                         sizeof(maacCurrentStringStringId[liIter]));
+            maiCurrentStringParamCount[liIter] = 0;
         }
 
         meCurrentGameMode =
@@ -710,12 +711,12 @@ namespace
         {
             maiCurrentStringParamCount[liString] = lpMessage->maiStringParamCount[liString];
 
-            CGS_ASSERT(maiCurrentStringParamCount[liString] >= 0,
-                       "maiCurrentStringParamCount[liIter] >= 0");                    // cpp:403
-            CGS_ASSERT(maiCurrentStringParamCount[liString] <=
+            CGS_ASSERT_AT(maiCurrentStringParamCount[liString] >= 0,
+                       "maiCurrentStringParamCount[liIter] >= 0", CGS_ARTIST_FILE, 403);                    // cpp:403
+            CGS_ASSERT_AT(maiCurrentStringParamCount[liString] <=
                            BrnResource::HudMessageEvent::KI_MAX_PARAMS_PER_STRING,
                        "maiCurrentStringParamCount[liIter] <= "
-                       "BrnResource::HudMessageEvent::KI_MAX_PARAMS_PER_STRING");     // cpp:404
+                       "BrnResource::HudMessageEvent::KI_MAX_PARAMS_PER_STRING", CGS_ARTIST_FILE, 404);     // cpp:404
 
             std::memcpy(maacCurrentStringStringId[liString], lpMessage->maacString[liString],
                         sizeof(maacCurrentStringStringId[liString]));
@@ -749,12 +750,12 @@ namespace
             // NOTE the asymmetry, and that it is the console's: the INCOMING event's
             // miForceRemoveThreshold (+0x0C) is compared against the RESIDENT message's
             // miPriority (+0x08), not against its own priority.
-            CGS_ASSERT(mpInGameMessagesQueue
+            CGS_ASSERT_AT(mpInGameMessagesQueue
                                ->maeMessageState[mpInGameMessagesQueue->muCurrentMessageIndex] ==
                                E_MESSAGESTATE_WAITING ||
                            lpEvent->miForceRemoveThreshold >=
                                mpInGameMessagesQueue->maMessages[GetCurrentIndex()].miPriority,
-                       "Invalid state to start a message in");                        // cpp:290
+                       "Invalid state to start a message in", CGS_ARTIST_FILE, 290);                        // cpp:290
         }
 
         char lacMessageName[24];

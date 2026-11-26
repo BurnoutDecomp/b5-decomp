@@ -439,7 +439,7 @@ namespace BrnGui
 
                 case KI_EVENT_IN_GAME:
                 {
-                    CGS_ASSERT(lpEvent != 0, "lpInGameEvent");   // cpp:608 (non-fatal)
+                    CGS_ASSERT_AT(lpEvent != 0, "lpInGameEvent", CGS_ARTIST_FILE, 608);   // cpp:608 (non-fatal)
                     // Entering the game: hold the flow until the "enter game" overlay has
                     // finished showing.
                     if (reinterpret_cast<const InGameEventPayload*>(lpEvent)->mbInGame)
@@ -575,7 +575,7 @@ namespace BrnGui
                 case KI_EVENT_UI_VISIBLE:
                     if (meSubState == E_SUBSTATE_FREE_BURNING)
                     {
-                        CGS_ASSERT(lpEvent != 0, "lpUiVisibleEvent != NULL");   // cpp:519 (non-fatal)
+                        CGS_ASSERT_AT(lpEvent != 0, "lpUiVisibleEvent != NULL", CGS_ARTIST_FILE, 519);   // cpp:519 (non-fatal)
                         if (reinterpret_cast<const UiVisiblePayload*>(lpEvent)->miUiVisible == 0)
                         {
                             HideHUDAndEnterMenus();
@@ -1003,7 +1003,7 @@ namespace BrnGui
     // @0x824A3FB8 -- DWARF cpp:965. Advance whichever load is in flight.
     void OnlineGameRoomPlayerInfo::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                                  // cpp:979
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 979);                                  // cpp:979
 
         switch (meSubState)
         {
@@ -1121,7 +1121,7 @@ namespace BrnGui
             {
                 mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
                 meSubState = E_SUBSTATE_MAIN;
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                          // cpp:1011
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1011);                          // cpp:1011
 
                 mOptionsAnimation.AddOutputAptViewState("apt_Transition",
                                                         KAPC_ANIMATION_STATES[1], false);
@@ -1456,16 +1456,16 @@ namespace BrnGui
             lIcons.mRevengeStatusIcon.SetState(luRevengeState);
 
             // Ready column (lobby record +20).
-            CGS_ASSERT(lpLobbyPlayerInfo->meReadyStatus >= LobbyPlayerStatusData::E_READY_STATUS_HOST,
-                       "lpLobbyPlayerInfo->meReadyStatus >= BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData::E_READY_STATUS_HOST");   // cpp:3418
-            CGS_ASSERT(lpLobbyPlayerInfo->meReadyStatus < LobbyPlayerStatusData::E_READY_STATUS_COUNT,
-                       "lpLobbyPlayerInfo->meReadyStatus < BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData::E_READY_STATUS_COUNT");   // cpp:3419
+            CGS_ASSERT_AT(lpLobbyPlayerInfo->meReadyStatus >= LobbyPlayerStatusData::E_READY_STATUS_HOST,
+                       "lpLobbyPlayerInfo->meReadyStatus >= BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData::E_READY_STATUS_HOST", CGS_ARTIST_FILE, 3418);   // cpp:3418
+            CGS_ASSERT_AT(lpLobbyPlayerInfo->meReadyStatus < LobbyPlayerStatusData::E_READY_STATUS_COUNT,
+                       "lpLobbyPlayerInfo->meReadyStatus < BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData::E_READY_STATUS_COUNT", CGS_ARTIST_FILE, 3419);   // cpp:3419
             lIcons.mReadyStatusIcon.SetState(static_cast<u32>(lpLobbyPlayerInfo->meReadyStatus));
 
             // Video/camera column (record +284). Out-of-range falls back to "no camera"
             // AFTER firing the streamed assert -- it does not skip the SetState.
-            CGS_ASSERT(lpPlayerInfo->meCameraStatus >= BrnNetwork::E_CAMERA_STATUS_NONE,
-                       "lpPlayerInfo->meCameraStatus >= BrnNetwork::E_CAMERA_STATUS_NONE");   // cpp:3424
+            CGS_ASSERT_AT(lpPlayerInfo->meCameraStatus >= BrnNetwork::E_CAMERA_STATUS_NONE,
+                       "lpPlayerInfo->meCameraStatus >= BrnNetwork::E_CAMERA_STATUS_NONE", CGS_ARTIST_FILE, 3424);   // cpp:3424
             if (lpPlayerInfo->meCameraStatus < BrnNetwork::E_CAMERA_STATUS_COUNT)
             {
                 lIcons.mVideoStatusIcon.SetState(static_cast<u32>(lpPlayerInfo->meCameraStatus));
@@ -1479,8 +1479,8 @@ namespace BrnGui
             }
 
             // VOIP column (record +280); same shape as the camera column.
-            CGS_ASSERT(lpPlayerInfo->meVOIPStatus >= 0,
-                       "lpPlayerInfo->meVOIPStatus >= CgsNetwork::E_NETWORK_HEADSET_PLAYER_STATUS_NONE");   // cpp:3435
+            CGS_ASSERT_AT(lpPlayerInfo->meVOIPStatus >= 0,
+                       "lpPlayerInfo->meVOIPStatus >= CgsNetwork::E_NETWORK_HEADSET_PLAYER_STATUS_NONE", CGS_ARTIST_FILE, 3435);   // cpp:3435
             if (lpPlayerInfo->meVOIPStatus < KI_NETWORK_HEADSET_PLAYER_STATUS_COUNT)
             {
                 lIcons.mVoipStatusIcon.SetState(static_cast<u32>(lpPlayerInfo->meVOIPStatus));
@@ -2687,8 +2687,8 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::ShowSettingsScreen()
     {
         // cpp:4311 -- the X360 fires the bare expression text (non-fatal).
-        CGS_ASSERT((meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING),
-                   "(meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING)");
+        CGS_ASSERT_AT((meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING),
+                   "(meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING)", CGS_ARTIST_FILE, 4311);
 
         meSubState = E_SUBSTATE_LOADING_SETTINGS_SCREEN;
 
@@ -3332,10 +3332,10 @@ namespace BrnGui
 
         // Both asserts fire from the one overflow test in the asm (`cmpwi r28, 0xB` at
         // 0x8248C1F0), cpp:3102 then cpp:3103. Both bounds are 11 on ARTIST.
-        CGS_ASSERT(liOptionIndex <= KI_MAX_DISPLAYABLE_PAUSE_OPTIONS,
-                   "liOptionIndex <= KI_MAX_DISPLAYABLE_PAUSE_OPTIONS");
-        CGS_ASSERT(liOptionIndex <= KI_MAX_PAUSE_OPTIONS,
-                   "liOptionIndex <= KI_MAX_PAUSE_OPTIONS");
+        CGS_ASSERT_AT(liOptionIndex <= KI_MAX_DISPLAYABLE_PAUSE_OPTIONS,
+                   "liOptionIndex <= KI_MAX_DISPLAYABLE_PAUSE_OPTIONS", CGS_ARTIST_FILE, 3102);
+        CGS_ASSERT_AT(liOptionIndex <= KI_MAX_PAUSE_OPTIONS,
+                   "liOptionIndex <= KI_MAX_PAUSE_OPTIONS", CGS_ARTIST_FILE, 3103);
 
         mPauseComponent.SetupMenu(KI_MAX_DISPLAYABLE_PAUSE_OPTIONS, true);
 
@@ -3624,10 +3624,10 @@ namespace BrnGui
         {
         case KI_PAUSE_OPTION_LAUNCH:
             // cpp:3987. Inlined by the X360 into the 15/16 compare pair at 0x824A5FF4.
-            CGS_ASSERT(!BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(
+            CGS_ASSERT_AT(!BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(
                            static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(
                                mpGuiCache->GetOnlineGameModeOptions()->meGameMode)),
-                       "!GsmIO::IsOnlineFreeBurnLobby(mpGuiCache->GetOnlineGameModeOptions()->meGameMode)");
+                       "!GsmIO::IsOnlineFreeBurnLobby(mpGuiCache->GetOnlineGameModeOptions()->meGameMode)", CGS_ARTIST_FILE, 3987);
 
             PostCommand16<KI_EVENT_LAUNCH_ONLINE_GAME>(mpStateInterface);
             HideMenusAndReturnToHUD();
@@ -3731,7 +3731,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid game action to perform\n");   // cpp:4112
+            CGS_ASSERT_AT(false, "Invalid game action to perform\n", CGS_ARTIST_FILE, 4112);   // cpp:4112
             break;
         }
     }
@@ -3750,9 +3750,9 @@ namespace BrnGui
         }
         else
         {
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                                   // cpp:2869
-            CGS_ASSERT(mpGuiCache->GetFreeburnChallengeManager() != 0,
-                       "mpGuiCache->GetFreeburnChallengeManager()");                     // cpp:2870
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2869);                                   // cpp:2869
+            CGS_ASSERT_AT(mpGuiCache->GetFreeburnChallengeManager() != 0,
+                       "mpGuiCache->GetFreeburnChallengeManager()", CGS_ARTIST_FILE, 2870);                     // cpp:2870
 
             // The accessor's own "mpChallengeManager" assert (BrnGuiCache.h:2390) is what
             // the X360 shows inlined before each of these two uses.
@@ -3933,7 +3933,7 @@ namespace BrnGui
     // header-stripped shared payload.
     void OnlineGameRoomPlayerInfo::HandleSplashScreenRequests(const CgsModule::Event* lpNetworkSplashEvent)
     {
-        CGS_ASSERT(lpNetworkSplashEvent != 0, "lpNetworkSplashEvent");   // cpp:2770
+        CGS_ASSERT_AT(lpNetworkSplashEvent != 0, "lpNetworkSplashEvent", CGS_ARTIST_FILE, 2770);   // cpp:2770
 
         const u32 luSplashState =
             reinterpret_cast<const GuiEventNetworkSplashEvent*>(lpNetworkSplashEvent)->meSplashState;
@@ -3987,14 +3987,14 @@ namespace BrnGui
             }
             else
             {
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:2812
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2812);   // cpp:2812
 
                 const s32 leGameModeType = mpGuiCache->meGameModeType;
-                CGS_ASSERT(leGameModeType > BrnGameState::GameStateModuleIO::E_MODE_NONE,
-                           "leGameModeType > GsmIO::E_MODE_NONE");    // cpp:2814
+                CGS_ASSERT_AT(leGameModeType > BrnGameState::GameStateModuleIO::E_MODE_NONE,
+                           "leGameModeType > GsmIO::E_MODE_NONE", CGS_ARTIST_FILE, 2814);    // cpp:2814
                 // ARTIST E_MODE_COUNT (the X360 compares against 18) -- see KI_ARTIST_MODE_COUNT.
-                CGS_ASSERT(leGameModeType < KI_ARTIST_MODE_COUNT,
-                           "leGameModeType < GsmIO::E_MODE_COUNT");   // cpp:2815
+                CGS_ASSERT_AT(leGameModeType < KI_ARTIST_MODE_COUNT,
+                           "leGameModeType < GsmIO::E_MODE_COUNT", CGS_ARTIST_FILE, 2815);   // cpp:2815
 
                 // The X360 constructs the request into its own stack slot and the
                 // instantiation copies the 8 bytes into the record.
@@ -4226,7 +4226,7 @@ namespace BrnGui
     // the screen answers each name their own overlay; any other reason is ignored.
     void OnlineGameRoomPlayerInfo::HandleInviteFailed(const CgsModule::Event* lpInviteFailedEvent)
     {
-        CGS_ASSERT(lpInviteFailedEvent != 0, "lpInviteFailedEvent");   // cpp:2735
+        CGS_ASSERT_AT(lpInviteFailedEvent != 0, "lpInviteFailedEvent", CGS_ARTIST_FILE, 2735);   // cpp:2735
 
         const s32 liReason =
             reinterpret_cast<const GuiEventInviteFailedPayload*>(lpInviteFailedEvent)->miReason;
@@ -4271,7 +4271,7 @@ namespace BrnGui
     //                     otherwise remember it and clear it on the next Update.
     void OnlineGameRoomPlayerInfo::HandleOverlayComplete(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "lpOverlayCompleteEvent");   // cpp:2899
+        CGS_ASSERT_AT(lpEvent != 0, "lpOverlayCompleteEvent", CGS_ARTIST_FILE, 2899);   // cpp:2899
 
         // The stored member and ClearSplashScreenOverlay's parameter are both this shape
         // (id qword at +0, leave method at +8) -- see the class header.
@@ -4498,7 +4498,7 @@ namespace BrnGui
     {
         // The X360 fires BOTH asserts back-to-back on the null path: the bare expression
         // text (cpp:2408) then the streamed message (cpp:2409).
-        CGS_ASSERT(lpLeftGameEvent != 0, "lpLeftGameEvent");                                  // cpp:2408
+        CGS_ASSERT_AT(lpLeftGameEvent != 0, "lpLeftGameEvent", CGS_ARTIST_FILE, 2408);                                  // cpp:2408
         CGS_ASSERT(lpLeftGameEvent != 0,
                    "Invalid event sent to OnlineGameRoomPlayerInfo::HandleLeftGameEvent");    // cpp:2409
 
@@ -4734,7 +4734,7 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
 
         // X360 BrnOnlineGameRoomPlayerInfo.cpp:4161.
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 4161);
 
         // Re-read (not the asserted copy): the X360 reloads the member and re-tests it.
         if (mpGuiCache != 0)
@@ -5053,8 +5053,8 @@ namespace BrnGui
                 BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
             {
                 // Non-fatal assert; the tracker is dereferenced either way.
-                CGS_ASSERT(mpGuiCache->GetGuiTracker() != 0,
-                           "mpGuiCache->GetGuiTracker()");   // cpp:956
+                CGS_ASSERT_AT(mpGuiCache->GetGuiTracker() != 0,
+                           "mpGuiCache->GetGuiTracker()", CGS_ARTIST_FILE, 956);   // cpp:956
 
                 mpGuiCache->GetGuiTracker()->ClearTracker();
                 SendStateEvent("TO_ST_POST");
@@ -5157,7 +5157,7 @@ namespace BrnGui
             return;
         }
 
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1242);
 
         const Vector3& lrv4CameraPosition = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;
         const Vector3 lv3InitialCursorPosWorldSpace(lrv4CameraPosition.mV);
@@ -5407,8 +5407,8 @@ namespace BrnGui
     // the front-end map, the HUD and car control away.
     void OnlineGameRoomPlayerInfo::ShowLobby()
     {
-        CGS_ASSERT((meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING),
-                   "(meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING)");
+        CGS_ASSERT_AT((meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING),
+                   "(meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING)", CGS_ARTIST_FILE, 3547);
 
         meSubState = E_SUBSTATE_LOADING_SCREEN;
 
@@ -5423,7 +5423,7 @@ namespace BrnGui
     // lobby panels, stop the player image, and give the map, the HUD and car control back.
     void OnlineGameRoomPlayerInfo::HideLobby()
     {
-        CGS_ASSERT(meSubState == E_SUBSTATE_MAIN, "meSubState == E_SUBSTATE_MAIN");
+        CGS_ASSERT_AT(meSubState == E_SUBSTATE_MAIN, "meSubState == E_SUBSTATE_MAIN", CGS_ARTIST_FILE, 3580);
 
         meSubState = E_SUBSTATE_FREE_BURNING;
 
@@ -5446,12 +5446,12 @@ namespace BrnGui
     // main map's view state is reset in between. The sub-state is left to the caller.
     void OnlineGameRoomPlayerInfo::HideHUDAndEnterMenus()
     {
-        CGS_ASSERT((meSubState == E_SUBSTATE_FREE_BURNING) || (meSubState == E_SUBSTATE_MAIN) ||
+        CGS_ASSERT_AT((meSubState == E_SUBSTATE_FREE_BURNING) || (meSubState == E_SUBSTATE_MAIN) ||
                    (meSubState == E_SUBSTATE_CHALLENGES) || (meSubState == E_SUBSTATE_VIEW_EVENT) ||
                    (meSubState == E_SUBSTATE_SETTINGS),
                    "(meSubState == E_SUBSTATE_FREE_BURNING) || (meSubState == E_SUBSTATE_MAIN) || "
                    "(meSubState == E_SUBSTATE_CHALLENGES) || (meSubState == E_SUBSTATE_VIEW_EVENT) || "
-                   "(meSubState == E_SUBSTATE_SETTINGS)");
+                   "(meSubState == E_SUBSTATE_SETTINGS)", CGS_ARTIST_FILE, 3721);
 
         PostActivateCrashNav(mpStateInterface, false);
         PostShowHideHud(mpStateInterface, false);
@@ -5464,10 +5464,10 @@ namespace BrnGui
     // local player.
     void OnlineGameRoomPlayerInfo::ShowMapScreen()
     {
-        CGS_ASSERT((meSubState == E_SUBSTATE_FREE_BURNING) || (meSubState == E_SUBSTATE_MAIN) ||
+        CGS_ASSERT_AT((meSubState == E_SUBSTATE_FREE_BURNING) || (meSubState == E_SUBSTATE_MAIN) ||
                    (meSubState == E_SUBSTATE_PAUSE),
                    "( meSubState == E_SUBSTATE_FREE_BURNING ) || ( meSubState == E_SUBSTATE_MAIN ) || "
-                   "( meSubState == E_SUBSTATE_PAUSE )");
+                   "( meSubState == E_SUBSTATE_PAUSE )", CGS_ARTIST_FILE, 3844);
 
         PostActivateCrashNav(mpStateInterface, false);
         PostShowHideHud(mpStateInterface, false);
@@ -5482,8 +5482,8 @@ namespace BrnGui
     // the first of the three challenge training tips the player has not seen yet.
     void OnlineGameRoomPlayerInfo::ShowChallengesScreen()
     {
-        CGS_ASSERT((meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING),
-                   "(meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING)");
+        CGS_ASSERT_AT((meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING),
+                   "(meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING)", CGS_ARTIST_FILE, 3672);
 
         meSubState = E_SUBSTATE_LOADING_CHALLENGES_SCREEN;
 
@@ -5522,7 +5522,7 @@ namespace BrnGui
     // Leave the challenge page for driving.
     void OnlineGameRoomPlayerInfo::HideChallengePage()
     {
-        CGS_ASSERT(meSubState == E_SUBSTATE_CHALLENGES, "meSubState == E_SUBSTATE_CHALLENGES");
+        CGS_ASSERT_AT(meSubState == E_SUBSTATE_CHALLENGES, "meSubState == E_SUBSTATE_CHALLENGES", CGS_ARTIST_FILE, 3635);
 
         meSubState = E_SUBSTATE_FREE_BURNING;
 
@@ -5537,7 +5537,7 @@ namespace BrnGui
     // Leave the settings page for driving.
     void OnlineGameRoomPlayerInfo::HideSettingsPage()
     {
-        CGS_ASSERT(meSubState == E_SUBSTATE_SETTINGS, "meSubState == E_SUBSTATE_SETTINGS");
+        CGS_ASSERT_AT(meSubState == E_SUBSTATE_SETTINGS, "meSubState == E_SUBSTATE_SETTINGS", CGS_ARTIST_FILE, 4274);
 
         meSubState = E_SUBSTATE_FREE_BURNING;
 
@@ -5552,8 +5552,8 @@ namespace BrnGui
     // Arm the view-event page load.
     void OnlineGameRoomPlayerInfo::ShowViewEventScreen()
     {
-        CGS_ASSERT((meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING),
-                   "(meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING)");
+        CGS_ASSERT_AT((meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING),
+                   "(meSubState == E_SUBSTATE_PAUSE) || (meSubState == E_SUBSTATE_FREE_BURNING)", CGS_ARTIST_FILE, 4419);
 
         meSubState = E_SUBSTATE_LOADING_VIEW_EVENT_SCREEN;
 
@@ -5567,10 +5567,10 @@ namespace BrnGui
     // movie, give everything back and reset the main-map view state.
     void OnlineGameRoomPlayerInfo::HideViewEventPage()
     {
-        CGS_ASSERT((meSubState == E_SUBSTATE_VIEW_EVENT) ||
+        CGS_ASSERT_AT((meSubState == E_SUBSTATE_VIEW_EVENT) ||
                    (meSubState == E_SUBSTATE_LOADING_VIEW_EVENT_COMPONENTS),
                    "(meSubState == E_SUBSTATE_VIEW_EVENT) || "
-                   "(meSubState == E_SUBSTATE_LOADING_VIEW_EVENT_COMPONENTS)");
+                   "(meSubState == E_SUBSTATE_LOADING_VIEW_EVENT_COMPONENTS)", CGS_ARTIST_FILE, 4372);
 
         meSubState = E_SUBSTATE_FREE_BURNING;
 
@@ -5595,7 +5595,7 @@ namespace BrnGui
 
         mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
 
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 4255);
 
         if (mpGuiCache != 0)
         {
@@ -6124,7 +6124,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::HandleLaunchingEvent(const CgsModule::Event* lpEvent)
     {
         CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineGameRoomPlayerInfo::HandleLaunchingEvent");
-        CGS_ASSERT(lpEvent != 0, "lpLaunchingEvent");
+        CGS_ASSERT_AT(lpEvent != 0, "lpLaunchingEvent", CGS_ARTIST_FILE, 2567);
 
         const GuiEventNetworkLaunchingPayload* lpLaunchingEvent =
             reinterpret_cast<const GuiEventNetworkLaunchingPayload*>(lpEvent);
@@ -6133,7 +6133,7 @@ namespace BrnGui
         PostOverlayWaitFinish(mpStateInterface, "CNOnlLvChaQn");
         PostOverlayWaitFinish(mpStateInterface, "CNOnlLvgGame");
 
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2578);
 
         GuiOverlayRequestWire lWire;
         if (mpGuiCache != 0 && mpGuiCache->IsLocalPlayerHost())
@@ -6144,7 +6144,7 @@ namespace BrnGui
         {
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerStatusData =
                 mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpLaunchingEvent->mPlayerID);
-            CGS_ASSERT(lpPlayerStatusData != 0, "lpPlayerStatusData");
+            CGS_ASSERT_AT(lpPlayerStatusData != 0, "lpPlayerStatusData", CGS_ARTIST_FILE, 2591);
 
             lWire.mRequest.Construct("CNOnlLchGame");
             lWire.mRequest.AddMessageParam(KU_LAUNCH_PARAM_PLAYER_NAME,

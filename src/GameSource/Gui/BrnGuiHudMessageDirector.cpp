@@ -9,7 +9,7 @@
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"            // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // gpDebugPrint, gxMessageFilterFlags
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageDirector.cpp"
 namespace BrnGui
 {
     namespace
@@ -248,7 +248,7 @@ namespace
 bool HudMessageDirector::IsMessageAllowed(CgsID lMessageId) const
 {
     // Non-gating tripwire (cpp:384).
-    CGS_ASSERT(lMessageId != static_cast<CgsID>(0), "kCGSID_NULL != lMessageID");
+    CGS_ASSERT_AT(lMessageId != static_cast<CgsID>(0), "kCGSID_NULL != lMessageID", CGS_ARTIST_FILE, 384);
 
     if (mbStopFlagBlackBar)
     {
@@ -276,7 +276,7 @@ bool HudMessageDirector::IsMessageAllowed(CgsID lMessageId) const
 // unsupported game mode" arm and every message is suppressed. Reproduced as written.
 bool HudMessageDirector::CheckMessageIsAvailable(u32 luAvailabilityBitSet) const
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:307
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 307);   // cpp:307
 
     const s32 leGameModeType = mpGuiCache->meGameModeType;
 
@@ -338,7 +338,7 @@ bool HudMessageDirector::FilterAndSendOffMessage(const GuiHudMessage* lpMessage,
     char lacMessageId[24];
     CgsIDConvertToString(lpMessage->mMessageIdHash, lacMessageId);
 
-    CGS_ASSERT(mpController != 0, "mpController");   // cpp:222
+    CGS_ASSERT_AT(mpController != 0, "mpController", CGS_ARTIST_FILE, 222);   // cpp:222
 
     const s32 liIndex = mpController->GetIndexFromMessageHash(lpMessage->mMessageIdHash);
     if (liIndex == -1)
@@ -392,7 +392,7 @@ bool HudMessageDirector::FilterAndSendOffMessage(const GuiHudMessage* lpMessage,
 void HudMessageDirector::AddMessage(const GuiHudMessage* lpMessage, bool lbForce)
 {
     CGS_ASSERT(lpMessage != NULL, "Message is invalid");   // cpp:162
-    CGS_ASSERT(mpController != 0, "mpController");         // cpp:163
+    CGS_ASSERT_AT(mpController != 0, "mpController", CGS_ARTIST_FILE, 163);         // cpp:163
 
     FilterAndSendOffMessage(lpMessage, lbForce);
 }
@@ -467,7 +467,7 @@ void HudMessageDirector::Construct(CgsGui::ModelModule* lpModelModule,
             CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageDirector.cpp", 80));
         CgsDev::Assert::EndAssert();
     }
-    CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");         // cpp:81
+    CGS_ASSERT_AT(lpGuiCache != 0, "lpGuiCache", CGS_ARTIST_FILE, 81);         // cpp:81
 
     mpModelModule = lpModelModule;
     mpGuiCache    = lpGuiCache;

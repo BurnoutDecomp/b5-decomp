@@ -74,7 +74,7 @@
 #include "GameSource/GameState/Progression/BrnDerivedCars.h"              // BrnProgression::DerivedCarArray
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                   // GSM::EGameModeType
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"   // BrnGameState::ECurrentMedalTargetTime
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.cpp"
 // ============================================================================
 // FOLDED FROM BrnPreRaceFlyBy_wJ_01.cpp (wave J) on 2026-09-15 by tools/work/fold_partfiles.py.
 // Its header is THIS FILE'S header, at the top -- not repeated here.
@@ -661,7 +661,7 @@ namespace BrnGui
         mbHiddenDueToPause  = false;
         mIconManagerOwnerId = MapIconManager::E_PRERACE_FLYBY_MAP;
 
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:271 (non-fatal)
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 271);   // cpp:271 (non-fatal)
 
         // X360 `stbx r24, mpGuiCache, 0xA015` -- the cache-side "a fly-by is running" latch.
         mpGuiCache->SetPreRaceFlyByActive(true);
@@ -671,7 +671,7 @@ namespace BrnGui
         if (IsMapApplicableToGameMode(static_cast<GSM::EGameModeType>(mpGuiCache->GetGameMode())))
         {
             mpIconManager = mpGuiCache->GetMapIconManager();
-            CGS_ASSERT(mpIconManager != 0, "mpIconManager");   // cpp:277 (non-fatal)
+            CGS_ASSERT_AT(mpIconManager != 0, "mpIconManager", CGS_ARTIST_FILE, 277);   // cpp:277 (non-fatal)
 
             mpIconManager->SetIconsVisible(true);
 
@@ -915,7 +915,7 @@ namespace BrnGui
 
                 case KI_EVENT_PRERACE_MESSAGES:
                 {
-                    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:819
+                    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 819);   // cpp:819
 
                     // The online modes have no fly-by: any pre-race message ends it.
                     const s32 liGameMode = mpGuiCache->GetGameMode();
@@ -970,7 +970,7 @@ namespace BrnGui
                 default:
                     // cpp:927 -- the message names Update because this drain is inlined
                     // into it on the console. Non-fatal.
-                    CGS_ASSERT(false, "Unexpected event in PreRaceFlyByState::Update");
+                    CGS_ASSERT_AT(false, "Unexpected event in PreRaceFlyByState::Update", CGS_ARTIST_FILE, 927);
                     break;
             }
 
@@ -1242,11 +1242,11 @@ namespace BrnGui
 // -------------------------------------------------------------------------------------
 void PreRaceFlyByState::SetEventIconResource()
 {
-    CGS_ASSERT(mpGuiCache, "mpGuiCache");                                     // cpp:1694
-    CGS_ASSERT(mpGuiCache->GetGameMode() >= GSM::E_MODE_NONE,                 // cpp:1695
-               "mpGuiCache->GetGameMode() >= BrnGameState::GameStateModuleIO::E_MODE_NONE");
-    CGS_ASSERT(mpGuiCache->GetGameMode() < GSM::E_MODE_OFFLINE_COUNT,         // cpp:1696
-               "mpGuiCache->GetGameMode() < BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_COUNT");
+    CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 1694);                                     // cpp:1694
+    CGS_ASSERT_AT(mpGuiCache->GetGameMode() >= GSM::E_MODE_NONE,                 // cpp:1695
+               "mpGuiCache->GetGameMode() >= BrnGameState::GameStateModuleIO::E_MODE_NONE", CGS_ARTIST_FILE, 1695);
+    CGS_ASSERT_AT(mpGuiCache->GetGameMode() < GSM::E_MODE_OFFLINE_COUNT,         // cpp:1696
+               "mpGuiCache->GetGameMode() < BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_COUNT", CGS_ARTIST_FILE, 1696);
 
     switch (static_cast<GSM::EGameModeType>(mpGuiCache->GetGameMode()))
     {
@@ -1384,10 +1384,10 @@ void PreRaceFlyByState::Update()
                     // cpp:328 / cpp:329. Both are unreachable from inside this arm (the
                     // switch already bounded the mode) but the X360 emits them, so they
                     // are part of the source.
-                    CGS_ASSERT(mpGuiCache->GetGameMode() >= 0,
-                               "mpGuiCache->GetGameMode() >= 0");
-                    CGS_ASSERT(mpGuiCache->GetGameMode() < GSM::E_MODE_OFFLINE_COUNT,
-                               "mpGuiCache->GetGameMode() < BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_COUNT");
+                    CGS_ASSERT_AT(mpGuiCache->GetGameMode() >= 0,
+                               "mpGuiCache->GetGameMode() >= 0", CGS_ARTIST_FILE, 328);
+                    CGS_ASSERT_AT(mpGuiCache->GetGameMode() < GSM::E_MODE_OFFLINE_COUNT,
+                               "mpGuiCache->GetGameMode() < BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_COUNT", CGS_ARTIST_FILE, 329);
 
                     const CgsGui::sResourceTuple lPerModeScreen = maPerGamemodeScreens[leGameMode];
 
@@ -1396,8 +1396,8 @@ void PreRaceFlyByState::Update()
                     if (mLargeIconResource.muId == 0)
                     {
                         SetEventIconResource();
-                        CGS_ASSERT(0 != mLargeIconResource.muId,   // cpp:338
-                                   "0 != mLargeIconResource.muId");
+                        CGS_ASSERT_AT(0 != mLargeIconResource.muId,   // cpp:338
+                                   "0 != mLargeIconResource.muId", CGS_ARTIST_FILE, 338);
                     }
 
                     // The gate is short-circuiting in the asm: each of the three tests
@@ -1661,14 +1661,14 @@ namespace
 //    leaves the angle alone. `crossY < 0.0f` matches.
     ECompassPoints PreRaceFlyByState::FindEventDirection()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1601
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1601);   // cpp:1601
 
-        CGS_ASSERT((mpGuiCache->GetGameMode() == GSM::E_MODE_OFFLINE_RACE)
+        CGS_ASSERT_AT((mpGuiCache->GetGameMode() == GSM::E_MODE_OFFLINE_RACE)
                        || (mpGuiCache->GetGameMode() == GSM::E_MODE_BURNING_ROUTE)
                        || (mpGuiCache->GetGameMode() == GSM::E_MODE_MARKED_MAN),
                    "(mpGuiCache->GetGameMode() == GsmIO::E_MODE_OFFLINE_RACE) || "
                    "(mpGuiCache->GetGameMode() == GsmIO::E_MODE_BURNING_ROUTE) || "
-                   "(mpGuiCache->GetGameMode() == GsmIO::E_MODE_MARKED_MAN)");   // cpp:1604
+                   "(mpGuiCache->GetGameMode() == GsmIO::E_MODE_MARKED_MAN)", CGS_ARTIST_FILE, 1604);   // cpp:1604
 
         const Vector3& lv4CameraPosition = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;
 
@@ -1720,8 +1720,8 @@ namespace
         // cpp:1648 -- `cmpwi cr6, r31, 8` / `blt`. The 8 is ECompassPoints'
         // E_COMPASS_POINTS_COUNT, which BrnGuiShared.h now defines, so the enumerator is
         // named rather than the measured literal spelled out.
-        CGS_ASSERT(liEventDirection < E_COMPASS_POINTS_COUNT,
-                   "E_COMPASS_POINTS_COUNT > leEventDirection");
+        CGS_ASSERT_AT(liEventDirection < E_COMPASS_POINTS_COUNT,
+                   "E_COMPASS_POINTS_COUNT > leEventDirection", CGS_ARTIST_FILE, 1648);
 
         return static_cast<ECompassPoints>(liEventDirection);
     }
@@ -1784,8 +1784,8 @@ namespace
         const BrnProgression::RaceEventData* const lpRaceEventData =
             mpGuiCache->GetWorldDataController()->GetEventInfoFromEventId(luEventId);
 
-        CGS_ASSERT(lpEventStart != 0, "lpEventStart");           // cpp:1781
-        CGS_ASSERT(lpRaceEventData != 0, "lpRaceEventData");     // cpp:1782
+        CGS_ASSERT_AT(lpEventStart != 0, "lpEventStart", CGS_ARTIST_FILE, 1781);           // cpp:1781
+        CGS_ASSERT_AT(lpRaceEventData != 0, "lpRaceEventData", CGS_ARTIST_FILE, 1782);     // cpp:1782
 
         // Seed the bounding rectangle with the event's start position, flattened onto the
         // map plane ({x, z}).
@@ -1939,7 +1939,7 @@ namespace
 // -------------------------------------------------------------------------------------
 void PreRaceFlyByState::SetBurningRouteDescription()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1456
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1456);   // cpp:1456
 
     const ECompassPoints leEventDirection = FindEventDirection();
     maEventDescriptionText[0].SetLocalisedText("PRE_BURNINGROUTE_PART1", LM::E_FORMAT_ID_LOOKUP, 1,
@@ -1974,18 +1974,18 @@ void PreRaceFlyByState::SetBurningRouteDescription()
 
     const BrnProgression::RaceEventData* lpEventData =
         lpWorldDataController->GetEventInfoFromEventId(mpGuiCache->GetEventID());
-    CGS_ASSERT(lpEventData != 0, "lpEventData");                                     // cpp:1523
+    CGS_ASSERT_AT(lpEventData != 0, "lpEventData", CGS_ARTIST_FILE, 1523);                                     // cpp:1523
 
     // cpp:1524 -- the X360 inlines IsSpecialEvent() to "the record's +0x10 doubleword is
     // not null". It then loads that SAME doubleword a second time as the players-car id
     // and asserts it again at cpp:1526, so both asserts are kept, in source order.
     // (No kCGSID_NULL constant is committed anywhere in the tree yet; the literal 0 the
     // X360 compares against stands in for it.)
-    CGS_ASSERT(lpEventData->GetEventInstanceId() != 0, "lpEventData->IsSpecialEvent()");
+    CGS_ASSERT_AT(lpEventData->GetEventInstanceId() != 0, "lpEventData->IsSpecialEvent()", CGS_ARTIST_FILE, 1524);
     const CgsID lPlayersCarId = lpEventData->GetEventInstanceId();
-    CGS_ASSERT(lPlayersCarId != 0, "kCGSID_NULL != lPlayersCarId");                  // cpp:1526
-    CGS_ASSERT(lpWorldDataController->GetVehicleList() != 0,
-               "lpWorldDataController->GetVehicleList()");                           // cpp:1529
+    CGS_ASSERT_AT(lPlayersCarId != 0, "kCGSID_NULL != lPlayersCarId", CGS_ARTIST_FILE, 1526);                  // cpp:1526
+    CGS_ASSERT_AT(lpWorldDataController->GetVehicleList() != 0,
+               "lpWorldDataController->GetVehicleList()", CGS_ARTIST_FILE, 1529);                           // cpp:1529
 
     BrnProgression::DerivedCarArray lCarVariants;
     lCarVariants.ConstructPatternLiveryList(lpWorldDataController->GetVehicleList(), lPlayersCarId);
@@ -2000,8 +2000,8 @@ void PreRaceFlyByState::SetBurningRouteDescription()
     {
         ++liVariant;
     }
-    CGS_ASSERT(lPlayersCarId != lCarVariants.GetItem(liVariant),
-               "lPlayersCarId != lCarVariants.GetItem(liVariant)");                  // cpp:1538
+    CGS_ASSERT_AT(lPlayersCarId != lCarVariants.GetItem(liVariant),
+               "lPlayersCarId != lCarVariants.GetItem(liVariant)", CGS_ARTIST_FILE, 1538);                  // cpp:1538
 
     char lacCarId[KI_CGSID_STRING_LEN];
     CgsIDConvertToString(lCarVariants.GetItem(liVariant), lacCarId);
@@ -2059,7 +2059,7 @@ void PreRaceFlyByState::SetBurningRouteDescription()
 // -------------------------------------------------------------------------------------
 void PreRaceFlyByState::SetMarkedManDescription()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1351
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1351);   // cpp:1351
 
     const ECompassPoints leEventDirection = FindEventDirection();
     maEventDescriptionText[0].SetLocalisedText("PRE_SURVIVAL_PART1", LM::E_FORMAT_ID_LOOKUP, 1,
@@ -2136,7 +2136,7 @@ void PreRaceFlyByState::SetMarkedManDescription()
 // -------------------------------------------------------------------------------------
 void PreRaceFlyByState::SetRaceDescription()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1133
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1133);   // cpp:1133
 
     const ECompassPoints leEventDirection = FindEventDirection();
     maEventDescriptionText[0].SetLocalisedText("PRE_RACE_PART1", LM::E_FORMAT_ID_LOOKUP, 1,
@@ -2293,7 +2293,7 @@ namespace
 // -------------------------------------------------------------------------------
 void PreRaceFlyByState::SetFreestyleDescription()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1271
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1271);   // cpp:1271
 
     char lacParameterText[128];
     CgsCore::SPrintf(lacParameterText, sizeof(lacParameterText), "%d",
@@ -2400,7 +2400,7 @@ void PreRaceFlyByState::SetFreestyleDescription()
 // -------------------------------------------------------------------------------
 void PreRaceFlyByState::SetRoadRageDescription()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1208
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1208);   // cpp:1208
 
     char lacParameterText[128];
     CgsCore::SPrintf(lacParameterText, sizeof(lacParameterText), "%d",

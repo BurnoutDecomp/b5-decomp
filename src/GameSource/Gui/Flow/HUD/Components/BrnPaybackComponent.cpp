@@ -234,7 +234,7 @@ void PaybackComponent::RespondToTransitionComplete()
                     mfTimeStampOfMessageEnd = mfCurrentSysTime_Seconds + KF_TIME_TO_DELAY_SHOWING_ICON; // +0xC8
                     break;
                 default:
-                    CGS_ASSERT(false, "false");   // cpp:275
+                    CGS_ASSERT_AT(false, "false", CGS_ARTIST_FILE, 275);   // cpp:275
                     break;
             }
             break;

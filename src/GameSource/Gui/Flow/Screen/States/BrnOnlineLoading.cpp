@@ -251,7 +251,7 @@ namespace BrnGui
         // and asks for a save.
         if (miCurrentRoundDisplayed == 0)
         {
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 354);
             mpGuiCache->GetMenuOptionsData()->AddReceivedOnlineGameOptions(mpGuiCache,
                                                                              &mCurrentGameParams);
             PostWire(mpStateInterface, GuiAutosaveRequestWire());
@@ -326,7 +326,7 @@ namespace BrnGui
             case KI_EVENT_ADVANCE:
                 if (mbDisconnected)
                 {
-                    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 230);
                     mpGuiCache->SetDoDisconnectPopup(lpEvent);
                     SendStateEvent("DISCONNECT");
                 }
@@ -382,7 +382,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 374);
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
@@ -496,7 +496,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::UpdatePlayerList()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 629);
 
 
         for (s32 liPlayerInfoIndex = 0; liPlayerInfoIndex < KI_MAX_PLAYERS; ++liPlayerInfoIndex)

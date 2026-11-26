@@ -10,14 +10,14 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnIcon.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (SetState's cpp:85 tripwire)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnIcon.cpp"
 namespace BrnGui
 {
     // @ 0x824E2B90 (ledger-unnamed sub_) -- the named-state overload: assert the
     // identifier (cpp:85) and push it straight onto the apt "apt_state" view-state.
     void IconComponent::SetState(const char* lpacStateIdentifier)
     {
-        CGS_ASSERT(lpacStateIdentifier != 0, "lStateIdentifier != NULL");   // cpp:85
+        CGS_ASSERT_AT(lpacStateIdentifier != 0, "lStateIdentifier != NULL", CGS_ARTIST_FILE, 85);   // cpp:85
 
         AddOutputAptViewState("apt_state", lpacStateIdentifier, false);
     }

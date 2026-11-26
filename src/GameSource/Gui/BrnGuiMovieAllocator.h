@@ -11,7 +11,8 @@ namespace BrnGui
     class MovieAllocator : public rw::IResourceAllocator
     {
     public:
-        ~MovieAllocator() ;
+        // (no user destructor: DWARF places ~MovieAllocator on the class line h:72, i.e. the
+        // implicit one; ARTIST's scalar deleting destructor 0x827DD408 stores no own vptr)
         void Construct() { mGraphicsAllocator.Construct(); }   // header-inline: no ARTIST copy (MovieManager::Construct @0x824F95F4 calls LinearMalloc::Construct)
         bool Prepare(rw::Resource lResource, rw::ResourceDescriptor lDescriptor);
         bool Release();

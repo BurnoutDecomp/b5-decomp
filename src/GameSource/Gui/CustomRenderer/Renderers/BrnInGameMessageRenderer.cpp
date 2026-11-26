@@ -31,7 +31,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnInGameMessageRenderer.h"
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnInGameMessageRenderer.cpp"
 #include "GameSource/Gui/BrnGuiCache.h"                       // GuiCache (mode/road-rule/controller reads)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h" // LanguageManager (FindString / GetDefaultFont / GetCurrentLanguage)
 #include "GameShared/GameClasses/Fonts/CgsFont.h"             // CgsResource::Font (GetStringWidth family)
@@ -117,7 +117,7 @@ void InGameMessageRenderer::InGameMessage::SetupMessage(
     const CgsUnicode::CgsUtf8* lpParam1, const CgsUnicode::CgsUtf8* lpParam2,
     const CgsUnicode::CgsUtf8* lpParam3)
 {
-    CGS_ASSERT(lpMessageText != 0, "lpMessageText");   // :1978
+    CGS_ASSERT_AT(lpMessageText != 0, "lpMessageText", CGS_ARTIST_FILE, 1978);   // :1978
     if (lpMessageText == 0)
     {
         return;
@@ -141,8 +141,8 @@ void InGameMessageRenderer::InGameMessage::SetupMessage(
 
         case 2:
         {
-            CGS_ASSERT(lpParam1 != 0, "lpParam1");     // :2007
-            CGS_ASSERT(lpParam2 != 0, "lpParam2");     // :2008
+            CGS_ASSERT_AT(lpParam1 != 0, "lpParam1", CGS_ARTIST_FILE, 1995);     // :2007
+            CGS_ASSERT_AT(lpParam2 != 0, "lpParam2", CGS_ARTIST_FILE, 2007);     // :2008
             const CgsUnicode::CgsUtf8* lapArgs[2] = { lpParam1, lpParam2 };
             CgsUnicode::_Print(macMessageText, lpMessageText, 512, lapArgs, 2);
             break;
@@ -150,17 +150,17 @@ void InGameMessageRenderer::InGameMessage::SetupMessage(
 
         case 3:
         {
-            CGS_ASSERT(lpParam1 != 0, "lpParam1");     // :2021
-            CGS_ASSERT(lpParam2 != 0, "lpParam2");     // :2022
-            CGS_ASSERT(lpParam3 != 0, "lpParam3");     // :2023
+            CGS_ASSERT_AT(lpParam1 != 0, "lpParam1", CGS_ARTIST_FILE, 2008);     // :2021
+            CGS_ASSERT_AT(lpParam2 != 0, "lpParam2", CGS_ARTIST_FILE, 2021);     // :2022
+            CGS_ASSERT_AT(lpParam3 != 0, "lpParam3", CGS_ARTIST_FILE, 2022);     // :2023
             const CgsUnicode::CgsUtf8* lapArgs[3] = { lpParam1, lpParam2, lpParam3 };
             CgsUnicode::_Print(macMessageText, lpMessageText, 512, lapArgs, 3);
             break;
         }
 
         default:
-            CGS_ASSERT(false,
-                       "Unhandled number of params in InGameMessageRenderer::InGameMessage::SetupMessage\n"); // :2036
+            CGS_ASSERT_AT(false,
+                       "Unhandled number of params in InGameMessageRenderer::InGameMessage::SetupMessage\n", CGS_ARTIST_FILE, 2023); // :2036
             break;
     }
 
@@ -356,7 +356,7 @@ void* InGameMessageRenderer::SetLanguageManager(CgsLanguage::LanguageManager* lp
 // ---------------------------------------------------------------------------
 void InGameMessageRenderer::ResetYPos()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :1898
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1898);   // :1898
 
     switch (meTickerMode)
     {
@@ -423,7 +423,7 @@ void InGameMessageRenderer::ClearAllMessages(bool lbClearTraining, bool lbClearC
 // ---------------------------------------------------------------------------
 void InGameMessageRenderer::UpdateTickerMode()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :1800
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1800);   // :1800
 
     ETickerMode leNewMode;
     if (mbGamePausedForDisconnect)               // +5020
@@ -532,15 +532,15 @@ bool InGameMessageRenderer::AddNewMessage(
 {
     if (lbPriority && lbCustom)
     {
-        CGS_ASSERT(false,
-                   "false == (( true == lbIsPriorityMessage) && ( true == lbIsCustomMessage ))"); // :1120
+        CGS_ASSERT_AT(false,
+                   "false == (( true == lbIsPriorityMessage) && ( true == lbIsCustomMessage ))", CGS_ARTIST_FILE, 1120); // :1120
     }
     // The console evaluates the handle cast here; on a NULL handle the cast's own
     // assert expression dereferences mpResourceMemory and would AV before FireAssert
     // ever ran (proven on the 2026-08-24 boot: AV reading 0 at AddNewMessage+0x4E).
     // Test the handle's memory pointer directly -- the null-safe x64 equivalent.
-    CGS_ASSERT(mTextObject.mpFont.mpResourceMemory != 0,
-               "Font for the InGameMessageRenderer was not Loaded");   // :1121
+    CGS_ASSERT_AT(mTextObject.mpFont.mpResourceMemory != 0,
+               "Font for the InGameMessageRenderer was not Loaded", CGS_ARTIST_FILE, 1121);   // :1121
     if (mTextObject.mpFont.mpResourceMemory == 0)
     {
         // [PC bring-up guard] A dev assert continues on PC; without the font every
@@ -940,9 +940,9 @@ bool InGameMessageRenderer::RequestNewRoadRulesScore()
         liRoadIndex = miLastRoadRuleScoreReceived + 1;
     }
 
-    CGS_ASSERT(liRoadIndex >= 0, "liRoadIndex >= 0");
-    CGS_ASSERT(liRoadIndex < BrnGameState::KI_MAX_CHALLENGES,
-               "liRoadIndex < BrnGameState::KI_MAX_CHALLENGES");
+    CGS_ASSERT_AT(liRoadIndex >= 0, "liRoadIndex >= 0", CGS_ARTIST_FILE, 1776);
+    CGS_ASSERT_AT(liRoadIndex < BrnGameState::KI_MAX_CHALLENGES,
+               "liRoadIndex < BrnGameState::KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 1777);
 
     // GuiEventRoadRuleTickerScoreRequest: one Road::ChallengeIndex word.
     mpOutputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liRoadIndex), 329, 4);
@@ -1028,7 +1028,7 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
             GuiCache* const* lppCache = reinterpret_cast<GuiCache* const*>(lpEvent);
             if (*lppCache == 0)
             {
-                CGS_ASSERT(false, "Invalid GUI cache pointer");   // :433
+                CGS_ASSERT_AT(false, "Invalid GUI cache pointer", CGS_ARTIST_FILE, 406);   // :433
             }
             mpGuiCache = *lppCache;
             break;
@@ -1036,7 +1036,7 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
 
         case 505:   // game paused {u32 pad, bool paused @+4}
         {
-            CGS_ASSERT(lpEvent != 0, "lpPausedEvent");   // :731
+            CGS_ASSERT_AT(lpEvent != 0, "lpPausedEvent", CGS_ARTIST_FILE, 731);   // :731
             mbGamePaused = (reinterpret_cast<const u8*>(lpEvent)[4] != 0);   // +5019
             if (mpGuiCache != 0)
             {
@@ -1167,7 +1167,7 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
                 }
                 if (lbTraining)
                 {
-                    CGS_ASSERT(false, "Ticker is too full for a training message!\n");   // :556
+                    CGS_ASSERT_AT(false, "Ticker is too full for a training message!\n", CGS_ARTIST_FILE, 556);   // :556
                 }
             }
             break;
@@ -1186,7 +1186,7 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
 
         case 345:   // GuiEventRoadRuleTickerScoreResponse -- one road's ticker line
         {
-            CGS_ASSERT(mpLanguageManager != 0, "mpLanguageManager");
+            CGS_ASSERT_AT(mpLanguageManager != 0, "mpLanguageManager", CGS_ARTIST_FILE, 575);
             if (meTickerMode != E_TICKERMODE_ROADRULES)
             {
                 break;
@@ -1207,7 +1207,7 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
             }
 
             const CgsUnicode::CgsUtf8* lpcFormatString = mpLanguageManager->FindString("RRULES_TKR_123");
-            CGS_ASSERT(lpcFormatString != 0, "lpFormatString");
+            CGS_ASSERT_AT(lpcFormatString != 0, "lpFormatString", CGS_ARTIST_FILE, 600);
 
             // The road's name: its id is the string key; the bare id when there is none.
             char lacRoadId[16];
@@ -1595,7 +1595,7 @@ void InGameMessageRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet
         }
 
         default:
-            CGS_ASSERT(false, "Unhandled state in InGameMessageRenderer::Update\n");   // :1067
+            CGS_ASSERT_AT(false, "Unhandled state in InGameMessageRenderer::Update\n", CGS_ARTIST_FILE, 1067);   // :1067
             break;
     }
     lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard); // ARTIST8246A3EC

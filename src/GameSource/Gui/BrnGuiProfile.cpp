@@ -1,5 +1,5 @@
 #include "GameSource/Gui/BrnGuiProfile.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsHash.h"                // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
@@ -566,9 +566,9 @@ void ProfileManager::ShowMessage(CgsGui::MessageDisplay::OptionHandler* lpHandle
                                  const char* lpcMessage, const char** lpacOptions,
                                  u32 luNumberOfOptions)
 {
-    CGS_ASSERT(lpHandler != 0, "lpHandler != NULL");
-    CGS_ASSERT(lpcMessage != 0, "lpMessage != NULL");
-    CGS_ASSERT(luNumberOfOptions <= 2, "luOptionCount <= 2");
+    CGS_ASSERT_AT(lpHandler != 0, "lpHandler != NULL", CGS_ARTIST_FILE, 1357);
+    CGS_ASSERT_AT(lpcMessage != 0, "lpMessage != NULL", CGS_ARTIST_FILE, 1358);
+    CGS_ASSERT_AT(luNumberOfOptions <= 2, "luOptionCount <= 2", CGS_ARTIST_FILE, 1359);
     CGS_ASSERT(muOptionCount == 0, "A message with options is already being shown");
 
     if (mpMessageDisplay != 0 && mpOptionHandler != 0)
@@ -592,8 +592,8 @@ void ProfileManager::ShowMessage(CgsGui::MessageDisplay::OptionHandler* lpHandle
 void ProfileManager::ShowNoSpaceMessage(CgsGui::MessageDisplay::OptionHandler* lpHandler,
                                         const char* lpcMessage, u32 luRequiredKb, u32 luFreeKb)
 {
-    CGS_ASSERT(lpHandler != 0, "lpHandler != NULL");
-    CGS_ASSERT(lpcMessage != 0, "lpMessage != NULL");
+    CGS_ASSERT_AT(lpHandler != 0, "lpHandler != NULL", CGS_ARTIST_FILE, 1391);
+    CGS_ASSERT_AT(lpcMessage != 0, "lpMessage != NULL", CGS_ARTIST_FILE, 1392);
     CGS_ASSERT(muOptionCount == 0, "A message with options is already being shown");
 
     if (mpMessageDisplay != 0 && mpOptionHandler != 0)
@@ -1412,18 +1412,18 @@ void ProfileManager::ReadProfileData()
     ProgressionProfile_Serialise(mpProgressionProfile, mStoredData.mProgressionProfile.maData,
                                  lpUpgradeData, &mStoredData.mProgressionProfileDLC1);
 
-    CGS_ASSERT(mpLiveRevengeProfile != 0, "mpLiveRevengeProfile");
+    CGS_ASSERT_AT(mpLiveRevengeProfile != 0, "mpLiveRevengeProfile", CGS_ARTIST_FILE, 860);
     std::memcpy(mStoredData.mLiveRevengeProfile.maData, mpLiveRevengeProfile,
                 KI_LIVEREVENGE_PROFILE_SIZE_BYTES);
 
     OptionsDataProfile* lpOptionsDataProfile = mpGuiCache->GetMenuOptionsData();
-    CGS_ASSERT(lpOptionsDataProfile != 0, "lpOptionsDataProfile");
+    CGS_ASSERT_AT(lpOptionsDataProfile != 0, "lpOptionsDataProfile", CGS_ARTIST_FILE, 867);
     std::memcpy(mStoredData.mOptionsDataProfile.maData, lpOptionsDataProfile,
                 KI_OPTIONSDATA_PROFILE_SIZE_BYTES);
 
     // The live DLC1 options block sits right after the live options in the cache
     // (X360 cache+76776); reached through the boundary leaf until it is named there.
-    CGS_ASSERT(lpOptionsDataProfile != 0, "lpOptionsDataProfile");
+    CGS_ASSERT_AT(lpOptionsDataProfile != 0, "lpOptionsDataProfile", CGS_ARTIST_FILE, 873);
     const OptionsDataProfileDLC1* lpOptionsDataProfileDLC1 =
         GuiCache_GetOptionsDataProfileDLC1(mpGuiCache);
     if (lpOptionsDataProfileDLC1 != 0)
@@ -1515,7 +1515,7 @@ void ProfileManager::SetMugshotBufferFromCircularBuffer(CgsGui::ImageFileInfo* l
 // ---------------------------------------------------------------------------
 s32 ProfileManager::CopyImageToBuffer(const CgsGui::ImageFileInfo* lpSourceImageFileInfo)
 {
-    CGS_ASSERT(lpSourceImageFileInfo != 0, "lpSourceImageFileInfo != NULL");
+    CGS_ASSERT_AT(lpSourceImageFileInfo != 0, "lpSourceImageFileInfo != NULL", CGS_ARTIST_FILE, 1519);
 
     MugshotSaveBuffer* lpSlot = mpaMugshotCircularBuffer;
 

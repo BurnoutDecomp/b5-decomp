@@ -37,7 +37,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMapMain.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMapMain.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent / GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface, GuiEventNetworkSuspension
@@ -345,7 +345,7 @@ namespace BrnGui
             else if (liEventId == KI_EVENT_UI_VISIBLE)
             {
                 // cpp:151 -- non-fatal on the X360; the payload is dereferenced either way.
-                CGS_ASSERT(lpEvent != 0, "lpUiVisibleEvent != NULL");
+                CGS_ASSERT_AT(lpEvent != 0, "lpUiVisibleEvent != NULL", CGS_ARTIST_FILE, 151);
 
                 const UiVisiblePayload* lpUiVisibleEvent =
                     static_cast<const UiVisiblePayload*>(lpEvent);
@@ -366,7 +366,7 @@ namespace BrnGui
             {
                 // The ARTIST path uses the player position at the head of the cache record.
                 const GuiPlayerInfo* lpPlayerInfo = mpGuiCache->GetPlayerInfo();
-                CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerInfo");             // cpp:205
+                CGS_ASSERT_AT(lpPlayerInfo != 0, "lpPlayerInfo", CGS_ARTIST_FILE, 205);             // cpp:205
 
                 // The `lvx128` + `vperm` against unk_82CDA450
                 // (= 00010203 18191A1B 00010203 00010203) flattens the world (X,Y,Z,W)

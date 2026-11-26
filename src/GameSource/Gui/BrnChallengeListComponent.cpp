@@ -17,7 +17,7 @@
 #include "SharedClasses/DataLists/ChallengeListEntry.h"     // BrnResource::ChallengeListEntry (complete)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnChallengeListComponent.cpp"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
@@ -176,7 +176,7 @@ void ChallengeListComponent::HandleEveryPlayerCompletionStatus(
 // window state, decides whether the select button shows, and refreshes the ticker.
 void ChallengeListComponent::Setup( GuiCache* lpGuiCache, s32 liNumPlayers, bool lbShowButton )
 {
-    CGS_ASSERT( lpGuiCache != 0, "lpGuiCache" );
+    CGS_ASSERT_AT( lpGuiCache != 0, "lpGuiCache" , CGS_ARTIST_FILE, 283);
 
     miNumPlayers    = liNumPlayers;
     mpGuiCache      = lpGuiCache;

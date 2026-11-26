@@ -198,7 +198,7 @@ namespace BrnGui
                 break;
 
             case KI_EVENT_NETWORK_DISCONNECTED:
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 151);
                 // A null event still latches (0).
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
                 SendStateEvent("DISCONNECT");
@@ -233,7 +233,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineCreateFreeburn::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 221);
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
@@ -305,7 +305,7 @@ namespace BrnGui
         const GuiCachePayload* lpPayload = reinterpret_cast<const GuiCachePayload*>(lpEvent);
 
         // Streamed on the console; non-fatal.
-        CGS_ASSERT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update");
+        CGS_ASSERT_AT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update", CGS_ARTIST_FILE, 376);
 
         if (mpGuiCache != 0)
         {
@@ -327,7 +327,7 @@ namespace BrnGui
     {
         // Both asserts fire on a null event (the streamed one, then the plain one).
         CGS_ASSERT(lpInGameEvent != 0, "Invalid event sent to OnlineCreateFreeburn::HandleInGameEvent");
-        CGS_ASSERT(lpInGameEvent != 0, "lpInGameEvent");
+        CGS_ASSERT_AT(lpInGameEvent != 0, "lpInGameEvent", CGS_ARTIST_FILE, 339);
 
         GuiOverlayWaitFinishWire lWaitEnterGame("CNOnlEntGame");
         mpStateInterface->OutputGuiEvent(lWaitEnterGame.mRequest);

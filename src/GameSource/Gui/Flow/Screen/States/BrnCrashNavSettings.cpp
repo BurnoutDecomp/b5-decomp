@@ -580,7 +580,7 @@ namespace BrnGui
             {
                 const GuiEventKeyboardResponse* lpResponse =
                     reinterpret_cast<const GuiEventKeyboardResponse*>(lpEvent);
-                CGS_ASSERT(lpResponse->lpKeyboard != 0, "lpKeyboardResponse->lpKeyboard");   // cpp:237
+                CGS_ASSERT_AT(lpResponse->lpKeyboard != 0, "lpKeyboardResponse->lpKeyboard", CGS_ARTIST_FILE, 237);   // cpp:237
 
                 mpGuiKeyboard = lpResponse->lpKeyboard;   // `stw r11, 0x1284` -- a real store
 

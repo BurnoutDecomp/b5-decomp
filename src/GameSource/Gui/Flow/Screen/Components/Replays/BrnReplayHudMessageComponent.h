@@ -35,9 +35,10 @@ namespace BrnGui
         static const s32 KI_NUM_TEXT_FIELDS = 3;
 
         // @0x8241BE68 -- run the base component Construct then construct the three
-        // embedded text fields ("string_0/1/2", parent = this component's name).
-        void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
-                       const char* lpacParentName);
+        // embedded text fields ("string_0/1/2", parent = this component's name). Two
+        // parameters: ReplayMain::OnEnter passes only (name, interface) and calls it directly
+        // (bl 0x8241BE68 @0x824BA278), so it does not override the virtual base Construct.
+        void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface);
 
         // @0x8241BF18 -- push the message text (3 lines, 0x80 stride) to the banner:
         // make the apt clip visible and set each field's text.

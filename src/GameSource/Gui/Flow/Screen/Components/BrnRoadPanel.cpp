@@ -22,7 +22,7 @@
 // mechanism. See the header banner for the full member run.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/Components/BrnRoadPanel.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRoadPanel.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // ParameterFormatType
@@ -36,7 +36,7 @@
 namespace BrnGui
 {
     typedef CgsLanguage::LanguageManager LM;
-    static const char KAC_ARTIST_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRoadPanel.cpp";
+
 
     // The build's shared empty string literal (X360 `&unk_820046A7`).
     static const char KAC_EMPTY_STRING[] = "";
@@ -59,14 +59,6 @@ namespace BrnGui
     static const char KAC_VIEW_INVISIBLE[] = "invisible";
 
     // Named apt states the panel pushes on ITSELF.
-    static const char KAC_STATE_TIME[]           = "Time";
-    static const char KAC_STATE_CRASH[]          = "Crash";
-    static const char KAC_STATE_TIME_TO_CRASH[]  = "TimeToCrash";
-    static const char KAC_STATE_CRASH_TO_TIME[]  = "CrashToTime";
-    static const char KAC_STATE_TRANS_IN_TIME[]  = "transInTime";
-    static const char KAC_STATE_TRANS_IN_CRASH[] = "transInCrash";
-    static const char KAC_STATE_TRANS_OUT_TIME[] = "transOutTime";
-    static const char KAC_STATE_TRANS_OUT_CRASH[]= "transOutCrash";
 
     // Localisation keys for the "best score" caption.
     static const char KAC_CAPTION_BEAT_TIME[]    = "MAP_BEATTIME";
@@ -102,18 +94,6 @@ namespace BrnGui
     // other.
     // FLAG: 330 is the X360 WIRE id (which happens to match the demangled table's id here).
     // ---------------------------------------------------------------------------------
-    struct GuiEventSetRoadRuleScoreModeRecord : public CgsGui::GuiEvent<330>
-    {
-        explicit GuiEventSetRoadRuleScoreModeRecord(s32 liScoreMode)
-            : miScoreMode(liScoreMode)
-        {
-        }
-        s32 miScoreMode;   // record +0x0C
-        GuiEventSetRoadRuleScoreModeRecord() {}
-    };
-    CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventSetRoadRuleScoreModeRecord>) == 16),
-                  "the road-rule score-mode record is the 16 bytes AddEvent is given (li r6, 0x10)");
-
     static const s32 KI_OUT_CHANNEL_GUI_EVENT = 40;
     static const s32 KI_SCORE_MODE_RECORD_SIZE = 16;
 
@@ -122,8 +102,8 @@ namespace BrnGui
                                            const char* lpacScore1, const char* lpacName2,
                                            const char* lpacScore2, bool lbBeaten1, bool lbBeaten2)
     {
-        CGS_ASSERT(lpacYourScore && lpacName1 && lpacName2 && lpacScore1 && lpacScore2,
-                   "lpYourScore && lpName1 && lpName2 && lpScore1 && lpScore2");   // cpp:99
+        CGS_ASSERT_AT(lpacYourScore && lpacName1 && lpacName2 && lpacScore1 && lpacScore2,
+                   "lpYourScore && lpName1 && lpName2 && lpScore1 && lpScore2", CGS_ARTIST_FILE, 99);   // cpp:99
 
         // The console measures each string with an inline `while (*p++)` and compares the
         // resulting length INCLUDING the terminator against 32 (`cmpwi 0x20` on p - start).
@@ -253,9 +233,9 @@ namespace BrnGui
     // @ 0x8242D1B8 -------------------------------------------------------------------
     void RoadPanel::SetCurrentRule(s32 leRule)
     {
-        CGS_ASSERT(leRule >= KI_SCORE_TYPE_TIME && leRule < KI_SCORE_TYPE_COUNT,
+        CGS_ASSERT_AT(leRule >= KI_SCORE_TYPE_TIME && leRule < KI_SCORE_TYPE_COUNT,
                    "BrnStreetData::E_SCORE_TYPE_START <= leNewRule && "
-                   "BrnStreetData::E_SCORE_TYPE_COUNT > leNewRule");   // cpp:228
+                   "BrnStreetData::E_SCORE_TYPE_COUNT > leNewRule", CGS_ARTIST_FILE, 228);   // cpp:228
 
         if (leRule == meCurrentRule)
         {
@@ -272,13 +252,13 @@ namespace BrnGui
             {
                 CGS_ASSERT(leRule == KI_SCORE_TYPE_CRASH,
                            "Trying to select unknown type of road rule (");   // cpp:241
-                lpacState = KAC_STATE_TIME_TO_CRASH;
+                lpacState = "TimeToCrash";
             }
             else if (meCurrentRule == KI_SCORE_TYPE_CRASH)
             {
                 CGS_ASSERT(leRule == KI_SCORE_TYPE_TIME,
                            "Trying to select unknown type of road rule (");   // cpp:250
-                lpacState = KAC_STATE_CRASH_TO_TIME;
+                lpacState = "CrashToTime";
             }
             else if (meCurrentRule == KI_SCORE_TYPE_COUNT)
             {
@@ -286,13 +266,13 @@ namespace BrnGui
                 // panel snaps straight to the destination rule's artwork.
                 if (leRule == KI_SCORE_TYPE_TIME)
                 {
-                    lpacState = KAC_STATE_TIME;
+                    lpacState = "Time";
                 }
                 else
                 {
                     CGS_ASSERT(leRule == KI_SCORE_TYPE_CRASH,
                                "Trying to select unknown type of road rule (");   // cpp:266
-                    lpacState = KAC_STATE_CRASH;
+                    lpacState = "Crash";
                 }
             }
             else
@@ -325,15 +305,18 @@ namespace BrnGui
         {
             CGS_ASSERT_AT(meCurrentScoreMode == KI_ROAD_PANEL_MODE_ONLINE,
                           "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE == meCurrentScoreMode",
-                          KAC_ARTIST_FILE, 306);
+                          CGS_ARTIST_FILE, 306);
             liNextScoreMode = KI_ROAD_PANEL_MODE_OFFLINE;
         }
         meCurrentScoreMode = liNextScoreMode;
         UpdateVisibleScores();
 
-        // Tell the rest of the GUI which scoreboard the road panel is now showing.
-        GuiEventSetRoadRuleScoreModeRecord lScoreModeEvent(meCurrentScoreMode);
-        mpStateInterface->OutputGuiEvent(lScoreModeEvent);
+        // Tell the rest of the GUI which scoreboard the road panel is now showing (DWARF local
+        // GuiEventSetRoadRuleScoreMode lSwitchModeEvent, cpp:314).
+        GuiEventSetRoadRuleScoreMode lSwitchModeEvent;
+        lSwitchModeEvent.meNewRoadRuleScoreMode =
+            static_cast<GuiEventSetRoadRuleScoreMode::ERoadPanelModes>(meCurrentScoreMode);
+        mpStateInterface->OutputGuiEvent(lSwitchModeEvent);
     }
 
     // @ 0x8243A490 -------------------------------------------------------------------
@@ -341,20 +324,23 @@ namespace BrnGui
     {
         if (meCurrentRule == KI_SCORE_TYPE_TIME)
         {
-            SetState(KAC_STATE_TRANS_IN_TIME);
+            SetState("transInTime");
         }
         else
         {
-            CGS_ASSERT(meCurrentRule == KI_SCORE_TYPE_CRASH,
-                       "BrnStreetData::E_SCORE_TYPE_CRASH == meCurrentRule");   // cpp:337
-            SetState(KAC_STATE_TRANS_IN_CRASH);
+            CGS_ASSERT_AT(meCurrentRule == KI_SCORE_TYPE_CRASH,
+                       "BrnStreetData::E_SCORE_TYPE_CRASH == meCurrentRule", CGS_ARTIST_FILE, 337);
+            SetState("transInCrash");
         }
 
         mbActive = true;   // stb 1, 0xDA4
 
-        // Showing the panel re-announces the scoring mode (same record as SwitchScoreMode).
-        GuiEventSetRoadRuleScoreModeRecord lScoreModeEvent(meCurrentScoreMode);
-        mpStateInterface->OutputGuiEvent(lScoreModeEvent);
+        // Showing the panel re-announces the scoring mode (DWARF local GuiEventSetRoadRuleScoreMode
+        // lSwitchModeEvent, cpp:345).
+        GuiEventSetRoadRuleScoreMode lSwitchModeEvent;
+        lSwitchModeEvent.meNewRoadRuleScoreMode =
+            static_cast<GuiEventSetRoadRuleScoreMode::ERoadPanelModes>(meCurrentScoreMode);
+        mpStateInterface->OutputGuiEvent(lSwitchModeEvent);
     }
 
     // @ 0x824184D0 -------------------------------------------------------------------
@@ -362,13 +348,13 @@ namespace BrnGui
     {
         if (meCurrentRule == KI_SCORE_TYPE_TIME)
         {
-            SetState(KAC_STATE_TRANS_OUT_TIME);
+            SetState("transOutTime");
         }
         else
         {
-            CGS_ASSERT(meCurrentRule == KI_SCORE_TYPE_CRASH,
-                       "BrnStreetData::E_SCORE_TYPE_CRASH == meCurrentRule");   // cpp:368
-            SetState(KAC_STATE_TRANS_OUT_CRASH);
+            CGS_ASSERT_AT(meCurrentRule == KI_SCORE_TYPE_CRASH,
+                       "BrnStreetData::E_SCORE_TYPE_CRASH == meCurrentRule", CGS_ARTIST_FILE, 368);
+            SetState("transOutCrash");
         }
 
         mbActive = false;   // stb 0, 0xDA4
@@ -390,9 +376,9 @@ namespace BrnGui
 
             if (meCurrentScoreMode != KI_ROAD_PANEL_MODE_OFFLINE)
             {
-                CGS_ASSERT(meCurrentScoreMode == KI_ROAD_PANEL_MODE_ONLINE,
+                CGS_ASSERT_AT(meCurrentScoreMode == KI_ROAD_PANEL_MODE_ONLINE,
                            "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE == "
-                           "meCurrentScoreMode");   // cpp:410 (time) / cpp:434 (crash)
+                           "meCurrentScoreMode", CGS_ARTIST_FILE, 410);   // cpp:410 (time) / cpp:434 (crash)
                 lpacCaptionKey = (meCurrentRule == KI_SCORE_TYPE_TIME) ? KAC_CAPTION_FRIEND_TIME
                                                                       : KAC_CAPTION_FRIEND_CRASH;
             }
@@ -437,9 +423,9 @@ namespace BrnGui
         // ---- the two OPPOSING rows -----------------------------------------------------
         if (meCurrentScoreMode != KI_ROAD_PANEL_MODE_OFFLINE)
         {
-            CGS_ASSERT(meCurrentScoreMode == KI_ROAD_PANEL_MODE_ONLINE,
+            CGS_ASSERT_AT(meCurrentScoreMode == KI_ROAD_PANEL_MODE_ONLINE,
                        "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE == "
-                       "meCurrentScoreMode");   // cpp:477
+                       "meCurrentScoreMode", CGS_ARTIST_FILE, 477);   // cpp:477
 
             // Online: the FRIEND row (names go through SetText -- they are already display
             // strings, not localisation ids).

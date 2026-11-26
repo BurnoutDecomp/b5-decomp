@@ -7,7 +7,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/Components/BrnSelectRoutes.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnSelectRoutes.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiCache.h"              // GuiCache (preset events, landmark info, online game mode)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // GuiEventUpdateSatNav::SatNavIconInfo
@@ -114,7 +114,7 @@ namespace BrnGui
 
                 const SatNavEventDisplayInfo* lpEventStart =
                     mpGuiCache->GetPresetEventDisplayInfo(lrCheckpoint.maStartLightTriggerID[liRound]);
-                CGS_ASSERT(lpEventStart, "lpEventStart");
+                CGS_ASSERT_AT(lpEventStart, "lpEventStart", CGS_ARTIST_FILE, 1204);
 
                 lrCheckpoint.maeSelectedCounty[liRound] = static_cast<BrnWorld::ECounty>(lpEventStart->muCounty);
                 if (mpGuiCache->GetOnlineGameMode() == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)
@@ -183,14 +183,14 @@ namespace BrnGui
     {
         const SatNavEventDisplayInfo* lpEventStart =
             mpGuiCache->GetPresetEventDisplayInfo(maCheckpointData[0].maStartLightTriggerID[miCurrentRound]);
-        CGS_ASSERT(lpEventStart, "lpEventStart");
+        CGS_ASSERT_AT(lpEventStart, "lpEventStart", CGS_ARTIST_FILE, 715);
         const Vector3 lv3StartPosition = lpEventStart->mv3Position;
 
-        CGS_ASSERT(liCheckpointItem > 0, "liCheckpointItem > 0");
+        CGS_ASSERT_AT(liCheckpointItem > 0, "liCheckpointItem > 0", CGS_ARTIST_FILE, 719);
 
         BrnGameState::LandmarkIndex lLandmark(-1);
 
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 724);
         CgsNumeric::Random lRandom;
         SeedFromGuiClock(lRandom, mpGuiCache);
 
@@ -271,14 +271,14 @@ namespace BrnGui
     {
         const SatNavEventDisplayInfo* lpEventStart =
             mpGuiCache->GetPresetEventDisplayInfo(maCheckpointData[0].maStartLightTriggerID[miCurrentRound]);
-        CGS_ASSERT(lpEventStart, "lpEventStart");
+        CGS_ASSERT_AT(lpEventStart, "lpEventStart", CGS_ARTIST_FILE, 827);
         const Vector3 lv3StartPosition = lpEventStart->mv3Position;
 
-        CGS_ASSERT(liCheckpointItem > 0, "liCheckpointItem > 0");
+        CGS_ASSERT_AT(liCheckpointItem > 0, "liCheckpointItem > 0", CGS_ARTIST_FILE, 831);
 
         BrnGameState::LandmarkIndex lLandmark(-1);
 
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 836);
         CgsNumeric::Random lRandom;
         SeedFromGuiClock(lRandom, mpGuiCache);
 
@@ -360,7 +360,7 @@ namespace BrnGui
     {
         u32 luStartLightTriggerID = static_cast<u32>(-1);
 
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 943);
 
         GuiEventUpdateSatNav::SatNavIconInfo lFirstCheckpointInfo;
         mpGuiCache->GetLandmarkInfoFromIndex(maCheckpointData[1].maLandmarkIndex[miCurrentRound],
@@ -552,7 +552,7 @@ namespace BrnGui
             const PresetEvent* lpPreset = mpGuiCache->GetPresetEvent(static_cast<s32>(luEvent));
             const SatNavEventDisplayInfo* lpEventStart =
                 mpGuiCache->GetPresetEventDisplayInfo(lpPreset->GetPositionLookupId());
-            CGS_ASSERT(lpEventStart, "lpEventStart");
+            CGS_ASSERT_AT(lpEventStart, "lpEventStart", CGS_ARTIST_FILE, 574);
             if (mpGuiCache->GetPresetEvent(static_cast<s32>(luEvent))->GetPositionLookupId() ==
                 maCheckpointData[0].maStartLightTriggerID[liRoundNumber])
                 return luEvent;
@@ -624,8 +624,8 @@ namespace BrnGui
     // ARTIST 82431400: seed missing routes, retaining an explicitly selected preset.
     void SelectRoutes::Setup(const GuiEventNetworkGameParams* lpGameParams, GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGameParams, "lpGameParams");
-        CGS_ASSERT(lpGuiCache, "lpGuiCache");
+        CGS_ASSERT_AT(lpGameParams, "lpGameParams", CGS_ARTIST_FILE, 469);
+        CGS_ASSERT_AT(lpGuiCache, "lpGuiCache", CGS_ARTIST_FILE, 470);
         mpGuiCache = lpGuiCache;
         miStartItem = 0;
         const u32 luPresetCount = static_cast<u32>(mpGuiCache->GetNumPresetEvents());
@@ -709,7 +709,7 @@ namespace BrnGui
                 return false;
             }
             const SatNavEventDisplayInfo* lpStart = mpGuiCache->GetPresetEventDisplayInfo(luStart);
-            CGS_ASSERT(lpStart, "lpEventStart");
+            CGS_ASSERT_AT(lpStart, "lpEventStart", CGS_ARTIST_FILE, 611);
             maCheckpointData[0].maStartLightTriggerID[miCurrentRound] = lpStart->muLightTriggerId;
             maCheckpointData[0].maeSelectedCounty[miCurrentRound] = static_cast<BrnWorld::ECounty>(lpStart->muCounty);
             if (mpGuiCache->GetOnlineGameMode() == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)
@@ -727,7 +727,7 @@ namespace BrnGui
                     : GenerateRandomLandmark(miCurrentRound, liCheckpointItem, leCounty);
             if (static_cast<s32>(lLandmark) == -1)
             {
-                CGS_ASSERT(false, "Couldn't find landmark for county");
+                CGS_ASSERT_AT(false, "Couldn't find landmark for county", CGS_ARTIST_FILE, 645);
                 return false;
             }
             GuiEventUpdateSatNav::SatNavIconInfo lInfo;

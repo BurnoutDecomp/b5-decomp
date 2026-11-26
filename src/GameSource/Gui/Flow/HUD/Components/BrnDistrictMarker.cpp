@@ -10,7 +10,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/hud/Components/BrnDistrictMarker.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnDistrictMarker.cpp"
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"  // MovieClipInstance::ResetTimeline
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // CGS_ASSERT
@@ -213,7 +213,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid marker state in CountyMarkerComponent::SetCounty");
+            CGS_ASSERT_AT(false, "Invalid marker state in CountyMarkerComponent::SetCounty", CGS_ARTIST_FILE, 232);
             break;
         }
     }
@@ -255,7 +255,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid marker state in DistrictMarkerComponent::SetDistrict");
+            CGS_ASSERT_AT(false, "Invalid marker state in DistrictMarkerComponent::SetDistrict", CGS_ARTIST_FILE, 307);
             break;
         }
     }

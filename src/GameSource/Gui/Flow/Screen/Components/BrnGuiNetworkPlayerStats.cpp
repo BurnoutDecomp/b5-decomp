@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Screen/Components/BrnGuiNetworkPlayerStats.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnGuiNetworkPlayerStats.cpp"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiCache.h"                   // BrnGui::GuiCache (AppendExpectedAptComponent)
@@ -97,7 +97,7 @@ namespace BrnGui
         }
         else
         {
-            CGS_ASSERT(false, "Invalid state");
+            CGS_ASSERT_AT(false, "Invalid state", CGS_ARTIST_FILE, 174);
         }
     }
 
@@ -189,7 +189,7 @@ namespace BrnGui
             char lacTotalChallenges[BrnNetwork::NetworkPlayerStats::KI_MININUM_CHAR_BUFFER_SIZE];
 
             // X360 assert message is literally "lpGuiCache" (cpp:205).
-            CGS_ASSERT(lpGuiCache, "lpGuiCache");
+            CGS_ASSERT_AT(lpGuiCache, "lpGuiCache", CGS_ARTIST_FILE, 205);
 
             // The X360 reads the count inline as *(list + 0x32E0) -- that CONSOLE offset is
             // ChallengeList::miCount, i.e. the inlined body of the declared accessor

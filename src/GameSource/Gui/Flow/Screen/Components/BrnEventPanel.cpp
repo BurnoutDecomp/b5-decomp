@@ -28,7 +28,7 @@
 // literal strings those dropped blocks streamed.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/Components/BrnEventPanel.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEventPanel.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
@@ -222,7 +222,7 @@ namespace BrnGui
     void EventPanel::SetEventData(u32 luEventId, const void* lpChallengedScores,
                                   const GuiCache* lpGuiCache, bool lbShowPanel)
     {
-        CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");   // cpp:163
+        CGS_ASSERT_AT(lpGuiCache != 0, "lpGuiCache", CGS_ARTIST_FILE, 163);   // cpp:163
 
         // Same event AND no challenged-score override -> nothing changed.
         if (luEventId == muCurrentEventID && lpChallengedScores == 0)
@@ -261,13 +261,13 @@ namespace BrnGui
         lacScratch[KI_SCRATCH_LEN - 1] = 0;
         maTextfields[E_TEXTFIELD_EVENT_START].SetLocalisedText(lacScratch, LM::E_FORMAT_ID_LOOKUP);
 
-        CGS_ASSERT(lpGuiCache->GetWorldDataController() != 0,
-                   "lpGuiCache->GetWorldDataController()");   // cpp:211
+        CGS_ASSERT_AT(lpGuiCache->GetWorldDataController() != 0,
+                   "lpGuiCache->GetWorldDataController()", CGS_ARTIST_FILE, 211);   // cpp:211
         const WorldDataController* const lpWorldDataController = lpGuiCache->GetWorldDataController();
 
         const RaceEventData* const lpEventData =
             lpWorldDataController->GetEventInfoFromEventId(luEventId);
-        CGS_ASSERT(lpEventData != 0, "lpEventData");           // cpp:216
+        CGS_ASSERT_AT(lpEventData != 0, "lpEventData", CGS_ARTIST_FILE, 216);           // cpp:216
 
         // The logo artwork is picked straight off the event's mode byte.
         mModeLogo.SetState(static_cast<u32>(lpEventData->GetMode()));
@@ -282,7 +282,7 @@ namespace BrnGui
 
             const BrnProgression::CheckpointData* const lpEndCheckpoint =
                 lpEventData->GetCheckpointData(lpEventData->GetCheckpointCount() - 1);
-            CGS_ASSERT(lpEndCheckpoint != 0, "lpEndCheckpoint");   // cpp:229 (race) / cpp:251 (survivor)
+            CGS_ASSERT_AT(lpEndCheckpoint != 0, "lpEndCheckpoint", CGS_ARTIST_FILE, 229);   // cpp:229 (race) / cpp:251 (survivor)
 
             GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
             lpGuiCache->GetLandmarkInfoFromID(lpEndCheckpoint->GetLandmarkId(), &lLandmarkInfo);
@@ -301,7 +301,7 @@ namespace BrnGui
 
         case RaceEventData::E_MODE_ROAD_RAGE:
         {
-            CGS_ASSERT(miCurrentRoadRageRank >= 0, "0 <= miCurrentRoadRageRank");   // cpp:269
+            CGS_ASSERT_AT(miCurrentRoadRageRank >= 0, "0 <= miCurrentRoadRageRank", CGS_ARTIST_FILE, 269);   // cpp:269
 
             maTextfields[E_TEXTFIELD_GOAL_TITLE].SetLocalisedText(KAC_GOAL_TAKEDOWNS,
                                                                  LM::E_FORMAT_ID_LOOKUP);
@@ -310,8 +310,8 @@ namespace BrnGui
             // target; the target helper resolves it again for itself.
             const ProgressionData* const lpProgressionData =
                 lpWorldDataController->GetProgressionData();
-            CGS_ASSERT(lpProgressionData->GetProgressionRankData(
-                           static_cast<u32>(miCurrentRoadRageRank)) != 0, "lpRankData"); // cpp:276
+            CGS_ASSERT_AT(lpProgressionData->GetProgressionRankData(
+                           static_cast<u32>(miCurrentRoadRageRank)) != 0, "lpRankData", CGS_ARTIST_FILE, 276); // cpp:276
 
             CgsCore::SPrintf(lacScratch, KI_SCRATCH_LEN, "%d",
                              GetRoadRageTakedownScore(lpWorldDataController));
@@ -328,7 +328,7 @@ namespace BrnGui
 
         case RaceEventData::E_MODE_STUNT_ATTACK:
         {
-            CGS_ASSERT(miCurrentStuntAttackRank >= 0, "0 <= miCurrentStuntAttackRank"); // cpp:297
+            CGS_ASSERT_AT(miCurrentStuntAttackRank >= 0, "0 <= miCurrentStuntAttackRank", CGS_ARTIST_FILE, 297); // cpp:297
 
             maTextfields[E_TEXTFIELD_GOAL_TITLE].SetLocalisedText(KAC_GOAL_SCORE,
                                                                  LM::E_FORMAT_ID_LOOKUP);
@@ -359,7 +359,7 @@ namespace BrnGui
 
             const BrnProgression::CheckpointData* const lpEndCheckpoint =
                 lpEventData->GetCheckpointData(lpEventData->GetCheckpointCount() - 1);
-            CGS_ASSERT(lpEndCheckpoint != 0, "lpEndCheckpoint");   // cpp:334
+            CGS_ASSERT_AT(lpEndCheckpoint != 0, "lpEndCheckpoint", CGS_ARTIST_FILE, 334);   // cpp:334
 
             GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
             lpGuiCache->GetLandmarkInfoFromID(lpEndCheckpoint->GetLandmarkId(), &lLandmarkInfo);
@@ -414,7 +414,7 @@ namespace BrnGui
     s32 EventPanel::GetRoadRageTakedownScore(const WorldDataController* lpWorldDataController) const
     {
         const ProgressionData* const lpProgressionData = lpWorldDataController->GetProgressionData();
-        CGS_ASSERT(lpProgressionData != 0, "lpProgressionData != NULL");   // cpp:511
+        CGS_ASSERT_AT(lpProgressionData != 0, "lpProgressionData != NULL", CGS_ARTIST_FILE, 511);   // cpp:511
 
         const s32 liLastRank =
             static_cast<s32>(lpProgressionData->GetProgressionRankCount()) - 1;
@@ -469,7 +469,7 @@ namespace BrnGui
                                      const RaceEventData* lpEventData) const
     {
         const ProgressionData* const lpProgressionData = lpWorldDataController->GetProgressionData();
-        CGS_ASSERT(lpProgressionData != 0, "lpProgressionData != NULL");   // cpp:460
+        CGS_ASSERT_AT(lpProgressionData != 0, "lpProgressionData != NULL", CGS_ARTIST_FILE, 460);   // cpp:460
 
         const s32 liLastRank =
             static_cast<s32>(lpProgressionData->GetProgressionRankCount()) - 1;
@@ -510,9 +510,9 @@ namespace BrnGui
 // @ 0x82417BE0 -----------------------------------------------------------------------
     void EventPanel::SetCurrentGameMode(EventPanel::EEventType leGameMode)
     {
-        CGS_ASSERT(static_cast<s32>(leGameMode) >= E_EVENT_TYPE_RACE &&
+        CGS_ASSERT_AT(static_cast<s32>(leGameMode) >= E_EVENT_TYPE_RACE &&
                        static_cast<s32>(leGameMode) < E_EVENT_TYPE_COUNT,
-                   "E_EVENT_TYPE_RACE <= leNewMode && E_EVENT_TYPE_COUNT > leNewMode"); // cpp:574
+                   "E_EVENT_TYPE_RACE <= leNewMode && E_EVENT_TYPE_COUNT > leNewMode", CGS_ARTIST_FILE, 574); // cpp:574
 
         if (leGameMode == meCurrentGameMode)
         {

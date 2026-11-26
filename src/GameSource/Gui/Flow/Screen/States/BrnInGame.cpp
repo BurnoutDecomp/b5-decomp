@@ -443,23 +443,23 @@ namespace BrnGui
     // ESplashState word leads).
     void InGame::HandleSplashScreenRequests(const CgsModule::Event* lpNetworkSplashEvent)
     {
-        CGS_ASSERT(lpNetworkSplashEvent != 0, "lpNetworkSplashEvent");   // cpp:851
+        CGS_ASSERT_AT(lpNetworkSplashEvent != 0, "lpNetworkSplashEvent", CGS_ARTIST_FILE, 851);   // cpp:851
 
         const u32 luSplashState = *reinterpret_cast<const u32*>(lpNetworkSplashEvent);
         if (luSplashState == KU_SPLASH_STATE_SHOW)
         {
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                   // cpp:862
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 862);                   // cpp:862
             const s32 liGameModeType = mpGuiCache->GetGameMode();
             // X360 bounds: > -1 (E_MODE_NONE) and < 18 (its E_MODE_COUNT -- one mode
             // more than the committed DecFIGS enum's 17; named form kept).
-            CGS_ASSERT(liGameModeType > BrnGameState::GameStateModuleIO::E_MODE_NONE,
-                       "leGameModeType > GsmIO::E_MODE_NONE");           // cpp:864
-            CGS_ASSERT(liGameModeType < BrnGameState::GameStateModuleIO::E_MODE_COUNT + 1,
-                       "leGameModeType < GsmIO::E_MODE_COUNT");          // cpp:865
+            CGS_ASSERT_AT(liGameModeType > BrnGameState::GameStateModuleIO::E_MODE_NONE,
+                       "leGameModeType > GsmIO::E_MODE_NONE", CGS_ARTIST_FILE, 864);           // cpp:864
+            CGS_ASSERT_AT(liGameModeType < BrnGameState::GameStateModuleIO::E_MODE_COUNT + 1,
+                       "leGameModeType < GsmIO::E_MODE_COUNT", CGS_ARTIST_FILE, 865);          // cpp:865
 
             const char* lpcSplashScreenID = GetSplashScreenIDForGameMode(
                 static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(liGameModeType));
-            CGS_ASSERT(lpcSplashScreenID != 0, "lpcSplashScreenID != NULL");   // cpp:870
+            CGS_ASSERT_AT(lpcSplashScreenID != 0, "lpcSplashScreenID != NULL", CGS_ARTIST_FILE, 870);   // cpp:870
             PostOverlayRequest(mpStateInterface, lpcSplashScreenID);
         }
         else if (luSplashState == KU_SPLASH_STATE_STOP)
@@ -488,7 +488,7 @@ namespace BrnGui
             return;
         }
 
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:919
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 919);   // cpp:919
 
         // The non-join options (gallery / challenges / scoreboards / news) go straight
         // through.
@@ -526,8 +526,8 @@ namespace BrnGui
     // leave method @+8).
     void InGame::HandleOverlayComplete(const CgsModule::Event* lpOverlayCompleteEvent)
     {
-        CGS_ASSERT(lpOverlayCompleteEvent != 0, "lpOverlayCompleteEvent");   // cpp:982
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                           // cpp:984
+        CGS_ASSERT_AT(lpOverlayCompleteEvent != 0, "lpOverlayCompleteEvent", CGS_ARTIST_FILE, 982);   // cpp:982
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 984);                           // cpp:984
 
         const GuiOverlayCompletePayload* lpComplete =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpOverlayCompleteEvent);
@@ -592,7 +592,7 @@ namespace BrnGui
     // the junkyard, and requires every GUI flow layer's apt components initialised.
     bool InGame::PauseAllowed()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1096
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1096);   // cpp:1096
 
         if (CacheFarPauseGateA(mpGuiCache) || CacheIsMugshotActive(mpGuiCache) ||
             CacheIsInputSuppressed(mpGuiCache) || CacheFarPauseGateB(mpGuiCache) ||
@@ -762,7 +762,7 @@ namespace BrnGui
             }
         }
 
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:275
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 275);   // cpp:275
 
         // ---- pass 2: the full dispatch ---------------------------------------------
         for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);

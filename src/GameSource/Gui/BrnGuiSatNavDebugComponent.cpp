@@ -1,5 +1,5 @@
 #include "GameSource/Gui/BrnGuiSatNavDebugComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiSatNavDebugComponent.cpp"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // DrawFrame
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnSatNavRenderer.h"                       // SatNavRenderer::UpdateRendererTransform
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                           // CGS_ASSERT
@@ -273,7 +273,7 @@ namespace BrnGui
         lv4Rect.SetW(mfSatNavBottomRightY);
         MapTransform::SetSatNavRect(lv4Rect);
 
-        CGS_ASSERT(miSatNavAlpha <= 100, "miSatNavAlpha <= 100");   // BrnGuiSatNavDebugComponent.cpp:264
+        CGS_ASSERT_AT(miSatNavAlpha <= 100, "miSatNavAlpha <= 100", CGS_ARTIST_FILE, 264);   // BrnGuiSatNavDebugComponent.cpp:264
 
         // Follow the named owner chain; declaration friendship preserves these private owners
         // and fields without using guest-layout arithmetic on the host object.

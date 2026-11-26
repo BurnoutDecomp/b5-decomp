@@ -221,7 +221,7 @@ namespace BrnGui
     // ---- OnLeave @ 0x824D6C30 ------------------------------------------------------
     void CarSelectLivery::OnLeave()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:169
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 169);   // cpp:169
 
         {
             GuiScreenLeaveWire80 lLeave;
@@ -340,7 +340,7 @@ namespace BrnGui
     {
         CarSelectMain::AppendAptComponents();
 
-        CGS_ASSERT(mpGuiCache != 0, "lpGuiCache");   // cpp:447
+        CGS_ASSERT_AT(mpGuiCache != 0, "lpGuiCache", CGS_ARTIST_FILE, 447);   // cpp:447
 
         // The group forwards each live row's own three names (row / title / item selection).
         mOptionToggles.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache, true);
@@ -502,8 +502,8 @@ namespace BrnGui
                 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
                     mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lrPlayer.mPlayerID);
 
-                CGS_ASSERT(lpPlayerInfo != 0,
-                           "Trying to show the name of a player who isn't in our game");  // cpp:1177
+                CGS_ASSERT_AT(lpPlayerInfo != 0,
+                           "Trying to show the name of a player who isn't in our game", CGS_ARTIST_FILE, 1177);  // cpp:1177
 
                 // X360 `addi r5, r3, 0x100` -- the record's name field at console +256.
                 mOnlinePlayerList.SetPlayerName(liPlayer, lpPlayerInfo->mPlayerName.macName);
@@ -686,8 +686,8 @@ namespace BrnGui
     // ---- SetupComponents @ 0x824C8240 ----------------------------------------------
     void CarSelectLivery::SetupComponents()
     {
-        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:464
-        CGS_ASSERT(mpGuiCache != 0, "lpGuiCache");         // cpp:467
+        CGS_ASSERT_AT(mpVehicleList != 0, "mpVehicleList", CGS_ARTIST_FILE, 464);   // cpp:464
+        CGS_ASSERT_AT(mpGuiCache != 0, "lpGuiCache", CGS_ARTIST_FILE, 467);         // cpp:467
 
         // The whole car-modification surface is suppressed when the flow has already shown
         // its car-select transition, or when this car has nothing to modify (one livery and
@@ -729,12 +729,12 @@ namespace BrnGui
             const s32 liIndex = mpVehicleList->GetVehicleIndex(maUnlockedLiveryCars[luLivery]);
             const BrnResource::VehicleListEntry* lpVehicleData =
                 (liIndex < 0) ? 0 : mpVehicleList->GetVehicleData(liIndex);
-            CGS_ASSERT(lpVehicleData != 0, "lpVehicleData");   // cpp:508
+            CGS_ASSERT_AT(lpVehicleData != 0, "lpVehicleData", CGS_ARTIST_FILE, 508);   // cpp:508
 
             lau64LiveryIds[luLivery] = luLivery;
 
             Selectable* lpSelectable = mCarSelector.GetSelectable(static_cast<s32>(luLivery));
-            CGS_ASSERT(lpSelectable != 0, "lpSelectable");     // cpp:514
+            CGS_ASSERT_AT(lpSelectable != 0, "lpSelectable", CGS_ARTIST_FILE, 514);     // cpp:514
 
             // ⚠️ ENTRY guard (not in the X360 body -- it dereferences lpVehicleData on the
             // next line). Removed with the stand-in car-id producer; see CanCarBePainted.
@@ -981,7 +981,7 @@ namespace BrnGui
     // selects, then re-seat it on liColourIndex.
     void CarSelectLivery::SetupPaintColourToggle(s32 liColourIndex, bool lbHighlighted)
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:613
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 613);   // cpp:613
 
         const s32 liPaintFinish =
             mOptionToggles.GetSelectable(E_OPTIONTOGGLE_PAINT_FINISH)->mItemText.miHighlightedIndex;
@@ -1030,7 +1030,7 @@ namespace BrnGui
         mColourMenuToggle.SetDirty();                     // *(toggle + 0xC) |= 0x10
         mColourMenuToggle.Update();                       // toggle slot 5
 
-        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:654
+        CGS_ASSERT_AT(mpVehicleList != 0, "mpVehicleList", CGS_ARTIST_FILE, 654);   // cpp:654
         const SelectableGroup& lrCarSelector = mCarSelector;
         CGS_ASSERT(mCarSelector.miHighlightedIndex > -1 && lrCarSelector.GetHighlighted() != 0,
                    "GetHighlighted()");                    // BrnSelectableGroup.h:218
@@ -1451,7 +1451,7 @@ namespace BrnGui
     void CarSelectLivery::HandleCarInfoResponseEvent(const CgsModule::Event* lpEvent,
                                                      s32 /*liEventType*/)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent");   // cpp:929
+        CGS_ASSERT_AT(lpEvent != 0, "lpEvent", CGS_ARTIST_FILE, 929);   // cpp:929
         // The second assert's baked file is BrnCarSelectMain.cpp:582 (a copy-paste in the
         // original); it tests the same pointer.
         CGS_ASSERT(lpEvent != 0, "lpEvent");
@@ -1487,7 +1487,7 @@ namespace BrnGui
     void CarSelectLivery::HandleUnlockedLiveryResponseEvent(const CgsModule::Event* lpEvent,
                                                             s32 liEventType)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent");   // cpp:1033
+        CGS_ASSERT_AT(lpEvent != 0, "lpEvent", CGS_ARTIST_FILE, 1033);   // cpp:1033
 
         if (liEventType != 413)
         {

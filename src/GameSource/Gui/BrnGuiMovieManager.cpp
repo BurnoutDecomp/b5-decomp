@@ -517,8 +517,8 @@ namespace BrnGui
             if (!mMoviePlayer.IsFinished())
                 return;
             if (mPlayingMovie.mbDisableCustomSoundtracks)
-                CGS_ASSERT(XMPRestoreBackgroundMusic() == ERROR_SUCCESS,
-                           "XMPRestoreBackgroundMusic() == ERROR_SUCCESS");
+                CGS_ASSERT_AT(XMPRestoreBackgroundMusic() == ERROR_SUCCESS,
+                           "XMPRestoreBackgroundMusic() == ERROR_SUCCESS", CGS_ARTIST_FILE, 265);
             meState = E_MOVIEMANAGERSTATE_RELEASING_MOVIE_PLAYER;
             // Fall through.
         case E_MOVIEMANAGERSTATE_RELEASING_MOVIE_PLAYER:
@@ -572,19 +572,19 @@ namespace BrnGui
         case E_MOVIEMANAGERSTATE_WAITING_FOR_MOVIEDATARESOURCE:
         {
             meState = E_MOVIEMANAGERSTATE_WAITING_FOR_MOVIEDATARESOURCE;
-            CGS_ASSERT(IsMovieQueued(), "IsMovieQueued()");
+            CGS_ASSERT_AT(IsMovieQueued(), "IsMovieQueued()", CGS_ARTIST_FILE, 377);
             if (mReceiverQueue.GetLength() == 0)
                 return;
-            CGS_ASSERT(mReceiverQueue.GetLength() == 1, "mReceiverQueue.GetLength() == 1");
+            CGS_ASSERT_AT(mReceiverQueue.GetLength() == 1, "mReceiverQueue.GetLength() == 1", CGS_ARTIST_FILE, 385);
             const CgsModule::Event* lpEvent = 0;
             s32 liEventSize;
             const s32 liEventId = mReceiverQueue.GetFirstEvent(&lpEvent, &liEventSize);
-            CGS_ASSERT(lpEvent != 0, "lpEvent");
-            CGS_ASSERT(liEventId == 4, "liEventId == CgsResource::ResourceIO::EVENT_ACQUIRERESOURCE");
+            CGS_ASSERT_AT(lpEvent != 0, "lpEvent", CGS_ARTIST_FILE, 393);
+            CGS_ASSERT_AT(liEventId == 4, "liEventId == CgsResource::ResourceIO::EVENT_ACQUIRERESOURCE", CGS_ARTIST_FILE, 394);
             const CgsResource::Events::AcquireResourceResponse* lpAcquire =
                 reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
-            CGS_ASSERT(lpAcquire->miEventId == KI_VIDEO_DATA_RESOURCE_EVENT_ID,
-                       "KI_VIDEO_DATA_RESOURCE_EVENT_ID == lpAcquire->GetEventId()");
+            CGS_ASSERT_AT(lpAcquire->miEventId == KI_VIDEO_DATA_RESOURCE_EVENT_ID,
+                       "KI_VIDEO_DATA_RESOURCE_EVENT_ID == lpAcquire->GetEventId()", CGS_ARTIST_FILE, 400);
             CgsResource::ResourceHandle lHandle;
             lHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
             lHandle.mpSourceEntry = lpAcquire->mpSourceEntry;
@@ -593,12 +593,12 @@ namespace BrnGui
         }
             // Fall through.
         case E_MOVIEMANAGERSTATE_WAITING_FOR_MEMORY:
-            CGS_ASSERT(IsMovieQueued(), "IsMovieQueued()");
+            CGS_ASSERT_AT(IsMovieQueued(), "IsMovieQueued()", CGS_ARTIST_FILE, 409);
             meState = E_MOVIEMANAGERSTATE_WAITING_FOR_MEMORY;
             if (meCollisionWorldState != E_COLLISIONWORLDSTATE_INVALID ||
                 meCarPoolState != E_CARPOOLSTATE_INVALID)
                 return;
-            CGS_ASSERT(PrepareMovieAllocator(), "mAllocator.Prepare(mResourceAllocatorResource, mDescriptor)");
+            CGS_ASSERT_AT(PrepareMovieAllocator(), "mAllocator.Prepare(mResourceAllocatorResource, mDescriptor)", CGS_ARTIST_FILE, 425);
             QueueNextMovie();
             meState = E_MOVIEMANAGERSTATE_PREPARING_MOVIE_PLAYER;
             // Fall through.
@@ -613,13 +613,13 @@ namespace BrnGui
                 meState = E_MOVIEMANAGERSTATE_REQUESTING_AUDIO;
             }
             if (mPlayingMovie.mbDisableCustomSoundtracks)
-                CGS_ASSERT(XMPOverrideBackgroundMusic() == ERROR_SUCCESS,
-                           "XMPOverrideBackgroundMusic() == ERROR_SUCCESS");
+                CGS_ASSERT_AT(XMPOverrideBackgroundMusic() == ERROR_SUCCESS,
+                           "XMPOverrideBackgroundMusic() == ERROR_SUCCESS", CGS_ARTIST_FILE, 454);
             else if (BrnSound::Logic::MusicEffect::IsCustomSoundtrackActive())
                 meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
             return;
         default:
-            CGS_ASSERT(false, "Unhandled state");
+            CGS_ASSERT_AT(false, "Unhandled state", CGS_ARTIST_FILE, 482);
             return;
         }
     }

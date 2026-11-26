@@ -70,14 +70,14 @@ void HudMessageAnalyzer::HandleLiveRevengeUpdate(const GuiLiveRevengeUpdateEvent
 {
     // Non-gating tripwires (cpp:3593-3597; the first streamed, folded static).
     CGS_ASSERT(lpEvent != NULL, "Invalid Live Revenge Update Event");
-    CGS_ASSERT(lpEvent->meAggressorActiveRaceCarIndex >= 0,
-               "lpEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(lpEvent->meAggressorActiveRaceCarIndex < 8,
-               "lpEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-    CGS_ASSERT(lpEvent->meVictimActiveRaceCarIndex >= 0,
-               "lpEvent->meVictimActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(lpEvent->meVictimActiveRaceCarIndex < 8,
-               "lpEvent->meVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT_AT(lpEvent->meAggressorActiveRaceCarIndex >= 0,
+               "lpEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 3594);
+    CGS_ASSERT_AT(lpEvent->meAggressorActiveRaceCarIndex < 8,
+               "lpEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 3595);
+    CGS_ASSERT_AT(lpEvent->meVictimActiveRaceCarIndex >= 0,
+               "lpEvent->meVictimActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 3596);
+    CGS_ASSERT_AT(lpEvent->meVictimActiveRaceCarIndex < 8,
+               "lpEvent->meVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 3597);
 
     // A running freeburn challenge suppresses the revenge chatter (the accessor
     // carries the inlined "mpChallengeManager" assert, BrnGuiCache.h:2390).
@@ -346,7 +346,7 @@ void HudMessageAnalyzer::HandleOnlineStuntRunLastRun(
 void HudMessageAnalyzer::HandleOnlineStuntRunMessage(
         const GuiOnlineStuntRunMessageEvent* lpMessageEvent)
 {
-    CGS_ASSERT(lpMessageEvent != NULL, "lpMessageEvent");
+    CGS_ASSERT_AT(lpMessageEvent != NULL, "lpMessageEvent", CGS_ARTIST_FILE, 5492);
 
     GuiHudMessage lMessage;
 
@@ -360,7 +360,7 @@ void HudMessageAnalyzer::HandleOnlineStuntRunMessage(
 
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpEliminatedPlayer =
             mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpMessageEvent->mPlayerId);
-        CGS_ASSERT(lpEliminatedPlayer != NULL, "lpEliminatedPlayer");
+        CGS_ASSERT_AT(lpEliminatedPlayer != NULL, "lpEliminatedPlayer", CGS_ARTIST_FILE, 5503);
 
         const s32 liScoringPlayerTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(
             static_cast<EActiveRaceCarIndex>(lpEliminatedPlayer->meActiveRaceCarIndex));
@@ -657,8 +657,8 @@ void HudMessageAnalyzer::HandleTakedown(const GuiTakedownEvent* lpTakedown)
         GuiHudMessage lMessage;
         lMessage.Construct(lpcMessageId);
 
-        CGS_ASSERT(lpTakedown->meAggressorIndex != lpTakedown->meVictimIndex,
-                   "lpTakedown->meAggressorIndex != lpTakedown->meVictimIndex");
+        CGS_ASSERT_AT(lpTakedown->meAggressorIndex != lpTakedown->meVictimIndex,
+                   "lpTakedown->meAggressorIndex != lpTakedown->meVictimIndex", CGS_ARTIST_FILE, 2514);
 
         if (mpGuiCache->IsOnlineStartInProgress())
         {
@@ -728,10 +728,10 @@ void HudMessageAnalyzer::HandleCrashedEvent(
         GuiPlayerCrashingStateChangeEvent::CrashBarState leCrashBarState)
 {
     // Non-gating range/pointer tripwires (cpp:2719-2721).
-    CGS_ASSERT(leCrashBarState >= 0, "lCrashingState >= 0");
-    CGS_ASSERT(leCrashBarState < GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_COUNT,
-               "lCrashingState < BrnGui::GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_COUNT");
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT_AT(leCrashBarState >= 0, "lCrashingState >= 0", CGS_ARTIST_FILE, 2719);
+    CGS_ASSERT_AT(leCrashBarState < GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_COUNT,
+               "lCrashingState < BrnGui::GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_COUNT", CGS_ARTIST_FILE, 2720);
+    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 2721);
 
     GuiHudMessage lMessage;
 
@@ -797,14 +797,14 @@ void HudMessageAnalyzer::HandleCrashedEvent(
         {
             // A dirty trick was parked: fire its "bad" payback line tagged with the
             // stored victim name, then reset the pending trick to the 'none' sentinel.
-            CGS_ASSERT(meDirtyTrickPending >= BrnNetwork::E_PAYBACK_TYPE_START,
-                       "meDirtyTrickPending >= BrnNetwork::E_PAYBACK_TYPE_START");
-            CGS_ASSERT(meDirtyTrickPending < 3,
-                       "meDirtyTrickPending < BrnNetwork::E_PAYBACK_TYPE_COUNT");
+            CGS_ASSERT_AT(meDirtyTrickPending >= BrnNetwork::E_PAYBACK_TYPE_START,
+                       "meDirtyTrickPending >= BrnNetwork::E_PAYBACK_TYPE_START", CGS_ARTIST_FILE, 2786);
+            CGS_ASSERT_AT(meDirtyTrickPending < 3,
+                       "meDirtyTrickPending < BrnNetwork::E_PAYBACK_TYPE_COUNT", CGS_ARTIST_FILE, 2787);
 
             lMessage.Construct(KAPC_PAYBACK_TAKEDOWN_BD_MESSAGES[meDirtyTrickPending]);
 
-            CGS_ASSERT(macDTPendingVictim != NULL, "macDTPendingVictim");
+            CGS_ASSERT_AT(macDTPendingVictim != NULL, "macDTPendingVictim", CGS_ARTIST_FILE, 2795);
             lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 1, macDTPendingVictim);
             TriggerMessage(&lMessage);
 
@@ -897,10 +897,10 @@ namespace BrnGui
 void HudMessageAnalyzer::HandleDirtyTrickNew(const GuiDirtyTrickNewEvent* lpEvent)
 {
     CGS_ASSERT(lpEvent != NULL, "Invalid Dirty Trick Event");
-    CGS_ASSERT(lpEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               "lpDTEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(lpEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "lpDTEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT_AT(lpEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "lpDTEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 3415);
+    CGS_ASSERT_AT(lpEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "lpDTEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 3416);
 
     const EActiveRaceCarIndex leLocalPlayer =
         static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex());
@@ -921,14 +921,14 @@ void HudMessageAnalyzer::HandleDirtyTrickTriggered(const GuiDirtyTrickTriggerEve
 {
     CGS_ASSERT(lpEvent != NULL, "Invalid Dirty Trick Event");
     CGS_ASSERT(lpEvent->meTrickType < 3, "Trick type invalid");
-    CGS_ASSERT(lpEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               "lpDTEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(lpEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "lpDTEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-    CGS_ASSERT(lpEvent->meVictimActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               "lpDTEvent->meVictimActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(lpEvent->meVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "lpDTEvent->meVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT_AT(lpEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "lpDTEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 3441);
+    CGS_ASSERT_AT(lpEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "lpDTEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 3442);
+    CGS_ASSERT_AT(lpEvent->meVictimActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "lpDTEvent->meVictimActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 3443);
+    CGS_ASSERT_AT(lpEvent->meVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "lpDTEvent->meVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 3444);
 
     const EActiveRaceCarIndex leLocalPlayer =
         static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex());
@@ -940,13 +940,13 @@ void HudMessageAnalyzer::HandleDirtyTrickTriggered(const GuiDirtyTrickTriggerEve
         // The local player pulled off the dirty trick.
         lMessage.Construct("PbkGdPayBack");
 
-        CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 3457);
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpVictimInfo =
             mpGuiCache->GetOnlinePlayerInfo( lpEvent->meVictimActiveRaceCarIndex);
         CGS_ASSERT(lpVictimInfo != NULL,
                    "mpGuiCache->GetOnlinePlayerInfo( lpDTEvent->meVictimActiveRaceCarIndex )");
-        CGS_ASSERT(lpVictimInfo->mPlayerName.macName != NULL,
-                   "mpGuiCache->GetOnlinePlayerInfo( lpDTEvent->meVictimActiveRaceCarIndex )->mPlayerName.GetPlayerName()");
+        CGS_ASSERT_AT(lpVictimInfo->mPlayerName.macName != NULL,
+                   "mpGuiCache->GetOnlinePlayerInfo( lpDTEvent->meVictimActiveRaceCarIndex )->mPlayerName.GetPlayerName()", CGS_ARTIST_FILE, 3459);
 
         lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 1,
                           lpVictimInfo->mPlayerName.macName);
@@ -964,13 +964,13 @@ void HudMessageAnalyzer::HandleDirtyTrickTriggered(const GuiDirtyTrickTriggerEve
         CgsCore::StrCpy(macDTPendingVictim, sizeof(macDTPendingVictim),
                         lpAggressorInfo->mPlayerName.macName);
 
-        CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 3479);
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpVictimInfo =
             mpGuiCache->GetOnlinePlayerInfo( lpEvent->meVictimActiveRaceCarIndex);
-        CGS_ASSERT(lpVictimInfo != NULL,
-                   "mpGuiCache->GetOnlinePlayerInfo( lpDTEvent->meVictimActiveRaceCarIndex )");
-        CGS_ASSERT(lpVictimInfo->mPlayerName.macName != NULL,
-                   "mpGuiCache->GetOnlinePlayerInfo( lpDTEvent->meVictimActiveRaceCarIndex )->mPlayerName.GetPlayerName()");
+        CGS_ASSERT_AT(lpVictimInfo != NULL,
+                   "mpGuiCache->GetOnlinePlayerInfo( lpDTEvent->meVictimActiveRaceCarIndex )", CGS_ARTIST_FILE, 3480);
+        CGS_ASSERT_AT(lpVictimInfo->mPlayerName.macName != NULL,
+                   "mpGuiCache->GetOnlinePlayerInfo( lpDTEvent->meVictimActiveRaceCarIndex )->mPlayerName.GetPlayerName()", CGS_ARTIST_FILE, 3481);
 
         lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 1,
                           lpAggressorInfo->mPlayerName.macName);
@@ -984,12 +984,12 @@ void HudMessageAnalyzer::HandleDirtyTrickTriggered(const GuiDirtyTrickTriggerEve
 // victim who survived sees "DTMlfStab". Either way the pending trick slot resets.
 void HudMessageAnalyzer::HandleDirtyTrickEnded(const GuiDirtyTrickEndedEvent* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, "Invalid Dirty Trick Event");
-    CGS_ASSERT(lpEvent->meTrickType < 3, "Trick type invalid");
-    CGS_ASSERT(lpEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               "lpDTEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(lpEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "lpDTEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT_AT(lpEvent != NULL, "Invalid Dirty Trick Event", CGS_ARTIST_FILE, 3508);
+    CGS_ASSERT_AT(lpEvent->meTrickType < 3, "Trick type invalid", CGS_ARTIST_FILE, 3509);
+    CGS_ASSERT_AT(lpEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "lpDTEvent->meAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 3510);
+    CGS_ASSERT_AT(lpEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "lpDTEvent->meAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 3511);
     CGS_ASSERT(lpEvent->meVictimActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
                "lpDTEvent->meVictimActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
     CGS_ASSERT(lpEvent->meVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
@@ -1014,10 +1014,10 @@ void HudMessageAnalyzer::HandleDirtyTrickEnded(const GuiDirtyTrickEndedEvent* lp
         }
         else
         {
-            CGS_ASSERT(lpEvent->meTrickType >= 0,
-                       "lpDTEvent->meTrickType >= BrnNetwork::E_PAYBACK_TYPE_START");
-            CGS_ASSERT(lpEvent->meTrickType < 3,
-                       "lpDTEvent->meTrickType < BrnNetwork::E_PAYBACK_TYPE_COUNT");
+            CGS_ASSERT_AT(lpEvent->meTrickType >= 0,
+                       "lpDTEvent->meTrickType >= BrnNetwork::E_PAYBACK_TYPE_START", CGS_ARTIST_FILE, 3535);
+            CGS_ASSERT_AT(lpEvent->meTrickType < 3,
+                       "lpDTEvent->meTrickType < BrnNetwork::E_PAYBACK_TYPE_COUNT", CGS_ARTIST_FILE, 3536);
 
             lMessage.Construct(KAPC_PAYBACK_TAKEDOWN_GD_MESSAGES[lpEvent->meTrickType]);
             lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 1,
@@ -1191,7 +1191,7 @@ void HudMessageAnalyzer::HandleNewRoadRulesHighScore(const GuiEventRoadRuleNewHi
 void HudMessageAnalyzer::HandleRoadRuleFailed(const GuiEventRoadRuleFail* lpEvent)
 {
     // Non-gating tripwire (cpp:4855; streamed on the X360, folded static).
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");
+    CGS_ASSERT_AT(lpEvent != NULL, "lpEvent", CGS_ARTIST_FILE, 4855);
 
     char lacRoadNumber[16];
     CgsCore::SPrintf(lacRoadNumber, 12, "%llu", lpEvent->mRoadID);
@@ -1425,10 +1425,10 @@ namespace BrnGui
 void HudMessageAnalyzer::HandlePlayerJoinedLobby(const GuiEventNetworkPlayerJoinedLobby* lpEvent)
 {
     // Non-gating pointer/range tripwires (cpp:5032-5034).
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");
-    CGS_ASSERT(lpEvent->mNetworkPlayerID != KI_INVALID_PLAYER_ID,
-               "lpEvent->mNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT_AT(lpEvent != NULL, "lpEvent", CGS_ARTIST_FILE, 5032);
+    CGS_ASSERT_AT(lpEvent->mNetworkPlayerID != KI_INVALID_PLAYER_ID,
+               "lpEvent->mNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 5033);
+    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 5034);
 
     // Debug trace of the joining player id (log-category gated).
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -1438,7 +1438,7 @@ void HudMessageAnalyzer::HandlePlayerJoinedLobby(const GuiEventNetworkPlayerJoin
 
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerData =
         mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpEvent->mNetworkPlayerID);
-    CGS_ASSERT(lpPlayerData != NULL, "lpPlayerData");
+    CGS_ASSERT_AT(lpPlayerData != NULL, "lpPlayerData", CGS_ARTIST_FILE, 5039);
 
     GuiHudMessage lMessage;
     lMessage.Construct("OnlFBJoin");
@@ -2223,8 +2223,8 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                                 CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpViewOutputQueue)
 {
     // Entry tripwires (cpp:535 streamed / cpp:538) and adopt the view output queue.
-    CGS_ASSERT(lpViewOutputQueue != NULL,
-               "View output queue is not valid. Is it definately locked for writing?");
+    CGS_ASSERT_AT(lpViewOutputQueue != NULL,
+               "View output queue is not valid. Is it definately locked for writing?", CGS_ARTIST_FILE, 538);
     mpViewOutputQueue = lpViewOutputQueue;
     CGS_ASSERT(lpGuiEventQueue != NULL, "lpEventQueue != NULL");
 
@@ -2952,8 +2952,8 @@ namespace BrnGui
 void HudMessageAnalyzer::HandleTookLead(const GuiTookLeadEvent* lpEvent) const
 {
     CGS_ASSERT(lpEvent != NULL, "Invalid Took Lead Event");
-    CGS_ASSERT(lpEvent->meLeadActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "lpEvent->meLeadActiveRaceCarIndex < KI_MAX_PLAYERS");
+    CGS_ASSERT_AT(lpEvent->meLeadActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "lpEvent->meLeadActiveRaceCarIndex < KI_MAX_PLAYERS", CGS_ARTIST_FILE, 3980);
 
     GuiHudMessage lMessage;
     lMessage.Construct("AggDrTkLead");
@@ -2971,8 +2971,8 @@ void HudMessageAnalyzer::HandleTookLead(const GuiTookLeadEvent* lpEvent) const
 void HudMessageAnalyzer::HandleTookLast(const GuiTookLastEvent* lpEvent) const
 {
     CGS_ASSERT(lpEvent != NULL, "Invalid Took Last Event");
-    CGS_ASSERT(lpEvent->meLastActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "lpEvent->meLastActiveRaceCarIndex < KI_MAX_PLAYERS");
+    CGS_ASSERT_AT(lpEvent->meLastActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "lpEvent->meLastActiveRaceCarIndex < KI_MAX_PLAYERS", CGS_ARTIST_FILE, 4011);
 
     GuiHudMessage lMessage;
     lMessage.Construct("AggDrLast");
@@ -2992,7 +2992,7 @@ void HudMessageAnalyzer::HandleTookLast(const GuiTookLastEvent* lpEvent) const
 void HudMessageAnalyzer::HandleRemotePlayerDisconnect(const GuiNetworkRemotePlayerDisconnectEvent* lpEvent) const
 {
     CGS_ASSERT(lpEvent != NULL, "Invalid remote player disconnected event");
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 4587);
 
     if (mpGuiCache->GetOnlinePlayerDisconnected(
             static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex())))
@@ -3310,7 +3310,7 @@ void HudMessageAnalyzer::HandleStuntPerformed(const GuiHUDMessageStuntPerformed*
             CgsCore::StrCat(lacBuffer, 0x80, lacFormatBuffer);
         }
 
-        CGS_ASSERT(std::strlen(lacBuffer) > 3, "strlen(lacBuffer) > 3");
+        CGS_ASSERT_AT(std::strlen(lacBuffer) > 3, "strlen(lacBuffer) > 3", CGS_ARTIST_FILE, 2139);
 
         const s32 liChainScore = lpEvent->mStuntInfo.mu16X360Tail14 + lpEvent->mStuntInfo.miStuntMultiplier;
         lacBuffer[std::strlen(lacBuffer) - 3] = 0;   // trim the trailing category separator
@@ -3340,14 +3340,14 @@ void HudMessageAnalyzer::HandleDeveloperChallengeMessageDEBUG(
     // Non-gating tripwires. MEASURED: both strings and both line numbers are verbatim
     // X360 assert rodata (@0x824F9D78 cpp:0x1755 == 5973, @0x824F9DC4 cpp:0x1756 == 5974) --
     // that rodata is where the parameter name and the event's member name come from.
-    CGS_ASSERT(lpDeveloperChallengeEvent != NULL, "lpDeveloperChallengeEvent");
+    CGS_ASSERT_AT(lpDeveloperChallengeEvent != NULL, "lpDeveloperChallengeEvent", CGS_ARTIST_FILE, 5973);
 
     // @0x824F9D88..0x824F9DB4 is FastBitArray<15>::IsZero() folded inline: a ldx/cmpldi
     // scan over the bit fields (one, for <15>), with the assert firing when the scan
     // completes without finding a non-zero field (r11 = 1 at 0x824F9DA8 -> fire;
     // the early bne at 0x824F9D98 lands on r11 = 0 -> skip).
-    CGS_ASSERT(!lpDeveloperChallengeEvent->mCompletedDeveloperChallenges.IsZero(),
-               "!lpDeveloperChallengeEvent->mCompletedDeveloperChallenges.IsZero()");
+    CGS_ASSERT_AT(!lpDeveloperChallengeEvent->mCompletedDeveloperChallenges.IsZero(),
+               "!lpDeveloperChallengeEvent->mCompletedDeveloperChallenges.IsZero()", CGS_ARTIST_FILE, 5974);
 
     // Park the flag and OR-accumulate the event's completed-challenge bits.
     // MEASURED @0x824F9DD4..0x824F9DE8: li r11,1 / stb r11,0x4F9(r30), then
@@ -3377,7 +3377,7 @@ void HudMessageAnalyzer::TriggerDeveloperChallengeMessageDEBUG()
 {
     // Non-gating tripwire; the string is verbatim X360 assert rodata (@0x825204B8,
     // cpp:0x176A == 5994) -- it is what names the bool member.
-    CGS_ASSERT(mbDEBUGDeveloperChallengeComplete, "mbDEBUGDeveloperChallengeComplete");
+    CGS_ASSERT_AT(mbDEBUGDeveloperChallengeComplete, "mbDEBUGDeveloperChallengeComplete", CGS_ARTIST_FILE, 5994);
 
     GuiHudMessage lMessage;
     lMessage.Construct("Generic");
@@ -4063,7 +4063,7 @@ void HudMessageAnalyzer::TriggerNewRoadRulesHighScoreMessage()
 // past the `stb 0, 0x458`). Do not hoist the clear.
 void HudMessageAnalyzer::TriggerChallengeEndedMessage()
 {
-    CGS_ASSERT(mbChallengeEnded == true, "mbChallengeEnded == true");   // cpp:5552
+    CGS_ASSERT_AT(mbChallengeEnded == true, "mbChallengeEnded == true", CGS_ARTIST_FILE, 5552);   // cpp:5552
 
     // [gateui r3] THE CONSOLE TWO-HOP, RESTORED. The X360 inlines
     //     mpGuiCache->GetWorldDataController()->GetFreeburnChallengeList()
@@ -4077,7 +4077,7 @@ void HudMessageAnalyzer::TriggerChallengeEndedMessage()
     // BrnGuiWorldDataController.cpp) rather than the unmounted BrnGuiCache_wB_01.cpp.
     const BrnResource::ChallengeList* lpChallengeList =
         mpGuiCache->GetWorldDataController()->GetFreeburnChallengeList();
-    CGS_ASSERT(lpChallengeList != NULL, "lpChallengeList");            // cpp:5558
+    CGS_ASSERT_AT(lpChallengeList != NULL, "lpChallengeList", CGS_ARTIST_FILE, 5558);            // cpp:5558
 
     const CgsID lMessageId =
         KA_CHALLENGE_END_MESSAGE_IDS[mChallengedEndedData.meChallengeStatus];
@@ -4137,11 +4137,11 @@ void HudMessageAnalyzer::TriggerChallengeEndedMessage()
     // Non-gating tripwires re-evaluated by the console on EVERY arm, not just the failure one
     // (0x82520238 / 0x82520268 call GetChallengeData again after the switch); the second is
     // the compiler's `GetTitleStringID() != NULL` rendered as `entry + 0xB0 != 0`.
-    CGS_ASSERT(lpChallengeList->GetChallengeData(mChallengedEndedData.mChallengeID) != NULL,
-               "lpChallengeList->GetChallengeData( mChallengedEndedData.mChallengeID )");   // cpp:5604
-    CGS_ASSERT(lpChallengeList->GetChallengeData(mChallengedEndedData.mChallengeID)
+    CGS_ASSERT_AT(lpChallengeList->GetChallengeData(mChallengedEndedData.mChallengeID) != NULL,
+               "lpChallengeList->GetChallengeData( mChallengedEndedData.mChallengeID )", CGS_ARTIST_FILE, 5604);   // cpp:5604
+    CGS_ASSERT_AT(lpChallengeList->GetChallengeData(mChallengedEndedData.mChallengeID)
                    ->GetTitleStringID() != NULL,
-               "lpChallengeList->GetChallengeData( mChallengedEndedData.mChallengeID )->GetTitleStringID()");  // cpp:5605
+               "lpChallengeList->GetChallengeData( mChallengedEndedData.mChallengeID )->GetTitleStringID()", CGS_ARTIST_FILE, 5605);  // cpp:5605
 
     TriggerMessage(&lMessage);
     mbChallengeEnded = false;
@@ -4250,7 +4250,7 @@ void HudMessageAnalyzer::HandleDriveThrough(const GuiDriveThroughEvent* lpEvent)
 // (`bl PlayerName::Construct` @0x824F3280 precedes the `lbz`/`beq` on the flag). Reproduced.
 void HudMessageAnalyzer::HandleEventFinisher(const GuiInEventFinisher* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");   // cpp:3892
+    CGS_ASSERT_AT(lpEvent != NULL, "lpEvent", CGS_ARTIST_FILE, 3892);   // cpp:3892
 
     if (!mpGuiCache->IsOnlineStartInProgress())
         return;
@@ -4621,7 +4621,7 @@ void HudMessageAnalyzer::HandleBurningHomeRunRunnerCrashes(
 // -------------------------------------------------------------------------------------
 void HudMessageAnalyzer::HandleEventLeaderSplitTime(const GuiInEventLeaderSplit* lpEvent) const
 {
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");   // cpp:3785
+    CGS_ASSERT_AT(lpEvent != NULL, "lpEvent", CGS_ARTIST_FILE, 3785);   // cpp:3785
 
     GuiHudMessage lMessage;
     s32 liSecondParam;
@@ -4669,14 +4669,14 @@ void HudMessageAnalyzer::HandleEventLeaderSplitTime(const GuiInEventLeaderSplit*
 // -------------------------------------------------------------------------------------
 void HudMessageAnalyzer::HandlePowerParkingResult(const GuiPowerParkResult* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");   // cpp:4989
+    CGS_ASSERT_AT(lpEvent != NULL, "lpEvent", CGS_ARTIST_FILE, 4989);   // cpp:4989
 
     GuiHudMessage lMessage;
 
     if (lpEvent->meOutcome == BrnWorld::E_PPO_SUCCESS)
     {
         const u32 luRatingIndex = lpEvent->miOverallRating / KI_POWER_PARK_RATING_BAND_SIZE;
-        CGS_ASSERT(luRatingIndex < KU_POWER_PARK_RATING_COUNT, "luRatingIndex<6");  // cpp:4998
+        CGS_ASSERT_AT(luRatingIndex < KU_POWER_PARK_RATING_COUNT, "luRatingIndex<6", CGS_ARTIST_FILE, 4998);  // cpp:4998
 
         char lacRatingStringID[32];
         CgsCore::SPrintf(lacRatingStringID, sizeof(lacRatingStringID),
@@ -4689,8 +4689,8 @@ void HudMessageAnalyzer::HandlePowerParkingResult(const GuiPowerParkResult* lpEv
     }
     else
     {
-        CGS_ASSERT(lpEvent->meOutcome == BrnWorld::E_PPO_FAILURE,
-                   "lpEvent->meOutcome == BrnWorld::E_PPO_FAILURE");   // cpp:5007
+        CGS_ASSERT_AT(lpEvent->meOutcome == BrnWorld::E_PPO_FAILURE,
+                   "lpEvent->meOutcome == BrnWorld::E_PPO_FAILURE", CGS_ARTIST_FILE, 5007);   // cpp:5007
 
         lMessage.Construct("PowPkLose");
         TriggerMessage(&lMessage);

@@ -22,7 +22,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnAboveCarRenderer.cpp"
 namespace BrnGui
 {
 namespace
@@ -117,7 +117,7 @@ void AboveCarRenderer::UpdateCachedInfoForRival(EActiveRaceCarIndex leIndex)
     lrInfo.muRivalPosition = 0;
     if (mpGuiCache->GetGameMode() == 10)
     {
-        CGS_ASSERT(luPosition < 9, "luRivalPosition < 9");
+        CGS_ASSERT_AT(luPosition < 9, "luRivalPosition < 9", CGS_ARTIST_FILE, 908);
         if (luPosition && luPosition <= mpGuiCache->GetOpponentsInEvent()+1)
         {
             lrInfo.muRivalPosition = luPosition;
@@ -194,7 +194,7 @@ void AboveCarRenderer::Construct()
     mbTimeExtensionPending = false;
     miAboveCarRendererPM = -1;
     miAboveCarRendererPM = CgsDev::PerfMonCpu::AddMonitor("AboveCarRenderer", CgsDev::E_PMP_3, false, 2.0f, false);
-    CGS_ASSERT(miAboveCarRendererPM >= 0, "miAboveCarRendererPM >= 0");
+    CGS_ASSERT_AT(miAboveCarRendererPM >= 0, "miAboveCarRendererPM >= 0", CGS_ARTIST_FILE, 184);
 }
 
 // ARTIST824469A8 stores r5: the first allocator, after the event-queue argument.
@@ -274,7 +274,7 @@ void AboveCarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
                    "Invalid resource data sent AboveCarRenderer::RecvEvent");
         if (lpNotification->meRequestType == 16)
         {
-            CGS_ASSERT(!lFont.IsNull(), "lpFont != CgsResource::NULLResourceHandle");
+            CGS_ASSERT_AT(!lFont.IsNull(), "lpFont != CgsResource::NULLResourceHandle", CGS_ARTIST_FILE, 352);
             const char* lpcFamily = lFont->macTypefaceFamilyName;
             if (mTextObject.mpFont.IsNull())
             {
@@ -330,7 +330,7 @@ void AboveCarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
     case 394:
     {
         const GuiHitVehicleEvent* lpHit = reinterpret_cast<const GuiHitVehicleEvent*>(lpEvent);
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 416);
         if (!maBankingScores.IsFull())
         {
             const u32 luCount = mpGuiCache->GetScoringTrafficCount();
@@ -484,7 +484,7 @@ void AboveCarRenderer::RenderReplayAboveCar(CgsGui::ImRendererSet* lpRendererSet
         if (lrRecord.muRacePosition)
         {
             const CgsResource::CgsUtf8* lpText = mpLanguageManager->FindString(KAP_POSITION_STRINGS[lrRecord.muRacePosition-1]);
-            CGS_ASSERT(lpText, "lpPositionString");
+            CGS_ASSERT_AT(lpText, "lpPositionString", CGS_ARTIST_FILE, 788);
             SetAboveCarText(mTextObject, lpText, lfHeight, lfBottom, lrRecord.mColour,
                 mTextObject.mpFont->GetStringWidth(lpText));
             mpTextRenderer->RenderString(lpBuffer, mTextObject);
@@ -492,7 +492,7 @@ void AboveCarRenderer::RenderReplayAboveCar(CgsGui::ImRendererSet* lpRendererSet
         }
         const u8 (*lpNames)[16] = lpLayout->mbFrameParity ? lpLayout->maCarFlagsBuffer0 : lpLayout->maCarFlagsBuffer1;
         const CgsResource::CgsUtf8* lpName = reinterpret_cast<const CgsResource::CgsUtf8*>(lpNames[liIndex]);
-        CGS_ASSERT(lpName, "lpStaticLayout->maaGamertags[lpStaticLayout->GetGamertagBufferIndexLastFrame()][leActiveRaceCarIndex].GetPlayerName()");
+        CGS_ASSERT_AT(lpName, "lpStaticLayout->maaGamertags[lpStaticLayout->GetGamertagBufferIndexLastFrame()][leActiveRaceCarIndex].GetPlayerName()", CGS_ARTIST_FILE, 809);
         SetAboveCarText(mTextObject, lpName, lfHeight, lfBottom, lrRecord.mColour,
             mTextObject.mpFont->GetStringWidth(lpName));
         mpTextRenderer->RenderString(lpBuffer, mTextObject);
@@ -502,7 +502,7 @@ void AboveCarRenderer::RenderReplayAboveCar(CgsGui::ImRendererSet* lpRendererSet
 // ARTIST82462A38: one 3D batch, online names or replay names, then traffic and banking.
 void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
 {
-    CGS_ASSERT(mpLanguageManager, "mpLanguageManager");
+    CGS_ASSERT_AT(mpLanguageManager, "mpLanguageManager", CGS_ARTIST_FILE, 501);
     if (!mpGuiCache || mTextObject.mpFont.IsNull() || mpScoreFont.IsNull())
         return;
     if (miAboveCarRendererPM >= 0) CgsDev::PerfMonCpu::StartMonitor(miAboveCarRendererPM);

@@ -1177,7 +1177,7 @@ namespace BrnGui
                     // Unsolicited replies are ignored; only the screen that asked cares.
                     if (mbWaitingForTargetScoreResponse)
                     {
-                        CGS_ASSERT(lpEvent != 0, "lpTargetScoreResponse");
+                        CGS_ASSERT_AT(lpEvent != 0, "lpTargetScoreResponse", CGS_ARTIST_FILE, 698);
 
                         const TargetScoreResponsePayload* lpTargetScoreResponse =
                             reinterpret_cast<const TargetScoreResponsePayload*>(lpEvent);
@@ -1193,8 +1193,8 @@ namespace BrnGui
                             std::memcpy(mCurrentTargetScorePlayerName.macName,
                                         lpTargetScoreResponse->macPlayerName,
                                         sizeof(mCurrentTargetScorePlayerName.macName));
-                            CGS_ASSERT(mCurrentTargetScorePlayerName.macName[0] != 0,
-                                       "!mCurrentTargetScorePlayerName.IsEmpty()");
+                            CGS_ASSERT_AT(mCurrentTargetScorePlayerName.macName[0] != 0,
+                                       "!mCurrentTargetScorePlayerName.IsEmpty()", CGS_ARTIST_FILE, 711);
                         }
 
                         mTable.SetTargetGamertag(mCurrentTargetScorePlayerName.macName);
@@ -1203,7 +1203,7 @@ namespace BrnGui
 
                 case KI_EVENT_SCOREBOARD_DLD_CHALLENGEABLE:
                 {
-                    CGS_ASSERT(lpEvent != 0, "lpDldChallengeableEvent");
+                    CGS_ASSERT_AT(lpEvent != 0, "lpDldChallengeableEvent", CGS_ARTIST_FILE, 726);
 
                     const DldChallengeablePayload* lpDldChallengeable =
                         reinterpret_cast<const DldChallengeablePayload*>(lpEvent);
@@ -1211,8 +1211,8 @@ namespace BrnGui
                     std::memcpy(mCurrentTargetScorePlayerName.macName,
                                 lpDldChallengeable->macPlayerName,
                                 sizeof(mCurrentTargetScorePlayerName.macName));
-                    CGS_ASSERT(mCurrentTargetScorePlayerName.macName[0] != 0,
-                               "!mCurrentTargetScorePlayerName.IsEmpty()");
+                    CGS_ASSERT_AT(mCurrentTargetScorePlayerName.macName[0] != 0,
+                               "!mCurrentTargetScorePlayerName.IsEmpty()", CGS_ARTIST_FILE, 730);
 
                     mTable.SetTargetGamertag(mCurrentTargetScorePlayerName.macName);
                     break;
@@ -1625,10 +1625,10 @@ namespace BrnGui
         {
             for (s32 liRoadIndex = 0; liRoadIndex < miMaxVariations; ++liRoadIndex)
             {
-                CGS_ASSERT(maiAlphabeticalRoadIndex[liRoadIndex] >= 0,
-                           "maiAlphabeticalRoadIndex[ liRoadIndex ] >= 0");
-                CGS_ASSERT(maiAlphabeticalRoadIndex[liRoadIndex] < KI_MAX_VARIATIONS,
-                           "maiAlphabeticalRoadIndex[ liRoadIndex ] < GuiEventScoreboardResponseVariationEvent::KI_MAX_VARIATIONS");
+                CGS_ASSERT_AT(maiAlphabeticalRoadIndex[liRoadIndex] >= 0,
+                           "maiAlphabeticalRoadIndex[ liRoadIndex ] >= 0", CGS_ARTIST_FILE, 1269);
+                CGS_ASSERT_AT(maiAlphabeticalRoadIndex[liRoadIndex] < KI_MAX_VARIATIONS,
+                           "maiAlphabeticalRoadIndex[ liRoadIndex ] < GuiEventScoreboardResponseVariationEvent::KI_MAX_VARIATIONS", CGS_ARTIST_FILE, 1270);
 
                 const char* lpacRoad = lpList->maacVariations[maiAlphabeticalRoadIndex[liRoadIndex]];
                 // The console's checked string copy: assert the name fits, then copy it.

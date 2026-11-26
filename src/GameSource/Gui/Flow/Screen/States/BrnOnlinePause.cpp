@@ -6,7 +6,7 @@
 //   sizes, on channel 40 (GUI out) unless noted.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlinePause.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlinePause.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
@@ -205,7 +205,7 @@ namespace BrnGui
                 case KI_EVENT_GUI_CACHE:
                 {
                     const GuiEventCache* lpCacheEvent = reinterpret_cast<const GuiEventCache*>(lpEvent);
-                    CGS_ASSERT(lpCacheEvent->mpCachePointer != 0, "lpCacheEvent->mpCachePointer");
+                    CGS_ASSERT_AT(lpCacheEvent->mpCachePointer != 0, "lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 154);
                     if (mpGuiCache == 0)
                     {
                         mpGuiCache = lpCacheEvent->mpCachePointer;
@@ -234,8 +234,8 @@ namespace BrnGui
 
                 case KI_EVENT_ROUND_FINISHED:
                 {
-                    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
-                    CGS_ASSERT(mpGuiCache->GetGuiTracker() != 0, "mpGuiCache->GetGuiTracker()");
+                    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 128);
+                    CGS_ASSERT_AT(mpGuiCache->GetGuiTracker() != 0, "mpGuiCache->GetGuiTracker()", CGS_ARTIST_FILE, 129);
                     mpGuiCache->GetGuiTracker()->ClearTracker();
 
                     const s32  liGameMode = mpGuiCache->GetGameMode();
@@ -338,7 +338,7 @@ namespace BrnGui
                         break;
 
                     default:
-                        CGS_ASSERT(false, "Invalid pause option selected");
+                        CGS_ASSERT_AT(false, "Invalid pause option selected", CGS_ARTIST_FILE, 317);
                         break;
                 }
                 break;
@@ -351,7 +351,7 @@ namespace BrnGui
     // The leave-game question was answered OK: ask the game to leave.
     void OnlinePause::HandleOverlayComplete(const CgsModule::Event* lpOverlayCompleteEvent)
     {
-        CGS_ASSERT(lpOverlayCompleteEvent != 0, "lpOverlayCompleteEvent");
+        CGS_ASSERT_AT(lpOverlayCompleteEvent != 0, "lpOverlayCompleteEvent", CGS_ARTIST_FILE, 364);
 
         const GuiOverlayCompletePayload* lpPayload =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpOverlayCompleteEvent);

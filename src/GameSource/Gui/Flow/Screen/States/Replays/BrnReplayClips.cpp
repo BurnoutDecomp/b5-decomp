@@ -1,7 +1,7 @@
 // BrnGui::ReplayClips -- the "RE_CLIPS" screen state, reconstructed from the console build.
 
 #include "GameSource/Gui/Flow/Screen/States/Replays/BrnReplayClips.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/Replays/BrnReplayClips.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                         // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                        // CgsGui::GuiAccessPointers
@@ -255,7 +255,7 @@ bool ReplayClips::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
         GuiReplaySetModeWire lSetMode(0);
         PostOut(mpStateInterface, lSetMode);
 
-        CGS_ASSERT(mpGuiCache->IsReplayInfoVisible(), "mpGuiCache->IsReplayInfoVisible()");
+        CGS_ASSERT_AT(mpGuiCache->IsReplayInfoVisible(), "mpGuiCache->IsReplayInfoVisible()", CGS_ARTIST_FILE, 320);
         mpStateInterface->PlayAptMovie("", KI_INFO_MOVIE_LEVEL);
         mpGuiCache->mbReplayInfoVisible = false;
         mpGuiCache->UnloadResources(maInfoResourcesToLoad, 1);
@@ -305,7 +305,7 @@ bool ReplayClips::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
         GuiReplaySetModeWire lSetMode(0);
         PostOut(mpStateInterface, lSetMode);
 
-        CGS_ASSERT(mpGuiCache->IsReplayInfoVisible(), "mpGuiCache->IsReplayInfoVisible()");
+        CGS_ASSERT_AT(mpGuiCache->IsReplayInfoVisible(), "mpGuiCache->IsReplayInfoVisible()", CGS_ARTIST_FILE, 340);
         mpStateInterface->PlayAptMovie("", KI_INFO_MOVIE_LEVEL);
         mpGuiCache->mbReplayInfoVisible = false;
         mpGuiCache->UnloadResources(maInfoResourcesToLoad, 1);

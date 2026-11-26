@@ -30,7 +30,7 @@
 // meCompletedGameState to DONE, which makes the next frame TriggerExitState.
 // ===================================================================================
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnCompletedGame.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnCompletedGame.cpp"
 #include <cstddef>                                                        // offsetof
 #include <cstring>                                                        // strstr
 
@@ -281,12 +281,12 @@ void CompletedGame::Update()
 
         const GuiEventOfflinePostEvent::OfflinePostEventData* const lpLastResults =
             &mpGuiCache->GetOfflinePostEventData();
-        CGS_ASSERT(lpLastResults != 0, "lpLastResults");                      // cpp:203
+        CGS_ASSERT_AT(lpLastResults != 0, "lpLastResults", CGS_ARTIST_FILE, 203);                      // cpp:203
 
         const s32 liBurnoutLicenseRank = static_cast<s32>(
             mpGuiCache->GetWorldDataController()->GetProgressionData()
                 ->GetProgressionRankCount()) - 1;
-        CGS_ASSERT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0");     // cpp:208
+        CGS_ASSERT_AT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0", CGS_ARTIST_FILE, 208);     // cpp:208
 
         // Every presentation shows the DMV upgrade photo frame.
         mPhotoBoothComponent.SetPhotoResourceId(
@@ -860,9 +860,9 @@ void CompletedGame::UpdateOneHundredPercentPartTwoPresentation()
 
         mLicense.ReleaseResources();
 
-        CGS_ASSERT(mpProfile != 0, "NULL != mpProfile");                          // cpp:963
-        CGS_ASSERT(meCompletionType == E_COMPLETION_FINISHED_GAME,
-                   "E_COMPLETION_FINISHED_GAME == meCompletionType");             // cpp:964
+        CGS_ASSERT_AT(mpProfile != 0, "NULL != mpProfile", CGS_ARTIST_FILE, 963);                          // cpp:963
+        CGS_ASSERT_AT(meCompletionType == E_COMPLETION_FINISHED_GAME,
+                   "E_COMPLETION_FINISHED_GAME == meCompletionType", CGS_ARTIST_FILE, 964);             // cpp:964
 
         mpProfile->SetSeen100PercentCompletionSequence();
 
@@ -922,7 +922,7 @@ void CompletedGame::HandleIncomingEvents()
 
         case KI_EVENT_APT_TRIGGER:
         {
-            CGS_ASSERT(lpEvent != 0, "lpEvent");                                  // cpp:1013
+            CGS_ASSERT_AT(lpEvent != 0, "lpEvent", CGS_ARTIST_FILE, 1013);                                  // cpp:1013
 
             const CgsGui::GuiEventAptTriggerPayload* const lpAptTrigger =
                 reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent);
@@ -992,7 +992,7 @@ void CompletedGame::HandleIncomingEvents()
 // Either component answer that returns true advances the ladder to the photo cleanup.
 void CompletedGame::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liEventType)
 {
-    CGS_ASSERT(lpEvent != 0, "lpEvent");                                          // cpp:1124
+    CGS_ASSERT_AT(lpEvent != 0, "lpEvent", CGS_ARTIST_FILE, 1124);                                          // cpp:1124
 
     if (liEventType != KI_EVENT_CONTROLLER_INPUT_PRESSED)
     {

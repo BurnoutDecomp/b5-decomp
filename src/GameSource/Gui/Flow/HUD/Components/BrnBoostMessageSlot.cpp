@@ -266,8 +266,8 @@ void BoostMessageSlot::Update(f32 lfTimeStep)
 
     // The tripwire runs AFTER the clear (the console re-reads both the latch and the
     // frame here -- 0x82420F34/0x82420F40); non-gating.
-    CGS_ASSERT(!mbInTransition || liSlotFrame <= KI_SLOT_TRANSITION_FRAME_LIMIT,
-               "!mbInTransition || mMovieClipRef.GetCurrentFrameOneBased()<=34");   // :266
+    CGS_ASSERT_AT(!mbInTransition || liSlotFrame <= KI_SLOT_TRANSITION_FRAME_LIMIT,
+               "!mbInTransition || mMovieClipRef.GetCurrentFrameOneBased()<=34", CGS_ARTIST_FILE, 266);   // :266
 
     // ---- the item clip's transition latch ------------------------------------
     const s32 liItemFrame = mMessageItem.GetAptRef().mpMovieClipInst->GetCurrentFrameOneBased();

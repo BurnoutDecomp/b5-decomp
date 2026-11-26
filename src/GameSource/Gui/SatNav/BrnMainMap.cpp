@@ -1,5 +1,5 @@
 #include "GameSource/Gui/SatNav/BrnMainMap.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/SatNav/BrnMainMap.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // the one-shot gate log
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"       // CgsGui::GuiAccessPointers::GetGuiCache
@@ -225,8 +225,8 @@ namespace BrnGui
         // cpp:96 -- the console's own sanity check on the world rect it just installed. The
         // vendor Magnitude (vector4_operation_inline.h) carries the console's exact semantics
         // including the vsel zero-dot guard (sqrt(0) == 0).
-        CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
-                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
+        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 96);
 
         mbIsZooming  = false;
         mpMapManager = 0;
@@ -440,7 +440,7 @@ namespace BrnGui
 
         // cpp:456 -- the console's own cache assert (it derefs nothing here, but the check
         // is part of the body and is reproduced faithfully).
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 456);
 
         // mv4WorldRect = mv4ViewRect * <the still-current scale>, then the z lane alone
         // scaled by the 16:9 aspect (see the vperm note in the banner).
@@ -451,8 +451,8 @@ namespace BrnGui
         mv4WorldRect.mV = __vrlimi(lvScaledRect, __vmulfp(lvScaledRect, lv4Aspect.mV), 2, 0);
 
         // cpp:461 -- same guard Construct fires, on the rect this function just installed.
-        CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
-                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
+        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 461);
 
         // `stfs f31, 0x664` then `stfs f31, 0x660` -- desired first, then live.
         mfDesiredWorldZoomFactor = lfZoom;
@@ -587,8 +587,8 @@ namespace BrnGui
         mv4WorldRect.mV.w = mv4WorldRect.mV.y + lfHeight;
 
         // cpp:376 -- the same guard Construct / SetZoom fire, on the rect just installed.
-        CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
-                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
+        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 376);
 
         Vector2 lv2NewCentre;
         lv2NewCentre.mV.x = mv4WorldRect.mV.x + (mv4WorldRect.mV.z - mv4WorldRect.mV.x) * KF_RECT_CENTRE_SCALE;
@@ -663,7 +663,7 @@ namespace BrnGui
     void MainMapComponent::SnapToLocation(Vector2 lv2Location)
     {
         // cpp:397 -- the console's cache tripwire (it derefs nothing here).
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 397);
 
         // `lfs f0, 0x664(r30)` then `stfs f0, 0x660(r30)`: the pending zoom is committed
         // outright rather than animated towards.
@@ -683,11 +683,11 @@ namespace BrnGui
 
         // cpp:405 -- a TWO-lane magnitude (the asm splats lanes 0 and 1 of the squared
         // register and adds them; z/w are never read), hence the Vector2 overload.
-        CGS_ASSERT(rw::math::vpu::Magnitude(mv2DesiredCentre) < KF_MAX_WORLD_RECT_MAGNITUDE,
-                   "RwMathVPU::Magnitude(mv2DesiredCentre) < 1000000.0f");
+        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv2DesiredCentre) < KF_MAX_WORLD_RECT_MAGNITUDE,
+                   "RwMathVPU::Magnitude(mv2DesiredCentre) < 1000000.0f", CGS_ARTIST_FILE, 405);
         // cpp:406 -- the four-lane one, on the rect just installed.
-        CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
-                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
+        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 406);
 
         // See the [FLAG dead-value] note above: the console computes all three of these and
         // uses none of the returned values.
@@ -813,8 +813,8 @@ namespace BrnGui
                 mv4WorldRect.mV = __vrlimi(lvScaledRect, __vmulfp(lvScaledRect, lv4Aspect.mV), 2, 0);
 
                 // cpp:579 -- the shared four-lane guard on the rect just installed.
-                CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
-                           "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
+                CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+                           "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 579);
 
                 // The settled arm's chase divisor is 1.0f, i.e. the centre lands on the
                 // desired centre this frame (see the banner -- the reciprocal chain on a
@@ -897,7 +897,7 @@ namespace BrnGui
                 break;
             default:
                 // cpp:635 -- the console's out-of-range tripwire.
-                CGS_ASSERT(false, "Unexpected zoom factor");
+                CGS_ASSERT_AT(false, "Unexpected zoom factor", CGS_ARTIST_FILE, 635);
                 break;
             }
         }
@@ -912,8 +912,8 @@ namespace BrnGui
         mv4WorldRect.mV = __vrlimi(lvScaledRect, __vmulfp(lvScaledRect, lv4Aspect.mV), 2, 0);
 
         // cpp:645
-        CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
-                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
+        CGS_ASSERT_AT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f", CGS_ARTIST_FILE, 645);
 
         return lv2Result;
     }
@@ -967,7 +967,7 @@ namespace BrnGui
     Vector2 MainMapComponent::Update(Vector2 lv2WorldCentre)
     {
         // cpp:167 -- the console's cache tripwire (it derefs nothing here).
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 167);
 
         // flt_82F25AD4 == 0x3FE38E39 == 1.7777778f, read from the image: the 16:9 aspect the
         // whole family folds into the world rect's z lane (SetZoom and SnapToLocation apply

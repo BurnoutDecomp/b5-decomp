@@ -683,7 +683,7 @@ namespace BrnGui
         switch (leOldState)
         {
         case E_STATE_UNLOADED:
-            CGS_ASSERT(lrResourceInfo.mpResource == 0, "lResourceInfo.mpResource==NULL");
+            CGS_ASSERT_AT(lrResourceInfo.mpResource == 0, "lResourceInfo.mpResource==NULL", CGS_ARTIST_FILE, 207);
             // 23 is the wildcard "no type recorded yet" value the X360 admits alongside
             // an exact match ("GuiCache: inconsistent type used for resource Id=" fold).
             CGS_ASSERT(lrResourceInfo.meType == 23 || lrResourceInfo.meType == lResource.meType,
@@ -734,8 +734,8 @@ namespace BrnGui
     bool StateLoadingHelper::EnsureResourcesAreLoaded(const CgsGui::sResourceTuple* lpResources,
                                                       u32 luCount)
     {
-        CGS_ASSERT(muPendingUnloadCount <= KU_MAX_RESOURCES_TO_WATCH,
-                   "muPendingUnloadCount <= KU_MAX_RESOURCES_TO_WATCH");
+        CGS_ASSERT_AT(muPendingUnloadCount <= KU_MAX_RESOURCES_TO_WATCH,
+                   "muPendingUnloadCount <= KU_MAX_RESOURCES_TO_WATCH", CGS_ARTIST_FILE, 288);
 
         const u32 luRealPending = CountRealPendingUnloads(maResources, KU_MAX_RESOURCES_TO_WATCH);
         CGS_ASSERT(muPendingUnloadCount == luRealPending,
@@ -790,7 +790,7 @@ namespace BrnGui
             break;
 
         case E_STATE_LOADED:
-            CGS_ASSERT(lrResourceInfo.mpResource != 0, "lResourceInfo.mpResource!=NULL");
+            CGS_ASSERT_AT(lrResourceInfo.mpResource != 0, "lResourceInfo.mpResource!=NULL", CGS_ARTIST_FILE, 376);
             CGS_ASSERT(lrResourceInfo.meType == 23 || lrResourceInfo.meType == lResource.meType,
                        "GuiCache: inconsistent type used for resource Id=");
             lrResourceInfo.meState = E_STATE_UNLOAD_REQUESTED;
@@ -1145,12 +1145,12 @@ namespace BrnGui
     // defined, which is why BrnNetworkPlayerImageRenderer could not link.
     const void* StateLoadingHelper::GetLoadedResource(u32 luId) const
     {
-        CGS_ASSERT(luId < KU_MAX_RESOURCES_TO_WATCH,
-                   "(luId >= 0) && (luId < KU_MAX_RESOURCES_TO_WATCH)");
+        CGS_ASSERT_AT(luId < KU_MAX_RESOURCES_TO_WATCH,
+                   "(luId >= 0) && (luId < KU_MAX_RESOURCES_TO_WATCH)", CGS_ARTIST_FILE, 345);
         if (luId >= KU_MAX_RESOURCES_TO_WATCH)
             return 0;
 
-        CGS_ASSERT(maResources[luId].mpResource != 0, "maResources[luId].mpResource!=NULL");
+        CGS_ASSERT_AT(maResources[luId].mpResource != 0, "maResources[luId].mpResource!=NULL", CGS_ARTIST_FILE, 346);
         return maResources[luId].mpResource;
     }
 
@@ -1316,11 +1316,11 @@ namespace BrnGui
     // does for paint/livery variants, using the GUI's loaded vehicle list.
     CgsID GuiCache::GetOriginalCarId(CgsID lCarId)
     {
-        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController != NULL");
+        CGS_ASSERT_AT(mpWorldDataController != 0, "mpWorldDataController != NULL", CGS_ARTIST_FILE, 3164);
         if (mpWorldDataController == 0)
             return lCarId;
         const BrnResource::VehicleList* lpVehicleList = mpWorldDataController->GetVehicleList();
-        CGS_ASSERT(lpVehicleList != 0, "lpVehicleList != NULL");
+        CGS_ASSERT_AT(lpVehicleList != 0, "lpVehicleList != NULL", CGS_ARTIST_FILE, 3171);
         const s32 liIndex = lpVehicleList->GetVehicleIndex(lCarId);
         if (liIndex < 0)
             return lCarId;
@@ -1329,7 +1329,7 @@ namespace BrnGui
             return lCarId;
         const CgsID lParentId = lpEntry->GetParentId();
         const BrnResource::VehicleListEntry* lpParent = lpVehicleList->GetVehicleData(lParentId);
-        CGS_ASSERT(lpParent != 0, "lpParentVehicleListEntry != NULL");
+        CGS_ASSERT_AT(lpParent != 0, "lpParentVehicleListEntry != NULL", CGS_ARTIST_FILE, 3190);
         return lpParent->GetParentId() != 0 ? lpParent->GetParentId() : lParentId;
     }
 
@@ -1372,7 +1372,7 @@ namespace BrnGui
         case 415:
         {
             const CgsID lCarId = *reinterpret_cast<const CgsID*>(lpEvent);
-            CGS_ASSERT(lCarId != 0, "lpChangeCarEvent->mCarId != kCGSID_NULL");
+            CGS_ASSERT_AT(lCarId != 0, "lpChangeCarEvent->mCarId != kCGSID_NULL", CGS_ARTIST_FILE, 1554);
             mGuiPlayerInfo.mSelectedCarId = lCarId;
             mGuiPlayerInfo.mOriginalCarId = GetOriginalCarId(lCarId);
             break;
@@ -1619,8 +1619,8 @@ namespace BrnGui
                         typedef BrnGui::GuiEventUpdateSatNav::SatNavIconInfo SatNavIconInfo;
                         const s32 KI_MAX_DRIVE_THRUS_IN_THE_WORLD =
                             static_cast<s32>(sizeof(maDriveThroughInfo) / sizeof(maDriveThroughInfo[0]));   // 46
-                        CGS_ASSERT(miNumDriveThroughs < KI_MAX_DRIVE_THRUS_IN_THE_WORLD,
-                                   "miNumDriveThroughs < (static_cast<const int32_t>(KI_MAX_DRIVE_THRUS_IN_THE_WORLD))");
+                        CGS_ASSERT_AT(miNumDriveThroughs < KI_MAX_DRIVE_THRUS_IN_THE_WORLD,
+                                   "miNumDriveThroughs < (static_cast<const int32_t>(KI_MAX_DRIVE_THRUS_IN_THE_WORLD))", CGS_ARTIST_FILE, 1603);
                         if (miNumDriveThroughs >= KI_MAX_DRIVE_THRUS_IN_THE_WORLD)
                         {
                             break;
@@ -1932,8 +1932,8 @@ namespace BrnGui
             std::memcpy(maEventPositionValid, positions->mabValid, sizeof(maEventPositionValid));
             if (mGuiPlayerInfo.mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
             {
-                CGS_ASSERT(mGuiPlayerInfo.mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                           "lePlayerActiveRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                CGS_ASSERT_AT(mGuiPlayerInfo.mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                           "lePlayerActiveRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 2407);
                 if (maEventPositionValid[mGuiPlayerInfo.mePlayerActiveRaceCarIndex])
                 {
                     const u8 position = static_cast<u8>(maEventPositionOfRaceCar[mGuiPlayerInfo.mePlayerActiveRaceCarIndex]);
@@ -2034,8 +2034,8 @@ namespace BrnGui
                 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData& lrStatus =
                     lpNetworkPlayerStatus->maPlayerInfo[liIndex];
                 const BrnNetwork::NetworkPlayerID lNetworkPlayerID = lrStatus.mNetworkPlayerID;
-                CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-                           "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+                CGS_ASSERT_AT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+                           "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 1990);
 
                 BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpData = 0;
                 for (s32 liSlot = 0; liSlot < 8; ++liSlot)
@@ -2055,9 +2055,9 @@ namespace BrnGui
                 if (lpData == 0)
                     continue;
 
-                CGS_ASSERT((lpData->mPlayerName.macName[0] == 0) ||
+                CGS_ASSERT_AT((lpData->mPlayerName.macName[0] == 0) ||
                                (LobbyNameCmp(lpData->mPlayerName.macName, lrStatus.mPlayerName.macName) == 0),
-                           "( lpData->mPlayerName.IsEmpty() ) || ( lpData->mPlayerName.IsEqualTo( lpNetworkPlayerStatus->maPlayerInfo[liIndex].mPlayerName ) )");
+                           "( lpData->mPlayerName.IsEmpty() ) || ( lpData->mPlayerName.IsEqualTo( lpNetworkPlayerStatus->maPlayerInfo[liIndex].mPlayerName ) )", CGS_ARTIST_FILE, 1997);
                 std::memcpy(lpData, &lrStatus, sizeof(*lpData));   // XMemCpy, 312 bytes
             }
 
@@ -2238,8 +2238,8 @@ namespace BrnGui
             const GuiEventSetAvailablePresetRaces* lpRaces =
                 reinterpret_cast<const GuiEventSetAvailablePresetRaces*>(lpEvent);
             miNumPresetRaces = lpRaces->miNumPresetRaces;
-            CGS_ASSERT(miNumPresetRaces >= 0 && miNumPresetRaces <= 6,
-                       "miNumPresetRaces >= 0 && miNumPresetRaces <= KI_MAX_RACES_AT_LANDMARK");
+            CGS_ASSERT_AT(miNumPresetRaces >= 0 && miNumPresetRaces <= 6,
+                       "miNumPresetRaces >= 0 && miNumPresetRaces <= KI_MAX_RACES_AT_LANDMARK", CGS_ARTIST_FILE, 1786);
             // Only the live rows are copied. The original refresh reads row0 even at count0.
             std::memcpy(maPresetRaces, lpRaces->maPresetRaces,
                         static_cast<size_t>(miNumPresetRaces) * sizeof(PresetRace));
@@ -2554,8 +2554,8 @@ namespace BrnGui
             if (lpPrepare->mu8CheckpointCount != 0)
             {
                 const s32 KI_MAX_LANDMARKS_IN_MODE = 16;   // `cmplwi r11, 0x10` @0x8250E9E4
-                CGS_ASSERT(static_cast<s32>(lpPrepare->mu8CheckpointCount) <= KI_MAX_LANDMARKS_IN_MODE,
-                           "lpGuiEventPrepareForModeStart->muCheckpointsInEvent <= KI_MAX_LANDMARKS_IN_MODE"); // cpp:2094
+                CGS_ASSERT_AT(static_cast<s32>(lpPrepare->mu8CheckpointCount) <= KI_MAX_LANDMARKS_IN_MODE,
+                           "lpGuiEventPrepareForModeStart->muCheckpointsInEvent <= KI_MAX_LANDMARKS_IN_MODE", CGS_ARTIST_FILE, 2094); // cpp:2094
 
                 s32 liCheckpoint = 0;
                 for (; liCheckpoint < static_cast<s32>(lpPrepare->mu8CheckpointCount); ++liCheckpoint)
@@ -2574,9 +2574,9 @@ namespace BrnGui
             {
                 // ---- the ONLINE tail (@0x8250EAA8..) ---------------------------------
                 miOnlineRoundIndex = lpPrepare->miCurrentRound;      // stw +0xA7FC
-                CGS_ASSERT(miOnlineRoundIndex >= 0 && static_cast<u32>(miOnlineRoundIndex) < 10u,
+                CGS_ASSERT_AT(miOnlineRoundIndex >= 0 && static_cast<u32>(miOnlineRoundIndex) < 10u,
                            "miRoundIndex>=0 && uint32_t(miRoundIndex)<BrnGameState::GameStateModuleIO::"
-                           "KU_MAX_ONLINE_ROUNDS_IN_MODE");        // cpp:2115 (`cmplwi r11, 0xA`)
+                           "KU_MAX_ONLINE_ROUNDS_IN_MODE", CGS_ARTIST_FILE, 2115);        // cpp:2115 (`cmplwi r11, 0xA`)
 
                 // ARTIST 8250EAE8..EB04 indexes the 44-byte round record.
                 typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event
@@ -2689,10 +2689,10 @@ namespace BrnGui
         case 396:
         {
             const GuiShowtimeScoreUpdate* lpUpdate = reinterpret_cast<const GuiShowtimeScoreUpdate*>(lpEvent);
-            CGS_ASSERT(lpUpdate->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                       "lpShowtimeUpdate->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-            CGS_ASSERT(lpUpdate->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "lpShowtimeUpdate->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CGS_ASSERT_AT(lpUpdate->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                       "lpShowtimeUpdate->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 2887);
+            CGS_ASSERT_AT(lpUpdate->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "lpShowtimeUpdate->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 2888);
             maShowtimeScoreData[lpUpdate->meActiveRaceCarIndex] = *lpUpdate;
             break;
         }
@@ -3643,9 +3643,9 @@ namespace BrnGui
     // the reel was located.
     s32 GuiCache::ReplayConvertGuiSlotIndexToReelIndex(s32 liSlotIndex) const
     {
-        CGS_ASSERT(liSlotIndex >= 0, "liSlotIndex >= 0");
-        CGS_ASSERT(liSlotIndex < 6, "liSlotIndex < BrnReplays::KI_MAX_REELS");
-        CGS_ASSERT(liSlotIndex < miReplaySlotsUsed, "liSlotIndex < miReplaySlotsUsed");
+        CGS_ASSERT_AT(liSlotIndex >= 0, "liSlotIndex >= 0", CGS_ARTIST_FILE, 4419);
+        CGS_ASSERT_AT(liSlotIndex < 6, "liSlotIndex < BrnReplays::KI_MAX_REELS", CGS_ARTIST_FILE, 4420);
+        CGS_ASSERT_AT(liSlotIndex < miReplaySlotsUsed, "liSlotIndex < miReplaySlotsUsed", CGS_ARTIST_FILE, 4421);
 
         // The cached slot->reel entry is the reel's address; find the reel index whose
         // StatusInterface::GetReel address matches it.
@@ -3827,11 +3827,11 @@ void GuiCache::GetOnlineLandmarkInfoAtPositionInList(
          s32 liIndex,
          GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
 {
-    CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");   // cpp:3586
+    CGS_ASSERT_AT(mpWorldDataController != 0, "mpWorldDataController", CGS_ARTIST_FILE, 3586);   // cpp:3586
 
     const BrnTrigger::Landmark* lpLandmark =
         mpWorldDataController->GetOnlineLandmarkInfoAtPositionInList(liIndex);
-    CGS_ASSERT(lpLandmark != 0, "lpLandmark");                         // cpp:3589
+    CGS_ASSERT_AT(lpLandmark != 0, "lpLandmark", CGS_ARTIST_FILE, 3589);                         // cpp:3589
     if (lpLandmark == 0)
     {
         return;
@@ -4113,7 +4113,7 @@ namespace BrnGui
         GuiCache::GetLandmarkInfoFromIndex(BrnGameState::LandmarkIndex lLandmarkIndex,
                                            GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
     {
-        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");   // cpp:3620
+        CGS_ASSERT_AT(mpWorldDataController != 0, "mpWorldDataController", CGS_ARTIST_FILE, 3620);   // cpp:3620
 
         if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
         {
@@ -4123,7 +4123,7 @@ namespace BrnGui
 
         const BrnTrigger::Landmark* lpLandmark =
             mpWorldDataController->GetLandmarkInfoFromIndex(lLandmarkIndex);
-        CGS_ASSERT(lpLandmark != 0, "lpLandmark");                         // cpp:3623
+        CGS_ASSERT_AT(lpLandmark != 0, "lpLandmark", CGS_ARTIST_FILE, 3623);                         // cpp:3623
 
         // The three `lfs` off the landmark's BoxRegion position + `stw 0` for the w lane,
         // then one `stvx128` -- the whole 16-byte lane in one store.
@@ -4159,7 +4159,7 @@ namespace BrnGui
     void GuiCache::GetLandmarkInfoFromID(CgsID lLandmarkID,
                                          GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
     {
-        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");   // cpp:3654
+        CGS_ASSERT_AT(mpWorldDataController != 0, "mpWorldDataController", CGS_ARTIST_FILE, 3654);   // cpp:3654
 
         if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
         {
@@ -4169,7 +4169,7 @@ namespace BrnGui
 
         const BrnTrigger::Landmark* lpLandmark =
             mpWorldDataController->GetLandmarkInfoFromID(lLandmarkID);
-        CGS_ASSERT(lpLandmark != 0, "lpLandmark");                         // cpp:3657
+        CGS_ASSERT_AT(lpLandmark != 0, "lpLandmark", CGS_ARTIST_FILE, 3657);                         // cpp:3657
 
         const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
         const Vector4 lv4PositionLane(lv3LandmarkPosition.mV.x, lv3LandmarkPosition.mV.y,
@@ -4272,7 +4272,7 @@ namespace BrnGui
     // default-initialised for the same reason the console leaves its frame alone.
     void GuiCache::UpdateTrackerInfo(const u16* lpLandmarkIndices, s32 liCount)
     {
-        CGS_ASSERT(lpLandmarkIndices != 0, "lpLandmarkIndices");            // cpp:3913
+        CGS_ASSERT_AT(lpLandmarkIndices != 0, "lpLandmarkIndices", CGS_ARTIST_FILE, 3913);            // cpp:3913
 
         GuiEventSetTracker lSetTrackerEvent;
         lSetTrackerEvent.miCurrentlyTrackedIndex = 0;
@@ -4460,8 +4460,8 @@ namespace BrnGui
         if (lbFlag)
         {
             lSetTrackerEvent.miCurrentlyTrackedIndex = GetCheckpointReached();
-            CGS_ASSERT(lSetTrackerEvent.miCurrentlyTrackedIndex >= 0,
-                       "lSetTrackerEvent.miCurrentlyTrackedIndex >= 0");    // cpp:4204
+            CGS_ASSERT_AT(lSetTrackerEvent.miCurrentlyTrackedIndex >= 0,
+                       "lSetTrackerEvent.miCurrentlyTrackedIndex >= 0", CGS_ARTIST_FILE, 4204);    // cpp:4204
         }
         else
         {
@@ -4482,9 +4482,9 @@ namespace BrnGui
             lActiveLandmarksEvent.muNumLandmarks = static_cast<u32>(liNumTracked);
             lSetTrackerEvent.miNumTrackedItems   = liNumTracked;
 
-            CGS_ASSERT(liNumTracked <= GuiTracker::KI_TRACKER_STACK_SIZE,
+            CGS_ASSERT_AT(liNumTracked <= GuiTracker::KI_TRACKER_STACK_SIZE,
                        "lSetTrackerEvent.miNumTrackedItems <= "
-                       "GuiTracker::KI_TRACKER_STACK_SIZE");                // cpp:4227
+                       "GuiTracker::KI_TRACKER_STACK_SIZE", CGS_ARTIST_FILE, 4227);                // cpp:4227
 
             // [FLAG deliberate divergence -- see the banner above] the console walks to
             // liNumTracked regardless; we stop at the record's own capacity so a
@@ -4724,15 +4724,15 @@ namespace BrnGui
     void GuiCache::GetOnlineFinishPoint(s32 liIndexIn,
                                         GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
     {
-        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");       // cpp:3695
-        CGS_ASSERT(static_cast<u32>(liIndexIn) < GetNumOnlineFinishPoints(),
-                   "((uint32_t)liIndexIn) < mEventsWithUniqueFinishPoints.CountSetBits()");
+        CGS_ASSERT_AT(mpWorldDataController != 0, "mpWorldDataController", CGS_ARTIST_FILE, 3695);       // cpp:3695
+        CGS_ASSERT_AT(static_cast<u32>(liIndexIn) < GetNumOnlineFinishPoints(),
+                   "((uint32_t)liIndexIn) < mEventsWithUniqueFinishPoints.CountSetBits()", CGS_ARTIST_FILE, 3696);
                                                                                // cpp:3696
 
         s32 liSetBit = GetFirstSetBit(maOnlineFinishPointsMask);
-        CGS_ASSERT(liSetBit != KI_INVALID_BITINDEX,
+        CGS_ASSERT_AT(liSetBit != KI_INVALID_BITINDEX,
                    "liSetBit != CgsContainers::BitArray<KI_MAX_FINISH_POINTS>"
-                   "::KI_INVALID_BITINDEX");                                   // cpp:3699
+                   "::KI_INVALID_BITINDEX", CGS_ARTIST_FILE, 3699);                                   // cpp:3699
 
         for (s32 liRemaining = liIndexIn; liRemaining > 0; --liRemaining)
         {
@@ -4794,10 +4794,10 @@ namespace BrnGui
 void GuiCache::GetLandmarkInfoAtPositionInList(s32 liIndex,
     GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
 {
-    CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");
+    CGS_ASSERT_AT(mpWorldDataController != 0, "mpWorldDataController", CGS_ARTIST_FILE, 3551);
     const BrnTrigger::Landmark* lpLandmark =
         mpWorldDataController->GetLandmarkInfoAtPositionInList(liIndex);
-    CGS_ASSERT(lpLandmark != 0, "lpLandmark");
+    CGS_ASSERT_AT(lpLandmark != 0, "lpLandmark", CGS_ARTIST_FILE, 3554);
         // The three `lfs` off the landmark's BoxRegion position + `stw 0` for the w lane,
         // then one `stvx128` -- the whole 16-byte lane in one store.
         const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();

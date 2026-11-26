@@ -106,11 +106,11 @@ namespace BrnGui
     // lerp(start, end, proportion) of each endpoint pair.
     void FlaptInterpolatorComponent::SetProportion(f32 lfNewProportion)
     {
-        CGS_ASSERT((0.0f <= lfNewProportion) && (1.0f >= lfNewProportion),
-                   "( 0.0f <= lfNewProportion ) && ( 1.0f >= lfNewProportion )");
-        CGS_ASSERT(mbSetInterpValues, "mbSetInterpValues");
-        CGS_ASSERT(mControlledMovieClip.mpMovieClipInst != 0,
-                   "mControlledMovieClip.IsValid()");
+        CGS_ASSERT_AT((0.0f <= lfNewProportion) && (1.0f >= lfNewProportion),
+                   "( 0.0f <= lfNewProportion ) && ( 1.0f >= lfNewProportion )", CGS_ARTIST_FILE, 127);
+        CGS_ASSERT_AT(mbSetInterpValues, "mbSetInterpValues", CGS_ARTIST_FILE, 128);
+        CGS_ASSERT_AT(mControlledMovieClip.mpMovieClipInst != 0,
+                   "mControlledMovieClip.IsValid()", CGS_ARTIST_FILE, 129);
 
         if (lfNewProportion != mfCurrentProportion)
         {

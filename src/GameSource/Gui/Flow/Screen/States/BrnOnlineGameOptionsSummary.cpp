@@ -18,7 +18,7 @@
 // GetOutputEventQueue()->AddEvent with host sizeof sizes.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptionsSummary.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameOptionsSummary.cpp"
 #include <cstring>                                                        // std::memcpy
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
@@ -303,7 +303,7 @@ namespace BrnGui
                 break;
 
             case KI_EVENT_NETWORK_DISCONNECTED:
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 182);
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
                 SendStateEvent("DISCONNECT");
                 break;
@@ -625,7 +625,7 @@ namespace BrnGui
     {
         // The console's text names OnlineSelectRoute (the same pooled string).
         CGS_ASSERT(lpInGameEvent != 0, "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");
-        CGS_ASSERT(lpInGameEvent != 0, "lpInGameEvent");
+        CGS_ASSERT_AT(lpInGameEvent != 0, "lpInGameEvent", CGS_ARTIST_FILE, 1030);
 
         PostWire(mpStateInterface, GuiOverlayWaitFinishWire("CNOnlEntGame").mRequest);
         SendStateEvent("ADVANCE");

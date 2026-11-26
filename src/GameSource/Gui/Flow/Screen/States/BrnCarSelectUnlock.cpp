@@ -231,7 +231,7 @@ namespace BrnGui
     // ---- OnLeave @ 0x824CA2E8 -----------------------------------------------------
     void CarSelectUnlock::OnLeave()
     {
-        CGS_ASSERT(mpGuiCache != NULL, "NULL != mpGuiCache");   // cpp:184
+        CGS_ASSERT_AT(mpGuiCache != NULL, "NULL != mpGuiCache", CGS_ARTIST_FILE, 184);   // cpp:184
 
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
@@ -414,13 +414,13 @@ namespace BrnGui
                         mpGuiCache->GetWorldDataController()->GetVehicleList();
                     mManufacturerLogo.Set(lpVehicleList, lNewCarId);
 
-                    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");   // cpp:445
+                    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 445);   // cpp:445
                     lpVehicleList = mpGuiCache->GetWorldDataController()->GetVehicleList();
 
                     const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lNewCarId);
                     const BrnResource::VehicleListEntry* lpVehicleData =
                         (liVehicleIndex < 0) ? NULL : lpVehicleList->GetVehicleData(liVehicleIndex);
-                    CGS_ASSERT(lpVehicleData != NULL, "lpVehicleData");   // cpp:451
+                    CGS_ASSERT_AT(lpVehicleData != NULL, "lpVehicleData", CGS_ARTIST_FILE, 451);   // cpp:451
 
                     // ⚠️ ENTRY guard (the SetTicker sibling's shape (b)): the console
                     // dereferences lpVehicleData unconditionally below (its assert is
@@ -470,7 +470,7 @@ namespace BrnGui
 
                 case KI_EVENT_CAR_UNLOCK:   // 76 -- run the unlocked car's blurb ticker
                 {
-                    CGS_ASSERT(lpEvent != NULL, "lpCarUnlockEvent");   // cpp:367
+                    CGS_ASSERT_AT(lpEvent != NULL, "lpCarUnlockEvent", CGS_ARTIST_FILE, 367);   // cpp:367
 
                     {
                         GuiTickerFlagsWire536 lTickerClear;

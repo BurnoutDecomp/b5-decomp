@@ -225,7 +225,7 @@ namespace BrnGui
                 break;
 
             case KI_EVENT_NETWORK_DISCONNECTED:
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 190);
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
                 if (mpGuiCache->IsOnlineStartPending())
                 {
@@ -449,7 +449,7 @@ namespace BrnGui
             {
                 lpOptions->SetUnreadNews(false);
 
-                CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");
+                CGS_ASSERT_AT(mpStateInterface != 0, "mpStateInterface", CGS_ARTIST_FILE, 531);
                 mpStateInterface->OutputGuiEvent(lAutosaveEvent);
             }
         }

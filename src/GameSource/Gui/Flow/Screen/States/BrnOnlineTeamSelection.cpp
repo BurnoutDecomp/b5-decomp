@@ -228,7 +228,7 @@ void OnlineTeamSelection::UnloadLobbyResources()
 {
     mpStateInterface->PlayAptMovie("", KI_SCREEN_MOVIE_LEVEL);
 
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 558);
     if (mpGuiCache != 0)
         mpGuiCache->UnloadResources(maResourcesToLoad, 1);
 }

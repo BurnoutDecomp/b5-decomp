@@ -456,7 +456,7 @@ namespace BrnGui
     // ================================================================================
     void Intro::SetupComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:617
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 617);   // cpp:617
 
         switch (meIntroState)
         {
@@ -517,7 +517,7 @@ namespace BrnGui
     // ================================================================================
     void Intro::HandleTransitionFromLicense()
     {
-        CGS_ASSERT(mpProfile != 0, "mpProfile");   // cpp:860
+        CGS_ASSERT_AT(mpProfile != 0, "mpProfile", CGS_ARTIST_FILE, 860);   // cpp:860
 
         // X360: the inlined GuiEventPlayAptMovie record {8, 18, 12, "", 3} on channel 41.
         mpStateInterface->PlayAptMovie("", 3);
@@ -652,8 +652,8 @@ namespace BrnGui
                     const CgsSystem::DateAndTime lLicenceDate = mpProfile->GetLicenceIssuedDate();
 
                     const s32 liMonth = lLicenceDate.GetMonth() - 1;
-                    CGS_ASSERT(liMonth >= 0, "liMonth >= 0");                                  // cpp:443
-                    CGS_ASSERT(liMonth < KI_NUM_MONTH_STRINGIDS, "liMonth < KI_NUM_MONTH_STRINGIDS"); // cpp:444
+                    CGS_ASSERT_AT(liMonth >= 0, "liMonth >= 0", CGS_ARTIST_FILE, 443);                                  // cpp:443
+                    CGS_ASSERT_AT(liMonth < KI_NUM_MONTH_STRINGIDS, "liMonth < KI_NUM_MONTH_STRINGIDS", CGS_ARTIST_FILE, 444); // cpp:444
                     mMonthTextField.SetLocalisedText(KAPC_MONTH_STRINGIDS[liMonth], KE_MONTH_TEXT_FORMAT);
 
                     char lacScratch[KI_DATE_SCRATCH_LEN + 1];
@@ -717,7 +717,7 @@ namespace BrnGui
     // ================================================================================
     void Intro::HandleControllerInput(const CgsModule::Event* lpEvent, s32 leEventType)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent");   // cpp:704
+        CGS_ASSERT_AT(lpEvent != 0, "lpEvent", CGS_ARTIST_FILE, 704);   // cpp:704
 
         if (leEventType != KI_EVENT_CONTROLLER)
             return;
@@ -804,7 +804,7 @@ namespace BrnGui
         switch (meIntroState)
         {
         case E_INTROSTATE_NONE:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:212
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 212);   // cpp:212
             mpStateInterface->StopLoadingScreen();
             meIntroState = E_INTROSTATE_LOADINGRESOURCES;
             // FALL THROUGH -- the X360 case 0 runs straight on into case 5 (no branch).
@@ -826,7 +826,7 @@ namespace BrnGui
             break;
 
         case E_INTROSTATE_WAITINGFORCOMPONENTS:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:248
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 248);   // cpp:248
             if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
             {
                 meIntroState = E_INTROSTATE_WELCOMETEXT;
@@ -844,7 +844,7 @@ namespace BrnGui
             break;
 
         case E_INTROSTATE_WAIT_FOR_FLYBY_FINISH:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:295
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 295);   // cpp:295
             if (CacheIsUserSignedIn(mpGuiCache))
             {
                 mfFlybyTimer += mpGuiCache->GetTimeStep();

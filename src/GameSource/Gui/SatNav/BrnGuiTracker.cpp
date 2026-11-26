@@ -252,12 +252,12 @@ namespace BrnGui
 
         mPlayersTrackerInfo.muTargetSectionId =
             static_cast<u16>(muPlayerTargetSectionId);                   // sth -> this+0xC30
-        CGS_ASSERT(mPlayersTrackerInfo.muTargetSectionId != KI_INVALID_SECTION_INDEX,
-                   "mPlayersTrackerInfo.muTargetSectionId != BrnWorld::KI_INVALID_SECTION_INDEX");
+        CGS_ASSERT_AT(mPlayersTrackerInfo.muTargetSectionId != KI_INVALID_SECTION_INDEX,
+                   "mPlayersTrackerInfo.muTargetSectionId != BrnWorld::KI_INVALID_SECTION_INDEX", CGS_ARTIST_FILE, 280);
 
         maTrackerRecords[0] = mPlayersTrackerInfo;                       // the six 8-byte moves
 
-        CGS_ASSERT(miCurrentlyTrackedIndex != -1, "miCurrentlyTrackedIndex != -1");
+        CGS_ASSERT_AT(miCurrentlyTrackedIndex != -1, "miCurrentlyTrackedIndex != -1", CGS_ARTIST_FILE, 284);
 
         const s32 liFirstKept = miCurrentlyTrackedIndex;
         const s32 liNumKept   = miTrackerCount - liFirstKept;            // v10
@@ -384,10 +384,10 @@ namespace BrnGui
                 const RouteInformation* lpRoute =
                     reinterpret_cast<const RouteInformation*>(lpEvent);
 
-                CGS_ASSERT(static_cast<u32>(lpRoute->miEventId)
+                CGS_ASSERT_AT(static_cast<u32>(lpRoute->miEventId)
                                < static_cast<u32>(KI_TRACKER_STACK_SIZE),
                            "lpRouteInformaton->miEventId >= 0 && "
-                           "lpRouteInformaton->miEventId < KI_TRACKER_STACK_SIZE");  // cpp:166
+                           "lpRouteInformaton->miEventId < KI_TRACKER_STACK_SIZE", CGS_ARTIST_FILE, 166);  // cpp:166
 
                 std::memcpy(&maRouteInformation[lpRoute->miEventId], lpRoute,
                             sizeof(RouteInformation));   // memcpy(.., .., 5136)
@@ -575,16 +575,16 @@ namespace BrnGui
                                                       CalculateRoute* lpOutCalculateRouteEvent,
                                                       s32 liNodeIndex)
     {
-        CGS_ASSERT(lpInTrackedItem != 0, "lpInTrackedItem");
-        CGS_ASSERT(lpOutCalculateRouteEvent != 0, "lpOutCalculateRouteEvent");
-        CGS_ASSERT((0 <= liNodeIndex) && (CalculateRoute::KI_MAX_POINTS > liNodeIndex),
-                   "(0 <= liNodeIndex) && (CalculateRoute::KI_MAX_POINTS > liNodeIndex)");
+        CGS_ASSERT_AT(lpInTrackedItem != 0, "lpInTrackedItem", CGS_ARTIST_FILE, 418);
+        CGS_ASSERT_AT(lpOutCalculateRouteEvent != 0, "lpOutCalculateRouteEvent", CGS_ARTIST_FILE, 419);
+        CGS_ASSERT_AT((0 <= liNodeIndex) && (CalculateRoute::KI_MAX_POINTS > liNodeIndex),
+                   "(0 <= liNodeIndex) && (CalculateRoute::KI_MAX_POINTS > liNodeIndex)", CGS_ARTIST_FILE, 420);
 
         switch (lpInTrackedItem->meIconType)
         {
             case GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK:
             {
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 426);
 
                 GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
                 mpGuiCache->GetLandmarkInfoFromIndex(

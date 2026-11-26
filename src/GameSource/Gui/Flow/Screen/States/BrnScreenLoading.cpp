@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnScreenLoading.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnScreenLoading.cpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / GuiEventPlayAptMovie
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventQueueSmall
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
@@ -229,7 +229,7 @@ namespace BrnGui
             if (liEventId == KI_EVENT_GUI_CACHE)
             {
                 const GuiEventCache* lpCacheEvent = reinterpret_cast<const GuiEventCache*>(lpEvent);
-                CGS_ASSERT(lpCacheEvent->mpGuiCache != 0, "lpCacheEvent->mpCachePointer");   // cpp:106
+                CGS_ASSERT_AT(lpCacheEvent->mpGuiCache != 0, "lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 106);   // cpp:106
                 mpGuiCache = lpCacheEvent->mpGuiCache;
             }
         }
@@ -285,7 +285,7 @@ namespace BrnGui
     // brightness/contrast hand-off (545).
     void ScreenLoading::ApplyOptionsDataProfileSettings()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:201
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 201);   // cpp:201
 
         CgsGui::GuiEventQueueSmall lLoadCompleteQueue;
         lLoadCompleteQueue.Construct();

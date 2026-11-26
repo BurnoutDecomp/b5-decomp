@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnBoostMessageManager.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnBoostMessageManager.cpp"
 #include <cstdarg>
 #include <cstdlib>                                           // getenv (the BRN_BOOST_TICKER_DIAG guard)
 
@@ -280,7 +280,7 @@ s32 BoostMessageManager::GetNumActiveSlots() const
 bool BoostMessageManager::AddMessage(MessageType leMessageType, const char* lpcText,
                                      f32 lfTimeToLive, s32 liBoostAmount)
 {
-    CGS_ASSERT(lpcText != 0, "lpMessageText");                                  // cpp:477
+    CGS_ASSERT_AT(lpcText != 0, "lpMessageText", CGS_ARTIST_FILE, 477);                                  // cpp:477
 
     BoostMessageSlot* lpMessageSlot = GetFreeSlot();
     if (lpMessageSlot == 0)
@@ -469,8 +469,8 @@ void BoostMessageManager::RecvEvent(const CgsModule::Event* lpEvent, s32 liEvent
         {
             const GuiSpinningEvent* lpSpinEvent = reinterpret_cast<const GuiSpinningEvent*>(lpEvent);
             CGS_ASSERT(lpSpinEvent != 0, "lpSpinEvent");                        // cpp:282
-            CGS_ASSERT(lpSpinEvent->mfSpinAngle >= 0.0f,
-                       "lpSpinEvent->mfSpinAngle >= 0.0f");                     // cpp:284
+            CGS_ASSERT_AT(lpSpinEvent->mfSpinAngle >= 0.0f,
+                       "lpSpinEvent->mfSpinAngle >= 0.0f", CGS_ARTIST_FILE, 284);                     // cpp:284
             mfSpinAngle = lpSpinEvent->mfSpinAngle;                             // @0x824209C0
             break;
         }
@@ -1220,11 +1220,11 @@ void BoostMessageManager::UpdateShowtime()
 {
     if (meHitVehicleCategory != 8)                                              // "none" sentinel
     {
-        CGS_ASSERT(meHitVehicleCategory >= 0, "meHitVehicleCategory >= 0");     // cpp:1722
-        CGS_ASSERT(static_cast<u32>(meHitVehicleCategory) <
+        CGS_ASSERT_AT(meHitVehicleCategory >= 0, "meHitVehicleCategory >= 0", CGS_ARTIST_FILE, 1722);     // cpp:1722
+        CGS_ASSERT_AT(static_cast<u32>(meHitVehicleCategory) <
                    sizeof(KA_VEHICLE_SCORE_CATEGORY_TO_MESSAGE_TYPE) /
                    sizeof(KA_VEHICLE_SCORE_CATEGORY_TO_MESSAGE_TYPE[0]),
-                   "(uint32_t) meHitVehicleCategory < sizeof(...)");            // cpp:1723
+                   "(uint32_t) meHitVehicleCategory < sizeof(...)", CGS_ARTIST_FILE, 1723);            // cpp:1723
 
         const MessageType leCategoryMessage =
             static_cast<MessageType>(KA_VEHICLE_SCORE_CATEGORY_TO_MESSAGE_TYPE[meHitVehicleCategory]);

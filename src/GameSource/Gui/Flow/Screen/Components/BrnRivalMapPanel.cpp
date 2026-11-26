@@ -175,9 +175,9 @@ namespace BrnGui
 
         SetState(KAC_STATE_PLAYER);
 
-        CGS_ASSERT(meCurrentRivalType == E_RIVAL_TYPE_OFFLINE_PLAYER,
-                   "E_RIVAL_TYPE_OFFLINE_PLAYER == meCurrentRivalType");   // cpp:127
-        CGS_ASSERT(lpGuiCache != 0, "NULL != lpGuiCache");                 // cpp:128
+        CGS_ASSERT_AT(meCurrentRivalType == E_RIVAL_TYPE_OFFLINE_PLAYER,
+                   "E_RIVAL_TYPE_OFFLINE_PLAYER == meCurrentRivalType", CGS_ARTIST_FILE, 127);   // cpp:127
+        CGS_ASSERT_AT(lpGuiCache != 0, "NULL != lpGuiCache", CGS_ARTIST_FILE, 128);                 // cpp:128
 
         if (!mbHasPlayerInfo)   // lbz 0x7A0 -- no response cached yet, nothing to draw
         {

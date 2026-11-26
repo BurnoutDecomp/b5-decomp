@@ -318,7 +318,7 @@ void OnlinePlay::HandleControllerInputMainMenu(const GuiEventControllerInputPres
                 break;
             }
 
-            CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 561);
 
             // The offline options select immediately; the online-start options (freeburn / unranked /
             // ranked) show the "start online?" confirmation first, unless a start is already in
@@ -413,7 +413,7 @@ void OnlinePlay::SelectOnlineMenuOption(EMainMenuOptions leOption)
         leOption == E_MAIN_MENU_OPTIONS_UNRANKED ||
         leOption == E_MAIN_MENU_OPTIONS_RANKED)
     {
-        CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 898);
 
         if (leOption != E_MAIN_MENU_OPTIONS_FREEBURN)
         {
@@ -522,7 +522,7 @@ void OnlinePlay::Update()
                 // The "start online?" question was answered: OK selects the highlighted option.
                 const EMainMenuOptions leOption =
                     static_cast<EMainMenuOptions>(mMainMenuComponent.GetHighlightedIndex());
-                CGS_ASSERT(lpEvent != NULL, "lpOverlayCompleteEvent");
+                CGS_ASSERT_AT(lpEvent != NULL, "lpOverlayCompleteEvent", CGS_ARTIST_FILE, 770);
 
                 const GuiOverlayCompletePayload* lpComplete =
                     static_cast<const GuiOverlayCompletePayload*>(lpEvent);
@@ -539,7 +539,7 @@ void OnlinePlay::Update()
                 break;
 
             case 493:
-                CGS_ASSERT(lpEvent != NULL, "lpEvent");
+                CGS_ASSERT_AT(lpEvent != NULL, "lpEvent", CGS_ARTIST_FILE, 794);
                 break;
 
             default:
@@ -564,7 +564,7 @@ void OnlinePlay::Update()
             {
                 if (luNotificationParam == 0)
                 {
-                    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+                    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 266);
                     if (XUserGetSigninState(mpGuiCache->GetActiveControllerIndex()) ==
                         eXUserSigninState_SignedInToLive)
                     {
@@ -585,7 +585,7 @@ void OnlinePlay::Update()
 // ------------------------------------------------ CheckForCompletedLoads
 void OnlinePlay::CheckForCompletedLoads()
 {
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 362);
 
     if (meSubState == E_SUBSTATE_LOADING_SCREEN)
     {

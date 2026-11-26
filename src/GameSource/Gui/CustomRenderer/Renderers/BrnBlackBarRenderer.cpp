@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnBlackBarRenderer.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnBlackBarRenderer.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
@@ -49,7 +49,7 @@ namespace BrnGui
 
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>*
             lpIm2dRenderBuffer = lpRendererSet->mpIm2dRenderBuffer;
-        CGS_ASSERT(lpIm2dRenderBuffer != 0, "lpIm2dRenderBuffer");
+        CGS_ASSERT_AT(lpIm2dRenderBuffer != 0, "lpIm2dRenderBuffer", CGS_ARTIST_FILE, 179);
 
         CgsGraphics::Basic2dColouredTexturedVertex laVertices[4] = {};
         const f32 lafUv[4][2] = { { 0.0f, 0.0f }, { 0.0f, 1.0f },

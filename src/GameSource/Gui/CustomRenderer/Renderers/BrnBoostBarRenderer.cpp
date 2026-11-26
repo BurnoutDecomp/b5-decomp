@@ -2,7 +2,7 @@
 #include "BrnBoostBarRenderer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include <cfloat>
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT + the Begin/Fire/EndAssert front-end
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // StrStream (runtime-composed assert messages)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor ("BoostBar", page 3)
@@ -288,7 +288,7 @@ void BoostBarRenderer::Construct()
     miBoostBarPM = -1;
     miBoostBarPM = CgsDev::PerfMonCpu::AddMonitor("BoostBar", static_cast<CgsDev::PerfMonCpuPage>(3),
                                                   false, 2.0f, false);
-    CGS_ASSERT(miBoostBarPM >= 0, "miBoostBarPM >= 0");
+    CGS_ASSERT_AT(miBoostBarPM >= 0, "miBoostBarPM >= 0", CGS_ARTIST_FILE, 245);
 }
 
 // Faithful port of X360 Prepare @0x82451B28 -- the staged bring-up:
@@ -481,7 +481,7 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
 // payload.
 void BoostBarRenderer::HandleFirstEvent(const GuiEventBoostInfo* lpBoostBarInfo)
 {
-    CGS_ASSERT(lpBoostBarInfo != 0, "lpBoostBarInfo");
+    CGS_ASSERT_AT(lpBoostBarInfo != 0, "lpBoostBarInfo", CGS_ARTIST_FILE, 2316);
 
     meVisibilityFadeState = lpBoostBarInfo->mbAllowedToBoost ? E_VISIBILITY_FULL
                                                              : E_VISIBILITY_NONE;
@@ -562,11 +562,11 @@ namespace
 
 void BoostBarRenderer::InitResources()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 722);
 
     const CgsGraphics::ImRendererBase::StateLibrary& lrStates = CgsGraphics::ImRendererBase::GetStateLibrary();
     const renderengine::Texture* lpWhiteTexture = lrStates.mpTexture_White;
-    CGS_ASSERT(lpWhiteTexture != 0, "lpTexture!=NULL");
+    CGS_ASSERT_AT(lpWhiteTexture != 0, "lpTexture!=NULL", CGS_ARTIST_FILE, 741);
 
     struct SlotBuild
     {
@@ -604,7 +604,7 @@ void BoostBarRenderer::InitResources()
         {
             lpTexture = static_cast<const renderengine::Texture*>(
                 mpGuiCache->GetLoadedResource(static_cast<u32>(lrBuild.liCacheId)));
-            CGS_ASSERT(lpTexture != 0, "lpTexture!=NULL");
+            CGS_ASSERT_AT(lpTexture != 0, "lpTexture!=NULL", CGS_ARTIST_FILE, 756);
         }
         *lrBuild.lppState = BuildBoostBarTextureState(mpHeapAllocator, *lrBuild.lpResource,
                                                       lpTexture, lrBuild.luAddressU);
@@ -1685,11 +1685,11 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
     if (miBoostBarPM >= 0)
         CgsDev::PerfMonCpu::StartMonitor(miBoostBarPM);
 
-    CGS_ASSERT(lpImRenderers != 0, "lpImRenderers");                          // :967
+    CGS_ASSERT_AT(lpImRenderers != 0, "lpImRenderers", CGS_ARTIST_FILE, 972);                          // :967
     mpImRenderers = lpImRenderers;
     Im2dCommandBuffer* lpRenderBuffer = ResolveBoostBarBuffer(mpImRenderers);
     CGS_ASSERT(lpRenderBuffer != 0, "NULL != lpIm2dRenderBuffer");            // :972
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                                // :975
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 975);                                // :975
     if (lpRenderBuffer == 0 || mpGuiCache == 0)
     {
         if (miBoostBarPM >= 0)
@@ -1917,7 +1917,7 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
             lInfo.miTextureFrame = static_cast<s32>(lfTimeNow * 30.0f);
             maBillboards.Append(lInfo);
 
-            CGS_ASSERT(mpWhiteTextureState != 0, "mpWhiteTextureState");   // :1220
+            CGS_ASSERT_AT(mpWhiteTextureState != 0, "mpWhiteTextureState", CGS_ARTIST_FILE, 1220);   // :1220
             const Vector4 lv4FlameMaskRect( lv4BoostRect.GetX().GetFloat(), 0.0f, 1.0f, 1.0f );
             const Vector4 lv4FullUVs( 0.0f, 0.0f, 1.0f, 1.0f );
             BrnGui::SetMaskRect(lpRenderBuffer, mpWhiteTextureState,

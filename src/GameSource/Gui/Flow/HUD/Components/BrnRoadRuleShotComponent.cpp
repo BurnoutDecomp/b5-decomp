@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnRoadRuleShotComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnRoadRuleShotComponent.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::GetAccessPointers
@@ -113,25 +113,25 @@ void RoadRuleShotComponent::SetupComponent(EPlayerState lePlayerState,
     // ---- the gamertag well ----
     BrnFlapt::MovieClipRef lTextFieldComponent;
     BrnFlapt::MovieClipRef lParent;
-    CGS_ASSERT(mAnimationMovieClip.TryFindChildComponentRecursively(
+    CGS_ASSERT_AT(mAnimationMovieClip.TryFindChildComponentRecursively(
                    KAC_GAMERTAG_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent),
-               "mAnimationMovieClip.TryFindChildComponentRecursively( KAC_GAMERTAG_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent )");   // :197 (non-gating)
+               "mAnimationMovieClip.TryFindChildComponentRecursively( KAC_GAMERTAG_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent )", CGS_ARTIST_FILE, 197);   // :197 (non-gating)
     lTextFieldComponent.SetVisible(false);
     lParent = lTextFieldComponent.GetParent();
     mGamertagTextfield = lParent.FindChildTextField(KAC_GAMERTAG_TEXTFIELD_NAME);
 
     // ---- the road-name well ----
-    CGS_ASSERT(mAnimationMovieClip.TryFindChildComponentRecursively(
+    CGS_ASSERT_AT(mAnimationMovieClip.TryFindChildComponentRecursively(
                    KAC_ROAD_NAME_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent),
-               "mAnimationMovieClip.TryFindChildComponentRecursively( KAC_ROAD_NAME_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent )");   // :202 (non-gating)
+               "mAnimationMovieClip.TryFindChildComponentRecursively( KAC_ROAD_NAME_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent )", CGS_ARTIST_FILE, 202);   // :202 (non-gating)
     lTextFieldComponent.SetVisible(false);
     lParent = lTextFieldComponent.GetParent();
     mRoadNameTextfield = lParent.FindChildTextField(KAC_ROAD_NAME_TEXTFIELD_NAME);
 
     // ---- the rule-state well ----
-    CGS_ASSERT(mAnimationMovieClip.TryFindChildComponentRecursively(
+    CGS_ASSERT_AT(mAnimationMovieClip.TryFindChildComponentRecursively(
                    KAC_RULE_STATE_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent),
-               "mAnimationMovieClip.TryFindChildComponentRecursively( KAC_RULE_STATE_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent )");   // :207 (non-gating)
+               "mAnimationMovieClip.TryFindChildComponentRecursively( KAC_RULE_STATE_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent )", CGS_ARTIST_FILE, 207);   // :207 (non-gating)
     lTextFieldComponent.SetVisible(false);
     lParent = lTextFieldComponent.GetParent();
     mRuleStateTextfield = lParent.FindChildTextField(KAC_RULE_STATE_TEXTFIELD_NAME);
@@ -149,7 +149,7 @@ void RoadRuleShotComponent::SetupComponent(EPlayerState lePlayerState,
 // @ 0x82415598 -- cpp:253.
 void RoadRuleShotComponent::Show(bool lbPose)
 {
-    CGS_ASSERT(0 != mpcComponentState, "NULL != mpcComponentState");   // :255 (non-gating)
+    CGS_ASSERT_AT(0 != mpcComponentState, "NULL != mpcComponentState", CGS_ARTIST_FILE, 255);   // :255 (non-gating)
     mAnimationMovieClip.GotoAndPlayLabel(lbPose ? "pose" : "transin");
 }
 
@@ -159,7 +159,7 @@ void RoadRuleShotComponent::Show(bool lbPose)
 // "CAPTURED_FOR <that record's player name>".
 void RoadRuleShotComponent::Snap(bool lbShowing)
 {
-    CGS_ASSERT(0 != mpcComponentState, "NULL != mpcComponentState");   // :297 (non-gating)
+    CGS_ASSERT_AT(0 != mpcComponentState, "NULL != mpcComponentState", CGS_ARTIST_FILE, 297);   // :297 (non-gating)
     mAnimationMovieClip.GotoAndPlayLabel(lbShowing ? "showing" : "snap");
 
     // The asserting access chain (CgsGuiStateInterface.h:344 "mpAccessPointers

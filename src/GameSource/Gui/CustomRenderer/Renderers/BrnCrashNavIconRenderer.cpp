@@ -32,7 +32,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnCrashNavIconRenderer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnCrashNavIconRenderer.cpp"
 #include "GameSource/Gui/BrnGuiCache.h"                          // BrnGui::GuiCache (resource pump + GetTime)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // sResourceTuple / GuiEventLoadNotification
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"  // CgsLanguage::LanguageManager
@@ -332,7 +332,7 @@ bool CrashNavIconRenderer::Prepare(CgsGui::GuiEventQueueSmall* lpOutputEventQueu
     {
     case E_PREPARESTAGE_START:
         mpHeapAllocator = lpHeapAllocator;   // stw r5, 0x94
-        CGS_ASSERT(lpOutputEventQueue != 0, "lpOutputEventQueue");   // console line 288
+        CGS_ASSERT_AT(lpOutputEventQueue != 0, "lpOutputEventQueue", CGS_ARTIST_FILE, 288);   // console line 288
         mpOutputEventQueue = lpOutputEventQueue;   // stw r4, 0x98
         mePrepareStage     = E_PREPARESTAGE_LOAD;
         return false;
@@ -471,7 +471,7 @@ void CrashNavIconRenderer::InitResources()
     {
         const void* const lpTexture =
             mpGuiCache->GetLoadedResource(KA_RESOURCES_TO_LOAD[liTextureIndex].muId);
-        CGS_ASSERT(lpTexture != 0, "lpTexture!=NULL");   // console line 631
+        CGS_ASSERT_AT(lpTexture != 0, "lpTexture!=NULL", CGS_ARTIST_FILE, 631);   // console line 631
 
         mapIconTextureStates[liTextureIndex] =
             CreateIconTextureState(mpHeapAllocator, &maIconResources[liTextureIndex], lpTexture);
@@ -481,9 +481,9 @@ void CrashNavIconRenderer::InitResources()
 
     {
         const void* const lpTexture = mpGuiCache->GetLoadedResource(KU_TEXTURE_ID_CRASHNAV_ICONS);
-        CGS_ASSERT(lpTexture != 0, "lpTexture != NULL");   // console line 647
+        CGS_ASSERT_AT(lpTexture != 0, "lpTexture != NULL", CGS_ARTIST_FILE, 647);   // console line 647
         mpIconsTextureState = CreateIconTextureState(mpHeapAllocator, &mIconsTextureStateResource, lpTexture);
-        CGS_ASSERT(mpIconsTextureState != 0, "mpIconsTextureState");   // console line 658
+        CGS_ASSERT_AT(mpIconsTextureState != 0, "mpIconsTextureState", CGS_ARTIST_FILE, 658);   // console line 658
     }
 
     // The console fills the UV tables here, BETWEEN the icon page and the masks.
@@ -491,26 +491,26 @@ void CrashNavIconRenderer::InitResources()
 
     {
         const void* const lpTexture = mpGuiCache->GetLoadedResource(KU_TEXTURE_ID_BACKGROUND_MASK);
-        CGS_ASSERT(lpTexture != 0, "lpTexture != NULL");   // console line 665
+        CGS_ASSERT_AT(lpTexture != 0, "lpTexture != NULL", CGS_ARTIST_FILE, 665);   // console line 665
         mpBackgroundMaskTextureState =
             CreateIconTextureState(mpHeapAllocator, &mBackgroundMaskTextureStateResource, lpTexture);
-        CGS_ASSERT(mpBackgroundMaskTextureState != 0, "mpBackgroundMaskTextureState");   // line 676
+        CGS_ASSERT_AT(mpBackgroundMaskTextureState != 0, "mpBackgroundMaskTextureState", CGS_ARTIST_FILE, 676);   // line 676
     }
 
     {
         const void* const lpTexture = mpGuiCache->GetLoadedResource(KU_TEXTURE_ID_PRERACE_MASK);
-        CGS_ASSERT(lpTexture != 0, "lpTexture != NULL");   // console line 680
+        CGS_ASSERT_AT(lpTexture != 0, "lpTexture != NULL", CGS_ARTIST_FILE, 680);   // console line 680
         mpPreRaceMaskTextureState =
             CreateIconTextureState(mpHeapAllocator, &mPreRaceMaskTextureStateResource, lpTexture);
-        CGS_ASSERT(mpPreRaceMaskTextureState != 0, "mpPreRaceMaskTextureState");   // line 691
+        CGS_ASSERT_AT(mpPreRaceMaskTextureState != 0, "mpPreRaceMaskTextureState", CGS_ARTIST_FILE, 691);   // line 691
     }
 
     {
         const void* const lpTexture = mpGuiCache->GetLoadedResource(KU_TEXTURE_ID_ROAD_SIGNS);
-        CGS_ASSERT(lpTexture != 0, "lpTexture != NULL");   // console line 694
+        CGS_ASSERT_AT(lpTexture != 0, "lpTexture != NULL", CGS_ARTIST_FILE, 694);   // console line 694
         mpRoadSignsTextureState =
             CreateIconTextureState(mpHeapAllocator, &mRoadSignsTextureStateResource, lpTexture);
-        CGS_ASSERT(mpRoadSignsTextureState != 0, "mpRoadSignsTextureState");   // line 705
+        CGS_ASSERT_AT(mpRoadSignsTextureState != 0, "mpRoadSignsTextureState", CGS_ARTIST_FILE, 705);   // line 705
     }
 }
 
@@ -649,8 +649,8 @@ void CrashNavIconRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEven
         CgsResource::SafeResourceHandle<CgsResource::Font> lFont;
         lFont.mpResourceMemory = lpcNotification->mResourceHandle.mpResourceMemory;
         lFont.mpSourceEntry    = lpcNotification->mResourceHandle.mpSourceEntry;
-        CGS_ASSERT(lFont.mpResourceMemory != 0,
-                   "lpFont != CgsResource::NULLResourceHandle");   // console line 497
+        CGS_ASSERT_AT(lFont.mpResourceMemory != 0,
+                   "lpFont != CgsResource::NULLResourceHandle", CGS_ARTIST_FILE, 497);   // console line 497
         if (lFont.mpResourceMemory == 0)
             break;
 
@@ -780,7 +780,7 @@ void CrashNavIconRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEven
         break;
 
     case KI_EVENT_MAP_ICON_STATUS:
-        CGS_ASSERT(lpEvent != 0, "lpMapIconStatus");   // console line 471
+        CGS_ASSERT_AT(lpEvent != 0, "lpMapIconStatus", CGS_ARTIST_FILE, 471);   // console line 471
         if (lpEvent != 0)
         {
             // Two words into +0x1C4 (bank pointer + count).
@@ -789,7 +789,7 @@ void CrashNavIconRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEven
         break;
 
     case KI_EVENT_ROAD_SIGN_ICON_STATUS:
-        CGS_ASSERT(lpEvent != 0, "lRoadSignIconStatus");   // console line 481
+        CGS_ASSERT_AT(lpEvent != 0, "lRoadSignIconStatus", CGS_ARTIST_FILE, 481);   // console line 481
         if (lpEvent != 0)
         {
             // Two words into +0x1544 (bank pointer + scale factor).
@@ -1438,7 +1438,7 @@ u32 CrashNavIconRenderer::GetNumIcons() const
         return static_cast<u32>(mpGuiCache->GetNumPresetEvents());
 
     default:
-        CGS_ASSERT(false, "Invalid icon display type in GetNumIcons");   // console line 899
+        CGS_ASSERT_AT(false, "Invalid icon display type in GetNumIcons", CGS_ARTIST_FILE, 899);   // console line 899
         return 0;
     }
 }
@@ -1488,9 +1488,9 @@ void CrashNavIconRenderer::GetIconInformation(u32 luIndex, bool* lpbFiltered,
                                               u32* lpuEventTypeIndex,
                                               Vector3& lrv3Position) const
 {
-    CGS_ASSERT(lpbFiltered != 0, "lpbFiltered");     // console line 926
-    CGS_ASSERT(lpuEventID != 0, "lpuEventID");       // console line 927
-    CGS_ASSERT(lpeIconType != 0, "lpeIconType");     // console line 928
+    CGS_ASSERT_AT(lpbFiltered != 0, "lpbFiltered", CGS_ARTIST_FILE, 926);     // console line 926
+    CGS_ASSERT_AT(lpuEventID != 0, "lpuEventID", CGS_ARTIST_FILE, 927);       // console line 927
+    CGS_ASSERT_AT(lpeIconType != 0, "lpeIconType", CGS_ARTIST_FILE, 928);     // console line 928
 
     switch (GetActiveIconType())
     {
@@ -1685,7 +1685,7 @@ void CrashNavIconRenderer::GetIconInformation(u32 luIndex, bool* lpbFiltered,
 // ---------------------------------------------------------------------------
 void CrashNavIconRenderer::RenderCursor(Im2dCommandBuffer* lpRenderBuffer)
 {
-    CGS_ASSERT(mpIconsTextureState != 0, "mpIconsTextureState");   // console line 1474
+    CGS_ASSERT_AT(mpIconsTextureState != 0, "mpIconsTextureState", CGS_ARTIST_FILE, 1474);   // console line 1474
 
     if (mGuiEventMapCursorStatus.miAnimationState == 4)
         return;
@@ -2312,10 +2312,10 @@ void CrashNavIconRenderer::RenderEventIcon(Im2dCommandBuffer* lpRenderBuffer,
 // ---------------------------------------------------------------------------
 void CrashNavIconRenderer::RenderIcons(Im2dCommandBuffer* lpRenderBuffer)
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");           // console line 1120
-    CGS_ASSERT(lpRenderBuffer != 0, "lpRenderBuffer");   // console line 1121
-    CGS_ASSERT(mRenderMainMapEvent.mfZoomLevel != 0.0f,
-               "mRenderMainMapEvent.mfZoomLevel != 0.0f");   // console line 1122
+    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1120);           // console line 1120
+    CGS_ASSERT_AT(lpRenderBuffer != 0, "lpRenderBuffer", CGS_ARTIST_FILE, 1121);   // console line 1121
+    CGS_ASSERT_AT(mRenderMainMapEvent.mfZoomLevel != 0.0f,
+               "mRenderMainMapEvent.mfZoomLevel != 0.0f", CGS_ARTIST_FILE, 1122);   // console line 1122
 
     const f32 lfZoom = mRenderMainMapEvent.mfZoomLevel;
 
@@ -2365,8 +2365,8 @@ void CrashNavIconRenderer::RenderIcons(Im2dCommandBuffer* lpRenderBuffer)
             }
             else
             {
-                CGS_ASSERT(lfNow >= mfIconFadeStartTime,
-                           "lfCurrentTime >= mfIconFadeStartTime");   // console line 1182
+                CGS_ASSERT_AT(lfNow >= mfIconFadeStartTime,
+                           "lfCurrentTime >= mfIconFadeStartTime", CGS_ARTIST_FILE, 1182);   // console line 1182
                 const f32 lfT = (lfNow - mfIconFadeStartTime) /
                                 (mfIconFadeEndTime - mfIconFadeStartTime);
                 // The console's two fsel-clamped arms. (The export's operand order for the
@@ -2501,12 +2501,12 @@ void CrashNavIconRenderer::RenderIcons(Im2dCommandBuffer* lpRenderBuffer)
 // ---------------------------------------------------------------------------
 void CrashNavIconRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
 {
-    CGS_ASSERT(mePrepareStage == E_PREPARESTAGE_DONE,
-               "mePrepareStage == E_PREPARESTAGE_DONE");   // console line 552
+    CGS_ASSERT_AT(mePrepareStage == E_PREPARESTAGE_DONE,
+               "mePrepareStage == E_PREPARESTAGE_DONE", CGS_ARTIST_FILE, 552);   // console line 552
     CGS_ASSERT(lpRendererSet != 0, "lpImRenderers");       // console line 555
 
     Im2dCommandBuffer* lpRenderBuffer = ResolveCrashNavBuffer(lpRendererSet);
-    CGS_ASSERT(lpRenderBuffer != 0, "lpImRenderers->mpIm2dRenderBuffer");   // console line 556
+    CGS_ASSERT_AT(lpRenderBuffer != 0, "lpImRenderers->mpIm2dRenderBuffer", CGS_ARTIST_FILE, 555);   // console line 556
 
     if (mRenderMainMapEvent.mpActiveTextures == 0 ||
         mpGuiCache                           == 0 ||

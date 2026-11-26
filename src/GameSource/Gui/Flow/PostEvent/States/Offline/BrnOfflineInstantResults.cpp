@@ -552,7 +552,7 @@ namespace BrnGui
                                            : (mpGuiCache->GetLicencePointsToNextRank() + 1);
 
                 BrnProgression::Profile* lpProgressionProfile = mpGuiCache->GetProfile();
-                CGS_ASSERT(lpProgressionProfile, "lpProgressionProfile");   // cpp:527
+                CGS_ASSERT_AT(lpProgressionProfile, "lpProgressionProfile", CGS_ARTIST_FILE, 527);   // cpp:527
 
                 const bool lbSeen100Percent =
                     lpProgressionProfile->GetSeen100PercentCompletionSequence();
@@ -567,7 +567,7 @@ namespace BrnGui
                 mPhotoBoothComponent.SetPhotoResourceId(mResults.mbHasRankedUp ? 93u : 91u);
 
                 SetEventIconResource();
-                CGS_ASSERT(0 != mLargeIconResource.muId, "0 != mLargeIconResource.muId"); // cpp:555
+                CGS_ASSERT_AT(0 != mLargeIconResource.muId, "0 != mLargeIconResource.muId", CGS_ARTIST_FILE, 555); // cpp:555
 
                 meCurrentState = E_RESULTS_STATE_LOADING_RESOURCES;
                 if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
@@ -797,13 +797,13 @@ namespace BrnGui
     // Tick the current substate's dwell down by one frame and report whether it expired.
     bool InstantResultsState::HasSubstateTimedOut()
     {
-        CGS_ASSERT(meActiveSubState > E_ACTIVE_SUBSTATE_EVENT_NONE
+        CGS_ASSERT_AT(meActiveSubState > E_ACTIVE_SUBSTATE_EVENT_NONE
                        && meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT,
                    "(E_ACTIVE_SUBSTATE_EVENT_NONE < meActiveSubState) && "
-                   "(E_ACTIVE_SUBSTATE_EVENT_COUNT > meActiveSubState)");        // cpp:3250
-        CGS_ASSERT(meSubStateState == E_SUBSTATE_RUNNING,
-                   "E_SUBSTATE_RUNNING == meSubStateState");                     // cpp:3251
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");                                    // cpp:3255
+                   "(E_ACTIVE_SUBSTATE_EVENT_COUNT > meActiveSubState)", CGS_ARTIST_FILE, 3250);        // cpp:3250
+        CGS_ASSERT_AT(meSubStateState == E_SUBSTATE_RUNNING,
+                   "E_SUBSTATE_RUNNING == meSubStateState", CGS_ARTIST_FILE, 3251);                     // cpp:3251
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 3255);                                    // cpp:3255
 
         mfTimeRemaining -= mpGuiCache->GetTimeStep();
         return mfTimeRemaining <= 0.0f;
@@ -896,8 +896,8 @@ namespace BrnGui
         {
         case 0: // Race, ARTIST 0x824B4134..0x824B41E0.
             CGS_ASSERT(liFinishPositionIndex >= 0, "liFinishPositionIndex >= 0");
-            CGS_ASSERT(liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS,
-                       "liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS");
+            CGS_ASSERT_AT(liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS,
+                       "liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS", CGS_ARTIST_FILE, 1325);
             mFinishedText.SetLocalisedText(KAC_FINISH_POS_STRINGIDS[liFinishPositionIndex],
                 CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
             meWinState = (mResults.mbPlayerWon && !mResults.mbTimedOut)
@@ -905,9 +905,9 @@ namespace BrnGui
             break;
 
         case 1:
-            CGS_ASSERT(liFinishPositionIndex >= 0, "liFinishPositionIndex >= 0");          // cpp:1359
-            CGS_ASSERT(liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS,
-                       "liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS");               // cpp:1360
+            CGS_ASSERT_AT(liFinishPositionIndex >= 0, "liFinishPositionIndex >= 0", CGS_ARTIST_FILE, 1359);          // cpp:1359
+            CGS_ASSERT_AT(liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS,
+                       "liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS", CGS_ARTIST_FILE, 1360);               // cpp:1360
             if (mResults.miPlayerFinishPosition != 0)
             {
                 mFinishedText.SetLocalisedText("POSTRACE_EVENT_LOST",
@@ -954,9 +954,9 @@ namespace BrnGui
 
         case 3: // Road Rage, ARTIST 0x824B4450..0x824B454C.
         {
-            CGS_ASSERT(liFinishPositionIndex >= 0, "liFinishPositionIndex >= 0");
-            CGS_ASSERT(liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS,
-                       "liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS");
+            CGS_ASSERT_AT(liFinishPositionIndex >= 0, "liFinishPositionIndex >= 0", CGS_ARTIST_FILE, 1457);
+            CGS_ASSERT_AT(liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS,
+                       "liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS", CGS_ARTIST_FILE, 1458);
             char lacTakedowns[1024];
             CgsCore::SPrintf(lacTakedowns, 1023, "%d", mpGuiCache->GetCurrentTakedownsInEvent());
             lacTakedowns[1023] = 0;
@@ -1007,8 +1007,8 @@ namespace BrnGui
             }
             else
             {
-                CGS_ASSERT(mpGuiCache->GetEventDestinationLandmarkIndex() != BrnGameState::LandmarkIndex(-1),
-                    "BrnGameState::K_INVALID_LANDMARK != mpGuiCache->GetEventDestinationLandmarkIndex()");
+                CGS_ASSERT_AT(mpGuiCache->GetEventDestinationLandmarkIndex() != BrnGameState::LandmarkIndex(-1),
+                    "BrnGameState::K_INVALID_LANDMARK != mpGuiCache->GetEventDestinationLandmarkIndex()", CGS_ARTIST_FILE, 1521);
                 GuiEventUpdateSatNav::SatNavIconInfo lLandmark;
                 mpGuiCache->GetLandmarkInfoFromIndex(mpGuiCache->GetEventDestinationLandmarkIndex(), &lLandmark);
                 char lacDestination[1024];
@@ -1049,8 +1049,8 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::UpdateEventResults()
     {
-        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RESULTS,
-                   "E_ACTIVE_SUBSTATE_EVENT_RESULTS == meActiveSubState");            // cpp:1727
+        CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RESULTS,
+                   "E_ACTIVE_SUBSTATE_EVENT_RESULTS == meActiveSubState", CGS_ARTIST_FILE, 1727);            // cpp:1727
 
         if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
         {
@@ -1106,7 +1106,7 @@ namespace BrnGui
     // ARTIST 0x824B3E00: only the photo interrupt consumes select/cancel.
     void InstantResultsState::HandleControllerInput(const void* lpEvent)
     {
-        CGS_ASSERT(lpEvent, "lpEvent");
+        CGS_ASSERT_AT(lpEvent, "lpEvent", CGS_ARTIST_FILE, 1217);
         struct GuiEventControllerAction : public CgsModule::Event
         {
             s32 miPad0;
@@ -1169,8 +1169,8 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::UpdateSecondResultsPage()
     {
-        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RESULTS_TWO,
-                   "E_ACTIVE_SUBSTATE_EVENT_RESULTS_TWO == meActiveSubState");         // cpp:1814
+        CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RESULTS_TWO,
+                   "E_ACTIVE_SUBSTATE_EVENT_RESULTS_TWO == meActiveSubState", CGS_ARTIST_FILE, 1814);         // cpp:1814
 
         if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
         {
@@ -1232,8 +1232,8 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::UpdateTakePhotoPage()
     {
-        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_TAKE_PHOTO,
-                   "E_ACTIVE_SUBSTATE_EVENT_TAKE_PHOTO == meActiveSubState");          // cpp:1876
+        CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_TAKE_PHOTO,
+                   "E_ACTIVE_SUBSTATE_EVENT_TAKE_PHOTO == meActiveSubState", CGS_ARTIST_FILE, 1876);          // cpp:1876
 
         if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
         {
@@ -1370,7 +1370,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid substate for taking new photo");                // cpp:2053
+            CGS_ASSERT_AT(false, "Invalid substate for taking new photo", CGS_ARTIST_FILE, 2053);                // cpp:2053
             break;
         }
     }
@@ -1384,8 +1384,8 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::UpdateRankUp()
     {
-        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_TEXT,
-                   "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_TEXT == meActiveSubState");        // cpp:2576
+        CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_TEXT,
+                   "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_TEXT == meActiveSubState", CGS_ARTIST_FILE, 2576);        // cpp:2576
 
         if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
         {
@@ -1410,8 +1410,8 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::UpdateLeaving()
     {
-        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_LEAVING,
-                   "E_ACTIVE_SUBSTATE_EVENT_LEAVING == meActiveSubState");             // cpp:3151
+        CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_LEAVING,
+                   "E_ACTIVE_SUBSTATE_EVENT_LEAVING == meActiveSubState", CGS_ARTIST_FILE, 3151);             // cpp:3151
 
         if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
         {
@@ -1506,24 +1506,24 @@ namespace BrnGui
                 break;
 
             case 299: // ARTIST 0x824DBAD8: start the new-rivals introduction.
-                CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
-                    "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState");
-                CGS_ASSERT(meNewRivalsPresentationStage == E_NEW_RIVALS_PRESENTATION_WAITING,
-                    "E_NEW_RIVALS_PRESENTATION_WAITING == meNewRivalsPresentationStage");
+                CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
+                    "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState", CGS_ARTIST_FILE, 901);
+                CGS_ASSERT_AT(meNewRivalsPresentationStage == E_NEW_RIVALS_PRESENTATION_WAITING,
+                    "E_NEW_RIVALS_PRESENTATION_WAITING == meNewRivalsPresentationStage", CGS_ARTIST_FILE, 902);
                 meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_INTRO_SET_UP;
                 break;
 
             case 300: // The next rival's full-width CgsID.
-                CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
-                    "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState");
+                CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
+                    "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState", CGS_ARTIST_FILE, 913);
                 mPendingRivalId = *reinterpret_cast<const CgsID*>(lpEvent);
                 mNewRivalsIcon.SetState(meNewRivalsPresentationStage == E_NEW_RIVALS_PRESENTATION_INTRO
                     ? 1u : 3u);
                 break;
 
             case 301: // Finish the sequence after any active car reveal.
-                CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
-                    "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState");
+                CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
+                    "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState", CGS_ARTIST_FILE, 938);
                 if (meNewRivalsPresentationStage != E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL)
                     meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_OUTRO_ENDING;
                 mNewRivalsIcon.SetState(3u);
@@ -1583,7 +1583,7 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     bool InstantResultsState::WillShowCredits()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");     // cpp:3433
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 3433);     // cpp:3433
 
         if (!mResults.mbHasRankedUp)
             return false;
@@ -1597,7 +1597,7 @@ namespace BrnGui
         const s32 liBurnoutLicenseRank = static_cast<s32>(
             mpGuiCache->GetWorldDataController()->GetProgressionData()
                 ->GetProgressionRankCount()) - 1;
-        CGS_ASSERT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0");   // cpp:3444
+        CGS_ASSERT_AT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0", CGS_ARTIST_FILE, 3444);   // cpp:3444
 
         if (mResults.miPlayerNewRank != liBurnoutLicenseRank && !mResults.mbCompletedLastRank)
             return false;
@@ -1679,7 +1679,7 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::HandleAptTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger)
     {
-        CGS_ASSERT(lpAptTrigger, "lpEvent");     // cpp:1005
+        CGS_ASSERT_AT(lpAptTrigger, "lpEvent", CGS_ARTIST_FILE, 1005);     // cpp:1005
 
         const char* const lpacName = lpAptTrigger->mpacComponentName;
 
@@ -1705,8 +1705,8 @@ namespace BrnGui
                     const s32 liBurnoutLicenseRank = static_cast<s32>(
                         mpGuiCache->GetWorldDataController()->GetProgressionData()
                             ->GetProgressionRankCount()) - 1;
-                    CGS_ASSERT(liBurnoutLicenseRank > 0,
-                               "liBurnoutLicenseRank > 0");                       // cpp:1026
+                    CGS_ASSERT_AT(liBurnoutLicenseRank > 0,
+                               "liBurnoutLicenseRank > 0", CGS_ARTIST_FILE, 1026);                       // cpp:1026
 
                     if (mResults.mbCompletedLastRank)
                     {
@@ -1791,8 +1791,8 @@ namespace BrnGui
 
         if (std::strcmp(mNewRivalsIcon.GetName(), lpacName) == 0)
         {
-            CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
-                       "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState");
+            CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
+                       "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState", CGS_ARTIST_FILE, 1088);
                                                                                   // cpp:1088
             switch (meNewRivalsPresentationStage)
             {
@@ -1840,10 +1840,10 @@ namespace BrnGui
 
         if (std::strcmp(mCarUnlockIcon.GetName(), lpacName) == 0)
         {
-            CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK
+            CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK
                            || meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK,
                        "( E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK == meActiveSubState ) || "
-                       "( E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK == meActiveSubState )");
+                       "( E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK == meActiveSubState )", CGS_ARTIST_FILE, 1134);
                                                                                   // cpp:1134
             if (meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK)
             {
@@ -1961,7 +1961,7 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::TriggerExitResults()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");     // cpp:3294
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 3294);     // cpp:3294
 
         if (WillShowCredits())
         {
@@ -2036,7 +2036,7 @@ namespace BrnGui
     bool InstantResultsState::IsXSCarInUnlockedArray(
         s32 liStartIndex, s32* lpiFoundIndex, CgsID* lpFoundCar)
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 3485);
         const s32 liCount = mResults.maCarsToUnlockFromSpecialEvent.GetLength();
         for (s32 liIndex = liStartIndex; liIndex < liCount; ++liIndex)
         {
@@ -2045,7 +2045,7 @@ namespace BrnGui
             const s32 liVehicleIndex = lpVehicles->GetVehicleIndex(lCar);
             const BrnResource::VehicleListEntry* lpVehicle =
                 liVehicleIndex < 0 ? 0 : lpVehicles->GetVehicleData(liVehicleIndex);
-            CGS_ASSERT(lpVehicle != 0, "lpVehicleEntry");
+            CGS_ASSERT_AT(lpVehicle != 0, "lpVehicleEntry", CGS_ARTIST_FILE, 3495);
             if (lpVehicle->GetLiveryType() == BrnResource::VehicleListEntry::E_LIVERY_TYPE_PATTERN)
             {
                 if (lpiFoundIndex != 0)
@@ -2061,8 +2061,8 @@ namespace BrnGui
     // ARTIST 0x824C4870. Each pattern-livery award runs its own reveal and cleanup.
     void InstantResultsState::UpdateCarUnlock()
     {
-        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK,
-                   "E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK == meActiveSubState");
+        CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK,
+                   "E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK == meActiveSubState", CGS_ARTIST_FILE, 2315);
         if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
         {
             CGS_ASSERT(meCarUnlockPresentationStage == E_CAR_UNLOCK_PRESENTATION_WAITING,
@@ -2120,7 +2120,7 @@ namespace BrnGui
             break;
         case E_CAR_UNLOCK_PRESENTATION_INTRO_SET_UP:
         {
-            CGS_ASSERT(mCarUnlockId != 0, "mCarUnlockId != kCGSID_NULL");
+            CGS_ASSERT_AT(mCarUnlockId != 0, "mCarUnlockId != kCGSID_NULL", CGS_ARTIST_FILE, 2406);
             mCarUnlockIcon.SetState(0u);
             char lacCar[16], lacText[64];
             CgsIDConvertToString(mCarUnlockId, lacCar);
@@ -2146,7 +2146,7 @@ namespace BrnGui
             }
             break;
         case E_CAR_UNLOCK_PRESENTATION_SHOWING_CAR:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2469);
             mfCarUnlockPresentationTimeRemaining -= mpGuiCache->GetTimeStep();
             if (!(mfCarUnlockPresentationTimeRemaining > 0.0f))
             {
@@ -2160,7 +2160,7 @@ namespace BrnGui
             meCarUnlockPresentationStage = E_CAR_UNLOCK_PRESENTATION_OUTRO;
             break;
         case E_CAR_UNLOCK_PRESENTATION_OUTRO:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2496);
             mfCarUnlockPresentationTimeRemaining -= mpGuiCache->GetTimeStep();
             if (!(mfCarUnlockPresentationTimeRemaining > 0.0f))
             {
@@ -2200,8 +2200,8 @@ namespace BrnGui
     // ARTIST 0x824C41B0. The free-car award uses resource slot 121 and one car ID.
     void InstantResultsState::UpdateFreeCarUnlock()
     {
-        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK,
-                   "E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK == meActiveSubState");
+        CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK,
+                   "E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK == meActiveSubState", CGS_ARTIST_FILE, 2079);
         if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
         {
             mResultsIcon.SetState("Invisible");
@@ -2244,7 +2244,7 @@ namespace BrnGui
             break;
         case E_FREE_CAR_UNLOCK_PRESENTATION_INTRO_SET_UP:
         {
-            CGS_ASSERT(mPendingFreeCarId != 0, "mPendingFreeCarId != kCGSID_NULL");
+            CGS_ASSERT_AT(mPendingFreeCarId != 0, "mPendingFreeCarId != kCGSID_NULL", CGS_ARTIST_FILE, 2149);
             mCarUnlockIcon.SetState(0u);
             char lacCar[16], lacText[64];
             CgsIDConvertToString(mPendingFreeCarId, lacCar);
@@ -2253,12 +2253,12 @@ namespace BrnGui
             mCarUnlockManuIcon.Set(mpGuiCache->GetWorldDataController()->GetVehicleList(), mPendingFreeCarId);
             mCarUnlockText.SetLocalisedText(lacText, CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
             mCarUnlockDescText.SetLocalisedText("POSTRACE_NEW_CAR_DESC1", CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2185);
             const BrnResource::VehicleList* lpVehicles = mpGuiCache->GetWorldDataController()->GetVehicleList();
-            CGS_ASSERT(lpVehicles != 0, "lpVehicleList");
+            CGS_ASSERT_AT(lpVehicles != 0, "lpVehicleList", CGS_ARTIST_FILE, 2187);
             const s32 liIndex = lpVehicles->GetVehicleIndex(mPendingFreeCarId);
             const BrnResource::VehicleListEntry* lpVehicle = liIndex < 0 ? 0 : lpVehicles->GetVehicleData(liIndex);
-            CGS_ASSERT(lpVehicle != 0, "lpVehicleListEntry");
+            CGS_ASSERT_AT(lpVehicle != 0, "lpVehicleListEntry", CGS_ARTIST_FILE, 2189);
             GuiEventPostEventFreeCarSequenceStart lSequence;
             const u64 luVoiceOver = lpVehicle->GetWonCarVoiceOverKeyHash();
             std::memcpy(lSequence.maData, &luVoiceOver, sizeof(lSequence.maData));
@@ -2280,7 +2280,7 @@ namespace BrnGui
             }
             break;
         case E_FREE_CAR_UNLOCK_PRESENTATION_SHOWING_CAR:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2224);
             mfFreeCarPresentationTimeRemaining -= mpGuiCache->GetTimeStep();
             if (!(mfFreeCarPresentationTimeRemaining > 0.0f))
             {
@@ -2294,7 +2294,7 @@ namespace BrnGui
             meFreeCarPresentationStages = E_FREE_CAR_UNLOCK_PRESENTATION_OUTRO;
             break;
         case E_FREE_CAR_UNLOCK_PRESENTATION_OUTRO:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2250);
             mfFreeCarPresentationTimeRemaining -= mpGuiCache->GetTimeStep();
             if (!(mfFreeCarPresentationTimeRemaining > 0.0f))
             {
@@ -2325,8 +2325,8 @@ namespace BrnGui
     // ARTIST 0x824C4F98. Swap the results movie for the licence upgrade, then resume it.
     void InstantResultsState::UpdateLicense()
     {
-        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_LICENSE,
-                   "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_LICENSE == meActiveSubState");
+        CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_LICENSE,
+                   "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_LICENSE == meActiveSubState", CGS_ARTIST_FILE, 2618);
         if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
         {
             meSubStateState = E_SUBSTATE_RUNNING;
@@ -2379,7 +2379,7 @@ namespace BrnGui
                 mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
                 const s32 liBurnoutLicenseRank = static_cast<s32>(
                     mpGuiCache->GetWorldDataController()->GetProgressionData()->GetProgressionRankCount()) - 1;
-                CGS_ASSERT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0");
+                CGS_ASSERT_AT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0", CGS_ARTIST_FILE, 2710);
                 const bool lbShowPoints = liBurnoutLicenseRank != mResults.miPlayerNewRank
                     && liBurnoutLicenseRank != mResults.miPlayerOldRank && !mResults.mbCompletedLastRank;
                 mLicense.RankUp(3.0f, 0.0f, lbShowPoints);
@@ -2407,7 +2407,7 @@ namespace BrnGui
                     mbStartedUpgradeTransOut = true;
                     const s32 liBurnoutLicenseRank = static_cast<s32>(
                         mpGuiCache->GetWorldDataController()->GetProgressionData()->GetProgressionRankCount()) - 1;
-                    CGS_ASSERT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0");
+                    CGS_ASSERT_AT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0", CGS_ARTIST_FILE, 2767);
                     const char* lpacTransition = mResults.mbCompletedLastRank ? "upgradeEliteOut"
                         : liBurnoutLicenseRank == mResults.miPlayerNewRank ? "upgradeBurnoutOut" : "upgradeOut";
                     mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition", lpacTransition, false);
@@ -2449,7 +2449,7 @@ namespace BrnGui
             meSubStateState = E_SUBSTATE_SET_UP_COMPONENTS;
             break;
         default:
-            CGS_ASSERT(false, "Invalid substate when upgrading license");
+            CGS_ASSERT_AT(false, "Invalid substate when upgrading license", CGS_ARTIST_FILE, 2857);
             break;
         }
     }
@@ -2457,8 +2457,8 @@ namespace BrnGui
     // ARTIST0x824C5598. Present the newly unlocked rival, then resume results teardown.
     void InstantResultsState::UpdateShowingRivals()
     {
-        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
-                   "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState");
+        CGS_ASSERT_AT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
+                   "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState", CGS_ARTIST_FILE, 2888);
         if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
         {
             CGS_ASSERT(meNewRivalsPresentationStage == E_NEW_RIVALS_PRESENTATION_WAITING,
@@ -2537,7 +2537,7 @@ namespace BrnGui
             }
             break;
         case E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 3062);
             mfRivalPresentationTimeRemaining -= mpGuiCache->GetTimeStep();
             if (mfRivalPresentationTimeRemaining <= 0.0f)
             {
@@ -2551,7 +2551,7 @@ namespace BrnGui
             meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_OUTRO;
             break;
         case E_NEW_RIVALS_PRESENTATION_OUTRO:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 3090);
             mfRivalPresentationTimeRemaining -= mpGuiCache->GetTimeStep();
             if (mfRivalPresentationTimeRemaining <= 0.0f)
             {

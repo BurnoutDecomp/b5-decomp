@@ -21,7 +21,7 @@
 // Vector4 lanes (semantic parity, not byte parity).
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptTimerFieldComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptTimerFieldComponent.cpp"
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"             // BrnFlapt::FileRef::FindComponent
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"   // MovieClipInstance::ResetTimeline
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponentUtils.h" // AttachToTextFieldComponent
@@ -101,7 +101,7 @@ namespace BrnGui
                                            const char* lacName,
                                            const BrnFlapt::FileRef& lFlaptFile)
     {
-        CGS_ASSERT(lacName != 0, "lacName");
+        CGS_ASSERT_AT(lacName != 0, "lacName", CGS_ARTIST_FILE, 91);
         CGS_ASSERT(lacName != 0, "lacName != NULL");
 
         // Bind this component's own movie clip and reset its timeline.
@@ -138,8 +138,8 @@ namespace BrnGui
     {
         if (meCountingMode == E_TIMER_MODE_COUNTING_DOWN)
         {
-            CGS_ASSERT(mfOneOverBoundaryDifference != 0.0f,
-                       "mfOneOverBoundaryDifference != 0.0f");
+            CGS_ASSERT_AT(mfOneOverBoundaryDifference != 0.0f,
+                       "mfOneOverBoundaryDifference != 0.0f", CGS_ARTIST_FILE, 145);
 
             // t = 1 at the safe boundary, 0 at the danger boundary.
             f32 lfRatio = (mfCurrentTime - mfDangerColourBoundary)
@@ -154,8 +154,8 @@ namespace BrnGui
         }
         else if (meCountingMode == E_TIMER_MODE_COUNTING_UP)
         {
-            CGS_ASSERT(mfOneOverBoundaryDifference != 0.0f,
-                       "mfOneOverBoundaryDifference != 0.0f");
+            CGS_ASSERT_AT(mfOneOverBoundaryDifference != 0.0f,
+                       "mfOneOverBoundaryDifference != 0.0f", CGS_ARTIST_FILE, 155);
 
             // t = 1 at the danger boundary, 0 at the safe boundary.
             f32 lfRatio = (mfCurrentTime - mfSafeColourBoundary)

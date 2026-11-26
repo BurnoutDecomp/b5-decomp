@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Overlay/States/BrnBaseOverlayState.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Overlay/States/BrnBaseOverlayState.cpp"
 #include <cstring>   // std::strlen / std::strncpy (the inlined StrCpy)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
@@ -248,7 +248,7 @@ void BaseOverlayState::UpdatePermanent()
 void BaseOverlayState::GetCache()
 {
     // Non-gating tripwire: the cache must not already be latched (cpp:353).
-    CGS_ASSERT(mpGuiCache == NULL, "mpGuiCache == NULL");
+    CGS_ASSERT_AT(mpGuiCache == NULL, "mpGuiCache == NULL", CGS_ARTIST_FILE, 353);
 
 
 
@@ -271,7 +271,7 @@ void BaseOverlayState::GetCache()
     }
 
     // Non-gating tripwire: a cache must have arrived (cpp:374).
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 374);
 }
 
 // @ 0x824B25D0
@@ -340,10 +340,10 @@ void BaseOverlayState::SetupOverlay(const GuiOverlayFullInfoResponse* lpResponse
     }
 
     // Non-gating range tripwires (cpp:490/491), then the indexed icon state.
-    CGS_ASSERT(lpResponse->meIcon >= CgsGui::E_POPUPICONS_INVISIBLE,
-               "lpResponse->meIcon >= CgsGui::E_POPUPICONS_INVISIBLE");
-    CGS_ASSERT(lpResponse->meIcon <= CgsGui::E_POPUPICONS_WARNING,
-               "lpResponse->meIcon <= CgsGui::E_POPUPICONS_WARNING");
+    CGS_ASSERT_AT(lpResponse->meIcon >= CgsGui::E_POPUPICONS_INVISIBLE,
+               "lpResponse->meIcon >= CgsGui::E_POPUPICONS_INVISIBLE", CGS_ARTIST_FILE, 490);
+    CGS_ASSERT_AT(lpResponse->meIcon <= CgsGui::E_POPUPICONS_WARNING,
+               "lpResponse->meIcon <= CgsGui::E_POPUPICONS_WARNING", CGS_ARTIST_FILE, 491);
     mIconComponent.SetState(mapcIconStateNames[lpResponse->meIcon]);
 }
 
@@ -353,7 +353,7 @@ void BaseOverlayState::SetupOverlayComponents(const char* lpcTransition)
     if (lpcTransition == NULL)
     {
         // Gating on the X360 (the assert arm returns immediately; cpp:597).
-        CGS_ASSERT(NULL != lpcTransition, "NULL != lpcTransition");
+        CGS_ASSERT_AT(NULL != lpcTransition, "NULL != lpcTransition", CGS_ARTIST_FILE, 597);
         return;
     }
 
@@ -362,9 +362,9 @@ void BaseOverlayState::SetupOverlayComponents(const char* lpcTransition)
 
     // Non-gating tripwires (cpp:607/608; the first is the compiler-folded
     // &member != NULL check the X360 still emits).
-    CGS_ASSERT(NULL != lpTransitionMovieClipRef, "NULL != lpTransitionMovieClipRef");
-    CGS_ASSERT(true == lpTransitionMovieClipRef->IsValid(),
-               "true == lpTransitionMovieClipRef->IsValid( )");
+    CGS_ASSERT_AT(NULL != lpTransitionMovieClipRef, "NULL != lpTransitionMovieClipRef", CGS_ARTIST_FILE, 607);
+    CGS_ASSERT_AT(true == lpTransitionMovieClipRef->IsValid(),
+               "true == lpTransitionMovieClipRef->IsValid( )", CGS_ARTIST_FILE, 608);
 
     // Locate the popup's children under the transition clip. The finds are asserted
     // but NON-gating (the X360 proceeds with the -- then unwritten -- refs on a miss),
@@ -375,8 +375,8 @@ void BaseOverlayState::SetupOverlayComponents(const char* lpcTransition)
     BrnFlapt::MovieClipRef lIcon;
 
     bool lbFound = lpTransitionMovieClipRef->TryFindChildComponentRecursively("helpItem0", &lHelpItem0);
-    CGS_ASSERT(true == lbFound,
-               "true == lpTransitionMovieClipRef->TryFindChildComponentRecursively( \"helpItem0\", &lHelpItem0 )");
+    CGS_ASSERT_AT(true == lbFound,
+               "true == lpTransitionMovieClipRef->TryFindChildComponentRecursively( \"helpItem0\", &lHelpItem0 )", CGS_ARTIST_FILE, 611);
 
     lbFound = lpTransitionMovieClipRef->TryFindChildComponentRecursively("helpItem1", &lHelpItem1);
     CGS_ASSERT(true == lbFound,

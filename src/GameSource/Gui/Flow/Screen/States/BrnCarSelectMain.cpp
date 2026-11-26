@@ -16,7 +16,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectMain.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectMain.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"              // CgsID / CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SPrintf
@@ -100,7 +100,7 @@ namespace BrnGui
     // ---- AppendAptComponents @ 0x824B5380 -----------------------------------------
     void CarSelectMain::AppendAptComponents()
     {
-        CGS_ASSERT(mpGuiCache, "lpGuiCache");   // cpp:502
+        CGS_ASSERT_AT(mpGuiCache, "lpGuiCache", CGS_ARTIST_FILE, 502);   // cpp:502
 
         // The three always-present help/logo apt clips (X360 sub_824F87C0 == the name-taking
         // GuiCache::AppendExpectedAptComponent entry, flow 0).
@@ -131,7 +131,7 @@ namespace BrnGui
         // External event blob: its layout is fixed by the event, not a reconstructable C++ class,
         // so the leading pointer is read positionally (X360 lwz r11,0(a2)).
         GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpCacheEvent);
-        CGS_ASSERT(lpCache != 0, "lpCacheEvent->mpCachePointer");   // cpp:553
+        CGS_ASSERT_AT(lpCache != 0, "lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 553);   // cpp:553
 
         mpGuiCache = lpCache;
 
@@ -163,7 +163,7 @@ namespace BrnGui
 
         // cpp:880 -- the console's assert, RESTORED 2026-08-02: GuiCache::mpWorldDataController
         // is populated now, so mpVehicleList is the real list (see UpdateGuiCache above).
-        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:880
+        CGS_ASSERT_AT(mpVehicleList != 0, "mpVehicleList", CGS_ARTIST_FILE, 880);   // cpp:880
 
         const BrnResource::VehicleList* lpVehicleList = mpVehicleList;
         const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lSelectedCarId);
@@ -536,7 +536,7 @@ namespace BrnGui
     // "ACCEPT" state event.
     void CarSelectMain::ExitCarSelection()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:616
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 616);   // cpp:616
 
         // GetCurrentCarSelectType() carries the "meCarSelectType >
         // GsmIO::E_CAR_SELECT_TYPE_NONE" assert (BrnGuiCache.h:4378) the X360 inlines here.
@@ -689,7 +689,7 @@ namespace BrnGui
         // The X360 fires BOTH asserts back-to-back on the null path: the bare expression
         // text (cpp:755) then the streamed message (cpp:756, again the original
         // OnlineGameRoomPlayerInfo copy-paste).
-        CGS_ASSERT(lpLeftGameEvent != 0, "lpLeftGameEvent");                            // cpp:755
+        CGS_ASSERT_AT(lpLeftGameEvent != 0, "lpLeftGameEvent", CGS_ARTIST_FILE, 755);                            // cpp:755
         CGS_ASSERT(lpLeftGameEvent != 0,
                    "Invalid event sent to OnlineGameRoomPlayerInfo::HandleLeftGameEvent"); // cpp:756
 
@@ -911,7 +911,7 @@ namespace BrnGui
             break;
 
         case E_CARSELECT_VISIBLE_INTERACTIVE:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:280
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 280);   // cpp:280
 
             // Full 64-bit id compare (X360 ld/ld + cmpld): a pending selection is anything
             // whose desired car id differs from the committed one.
@@ -921,7 +921,7 @@ namespace BrnGui
 
         default:
             // E_CARSELECT_INVALID (-1) and anything >= E_CARSELECT_COUNT land here.
-            CGS_ASSERT(false, "Invalid, unhandled state");   // cpp:291
+            CGS_ASSERT_AT(false, "Invalid, unhandled state", CGS_ARTIST_FILE, 291);   // cpp:291
             break;
         }
 
@@ -1120,8 +1120,8 @@ namespace BrnGui
         // OnlineGameRoomPlayerInfo, as in the sibling HandleLaunchedEvent/HandleLeftGameEvent.
         CGS_ASSERT(lpEvent != 0,
                    "Invalid event sent to OnlineGameRoomPlayerInfo::HandleLaunchingEvent");
-        CGS_ASSERT(lpEvent != 0, "lpLaunchingEvent");
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(lpEvent != 0, "lpLaunchingEvent", CGS_ARTIST_FILE, 716);
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 719);
 
         const GuiEventNetworkLaunchingPayload* lpLaunchingEvent =
             reinterpret_cast<const GuiEventNetworkLaunchingPayload*>(lpEvent);
@@ -1135,7 +1135,7 @@ namespace BrnGui
         {
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerStatusData =
                 mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpLaunchingEvent->mPlayerID);
-            CGS_ASSERT(lpPlayerStatusData != 0, "lpPlayerStatusData");
+            CGS_ASSERT_AT(lpPlayerStatusData != 0, "lpPlayerStatusData", CGS_ARTIST_FILE, 731);
 
             lWire.mRequest.Construct("CNOnlLchGame");
             lWire.mRequest.AddMessageParam(KU_LAUNCH_PARAM_PLAYER_NAME,

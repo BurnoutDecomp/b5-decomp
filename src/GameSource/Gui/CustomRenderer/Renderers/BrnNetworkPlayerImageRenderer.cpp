@@ -1,5 +1,5 @@
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.cpp"
 #include "GameSource/Gui/BrnGuiCache.h"                                       // BrnGui::GuiCache
 #include "GameSource/Gui/Flapt/BrnFlaptRenderer.h"                            // BrnFlapt::FlaptRenderer
 #include "SharedClasses/Gui/Flapt/BrnFlaptFile.h"                             // BrnFlapt::FlaptFile::SetSpecialTexture
@@ -167,8 +167,8 @@ namespace BrnGui
                     renderengine::Texture2D* lpNormal = AllocateTexture(
                         mpTextureAllocator, lNormalDesc, lNormalParams);
                     maapTextureBuffer[liDisplay][liBuffer] = lpNormal;
-                    CGS_ASSERT(maapTextureBuffer[liDisplay][liBuffer],
-                               "maapTextureBuffer[ liTextureIndex ][ liIndex ]");
+                    CGS_ASSERT_AT(maapTextureBuffer[liDisplay][liBuffer],
+                               "maapTextureBuffer[ liTextureIndex ][ liIndex ]", CGS_ARTIST_FILE, 232);
                     maapTextureBuffer[liDisplay][liBuffer]->Lock(0, 0, 0, maaLockedTextures[liDisplay][liBuffer]);
                     memset(maaLockedTextures[liDisplay][liBuffer].mpPixelData, 0,
                            maaLockedTextures[liDisplay][liBuffer].muStride *
@@ -320,7 +320,7 @@ namespace BrnGui
         {
         case 64:   // E_GUI_CACHE: latch the GuiCache pointer (event's leading field).
         {
-            CGS_ASSERT(lpEvent, "NULL != lpGuiCacheEvent");
+            CGS_ASSERT_AT(lpEvent, "NULL != lpGuiCacheEvent", CGS_ARTIST_FILE, 483);
             BrnGui::GuiCache* const* lppCache =
                 reinterpret_cast<BrnGui::GuiCache* const*>(lpEvent);
             mpGuiCache = *lppCache;
@@ -337,10 +337,10 @@ namespace BrnGui
 
             if (mbRenderTexture)
             {
-                CGS_ASSERT((lpImageEvent->miTextureIndex >= 0) &&
+                CGS_ASSERT_AT((lpImageEvent->miTextureIndex >= 0) &&
                                (lpImageEvent->miTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY),
                            "(lpNetworkPlayerImageEvent->miTextureIndex >= 0) && "
-                           "(lpNetworkPlayerImageEvent->miTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY)");
+                           "(lpNetworkPlayerImageEvent->miTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY)", CGS_ARTIST_FILE, 446);
                 miClearTexturesFrameCount = KI_CLEAR_TEXTURES_NOT_SET;   // -1
 
                 if (lpImageEvent->mpTexture)
@@ -406,9 +406,9 @@ namespace BrnGui
             return mpDefaultTexture;
         }
 
-        CGS_ASSERT((liTextureIndex >= 0) && (liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY),
-                   "(liTextureIndex >= 0) && (liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY)");
-        CGS_ASSERT(lpiShaderProgram != 0, "lpiShaderProgram != NULL");
+        CGS_ASSERT_AT((liTextureIndex >= 0) && (liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY),
+                   "(liTextureIndex >= 0) && (liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY)", CGS_ARTIST_FILE, 547);
+        CGS_ASSERT_AT(lpiShaderProgram != 0, "lpiShaderProgram != NULL", CGS_ARTIST_FILE, 548);
 
         *lpiShaderProgram = 0;
 
@@ -445,7 +445,7 @@ namespace BrnGui
         BrnFlapt::FlaptFile::SetSpecialTexture(lpOutput,
                                                "CustomComponentTexture.tif");
 
-        CGS_ASSERT(mpFlaptRenderer, "mpFlaptRenderer");
+        CGS_ASSERT_AT(mpFlaptRenderer, "mpFlaptRenderer", CGS_ARTIST_FILE, 607);
         mpFlaptRenderer->SetSpecialTextureShaderProgram(liShaderProgram);
     }
 
@@ -468,10 +468,10 @@ namespace BrnGui
     void NetworkPlayerImageRenderer::CopyTexture(const GuiEventNetworkPlayerImage* lpEvent,
                                                  s32 liCopyToTexture)
     {
-        CGS_ASSERT((lpEvent->miTextureIndex >= 0) &&
+        CGS_ASSERT_AT((lpEvent->miTextureIndex >= 0) &&
                        (lpEvent->miTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY),
-                   "(lpEvent->miTextureIndex >= 0) && (lpEvent->miTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY)");
-        CGS_ASSERT(lpEvent->mpTexture, "lpEvent->mpTexture");
+                   "(lpEvent->miTextureIndex >= 0) && (lpEvent->miTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY)", CGS_ARTIST_FILE, 627);
+        CGS_ASSERT_AT(lpEvent->mpTexture, "lpEvent->mpTexture", CGS_ARTIST_FILE, 628);
 
         const s32 liDisplay = lpEvent->miTextureIndex;
 

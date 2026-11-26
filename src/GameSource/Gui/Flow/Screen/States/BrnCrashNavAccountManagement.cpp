@@ -20,7 +20,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"
 #include "GameSource/Gui/BrnGuiShared.h"          // gGuiResourceIdentifier (the apt movie names)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // GuiOverlayRequest / GuiOverlayWaitFinishRequest / GuiAudioTriggerEvent
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavAccountManagement.cpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // getenv ([acct])
@@ -166,29 +166,6 @@ namespace BrnGui
         // they are named here from the event each one is PAIRED with in the observe list
         // (266 is answered by HandleNewsAndTOSEvent, 124 by HandleAccountSettings/125).
 
-        // OnEnter's first post: { 4, 266, 12 } + the s32 1.
-        struct GuiEventNewsAndTOSRequest : public CgsGui::GuiEvent<266>
-        {
-            s32 miRequest;   // +0x0C
-            GuiEventNewsAndTOSRequest() : miRequest(1) {}
-        };
-
-        // OnEnter's second post: { 1, 124, 12 } + ONE byte.
-        //
-        // ⭐ THE PAYLOAD BYTE IS 0, AND THAT IS NOT A TYPO. The X360 reuses the same stack
-        // record: it rewrites +0x50/+0x54/+0x58 (size/type/offset) and leaves +0x5C alone,
-        // so the payload word still holds the 1 the type-266 record put there. The record
-        // declares ONE byte of payload, and on the big-endian X360 the first byte of the
-        // word 0x00000001 is 0x00. Spelling it as an explicit 0 keeps the queued bytes
-        // identical; writing `1` here would be a little-endian host reading a big-endian
-        // leftover (the x64-widening-ghost class). [FLAG] If a consumer of 124 ever lands
-        // and wants a 1 here, re-read 0x824CE1F4..0x824CE218 before changing it.
-        struct GuiEventAccountSettingsRequest : public CgsGui::GuiEvent<124>
-        {
-            u8  mbRequest;   // the one payload byte (the wrapper's tail padding is the leftover)
-            GuiEventAccountSettingsRequest()
-                : mbRequest(0) {}
-        };
 
         // ApplyAndSaveSettings's post: { 3, 126, 12 } + the three answer bytes.
         struct GuiEventAccountSettingsUpdate : public CgsGui::GuiEvent<126>
@@ -274,14 +251,15 @@ namespace BrnGui
 
         // Ask for the terms-of-service text and for the account's stored answers. The
         // replies come back as events 266 and 125, both of which this state observes.
-        {
-            GuiEventNewsAndTOSRequest lRequest;
-            mpStateInterface->OutputGuiEvent(lRequest);
-        }
-        {
-            GuiEventAccountSettingsRequest lRequest;
-            mpStateInterface->OutputGuiEvent(lRequest);
-        }
+        // DWARF locals GuiEventNetworkNewsAndTOS lNewsAndTOSEvent (cpp:122) and
+        // GuiEventOnlineRequestAccountSettings lRequestAccount (cpp:126); the second is an empty
+        // event, so its tag byte is copied unwritten.
+        GuiEventNetworkNewsAndTOS lNewsAndTOSEvent;
+        lNewsAndTOSEvent.meEventType = GuiEventNetworkNewsAndTOS::E_EVENT_TYPE_REQUEST_TOS;
+        mpStateInterface->OutputGuiEvent(lNewsAndTOSEvent);
+
+        GuiEventOnlineRequestAccountSettings lRequestAccount;
+        mpStateInterface->OutputGuiEvent(lRequestAccount);
 
     }
 
@@ -397,7 +375,7 @@ namespace BrnGui
     // this tab expects and ask the view to play the movie.
     bool CrashNavAccountManagement::UpdateLoading()
     {
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:306
+        CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 306);   // cpp:306
 
         if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
@@ -416,7 +394,7 @@ namespace BrnGui
     // hand and show whichever TOS text the download has reached.
     bool CrashNavAccountManagement::UpdateWFInit()
     {
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:344
+        CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 344);   // cpp:344
 
         if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
@@ -424,7 +402,7 @@ namespace BrnGui
         }
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:854 (the console asserts twice)
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 854);   // cpp:854 (the console asserts twice)
 
         // Each row is the same YES/NO pair with ids { 0, 1 }, and "yes" highlights item 0.
         mMenuToggleGroup.SetupToggle(E_TOGGLEROW_SHARE_INFO_1, 2, true,
@@ -750,7 +728,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "lpcLabel");   // cpp:941
+            CGS_ASSERT_AT(false, "lpcLabel", CGS_ARTIST_FILE, 941);   // cpp:941
             break;
         }
 

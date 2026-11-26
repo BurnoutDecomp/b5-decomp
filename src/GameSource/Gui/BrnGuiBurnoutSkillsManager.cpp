@@ -71,7 +71,7 @@ const f32 BurnoutSkillsManager::KAF_MINIMUM_HUD_MESSAGE_SKILLS_LEVEL
 // ----------------------------------------------------------------------------
 void BurnoutSkillsManager::Construct(BrnGui::GuiCache* lpCache)
 {
-    CGS_ASSERT(lpCache, "lpCache");
+    CGS_ASSERT_AT(lpCache, "lpCache", CGS_ARTIST_FILE, 72);
 
     mpCache              = lpCache;
     mfTimeToNextChange   = 0.0f;
@@ -197,8 +197,8 @@ void BurnoutSkillsManager::ResetPlayerData(EActiveRaceCarIndex leActiveRaceCar)
 // ----------------------------------------------------------------------------
 void BurnoutSkillsManager::SelectNextSkill()
 {
-    CGS_ASSERT(E_BURNOUT_SKILLS_SHOWING_TYPE_ROAD_RULE_ACTIVE != meCurrentShowingType,
-               "E_BURNOUT_SKILLS_SHOWING_TYPE_ROAD_RULE_ACTIVE != meCurrentShowingType");
+    CGS_ASSERT_AT(E_BURNOUT_SKILLS_SHOWING_TYPE_ROAD_RULE_ACTIVE != meCurrentShowingType,
+               "E_BURNOUT_SKILLS_SHOWING_TYPE_ROAD_RULE_ACTIVE != meCurrentShowingType", CGS_ARTIST_FILE, 483);
 
     if (meCurrentShowingType == E_BURNOUT_SKILLS_SHOWING_TYPE_ROAD_RULE_ACTIVE)
     {
@@ -480,9 +480,9 @@ void BurnoutSkillsManager::SetSkillsData(EActiveRaceCarIndex leActiveRaceCar,
         }
 
         leSkill++;
-        CGS_ASSERT(static_cast<int>(leSkill)
+        CGS_ASSERT_AT(static_cast<int>(leSkill)
                        <= BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_COUNT,
-                   "leEnumIndex <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT");
+                   "leEnumIndex <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 272);
         if (leSkill >= BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_COUNT)
         {
             break;

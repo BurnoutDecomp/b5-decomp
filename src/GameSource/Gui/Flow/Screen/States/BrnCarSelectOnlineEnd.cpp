@@ -16,7 +16,7 @@
 // GetOutputEventQueue()->AddEvent with host sizeof sizes.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectOnlineEnd.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectOnlineEnd.cpp"
 #include <cstddef>                                                        // offsetof (wire records)
 #include <cstring>                                                        // std::strstr
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
@@ -205,7 +205,7 @@ namespace BrnGui
     // ================================================================================
     bool CarSelectOnlineEnd::UpdateLoadResources()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 195);
 
         if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
@@ -319,7 +319,7 @@ namespace BrnGui
     // ================================================================================
     void CarSelectOnlineEnd::HandleLobbyPlayerList(const GuiEventNetworkLobbyPlayerList* lpEvent)
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache != NULL");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache != NULL", CGS_ARTIST_FILE, 361);
 
         const GuiEventNetworkLobbyPlayerListPayload* lpPlayerList =
             reinterpret_cast<const GuiEventNetworkLobbyPlayerListPayload*>(lpEvent);
@@ -339,8 +339,8 @@ namespace BrnGui
 
                 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
                     mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lrPlayer.mPlayerID);
-                CGS_ASSERT(lpPlayerInfo != 0,
-                           "Trying to show the name of a player who isn't in our game");
+                CGS_ASSERT_AT(lpPlayerInfo != 0,
+                           "Trying to show the name of a player who isn't in our game", CGS_ARTIST_FILE, 375);
                 mOnlinePlayerList.SetPlayerName(liPlayer, lpPlayerInfo->mPlayerName.macName);
             }
 

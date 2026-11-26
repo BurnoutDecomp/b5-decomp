@@ -777,6 +777,11 @@ namespace BrnGui
     {
     };
 
+    // DWARF BrnGuiEventTypeDefs.h:6452 `typedef GuiEvent<122> GuiEventOnlineRequestAccountSettings` (PS3
+    // id); CrashNavAccountManagement::OnEnter posts it as the empty {1, 124, 12} record (ARTIST
+    // 0x824CE20C).
+    typedef CgsGui::GuiEvent<124> GuiEventOnlineRequestAccountSettings;
+
     class GuiPlayerInfoResponse : public CgsGui::GuiEvent<406>
     {
     public:
@@ -1114,12 +1119,9 @@ namespace BrnGui
                                       //   (same no-home treatment); widened from the toggle row's
                                       //   SIGNED s8 highlight index, so -1 is reachable.
         bool mbRanked;                // payload +0x08
-        bool mbFreeburn;              // payload +0x09
-        u8   maPad[2];                // payload +0x0A -- the console reads the +8 word whole (`lwz`)
-
-        GuiEventNetworkCustomMatchSearch()
-            : meGameMode(0), meSearchOpponentTypes(0), mbRanked(false), mbFreeburn(false)
-        { maPad[0] = 0; maPad[1] = 0; }
+        bool mbFreeburn;              // payload +0x09 (then two bytes of tail padding)
+        // DWARF BrnGuiEventTypeDefs.h:3163-3168 declares no constructor: OnlineCustomMatch's
+        // implicit constructor (ARTIST 0x82508C20) leaves its mLastSearchParams member unwritten.
     };  // id 252, payload 12 bytes, record 24
     CGS_STATIC_ASSERT((sizeof(GuiEventNetworkCustomMatchSearch) == 12),
                   "GuiEventNetworkCustomMatchSearch is the 12-byte OutputGuiEvent payload");

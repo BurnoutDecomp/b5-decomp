@@ -572,7 +572,7 @@ namespace BrnGui
         // original's copy-pasted OnlineSelectRoute message.
         CGS_ASSERT(lpInGameEvent != 0,
                    "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");   // cpp:2226 (non-fatal)
-        CGS_ASSERT(lpInGameEvent != 0, "lpInGameEvent");                            // cpp:2228 (non-fatal)
+        CGS_ASSERT_AT(lpInGameEvent != 0, "lpInGameEvent", CGS_ARTIST_FILE, 2228);                            // cpp:2228 (non-fatal)
 
         PostOverlayWaitFinish(mpStateInterface, "CNOnlEntGame");
         SendStateEvent("ADVANCE");
@@ -1313,7 +1313,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptions::SetupHelpBar(bool /*lbUnused*/)
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1936 (non-fatal)
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1936);   // cpp:1936 (non-fatal)
 
         // The X360 builds two parallel stack arrays (buttons then texts, both walked with
         // a word-scaled index) rather than an array of the class's HelpBarItem pairs.
@@ -1365,8 +1365,8 @@ namespace BrnGui
                                                    KA_HELPBAR_ITEMS[0].meButton);   // 5 BACK
         ++liHelpBarItemCount;
 
-        CGS_ASSERT(liHelpBarItemCount <= KI_MAX_HELP_BAR_ITEMS,
-                   "liHelpBarItemCount <= KI_MAX_HELP_BAR_ITEMS");   // cpp:1995 (non-fatal)
+        CGS_ASSERT_AT(liHelpBarItemCount <= KI_MAX_HELP_BAR_ITEMS,
+                   "liHelpBarItemCount <= KI_MAX_HELP_BAR_ITEMS", CGS_ARTIST_FILE, 1995);   // cpp:1995 (non-fatal)
 
         mHelpBar.Clear();   // this+0x5C40
         for (s32 liItem = 0; liItem < liHelpBarItemCount; ++liItem)
@@ -1485,7 +1485,7 @@ namespace BrnGui
 
         const CreateMatchOptions::EOption* lpeGameModeOptions =
             KAP_GAME_MODE_OPTION_DATA[GetSelectedGameMode()];
-        CGS_ASSERT(lpeGameModeOptions != 0, "lpeGameModeOptions");            // cpp:1684
+        CGS_ASSERT_AT(lpeGameModeOptions != 0, "lpeGameModeOptions", CGS_ARTIST_FILE, 1684);            // cpp:1684
 
         // The ranked flag is not a toggle row -- it comes off the cache the online menu
         // set when the player picked ranked or unranked play.
@@ -1545,7 +1545,7 @@ namespace BrnGui
                         break;
 
                     default:
-                        CGS_ASSERT(false, "Unknown game mode option");          // cpp:1777
+                        CGS_ASSERT_AT(false, "Unknown game mode option", CGS_ARTIST_FILE, 1777);          // cpp:1777
                         break;
                 }
             }
@@ -1651,7 +1651,7 @@ namespace BrnGui
                 // SetupGameModeOptions -- so the rows below are highlighted against
                 // whatever the group already holds.
                 lpeGameModeOptions = KAE_RACE_MODE_OPTIONS;
-                CGS_ASSERT(false, "Invalid game mode option");                  // cpp:1496
+                CGS_ASSERT_AT(false, "Invalid game mode option", CGS_ARTIST_FILE, 1496);                  // cpp:1496
                 break;
         }
 
@@ -1719,7 +1719,7 @@ namespace BrnGui
                         break;
 
                     default:
-                        CGS_ASSERT(false, "Unknown game mode option");          // cpp:1611
+                        CGS_ASSERT_AT(false, "Unknown game mode option", CGS_ARTIST_FILE, 1611);          // cpp:1611
                         break;
                 }
             }
@@ -1855,8 +1855,8 @@ namespace BrnGui
         else
         {
             // cpp:2078 -- non-fatal; the X360 falls straight through into the recent list.
-            CGS_ASSERT(lpOptionsData->GetNumReceivedOnlineGameOptions() > 0,
-                       "mpGuiCache->GetMenuOptionsData()->GetNumReceivedOnlineGameOptions() > 0");
+            CGS_ASSERT_AT(lpOptionsData->GetNumReceivedOnlineGameOptions() > 0,
+                       "mpGuiCache->GetMenuOptionsData()->GetNumReceivedOnlineGameOptions() > 0", CGS_ARTIST_FILE, 2078);
 
             liNumRoutes      = lpOptionsData->GetNumReceivedOnlineGameOptions();
             lpacHeaderTextId = KAC_RECENT_OPTIONS_STRING_ID;
@@ -1920,8 +1920,8 @@ namespace BrnGui
         else
         {
             // cpp:2151 -- non-fatal; the X360 reads the received counter either way.
-            CGS_ASSERT(meOptionsToLoad == E_OPTIONS_TO_LOAD_RECENT,
-                       "meOptionsToLoad == E_OPTIONS_TO_LOAD_RECENT");
+            CGS_ASSERT_AT(meOptionsToLoad == E_OPTIONS_TO_LOAD_RECENT,
+                       "meOptionsToLoad == E_OPTIONS_TO_LOAD_RECENT", CGS_ARTIST_FILE, 2151);
 
             liNumRoutes = lpOptionsData->GetNumReceivedOnlineGameOptions();
         }
@@ -2868,7 +2868,7 @@ namespace BrnGui
     CreateMatchOptions::EOption OnlineGameOptions::GetHighlightedOption(CreateMatchOptions::EOption leOption)
     {
         const s32 liToggle = mCreateGameToggles.GetIndexFromId(static_cast<u64>(static_cast<s64>(leOption)));
-        CGS_ASSERT(liToggle >= 0, "Required toggle not found!");
+        CGS_ASSERT_AT(liToggle >= 0, "Required toggle not found!", CGS_ARTIST_FILE, 1864);
 
         return static_cast<CreateMatchOptions::EOption>(
             mCreateGameToggles.GetSelectable(liToggle)->GetHighlightedId());
@@ -2882,8 +2882,8 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptions::HandleCarInfoResponseEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent");
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(lpEvent != 0, "lpEvent", CGS_ARTIST_FILE, 2349);
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 2350);
 
         CGS_ASSERT(mpGuiCache->GetWorldDataController() != 0, "mpWorldDataController");
         const BrnResource::VehicleList* lpVehicleList =
@@ -3201,7 +3201,7 @@ namespace BrnGui
 
                 case KI_EVENT_DISCONNECTED:
                     // Latch the disconnect reason for the popup and leave the screen.
-                    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                    CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 300);
                     mpGuiCache->SetDoDisconnectPopup(lpEvent);
                     SendStateEvent("DISCONNECT");
                     break;
@@ -3219,12 +3219,12 @@ namespace BrnGui
                     break;
 
                 case KI_EVENT_OVERLAY_COMPLETE:
-                    CGS_ASSERT(lpEvent != 0, "lpOverlayCompleteEvent");
+                    CGS_ASSERT_AT(lpEvent != 0, "lpOverlayCompleteEvent", CGS_ARTIST_FILE, 2283);
                     break;
 
                 case KI_EVENT_LOBBY_PLAYER_LIST:
                     // An empty lobby means this player is creating the match.
-                    CGS_ASSERT(lpEvent != 0, "lpLobbyList");
+                    CGS_ASSERT_AT(lpEvent != 0, "lpLobbyList", CGS_ARTIST_FILE, 290);
                     mbIsCreating =
                         static_cast<const GuiEventNetworkLobbyPlayerListPayload*>(lpEvent)->miNumPlayers == 0;
                     break;

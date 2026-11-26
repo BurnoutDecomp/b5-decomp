@@ -697,8 +697,8 @@ namespace BrnGui
         {
             const s32 leMode = meModeOverlayDisplayed;
             mbOverlayInProgress = false;
-            CGS_ASSERT(KAPC_PRE_EVENT_OVERLAYS[leMode] != 0,
-                       "KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]");   // cpp:1668 (non-gating)
+            CGS_ASSERT_AT(KAPC_PRE_EVENT_OVERLAYS[leMode] != 0,
+                       "KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]", CGS_ARTIST_FILE, 1668);   // cpp:1668 (non-gating)
 
             // The record is { 8, 188, 16, <pad>, id } posted on the gui-out channel at
             // 24 bytes; Construct compresses the name into the id word.
@@ -817,7 +817,7 @@ namespace BrnGui
     // rules, the pre-event overlay and the road-rule-shot panel).
     bool RaceMainHudState::UpdateSetupState()
     {
-        CGS_ASSERT(mpCache == 0, "mpCache == NULL");   // cpp:1886 (non-gating)
+        CGS_ASSERT_AT(mpCache == 0, "mpCache == NULL", CGS_ARTIST_FILE, 1886);   // cpp:1886 (non-gating)
 
         StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
         if (lpInQueue != 0)
@@ -1144,8 +1144,8 @@ namespace BrnGui
         if (mbPreEventOverlay && mpCache->IsEventPreparedForModeStart())
         {
             const s32 liDestinationDistrict = mpCache->GetEventDestinationDistrict();
-            CGS_ASSERT(KAPC_PRE_EVENT_OVERLAYS[leGameModeType] != 0,
-                       "KAPC_PRE_EVENT_OVERLAYS[leGameModeType]");   // cpp:2615 (non-gating)
+            CGS_ASSERT_AT(KAPC_PRE_EVENT_OVERLAYS[leGameModeType] != 0,
+                       "KAPC_PRE_EVENT_OVERLAYS[leGameModeType]", CGS_ARTIST_FILE, 2615);   // cpp:2615 (non-gating)
 
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct(KAPC_PRE_EVENT_OVERLAYS[leGameModeType]);
@@ -1183,7 +1183,7 @@ namespace BrnGui
                     break;
                 }
             }
-            CGS_ASSERT(lpOpponent != 0, "lpOpponentStatusData != NULL");   // cpp:2636 (non-gating)
+            CGS_ASSERT_AT(lpOpponent != 0, "lpOpponentStatusData != NULL", CGS_ARTIST_FILE, 2636);   // cpp:2636 (non-gating)
 
             mRoadRuleShotComponent.SetupComponent(
                 RoadRuleShotComponent::E_PLAYER_STATE_RACING,
@@ -1536,7 +1536,7 @@ namespace BrnGui
 
         // @0x8248051C..0x8248054C: assert the cache, then store the gameplay-HUD gate byte
         // through it REGARDLESS (the assert is non-gating on console).
-        CGS_ASSERT(mpCache != 0, "mpCache");                               // cpp:2819
+        CGS_ASSERT_AT(mpCache != 0, "mpCache", CGS_ARTIST_FILE, 2819);                               // cpp:2819
         mpCache->SetGameplayHudActive(true);                               // stb 1 @cache+0x407C
 
         // @0x82480550..0x82480590: in an event (byte == 1) AND mode 4 (E_MODE_PURSUIT) ->
@@ -1770,7 +1770,7 @@ namespace BrnGui
                 break;
 
             case 574:
-                CGS_ASSERT(lpEvent != 0, "lpChallengeEvent");               // cpp:3620 (li r5, 0xE24)
+                CGS_ASSERT_AT(lpEvent != 0, "lpChallengeEvent", CGS_ARTIST_FILE, 3620);               // cpp:3620 (li r5, 0xE24)
                 // @0x824809D4 `lbz r11, 8(r28)` -- a BYTE at +8 here, where case 573 read a
                 // word at the same offset. Only a ZERO byte falls into the 576 arm.
                 if (lpu8Payload[8] == 0 && mbFreeburnChallengeTicker)
@@ -1833,8 +1833,8 @@ namespace BrnGui
             && mpCache->GetTime() > mfOverlayRemovalTime)
         {
             mbOverlayInProgress = false;                                    // @0x82480AE0
-            CGS_ASSERT(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed] != 0,
-                       "KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]");   // cpp:3737 (li r5, 0xE99)
+            CGS_ASSERT_AT(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed] != 0,
+                       "KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]", CGS_ARTIST_FILE, 3737);   // cpp:3737 (li r5, 0xE99)
 
             GuiOverlayWaitFinishWire lWire(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]);
             mpStateInterface->OutputGuiEvent(lWire.mRequest);
@@ -2339,7 +2339,7 @@ namespace BrnGui
                 // X360 LABEL_120 -- the whole boost-message event family routes through the
                 // manager with the LIVE event id. Note there is NO mbBoostMessages gate here;
                 // only the per-frame Update below is gated.
-                CGS_ASSERT(mpCache != 0, "mpCache != NULL");   // cpp:839 (non-gating)
+                CGS_ASSERT_AT(mpCache != 0, "mpCache != NULL", CGS_ARTIST_FILE, 839);   // cpp:839 (non-gating)
                 mBoostMessageManager.RecvEvent(lpEvent, liEventId, mpCache);
                 break;
             case 398:
@@ -2661,7 +2661,7 @@ namespace BrnGui
                 meCurrentEventCountdownState = E_EVENT_COUNTDOWN_STATE_ONE;
                 if (mbPreRaceCountdownRenders)
                     mEventCountdownIcon.SetState("one");
-                CGS_ASSERT(mpCache != 0, "mpCache");   // cpp:3336 (non-gating)
+                CGS_ASSERT_AT(mpCache != 0, "mpCache", CGS_ARTIST_FILE, 3336);   // cpp:3336 (non-gating)
                 mfEventCountdownTimer = mpCache->GetTime();
                 PostCountdownAudio(mpStateInterface, 1);
             }
@@ -2682,7 +2682,7 @@ namespace BrnGui
                 // retire" -- ConcludeEventCountdown waits for it. Do not "fix" either line.
                 if (mfEventCountdownTimer == 0.0f)
                     mfEventCountdownTimer = mpCache->GetTime() - 1.0f;
-                CGS_ASSERT(mpCache != 0, "mpCache");   // cpp:3369 (non-gating)
+                CGS_ASSERT_AT(mpCache != 0, "mpCache", CGS_ARTIST_FILE, 3369);   // cpp:3369 (non-gating)
                 mfEventCountdownTimer = (mpCache->GetTime() * 2.0f) - mfEventCountdownTimer;
 
                 PostCountdownAudio(mpStateInterface, 0);
@@ -2699,8 +2699,8 @@ namespace BrnGui
         case 9:
             break;
         default:
-            CGS_ASSERT(false,
-                       "Unexpected Countdown State in RaceMainHudState::UpdateEventCountdown");   // cpp:3392
+            CGS_ASSERT_AT(false,
+                       "Unexpected Countdown State in RaceMainHudState::UpdateEventCountdown", CGS_ARTIST_FILE, 3392);   // cpp:3392
             break;
         }
     }
@@ -2932,7 +2932,7 @@ namespace BrnGui
 
         if (mbBoostMessages)                                                // lbz 0x154
         {
-            CGS_ASSERT(mpCache != 0, "mpCache != NULL");                    // cpp:2910
+            CGS_ASSERT_AT(mpCache != 0, "mpCache != NULL", CGS_ARTIST_FILE, 2910);                    // cpp:2910
             // @0x8247461C: `li r5, 0xCE` == 206, `addi r3, r27, 0x1078` == &mBoostMessageManager.
             mBoostMessageManager.RecvEvent(lpEvent, 206, mpCache);
         }
@@ -3010,7 +3010,7 @@ namespace BrnGui
 
         if (mbBoostMessages)                                                // lbz 0x154
         {
-            CGS_ASSERT(mpCache != 0, "mpCache != NULL");                    // cpp:3134
+            CGS_ASSERT_AT(mpCache != 0, "mpCache != NULL", CGS_ARTIST_FILE, 3134);                    // cpp:3134
             // @0x82474810: `li r5, 0x15` == 21. Id 21 is the apt-trigger record the manager's
             // switch deliberately ignores (its jump table starts at 206) -- the call is made
             // and falls through to default, exactly as shipped.
@@ -3045,8 +3045,8 @@ namespace BrnGui
     // cases 573/574/576/581 (wS2.cpp:591/613/618/642).
     void RaceMainHudState::StartFreeburnChallengeTicker()
     {
-        CGS_ASSERT(mbFreeburnChallengeTicker,
-                   "mbFreeburnChallengeTicker == true");                    // cpp:4038 (lbz 0x167)
+        CGS_ASSERT_AT(mbFreeburnChallengeTicker,
+                   "mbFreeburnChallengeTicker == true", CGS_ARTIST_FILE, 4038);                    // cpp:4038 (lbz 0x167)
 
         PostTickerClear536(mpStateInterface);
 
@@ -3186,8 +3186,8 @@ namespace BrnGui
     // (wS3.cpp:653).
     void RaceMainHudState::StartFreeburnChallengeNotActiveTicker()
     {
-        CGS_ASSERT(mbFreeburnChallengeTicker,
-                   "mbFreeburnChallengeTicker == true");                    // cpp:4138 (lbz 0x167)
+        CGS_ASSERT_AT(mbFreeburnChallengeTicker,
+                   "mbFreeburnChallengeTicker == true", CGS_ARTIST_FILE, 4138);                    // cpp:4138 (lbz 0x167)
 
         PostTickerClear536(mpStateInterface);
 

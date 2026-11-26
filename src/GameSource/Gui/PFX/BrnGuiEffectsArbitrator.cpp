@@ -122,8 +122,8 @@ namespace BrnGui
     void EffectsArbitrator::ResourceUpdate(CgsGui::ModelIO::InputBuffer* lpGuiModelInputBuffer,
                                            const CgsGui::ModelIO::OutputBuffer* lpGuiModelOutputBuffer)
     {
-        CGS_ASSERT(lpGuiModelInputBuffer != 0, "lpGuiModelInputBuffer != NULL");     // :171
-        CGS_ASSERT(lpGuiModelOutputBuffer != 0, "lpGuiModelOutputBuffer != NULL");   // :172
+        CGS_ASSERT_AT(lpGuiModelInputBuffer != 0, "lpGuiModelInputBuffer != NULL", CGS_ARTIST_FILE, 171);     // :171
+        CGS_ASSERT_AT(lpGuiModelOutputBuffer != 0, "lpGuiModelOutputBuffer != NULL", CGS_ARTIST_FILE, 172);   // :172
 
         const CgsGui::ModelIO::OutputBuffer::GuiNotificationQueue* lpNotifications =
             lpGuiModelOutputBuffer->GetLoadNotifications();
@@ -146,8 +146,8 @@ namespace BrnGui
                 if (luRequestId == KU_PFX_HOOK_BUNDLE_REQUEST_ID)
                 {
                     mpHookInfo = CgsResource::ResourcePtr<PFXHookBundle>(lpNotification->mResourceHandle);
-                    CGS_ASSERT(!mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr),
-                               "mpHookInfo != CgsResource::NULLResourcePtr");           // :198
+                    CGS_ASSERT_AT(!mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr),
+                               "mpHookInfo != CgsResource::NULLResourcePtr", CGS_ARTIST_FILE, 198);           // :198
                     Acquire3dTints(lpGuiModelInputBuffer);
                 }
                 else if (luRequestId - KU_PFX_COLOURCUBE_REQUEST_BASE <= 5u)
@@ -190,8 +190,8 @@ namespace BrnGui
             const PFXGroup* lpGroup = lpBundle->GetGroup(liGroup);
             if (lpGroup->mbUseTint3D && LookupColourCube(lpGroup->muTint3DResourceId) == 0)
             {
-                CGS_ASSERT(muColourCubeCount < KU_MAX_NUM_COLOURCUBES,
-                           "muColourCubeCount < KU_MAX_NUM_COLOURCUBES");             // :477
+                CGS_ASSERT_AT(muColourCubeCount < KU_MAX_NUM_COLOURCUBES,
+                           "muColourCubeCount < KU_MAX_NUM_COLOURCUBES", CGS_ARTIST_FILE, 477);             // :477
                 CgsGui::GuiEventLoadRequest lRequest;
                 lRequest.meRequestType  = static_cast<CgsGui::ResourceRequestTypes>(KI_ARTIST_RESOURCETYPE_PFX_COLOURCUBE);
                 lRequest.meLoadUnload   = CgsGui::E_GUI_RESOURCEREQUEST_LOAD;
@@ -221,9 +221,9 @@ namespace BrnGui
     // ------------------------------------------------------------------------------------
     const PFXHook* EffectsArbitrator::GetHookFromName(const char* lpcName)
     {
-        CGS_ASSERT(!mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr),
-                   "mpHookInfo != CgsResource::NULLResourcePtr");                   // :527
-        CGS_ASSERT(lpcName != 0, "lpcName != NULL");                                // :528
+        CGS_ASSERT_AT(!mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr),
+                   "mpHookInfo != CgsResource::NULLResourcePtr", CGS_ARTIST_FILE, 527);                   // :527
+        CGS_ASSERT_AT(lpcName != 0, "lpcName != NULL", CGS_ARTIST_FILE, 528);                                // :528
         const PFXHookBundle* lpBundle = mpHookInfo.operator->();
         for (s32 liHook = 0; liHook < lpBundle->miHookCount; ++liHook)
         {
@@ -238,8 +238,8 @@ namespace BrnGui
 
     const PFXHook* EffectsArbitrator::GetHookFromGUID(u32 luGuid)
     {
-        CGS_ASSERT(!mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr),
-                   "mpHookInfo != CgsResource::NULLResourcePtr");                   // :554
+        CGS_ASSERT_AT(!mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr),
+                   "mpHookInfo != CgsResource::NULLResourcePtr", CGS_ARTIST_FILE, 554);                   // :554
         const PFXHookBundle* lpBundle = mpHookInfo.operator->();
         for (s32 liHook = 0; liHook < lpBundle->miHookCount; ++liHook)
         {
@@ -288,7 +288,7 @@ namespace BrnGui
     void EffectsArbitrator::StartHook(const GuiPFXHookEvent* lpGuiPFXHookEvent)
     {
         const PFXHook* lpHook = ResolveHook(lpGuiPFXHookEvent->muGuid, lpGuiPFXHookEvent->macName, "StartHook");
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache != NULL");                         // :598
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache != NULL", CGS_ARTIST_FILE, 598);                         // :598
         if (lpHook == 0)
         {
             return;
@@ -351,10 +351,10 @@ namespace BrnGui
             f32 lfTime = lpHook->mfTransitionTime;
             if (lfTime < 0.0099999998f && lfTime > -0.0099999998f)
             {
-                CGS_ASSERT(lpHook->miNodeCount > 0, "lpHook->mpaNodes[0]");         // :620
+                CGS_ASSERT_AT(lpHook->miNodeCount > 0, "lpHook->mpaNodes[0]", CGS_ARTIST_FILE, 620);         // :620
                 const PFXHookNode* lpNode  = lpBundle->GetHookNode(*lpHook, 0);
                 const PFXGroup*    lpGroup = lpBundle->GetNodeGroup(*lpNode);
-                CGS_ASSERT(lpGroup != 0, "lpHook->mpaNodes[0]->mpGroup");           // :621
+                CGS_ASSERT_AT(lpGroup != 0, "lpHook->mpaNodes[0]->mpGroup", CGS_ARTIST_FILE, 621);           // :621
                 lfTime = lpGroup->mfFadeIn;
             }
             const EHookState leState = meHookState;
@@ -398,7 +398,7 @@ namespace BrnGui
         {
             return;
         }
-        CGS_ASSERT(mpMenu->IsActive(), "mpMenu->IsActive()");                       // :727
+        CGS_ASSERT_AT(mpMenu->IsActive(), "mpMenu->IsActive()", CGS_ARTIST_FILE, 727);                       // :727
         if (mpMenu->GetHook()->meTransitionMode == 1)
         {
             mpMenu->StartFadeOut(0.0f);
@@ -439,7 +439,7 @@ namespace BrnGui
                     CGS_ASSERT(lpHook->miNodeCount > 0, "lpHook->mpaNodes[0]");     // :404
                     const PFXHookNode* lpNode  = lpBundle->GetHookNode(*lpHook, 0);
                     const PFXGroup*    lpGroup = lpBundle->GetNodeGroup(*lpNode);
-                    CGS_ASSERT(lpGroup != 0, "lpHook->mpaNodes[0]->mpGroup");       // :405
+                    CGS_ASSERT_AT(lpGroup != 0, "lpHook->mpaNodes[0]->mpGroup", CGS_ARTIST_FILE, 404);       // :405
                     lfTime = lpGroup->mfFadeIn;
                 }
                 mfBackgroundFadeTimeToEnd = lfTime;
@@ -551,11 +551,11 @@ namespace BrnGui
                                         const CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
                                         CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer)
     {
-        CGS_ASSERT(lpGuiInputBuffer != 0, "lpGuiInputBuffer != NULL");              // :256
-        CGS_ASSERT(lpGuiOutputBuffer != 0, "lpGuiOutputBuffer != NULL");                // :257
+        CGS_ASSERT_AT(lpGuiInputBuffer != 0, "lpGuiInputBuffer != NULL", CGS_ARTIST_FILE, 256);              // :256
+        CGS_ASSERT_AT(lpGuiOutputBuffer != 0, "lpGuiOutputBuffer != NULL", CGS_ARTIST_FILE, 257);                // :257
 
         const CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue = lpGuiInputBuffer->GetGuiEvents();
-        CGS_ASSERT(lpEventQueue != 0, "lpEventQueue != NULL");                      // :265
+        CGS_ASSERT_AT(lpEventQueue != 0, "lpEventQueue != NULL", CGS_ARTIST_FILE, 265);                      // :265
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
@@ -578,7 +578,7 @@ namespace BrnGui
                 break;
             case 496:
             {
-                CGS_ASSERT(lpEvent != 0, "lpGuiPFXHookEvent != NULL");              // :297
+                CGS_ASSERT_AT(lpEvent != 0, "lpGuiPFXHookEvent != NULL", CGS_ARTIST_FILE, 297);              // :297
                 const GuiPFXHookStopEvent* lpStop = static_cast<const GuiPFXHookStopEvent*>(lpEvent);
                 const PFXHook* lpHook = ResolveHook(lpStop->muGuid, lpStop->macName, "EventUpdate");
                 if (lpHook != 0)
@@ -661,7 +661,7 @@ namespace BrnGui
     // ------------------------------------------------------------------------------------
     void EffectsArbitrator::GenerateEffectFrameEvents(RendererIO::OutputBuffer* lpRenderOutput)
     {
-        CGS_ASSERT(lpRenderOutput != 0, "lpRenderOutput != NULL");                  // :860
+        CGS_ASSERT_AT(lpRenderOutput != 0, "lpRenderOutput != NULL", CGS_ARTIST_FILE, 860);                  // :860
         BrnEffectsFrame* lpFrame1 = lpRenderOutput->GetFXEventsEffectsFrame(0);
         BrnEffectsFrame* lpFrame2 = lpRenderOutput->GetFXEventsEffectsFrame(1);
 

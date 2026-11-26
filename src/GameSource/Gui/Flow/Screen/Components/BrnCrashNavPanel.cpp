@@ -579,8 +579,8 @@ namespace BrnGui
     // @ 0x8243A978
     void CrashNavPanel::SetRoadPanelData(const char* lpacRoadName, RoadPanelData& lrData)
     {
-        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN, "E_PANEL_ROADSIGN == mePanelType"); // cpp:678
-        CGS_ASSERT(lpacRoadName != 0, "NULL != lpRoadName");                            // cpp:679
+        CGS_ASSERT_AT(mePanelType == E_PANEL_ROADSIGN, "E_PANEL_ROADSIGN == mePanelType", CGS_ARTIST_FILE, 678); // cpp:678
+        CGS_ASSERT_AT(lpacRoadName != 0, "NULL != lpRoadName", CGS_ARTIST_FILE, 679);                            // cpp:679
 
         // The console INLINES RoadPanel::SetRoadPanelData (DWARF BrnRoadPanel.cpp:203) here:
         //   RoadSignIcon::FindRoadFromName(mRoadPanel.mRoadSign, lpacRoadName)
@@ -692,11 +692,11 @@ namespace BrnGui
                 // The player has dropped out of the last rank: fall back to the progression
                 // table's own length (the console reads `*(progressionData + 20) - 1`).
                 GuiCache* const lpGuiCache = mpStateInterface->GetAccessPointers()->GetGuiCache();
-                CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");                                    // cpp:563
-                CGS_ASSERT(lpGuiCache->GetWorldDataController() != 0,
-                           "lpGuiCache->GetWorldDataController()");                           // cpp:564
-                CGS_ASSERT(lpGuiCache->GetWorldDataController()->GetProgressionData() != 0,
-                           "lpGuiCache->GetWorldDataController()->GetProgressionData()");     // cpp:565
+                CGS_ASSERT_AT(lpGuiCache != 0, "lpGuiCache", CGS_ARTIST_FILE, 563);                                    // cpp:563
+                CGS_ASSERT_AT(lpGuiCache->GetWorldDataController() != 0,
+                           "lpGuiCache->GetWorldDataController()", CGS_ARTIST_FILE, 564);                           // cpp:564
+                CGS_ASSERT_AT(lpGuiCache->GetWorldDataController()->GetProgressionData() != 0,
+                           "lpGuiCache->GetWorldDataController()->GetProgressionData()", CGS_ARTIST_FILE, 565);     // cpp:565
 
                 liPlayerRank = static_cast<s32>(
                     lpGuiCache->GetWorldDataController()->GetProgressionData()
@@ -772,7 +772,7 @@ namespace BrnGui
     bool CrashNavPanel::HandleControllerInput(
         const CgsGui::GuiEventControllerInputPressed* lpControllerEvent)
     {
-        CGS_ASSERT(lpControllerEvent != 0, "lpControllerEvent");   // cpp:849
+        CGS_ASSERT_AT(lpControllerEvent != 0, "lpControllerEvent", CGS_ARTIST_FILE, 849);   // cpp:849
 
         if (mePrepareStage != E_PREPARESTAGE_DONE)
         {
@@ -961,7 +961,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "lpcLabel");   // cpp:1136
+            CGS_ASSERT_AT(false, "lpcLabel", CGS_ARTIST_FILE, 1136);   // cpp:1136
             break;
         }
 

@@ -687,7 +687,7 @@ renderengine::Texture* CustomRendererManager::GetComponentTexture(
     CgsID lComponentID, s32 liTextureIndex, s32* lpiShaderProgram,
     CgsGui::ImRendererSet* lpRendererSet)
 {
-    CGS_ASSERT(lpiShaderProgram != 0, "lpiShaderProgram != NULL");
+    CGS_ASSERT_AT(lpiShaderProgram != 0, "lpiShaderProgram != NULL", CGS_ARTIST_FILE, 628);
     if (lpiShaderProgram == 0)
         return 0;
 

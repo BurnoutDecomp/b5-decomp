@@ -245,7 +245,7 @@ void OfflineTrophyCarUnlock::Update()
         break;
 
     case E_OFFLINETROPHYCARUNLOCKSTATE_WAITINGFORCOMPONENTS:
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 227);
         if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
             SetupComponents();
@@ -384,7 +384,7 @@ void OfflineTrophyCarUnlock::AppendExpectedComponents()
 // clip's "transin". Unlike the rival screen there are no audio / training posts here.
 void OfflineTrophyCarUnlock::SetupComponents()
 {
-    CGS_ASSERT(mpGuiCache, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 421);
 
     const CgsID lTrophyCarID = mpGuiCache->GetTrophyCarID();
 
@@ -411,7 +411,7 @@ void OfflineTrophyCarUnlock::SetupComponents()
 // strcmp loops (operand order kept).
 void OfflineTrophyCarUnlock::HandleAptTriggers(const CgsGui::GuiEventAptTriggerPayload* lpEvent)
 {
-    CGS_ASSERT(lpEvent, "lpEvent");
+    CGS_ASSERT_AT(lpEvent, "lpEvent", CGS_ARTIST_FILE, 473);
 
     if (lpEvent->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
     {
@@ -465,7 +465,7 @@ void OfflineTrophyCarUnlock::HandleControllerInput(const CgsModule::Event* lpEve
 void OfflineTrophyCarUnlock::HandleControllerInputPressed(
     const CgsGui::GuiEventControllerInputPressed* lpControllerPressedEvent)
 {
-    CGS_ASSERT(lpControllerPressedEvent, "lpControllerPressedEvent");
+    CGS_ASSERT_AT(lpControllerPressedEvent, "lpControllerPressedEvent", CGS_ARTIST_FILE, 554);
 
     switch (meOfflineTrophyCarUnlockState)
     {

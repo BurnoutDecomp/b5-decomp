@@ -19,7 +19,7 @@
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                     // BrnGui::WorldDataController
 #include "SharedClasses/DataLists/VehicleList.h"                          // BrnResource::VehicleList::GetVehicleData
 #include "SharedClasses/DataLists/VehicleListEntry.h"                     // GetLiveryType / GetParentId
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnCarSelectOnlinePlayerList.cpp"
 #include <cstring>   // std::strstr
 
 namespace BrnGui
@@ -49,7 +49,7 @@ namespace BrnGui
         // asserts the result (cpp:62).
         mpVehicleList = mpStateInterface->GetAccessPointers()
                             ->GetGuiCache()->GetWorldDataController()->GetVehicleList();
-        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList != NULL");   // cpp:62
+        CGS_ASSERT_AT(mpVehicleList != 0, "mpVehicleList != NULL", CGS_ARTIST_FILE, 62);   // cpp:62
     }
 
     // @ 0x82482950
@@ -138,7 +138,7 @@ namespace BrnGui
         // "id not present" arm and the "no entry" arm into the same assert; the committed
         // GetVehicleData(CgsID) overload is exactly that composite and returns null for both.
         const BrnResource::VehicleListEntry* lpVehicleData = mpVehicleList->GetVehicleData(lCarId);
-        CGS_ASSERT(lpVehicleData != 0, "lpVehicleData");                      // cpp:101
+        CGS_ASSERT_AT(lpVehicleData != 0, "lpVehicleData", CGS_ARTIST_FILE, 101);                      // cpp:101
 
         if (lpVehicleData->GetLiveryType() != 2 && lpVehicleData->GetParentId() != 0)
         {

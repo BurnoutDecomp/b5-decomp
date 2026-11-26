@@ -459,7 +459,7 @@ namespace BrnGui
         // (INT_SHOWCAR.SNS) drained.)
         const BrnResource::VehicleListEntry* lpVehicleListEntry =
             mpVehicleList->GetVehicleData(miMostRecentDropInId);
-        CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntry");   // cpp:1505
+        CGS_ASSERT_AT(lpVehicleListEntry != 0, "lpVehicleListEntry", CGS_ARTIST_FILE, 1505);   // cpp:1505
 
         // ⚠️ ENTRY guard (shape (b) in BrnCarSelectVehicle.h), not in the X360 body. The
         // console dereferences the entry unconditionally on the line below; it can do that
@@ -585,7 +585,7 @@ namespace BrnGui
     // ---- SetupComponents @ 0x824C9978 ----------------------------------------------
     void CarSelectVehicle::SetupComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0, "lpGuiCache");   // cpp:371
+        CGS_ASSERT_AT(mpGuiCache != 0, "lpGuiCache", CGS_ARTIST_FILE, 371);   // cpp:371
 
         // Blank both help prompts (invisible glyphs) until UpdateComponents decides what
         // the continue prompt should say. Back first, exactly as the console does.
@@ -681,7 +681,7 @@ namespace BrnGui
     {
         // cpp:540 -- the console's assert, RESTORED 2026-08-02 (the LIST guard that stood here
         // is retired with the WorldDataController; see BrnCarSelectVehicle.h).
-        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:540
+        CGS_ASSERT_AT(mpVehicleList != 0, "mpVehicleList", CGS_ARTIST_FILE, 540);   // cpp:540
 
         CgsID       laCarIds[KI_MAX_SELECTABLE_CARS];
         const char* lapacCarNames[KI_MAX_SELECTABLE_CARS];
@@ -719,7 +719,7 @@ namespace BrnGui
     void CarSelectVehicle::SetCarSelectorComponent()
     {
         // cpp:441 -- the console's assert, RESTORED 2026-08-02 (LIST guard retired).
-        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:441
+        CGS_ASSERT_AT(mpVehicleList != 0, "mpVehicleList", CGS_ARTIST_FILE, 441);   // cpp:441
 
         const s32 liNumCars = gsiNumCarouselCars;
 
@@ -729,7 +729,7 @@ namespace BrnGui
         for (s32 liCar = 0; liCar < liNumCars; ++liCar)
         {
             Selectable* lpSelectable = mCarSelector.GetSelectable(liCar);
-            CGS_ASSERT(lpSelectable != 0, "lpSelectable");             // cpp:457
+            CGS_ASSERT_AT(lpSelectable != 0, "lpSelectable", CGS_ARTIST_FILE, 457);             // cpp:457
 
             const BrnResource::VehicleListEntry* lpVehicleData =
                 mpVehicleList->GetVehicleData(maSelectedCars[liCar]);
@@ -851,7 +851,7 @@ namespace BrnGui
     {
         // cpp:1191 -- THE CONSOLE'S OWN guard: it asserts mpVehicleList AND gates the whole
         // body on it (`lwz 0x28C / beq skip`). Both restored (this one was never a PC guard).
-        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:1191
+        CGS_ASSERT_AT(mpVehicleList != 0, "mpVehicleList", CGS_ARTIST_FILE, 1191);   // cpp:1191
         if (mpVehicleList == 0)
             return;
 
@@ -1290,7 +1290,7 @@ namespace BrnGui
     // highlight once enough travel has accumulated.
     void CarSelectVehicle::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liEventKind)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent");   // cpp:587
+        CGS_ASSERT_AT(lpEvent != 0, "lpEvent", CGS_ARTIST_FILE, 587);   // cpp:587
 
         CarSelectMain::HandleControllerInput(lpEvent, liEventKind);
 
@@ -1516,7 +1516,7 @@ namespace BrnGui
     void CarSelectVehicle::SetTicker(CgsID lCarId)
     {
         // cpp:1074 -- the console's assert, RESTORED 2026-08-02 (LIST guard retired).
-        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:1074
+        CGS_ASSERT_AT(mpVehicleList != 0, "mpVehicleList", CGS_ARTIST_FILE, 1074);   // cpp:1074
 
         const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lCarId);
         const BrnResource::VehicleListEntry* lpVehicleData =

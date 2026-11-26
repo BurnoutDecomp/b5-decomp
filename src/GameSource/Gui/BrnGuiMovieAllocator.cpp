@@ -3,7 +3,7 @@
 
 namespace BrnGui
 {
-    MovieAllocator::~MovieAllocator() {}
+    // (the destructor is the implicit one, see the header)
 
     // MovieAllocator::Construct is header-inline (ARTIST has no out-of-line copy;
     // MovieManager::Construct @0x824F95F0..95F4 resets the contained linear

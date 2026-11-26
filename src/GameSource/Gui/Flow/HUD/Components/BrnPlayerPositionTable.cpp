@@ -166,7 +166,7 @@ namespace BrnGui
     // value. Do not hoist the store below the test.
     void PlayerPositionTableComponent::SetupGameMode()
     {
-        CGS_ASSERT(mpCache != NULL, "mpCache");   // X360 cpp:196 (non-gating: the load below follows regardless)
+        CGS_ASSERT_AT(mpCache != NULL, "mpCache", CGS_ARTIST_FILE, 196);   // X360 cpp:196 (non-gating: the load below follows regardless)
 
         meGameMode = static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(mpCache->GetGameMode());
 
@@ -435,8 +435,8 @@ namespace BrnGui
     // caption on every frame the target type differs from the stored one.
     void PlayerPositionTableComponent::ProcessOnlineFreeburnTable()
     {
-        CGS_ASSERT(IsOnlineFreeBurnLobby(mpCache->GetGameMode()) == true,
-                   "GsmIO::IsOnlineFreeBurnLobby( mpCache->GetGameMode() ) == true");
+        CGS_ASSERT_AT(IsOnlineFreeBurnLobby(mpCache->GetGameMode()) == true,
+                   "GsmIO::IsOnlineFreeBurnLobby( mpCache->GetGameMode() ) == true", CGS_ARTIST_FILE, 1241);
 
         if (mpCache->GetActiveRoadRule() == 0 && mpChallengeManager->IsStarted())
         {
@@ -458,10 +458,10 @@ namespace BrnGui
             if (mpChallengeManager->GetTargetsCount() > 0 &&
                 meCurrentChallengeDataType != static_cast<s32>(mpChallengeManager->GetCurrentTargetType()))
             {
-                CGS_ASSERT(static_cast<s32>(mpChallengeManager->GetCurrentTargetType()) < KI_NUM_FREEBURN_CHALLENGE_TYPE_STRINGS,
-                           "mpChallengeManager->GetCurrentTargetType() < BrnResource::ChallengeListEntryAction::E_CHALLENGE_DATA_TYPE_COUNT");
-                CGS_ASSERT(static_cast<s32>(mpChallengeManager->GetCurrentTargetType()) >= 0,
-                           "mpChallengeManager->GetCurrentTargetType() >= 0");
+                CGS_ASSERT_AT(static_cast<s32>(mpChallengeManager->GetCurrentTargetType()) < KI_NUM_FREEBURN_CHALLENGE_TYPE_STRINGS,
+                           "mpChallengeManager->GetCurrentTargetType() < BrnResource::ChallengeListEntryAction::E_CHALLENGE_DATA_TYPE_COUNT", CGS_ARTIST_FILE, 1288);
+                CGS_ASSERT_AT(static_cast<s32>(mpChallengeManager->GetCurrentTargetType()) >= 0,
+                           "mpChallengeManager->GetCurrentTargetType() >= 0", CGS_ARTIST_FILE, 1289);
                 SetSkillsText(KAPC_FREEBURN_CHALLENGE_TYPE_STRINGS[mpChallengeManager->GetCurrentTargetType()]);
                 SetValuesDirty();
             }
@@ -537,7 +537,7 @@ namespace BrnGui
     // scan of the cache's eight player records.
     void PlayerPositionTableComponent::FillOutOnlineData(EActiveRaceCarIndex leCurrentActiveRaceCar)
     {
-        CGS_ASSERT(mpCache != NULL, "mpCache");
+        CGS_ASSERT_AT(mpCache != NULL, "mpCache", CGS_ARTIST_FILE, 416);
 
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo = NULL;
         for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
@@ -712,7 +712,7 @@ namespace BrnGui
             break;
         case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY:
         case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME:
-            CGS_ASSERT(mpCache != NULL, "mpCache");
+            CGS_ASSERT_AT(mpCache != NULL, "mpCache", CGS_ARTIST_FILE, 668);
             if (mpCache->GetActiveRoadRule() == 0 && mpChallengeManager->IsStarted())
                 lpfnCompare = FunctionSortAlphabetical;
             else if (mpCache->GetBurnoutSkillsManager()->GetCurrentSkill() ==

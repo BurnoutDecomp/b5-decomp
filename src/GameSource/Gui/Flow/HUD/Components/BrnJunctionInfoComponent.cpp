@@ -253,10 +253,10 @@ namespace BrnGui
 
             if (!mbInJunction)
             {
-                CGS_ASSERT(mJunctionInfo.meGameModeType >= 0,
-                           "mJunctionInfo.meGameModeType >= 0");                              // cpp:230
-                CGS_ASSERT(mJunctionInfo.meGameModeType <= 10,
-                           "mJunctionInfo.meGameModeType <= BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_COUNT");   // cpp:231
+                CGS_ASSERT_AT(mJunctionInfo.meGameModeType >= 0,
+                           "mJunctionInfo.meGameModeType >= 0", CGS_ARTIST_FILE, 230);                              // cpp:230
+                CGS_ASSERT_AT(mJunctionInfo.meGameModeType <= 10,
+                           "mJunctionInfo.meGameModeType <= BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_COUNT", CGS_ARTIST_FILE, 231);   // cpp:231
 
                 const char* lpIconFrameName;
                 if (mJunctionInfo.meGameModeType == 5)   // E_MODE_BURNING_ROUTE

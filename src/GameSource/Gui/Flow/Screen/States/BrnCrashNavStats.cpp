@@ -119,7 +119,7 @@ namespace BrnGui
     // ---- HandleStatData @ 0x824B5D18 ----------------------------------------------
     void CrashNavStats::HandleStatData(const GuiEventStatsResponse* lpStatsEvent)
     {
-        CGS_ASSERT(lpStatsEvent != 0, "lpStatsEvent");   // cpp:447
+        CGS_ASSERT_AT(lpStatsEvent != 0, "lpStatsEvent", CGS_ARTIST_FILE, 447);   // cpp:447
 
         // READ BY NAME, NOT BY OFFSET. GuiEventStatsResponse (BrnGuiEventStatsResponse.h)
         // names every field of this 432-byte record, and its own banner calls out BOTH of its
@@ -261,7 +261,7 @@ namespace BrnGui
     // ---- UpdateLoading @ 0x824CAAA0 -----------------------------------------------
     bool CrashNavStats::UpdateLoading()
     {
-        CGS_ASSERT(mpGuiCache, "NULL != mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache, "NULL != mpGuiCache", CGS_ARTIST_FILE, 304);
 
         if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
             return false;

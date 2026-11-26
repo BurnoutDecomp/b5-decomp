@@ -493,14 +493,14 @@ void EventInfoComponent::SetEventType(BrnGameState::GameStateModuleIO::EGameMode
 // ---------------------------------------------------------------------------
 void EventInfoComponent::MoveAnimation(const char* lpcAnimation)
 {
-    CGS_ASSERT(lpcAnimation != 0, "lpcAnimation");   // cpp:522 (non-gating)
+    CGS_ASSERT_AT(lpcAnimation != 0, "lpcAnimation", CGS_ARTIST_FILE, 522);   // cpp:522 (non-gating)
 
     // cmpwi -1 / ble -> fire, cmpwi 0x12 / blt -> pass. The upper bound is the X360's
     // EIGHTEEN modes (KI_MODE_FRAME_NAME_COUNT), which is the bound the mode-frame
     // table is actually sized to -- the shared enum's E_MODE_COUNT spells 17.
-    CGS_ASSERT((meCurrentEventType > BrnGameState::GameStateModuleIO::E_MODE_NONE)
+    CGS_ASSERT_AT((meCurrentEventType > BrnGameState::GameStateModuleIO::E_MODE_NONE)
             && (meCurrentEventType < KI_MODE_FRAME_NAME_COUNT),
-               "( GsmIO::E_MODE_NONE < meCurrentEventType ) && ( GsmIO::E_MODE_COUNT > meCurrentEventType )");   // cpp:523 (non-gating)
+               "( GsmIO::E_MODE_NONE < meCurrentEventType ) && ( GsmIO::E_MODE_COUNT > meCurrentEventType )", CGS_ARTIST_FILE, 523);   // cpp:523 (non-gating)
 
     const char* lpcFrame;
 
@@ -1227,10 +1227,10 @@ void EventInfoComponent::UpdateStuntAttack(GuiCache* lpCache, bool lbOnline)
             // float memory here. See the banner note (2).
             const s32 liFrameNameIndex = static_cast<s32>(lpCache->mfComboWarningTimeActive);
 
-            CGS_ASSERT(liFrameNameIndex >= 0,
-                       "liFrameNameIndex >= 0");                                   // cpp:1439
-            CGS_ASSERT(liFrameNameIndex <= KI_NUM_TIMEOUT_WEDGE_FRAMES,
-                       "liFrameNameIndex <= KI_NUM_TIMEOUT_WEDGE_FRAMES");         // cpp:1440
+            CGS_ASSERT_AT(liFrameNameIndex >= 0,
+                       "liFrameNameIndex >= 0", CGS_ARTIST_FILE, 1439);                                   // cpp:1439
+            CGS_ASSERT_AT(liFrameNameIndex <= KI_NUM_TIMEOUT_WEDGE_FRAMES,
+                       "liFrameNameIndex <= KI_NUM_TIMEOUT_WEDGE_FRAMES", CGS_ARTIST_FILE, 1440);         // cpp:1440
 
             // Clamp<s32>(index, 0, KI_NUM_TIMEOUT_WEDGE_FRAMES - 1), inlined
             // @0x8242A0A4-0x8242A0D4. Note the asserted bound is 5 but the clamp is 4:
@@ -1367,7 +1367,7 @@ void EventInfoComponent::UpdateStuntAttack(GuiCache* lpCache, bool lbOnline)
         }
         else
         {
-            CGS_ASSERT(miMultiplierInEvent >= 1, "miMultiplierInEvent >= 1");      // cpp:1594
+            CGS_ASSERT_AT(miMultiplierInEvent >= 1, "miMultiplierInEvent >= 1", CGS_ARTIST_FILE, 1594);      // cpp:1594
 
             // The combo score goes through the INTEGER SetLocalisedText overload
             // (sub_8246CF18 @0x8246CF18) -- no string id, just the thousands-separated
@@ -1443,8 +1443,8 @@ void EventInfoComponent::UpdateStuntAttack(GuiCache* lpCache, bool lbOnline)
         // its own assert text names BrnGameState::E_STUNT_TYPE_COUNT, which this tree
         // spells 15. The assert text is reproduced verbatim; the bound is the component's
         // own table size, so types 15..17 do NOT trip it.
-        CGS_ASSERT(leStuntType >= 0 && leStuntType < KI_STUNT_TYPE_STRING_ID_COUNT,
-                   "leStuntType >= 0 && leStuntType < BrnGameState::E_STUNT_TYPE_COUNT");  // cpp:1677
+        CGS_ASSERT_AT(leStuntType >= 0 && leStuntType < KI_STUNT_TYPE_STRING_ID_COUNT,
+                   "leStuntType >= 0 && leStuntType < BrnGameState::E_STUNT_TYPE_COUNT", CGS_ARTIST_FILE, 1677);  // cpp:1677
 
         CgsCore::SnPrintf(lacStuntScore, KI_STUNT_SCORE_PRINT_CAP, "%d", liStuntScore);
 
@@ -1656,7 +1656,7 @@ void EventInfoComponent::UpdateFreeBurnLobby(GuiCache* lpCache)
 
     const GuiEventNetworkGameParams* lpParams =
         lpCache->GetOnlineGameModeOptions();
-    CGS_ASSERT(lpParams != 0, "lpParams");
+    CGS_ASSERT_AT(lpParams != 0, "lpParams", CGS_ARTIST_FILE, 996);
 
     if (lpParams->meGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
     {
@@ -1786,7 +1786,7 @@ void EventInfoComponent::UpdateDestinationText(GuiCache* lpCache)
     if (lpCache->IsOnlineStartInProgress())
     {
         GuiTracker* tracker = lpCache->GetGuiTracker();
-        CGS_ASSERT(tracker != 0, "lpGuiTracker");
+        CGS_ASSERT_AT(tracker != 0, "lpGuiTracker", CGS_ARTIST_FILE, 2109);
         const s32 trackedIndex = tracker->GetCurrentlyTrackedIndex();
         if (trackedIndex < 0)
         {
@@ -1800,8 +1800,8 @@ void EventInfoComponent::UpdateDestinationText(GuiCache* lpCache)
     if (landmark != mCurrentLandmark)
     {
         mCurrentLandmark = landmark;
-        CGS_ASSERT(mCurrentLandmark != BrnGameState::LandmarkIndex(-1),
-                   "BrnGameState::K_INVALID_LANDMARK != mCurrentLandmark");
+        CGS_ASSERT_AT(mCurrentLandmark != BrnGameState::LandmarkIndex(-1),
+                   "BrnGameState::K_INVALID_LANDMARK != mCurrentLandmark", CGS_ARTIST_FILE, 2129);
         GuiEventUpdateSatNav::SatNavIconInfo info;
         lpCache->GetLandmarkInfoFromIndex(mCurrentLandmark, &info);
         char name[32];

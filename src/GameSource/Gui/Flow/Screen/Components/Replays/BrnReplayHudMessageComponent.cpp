@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Screen/Components/Replays/BrnReplayHudMessageComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/Replays/BrnReplayHudMessageComponent.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (Update tripwires)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                     // CgsGui::GuiAccessPointers
@@ -26,11 +26,9 @@ namespace BrnGui
 // fields with their fixed ids and this component's name as parent, and clear the
 // "showing" latch. The X360 dispatches each field's Construct through its own vtable
 // (the field IS a GuiComponent); reads mpStateInterface @+0x88 and macName @+0x04.
-void ReplayHudMessageComponent::Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
-                                          const char* lpacParentName)
+void ReplayHudMessageComponent::Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface)
 {
-    CgsGui::GuiComponent::Construct(lpacName, lpStateInterface, 0);
-    // (ARTIST passes a null parent: li r6, 0 @0x8241BE7C; lpacParentName is unused.)
+    CgsGui::GuiComponent::Construct(lpacName, lpStateInterface, 0);   // null parent (li r6, 0 @0x8241BE7C)
     maTextFields[0].Construct("string_0", mpStateInterface, GetName());
     maTextFields[1].Construct("string_1", mpStateInterface, GetName());
     maTextFields[2].Construct("string_2", mpStateInterface, GetName());
@@ -94,7 +92,7 @@ void ReplayHudMessageComponent::Update()
     BrnReplays::GuiModuleSerialiser* lpSerialiser = lpAccessPointers->GetSerialiser();
 
     BrnReplays::GuiModuleStaticLayout* lpLayout = lpSerialiser->GetStaticLayout();
-    CGS_ASSERT(lpLayout != 0, "lpLayout != NULL");                  // BrnReplayHudMessageComponent.cpp:66
+    CGS_ASSERT_AT(lpLayout != 0, "lpLayout != NULL", CGS_ARTIST_FILE, 66);
 
     if (lpLayout->mbMessageStart == 1)
     {
@@ -103,10 +101,11 @@ void ReplayHudMessageComponent::Update()
     }
     else
     {
-        const u8 luActive = lpLayout->mbMessageActive;
-        if (mbMessageShowing != luActive)   // cmplw byte@+0x404 vs byte@+0x181
+        // Two reads of the layout byte (ARTIST compares the loaded bytes, then re-narrows the
+        // layout one for the store: cmplw / clrlwi @0x82427B74).
+        if (mbMessageShowing != lpLayout->mbMessageActive)
         {
-            mbMessageShowing = luActive;
+            mbMessageShowing = lpLayout->mbMessageActive;
             if (lpLayout->mbMessageActive == 1)
                 ShowMessage(reinterpret_cast<const char*>(lpLayout));
             else

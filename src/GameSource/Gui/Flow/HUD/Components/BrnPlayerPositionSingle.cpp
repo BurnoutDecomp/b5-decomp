@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnPlayerPositionSingle.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnPlayerPositionSingle.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include <cfloat>
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf/SnPrintf
@@ -95,7 +95,7 @@ void PlayerPositionSingleComponent::Construct(const char* /*lpacName*/,
     mpCache              = NULL;
 
     mpLanguageManager = mpStateInterface->GetLanguageManager();
-    CGS_ASSERT(mpLanguageManager != NULL, "mpLanguageManager");   // cpp:202, non-gating
+    CGS_ASSERT_AT(mpLanguageManager != NULL, "mpLanguageManager", CGS_ARTIST_FILE, 202);   // cpp:202, non-gating
 
     // The two colour animators (virtual Construct; the X360 passes no names).
     mPlayerColourAnimator.Construct(NULL, mpStateInterface, NULL);
@@ -416,7 +416,7 @@ namespace BrnGui
 
     void PlayerPositionSingleComponent::Update(PlayerPositionSingleData* lpData)
     {
-        CGS_ASSERT(lpData != 0, "lpPlayerData");
+        CGS_ASSERT_AT(lpData != 0, "lpPlayerData", CGS_ARTIST_FILE, 276);
         CGS_ASSERT(lpData->mePlayerType >= 0, "Player Type is invalid : ");
         CGS_ASSERT(lpData->mePlayerType < E_PLAYERTYPES_COUNT, "Player Type is invalid : ");
         CGS_ASSERT(lpData->meHeadsetStatus >= 0, "Headset Status is invalid : ");

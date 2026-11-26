@@ -48,7 +48,7 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnTable.h"               // Table::Update
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuToggleGroup.h"     // MenuToggleGroupVarSize<3>::Update (SelectableGroup)
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"       // MenuComponent::Update (SelectableGroup)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineCustomMatch.cpp"
 // ============================================================================
 // FOLDED FROM BrnOnlineCustomMatch_wJ_01.cpp (wave J) on 2026-09-15 by tools/work/fold_partfiles.py.
 // Its header is THIS FILE'S header, at the top -- not repeated here.
@@ -89,30 +89,6 @@ namespace BrnGui
         // HEADER0 IS THE PAYLOAD BYTE COUNT. Here the payload is exactly 12 bytes with no
         // trailing padding, so sizeof(record) - offsetof(payload) happens to agree -- but
         // it is still taken from the payload members, per the wave-I rule.
-        struct GuiEventNetworkCustomMatchSearchWire : public CgsGui::GuiEvent<252>
-        {
-            s32  meGameMode;        // payload +0x00
-            s32  meSearchOpponentTypes;  // payload +0x04
-            bool mbRanked;          // payload +0x08
-            bool mbFreeburn;        // payload +0x09
-            u8   maPad[2];          // payload +0x0A -- the console copies word +8 whole
-
-            explicit GuiEventNetworkCustomMatchSearchWire(
-                const GuiEventNetworkCustomMatchSearch& lrParams)
-                : meGameMode(lrParams.meGameMode)
-                , meSearchOpponentTypes(lrParams.meSearchOpponentTypes)
-                , mbRanked(lrParams.mbRanked)
-                , mbFreeburn(lrParams.mbFreeburn)
-            {
-                // The console's third payload word is a straight `lwz` of the member's
-                // +8 word, so the two pad bytes carry whatever the member holds. The host
-                // copies the two flags by name and zeroes the padding rather than
-                // publishing uninitialised stack bytes.
-                maPad[0] = 0;
-                maPad[1] = 0;
-            }
-            GuiEventNetworkCustomMatchSearchWire() {}
-        };
     }
 
 //
@@ -160,8 +136,7 @@ namespace BrnGui
             mLastSearchParams.mbRanked         = mpGuiCache->mbOnlineMatchRanked;
             mLastSearchParams.mbFreeburn       = true;
 
-            GuiEventNetworkCustomMatchSearchWire lSearch(mLastSearchParams);
-            mpStateInterface->OutputGuiEvent(lSearch);   // X360 record size 24
+            mpStateInterface->OutputGuiEvent(mLastSearchParams);   // X360 record size 24
 
             meSubState = E_SUBSTATE_SEARCHING;
 
@@ -448,7 +423,7 @@ namespace BrnGui
         case KI_ACTION_GUI_SELECT:
             {
                 // Non-fatal (no early-out): the cache is dereferenced either way.
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:557
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 557);   // cpp:557
 
                 // The match KIND is not a form field -- it comes from how the player
                 // entered online play, so it is copied straight off the cache.
@@ -1186,7 +1161,7 @@ namespace BrnGui
 
         // ---- back out ------------------------------------------------------------------
         case KI_ACTION_GUI_CANCEL:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                     // cpp:772
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 772);                     // cpp:772
 
             if (mpGuiCache->mbOnlineMatchUnranked)
             {
@@ -1277,8 +1252,8 @@ namespace BrnGui
             // E_OK_BUTTON_OK are named by the original source only -- neither exists in the
             // committed SelectableGroup, so the check reads the member the console reads
             // (`lbz r11, 0x31A5(r28)` == mMessageButtons.miHighlightedIndex, tested != 0).
-            CGS_ASSERT(mMessageButtons.miHighlightedIndex == KI_MESSAGE_BUTTON_AFFIRMATIVE,
-                       "mMessageButtons.GetHighlightedIndex() == E_OK_BUTTON_OK");   // cpp:836
+            CGS_ASSERT_AT(mMessageButtons.miHighlightedIndex == KI_MESSAGE_BUTTON_AFFIRMATIVE,
+                       "mMessageButtons.GetHighlightedIndex() == E_OK_BUTTON_OK", CGS_ARTIST_FILE, 836);   // cpp:836
 
             if (mpGuiCache->IsOnlineStartPending())
             {
@@ -1297,7 +1272,7 @@ namespace BrnGui
 
         // ---- back out ------------------------------------------------------------------
         case KI_ACTION_GUI_CANCEL:
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                     // cpp:858
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 858);                     // cpp:858
 
             if (mpGuiCache->mbOnlineMatchUnranked)
             {
@@ -1711,7 +1686,7 @@ namespace BrnGui
     void OnlineCustomMatch::CheckForCompletedLoads()
     {
         // Non-fatal (BeginAssert / FireAssert / EndAssert, no early-out).
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:432
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 432);   // cpp:432
 
         switch (meSubState)
         {
@@ -1943,7 +1918,7 @@ namespace BrnGui
             mpStateInterface->OutputGuiEvent(lTicker);   // X360 record size 0x824
         }
 
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1340
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1340);   // cpp:1340
 
         // ---- either arm the page, or back straight out --------------------------------
         if (mpGuiCache->IsMultiplayerAllowed())
@@ -2248,8 +2223,8 @@ namespace BrnGui
 
                 if (maTableRowComponentTypes[liColumn] == TableCell::E_TABLECELLCOMPONENTTYPES_ICON)
                 {
-                    CGS_ASSERT(liIconCount < Table::KI_MAX_ROWS_PER_TABLE,
-                               "liIconCount < Table::KI_MAX_ROWS_PER_TABLE");   // X360 cpp:215
+                    CGS_ASSERT_AT(liIconCount < Table::KI_MAX_ROWS_PER_TABLE,
+                               "liIconCount < Table::KI_MAX_ROWS_PER_TABLE", CGS_ARTIST_FILE, 215);   // X360 cpp:215
 
                     maIcons[liIconCount].Construct(lacCellName, mpStateInterface,
                                                    maIconStates, lacRowName);
@@ -2261,8 +2236,8 @@ namespace BrnGui
                 {
                     // The bound is the instant-results screen's constant, not this screen's
                     // KI_NUM_ONLINE_FOUND_GAMES_TEXT_FIELDS -- see the note on the constant.
-                    CGS_ASSERT(liTextFieldCount < KI_NUM_ONLINE_INSTANT_RESULTS_TEXT_FIELDS,
-                               "liTextFieldCount < KI_NUM_ONLINE_INSTANT_RESULTS_TEXT_FIELDS"); // X360 cpp:222
+                    CGS_ASSERT_AT(liTextFieldCount < KI_NUM_ONLINE_INSTANT_RESULTS_TEXT_FIELDS,
+                               "liTextFieldCount < KI_NUM_ONLINE_INSTANT_RESULTS_TEXT_FIELDS", CGS_ARTIST_FILE, 222); // X360 cpp:222
 
                     maTextFields[liTextFieldCount].Construct(lacCellName, mpStateInterface,
                                                              lacRowName);

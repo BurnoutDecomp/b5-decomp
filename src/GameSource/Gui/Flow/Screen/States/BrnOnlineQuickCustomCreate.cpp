@@ -18,7 +18,7 @@
 // GetOutputEventQueue()->AddEvent with the native record sizes.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineQuickCustomCreate.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineQuickCustomCreate.cpp"
 #include <xtl.h>
 #include <cstddef>                                                        // offsetof (wire records)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
@@ -230,7 +230,7 @@ namespace BrnGui
                     // on the service, and go back to the menu either way.
                     if (luNotificationParam == 0)
                     {
-                        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 183);
                         if (XUserGetSigninState(static_cast<u32>(mpGuiCache->GetActiveControllerIndex())) ==
                             eXUserSigninState_SignedInToLive)
                         {
@@ -266,7 +266,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineQuickCustomCreate::UpdateGetCache()
     {
-        CGS_ASSERT(0 == mpGuiCache, "NULL == mpGuiCache");
+        CGS_ASSERT_AT(0 == mpGuiCache, "NULL == mpGuiCache", CGS_ARTIST_FILE, 308);
 
 
 
@@ -280,8 +280,8 @@ namespace BrnGui
             {
                 const GuiEventCachePayload* lpCacheEvent =
                     static_cast<const GuiEventCachePayload*>(lpEvent);
-                CGS_ASSERT(0 != lpCacheEvent->mpCachePointer,
-                           "NULL != lpCacheEvent->mpCachePointer");
+                CGS_ASSERT_AT(0 != lpCacheEvent->mpCachePointer,
+                           "NULL != lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 318);
 
                 mpGuiCache = lpCacheEvent->mpCachePointer;
                 mpGuiCache->SetResetOnlineGameOptions(true);
@@ -305,7 +305,7 @@ namespace BrnGui
             }
         }
 
-        CGS_ASSERT(0 != mpGuiCache, "NULL != mpGuiCache");
+        CGS_ASSERT_AT(0 != mpGuiCache, "NULL != mpGuiCache", CGS_ARTIST_FILE, 346);
     }
 
     // ================================================================================
@@ -313,7 +313,7 @@ namespace BrnGui
     // ================================================================================
     bool OnlineQuickCustomCreate::UpdateLoadResources()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 361);
 
         if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
@@ -386,7 +386,7 @@ namespace BrnGui
         {
             if (liEventId == KI_EVENT_NETWORK_DISCONNECTED)
             {
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 543);
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
                 SendStateEvent("GO_BACK");
             }

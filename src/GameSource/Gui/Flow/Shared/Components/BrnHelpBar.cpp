@@ -34,9 +34,9 @@ namespace BrnGui
     void HelpBar::Construct(const char* lpacName, s32 liNumItems,
                             CgsGui::StateInterface* lpStateInterface, const char* lpacParentName)
     {
-        CGS_ASSERT(lpacName != 0, "lacName");
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
-        CGS_ASSERT(liNumItems <= KI_MAX_HELPITEMS, "liNumItems <= KI_MAX_HELPITEMS");
+        CGS_ASSERT_AT(lpacName != 0, "lacName", CGS_ARTIST_FILE, 49);
+        CGS_ASSERT_AT(lpStateInterface != 0, "lpStateInterface", CGS_ARTIST_FILE, 50);
+        CGS_ASSERT_AT(liNumItems <= KI_MAX_HELPITEMS, "liNumItems <= KI_MAX_HELPITEMS", CGS_ARTIST_FILE, 51);
 
         miNumItems = liNumItems;
         for (s32 liItem = 0; liItem < miNumItems; ++liItem)
@@ -182,7 +182,7 @@ namespace BrnGui
         for (s32 liItem = 0; liItem < miNumUsedItems; ++liItem)
         {
             CgsGui::ObjectController* lpObjectController = maAnimators[liItem].GetObjectController();
-            CGS_ASSERT(lpObjectController != 0, "lpObjectController");
+            CGS_ASSERT_AT(lpObjectController != 0, "lpObjectController", CGS_ARTIST_FILE, 320);
 
             lpObjectController->SetObjectVariableBoolean("_visible", true);
             if (liItem != 0)

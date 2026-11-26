@@ -1329,7 +1329,7 @@ namespace BrnGui
     // ================================================================================
     void CrashNavEnterOnlineBase::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:748
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 748);   // cpp:748
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
@@ -1377,7 +1377,7 @@ namespace BrnGui
                     // straight on into `li r11, 0` at @0x824DD6A8).
                     if (meSignInType != E_SIGN_IN_TYPE_FULL)
                     {
-                        CGS_ASSERT(false, "Unknown sign in type");
+                        CGS_ASSERT_AT(false, "Unknown sign in type", CGS_ARTIST_FILE, 794);
                     }
                     liConnectType = KI_CONNECT_TYPE_FULL;
                 }
@@ -1583,7 +1583,7 @@ namespace BrnGui
     // the failure overlay / the login-error page.
     void CrashNavEnterOnlineBase::HandleDisconnectedEvent(const CgsModule::Event* lpDisconnectedEvent)
     {
-        CGS_ASSERT(lpDisconnectedEvent != 0, "lpDisconnectedEvent");   // cpp:878
+        CGS_ASSERT_AT(lpDisconnectedEvent != 0, "lpDisconnectedEvent", CGS_ARTIST_FILE, 878);   // cpp:878
 
         // The in-queue hands out CgsGui::GuiEventNetworkDisconnected itself: the publisher
         // @0x825660B0 posts the object raw (size 0x84), so there is no header to step over
@@ -1713,7 +1713,7 @@ namespace BrnGui
     // leave the sign-in flow the same way the no-popup disconnect path does.
     void CrashNavEnterOnlineBase::HandleOverlayCompleteEvent(const CgsModule::Event* lpOverlayCompleteEvent)
     {
-        CGS_ASSERT(lpOverlayCompleteEvent != 0, "lpOverlayCompleteEvent");   // cpp:981
+        CGS_ASSERT_AT(lpOverlayCompleteEvent != 0, "lpOverlayCompleteEvent", CGS_ARTIST_FILE, 981);   // cpp:981
 
         const GuiOverlayCompletePayload* lpPayload =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpOverlayCompleteEvent);

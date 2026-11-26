@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Screen/Components/BrnLeaderboardTableComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLeaderboardTableComponent.cpp"
 #include <cstdlib>   // std::atof
 #include <cstring>   // std::memcpy
 
@@ -153,7 +153,7 @@ namespace BrnGui
             liCurrentPosition = liHalfWidth + liColumnCentre;
         }
 
-        CGS_ASSERT(liCurrentPosition == liWidth / 2, "liCurrentPosition == liWidth / 2");
+        CGS_ASSERT_AT(liCurrentPosition == liWidth / 2, "liCurrentPosition == liWidth / 2", CGS_ARTIST_FILE, 211);
 
         // Blank the unused columns: empty title, the current highlight/local-player markers, and
         // a zero cell count.
@@ -299,7 +299,7 @@ namespace BrnGui
                 break;
             ++liColumn;
         }
-        CGS_ASSERT(liColumn < miColumnsUsed, "liColumn < miColumnsUsed");
+        CGS_ASSERT_AT(liColumn < miColumnsUsed, "liColumn < miColumnsUsed", CGS_ARTIST_FILE, 431);
 
         // Read that column's cell for the currently-highlighted row and parse it as an integer
         // (GetRow asserts the row-index bounds against the scoreboard's row count).
@@ -310,7 +310,7 @@ namespace BrnGui
     // @ 0x82436580
     void LeaderboardTableComponent::SetTargetGamertag(const char* lpacPlayerName)
     {
-        CGS_ASSERT(lpacPlayerName != 0, "lpPlayerName");
+        CGS_ASSERT_AT(lpacPlayerName != 0, "lpPlayerName", CGS_ARTIST_FILE, 459);
 
         // An empty target clears the local-player highlight and redraws.
         if (*lpacPlayerName == 0)
@@ -365,7 +365,7 @@ namespace BrnGui
             if (mScoreboard.GetColumn(liColumn)->GetType() == BrnNetwork::ScoreboardColumn::E_DATATYPE_NAME)
                 break;
         }
-        CGS_ASSERT(liColumn < miColumnsUsed, "liColumn < miColumnsUsed");
+        CGS_ASSERT_AT(liColumn < miColumnsUsed, "liColumn < miColumnsUsed", CGS_ARTIST_FILE, 391);
 
         lpPlayerName->Construct(mScoreboard.GetRow(miHighlight)->GetData(liColumn));
     }

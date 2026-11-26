@@ -49,7 +49,7 @@ void ReplayMain::OnEnter()
     // construct the embedded ReplayHudMessageComponent ("HudMessage_mc"). The X360 caller sets
     // only name + stateInterface (r4/r5); the base component parent-name arg is left unset here.
     if (mpGuiCache->GetReplayDisplayHud() == 1)
-        mHudMessage.Construct("HudMessage_mc", mpStateInterface, 0);   // this+0x40
+        mHudMessage.Construct("HudMessage_mc", mpStateInterface);   // this+0x40
 
     meState = E_STATE_ENTER;   // this+0x3C = 0
 }

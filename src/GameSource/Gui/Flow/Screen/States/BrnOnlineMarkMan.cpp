@@ -261,7 +261,7 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     // the screen's movie and post the loaded record.
     bool OnlineMarkMan::UpdateLoadResources()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 261);
 
         if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {

@@ -1042,7 +1042,7 @@ void FriendsListComponent::UpdateAllShortcutsEntryData()
         {
             ++miCurrentlyActiveSlots;
             const s32 option = maeAvailableShortcutOptions[first + i];
-            CGS_ASSERT(option != E_SHORTCUTOPTION_COUNT, "Trying to display an invalid option");
+            CGS_ASSERT_AT(option != E_SHORTCUTOPTION_COUNT, "Trying to display an invalid option", CGS_ARTIST_FILE, 2768);
             const bool disabled = !CgsSystem::HardwareInit::IsHardDiskAvailable()
                                && option >= 2 && option <= 6;
             SetEntryData(i, KAPC_SHORTCUT_TEXT[option], disabled ? 3 : 17, true);
@@ -1377,9 +1377,9 @@ const s32 KAA_FRIEND_BRANCHES[17][3] = {
 // ARTIST 0x82423120.
 void FriendsListComponent::ShowShortcutsBranch()
 {
-    CGS_ASSERT(miCurrentlyHighlightedOption < E_SHORTCUTOPTION_COUNT, "miCurrentlyHighlightedOption < E_SHORTCUT_OPTIONS_COUNT");
+    CGS_ASSERT_AT(miCurrentlyHighlightedOption < E_SHORTCUTOPTION_COUNT, "miCurrentlyHighlightedOption < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1835);
     const s32 option = maeAvailableShortcutOptions[miCurrentlyHighlightedOption];
-    CGS_ASSERT(option < E_SHORTCUTOPTION_COUNT, "maeAvailableShortcutOptions[ miCurrentlyHighlightedOption ] < E_SHORTCUT_OPTIONS_COUNT");
+    CGS_ASSERT_AT(option < E_SHORTCUTOPTION_COUNT, "maeAvailableShortcutOptions[ miCurrentlyHighlightedOption ] < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1836);
     s32 count = 0;
     s32 first = -1;
     switch (option)
@@ -1394,7 +1394,7 @@ void FriendsListComponent::ShowShortcutsBranch()
         maeAvailableShortcutBranchOptions[0] = mpGuiCache->GetOnlineGameModeOptions()->meSecurity == 0 ? 13 : 12;
         maeAvailableShortcutBranchOptions[1] = mpGuiCache->GetOnlineGameModeOptions()->meSecurity == 2 ? 13 : 14;
         break;
-    default: CGS_ASSERT(false, "Shortcut option doesn't have branches"); break;
+    default: CGS_ASSERT_AT(false, "Shortcut option doesn't have branches", CGS_ARTIST_FILE, 1952); break;
     }
     if (first >= 0)
     {
@@ -1414,7 +1414,7 @@ void FriendsListComponent::ShowShortcutsBranch()
 // ARTIST 0x82439040.
 void FriendsListComponent::HandleBranchInteraction(s32 action)
 {
-    CGS_ASSERT(meBranchState != 0, "E_FRIENDLISTBRANCH_INVISIBLE != meBranchState");
+    CGS_ASSERT_AT(meBranchState != 0, "E_FRIENDLISTBRANCH_INVISIBLE != meBranchState", CGS_ARTIST_FILE, 2109);
     if (action == 37 && (meBranchState == 9 || meBranchState == 11 || meBranchState == 12))
     {
         --meBranchState;
@@ -1437,11 +1437,11 @@ void FriendsListComponent::HandleBranchInteraction(s32 action)
         case 1: HandleBranchDPadRightFriends(); break;
         case 2: HandleBranchDPadRightShortcuts(); break;
         case 3: break;
-        default: CGS_ASSERT(false, "unknown list type"); break;
+        default: CGS_ASSERT_AT(false, "unknown list type", CGS_ARTIST_FILE, 2197); break;
         }
     }
-    CGS_ASSERT(miCurrentlyHighlightedBranch >= 0 && miCurrentlyHighlightedBranch < 3,
-               "miCurrentlyHighlightedBranch in range");
+    CGS_ASSERT_AT(miCurrentlyHighlightedBranch >= 0 && miCurrentlyHighlightedBranch < 3,
+               "miCurrentlyHighlightedBranch in range", CGS_ARTIST_FILE, 2211);
 }
 
 // ARTIST 0x82438DC0.
@@ -1470,7 +1470,7 @@ void FriendsListComponent::HandleBranchDPadRightShortcuts()
         memcpy(event.maData, &option, 4);
         mpStateInterface->OutputInternalState(event);
     }
-    else CGS_ASSERT(false, "Unknown branch option");
+    else CGS_ASSERT_AT(false, "Unknown branch option", CGS_ARTIST_FILE, 1669);
     WithdrawBranches();
     meCurrentState = 5;
     SetDirty();
@@ -1480,9 +1480,9 @@ void FriendsListComponent::HandleBranchDPadRightShortcuts()
 // ARTIST 0x82442938.
 void FriendsListComponent::HandleDPadRightShortcuts()
 {
-    CGS_ASSERT(miCurrentlyHighlightedOption < E_SHORTCUTOPTION_COUNT, "miCurrentlyHighlightedOption < E_SHORTCUT_OPTIONS_COUNT");
+    CGS_ASSERT_AT(miCurrentlyHighlightedOption < E_SHORTCUTOPTION_COUNT, "miCurrentlyHighlightedOption < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1125);
     const s32 option = maeAvailableShortcutOptions[miCurrentlyHighlightedOption];
-    CGS_ASSERT(option < E_SHORTCUTOPTION_COUNT, "maeAvailableShortcutOptions[ miCurrentlyHighlightedOption ] < E_SHORTCUT_OPTIONS_COUNT");
+    CGS_ASSERT_AT(option < E_SHORTCUTOPTION_COUNT, "maeAvailableShortcutOptions[ miCurrentlyHighlightedOption ] < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1126);
     if (!CgsSystem::HardwareInit::IsHardDiskAvailable() && option >= 2 && option <= 6) return;
     switch (option)
     {
@@ -1515,7 +1515,7 @@ void FriendsListComponent::HandleDPadRightShortcuts()
         meCurrentState = 0;
         ShowSpecificChallenge(s_u64SavedChallengeUid);
         return;
-    default: CGS_ASSERT(false, "Unknown shortcut option"); break;
+    default: CGS_ASSERT_AT(false, "Unknown shortcut option", CGS_ARTIST_FILE, 1313); break;
     }
     meCurrentState = 5;
     SetDirty();

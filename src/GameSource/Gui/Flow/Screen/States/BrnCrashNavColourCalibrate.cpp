@@ -32,7 +32,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavColourCalibrate.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavColourCalibrate.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (register / out-queue / PlayAptMovie)
@@ -434,7 +434,7 @@ namespace BrnGui
     // for the toggle row and play this screen's own movie on display level 3.
     bool CrashNavColourCalibrate::UpdateLoading()
     {
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:332
+        CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 332);   // cpp:332
 
         if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
@@ -455,7 +455,7 @@ namespace BrnGui
     // and build the row.
     bool CrashNavColourCalibrate::UpdateWFInit()
     {
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:371
+        CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 371);   // cpp:371
 
         if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {

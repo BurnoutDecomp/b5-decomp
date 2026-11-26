@@ -38,7 +38,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream (the streamed unhandled-photostate asserts)
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h" // CgsDev::Assert::Begin/Fire/EndAssert + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"       // CGS_ASSERT
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnPhotoBoothComponent.cpp"
 #include <cstddef>   // offsetof (the x64 payload-offset words of the wire records)
 
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnPhotoBoothComponent.h".
@@ -340,7 +340,7 @@ namespace BrnGui
     // state from whether a Live Vision camera is attached.
     void PhotoBoothComponent::OnLoad()
     {
-        CGS_ASSERT(mbResourceLoaded == true, "true == mbResourceLoaded");   // cpp:157
+        CGS_ASSERT_AT(mbResourceLoaded == true, "true == mbResourceLoaded", CGS_ARTIST_FILE, 157);   // cpp:157
 
         mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[mPhotoResourceToLoad.muId],
                                        KI_PHOTOBOOTH_APT_LEVEL);
@@ -372,9 +372,9 @@ namespace BrnGui
     // that does that.
     void PhotoBoothComponent::ReleaseResources()
     {
-        CGS_ASSERT(mPhotoResourceToLoad.muId != KU_GUI_RESOURCEID_NUM,
-                   "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId");   // cpp:206
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");                              // cpp:207
+        CGS_ASSERT_AT(mPhotoResourceToLoad.muId != KU_GUI_RESOURCEID_NUM,
+                   "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId", CGS_ARTIST_FILE, 206);   // cpp:206
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 207);                              // cpp:207
 
         mpStateInterface->PlayAptMovie("", KI_PHOTOBOOTH_APT_LEVEL);
         PostPlayerTextureEvent(mpStateInterface, E_PLAYERTEXTURE_OFF);
@@ -544,8 +544,8 @@ namespace BrnGui
         const GuiEventCamPicCompressedPayload* lpCompressedPicEvent =
             reinterpret_cast<const GuiEventCamPicCompressedPayload*>(lpEvent);
 
-        CGS_ASSERT(lpCompressedPicEvent != 0, "lpCompressedPicEvent");   // cpp:486
-        CGS_ASSERT(mpProfile != 0, "mpProfile");                         // cpp:487
+        CGS_ASSERT_AT(lpCompressedPicEvent != 0, "lpCompressedPicEvent", CGS_ARTIST_FILE, 486);   // cpp:486
+        CGS_ASSERT_AT(mpProfile != 0, "mpProfile", CGS_ARTIST_FILE, 487);                         // cpp:487
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)            // cpp:489
             *CgsDev::Log::gpDebugPrint << "Cached Picture size: " << static_cast<u32>(sizeof(sacCachedPictureData)) << "\n";
@@ -591,7 +591,7 @@ namespace BrnGui
     //   CACHEDSTILLIMAGE(4)         : keep pushing the cached still at the view.
     void PhotoBoothComponent::SendPlayerPictureEvent()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:533
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 533);   // cpp:533
 
         switch (mePhotoState)
         {

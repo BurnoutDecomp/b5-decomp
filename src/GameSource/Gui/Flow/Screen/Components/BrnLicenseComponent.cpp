@@ -23,7 +23,7 @@
 // ============================================================================
 
 #include "GameSource/Gui/Flow/Screen/Components/BrnLicenseComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp"
 #include "GameSource/Gui/BrnGuiWorldDataController.h"
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (resources + time step)
 #include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier (resource name table)
@@ -278,8 +278,8 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::OnLoad()
     {
-        CGS_ASSERT(meCurrentLicenseState == E_LICENSE_DATA_SUPPLIED,
-                   "E_LICENSE_DATA_SUPPLIED == meCurrentLicenseState");   // cpp:169
+        CGS_ASSERT_AT(meCurrentLicenseState == E_LICENSE_DATA_SUPPLIED,
+                   "E_LICENSE_DATA_SUPPLIED == meCurrentLicenseState", CGS_ARTIST_FILE, 169);   // cpp:169
 
         mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[maLicenseResourcesToLoad[0].muId],
                                        KI_LICENSE_APT_LEVEL);
@@ -298,7 +298,7 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::ReleaseResources()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:202
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 202);   // cpp:202
 
         mpStateInterface->PlayAptMovie("", KI_LICENSE_APT_LEVEL);
 
@@ -375,9 +375,9 @@ namespace BrnGui
     // ================================================================================
     bool LicenseComponent::HandleAptTransitionTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger)
     {
-        CGS_ASSERT(lpAptTrigger != 0, "lpAptTrigger");                                   // cpp:296
-        CGS_ASSERT(lpAptTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE,
-                   "CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE == lpAptTrigger->meEventType"); // cpp:297
+        CGS_ASSERT_AT(lpAptTrigger != 0, "lpAptTrigger", CGS_ARTIST_FILE, 296);                                   // cpp:296
+        CGS_ASSERT_AT(lpAptTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE,
+                   "CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE == lpAptTrigger->meEventType", CGS_ARTIST_FILE, 297); // cpp:297
 
         if (std::strcmp(GetName(), lpAptTrigger->mpacComponentName) != 0)
             return false;
@@ -452,14 +452,14 @@ namespace BrnGui
         case E_LICENSE_FIRST_RESOURCE_UNLOADING:
             if (mpGuiCache->EnsureResourceIsUnloaded(maLicenseResourcesToLoad[0]))
             {
-                CGS_ASSERT(miNumResourcesToLoad >= 2, "miNumResourcesToLoad >= 2");   // cpp:408
+                CGS_ASSERT_AT(miNumResourcesToLoad >= 2, "miNumResourcesToLoad >= 2", CGS_ARTIST_FILE, 408);   // cpp:408
                 mpGuiCache->EnsureResourceIsLoaded(maLicenseResourcesToLoad[1]);
                 meCurrentLicenseState = E_LICENSE_SECOND_RESOURCE_LOADING;
             }
             break;
 
         case E_LICENSE_SECOND_RESOURCE_LOADING:
-            CGS_ASSERT(miNumResourcesToLoad == 2, "miNumResourcesToLoad == 2");       // cpp:419
+            CGS_ASSERT_AT(miNumResourcesToLoad == 2, "miNumResourcesToLoad == 2", CGS_ARTIST_FILE, 419);       // cpp:419
             if (mpGuiCache->EnsureResourceIsLoaded(maLicenseResourcesToLoad[1]))
             {
                 mpStateInterface->PlayAptMovie(
@@ -538,12 +538,12 @@ namespace BrnGui
                                          s32 liPointsToNextRank, bool lbShowUpgradePending,
                                          bool lbShowPoints)
     {
-        CGS_ASSERT(lpcPlayerName != 0, "lpcPlayerName");                        // cpp:553
-        CGS_ASSERT(lpcPlayerName[0] != '\0', "lpcPlayerName[0]!='\\0'");        // cpp:554
-        CGS_ASSERT(liPointsToNextRank >= 0, "liPointsToNextRank >= 0");         // cpp:555
+        CGS_ASSERT_AT(lpcPlayerName != 0, "lpcPlayerName", CGS_ARTIST_FILE, 553);                        // cpp:553
+        CGS_ASSERT_AT(lpcPlayerName[0] != '\0', "lpcPlayerName[0]!='\\0'", CGS_ARTIST_FILE, 554);        // cpp:554
+        CGS_ASSERT_AT(liPointsToNextRank >= 0, "liPointsToNextRank >= 0", CGS_ARTIST_FILE, 555);         // cpp:555
         // "if you have finished the game you must also be elite" (the X360 tests
         // lbFinishedGame && !lbElite).
-        CGS_ASSERT(!lbFinishedGame || lbElite, "lbElite");                      // cpp:560
+        CGS_ASSERT_AT(!lbFinishedGame || lbElite, "lbElite", CGS_ARTIST_FILE, 560);                      // cpp:560
 
         mbFinishedGame       = lbFinishedGame;
         mbElite              = lbElite;
@@ -564,8 +564,8 @@ namespace BrnGui
             const CgsSystem::DateAndTime lCompletedDate = mpProfile->Get100PercentCompletedDate();
 
             const s32 liMonth = lCompletedDate.GetMonth() - 1;
-            CGS_ASSERT(liMonth >= 0, "liMonth >= 0");                                    // cpp:585
-            CGS_ASSERT(liMonth < KI_NUM_MONTH_STRINGIDS, "liMonth < KI_NUM_MONTH_STRINGIDS"); // cpp:586
+            CGS_ASSERT_AT(liMonth >= 0, "liMonth >= 0", CGS_ARTIST_FILE, 585);                                    // cpp:585
+            CGS_ASSERT_AT(liMonth < KI_NUM_MONTH_STRINGIDS, "liMonth < KI_NUM_MONTH_STRINGIDS", CGS_ARTIST_FILE, 586); // cpp:586
 
             mCompletionMonthField.SetLocalisedText(KAPC_MONTH_STRINGIDS[liMonth], KE_FORMAT_ID_LOOKUP);
             mCompletionDateField.SetLocalisedText(lCompletedDate.GetDay(), KE_FORMAT_INTEGER_FIELD);
@@ -650,8 +650,8 @@ namespace BrnGui
             ++miNumResourcesToLoad;
         }
 
-        CGS_ASSERT(miNumResourcesToLoad <= KI_MAX_REQUIRED_RANKS,
-                   "miNumResourcesToLoad <= KI_MAX_REQUIRED_RANKS");   // cpp:697
+        CGS_ASSERT_AT(miNumResourcesToLoad <= KI_MAX_REQUIRED_RANKS,
+                   "miNumResourcesToLoad <= KI_MAX_REQUIRED_RANKS", CGS_ARTIST_FILE, 697);   // cpp:697
 
         UpdateDirt();
         meCurrentLicenseState = E_LICENSE_DATA_SUPPLIED;
@@ -679,8 +679,8 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::ShowLicense(bool lbForceCentred)
     {
-        CGS_ASSERT(meCurrentLicenseState == E_LICENSE_FIRST_RESOURCE_LOADED,
-                   "E_LICENSE_FIRST_RESOURCE_LOADED == meCurrentLicenseState");   // cpp:745
+        CGS_ASSERT_AT(meCurrentLicenseState == E_LICENSE_FIRST_RESOURCE_LOADED,
+                   "E_LICENSE_FIRST_RESOURCE_LOADED == meCurrentLicenseState", CGS_ARTIST_FILE, 745);   // cpp:745
 
         mbForceCentred = lbForceCentred;
         SetState(lbForceCentred ? "upgradedTransIn" : "transIn");
@@ -704,7 +704,7 @@ namespace BrnGui
                                     ? E_LICENSE_SHOWING_UPGRADE_PENDING
                                     : E_LICENSE_SHOWING_NORMAL;
 
-        CGS_ASSERT(mpProfile != 0, "mpProfile");   // cpp:787
+        CGS_ASSERT_AT(mpProfile != 0, "mpProfile", CGS_ARTIST_FILE, 787);   // cpp:787
 
         mbShowingProfilePicture = (mpProfile->GetPlayerLicencePicture() != 0);
         if (!mbShowingProfilePicture)

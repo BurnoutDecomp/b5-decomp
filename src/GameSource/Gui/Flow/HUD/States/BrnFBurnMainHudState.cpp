@@ -2,7 +2,7 @@
 #include "GameSource/Replays/BrnReplayGuiModuleStaticLayout.h"
 #include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnFBurnMainHudState.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnFBurnMainHudState.cpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
@@ -166,7 +166,7 @@ namespace BrnGui
         // cpp:1584) and stores through it regardless.
         void GuiCache_SetHudReady(GuiCache* lpGuiCache)
         {
-            CGS_ASSERT(lpGuiCache != 0, "mpCache");   // cpp:1584 (non-gating; the store follows)
+            CGS_ASSERT_AT(lpGuiCache != 0, "mpCache", CGS_ARTIST_FILE, 1584);   // cpp:1584 (non-gating; the store follows)
             lpGuiCache->SetGameplayHudActive(true);   // stb 1 @cache+0x407C
         }
 
@@ -714,8 +714,8 @@ namespace BrnGui
         // "EventHud_Animator" on its invisible transition frame and leaves it there.
         const s32 liEngineState = GuiCache_GetPlayerEngineState(mpGuiCache);
 
-        CGS_ASSERT(liEngineState < 2,
-                   "( GuiPlayerEngineEvent::E_ENGINE_OFF == mpCache->GetPlayerEngineState( )) || ( GuiPlayerEngineEvent::E_ENGINE_ON == mpCache->GetPlayerEngineState( ))");   // cpp:1536
+        CGS_ASSERT_AT(liEngineState < 2,
+                   "( GuiPlayerEngineEvent::E_ENGINE_OFF == mpCache->GetPlayerEngineState( )) || ( GuiPlayerEngineEvent::E_ENGINE_ON == mpCache->GetPlayerEngineState( ))", CGS_ARTIST_FILE, 1536);   // cpp:1536
 
         if (liEngineState == 1)
         {
@@ -938,7 +938,7 @@ namespace BrnGui
             case 222:   // the PP-toggle (X360 assert "lpPPToggle" cpp:909)
                 if (mbPpToggleEnabled)
                 {
-                    CGS_ASSERT(lpEvent != 0, "lpPPToggle");
+                    CGS_ASSERT_AT(lpEvent != 0, "lpPPToggle", CGS_ARTIST_FILE, 909);
                     if (lpiPayload[0] == 1)
                     {
                         mIdentAnimator.Run("transIn");
@@ -1069,7 +1069,7 @@ namespace BrnGui
                     {
                         const BrnProgression::TrophyUnlockData* lpCurrentTrophyUnlockData =
                             lpProgressionData->GetTrophyUnlock(luIndex);
-                        CGS_ASSERT(lpCurrentTrophyUnlockData, "lpCurrentTrophyUnlockData");
+                        CGS_ASSERT_AT(lpCurrentTrophyUnlockData, "lpCurrentTrophyUnlockData", CGS_ARTIST_FILE, 1003);
 
                         const CgsID lCarUnlockId = lpCurrentTrophyUnlockData->GetCarUnlockID();
                         if (lCarUnlockId == 0)
@@ -1379,7 +1379,7 @@ namespace BrnGui
 
         if (mbBoostMessagesEnabled)
         {
-            CGS_ASSERT(mpGuiCache != 0, "mpCache != NULL");   // cpp:1807
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpCache != NULL", CGS_ARTIST_FILE, 1807);   // cpp:1807
             // X360 ProcessAptEvents @0x8247525C: RecvEvent(+0x8B0, lpEvent, 21,
             // mpGuiCache). Id 21 is the apt-trigger record the manager's switch
             // deliberately ignores (its jump table starts at 206) -- the call is made
@@ -1397,7 +1397,7 @@ namespace BrnGui
         CGS_ASSERT(lpEvent != 0, "Invalid event");   // cpp:1631
         if (mbBoostMessagesEnabled)
         {
-            CGS_ASSERT(mpGuiCache != 0, "mpCache != NULL");   // cpp:1639
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpCache != NULL", CGS_ARTIST_FILE, 1639);   // cpp:1639
             // X360 ProcessBoostInfo @0x8247502C: RecvEvent(+0x8B0, lpEvent, 206,
             // mpGuiCache) -- the boost-type latch that tints every posted message.
             mBoostMessages.RecvEvent(static_cast<const CgsModule::Event*>(lpEvent),

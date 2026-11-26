@@ -173,7 +173,7 @@ namespace BrnGui
     // the drive-thrus-found message in, and enter the DRIVETHRUFOUND state.
     void OdometerComponent::HandleDriveThruDiscovered(const GuiEventDriveThruDiscovered* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent");
+        CGS_ASSERT_AT(lpEvent != 0, "lpEvent", CGS_ARTIST_FILE, 175);
 
         const s32 liNumDiscovered = lpEvent->miNumDiscovered;
         const s32 liNumTotal      = lpEvent->miNumTotal;
@@ -197,7 +197,7 @@ namespace BrnGui
             lpDriveThruStringID = "DRIVETHRU_CAR_PARK_PLURAL";
             break;
         default:
-            CGS_ASSERT(false, "Unknown drive thru type");
+            CGS_ASSERT_AT(false, "Unknown drive thru type", CGS_ARTIST_FILE, 223);
             break;
         }
 
@@ -272,8 +272,8 @@ namespace BrnGui
     // streamed assert.
     void OdometerComponent::Update()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
-        CGS_ASSERT(mpProfile != 0, "mpProfile");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 274);
+        CGS_ASSERT_AT(mpProfile != 0, "mpProfile", CGS_ARTIST_FILE, 275);
 
         switch (meOdometerState)
         {
@@ -340,8 +340,8 @@ namespace BrnGui
     // message in, enter MILEAGE state and stamp the entered-state time.
     void OdometerComponent::TransIn()
     {
-        CGS_ASSERT(meOdometerState == E_ODOMETERSTATE_NONE, "meOdometerState == E_ODOMETERSTATE_NONE");
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(meOdometerState == E_ODOMETERSTATE_NONE, "meOdometerState == E_ODOMETERSTATE_NONE", CGS_ARTIST_FILE, 342);
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 343);
 
         mMileageAnimator.Run("transin");
         meOdometerState    = E_ODOMETERSTATE_MILEAGE;
@@ -360,7 +360,7 @@ namespace BrnGui
     // time. An unhandled state trips a streamed assert.
     void OdometerComponent::TransOutActiveText()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 362);
 
         switch (meOdometerState)
         {

@@ -27,7 +27,7 @@
 // reconstructed here -- the X360 asm is authoritative for behaviour.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Permanent/Components/BrnAchievementPopupComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnAchievementPopupComponent.cpp"
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"             // BrnFlapt::FileRef (Prepare param)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"        // MovieClipRef lookups / GotoAndPlayLabel
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -139,9 +139,9 @@ namespace BrnGui
                 mAptRef.GotoAndPlayLabel("AnimOut");
 
                 // Inlined BitArray<60>::IsBitSet (its bound assert CgsBitArray.h:203) + probe.
-                CGS_ASSERT(mAchievementsToShow.IsBitSet(
+                CGS_ASSERT_AT(mAchievementsToShow.IsBitSet(
                                static_cast<u32>(miCurrentAchievementShowing)),
-                           "mAchievementsToShow.IsBitSet( miCurrentAchievementShowing )");
+                           "mAchievementsToShow.IsBitSet( miCurrentAchievementShowing )", CGS_ARTIST_FILE, 173);
 
                 // Inlined BitArray<60>::UnSetBit bounds (CgsBitArray.h:241) + clear.
                 mAchievementsToShow.UnSetBit(static_cast<u32>(miCurrentAchievementShowing));

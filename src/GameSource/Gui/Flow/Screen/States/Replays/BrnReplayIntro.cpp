@@ -1,7 +1,7 @@
 // BrnGui::ReplayIntro -- the "RE_INTRO" screen state, reconstructed from the console build.
 
 #include "GameSource/Gui/Flow/Screen/States/Replays/BrnReplayIntro.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/Replays/BrnReplayIntro.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                         // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                        // CgsGui::GuiAccessPointers
@@ -133,7 +133,7 @@ void ReplayIntro::Update()
 
 bool ReplayIntro::UpdateLoadResources()
 {
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 198);
 
     if (mpGuiCache->mbReplayDisplayHud == true &&
         !mpGuiCache->EnsureResourcesAreLoaded(maMainResourcesToLoad, 1))

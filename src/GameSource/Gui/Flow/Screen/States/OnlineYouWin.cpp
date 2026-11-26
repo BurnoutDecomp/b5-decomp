@@ -7,7 +7,7 @@
 // result (SHOWING) before advancing. Every frame a timed-out player ends the screen early.
 
 #include "GameSource/Gui/Flow/Screen/States/OnlineYouWin.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/OnlineYouWin.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                          // CgsGui::GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"     // StateInterface
@@ -188,7 +188,7 @@ void OnlineYouWin::UpdateGetCache()
 // When the wait runs out the screen moves on to its own resources.
 bool OnlineYouWin::UpdateWFWinResult()
 {
-    CGS_ASSERT(mpGuiCache, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 258);
 
     if (!(mfCurrentTime < KF_WIN_CHECK_DURATION))
     {
@@ -214,8 +214,8 @@ bool OnlineYouWin::UpdateWFWinResult()
         }
     }
 
-    CGS_ASSERT(liIndex < lpPostEventData->miNumPlayersFinishedEvent,
-               "liIndex < lpPostEventData->miNumPlayersFinishedEvent");
+    CGS_ASSERT_AT(liIndex < lpPostEventData->miNumPlayersFinishedEvent,
+               "liIndex < lpPostEventData->miNumPlayersFinishedEvent", CGS_ARTIST_FILE, 280);
     return false;
 }
 
@@ -224,7 +224,7 @@ bool OnlineYouWin::UpdateWFWinResult()
 // photo icon to initialise.
 bool OnlineYouWin::UpdateLoadResources()
 {
-    CGS_ASSERT(mpGuiCache, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 301);
 
     if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
     {
@@ -320,7 +320,7 @@ void OnlineYouWin::UpdateShowing()
 // field's movie reports loaded, re-push its stored text.
 void OnlineYouWin::UpdatePermanent()
 {
-    CGS_ASSERT(mpGuiCache, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 459);
 
     if (HasAnyoneTimedOut())
     {

@@ -1,7 +1,7 @@
 // BrnGui::ReplayOptions -- the "RE_OPTIONS" screen state, reconstructed from the console build.
 
 #include "GameSource/Gui/Flow/Screen/States/Replays/BrnReplayOptions.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/Replays/BrnReplayOptions.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                         // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                        // CgsGui::GuiAccessPointers
@@ -301,9 +301,9 @@ void ReplayOptions::HandleControllerInputPressed(const CgsModule::Event* lpEvent
 
 void ReplayOptions::PlayReel(s32 liSlotIndex)
 {
-    CGS_ASSERT(liSlotIndex >= 0, "liSlotIndex >= 0");
-    CGS_ASSERT(liSlotIndex < mpGuiCache->GetReplayNumberSlotsUsed(),
-               "liSlotIndex < mpGuiCache->GetReplayNumberSlotsUsed()");
+    CGS_ASSERT_AT(liSlotIndex >= 0, "liSlotIndex >= 0", CGS_ARTIST_FILE, 458);
+    CGS_ASSERT_AT(liSlotIndex < mpGuiCache->GetReplayNumberSlotsUsed(),
+               "liSlotIndex < mpGuiCache->GetReplayNumberSlotsUsed()", CGS_ARTIST_FILE, 459);
 
     const MenuToggle* lpQualityToggle = mOptionToggles.GetSelectable(E_OPTION_TOGGLE_EXPORT_QUALITY);
 
@@ -319,7 +319,7 @@ void ReplayOptions::PlayReel(s32 liSlotIndex)
     lActivate.muParam = 0;
     PostOut(mpStateInterface, lActivate);
 
-    CGS_ASSERT(mpGuiCache->IsReplayInfoVisible(), "mpGuiCache->IsReplayInfoVisible()");
+    CGS_ASSERT_AT(mpGuiCache->IsReplayInfoVisible(), "mpGuiCache->IsReplayInfoVisible()", CGS_ARTIST_FILE, 476);
     mpStateInterface->PlayAptMovie("", KI_INFO_MOVIE_LEVEL);
     mpGuiCache->mbReplayInfoVisible = false;
     mpGuiCache->UnloadResources(maInfoResourcesToLoad, 1);

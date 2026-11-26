@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnReplayLoading.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/Replays/BrnReplayLoading.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (PlayAptMovie / GetAccessPointers)
@@ -65,7 +65,7 @@ void ReplayLoading::OnLeave()
 // ------------------------------------------------ UpdateLoadResources @ 0x824D49F8
 bool ReplayLoading::UpdateLoadResources()
 {
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 173);
 
     // Stream the screen's single static resource; keep waiting until it is fully loaded.
     if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))

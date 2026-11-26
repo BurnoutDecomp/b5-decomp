@@ -276,7 +276,7 @@ namespace BrnGui
     // SetExpectedAptComponentList (cpp:277) into this tail.
     bool CrashNavTrax::UpdateLoading()
     {
-        CGS_ASSERT(mpGuiCache, "NULL != mpGuiCache");   // cpp:245
+        CGS_ASSERT_AT(mpGuiCache, "NULL != mpGuiCache", CGS_ARTIST_FILE, 245);   // cpp:245
 
         if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
@@ -297,7 +297,7 @@ namespace BrnGui
     // tab must not count as an edit, or BACK would ask to discard on an untouched screen.
     bool CrashNavTrax::UpdateWFInit()
     {
-        CGS_ASSERT(mpGuiCache, "NULL != mpGuiCache");   // cpp:298
+        CGS_ASSERT_AT(mpGuiCache, "NULL != mpGuiCache", CGS_ARTIST_FILE, 298);   // cpp:298
 
         if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {

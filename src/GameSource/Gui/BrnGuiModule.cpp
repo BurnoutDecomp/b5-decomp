@@ -425,7 +425,7 @@ namespace BrnGui
             meReleaseStage = E_RELEASE_START;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid prepare state");
+            CGS_ASSERT_AT(false, "Invalid prepare state", CGS_ARTIST_FILE, 608);
             return false;
         }
     }
@@ -530,13 +530,13 @@ namespace BrnGui
             meReleaseStage = E_RELEASE_SYSTEM_NOTIFICATIONS;
         case E_RELEASE_PROFILE:
             meReleaseStage = E_RELEASE_PROFILE;
-            CGS_ASSERT(mProfileHost.Release(), "mProfileHost.Release()");
+            CGS_ASSERT_AT(mProfileHost.Release(), "mProfileHost.Release()", CGS_ARTIST_FILE, 703);
         case E_RELEASE_GUI_DEBUG_COMPONENT:
             meReleaseStage = E_RELEASE_GUI_DEBUG_COMPONENT;
             mEventReceiverQueue.Clear();
-            CGS_ASSERT(mSystemUserProfile.Release(), "mSystemUserProfile.Release()");
+            CGS_ASSERT_AT(mSystemUserProfile.Release(), "mSystemUserProfile.Release()", CGS_ARTIST_FILE, 710);
             mGuiKeyboard.Release();
-            CGS_ASSERT(mKeyboardHost.Release(), "mKeyboardHost.Release()");
+            CGS_ASSERT_AT(mKeyboardHost.Release(), "mKeyboardHost.Release()", CGS_ARTIST_FILE, 712);
         case E_RELEASE_WORLD_DATA_CONTROLLER:
             meReleaseStage = E_RELEASE_WORLD_DATA_CONTROLLER;
             mWorldDataController.Release();
@@ -546,7 +546,7 @@ namespace BrnGui
             meReleaseStage = E_RELEASE_MOVIE_MANAGER;
         case E_RELEASE_CUSTOMRENDERER_RELEASE:
             meReleaseStage = E_RELEASE_CUSTOMRENDERER_RELEASE;
-            CGS_ASSERT(mCustomRendererManager.Release(), "mCustomRenderManager.Release()");
+            CGS_ASSERT_AT(mCustomRendererManager.Release(), "mCustomRenderManager.Release()", CGS_ARTIST_FILE, 748);
         case E_RELEASE_CUSTOMRENDERER_DESTRUCT:
             meReleaseStage = E_RELEASE_CUSTOMRENDERER_DESTRUCT;
             mCustomRendererManager.Destruct();
@@ -600,10 +600,10 @@ namespace BrnGui
                                    CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer)
     {
         CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiModulePreWorldUpdate);
-        CGS_ASSERT(lpGuiOutput != 0, "lpGuiOutput != NULL");
-        CGS_ASSERT(lpModelOutputBuffer != 0, "lpModelOutputBuffer != NULL");
-        CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
-        CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
+        CGS_ASSERT_AT(lpGuiOutput != 0, "lpGuiOutput != NULL", CGS_ARTIST_FILE, 1576);
+        CGS_ASSERT_AT(lpModelOutputBuffer != 0, "lpModelOutputBuffer != NULL", CGS_ARTIST_FILE, 1577);
+        CGS_ASSERT_AT(lpInputBufferStack != 0, "lpInputBufferStack != NULL", CGS_ARTIST_FILE, 1578);
+        CGS_ASSERT_AT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL", CGS_ARTIST_FILE, 1579);
 
         lpGuiOutput->LockForWrite();
         UpdateCollisionWorldValidation(lpGuiOutput);
@@ -659,9 +659,9 @@ namespace BrnGui
             }
             else if (lbMovie || lbNetworking)
             {
-                CGS_ASSERT(!mbCollisionWorldInvalid, "!mbCollisionWorldInvalid");
-                CGS_ASSERT((lbMovie && !lbNetworking) || (!lbMovie && lbNetworking),
-                    "( lbMoviePendingInvalidate && !lbNetworkingPendingInvalidate) || (!lbMoviePendingInvalidate && lbNetworkingPendingInvalidate)");
+                CGS_ASSERT_AT(!mbCollisionWorldInvalid, "!mbCollisionWorldInvalid", CGS_ARTIST_FILE, 1278);
+                CGS_ASSERT_AT((lbMovie && !lbNetworking) || (!lbMovie && lbNetworking),
+                    "( lbMoviePendingInvalidate && !lbNetworkingPendingInvalidate) || (!lbMoviePendingInvalidate && lbNetworkingPendingInvalidate)", CGS_ARTIST_FILE, 1283);
                 {
                     GuiEventRequestCollisionWorldEvent lRequest;
                     lRequest.meEventType = GuiEventRequestCollisionWorldEvent::E_COLLISON_WORLD_INVALIDATE;
@@ -676,7 +676,7 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_BOOT:
             {
                 const bool lbPending = PendingCollisionWorldInvalidateForNetworking();
-                CGS_ASSERT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()");
+                CGS_ASSERT_AT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()", CGS_ARTIST_FILE, 1306);
             }
             if (mCollisonPoolValidationReceiverQueue.GetLength() > 0)
             {
@@ -691,9 +691,9 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_BOOT:
             {
                 const bool lbPending = PendingCollisionWorldInvalidateForNetworking();
-                CGS_ASSERT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()");
+                CGS_ASSERT_AT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()", CGS_ARTIST_FILE, 1336);
             }
-            CGS_ASSERT(mbCollisionWorldInvalid, "mbCollisionWorldInvalid");
+            CGS_ASSERT_AT(mbCollisionWorldInvalid, "mbCollisionWorldInvalid", CGS_ARTIST_FILE, 1337);
             if (mMovieManager.PendingCollisionWorldValidate())
             {
                 {
@@ -709,7 +709,7 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_BOOT:
             {
                 const bool lbPending = PendingCollisionWorldInvalidateForNetworking();
-                CGS_ASSERT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()");
+                CGS_ASSERT_AT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()", CGS_ARTIST_FILE, 1354);
             }
             if (mCollisonPoolValidationReceiverQueue.GetLength() > 0)
             {
@@ -724,11 +724,11 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_SAVELOAD:
             {
                 const bool lbPending = mMovieManager.PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1383);
             }
             {
                 const bool lbPending = PendingCollisionWorldInvalidateForNetworking();
-                CGS_ASSERT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()");
+                CGS_ASSERT_AT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()", CGS_ARTIST_FILE, 1384);
             }
             if (mCollisonPoolValidationReceiverQueue.GetLength() > 0)
             {
@@ -742,13 +742,13 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_SAVELOAD:
             {
                 const bool lbPending = mMovieManager.PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1413);
             }
             {
                 const bool lbPending = PendingCollisionWorldInvalidateForNetworking();
-                CGS_ASSERT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()");
+                CGS_ASSERT_AT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()", CGS_ARTIST_FILE, 1414);
             }
-            CGS_ASSERT(mbCollisionWorldInvalid, "mbCollisionWorldInvalid");
+            CGS_ASSERT_AT(mbCollisionWorldInvalid, "mbCollisionWorldInvalid", CGS_ARTIST_FILE, 1415);
             if (mProfileHost.GetProfileManager().PendingCollisionWorldValidate())
             {
                 {
@@ -764,11 +764,11 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_SAVELOAD:
             {
                 const bool lbPending = mMovieManager.PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1433);
             }
             {
                 const bool lbPending = PendingCollisionWorldInvalidateForNetworking();
-                CGS_ASSERT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()");
+                CGS_ASSERT_AT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()", CGS_ARTIST_FILE, 1434);
             }
             if (mCollisonPoolValidationReceiverQueue.GetLength() > 0)
             {
@@ -782,11 +782,11 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_MOVIE:
             {
                 const bool lbPending = mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1463);
             }
             {
                 const bool lbPending = PendingCollisionWorldInvalidateForNetworking();
-                CGS_ASSERT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()");
+                CGS_ASSERT_AT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()", CGS_ARTIST_FILE, 1464);
             }
             if (mbCollisionWorldInvalid)
             {
@@ -797,13 +797,13 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_MOVIE:
             {
                 const bool lbPending = mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1478);
             }
             {
                 const bool lbPending = PendingCollisionWorldInvalidateForNetworking();
-                CGS_ASSERT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()");
+                CGS_ASSERT_AT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()", CGS_ARTIST_FILE, 1479);
             }
-            CGS_ASSERT(mbCollisionWorldInvalid, "mbCollisionWorldInvalid");
+            CGS_ASSERT_AT(mbCollisionWorldInvalid, "mbCollisionWorldInvalid", CGS_ARTIST_FILE, 1480);
             if (mMovieManager.PendingCollisionWorldValidate())
             {
                 {
@@ -817,11 +817,11 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_MOVIE:
             {
                 const bool lbPending = mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1496);
             }
             {
                 const bool lbPending = PendingCollisionWorldInvalidateForNetworking();
-                CGS_ASSERT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()");
+                CGS_ASSERT_AT(!lbPending, "!PendingCollisionWorldInvalidateForNetworking()", CGS_ARTIST_FILE, 1497);
             }
             if (!mbCollisionWorldInvalid)
             {
@@ -832,11 +832,11 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_NETWORKING:
             {
                 const bool lbPending = mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1510);
             }
             {
                 const bool lbPending = mMovieManager.PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1511);
             }
             if (mbCollisionWorldInvalid)
                 meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_NETWORKING;
@@ -844,11 +844,11 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_NETWORKING:
             {
                 const bool lbPending = mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1523);
             }
             {
                 const bool lbPending = mMovieManager.PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1524);
             }
             if (PendingCollisionWorldValidateForNetworking())
             {
@@ -863,17 +863,17 @@ namespace BrnGui
         case E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_NETWORKING:
             {
                 const bool lbPending = mProfileHost.GetProfileManager().PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mProfileManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1540);
             }
             {
                 const bool lbPending = mMovieManager.PendingCollisionWorldInvalidate();
-                CGS_ASSERT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()");
+                CGS_ASSERT_AT(!lbPending, "!mMovieManager.PendingCollisionWorldInvalidate()", CGS_ARTIST_FILE, 1541);
             }
             if (!mbCollisionWorldInvalid)
                 meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE;
             break;
         default:
-            CGS_ASSERT(false, "Unhandled state");
+            CGS_ASSERT_AT(false, "Unhandled state", CGS_ARTIST_FILE, 1553);
             break;
         }
     }
@@ -911,14 +911,14 @@ namespace BrnGui
         case E_CARPOOLSTATEVALIDATIONSTATE_INVALIDATING_FOR_MOVIE:
             if (mEventReceiverQueue.GetLength() > 0)
             {
-                CGS_ASSERT(mEventReceiverQueue.GetLength() == 1, "mEventReceiverQueue.GetLength() == 1");
+                CGS_ASSERT_AT(mEventReceiverQueue.GetLength() == 1, "mEventReceiverQueue.GetLength() == 1", CGS_ARTIST_FILE, 934);
                 const CgsModule::Event* lpEvent = 0;
                 s32 liSize = 0;
                 const s32 liEventId = mEventReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
-                CGS_ASSERT(liEventId == 7, "liEventId == CgsResource::ResourceIO::EVENT_INVALIDATEPOOL");
+                CGS_ASSERT_AT(liEventId == 7, "liEventId == CgsResource::ResourceIO::EVENT_INVALIDATEPOOL", CGS_ARTIST_FILE, 937);
                 const CgsResource::Events::InvalidatePoolResponse* lpResponse = reinterpret_cast<const CgsResource::Events::InvalidatePoolResponse*>(lpEvent);
-                CGS_ASSERT(lpResponse->miEventId == BrnResource::E_POOL_TRAFFIC,
-                    "lpInvalidatePoolResponse->GetEventId() == BrnResource::E_POOL_TRAFFIC");
+                CGS_ASSERT_AT(lpResponse->miEventId == BrnResource::E_POOL_TRAFFIC,
+                    "lpInvalidatePoolResponse->GetEventId() == BrnResource::E_POOL_TRAFFIC", CGS_ARTIST_FILE, 941);
                 mEventReceiverQueue.Clear(); // Original Clear preserves payload storage.
                 if (lpResponse->GetResult() != CgsResource::Events::InvalidatePoolResponse::E_RESULT_SUCCESS)
                     meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_WAITING_FOR_POOL_TO_EMPTY;
@@ -944,14 +944,14 @@ namespace BrnGui
             if (mEventReceiverQueue.GetLength() <= 0)
                 break;
             {
-                CGS_ASSERT(mEventReceiverQueue.GetLength() == 1, "mEventReceiverQueue.GetLength() == 1");
+                CGS_ASSERT_AT(mEventReceiverQueue.GetLength() == 1, "mEventReceiverQueue.GetLength() == 1", CGS_ARTIST_FILE, 985);
                 const CgsModule::Event* lpEvent = 0;
                 s32 liSize = 0;
                 const s32 liEventId = mEventReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
-                CGS_ASSERT(liEventId == 8, "liEventId == CgsResource::ResourceIO::EVENT_VALIDATEPOOL");
+                CGS_ASSERT_AT(liEventId == 8, "liEventId == CgsResource::ResourceIO::EVENT_VALIDATEPOOL", CGS_ARTIST_FILE, 988);
                 const CgsResource::Events::ValidatePoolResponse* lpResponse = reinterpret_cast<const CgsResource::Events::ValidatePoolResponse*>(lpEvent);
-                CGS_ASSERT(lpResponse->miEventId == BrnResource::E_POOL_TRAFFIC,
-                    "lpValidatePoolResponse->GetEventId() == BrnResource::E_POOL_TRAFFIC");
+                CGS_ASSERT_AT(lpResponse->miEventId == BrnResource::E_POOL_TRAFFIC,
+                    "lpValidatePoolResponse->GetEventId() == BrnResource::E_POOL_TRAFFIC", CGS_ARTIST_FILE, 993);
                 mEventReceiverQueue.Clear();
                 if (mbBootMovieMode)
                     mbTrafficPoolEmptied = false;
@@ -960,7 +960,7 @@ namespace BrnGui
                     const bool lbEmpty = false;
                     lpOutput->GetGameActionQueue()->AddEvent(
                         reinterpret_cast<const CgsModule::Event*>(&lbEmpty), 13, sizeof(lbEmpty));
-                    CGS_ASSERT(mbTrafficPoolEmptied, "mbTrafficPoolEmptied");
+                    CGS_ASSERT_AT(mbTrafficPoolEmptied, "mbTrafficPoolEmptied", CGS_ARTIST_FILE, 1016);
                 }
                 meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_WAITING_FOR_POOL_TO_FILL;
             }
@@ -980,7 +980,7 @@ namespace BrnGui
             }
             break;
         default:
-            CGS_ASSERT(false, "Unhandled state");
+            CGS_ASSERT_AT(false, "Unhandled state", CGS_ARTIST_FILE, 1039);
             break;
         }
     }
@@ -1039,12 +1039,12 @@ void GuiModule::Destruct()
         if (XUserGetName(mSystemUserProfile.GetUserIndex(), lacName, 16) != ERROR_SUCCESS)
         {
             const u8* lpcDefaultName = lpLanguageManager->FindString(KAPC_UPN_DEFAULT_NAME_ID);
-            CGS_ASSERT(lpcDefaultName != NULL, "Couldn't find default player name in string database.");
+            CGS_ASSERT_AT(lpcDefaultName != NULL, "Couldn't find default player name in string database.", CGS_ARTIST_FILE, 1216);
             CGS_ASSERT(std::strlen(reinterpret_cast<const char*>(lpcDefaultName)) < 27, "String too long: ");
             std::strncpy(lacName, reinterpret_cast<const char*>(lpcDefaultName), 27);
             lpLanguageManager->AddString(KAPC_UPN_PLAYER_NAME_ID, reinterpret_cast<const u8*>(lacName));
             const u8* lpcDefaultQuoted = lpLanguageManager->FindString(KAPC_UPN_DEFAULT_QUOTED_ID);
-            CGS_ASSERT(lpcDefaultQuoted != NULL, "Couldn't find default player name quoted in string database.");
+            CGS_ASSERT_AT(lpcDefaultQuoted != NULL, "Couldn't find default player name quoted in string database.", CGS_ARTIST_FILE, 1222);
             CGS_ASSERT(std::strlen(reinterpret_cast<const char*>(lpcDefaultQuoted)) < 31, "String too long: ");
             std::strncpy(lacQuoted, reinterpret_cast<const char*>(lpcDefaultQuoted), 31);
         }
@@ -1075,7 +1075,7 @@ void GuiModule::Destruct()
 
     void GuiModule::HandleControllerPressed(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != NULL, "lpEvent");
+        CGS_ASSERT_AT(lpEvent != NULL, "lpEvent", CGS_ARTIST_FILE, 3344);
         const u32 luButton = reinterpret_cast<const u32*>(lpEvent)[1];
         if ((luButton == 49 || luButton == 50) &&
             mProfileHost.GetProfileManager().GetTaskResultHandler() == &mProfileHost)
@@ -1090,20 +1090,20 @@ void GuiModule::Destruct()
             mbPerformingInvite = true;
             if (mbInviteRequiresLogin)
             {
-                CgsGui::GuiEvent<89> lLogin;
-                lpOutput->AddGuiOutEvent(lLogin);
+                CgsGui::GuiEvent<89> lEndGameEvent;
+                lpOutput->AddGuiOutEvent(lEndGameEvent);
             }
             else
             {
-                GuiEventRunFsm lFsm;
-                lFsm.mFsmId = CgsIDCompress("BrnScreenFsm");
-                lFsm.mInitialStateId = CgsIDCompress("LOADING");
-                lFsm.meFlowToUse = E_GUIFLOW_SCREEN;
-                mStoredGuiEvents.AddEvent(&lFsm, 144, sizeof(lFsm));
-                lFsm.mFsmId = CgsIDCompress("BrnFBFsm");
-                lFsm.mInitialStateId = 0;
-                lFsm.meFlowToUse = E_GUIFLOW_HUD;
-                mStoredGuiEvents.AddEvent(&lFsm, 144, sizeof(lFsm));
+                GuiEventRunFsm lGuiRunFsm;   // DWARF locals lGuiRunFsm (cpp:3317) / lEndGameEvent (cpp:3312)
+                lGuiRunFsm.mFsmId = CgsIDCompress("BrnScreenFsm");
+                lGuiRunFsm.mInitialStateId = CgsIDCompress("LOADING");
+                lGuiRunFsm.meFlowToUse = E_GUIFLOW_SCREEN;
+                mStoredGuiEvents.AddEvent(&lGuiRunFsm, 144, sizeof(lGuiRunFsm));
+                lGuiRunFsm.mFsmId = CgsIDCompress("BrnFBFsm");
+                lGuiRunFsm.meFlowToUse = E_GUIFLOW_HUD;   // stored before the state id (ARTIST stw @0x82511498)
+                lGuiRunFsm.mInitialStateId = 0;
+                mStoredGuiEvents.AddEvent(&lGuiRunFsm, 144, sizeof(lGuiRunFsm));
             }
         }
     }
@@ -1436,10 +1436,10 @@ void GuiModule::Destruct()
         const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput,
         bool lbSerialise)
     {
-        CGS_ASSERT(lpInput != NULL, "lpInput != NULL");
-        CGS_ASSERT(lpOutput != NULL, "lpOutput != NULL");
+        CGS_ASSERT_AT(lpInput != NULL, "lpInput != NULL", CGS_ARTIST_FILE, 1801);
+        CGS_ASSERT_AT(lpOutput != NULL, "lpOutput != NULL", CGS_ARTIST_FILE, 1802);
         CGS_ASSERT(lpInputBufferStack != NULL, "lpInputBufferStack != NULL");
-        CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");
+        CGS_ASSERT_AT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL", CGS_ARTIST_FILE, 1803);
         bool lbForceAutosave = false;
         bool lbHasSaveImage = false;
         CgsGui::ImageFileInfo lSaveImageInfo;
@@ -1447,7 +1447,7 @@ void GuiModule::Destruct()
 
         lpInput->LockForWrite();
         lpOutput->LockForWrite();
-        CGS_ASSERT(mpOutputBuffer == NULL, "mpOutputBuffer == NULL");
+        CGS_ASSERT_AT(mpOutputBuffer == NULL, "mpOutputBuffer == NULL", CGS_ARTIST_FILE, 1858);
         mpOutputBuffer = lpOutput;
         mGuiCache.mbGameplayUpdateActive = (luUpdateSet & 8) != 0;
         mGuiAccessPointers.SetGDMInput(lpGameDataInput);
@@ -1458,9 +1458,9 @@ void GuiModule::Destruct()
                 mGuiModuleSerialiser.Read();
             else if (mGuiModuleSerialiser.IsRecording())
                 mGuiModuleSerialiser.GetStaticLayout()->SetupStartOfFrame();
-            CGS_ASSERT(!mGuiModuleSerialiser.IsRecording() ||
+            CGS_ASSERT_AT(!mGuiModuleSerialiser.IsRecording() ||
                 mGuiModuleSerialiser.GetBufferUsed() == 0,
-                "( mReplayGuiModuleSerialiser.IsRecording() == false ) || ( mReplayGuiModuleSerialiser.GetBufferUsed() == 0 )");
+                "( mReplayGuiModuleSerialiser.IsRecording() == false ) || ( mReplayGuiModuleSerialiser.GetBufferUsed() == 0 )", CGS_ARTIST_FILE, 1879);
         }
 
         CgsGui::ViewIO::OutputBuffer* lpViewOutputBuffer = NULL;
@@ -1472,7 +1472,7 @@ void GuiModule::Destruct()
 
         CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiModuleEventPump);
         CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue = lpInput->GetGuiEvents();
-        CGS_ASSERT(lpEventQueue != NULL, "lpEventQueue != NULL");
+        CGS_ASSERT_AT(lpEventQueue != NULL, "lpEventQueue != NULL", CGS_ARTIST_FILE, 1900);
         lpEventQueue->Append(mStoredGuiEvents);
         mStoredGuiEvents.Clear();
         if (mGDMReceiverQueue.GetLength() > 0)
@@ -1825,8 +1825,8 @@ void GuiModule::Destruct()
                            RendererIO::OutputBuffer* lpRenderOutput)
     {
         CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiModuleRender);
-        CGS_ASSERT(lpInput != 0, "lpInput");
-        CGS_ASSERT(lpRenderOutput != 0, "lpRenderOutput");
+        CGS_ASSERT_AT(lpInput != 0, "lpInput", CGS_ARTIST_FILE, 3113);
+        CGS_ASSERT_AT(lpRenderOutput != 0, "lpRenderOutput", CGS_ARTIST_FILE, 3114);
         if (IsPrepared() && mDebugComponent.IsGuiRenderingEnabled())
         {
             CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiRender);

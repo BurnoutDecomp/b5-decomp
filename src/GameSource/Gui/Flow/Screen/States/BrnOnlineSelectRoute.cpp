@@ -311,7 +311,7 @@ namespace
                 HandleControllerAxis(lpEvent);
                 break;
             case KI_EVENT_NETWORK_DISCONNECT:
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 292);
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
                 SendStateEvent("DISCONNECT");
                 break;
@@ -394,7 +394,7 @@ namespace
     // after the cache is complete does the route UI install its screen and highlight row.
     void OnlineSelectRoute::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 451);
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
             if (mpGuiCache->EnsureResourcesAreLoaded(
@@ -445,9 +445,9 @@ namespace
         if (mpGuiCache == 0)
         {
             mpGuiCache = lpCacheEvent->mpCache;
-            CGS_ASSERT(mpGuiCache, "mpGuiCache");
+            CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 1405);
             mpIconManager = mpGuiCache->GetMapIconManager();
-            CGS_ASSERT(mpIconManager, "mpIconManager");
+            CGS_ASSERT_AT(mpIconManager, "mpIconManager", CGS_ARTIST_FILE, 1408);
 
             if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
             {
@@ -492,7 +492,7 @@ namespace
     {
         CGS_ASSERT(lpEvent != 0,
                    "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");
-        CGS_ASSERT(lpEvent != 0, "lpInGameEvent");
+        CGS_ASSERT_AT(lpEvent != 0, "lpInGameEvent", CGS_ARTIST_FILE, 1362);
 
         GuiOverlayWaitFinishWire lRequest("CNOnlEntGame");
         mpStateInterface->OutputGuiEvent(lRequest.mRequest);
@@ -508,7 +508,7 @@ namespace
 
     void OnlineSelectRoute::SetupNormalRoute()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 599);
 
         GuiEventNetworkGameParams* lpParams =
             mpGuiCache->GetOnlineGameModeOptions();
@@ -519,9 +519,9 @@ namespace
                 mpGuiCache->GetPresetEvent(static_cast<s32>(luStartPresetEventIndex));
 
             const s32 liNumCheckpoints = mSelectRoutes.GetNumberCheckpoints(liRound);
-            CGS_ASSERT(liNumCheckpoints <= 17,
+            CGS_ASSERT_AT(liNumCheckpoints <= 17,
                        "mSelectRoutes.GetNumberCheckpoints( liRoundNumber ) <= "
-                       "(KI_MAX_LANDMARKS_IN_MODE+1)");
+                       "(KI_MAX_LANDMARKS_IN_MODE+1)", CGS_ARTIST_FILE, 607);
 
             BrnGameState::LandmarkIndex laLandmarks[17];
             for (s32 liCheckpoint = 1; liCheckpoint < liNumCheckpoints; ++liCheckpoint)
@@ -763,7 +763,7 @@ namespace
     {
         const ESubState leOldSubState = meSubState;
         meSubState = E_SUBSTATE_SELECTING_MAIN_OPTION;
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1733);
 
         const s32 liMode = mpGuiCache->GetOnlineGameMode();
         const s32 liRound = mSelectRoutes.GetCurrentRound();
@@ -1180,7 +1180,7 @@ namespace
                 const PresetEvent* lpPreset = mpGuiCache->GetPresetEvent(liIndex);
                 const SatNavEventDisplayInfo* lpEventStart =
                     mpGuiCache->GetPresetEventDisplayInfo(lpPreset->GetPositionLookupId());
-                CGS_ASSERT(lpEventStart != 0, "lpEventStart");
+                CGS_ASSERT_AT(lpEventStart != 0, "lpEventStart", CGS_ARTIST_FILE, 1995);
                 lv3Position = lpEventStart->mv3Position;
             }
             else
@@ -1198,7 +1198,7 @@ namespace
             const PresetEvent* lpPreset = mpGuiCache->GetPresetEvent(liIndex);
             const SatNavEventDisplayInfo* lpEventStart =
                 mpGuiCache->GetPresetEventDisplayInfo(lpPreset->GetPositionLookupId());
-            CGS_ASSERT(lpEventStart != 0, "lpEventStart");
+            CGS_ASSERT_AT(lpEventStart != 0, "lpEventStart", CGS_ARTIST_FILE, 2012);
             return lpEventStart->mv3Position;
         }
 
@@ -1206,7 +1206,7 @@ namespace
         {
             const SatNavEventDisplayInfo* lpEventStart = mpGuiCache->GetPresetEventDisplayInfo(
                 mSelectRoutes.GetStartLightTriggerID(mSelectRoutes.GetCurrentRound()));
-            CGS_ASSERT(lpEventStart != 0, "lpEventStart");
+            CGS_ASSERT_AT(lpEventStart != 0, "lpEventStart", CGS_ARTIST_FILE, 2023);
             return lpEventStart->mv3Position;
         }
 
@@ -1262,7 +1262,7 @@ namespace
             {
                 const SatNavEventDisplayInfo* lpEventStart = mpGuiCache->GetPresetEventDisplayInfo(
                     mSelectRoutes.GetStartLightTriggerID(mSelectRoutes.GetCurrentRound()));
-                CGS_ASSERT(lpEventStart != 0, "lpEventStart");
+                CGS_ASSERT_AT(lpEventStart != 0, "lpEventStart", CGS_ARTIST_FILE, 2189);
                 lv3WorldPosition = lpEventStart->mv3Position;
                 mCursor.SetActive();
                 lbPlaceCursor = true;
@@ -1321,7 +1321,7 @@ namespace
         if (meSubState == E_SUBSTATE_SELECTING_PRESET_EVENT)
         {
             lpPresetEvent = FindPresetEventById(mpGuiCache, muCurrentPresetEventID);
-            CGS_ASSERT(lpPresetEvent != 0, "lpPresetEvent");
+            CGS_ASSERT_AT(lpPresetEvent != 0, "lpPresetEvent", CGS_ARTIST_FILE, 1305);
             liNumTrackedItems = lpPresetEvent->GetNumLandmarks() + 1;
             luStartTriggerId = lpPresetEvent->GetPositionLookupId();
         }
@@ -1555,7 +1555,7 @@ namespace
                 do
                 {
                     const SatNavEventDisplayInfo* lpEventStart = mpGuiCache->GetEventStart(luEventStart);
-                    CGS_ASSERT(lpEventStart, "lpEventStart");
+                    CGS_ASSERT_AT(lpEventStart, "lpEventStart", CGS_ARTIST_FILE, 1096);
                     if (IsWithinRouteExclusion(&lpEventStart->mv3Position, &lFirstCheckpointInfo.GetPositionLane()))
                     {
                         lauIconsToIgnore[liNumIconsToIgnore++] = lpEventStart->muEventInstanceId;
@@ -1614,8 +1614,8 @@ namespace
                     mSelectRoutes.GetCheckpointLandmark(
                         mSelectRoutes.GetCurrentRound(),
                         mSelectRoutes.GetCurrentlySelectedCheckpointIndex() + 1)));
-                CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
-                    "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE");
+                CGS_ASSERT_AT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
+                    "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE", CGS_ARTIST_FILE, 1141);
             }
 
             if (leMenuType == SelectRoutes::E_MENU_ITEM_TYPE_FINISH_POINT)
@@ -1623,7 +1623,7 @@ namespace
                 // Finish-point editing additionally hides finish points near the start.
                 const SatNavEventDisplayInfo* lpEventStart = mpGuiCache->GetPresetEventDisplayInfo(
                     mSelectRoutes.GetStartLightTriggerID(mSelectRoutes.GetCurrentRound()));
-                CGS_ASSERT(lpEventStart, "lpEventStart");
+                CGS_ASSERT_AT(lpEventStart, "lpEventStart", CGS_ARTIST_FILE, 1154);
                 if (static_cast<s32>(mpGuiCache->GetNumOnlineFinishPoints()) > 0)
                 {
                     s32 liFinishPoint = 0;
@@ -1634,8 +1634,8 @@ namespace
                         if (IsWithinRouteExclusion(&lFinishInfo.GetPositionLane(), &lpEventStart->mv3Position))
                         {
                             lauIconsToIgnore[liNumIconsToIgnore++] = static_cast<u32>(static_cast<s32>(lFinishInfo.GetLandmarkIndexHalf()));
-                            CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
-                                "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE");
+                            CGS_ASSERT_AT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
+                                "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE", CGS_ARTIST_FILE, 1167);
                         }
                         if (liNumIconsToIgnore == GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE)
                             break;
@@ -1649,7 +1649,7 @@ namespace
                 // The first checkpoint additionally excludes every landmark near the start.
                 const SatNavEventDisplayInfo* lpEventStart = mpGuiCache->GetPresetEventDisplayInfo(
                     mSelectRoutes.GetStartLightTriggerID(mSelectRoutes.GetCurrentRound()));
-                CGS_ASSERT(lpEventStart, "lpEventStart");
+                CGS_ASSERT_AT(lpEventStart, "lpEventStart", CGS_ARTIST_FILE, 1186);
                 if (mpGuiCache->GetWorldDataController()->GetTotalNumberOfLandmarks() > 0)
                 {
                     s32 liLandmark = 0;
@@ -1660,8 +1660,8 @@ namespace
                         if (IsWithinRouteExclusion(&lLandmarkInfo.GetPositionLane(), &lpEventStart->mv3Position))
                         {
                             lauIconsToIgnore[liNumIconsToIgnore++] = static_cast<u32>(static_cast<s32>(lLandmarkInfo.GetLandmarkIndexHalf()));
-                            CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
-                                "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE");
+                            CGS_ASSERT_AT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
+                                "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE", CGS_ARTIST_FILE, 1199);
                         }
                         if (liNumIconsToIgnore == GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE)
                             break;

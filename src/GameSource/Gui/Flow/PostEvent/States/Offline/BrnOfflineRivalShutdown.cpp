@@ -260,7 +260,7 @@ void OfflineRivalShutdown::Update()
         break;
 
     case E_OFFLINERIVALSHUTDOWNSTATE_WAITINGFORCOMPONENTS:
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");   // cpp:212
+        CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 212);   // cpp:212
         if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
             SetupComponents();
@@ -416,15 +416,15 @@ void OfflineRivalShutdown::SetupComponents()
     mShutdownCarComponent.ShowCar();
     mScreenAnim.AddOutputAptViewState("apt_Transition", "transin", false);
 
-    CGS_ASSERT(mpGuiCache, "mpGuiCache");   // cpp:435
+    CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 435);   // cpp:435
     const BrnResource::VehicleList* lpVehicleList =
         mpGuiCache->GetWorldDataController()->GetVehicleList();
-    CGS_ASSERT(lpVehicleList, "lpVehicleList");   // cpp:437
+    CGS_ASSERT_AT(lpVehicleList, "lpVehicleList", CGS_ARTIST_FILE, 437);   // cpp:437
 
     const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lShutdownCarID);
     const BrnResource::VehicleListEntry* lpVehicleListEntry =
         (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
-    CGS_ASSERT(lpVehicleListEntry, "lpVehicleListEntry");   // cpp:439
+    CGS_ASSERT_AT(lpVehicleListEntry, "lpVehicleListEntry", CGS_ARTIST_FILE, 439);   // cpp:439
 
     GuiEventAudioGenericSequence lAudio;
     std::memcpy(lAudio.maData, &lpVehicleListEntry->mRivalUnlockName, sizeof(lAudio.maData));
@@ -455,7 +455,7 @@ void OfflineRivalShutdown::SetupComponents()
 // for TRANSITION_COMPLETE -- operand order kept).
 void OfflineRivalShutdown::HandleAptTriggers(const CgsGui::GuiEventAptTriggerPayload* lpEvent)
 {
-    CGS_ASSERT(lpEvent, "lpEvent");   // cpp:477
+    CGS_ASSERT_AT(lpEvent, "lpEvent", CGS_ARTIST_FILE, 477);   // cpp:477
 
     if (lpEvent->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
     {
@@ -509,7 +509,7 @@ void OfflineRivalShutdown::HandleControllerInput(const CgsModule::Event* lpEvent
 void OfflineRivalShutdown::HandleControllerInputPressed(
     const CgsGui::GuiEventControllerInputPressed* lpControllerPressedEvent)
 {
-    CGS_ASSERT(lpControllerPressedEvent, "lpControllerPressedEvent");   // cpp:558
+    CGS_ASSERT_AT(lpControllerPressedEvent, "lpControllerPressedEvent", CGS_ARTIST_FILE, 558);   // cpp:558
 
     switch (meOfflineRivalShutdownState)
     {

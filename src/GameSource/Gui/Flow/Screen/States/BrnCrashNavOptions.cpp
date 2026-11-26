@@ -393,7 +393,7 @@ namespace BrnGui
     // tab expects and ask the view to play the movie. Returns true once declared.
     bool CrashNavOptions::UpdateLoading()
     {
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:347
+        CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 347);   // cpp:347
 
         if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
@@ -412,7 +412,7 @@ namespace BrnGui
     // build the four rows. This is the first frame the tab can be read or driven.
     bool CrashNavOptions::UpdateWFInit()
     {
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:385
+        CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 385);   // cpp:385
 
         if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
@@ -698,8 +698,8 @@ namespace BrnGui
     // The inverse: republish the PROFILE's volumes, undoing an abandoned scrub.
     void CrashNavOptions::RestoreSoundSettings()
     {
-        CGS_ASSERT((mpStateInterface != 0) && (mpGuiCache != 0),
-                   "( mpStateInterface ) && ( mpGuiCache )");   // cpp:886
+        CGS_ASSERT_AT((mpStateInterface != 0) && (mpGuiCache != 0),
+                   "( mpStateInterface ) && ( mpGuiCache )", CGS_ARTIST_FILE, 886);   // cpp:886
 
         OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
 
@@ -771,7 +771,7 @@ namespace BrnGui
             break;
 
         default:
-            CGS_ASSERT(false, "lpcLabel");   // cpp:999
+            CGS_ASSERT_AT(false, "lpcLabel", CGS_ARTIST_FILE, 999);   // cpp:999
             break;
         }
 

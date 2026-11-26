@@ -269,7 +269,7 @@ namespace BrnGui
                 break;
 
             case KI_EVENT_NETWORK_DISCONNECTED:
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 199);
                 // A null event still latches (0).
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
                 SendStateEvent("DISCONNECT");
@@ -356,7 +356,7 @@ namespace BrnGui
         const GuiCachePayload* lpPayload = reinterpret_cast<const GuiCachePayload*>(lpEvent);
 
         // Streamed on the console; non-fatal (the adoption below runs either way).
-        CGS_ASSERT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update");
+        CGS_ASSERT_AT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update", CGS_ARTIST_FILE, 655);
 
         if (mpGuiCache != 0)
         {
@@ -399,8 +399,8 @@ namespace BrnGui
     void OnlineQuickMatch::HandleSearchResultsEvent(const GuiEventNetworkCustomMatchResults* lpSearchResults)
     {
         CGS_ASSERT(lpSearchResults != 0, "Invalid event in HandleSearchResultsEvent");
-        CGS_ASSERT(lpSearchResults->miNumGames == 0,
-                   "Should only get this in quickmatch if the search failed!");
+        CGS_ASSERT_AT(lpSearchResults->miNumGames == 0,
+                   "Should only get this in quickmatch if the search failed!", CGS_ARTIST_FILE, 512);
 
         if (mpGuiCache->IsOnline())
         {
@@ -504,8 +504,8 @@ namespace BrnGui
             break;
 
         case KI_ACTION_GUI_SELECT:
-            CGS_ASSERT(mMessageButtons.GetHighlightedIndex() == KI_MESSAGE_BUTTON_AFFIRMATIVE,
-                       "mMessageButtons.GetHighlightedIndex() == E_OK_BUTTON_OK");
+            CGS_ASSERT_AT(mMessageButtons.GetHighlightedIndex() == KI_MESSAGE_BUTTON_AFFIRMATIVE,
+                       "mMessageButtons.GetHighlightedIndex() == E_OK_BUTTON_OK", CGS_ARTIST_FILE, 440);
             // fall through
 
         case KI_ACTION_GUI_CANCEL:
