@@ -13,6 +13,9 @@
 // Both methods are STATIC: their leading register is the data they operate on
 // (MakeHash's r3 is the char*, Store's r3 is the hash), never a `this`. FLAG.
 
+// ARTIST asserts name this file by its relative include path (0x820AD594).
+#define CGS_COMMON_CPP_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsCommon.cpp"
+
 namespace CgsSound
 {
 namespace Playback
@@ -147,47 +150,32 @@ void Name::HashTable::Store(uintptr_t luHash, const char* lkpacName)
 // =============================================================================
 uintptr_t Name::MakeHash(const char* lkpacName)
 {
-    if (!lkpacName)
+    // DWARF cpp:217..; the locals lHash (cpp:223) and lpkcC (cpp:224) live in the inner block,
+    // and ARTIST 0x82689A50 shares one `return 0` for the null and empty strings. The
+    // characters are signed (extsb) and added to the running hash (add r10,r10,r31).
+    if (lkpacName && *lkpacName)
     {
-        return 0;
+        uintptr_t lHash = KU_HASH_SEED;
+        const char* lpkcC = lkpacName;
+        while (*lpkcC)
+        {
+            lHash = ((*lpkcC + lHash) * KU_HASH_MULTIPLIER) ^ KU_HASH_XOR;
+            ++lpkcC;
+        }
+
+        // Force the hash odd (low bit set) so it can never collide with a reserved /
+        // null ident. X360: xoris 0x8000 ; xori 1  == ^ 0x80000001.
+        if ((lHash & 1) == 0)
+        {
+            lHash ^= KU_HASH_FORCE_ODD;
+        }
+
+        CGS_ASSERT_AT((lHash & 1) != 0, "lHash & 1", CGS_COMMON_CPP_FILE, 244);
+
+        HashTable::Store(lHash, lkpacName);
+        return lHash;
     }
-
-    // First char as a SIGNED char (X360 extsb). FLAG: signed -- contrast with
-    // Store's unsigned strcmp.
-    s32 liChar = static_cast<s8>(*lkpacName);
-    if (liChar == 0)
-    {
-        return 0;
-    }
-
-    // CRITICAL: compute the rolling hash in a 32-bit local so the multiply (X360
-    // mullw = low 32 bits) and xor stay 32-bit. uintptr_t is 64-bit on the PC
-    // target -- doing the math in uintptr_t would change the result. The 32-bit
-    // value is widened to uintptr_t only on return. FLAG.
-    u32 luHash = KU_HASH_SEED;
-    const char* lpkcC = lkpacName;
-    do
-    {
-        ++lpkcC;
-        luHash = (KU_HASH_MULTIPLIER * (luHash + static_cast<u32>(liChar))) ^ KU_HASH_XOR;
-        liChar = static_cast<s8>(*lpkcC);
-    }
-    while (*lpkcC != 0);
-
-    // Force the hash odd (low bit set) so it can never collide with a reserved /
-    // null ident. X360: xoris 0x8000 ; xori 1  == ^ 0x80000001.
-    if ((luHash & 1) == 0)
-    {
-        luHash ^= KU_HASH_FORCE_ODD;
-    }
-
-    // Static-message assert (X360 baked file/line 244/0xF4; CGS_ASSERT supplies
-    // __FILE__/__LINE__ -- do NOT bake the literal line). FLAG.
-    CGS_ASSERT((luHash & 1) != 0, "lHash & 1");
-
-    HashTable::Store(luHash, lkpacName);
-
-    return static_cast<uintptr_t>(luHash);
+    return 0;
 }
 
 // =============================================================================
@@ -218,7 +206,7 @@ CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lrStream, const Name& l
     lrStream << reinterpret_cast<void*>(lkrName.GetValue());
     const char* lpcName = lkrName.GetCString();
     lrStream << " [";
-    lrStream << (lpcName ? lpcName : "<NULLSTRING>");
+    lrStream << lpcName;   // operator<<(const char*) supplies <NULLSTRING> (ARTIST 0x82691474)
     lrStream << "]";
     return lrStream;
 }

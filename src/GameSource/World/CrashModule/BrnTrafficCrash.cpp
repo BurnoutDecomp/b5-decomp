@@ -15,12 +15,7 @@ namespace BrnWorld
         muVehicleIndex = luVehicleIndex;
         CGS_ASSERT_AT(luVehicleIndex < 600u, "muVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_UNITY_BRNCRASHMODULE_CPP_FILE, 216);
         mfTimeTillClearup = lfTimeTillClearup;
-        // Two stores, the clear then the unconfirmed-network bit (0x827B16AC..0x827B16C8).
-        mxFlags = 0;
-        if (lbNetwork)
-        {
-            mxFlags |= 2;
-        }
+        mxFlags = lbNetwork ? 2 : 0;
     }
 
     // Inlined ARTIST TickCrashes827C6798..827C67C4; DWARF TrafficCrash::Tick(float).

@@ -6,6 +6,8 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnEngineControl.h"
 #include "GameSource/Sound/Vehicles/Brn3dCarPosition.h"
 
+#include "rw/math/fpu/scalar_operation.h"   // rw::math::fpu::Clamp (DWARF `using namespace rw::math::fpu`)
+
 #include <algorithm>
 #include <cmath>
 
@@ -25,34 +27,36 @@ namespace Wheels
 u32 KI_WHEEL_SPEW = 0;       // dword_82FFB8C0; ARTIST bool-tag alias
 u32 KI_WHEELSIDE_SPEW = 0;   // dword_82FFB8C4; ARTIST bool-tag alias for side totals
 
-namespace
-{
-const char* const KA_WHEEL_NAME[4] =
+// DWARF BrnWheelControl.cpp:31..56: tunable namespace floats (not const). Values read from
+// ARTIST's .data, 0x82F2CD8C..0x82F2CDC4, in declaration order.
+f32 KF_DRIFT_DRIFT_RPM_SCALE_FACTOR = 0.7f;        // 0x82F2CD8C
+f32 KF_DRIFT_RPM_SHIFT_FACTOR = 0.8f;              // 0x82F2CD90
+f32 KF_DRIFT_RPM_UP_SHIFT_FACTOR = 1.2f;           // 0x82F2CD94
+f32 KF_DRIFT_RPM_POST_SHIFT_FACTOR = 1.3f;         // 0x82F2CD98
+f32 KF_DRIFT_TIME_BETWEEN_SHIFTS = 3.0f;           // 0x82F2CD9C
+f32 KF_DRIFT_SHIFT_RISE_FROM_RPM = 3000.0f;        // 0x82F2CDA0
+f32 KF_DRIFT_UP_SHIFT_TARGET_RPM_OFFSET = 1000.0f; // 0x82F2CDA4
+f32 KF_PEEL_RPM_SCALE_FACTOR = 0.7f;               // 0x82F2CDA8
+f32 KF_PEEL_RPM_MULTIPLIER = 5.0f;                 // 0x82F2CDAC
+f32 KF_PEEL_SMOOTHING = 0.4f;                      // 0x82F2CDB0
+f32 KF_IN_AIR_RPM_BOOST = 3000.0f;                 // 0x82F2CDB4
+f32 KF_IN_AIR_MAX_VOLUME = 1.4f;                   // 0x82F2CDB8
+f32 KF_IN_AIR_ASCENDING_TIME = 150.0f;             // 0x82F2CDBC
+f32 KF_IN_AIR_DESCENDING_TIME = 3500.0f;           // 0x82F2CDC0
+f32 KF_IN_AIR_THROTTLE_TRANSITION = 100.0f;        // 0x82F2CDC4
+
+// DWARF cpp:62 / :69 (`const char*[4]`, `const char*[2]`); ARTIST 0x82F2CDC8 / 0x82F2CDD8.
+const char* KAPC_WHEEL_NAMES[4] =
 {
     "FrontLeft", "FrontRight", "RearLeft", "RearRight",
-}; // ARTIST off_82F2CDC8; confirmed with tools/re/x360rd.py
-const char* const KA_WHEEL_SIDE_NAME[2] = { "LeftSide", "RightSide" }; // off_82F2CDD8
+};
+const char* KAPC_SIDE_NAMES[2] = { "LeftSide", "RightSide" };
 
-const f32 KF_DRIFT_DRIFT_RPM_SCALE_FACTOR = 0.7f;
-const f32 KF_DRIFT_RPM_SHIFT_FACTOR = 0.8f;
-const f32 KF_DRIFT_RPM_UP_SHIFT_FACTOR = 1.2f;
-const f32 KF_DRIFT_RPM_POST_SHIFT_FACTOR = 1.3f;
-const f32 KF_DRIFT_TIME_BETWEEN_SHIFTS = 3.0f;
-const f32 KF_DRIFT_SHIFT_RISE_FROM_RPM = 3000.0f;
-const f32 KF_DRIFT_UP_SHIFT_TARGET_RPM_OFFSET = 1000.0f;
-
-const f32 KF_IN_AIR_RPM_BOOST = 3000.0f;
-const f32 KF_IN_AIR_MAX_VOLUME = 1.4f;
-const f32 KF_IN_AIR_ASCENDING_TIME = 150.0f;
-const f32 KF_IN_AIR_DESCENDING_TIME = 3500.0f;
-const f32 KF_IN_AIR_THROTTLE_TRANSITION = 100.0f;
-
+namespace
+{
 const s32 KAE_FLIPPED_WHEELS_LOOKUP[4] = { 1, 0, 3, 2 };
 
-f32 Clamp(f32 afValue, f32 afMinimum, f32 afMaximum)
-{
-    return (std::max)(afMinimum, (std::min)(afMaximum, afValue));
-}
+using rw::math::fpu::Clamp;
 
 f32 Approach(f32 afCurrent, f32 afTarget, f32 afRise, f32 afFall)
 {
@@ -311,9 +315,9 @@ void WheelControl::UpdateSkidValues(f32)
             if (KI_WHEEL_SPEW != 0)
             {
                 CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
-                lrLog << "Lat(" << KA_WHEEL_NAME[liWheelSlot] << "):" << lfLateral << "\t";
-                lrLog << "Brake(" << KA_WHEEL_NAME[liWheelSlot] << "):" << lfWheelBrake << "\t";
-                lrLog << "Peel(" << KA_WHEEL_NAME[liWheelSlot] << "):" << lfWheelPeel << "\t";
+                lrLog << "Lat(" << KAPC_WHEEL_NAMES[liWheelSlot] << "):" << lfLateral << "\t";
+                lrLog << "Brake(" << KAPC_WHEEL_NAMES[liWheelSlot] << "):" << lfWheelBrake << "\t";
+                lrLog << "Peel(" << KAPC_WHEEL_NAMES[liWheelSlot] << "):" << lfWheelPeel << "\t";
             }
         }
 
@@ -333,14 +337,14 @@ void WheelControl::UpdateSkidValues(f32)
         if (KI_WHEELSIDE_SPEW != 0)
         {
             CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
-            lrLog << "SideLat(" << KA_WHEEL_SIDE_NAME[liSide] << "):" << lfSideLateral << "\t";
-            lrLog << "SideBrake(" << KA_WHEEL_SIDE_NAME[liSide] << "):" << lfSideBrake << "\t";
-            lrLog << "SidePeel(" << KA_WHEEL_SIDE_NAME[liSide] << "):" << lfSidePeel << "\t";
-            lrLog << "SideLatNorm(" << KA_WHEEL_SIDE_NAME[liSide] << "):"
+            lrLog << "SideLat(" << KAPC_SIDE_NAMES[liSide] << "):" << lfSideLateral << "\t";
+            lrLog << "SideBrake(" << KAPC_SIDE_NAMES[liSide] << "):" << lfSideBrake << "\t";
+            lrLog << "SidePeel(" << KAPC_SIDE_NAMES[liSide] << "):" << lfSidePeel << "\t";
+            lrLog << "SideLatNorm(" << KAPC_SIDE_NAMES[liSide] << "):"
                   << lrSide.mfLateralNormalized << "\t";
-            lrLog << "SideBrakeNorm(" << KA_WHEEL_SIDE_NAME[liSide] << "):"
+            lrLog << "SideBrakeNorm(" << KAPC_SIDE_NAMES[liSide] << "):"
                   << lrSide.mfBrakeNormalized << "\t";
-            lrLog << "SidePeelNorm(" << KA_WHEEL_SIDE_NAME[liSide] << "):"
+            lrLog << "SidePeelNorm(" << KAPC_SIDE_NAMES[liSide] << "):"
                   << lrSide.mfPeelNormalized << "\t";
         }
         SetMixerInputValue(liSide, liGrounded == 0 ? 0x7FFF : 0);
@@ -354,9 +358,12 @@ void WheelControl::UpdateSkidValues(f32)
 
 void WheelControl::UpdateDriftingRPM()
 {
+    // DWARF cpp:193..; locals lfOriginalPhysicsRPM (cpp:196) and lfPhysicRPM (cpp:197). The
+    // shift timer runs on the owning state's delta time (ARTIST 0x826B7414: mpState+0x50).
     const Engines::PhysicsControl::PhysicsData& lrPhysics = mpPhysicsControl->GetPhysicsData();
-    mfDriftingShiftOccured -= mfDeltaTime;
-    const f32 lfPhysicsRPM = lrPhysics.mNormalizedRpm.GetCurrent();
+    mfDriftingShiftOccured -= mpState->GetDeltaTime();
+    const f32 lfOriginalPhysicsRPM = lrPhysics.mNormalizedRpm.GetCurrent();
+    f32 lfPhysicRPM = lfOriginalPhysicsRPM;
     mfDriftingRPMFactor = 1.0f -
         (1.0f - KF_DRIFT_DRIFT_RPM_SCALE_FACTOR) * lrPhysics.mDrifting.GetCurrent();
     if (mbPerformedDriftShift)
@@ -364,11 +371,10 @@ void WheelControl::UpdateDriftingRPM()
 
     if (lrPhysics.mGear.GetCurrent() >= 4)
     {
+        lfPhysicRPM = mfDriftingRPMFactor * lfOriginalPhysicsRPM;
         if (mfDriftingRPMFactor < KF_DRIFT_RPM_SHIFT_FACTOR)
         {
-            const bool lbShiftActive =
-                mpShiftControl->GetShiftingState() != Engines::ShiftControl::E_SHFT_NONE;
-            if (!lbShiftActive && mfDriftingShiftOccured < 0.0f)
+            if (!mpShiftControl->IsActive() && mfDriftingShiftOccured < 0.0f)
             {
                 mbIsDriftUpShift = false;
                 mpShiftControl->BeginDownShift(this);
@@ -395,7 +401,7 @@ void WheelControl::UpdateDriftingRPM()
             mpShiftControl->BeginUpShift(this);
         }
     }
-    mfRPMDueToDrift = lfPhysicsRPM * mfDriftingRPMFactor - lfPhysicsRPM;
+    mfRPMDueToDrift = lfPhysicRPM - lfOriginalPhysicsRPM;
 }
 
 void WheelControl::UpdatePeelRPM(f32)
@@ -515,10 +521,11 @@ f32 WheelControl::GetStartRPM()
 
 f32 WheelControl::GetTargetRPM()
 {
-    f32 lfTarget = Clamp(mpEngineControl->GetTargetRPM(), 1000.0f, 10000.0f);
+    // DWARF cpp:975 local lfTargetRPM; rw::math::fpu::Clamp (fsel pair, ARTIST 0x826B86F0).
+    f32 lfTargetRPM = Clamp(mpEngineControl->GetTargetRPM(), 1000.0f, 10000.0f);
     if (mbIsDriftUpShift && mpPhysicsControl->GetPhysicsData().mGear.GetCurrent() == 5)
-        lfTarget -= KF_DRIFT_UP_SHIFT_TARGET_RPM_OFFSET;
-    return lfTarget;
+        lfTargetRPM -= KF_DRIFT_UP_SHIFT_TARGET_RPM_OFFSET;
+    return lfTargetRPM;
 }
 
 f32 WheelControl::GetRiseFromRPM()

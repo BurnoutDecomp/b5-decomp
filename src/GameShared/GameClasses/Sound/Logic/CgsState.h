@@ -140,6 +140,10 @@ struct State : public CgsSound::MemBase
     // @0x826BADA0 via its inlined GetSoundEntity()/IsAttached() assert).
     bool IsAttached() const { return mbIsAttached; }
 
+    // DWARF CgsState.h:234 (header-inline; e.g. WheelControl::UpdateDriftingRPM 0x826B7428
+    // reads mpState->mfDeltaTime, +0x50).
+    f32 GetDeltaTime() { return mfDeltaTime; }
+
     static ClassTypeInfo<State>* GetRegisteredTypeInfo(u32 auIndex);
 
     s32 GetInstanceID() const { return miInstNum; }

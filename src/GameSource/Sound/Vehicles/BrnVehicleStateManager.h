@@ -3,6 +3,9 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
+#define BRN_VEHICLESTATEMANAGER_H_FILE "..\\..\\..\\GameSource\\Sound/Vehicles/BrnVehicleStateManager.h"
 
 namespace BrnResource { struct VehicleListEntry; }
 
@@ -47,11 +50,16 @@ public:
         return (liState == 1 && meMapState == 2) || meMapState == liState;
     }
 
-// BrnVehicleStateManager.h:143 (assert site). Map an active-race-car index to its
-// AI engine-voice assignment via the static lookup table. Asserts the index is in
-// [0, E_ACTIVE_RACE_CAR_INDEX_COUNT). Returns the assigned voice (a u8 from the
-// table). @ 0x82682050.
-    static u8 GetAIEngineAssignment( u32 luVehicleIndex );
+    // DWARF BrnVehicleStateManager.h:141: static, int32_t index, defined in the header
+    // (ARTIST's copy 0x82682050 asserts on h:143 with the header's relative path and
+    // compares the index signed on both sides).
+    static u8 GetAIEngineAssignment(s32 liVehicleIndex)
+    {
+        CGS_ASSERT_AT(liVehicleIndex >= 0 && liVehicleIndex < KI_ACTIVE_RACE_CAR_COUNT,
+                      "liVehicleIndex >= 0 && liVehicleIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                      BRN_VEHICLESTATEMANAGER_H_FILE, 143);
+        return msaAIEngineAssignement[liVehicleIndex];
+    }
     static bool AddEntry(CgsID lAssetId,
                          const BrnResource::VehicleListEntry* lpVehicleEntry,
                          u64 luUserId, bool lbIsPlayer);
@@ -72,6 +80,11 @@ public:
     void OnAssetLoaded(CgsID lAssetId, u32 luUserId, bool lbIsPlayer);
     void OnAssetUnloaded(CgsID lAssetId, u32 luUserId);
     void AddRegistry(const char* lpcEngineName, bool lbUseFilePath); // @ 0x826CA070
+
+protected:
+    // DWARF BrnVehicleStateManager.h:121 / cpp:48 (protected static, spelled as in the
+    // original); ARTIST .bss 0x82FFB838.
+    static u8 msaAIEngineAssignement[KI_ACTIVE_RACE_CAR_COUNT];
 
 private:
     static u8 GenerateAIEngineAssignment(const BrnResource::VehicleListEntry* lpVehicleEntry,

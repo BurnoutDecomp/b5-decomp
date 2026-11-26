@@ -1132,14 +1132,9 @@ namespace PropEntityIO
             return &mRaceCarCrashCompleteEventQueue;
         }
 
-        // :513, header-inline: neither ARTIST nor the PS3 build has an out-of-line copy, and
-        // WorldModule::BridgeCrashModuleToPropModule_PostScene inlines it as `addi r3, this, 8`
-        // + bl EventQueue<RaceCarCrashCompleteEvent,10>::Append (0x827AAD98/9C). It appends, no
-        // Clear(): PropEntityModule::PostSceneUpdate drains the queue.
-        void AppendRaceCarCrashQueue(const RaceCarCrashCompleteEventQueue* lpQueue)
-        {
-            mRaceCarCrashCompleteEventQueue.Append(*lpQueue);
-        }
+        // :513. Bodied in BrnPropEntityModuleIO_InputBuffer_PostScene.cpp; its caller is
+        // WorldModule::BridgeCrashModuleToPropModule_PostScene (WorldBridgePropModule.cpp).
+        void AppendRaceCarCrashQueue(const RaceCarCrashCompleteEventQueue* lpQueue);
 
         static void _AssertLayout();
 

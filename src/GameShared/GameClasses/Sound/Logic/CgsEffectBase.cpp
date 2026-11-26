@@ -66,11 +66,6 @@ bool EffectBase::Prepare(State* apState)
     return true;                                                // li r3, 1
 }
 
-s32 EffectBase::GetInstanceId() const
-{
-    return mpState ? mpState->miInstNum : -1;
-}
-
 // ---------------------------------------------------------------------------
 // EffectBase::GetMixerOutputValue(slot, preset)  @ 0x82680720
 //   if (!mpDynamicMixIo) return 0.0f;

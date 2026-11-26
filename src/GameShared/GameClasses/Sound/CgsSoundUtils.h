@@ -262,15 +262,19 @@ struct PathLine
 // ctor's `stb 1` @ +0x18).
 struct InterpolateLine
 {
+    // DWARF CgsSoundUtils.h:198. Every ARTIST copy stores the curve type and the completed flag
+    // apart from the floats, and the floats as value, elapsed, length, finish, start
+    // (EngineControl::EngineControl 0x826B2B38.., WheelControl::WheelControl 0x826CFDB4..);
+    // the XDK compiler keeps independent stores in statement order.
     InterpolateLine()
-        : mfElapsedTime(0.0f)
-        , mfLength(0.0f)
-        , mfStart(0.0f)
-        , mfFinish(0.0f)
-        , meCurveTypes(Curve::E_LINEAR)
-        , mfCurrentValue(0.0f)
-        , mbComplete(true)          // X360 default ctor: stb 1 @ +0x18
     {
+        meCurveTypes = Curve::E_LINEAR;
+        mfCurrentValue = 0.0f;
+        mbComplete = true;
+        mfElapsedTime = 0.0f;
+        mfLength = 0.0f;
+        mfFinish = 0.0f;
+        mfStart = 0.0f;
     }
 
     void Initialize(f32 lfStart, f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve);

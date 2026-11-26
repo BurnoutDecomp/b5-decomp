@@ -37,9 +37,11 @@ struct ShiftControl : public BrnSound::Logic::BrnEffectControl
         E_SHIFT_LFO_ON = 1,
     };
 
+    // DWARF BrnShiftControl.h:153: three pure virtuals and no destructor; ARTIST's vtable
+    // 0x820AC2D8 is {_purecall x3}, so GetTargetRPM is slot 1 (WheelControl::GetTargetRPM
+    // 0x826B86D0 `lwz r11,4(r11)`).
     struct IShiftingActivator
     {
-        virtual ~IShiftingActivator() {}
         virtual f32 GetStartRPM() = 0;
         virtual f32 GetTargetRPM() = 0;
         virtual f32 GetRiseFromRPM() = 0;
@@ -61,9 +63,12 @@ struct ShiftControl : public BrnSound::Logic::BrnEffectControl
 
     static CgsSound::Logic::EffectControl* CreateObject(u32 luType);
 
+    // DWARF BrnShiftControl.h:329. Every ARTIST copy tests E_SHFT_UP_LFO before
+    // E_SHFT_NONE and materialises the bool (ClutchControl::ShouldBeginIdleClutch 0x82699DA0,
+    // WheelControl::UpdateDriftingRPM 0x826B74A0).
     bool IsActive() const
     {
-        return meShiftState != E_SHFT_NONE;
+        return meShiftState == E_SHFT_UP_LFO || meShiftState != E_SHFT_NONE;
     }
     bool IsUpshifting() const
     {

@@ -34,7 +34,6 @@ namespace {
 // from this getter, and are modelled as zero-initialised storage (the honest
 // default state the read observes before any assignment write). One byte per
 // active race-car slot.
-static u8 gaAIEngineAssignment[VehicleStateManager::KI_ACTIVE_RACE_CAR_COUNT] = { 0 };
 static const BrnResource::VehicleListEntry*
     gapLoadedVehicleEntries[VehicleStateManager::KI_ACTIVE_RACE_CAR_COUNT] = { 0 };
 static CgsID gaDesiredAssetIds[VehicleStateManager::KI_ACTIVE_RACE_CAR_COUNT] = { 0 };
@@ -48,29 +47,10 @@ static u32 guAddedRegistryCount = 0;
 static u64 gauAddedRegistries[128] = { 0 };
 }
 
-// ---------------------------------------------------------------------------
-// GetAIEngineAssignment  @ 0x82682050
-//
-//   if ( !(liVehicleIndex >= 0 && liVehicleIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) )
-//       assert("liVehicleIndex >= 0 && liVehicleIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-//              BrnVehicleStateManager.h:143)               ; non-gating tripwire
-//   return gaAIEngineAssignment[liVehicleIndex]            ; lbzx r3, byte_82FFB838[idx]
-//
-// Store-for-store with the X360: the bounds check is the signed pair
-// (cmpwi r31,0 ; blt) and (cmpwi r31,8 ; blt ok), i.e. 0 <= index < 8; the read is
-// a single zero-extended byte load (lbzx). The Hex-Rays `unsigned int a1` is the
-// register width; the asm compares it SIGNED for the >=0 half of the assert, so
-// the index is conceptually a signed in-range value -- the assert text spells out
-// both halves.
-// ---------------------------------------------------------------------------
-u8 VehicleStateManager::GetAIEngineAssignment( u32 luVehicleIndex )
-{
-    CGS_ASSERT( static_cast<s32>(luVehicleIndex) >= 0
-                && luVehicleIndex < static_cast<u32>(KI_ACTIVE_RACE_CAR_COUNT),
-                "liVehicleIndex >= 0 && liVehicleIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+// DWARF BrnVehicleStateManager.cpp:48; ARTIST .bss 0x82FFB838.
+u8 VehicleStateManager::msaAIEngineAssignement[VehicleStateManager::KI_ACTIVE_RACE_CAR_COUNT] = { 0 };
 
-    return gaAIEngineAssignment[luVehicleIndex];
-}
+// GetAIEngineAssignment (0x82682050) is defined in the header (DWARF h:141).
 
 void VehicleStateManager::AddRegistry(const char* lpcEngineName, bool lbUseFilePath)
 {
@@ -157,7 +137,7 @@ u8 VehicleStateManager::GenerateAIEngineAssignment(
         bool lbInUse = false;
         for (u32 luCar = 0; luCar < KI_ACTIVE_RACE_CAR_COUNT; ++luCar)
         {
-            if (luCar != luVehicleIndex && gaAIEngineAssignment[luCar] == luCandidate)
+            if (luCar != luVehicleIndex && msaAIEngineAssignement[luCar] == luCandidate)
             {
                 lbInUse = true;
                 break;
@@ -190,9 +170,9 @@ bool VehicleStateManager::AddEntry(CgsID lAssetId,
         guDesiredPlayerMask |= static_cast<u8>(1u << luIndex);
     else
         guDesiredPlayerMask &= static_cast<u8>(~(1u << luIndex));
-    gaAIEngineAssignment[luIndex] = GenerateAIEngineAssignment(lpVehicleEntry, luIndex);
+    msaAIEngineAssignement[luIndex] = GenerateAIEngineAssignment(lpVehicleEntry, luIndex);
     if (lbIsPlayer)
-        gaAIEngineAssignment[luIndex] = 0;
+        msaAIEngineAssignement[luIndex] = 0;
     return true;
 }
 
@@ -211,7 +191,7 @@ bool VehicleStateManager::RemoveEntry(CgsID lAssetId, u64 luUserId)
     gaDesiredAssetIds[luIndex] = 0;
     guAddedMask &= static_cast<u8>(~(1u << luIndex));
     guDesiredPlayerMask &= static_cast<u8>(~(1u << luIndex));
-    gaAIEngineAssignment[luIndex] = 0;
+    msaAIEngineAssignement[luIndex] = 0;
     return true;
 }
 

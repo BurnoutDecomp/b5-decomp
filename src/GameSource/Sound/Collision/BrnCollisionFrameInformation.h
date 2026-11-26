@@ -78,6 +78,15 @@ struct FrameInformation
     // from the per-frame crash-input flag. @ 0x826ADD18.
     void UpdateFatalityFlag(bool lbCrashInput);
 
+    // BrnCollisionFrameInformation.h:58 / :61 (DWARF, header-inline; no ARTIST copy).
+    // MixerControl::UpdateParams 0x826BAFA8 tests the impact time against False (=1) and
+    // turns the bool into the mixer value; the fatality flag is tested against off.
+    bool IsCrashing() const { return meFatality.GetCurrent() != E_FATAL_OFF; }
+    bool IsImpactTime() const
+    {
+        return meImpactTime.GetCurrent() != AttribSys::Enums::eImpactTime::False;
+    }
+
     // BrnCollisionFrameInformation.h:67 (DWARF). True iff the frame is paused (any
     // pause source active). @ 0x826958E8.
     bool IsPaused() const;

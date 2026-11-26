@@ -84,9 +84,8 @@ EngineControl::EngineControl()
     , mfRedlingRPMOffset(0.0f)
     , mfRedlingVolumeScale(0.0f)
     , mfRedliningTime(0.0f)
-    , meDistortionState(E_DISTORTION_NONE)
-    , mfRPMRamping(0.0f)
 {
+    // ARTIST 0x826B2A98 leaves meDistortionState and mfRPMRamping (+0xC4/+0xC8) for Attach.
 }
 
 f32 EngineControl::GetStartRPM()
@@ -248,11 +247,9 @@ bool EngineControl::ShouldTurnOnClutch(f32 /*afTargetRpm*/) const
 
 f32 EngineControl::GetTargetRPM()
 {
-    const f32 lfPhysicsRpm = mpPhysicsControl
-        ? mpPhysicsControl->GetPhysicsData().mNormalizedRpm.GetCurrent()
-        : 0.0f;
-    const f32 lfWheelRpm = mpWheelControl ? mpWheelControl->GetAudioRPM() : 0.0f;
-    return lfPhysicsRpm + lfWheelRpm;
+    // ARTIST 0x82699568: no null tests (PC-era guards removed).
+    return mpWheelControl->GetAudioRPM() +
+           mpPhysicsControl->GetPhysicsData().mNormalizedRpm.GetCurrent();
 }
 
 void EngineControl::UpdateRPM(f32 afTimeStep)
@@ -354,8 +351,11 @@ void EngineControl::UpdateVolume(f32 /*afTimeStep*/)
 
 void EngineControl::UpdateEnginePitch(f32 /*afTimeStep*/)
 {
-    SetMixerInputValue(0,
-        mpPhysicsControl->GetPhysicsData().IsBoosting.GetCurrent() ? 0x7FFF : 0);
+    // ARTIST 0x826992B8: two tail calls, one per branch.
+    if (mpPhysicsControl->GetPhysicsData().IsBoosting.GetCurrent())
+        SetMixerInputValue(0, 0x7FFF);
+    else
+        SetMixerInputValue(0, 0);
 }
 
 void EngineControl::UpdateDistortion(f32 afTimeStep)

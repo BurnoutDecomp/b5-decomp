@@ -299,4 +299,22 @@ struct EffectObject : public EffectBase
 } // namespace Logic
 } // namespace CgsSound
 
+#include "GameShared/GameClasses/Sound/Logic/CgsState.h"
+
+namespace CgsSound
+{
+namespace Logic
+{
+
+// DWARF CgsEffectBase.h:953, defined in the header below the classes. ARTIST reads the
+// state's instance number directly, with no null test (WheelControl::UpdateDriftingRPM
+// 0x826B7524: lwz 0xC(this); lwz 4).
+inline s32 EffectBase::GetInstanceId() const
+{
+    return mpState->GetInstanceID();
+}
+
+} // namespace Logic
+} // namespace CgsSound
+
 #endif // CGS_SOUND_LOGIC_CGSEFFECTBASE_H

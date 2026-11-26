@@ -413,7 +413,8 @@ void ClutchControl::UpdateClutchState(f32 afTimeStep)
 
 f32 ClutchControl::GetStartRPM()
 {
-    return mpEngineControl ? mpEngineControl->GetAudioRPM().GetCurrent() : 1000.0f;
+    // ARTIST 0x82699F68 reads the engine's audio RPM with no null test.
+    return mpEngineControl->GetAudioRPM().GetCurrent();
 }
 
 f32 ClutchControl::GetTargetRPM()

@@ -10,6 +10,9 @@
 #include "SharedClasses/DataLists/VehicleListEntry.h"
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 
+// ARTIST compiled this file through the GameSource unity file; its asserts carry this path.
+#define BRN_CARSTEREOEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Environment/BrnCarStereoEffect.cpp"
+
 // =============================================================================
 // BrnSound::Vehicles::Environment::CarStereoEffect -- out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Recon'd function set:
@@ -104,8 +107,8 @@ bool CarStereoEffect::Attach()
 
     const BrnSound::Vehicles::VehicleState* lpState =
         static_cast<const BrnSound::Vehicles::VehicleState*>(GetStateBase());
-    CGS_ASSERT(lpState->GetAttachInfo().mpVehicleAsset != 0,
-               "lpState->GetAttachInfo().mpVehicleAsset");
+    CGS_ASSERT_AT(lpState->GetAttachInfo().mpVehicleAsset != 0,
+                  "lpState->GetAttachInfo().mpVehicleAsset", BRN_CARSTEREOEFFECT_CPP_FILE, 87);
 
     if (siNumStereos >= KI_MAX_CAR_STEREOS_PLAYING || !ShouldPlayMusic() ||
         static_cast<const BrnResource::VehicleListEntry*>(
@@ -130,8 +133,8 @@ bool CarStereoEffect::Attach()
         CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
     lParams.mContentSpecName = static_cast<const BrnResource::VehicleListEntry*>(
         lpState->GetAttachInfo().mpVehicleAsset)->muiMusicLoopContentSpec;
-    CGS_ASSERT(lParams.mContentSpecName != 0x7FFFFFFF,
-               "lParams.mContentSpecName != 0x7FFFFFFF");
+    CGS_ASSERT_AT(lParams.mContentSpecName != 0x7FFFFFFF,
+                  "lParams.mContentSpecName != 0x7FFFFFFF", BRN_CARSTEREOEFFECT_CPP_FILE, 113);
     lParams.miSendIndex = 0;
     lParams.mSubMixVoiceID = 1;
     lParams.mSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
@@ -238,9 +241,13 @@ bool CarStereoEffect::ShouldPlayMusic()
 {
     const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface* lpGameModeInterface =
         mpLogicModule->GetBrnInputStructure()->GetGameModeInterface();
-    CGS_ASSERT(lpGameModeInterface != 0, "lpGameModeInterface");
-    return lpGameModeInterface->miCurrentGameModeType ==
-           BrnGameState::GameStateModuleIO::E_MODE_NONE;
+    CGS_ASSERT_AT(lpGameModeInterface != 0, "lpGameModeInterface", BRN_CARSTEREOEFFECT_CPP_FILE, 267);
+
+    // DWARF local lbResult (cpp:269); ARTIST 0x8269BF20 sets it on a branch.
+    bool lbResult = false;
+    if (lpGameModeInterface->miCurrentGameModeType == BrnGameState::GameStateModuleIO::E_MODE_NONE)
+        lbResult = true;
+    return lbResult;
 }
 
 // ---------------------------------------------------------------------------

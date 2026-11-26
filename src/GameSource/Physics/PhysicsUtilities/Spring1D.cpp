@@ -13,15 +13,17 @@ namespace BrnPhysics
     // to offsets 0/4/0xC/0x10/0x18/0x20/0x1C/0x14; f13=1.0 stored to offset 8 == mfMass).
     void Spring1D::Construct()
     {
+        // Statement order = ARTIST's store order (0x8259CE54..78; the XDK compiler keeps
+        // independent stores in order, the 1.0 store trailing its load).
         mfDesiredLength     = 0.0f;
         mfCurrentLength     = 0.0f;
         mfMass              = 1.0f;
         mfVelocity          = 0.0f;
         mfStiffness         = 0.0f;
-        mfTotalForce        = 0.0f;
         mfDampeningConstant = 0.0f;
-        mfMaxStretch        = 0.0f;
         mfMinStretch        = 0.0f;
+        mfMaxStretch        = 0.0f;
+        mfTotalForce        = 0.0f;
     }
 
     // @0x8259CE80 -- seed the spring; zero the running velocity (offset 0xC) and accumulated
