@@ -3,6 +3,9 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysCollectionKey.h"  // Attrib::StringToKey
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"    // CgsResource::NULLResourcePtr
 #include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxcolourcube.h"  // rw::graphics::postfx::ColourCube (complete)
+#include "rw/math/fpu/scalar_operation.h"                                 // rw::math::fpu::Min<float>
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/PFX/BrnPfxHookBlender.cpp"
 
 // =============================================================================
 // BrnPfxHookBlender_Fader.cpp -- BrnGui::PFXNodeFader and BrnGui::PFXHookNodeBlender.
@@ -24,54 +27,39 @@
 
 namespace BrnGui
 {
-    namespace
-    {
-        // The console compares the fade times against 0.01 (flt_82002138) with the two-sided
-        // `>= 0.0099999998 || <= -0.0099999998` idiom; spelled once.
-        inline bool IsNonZeroTime(f32 lfTime)
-        {
-            return lfTime >= 0.0099999998f || lfTime <= -0.0099999998f;
-        }
-    }
 
     // ------------------------------------------------------------------------------------
-    // PFXNodeFader::LookupColourCube @0x825042A0 (BrnPfxHookBlender.cpp:238)
-    // Walk the cube table for the matching resource id; the cube must be a loaded resource.
+    // PFXNodeFader::LookupColourCube @0x825042A0 (BrnPfxHookBlender.cpp:230; DWARF local
+    // luIndex cpp:232). The first cube whose resource id matches; it must be loaded.
     // ------------------------------------------------------------------------------------
     rw::graphics::postfx::ColourCube* PFXNodeFader::LookupColourCube(ColourCubeInfo* lpaColourCubes,
-                                                                      u32 luNumColourCubes,
-                                                                      u64 luResourceId)
+                                                                      uint32_t luCubeCount,
+                                                                      uint64_t luResourceId)
     {
-        if (luNumColourCubes == 0)
+        for (uint32_t luIndex = 0; luIndex < luCubeCount; ++luIndex)
         {
-            return 0;
-        }
-        u32 luIndex = 0;
-        while (lpaColourCubes[luIndex].muResourceId != luResourceId)
-        {
-            if (++luIndex >= luNumColourCubes)
+            if (lpaColourCubes[luIndex].muResourceId == luResourceId)
             {
-                return 0;
+                CGS_ASSERT_AT(lpaColourCubes[luIndex].mpColourCube != CgsResource::NULLResourcePtr,
+                              "lpaColourCubes[luIndex].mpColourCube != CgsResource::NULLResourcePtr",
+                              CGS_ARTIST_FILE, 238);
+                return lpaColourCubes[luIndex].mpColourCube.GetMemoryResource();
             }
         }
-        // The console's 12-byte compare against NULLResourcePtr is BaseResourcePtr::IsEqual;
-        // the assert is non-gating (it returns the cube either way).
-        CGS_ASSERT(!lpaColourCubes[luIndex].mpColourCube.IsEqual(&CgsResource::NULLResourcePtr),
-                   "lpaColourCubes[luIndex].mpColourCube != CgsResource::NULLResourcePtr");
-        return lpaColourCubes[luIndex].mpColourCube.operator->();
+        return NULL;
     }
 
     // ------------------------------------------------------------------------------------
-    // PFXNodeFader::Initialise @0x82504378 (BrnPfxHookBlender.cpp:261)
+    // PFXNodeFader::Initialise @0x82504378 (BrnPfxHookBlender.cpp:259; DWARF local lpGroup
+    // cpp:263). The group comes from the node (`lwz r30, 4(r29)`).
     // ------------------------------------------------------------------------------------
-    void PFXNodeFader::Initialise(ColourCubeInfo* lpaColourCubes, u32 luNumColourCubes,
-                                  const PFXHookNode* lpPfxNode, const PFXGroup* lpPfxGroup)
+    void PFXNodeFader::Initialise(ColourCubeInfo* lpaColourCubes, uint32_t luCubeCount, PFXHookNode* lpPfxNode)
     {
-        CGS_ASSERT(lpPfxNode != 0, "lpPfxNode");                        // :261
-        CGS_ASSERT(lpPfxGroup != 0, "PfxNode has no PfxGroup");         // :265
+        CGS_ASSERT_AT(lpPfxNode, "lpPfxNode", CGS_ARTIST_FILE, 261);
+        PFXGroup* lpGroup = lpPfxNode->mpGroup;
+        CGS_ASSERT_AT(lpGroup, "PfxNode has no PfxGroup", CGS_ARTIST_FILE, 265);
 
         mpPfxNode           = lpPfxNode;
-        mpPfxGroup          = lpPfxGroup;
         mfWeight            = 0.0f;
         meState             = E_WAITING;
         mfForcedFadeoutTime = 0.0f;
@@ -80,37 +68,37 @@ namespace BrnGui
         // Each enabled effect is built from its AttribSys asset, keyed by the group's
         // collection name (Attrib::StringToKey on the 32-char id). The console's order:
         // bloom, vignette, blur, depth of field, 2D tint, then the 3D tint lookup.
-        if (lpPfxGroup->mbUseBloom)
+        if (lpGroup->GetUseBloom())
         {
-            mBloomData.Construct(Attrib::StringToKey(lpPfxGroup->macBloomDataID));
+            mBloomData.Construct(Attrib::StringToKey(lpGroup->macBloomDataID));
         }
-        if (lpPfxGroup->mbUseVignette)
+        if (lpGroup->GetUseVignette())
         {
-            mVignetteData.Construct(Attrib::StringToKey(lpPfxGroup->macVignetteDataID));
+            mVignetteData.Construct(Attrib::StringToKey(lpGroup->macVignetteDataID));
         }
-        if (lpPfxGroup->mbUseBlur)
+        if (lpGroup->GetUseBlur())
         {
-            mBlurData.Construct(Attrib::StringToKey(lpPfxGroup->macBlurDataID));
+            mBlurData.Construct(Attrib::StringToKey(lpGroup->macBlurDataID));
         }
-        if (lpPfxGroup->mbUseDepthOfField)
+        if (lpGroup->GetUseDepthOfField())
         {
-            mDepthOfFieldData.Construct(Attrib::StringToKey(lpPfxGroup->macDepthOfFieldDataID));
+            mDepthOfFieldData.Construct(Attrib::StringToKey(lpGroup->macDepthOfFieldDataID));
         }
-        if (lpPfxGroup->mbUseTint2D)
+        if (lpGroup->GetUseTint2D())
         {
-            mTint2DData.Construct(Attrib::StringToKey(lpPfxGroup->macTint2DDataID));
+            mTint2DData.Construct(Attrib::StringToKey(lpGroup->macTint2DDataID));
         }
-        if (lpPfxGroup->mbUseTint3D)
+        if (lpGroup->GetUseTint3D())
         {
-            mTint3DData.mpColourCube = 0;
-            mTint3DData.mpColourCube =
-                LookupColourCube(lpaColourCubes, luNumColourCubes, lpPfxGroup->muTint3DResourceId);
-            CGS_ASSERT(mTint3DData.mpColourCube != 0, "mTint3DData.mpColourCube != NULL");   // :297
+            mTint3DData.Construct();
+            mTint3DData.mpColourCube = LookupColourCube(lpaColourCubes, luCubeCount, lpGroup->muTint3DResourceId);
+            CGS_ASSERT_AT(mTint3DData.mpColourCube != NULL, "mTint3DData.mpColourCube != NULL", CGS_ARTIST_FILE, 297);
         }
     }
 
     // ------------------------------------------------------------------------------------
-    // PFXNodeFader::Update @0x824F5C40 (BrnPfxHookBlender.cpp:313)
+    // PFXNodeFader::Update @0x824F5C40 (BrnPfxHookBlender.cpp:311; DWARF locals lfStartTime,
+    // lfFadeIn, lfDuration, lfFadeOut cpp:316..319, the PFXGroup Get* accessors).
     //
     // Two regimes. While no fade-out has been forced (mfForcedFadeoutTime within 0.01 of
     // zero) the node is placed by ABSOLUTE hook time against its start time and the group's
@@ -119,23 +107,60 @@ namespace BrnGui
     // the phase state machine instead, with the forced time standing in for the group's
     // fade-out (when it is positive).
     // ------------------------------------------------------------------------------------
-    void PFXNodeFader::Update(f32 lfTimeNow, f32 lfTimestep)
+    void PFXNodeFader::Update(f32 lfTime, f32 lfTimeStep)
     {
-        CGS_ASSERT(mpPfxNode != 0, "mpPfxNode");                        // :313
-        CGS_ASSERT(mpPfxGroup != 0, "PfxNode has no PfxGroup");         // :314
+        CGS_ASSERT_AT(mpPfxNode, "mpPfxNode", CGS_ARTIST_FILE, 313);
+        CGS_ASSERT_AT(mpPfxNode->mpGroup, "PfxNode has no PfxGroup", CGS_ARTIST_FILE, 314);
 
-        const f32 lfStartTime = mpPfxNode->mfStartTime;
-        const f32 lfFadeIn    = mpPfxGroup->mfFadeIn;
-        const f32 lfDuration  = mpPfxGroup->mfDuration;
-        const f32 lfFadeOut   = (mfForcedFadeoutTime > 0.01f) ? mfForcedFadeoutTime
-                                                              : mpPfxGroup->mfFadeOut;
+        // The forced fade-out is tested against the double 0.01 (ARTIST 0x824F5CD4 `lfd`
+        // 0x82072738); the near-zero tests below use the float pair 0.01f / -0.01f
+        // (0x82002138 / 0x8201FDB8) as strict compares (`bge` / `ble`).
+        f32 lfStartTime = mpPfxNode->mfStartTime;
+        f32 lfFadeIn    = mpPfxNode->mpGroup->GetFadeIn();
+        f32 lfDuration  = mpPfxNode->mpGroup->GetDuration();
+        f32 lfFadeOut   = (mfForcedFadeoutTime <= 0.01) ? mpPfxNode->mpGroup->GetFadeOut() : mfForcedFadeoutTime;
 
-        if (IsNonZeroTime(mfForcedFadeoutTime))
+        if (mfForcedFadeoutTime < 0.01f && mfForcedFadeoutTime > -0.01f)
         {
+            // No forced fade-out: place the node by the hook's absolute time.
+            if (lfTime < lfStartTime)
+            {
+                mfExpiredTime = lfTime;
+                mfWeight      = 0.0f;
+                meState       = E_WAITING;
+            }
+            else if (lfTime < lfFadeIn + lfStartTime)
+            {
+                mfExpiredTime = lfTime - lfStartTime;
+                meState       = E_FADEIN;
+                mfWeight      = mfExpiredTime / lfFadeIn;
+            }
+            else if ((lfDuration < 0.01f && lfDuration > -0.01f) || lfTime < (lfDuration + lfFadeIn) + lfStartTime)
+            {
+                mfWeight      = 1.0f;
+                meState       = E_HOLD;
+                mfExpiredTime = (lfTime - lfStartTime) - lfFadeIn;
+            }
+            else if (lfTime < ((lfFadeOut + lfDuration) + lfFadeIn) + lfStartTime)
+            {
+                meState       = E_FADEOUT;
+                mfExpiredTime = ((lfTime - lfStartTime) - lfFadeIn) - lfDuration;
+                mfWeight      = 1.0f - (mfExpiredTime / lfFadeOut);
+            }
+            else
+            {
+                mfExpiredTime = 0.0f;
+                meState       = E_FINISHED;
+                mfWeight      = 0.0f;
+            }
+        }
+        else
+        {
+            // A forced fade-out: advance through the phases by the timestep.
             switch (meState)
             {
             case E_WAITING:
-                mfExpiredTime += lfTimestep;
+                mfExpiredTime += lfTimeStep;
                 if (mfExpiredTime > lfStartTime)
                 {
                     mfExpiredTime = 0.0f;
@@ -144,8 +169,8 @@ namespace BrnGui
                 }
                 break;
             case E_FADEIN:
-                mfExpiredTime += lfTimestep;
-                mfWeight      += lfTimestep / lfFadeIn;
+                mfExpiredTime += lfTimeStep;
+                mfWeight      += lfTimeStep / lfFadeIn;
                 if (mfExpiredTime > lfFadeIn || mfWeight >= 1.0f)
                 {
                     mfWeight      = 1.0f;
@@ -154,8 +179,8 @@ namespace BrnGui
                 }
                 break;
             case E_HOLD:
-                mfExpiredTime += lfTimestep;
-                if (mfExpiredTime > lfDuration && IsNonZeroTime(lfDuration))
+                mfExpiredTime += lfTimeStep;
+                if (mfExpiredTime > lfDuration && !(lfDuration < 0.01f && lfDuration > -0.01f))
                 {
                     mfExpiredTime = 0.0f;
                     meState       = E_FADEOUT;
@@ -163,8 +188,8 @@ namespace BrnGui
                 }
                 break;
             case E_FADEOUT:
-                mfExpiredTime += lfTimestep;
-                mfWeight      -= lfTimestep / lfFadeOut;
+                mfExpiredTime += lfTimeStep;
+                mfWeight      -= lfTimeStep / lfFadeOut;
                 if (mfExpiredTime > lfFadeOut || mfWeight <= 0.0f)
                 {
                     mfExpiredTime = 0.0f;
@@ -173,54 +198,28 @@ namespace BrnGui
                 }
                 break;
             case E_FINISHED:
-                return;
+                break;
             default:
-                CGS_FAIL("Bad state in PFXNodeFader");       // :438
+                CGS_FAIL_AT("Bad state in PFXNodeFader", CGS_ARTIST_FILE, 438);
                 break;
             }
-            return;
         }
-
-        // ---- the free-running placement by absolute time --------------------------------
-        if (lfTimeNow < lfStartTime)
-        {
-            mfExpiredTime = lfTimeNow;
-            mfWeight      = 0.0f;
-            meState       = E_WAITING;
-            return;
-        }
-        if (lfTimeNow < lfFadeIn + lfStartTime)
-        {
-            mfExpiredTime = lfTimeNow - lfStartTime;
-            meState       = E_FADEIN;
-            mfWeight      = mfExpiredTime / lfFadeIn;
-            return;
-        }
-        if (!(IsNonZeroTime(lfDuration) && lfTimeNow >= (lfDuration + lfFadeIn) + lfStartTime))
-        {
-            mfWeight      = 1.0f;
-            meState       = E_HOLD;
-            mfExpiredTime = (lfTimeNow - lfStartTime) - lfFadeIn;
-            return;
-        }
-        if (lfTimeNow >= ((lfFadeOut + lfDuration) + lfFadeIn) + lfStartTime)
-        {
-            mfExpiredTime = 0.0f;
-            meState       = E_FINISHED;
-            mfWeight      = 0.0f;
-            return;
-        }
-        meState       = E_FADEOUT;
-        mfExpiredTime = ((lfTimeNow - lfStartTime) - lfFadeIn) - lfDuration;
-        mfWeight      = 1.0f - (mfExpiredTime / lfFadeOut);
     }
 
     // ------------------------------------------------------------------------------------
-    // PFXNodeFader::StartFadeOut @0x824F5F90 (BrnPfxHookBlender.cpp:486)
+    // PFXNodeFader::StartFadeOut @0x824F5F90 (BrnPfxHookBlender.cpp:456)
     // ------------------------------------------------------------------------------------
-    void PFXNodeFader::StartFadeOut(f32 lfFadeOutTime)
+    void PFXNodeFader::StartFadeOut(f32 lfFadeOutTimeOverride)
     {
-        mfForcedFadeoutTime = (lfFadeOutTime <= 0.01f) ? -1.0f : lfFadeOutTime;
+        // The double 0.01 again (ARTIST 0x824F5FA8 `lfd` 0x82072738), two stores.
+        if (lfFadeOutTimeOverride > 0.01)
+        {
+            mfForcedFadeoutTime = lfFadeOutTimeOverride;
+        }
+        else
+        {
+            mfForcedFadeoutTime = -1.0f;
+        }
         switch (meState)
         {
         case E_WAITING:
@@ -233,7 +232,7 @@ namespace BrnGui
             meState = E_FADEOUT;
             break;
         default:
-            CGS_FAIL("Bad state in node fader.");             // :486
+            CGS_FAIL_AT("Bad state in node fader.", CGS_ARTIST_FILE, 486);
             break;
         }
         mfExpiredTime = 0.0f;
@@ -243,29 +242,40 @@ namespace BrnGui
     // PFXHookNodeBlender
     // ====================================================================================
 
-    // The six accumulator resets the console inlines into Initialise @0x82504510 (+2464..+2792)
-    // and Update @0x824FB598 (the same stores at v1[616..698]).
-    void PFXHookNodeBlender::ConstructBlends()
+    // ------------------------------------------------------------------------------------
+    // PfxContainer<TintData>::Add (BrnPfxHookBlender.cpp:114) -- the 3D tint has no blend:
+    // the last enabled node wins outright. ARTIST inlines it (0x824FB95C) and keeps no copy.
+    // ------------------------------------------------------------------------------------
+    TintDataBlend* TintDataBlend::Add(const BrnEffects::TintData* lpEffectsData, f32 lfWeight)
     {
+        if (lpEffectsData != NULL)
+        {
+            mfCount  = 1.0f;
+            mfWeight = lfWeight;
+            mData    = *lpEffectsData;
+        }
+        return this;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // PFXHookNodeBlender::Initialise @0x82504510 (BrnPfxHookBlender.cpp:527; DWARF local
+    // liIndex cpp:531)
+    // ------------------------------------------------------------------------------------
+    void PFXHookNodeBlender::Initialise(const PFXHook* lpHook, ColourCubeInfo* lpaColourCubes,
+                                        uint32_t luCubeCount,
+                                        f32 lfMaximumBloomWeight, f32 lfMaximumVignetteWeight,
+                                        f32 lfMaximumBlurWeight, f32 lfMaximumDepthOfFieldWeight,
+                                        f32 lfMaximum2DTintWeight, f32 lfMaximum3DTintWeight)
+    {
+        CGS_ASSERT_AT(lpHook, "lpHook", CGS_ARTIST_FILE, 529);
+
         mBlendedBloomData.Construct();
         mBlendedVignetteData.Construct();
         mBlendedBlurData.Construct();
         mBlendedDepthOfFieldData.Construct();
         mBlendedTint2DData.Construct();
         mBlendedTint3DData.Construct();
-    }
 
-    // ------------------------------------------------------------------------------------
-    // PFXHookNodeBlender::Initialise @0x82504510 (BrnPfxHookBlender.cpp:529)
-    // ------------------------------------------------------------------------------------
-    void PFXHookNodeBlender::Initialise(const PFXHook* lpHook, const PFXHookBundle* lpBundle,
-                                        ColourCubeInfo* lpaColourCubes, u32 luNumColourCubes,
-                                        f32 lfMaximumBloomWeight, f32 lfMaximumVignetteWeight,
-                                        f32 lfMaximumBlurWeight, f32 lfMaximumDepthOfFieldWeight,
-                                        f32 lfMaximum2DTintWeight, f32 lfMaximum3DTintWeight)
-    {
-        CGS_ASSERT(lpHook != 0, "lpHook");                              // :529
-        ConstructBlends();
         mpHook                      = lpHook;
         mfMaximumBloomWeight        = lfMaximumBloomWeight;
         mfMaximumVignetteWeight     = lfMaximumVignetteWeight;
@@ -274,93 +284,79 @@ namespace BrnGui
         mfMaximum2DTintWeight       = lfMaximum2DTintWeight;
         mfMaximum3DTintWeight       = lfMaximum3DTintWeight;
         mfTime                      = 0.0f;
-        for (s32 liNode = 0; liNode < lpHook->miNodeCount; ++liNode)
+
+        for (int32_t liIndex = 0; liIndex < mpHook->miNodeCount; ++liIndex)
         {
-            const PFXHookNode* lpNode = lpBundle->GetHookNode(*lpHook, liNode);
-            maNodeStates[liNode].Initialise(lpaColourCubes, luNumColourCubes,
-                                            lpNode, lpBundle->GetNodeGroup(*lpNode));
+            maNodeStates[liIndex].Initialise(lpaColourCubes, luCubeCount, mpHook->mpaNodes[liIndex]);
         }
     }
 
     // ------------------------------------------------------------------------------------
-    // PFXHookNodeBlender::Update @0x824FB598 (BrnPfxHookBlender.h:376..491)
+    // PFXHookNodeBlender::Update @0x824FB598 (BrnPfxHookBlender.cpp:567; DWARF locals liIndex
+    // cpp:571, lMyFader cpp:583, lfWeight cpp:593). Each type folds in at
+    // rw::math::fpu::Min(node weight, the per-type maximum); the fader's payload accessor
+    // answers NULL when the group does not enable the type (the accumulators' no-op).
     // ------------------------------------------------------------------------------------
-    void PFXHookNodeBlender::Update(f32 lfTimestep)
+    void PFXHookNodeBlender::Update(f32 lfTimeStep)
     {
-        if (mpHook == 0)
+        if (mpHook != NULL)
         {
-            return;
-        }
-        ConstructBlends();
-        for (s32 liNode = 0; liNode < mpHook->miNodeCount; ++liNode)
-        {
-            PFXNodeFader& lrFader = maNodeStates[liNode];
-            lrFader.Update(mfTime, lfTimestep);
-            if (!lrFader.IsActive())
+            mBlendedBloomData.Construct();
+            mBlendedVignetteData.Construct();
+            mBlendedBlurData.Construct();
+            mBlendedDepthOfFieldData.Construct();
+            mBlendedTint2DData.Construct();
+            mBlendedTint3DData.Construct();
+
+            for (int32_t liIndex = 0; liIndex < mpHook->miNodeCount; ++liIndex)
             {
-                continue;
+                maNodeStates[liIndex].Update(mfTime, lfTimeStep);
+
+                const PFXNodeFader& lMyFader = maNodeStates[liIndex];
+                if (lMyFader.IsActive())
+                {
+                    f32 lfWeight = lMyFader.GetWeight();
+
+                    mBlendedBloomData.Add(lMyFader.GetBloom(), rw::math::fpu::Min(lfWeight, mfMaximumBloomWeight));
+                    mBlendedVignetteData.Add(lMyFader.GetVignette(), rw::math::fpu::Min(lfWeight, mfMaximumVignetteWeight));
+                    mBlendedBlurData.Add(lMyFader.GetBlur(), rw::math::fpu::Min(lfWeight, mfMaximumBlurWeight));
+                    mBlendedDepthOfFieldData.Add(lMyFader.GetDepthOfField(),
+                                                 rw::math::fpu::Min(lfWeight, mfMaximumDepthOfFieldWeight));
+                    mBlendedTint2DData.Add(lMyFader.Get2DTint(), rw::math::fpu::Min(lfWeight, mfMaximum2DTintWeight));
+                    mBlendedTint3DData.Add(lMyFader.Get3DTint(), rw::math::fpu::Min(lfWeight, mfMaximum3DTintWeight));
+                }
             }
-            // Each type folds in at min(node weight, the per-type maximum) -- the console's
-            // `fsel (w - max), max, w` -- and only when the node's group enables the type
-            // (a null source is the accumulators' own no-op).
-            const f32       lfWeight = lrFader.GetWeight();
-            const PFXGroup* lpGroup  = lrFader.GetGroup();
-            CGS_ASSERT(lpGroup != 0, "mpPfxNode");                      // .h:376 / :399 / :422 / :445 / :468 / :491
 
-            const f32 lfBloom = (lfWeight - mfMaximumBloomWeight >= 0.0f) ? mfMaximumBloomWeight : lfWeight;
-            mBlendedBloomData.Add(lpGroup->mbUseBloom ? lrFader.GetBloom() : 0, lfBloom);
-
-            const f32 lfVignette = (lfWeight - mfMaximumVignetteWeight >= 0.0f) ? mfMaximumVignetteWeight : lfWeight;
-            mBlendedVignetteData.Add(lpGroup->mbUseVignette ? lrFader.GetVignette() : 0, lfVignette);
-
-            const f32 lfBlur = (lfWeight - mfMaximumBlurWeight >= 0.0f) ? mfMaximumBlurWeight : lfWeight;
-            mBlendedBlurData.Add(lpGroup->mbUseBlur ? lrFader.GetBlur() : 0, lfBlur);
-
-            const f32 lfDepthOfField = (lfWeight - mfMaximumDepthOfFieldWeight >= 0.0f) ? mfMaximumDepthOfFieldWeight : lfWeight;
-            mBlendedDepthOfFieldData.Add(lpGroup->mbUseDepthOfField ? lrFader.GetDepthOfField() : 0, lfDepthOfField);
-
-            const f32 lf2DTint = (lfWeight - mfMaximum2DTintWeight >= 0.0f) ? mfMaximum2DTintWeight : lfWeight;
-            mBlendedTint2DData.Add(lpGroup->mbUseTint2D ? lrFader.Get2DTint() : 0, lf2DTint);
-
-            const f32 lf3DTint = (lfWeight - mfMaximum3DTintWeight >= 0.0f) ? mfMaximum3DTintWeight : lfWeight;
-            if (lpGroup->mbUseTint3D)
-            {
-                // No Add for the 3D tint: the console stores the three fields outright
-                // (+2784 cube, +2788 weight, +2792 count = 1.0), the last node winning.
-                mBlendedTint3DData.mfCount            = 1.0f;
-                mBlendedTint3DData.mfWeight           = lf3DTint;
-                mBlendedTint3DData.mData.mpColourCube = lrFader.Get3DTint()->mpColourCube;
-            }
+            mfTime += lfTimeStep;
         }
-        mfTime += lfTimestep;
     }
 
     // ------------------------------------------------------------------------------------
-    // PFXHookNodeBlender::StartFadeOut @0x824F6058
+    // PFXHookNodeBlender::StartFadeOut @0x824F6058 (BrnPfxHookBlender.cpp:625; DWARF local
+    // liIndex cpp:627)
     // ------------------------------------------------------------------------------------
-    void PFXHookNodeBlender::StartFadeOut(f32 lfFadeOutTime)
+    void PFXHookNodeBlender::StartFadeOut(f32 lfFadeOutTimeOverride)
     {
-        for (s32 liNode = 0; liNode < mpHook->miNodeCount; ++liNode)
+        for (int32_t liIndex = 0; liIndex < mpHook->miNodeCount; ++liIndex)
         {
-            maNodeStates[liNode].StartFadeOut(lfFadeOutTime);
+            maNodeStates[liIndex].StartFadeOut(lfFadeOutTimeOverride);
         }
     }
 
     // ------------------------------------------------------------------------------------
-    // PFXHookNodeBlender::IsActive @0x824ECFC0 -- `lwz r11,0(r3)` (the hook), miNodeCount at
-    // +0x38, then each fader's leading state word compared against E_FINISHED (`cmpwi r8,4`).
+    // PFXHookNodeBlender::IsActive @0x824ECFC0 (DWARF local liIndex BrnPfxHookBlender.h:516):
+    // true while any node of the bound hook has not finished.
     // ------------------------------------------------------------------------------------
     bool PFXHookNodeBlender::IsActive() const
     {
-        if (mpHook == 0 || mpHook->miNodeCount <= 0)
+        if (mpHook != NULL)
         {
-            return false;
-        }
-        for (s32 liNode = 0; liNode < mpHook->miNodeCount; ++liNode)
-        {
-            if (maNodeStates[liNode].GetState() != PFXNodeFader::E_FINISHED)
+            for (int32_t liIndex = 0; liIndex < mpHook->miNodeCount; ++liIndex)
             {
-                return true;
+                if (!maNodeStates[liIndex].IsFinished())
+                {
+                    return true;
+                }
             }
         }
         return false;

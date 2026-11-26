@@ -187,7 +187,7 @@ namespace BrnGui
         const PFXHookBundle* lpBundle = mpHookInfo.operator->();
         for (s32 liGroup = 0; liGroup < lpBundle->miGroupCount; ++liGroup)
         {
-            const PFXGroup* lpGroup = lpBundle->GetGroup(liGroup);
+            const PFXGroup* lpGroup = lpBundle->mpaGroups[liGroup];
             if (lpGroup->mbUseTint3D && LookupColourCube(lpGroup->muTint3DResourceId) == 0)
             {
                 CGS_ASSERT_AT(muColourCubeCount < KU_MAX_NUM_COLOURCUBES,
@@ -210,7 +210,7 @@ namespace BrnGui
         for (s32 liHook = 0; liHook < lpBundle->miHookCount && liListed < 100; ++liHook, ++liListed)
         {
             maPfxHookList[liListed].miValue = liListed;
-            maPfxHookList[liListed].mpcName = lpBundle->GetHook(liHook)->macName;
+            maPfxHookList[liListed].mpcName = lpBundle->mpaHooks[liHook]->macName;
         }
         CgsDev::DebugInterface lDebugInterface;
         lDebugInterface.SetRange(&miPfxHookIndex, 0, lpBundle->miHookCount - 1);
@@ -227,7 +227,7 @@ namespace BrnGui
         const PFXHookBundle* lpBundle = mpHookInfo.operator->();
         for (s32 liHook = 0; liHook < lpBundle->miHookCount; ++liHook)
         {
-            const PFXHook* lpHook = lpBundle->GetHook(liHook);
+            const PFXHook* lpHook = lpBundle->mpaHooks[liHook];
             if (_strnicmp(lpHook->macName, lpcName, KI_MAX_PFX_ID_LENGTH) == 0)
             {
                 return lpHook;
@@ -243,7 +243,7 @@ namespace BrnGui
         const PFXHookBundle* lpBundle = mpHookInfo.operator->();
         for (s32 liHook = 0; liHook < lpBundle->miHookCount; ++liHook)
         {
-            const PFXHook* lpHook = lpBundle->GetHook(liHook);
+            const PFXHook* lpHook = lpBundle->mpaHooks[liHook];
             if (lpHook->muId == luGuid)
             {
                 return lpHook;
@@ -293,7 +293,6 @@ namespace BrnGui
         {
             return;
         }
-        const PFXHookBundle* lpBundle = mpHookInfo.operator->();
         PFXHookNodeBlender* lpCurrent  = mpCurrent;
         const bool          lbActive   = lpCurrent->IsActive();
 
@@ -314,7 +313,7 @@ namespace BrnGui
                     mfCrossFadeTimeExpired = 0.0f;
                     mfCrossFadeTimeToEnd   = lpHook->mfTransitionTime;
                     meHookState            = E_CROSSFADE;
-                    mpCurrent->Initialise(lpHook, lpBundle, maColourCubes, muColourCubeCount,
+                    mpCurrent->Initialise(lpHook, maColourCubes, muColourCubeCount,
                                           lpGuiPFXHookEvent->mfMaximumBloomWeight,
                                           lpGuiPFXHookEvent->mfMaximumVignetteWeight,
                                           lpGuiPFXHookEvent->mfMaximumBlurWeight,
@@ -326,7 +325,7 @@ namespace BrnGui
                 CGS_ASSERT(luMode == 0, "Bad transition mode in Hook");            // :669
             }
             meHookState = E_NORMAL;
-            mpCurrent->Initialise(lpHook, lpBundle, maColourCubes, muColourCubeCount,
+            mpCurrent->Initialise(lpHook, maColourCubes, muColourCubeCount,
                                   lpGuiPFXHookEvent->mfMaximumBloomWeight,
                                   lpGuiPFXHookEvent->mfMaximumVignetteWeight,
                                   lpGuiPFXHookEvent->mfMaximumBlurWeight,
@@ -337,7 +336,7 @@ namespace BrnGui
         }
 
         // ---- a MENU hook ------------------------------------------------------------------
-        mpMenu->Initialise(lpHook, lpBundle, maColourCubes, muColourCubeCount,
+        mpMenu->Initialise(lpHook, maColourCubes, muColourCubeCount,
                            lpGuiPFXHookEvent->mfMaximumBloomWeight,
                            lpGuiPFXHookEvent->mfMaximumVignetteWeight,
                            lpGuiPFXHookEvent->mfMaximumBlurWeight,
@@ -351,11 +350,9 @@ namespace BrnGui
             f32 lfTime = lpHook->mfTransitionTime;
             if (lfTime < 0.0099999998f && lfTime > -0.0099999998f)
             {
-                CGS_ASSERT_AT(lpHook->miNodeCount > 0, "lpHook->mpaNodes[0]", CGS_ARTIST_FILE, 620);         // :620
-                const PFXHookNode* lpNode  = lpBundle->GetHookNode(*lpHook, 0);
-                const PFXGroup*    lpGroup = lpBundle->GetNodeGroup(*lpNode);
-                CGS_ASSERT_AT(lpGroup != 0, "lpHook->mpaNodes[0]->mpGroup", CGS_ARTIST_FILE, 621);           // :621
-                lfTime = lpGroup->mfFadeIn;
+                CGS_ASSERT_AT(lpHook->mpaNodes[0], "lpHook->mpaNodes[0]", CGS_ARTIST_FILE, 620);
+                CGS_ASSERT_AT(lpHook->mpaNodes[0]->mpGroup, "lpHook->mpaNodes[0]->mpGroup", CGS_ARTIST_FILE, 621);
+                lfTime = lpHook->mpaNodes[0]->mpGroup->GetFadeIn();
             }
             const EHookState leState = meHookState;
             mfMenuPhaseTimeToEnd = lfTime;
@@ -404,8 +401,7 @@ namespace BrnGui
             mpMenu->StartFadeOut(0.0f);
             mfMenuPhaseTimeExpired = 0.0f;
             meHookState            = E_FADE_FROM_MENU;
-            const PFXHookBundle* lpBundle = mpHookInfo.operator->();
-            mfMenuPhaseTimeToEnd = lpBundle->GetNodeGroup(*lpBundle->GetHookNode(*mpMenu->GetHook(), 0))->mfFadeOut;
+            mfMenuPhaseTimeToEnd = mpMenu->GetHook()->mpaNodes[0]->mpGroup->GetFadeOut();
         }
         else
         {
@@ -425,7 +421,6 @@ namespace BrnGui
         {
             return;
         }
-        const PFXHookBundle* lpBundle  = mpHookInfo.operator->();
         PFXHookNodeBlender*  lpCurrent = mpBackgroundCurrent;
         if (lpCurrent->IsActive())
         {
@@ -436,11 +431,9 @@ namespace BrnGui
                 f32 lfTime = lpHook->mfTransitionTime;
                 if (lfTime < 0.0099999998f && lfTime > -0.0099999998f)
                 {
-                    CGS_ASSERT(lpHook->miNodeCount > 0, "lpHook->mpaNodes[0]");     // :404
-                    const PFXHookNode* lpNode  = lpBundle->GetHookNode(*lpHook, 0);
-                    const PFXGroup*    lpGroup = lpBundle->GetNodeGroup(*lpNode);
-                    CGS_ASSERT_AT(lpGroup != 0, "lpHook->mpaNodes[0]->mpGroup", CGS_ARTIST_FILE, 404);       // :405
-                    lfTime = lpGroup->mfFadeIn;
+                    CGS_ASSERT(lpHook->mpaNodes[0], "lpHook->mpaNodes[0]");     // :404
+                    CGS_ASSERT_AT(lpHook->mpaNodes[0]->mpGroup, "lpHook->mpaNodes[0]->mpGroup", CGS_ARTIST_FILE, 404);       // :405
+                    lfTime = lpHook->mpaNodes[0]->mpGroup->GetFadeIn();
                 }
                 mfBackgroundFadeTimeToEnd = lfTime;
             }
@@ -452,7 +445,7 @@ namespace BrnGui
             meBackgroundHookState = E_BACKGROUND_RUNNING;
         }
         const f32 lfWeight = lpEvent->mfMaximumWeight;
-        mpBackgroundCurrent->Initialise(lpHook, lpBundle, maColourCubes, muColourCubeCount,
+        mpBackgroundCurrent->Initialise(lpHook, maColourCubes, muColourCubeCount,
                                         lfWeight, lfWeight, lfWeight, lfWeight, lfWeight, lfWeight);
     }
 
@@ -612,7 +605,7 @@ namespace BrnGui
                     lEnumeration.miHookNameCount = lpBundle->miHookCount;
                     for (s32 liHook = 0; liHook < lpBundle->miHookCount && liHook < 100; ++liHook)
                     {
-                        lEnumeration.mapHookNames[liHook] = lpBundle->GetHook(liHook)->macName;
+                        lEnumeration.mapHookNames[liHook] = lpBundle->mpaHooks[liHook]->macName;
                     }
                 }
                 lpGuiOutputBuffer->AddGuiOutEvent(lEnumeration);   // AddGuiOutEvent<GuiPFXHookEnumeration>

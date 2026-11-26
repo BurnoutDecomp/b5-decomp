@@ -5,12 +5,10 @@
 
 // BrnGui PFX hook bundle layout. A serialised GUI post-FX hook bundle is a flat
 // blob of PFXHookBundle -> PFXHook[] -> PFXHookNode[] -> PFXGroup[] linked by
-// pointer tables. On X360 every inter-record link is a 32-bit pointer stored as a
-// raw address, so on disk/in-buffer they are relocated by a base value when the
-// blob is loaded (FixUp) and un-relocated back to file-relative offsets when it is
-// written (FixDown). The link fields are therefore modelled as relocatable u32
-// values, matching the X360 32-bit pointer width and the relocation arithmetic in
-// the asm (member access stays by name; the value is the relocated address).
+// pointer tables. Every inter-record link is a native 32-bit pointer (DWARF
+// BrnGuiPFXHooks.h:192/249/271/272); on disk it holds the file-relative offset, and the
+// resource type relocates it by the load base when the blob is loaded (FixUp) and back
+// when it is written (FixDown).
 //
 //
 // Layout / method set from the DecFIGS DWARF (BrnGuiPFXHooks.h). FixDown body
@@ -51,13 +49,19 @@ namespace BrnGui
         f32 GetFadeIn() const   { return mfFadeIn; }      // :66
         f32 GetFadeOut() const  { return mfFadeOut; }     // :75
         f32 GetDuration() const { return mfDuration; }    // :84
+        bool GetUseBloom() const        { return mbUseBloom != 0; }          // :94
+        bool GetUseVignette() const     { return mbUseVignette != 0; }       // :98
+        bool GetUseDepthOfField() const { return mbUseDepthOfField != 0; }   // :102
+        bool GetUseBlur() const         { return mbUseBlur != 0; }           // :106
+        bool GetUseTint2D() const       { return mbUseTint2D != 0; }         // :110
+        bool GetUseTint3D() const       { return mbUseTint3D != 0; }         // :114
     };
 
     // BrnGuiPFXHooks.h:189
     struct PFXHookNode
     {
-        f32 mfStartTime;   // BrnGuiPFXHooks.h:191
-        u32 mpGroup;       // BrnGuiPFXHooks.h:192 - relocatable PFXGroup* (32-bit; an OFFSET on PC)
+        f32       mfStartTime;   // BrnGuiPFXHooks.h:191
+        PFXGroup* mpGroup;       // BrnGuiPFXHooks.h:192
     };
 
     // BrnGuiPFXHooks.h:204
@@ -77,41 +81,18 @@ namespace BrnGui
         f32  mfTransitionTime;                // BrnGuiPFXHooks.h:246  @ 0x2C
         u8   mbIsMenu;                        // BrnGuiPFXHooks.h:247  @ 0x30
         u8   maPad53[3];                      // padding to align mpaNodes
-        u32  mpaNodes;                        // BrnGuiPFXHooks.h:249  @ 0x34 - relocatable PFXHookNode*[] (an OFFSET on PC)
+        PFXHookNode** mpaNodes;               // BrnGuiPFXHooks.h:249  @ 0x34
         s32  miNodeCount;                     // BrnGuiPFXHooks.h:250  @ 0x38
     };
 
     // BrnGuiPFXHooks.h:265
     struct PFXHookBundle
     {
-        s32 miHookCount;     // BrnGuiPFXHooks.h:268
-        s32 miGroupCount;    // BrnGuiPFXHooks.h:269
-        u32 mpaHooks;        // BrnGuiPFXHooks.h:271 - relocatable PFXHook*[] (an OFFSET on PC)
-        u32 mpaGroups;       // BrnGuiPFXHooks.h:272 - relocatable PFXGroup*[] (an OFFSET on PC)
-        u32 mSizeOfBundle;   // BrnGuiPFXHooks.h:274
-
-        const u8* BlobBase() const { return reinterpret_cast<const u8*>(this); }
-        const u32* HookTable() const  { return reinterpret_cast<const u32*>(BlobBase() + mpaHooks); }
-        const u32* GroupTable() const { return reinterpret_cast<const u32*>(BlobBase() + mpaGroups); }
-        const PFXHook* GetHook(s32 liIndex) const
-        {
-            return reinterpret_cast<const PFXHook*>(BlobBase() + HookTable()[liIndex]);
-        }
-        const PFXGroup* GetGroup(s32 liIndex) const
-        {
-            return reinterpret_cast<const PFXGroup*>(BlobBase() + GroupTable()[liIndex]);
-        }
-        // `lpHook->mpaNodes[liIndex]` and `lpNode->mpGroup` on the console.
-        const PFXHookNode* GetHookNode(const PFXHook& lrHook, s32 liIndex) const
-        {
-            const u32* lpaNodes = reinterpret_cast<const u32*>(BlobBase() + lrHook.mpaNodes);
-            return reinterpret_cast<const PFXHookNode*>(BlobBase() + lpaNodes[liIndex]);
-        }
-        const PFXGroup* GetNodeGroup(const PFXHookNode& lrNode) const
-        {
-            return lrNode.mpGroup != 0
-                ? reinterpret_cast<const PFXGroup*>(BlobBase() + lrNode.mpGroup) : 0;
-        }
+        s32        miHookCount;     // BrnGuiPFXHooks.h:268
+        s32        miGroupCount;    // BrnGuiPFXHooks.h:269
+        PFXHook**  mpaHooks;        // BrnGuiPFXHooks.h:271
+        PFXGroup** mpaGroups;       // BrnGuiPFXHooks.h:272
+        size_t     mSizeOfBundle;   // BrnGuiPFXHooks.h:274
     };
 }
 

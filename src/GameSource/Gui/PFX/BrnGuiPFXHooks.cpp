@@ -14,36 +14,30 @@
 
 namespace BrnGui
 {
-    template <typename T>
-    static T* PointerFromU32(u32 luAddress)
+    // @ 0x8250B038 (inlined into PFXHookBundleResourceType::FixUp through the BrnGuiUnity
+    // build; no ARTIST copy): relocate the node table, then each entry, then each node's
+    // group link, by the load base. DWARF local liIndex (cpp:176).
+    void PFXHook::FixUp(uint32_t luBaseValue)
     {
-        return reinterpret_cast<T*>(static_cast<uintptr_t>(luAddress));
-    }
-
-    // @ 0x8250B038 (inlined into PFXHookBundleResourceType::FixUp): the relocate twin of
-    // FixDown below -- table pointer, then each entry, then each node's group link, all
-    // by the load base. Lived in BrnGuiPFXHooksResource.cpp with a private copy of this
-    // struct until 2026-09-17; homed here so the type has ONE definition.
-    void PFXHook::FixUp(u32 luBaseValue)
-    {
-        mpaNodes += luBaseValue;
-        u32* lpaNodeAddresses = PointerFromU32<u32>(mpaNodes);
-        for (s32 liIndex = 0; liIndex < miNodeCount; ++liIndex)
+        mpaNodes = reinterpret_cast<PFXHookNode**>(reinterpret_cast<uint32_t>(mpaNodes) + luBaseValue);
+        for (int32_t liIndex = 0; liIndex < miNodeCount; ++liIndex)
         {
-            lpaNodeAddresses[liIndex] += luBaseValue;
-            PointerFromU32<PFXHookNode>(lpaNodeAddresses[liIndex])->mpGroup += luBaseValue;
+            mpaNodes[liIndex] = reinterpret_cast<PFXHookNode*>(reinterpret_cast<uint32_t>(mpaNodes[liIndex]) + luBaseValue);
+            mpaNodes[liIndex]->mpGroup =
+                reinterpret_cast<PFXGroup*>(reinterpret_cast<uint32_t>(mpaNodes[liIndex]->mpGroup) + luBaseValue);
         }
     }
 
-    // @ 0x8250AFD8
-    void PFXHook::FixDown(u32 luBaseValue)
+    // @ 0x8250AFD8: the reverse, the group link before its node and the table last.
+    // DWARF local liIndex (cpp:122).
+    void PFXHook::FixDown(uint32_t luBaseValue)
     {
-        u32* lpaNodeAddresses = PointerFromU32<u32>(mpaNodes);
-        for (s32 liIndex = 0; liIndex < miNodeCount; ++liIndex)
+        for (int32_t liIndex = 0; liIndex < miNodeCount; ++liIndex)
         {
-            PointerFromU32<PFXHookNode>(lpaNodeAddresses[liIndex])->mpGroup -= luBaseValue;
-            lpaNodeAddresses[liIndex] -= luBaseValue;
+            mpaNodes[liIndex]->mpGroup =
+                reinterpret_cast<PFXGroup*>(reinterpret_cast<uint32_t>(mpaNodes[liIndex]->mpGroup) - luBaseValue);
+            mpaNodes[liIndex] = reinterpret_cast<PFXHookNode*>(reinterpret_cast<uint32_t>(mpaNodes[liIndex]) - luBaseValue);
         }
-        mpaNodes -= luBaseValue;
+        mpaNodes = reinterpret_cast<PFXHookNode**>(reinterpret_cast<uint32_t>(mpaNodes) - luBaseValue);
     }
 }

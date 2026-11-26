@@ -1799,17 +1799,7 @@ __declspec(noinline) void HudMessageAnalyzer::ProcessInputEvent(const CgsModule:
                     // (BrnInGameMessagesComponent.h); VISIBLE(3)/TRANSOUT(4) slots are left
                     // alone to finish their transition, which is why the compare is against
                     // exactly {1,2} and not "non-zero".
-                    InGameMessagesQueue* lpQueue = mpGuiCache->GetInGameMessagesQueue();
-
-                    lpQueue->muCurrentEventEndTime = 0;
-                    for (s32 liSlot = 0; liSlot < 2; ++liSlot)
-                    {
-                        if (lpQueue->maeMessageState[liSlot] == E_MESSAGESTATE_WAITING ||
-                            lpQueue->maeMessageState[liSlot] == E_MESSAGESTATE_TRANSIN)
-                        {
-                            lpQueue->maeMessageState[liSlot] = E_MESSAGESTATE_NOMESSAGE;
-                        }
-                    }
+                    mpGuiCache->GetInGameMessagesQueue()->ClearPending();   // DWARF InGameMessagesQueue::ClearPending (h:103)
                     break;
                 }
 

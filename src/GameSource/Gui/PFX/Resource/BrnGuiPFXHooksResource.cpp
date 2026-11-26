@@ -2,71 +2,103 @@
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include <cstring>
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (ValidateBundleOffsets)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::PFXHookBundleResourceType::Serialise @ 0x82512478
-//   CgsResource::PFXHookBundleResourceType::FixUp     @ 0x8250B038
-//   CgsResource::PFXHookBundleResourceType::FixDown   @ 0x8250B128
+//   CgsResource::PFXHookBundleResourceType::FixUp     @ 0x8250B038 (the private (void*, uint32_t) one)
+//   CgsResource::PFXHookBundleResourceType::FixDown   @ 0x8250B128 (the private (void*, uint32_t) one)
 //   CgsResource::PFXHookBundleResourceType::GetTypeID @ 0x824F5B90
 //
 // FixUp/FixDown (un)relocate the hook/group pointer tables and each hook's nodes by a
-// base value (the rw::Resource's load base). Serialise un-relocates the source to
-// file-relative pointers, copies the bundle to the destination resource's buffer,
-// then re-relocates both. The worker logic is shared between the virtuals (base from
-// the rw::Resource) and Serialise (base = the buffer's own address).
+// base value. The virtuals take the base from the rw::Resource (0x825124E8 / 0x825124F0:
+// `lwz r5, 0(r5)` and a tail branch); Serialise un-relocates the source against its own
+// address, copies the bundle into the destination, relocates the copy through the
+// virtual FixUp and the source back (DWARF BrnGuiPFXHooksResource.h:43, cpp:43..190).
 
-#include "GameSource/Gui/PFX/BrnGuiPFXHooks.h"   // THE BrnGui::PFXHook / PFXHookBundle -- this TU
-                                                //   carried a private copy of both until 2026-09-17
-                                                //   (an ODR fork; see the note in BrnGuiPFXHooks.cpp)
-
-namespace BrnGui
-{
-    template <typename T>
-    static T* PointerFromU32(u32 luAddress)
-    {
-        return reinterpret_cast<T*>(static_cast<uintptr_t>(luAddress));
-    }
-}
+#include "GameSource/Gui/PFX/BrnGuiPFXHooks.h"
 
 namespace CgsResource
 {
     using BrnGui::PFXHook;
+    using BrnGui::PFXGroup;
     using BrnGui::PFXHookBundle;
-    using BrnGui::PointerFromU32;
 
     static const uint32_t KU_PFX_HOOK_BUNDLE_RESOURCE_TYPE_ID = 49;
 
-    static void ValidateBundleOffsets(const PFXHookBundle* lpBundle)
+    // cpp:43
+    void* PFXHookBundleResourceType::Serialise(const void* lpResource, const rw::Resource& lrDest) const
     {
-        CGS_ASSERT(lpBundle->mpaHooks + 4u * static_cast<u32>(lpBundle->miHookCount) <= lpBundle->mSizeOfBundle,
-                   "PFX hook table lies inside the bundle");
-        CGS_ASSERT(lpBundle->mpaGroups + 4u * static_cast<u32>(lpBundle->miGroupCount) <= lpBundle->mSizeOfBundle,
-                   "PFX group table lies inside the bundle");
+        PFXHookBundle* lpBundle = static_cast<PFXHookBundle*>(const_cast<void*>(lpResource));
+        const size_t luSize = lpBundle->mSizeOfBundle;
+        void* lpDest = lrDest.m_baseResources[0];
+
+        FixDown(lpBundle, reinterpret_cast<uint32_t>(lpBundle));
+        std::memcpy(lpDest, lpBundle, luSize);
+        FixUp(lpDest, lrDest);
+        FixUp(lpBundle, reinterpret_cast<uint32_t>(lpBundle));
+
+        return lrDest.m_baseResources[0];
     }
 
+    // cpp:92
     uint32_t PFXHookBundleResourceType::GetTypeID() const
     {
         return KU_PFX_HOOK_BUNDLE_RESOURCE_TYPE_ID;
     }
 
-    void PFXHookBundleResourceType::FixUp(void* lpResource, const rw::Resource& /*lrResource*/) const
+    // cpp:108
+    void PFXHookBundleResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        ValidateBundleOffsets(static_cast<const PFXHookBundle*>(lpResource));   // offsets stay (banner above)
+        FixUp(lpResource, reinterpret_cast<uint32_t>(lrResource.m_baseResources[0]));
     }
 
-    void PFXHookBundleResourceType::FixDown(void* /*lpResource*/, const rw::Resource& /*lrResource*/) const
+    // cpp:118
+    void PFXHookBundleResourceType::FixUp(void* lpResource, uint32_t luBaseValue) const
     {
-        // nothing to un-relocate: the blob never leaves its file-relative form on PC
+        PFXHookBundle* lpBundle = static_cast<PFXHookBundle*>(lpResource);
+
+        lpBundle->mpaHooks  = reinterpret_cast<PFXHook**>(reinterpret_cast<uint32_t>(lpBundle->mpaHooks) + luBaseValue);
+        lpBundle->mpaGroups = reinterpret_cast<PFXGroup**>(reinterpret_cast<uint32_t>(lpBundle->mpaGroups) + luBaseValue);
+
+        for (int32_t liIndex = 0; liIndex < lpBundle->miHookCount; ++liIndex)
+        {
+            lpBundle->mpaHooks[liIndex] =
+                reinterpret_cast<PFXHook*>(reinterpret_cast<uint32_t>(lpBundle->mpaHooks[liIndex]) + luBaseValue);
+            lpBundle->mpaHooks[liIndex]->FixUp(luBaseValue);
+        }
+
+        for (int32_t liIndex = 0; liIndex < lpBundle->miGroupCount; ++liIndex)
+        {
+            lpBundle->mpaGroups[liIndex] =
+                reinterpret_cast<PFXGroup*>(reinterpret_cast<uint32_t>(lpBundle->mpaGroups[liIndex]) + luBaseValue);
+        }
     }
 
-    void* PFXHookBundleResourceType::Serialise(const void* lpResource, const rw::Resource& lrDest) const
+    // cpp:180
+    void PFXHookBundleResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        // @0x82512478 fixes the source DOWN, copies, and fixes both back UP; with the blob
-        // held file-relative on PC the copy IS the serialisation.
-        const PFXHookBundle* lpBundle = static_cast<const PFXHookBundle*>(lpResource);
-        void*                lpDest   = lrDest.m_baseResources[0];
-        std::memcpy(lpDest, lpBundle, lpBundle->mSizeOfBundle);
-        return lpDest;
+        FixDown(lpResource, reinterpret_cast<uint32_t>(lrResource.m_baseResources[0]));
+    }
+
+    // cpp:190
+    void PFXHookBundleResourceType::FixDown(void* lpResource, uint32_t luBaseValue) const
+    {
+        PFXHookBundle* lpBundle = static_cast<PFXHookBundle*>(lpResource);
+
+        for (int32_t liIndex = 0; liIndex < lpBundle->miHookCount; ++liIndex)
+        {
+            lpBundle->mpaHooks[liIndex]->FixDown(luBaseValue);
+            lpBundle->mpaHooks[liIndex] =
+                reinterpret_cast<PFXHook*>(reinterpret_cast<uint32_t>(lpBundle->mpaHooks[liIndex]) - luBaseValue);
+        }
+
+        for (int32_t liIndex = 0; liIndex < lpBundle->miGroupCount; ++liIndex)
+        {
+            lpBundle->mpaGroups[liIndex] =
+                reinterpret_cast<PFXGroup*>(reinterpret_cast<uint32_t>(lpBundle->mpaGroups[liIndex]) - luBaseValue);
+        }
+
+        lpBundle->mpaHooks  = reinterpret_cast<PFXHook**>(reinterpret_cast<uint32_t>(lpBundle->mpaHooks) - luBaseValue);
+        lpBundle->mpaGroups = reinterpret_cast<PFXGroup**>(reinterpret_cast<uint32_t>(lpBundle->mpaGroups) - luBaseValue);
     }
 }

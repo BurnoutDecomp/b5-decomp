@@ -15,6 +15,10 @@ public:
     void          FixUp(void* lpResource, const rw::Resource& lrResource) const ;
     void          FixDown(void* lpResource, const rw::Resource& lrResource) const ;
     virtual void* Serialise(const void* lpResource, const rw::Resource& lrDest) const;
+
+private:
+    void          FixDown(void* lpResource, uint32_t luBaseValue) const;   // DWARF cpp:190
+    void          FixUp(void* lpResource, uint32_t luBaseValue) const;     // DWARF cpp:118
 };
 }
 

@@ -319,18 +319,14 @@ void CrashedStuntHudState::UpdateCrashRunningState()
 // ARTIST 0x8247DF68.
 void CrashedStuntHudState::OnLeave()
 {
-    CGS_ASSERT(mCrashHudAnimator.IsValid(), "mpMovieClipInst");
-    mCrashHudAnimator.mpMovieClipInst->ResetTimeline();
+    // DWARF (_compile/BrnGuiHUDUnity.cpp): MovieClipRef::ResetTimeline and
+    // InGameMessagesQueue::ClearPending inlined.
+    mCrashHudAnimator.ResetTimeline();
     mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
     mpStateInterface->PlayAptMovie("", 1);
     if (mpCache)
     {
-        InGameMessagesQueue* lpMessages = mpCache->GetInGameMessagesQueue();
-        lpMessages->muCurrentEventEndTime = 0;
-        for (s32 liSlot = 0; liSlot < 2; ++liSlot)
-            if (lpMessages->maeMessageState[liSlot] == E_MESSAGESTATE_WAITING ||
-                lpMessages->maeMessageState[liSlot] == E_MESSAGESTATE_TRANSIN)
-                lpMessages->maeMessageState[liSlot] = E_MESSAGESTATE_NOMESSAGE;
+        mpCache->GetInGameMessagesQueue()->ClearPending();
     }
 }
 

@@ -1262,11 +1262,7 @@ void GuiModule::Destruct()
             }
             case 291:
             case 320:
-                mGuiCache.mInGameMessagesQueue.muCurrentEventEndTime = 0;
-                if (mGuiCache.mInGameMessagesQueue.maeMessageState[0] == E_MESSAGESTATE_WAITING)
-                    mGuiCache.mInGameMessagesQueue.maeMessageState[0] = E_MESSAGESTATE_NOMESSAGE;
-                if (mGuiCache.mInGameMessagesQueue.maeMessageState[1] == E_MESSAGESTATE_WAITING)
-                    mGuiCache.mInGameMessagesQueue.maeMessageState[1] = E_MESSAGESTATE_NOMESSAGE;
+                mGuiCache.GetInGameMessagesQueue()->ClearWaiting();   // DWARF InGameMessagesQueue::ClearWaiting (h:99)
                 break;
             case 325:
                 switch (lpWords[2])

@@ -61,6 +61,37 @@ namespace BrnGui
         MessageState                 maeMessageState[2];  // +0x8B0 (h:88)
         u64                          muCurrentEventEndTime;// +0x8B8 (h:90)
         u8                           muCurrentMessageIndex;// +0x8C0 (h:91)
+
+        // DWARF h:99, header-inline with no locals: cancel the slots still waiting to start and
+        // the current end time (GuiModule's 291/320 arm).
+        void ClearWaiting()
+        {
+            muCurrentEventEndTime = 0;
+            if (maeMessageState[0] == E_MESSAGESTATE_WAITING)
+            {
+                maeMessageState[0] = E_MESSAGESTATE_NOMESSAGE;
+            }
+            if (maeMessageState[1] == E_MESSAGESTATE_WAITING)
+            {
+                maeMessageState[1] = E_MESSAGESTATE_NOMESSAGE;
+            }
+        }
+
+        // DWARF h:103, header-inline with no locals (so no loop): drop the queued (waiting or
+        // transitioning-in) messages of both slots and the current end time.
+        // CrashedStuntHudState::OnLeave inlines it (0x8247E01C).
+        void ClearPending()
+        {
+            muCurrentEventEndTime = 0;
+            if (maeMessageState[0] == E_MESSAGESTATE_WAITING || maeMessageState[0] == E_MESSAGESTATE_TRANSIN)
+            {
+                maeMessageState[0] = E_MESSAGESTATE_NOMESSAGE;
+            }
+            if (maeMessageState[1] == E_MESSAGESTATE_WAITING || maeMessageState[1] == E_MESSAGESTATE_TRANSIN)
+            {
+                maeMessageState[1] = E_MESSAGESTATE_NOMESSAGE;
+            }
+        }
     };
 
     // BrnGui::InGameMessagesComponent (DWARF BrnInGameMessagesComponent.h:182). Derives the

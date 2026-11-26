@@ -5,6 +5,7 @@
 #include "SharedClasses/Graphics/BrnEffectsData.h"                 // BrnEffects::BloomData / VignetteData / ...
 #include "GameSource/Gui/PFX/BrnGuiPFXHooks.h"                     // BrnGui::PFXHook / PFXHookNode / PFXGroup / PFXHookBundle
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h" // CgsResource::ResourcePtr<ColourCube>
+#include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT_AT (the fader payload accessors)
 
 namespace rw { namespace graphics { namespace postfx { struct ColourCube; } } }
 
@@ -170,6 +171,9 @@ namespace BrnGui
         f32                  mfCount;
 
         TintDataBlend* Construct() { mData.Construct(); mfWeight = 0.0f; mfCount = 0.0f; return this; }
+        // DWARF BrnPfxHookBlender.cpp:114; ARTIST inlines it into PFXHookNodeBlender::Update
+        // (0x824FB95C: count 1.0, weight, cube) and keeps no copy.
+        TintDataBlend* Add(const BrnEffects::TintData* lpEffectsData, f32 lfWeight);
         f32 GetWeight() const { return mfWeight; }
         f32 GetCount() const  { return mfCount; }
         const BrnEffects::TintData& GetData() const { return mData; }
@@ -191,33 +195,31 @@ namespace BrnGui
         // :121 @0x82504378 -- bind a node: zero the envelope, then construct each effect
         // payload the node's group enables from its AttribSys asset key (the collection
         // name hashed by Attrib::StringToKey) and, for the 3D tint, look the colour cube up.
-        void Initialise(ColourCubeInfo* lpaColourCubes, u32 luNumColourCubes,
-                        const PFXHookNode* lpPfxNode, const PFXGroup* lpPfxGroup);
+        void Initialise(ColourCubeInfo* lpaColourCubes, u32 luCubeCount, PFXHookNode* lpPfxNode);
         // :126 @0x824F5C40 -- advance the envelope: by absolute hook time while the node runs
         // free, by timestep through the state machine once a fade-out was forced.
         void Update(f32 lfTimeNow, f32 lfTimestep);
         f32  GetWeight() const   { return mfWeight; }                      // :130
-        bool IsActive() const    { return meState != E_WAITING && meState != E_FINISHED; } // :134
+        bool IsActive() const    { return meState != E_FINISHED && meState != E_WAITING; } // :134
         bool IsFinished() const  { return meState == E_FINISHED; }         // :138
         // :142 @0x824F5F90 -- force the fade-out (time <= 0.01 means "the group's own").
-        void StartFadeOut(f32 lfFadeOutTime);
-        const BrnEffects::BloomData*        GetBloom() const        { return &mBloomData; }        // :146
-        const BrnEffects::VignetteData*     GetVignette() const     { return &mVignetteData; }     // :150
-        const BrnEffects::BlurData*         GetBlur() const         { return &mBlurData; }         // :154
-        const BrnEffects::DepthOfFieldData* GetDepthOfField() const { return &mDepthOfFieldData; } // :158
-        const BrnEffects::TintData2d*       Get2DTint() const       { return &mTint2DData; }       // :162
-        const BrnEffects::TintData*         Get3DTint() const       { return &mTint3DData; }       // :166
-        ENodePhase GetState() const { return meState; }
-        const PFXGroup* GetGroup() const { return mpPfxGroup; }
+        void StartFadeOut(f32 lfFadeOutTimeOverride);
+        // :146..:166 -- the payload when the node's group enables the effect, else NULL;
+        // defined below the class (their asserts name this header, lines 376..491).
+        const BrnEffects::BloomData*        GetBloom() const;
+        const BrnEffects::VignetteData*     GetVignette() const;
+        const BrnEffects::BlurData*         GetBlur() const;
+        const BrnEffects::DepthOfFieldData* GetDepthOfField() const;
+        const BrnEffects::TintData2d*       Get2DTint() const;
+        const BrnEffects::TintData*         Get3DTint() const;
 
     private:
         // :182 @0x825042A0 -- the cube whose resource id matches, or 0.
-        static rw::graphics::postfx::ColourCube* LookupColourCube(ColourCubeInfo* lpaColourCubes,
-                                                                   u32 luNumColourCubes,
-                                                                   u64 luResourceId);
+        rw::graphics::postfx::ColourCube* LookupColourCube(ColourCubeInfo* lpaColourCubes,
+                                                           u32 luCubeCount,
+                                                           u64 luResourceId);
 
-        const PFXHookNode*           mpPfxNode;             // :184  +0x00
-        const PFXGroup*              mpPfxGroup;            // PC widening: the node's group, resolved once
+        PFXHookNode*                 mpPfxNode;             // :184  +0x00
         ENodePhase                   meState;               // :185  +0x04
         f32                          mfWeight;              // :186  +0x08
         f32                          mfExpiredTime;         // :187  +0x0C
@@ -238,8 +240,7 @@ namespace BrnGui
         // stores the five blenders' first word 0): no hook bound.
         void Construct() { mpHook = 0; }
         // :225 @0x82504510 -- bind a hook and initialise one fader per node.
-        void Initialise(const PFXHook* lpHook, const PFXHookBundle* lpBundle,
-                        ColourCubeInfo* lpaColourCubes, u32 luNumColourCubes,
+        void Initialise(const PFXHook* lpHook, ColourCubeInfo* lpaColourCubes, u32 luCubeCount,
                         f32 lfMaximumBloomWeight, f32 lfMaximumVignetteWeight,
                         f32 lfMaximumBlurWeight, f32 lfMaximumDepthOfFieldWeight,
                         f32 lfMaximum2DTintWeight, f32 lfMaximum3DTintWeight);
@@ -255,7 +256,7 @@ namespace BrnGui
         f32  GetTime() const             { return mfTime; }            // :244
         const PFXHook* GetHook() const   { return mpHook; }            // :248
         // :252 @0x824F6058 -- every fader.
-        void StartFadeOut(f32 lfFadeOutTime);
+        void StartFadeOut(f32 lfFadeOutTimeOverride);
         const BloomBlend&        GetBloom() const        { return mBlendedBloomData; }        // :256
         const VignetteBlend&     GetVignette() const     { return mBlendedVignetteData; }     // :260
         const BlurBlend&         GetBlur() const         { return mBlendedBlurData; }         // :264
@@ -264,8 +265,6 @@ namespace BrnGui
         const TintDataBlend&     Get3DTint() const       { return mBlendedTint3DData; }       // :276
 
     private:
-        void ConstructBlends();   // the six accumulator resets Initialise and Update share (inlined on the console)
-
         const PFXHook*    mpHook;                                   // :302  +0x000
         PFXNodeFader      maNodeStates[KU_MAX_CONCURRENT_NODES];    // :303  +0x010 (stride 0x130)
         f32               mfTime;                                   // :304  +0x990
@@ -282,6 +281,45 @@ namespace BrnGui
         f32               mfMaximum2DTintWeight;                    // :317  +0xAFC
         f32               mfMaximum3DTintWeight;                    // :318  +0xB00  (0xB10 per blender on the console)
     };
+
+    // The fader's payload accessors, header-inline: ARTIST inlines them into
+    // PFXHookNodeBlender::Update with their asserts on this header's lines (0x824FB774..).
+#define CGS_ARTIST_BRNPFXHOOKBLENDER_H_FILE "..\\..\\..\\GameSource\\Gui/pfx/BrnPfxHookBlender.h"
+    inline const BrnEffects::BloomData* PFXNodeFader::GetBloom() const
+    {
+        CGS_ASSERT_AT(mpPfxNode, "mpPfxNode", CGS_ARTIST_BRNPFXHOOKBLENDER_H_FILE, 376);
+        return mpPfxNode->mpGroup->GetUseBloom() ? &mBloomData : NULL;
+    }
+
+    inline const BrnEffects::VignetteData* PFXNodeFader::GetVignette() const
+    {
+        CGS_ASSERT_AT(mpPfxNode, "mpPfxNode", CGS_ARTIST_BRNPFXHOOKBLENDER_H_FILE, 399);
+        return mpPfxNode->mpGroup->GetUseVignette() ? &mVignetteData : NULL;
+    }
+
+    inline const BrnEffects::BlurData* PFXNodeFader::GetBlur() const
+    {
+        CGS_ASSERT_AT(mpPfxNode, "mpPfxNode", CGS_ARTIST_BRNPFXHOOKBLENDER_H_FILE, 422);
+        return mpPfxNode->mpGroup->GetUseBlur() ? &mBlurData : NULL;
+    }
+
+    inline const BrnEffects::DepthOfFieldData* PFXNodeFader::GetDepthOfField() const
+    {
+        CGS_ASSERT_AT(mpPfxNode, "mpPfxNode", CGS_ARTIST_BRNPFXHOOKBLENDER_H_FILE, 445);
+        return mpPfxNode->mpGroup->GetUseDepthOfField() ? &mDepthOfFieldData : NULL;
+    }
+
+    inline const BrnEffects::TintData2d* PFXNodeFader::Get2DTint() const
+    {
+        CGS_ASSERT_AT(mpPfxNode, "mpPfxNode", CGS_ARTIST_BRNPFXHOOKBLENDER_H_FILE, 468);
+        return mpPfxNode->mpGroup->GetUseTint2D() ? &mTint2DData : NULL;
+    }
+
+    inline const BrnEffects::TintData* PFXNodeFader::Get3DTint() const
+    {
+        CGS_ASSERT_AT(mpPfxNode, "mpPfxNode", CGS_ARTIST_BRNPFXHOOKBLENDER_H_FILE, 491);
+        return mpPfxNode->mpGroup->GetUseTint3D() ? &mTint3DData : NULL;
+    }
 }
 
 #endif
