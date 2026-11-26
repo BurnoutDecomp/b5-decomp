@@ -309,17 +309,20 @@ namespace BrnResource
         lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
         if (miNumBankCreationRequests == 0)
         {
+            // DWARF locals cpp:2181..2193.
             CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequests;
+            const CgsMemory::MemoryMapBank* lpMap;
+            const CgsMemory::MemoryBank::Params* lpParams;
+            CgsMemory::MemoryIO::CreateBankRequest lCreateBankRequest;
             lRequests.Construct();
-            const s32 liNumBanks = mpMemoryMap->GetNumBanks();
-            for (s32 liBank = 0; liBank < liNumBanks; ++liBank)
+            const s32 liBankCount = mpMemoryMap->GetNumBanks();
+            for (s32 liIndex = 0; liIndex < liBankCount; ++liIndex)
             {
-                CgsMemory::MemoryIO::CreateBankRequest lRequest;
-                const s32 liEventId = miNumBankCreationRequests++;
-                lRequest.Construct(&mReceiverQueue, liEventId);
-                CgsMemory::MemoryBank::Params lParams = *mpMemoryMap->GetBank(liBank)->GetParams();
-                lRequest.SetParams(&lParams);
-                lRequests.AddEvent(lRequest, 9);
+                lpMap = mpMemoryMap->GetBank(liIndex);
+                lCreateBankRequest.Construct(&mReceiverQueue, miNumBankCreationRequests++);
+                lpParams = lpMap->GetParams();
+                lCreateBankRequest.SetParams(lpParams);
+                lRequests.CreateBank(lCreateBankRequest);
             }
             lpResourceInput->LockForWrite();
             lpResourceInput->AppendResourceQueue(&lRequests);
@@ -357,7 +360,7 @@ namespace BrnResource
                     lRequest.mbAllowDefragmentation = true;
                 lRequest.mpUser = &mReceiverQueue;
                 lRequest.miEventId = miNumPoolCreationRequests++;
-                lRequests.AddEvent(lRequest, 0);
+                lRequests.CreatePool(lRequest);   // DWARF call list (CgsResourceRequestQueue.h:148)
             }
             lpResourceInput->LockForWrite();
             lpResourceInput->AppendResourceQueue(&lRequests);
@@ -390,7 +393,7 @@ namespace BrnResource
                 CgsMemory::MemoryIO::CreateResourceRequest lRequest = *mpMemoryMap->GetRawResource(li)->GetRequest();
                 lRequest.SetReceiverQueue(&mReceiverQueue);
                 lRequest.SetEventId(li);
-                lRequests.AddEvent(lRequest, 10);
+                lRequests.CreateResource(lRequest);
                 ++miNumAllocatorCreationRequests;
                 mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
                 mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW;
@@ -404,7 +407,7 @@ namespace BrnResource
                 lRequest.SetEventId(li);
                 lRequest.SetHeapAllocator(0);
                 lRequest.SetLinearAllocator(&maGeneratedLinearAllocators[li]);
-                lRequests.AddEvent(lRequest, 14);
+                lRequests.CreateAllocator(lRequest);
                 ++miNumAllocatorCreationRequests;
                 mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
                 mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_LINEAR;
@@ -417,7 +420,7 @@ namespace BrnResource
                 lRequest.SetEventId(li);
                 lRequest.SetHeapAllocator(&maGeneratedHeapAllocators[li]);
                 lRequest.SetLinearAllocator(0);
-                lRequests.AddEvent(lRequest, 14);
+                lRequests.CreateAllocator(lRequest);
                 ++miNumAllocatorCreationRequests;
                 mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
                 mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_HEAP;
@@ -428,7 +431,7 @@ namespace BrnResource
                 CgsMemory::MemoryIO::CreateLinearAllocatorRequest lRequest = *mpMemoryMap->GetRWLinearAllocator(li)->GetRequest();
                 lRequest.SetReceiverQueue(&mReceiverQueue);
                 lRequest.SetEventId(li);
-                lRequests.AddEvent(lRequest, 11);
+                lRequests.CreateRwLinearAllocator(lRequest);
                 ++miNumAllocatorCreationRequests;
                 mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
                 mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWLINEAR;
@@ -438,7 +441,7 @@ namespace BrnResource
                 CgsMemory::MemoryIO::CreateGeneralAllocatorRequest lRequest = *mpMemoryMap->GetRWGeneralAllocator(li)->GetRequest();
                 lRequest.SetReceiverQueue(&mReceiverQueue);
                 lRequest.SetEventId(li);
-                lRequests.AddEvent(lRequest, 12);
+                lRequests.CreateRwGeneralAllocator(lRequest);
                 ++miNumAllocatorCreationRequests;
                 mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
                 mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP;

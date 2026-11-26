@@ -108,15 +108,6 @@ const MemoryMapPool* MemoryMap::GetPool(s32 liIndex) const
 
 // The X360 GameDataModule callers read these same count/pointer members directly in their table
 // loops. These typed accessors expose those exact fields and native row arithmetic to the PC caller.
-s32 MemoryMap::GetVersion() const { return miVersion; }
-s32 MemoryMap::GetPlatform() const { return miPlatform; }
-s32 MemoryMap::GetNumBanks() const { return static_cast<s32>(muNumBanks) - 1; }
-s32 MemoryMap::GetNumPools() const { return static_cast<s32>(muNumPools); }
-s32 MemoryMap::GetNumRawResources() const { return static_cast<s32>(muNumRawResources); }
-s32 MemoryMap::GetNumLinearAllocators() const { return static_cast<s32>(muNumLinearAllocators); }
-s32 MemoryMap::GetNumHeapAllocators() const { return static_cast<s32>(muNumHeapAllocators); }
-s32 MemoryMap::GetNumRWLinearAllocators() const { return static_cast<s32>(muNumRWLinearAllocators); }
-s32 MemoryMap::GetNumRWGeneralAllocators() const { return static_cast<s32>(muNumRWGeneralAllocators); }
 
 const MemoryMapRawResource* MemoryMap::GetRawResource(s32 liIndex) const { return mpRawResources + liIndex; }
 const MemoryMapLinearAllocator* MemoryMap::GetLinearAllocator(s32 liIndex) const { return mpLinearAllocators + liIndex; }

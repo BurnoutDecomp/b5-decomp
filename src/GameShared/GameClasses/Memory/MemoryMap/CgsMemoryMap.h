@@ -132,25 +132,28 @@ namespace CgsMemory
 
         // CgsMemoryMap.h:66-123 - typed table accessors. X360 GetBank/GetPool body pins the
         // index rules; native pointer arithmetic uses the canonical record sizes above.
-        s32 GetVersion() const;
-        s32 GetPlatform() const;
+        // The scalar getters are in-class: DWARF defines them in this header (h:66/69/78/93/99/105/
+        // 111/117/123) and ARTIST has no copy of any (GameDataModule::CreatePools 0x8266DBFC reads
+        // the pool count at +0xC in line).
+        s32 GetVersion() const { return miVersion; }
+        s32 GetPlatform() const { return miPlatform; }
         const MemoryMapBank* GetBank(s32 liIndex) const;
-        s32 GetNumBanks() const;
+        s32 GetNumBanks() const { return static_cast<s32>(muNumBanks) - 1; }
         const MemoryMapPool* GetPool(s32 liIndex) const;
         const MemoryMapPool* GetPool(const char* lpcName) const;
         s32 GetPoolIndex(const char* lpcName) const;
         const MemoryMapPool* GetPoolById(s32 liId) const;
-        s32 GetNumPools() const;
+        s32 GetNumPools() const { return static_cast<s32>(muNumPools); }
         const MemoryMapRawResource* GetRawResource(s32 liIndex) const;
-        s32 GetNumRawResources() const;
+        s32 GetNumRawResources() const { return static_cast<s32>(muNumRawResources); }
         const MemoryMapLinearAllocator* GetLinearAllocator(s32 liIndex) const;
-        s32 GetNumLinearAllocators() const;
+        s32 GetNumLinearAllocators() const { return static_cast<s32>(muNumLinearAllocators); }
         const MemoryMapHeapAllocator* GetHeapAllocator(s32 liIndex) const;
-        s32 GetNumHeapAllocators() const;
+        s32 GetNumHeapAllocators() const { return static_cast<s32>(muNumHeapAllocators); }
         const MemoryMapRWLinearAllocator* GetRWLinearAllocator(s32 liIndex) const;
-        s32 GetNumRWLinearAllocators() const;
+        s32 GetNumRWLinearAllocators() const { return static_cast<s32>(muNumRWLinearAllocators); }
         const MemoryMapRWGeneralAllocator* GetRWGeneralAllocator(s32 liIndex) const;
-        s32 GetNumRWGeneralAllocators() const;
+        s32 GetNumRWGeneralAllocators() const { return static_cast<s32>(muNumRWGeneralAllocators); }
 
     private:
         // The generated typed image helper seeds the serialized header and relative table pointers.

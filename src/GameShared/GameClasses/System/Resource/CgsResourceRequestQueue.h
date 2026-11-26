@@ -5,6 +5,13 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<BUFSIZE,ALIGN> (generic body inline)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // the request records the builders queue
 
+// The memory module's request records the bank / resource / allocator builders queue
+// (DWARF CgsMemoryModuleIO.h); complete wherever a builder is used.
+namespace CgsMemory { namespace MemoryIO {
+    struct CreateBankRequest; struct CreateResourceRequest; struct CreateAllocatorRequest;
+    struct CreateLinearAllocatorRequest; struct CreateGeneralAllocatorRequest;
+} }
+
 // CgsResource::ResourceIO::ResourceRequestQueue<N>
 //
 // The resource-IO request queue. Per DecFIGS DWARF (CgsResourceRequestQueue.h) every
@@ -61,12 +68,52 @@ namespace CgsResource
         template <s32 N>
         struct ResourceRequestQueue : public CgsModule::VariableEventQueue<N, 16>
         {
+            // DWARF CgsResourceRequestQueue.h:148. Inlined by GameDataModule::CreatePools
+            // @0x8266DC54..0x8266DC74: queue the record under EVENT_CREATEPOOL with its size.
+            bool CreatePool(const Events::CreatePoolRequest& lRequest)
+            {
+                return this->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequest), EVENT_CREATEPOOL,
+                                      sizeof(lRequest));
+            }
+
             // DWARF CgsResourceRequestQueue.h:274. Inlined by BundleLoaderModule::StreamClose
             // @0x828FB2C4..0x828FB2D8: queue the record under EVENT_CLOSEREADSTREAM with its size.
             bool CloseReadStream(const Events::CloseReadStreamRequest& lRequest)
             {
                 return this->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequest), EVENT_CLOSEREADSTREAM,
                                       sizeof(lRequest));
+            }
+
+            // DWARF h:211 / 225 / 232 / 239 / 246, inlined by GameDataModule::CreateBanks /
+            // CreateAllocators: each queues its record under its own event id with its size.
+            bool CreateAllocator(const CgsMemory::MemoryIO::CreateAllocatorRequest& lRequest)
+            {
+                return this->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequest), EVENT_CREATEALLOCATOR,
+                                      sizeof(lRequest));
+            }
+
+            bool CreateBank(const CgsMemory::MemoryIO::CreateBankRequest& lRequest)
+            {
+                return this->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequest), EVENT_CREATEBANK,
+                                      sizeof(lRequest));
+            }
+
+            bool CreateResource(const CgsMemory::MemoryIO::CreateResourceRequest& lRequest)
+            {
+                return this->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequest), EVENT_CREATERESOURCE,
+                                      sizeof(lRequest));
+            }
+
+            bool CreateRwLinearAllocator(const CgsMemory::MemoryIO::CreateLinearAllocatorRequest& lRequest)
+            {
+                return this->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequest),
+                                      EVENT_CREATERWLINEARALLOCATOR, sizeof(lRequest));
+            }
+
+            bool CreateRwGeneralAllocator(const CgsMemory::MemoryIO::CreateGeneralAllocatorRequest& lRequest)
+            {
+                return this->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequest),
+                                      EVENT_CREATERWGENERALALLOCATOR, sizeof(lRequest));
             }
 
             // DEFERRED (ResourceRequestQueue TU): the other request builders (DWARF h:148..)
