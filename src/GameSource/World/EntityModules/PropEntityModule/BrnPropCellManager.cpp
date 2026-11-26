@@ -33,9 +33,10 @@
 //
 // Source-of-truth: the X360 ARTIST asm is authoritative (per-function addresses noted on
 // each body). The inlined container bounds asserts (CgsBitArray.h:203 "invalid index",
-// :241 "luIndex < NUMBITS") are emitted at these call sites because the shared
-// CgsBitArray.h keeps its bodies assert-free (the assert-system dependency lives at the
-// caller). They are reproduced verbatim; file/line are dropped per house convention.
+// :241 "luIndex < NUMBITS") belong to BitArray's own IsBitSet/UnSetBit.
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PropCellManager::FreePhysicalPropSlot 0x822BBF10): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropCellManager.h"
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h" // OutputBuffer_PreScene
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h"          // PropInputInterface
@@ -870,10 +871,8 @@ namespace BrnWorld
     void PropCellManager::FreePhysicalPropSlot(s32 liPhysicsIndex)
     {
         CGS_ASSERT(liPhysicsIndex != -1, "liProp != -1");                           // BrnPropCellManager.h:611
-        CGS_ASSERT(static_cast<u32>(liPhysicsIndex) < 15u, "invalid index : < 15"); // CgsBitArray.h:203
         CGS_ASSERT(mPhysicalProps.IsBitSet(static_cast<u32>(liPhysicsIndex)),
                    "mPhysicalProps.IsBitSet( liProp )");                            // BrnPropCellManager.h:612
-        CGS_ASSERT(static_cast<u32>(liPhysicsIndex) < 15u, "luIndex < NUMBITS");    // CgsBitArray.h:241
         mPhysicalProps.UnSetBit(static_cast<u32>(liPhysicsIndex));
     }
 
@@ -881,10 +880,8 @@ namespace BrnWorld
     void PropCellManager::FreePhysicalPartSlot(s32 liPhysicsIndex)
     {
         CGS_ASSERT(liPhysicsIndex != -1, "liPart!= -1");                            // BrnPropCellManager.h:624
-        CGS_ASSERT(static_cast<u32>(liPhysicsIndex) < 30u, "invalid index : < 30"); // CgsBitArray.h:203
         CGS_ASSERT(mPhysicalParts.IsBitSet(static_cast<u32>(liPhysicsIndex)),
                    "mPhysicalParts.IsBitSet( liPart )");                            // BrnPropCellManager.h:625
-        CGS_ASSERT(static_cast<u32>(liPhysicsIndex) < 30u, "luIndex < NUMBITS");    // CgsBitArray.h:241
         mPhysicalParts.UnSetBit(static_cast<u32>(liPhysicsIndex));
     }
 
@@ -892,7 +889,6 @@ namespace BrnWorld
     // The asm asserts the < 15 bounds (inlined IsBitSet[]) then that the slot bit is set.
     void PropCellManager::IncrementPropsTimeInSim(u32 luPhysicsIndex, f32 lfTimeStep)
     {
-        CGS_ASSERT(luPhysicsIndex < 15u, "invalid index : < 15");                   // CgsBitArray.h:203
         CGS_ASSERT(mPhysicalProps.IsBitSet(luPhysicsIndex),
                    "mPhysicalProps.IsBitSet( liPhysicalPropIndex )");               // BrnPropCellManager.h:639
         maPhysicalPropParams[luPhysicsIndex].mfTimeInSim += lfTimeStep;
@@ -901,7 +897,6 @@ namespace BrnWorld
     // @ 0x822BC380. Accumulate the frame time step into a physical part's time-in-sim.
     void PropCellManager::IncrementPartsTimeInSim(u32 luPhysicsIndex, f32 lfTimeStep)
     {
-        CGS_ASSERT(luPhysicsIndex < 30u, "invalid index : < 30");                   // CgsBitArray.h:203
         CGS_ASSERT(mPhysicalParts.IsBitSet(luPhysicsIndex),
                    "mPhysicalParts.IsBitSet( liPhysicalPartIndex )");               // BrnPropCellManager.h:652
         maPhysicalPartParams[luPhysicsIndex].mfTimeInSim += lfTimeStep;

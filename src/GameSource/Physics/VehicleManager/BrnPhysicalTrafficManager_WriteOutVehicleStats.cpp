@@ -44,6 +44,9 @@
 //     traffic walks in this manager already use (BrnVehicleManager_ReadUpdatedBodies.cpp:169).
 // =================================================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PhysicalTrafficManager::WriteOutVehicleStats 0x825F0308): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"

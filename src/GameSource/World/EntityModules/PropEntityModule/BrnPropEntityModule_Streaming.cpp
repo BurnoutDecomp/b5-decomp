@@ -85,6 +85,9 @@
 //    `lpUpdatePropEventQueue` parameter is still a `const void*` placeholder.
 // ============================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PropEntityModule::UpdateInstanceStreaming 0x82308330): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "BrnPropEntityModule.h"
 
 #include "BrnPropEntityModuleIO.h"   // PropEntityIO::OutputBuffer_PreScene

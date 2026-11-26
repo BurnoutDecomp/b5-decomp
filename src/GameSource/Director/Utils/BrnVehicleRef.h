@@ -151,7 +151,6 @@ namespace BrnDirector
                 return false;
             }
 
-            CGS_ASSERT(static_cast<u32>(leIndex) < 8u, "invalid index");   // non-gating
 
             return lrWorld.GetUsedRaceCarsBitArray().IsBitSet(static_cast<u32>(leIndex));
         }

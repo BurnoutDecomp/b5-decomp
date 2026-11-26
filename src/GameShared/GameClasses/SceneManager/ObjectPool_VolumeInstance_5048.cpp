@@ -14,6 +14,9 @@
 // @+0xA2AE0, mObjectsAllocated(BitArray<5048>) @+0xA2AE8. Store-for-store
 // identical to the committed generic bodies.
 // ===========================================================================
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. ObjectPool<VolumeInstance,5048,int>::FreeObject 0x828B7000): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstance.h"
 

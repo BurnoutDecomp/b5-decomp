@@ -29,7 +29,6 @@ namespace Deformation
     {
         const u32 luIndex = static_cast<u32>(li16Index);
         CGS_ASSERT(luIndex < KU_MAX_DETACHED_PARTS, "Part index out of range: ");
-        CGS_ASSERT(luIndex < KU_MAX_DETACHED_PARTS, "invalid index : ");   // inlined CgsBitArray bounds tripwire (< 50)
         CGS_ASSERT(mUsedParts.IsBitSet(luIndex), "mUsedParts.IsBitSet( liPartIndex )");
         return &maParts[luIndex];
     }
@@ -47,7 +46,6 @@ namespace Deformation
         const u32 luIndex = static_cast<u32>(li16Index);
         CGS_ASSERT(static_cast<s32>(li16Index) < static_cast<s32>(KU_MAX_DETACHED_PARTS),
                    "liPartIndex < (int32_t)KU_MAX_DETACHED_PARTS");
-        CGS_ASSERT(luIndex < KU_MAX_DETACHED_PARTS, "invalid index : ");
         CGS_ASSERT(mUsedParts.IsBitSet(luIndex), "mUsedParts.IsBitSet( liPartIndex )");
         return &maParts[luIndex];
     }
@@ -61,7 +59,6 @@ namespace Deformation
     bool PhysicalBodyPartPool::IsPartIndexUsed(s32 liIndex)
     {
         const u32 luIndex = static_cast<u32>(liIndex);
-        CGS_ASSERT(luIndex < KU_MAX_DETACHED_PARTS, "invalid index : ");
         return mUsedParts.IsBitSet(luIndex);
     }
 

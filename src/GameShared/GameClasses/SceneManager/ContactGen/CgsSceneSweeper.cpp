@@ -22,6 +22,9 @@
 // scratchpad/waveQ5/sweeper.owner.md.
 // ============================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. SceneSweeper::ForceNoPadding 0x828B0578): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsSceneSweeper.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // CGS_ASSERT
 
@@ -245,7 +248,6 @@ namespace CgsSceneManager
         CGS_ASSERT(luObjectIndex < static_cast<u32>(KI_MAX_NUM_VOLUME_INSTANCES),
                    "luObjectIndex < (uint32_t)KI_MAX_NUM_VOLUME_INSTANCES");
 
-        CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS, "Index out of range\n");
 
         mabForceNoPadding.SetBit(luObjectIndex);
     }
@@ -490,7 +492,6 @@ namespace
     {
         CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS,
                    "luObjectIndex < KU_MAX_NUM_OBJECTS");                    // :274
-        CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS, "invalid index : ");  // CgsBitArray.h:203
 
         CGS_ASSERT(!mCollidingBodies.IsBitSet(luObjectIndex),
                    "object being added to the scene sweeper twice ID=");     // :275
@@ -527,7 +528,6 @@ namespace
             return;   // faithful: a static body joins no list and is not counted
         }
 
-        CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS, "Index out of range\n");  // CgsBitArray.h:222
         mCollidingBodies.SetBit(luObjectIndex);
         ++muNumObjects;
     }
@@ -674,7 +674,6 @@ void SceneSweeper::UpdateObject(u32 luObjectIndex, const rw::collision::AABBox* 
                                 Vector3 lPadding, VolumeInstanceId lVolumeInstanceID)
 {
     CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS, "Object index is invalid: ");   // :392
-    CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS, "invalid index : ");            // CgsBitArray.h:203
     CGS_ASSERT(mCollidingBodies.IsBitSet(luObjectIndex),
                "mCollidingBodies.IsBitSet( luObjectIndex )");                      // :393
 
@@ -767,14 +766,12 @@ void SceneSweeper::RemoveObject(u32 luObjectIndex)
         static_cast<eObjectBodyState>(maObjectData[luObjectIndex].mu8BodyState);
     if (leBodyState == E_DYNAMIC_BODY)
     {
-        CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS, "invalid index : ");   // CgsBitArray.h:203
         CGS_ASSERT(mCollidingBodies.IsBitSet(luObjectIndex),
                    "Non existing object being removed from the scene sweeper");            // :347
         mDynamicIntervalList.RemoveObject(static_cast<u16>(luObjectIndex));
     }
     else if (leBodyState == E_INACTIVE_BODY)
     {
-        CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS, "invalid index : ");   // CgsBitArray.h:203
         CGS_ASSERT(mCollidingBodies.IsBitSet(luObjectIndex),
                    "Non existing object being removed from the scene sweeper");            // :352
         mInactiveIntervalList.RemoveObject(static_cast<u16>(luObjectIndex));
@@ -789,7 +786,6 @@ void SceneSweeper::RemoveObject(u32 luObjectIndex)
 
     maObjectData[luObjectIndex].mu8BodyState = E_INVALID_BODY;
 
-    CGS_ASSERT(luObjectIndex < KU_MAX_NUM_OBJECTS, "luIndex < NUMBITS");      // CgsBitArray.h:241
     mCollidingBodies.UnSetBit(luObjectIndex);
 
     --muNumObjects;

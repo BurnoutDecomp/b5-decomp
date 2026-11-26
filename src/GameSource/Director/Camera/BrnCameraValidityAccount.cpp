@@ -5,7 +5,6 @@
 #include <cstring>   // std::strcmp (SetupFailFlagMask's name-table self-check)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 
-#define CGS_ARTIST_BITARRAY_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h"
 #define CGS_ARTIST_VALIDITY_ACCOUNT_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnCameraValidityAccount.h"
 
 // BrnDirector::Camera::ValidityAccount -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -141,9 +140,6 @@ void ValidityAccount::SetFlag(EFailedFlag leFlag)
 {
     CGS_ASSERT(leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG,
                CGS_ASSERT_MESSAGE_AT("leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG", CGS_ARTIST_VALIDITY_ACCOUNT_FILE, 219));   // h:219 (non-gating)
-    CGS_ASSERT_STREAM_AT(static_cast<u32>(leFlag) < 32u,
-                         "Index: " << static_cast<u32>(leFlag) << ", Number of bits: " << 32u,
-                         CGS_ARTIST_BITARRAY_FILE, 222);
     mFailedFlags.SetBit(static_cast<u32>(leFlag));
 }
 
@@ -175,9 +171,6 @@ void ValidityAccount::SetFlag(ENoCutFromFlag leFlag)
     CGS_ASSERT(leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag < E_END_NOCUTFROM_FLAG,
                CGS_ASSERT_MESSAGE_AT("leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag < E_END_NOCUTFROM_FLAG",
                                      CGS_ARTIST_VALIDITY_ACCOUNT_FILE, 245));
-    CGS_ASSERT_STREAM_AT(static_cast<u32>(leFlag) < 32u,
-                         "Index: " << static_cast<u32>(leFlag) << ", Number of bits: " << 32u,
-                         CGS_ARTIST_BITARRAY_FILE, 222);
     mFailedFlags.SetBit(static_cast<u32>(leFlag));
 }
 
@@ -193,8 +186,6 @@ void ValidityAccount::SetFlag(ENoCutFromFlag leFlag)
 // DELETE-WHEN: the no-cut-TO setter's address/band is identified -- then add its range assert.
 void ValidityAccount::SetFlag(ENoCutToFlag leFlag)
 {
-    CGS_ASSERT(static_cast<u32>(leFlag) < 32u,
-               "Index < Number of bits");   // CgsBitArray.h:222 (streamed on the X360)
     mFailedFlags.SetBit(static_cast<u32>(leFlag));
 }
 
@@ -202,4 +193,3 @@ void ValidityAccount::SetFlag(ENoCutToFlag leFlag)
 }
 
 #undef CGS_ARTIST_VALIDITY_ACCOUNT_FILE
-#undef CGS_ARTIST_BITARRAY_FILE

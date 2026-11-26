@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PropEntityDebugComponent::RenderModuleStats 0x822DE3F8): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include <xtl.h>
 // ============================================================================
 // Bodies for the prop-entity-module debug overlay, reconstructed from BURNOUT_X360_ARTIST.XEX:

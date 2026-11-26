@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. VehicleManager::SetNetworkRaceCarHidden 0x825C3040): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"  // RaceCarPhysics::SetPlayerVehicleInShowtime (declare-only callee)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                            // CGS_ASSERT
@@ -250,7 +253,6 @@ namespace Vehicle
 
         // (asm: the CgsBitArray bounds assert that idx < 8 -- here folded into the BitArray::SetBit
         // bound check.)
-        CGS_ASSERT(liIndex < 8, "Index < Number of bits");
 
         mHiddenRaceCars.SetBit(static_cast<u32>(liIndex));   // asm: 64-bit word @ +44704, set bit idx
         mauNetworkCarHiddenFramesRemaining[liIndex] = liFrames;                      // asm: stwx liFrames @ 4*idx + 44736
@@ -615,8 +617,6 @@ namespace Vehicle
 
         maRaceCarDrivers[liDisconnectedRaceCar].ClearControls();                                // 0x825C5464..0x825C54D0
 
-        CGS_ASSERT(static_cast<u32>(liDisconnectedRaceCar) < mHiddenRaceCars.GetCapacity(),
-                   "luIndex < NUMBITS");                                                        // CgsBitArray.h:241
         mHiddenRaceCars.UnSetBit(static_cast<u32>(liDisconnectedRaceCar));                      // stdx @ +44704
     }
 
@@ -680,8 +680,6 @@ namespace Vehicle
             bool lbSnap = lpControls->mbSnap;                                                   // lbz 0xB8
             if (!lbSnap)
             {
-                CGS_ASSERT(static_cast<u32>(liRaceCarIndex) < mNetworkCarsRecievedFirstUpdate.GetCapacity(),
-                           "invalid index : liRaceCarIndex < 8");                                // CgsBitArray.h:203
                 lbSnap = !mNetworkCarsRecievedFirstUpdate.IsBitSet(static_cast<u32>(liRaceCarIndex));
             }
 
@@ -703,8 +701,6 @@ namespace Vehicle
                     lrStream << "\n";
                 }
 
-                CGS_ASSERT(static_cast<u32>(liRaceCarIndex) < mNetworkCarsRecievedFirstUpdate.GetCapacity(),
-                           "Index: liRaceCarIndex, Number of bits: 8");                          // CgsBitArray.h:222
                 mNetworkCarsRecievedFirstUpdate.SetBit(static_cast<u32>(liRaceCarIndex));     // stdx @ +0xAEB8
                 SetNetworkRaceCarHidden(static_cast<EActiveRaceCarIndex>(liRaceCarIndex), 1);  // 0x82619318
             }

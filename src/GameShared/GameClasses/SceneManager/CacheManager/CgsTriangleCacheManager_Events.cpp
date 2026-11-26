@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. TriangleCacheManager::ProcessRemoveFromCacheEvents 0x828B2710): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h"
 
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // InSceneUpdateInterface (mAddToCacheQueue / mRemoveFromCacheQueue)
@@ -297,7 +300,6 @@ namespace CgsSceneManager
             const TriangleCacheManagerIO::InEventRemoveFromCache& lrEvent = lrRemoveQueue.GetEvent(liEvent);
             const s32 liCacheSlot = lrEvent.miCacheSlot;
 
-            CGS_ASSERT(static_cast<u32>(liCacheSlot) < KU_MAX_CACHED_OBJECTS, "invalid index : ");
 
             if (!mUsedCacheSlots.IsBitSet(static_cast<u32>(liCacheSlot)))
             {
@@ -376,7 +378,6 @@ namespace CgsSceneManager
             // `li r5, 0xF1` (== 241) / 0x828B2C24 `lwz r3, var_FC` where var_FC was stored at
             // 0x828B276C from aLuindexNumbits == "luIndex < NUMBITS" -- a plain baked string,
             // no stream formatting.
-            CGS_ASSERT(static_cast<u32>(liCacheSlot) < KU_MAX_CACHED_OBJECTS, "luIndex < NUMBITS");
             mUsedCacheSlots.UnSetBit(static_cast<u32>(liCacheSlot));
 
             // [DIAG] NOT IN THE X360 BINARY -- one bounds-checked increment, no print.
@@ -410,7 +411,6 @@ namespace CgsSceneManager
             const TriangleCacheManagerIO::InEventAddToCache& lrEvent = lrQueue.GetEvent(liEvent);
             const s32 liCacheSlot = lrEvent.miCacheSlot;
 
-            CGS_ASSERT(static_cast<u32>(liCacheSlot) < KU_MAX_CACHED_OBJECTS, "invalid index : ");
             CGS_ASSERT(!mUsedCacheSlots.IsBitSet(static_cast<u32>(liCacheSlot)),
                        "!mUsedCacheSlots.IsBitSet( lEvent.miCacheSlot )");
 
@@ -428,7 +428,6 @@ namespace CgsSceneManager
             // from r20 == aIndex_0 ("Index: ") + the index + aNumberOfBits (", Number of bits: ")
             // + 0x12A (298). Reduced to the project's static expression form, as at
             // CgsOverlapCullingModule.cpp:511 and BrnCameraValidityAccount.cpp:45.
-            CGS_ASSERT(static_cast<u32>(liCacheSlot) < KU_MAX_CACHED_OBJECTS, "Index < Number of bits");
             mUsedCacheSlots.SetBit(static_cast<u32>(liCacheSlot));
 
             // [DIAG] NOT IN THE X360 BINARY -- wave Q6 round 2. One-shot for the first slot claimed
@@ -477,7 +476,6 @@ namespace CgsSceneManager
             const TriangleCacheManagerIO::InEventUpdateCachedPosition& lrEvent = lrQueue.GetEvent(liEvent);
             const s32 liCacheSlot = lrEvent.miCacheSlot;
 
-            CGS_ASSERT(static_cast<u32>(liCacheSlot) < KU_MAX_CACHED_OBJECTS, "invalid index : ");
             CGS_ASSERT(mUsedCacheSlots.IsBitSet(static_cast<u32>(liCacheSlot)),
                        "Bit not set for event index ");
 

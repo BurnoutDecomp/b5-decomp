@@ -94,7 +94,6 @@ namespace Deformation
 
         // The owning car model slot (poly tag B). Tripwire-bound, then tested live.
         const u32 luModelIndex = lpContact->muPolyTagB;
-        CGS_ASSERT(luModelIndex < static_cast<u32>(KI_MAX_DEFORMATION_MODELS), "invalid index : ");
         if (!mModelsAdded.IsBitSet(luModelIndex))
         {
             return false;
@@ -144,7 +143,6 @@ namespace Deformation
         }
 
         const u32 luModelIndex = lpContact->muPolyTagB;
-        CGS_ASSERT(luModelIndex < static_cast<u32>(KI_MAX_DEFORMATION_MODELS), "invalid index : ");
         if (!mModelsAdded.IsBitSet(luModelIndex))
         {
             return false;

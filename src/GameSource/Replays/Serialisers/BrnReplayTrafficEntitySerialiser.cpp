@@ -83,7 +83,6 @@ namespace BrnReplays
     BrnTraffic::TrafficPhysicsInfo* TrafficEntitySerialiser::GetPhysicsInfo(u32 luPhysicsInfo)
     {
         TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
-        CGS_ASSERT(luPhysicsInfo < KU_NUM_PHYSICS_INFO, "invalid index");
         CGS_ASSERT(lpLayout->mPhysicsBits.IsBitSet(luPhysicsInfo),
                    CGS_ASSERT_MESSAGE_AT("lpFrame->mHeader.mPhysicsBits.IsBitSet( luPhysicsInfo )", CGS_ARTIST_FILE, 534));
         return &lpLayout->maPhysicsInfo[luPhysicsInfo];

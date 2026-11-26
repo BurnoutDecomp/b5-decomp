@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. ArticulatedJointCreateBuffer::FlagJointToBeCreated 0x825C23B0): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 

@@ -153,8 +153,6 @@ namespace CgsGui
                 mOverriddenEventListBitArray.UnSetAll();
                 for (u32 luIndex = 0; luIndex < luOverrideCount; ++luIndex)
                 {
-                    CGS_ASSERT(static_cast<u32>(lpaEventTypeOverrides[luIndex]) <
-                        static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER), "luIndex < NUMBITS");
                     mOverriddenEventListBitArray.SetBit(
                         static_cast<u32>(lpaEventTypeOverrides[luIndex]));
                 }
@@ -183,8 +181,6 @@ namespace CgsGui
                 CGS_ASSERT((liEventType > E_GUI_INVALID) &&
                            (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
                            "Cannot register for invalid events");
-                CGS_ASSERT(static_cast<u32>(liEventType) <
-                    static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER), "luIndex < NUMBITS");
                 mEventListBitArray.SetBit(static_cast<u32>(liEventType));
             }
 
@@ -193,8 +189,6 @@ namespace CgsGui
                 CGS_ASSERT((liEventType > E_GUI_INVALID) &&
                            (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
                            "Cannot register for invalid events");
-                CGS_ASSERT(static_cast<u32>(liEventType) <
-                    static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER), "luIndex < NUMBITS");
                 mEventListBitArray.UnSetBit(static_cast<u32>(liEventType));
             }
 
@@ -203,8 +197,6 @@ namespace CgsGui
                 CGS_ASSERT((liEventType > E_GUI_INVALID) &&
                            (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
                            "Cannot register for invalid events");
-                CGS_ASSERT(static_cast<u32>(liEventType) <
-                    static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER), "luIndex < NUMBITS");
                 return mEventListBitArray.IsBitSet(static_cast<u32>(liEventType));
             }
         };
@@ -238,8 +230,6 @@ namespace CgsGui
                 CGS_ASSERT((liEventType > E_GUI_INVALID) &&
                            (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
                            "Cannot register for invalid events");
-                CGS_ASSERT(static_cast<u32>(liEventType) <
-                    static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER), "luIndex < NUMBITS");
                 return mEventListBitArray.IsBitSet(static_cast<u32>(liEventType));
             }
 

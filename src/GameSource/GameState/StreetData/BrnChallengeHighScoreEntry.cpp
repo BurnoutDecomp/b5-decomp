@@ -156,8 +156,6 @@ bool ChallengeHighScoreEntry::UpdateEntry(const ChallengeHighScoreEntry* lpEntry
 
                 if (lpUpdateScoresBitArray)
                 {
-                    CGS_ASSERT(static_cast<u32>(liScoreType) < E_SCORE_TYPE_COUNT,
-                               "luIndex < NUMBITS");
                     lpUpdateScoresBitArray->SetBit(static_cast<u32>(liScoreType));
                 }
 

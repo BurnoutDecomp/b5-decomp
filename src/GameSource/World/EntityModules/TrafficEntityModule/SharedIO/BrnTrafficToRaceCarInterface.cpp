@@ -108,13 +108,10 @@ namespace BrnTrafficIO
         {
             // Streamed CgsBitArray.h:222 tripwire (dynamic `Index: <i>, Number of bits: 400`); the
             // recoverable rodata head is `Index: `. Non-gating.
-            CGS_ASSERT(static_cast<u32>(liTrafficCarIndex) < KU_MAX_STANDARD_TRAFFIC, "Index: ");
             mSympatheticCrashers.SetBit(static_cast<u32>(liTrafficCarIndex));
         }
         else
         {
-            CGS_ASSERT(static_cast<u32>(liTrafficCarIndex) < KU_MAX_STANDARD_TRAFFIC,
-                       "luIndex < NUMBITS");   // CgsBitArray.h:241 (static rodata)
             mSympatheticCrashers.UnSetBit(static_cast<u32>(liTrafficCarIndex));
         }
     }

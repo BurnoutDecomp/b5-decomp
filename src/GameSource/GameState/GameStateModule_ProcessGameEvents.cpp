@@ -565,18 +565,15 @@ void GameStateModule::ProcessGameEvents_Group1(s32 liEventType, const CgsModule:
             {
                 if (lpCarData->GetUnlockDeformationAmount() > 0.0f)
                 {
-                    CGS_ASSERT(luCar < KU_NUM_CARS, "Index < Number of bits");
                     lCarSelectionResponseAction.mWreckedArray.SetBit(luCar);
                 }
                 else
                 {
-                    CGS_ASSERT(luCar < KU_NUM_CARS, "luIndex < NUMBITS");
                     lCarSelectionResponseAction.mWreckedArray.UnSetBit(luCar);
                 }
             }
             else
             {
-                CGS_ASSERT(luCar < KU_NUM_CARS, "Index < Number of bits");
                 lCarSelectionResponseAction.mWreckedArray.SetBit(luCar);
             }
 
@@ -593,12 +590,10 @@ void GameStateModule::ProcessGameEvents_Group1(s32 liEventType, const CgsModule:
             {
                 if (lpLiveryData->mfDistanceDriven > 0.0f)
                 {
-                    CGS_ASSERT(luCar < KU_NUM_CARS, "Index < Number of bits");
                     lCarSelectionResponseAction.mHasBeenDrivenBitArray.SetBit(luCar);
                 }
                 else
                 {
-                    CGS_ASSERT(luCar < KU_NUM_CARS, "luIndex < NUMBITS");
                     lCarSelectionResponseAction.mHasBeenDrivenBitArray.UnSetBit(luCar);
                 }
             }

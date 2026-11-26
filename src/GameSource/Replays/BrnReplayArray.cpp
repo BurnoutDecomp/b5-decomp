@@ -148,7 +148,6 @@ namespace BrnReplays
         {
             if (TAreDifferent::AreDifferent(maElements[luElement], lpPrevData[luElement]))
             {
-                CGS_ASSERT(luElement < N, "Index: ");
                 lChangedBits.SetBit(luElement);
                 ++luNumChanged;
             }

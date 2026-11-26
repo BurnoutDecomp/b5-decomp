@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. DeformationState::GetCarStateF 0x822CC340): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"
 #include <cstddef>   // offsetof
 

@@ -28,6 +28,9 @@
 //     flt_820047C4 = 15.0f, flt_82001C98 = 1.0f, flt_82001DA0 = 0.5f
 // =================================================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PhysicalTrafficManager::SetTrafficVehicleChecked 0x8262D748): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"
@@ -201,7 +204,6 @@ void PhysicalTrafficManager::SetTrafficVehicleCrashing(
     lpVehicle->mePhysicalTrafficState = E_TRAFFIC_TYPE_CRASHING;
     lpBody->SetCrashing();                                     // vtable +8
 
-    CGS_ASSERT(lu16TrafficIndex < 20u, "luIndex < NUMBITS");   // CgsBitArray.h:241
     mPotentialTrafficVehicles.UnSetBit(lu16TrafficIndex);
 
     if (EntityOwnerOf(lCrasherEntityID) == 2u)
@@ -288,7 +290,6 @@ void PhysicalTrafficManager::SetTrafficVehicleChecked(
 
     lpVehicle->mePhysicalTrafficState = E_TRAFFIC_TYPE_PHYSICAL;
 
-    CGS_ASSERT(lu16TrafficIndex < 20u, "luIndex < NUMBITS");   // CgsBitArray.h:241
     mPotentialTrafficVehicles.UnSetBit(lu16TrafficIndex);
 
     // An articulated car is checked as one: the other half of the joint takes the same response
@@ -357,7 +358,6 @@ void PhysicalTrafficManager::SetTrafficVehicleSlammed(
 
     lpVehicle->mePhysicalTrafficState = E_TRAFFIC_TYPE_PHYSICAL;
 
-    CGS_ASSERT(lu16TrafficIndex < 20u, "luIndex < NUMBITS");   // CgsBitArray.h:241
     mPotentialTrafficVehicles.UnSetBit(lu16TrafficIndex);
 
     // An articulated car is slammed as one: the other half of the joint takes the same response

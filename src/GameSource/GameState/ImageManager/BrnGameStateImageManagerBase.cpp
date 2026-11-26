@@ -902,7 +902,6 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
     // Clear the render bits of the slots from the deleted one onwards.
     for (s32 liClearSlot = liSlotIndex; liClearSlot < KI_NUM_PICTURES; ++liClearSlot)
     {
-        CGS_ASSERT(static_cast<u32>(liClearSlot) < static_cast<u32>(KI_NUM_PICTURES), "luIndex < NUMBITS");
         mImagesToRenderBitArray.UnSetBit(static_cast<u32>(liClearSlot));
     }
 
@@ -951,7 +950,6 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
     {
         for (s32 liSetSlot = liSlotIndex; liSetSlot < KI_NUM_PICTURES - 1; ++liSetSlot)
         {
-            CGS_ASSERT(static_cast<u32>(liSetSlot) < static_cast<u32>(KI_NUM_PICTURES), "luIndex < NUMBITS");
             mImagesToRenderBitArray.SetBit(static_cast<u32>(liSetSlot));
         }
     }

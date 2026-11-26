@@ -34,6 +34,9 @@
 // deliberately NOT enabled in this commit for exactly that reason.
 // =================================================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PhysicalTrafficManager::ReadUpdatedBodies 0x825EF608): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"      // KF_GRAVITY

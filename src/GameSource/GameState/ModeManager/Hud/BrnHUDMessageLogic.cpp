@@ -1453,8 +1453,6 @@ void HUDMessageLogic::OnlineTeamChange(EActiveRaceCarIndex leActiveRaceCarIndex)
     CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_BRNHUDMESSAGELOGIC_FILE, 466));
 
-    CGS_ASSERT(static_cast<u32>(leActiveRaceCarIndex) < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "luIndex < NUMBITS");
 
     mTeamChangedBits.SetBit(static_cast<u32>(leActiveRaceCarIndex));
 }

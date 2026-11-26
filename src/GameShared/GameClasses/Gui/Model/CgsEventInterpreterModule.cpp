@@ -603,8 +603,6 @@ void EventInterpreterModule::PriorityObjectEventObserver::RegisterForEvent(
 {
     CGS_ASSERT((liEventType > E_GUI_INVALID) && (liEventType <= KI_MAX_EVENTS_PER_OBSERVER),
                "Cannot register for invalid events");
-    CGS_ASSERT(static_cast<u32>(liEventType) < static_cast<u32>(KI_MAX_EVENTS_PER_OBSERVER),
-        "luIndex < NUMBITS");
     mEventListBitArray.SetBit(static_cast<u32>(liEventType));
 
     const sMapEntry lMapEntry(lpaEventTypeOverrides, lruOverrideCount);

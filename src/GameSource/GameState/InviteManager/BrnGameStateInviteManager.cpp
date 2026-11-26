@@ -109,20 +109,6 @@ namespace BrnGameState
         u32 luIndex = 0;
         for (; luIndex < luCapacity; ++luIndex)
         {
-            // FindFirstZero bounds tripwire (X360 inlines BitArray's assert): only ever fires
-            // if the search ran off the end, which it cannot on first entry. Preserved as the
-            // dynamic "invalid index" assert message the X360 builds.
-            if (luIndex >= luCapacity)
-            {
-                char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                lStrStream << "invalid index : " << luIndex << " < " << luCapacity;
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(),
-                                           CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 203));
-                CgsDev::Assert::EndAssert();
-            }
-
             // First field whose (1 << bit) mask is clear == first not-yet-prepared module.
             if (!mModulePreparedBitArray.IsBitSet(luIndex))
             {

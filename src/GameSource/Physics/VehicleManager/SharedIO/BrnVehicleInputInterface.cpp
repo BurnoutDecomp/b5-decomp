@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. VehicleInputInterface::SetRaceCarAddedForCollision 0x822B4770): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"          // rw::math::vpu::IsValid(Vector3)
@@ -262,7 +265,6 @@ namespace Vehicle
     //   expression per the committed convention. DWARF return type is void.
     void VehicleInputInterface::SetRaceCarAddedForCollision(EActiveRaceCarIndex leRaceCarIndex)
     {
-        CGS_ASSERT(static_cast<u32>(leRaceCarIndex) < 8u, "Index < Number of bits");
         mRaceCarsAddedForCollision.SetBit(static_cast<u32>(leRaceCarIndex));
     }
 

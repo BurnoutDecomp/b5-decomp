@@ -7,6 +7,9 @@
 // independent closures that pin the class to 1296 bytes.
 // ============================================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. VehicleManagerDebugComponent::DrawPlayerStuckInCollisionLineTests 0x825C9C78): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h"
 
 #include <cstddef>                                          // offsetof (layout asserts)
@@ -758,7 +761,6 @@ namespace Vehicle
             return;
 
         const u32 luPlayerIndex = static_cast<u32>(liPlayerIndex);
-        CGS_ASSERT(luPlayerIndex < VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "invalid index : "); // CgsBitArray.h:203
         if (!lrManager.mUsedRaceCars.IsBitSet(luPlayerIndex))
             return;
 

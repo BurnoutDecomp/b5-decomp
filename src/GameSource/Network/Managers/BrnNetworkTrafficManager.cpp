@@ -467,7 +467,6 @@ namespace BrnNetwork
 
         // BitArray::SetBit's inlined range check; the console streams the index and the
         // bit count after this prefix.
-        CGS_ASSERT(static_cast<u32>(liTrafficDataIndex) < mPendingTrafficResetBitArray.GetCapacity(), "Index: ");
         mPendingTrafficResetBitArray.SetBit(static_cast<u32>(liTrafficDataIndex));
     }
 

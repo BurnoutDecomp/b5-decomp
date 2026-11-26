@@ -25,6 +25,9 @@
 // why StreamCommand::KI_MAX_LINES_PER_COMMAND is 5.
 // =================================================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PhysicalTrafficManager::AddTrafficTractionLineTests 0x8261D580): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"  // GetTractionLine / AddTractionPoint / SetAboveGroundTestResult / EVehicleDrivenWheel
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"                       // KI_MAX_ACTIVE_RACE_CARS (the cache-slot bias)

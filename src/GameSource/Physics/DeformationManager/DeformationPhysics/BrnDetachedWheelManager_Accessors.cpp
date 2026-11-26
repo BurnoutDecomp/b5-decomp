@@ -45,7 +45,6 @@ namespace Deformation
     // ============================================================================================
     bool DetachedWheelManager::IsSlotUsed(u16 lu16Slot)
     {
-        CGS_ASSERT(lu16Slot < KI_MAX_DETACHED_WHEELS, "invalid index : ");
         return mUsedWheels.IsBitSet(static_cast<u32>(lu16Slot));
     }
 

@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. RaceCarAudioStreamer::OnLoadComplete 0x822C08C8): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarComponentStreamers.h"
 #include "GameSource/Sound/BrnDebugComponent.h"
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.cpp"

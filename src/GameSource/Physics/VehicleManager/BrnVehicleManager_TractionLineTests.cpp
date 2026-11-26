@@ -28,6 +28,9 @@
 //
 // =================================================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. VehicleManager::AddRaceCarTractionLineTests 0x825E9640): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerPerfMonHandles.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"                // the traffic pair

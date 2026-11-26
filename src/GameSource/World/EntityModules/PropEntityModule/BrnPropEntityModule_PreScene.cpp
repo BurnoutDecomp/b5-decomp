@@ -463,7 +463,6 @@ namespace BrnWorld
                                          &mReceiverQueue,
                                          luZone );
 
-                CGS_ASSERT( luZone < KU_MAX_ZONES, "luIndex < NUMBITS" );  // CgsBitArray.h:222
                 mabWaitingForGraphics.SetBit( luZone );
 
                 CGS_ASSERT( !mabLoadedWorldGraphics.IsBitSet( luZone ),
@@ -744,7 +743,6 @@ namespace BrnWorld
                     const u32 luZone =
                         static_cast<u32>( atoi( lacName + KI_PRP_INST_PREFIX_LEN ) );
 
-                    CGS_ASSERT( luZone < KU_MAX_ZONES, "luIndex < NUMBITS" );  // CgsBitArray.h:203
                     CGS_ASSERT( mabWaitingForInstances.IsBitSet( luZone ),
                                 "mabWaitingForInstances.IsBitSet( luZoneIndex )" );  // cpp:720
                     // The zone must NOT already be resident. The X360 spells this as

@@ -40,7 +40,6 @@ namespace Vehicle
     //   GetRaceCarState overloads at :343/:347, both returning RaceCarState*.)
     RaceCarState* VehicleOutputInterface::GetRaceCarState(s32 liRaceCarIndex)
     {
-        CGS_ASSERT(static_cast<u32>(liRaceCarIndex) < 8u, "invalid index : ");
         CGS_ASSERT(mUsedRaceCars.IsBitSet(static_cast<u32>(liRaceCarIndex)),
                    "mUsedRaceCars.IsBitSet( liRaceCarIndex )");
         return &maRaceCarStates[liRaceCarIndex];
@@ -51,7 +50,6 @@ namespace Vehicle
     //   dropped FireAssert file/line args.
     const RaceCarState* VehicleOutputInterface::GetRaceCarState(s32 liRaceCarIndex) const
     {
-        CGS_ASSERT(static_cast<u32>(liRaceCarIndex) < 8u, "invalid index : ");
         CGS_ASSERT(mUsedRaceCars.IsBitSet(static_cast<u32>(liRaceCarIndex)),
                    "mUsedRaceCars.IsBitSet( liRaceCarIndex )");
         return &maRaceCarStates[liRaceCarIndex];
@@ -382,7 +380,6 @@ namespace Vehicle
     {
         for (s32 liIndex = 0; liIndex < KI_NUM_RACE_CARS; ++liIndex)
         {
-            CGS_ASSERT(static_cast<u32>(liIndex) < 8u, "invalid index : < 8");
 
             if (lpOutput->GetUsedCarsBitArray().IsBitSet(static_cast<u32>(liIndex)))
             {

@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. VehicleManager::ReadPlayerStuckTractionLineTestResults 0x825C3898): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include <float.h>
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_PlayerStuck.cpp
@@ -348,7 +351,6 @@ namespace
         }
 
         const u32 luPlayer = static_cast<u32>(mePlayerActiveRaceCarIndex);
-        CGS_ASSERT(luPlayer < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS), "invalid index : "); // CgsBitArray.h:203
 
         if (mUsedRaceCars.IsBitSet(luPlayer))
         {
@@ -374,7 +376,6 @@ namespace
         CGS_ASSERT(mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
                    "mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID");     // :3364
         const u32 luPlayer = static_cast<u32>(mePlayerActiveRaceCarIndex);
-        CGS_ASSERT(luPlayer < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS), "invalid index : "); // CgsBitArray.h:203
         CGS_ASSERT(mUsedRaceCars.IsBitSet(luPlayer),
                    "mUsedRaceCars.IsBitSet( mePlayerActiveRaceCarIndex )");               // :3365
 
@@ -456,7 +457,6 @@ namespace
         }
 
         const u32 luPlayer = static_cast<u32>(mePlayerActiveRaceCarIndex);
-        CGS_ASSERT(luPlayer < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS), "invalid index : "); // CgsBitArray.h:203
 
         if (!mUsedRaceCars.IsBitSet(luPlayer)
             || lpDeformationManager->GetPlayerModelIndex() == -1
@@ -534,7 +534,6 @@ namespace
         }
 
         const u32 luPlayer = static_cast<u32>(mePlayerActiveRaceCarIndex);
-        CGS_ASSERT(luPlayer < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS), "invalid index : "); // CgsBitArray.h:203
 
         if (!mUsedRaceCars.IsBitSet(luPlayer)
             || (maRaceCarVehicles[luPlayer].GetTimeUntilStuckInCollisionTest() > 0.0f))

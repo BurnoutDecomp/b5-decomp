@@ -24,6 +24,9 @@
 // They are on the frame path regardless -- the stage runs every step.
 // =================================================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. VehicleManager::SetNetworkCarCrashing 0x82633F00): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"                 // maTrafficEntityIDs (the traffic-owned id remap)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"   // the driver queue + the base-deformation accessors

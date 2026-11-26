@@ -12,6 +12,9 @@
 // out-of-line). Driven every non-catchup frame by PhysicsModule::Update @0x825B0640.
 // ============================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. VehicleManager::DoRaceCarWorldContactValidation 0x825EB6C8): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT

@@ -9,6 +9,9 @@
 // offsets (this+103600, this+104552, this+104688, the +0x1C/+0x32 sub-offsets, etc.) are
 // recorded in comments only and are NOT host-reproducible because host pointers are 8 bytes.
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Physics/VehicleManager/BrnPhysicalTrafficVehicle.h"
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PhysicalTrafficManager::GetGlobalTrafficEntityId 0x825C2C38): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
@@ -173,7 +176,6 @@ EntityId PhysicalTrafficManager::GetGlobalTrafficEntityId(u16 lu16TrafficCarInde
 {
     // CgsBitArray.h:203 bounds assert ("invalid index : <i> < 20"), built by the inlined
     // StrStream in the X360; the house CGS_ASSERT carries the stringized condition.
-    CGS_ASSERT(lu16TrafficCarIndex < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC, "invalid index : luIndex < 20");
 
     CGS_ASSERT(mUsedTrafficVehicles.IsBitSet(lu16TrafficCarIndex),
                "mUsedTrafficVehicles.IsBitSet( lu16TrafficCarIndex )");
@@ -1222,8 +1224,6 @@ void PhysicalTrafficManager::ResolveArticulatedJoints()
             liJointIndex,
             static_cast<s32>(lpTrafficVehicle->GetArticulatedVehicleType()));
 
-        CGS_ASSERT(static_cast<u32>(liTrailerIndex) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-                   "invalid index : ");
         if (!mUsedTrafficVehicles.IsBitSet(static_cast<u32>(liTrailerIndex)))
         {
             continue;
@@ -1327,8 +1327,6 @@ void PhysicalTrafficManager::AddArticulatedJointContacts(
             liJointIndex,
             static_cast<s32>(lpCab->GetArticulatedVehicleType()));
 
-        CGS_ASSERT(static_cast<u32>(liTrailerIndex) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-                   "invalid index : ");
         if (!mUsedTrafficVehicles.IsBitSet(static_cast<u32>(liTrailerIndex)))
         {
             continue;

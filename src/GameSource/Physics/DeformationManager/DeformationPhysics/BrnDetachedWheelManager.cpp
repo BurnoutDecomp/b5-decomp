@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. DetachedWheelManager::DetachWheel 0x8260E430): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"
 
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"   // OutputBuffer + OutUpdateRigidBody queue (walls leg 4)
@@ -148,7 +151,6 @@ namespace Deformation
                                            CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
     {
         CGS_ASSERT(liSlot < KI_MAX_DETACHED_WHEELS, "liSlot < KI_MAX_DETACHED_WHEELS");
-        CGS_ASSERT(static_cast<u32>(liSlot) < KI_MAX_DETACHED_WHEELS, "invalid index : ");
         CGS_ASSERT(mUsedWheels.IsBitSet(static_cast<u32>(liSlot)), "mUsedWheels.IsBitSet(liSlot)");
 
         PhysicalWheel* lpWheel = &maWheels[liSlot];
@@ -174,7 +176,6 @@ namespace Deformation
         }
 
         // Clear the slot's used bit (the :241 "luIndex < NUMBITS" tripwire fires inline, non-gating).
-        CGS_ASSERT(static_cast<u32>(liSlot) < KI_MAX_DETACHED_WHEELS, "luIndex < NUMBITS");
         mUsedWheels.UnSetBit(static_cast<u32>(liSlot));
     }
 
@@ -454,7 +455,6 @@ namespace Deformation
             //   0x82627360  r3 = this + 144*slot ; r4 = event ; r5 = scene  ; bl PhysicalWheel::Update
             // (DWARF BrnDetachedWheelManager.cpp:148 names the local lBodyId.)
             const u32 luSlot = static_cast<u32>(lrEvent.mID & 0xFFFFu);
-            CGS_ASSERT(luSlot < static_cast<u32>(KI_MAX_DETACHED_WHEELS), "invalid index : lBodyId.GetPartPoolIndex() < 20");
             CGS_ASSERT(mUsedWheels.IsBitSet(luSlot), "mUsedWheels.IsBitSet(lBodyId.GetPartPoolIndex())");
             if ( luSlot < static_cast<u32>(KI_MAX_DETACHED_WHEELS) )
             {

@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. TriangleCacheManager::StartUpdateTriangleCaches 0x828BECF8): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT

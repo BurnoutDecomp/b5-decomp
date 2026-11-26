@@ -161,6 +161,9 @@
 //
 // No types or bodies are fabricated here.
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\""../Physics/PropManager/BrnPropManager.cpp"
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PropManager::HasPartJustBeenRemoved 0x825DE930): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/PropManager/BrnPropManager.h"
 
 #include "GameSource/Resource/BrnResourceAllocator.h"   // BrnResource::GetDebugAllocator
@@ -1119,8 +1122,7 @@ PropManager::SetupAndValidatePropContact(
             }
 
             // GetJointIndex carries its own IsJointed() tripwire; the console additionally
-            // inlines BitArray<15>::SetBit's index assert (baked CgsBitArray.h:222), which the
-            // committed assert-free CgsBitArray owns rather than this body.
+            // inlines BitArray<15>::SetBit's own index assert (baked CgsBitArray.h:222).
             mBreakPropJoints.SetBit(
                 static_cast<u32>( lpPropInstance->GetJointIndex() ) );
 
@@ -6708,7 +6710,6 @@ void PropManager::CreatePart( PropEntityID                                      
     // Note the console's compare is `cmplwi ... 0x1E` -- UNSIGNED -- which is why a -1 index falls
     // straight through the :856 assert into this one (the emission literally branches from the
     // :856 assert into the bound-assert block at 0x8262799C).
-    CGS_ASSERT( static_cast<u32>( liPropPartIndex ) < mUsedParts.GetCapacity(), "invalid index" );
     CGS_ASSERT( !mUsedParts.IsBitSet( static_cast<u32>( liPropPartIndex ) ),
                 "!mUsedParts.IsBitSet( liPropPartIndex )" );
 
@@ -7011,14 +7012,12 @@ void PropManager::RemovePart( PropEntityID                                      
 
     // IsBitSet's own bound tripwire (CgsBitArray.h:203) -- see the CreatePart note for why it is
     // spelled here rather than in the container header.
-    CGS_ASSERT( luPartIndex < mUsedParts.GetCapacity(), "invalid index" );
     // :811. 0x8260FA74..0x8260FAC8.
     CGS_ASSERT( mUsedParts.IsBitSet( luPartIndex ), "mUsedParts.IsBitSet( luPartIndex )" );
 
     // UnSetBit's bound tripwire (CgsBitArray.h:241), then the ld/andc/std at
     // 0x8260FAF4..0x8260FB08. The message is the binary's own and matches the committed spelling in
     // BrnPhysicalBodyPartPool_Remove.cpp:58.
-    CGS_ASSERT( luPartIndex < mUsedParts.GetCapacity(), "luIndex < NUMBITS" );
     mUsedParts.UnSetBit( luPartIndex );
 
     // :815. `sldi r10, r25, 32 ; clrlwi r11, r29, 16 ; or ; std` -- same packing as CreatePart, and
@@ -7090,12 +7089,10 @@ void PropManager::RemoveProp( PropEntityID                                      
     }
 
     // IsBitSet's bound tripwire (CgsBitArray.h:203, bound 0xF == 15 == mUsedProps' capacity).
-    CGS_ASSERT( luPropIndex < mUsedProps.GetCapacity(), "invalid index" );
     // :767. 0x8260F634..0x8260F690.
     CGS_ASSERT( mUsedProps.IsBitSet( luPropIndex ), "mUsedProps.IsBitSet( luPropIndex )" );
 
     // UnSetBit's bound tripwire (CgsBitArray.h:241), then ld/andc/std at 0x8260F6C0..0x8260F6D4.
-    CGS_ASSERT( luPropIndex < mUsedProps.GetCapacity(), "luIndex < NUMBITS" );
     mUsedProps.UnSetBit( luPropIndex );
 
     // :771 / :772. Same packing and same inlined AssertIsProp() (fired at 0x8260F6EC) as the two
@@ -7179,14 +7176,10 @@ void PropManager::RemoveProp( PropEntityID                                      
         //    to four times where the console emits it once -- all provably unreachable (const getter,
         //    the whole block is guarded by IsJointed()), which is why the spelling stands.
         //    GetJointIndex()'s committed body (BrnPropInstance.cpp:66) carries that same assert.
-        CGS_ASSERT( static_cast<u32>( lpProp->GetJointIndex() ) < mUsedPropJoints.GetCapacity(),
-                    "invalid index" );                                    // CgsBitArray.h:203
         // :783.
         CGS_ASSERT( mUsedPropJoints.IsBitSet( static_cast<u32>( lpProp->GetJointIndex() ) ),
                     "mUsedPropJoints.IsBitSet( lpProp->GetJointIndex() )" );
 
-        CGS_ASSERT( static_cast<u32>( lpProp->GetJointIndex() ) < mUsedPropJoints.GetCapacity(),
-                    "luIndex < NUMBITS" );                                // CgsBitArray.h:241
         // 0x8260F948..0x8260F960 -- `rlwinm r11, r31, 29,3,28` is (idx>>6)*8, the field index.
         mUsedPropJoints.UnSetBit( static_cast<u32>( lpProp->GetJointIndex() ) );
 
@@ -7692,7 +7685,6 @@ void PropManager::BreakJoint( PropEntityID                                  lEnt
     // UnSetBit's own bound tripwire (CgsBitArray.h:241, `cmplwi cr6, r31, 0xF` at 0x82628B64 --
     // 15 == mUsedPropJoints' capacity), then the ld/andc/std at 0x82628BB8..0x82628BC4. The message
     // is the binary's own. `addi r29, r28, 0x670` == &mUsedPropJoints, reached by name.
-    CGS_ASSERT( static_cast<u32>( liJointIndex ) < mUsedPropJoints.GetCapacity(), "luIndex < NUMBITS" );
     mUsedPropJoints.UnSetBit( static_cast<u32>( liJointIndex ) );
 
     // 0x82628BCC `stb r8(=0xFF), 0x6C(r30)` then 0x82628BDC `stb r11(=0), 0x6D(r30)` -- in that
@@ -7838,7 +7830,6 @@ void PropManager::UpdateJointedProps( CgsPhysics::PhysicsSimulationIO::InputBuff
         // " < " << 15 -- through the same BasePriorityQueue::Clear + AppendFormat pair every other
         // BitArray tripwire in this cluster uses; spelled with the short form here, exactly as the
         // committed siblings in PropManager_wQ2_04.cpp's RemovePart/RemoveProp do.
-        CGS_ASSERT( static_cast<u32>( liJointIndex ) < mBreakPropJoints.GetCapacity(), "invalid index" );
 
         // 0x8263147C..0x826314B0 -- `(liJointIndex>>6 + 0xCF)*8 + this`. 0xCF*8 == 0x678 ==
         // &mBreakPropJoints (mUsedPropJoints is 0x670; the two BitArray<15>s are adjacent). CONSOLE
@@ -7853,7 +7844,6 @@ void PropManager::UpdateJointedProps( CgsPhysics::PhysicsSimulationIO::InputBuff
             // The second CgsBitArray.h:203 copy, this one on the prop index (`cmplwi cr6, r28, 0xF`
             // at 0x826314BC), then :359 itself at 0x826315D4..0x82631620 --
             // `(liPropIndex>>6 + 0x10)*8 + this`, 0x10*8 == 0x80 == &mUsedProps.
-            CGS_ASSERT( static_cast<u32>( liPropIndex ) < mUsedProps.GetCapacity(), "invalid index" );
             CGS_ASSERT( mUsedProps.IsBitSet( static_cast<u32>( liPropIndex ) ),
                         "mUsedProps.IsBitSet( liPropIndex )" );
 
@@ -9103,8 +9093,6 @@ namespace Props
     // slot has been recycled to a different entity (stored != lEntityId).
     bool PropManager::HasPropJustBeenRemoved( PropEntityID lEntityId, int32_t liPropIndex )
     {
-        CGS_ASSERT( static_cast<u32>( liPropIndex ) < mUsedProps.GetCapacity(),
-                    "invalid index" );
 
         if ( !mUsedProps.IsBitSet( static_cast<u32>( liPropIndex ) ) )
         {
@@ -9122,8 +9110,6 @@ namespace Props
     // over mUsedParts<30> / mpaPartInstances (stride 64, mEntityId @+0x30 -> GetEntityId()).
     bool PropManager::HasPartJustBeenRemoved( PropEntityID lEntityId, int32_t liPartIndex )
     {
-        CGS_ASSERT( static_cast<u32>( liPartIndex ) < mUsedParts.GetCapacity(),
-                    "invalid index" );
 
         if ( !mUsedParts.IsBitSet( static_cast<u32>( liPartIndex ) ) )
         {

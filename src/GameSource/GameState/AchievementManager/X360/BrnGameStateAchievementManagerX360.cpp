@@ -120,7 +120,6 @@ void AchievementManagerX360::AchievementEarnt(EAchievement leAchievement)
     const u32 luIndex = static_cast<u32>(leAchievement);
 
     // BitArray<50>::IsBitSet's inlined bounds guard (CgsBitArray.h:203).
-    CGS_ASSERT(luIndex < mAchievementsEarnt.GetCapacity(), "luIndex < NUMBITS");
 
     if (mAchievementsEarnt.IsBitSet(luIndex))
     {
@@ -131,7 +130,6 @@ void AchievementManagerX360::AchievementEarnt(EAchievement leAchievement)
     else
     {
         // BitArray<50>::SetBit's inlined bounds guard (CgsBitArray.h:222).
-        CGS_ASSERT(luIndex < mAchievementsToWrite.GetCapacity(), "luIndex < NUMBITS");
         mAchievementsToWrite.SetBit(luIndex);
     }
 }
@@ -147,14 +145,12 @@ bool AchievementManagerX360::IsAchievementEarnt(EAchievement leAchievement)
     const u32 luIndex = static_cast<u32>(leAchievement);
 
     // BitArray<50>::IsBitSet's inlined bounds guard (CgsBitArray.h:203).
-    CGS_ASSERT(luIndex < mAchievementsEarnt.GetCapacity(), "luIndex < NUMBITS");
     if (mAchievementsEarnt.IsBitSet(luIndex))
     {
         return true;
     }
 
     // Second probe -- same inlined bounds guard on the write queue (CgsBitArray.h:203).
-    CGS_ASSERT(luIndex < mAchievementsToWrite.GetCapacity(), "luIndex < NUMBITS");
     if (mAchievementsToWrite.IsBitSet(luIndex))
     {
         return true;
@@ -339,7 +335,6 @@ bool AchievementManagerX360::GetAchievementsFromX360Api(GameStateModuleIO::Outpu
         }
 
         // BitArray<50>::SetBit's inlined bounds guard (CgsBitArray.h).
-        CGS_ASSERT(static_cast<u32>(liIndex) < mAchievementsEarnt.GetCapacity(), "luIndex < NUMBITS");
         mAchievementsEarnt.SetBit(static_cast<u32>(liIndex));
     }
 
@@ -384,9 +379,7 @@ void AchievementManagerX360::WriteAchievements(GameStateModuleIO::OutputBuffer* 
         const u32 luIndex = static_cast<u32>(liIndex);
 
         // BitArray<50>::IsBitSet's inlined bounds guard (CgsBitArray.h), twice.
-        CGS_ASSERT(luIndex < mAchievementsEarnt.GetCapacity(), "luIndex < NUMBITS");
         CGS_ASSERT(!mAchievementsEarnt.IsBitSet(luIndex), "Trying to earn an achievement twice");
-        CGS_ASSERT(luIndex < mAchievementsToWrite.GetCapacity(), "luIndex < NUMBITS");
         CGS_ASSERT(mAchievementsToWrite.IsBitSet(luIndex), "Trying to write an unachieved event");
 
         XUSER_ACHIEVEMENT& lrAchievement = maAchievementsToWrite[liNumAchievements];
@@ -394,9 +387,7 @@ void AchievementManagerX360::WriteAchievements(GameStateModuleIO::OutputBuffer* 
         lrAchievement.dwAchievementId = KAU_ACHIEVEMENT_IDS[luIndex];
 
         // BitArray<50>::SetBit (CgsBitArray.h) and UnSetBit (CgsBitArray.h) guards.
-        CGS_ASSERT(luIndex < mAchievementsEarnt.GetCapacity(), "luIndex < NUMBITS");
         mAchievementsEarnt.SetBit(luIndex);
-        CGS_ASSERT(luIndex < mAchievementsToWrite.GetCapacity(), "luIndex < NUMBITS");
         mAchievementsToWrite.UnSetBit(luIndex);
 
         BrnNetwork::BrnNetworkModuleIO::TelemetryData lTelemetry;

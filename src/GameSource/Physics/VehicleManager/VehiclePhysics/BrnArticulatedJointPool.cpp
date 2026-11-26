@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. ArticulatedJointPool::IsJointInUse 0x825C29C8): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnArticulatedJointPool.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
@@ -232,7 +235,6 @@ ArticulatedJoint* ArticulatedJointPool::GetJoint(s32 liJointIndex)
 bool ArticulatedJointPool::IsJointInUse(s32 liJointIndex) const
 {
     CGS_ASSERT(liJointIndex >= 0 && liJointIndex < KI_NUM_JOINTS, "Invalid joint index: ");
-    CGS_ASSERT(static_cast<u32>(liJointIndex) < KU_NUM_JOINTS, "invalid index : ");
     return mUsedJoints.IsBitSet(static_cast<u32>(liJointIndex));
 }
 
@@ -452,7 +454,6 @@ void ArticulatedJointPool::RemoveJoint(ArticulatedJointCreateBuffer* lpJointWork
     CGS_ASSERT(lpJointWorkingBuffer != 0, "lpJointWorkingBuffer != NULL");          // :322
     CGS_ASSERT(liJointIndex >= 0 && liJointIndex < KI_NUM_JOINTS,
                "liJointIndex >= 0 && liJointIndex < kiMaxArticulatedTrafficVehicles");    // :323
-    CGS_ASSERT(static_cast<u32>(liJointIndex) < KU_NUM_JOINTS, "invalid index : ");       // CgsBitArray.h:203
     CGS_ASSERT(mUsedJoints.IsBitSet(static_cast<u32>(liJointIndex)),
                "Trying to remove articulated joint ");   // :324, streamed "<i> that isn't in use"
 
@@ -460,7 +461,6 @@ void ArticulatedJointPool::RemoveJoint(ArticulatedJointCreateBuffer* lpJointWork
     lRemoveJointEvent.mu64Id = GetJoint(liJointIndex)->GetJointId().mu64RawId;   // ld 0x40 / std
     lpJointWorkingBuffer->FlagJointToBeRemoved(liJointIndex, lRemoveJointEvent);
 
-    CGS_ASSERT(static_cast<u32>(liJointIndex) < KU_NUM_JOINTS, "luIndex < NUMBITS");      // CgsBitArray.h:241
     mUsedJoints.UnSetBit(static_cast<u32>(liJointIndex));
 }
 

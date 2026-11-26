@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. SceneManagerDebugComponent::DrawCachedObjectSpheres 0x828C2B80): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerDebugComponent.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                           // CGS_ASSERT

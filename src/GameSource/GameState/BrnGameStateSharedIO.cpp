@@ -165,7 +165,6 @@ void CarCheckpointData::SetupCheckpoints(s32 liNumCheckpoints)
 
     for (s32 liIndex = 0; liIndex < liNumCheckpoints; ++liIndex)
     {
-        CGS_ASSERT(static_cast<u32>(liIndex) < KI_MAX_LANDMARKS_IN_MODE, "luIndex < NUMBITS");
 
         mCheckpointsRemaining.SetBit(static_cast<u32>(liIndex));
     }
@@ -183,11 +182,9 @@ void CarCheckpointData::MarkCheckpointAsHit(s32 liCheckpointIndex)
     CGS_ASSERT(liCheckpointIndex >= 0, CGS_ASSERT_MESSAGE_AT("liCheckpointIndex >= 0", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 1210));
     CGS_ASSERT(liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE, CGS_ASSERT_MESSAGE_AT("liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 1211));
 
-    CGS_ASSERT(static_cast<u32>(liCheckpointIndex) < KI_MAX_LANDMARKS_IN_MODE, "luIndex < NUMBITS");
 
     CGS_ASSERT(mCheckpointsRemaining.IsBitSet(static_cast<u32>(liCheckpointIndex)), "Checkpoint either out of range or already hit!");
 
-    CGS_ASSERT(static_cast<u32>(liCheckpointIndex) < KI_MAX_LANDMARKS_IN_MODE, "luIndex < NUMBITS");
 
     mCheckpointsRemaining.UnSetBit(static_cast<u32>(liCheckpointIndex));
 }

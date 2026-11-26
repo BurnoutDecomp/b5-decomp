@@ -22,6 +22,9 @@
 // assert-path-only and non-gating -- reproduced as CGS_ASSERT(vpu::IsValid(...), "<msg>").
 // ============================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. DeformationManager::SolvePenetration 0x82621B08): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"

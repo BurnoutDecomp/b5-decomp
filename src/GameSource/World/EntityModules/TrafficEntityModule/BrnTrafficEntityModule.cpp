@@ -3199,7 +3199,6 @@ void TrafficEntityModule::RecalculateActiveHulls(
             continue;
         }
 
-        CGS_ASSERT(luHullRuntime < KU_MAX_ACTIVE_HULLS, "luIndex < NUMBITS");
         CGS_ASSERT(mUsedHullRuntimeData.IsBitSet(luHullRuntime),
                    "mUsedHullRuntimeData.IsBitSet( luHullRuntime )");
 
@@ -11598,7 +11597,6 @@ void TrafficEntityModule::SendEmergencyCrashEvents(BrnTrafficIO::OutputBuffer_Pr
         CGS_ASSERT(lpInfo->mVictimId.muValue != lpInfo->mCauserId.muValue,
                    CGS_ASSERT_MESSAGE_AT("lpInfo->mVictimId != lpInfo->mCauserId", __FILE__, 5485));   // .cpp:5485
 
-        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "invalid index : ");   // CgsBitArray.h:203
         if (lpCreatedBodies->IsBitSet(luVehicle))
         {
             continue;
@@ -11717,7 +11715,6 @@ void TrafficEntityModule::SafeRequestMakeVehiclePhysical(
 
     // 0x8274B060..0x8274B144 -- the inlined BitArray<601>::IsBitSet with its streamed bounds
     // message ("invalid index : " << luVehicle << " < " << 600).
-    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "invalid index : ");   // CgsBitArray.h:203
     if (lpMadePhysical->IsBitSet(luVehicle))
     {
         return;
@@ -11930,9 +11927,7 @@ void TrafficEntityModule::AddVehicleToPhysics(
             lCabAngularVelocity, lCabKey, lCabHandle, lCabId, lTrailerVolume,
             lTrailerTransform, lTrailerVelocity, lTrailerAngularVelocity, lTrailerKey,
             lTrailerHandle, lTrailerId, leTrafficType);
-        CGS_ASSERT(luCab < KU_MAX_TOTAL_TRAFFIC, "Index: ");
         lpMadePhysical->SetBit(luCab);
-        CGS_ASSERT(luTrailer < KU_MAX_TOTAL_TRAFFIC, "Index: ");
         lpMadePhysical->SetBit(luTrailer);
         return;
     }
@@ -12024,7 +12019,6 @@ void TrafficEntityModule::AddVehicleToPhysics(
 
     // 0x827427C4..0x82742888 -- the inlined BitArray<601>::SetBit with its streamed bounds
     // message ("Index: " << luVehicle << ", Number of bits: " << 600).
-    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "Index: ");   // CgsBitArray.h:222
     lpMadePhysical->SetBit(luVehicle);
 }
 
@@ -12094,8 +12088,6 @@ void TrafficEntityModule::RecordTrafficVehicleIsPhysical(
         }
 
         CGS_ASSERT(liPartsIndex >= 0, CGS_ASSERT_MESSAGE_AT("liPartsIndex >= 0", __FILE__, 7025));                    // .cpp:7025
-        CGS_ASSERT(static_cast<u32>(liPartsIndex) < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES,
-                   "Index: ");                                                 // CgsBitArray.h:222
 
         maTrafficPhysicsInfoListBits.SetBit(static_cast<u32>(liPartsIndex));   // 0x8272115C
 
@@ -14443,8 +14435,6 @@ void TrafficEntityModule::StopVehicleBeingPhysical(u32 luVehicle, bool lbSuppres
     // BEFORE SetNotPhysical (which stores -1 over it); the console's `extsb` only serves the
     // 25-bound compare.
     const s32 liPartsIndex = lpVehicle->GetPhysicalPartsIndex();
-    CGS_ASSERT(static_cast<u32>(liPartsIndex) < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES,
-               "luIndex < NUMBITS");                                   // CgsBitArray.h:241
 
     maTrafficPhysicsInfoListBits.UnSetBit(static_cast<u32>(liPartsIndex));
     maTrafficPhysicsInfoList[liPartsIndex].Destruct();

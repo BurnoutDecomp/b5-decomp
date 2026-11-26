@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PhysicalBodyPartPool::RemovePart 0x8260CA30): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPartPool.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
@@ -56,7 +59,6 @@ namespace Deformation
         }
 
         // The inlined CgsBitArray bounds tripwire (CgsBitArray.h:241), then the un-set + count.
-        CGS_ASSERT(static_cast<u32>(lu8Index) < KU_MAX_DETACHED_PARTS, "luIndex < NUMBITS");
         mUsedParts.UnSetBit(static_cast<u32>(lu8Index));
         mu8NumDetachedParts = static_cast<u8>(mu8NumDetachedParts - 1u);   // addi +0xFF / stb
 

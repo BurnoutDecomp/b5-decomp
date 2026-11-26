@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. VehicleManager::RecordNetworkRaceCarsAddedForCollision 0x825C7EA8): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"  // RaceCarPhysics::SetCrashing (declare-only callee)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                    // CgsContainers::BitArray<N> (crash-data free-list + taken-down bitset)
@@ -4408,7 +4411,6 @@ namespace Vehicle
                 // sitting on the start line is NOT hidden.
                 if (!mbInOnlineGameModeStartLine)
                 {
-                    CGS_ASSERT(luRaceCar < 8u, "luIndex < NUMBITS");     // CgsBitArray.h:241
                     mNetworkCarsRecievedFirstUpdate.UnSetBit(luRaceCar); // this + 44728
 
                     if (CgsDev::Message::gxMessageFilterFlags & 1)
@@ -5599,7 +5601,6 @@ namespace Vehicle
         BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue)
     {
         const u32 luPlayerIndex = static_cast<u32>(mePlayerActiveRaceCarIndex);
-        CGS_ASSERT(luPlayerIndex < KI_MAX_ACTIVE_RACE_CARS, "invalid index : ");
         const bool lbPlayerCarUsed = mUsedRaceCars.IsBitSet(luPlayerIndex);
 
         if (lbPlayerCarUsed)

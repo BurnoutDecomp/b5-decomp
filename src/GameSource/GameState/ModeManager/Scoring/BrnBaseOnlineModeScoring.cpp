@@ -449,14 +449,10 @@ void BaseOnlineModeScoring::AwardNetworkRatings(const ScoringSystem* lpScoringSy
                        "E_ACTIVE_RACE_CAR_INDEX_INVALID != leRaceCarIndex");
 
             // The bit array's own index check (message streamed with the index on the console).
-            CGS_ASSERT(static_cast<u32>(leRaceCarIndex) < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS),
-                       "invalid index : ");
             if (!lAwardedPlayers.IsBitSet(static_cast<u32>(leRaceCarIndex)))
             {
                 if (maGiveAwardFunctions[leAwardID](laNetworkAwardData, liNumActiveRaceCars))
                 {
-                    CGS_ASSERT(static_cast<u32>(leRaceCarIndex) < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS),
-                               "Index: ");
                     lAwardedPlayers.SetBit(static_cast<u32>(leRaceCarIndex));
 
                     maOnlineAwards[leRaceCarIndex]          = leAwardID;

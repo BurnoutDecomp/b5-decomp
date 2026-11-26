@@ -15,6 +15,9 @@
 // maiObjectFreeQueue @ +0x1D4C0 (base 120000), BitArray<10000> mObjectsAllocated
 // @ +0x27108. All six map store-for-store to the committed generic bodies.
 // ===========================================================================
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. ObjectPool<SceneManagerEntity,10000,int>::FreeObject 0x828B6A28): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityManager.h"
 

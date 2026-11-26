@@ -89,7 +89,6 @@ namespace BrnStreetData
             return;
         }
 
-        CGS_ASSERT( leScoreType < E_SCORE_TYPE_COUNT, "luIndex < NUMBITS" );
         mDirty.UnSetBit( static_cast<u32>( leScoreType ) );
     }
 

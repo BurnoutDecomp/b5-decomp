@@ -27,6 +27,9 @@
 //   - LoadZone's per-prop loop is 4x-unrolled by the compiler; re-rolled here into one for.
 //   - UpdateInstance's transform-validity checks are emitted as inlined RwMath::IsValid /
 //     vcmpgtfp SIMD lane tests; restored to IsValid(...) / scalar component comparisons.
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PropZoneManager::GetRespawnType 0x822BC4D0): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropZoneManager.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropZoneManager.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -322,7 +325,6 @@ namespace BrnWorld
                    "luStartOfBlock % KU_SIZE_OF_PROP_ZONE_SLOT == 0");
 
         const u32 luSlotIndex = luStartOfBlock / KU_SIZE_OF_PROP_ZONE_SLOT;
-        CGS_ASSERT(luSlotIndex < KU_NUM_ZONE_SLOTS, "invalid index");
         CGS_ASSERT(maUsedProps.IsBitSet(luSlotIndex), "maUsedProps.IsBitSet(liSlotIndex)");
         maUsedProps.UnSetBit(luSlotIndex);
     }
@@ -339,7 +341,6 @@ namespace BrnWorld
                    "luStartOfBlock % KU_SIZE_OF_PART_ZONE_SLOT == 0");
 
         const u32 luSlotIndex = luStartOfBlock / KU_SIZE_OF_PART_ZONE_SLOT;
-        CGS_ASSERT(luSlotIndex < KU_NUM_ZONE_SLOTS, "invalid index");
         CGS_ASSERT(maUsedParts.IsBitSet(luSlotIndex), "maUsedParts.IsBitSet(liSlotIndex)");
         maUsedParts.UnSetBit(luSlotIndex);
     }
@@ -536,7 +537,6 @@ namespace BrnWorld
 
         const u32 luBitIndex =
             KU_MAX_PROP_INSTANCES_PER_ZONE * static_cast<u32>(liZoneIndex) + static_cast<u32>(liPropIndex);
-        CGS_ASSERT(luBitIndex < 300000u, "invalid index");
         maPreviouslyHitProps.SetBit(luBitIndex);
     }
 
@@ -621,7 +621,6 @@ namespace BrnWorld
         const s32 liSlotIndex = maUsedProps.GetFirstClearBit();
         CGS_ASSERT(liSlotIndex != -1, "liSlotIndex != -1");
 
-        CGS_ASSERT(static_cast<u32>(liSlotIndex) < KU_NUM_ZONE_SLOTS, "invalid index");
         maUsedProps.SetBit(static_cast<u32>(liSlotIndex));
 
         return static_cast<s32>(KU_SIZE_OF_PROP_ZONE_SLOT) * liSlotIndex;
@@ -640,7 +639,6 @@ namespace BrnWorld
         const s32 liSlotIndex = maUsedParts.GetFirstClearBit();
         CGS_ASSERT(liSlotIndex != -1, "liSlotIndex != -1");
 
-        CGS_ASSERT(static_cast<u32>(liSlotIndex) < KU_NUM_ZONE_SLOTS, "invalid index");
         maUsedParts.SetBit(static_cast<u32>(liSlotIndex));
 
         return static_cast<s32>(KU_SIZE_OF_PART_ZONE_SLOT) * liSlotIndex;
@@ -657,7 +655,6 @@ namespace BrnWorld
         CGS_ASSERT(luZoneIndex < KU_MAX_ZONES, "luZoneIndex < BrnPhysics::Props::KU_MAX_ZONES");
 
         const u32 luBitIndex = KU_MAX_PROP_INSTANCES_PER_ZONE * luZoneIndex + luPropIndex;
-        CGS_ASSERT(luBitIndex < 300000u, "invalid index");
         return maPreviouslyHitProps.IsBitSet(luBitIndex);
     }
 
@@ -677,23 +674,19 @@ namespace BrnWorld
     {
         CGS_ASSERT(lId.GetOwner() == E_ENTITYTYPE_PROP, "mEntityId.GetOwner() == E_ENTITYTYPE_PROP");
         const u32 luEntityIndex = lId.GetEntityIndex();
-        CGS_ASSERT(luEntityIndex < 5400u, "invalid index");
 
         if (maDontRespawnProps.IsBitSet(luEntityIndex))
         {
             CGS_ASSERT(lId.GetOwner() == E_ENTITYTYPE_PROP, "mEntityId.GetOwner() == E_ENTITYTYPE_PROP");
-            CGS_ASSERT(luEntityIndex < 5400u, "invalid index");
             CGS_ASSERT(!maRespawnDifferentProps.IsBitSet(luEntityIndex),
                        "!maRespawnDifferentProps.IsBitSet(lId.GetEntityIndex())");
             return BrnPhysics::Props::E_DONT_RESPAWN;
         }
 
         CGS_ASSERT(lId.GetOwner() == E_ENTITYTYPE_PROP, "mEntityId.GetOwner() == E_ENTITYTYPE_PROP");
-        CGS_ASSERT(luEntityIndex < 5400u, "invalid index");
         if (maRespawnDifferentProps.IsBitSet(luEntityIndex))
         {
             const u32 luRespawnEntityIndex = lId.GetEntityIndex();
-            CGS_ASSERT(luRespawnEntityIndex < 5400u, "invalid index");
             CGS_ASSERT(!maDontRespawnProps.IsBitSet(luRespawnEntityIndex),
                        "!maDontRespawnProps.IsBitSet(lId.GetEntityIndex())");
             return BrnPhysics::Props::E_RESPAWN_CHANGED;
@@ -1138,8 +1131,6 @@ namespace BrnWorld
             if (liRotationParamsIndex != -1 &&
                 static_cast<u32>(liRotationParamsIndex) < KU_MAX_ROTATION_PARAMS)
             {
-                CGS_ASSERT(static_cast<u32>(liRotationParamsIndex) < KU_MAX_ROTATION_PARAMS,
-                           "Index / Number of bits");
                 mUsedRotationParams.SetBit(static_cast<u32>(liRotationParamsIndex));
 
                 PropEntityRotationParams& lrRotationParams = maRotationParams[liRotationParamsIndex];
@@ -1176,7 +1167,6 @@ namespace BrnWorld
         if (leRespawnType == BrnPhysics::Props::E_RESPAWN)
         {
             // Ordinary prop: it respawns intact, so neither respawn bit is set.
-            CGS_ASSERT(static_cast<u32>(liPropPoolIndex) < KU_MAX_LOADED_PROP_INSTANCES, "luIndex < NUMBITS");
             maDontRespawnProps.UnSetBit(static_cast<u32>(liPropPoolIndex));
             maRespawnDifferentProps.UnSetBit(static_cast<u32>(liPropPoolIndex));
         }
@@ -1187,7 +1177,6 @@ namespace BrnWorld
                        "liZoneDataIndex < static_cast< int32_t > ( BrnPhysics::Props::"
                        "KU_MAX_NON_PERSISTENT_PROPS_PER_ZONE ) || !HasPropBeenHit( liZoneId, liZoneDataIndex )");
 
-            CGS_ASSERT(static_cast<u32>(liPropPoolIndex) < KU_MAX_LOADED_PROP_INSTANCES, "luIndex < NUMBITS");
             maRespawnDifferentProps.UnSetBit(static_cast<u32>(liPropPoolIndex));
             maDontRespawnProps.SetBit(static_cast<u32>(liPropPoolIndex));
 
@@ -1209,7 +1198,6 @@ namespace BrnWorld
         }
         else if (leRespawnType == BrnPhysics::Props::E_RESPAWN_CHANGED)
         {
-            CGS_ASSERT(static_cast<u32>(liPropPoolIndex) < KU_MAX_LOADED_PROP_INSTANCES, "luIndex < NUMBITS");
             maRespawnDifferentProps.SetBit(static_cast<u32>(liPropPoolIndex));
             maDontRespawnProps.UnSetBit(static_cast<u32>(liPropPoolIndex));
 
@@ -1387,7 +1375,6 @@ namespace BrnWorld
             const s8 li8RotationParamsIndex = lpProp->mi8RotationParamsIndex;
             if (li8RotationParamsIndex != -1)
             {
-                CGS_ASSERT(static_cast<u32>(li8RotationParamsIndex) < KU_MAX_ROTATION_PARAMS, "invalid index");
                 CGS_ASSERT(mUsedRotationParams.IsBitSet(li8RotationParamsIndex),
                            "mUsedRotationParams.IsBitSet( lpProp->GetRotationParamsIndex() )");
                 mUsedRotationParams.UnSetBit(li8RotationParamsIndex);

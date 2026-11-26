@@ -15,7 +15,6 @@
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([profile] selftest witness)
-#define CGS_ARTIST_FILE_CGSBITARRAY "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h"
 #define CGS_ARTIST_FILE_BRNPROFILE "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h"
 #include <string.h>   // memset / memcpy
 #include <stdlib.h>   // getenv (the [profile] selftest gate)
@@ -583,8 +582,6 @@ bool Profile::HasPlayerSeenTrainingType(ETrainingType leTrainingType) const
     CGS_ASSERT(leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT,
                CGS_ASSERT_MESSAGE_AT("leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 2769));  // :2769
     const u32 luIndex = static_cast<u32>(leTrainingType);
-    CGS_ASSERT_STREAM_AT(luIndex < 256u, "invalid index : " << luIndex << " < " << 256u,
-                         CGS_ARTIST_FILE_CGSBITARRAY, 203);
 
     return maHasPlayerSeenTraining.IsBitSet(luIndex);
 }
@@ -781,7 +778,6 @@ s32 Profile::AddMugshot(BrnGameState::GameStateModuleIO::EImageGalleryType leMug
     const s32 liFreeFileIdBit = lrFileIds.GetFirstNonZeroBit();
     if (liFreeFileIdBit != CgsContainers::BitArray<20u>::KI_INVALID_BITINDEX)
     {
-        CGS_ASSERT(static_cast<u32>(liFreeFileIdBit) < 20u, CGS_ASSERT_MESSAGE_AT("luIndex < NUMBITS", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 241));   // CgsBitArray.h:241
         lrFileIds.UnSetBit(static_cast<u32>(liFreeFileIdBit));                      // X360 `andc`
 
         // X360 `mulli r8, r28, 0x3E8 ; add r30, r8, r31` -- the file id is namespaced per gallery.
@@ -876,9 +872,6 @@ s32 Profile::DeleteMugshot(BrnGameState::GameStateModuleIO::EImageGalleryType le
 
             const u32 luNewlyAvailableID = static_cast<u32>(liFileID - 1000 * leMugshotType);
             CgsContainers::BitArray<20>& lrAvailableIDs = maAvailableMugshotFileIDs[leMugshotType];
-            CGS_ASSERT_STREAM_AT(luNewlyAvailableID < 20u,
-                                 "Index: " << luNewlyAvailableID << ", Number of bits: " << 20u,
-                                 CGS_ARTIST_FILE_CGSBITARRAY, 222);
             lrAvailableIDs.SetBit(luNewlyAvailableID);
         }
     }
@@ -1485,8 +1478,6 @@ void Profile::RecordPropHit(s32 liZoneIndex, s32 liPropIndex)
 
     const u32 luBitIndex = static_cast<u32>(600 * liZoneIndex + liPropIndex);
     HitPropsBitArray& lrHitProps = mabHitPropBitArray;
-    CGS_ASSERT_STREAM_AT(luBitIndex < 300000u, "Index: " << luBitIndex << ", Number of bits: " << 300000u,
-                         CGS_ARTIST_FILE_CGSBITARRAY, 222);
     lrHitProps.SetBit(luBitIndex);
 }
 
@@ -1499,8 +1490,6 @@ bool Profile::GetSeenAllEventTypeWonMessage(RaceEventData::EModeType leModeType)
     CGS_ASSERT(leModeType > RaceEventData::E_MODE_INVALID, CGS_ASSERT_MESSAGE_AT("leModeType > RaceEventData::E_MODE_INVALID", CGS_ARTIST_FILE_BRNPROFILE, 3320));   // :3320
     CGS_ASSERT(leModeType < RaceEventData::E_MODE_COUNT, CGS_ASSERT_MESSAGE_AT("leModeType < RaceEventData::E_MODE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3321));     // :3321
     const u32 luIndex = static_cast<u32>(leModeType);
-    CGS_ASSERT_STREAM_AT(luIndex < 6u, "invalid index : " << luIndex << " < " << 6u,
-                         CGS_ARTIST_FILE_CGSBITARRAY, 203);
 
     return mSeenCompleteAllEventTypeArray.IsBitSet(luIndex);
 }
@@ -1514,8 +1503,6 @@ void Profile::SetSeenAllEventTypeWonMessage(RaceEventData::EModeType leModeType)
     CGS_ASSERT(leModeType < RaceEventData::E_MODE_COUNT, CGS_ASSERT_MESSAGE_AT("leModeType < RaceEventData::E_MODE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3337));     // :3337
     CgsContainers::BitArray<6u>& lrFlags = mSeenCompleteAllEventTypeArray;
     const u32 luIndex = static_cast<u32>(leModeType);
-    CGS_ASSERT_STREAM_AT(luIndex < 6u, "Index: " << luIndex << ", Number of bits: " << 6u,
-                         CGS_ARTIST_FILE_CGSBITARRAY, 222);
 
     lrFlags.SetBit(luIndex);
 }
@@ -1529,8 +1516,6 @@ bool Profile::GetSeenTrophyUnlockSequence(TrophyUnlockData::UnlockType leUnlockT
     CGS_ASSERT(leUnlockType > TrophyUnlockData::E_UNLOCKTYPE_NONE, CGS_ASSERT_MESSAGE_AT("leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE", CGS_ARTIST_FILE_BRNPROFILE, 3287));  // :3287
     CGS_ASSERT(leUnlockType < TrophyUnlockData::E_UNLOCKTYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3288)); // :3288
     const u32 luIndex = static_cast<u32>(leUnlockType);
-    CGS_ASSERT_STREAM_AT(luIndex < 35u, "invalid index : " << luIndex << " < " << 35u,
-                         CGS_ARTIST_FILE_CGSBITARRAY, 203);
 
     return mSeenTrophyAwardBitArray.IsBitSet(luIndex);
 }
@@ -1544,8 +1529,6 @@ void Profile::SetSeenTrophyUnlockSequence(TrophyUnlockData::UnlockType leUnlockT
     CGS_ASSERT(leUnlockType < TrophyUnlockData::E_UNLOCKTYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3304)); // :3304
     CgsContainers::BitArray<35u>& lrFlags = mSeenTrophyAwardBitArray;
     const u32 luIndex = static_cast<u32>(leUnlockType);
-    CGS_ASSERT_STREAM_AT(luIndex < 35u, "Index: " << luIndex << ", Number of bits: " << 35u,
-                         CGS_ARTIST_FILE_CGSBITARRAY, 222);
 
     lrFlags.SetBit(luIndex);
 }
@@ -1560,8 +1543,6 @@ void Profile::SetTrainingAlreadySeen(ETrainingType leTrainingType)
                CGS_ASSERT_MESSAGE_AT("leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 2761));  // :2761
     CgsContainers::BitArray<256u>& lrFlags = maHasPlayerSeenTraining;
     const u32 luIndex = static_cast<u32>(leTrainingType);
-    CGS_ASSERT_STREAM_AT(luIndex < 256u, "Index: " << luIndex << ", Number of bits: " << 256u,
-                         CGS_ARTIST_FILE_CGSBITARRAY, 222);
 
     lrFlags.SetBit(luIndex);
 }
@@ -2592,10 +2573,6 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
         {
             const ProfileUpgradeTable::Entry& lrEntry = lpUpgrade->mpaEntries[liEntry];
 
-            CGS_ASSERT(lrEntry.muLiveBitIndex < SaveImage::KU_HIT_PROP_BIT_COUNT,
-                       "luIndex < NUMBITS");                                  // CgsBitArray.h:203
-            CGS_ASSERT(lrEntry.muImageBitIndex < SaveImage::KU_HIT_PROP_BIT_COUNT,
-                       "luIndex < NUMBITS");                                  // CgsBitArray.h:222 / :241
 
             if (mabHitPropBitArray.IsBitSet(lrEntry.muLiveBitIndex))
             {
@@ -2808,10 +2785,6 @@ void Profile::Deserialise(const BrnGuiSaveLoad::Profile* lpImage,
         {
             const ProfileUpgradeTable::Entry& lrEntry = lpUpgrade->mpaEntries[liEntry];
 
-            CGS_ASSERT(lrEntry.muImageBitIndex < SaveImage::KU_HIT_PROP_BIT_COUNT,
-                       "luIndex < NUMBITS");                                  // CgsBitArray.h:203
-            CGS_ASSERT(lrEntry.muLiveBitIndex < SaveImage::KU_HIT_PROP_BIT_COUNT,
-                       "luIndex < NUMBITS");                                  // CgsBitArray.h:222 / :241
 
             if (lpImageHitProps->IsBitSet(lrEntry.muImageBitIndex))
             {

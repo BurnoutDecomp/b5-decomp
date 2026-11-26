@@ -176,8 +176,6 @@ void TrafficEntityModule::ProcessDeformationData(
                     const s32 liPhysicalIndex = static_cast< s8 >( lpVehicle->GetPhysicalPartsIndex() );   // `extsb` after every call
                     CGS_ASSERT( liPhysicalIndex >= 0,
                                 "Traffic vehicle  is physical but has no parts data" );         // :3149
-                    CGS_ASSERT( static_cast< u32 >( liPhysicalIndex ) < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES,
-                                "invalid index :  < 25" );                                       // CgsBitArray.h:203
                     CGS_ASSERT( maTrafficPhysicsInfoListBits.IsBitSet( static_cast< u32 >( liPhysicalIndex ) ),
                                 "maTrafficPhysicsInfoListBits.IsBitSet( liPhysicalIndex )" );   // :3150
 
@@ -255,8 +253,6 @@ void TrafficEntityModule::ProcessDeformationData(
                         {
                             // Both bit-array tripwires are re-run PER WHEEL on the console
                             // (0x8271E430..0x8271E59C) -- the IsBitSet inline was not hoisted.
-                            CGS_ASSERT( static_cast< u32 >( liPhysicalIndex ) < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES,
-                                        "invalid index :  < 25" );                               // CgsBitArray.h:203
                             CGS_ASSERT( maTrafficPhysicsInfoListBits.IsBitSet( static_cast< u32 >( liPhysicalIndex ) ),
                                         "maTrafficPhysicsInfoListBits.IsBitSet(liPhysicalIndex)" ); // :3199
 
@@ -294,8 +290,6 @@ void TrafficEntityModule::ProcessDeformationData(
                     const s32 liPhysicalIndex = static_cast< s8 >( lpVehicle->GetPhysicalPartsIndex() );   // `extsb` after every call
                     CGS_ASSERT( liPhysicalIndex >= 0,
                                 "Traffic vehicle  is physical but has no parts data" );         // :3224
-                    CGS_ASSERT( static_cast< u32 >( liPhysicalIndex ) < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES,
-                                "invalid index :  < 25" );                                       // CgsBitArray.h:203
                     CGS_ASSERT( maTrafficPhysicsInfoListBits.IsBitSet( static_cast< u32 >( liPhysicalIndex ) ),
                                 "maTrafficPhysicsInfoListBits.IsBitSet( liPhysicalIndex )" );   // :3225
 

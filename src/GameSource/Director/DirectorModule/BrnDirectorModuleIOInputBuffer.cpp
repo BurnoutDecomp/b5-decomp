@@ -529,7 +529,6 @@ namespace DirectorIO
     void InputBuffer::SetRaceCarInfo(u32 luIndex, const BrnDirector::Camera::VehicleInfo& lrInfo)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        CGS_ASSERT(luIndex < 8, "Index < Number of bits");
         mUsedRaceCars.SetBit(luIndex);
         mRaceCarInfo[luIndex] = lrInfo;
     }

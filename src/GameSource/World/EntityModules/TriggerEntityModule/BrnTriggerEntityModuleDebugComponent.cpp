@@ -11,6 +11,9 @@
 // reference); the X360 pseudocode/asm is authority for the control flow, the per-type counters, the
 // colours, and the member offsets (all confirmed against 0x822DA1F0 / 0x822C4368).
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. TriggerEntityModuleDebugComponent::RenderHUD 0x822C4368): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleDebugComponent.h"
 
 #include "GameSource/World/Trigger/BrnTriggerEntityModule.h"          // TriggerEntityModule (GetTrigger / GetUsedTriggerList)

@@ -10,6 +10,9 @@
 // the DecFIGS DWARF. Asserts reproduce the X360 file/line VERBATIM (explicit
 // BeginAssert/FireAssert/EndAssert, no baked __FILE__/__LINE__).
 // ============================================================================
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. TriggerEntityModule::ProcessRemoveTriggerEvents 0x822D9A90): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "BrnTriggerEntityModule.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CgsDev::Assert::Begin/Fire/EndAssert

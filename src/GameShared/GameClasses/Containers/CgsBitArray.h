@@ -4,6 +4,25 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+// ARTIST bakes two spellings of this header's path into the asserts of the inlined accessors
+// below (IsBitSet :203, SetBit :222, UnSetBit :241), one per translation unit, decided by the
+// include path through which the unit first reached this header:
+//   "..\..\..\GameShared\GameClasses\Containers/CgsBitArray.h" through the GameShared include
+//     root (e.g. TrafficEntityModule::RecalculateActiveHulls 0x8274C870, Profile::RecordPropHit
+//     0x82361C48);
+//   "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\containers\./CgsBitArray.h" through
+//     a nested "./CgsBitArray.h" include from the containers directory (e.g. PropZoneManager::
+//     UnloadZone 0x82303790, ObjectPool<VolumeSlot,4608,int>::FreeObject 0x828B9030; the PS3
+//     DWARF records the same "Containers/./CgsBitArray.h" path for those units' inlines).
+// A source compiled in a unit of the second kind defines CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
+// before its first #include, so the path is fixed when this header is first read, as __FILE__ was.
+#if defined(CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE)
+#define CGS_ARTIST_CGSBITARRAY_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\./CgsBitArray.h"
+#else
+#define CGS_ARTIST_CGSBITARRAY_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h"
+#endif
 
 namespace CgsContainers
 {
@@ -14,9 +33,6 @@ namespace CgsContainers
 // inlines every instantiation at its call site (e.g. IsBitSet/UnSetBit folded
 // into StreamedVaultAllocator::GetSlotMemory/ReleaseSlot); the semantics here
 // match that inlined bit math (field = index / 64, bit = index % 64).
-//
-// Recovered callers provide their ARTIST diagnostic context. ObjectPool passes
-// its known BitArray source path when clearing an occupied slot.
 template <u32 tuNumBits>
 class BitArray
 {
@@ -27,11 +43,41 @@ public:
     static const u32 kuBitsInBitFieldMask = kuNumberOfBitsInBitField - 1;
     static const s32 KI_INVALID_BITINDEX = -1;
 
-    bool IsBitSet(u32 luIndex) const
+    // DWARF CgsBitArray.h:191 / :210 / :229. Each accessor owns its index tripwire (LegacySrc
+    // CgsBitArray.h; ARTIST lines 203 / 222 / 241). ARTIST inlines all three, with those asserts,
+    // at every one of their ~730 call sites, and the image holds no out-of-line BitArray method;
+    // the XDK declines the streamed bodies under /Ob2, so they are __forceinline.
+    __forceinline const bool IsBitSet(const u32 luIndex) const
     {
-        const u32 luField = luIndex / kuNumberOfBitsInBitField;
-        const u64 lu64Mask = (u64)1 << (luIndex & kuBitsInBitFieldMask);
-        return (maxBits[luField] & lu64Mask) != 0;
+        CGS_ASSERT_STREAM_AT(luIndex < tuNumBits, "invalid index : " << luIndex << " < " << tuNumBits,
+                             CGS_ARTIST_CGSBITARRAY_FILE, 203);
+        return (maxBits[luIndex / kuNumberOfBitsInBitField] & ((u64)1 << (luIndex & kuBitsInBitFieldMask))) != 0;
+    }
+
+    __forceinline void SetBit(const u32 luIndex)
+    {
+        CGS_ASSERT_STREAM_AT(luIndex < tuNumBits, "Index: " << luIndex << ", Number of bits: " << tuNumBits,
+                             CGS_ARTIST_CGSBITARRAY_FILE, 222);
+        maxBits[luIndex / kuNumberOfBitsInBitField] |= ((u64)1) << (luIndex & kuBitsInBitFieldMask);
+    }
+
+    __forceinline void UnSetBit(const u32 luIndex)
+    {
+        CGS_ASSERT_AT(luIndex < tuNumBits, "luIndex < NUMBITS", CGS_ARTIST_CGSBITARRAY_FILE, 241);
+        maxBits[luIndex / kuNumberOfBitsInBitField] &= ~(((u64)1) << (luIndex & kuBitsInBitFieldMask));
+    }
+
+    // DWARF CgsBitArray.h:250 (LegacySrc body).
+    void SetBitToBool(const u32 luIndex, bool lbValue)
+    {
+        if (lbValue)
+        {
+            SetBit(luIndex);
+        }
+        else
+        {
+            UnSetBit(luIndex);
+        }
     }
 
     // ADDITIVE GROW: extract luCount contiguous bits starting at luStartBit into lpaOut, one
@@ -39,7 +85,7 @@ public:
     // final partial word masked to (luCount % 64) bits. Mirrors the X360 cross-field
     // shift-extract (field = start/64, shift = start%64) inlined at PropZoneManager::
     // GetHitPropsFromZone (asm bounds asserts CgsBitArray.h:862/874/914 owned by the caller's
-    // assert system, so this stays assert-free like the rest of the header). The
+    // assert system, so this stays assert-free). The
     // (luShift == 0 ? 0 : ...) guard reproduces the PPC sld-by-64 == 0 behaviour on the host
     // where a 64-bit shift-by-64 is UB.
     void GetBitRange(u32 luStartBit, u32 luCount, u64* lpaOut) const
@@ -68,34 +114,6 @@ public:
             }
             lpaOut[luOutWord] = lu64Low & lu64TailMask;
         }
-    }
-
-    void SetBit(u32 luIndex)
-    {
-        const u32 luField = luIndex / kuNumberOfBitsInBitField;
-        const u64 lu64Mask = (u64)1 << (luIndex & kuBitsInBitFieldMask);
-        maxBits[luField] |= lu64Mask;
-    }
-
-    void UnSetBit(u32 luIndex)
-    {
-        UnSetBit(luIndex, 0);
-    }
-
-private:
-    template <typename T, s32 N, typename TIndex> friend class ObjectPool;
-
-    // ObjectPool supplies the nested include spelling found in ARTIST. The
-    // original inlined bit clear selects the guard at that call site.
-    __forceinline void UnSetBit(u32 luIndex, const char* lpcAssertFile)
-    {
-        if (lpcAssertFile)
-        {
-            CGS_ASSERT_AT(luIndex < tuNumBits, "luIndex < NUMBITS", lpcAssertFile, 241);
-        }
-        const u32 luField = luIndex / kuNumberOfBitsInBitField;
-        const u64 lu64Mask = (u64)1 << (luIndex & kuBitsInBitFieldMask);
-        maxBits[luField] &= ~lu64Mask;
     }
 
 public:
@@ -145,39 +163,21 @@ public:
         }
     }
 
-    // ===== Added for the CarCheckpointData TU (BitArray<16>) =====
-    // The four generic methods below are the EXACT methods the LegacySrc reference template
-    // declares (DWARF BitArray<16u> at CgsBitArray.h:4482/:4485/:4496/:4502 attests
-    // UnSetAll/IsZero/GetFirstNonZeroBit/GetNextNonZeroBit) and that CarCheckpointData's four
-    // X360 bodies inline. Header-inline, matching the X360 inlined bit math; zero-risk additive
-    // (no layout change, no behaviour change to existing IsBitSet/SetBit/UnSetBit users).
-
-    // ADDITIVE GROW (VehiclePhysics::Prepare wave, 2026-08-11). `Prepare()` is a REAL method of
-    // this template, not a synonym invented here: the PS3 build exports it out of line for at
-    // least eight instantiations, mangled -- BitArray<1u>, <2u>, <3u>, <4u>, <8u>, <28u>, <46u>,
-    // <50u>, <64u> all carry `_ZN13CgsContainers8BitArrayILj..EE7PrepareEv`. The X360 inlines
-    // every one of them; VehiclePhysics::Prepare @0x82638080/84 is two such inlines side by side
-    // (`std r30,0x1158` / `std r30,0x1220` -- one 64-bit zero per single-field array), and the
-    // PS3 build of that same source calls `CgsContainers::BitArray<4u>::Prepare(this+0x1148)`
-    // and its BitArray<8u> sibling at the matching two offsets. Same clearing semantics as
-    // UnSetAll above; kept as a separate name because the console source distinguishes them and
-    // the call sites should read the way the console source reads.
-    void Prepare()
+    // DWARF CgsBitArray.h:306 / :324 / :342 / :360 / :378 / :397, bodies from LegacySrc
+    // CgsBitArray.h: SetAll and UnSetAll fill the storage with memset, and the lifecycle
+    // methods all clear it through UnSetAll (Prepare reports success). ARTIST inlines them; e.g.
+    // VehiclePhysics::Prepare 0x82638080/84 stores one 64-bit zero per single-field array
+    // (the PS3 build calls BitArray<4u>/<8u>::Prepare there out of line).
+    void SetAll()
     {
-        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
-        {
-            maxBits[luField] = 0;
-        }
+        memset(maxBits, 0xFF, sizeof(maxBits));
     }
 
-    // Clear every bit (the X360 `*this = 0` of the single-field BitArray<16>).
     void UnSetAll()
     {
         memset(maxBits, 0, sizeof(maxBits));
     }
 
-    // DecFIGS CgsBitArray.h:342 and :360. Both lifecycle operations clear the
-    // storage, as in the BitArray<3> bodies at PS3 0x2CE570 and 0x2CE57C.
     void Construct()
     {
         UnSetAll();
@@ -185,18 +185,18 @@ public:
 
     void Destruct()
     {
-        memset(maxBits, 0, sizeof(maxBits));
+        UnSetAll();
     }
 
-    // ADDITIVE GROW (StreetData wave-C keystone; DWARF CgsBitArray.h:55 attests SetAll on the
-    // reference template). Set every bit -- whole-word ~0 stores, exactly the X360 single
-    // `std -1` of the one-field BitArray<2> in StreetData::FixUp/FixDown's par-score loop.
-    void SetAll()
+    bool Prepare()
     {
-        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
-        {
-            maxBits[luField] = ~static_cast<u64>(0);
-        }
+        UnSetAll();
+        return true;
+    }
+
+    void Release()
+    {
+        UnSetAll();
     }
 
     // ADDITIVE GROW (race-car render wave 2026-07-31). Whole-field store/load, for the

@@ -17,7 +17,6 @@
 #include <cstddef>   // offsetof
 #include <cstring>   // strcmp
 
-#define CGS_ARTIST_BITARRAY_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h"
 
 namespace BrnDirector
 {
@@ -99,13 +98,10 @@ void CameraState::SetFlag(EFlag leFlag, bool lbValue)
     CgsContainers::BitArray<KU_NUM_FLAGS>& lrCurrentFlags = mCurrentFlags;
     if (lbValue)
     {
-        CGS_ASSERT_STREAM_AT(luIndex < KU_NUM_FLAGS, "Index: " << luIndex << ", Number of bits: " << KU_NUM_FLAGS,
-                             CGS_ARTIST_BITARRAY_FILE, 222);
         lrCurrentFlags.SetBit(luIndex);                 // ldx/or/stdx @ this+8
     }
     else
     {
-        CGS_ASSERT_AT(luIndex < KU_NUM_FLAGS, "luIndex < NUMBITS", CGS_ARTIST_BITARRAY_FILE, 241);
         lrCurrentFlags.UnSetBit(luIndex);               // ldx/andc/stdx @ this+8
     }
 }
@@ -120,7 +116,6 @@ void CameraState::ClearFlag(EFlag leFlag)
 {
     const u32 luIndex = static_cast<u32>(leFlag);
     CgsContainers::BitArray<KU_NUM_FLAGS>& lrCurrentFlags = mCurrentFlags;
-    CGS_ASSERT(luIndex < KU_NUM_FLAGS, CGS_ASSERT_MESSAGE_AT("luIndex < NUMBITS", CGS_ARTIST_BITARRAY_FILE, 241));
     lrCurrentFlags.UnSetBit(luIndex);                   // ldx/andc/stdx @ this+8
 }
 
@@ -138,10 +133,8 @@ void CameraState::ClearFlag(EFlag leFlag)
 bool CameraState::HasChanged(EFlag leFlag) const
 {
     const u32 luIndex = static_cast<u32>(leFlag);
-    CGS_ASSERT(luIndex < KU_NUM_FLAGS, "luIndex < NUMBITS");
     const bool lbCurrent = mCurrentFlags.IsBitSet(luIndex);      // first qword read @ this+8
 
-    CGS_ASSERT(luIndex < KU_NUM_FLAGS, "luIndex < NUMBITS");
     const bool lbPrevious = mPreviousFlags.IsBitSet(luIndex);    // second qword read @ this+16
 
     return lbPrevious != lbCurrent;
@@ -284,5 +277,4 @@ CameraState CameraState::Interpolate(const CameraState& lrFrom, const CameraStat
 } // namespace Camera
 } // namespace BrnDirector
 
-#undef CGS_ARTIST_BITARRAY_FILE
 #undef CGS_ARTIST_FILE

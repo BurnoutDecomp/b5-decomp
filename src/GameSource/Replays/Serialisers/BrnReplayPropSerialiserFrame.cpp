@@ -62,6 +62,9 @@
 // x64 host recomputes both from the type -- both records are pure fixed-width POD, so
 // sizeof stays 168 either way (pinned by PropLoadedZoneRecord::_AssertLayout).
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h"
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PropSerialiserFrame::SetPropAddedToScene 0x822BBC28): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -104,7 +107,6 @@ namespace BrnReplays
             return false;
         }
 
-        CGS_ASSERT(luPropIndex < KU_PROPS_PER_ZONE, "invalid index : ");
 
         return lpZone->maPropsPreviouslyHit.IsBitSet(luPropIndex);
     }
@@ -181,12 +183,10 @@ namespace BrnReplays
 
         if (static_cast<u8>(liAddedToScene) != 0)
         {
-            CGS_ASSERT(luPropIndex < KU_PROPS_PER_ZONE, "Index: ");
             lpZone->maPropsAddedToScene.SetBit(luPropIndex);
         }
         else
         {
-            CGS_ASSERT(luPropIndex < KU_PROPS_PER_ZONE, CGS_ASSERT_MESSAGE_AT("luIndex < NUMBITS", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\./CgsBitArray.h", 241));
             lpZone->maPropsAddedToScene.UnSetBit(luPropIndex);
         }
     }
@@ -491,7 +491,6 @@ namespace BrnReplays
             return false;
         }
 
-        CGS_ASSERT(luPropIndex < KU_PROPS_PER_ZONE, "invalid index : ");
 
         return lpZone->maPropsAddedToScene.IsBitSet(luPropIndex);
     }

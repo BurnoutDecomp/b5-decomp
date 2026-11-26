@@ -305,7 +305,6 @@ void AboveCarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
         for (u32 luIndex = 0; luIndex < lrRemoved.GetLength(); ++luIndex)
         {
             const u16 luVehicle = lrRemoved.GetItem(luIndex);
-            CGS_ASSERT(luVehicle < 600, "luIndex < NUMBITS");
             mRecentCrashSet.UnSetBit(luVehicle);
         }
         break;
@@ -350,7 +349,6 @@ void AboveCarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
                 }
             }
         }
-        CGS_ASSERT(lpHit->muVehicleIndex < 600, "Index < Number of bits");
         mRecentCrashSet.SetBit(lpHit->muVehicleIndex);
         break;
     }
@@ -390,7 +388,6 @@ void AboveCarRenderer::RenderTrafficCarScores(CgsGui::ImRendererSet* lpRendererS
     for (u32 luIndex = 0; luIndex < mpGuiCache->GetScoringTrafficCount(); ++luIndex)
     {
         const BrnTraffic::BrnTrafficIO::VehicleScoreData* lpCar = mpGuiCache->GetScoringTrafficData(luIndex);
-        CGS_ASSERT(lpCar->muVehicleIndex < 600, "invalid index < NUMBITS");
         if (mRecentCrashSet.IsBitSet(lpCar->muVehicleIndex))
             continue;
         SetTransformMatrixForCar(lpRendererSet, lpCar->mPosition);

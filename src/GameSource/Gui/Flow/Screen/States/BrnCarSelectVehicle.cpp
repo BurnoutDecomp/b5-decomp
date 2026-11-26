@@ -908,10 +908,8 @@ namespace BrnGui
 
                 // Both bit arrays are indexed with the same assert the X360 inlines from
                 // CgsBitArray.h:203 (`index < 128`).
-                CGS_ASSERT(liVehicleIndex < 128, "invalid index : ");
                 lrCell.SetDriven(maSelectedCarsDrivenState.IsBitSet(static_cast<u32>(liVehicleIndex)));
 
-                CGS_ASSERT(liVehicleIndex < 128, "invalid index : ");
                 lrCell.SetWrecked(maSelectedCarsWreckedState.IsBitSet(static_cast<u32>(liVehicleIndex)));
             }
         }

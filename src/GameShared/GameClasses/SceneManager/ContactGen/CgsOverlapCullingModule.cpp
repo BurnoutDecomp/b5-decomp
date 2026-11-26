@@ -46,6 +46,9 @@
 //     only producer.
 // ===========================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. OverlapCullingModule::ProcessInternalCollisions 0x828CB308): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameShared/GameClasses/SceneManager/CgsOverlapCullingModule.h"
 
 #include <cstddef>  // offsetof
@@ -445,12 +448,7 @@ void OverlapCullingModule::SetContactGenerator(void* lpContactGenerator)
 //
 // The X360 also carries the BitArray's own over-capacity tripwire inlined into SetBit
 // (CgsBitArray.h:222, message streamed as "Index: " << i << ", Number of bits: " <<
-// 5048). CgsBitArray.h keeps its methods assert-free BY DESIGN -- see its banner at
-// CgsBitArray.h:15-17, which states that the bounds asserts the DWARF shows guarding
-// these methods are emitted AT THE CALL SITES by callers that own the CgsDev::Assert
-// API, so the header stays free of the assert-system dependency. The :222 tripwire is
-// therefore the CALLER's to write, per the convention CgsSceneSweeper_wQ5_01.cpp and
-// BrnCameraValidityAccount.cpp already follow; it is emitted before the SetBit below.
+// 5048); BitArray::SetBit owns it.
 //
 // FAITHFUL: all three asserts are NON-GATING -- the console fires them and then does the
 // three stores anyway (there is no branch around loc_828B568C). An out-of-range index
@@ -474,8 +472,6 @@ void OverlapCullingModule::ProcessAddInternalVolumeQueue(const OverlapCullingIO:
         CGS_ASSERT(lrEvent.muEscapeVolumeInstanceIndex < KU_MAX_NUM_VOLUME_INSTANCES,
                    "lEvent.muEscapeVolumeInstanceIndex < static_cast<uint32_t>( KI_MAX_NUM_VOLUME_INSTANCES )");    // :323
 
-        CGS_ASSERT(lrEvent.muVolumeInstanceIndex < KU_MAX_NUM_VOLUME_INSTANCES,
-                   "Index < Number of bits");   // CgsBitArray.h:222
         mabIsUsingInternalCollision.SetBit(lrEvent.muVolumeInstanceIndex);
         mauInternalVolumeInstanceIndex[lrEvent.muVolumeInstanceIndex] =
             lrEvent.muInternalVolumeInstanceIndex;
@@ -1231,12 +1227,7 @@ void OverlapCullingModule::ProcessInternalCollisions(OverlapCullingIO::OutputBuf
         }
         else
         {
-            // The bounds check the console emits from inside the inlined
-            // UnSetBit (0x828CB42C); CgsBitArray.h keeps its asserts at the
-            // call site by design. Unreachable in practice -- the search is
-            // bounded by tuNumBits -- and preserved because the binary has it.
-            CGS_ASSERT(static_cast<u32>(liVolumeInstanceIndex) < KU_MAX_NUM_VOLUME_INSTANCES,
-                       "luIndex < NUMBITS");
+            // UnSetBit carries the console's inlined bound check (0x828CB42C).
             mabIsUsingInternalCollision.UnSetBit(static_cast<u32>(liVolumeInstanceIndex));
         }
     }

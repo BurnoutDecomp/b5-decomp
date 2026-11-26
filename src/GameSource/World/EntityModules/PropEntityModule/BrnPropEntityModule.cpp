@@ -23,6 +23,9 @@
 // that possible is documented once, in the header banner, with its asm provenance.
 // ============================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PropZoneManager::UpdateAnimation 0x822DF3A0): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "BrnPropEntityModule.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
@@ -2885,8 +2888,6 @@ namespace BrnWorld
             // 0x822E132C -- SetBit's own bounds tripwire (CgsBitArray.h:222). Its X360
             // message is StrStream-built ("Index: " << i << ", Number of bits: " << 15);
             // collapsed to a plain CGS_ASSERT per this TU's convention, literal verbatim.
-            CGS_ASSERT( static_cast<u32>( liFreeSlot ) < KU_MAX_PHYSICAL_PROPS,
-                        "Index: " );
 
             // 0x822E13DC..0x822E1438, in asm store order.
             mPhysicalProps.SetBit( static_cast<u32>( liFreeSlot ) );
@@ -2910,7 +2911,6 @@ namespace BrnWorld
             // 0x822E1274 -- IsBitSet's bounds tripwire (CgsBitArray.h:203), StrStream-built
             // ("invalid index : " << i << " < " << 15); collapsed, literal verbatim. It is
             // unreachable with this loop bound, exactly as in the console.
-            CGS_ASSERT( luSlot < KU_MAX_PHYSICAL_PROPS, "invalid index : " );
 
             // 0x822E14CC..0x822E1518 (BrnPropCellManager.cpp:1091). Every occupied-pool slot
             // must be marked in the bit array; the whole pool is occupied on this path.
@@ -2974,8 +2974,6 @@ namespace BrnWorld
         if ( liFreeSlot != CgsContainers::BitArray<KU_MAX_PHYSICAL_PARTS>::KI_INVALID_BITINDEX )
         {
             // 0x822E0F1C -- SetBit bounds tripwire (CgsBitArray.h:222).
-            CGS_ASSERT( static_cast<u32>( liFreeSlot ) < KU_MAX_PHYSICAL_PARTS,
-                        "Index: " );
 
             // 0x822E0FCC..0x822E1028, in asm store order.
             mPhysicalParts.SetBit( static_cast<u32>( liFreeSlot ) );
@@ -2995,7 +2993,6 @@ namespace BrnWorld
         for ( u32 luSlot = 0; luSlot < KU_MAX_PHYSICAL_PARTS; ++luSlot )
         {
             // 0x822E0E64 -- IsBitSet bounds tripwire (CgsBitArray.h:203).
-            CGS_ASSERT( luSlot < KU_MAX_PHYSICAL_PARTS, "invalid index : " );
 
             // 0x822E10BC..0x822E1108 (BrnPropCellManager.cpp:1014).
             CGS_ASSERT( mPhysicalParts.IsBitSet( luSlot ),

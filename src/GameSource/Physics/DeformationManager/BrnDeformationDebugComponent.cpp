@@ -26,6 +26,9 @@
 // (VariableCallbackFunction = void(*)(void*,void*) / DebugCallbackFunction = void(*)(void*)); the X360
 // passes the component as the user-data argument, which each callback casts back to a component.
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. DeformationDebugComponent::OnSelectedRigChange 0x825DF408): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include <float.h>
 #include "GameSource/Physics/DeformationManager/BrnDeformationDebugComponent.h"
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"                          // DeformationManager

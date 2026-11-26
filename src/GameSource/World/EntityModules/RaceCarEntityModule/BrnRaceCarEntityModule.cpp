@@ -47,6 +47,9 @@
 // See the FLAG INVENTORY block at the bottom for the per-function disposition of
 // the remaining 79 methods.
 // ============================================================================
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. RaceCarEntityModule::SetPaddingForResetRaceCars 0x822CEEA8): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "SharedClasses/Progression/BrnTrainingTypes.h"   // BrnProgression::ETrainingType
@@ -1640,8 +1643,6 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         // drops the reset car's scene-volume padding and then clears the array) and the glass
         // event skip in ReadUpdatedActiveRaceCarDataFromPhysics (0x822E8AA0) -- until this store
         // landed both saw an always-empty array.
-        CGS_ASSERT( static_cast<u32>( leActiveRaceCarIndex ) < 8u,
-                    "Index: <slot>, Number of bits: 8" );                    // CgsBitArray.h:222
         mabResetThisFrame.SetBit( static_cast<u32>( leActiveRaceCarIndex ) );
 
         // ---- 0x822F4C14 -- THE CRASH BOOK-KEEPING RE-SEAT. See PARK 3 above. --------------

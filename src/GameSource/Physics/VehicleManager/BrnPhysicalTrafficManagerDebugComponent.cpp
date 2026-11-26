@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PhysicalTrafficManagerDebugComponent::DrawCatchupTargets 0x825ED0C0): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerDebugComponent.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h" // manager storage and pools
 #include "GameShared/GameClasses/Core/CgsAssert.h"

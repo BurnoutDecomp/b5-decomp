@@ -34,6 +34,9 @@
 // No LegacySrc source. ARTIST pseudocode + asm, DecFIGS DWARF for declaration shape.
 // =================================================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PhysicalTrafficManager::ComputeTrafficVehicleInertia 0x825CAF60): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerIO.h"          // ArticulatedJointCreateBuffer
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"     // the remove queue
@@ -218,8 +221,6 @@ namespace Vehicle
             return;
         }
 
-        CGS_ASSERT(lu16TrafficCarIndex < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-                   "invalid index : luIndex < 20");                                  // CgsBitArray.h:203
         if (!mTrafficDeformationModelsActive.IsBitSet(lu16TrafficCarIndex))
         {
             // The arm that never fires in this build -- see the MEASURED note in the banner.
@@ -247,8 +248,6 @@ namespace Vehicle
         lpDeformationInterface->RemoveDeformationModel(
                 CgsPhysics::RigidBodyId(lTrafficBodyID.muId));
 
-        CGS_ASSERT(lu16TrafficCarIndex < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-                   "luIndex < NUMBITS");                                             // CgsBitArray.h:241
         mTrafficDeformationModelsActive.UnSetBit(lu16TrafficCarIndex);
 
         // The two queue lengths are read back AFTER the posts, so a line with both non-zero is
@@ -449,8 +448,6 @@ namespace Vehicle
             Deformation::DeformationInputInterface* lpDeformationInterface,
             bool /*lbRemoveFromSimulation -- unread, see banner*/)
     {
-        CGS_ASSERT(lu8TrafficEntityNum < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-                   "invalid index : luIndex < 20");                                          // CgsBitArray.h:203
         CGS_ASSERT(mUsedTrafficVehicles.IsBitSet(lu8TrafficEntityNum),
                    "mUsedTrafficVehicles.IsBitSet( lu8TrafficEntityNum )");                  // :660
 
@@ -464,8 +461,6 @@ namespace Vehicle
             const s32 liOtherHalfIndex = mArticulatedJointPool.GetIndexOfOtherHalf(
                     liJointIndex, lpVehicle->GetArticulatedVehicleType());   // 0x8261CE04 / 0x8261CE14
 
-            CGS_ASSERT(static_cast<u32>(liOtherHalfIndex) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-                       "invalid index : luIndex < 20");                                      // CgsBitArray.h:203
             CGS_ASSERT(mUsedTrafficVehicles.IsBitSet(static_cast<u32>(liOtherHalfIndex)),
                        "mUsedTrafficVehicles.IsBitSet( liOtherHalfIndex )");                 // :682
 
@@ -508,18 +503,14 @@ namespace Vehicle
         // static text, the committed precedent for streamed asserts.
         if (lu8Type == PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL)
         {
-            CGS_ASSERT(lu8PoolIndex < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC, "invalid index : luIndex < 20");
             CGS_ASSERT(mUsedFullTrafficPhysics.IsBitSet(lu8PoolIndex),
                        "Trying to remove traffic using TrafficPhysics object which isn't in use"); // :744
-            CGS_ASSERT(lu8PoolIndex < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC, "luIndex < NUMBITS");
             mUsedFullTrafficPhysics.UnSetBit(lu8PoolIndex);
         }
         else
         {
-            CGS_ASSERT(lu8PoolIndex < 1, "invalid index : luIndex < 1");
             CGS_ASSERT(mUsedSimpleVehiclePhysics.IsBitSet(lu8PoolIndex),
                        "Trying to remove traffic using SimpleVehiclePhysics object which isn't in use"); // :749
-            CGS_ASSERT(lu8PoolIndex < 1, "luIndex < NUMBITS");
             mUsedSimpleVehiclePhysics.UnSetBit(lu8PoolIndex);
         }
 
@@ -534,13 +525,9 @@ namespace Vehicle
         mu8GlobalToPhysicalEntityIndexMap[luEntityIndex] = KU8_INVALID_MAP;
         maTrafficEntityIDs[lu8TrafficEntityNum].muValue  = 0xFFFFFFFFu;
 
-        CGS_ASSERT(lu8TrafficEntityNum < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC, "luIndex < NUMBITS");
         mUsedTrafficVehicles.UnSetBit(lu8TrafficEntityNum);
-        CGS_ASSERT(lu8TrafficEntityNum < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC, "luIndex < NUMBITS");
         mPotentialTrafficVehicles.UnSetBit(lu8TrafficEntityNum);
-        CGS_ASSERT(lu8TrafficEntityNum < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC, "invalid index : luIndex < 20");
         mRemovedTrafficVehicles.SetBit(lu8TrafficEntityNum);
-        CGS_ASSERT(lu8TrafficEntityNum < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC, "luIndex < NUMBITS");
         mAddedTrafficVehicles.UnSetBit(lu8TrafficEntityNum);
     }
 
@@ -562,8 +549,6 @@ namespace Vehicle
                                                               rw::physics::Inertia* lpOutInertia)
     {
         CGS_ASSERT(lpOutInertia != 0, "lpOutInertia != NULL");                               // :3766
-        CGS_ASSERT(liTrafficVehicleIndex < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-                   "invalid index : luIndex < 20");                                          // CgsBitArray.h
         CGS_ASSERT(mUsedTrafficVehicles.IsBitSet(static_cast<u32>(liTrafficVehicleIndex)),
                    "mUsedTrafficVehicles.IsBitSet( liTrafficVehicleIndex )");                // :3767
 

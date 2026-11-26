@@ -39,6 +39,9 @@
 // the record only; none of them reproduce on the x64 host (pointer-carrying records).
 // =================================================================================================
 
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. VehicleManager::UpdateFatalCrashFlags 0x825EA970): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"                 // EImpactType, gbReadSurfaceProperties, KI_NUM_USED_SURFACES, KAB_SURFACE_IS_WATER
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"           // PhysicalTrafficVehicle, GetTrafficVehicle

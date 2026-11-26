@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. ObjectPool<SceneManagerEntity,10000,int>::operator[] 0x828B6C08): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"

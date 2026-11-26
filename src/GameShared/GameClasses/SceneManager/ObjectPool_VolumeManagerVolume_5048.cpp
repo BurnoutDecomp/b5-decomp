@@ -26,6 +26,9 @@
 // stride, which is why there is no sizeof static_assert here (contrast the pointer-free
 // VolumeSlot pool, which IS asserted in CgsVolumeStore.h).
 // ===========================================================================
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. ObjectPool<VolumeManagerVolume,5048,int>::FreeObject 0x828B75D0): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"
 #include "GameShared/GameClasses/SceneManager/CgsVolumeManager.h"
 

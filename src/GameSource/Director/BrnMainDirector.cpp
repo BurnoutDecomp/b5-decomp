@@ -600,7 +600,6 @@ namespace BrnDirector
         if (liIndex == -1)
             return -1;
 
-        CGS_ASSERT(liIndex < 8, "invalid index");
         if (liIndex < 8 && lpUsedRaceCars->IsBitSet(static_cast<u32>(liIndex)))
             return liIndex;
 

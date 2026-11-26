@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. PhysicalBodyPartPool::UpdateRWBodies 0x825E7E98): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPartPool.h"
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"   // the REAL interface (walls leg 4: model accessor views)
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"  // the two OutputEvents sinks (landed 2026-08-24)
@@ -485,7 +488,6 @@ namespace Deformation
         const u16 lu16PartIndex = static_cast<u16>(lu64EventId & 0xFFFFu);
 
         // CgsBitArray.h:203 -- the inlined bound tripwire, non-gating.
-        CGS_ASSERT(lu16PartIndex < KU_MAX_DETACHED_PARTS, "invalid index : lu16PartIndex < 50");
 
         // :172 / :173 -- both non-gating.
         CGS_ASSERT(mUsedParts.IsBitSet(lu16PartIndex), "mUsedParts.IsBitSet( lu16PartIndex )");

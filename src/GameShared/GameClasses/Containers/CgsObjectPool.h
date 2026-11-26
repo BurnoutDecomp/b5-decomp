@@ -5,10 +5,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<N>
 
-// ARTIST spells the pool and its nested BitArray diagnostics differently.
 #define CGS_ARTIST_CGSOBJECTPOOL_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsObjectPool.h"
-#define CGS_ARTIST_CGSOBJECTPOOL_BITARRAY_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h"
-#define CGS_ARTIST_CGSOBJECTPOOL_NESTED_BITARRAY_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\./CgsBitArray.h"
 
 namespace BrnGameState { class HUDMessageLogic; class ChallengeManager; class StuntModeScoringOnline; }
 
@@ -22,19 +19,6 @@ namespace CgsSceneManager
 
 namespace CgsContainers
 {
-// ARTIST uses the nested include spelling for these four pool instantiations.
-// Select the diagnostic context by the complete pool type so it is uniform across TUs.
-template <typename T, s32 N, typename TIndex>
-struct ObjectPoolBitArrayUsesNestedPath { static const bool KB_VALUE = false; };
-template <> struct ObjectPoolBitArrayUsesNestedPath<CgsSceneManager::SceneManagerEntity, 10000, s32>
-{ static const bool KB_VALUE = true; };
-template <> struct ObjectPoolBitArrayUsesNestedPath<CgsSceneManager::VolumeInstance, 5048, s32>
-{ static const bool KB_VALUE = true; };
-template <> struct ObjectPoolBitArrayUsesNestedPath<CgsSceneManager::VolumeManagerVolume, 5048, s32>
-{ static const bool KB_VALUE = true; };
-template <> struct ObjectPoolBitArrayUsesNestedPath<CgsSceneManager::VolumeSlot, 4608, s32>
-{ static const bool KB_VALUE = true; };
-
 // Fixed-capacity object pool: N inline objects, a LIFO free-index queue, and an occupancy
 // BitArray. Recovered from the X360 spine (CgsObjectPool.h) with member names from DWARF.
 // Empty base carries attested per-instantiation alignment, without storage.
@@ -119,7 +103,7 @@ public:
             const TIndex liFreeObjectIndex = maiObjectFreeQueue[--miNumObjectsFree];
             CGS_ASSERT_STREAM_AT(liFreeObjectIndex < N, "Array index out of bounds: " << liFreeObjectIndex,
                                  CGS_ARTIST_CGSOBJECTPOOL_FILE, 193);
-            SetAllocationBit(static_cast<u32>(liFreeObjectIndex));
+            mObjectsAllocated.SetBit(static_cast<u32>(liFreeObjectIndex));
             return liFreeObjectIndex;
         }
         return static_cast<TIndex>(-1);
@@ -134,7 +118,7 @@ public:
     bool IsObjectAllocated(TIndex liIndex) const
     {
         CGS_ASSERT_AT(liIndex < N, "Array index out of bounds", CGS_ARTIST_CGSOBJECTPOOL_FILE, 260);
-        return IsAllocationBitSet(static_cast<u32>(liIndex));
+        return mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex));
     }
 
     // Find the first allocated slot whose object compares equal to lrTarget (via T::operator==)
@@ -172,8 +156,8 @@ public:
         CGS_ASSERT_AT(miNumObjectsFree < N, "miNumObjectsFree < PoolSize", CGS_ARTIST_CGSOBJECTPOOL_FILE, 206);
         maiObjectFreeQueue[miNumObjectsFree] = liIndex;
         ++miNumObjectsFree;
-        CGS_ASSERT_AT(IsAllocationBitSet(static_cast<u32>(liIndex)), "The object isn't allocated", CGS_ARTIST_CGSOBJECTPOOL_FILE, 209);
-        mObjectsAllocated.UnSetBit(static_cast<u32>(liIndex), GetBitArrayAssertFile());
+        CGS_ASSERT_AT(mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex)), "The object isn't allocated", CGS_ARTIST_CGSOBJECTPOOL_FILE, 209);
+        mObjectsAllocated.UnSetBit(static_cast<u32>(liIndex));
     }
 
     // Reach the inline object at a pool slot index (callers resolve a slot via the free
@@ -187,46 +171,17 @@ public:
     T& operator[](TIndex liIndex)
     {
         CGS_ASSERT_AT(liIndex < N, "Array index out of bounds", CGS_ARTIST_CGSOBJECTPOOL_FILE, 218);
-        CGS_ASSERT_AT(IsAllocationBitSet(static_cast<u32>(liIndex)), "The referenced object has not been allocated", CGS_ARTIST_CGSOBJECTPOOL_FILE, 219);
+        CGS_ASSERT_AT(mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex)), "The referenced object has not been allocated", CGS_ARTIST_CGSOBJECTPOOL_FILE, 219);
         return maObjectPool[static_cast<s32>(liIndex)];
     }
     const T& operator[](TIndex liIndex) const
     {
         CGS_ASSERT_AT(liIndex < N, "Array index out of bounds", CGS_ARTIST_CGSOBJECTPOOL_FILE, 228);
-        CGS_ASSERT_AT(IsAllocationBitSet(static_cast<u32>(liIndex)), "The referenced object has not been allocated", CGS_ARTIST_CGSOBJECTPOOL_FILE, 229);
+        CGS_ASSERT_AT(mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex)), "The referenced object has not been allocated", CGS_ARTIST_CGSOBJECTPOOL_FILE, 229);
         return maObjectPool[static_cast<s32>(liIndex)];
     }
 
 private:
-    static const char* GetBitArrayAssertFile()
-    {
-#if defined(CGS_MATCH_ASSERT_LOCATIONS) && CGS_MATCH_ASSERT_LOCATIONS
-        return ObjectPoolBitArrayUsesNestedPath<T, N, TIndex>::KB_VALUE
-            ? CGS_ARTIST_CGSOBJECTPOOL_NESTED_BITARRAY_FILE
-            : CGS_ARTIST_CGSOBJECTPOOL_BITARRAY_FILE;
-#else
-        // A live path keeps the contextual guard enabled in normal builds.
-        // CGS_ASSERT_LOCATION supplies its actual BitArray call site.
-        return __FILE__;
-#endif
-    }
-
-    // ARTIST inlines the Bitmap diagnostics into the pool operations.
-    // Keep these checked helpers inline even when the streamed message is large.
-    __forceinline bool IsAllocationBitSet(u32 luIndex) const
-    {
-        CGS_ASSERT_STREAM_AT(luIndex < static_cast<u32>(N), "invalid index : " << luIndex << " < " << static_cast<u32>(N),
-                             GetBitArrayAssertFile(), 203);
-        return mObjectsAllocated.IsBitSet(luIndex);
-    }
-
-    __forceinline void SetAllocationBit(u32 luIndex)
-    {
-        CGS_ASSERT_STREAM_AT(luIndex < static_cast<u32>(N), "Index: " << luIndex << ", Number of bits: " << static_cast<u32>(N),
-                             GetBitArrayAssertFile(), 222);
-        mObjectsAllocated.SetBit(luIndex);
-    }
-
     T                  maObjectPool[N];
     TIndex             maiObjectFreeQueue[N];
     s32                miNumObjectsFree;
@@ -234,6 +189,4 @@ private:
 };
 }
 
-#undef CGS_ARTIST_CGSOBJECTPOOL_NESTED_BITARRAY_FILE
-#undef CGS_ARTIST_CGSOBJECTPOOL_BITARRAY_FILE
 #undef CGS_ARTIST_CGSOBJECTPOOL_FILE

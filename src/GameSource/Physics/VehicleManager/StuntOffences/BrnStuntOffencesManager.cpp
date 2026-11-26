@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. StuntOffencesManager::GetTailgateeIndex 0x82613960): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/VehicleManager/StuntOffences/BrnStuntOffencesManager.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"   // RaceCarPhysics (GetTransform/GetAngularVelocity/GetLinearVelocity/GetNumberOfWheelsOnTheGround/IsCrashing)
 #include "GameSource/Math/BrnMathUtils.h"                                      // BrnMath::Flatten

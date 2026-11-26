@@ -252,8 +252,7 @@ namespace Camera
     //
     // Faithful to the X360 asm: first assert is the DWARF-attested
     // "mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)" (BrnBehaviourManager.h:218); the
-    // second is the BitArray<28> bounds guard the CgsBitArray.h header documents as being the
-    // CALLER's responsibility (its own IsBitSet is assert-free / header-inline). Both asserts are
+    // second is the BitArray<28> bounds guard inlined from BitArray::IsBitSet. Both asserts are
     // non-fatal tripwires (the X360 keeps going after EndAssert()), so they are modelled as
     // CGS_ASSERT rather than early-outs, matching the fall-through control flow in the asm. The
     // tail `(*&v4 << SBYTE3(v14)) & v14) != 0` is Hex-Rays' rendering of the inlined
@@ -278,8 +277,6 @@ namespace Camera
 
         CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex),
                    CGS_ASSERT_MESSAGE_AT("mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)", CGS_ARTIST_FILE, 218));
-        CGS_ASSERT(luAllocationKey < mBehaviourNeedsPreparingFlags.GetCapacity(),
-                   "invalid index : luAllocationKey < capacity");
 
         return mBehaviourNeedsPreparingFlags.IsBitSet(luAllocationKey);
     }

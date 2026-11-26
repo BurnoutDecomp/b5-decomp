@@ -1,3 +1,6 @@
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. DeformationManager::BridgeBodyPartCarContactsToSimulation 0x825DD7D0): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
 #include "GameSource/Physics/DeformationManager/BrnDeformationDebugComponent.h"
 
@@ -407,8 +410,6 @@ namespace Deformation
             // CgsBitArray.h:222 bounds tripwire (the X360 SetBit path streams
             // "Index: " << liModelIndex << ", Number of bits: " << 28 into the message buffer
             // before FireAssert). Reduced to the static streamed wording.
-            CGS_ASSERT(static_cast<u32>(liModelIndex) < KU_MAX_DEFORMATION_MODELS,
-                       "Index: liModelIndex, Number of bits: 28");
 
             // Mark the slot live, bump the live count, record the owning global entity id.
             mModelsAdded.SetBit(static_cast<u32>(liModelIndex));
@@ -532,7 +533,6 @@ namespace Deformation
                                             &mDetachedPartManager, &mDetachedWheelManager);
 
             // Clear the live-slot bit (CgsBitArray.h:241 bounds tripwire).
-            CGS_ASSERT(static_cast<u32>(liModelIndex) < KU_MAX_DEFORMATION_MODELS, "luIndex < NUMBITS");
             mModelsAdded.UnSetBit(static_cast<u32>(liModelIndex));
             --miNumUsedModels;
 
@@ -1751,7 +1751,6 @@ namespace Deformation
             const u32 luModelIndex = lContact.muPolyTagB;
             CGS_ASSERT(luModelIndex < KU_MAX_DEFORMATION_MODELS,
                        "lContact.muPolyTagB < BrnPhysics::Deformation::KU_MAX_DEFORMATION_MODELS");                            // :2381
-            CGS_ASSERT(luModelIndex < KU_MAX_DEFORMATION_MODELS, "invalid index : ");        // CgsBitArray.h:203
             CGS_ASSERT(mModelsAdded.IsBitSet(luModelIndex),
                        "mModelsAdded.IsBitSet(lContact.muPolyTagB)");                                                          // :2382
 
@@ -1852,7 +1851,6 @@ namespace Deformation
             lAddContactEvent.mIDA = lpWheel->GetVolumeInstanceId().muId;
 
             const u32 luModelIndex = lContact.muPolyTagB;
-            CGS_ASSERT(luModelIndex < KU_MAX_DEFORMATION_MODELS, "invalid index : ");        // CgsBitArray.h:203
             CGS_ASSERT(mModelsAdded.IsBitSet(luModelIndex),
                        "mModelsAdded.IsBitSet(lContact.muPolyTagB)");                                                          // :2473
 

@@ -138,18 +138,12 @@ namespace BrnGui
                 mfIntervalTime_Seconds = mfCurrentGameTime_Seconds + KF_TIME_BETWEEN_POPUPS_SECS;
                 mAptRef.GotoAndPlayLabel("AnimOut");
 
-                // Inlined BitArray<60>::IsBitSet bounds + probe (CgsBitArray.h:203).
-                CGS_ASSERT(static_cast<u32>(miCurrentAchievementShowing)
-                               < mAchievementsToShow.GetCapacity(),
-                           "invalid index");
+                // Inlined BitArray<60>::IsBitSet (its bound assert CgsBitArray.h:203) + probe.
                 CGS_ASSERT(mAchievementsToShow.IsBitSet(
                                static_cast<u32>(miCurrentAchievementShowing)),
                            "mAchievementsToShow.IsBitSet( miCurrentAchievementShowing )");
 
                 // Inlined BitArray<60>::UnSetBit bounds (CgsBitArray.h:241) + clear.
-                CGS_ASSERT(static_cast<u32>(miCurrentAchievementShowing)
-                               < mAchievementsToShow.GetCapacity(),
-                           "luIndex < NUMBITS");
                 mAchievementsToShow.UnSetBit(static_cast<u32>(miCurrentAchievementShowing));
                 miCurrentAchievementShowing = KI_NO_ACHIEVEMENT_SHOWING;
             }

@@ -26,6 +26,9 @@
 // compile; sizeof == 608848 (with the 16-byte tail pad) is static_asserted in
 // CgsVolumeStore.h rather than merely commented.
 // ===========================================================================
+// ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
+// containers\./CgsBitArray.h, e.g. ObjectPool<VolumeSlot,4608,int>::FreeObject 0x828B9030): see CgsBitArray.h.
+#define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
 #include "GameShared/GameClasses/SceneManager/CgsVolumeStore.h"
 
 template int  CgsContainers::ObjectPool<CgsSceneManager::VolumeSlot, 4608, int>::AllocateObject();
