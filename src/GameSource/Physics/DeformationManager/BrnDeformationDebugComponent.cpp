@@ -1185,10 +1185,11 @@ namespace Deformation
         DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
 
         const s32 liRig = lpThis->miSelectedRig;
-        CGS_ASSERT( static_cast<u32>(liRig) < 28u, "invalid index : liIndex < 28" );   // CgsBitArray.h:203 (non-gating)
 
+        // ARTIST 0x825DF408 tests the rig bit with no null test of the manager; the only assert is
+        // the accessor's own IsBitSet bound (CgsBitArray.h:203, nested containers path).
         DeformationManager* lpMgr = lpThis->mpDeformationManager;
-        if ( lpMgr != 0 && lpMgr->IsDeformableObjectActive(liRig) )
+        if ( lpMgr->IsDeformableObjectActive(liRig) )
         {
             lpThis->mpSelectedRig = lpMgr->GetDeformableObject(liRig);
 
