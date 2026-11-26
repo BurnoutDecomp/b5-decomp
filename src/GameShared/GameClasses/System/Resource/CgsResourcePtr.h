@@ -78,12 +78,13 @@ namespace CgsResource
         bool IsEqual(const void* lpOther) const;
 
     protected:
+        // DWARF h:111; the body (h:255-262 in DecFIGS) hands the handle to
+        // ResourceHandle::Construct (see CgsResourceHandle.h).
         void Reset()
         {
             mpNext = this;
             mpPrev = this;
-            mHandle.mpResourceMemory = &mResourceMemory;
-            mHandle.mpSourceEntry = 0;
+            mHandle.Construct(&mResourceMemory, 0);
         }
         void RemoveFromCurrentList();
         void AddToNewList(BaseResourcePtr* lpList);

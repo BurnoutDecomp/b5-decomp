@@ -10,6 +10,7 @@
 namespace CgsResource
 {
     class Entry;
+    struct SmallResource;
 
     struct ResourceHandle
     {
@@ -20,6 +21,17 @@ namespace CgsResource
         // source pool entry. Out-of-line in the X360 ARTIST build (@0x828D8438); declared
         // here, defined in CgsResourceHandle.cpp.
         ID GetResourceId() const;
+
+        // CgsResourceHandle.h:61 (DWARF Construct(ResourceHandle::Resource*, Entry*)); the
+        // inline body sits at h:220-221. DecFIGS Pool::InitManagementData (PS3 0xCE3C5C) runs
+        // it inside BaseResourcePtr::Reset (CgsResourcePtr.h:255-262 then CgsResourceHandle.h
+        // 221/220, decfigs_inlining); ARTIST Pool::InitManagementData @0x828F5B28 keeps the
+        // two stores after Reset's list links.
+        void Construct(SmallResource* lpResource, Entry* lpSourceEntry)
+        {
+            mpResourceMemory = lpResource;
+            mpSourceEntry = lpSourceEntry;
+        }
 
         // ADDITIVE GROW (DWARF-attested via the DecFIGS DispatchThreadInputBuffer::Construct
         // call list; the X360 inlines it as the two null stores @0x823C5BB8 +0x9994/+0x9998):
