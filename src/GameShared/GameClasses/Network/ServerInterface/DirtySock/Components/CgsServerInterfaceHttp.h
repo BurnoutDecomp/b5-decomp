@@ -80,6 +80,8 @@ namespace CgsNetwork
         void Resume();
 
     private:
+        // DWARF CgsServerInterfaceHttp.cpp:344; ARTIST inlines it (no out-of-line copy).
+        EServerInterfaceError ConvertError(s32 liError, EAction leAction);
         void EndAction(s32 liError);
 
         static const DSErrorToServerInterfaceErrorTable KA_DS_ERROR_TABLE_LOOKUP[E_ACTION_COUNT];

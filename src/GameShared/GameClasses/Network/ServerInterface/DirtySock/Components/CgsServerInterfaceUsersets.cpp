@@ -279,7 +279,7 @@ namespace CgsNetwork
             for (s32 liMember = 0; liMember < DispListCount(mpUsersInUsersetList); ++liMember)
             {
                 const s32* lpMember = static_cast<const s32*>(DispListIndex(mpUsersInUsersetList, liMember));
-                if (*lpMember == lPlayerID)
+                if (lPlayerID == *lpMember)   // ARTIST 0x8287C5E0 cmpw id, member
                 {
                     return true;
                 }
@@ -363,8 +363,16 @@ namespace CgsNetwork
     {
         mpServerInterface->GetMessageBuffer()[0] = 0;
 
-        // The host leaving deletes the userset.
-        StartAction(IsLocalPlayerHost() ? E_ACTION_DELETE : E_ACTION_LEAVE);
+        // The host leaving deletes the userset: one StartAction per arm, merged by the compiler
+        // (ARTIST 0x828896E8 `li r4,1; bne; li r4,3`, not a branchless select).
+        if (IsLocalPlayerHost())
+        {
+            StartAction(E_ACTION_DELETE);
+        }
+        else
+        {
+            StartAction(E_ACTION_LEAVE);
+        }
         LobbyApiListFlush(mpServerInterface->GetLobbyAPIRef(), KI_LOBBY_LIST_USERSET_USERS);
     }
 
@@ -399,14 +407,16 @@ namespace CgsNetwork
 
     void ServerInterfaceUsersets::KickPlayer(s32 liMemberIndex, EKickReason leReason)
     {
-        CGS_ASSERT(mpUsersInUsersetList != 0, "Trying to kick a player without a user list");
-        CGS_ASSERT(liMemberIndex >= 0 && liMemberIndex < DispListCount(mpUsersInUsersetList),
-                   "Invalid userset member index");
+        CGS_ASSERT_AT(mpUsersInUsersetList != 0, "Trying to kick a player without a user list",
+                      CGS_ARTIST_FILE, 813 /* ARTIST 0x82889804 */);
+        CGS_ASSERT_AT(liMemberIndex >= 0 && liMemberIndex < DispListCount(mpUsersInUsersetList),
+                      "Invalid userset member index", CGS_ARTIST_FILE, 814 /* ARTIST 0x82889838 */);
 
         const char* lpMember = static_cast<const char*>(DispListIndex(mpUsersInUsersetList, liMemberIndex));
         if (lpMember == 0)
         {
-            CGS_ASSERT(lpMember != 0, "Failed to find player to kick");
+            CGS_ASSERT_AT(lpMember != 0, "Failed to find player to kick",
+                          CGS_ARTIST_FILE, 819 /* ARTIST 0x8288986C */);
             return;
         }
 
@@ -427,7 +437,7 @@ namespace CgsNetwork
         for (s32 liMember = 0; liMember < DispListCount(mpUsersInUsersetList); ++liMember)
         {
             const s32* lpMember = static_cast<const s32*>(DispListIndex(mpUsersInUsersetList, liMember));
-            if (*lpMember == lPlayerID)
+            if (lPlayerID == *lpMember)   // ARTIST 0x82889974 cmpw id, member
             {
                 KickPlayer(liMember, leReason);
                 return;

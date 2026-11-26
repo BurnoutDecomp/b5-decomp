@@ -342,9 +342,9 @@ namespace CgsNetwork
 
     EServerInterfaceError ServerInterfaceRankings::ConvertError(s32 liError, EAction leAction)
     {
-        const DSErrorToServerInterfaceError* lpMappingTable = KA_DS_ERROR_TABLE_LOOKUP[leAction].mpMappingTable;
-        const s32 liNumMappings = KA_DS_ERROR_TABLE_LOOKUP[leAction].miNumMappings;
-        return ServerInterfaceComponent::ConvertError(liError, lpMappingTable, liNumMappings);
+        // One call expression: the count (last argument) is loaded first (ARTIST EndAction 0x82888FD0).
+        return ServerInterfaceComponent::ConvertError(liError, KA_DS_ERROR_TABLE_LOOKUP[leAction].mpMappingTable,
+                                                      KA_DS_ERROR_TABLE_LOOKUP[leAction].miNumMappings);
     }
 
     void ServerInterfaceRankings::FetchCategoriesCallback(DirtySock::LobbyRankT* /*lpLobbyRank*/,

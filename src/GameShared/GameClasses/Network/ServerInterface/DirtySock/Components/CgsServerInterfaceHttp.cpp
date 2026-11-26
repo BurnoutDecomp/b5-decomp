@@ -204,15 +204,20 @@ namespace CgsNetwork
         }
     }
 
+    EServerInterfaceError ServerInterfaceHttp::ConvertError(s32 liError, EAction leAction)
+    {
+        // Indexed twice in one call expression (ARTIST EndAction 0x8287AB34: two lwzx).
+        return ServerInterfaceComponent::ConvertError(liError, KA_DS_ERROR_TABLE_LOOKUP[leAction].mpMappingTable,
+                                                      KA_DS_ERROR_TABLE_LOOKUP[leAction].miNumMappings);
+    }
+
     void ServerInterfaceHttp::EndAction(s32 liError)
     {
         CGS_ASSERT(meCurrentAction != E_ACTION_COUNT, CGS_ASSERT_MESSAGE_AT(
             "Trying to end an action when not doing anything",
             "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceHttp.cpp", 414 /* ARTIST 0x8287AB10 */));
 
-        const DSErrorToServerInterfaceErrorTable& lrTable = KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-        ServerInterfaceComponent::EndActionCore(
-            ConvertError(liError, lrTable.mpMappingTable, lrTable.miNumMappings));
+        ServerInterfaceComponent::EndActionCore(ConvertError(liError, meCurrentAction));
 
         miHttpBufferSize = 0;
         meCurrentAction  = E_ACTION_COUNT;

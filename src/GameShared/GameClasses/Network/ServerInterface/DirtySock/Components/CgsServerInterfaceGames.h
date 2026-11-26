@@ -56,6 +56,7 @@ namespace CgsNetwork
     struct ServerInterfaceQuickJoinParamsBase;
     struct ServerInterfaceEndGameDataBase;
     struct ServerInterfaceGameResultsBase;
+    struct DSErrorToServerInterfaceErrorTable;
     enum   EServerInterfaceEvent ;
 
     namespace DirtySock
@@ -248,9 +249,14 @@ namespace CgsNetwork
         // DispListSortT: (sort ref == this component, sort con, two list-3 game records).
         static s32   FoundGamesSort(void* lpSortRef, s32 liSortCon, void* lpGameA, void* lpGameB);
 
+        // The per-action tables are private class statics (DWARF CgsServerInterfaceGames.h:146..152).
+        // The names are non-const pointers: ARTIST's StartAction 0x82877DDC indexes them in .data
+        // (0x82F334D8) apart from the .rdata request codes (0x820E8CAC).
+        static const s32 KAI_ACTION_CODE_MAPPING[E_ACTION_COUNT];
+        static const DSErrorToServerInterfaceErrorTable KA_DS_ERROR_TABLE_LOOKUP[E_ACTION_COUNT];
+        static const char* KAPC_ACTION_NAMES[E_ACTION_COUNT];
+
     public:
-        // The per-action error-mapping table ({table-ptr, count} indexed by action),
-        // and the per-action message fourcc / name tables, live in the .cpp.
 
     protected:
         // ---- own members (the ServerInterfaceComponent base provides the +0x00..+0x0F

@@ -119,7 +119,7 @@ namespace CgsNetwork
 
     // ---- Per-action tables (console rodata). ----
     // The per-action display names indexed by EAction (passed to StartActionCore).
-    const char* const KAPC_ACTION_NAMES[ServerInterfaceGames::E_ACTION_COUNT] =
+    const char* ServerInterfaceGames::KAPC_ACTION_NAMES[ServerInterfaceGames::E_ACTION_COUNT] =
     {
         "Create Game",                // 0
         "Join game",                  // 1
@@ -137,7 +137,7 @@ namespace CgsNetwork
     };
 
     // The DirtySDK request message code each action sends.
-    const s32 KAU_ACTION_MESSAGE_TYPES[ServerInterfaceGames::E_ACTION_COUNT] =
+    const s32 ServerInterfaceGames::KAI_ACTION_CODE_MAPPING[ServerInterfaceGames::E_ACTION_COUNT] =
     {
         0x67637265,   // 'gcre'
         0x676A6F69,   // 'gjoi'
@@ -248,7 +248,7 @@ namespace CgsNetwork
     };
 
     // Per-action { mapping table, count } used by EndAction -> ConvertError.
-    const DSErrorToServerInterfaceErrorTable KA_DS_ERROR_TABLE_LOOKUP[ServerInterfaceGames::E_ACTION_COUNT] =
+    const DSErrorToServerInterfaceErrorTable ServerInterfaceGames::KA_DS_ERROR_TABLE_LOOKUP[ServerInterfaceGames::E_ACTION_COUNT] =
     {
         { &KA_GAMES_DS_ERROR_MAPPINGS[0],  10 },
         { &KA_GAMES_DS_ERROR_MAPPINGS[10], 15 },
@@ -381,14 +381,12 @@ namespace CgsNetwork
     void ServerInterfaceGames::StartAction(EAction leAction, LobbyApiCallbackT* lpfnCallback)
     {
         meCurrentAction = leAction;
-        StartActionCore(KAPC_ACTION_NAMES[leAction]);
+        ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[leAction]);   // direct call
 
-        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
-
+        // One GetMessageBuffer (its h:719 assert once), evaluated first as the third argument.
         s32 liResult = LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),
-                                         KAU_ACTION_MESSAGE_TYPES[meCurrentAction],
-                                         lpcBuffer, lpfnCallback, this);
+                                         KAI_ACTION_CODE_MAPPING[meCurrentAction],
+                                         mpServerInterface->GetMessageBuffer(), lpfnCallback, this);
         miRequestCallbackID = liResult;
         if (liResult <= 0)
             miRequestCallbackID = -1;
@@ -399,12 +397,10 @@ namespace CgsNetwork
         meCurrentAction = leAction;
         ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[leAction]);
 
-        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
-
+        // One GetMessageBuffer (its h:719 assert once), evaluated first as the third argument.
         s32 liResult = GameManagerRequestCb(mpServerInterface->GetGameManagerRef(),
-                                            KAU_ACTION_MESSAGE_TYPES[meCurrentAction],
-                                            lpcBuffer, lpfnCallback, this);
+                                            KAI_ACTION_CODE_MAPPING[meCurrentAction],
+                                            mpServerInterface->GetMessageBuffer(), lpfnCallback, this);
         if (liResult < 0)
         {
             // Synthesise an immediate failure callback when the request could not be sent.

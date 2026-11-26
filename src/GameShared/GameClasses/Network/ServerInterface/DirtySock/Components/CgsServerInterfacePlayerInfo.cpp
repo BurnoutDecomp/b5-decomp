@@ -32,7 +32,7 @@
 namespace CgsNetwork
 {
     // The per-action display names indexed by EAction (passed to StartActionCore).
-    static const char* const KAPC_ACTION_NAMES[ServerInterfacePlayerInfo::E_ACTION_COUNT] =
+    const char* ServerInterfacePlayerInfo::KAPC_ACTION_NAMES[ServerInterfacePlayerInfo::E_ACTION_COUNT] =
     {
         "Finding User Data",          // 0
         "Updating auxiliary data",    // 1
@@ -47,7 +47,7 @@ namespace CgsNetwork
 
     // The lobby request code StartAction sends for each action. 0x20 marks the actions
     // that are not lobby requests.
-    static const s32 KAI_ACTION_CODE_MAPPING[ServerInterfacePlayerInfo::E_ACTION_COUNT] =
+    const s32 ServerInterfacePlayerInfo::KAI_ACTION_CODE_MAPPING[ServerInterfacePlayerInfo::E_ACTION_COUNT] =
     {
         0x20,
         0x61757869,   // 'auxi'
@@ -110,8 +110,8 @@ namespace CgsNetwork
     };
 
     // Per-action { mapping table, count }. The three stat-book actions share one table.
-    static const DSErrorToServerInterfaceErrorTable
-        KA_DS_ERROR_TABLE_LOOKUP[ServerInterfacePlayerInfo::E_ACTION_COUNT] =
+    const DSErrorToServerInterfaceErrorTable
+        ServerInterfacePlayerInfo::KA_DS_ERROR_TABLE_LOOKUP[ServerInterfacePlayerInfo::E_ACTION_COUNT] =
     {
         { &KA_PLAYER_INFO_DS_ERROR_MAPPINGS[0],  3 },
         { &KA_PLAYER_INFO_DS_ERROR_MAPPINGS[3],  3 },
@@ -290,14 +290,17 @@ namespace CgsNetwork
     // EndAction @ 0x82878DD0
     //   Map the raw lobby error for the current action and finish the action.
     // -----------------------------------------------------------------------------------
+    EServerInterfaceError ServerInterfacePlayerInfo::ConvertError(int liError, EAction leAction)
+    {
+        return ServerInterfaceComponent::ConvertError(liError, KA_DS_ERROR_TABLE_LOOKUP[leAction].mpMappingTable,
+                                                      KA_DS_ERROR_TABLE_LOOKUP[leAction].miNumMappings);
+    }
+
     void ServerInterfacePlayerInfo::EndAction(int liError)
     {
-        const DSErrorToServerInterfaceErrorTable& lEntry =
-            KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-        EServerInterfaceError leError =
-            ServerInterfaceComponent::ConvertError(liError, lEntry.mpMappingTable,
-                                                   lEntry.miNumMappings);
-        EndActionCore(static_cast<int>(leError));
+        // Qualified (direct) EndActionCore call through the inline ConvertError(int, EAction)
+        // (DWARF CgsServerInterfacePlayerInfo.h; ARTIST 0x82878E0C bl, no vtable load).
+        ServerInterfaceComponent::EndActionCore(ConvertError(liError, meCurrentAction));
         meCurrentAction = E_ACTION_COUNT;
     }
 
@@ -308,10 +311,9 @@ namespace CgsNetwork
     void ServerInterfacePlayerInfo::StartAction(EAction leAction, LobbyApiCallbackT* lpfCallback)
     {
         meCurrentAction = leAction;
-        StartActionCore(KAPC_ACTION_NAMES[leAction]);
+        ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[leAction]);   // direct: ARTIST 0x82878D68
 
-        CGS_ASSERT(mpServerInterface->GetMessageBuffer() != 0, "mpacMessageBuffer");
-
+        // One GetMessageBuffer (its h:719 assert once), evaluated first as the third argument.
         LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),
                           KAI_ACTION_CODE_MAPPING[meCurrentAction],
                           mpServerInterface->GetMessageBuffer(),
@@ -329,14 +331,13 @@ namespace CgsNetwork
     void ServerInterfacePlayerInfo::GetPlayerXUIDByName(const PlayerName* lpcPlayerName,
                                                         u64* lpXuidOut)
     {
-        CGS_ASSERT(lpXuidOut, "lpXUID");
-        CGS_ASSERT(lpcPlayerName, "lpPlayerName");
+        CGS_ASSERT_AT(lpXuidOut, "lpXUID", __FILE__, 1204 /* ARTIST 0x82888948 */);
+        CGS_ASSERT_AT(lpcPlayerName, "lpPlayerName", __FILE__, 1205 /* ARTIST 0x8288896C */);
 
         mpXUID = lpXuidOut;   // +0x28 (aliases the account-settings flag bytes; stw @0x82888984)
 
-        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
-        lpcBuffer[0] = 0;
+        // GetMessageBuffer (h:719 assert) cleared in place, then fetched again for the tag.
+        mpServerInterface->GetMessageBuffer()[0] = 0;
 
         // KI_MESSAGE_BUFFER_LEN (2048). The persona name reaches TagFieldSetString as a
         // const char* (the name buffer).
@@ -362,9 +363,8 @@ namespace CgsNetwork
             "lpServerInterface->mpXUID",
             __FILE__, 1234 /* ARTIST 0x828796D8 */));
 
-        // The lobby result code and the record text.
-        const s32 liResult = lpMsg->code;
-        if (liResult == 0)
+        // The lobby result code is read where it is used (ARTIST 0x828796E0 and 0x82879730).
+        if (lpMsg->code == 0)
         {
             const char* lpField = TagFieldFind(lpMsg->pData, "MADDR");
             DirtyAddrToHostAddr(lpComponent->mpXUID, 8, reinterpret_cast<const DirtyAddrT*>(lpField));
@@ -374,15 +374,8 @@ namespace CgsNetwork
             *lpComponent->mpXUID = 0;
         }
 
-        const EAction leAction = lpComponent->meCurrentAction;   // read +0x14 before clearing
         lpComponent->mpXUID = 0;                                 // stw 0,0x28
-
-        const DSErrorToServerInterfaceErrorTable& lEntry = KA_DS_ERROR_TABLE_LOOKUP[leAction];
-        EServerInterfaceError leError =
-            lpComponent->ServerInterfaceComponent::ConvertError(
-                liResult, lEntry.mpMappingTable, lEntry.miNumMappings);
-        lpComponent->EndActionCore(static_cast<int>(leError));
-        lpComponent->meCurrentAction = E_ACTION_COUNT;
+        lpComponent->EndAction(lpMsg->code);
     }
 
     // -----------------------------------------------------------------------------------
@@ -393,16 +386,19 @@ namespace CgsNetwork
     void ServerInterfacePlayerInfo::FindUserCallback(void* lpUserData, const char* /*lpcName*/,
                                                      LobbyApiUserT* lpUser)
     {
-        CGS_ASSERT(lpUser, "lpUser");
+        CGS_ASSERT_AT(lpUser, "lpUser", __FILE__, 736 /* ARTIST 0x82878EEC */);
+        CGS_ASSERT_AT(lpUserData, "lpUserData", __FILE__, 737 /* ARTIST 0x82878F10 */);
 
-        ServerInterfacePlayerInfo* lpComponent =
+        ServerInterfacePlayerInfo* lpPlayerInfoComponent =
             static_cast<ServerInterfacePlayerInfo*>(lpUserData);
-        CGS_ASSERT(lpUserData, "lpUserData");                 // asm assert @737
-        CGS_ASSERT(lpComponent, "lpPlayerInfoComponent");     // asm assert @741
+        CGS_ASSERT_AT(lpPlayerInfoComponent, "lpPlayerInfoComponent", __FILE__, 741 /* ARTIST 0x82878F2C */);
+        CGS_ASSERT_AT(lpPlayerInfoComponent->mpPlayerInfo, "lpPlayerInfoComponent->mpPlayerInfo",
+                      __FILE__, 742 /* ARTIST 0x82878F54 */);
 
-        lpComponent->mpPlayerInfo->SerialiseFromUser(lpUser);
-        lpComponent->EndActionCore(0);
-        lpComponent->meCurrentAction = E_ACTION_COUNT;
+        lpPlayerInfoComponent->mpPlayerInfo->SerialiseFromUser(lpUser);
+        // Direct (qualified) call: ARTIST 0x82878F88 bl, no vtable load.
+        lpPlayerInfoComponent->ServerInterfaceComponent::EndActionCore(0);
+        lpPlayerInfoComponent->meCurrentAction = E_ACTION_COUNT;
     }
 
     // -----------------------------------------------------------------------------------
@@ -441,7 +437,7 @@ namespace CgsNetwork
 
         mpPlayerInfo    = lpPlayerInfo;
         meCurrentAction = E_ACTION_FIND_USER;
-        StartActionCore(KAPC_ACTION_NAMES[E_ACTION_FIND_USER]);
+        ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[E_ACTION_FIND_USER]);   // direct call
 
         LobbyFindUserCancel(mpFindUser);
 
@@ -455,14 +451,16 @@ namespace CgsNetwork
         {
         case 0:
             break;
+        // ARTIST's jump table 0x82888898: -3 -> 'invp', -2 -> 'many', -1 -> 'soon'; the
+        // blocks are laid out -1, -2, -3.
         case -1:
-            EndAction(0x696E7670);   // 'invp' (invalid player)
+            EndAction(0x736F6F6E);   // 'soon' (too soon)
             break;
         case -2:
             EndAction(0x6D616E79);   // 'many' (too many requests)
             break;
         case -3:
-            EndAction(0x736F6F6E);   // 'soon' (too soon)
+            EndAction(0x696E7670);   // 'invp' (invalid player)
             break;
         default:
             CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
@@ -482,18 +480,12 @@ namespace CgsNetwork
             __FILE__, 797 /* ARTIST 0x82878FE0 */));
 
         meCurrentAction = E_ACTION_SELECT_VIEW;
-        StartActionCore(KAPC_ACTION_NAMES[E_ACTION_SELECT_VIEW]);
+        ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[E_ACTION_SELECT_VIEW]);
 
         s32 liResult = LobbyStatbookFetchView(mpStatbook, lpcView);
         if (liResult < 0)
         {
-            const DSErrorToServerInterfaceErrorTable& lEntry =
-                KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-            EServerInterfaceError leError =
-                ServerInterfaceComponent::ConvertError(liResult, lEntry.mpMappingTable,
-                                                       lEntry.miNumMappings);
-            EndActionCore(static_cast<int>(leError));
-            meCurrentAction = E_ACTION_COUNT;
+            EndAction(liResult);   // inlined: ConvertError + the direct EndActionCore call
         }
     }
 
@@ -507,18 +499,12 @@ namespace CgsNetwork
             __FILE__, 826 /* ARTIST 0x828790B0 */));
 
         meCurrentAction = E_ACTION_DOWNLOADING_STATS;
-        StartActionCore(KAPC_ACTION_NAMES[E_ACTION_DOWNLOADING_STATS]);  // asm: off_82F33518 = table[3]
+        ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[E_ACTION_DOWNLOADING_STATS]);  // asm: off_82F33518 = table[3]
 
         s32 liResult = LobbyStatbookFetch(mpStatbook, 0, lpacStatList);
         if (liResult < 0)
         {
-            const DSErrorToServerInterfaceErrorTable& lEntry =
-                KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-            EServerInterfaceError leError =
-                ServerInterfaceComponent::ConvertError(liResult, lEntry.mpMappingTable,
-                                                       lEntry.miNumMappings);
-            EndActionCore(static_cast<int>(leError));
-            meCurrentAction = E_ACTION_COUNT;
+            EndAction(liResult);   // inlined: ConvertError + the direct EndActionCore call
         }
     }
 
@@ -532,18 +518,12 @@ namespace CgsNetwork
             __FILE__, 973 /* ARTIST 0x82879290 */));
 
         meCurrentAction = E_ACTION_DOWNLOADING_VIEW_INFO;
-        StartActionCore(KAPC_ACTION_NAMES[E_ACTION_DOWNLOADING_VIEW_INFO]);  // asm: off_82F3351C = table[4]
+        ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[E_ACTION_DOWNLOADING_VIEW_INFO]);  // asm: off_82F3351C = table[4]
 
         s32 liResult = LobbyStatbookFetchViewInfo(mpStatbook);
         if (liResult < 0)
         {
-            const DSErrorToServerInterfaceErrorTable& lEntry =
-                KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-            EServerInterfaceError leError =
-                ServerInterfaceComponent::ConvertError(liResult, lEntry.mpMappingTable,
-                                                       lEntry.miNumMappings);
-            EndActionCore(static_cast<int>(leError));
-            meCurrentAction = E_ACTION_COUNT;
+            EndAction(liResult);   // inlined: ConvertError + the direct EndActionCore call
         }
     }
 
@@ -629,16 +609,16 @@ namespace CgsNetwork
                                                 bool lbAgreeToShareInfoPartners,
                                                 bool lbTelemetryEnable)
     {
-        DirtySock::LobbySettingRefT* lpSettings = mpServerInterface->GetSettingRef();
-
-        LobbySettingSetNumber(lpSettings, "TELE_NABL", lbTelemetryEnable ? 1 : 0);
-        LobbySettingSetNumber(lpSettings, "SPM_EA",   lbAgreeToShareInfoEA ? 1 : 0);
-        LobbySettingSetNumber(lpSettings, "SPM_PART", lbAgreeToShareInfoPartners ? 1 : 0);
+        // The settings ref is fetched per call (ARTIST 0x82879478 / 0x828794AC / 0x828794C4 /
+        // 0x82879504 reload mpServerInterface+0x88).
+        LobbySettingSetNumber(mpServerInterface->GetSettingRef(), "TELE_NABL", lbTelemetryEnable ? 1 : 0);
+        LobbySettingSetNumber(mpServerInterface->GetSettingRef(), "SPM_EA",   lbAgreeToShareInfoEA ? 1 : 0);
+        LobbySettingSetNumber(mpServerInterface->GetSettingRef(), "SPM_PART", lbAgreeToShareInfoPartners ? 1 : 0);
 
         meCurrentAction = E_ACTION_UPDATE_ACCOUNT;
-        StartActionCore(KAPC_ACTION_NAMES[E_ACTION_UPDATE_ACCOUNT]);
+        StartActionCore(KAPC_ACTION_NAMES[E_ACTION_UPDATE_ACCOUNT]);   // virtual here (bctrl 0x82879500)
 
-        LobbySettingSave(lpSettings,
+        LobbySettingSave(mpServerInterface->GetSettingRef(),
                          &ServerInterfacePlayerInfo::UpdateSettingsCallback, this);
     }
 
@@ -660,12 +640,11 @@ namespace CgsNetwork
             "lpbTelemetryEnable",
             __FILE__, 1158 /* ARTIST 0x828795B0 */));
 
-        DirtySock::LobbySettingRefT* lpSettings = mpServerInterface->GetSettingRef();
-
         // asm decodes all three flags identically: (cntlzw(GetNumber-1) & 0x20), i.e. == 1.
-        *lpbAgreeToShareInfoEA       = LobbySettingGetNumber(lpSettings, "SPM_EA", 0) == 1;
-        *lpbAgreeToShareInfoPartners = LobbySettingGetNumber(lpSettings, "SPM_PART", 0) == 1;
-        *lpbTelemetryEnable          = LobbySettingGetNumber(lpSettings, "TELE_NABL", 1) == 1;
+        // The settings ref is fetched per call (ARTIST 0x828795B8 / 0x828795EC / 0x82879614).
+        *lpbAgreeToShareInfoEA       = LobbySettingGetNumber(mpServerInterface->GetSettingRef(), "SPM_EA", 0) == 1;
+        *lpbAgreeToShareInfoPartners = LobbySettingGetNumber(mpServerInterface->GetSettingRef(), "SPM_PART", 0) == 1;
+        *lpbTelemetryEnable          = LobbySettingGetNumber(mpServerInterface->GetSettingRef(), "TELE_NABL", 1) == 1;
     }
 
     // -----------------------------------------------------------------------------------
@@ -687,17 +666,12 @@ namespace CgsNetwork
     void ServerInterfacePlayerInfo::UpdateSettingsCallback(DirtySock::LobbySettingRefT* /*lpRef*/,
                                                            s32 liResult, void* lpData)
     {
-        ServerInterfacePlayerInfo* lpComponent =
+        CGS_ASSERT_AT(lpData, "lpData", __FILE__, 1055 /* ARTIST 0x8287933C */);
+        ServerInterfacePlayerInfo* lpPlayerInfoComponent =
             static_cast<ServerInterfacePlayerInfo*>(lpData);
-        CGS_ASSERT(lpComponent, "lpData");
+        CGS_ASSERT_AT(lpPlayerInfoComponent, "lpPlayerInfoComponent", __FILE__, 1057 /* ARTIST 0x82879360 */);
 
-        const DSErrorToServerInterfaceErrorTable& lEntry =
-            KA_DS_ERROR_TABLE_LOOKUP[lpComponent->meCurrentAction];
-        EServerInterfaceError leError =
-            lpComponent->ServerInterfaceComponent::ConvertError(
-                liResult, lEntry.mpMappingTable, lEntry.miNumMappings);
-        lpComponent->EndActionCore(static_cast<int>(leError));
-        lpComponent->meCurrentAction = E_ACTION_COUNT;
+        lpPlayerInfoComponent->EndAction(liResult);
     }
 
     // Both empty: the owning server interface's suspend / resume fan-out reaches the shared

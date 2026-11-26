@@ -54,6 +54,7 @@ namespace CgsNetwork
     struct ServerInterfaceStructureInterface;
     struct ServerInterfacePlayerInfoDataBase;
     struct PlayerName;
+    struct DSErrorToServerInterfaceErrorTable;
 
     // The DirtySock-namespaced module handles the DWARF declares as the member types.
     // The find-user / statbook handles are the vendor SDK opaque structs; the lobby
@@ -162,6 +163,13 @@ namespace CgsNetwork
         // GetPlayerXUIDByName hands its address to StartAction as a LobbyApiCallbackT* -- so it
         // must be a plain (LobbyApiRefT*, LobbyApiMsgT*, void*) static, the LobbyApiCallbackT shape).
         static void _GetPlayerXUIDCallback(LobbyApiRefT* lpRef, LobbyApiMsgT* lpMsg, void* lpData);
+
+        // The per-action tables are private class statics (DWARF CgsServerInterfacePlayerInfo.cpp:51 /
+        // :156 / :173). The names are non-const pointers: ARTIST loads each entry from .data
+        // (LoadSettings 0x82879660 lwz from 0x82F3350C+0x1C).
+        static const s32 KAI_ACTION_CODE_MAPPING[E_ACTION_COUNT];
+        static const DSErrorToServerInterfaceErrorTable KA_DS_ERROR_TABLE_LOOKUP[E_ACTION_COUNT];
+        static const char* KAPC_ACTION_NAMES[E_ACTION_COUNT];
 
         // ---- Data members (DWARF order; base occupies +0x00..+0x0C) -----------------
         ServerInterfaceDirtySock*          mpServerInterface;        // +0x10

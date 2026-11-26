@@ -34,24 +34,19 @@ namespace CgsNetwork
 {
     namespace
     {
-        // Pack a 4-character code the way the X360 build reads it (big-endian byte order),
-        // so the literal matches the immediates in the disassembly.
-        inline int FourCC(char a, char b, char c, char d)
-        {
-            return (static_cast<int>(static_cast<unsigned char>(a)) << 24) |
-                   (static_cast<int>(static_cast<unsigned char>(b)) << 16) |
-                   (static_cast<int>(static_cast<unsigned char>(c)) << 8)  |
-                    static_cast<int>(static_cast<unsigned char>(d));
-        }
+        // The four-character codes are multi-character literals, constants the compiler folds:
+        // ARTIST uses immediates (GetGameNewsCallback 0x82888CD0 addis 0x6E65 / addi 0x7730,
+        // 0x82888CF0 lis 0x6E66 / ori 0x6E64) and a static .rdata error map, not values
+        // computed at start-up.
 
         // The "game news" lobby request fourcc StartAction sends (with the index as the
         // "NAME" field). GetGameNewsCallback accepts a response whose code ==
         // miRequestedNewsIndex + 'new0' (the asm adds 0x6E657730).
-        const int KI_REQUEST_GAME_NEWS = FourCC('n', 'e', 'w', 's');   // 0x6E657773
+        const int KI_REQUEST_GAME_NEWS = 'news';   // 0x6E657773
 
         // Result codes the callback / parser produce explicitly (X360 immediates).
-        const int KI_RESULT_NEWS_BASE  = FourCC('n', 'e', 'w', '0');   // 0x6E657730 ('new0'+idx)
-        const int KI_RESULT_NOT_FOUND  = FourCC('n', 'f', 'n', 'd');   // 0x6E666E64 ('nfnd')
+        const int KI_RESULT_NEWS_BASE  = 'new0';   // 0x6E657730 ('new0'+idx)
+        const int KI_RESULT_NOT_FOUND  = 'nfnd';   // 0x6E666E64 ('nfnd')
 
         // The "NAME" tagfield carries the requested news index in the outgoing request.
         const int KI_NAME_FIELD_RECLEN = 2048;   // == KI_MESSAGE_BUFFER_SIZE
@@ -66,7 +61,7 @@ namespace CgsNetwork
         const DSErrorToServerInterfaceError KA_CONFIGDOWNLOAD_NEWS_SERVER_INTERFACE_ERROR_MAPPING[2] =
         {
             { 0,                          E_SERVER_INTERFACE_ERROR_NONE },
-            { FourCC('n', 'f', 'n', 'd'), E_SERVER_INTERFACE_SERVER_INFO_ERROR_ITEM_NOT_FOUND },
+            { 'nfnd',                     E_SERVER_INTERFACE_SERVER_INFO_ERROR_ITEM_NOT_FOUND },
         };
     }
 
@@ -178,10 +173,9 @@ namespace CgsNetwork
     void ServerInterfaceDownloadableConfig::StartAction(EAction leAction, LobbyApiCallbackT* lpCallback)
     {
         meCurrentAction = leAction;                        // +0x18
-        StartActionCore(KAPC_ACTION_NAMES[leAction]);
+        ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[leAction]);   // direct call
 
-        CGS_ASSERT(mpServerInterface->GetMessageBuffer() != 0, "mpacMessageBuffer");
-
+        // One GetMessageBuffer (its h:719 assert once), evaluated first as the third argument.
         LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),
                           KAI_ACTION_CODE_MAPPING[meCurrentAction],
                           mpServerInterface->GetMessageBuffer(),
@@ -193,10 +187,7 @@ namespace CgsNetwork
     // base to record, then return to idle.
     void ServerInterfaceDownloadableConfig::EndAction(int32_t liErrorCode)
     {
-        const DSErrorToServerInterfaceErrorTable& lrTable = KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-        EndActionCore(ServerInterfaceComponent::ConvertError(liErrorCode,
-                                                             lrTable.mpMappingTable,
-                                                             lrTable.miNumMappings));
+        ServerInterfaceComponent::EndActionCore(ConvertError(liErrorCode, meCurrentAction));   // direct call
         meCurrentAction = E_ACTION_COUNT;                  // +0x18 (== 1)
     }
 
@@ -206,10 +197,9 @@ namespace CgsNetwork
     EServerInterfaceError ServerInterfaceDownloadableConfig::ConvertError(int32_t liErrorCode,
                                                                           EAction leAction)
     {
-        const DSErrorToServerInterfaceErrorTable& lrTable = KA_DS_ERROR_TABLE_LOOKUP[leAction];
         return ServerInterfaceComponent::ConvertError(liErrorCode,
-                                                       lrTable.mpMappingTable,
-                                                       lrTable.miNumMappings);
+                                                       KA_DS_ERROR_TABLE_LOOKUP[leAction].mpMappingTable,
+                                                       KA_DS_ERROR_TABLE_LOOKUP[leAction].miNumMappings);
     }
 
     // ===========================================================================
@@ -223,19 +213,20 @@ namespace CgsNetwork
         DataIDToMemoryAddr* lpaDataIDToMemAddrs,
         int32_t liSize)
     {
-        CGS_ASSERT(lpaDataIDToMemAddrs != 0, "lpaDataIDToMemAddrs");
-        CGS_ASSERT(mpaDataIDToMemAddrs == 0, "mpaDataIDToMemAddrs == NULL");
-        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+        CGS_ASSERT_AT(lpaDataIDToMemAddrs != 0, "lpaDataIDToMemAddrs", __FILE__, 243 /* ARTIST 0x828916FC */);
+        CGS_ASSERT_AT(mpaDataIDToMemAddrs == 0, "mpaDataIDToMemAddrs == NULL", __FILE__, 244 /* ARTIST 0x82891724 */);
+        CGS_ASSERT_AT(mpServerInterface != 0, "mpServerInterface", __FILE__, 245 /* ARTIST 0x8289174C */);
 
         miMemAddrTableSize   = liSize;                     // +0x1C  (a4)
         miRequestedNewsIndex = liRequestIndex;             // +0x20  (a2)
         mpaDataIDToMemAddrs  = lpaDataIDToMemAddrs;         // +0x14  (a3)
 
         // Start the request from a freshly-emptied shared message buffer, then write the
-        // requested index into it as the "NAME" field. (The X360 asserts the buffer twice
-        // -- once before zeroing, once before TagFieldSetNumber; CGS_ASSERT folds both.)
+        // requested index into it as the "NAME" field. ARTIST fetches the buffer twice, each
+        // through the asserting GetMessageBuffer (h:719): first the one the tag is written to
+        // (0x828917A8), then the one it clears (0x828917D0).
         char* lpacMessageBuffer = mpServerInterface->GetMessageBuffer();
-        lpacMessageBuffer[0] = 0;
+        mpServerInterface->GetMessageBuffer()[0] = 0;
         TagFieldSetNumber(lpacMessageBuffer, KI_NAME_FIELD_RECLEN, "NAME", liRequestIndex);
 
         StartAction(E_ACTION_DOWNLOADING_GAME_NEWS, GetGameNewsCallback);
@@ -255,7 +246,7 @@ namespace CgsNetwork
         miMemAddrTableSize  = liSize;
 
         const char* lpacConf = static_cast<const char*>(
-            LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), FourCC('c', 'o', 'n', 'f')));
+            LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), 'conf'));
         ParseConfigFile(lpacConf);
     }
 
@@ -274,26 +265,21 @@ namespace CgsNetwork
         if (lpMsg->code == lpThis->miRequestedNewsIndex + KI_RESULT_NEWS_BASE)
         {
             // Success: the response carries the config record. An empty record means the
-            // config file was not present on the server.
-            if (lpMsg->pData[0] != 0)
+            // config file was not present on the server (ARTIST tests the empty case first).
+            if (lpMsg->pData[0] == 0)
             {
-                lpThis->ParseConfigFile(lpMsg->pData);
-                lpThis->EndAction(0);
+                lpThis->EndAction(KI_RESULT_NOT_FOUND);
             }
             else
             {
-                lpThis->EndAction(KI_RESULT_NOT_FOUND);
+                lpThis->ParseConfigFile(lpMsg->pData);
+                lpThis->EndAction(0);
             }
         }
         else
         {
             // The lobby reported an error fourcc instead of our news response.
-            const DSErrorToServerInterfaceErrorTable& lrTable =
-                KA_DS_ERROR_TABLE_LOOKUP[lpThis->meCurrentAction];
-            lpThis->EndActionCore(lpThis->ServerInterfaceComponent::ConvertError(lpMsg->code,
-                                                                                 lrTable.mpMappingTable,
-                                                                                 lrTable.miNumMappings));
-            lpThis->meCurrentAction = E_ACTION_COUNT;
+            lpThis->EndAction(lpMsg->code);
         }
     }
 

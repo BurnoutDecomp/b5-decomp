@@ -2,14 +2,7 @@
 #include "lobbytagfield.h"   // DirtySDK TagFieldGetBinary
 #include <cstring>           // std::memcpy / std::strchr
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
-// Xbox platform entry points (platform lane; no home header yet).
-extern "C"
-{
-    void* XMemSet(void* lpDest, s32 liValue, u32 luCount);
-    u32   XOnlineGetNatType();
-    u32   XNetGetTitleXnAddr(void* lpXnAddr);
-}
+#include <xtl.h>             // XMemSet, XOnlineGetNatType (xonline.h), XNetGetTitleXnAddr (winsockx.h)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::ServerInterfacePlayerParamsX360::GetNetworkAddress    @ 0x8287A308
@@ -41,24 +34,28 @@ bool ServerInterfacePlayerParamsX360::Prepare()
     muFlags           = 0;
     meFirewallSetting = E_FIREWALL_OPEN;
 
-    // NAT type: 1 open, 2 moderate, 3 strict.
+    // XONLINE_NAT_TYPE is an enum: ARTIST compares it signed (cmpwi @0x8287A270).
     switch (XOnlineGetNatType())
     {
-    case 1:
+    case XONLINE_NAT_OPEN:
         meFirewallSetting = E_FIREWALL_OPEN;
         break;
-    case 2:
+    case XONLINE_NAT_MODERATE:
         meFirewallSetting = E_FIREWALL_MODERATE;
         break;
-    case 3:
+    case XONLINE_NAT_STRICT:
         meFirewallSetting = E_FIREWALL_STRICT;
         break;
     default:
-        CGS_ASSERT(false, "invalid X360 NAT type\n");
+        // ARTIST names the shared player-params file (li r5,0xA3 @0x8287A290).
+        CGS_ASSERT_AT(false, "invalid X360 NAT type\n",
+                      "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerParams.cpp",
+                      163);
         break;
     }
 
-    XNetGetTitleXnAddr(macNetworkAddress);
+    // The 36-byte secure address is the XNADDR the XDK fills in place.
+    XNetGetTitleXnAddr(reinterpret_cast<XNADDR*>(macNetworkAddress));
     return true;
 }
 
