@@ -1,10 +1,12 @@
 #define CGS_ARTIST_UNITY_BRNAICAR_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAICar.cpp"
 #include "GameSource/World/AI/BrnAICar.h"
 #include "GameSource/World/AI/BrnAIDriver.h"
-#include "GameSource/World/AI/BrnAICar_Constants.h"       // the .bss tunables, recovered from their start-up initialisers
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"      // CgsCore::KF_MPH_TO_MPS (the mph tunables)
+#include "GameSource/World/BrnWorldSharedConstants.h"          // BrnWorld::KF_INVALID_DISTANCE
 #include "GameSource/World/AI/Route/BrnRoute.h"                 // BrnAI::Route, RouteNode, Route::GetNode
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h" // RaceBalancingManager::ComputeTargetSpeed
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/AI/BrnAICar.cpp"
+#define CGS_ARTIST_BRNAICAR_H_FILE "..\\..\\..\\GameSource\\World/AI/BrnAICar.h"
 #include "GameSource/Math/BrnMathUtils.h"                      // BrnMath::IsNormal (SetRight unit-length check)
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"              // CGS_ASSERT + KI_MESSAGEBUFFERSIZE
@@ -23,15 +25,123 @@
 // reversed into LOGICAL CALLS to the already-bodied/declared callees (RaceBalancingManager::
 // ComputeTargetSpeed, Route::GetNode, the AICar accessors).
 //
-// File-local tuning constants: the 0x820Cxxxx / 0x8200xxxx ones are the big-endian rodata
-// literal pool and are read straight out of image.bin. The 0x8300Dxxx ones are .bss, written at
-// start-up by the CRT initialiser bank at 0x82C685B8..0x82C69488; they now live in
-// BrnAICar_Constants.h with their initialiser address and derivation, so there are NO 0.0f
-// placeholder tunables left in this TU. Literal immediates Hex-Rays decoded from the float bits
-// (0.0/0.5/0.6/0.55/0.4/1.0/3.0/10.0/20.0/30.0/50.0/80.0/100.0/10000.0) are used inline.
+// File-scope tunables: DWARF BrnAICar.cpp:32..:133 and :1648, defined below in that order.
+// Every assert path is a literal (the macros above): a named path array or pointer would be an
+// .rdata object of this TU that ARTIST does not have.
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\World/AI/BrnAICar.h";
-static const char* const KPC_AICAR_CPP = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAICar.cpp";
+namespace BrnAI
+{
+    // ====================================================================================
+    // File-scope tunables, DWARF BrnAICar.cpp:32..:133 + :1648 (names, types, order; PS3 values in
+    // references/DecFIGS/dwarfdump/_compile/BrnWorldAIUnity.cpp, X360 values read from the image).
+    // ARTIST compiled this file first in BrnWorldAIUnity and keeps three kinds:
+    //   * the mph tunables, `mph * CgsCore::KF_MPH_TO_MPS` (an extern, so not foldable), written by
+    //     the CRT init bank in declaration order (0x82C68580..0x82C687A0) into .bss; their readers
+    //     load them from storage (PS3 DecFIGS names each one at its reader: CalcDesiredSpeed
+    //     0x9FE150, CalcPersonalitySpeed 0x9C32C8, CalcRoadRageSpeed 0x9FDC00, UpdateRaceDistance
+    //     0x9E9520, GetUsefulDirection 0x9F1A60, Construct 0x9C6EB0);
+    //   * statically initialised consts in the TU's .rdata, in definition order 0x820C4144..
+    //     0x820C41B4. The XDK emits a referenced one only, and a read of value V goes to the named
+    //     const (or __real literal) the first function in code-generation order loaded V from
+    //     (verified with the XDK, scratch/BYTEMATCH_1123/msgs/world14/): that is why most of these
+    //     slots are read through another one of the same value. The DWARF names with no X360 slot
+    //     (:65 KF_OUT_OF_RANGE_PERSONALITY_SPEED_MULTIPLIER, :76/:77/:79 the free-roam chase and
+    //     drive-away distances, :84 KF_FREE_ROAM_ROUTE_REFRESH_DISTANCE) are unreferenced on the
+    //     console and have no recoverable X360 value, so they are left out;
+    //   * the two marked-man aggression bounds (:111/:112, not const: the AI debug component
+    //     registers them) in .data 0x82F30170/0x82F30174.
+    // The integral DWARF constants (:59 KU_INVALID_SECTION_INDEX, :60 KU_INVALID_PORTAL_INDEX,
+    // :68 KI_MINIMUM_NODES_REMAINING_FOR_SAFE_EXTRAPOLATION) take no storage and are not carried.
+    // ====================================================================================
+    const f32 KF_DEFAULT_OUT_OF_RANGE_SPEED         = 80.0f * CgsCore::KF_MPH_TO_MPS;     // :32 bss 0x8300D7FC (init 0x82C68580)
+
+    const f32 KF_MIN_SPEED_FOR_VELOCITY_USEFULNESS  = 20.0f * CgsCore::KF_MPH_TO_MPS;     // :35 bss 0x8300D964
+
+    const f32 KF_MINIMUM_PERSONALITY_SPEED          = 20.0f * CgsCore::KF_MPH_TO_MPS;     // :38 bss 0x8300D93C
+    const f32 KF_MAXIMUM_PERSONALITY_SPEED          = 240.0f * CgsCore::KF_MPH_TO_MPS;    // :39 bss 0x8300D740
+
+    const f32 KF_MAX_TIME_IN_BAD_SECTION            = 1.0f;                               // :42 rdata 0x820C4144
+
+    const f32 KF_ROAD_RAGE_SLOW_DOWN_FACTOR         = 60.0f * CgsCore::KF_MPH_TO_MPS;     // :45 bss 0x8300D83C
+    const f32 KF_ROAD_RAGE_SPEED_UP_FACTOR          = 60.0f * CgsCore::KF_MPH_TO_MPS;     // :46 bss 0x8300D724
+    const f32 KF_ROAD_RAGE_CLIP_SPEED               = 120.0f * CgsCore::KF_MPH_TO_MPS;    // :47 bss 0x8300D810
+
+    const f32 KF_PLAYER_ROLLING_START_SPEED                = 80.0f * CgsCore::KF_MPH_TO_MPS;  // :50 bss 0x8300D980
+    const f32 KF_AI_ROLLING_START_MAX_SPEED_RACE           = 80.0f * CgsCore::KF_MPH_TO_MPS;  // :51 bss 0x8300D708
+    const f32 KF_AI_ROLLING_START_SPEED_DIFFERENCE         = 6.0f * CgsCore::KF_MPH_TO_MPS;   // :52 bss 0x8300D968
+    const f32 KF_AI_ROLLING_START_MAX_SPEED_ROAD_RAGE      = 85.0f * CgsCore::KF_MPH_TO_MPS;  // :53 bss 0x8300D7D4
+    const f32 KF_AI_ROLLING_START_MAX_DIFFERENCE_ROAD_RAGE = 4.0f * CgsCore::KF_MPH_TO_MPS;   // :54 bss 0x8300DC08
+
+    const f32 KF_RECALCULATE_ROUTE_SEPERATION_PLAYER = 50.0f;                             // :56 rdata 0x820C4148
+    const f32 KF_RECALCULATE_ROUTE_SEPERATION_AI     = 200.0f;                            // :57 rdata 0x820C414C
+
+    const f32 KF_MIN_ALTERNATIVE_ROUTE_TIME         = 10.0f;                              // :62 rdata 0x820C4150
+    const f32 KF_ALTERNATIVE_ROUTE_INTERVAL         = 3.0f;                               // :63 rdata 0x820C4154
+
+    const f32 KF_FRAMES_TO_RECALC_ROUTE             = 60.0f;                              // :67 rdata 0x820C4158
+
+    const f32 KF_OVERTAKE_FROM_BEHIND               = 20.0f * CgsCore::KF_MPH_TO_MPS;     // :70 bss 0x8300D788
+
+    const f32 KF_AHEAD_DISTANCE                     = 30.0f;                              // :72 rdata 0x820C415C
+
+    const f32 KF_FREE_ROAM_CAR_PROXIMITY_TO_GOAL    = 300.0f;                             // :74 rdata 0x820C4160
+
+    const f32 KF_FREE_ROAM_HIGH_SPEED               = 100.0f * CgsCore::KF_MPH_TO_MPS;    // :80 bss 0x8300DC3C
+    const f32 KF_FREE_ROAM_LOW_SPEED                = 80.0f * CgsCore::KF_MPH_TO_MPS;     // :81 bss 0x8300DB04
+    const f32 KF_FREE_ROAM_CATCH_UP_SPEED           = 20.0f * CgsCore::KF_MPH_TO_MPS;     // :82 bss 0x8300D97C
+    const f32 KF_FREE_ROAM_SLOW_DOWN_SPEED          = 5.0f * CgsCore::KF_MPH_TO_MPS;      // :83 bss 0x8300D700
+
+    const f32 KF_DECENT_SPEED_RATIO                 = 0.55f;                              // :86 rdata 0x820C4164
+    const f32 KF_DECENT_ROAD_RAGE_SPEED_RATIO       = 0.5f;                               // :87 rdata 0x820C4168
+    const f32 KF_DECENT_PURSUIT_SPEED_RATIO         = 0.6f;                               // :88 rdata 0x820C416C
+    const f32 KF_DECENT_MARKED_MAN_MIN_SPEED_RATIO  = 0.0f;                               // :89 rdata 0x820C4170
+    const f32 KF_DECENT_MARKED_MAN_MAX_SPEED_RATIO  = 0.4f;                               // :90 rdata 0x820C4174
+    const f32 KF_DECENT_SPEED_START_TIME            = 15.0f;                              // :91 rdata 0x820C4178
+
+    const f32 KF_NEAR_FINISH_DISTANCE               = 1000.0f;                            // :93 rdata 0x820C417C
+
+    const f32 KF_DRIVING_PLAYER_SPEED_RATIO         = 0.7f;                               // :95 rdata 0x820C4180
+
+    const f32 KF_BLOCKED_ROUTE_RETRY_DISTANCE       = 100.0f;                             // :97 rdata 0x820C4184
+
+    const f32 KAF_MIN_AGGRESSION[E_PERSONALITY_TYPE_COUNT] =                              // :99 rdata 0x820C4188
+    {
+        0.1f,
+        0.1f,
+    };
+
+    const f32 KAF_MAX_AGGRESSION[E_PERSONALITY_TYPE_COUNT] =                              // :105 rdata 0x820C4190
+    {
+        0.6f,
+        0.6f,
+    };
+
+    f32 KF_MARKED_MAN_MIN_AGGRESSION                = 0.2f;                               // :111 data 0x82F30170
+    f32 KF_MARKED_MAN_MAX_AGGRESSION                = 1.0f;                               // :112 data 0x82F30174
+
+    const f32 KF_ROAD_RAGE_MIN_AGGRESSION           = 0.0f;                               // :114 rdata 0x820C4198
+    const f32 KF_ROAD_RAGE_MAX_AGGRESSION           = 0.6f;                               // :115 rdata 0x820C419C
+
+    const f32 KAF_PURSUIT_AGGRESSION[E_PERSONALITY_TYPE_COUNT] =                          // :117 rdata 0x820C41A0
+    {
+        0.0f,
+        0.5f,
+    };
+
+    // PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x820C41A8. The X360 source has one
+    // more .rdata const here than the PS3 DWARF (between :117 and :129): the 0.7 AICar::OnModeStart
+    // 0x8277BD20 loads directly for the four speed-match settings of a non-marked-man mode (PS3
+    // 0x9C7DC4 stores 0.7 literals there), and the slot every later 0.7 read in the unity goes
+    // to (CalcDesiredSpeed 0x82796078 reads KF_DRIVING_PLAYER_SPEED_RATIO from it).
+    const f32 KF_DEFAULT_SPEED_MATCH_TUNING         = 0.7f;                               // rdata 0x820C41A8
+
+    const f32 KF_MAX_MEDALS_TO_UNLOCK_A_CAR         = 130.0f;                             // :129 rdata 0x820C41AC
+
+    const f32 KF_MIN_SPEED_FOR_WRONG_WAY            = 40.0f * CgsCore::KF_MPH_TO_MPS;     // :132 bss 0x8300D814
+    const f32 KF_WRONG_WAY_TIME_TO_INVALIDATE_ROUTE = 4.0f;                               // :133 rdata 0x820C41B0
+
+    const f32 KF_ROAD_RAGE_SPEED_DISTANCE           = 20.0f;                              // :1648 rdata 0x820C41B4
+}
 
 namespace BrnAI
 {
@@ -48,47 +158,6 @@ namespace BrnAI
         return mpDriver->GetForcedSpeed();
     }
 
-    // ===== file-local tuning constants =====
-    // The .bss tunables (0x8300Dxxx) live in BrnAICar_Constants.h -- KF_DESIRED_*,
-    // KF_PERSONALITY_SPEED_OFFSET / KF_PERSONALITY_CLAMP_*, KF_ROAD_RAGE_BEHIND_BIAS /
-    // SLOW_FLOOR / AHEAD_DROP and KF_RACE_DISTANCE_MIN_SPEED -- recovered 2026-09-04 from their
-    // start-up initialisers in the CRT bank at 0x82C685B8..0x82C69488.
-    //
-    // GetDecentSpeed @0x82766030 -- per-route-finding-style "decent" fraction of
-    // mfMaxPlayerSpeed. The asm dispatches on meRouteFindingStyle 2 / 3 / 6 / default; the four
-    // rodata floats sit in one pool addressed off 0x820C4164: 0x820C4164 = 0.55 (the default
-    // arm), 0x820C4168 = 0.5 (ROAD_RAGE), 0x820C416C = 0.6 (PURSUIT), 0x820C4174 = 0.4
-    // (MARKED_MAN with a non-zero opponent index).
-    const f32 KF_DECENT_SPEED_ROAD_RAGE = 0.5f;        // flt_820C4168 -- style 2
-    const f32 KF_DECENT_SPEED_PURSUIT   = 0.6f;        // flt_820C416C -- style 3 (0.60000002)
-    const f32 KF_DECENT_SPEED_DEFAULT   = 0.55f;       // flt_820C4164 -- default arm (0.55000001)
-    const f32 KF_DECENT_SPEED_MARKED    = 0.4f;        // flt_820C4174 -- style 6 w/ opponent (0.40000001)
-
-    // CalcDesiredSpeed -- the two multipliers that are rodata, not .bss.
-    const f32 KF_DESIRED_PLAYER_DRIVEN_MUL  = 0.7f;    // flt_820C41A8 == 0.69999999 (read from image.bin @0xC41A8, 2026-09-03; was a 0.0 placeholder)
-    const f32 KF_DESIRED_DEFAULT_MUL        = 4.0f;    // flt_820C41C0 == 4.0 (read from image.bin @0xC41C0, 2026-09-03; was a 0.0 placeholder; the same word is Update's wrong-way limit)
-
-    // CalcPersonalitySpeed -- the mph -> m/s factor the x50/x80/x100 bases are scaled by.
-    const f32 KF_PERSONALITY_BASE_SCALE     = 0.44704f; // flt_82F31928 == 0.44704 (mph -> m/s; read from image.bin @0xF31928, 2026-09-03) -- the x50/x80/x100 are mph
-
-    // CalcRoadRageSpeed -- the separation blend.
-    const f32 KF_ROAD_RAGE_BLEND_RATE       = 0.05f;   // flt_820047C8 == 0.05 (== 1/20 m, read from image.bin @0x47C8, 2026-09-03) -- lerp over the [0,20] band
-    const f32 KF_ROAD_RAGE_SEPARATION_RANGE = 20.0f;   // flt_820C4890 (== 20.0, separation upper bound)
-
-    // UpdateRaceDistance -- speed/distance thresholds.
-    const f32 KF_RACE_DISTANCE_AHEAD_GAP    =  30.0f;  // flt_820C3FA8 (== 30.0)  ahead-of-player synthetic gap
-    const f32 KF_RACE_DISTANCE_BEHIND_GAP   = -30.0f;  // flt_820951A8 (== -30.0) behind-player synthetic gap
-
-    // UpdateRouteFindingRace -- alt-route hold time = base + opponentIndex * scale.
-    const f32 KF_ALT_ROUTE_HOLD_BASE        = 10.0f;   // flt_820C4150 (== 10.0)
-    const f32 KF_ALT_ROUTE_HOLD_PER_OPP     = 3.0f;    // flt_820C4154 (== 3.0)
-
-    // NeedsNewRoute -- pursuit-route "chased car moved" distance-squared threshold.
-    const f32 KF_NEEDS_NEW_ROUTE_DIST_SQ    = 10000.0f; // flt_82005D9C (== 10000.0)
-
-    // Shared zero / one constants (flt_82001CC0 / flt_82001C98) used as the universal 0.0f/1.0f.
-
-
     // ==================================================================================
     // GetDecentSpeed @0x82766030
     //
@@ -99,14 +168,25 @@ namespace BrnAI
     f32 AICar::GetDecentSpeed() const
     {
         if (meRouteFindingStyle == E_ROUTE_FINDING_ROAD_RAGE)
-            return mfMaxPlayerSpeed * KF_DECENT_SPEED_ROAD_RAGE;
+            return mfMaxPlayerSpeed * KF_DECENT_ROAD_RAGE_SPEED_RATIO;
         if (meRouteFindingStyle == E_ROUTE_FINDING_PURSUIT)
-            return mfMaxPlayerSpeed * KF_DECENT_SPEED_PURSUIT;
+            return mfMaxPlayerSpeed * KF_DECENT_PURSUIT_SPEED_RATIO;
         if (meRouteFindingStyle != E_ROUTE_FINDING_MARKED_MAN)
-            return mfMaxPlayerSpeed * KF_DECENT_SPEED_DEFAULT;
+            return mfMaxPlayerSpeed * KF_DECENT_SPEED_RATIO;
         if (miOpponentIndex != 0)
-            return mfMaxPlayerSpeed * KF_DECENT_SPEED_MARKED;
-        return mfMaxPlayerSpeed * 0.0f;
+            return mfMaxPlayerSpeed * KF_DECENT_MARKED_MAN_MAX_SPEED_RATIO;
+        return mfMaxPlayerSpeed * KF_DECENT_MARKED_MAN_MIN_SPEED_RATIO;
+    }
+
+    // ==================================================================================
+    // IsNearRaceFinish (DWARF BrnAICar.h:578, BrnAICar.cpp:2416; PS3 0x9B8E84). No ARTIST copy:
+    // AIAggression::DecideToAttack 0x82770CB4..0x82770CE8, UpdateAggressionStateOutOfRange and
+    // AIAggression::Update inline it as a materialised bool (`li 1 ; fcmpu dist, 1000 ; blt ;
+    // li 0 ; clrlwi ; cmplwi`): an unordered distance is not near the finish.
+    // ==================================================================================
+    bool AICar::IsNearRaceFinish() const
+    {
+        return meRouteFindingStyle == E_ROUTE_FINDING_RACE && mfDistanceToCheckpoint < KF_NEAR_FINISH_DISTANCE;
     }
 
     // ==================================================================================
@@ -118,7 +198,7 @@ namespace BrnAI
     //     offset, floored by a one-time-cached minimum (x100);
     //   - NOT IN_RANGE & approaching (relative 0 or 2): |velocity| + offset (no floor);
     //   - NOT IN_RANGE & separating: a fixed x50 base.
-    // The result is finally clamped to [KF_PERSONALITY_CLAMP_LO, KF_PERSONALITY_CLAMP_HI].
+    // The result is finally clamped to [KF_MINIMUM_PERSONALITY_SPEED, KF_MAXIMUM_PERSONALITY_SPEED].
     // ==================================================================================
     f32 AICar::CalcPersonalitySpeed(const AICar* lpPlayerCar)
     {
@@ -152,21 +232,21 @@ namespace BrnAI
                 leRelative == E_RELATIVE_INFRONT_APPROACHING)
             {
                 const Vector3 lVelocity = lpPlayerCar->GetVelocity();
-                lfSpeed = std::sqrt(vpu::Dot(lVelocity, lVelocity)) + KF_PERSONALITY_SPEED_OFFSET;
+                lfSpeed = std::sqrt(vpu::Dot(lVelocity, lVelocity)) + KF_OVERTAKE_FROM_BEHIND;
             }
             else
             {
-                lfSpeed = KF_PERSONALITY_BASE_SCALE * 50.0f;
+                lfSpeed = CgsCore::KF_MPH_TO_MPS * 50.0f;
             }
         }
         else if (leRelative == E_RELATIVE_INFRONT_SEPARATING)
         {
-            lfSpeed = KF_PERSONALITY_BASE_SCALE * 80.0f;
+            lfSpeed = CgsCore::KF_MPH_TO_MPS * 80.0f;
         }
         else
         {
             const Vector3 lVelocity = lpPlayerCar->GetVelocity();
-            lfSpeed = std::sqrt(vpu::Dot(lVelocity, lVelocity)) + KF_PERSONALITY_SPEED_OFFSET;
+            lfSpeed = std::sqrt(vpu::Dot(lVelocity, lVelocity)) + KF_OVERTAKE_FROM_BEHIND;
 
             f32 lfMinSpeed;
             if (sbMinSpeedInitialised)
@@ -176,16 +256,16 @@ namespace BrnAI
             else
             {
                 sbMinSpeedInitialised = true;
-                lfMinSpeed = KF_PERSONALITY_BASE_SCALE * 100.0f;
+                lfMinSpeed = CgsCore::KF_MPH_TO_MPS * 100.0f;
                 sfCachedMinSpeed = lfMinSpeed;
             }
             if (lfSpeed < lfMinSpeed)
                 lfSpeed = lfMinSpeed;
         }
 
-        // Final clamp: min(KF_PERSONALITY_CLAMP_HI, max(KF_PERSONALITY_CLAMP_LO, lfSpeed)).
-        f32 lfClamped = (KF_PERSONALITY_CLAMP_LO >= lfSpeed) ? KF_PERSONALITY_CLAMP_LO : lfSpeed;
-        return (KF_PERSONALITY_CLAMP_HI >= lfClamped) ? lfClamped : KF_PERSONALITY_CLAMP_HI;
+        // Final clamp: min(KF_MAXIMUM_PERSONALITY_SPEED, max(KF_MINIMUM_PERSONALITY_SPEED, lfSpeed)).
+        f32 lfClamped = (KF_MINIMUM_PERSONALITY_SPEED >= lfSpeed) ? KF_MINIMUM_PERSONALITY_SPEED : lfSpeed;
+        return (KF_MAXIMUM_PERSONALITY_SPEED >= lfClamped) ? lfClamped : KF_MAXIMUM_PERSONALITY_SPEED;
     }
 
     // ==================================================================================
@@ -197,7 +277,7 @@ namespace BrnAI
     //   - if the player is at/above the AI's decent speed: drop when the player is well ahead
     //     (sep > 20), boost when behind (sep < 0), else lerp between the two across the [0,20]
     //     band;
-    //   - if the player is slower than decent: floor to KF_ROAD_RAGE_SLOW_FLOOR.
+    //   - if the player is slower than decent: floor to KF_ROAD_RAGE_CLIP_SPEED.
     // The result is finally floored by GetDecentSpeed().
     // ==================================================================================
     f32 AICar::CalcRoadRageSpeed(const AICar* lpPlayerCar)
@@ -222,25 +302,25 @@ namespace BrnAI
         f32 lfSpeed;
         if (lfPlayerSpeed >= lfDecentSpeed)
         {
-            if (lfForwardSep > KF_ROAD_RAGE_SEPARATION_RANGE)
+            if (lfForwardSep > KF_ROAD_RAGE_SPEED_DISTANCE)
             {
-                lfSpeed = lpPlayerCar->GetSpeed() - KF_ROAD_RAGE_AHEAD_DROP;
+                lfSpeed = lpPlayerCar->GetSpeed() - KF_ROAD_RAGE_SLOW_DOWN_FACTOR;
             }
             else if (lfForwardSep < 0.0f)
             {
-                lfSpeed = lpPlayerCar->GetSpeed() + KF_ROAD_RAGE_BEHIND_BIAS;
+                lfSpeed = lpPlayerCar->GetSpeed() + KF_ROAD_RAGE_SPEED_UP_FACTOR;
             }
             else
             {
-                const f32 lfAhead  = lpPlayerCar->GetSpeed() - KF_ROAD_RAGE_AHEAD_DROP;
-                const f32 lfBehind = lpPlayerCar->GetSpeed() + KF_ROAD_RAGE_BEHIND_BIAS;
-                lfSpeed = (lfAhead - lfBehind) * lfForwardSep * KF_ROAD_RAGE_BLEND_RATE + lfBehind;
+                const f32 lfAhead  = lpPlayerCar->GetSpeed() - KF_ROAD_RAGE_SLOW_DOWN_FACTOR;
+                const f32 lfBehind = lpPlayerCar->GetSpeed() + KF_ROAD_RAGE_SPEED_UP_FACTOR;
+                lfSpeed = (lfAhead - lfBehind) * lfForwardSep * (1.0f / KF_ROAD_RAGE_SPEED_DISTANCE) + lfBehind;
             }
         }
         else
         {
-            const f32 lfBehind = lpPlayerCar->GetSpeed() + KF_ROAD_RAGE_BEHIND_BIAS;
-            lfSpeed = (KF_ROAD_RAGE_SLOW_FLOOR >= lfBehind) ? KF_ROAD_RAGE_SLOW_FLOOR : lfBehind;
+            const f32 lfBehind = lpPlayerCar->GetSpeed() + KF_ROAD_RAGE_SPEED_UP_FACTOR;
+            lfSpeed = (KF_ROAD_RAGE_CLIP_SPEED >= lfBehind) ? KF_ROAD_RAGE_CLIP_SPEED : lfBehind;
         }
 
         const f32 lfFloor = GetDecentSpeed();
@@ -275,7 +355,7 @@ namespace BrnAI
         if (meBehaviour == 1)
         {
             if (mbIsPlayer)
-                return KF_DESIRED_INRANGE_PLAYER;
+                return KF_PLAYER_ROLLING_START_SPEED;
 
             // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): both arms are `fnmsubs f1, f12
             // (opponent index), f0 (scale), f13 (base)` = -(index * scale - base), ONE rounding
@@ -283,8 +363,8 @@ namespace BrnAI
             // keeps fnmsubs' sign (-(+0) = -0), as FX-GATE spells ComputeSpeedRatio's fnmsubs.
             const f32 lfOpponent = static_cast<f32>(miOpponentIndex);
             if (meRouteFindingStyle == E_ROUTE_FINDING_ROAD_RAGE)
-                return -(lfOpponent * KF_DESIRED_OPP_SCALE_RACE - KF_DESIRED_OPP_BASE_RACE);
-            return -(lfOpponent * KF_DESIRED_OPP_SCALE_DEFAULT - KF_DESIRED_OPP_BASE_DEFAULT);
+                return -(lfOpponent * KF_AI_ROLLING_START_MAX_DIFFERENCE_ROAD_RAGE - KF_AI_ROLLING_START_MAX_SPEED_ROAD_RAGE);
+            return -(lfOpponent * KF_AI_ROLLING_START_SPEED_DIFFERENCE - KF_AI_ROLLING_START_MAX_SPEED_RACE);
         }
 
         switch (meSpeedSelectionMethod)
@@ -294,37 +374,37 @@ namespace BrnAI
                 // Proximity-clamped speed, dispatched on where the car sits relative to the
                 // player. Only runs while IN_RANGE; otherwise falls through to the max clamp.
                 if (meCarState != E_AI_CAR_STATE_IN_RANGE)
-                    return KF_DESIRED_MAX_SPEED;
+                    return KF_FREE_ROAM_LOW_SPEED;
 
                 if (meRelativeLocation == E_RELATIVE_BEHIND_APPROACHING) // relative == 0
                 {
-                    // min(KF_DESIRED_MAX_SPEED, playerSpeed + bias)
-                    const f32 lfSpeed = lpPlayerCar->GetSpeed() + KF_DESIRED_FREEROAM_BIAS;
-                    return (KF_DESIRED_MAX_SPEED >= lfSpeed) ? KF_DESIRED_MAX_SPEED : lfSpeed;
+                    // min(KF_FREE_ROAM_LOW_SPEED, playerSpeed + bias)
+                    const f32 lfSpeed = lpPlayerCar->GetSpeed() + KF_FREE_ROAM_CATCH_UP_SPEED;
+                    return (KF_FREE_ROAM_LOW_SPEED >= lfSpeed) ? KF_FREE_ROAM_LOW_SPEED : lfSpeed;
                 }
                 if (meRelativeLocation == E_RELATIVE_INFRONT_SEPARATING) // relative == 3
                 {
-                    // clamp(playerSpeed - fallBehind) into [KF_DESIRED_PURSUIT_FLOOR, KF_DESIRED_MAX_SPEED]
-                    const f32 lfSpeed  = lpPlayerCar->GetSpeed() - KF_DESIRED_PURSUIT_FALLBEHIND;
-                    const f32 lfCapped = (KF_DESIRED_MAX_SPEED >= lfSpeed) ? KF_DESIRED_MAX_SPEED : lfSpeed;
-                    return (KF_DESIRED_PURSUIT_FLOOR >= lfCapped) ? lfCapped : KF_DESIRED_PURSUIT_FLOOR;
+                    // clamp(playerSpeed - fallBehind) into [KF_FREE_ROAM_HIGH_SPEED, KF_FREE_ROAM_LOW_SPEED]
+                    const f32 lfSpeed  = lpPlayerCar->GetSpeed() - KF_FREE_ROAM_SLOW_DOWN_SPEED;
+                    const f32 lfCapped = (KF_FREE_ROAM_LOW_SPEED >= lfSpeed) ? KF_FREE_ROAM_LOW_SPEED : lfSpeed;
+                    return (KF_FREE_ROAM_HIGH_SPEED >= lfCapped) ? lfCapped : KF_FREE_ROAM_HIGH_SPEED;
                 }
                 // Any other relative position -> the upper clamp speed.
-                return KF_DESIRED_MAX_SPEED;
+                return KF_FREE_ROAM_LOW_SPEED;
             }
 
             case 1:
             {
                 // Rubber-band target speed.
                 if (mbIsPlayer)
-                    return mfMaxPlayerSpeed * KF_DESIRED_PLAYER_DRIVEN_MUL;
+                    return mfMaxPlayerSpeed * KF_DRIVING_PLAYER_SPEED_RATIO;
 
                 // Restore the inlined RaceBalancingManager::ComputeTargetSpeed call by name.
                 f32 lfTargetSpeed = lpRaceBalancingManager->ComputeTargetSpeed(
                     this, lpAISectionsData, lpPlayerCar->IsCrashing());
 
                 // Once the race has settled and the car holds a sane lead, floor by decent speed.
-                if (mfRaceTimer > 15.0f)
+                if (mfRaceTimer > KF_DECENT_SPEED_START_TIME)
                 {
                     const f32 lfAhead = mfDistanceAheadOfPlayer;
                     if (lfAhead > 0.0f && lfAhead < 80.0f)
@@ -345,10 +425,10 @@ namespace BrnAI
 
             case 4:
             {
-                // mfMaxPlayerSpeed raw while IN_RANGE, else scaled by KF_DESIRED_DEFAULT_MUL.
+                // mfMaxPlayerSpeed raw while IN_RANGE, else scaled by 4 (a literal on PS3 0x9FE150 too).
                 if (meCarState == E_AI_CAR_STATE_IN_RANGE)
                     return mfMaxPlayerSpeed;
-                return mfMaxPlayerSpeed * KF_DESIRED_DEFAULT_MUL;
+                return mfMaxPlayerSpeed * 4.0f;
             }
 
             default:
@@ -439,7 +519,7 @@ namespace BrnAI
             // `fcmpu prev, dist ; bgt -> reset` 0x8278B058/0x8278B05C: only an ordered prev > dist
             // resets, so a NaN distance keeps the wrong-way clock running (FX-AINAN2; `<=` reset it).
             if (mbIsDrivenByPlayer && mbIsInGameMode && !mbIsCrashing &&
-                GetSpeed() > KF_RACE_DISTANCE_MIN_SPEED &&
+                GetSpeed() > KF_MIN_SPEED_FOR_WRONG_WAY &&
                 !(lfPrevDistance > mfDistanceToCheckpoint))
             {
                 mfWrongWayTime = mfWrongWayTime + lfTimeStep;
@@ -461,8 +541,8 @@ namespace BrnAI
             {
                 mbIsAheadOfPlayer = liThisCheckpoint > liPlayerCheckpoint;
                 mfDistanceAheadOfPlayer = (liThisCheckpoint > liPlayerCheckpoint)
-                                              ? KF_RACE_DISTANCE_AHEAD_GAP
-                                              : KF_RACE_DISTANCE_BEHIND_GAP;
+                                              ? KF_AHEAD_DISTANCE
+                                              : -KF_AHEAD_DISTANCE;
             }
         }
     }
@@ -498,8 +578,9 @@ namespace BrnAI
         const Vector3 lDelta = mLastRoutePosition - mPosition;
         const f32 lfDistSq = vpu::Dot(lDelta, lDelta);
 
-        // vcmpgtfp.: branch taken when KF_NEEDS_NEW_ROUTE_DIST_SQ > lfDistSq (still close).
-        if (KF_NEEDS_NEW_ROUTE_DIST_SQ > lfDistSq)
+        // vcmpgtfp.: branch taken when the retry distance squared (10000, the folded __real
+        // 0x82005D9C) > lfDistSq (still close).
+        if (KF_BLOCKED_ROUTE_RETRY_DISTANCE * KF_BLOCKED_ROUTE_RETRY_DISTANCE > lfDistSq)
             return false;
 
         return mbRouteRequested;
@@ -523,14 +604,15 @@ namespace BrnAI
         Route* lpThisRoute = GetRoute();
         lpThisRoute->Construct(lpRoute);
 
-        if (lpThisRoute->GetNodeCount() <= 0)
-        {
-            mbRouteRequested = true;
-        }
-        else
+        // ARTIST 0x8276F340 `ble` skips to the request arm: the node arm comes first.
+        if (lpThisRoute->GetNodeCount() > 0)
         {
             SetNextRouteNodeIndex(lpThisRoute->GetDefaultStartNode());
             ++miRouteTimeStamp;
+        }
+        else
+        {
+            mbRouteRequested = true;
         }
 
         mbHasBlockCheckpoints = 0;
@@ -578,7 +660,7 @@ namespace BrnAI
                 break;
 
             default:
-                CGS_FAIL_AT("Invalid route finding style", KPC_AICAR_CPP, 1008);
+                CGS_FAIL_AT("Invalid route finding style", CGS_ARTIST_UNITY_BRNAICAR_CPP_FILE, 1008);
                 break;
         }
     }
@@ -610,7 +692,7 @@ namespace BrnAI
         if (!mbWantsAlternativeRoute)
             return;
 
-        const f32 lfHoldTime = KF_ALT_ROUTE_HOLD_BASE + static_cast<f32>(miOpponentIndex) * KF_ALT_ROUTE_HOLD_PER_OPP;
+        const f32 lfHoldTime = KF_MIN_ALTERNATIVE_ROUTE_TIME + static_cast<f32>(miOpponentIndex) * KF_ALTERNATIVE_ROUTE_INTERVAL;
         if (mfAlternativeRouteTimer < lfHoldTime)                      // bgelr 0x82765E7C
         {
             mfAlternativeRouteTimer = mfAlternativeRouteTimer + lfTimeStep;
@@ -652,13 +734,13 @@ namespace BrnAI
         // mRoute.miNodeCount @+0x1400; miNextRouteNodeIndex @+0x1524.
         const Route* lpThisRoute = GetRoute();
         if (miNextRouteNodeIndex >= lpThisRoute->GetNodeCount())
-            mfTimeInInvalidSection = 1.0f;
+            mfTimeInInvalidSection = KF_MAX_TIME_IN_BAD_SECTION;
 
         const f32 lfNewTime = mfTimeInInvalidSection + lfTimeStep;
         mfTimeInInvalidSection = lfNewTime;
         // `fcmpu t, flt_82001C98 (1.0) ; blt` 0x8277C084/0x8277C088 skips only an ordered t < 1,
         // so a NaN dwell time drops the route (FX-AINAN2; `>=` kept it).
-        if (!(lfNewTime < 1.0f))
+        if (!(lfNewTime < KF_MAX_TIME_IN_BAD_SECTION))
         {
             mfWrongWayTime = 0.0f;
             Route* lpMutableRoute = GetRoute();
@@ -702,8 +784,8 @@ namespace BrnAI
     {
         const Route* lpThisRoute = GetRoute();
 
-        CGS_ASSERT_AT(HasValidRoute(), "HasValidRoute()", KAC_ARTIST_ASSERT_FILE, 978);
-        CGS_ASSERT_AT(lpThisRoute->GetNodeCount() > 0, "mRoute.GetNodeCount() > 0", KAC_ARTIST_ASSERT_FILE, 979);
+        CGS_ASSERT_AT(HasValidRoute(), "HasValidRoute()", CGS_ARTIST_BRNAICAR_H_FILE, 978);
+        CGS_ASSERT_AT(lpThisRoute->GetNodeCount() > 0, "mRoute.GetNodeCount() > 0", CGS_ARTIST_BRNAICAR_H_FILE, 979);
 
         return lpThisRoute->GetNode(lpThisRoute->GetNodeCount() - 1)->GetSectionIndex();
     }
@@ -722,7 +804,7 @@ namespace BrnAI
             return mfSpeedInRange;
 
         CGS_ASSERT_AT(meCarState == E_AI_CAR_STATE_OUT_OF_RANGE,
-            "AI car in bad state", KAC_ARTIST_ASSERT_FILE, 1105 /* ARTIST 0x82764DB0 */);
+            "AI car in bad state", CGS_ARTIST_BRNAICAR_H_FILE, 1105 /* ARTIST 0x82764DB0 */);
         return mfSpeedOutOfRange;
     }
 
@@ -735,7 +817,7 @@ namespace BrnAI
     // ==================================================================================
     Vector3 AICar::GetVelocity() const
     {
-        CGS_ASSERT_AT(vpu::IsValid(mVelocity), "Invalid velocity", KAC_ARTIST_ASSERT_FILE, 865);
+        CGS_ASSERT_AT(vpu::IsValid(mVelocity), "Invalid velocity", CGS_ARTIST_BRNAICAR_H_FILE, 865);
         return mVelocity;
     }
 
@@ -747,7 +829,7 @@ namespace BrnAI
     // ==================================================================================
     Vector3 AICar::GetLastGoodPosition() const
     {
-        CGS_ASSERT_AT(vpu::IsValid(mLastGoodPosition), "Invalid car last good position", KAC_ARTIST_ASSERT_FILE, 872);
+        CGS_ASSERT_AT(vpu::IsValid(mLastGoodPosition), "Invalid car last good position", CGS_ARTIST_BRNAICAR_H_FILE, 872);
         return mLastGoodPosition;
     }
 
@@ -760,7 +842,7 @@ namespace BrnAI
     bool AICar::IsOnStartLine() const
     {
         CGS_ASSERT_AT(meCarState != E_AI_CAR_STATE_INACTIVE,
-            "GetState() != E_AI_CAR_STATE_INACTIVE", KAC_ARTIST_ASSERT_FILE, 1272 /* ARTIST 0x82764E90 */);
+            "GetState() != E_AI_CAR_STATE_INACTIVE", CGS_ARTIST_BRNAICAR_H_FILE, 1272 /* ARTIST 0x82764E90 */);
 
         return mbIsOnStartLine;
     }
@@ -776,9 +858,9 @@ namespace BrnAI
     void AICar::SetBehaviour(EAIBehaviour leBehaviour)
     {
         CGS_ASSERT_AT(leBehaviour >= 0,
-            "leBehaviour >= 0", KAC_ARTIST_ASSERT_FILE, 1193 /* ARTIST 0x82764E0C */);
+            "leBehaviour >= 0", CGS_ARTIST_BRNAICAR_H_FILE, 1193 /* ARTIST 0x82764E0C */);
         CGS_ASSERT_AT(leBehaviour < E_AI_BEHAVIOUR_COUNT,
-            "leBehaviour < E_AI_BEHAVIOUR_COUNT", KAC_ARTIST_ASSERT_FILE, 1194 /* ARTIST 0x82764E30 */);
+            "leBehaviour < E_AI_BEHAVIOUR_COUNT", CGS_ARTIST_BRNAICAR_H_FILE, 1194 /* ARTIST 0x82764E30 */);
 
 
         mePreviousBehaviour = meBehaviour;
@@ -821,7 +903,7 @@ namespace BrnAI
     // ==================================================================================
     void AICar::SetRight(Vector3 lRight)
     {
-        CGS_ASSERT_AT(vpu::IsValid(lRight), "RwMath::IsValid( lRight )", KAC_ARTIST_ASSERT_FILE, 1311);
+        CGS_ASSERT_AT(vpu::IsValid(lRight), "RwMath::IsValid( lRight )", CGS_ARTIST_BRNAICAR_H_FILE, 1311);
 
         if (!BrnMath::IsNormal(lRight))
         {
@@ -840,7 +922,6 @@ namespace BrnAI
 
 // FOLDED FROM BrnAICar_Update.cpp
 #include "GameSource/World/AI/BrnAICar.h"
-#include "GameSource/World/AI/BrnAICar_Constants.h"       // the .bss tunables, recovered from their start-up initialisers
 #include "GameSource/World/AI/BrnAIDriver.h"   // AIDriver::ResetPIDTuningState / GetRacingLine (UpdateInRangeData / OnModeStart)
 #include "GameSource/World/AI/Route/BrnRoute.h"                          // BrnAI::Route, RouteNode
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h"   // RaceBalancingManager::CalculateScheduleOffset
@@ -859,6 +940,7 @@ namespace BrnAI
 #include "rw/math/vpu/vector3_operation.h"                     // rw::math::vpu Dot / Magnitude / Normalize / Cross / IsValid / IsZero
 
 #include <cmath>   // std::sqrt (the de-SIMD'd rsqrt sequences)
+#include <cfloat>  // FLT_EPSILON (the IsZero tolerance: both readers load the __real 0x820C3B70)
 
 // BrnAI::AICar -- the per-car AI BRAIN TICK and the module-facing state writers.
 // Partfile of BrnAICar.cpp (which owns the speed + route-progress core). This unit bodies
@@ -912,37 +994,10 @@ namespace BrnAI
 
     Vector3 AICar::GetVelocityDirection() const
     {
-        if (vpu::MagnitudeSquared(mVelocity) > KF_USEFUL_DIRECTION_MIN_SPEED * KF_USEFUL_DIRECTION_MIN_SPEED)
+        if (vpu::MagnitudeSquared(mVelocity) > KF_MIN_SPEED_FOR_VELOCITY_USEFULNESS * KF_MIN_SPEED_FOR_VELOCITY_USEFULNESS)
             return vpu::Normalize(GetVelocity());
         return GetDirection();
     }
-
-    // ===== file-local constants (every value read from the image; addresses in the banner) =====
-    const f32 KF_AICAR_FLOAT_EPSILON              = 1.1920929e-7f;   // flt_820C3B70
-    const f32 KF_WRONG_WAY_TIME_LIMIT             = 4.0f;            // flt_820C41C0
-    const f32 KF_FREE_ROAM_TO_PURSUIT_DISTANCE    = 100.0f;          // flt_820C3FAC
-    const f32 KF_PURSUIT_TO_FREE_ROAM_DISTANCE    = 750.0f;          // flt_820C5E90
-    const f32 KF_FREE_ROAM_ROUTE_OLD_DISTANCE     = 300.0f;          // IsFreeRoamingCarsRouteOld literal (Hex-Rays decoded)
-    const f32 KF_ROUTE_OLD_DISTANCE_AI            = 200.0f;          // flt_820C4318
-    const f32 KF_ROUTE_OLD_DISTANCE_PLAYER        = 50.0f;           // flt_820C4244
-    const f32 KF_SECTION_SPEED_TO_BUZZ_RATIO      = 0.0076923077f;   // flt_820C5E94 (1/130)
-    const f32 KF_MAX_PLAYER_SPEED_SCALE           = 1.1f;            // flt_820C3D90
-    const f32 KF_AICAR_FLT_MAX                    = 3.4028234663852886e+38f;  // flt_82F302F4 (0x7F7FFFFF)
-    // DWARF BrnAICar.cpp:32 KF_DEFAULT_OUT_OF_RANGE_SPEED. flt_8300D7FC is .bss (hence the 0
-    // in image.bin); its ONLY writer is the start-up leaf initialiser at 0x82C68580, which does
-    //   lfs f0, flt_82F31928(=0.44704) ; lfs f13, flt_82004A18(=80.0) ; fmuls ; stfs flt_8300D7FC
-    // == 80 mph -> 35.7632 m/s. AICar::Construct seeds mfSpeedOutOfRange (mfDesiredSpeed) with it.
-    const f32 KF_DEFAULT_OUT_OF_RANGE_SPEED       = 80.0f * 0.44704f;   // flt_8300D7FC (dyn-init 0x82C68580)
-    const f32 KAF_PERSONALITY_BASE_AGGRESSION[E_PERSONALITY_TYPE_COUNT] = { 0.0f, 0.5f };   // flt_820C41A0[personality]
-    f32 gfMarkedManMinAggression = 0.2f; // ARTIST 0x82F30170
-    f32 gfMarkedManMaxAggression = 1.0f; // ARTIST 0x82F30174
-    const f32 KAF_RANK_AGGRESSION_LO[E_PERSONALITY_TYPE_COUNT] = { 0.1f, 0.1f };   // unk_820C4188[personality]
-    const f32 KAF_RANK_AGGRESSION_HI[E_PERSONALITY_TYPE_COUNT] = { 0.6f, 0.6f };   // unk_820C4190[personality]
-    // GetUsefulDirection's "velocity is trustworthy above this speed" threshold lives in
-    // BrnAICar_Constants.h: flt_8300D964 is .bss (hence the 0 in image.bin), written at start-up
-    // by the leaf initialiser 0x82C685B8 as flt_820C4890 (20 mph) * 0.44704 == 8.9408 m/s.
-    // (The 1.0f placeholder shipped here before 2026-09-04 was ~9x too permissive.)
-    const f32 KF_USEFUL_DIRECTION_MIN_LENGTH      = 0.0099999998f;   // literal (Hex-Rays decoded)
 
     // vpu::IsZero(v, tolerance) as the console inlines it at UpdatePositionOutOfRange 0x8276F194
     // and UpdateOutOfRangeData 0x8276F550: vandc (|v|), vrlimi128 (w := x), vcmpgtfp. |v| >
@@ -956,10 +1011,6 @@ namespace BrnAI
                !(std::fabs(lrVector.Y().GetFloat()) > lfTolerance) &&
                !(std::fabs(lrVector.Z().GetFloat()) > lfTolerance);
     }
-
-    // The console's file strings (the unity .cpp path for .cpp-line asserts, the relative path
-    // for the inlined BrnAICar.h accessors).
-    static const char* const KPC_AICAR_H   = "..\\..\\..\\GameSource\\World/AI/BrnAICar.h";
 
     // ===== the BrnAICar.cpp file-scope RNG (.data 0x8300D5D0) ==============================
     // IDENTIFIED 2026-09-04 (this lane), replacing the opaque "11-word block" twin that stood
@@ -1077,7 +1128,7 @@ namespace BrnAI
                 CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStream << "AI car in unknown state " << static_cast<s32>(meCarState) << "\n";
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_AICAR_CPP, 928));
+                CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_UNITY_BRNAICAR_CPP_FILE, 928));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -1097,7 +1148,7 @@ namespace BrnAI
             UpdateRaceDistance(lpAISectionsData, lpPlayerCar, lfTimeStep);                  // 0x82799620
 
             // 0x82799624  wrong way for more than 4 s -> drop the route (it will be re-requested)
-            if (mfWrongWayTime > KF_WRONG_WAY_TIME_LIMIT)
+            if (mfWrongWayTime > KF_WRONG_WAY_TIME_TO_INVALIDATE_ROUTE)
             {
                 mfWrongWayTime = 0.0f;
                 Route* lpThisRoute = GetRoute();
@@ -1122,21 +1173,21 @@ namespace BrnAI
     // ==================================================================================
     Vector3 AICar::GetPosition() const
     {
-        CGS_ASSERT_AT(vpu::IsValid(mPosition), "Invalid car position", KAC_ARTIST_ASSERT_FILE, 839);
+        CGS_ASSERT_AT(vpu::IsValid(mPosition), "Invalid car position", CGS_ARTIST_BRNAICAR_H_FILE, 839);
         return mPosition;
     }
 
     Vector3 AICar::GetDirection() const
     {
-        CGS_ASSERT_AT(vpu::IsValid(mDirection), "Invalid car direction", KAC_ARTIST_ASSERT_FILE, 856);
-        CGS_ASSERT_AT(BrnMath::IsNormal(mDirection), "BrnMath::IsNormal( mDirection )", KAC_ARTIST_ASSERT_FILE, 857);
+        CGS_ASSERT_AT(vpu::IsValid(mDirection), "Invalid car direction", CGS_ARTIST_BRNAICAR_H_FILE, 856);
+        CGS_ASSERT_AT(BrnMath::IsNormal(mDirection), "BrnMath::IsNormal( mDirection )", CGS_ARTIST_BRNAICAR_H_FILE, 857);
         return mDirection;
     }
 
     Vector3 AICar::GetRight() const
     {
-        CGS_ASSERT_AT(vpu::IsValid(mRight), "RwMath::IsValid( mUnitRight )", KAC_ARTIST_ASSERT_FILE, 1320);       // ARTIST 0x8276BA28
-        CGS_ASSERT_AT(BrnMath::IsNormal(mRight), "BrnMath::IsNormal( mUnitRight )", KAC_ARTIST_ASSERT_FILE, 1321); // ARTIST 0x8276BA58
+        CGS_ASSERT_AT(vpu::IsValid(mRight), "RwMath::IsValid( mUnitRight )", CGS_ARTIST_BRNAICAR_H_FILE, 1320);       // ARTIST 0x8276BA28
+        CGS_ASSERT_AT(BrnMath::IsNormal(mRight), "BrnMath::IsNormal( mUnitRight )", CGS_ARTIST_BRNAICAR_H_FILE, 1321); // ARTIST 0x8276BA58
         return mRight;
     }
 
@@ -1149,7 +1200,7 @@ namespace BrnAI
     // ==================================================================================
     void AICar::SetDirection(Vector3 lDirection)
     {
-        CGS_ASSERT_AT(vpu::IsValid(lDirection), "RwMath::IsValid( lDirection )", KAC_ARTIST_ASSERT_FILE, 847);              // BrnAICar.h:847
+        CGS_ASSERT_AT(vpu::IsValid(lDirection), "RwMath::IsValid( lDirection )", CGS_ARTIST_BRNAICAR_H_FILE, 847);              // BrnAICar.h:847
 
         if (!BrnMath::IsNormal(lDirection))
         {
@@ -1157,7 +1208,7 @@ namespace BrnAI
             CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStream << "Diretion is  (" << lDirection.X().GetFloat() << "," << lDirection.Y().GetFloat() << "," << lDirection.Z().GetFloat() << "\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_AICAR_H, 848));
+            CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_BRNAICAR_H_FILE, 848));
             CgsDev::Assert::EndAssert();
         }
 
@@ -1172,7 +1223,7 @@ namespace BrnAI
     //   0x82770050  bl GetVelocity -> sp+0x60 ; 0x8277008C stvx128 the copy back to sp+0x60
     //   0x827700A4  stfs f31 (flt_82001CC0 == 0.0) -> sp+0x64, the copy's Y lane
     //   0x827700BC  vmsum3fp128 v0,v0,v0 on the reloaded copy; rsqrt magnitude, vsel 0 guard
-    //   0x827700FC  vcmpgefp. |xz| >= splat(flt_8300D964 == KF_USEFUL_DIRECTION_MIN_SPEED)
+    //   0x827700FC  vcmpgefp. |xz| >= splat(flt_8300D964 == KF_MIN_SPEED_FOR_VELOCITY_USEFULNESS)
     //   0x82770118  bl GetVelocity AGAIN -> Normalize of the unflattened velocity
     //   0x82770164  bl GetDirection -> sp+0x70 ; 0x827701A0 stfs f31 (0.0) -> sp+0x74 (Y lane)
     //   0x827701F4  vcmpgtfp. |xz| > flt_82002138 (0.01)
@@ -1186,17 +1237,17 @@ namespace BrnAI
     {
         Vector3 lXZSpeed = GetVelocity();
         lXZSpeed.SetY(0.0f);                                                                  // 0x827700A4
-        if (vpu::Magnitude(lXZSpeed) >= KF_USEFUL_DIRECTION_MIN_SPEED)                      // 0x827700FC
+        if (vpu::Magnitude(lXZSpeed) >= KF_MIN_SPEED_FOR_VELOCITY_USEFULNESS)                      // 0x827700FC
             return vpu::Normalize(GetVelocity());                                           // 0x82770118
 
         lXZSpeed = GetDirection();
         lXZSpeed.SetY(0.0f);                                                                  // 0x827701A0
-        if (vpu::Magnitude(lXZSpeed) > KF_USEFUL_DIRECTION_MIN_LENGTH)                      // 0x827701F4
+        if (vpu::Magnitude(lXZSpeed) > 0.01f)                      // 0x827701F4
             return GetDirection();                                                          // 0x82770210
 
         const Vector3 lRight = GetRight();
         const Vector3 lCross = vpu::Cross(GetDirection(), lRight);
-        if (vpu::Magnitude(lCross) > KF_USEFUL_DIRECTION_MIN_LENGTH)
+        if (vpu::Magnitude(lCross) > 0.01f)
             return lCross;                                                                  // NOT normalised on the console
 
         { const Vector3 lResult(1.0f, 0.0f, 0.0f); return lResult; }
@@ -1237,20 +1288,16 @@ namespace BrnAI
     // ==================================================================================
     void AICar::CheckForFreeRoamSwapToPursuit()
     {
-        Route* lpThisRoute = GetRoute();
-
         if (meRouteFindingStyle == E_ROUTE_FINDING_FREE_ROAM)
         {
             // 0x8276EE80 `fcmpu dist, 100.0 ; bgelr` returns on >= AND on unordered: a NaN
             // distance never swaps to pursuit (FX-AINAN2; `>=` let it through).
-            if (!(mfBuzzDistanceToPlayer < KF_FREE_ROAM_TO_PURSUIT_DISTANCE))
+            if (!(mfBuzzDistanceToPlayer < 100.0f))
                 return;
             if (miProximityIndex < 0)                                          // 0x8276EE90 bltlr
                 return;
 
-            mfWrongWayTime          = 0.0f;
-            lpThisRoute->miNodeCount = 0;
-            lpThisRoute->meStatus    = Route::E_STATUS_UNINITIALISED;
+            InvalidateRoute();                                                 // PS3 0x9BBED4 calls it
             ++miRouteTimeStamp;
             meRouteFindingStyle     = E_ROUTE_FINDING_PURSUIT;
             meSpeedSelectionMethod  = E_AI_SPEED_SELECTION_METHOD_PERSONALITY;
@@ -1261,15 +1308,13 @@ namespace BrnAI
             return;
 
         // 0x8276EED0  swap back when far away, or (else) when the proximity slot is gone
-        if (!(mfBuzzDistanceToPlayer > KF_PURSUIT_TO_FREE_ROAM_DISTANCE) && miProximityIndex >= 0)
+        if (!(mfBuzzDistanceToPlayer > 750.0f) && miProximityIndex >= 0)
             return;
 
-        mfWrongWayTime          = 0.0f;
+        InvalidateRoute();
         meRouteFindingStyle     = E_ROUTE_FINDING_FREE_ROAM;
         ++miRouteTimeStamp;
         meSpeedSelectionMethod  = E_AI_SPEED_SELECTION_METHOD_FREE_ROAM;
-        lpThisRoute->miNodeCount = 0;
-        lpThisRoute->meStatus    = Route::E_STATUS_UNINITIALISED;
     }
 
     // ==================================================================================
@@ -1302,7 +1347,7 @@ namespace BrnAI
             CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStream << "Trying to set " << liNodeIndex << " of " << liNodeCount << "\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_AICAR_H, 968));
+            CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_BRNAICAR_H_FILE, 968));
             CgsDev::Assert::EndAssert();
         }
         CGS_ASSERT(liNodeIndex >= 0, "liNextRouteNodeIndex >= 0");                          // BrnAICar.h:969
@@ -1393,7 +1438,7 @@ namespace BrnAI
 
         const Vector3 lDelta = lTarget - mPosition;                                         // vsubfp (target - mPosition)
         bool lbAdvance = true;
-        if (!IsZeroVmx(lDelta, KF_AICAR_FLOAT_EPSILON))                                     // 0x8276F194 vcmpgtfp. |delta| > eps
+        if (!IsZeroVmx(lDelta, FLT_EPSILON))                                     // 0x8276F194 vcmpgtfp. |delta| > eps
         {
             const f32 lfDistanceSq = vpu::Dot(lDelta, lDelta);                              // vmsum3fp128 v127
             const Vector3 lStep = mDirection * (mfSpeedOutOfRange * lfTimeStep);            // OLD facing (lvx 0x1440 before the call) * desired speed * dt
@@ -1429,7 +1474,7 @@ namespace BrnAI
     bool AICar::IsExtrapolatedRouteGettingOld()
     {
         const f32 lfDrift = vpu::Magnitude(mLastRoutePosition - mPosition);                 // lvx 0x1480 - lvx 0x1430
-        const f32 lfLimit = mbIsPlayer ? KF_ROUTE_OLD_DISTANCE_PLAYER : KF_ROUTE_OLD_DISTANCE_AI;
+        const f32 lfLimit = mbIsPlayer ? KF_RECALCULATE_ROUTE_SEPERATION_PLAYER : KF_RECALCULATE_ROUTE_SEPERATION_AI;
         // `fcmpu f13, f0 ; ble 0x8276FE0C` @0x8276FDFC. ble is `bc 4,gt` -- taken whenever GT is
         // clear, which after fcmpu includes the UNORDERED result -- so only an ordered drift ABOVE
         // the limit falls through to `li r3, 1` ("old"); a NaN drift goes on to the route tests below,
@@ -1475,11 +1520,26 @@ namespace BrnAI
         const f32 lfDistance = vpu::Magnitude(lLastPos - GetPosition());
         // `fcmpu dist, flt_820C4160 (300.0) ; bge -> return false` 0x8276FD0C/0x8276FD10: a NaN
         // distance is "not old" and keeps its destination (FX-AINAN2; `>=` invalidated it).
-        if (!(lfDistance < KF_FREE_ROAM_ROUTE_OLD_DISTANCE))
+        if (!(lfDistance < KF_FREE_ROAM_CAR_PROXIMITY_TO_GOAL))
             return false;
 
         muDestinationSectionIndex = KI_INVALID_SECTION_INDEX;                               // sth 0x7FFF,0x1536
         return true;
+    }
+
+    // ==================================================================================
+    // IsRouteToChasedCarGettingOld (DWARF BrnAICar.h:640, BrnAICar.cpp:1984). PS3 DecFIGS
+    // 0x9B4EF4 is the body (counts mfRouteTimer up by one per call against
+    // KF_FRAMES_TO_RECALC_ROUTE) and has no caller there either; ARTIST has no copy (unreferenced,
+    // dropped by the linker). It is the only BrnAICar.cpp reader of KF_FRAMES_TO_RECALC_ROUTE: the
+    // console's 60 at 0x820C4158 is emitted between :63 and :72, and every later 60 in the unity
+    // (HardNoGoMap::Render 0x82783740, the mph initialisers) is read from it, so this function was
+    // compiled (a leaf, ahead of them in code-generation order).
+    // ==================================================================================
+    bool AICar::IsRouteToChasedCarGettingOld()
+    {
+        mfRouteTimer += 1.0f;
+        return mfRouteTimer > KF_FRAMES_TO_RECALC_ROUTE;
     }
 
     // ==================================================================================
@@ -1672,7 +1732,7 @@ namespace BrnAI
     // default/best section and the buzz-frequency ratio min(1, sectionSpeed / 130).
     // ==================================================================================
     void AICar::UpdateOutOfRangeData(Vector3 lPosition, Vector3 lAtVector, u16 luSectionIndex,
-                                     u8 luSectionSpeed)
+                                     u8 luNumberOfMedalsToUnlock)
     {
         CGS_ASSERT_AT(IsActive(), "IsActive()", __FILE__, 1440);                                              // :1440
 
@@ -1684,7 +1744,7 @@ namespace BrnAI
             CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStream << "Bad At vector";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_AICAR_CPP, 1444));
+            CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_UNITY_BRNAICAR_CPP_FILE, 1444));
             CgsDev::Assert::EndAssert();
         }
 
@@ -1694,7 +1754,7 @@ namespace BrnAI
         // operands around vmulfp/vnmsubfp), degenerate -> gKVector, else Normalize.
         const Vector3 lCross = vpu::Cross(vpu::GetVector3_YAxis(), lAtVector);
         Vector3 lRight;
-        if (IsZeroVmx(lCross, KF_AICAR_FLOAT_EPSILON))                                      // 0x8276F550 vcmpgtfp., all false
+        if (IsZeroVmx(lCross, FLT_EPSILON))                                      // 0x8276F550 vcmpgtfp., all false
             lRight = vpu::GetVector3_ZAxis();                                               // lvx128 unk_82181520
         else
             lRight = vpu::Normalize(lCross);
@@ -1704,7 +1764,10 @@ namespace BrnAI
         muBestSectionIndex    = luSectionIndex;                                             // sth r25,0x1534
 
         // 0x8276F5BC..0x8276F5F4  ratio = min(1.0, float(speed) * (1/130))  (fsel on ratio-1)
-        const f32 lfRatio = static_cast<f32>(luSectionSpeed) * KF_SECTION_SPEED_TO_BUZZ_RATIO;
+        // the DWARF parameter luNumberOfMedalsToUnlock over :129
+        // KF_MAX_MEDALS_TO_UNLOCK_A_CAR (PS3 0x9C5BE4 divides by 130; the XDK multiplies by the
+        // folded reciprocal, the 1/130 at 0x820C5E94).
+        const f32 lfRatio = static_cast<f32>(luNumberOfMedalsToUnlock) / KF_MAX_MEDALS_TO_UNLOCK_A_CAR;
         mfBuzzFrequencyRatio = (lfRatio - 1.0f >= 0.0f) ? 1.0f : lfRatio;                   // stfs 0x1510
     }
 
@@ -1724,7 +1787,8 @@ namespace BrnAI
         // debug-menu equivalent of the console's aggression sliders.
         {
         }
-        mAggressiveness.SetAggression(lfMadness * 0.6f);                                    // stfs 0x140C ; stb 1,0x1410
+        mAggressiveness.SetAggression(lfMadness * (KF_ROAD_RAGE_MAX_AGGRESSION - KF_ROAD_RAGE_MIN_AGGRESSION)
+                                      + KF_ROAD_RAGE_MIN_AGGRESSION);                       // stfs 0x140C ; stb 1,0x1410
         mAggressiveness.SetProximityToSpeedMatch(0.5f);
         mAggressiveness.SetTimeForSpeedMatch(1.0f);
         mAggressiveness.SetRelativeSpeedForMatch(0.666f);                                   // stfs 0x141C (0.66600001)
@@ -1776,7 +1840,7 @@ namespace BrnAI
         meRouteFindingStyle     = leRouteFindingStyle;                                      // 0x14C0
         mbWantsAlternativeRoute = lbCanDeviateFromRoute ? 1 : 0;                            // 0x153F (== mbCanDeviateFromRoute)
         ++miRouteTimeStamp;                                                                 // 0x1528
-        mfDistanceToCheckpoint  = KF_AICAR_FLT_MAX;                                         // 0x14F0 <- flt_82F302F4
+        mfDistanceToCheckpoint  = BrnWorld::KF_INVALID_DISTANCE;                                        // 0x14F0 <- flt_82F302F4
         mbUseAIShortcuts        = lbCanUseAIShortcuts ? 1 : 0;                              // 0x153E (== mbCanUseAIShortcuts)
         lpThisRoute->meStatus    = Route::E_STATUS_UNINITIALISED;                           // 0x1408
         lpThisRoute->miNodeCount = 0;                                                       // 0x1400
@@ -1818,8 +1882,8 @@ namespace BrnAI
         f32 lfAcceleration;
         if (meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)                              // 0x8277BE84
         {
-            const f32 lfLo = gfMarkedManMinAggression;
-            const f32 lfHi = gfMarkedManMaxAggression;
+            const f32 lfLo = KF_MARKED_MAN_MIN_AGGRESSION;
+            const f32 lfHi = KF_MARKED_MAN_MAX_AGGRESSION;
             mAggressiveness.SetAggression((lfHi - lfLo) * lfProgressionRankAsRatio + lfLo);
             mAggressiveness.SetProximityToSpeedMatch(1.0f);
             mAggressiveness.SetTimeForSpeedMatch(1.0f);
@@ -1829,13 +1893,13 @@ namespace BrnAI
         else
         {
             // 0x8277BEE0  lvlx unk_820C4190[personality] / unk_820C4188[personality] ; lerp by rank
-            const f32 lfLo = KAF_RANK_AGGRESSION_LO[mePersonalityType];
-            const f32 lfHi = KAF_RANK_AGGRESSION_HI[mePersonalityType];
+            const f32 lfLo = KAF_MIN_AGGRESSION[mePersonalityType];
+            const f32 lfHi = KAF_MAX_AGGRESSION[mePersonalityType];
             mAggressiveness.SetAggression((lfHi - lfLo) * lfProgressionRankAsRatio + lfLo);  // vmaddfp (hi-lo)*ratio + lo
-            mAggressiveness.SetProximityToSpeedMatch(0.7f);
-            mAggressiveness.SetTimeForSpeedMatch(0.7f);
-            lfRelativeSpeed = 0.7f;
-            lfAcceleration  = 0.7f;
+            mAggressiveness.SetProximityToSpeedMatch(KF_DEFAULT_SPEED_MATCH_TUNING);
+            mAggressiveness.SetTimeForSpeedMatch(KF_DEFAULT_SPEED_MATCH_TUNING);
+            lfRelativeSpeed = KF_DEFAULT_SPEED_MATCH_TUNING;
+            lfAcceleration  = KF_DEFAULT_SPEED_MATCH_TUNING;
         }
         mAggressiveness.SetRelativeSpeedForMatch(lfRelativeSpeed);                          // stfs 0x141C
         mAggressiveness.SetAcclerationRateForSpeedMatch(lfAcceleration);
@@ -1908,7 +1972,7 @@ namespace BrnAI
         miOpponentIndex                 = -1;                                    // 0x827926D0 stb r9(-1),0x153A
         mpDriver                    = 0;                                     // 0x827926DC stw r30(0),0x14B0 (the guest mpDriver slot)
         meCarState                      = E_AI_CAR_STATE_INACTIVE;               // 0x827926E0 stw r7(2),0x14C8
-        mfDistanceToCheckpoint          = KF_AICAR_FLT_MAX;                      // 0x827926F0 stfs flt_82F302F4,0x14F0
+        mfDistanceToCheckpoint          = BrnWorld::KF_INVALID_DISTANCE;                     // 0x827926F0 stfs flt_82F302F4,0x14F0
         miRaceCarIndex                  = static_cast<s32>(leGlobalRaceCarIndex);// 0x827926F4 stw r28,0x14C4  <-- the car's own global slot
         muBestSectionIndex              = KI_INVALID_SECTION_INDEX;              // 0x827926FC sth r10(0x7FFF),0x1534
         muDefaultSectionIndex           = KI_INVALID_SECTION_INDEX;              // 0x82792700 sth r10(0x7FFF),0x1532
@@ -2008,7 +2072,7 @@ namespace BrnAI
         meCarState             = E_AI_CAR_STATE_INACTIVE;                                   // 0x14C8 <- 2
         meRelativeLocation     = E_RELATIVE_UNKNOWN;                                        // 0x14D4 <- 4
 
-        mAggressiveness.SetAggression(KAF_PERSONALITY_BASE_AGGRESSION[lePersonalityType]);  // flt_820C41A0[personality] ; stb 1,0x1410
+        mAggressiveness.SetAggression(KAF_PURSUIT_AGGRESSION[lePersonalityType]);  // flt_820C41A0[personality] ; stb 1,0x1410
         mAggressiveness.SetProximityToSpeedMatch(1.0f);
         mAggressiveness.SetTimeForSpeedMatch(1.0f);
         mAggressiveness.SetRelativeSpeedForMatch(0.5f);                                     // 0x141C <- 0x3F000000
@@ -2018,7 +2082,7 @@ namespace BrnAI
         mbIsInShortcut          = false;                                                    // 0x154C
         mfWrongWayTime          = 0.0f;                                                     // 0x14F4 (again)
         mbRouteRequested        = false;                                                    // 0x154D
-        mfDistanceToCheckpoint  = KF_AICAR_FLT_MAX;                                         // 0x14F0
+        mfDistanceToCheckpoint  = BrnWorld::KF_INVALID_DISTANCE;                                        // 0x14F0
         mfRouteTimer            = 0.0f;                                                     // 0x14EC
         mbIsInMasterRoute       = false;                                                    // 0x154E
         mfScheduleOffset0       = 0.0f;                                                     // 0x1518
@@ -2054,7 +2118,7 @@ namespace BrnAI
         const f32* lpBoostData = static_cast<const f32*>(lBoostAttribs.GetLayoutPointer());
         // CgsCore::KF_MPH_TO_MPS is the engine's extern (.data 0x82F31928), multiplied at run time
         // (0x8276EF90..9C) before the 1.1 scale.
-        mfMaxPlayerSpeed = lpBoostData[0] * CgsCore::KF_MPH_TO_MPS * KF_MAX_PLAYER_SPEED_SCALE;   // stfs 0x1504
+        mfMaxPlayerSpeed = lpBoostData[0] * CgsCore::KF_MPH_TO_MPS * 1.1f;   // stfs 0x1504
 
         // (2026-09-05, aiwave2: a first-8 witness here proved every rival resolves its key to the
         // right car -- mfMaxPlayerSpeed 78..85 m/s. The "rival top speed ~10 m/s" symptom was
@@ -2132,7 +2196,7 @@ namespace BrnAI
         InvalidateRoute();                                                   // 0x8278A698..0x8278A6A0
         muDestinationSectionIndex = luDestinationAISectionIndex;             // 0x8278A6C8 sth 0x1536
         miCurrentCheckpoint       = liCheckpointIndex + 1;                   // 0x8278A6B4 addi 1 / 0x8278A6CC stw 0x1520
-        mfDistanceToCheckpoint    = KF_AICAR_FLT_MAX;                        // 0x8278A6C0 stfs flt_82F302F4, 0x14F0
+        mfDistanceToCheckpoint    = BrnWorld::KF_INVALID_DISTANCE;                       // 0x8278A6C0 stfs flt_82F302F4, 0x14F0
         // 0x8278A694 `addi style,-1` / 0x8278A6A4 cntlzw / 0x8278A6BC extrwi 1,27 == (style == 1),
         // stored as a byte at 0x8278A6D0 (stb 0x153D).
         mbHasBlockCheckpoints     = (meRouteFindingStyle == E_ROUTE_FINDING_RACE) ? 1 : 0;

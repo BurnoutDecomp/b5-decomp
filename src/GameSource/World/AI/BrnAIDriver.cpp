@@ -42,12 +42,12 @@ namespace BrnAI
     // ====================================================================================
     // File-scope tunables, DWARF BrnAIDriver.cpp:39..:161 (names, order, const/volatile). ARTIST
     // compiled this file second in BrnWorldAIUnity (after BrnAICar.cpp), and keeps three kinds:
-    //   * statically initialised consts in the TU's .rdata, in definition order from 0x820C41BC
-    //     (:44 0.75, :51 4, :52 8, :56 0.85, :57 0.95, :58 0.75, :63 0.75, :68 25, :69 50, :76 8,
+    //   * statically initialised consts in the TU's .rdata, in definition order from 0x820C41B8
+    //     (:44 1, :45 0.75, :51 4, :52 8, :56 0.85, :57 0.95, :58 0.75, :63 0.75, :68 25, :69 50, :76 8,
     //     :77 3, :82 1.5, :85 16, :86 75, :90 2, :91 5, :92 0.75, :96 40000, :103 0, :110 10,
     //     :116 1.1, :117 10, :119 0.9, .., :136 3 (0x820C421C), :139 1 (0x820C4220), :140 0.1,
     //     :141 0.02, :142 0.03, :152 5 (0x820C4230), :154 3). Unreferenced ones are not emitted,
-    //     so the DWARF names with no slot (:45, :61, :65, :75, :113, :123/:133, :159..:161) have
+    //     so the DWARF names with no slot (:61, :65, :75, :113, :123, :159..:161) have
     //     no recoverable value and are left out. Reads of a non-volatile one go to the TU's pooled
     //     copy of its value; the two volatiles are read from their own slots (0x820C41D4,
     //     0x820C420C, 0x820C4214).
@@ -64,7 +64,8 @@ namespace BrnAI
     const f32       KF_SIGNIFICANT_BRAKING_ANGLE = rw::math::fpu::DegToRad(45.0f);   // :40 .data 0x82F30390
     const f32       KF_MAX_BRAKING_ANGLE         = rw::math::fpu::DegToRad(90.0f);   // :41 .data 0x82F30394
 
-    const f32       KF_AI_MAX_BRAKING_SPEED_PROPORTION = 0.75f;                                  // :44
+    const f32       KF_AI_MAX_BRAKING_SPEED_PROPORTION = 1.0f;                                   // :44 rdata 0x820C41B8
+    const f32       KF_AI_MIN_BRAKING_SPEED_PROPORTION = 0.75f;                                  // :45 rdata 0x820C41BC
     const f32       KF_AI_MIN_BRAKING_SPEED            = 60.0f * CgsCore::KF_MPH_TO_MPS;         // :46 bss 0x8300D748
 
     const f32       KF_BOOST_TO_CLOSE_SPEED_GAP = 5.0f * CgsCore::KF_MPH_TO_MPS;                 // :48 bss 0x8300DB20
@@ -961,7 +962,10 @@ namespace BrnAI
         if (lfSpeed < lfDesired)
         {
             // under speed -> accelerate. ramp = clamp((desired - speed) / 20 mph, 0, 1).
-            mfAccelerator = Saturate((lfDesired - lfSpeed) / KF_ACCELERATION_MAX_DIFF);   // 0x1D28
+            // PS3 0x9C8B34 shows the braking arm's shape; KF_ACCELERATION_START_DIFF is 0.0, so the
+            // subtractions fold away (0x820C4204 is never read).
+            mfAccelerator = Saturate(((lfDesired - lfSpeed) - KF_ACCELERATION_START_DIFF)
+                                     / (KF_ACCELERATION_MAX_DIFF - KF_ACCELERATION_START_DIFF));   // 0x1D28
         }
         else if (lfSpeed > lfDesired)
         {
@@ -1002,12 +1006,16 @@ namespace BrnAI
         const f32 lfRamp = Saturate((lfCorneringAngle - KF_MIN_BRAKING_ANGLE)   // flt_82F3038C, 30 deg
                                     / KF_BRAKING_ANGLE_RANGE);                 // flt_8300DC38, 60 deg
 
-        const f32 lfScaled = lfInputSpeed * KF_AI_MAX_BRAKING_SPEED_PROPORTION;   // flt_820C41FC
+        // The lerp runs from lfInputSpeed * KF_AI_MAX_BRAKING_SPEED_PROPORTION (1.0, so the
+        // multiply folds away and 0x820C41B8 is never read) to lfInputSpeed *
+        // KF_AI_MIN_BRAKING_SPEED_PROPORTION (0.75, read from the TU's pooled 0.75 at 0x820C41FC).
+        const f32 lfUnbraked = lfInputSpeed * KF_AI_MAX_BRAKING_SPEED_PROPORTION;
+        const f32 lfScaled   = lfInputSpeed * KF_AI_MIN_BRAKING_SPEED_PROPORTION;   // flt_820C41FC
         // cap = inputSpeed + (scaled - inputSpeed) * ramp -- lerps from inputSpeed (ramp==0, no
         // cornering yet) toward the scaled-down speed (ramp==1, sharp corner).
         // 0x8277D2A0 `vmaddfp v0, v12, v0, v13` (raw D,A,B,C: v0 = v12*v13 + v0 = (scaled - input) * ramp + input),
         // ONE rounding (ROUNDING_RULE 3; the vsubfp at 0x8277D254 and the fmuls at 0x8277D230 are rule 4).
-        return NativeVmxMadd(NativeVmxSub(lfScaled, lfInputSpeed), lfRamp, lfInputSpeed);
+        return NativeVmxMadd(NativeVmxSub(lfScaled, lfUnbraked), lfRamp, lfUnbraked);
     }
 
     // ====================================================================================
@@ -2153,7 +2161,9 @@ namespace BrnAI
         const f32 lfSteer = -((lfDot >= 0.0f) ? 1.0f : -1.0f);
         UpdateSteeringAngle(lfSteer);
 
-        const s32 liPhase = static_cast<s32>(lpCar->mfBehaviourTimer * 0.33333334f);
+        // PS3 0x9E9F04 divides by 3.0 (:136 KF_SLOW_TURN_DIRECTION_CHANGE_TIME); the XDK multiplies by
+        // the folded reciprocal.
+        const s32 liPhase = static_cast<s32>(lpCar->mfBehaviourTimer / KF_SLOW_TURN_DIRECTION_CHANGE_TIME);
         if ((liPhase % 2) == 0)
         {
             const f32 lfT = SaturateU(lpCar->GetSpeed() / KF_SLOW_TURN_SPEED);      // flt_8300D718
@@ -2533,7 +2543,7 @@ namespace BrnAI
         const Vector3 lOtherPosition = lpCar->GetPosition();
         const Vector3 lSeparation    = lOtherPosition - lMyPosition;
 
-        if (rw::math::vpu::Dot(lSeparation, lSeparation) > 40000.0f)  // flt_8201C220
+        if (rw::math::vpu::Dot(lSeparation, lSeparation) > KF_MAX_DIST_SQUARED_FOR_AI_AVOIDANCE)  // :96, read from the 40000 __real 0x8201C220 (IsPlayerBuzzable loads it first)
             return false;
 
         const Vector3 lUseful = mpCar->GetUsefulDirection();

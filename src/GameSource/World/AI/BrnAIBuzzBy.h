@@ -38,20 +38,8 @@ namespace BrnAI
     struct ResetOnTrackManager;   // pointer-only collaborator
     namespace AIModuleIO { class ResetOnTrackRequest; }
 
-    // --- BrnAIBuzzBy.cpp file-scope tuning constants (DWARF names; runtime-initialised in the
-    //     X360 data/rodata segment, grounded by the asm uses). Defined in the .cpp. ----------
-    extern const f32 KF_ON_COMING_RESET_SPEED;       // flt_820C4318 = 200.0f
-    extern const f32 KF_START_FAR_AHEAD;             // flt_8300DBEC (runtime)
-    extern const f32 KF_START_FAR_BEHIND;            // flt_8300D7F4 (runtime)
-    extern const f32 KF_MIN_SPEED_FOR_BUZZING;       // flt_8300D938 (runtime)
-    extern const f32 KF_START_BEHIND_PROBABLITY;     // flt_820C4168 = 0.5f (spelling per DWARF)
-    extern const f32 KF_SIDE_TURNING_PROBABILITY;    // flt_820C4330
-    // ADDITIVE NOTE (crash parity FX-AIBUZZ, 2026-09-24): three slot notes above are superseded.
-    // KF_ON_COMING_RESET_SPEED is flt_8300DBEC (80 mph, CRT thunk 0x82C68EE8), not the 200.0
-    // literal flt_820C4318 (that is the ahead reset DISTANCE); flt_8300D7F4 (25 mph) is
-    // KF_FASTER_THAN_PLAYER, defined file-local in BrnAIBuzzBy.cpp. KF_START_FAR_AHEAD /
-    // KF_START_FAR_BEHIND have no reader and no initialiser in the X360 image and are NOT defined
-    // anywhere -- do not use them. Evidence (PS3 twins + thunk order) at the .cpp definitions.
+    // BrnAIBuzzBy.cpp's file-scope tuning constants (DWARF :26..:46) are defined, and only used,
+    // in the .cpp.
 
     static const s32 KI_MAX_CARS_AWAITING_COLLECTION = 3;
 

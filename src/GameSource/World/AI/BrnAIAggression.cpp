@@ -1,6 +1,5 @@
 #include "GameSource/World/AI/BrnAIAggression.h"
 #include "GameSource/World/AI/BrnAICar.h"
-#include "GameSource/World/AI/BrnAICar_Constants.h"    // the .bss tunables, recovered from their start-up initialisers
 #include "GameSource/World/AI/BrnAIUtils.h"                 // BrnAI::StepTo (step-toward helper)
 #include "GameShared/GameClasses/Core/CgsCoreConstants.h"   // CgsCore::KF_MPH_TO_MPS
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\""../World/AI/BrnAIAggression.cpp"
@@ -23,7 +22,7 @@
 //
 // File-local tuning constants below: the 0x820Cxxxx values are the rodata literal pool, read
 // straight out of image.bin. The 0x8300Dxxx family is .bss and now lives in
-// BrnAICar_Constants.h, recovered 2026-09-04 from the CRT start-up initialisers that write it
+// the DWARF file-scope set below, recovered from the CRT start-up initialisers that write it
 // (0x82C685B8..0x82C69488). No 0.0f placeholder tunables remain in this TU.
 
 namespace BrnAI
@@ -56,7 +55,7 @@ namespace
     // DecideToAttack exit tally.  Every call lands in exactly one bucket.
     s32 gsiAttackCalls        = 0;   // total calls
     s32 gsiAttackProxReject   = 0;   // miProximityIndex < 0
-    s32 gsiAttackMarkedManYes = 0;   // MARKED_MAN + player slower than KF_MARKED_MAN_ATTACK_SPEED
+    s32 gsiAttackMarkedManYes = 0;   // MARKED_MAN + player slower than KF_MARKED_MAN_ALWAYS_ATTACK_SPEED
     s32 gsiAttackRaceReject   = 0;   // RACE + within 1000 of the checkpoint
     s32 gsiAttackRollYes      = 0;   // die roll beat the aggression level
     s32 gsiAttackRollNo       = 0;   // die roll lost
@@ -72,8 +71,8 @@ const f32 KF_MIN_POST_ATTACK_WAIT_TIME = 1.0f; // rodata 0x820C426C == 0x3F80000
 const f32 KF_MAX_POST_ATTACK_WAIT_TIME = 1.0f; // rodata 0x820C4270 == 0x3F800000 (read from image.bin)
 
 // CarIsTooSlow's flt_8300D9A0 (40 mph) and DecideToAttack's flt_8300D974 (90 mph, the
-// MARKED_MAN "player has slowed, attack now" threshold) are .bss: both live in
-// BrnAICar_Constants.h as KF_CAR_TOO_SLOW_SPEED / KF_MARKED_MAN_ATTACK_SPEED.
+// MARKED_MAN "player has slowed, attack now" threshold) are .bss: DWARF :87
+// KF_AGGRESSION_MIN_TARGET_SPEED and :134 KF_MARKED_MAN_ALWAYS_ATTACK_SPEED, below.
 
 // --- G2-geometry ---
 // CalcSeparationAcrossToTarget uses a small epsilon to reject a degenerate (near-zero) flattened
@@ -93,10 +92,10 @@ const f32 KF_ACROSS_SEPARATION_DEGENERATE = FLT_MAX; // rodata 0x8204F664 == 0x7
 //     writers had "no IDA export" and kept 0.0f placeholders -- WRONG. The writers exist as
 //     unexported CRT leaf routines in 0x82C685B8..0x82C69488 (one `stfs` per address, exactly
 //     one writer each), and every value in that family is now evaluated in
-//     BrnAICar_Constants.h: GetMinFallBackSpeed's four, GetMaxOvertakeSpeed's four,
+//     the DWARF block below: GetMinFallBackSpeed's four, GetMaxOvertakeSpeed's four,
 //     KF_DROP_BACK_SPEED, the GetSpeedMatchSpeed OVERTAKE_FAST / SLOW_TO_CLIP / SLOWER /
 //     aggressive-fall-back sets, SetSlowOvertakingSpeed's two, SetSlowFallbackSpeed's two,
-//     KF_MINIMUM_SLOW_CLIP and KF_NON_SPEED_MATCHED_SPEED_DEFAULT.
+//     KF_MINIMUM_SLOW_CLIP and KF_DEFAULT_NON_SPEED_MATCH_SPEED.
 
 // Shared speed-match RANGE tuning quad (proximity-lerped). Same four rodata floats are used by
 // OutOfSpeedMatchRange and the GetSpeedMatchSpeed default branch.
@@ -141,6 +140,7 @@ const f32 KF_HARD_RELATIVE_PASSING_SPEED            =   2.0f * CgsCore::KF_MPH_T
 const f32 KF_SLOW_CLIP_SPEED                        =  20.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_RELATIVE_CLIP_AWAY_SPEED               =  10.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_MINIMUM_SLOW_CLIP                      =  80.0f * CgsCore::KF_MPH_TO_MPS;
+const f32 KF_DEFAULT_NON_SPEED_MATCH_SPEED          =  80.0f * CgsCore::KF_MPH_TO_MPS;   // :61 (0x82C68C88 -> 0x8300DC64; Prepare, PS3 0x9B53D4)
 const f32 KF_RELATIVE_FAST_OVERTAKING_SPEED         =  20.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_RELATIVE_SLOW_OVERTAKING_SPEED         =   5.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_MAX_MAX_OVERTAKE_SPEED                 = 190.0f * CgsCore::KF_MPH_TO_MPS;
@@ -149,6 +149,21 @@ f32       KF_MAX_MAX_MARKED_MAN_OVERTAKE_SPEED      = 200.0f * CgsCore::KF_MPH_T
 f32       KF_MAX_MIN_MARKED_MAN_OVERTAKE_SPEED      = 160.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_MIN_OVERTAKE_SPEED                     = 120.0f * CgsCore::KF_MPH_TO_MPS;
 const f32 KF_EXCESS_SPEED_ALLOWED_FOR_SLOW_OVERTAKE =  20.0f * CgsCore::KF_MPH_TO_MPS;
+
+// DWARF :84..:134, the rest of the bank in declaration order (0x82C68DA8..0x82C68EA8), names at
+// their PS3 readers: :84 RelativeSpeedDifferenceIsTooBig 0x9C9658, :87 CarIsTooSlow 0x9C9584,
+// :91/:92/:104/:105/:107 GetSpeedMatchSpeed 0xA04290 (the fall-back floor by style and the
+// EASY..HARD slow-down lerp / speed-up magnitude of its default branch), :134 DecideToAttack
+// 0x9C9424. :102 K_SPEED_MATCH_MIN_RELATIVE has no initialiser in ARTIST's bank and is left out.
+const f32 KF_SLAM_MAX_SPEED_DIFF                    =  40.0f * CgsCore::KF_MPH_TO_MPS;   // :84  -> 0x8300D70C
+const f32 KF_AGGRESSION_MIN_TARGET_SPEED            =  40.0f * CgsCore::KF_MPH_TO_MPS;   // :87  -> 0x8300D9A0
+const f32 KF_MAX_ATTACK_SPEEDMATCH_RANGE            =  50.0f * CgsCore::KF_MPH_TO_MPS;   // :90  -> 0x8300D930
+const f32 KF_MIN_AGGRESSIVE_SPEED                   =  50.0f * CgsCore::KF_MPH_TO_MPS;   // :91  -> 0x8300D7D0
+const f32 KF_MIN_AGGRESSIVE_SPEED_IN_MARKED_MAN     =   0.0f * CgsCore::KF_MPH_TO_MPS;   // :92  -> 0x8300D6E8
+const f32 K_SPEED_MATCH_MAX_SLOW_DOWN_EASY          =  50.0f * CgsCore::KF_MPH_TO_MPS;   // :104 -> 0x8300D72C
+const f32 K_SPEED_MATCH_MAX_SLOW_DOWN_HARD          =  10.0f * CgsCore::KF_MPH_TO_MPS;   // :105 -> 0x8300DB08
+const f32 K_SPEED_MATCH_MAX_SPEED_UP                =  30.0f * CgsCore::KF_MPH_TO_MPS;   // :107 -> 0x8300D830
+const f32 KF_MARKED_MAN_ALWAYS_ATTACK_SPEED         =  90.0f * CgsCore::KF_MPH_TO_MPS;   // :134 -> 0x8300D974
 
 // DWARF BrnAIAggression.cpp:54..57. Dynamically initialised from CgsCore::KF_MPH_TO_MPS (the CRT
 // init bank 0x82C68BA8/0x82C68BC8/0x82C68BE8/0x82C68C08, in declaration order, each `mph *
@@ -363,7 +378,7 @@ bool AIAggression::CarIsTooSlow(const AICar* lpCar)
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../World/AI/BrnAIAggression.cpp", 1179 /* ARTIST 0x8276696C */);
 
-    return lpCar->GetSpeed() < KF_CAR_TOO_SLOW_SPEED;
+    return lpCar->GetSpeed() < KF_AGGRESSION_MIN_TARGET_SPEED;
 }
 
 // BrnAI::AIAggression::CheckForCarVeeringAwayFromPlayer @0x827709C0.
@@ -443,15 +458,14 @@ bool AIAggression::DecideToAttack()
 
     if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN && mpPlayerCar != NULL)
     {
-        if (mpPlayerCar->GetSpeed() < KF_MARKED_MAN_ATTACK_SPEED)
+        if (mpPlayerCar->GetSpeed() < KF_MARKED_MAN_ALWAYS_ATTACK_SPEED)
         {
             ++gsiAttackMarkedManYes;   // [DIAG]
             return true;
         }
     }
 
-    if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_RACE &&
-        mpCar->mfDistanceToCheckpoint < 1000.0f)
+    if (mpCar->IsNearRaceFinish())                                   // inlined 0x82770CB4..0x82770CE8
     {
         ++gsiAttackRaceReject;   // [DIAG]
         return false;
@@ -751,7 +765,7 @@ f32 AIAggression::GetSeparation(const AICar* lpThisCar, const AICar* lpOtherCar)
 //   arm 4   fsel 0x8277E0EC (cap)          NaN speed        -> GetMaxOvertakeSpeed()
 //   default bge 0x8277E264                 NaN error        -> the AHEAD span
 //           fsel 0x8277E308 (cap)          NaN ratio        -> 1.0 ahead / -0.2 behind
-//           bge 0x8277E314                 NaN curve        -> KF_AGG_FALLBACK_POS_MAGNITUDE
+//           bge 0x8277E314                 NaN curve        -> K_SPEED_MATCH_MAX_SPEED_UP
 // The floors (fsel 0x8277E0E4 / 0x8277E2AC / 0x8277E2FC / 0x8277E3D0) keep a NaN, as `x < K ? K : x`
 // does; bge 0x8277E380 / 0x8277E3DC and ble 0x8277E404 skip their assignments on NaN, as the
 // strict compares below do; ble 0x8277E388 (offset <= 0 -> -1.0) is only reached with an ordered
@@ -850,13 +864,13 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
                 f32 lfMagnitude;
                 if (!(lfCurve < 0.0f))
                 {
-                    lfMagnitude = KF_AGG_FALLBACK_POS_MAGNITUDE;
+                    lfMagnitude = K_SPEED_MATCH_MAX_SPEED_UP;
                 }
                 else
                 {
                     const f32 lfRelSpeed = mpCar->GetAggressiveness()->GetRelativeSpeedForMatch();
-                    lfMagnitude = KF_AGG_FALLBACK_RELSPEED_LO +
-                                  (KF_AGG_FALLBACK_RELSPEED_HI - KF_AGG_FALLBACK_RELSPEED_LO) * lfRelSpeed;
+                    lfMagnitude = K_SPEED_MATCH_MAX_SLOW_DOWN_EASY +
+                                  (K_SPEED_MATCH_MAX_SLOW_DOWN_HARD - K_SPEED_MATCH_MAX_SLOW_DOWN_EASY) * lfRelSpeed;
                 }
 
                 f32 lfOffset = lfMagnitude * lfCurve;
@@ -864,8 +878,8 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
                     lfOffset = (lfOffset <= 0.0f) ? -1.0f : 1.0f;
 
                 const f32 lfBase = (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)
-                                       ? KF_AGG_FALLBACK_BASE_MARKED
-                                       : KF_AGG_FALLBACK_BASE_DEFAULT;
+                                       ? KF_MIN_AGGRESSIVE_SPEED_IN_MARKED_MAN
+                                       : KF_MIN_AGGRESSIVE_SPEED;
 
                 const f32 lfRaw = mpTargetCar->GetSpeed() + lfOffset;
                 f32 lfFallBackSpeed = (lfRaw < lfBase) ? lfBase : lfRaw;
@@ -1094,8 +1108,7 @@ void AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar)
 
     // While racing and close to a checkpoint, drop straight back to OUT_OF_RANGE.
     EAIAggressionState leState = meAggressionState;
-    if ( mpCar->meRouteFindingStyle == E_ROUTE_FINDING_RACE
-         && mpCar->mfDistanceToCheckpoint < 1000.0f )
+    if ( mpCar->IsNearRaceFinish() )                                 // inlined 0x82799B74..0x82799BA4
     {
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;
         mfStateTime = -1.0f;
@@ -1645,7 +1658,7 @@ void BrnAI::AIAggression::UpdateAggressionStateOutOfRange(const AICar* lpPlayerC
             {
                 if (lpCar->meRouteFindingStyle == E_ROUTE_FINDING_RACE)
                 {
-                    if (!(lpCar->mfScheduleOffset1 < 0.0f) || lpCar->mfDistanceToCheckpoint < 1000.0f)
+                    if (!(lpCar->mfScheduleOffset1 < 0.0f) || lpCar->IsNearRaceFinish())   // inlined 0x827967F0..0x82796818
                     {
                         mfStateTime       = 12.0f;
                         meAggressionState = E_AI_AGGRESSION_STATE_PASSIVE;
@@ -1925,7 +1938,7 @@ void AIAggression::Prepare(AICar* lpCar)
     mbTargetPosValid         = false;                             // +7236 == +0x44
     meSpeedMatchType         = ESpeedMatch_Disabled;              // +7256 == +0x58
     // flt_8300DC64 == 80 mph * 0.44704 (initialiser 0x82C68CA0); see BrnAICar_Constants.h.
-    mfNonSpeedMatchedSpeed   = KF_NON_SPEED_MATCHED_SPEED_DEFAULT;// +7268 == +0x64
+    mfNonSpeedMatchedSpeed   = KF_DEFAULT_NON_SPEED_MATCH_SPEED;// +7268 == +0x64
     mpPlayerCar              = 0;                                 // +7184 == +0x10
     mfContinuousContactTimer = 0.0f;                              // +7248 == +0x50
     mfRecentHitTimer         = 0.0f;                              // +7244 == +0x4C

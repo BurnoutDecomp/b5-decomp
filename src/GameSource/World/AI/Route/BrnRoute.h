@@ -56,7 +56,7 @@ struct Route
         E_STATUS_BLOCKED = 3,
     };
 
-    void Construct(const Route* lpSource); // ARTIST 82767B28; DecFIGS :124
+    void Construct(const Route* lpRoute); // ARTIST 82767B28; DecFIGS :124
     bool Prepare(s32 liDefaultStartNode); // ARTIST 82767B98
     bool AddNode(const RouteNode& lrNode); // ARTIST 827642A0; DecFIGS :128
 

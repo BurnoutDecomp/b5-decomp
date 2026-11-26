@@ -69,20 +69,19 @@ const RouteNode* Route::GetNode(s32 liNodeIndex) const
 // node loop -- then if miNodeCount > 0 the populated node prefix (all four 32-bit
 // words per node, 0x10 stride), and finally meStatus (0x1408). It is a faithful
 // field+node-prefix copy: no de-dup and no distance recompute.
-void Route::Construct(const Route* lpSource)
+// DWARF BrnRoute.cpp:43 loop index liIndex; the bound is re-read from this route on every pass
+// (lwz 0x1400(r3) at 0x82767B38 and 0x82767B80), each node a RouteNode assignment (four words).
+void Route::Construct(const Route* lpRoute)
 {
-    const s32 liCount = lpSource->miNodeCount;
+    miNodeCount        = lpRoute->miNodeCount;          // 0x1400
+    miDefaultStartNode = lpRoute->miDefaultStartNode;   // 0x1404 (stored pre-loop in the asm)
 
-    miNodeCount        = liCount;                       // 0x1400
-    miDefaultStartNode = lpSource->miDefaultStartNode;   // 0x1404 (stored pre-loop in the asm)
-
-    for (s32 li = 0; li < liCount; ++li)
+    for (s32 liIndex = 0; liIndex < miNodeCount; ++liIndex)
     {
-        // Verbatim 16-byte node copy (lwz/stw of words 0,4,8,0xC in the asm).
-        std::memmove(&maNodes[li], &lpSource->maNodes[li], sizeof(RouteNode));
+        maNodes[liIndex] = lpRoute->maNodes[liIndex];
     }
 
-    meStatus = lpSource->meStatus;                       // 0x1408
+    meStatus = lpRoute->meStatus;                       // 0x1408
 }
 
 // @0x82767B98  Finalise the route after the nodes have been AddNode-ed.

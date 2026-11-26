@@ -2,6 +2,7 @@
 #define BRN_WORLD_SHARED_CONSTANTS_H
 
 #include "types.hpp"
+#include "rw/math/fpu/constants.h"   // rw::math::fpu::MAX_FLOAT (KF_INVALID_DISTANCE)
 
 // =============================================================================
 // BrnWorldSharedConstants.h  (OWNING HEADER for the BrnWorld race-car population limits)
@@ -29,6 +30,13 @@ namespace BrnWorld
     const s32 KI_MAX_RIVALS_IN_MODE  = 7;    // DWARF :33 -- Array<OpponentData,7> / the start-grid table width
     const s32 KI_MAX_RIVALS_IN_WORLD = 34;   // DWARF :34
     const s32 KI_INVALID_RIVAL       = -1;   // DWARF :38
+
+    // DWARF :48 (PS3 value FLT_MAX). Initialised from rwmath's MAX_FLOAT (the LegacySrc idiom,
+    // `RwMath::MAX_FLOAT`): the XDK folds the value but places a const initialised from another
+    // const in the TU's .data, read directly -- ARTIST's AI unity loads it from .data 0x82F302F4
+    // (AICar::Construct 0x827926F0, OnModeStart, OnReachedCheckpoint 0x8278A6C0), not from a
+    // literal pool.
+    const f32 KF_INVALID_DISTANCE    = rw::math::fpu::MAX_FLOAT;
 
     // [takedown wave 2026-09-02] Who drives an active race car. DWARF BrnWorldSharedConstants.h:101.
     // X360-attested by the SetPlayerCarDriverAction producers: DriveThruManager::SetPlayerCarDriver

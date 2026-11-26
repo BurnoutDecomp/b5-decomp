@@ -3,7 +3,6 @@
 
 #include "GameSource/World/AI/BrnAIModule.h"                                      // BrnAI::AIModule (member-pointer completeness)
 #include "GameSource/World/AI/BrnAICar.h"
-#include "GameSource/World/AI/BrnAICar_Constants.h"
 #include "GameSource/World/AI/BrnAIDriver.h"
 #include "GameSource/World/AI/BrnAIAggression.h"
 #include "GameSource/World/AI/BrnAIPortal.h"
@@ -38,6 +37,15 @@
 
 namespace BrnAI
 {
+    // The marked-man tunables OnActivate registers (PS3 0x9BF268 names all four): DWARF
+    // BrnAICar.cpp:111/:112 and BrnAIAggression.cpp:74/:75, the non-const file-scope globals of
+    // those unity members (.data 0x82F30170/0x82F30174, .bss 0x8300D6F0/0x8300D714). The unity TU
+    // sees their definitions; these declarations let this member also compile on its own.
+    extern f32 KF_MARKED_MAN_MIN_AGGRESSION;
+    extern f32 KF_MARKED_MAN_MAX_AGGRESSION;
+    extern f32 KF_MAX_MAX_MARKED_MAN_OVERTAKE_SPEED;
+    extern f32 KF_MAX_MIN_MARKED_MAN_OVERTAKE_SPEED;
+
 
 // ARTIST82773B48: active fighting drivers with an aggression target draw both primitives.
 void AIDebugComponent::DrawAggressiveTargetPoints(CgsDev::Debug3DImmediateRender* lpDisplay) const
@@ -600,12 +608,12 @@ void AIDebugComponent::OnActivate()
     const char* const lpcMarkedMan = "Marked man tweaks";
     RegisterVariable(&KF_MAX_MIN_MARKED_MAN_OVERTAKE_SPEED, lpcMarkedMan, "Min overtake speed");
     RegisterVariable(&KF_MAX_MAX_MARKED_MAN_OVERTAKE_SPEED, lpcMarkedMan, "Max overtake speed");
-    RegisterVariable(&gfMarkedManMinAggression, lpcMarkedMan, "Min aggression");
-    RegisterVariable(&gfMarkedManMaxAggression, lpcMarkedMan, "Max aggression");
-    SetStep(&gfMarkedManMinAggression, 0.05f);
-    SetStep(&gfMarkedManMaxAggression, 0.05f);
-    SetRange(&gfMarkedManMinAggression, 0.0f, 1.0f);
-    SetRange(&gfMarkedManMaxAggression, 0.0f, 1.0f);
+    RegisterVariable(&KF_MARKED_MAN_MIN_AGGRESSION, lpcMarkedMan, "Min aggression");
+    RegisterVariable(&KF_MARKED_MAN_MAX_AGGRESSION, lpcMarkedMan, "Max aggression");
+    SetStep(&KF_MARKED_MAN_MIN_AGGRESSION, 0.05f);
+    SetStep(&KF_MARKED_MAN_MAX_AGGRESSION, 0.05f);
+    SetRange(&KF_MARKED_MAN_MIN_AGGRESSION, 0.0f, 1.0f);
+    SetRange(&KF_MARKED_MAN_MAX_AGGRESSION, 0.0f, 1.0f);
 
     static bool sbDriversStayStill;      // ARTIST 0x8300D604
     static bool sbDriversMaxAggression;  // ARTIST 0x8300D605

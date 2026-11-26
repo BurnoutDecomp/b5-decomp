@@ -222,6 +222,7 @@ namespace BrnAI
         // GetDecentSpeed @0x82766030 -- the "decent" floor speed for the car's current route-
         // finding style (a fraction of mfMaxPlayerSpeed). Bodied in BrnAICar.cpp.
         f32  GetDecentSpeed() const;                          // DWARF BrnAICar.h:575
+        bool IsNearRaceFinish() const;                        // DWARF BrnAICar.h:578, BrnAICar.cpp:2416 (no ARTIST copy: inlined)
         // IsActive(): X360 inlined as (meCarState == IN_RANGE || meCarState == OUT_OF_RANGE).
         // Restored inline so the asserts in the speed/route funcs read true to the asm.
         bool IsActive() const
@@ -247,6 +248,7 @@ namespace BrnAI
         // The route-finding sub-dispatchers UpdateRouteFinding fans out to (separate TUs).
         void UpdateRouteFindingFreeRoam(const AICar* lpPlayerCar);   // DWARF BrnAICar.h:118
         bool IsExtrapolatedRouteGettingOld();                        // DWARF BrnAICar.h:637
+        bool IsRouteToChasedCarGettingOld();                         // DWARF BrnAICar.h:640, BrnAICar.cpp:1984 (no caller: not in ARTIST)
 
         // ---- accessors the RouteRequestManager (route-request brain) bodies call --------------
         // Sentinel for "no section". X360 compares the section indices to 0x7FFF
@@ -349,7 +351,7 @@ namespace BrnAI
         void UpdateResetOnTrackSection(EResetSpeedType leResetSpeedType, u16 luResetOnTrackSectionIndex,
                                        u8 luStartPortal, u8 luEndPortal);                  // @0x82765EA0 (DWARF :232)
         void UpdateOutOfRangeData(Vector3 lPosition, Vector3 lAtVector, u16 luSectionIndex,
-                                  u8 luSectionSpeed);                                       // @0x8276F398 (DWARF :240)
+                                  u8 luNumberOfMedalsToUnlock);                             // @0x8276F398 (DWARF :240)
         void SetDriver(AIDriver* lpDriver);                                                 // @0x8276EF20 (DWARF :125)
         AIDriver* GetDriver() const { return mpDriver; }                                // DWARF :131 (inlined-away getter)
         void SetDirection(Vector3 lDirection);                                              // @0x8276B2C0 (DWARF :532)

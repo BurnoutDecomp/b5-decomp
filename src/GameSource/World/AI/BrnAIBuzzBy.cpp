@@ -18,8 +18,9 @@
 #include "GameSource/World/AI/SharedIO/BrnAIModuleRequestInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"   // CgsCore::KF_MPH_TO_MPS (the mph tunables)
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Dot / MagnitudeSquared / Magnitude / Normalize / operator-
-#include "rw/math/fpu/scalar_operation.h"    // rw::math::fpu::KF_IS_ZERO_TOLERANCE (FLT_EPSILON, flt_820C3B70)
+#include <cfloat>                             // FLT_EPSILON (the __real 0x820C3B70 MaintainAheadOrBehind loads)
 #include <cmath>                             // std::fabs (MaintainAheadOrBehind's console IsZero)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                          // CgsDev::SimpleStrStream (DrawBuzzTimer)
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -27,40 +28,31 @@
 
 namespace BrnAI
 {
-    // --- file-scope tuning constants (DWARF-`extern`; grounded by the asm rodata uses) ------
-    // ⭐⭐ THE FOUR "(runtime; value not recovered)" ZEROS ARE RECOVERED (2026-09-06, driving-path
-    // 1:1 constant audit).  They were never un-homed: three are .bss slots the CRT fills at
-    // static-init time, in the SAME mph->m/s shape BrnAICar_Constants.h already documents --
-    //     lfs f0, flt_82F31928 (0.44703999) ; lfs f13, <mph> ; fmuls f0,f0,f13 ; stfs f0, <slot>
-    // -- and the fourth is plain .rdata that a literal scan would have found.  A flagged zero is
-    // only safe when 0 is the expression's identity, and here it was not: MIN_SPEED_FOR_BUZZING
-    // is a `speed < K -> refuse` gate, so at 0.0 the player was buzzable while STOPPED, and the
-    // two START_FAR_* feed a reset request's SPEED field, so road-rage rivals were teleported in
-    // at a standstill.
-    // ⚠️ NO STATIC-INIT ORDER HAZARD HERE (the trap BrnTrafficEntityModule_wT2_03.cpp documents
-    // for flt_830180B0): the multiplier flt_82F31928 is a plain image constant that reads
-    // 0.44703999 straight out of .rdata, not a slot another thunk has to compute first.
-    // ⭐ NAMES CORRECTED 2026-09-24 (crash parity FX-AIBUZZ; VALUES UNCHANGED). The two .bss speeds
-    // were filed as KF_START_FAR_AHEAD / KF_START_FAR_BEHIND and the 200.0 literal as
-    // KF_ON_COMING_RESET_SPEED. Two independent readings put the DWARF names elsewhere:
-    //   * the PS3 twins name them: DecFIGS ChooseAheadOrBehind 0x9CE24C and MaintainAheadOrBehind
-    //     0x9CE620 load the AHEAD speed from BrnAI::KF_ON_COMING_RESET_SPEED and the BEHIND one from
-    //     BrnAI::KF_FASTER_THAN_PLAYER (+ the player's speed); both distances are TOC literals
-    //     (200.0 / -60.0), exactly where the X360 reads the pooled .rdata flt_820C4318 / flt_820C431C;
-    //   * the CRT thunks run in declaration order (DWARF BrnAIBuzzBy.cpp:29 FASTER_THAN_PLAYER,
-    //     :30 ON_COMING_RESET_SPEED, :36 MIN_SPEED_FOR_BUZZING, :57 the no-buzz centres), and this
-    //     TU's are 0x82C68EC8 (25 mph) -> 0x82C68EE8 (80 mph) -> 0x82C68F08 (7.5 mph) -> 0x82C68F28
-    //     (the centres); the two thunks before them (0x82C68E88 / 0x82C68EA8) feed AIAggression's
-    //     GetSpeedMatchSpeed / UpdateAggressionStateClipOffBehind. START_FAR_AHEAD / START_FAR_BEHIND
-    //     (DWARF :31 / :32) have no thunk and no reader in the X360 image, so they are not defined.
-    const f32 KF_FASTER_THAN_PLAYER       = 11.1759996f;  // flt_8300D7F4 = thunk 0x82C68EC8, flt_820C4870 ( 25) * flt_82F31928 (0.44704)
-    const f32 KF_ON_COMING_RESET_SPEED    = 35.7631989f;  // flt_8300DBEC = thunk 0x82C68EE8, flt_82004A18 ( 80) * 0.44704
-    const f32 KF_MIN_SPEED_FOR_BUZZING    =  3.35279989f; // flt_8300D938 = init 0x82C68F20, flt_820C42D4 (7.5) * 0.44704
-    const f32 KF_START_BEHIND_PROBABLITY  = 0.5f;    // flt_820C4168 (rodata-pinned)
-    // Plain .rdata, read straight out of the image (0x820C4330 == 0x3F4CCCCD).  ChooseAheadOrBehind
-    // @0x8277197C does `fcmpu cr6, roll, flt_820C4330 ; bge` -> ON_COMING, so this is a 20%/80%
-    // split between the head-on and from-turnings reset types.
-    const f32 KF_SIDE_TURNING_PROBABILITY = 0.800000012f;  // flt_820C4330 (plain .rdata, 0x3F4CCCCD)
+    // --- file-scope tuning constants: DWARF BrnAIBuzzBy.cpp:26..:46 (names, order; PS3 values in
+    //     references/DecFIGS/dwarfdump/_compile/BrnWorldAIUnity.cpp, X360 values read from the image).
+    // The mph ones are dynamically initialised (`mph * CgsCore::KF_MPH_TO_MPS`, CRT thunks
+    // 0x82C68EC8 / 0x82C68EE8 / 0x82C68F08 in declaration order, into .bss, read from storage; PS3
+    // ChooseAheadOrBehind 0x9CE24C / MaintainAheadOrBehind 0x9CE620 name the two reset speeds).
+    // The rest are this member's .rdata block, in definition order 0x820C4314..0x820C4330 (with
+    // the no-buzz radii after it, :68). GCC folded those on PS3, so its bodies show bare 200.0 /
+    // -60.0 literals; on the console a read of a value goes to the TU's first-registered const
+    // of that value: MaintainAheadOrBehind (the earliest reader) reads KF_START_FAR_AHEAD, so every
+    // 200 in the unity is read from 0x820C4318, AICarCanBuzz's KF_TOO_CLOSE_TO_BUZZ included.
+    // :27/:28 (the post-event / junk-yard buzz times), :34, :40, :42 and :48 are unreferenced on the
+    // console (no slot) and left out.
+    const f32 KF_TOO_CLOSE_TO_BUZZ        = 200.0f;                            // :26 rdata 0x820C4314
+    const f32 KF_FASTER_THAN_PLAYER       = 25.0f * CgsCore::KF_MPH_TO_MPS;    // :29 bss 0x8300D7F4
+    const f32 KF_ON_COMING_RESET_SPEED    = 80.0f * CgsCore::KF_MPH_TO_MPS;    // :30 bss 0x8300DBEC
+    const f32 KF_START_FAR_AHEAD          = 200.0f;                            // :31 rdata 0x820C4318
+    const f32 KF_START_FAR_BEHIND         = -60.0f;                            // :32 rdata 0x820C431C
+    const f32 KF_MIN_SPEED_FOR_BUZZING    = 7.5f * CgsCore::KF_MPH_TO_MPS;     // :36 bss 0x8300D938
+    const f32 KF_RAPID_BUZZ_TIME          = 10.0f;                             // :38 rdata 0x820C4320
+    const f32 KF_SLOW_BUZZ_TIME           = 180.0f;                            // :39 rdata 0x820C4324
+    const f32 KF_CLOSE_ENOUGH_TO_SEE_BUZZ = 30.0f;                             // :44 rdata 0x820C4328
+    const f32 KF_START_BEHIND_PROBABLITY  = 0.5f;                              // :45 rdata 0x820C432C
+    // ChooseAheadOrBehind @0x8277197C does `fcmpu cr6, roll, flt_820C4330 ; bge` -> ON_COMING, so
+    // this is a 20%/80% split between the head-on and from-turnings reset types.
+    const f32 KF_SIDE_TURNING_PROBABILITY = 0.8f;                              // :46 rdata 0x820C4330
 
     // DWARF BrnAIBuzzBy.h:115 lists BuzzBy::mRandom as a static data member (`extern` in the dump,
     // the member DIE's external declaration); its one object is .bss 0x8300D5A0.
@@ -102,10 +94,10 @@ namespace BrnAI
     {
         CGS_ASSERT_AT(lpCar != NULL, "lpCar != NULL", __FILE__, 467);
 
-        // 0x82767020: lfs f13,0x1508(lpCar); lfs f0,flt_820C4318(=200.0); blt -> 0 else 1.
+        // 0x82767020: lfs f13,0x1508(lpCar); lfs f0,flt_820C4318(=200.0, the pooled 200); blt -> 0 else 1.
         // NaN polarity (FX-AINAN2): `li r3,0 ; fcmpu ; blt 0x82767070 ; li r3,1` -- blt is not
         // taken on an unordered compare, so a NaN distance CAN buzz; `>= 200` said no.
-        if (lpCar->mfBuzzDistanceToPlayer < 200.0f)
+        if (lpCar->mfBuzzDistanceToPlayer < KF_TOO_CLOSE_TO_BUZZ)
         {
             return false;
         }
@@ -122,8 +114,8 @@ namespace BrnAI
             return false;
         }
 
-        // flt_820C3FA8 = 30.0f: too far from the player for the buzz to register.
-        if (lpAICar->mfBuzzDistanceToPlayer > 30.0f)
+        // flt_820C3FA8 = 30.0f (the TU's pooled 30): too far from the player for the buzz to register.
+        if (lpAICar->mfBuzzDistanceToPlayer > KF_CLOSE_ENOUGH_TO_SEE_BUZZ)
         {
             return false;
         }
@@ -147,9 +139,9 @@ namespace BrnAI
     // so the console form is spelled here (the BrnAICar_Update.cpp IsZeroVmx precedent).
     static inline bool IsZeroVmx(const Vector3& lrVector)
     {
-        return !(std::fabs(static_cast<float>(lrVector.GetX())) > rw::math::fpu::KF_IS_ZERO_TOLERANCE) &&
-               !(std::fabs(static_cast<float>(lrVector.GetY())) > rw::math::fpu::KF_IS_ZERO_TOLERANCE) &&
-               !(std::fabs(static_cast<float>(lrVector.GetZ())) > rw::math::fpu::KF_IS_ZERO_TOLERANCE);
+        return !(std::fabs(static_cast<float>(lrVector.GetX())) > FLT_EPSILON) &&
+               !(std::fabs(static_cast<float>(lrVector.GetY())) > FLT_EPSILON) &&
+               !(std::fabs(static_cast<float>(lrVector.GetZ())) > FLT_EPSILON);
     }
 
     // ------------------------------------------------------------------------
@@ -202,14 +194,14 @@ namespace BrnAI
                                   ? E_RESET_TYPE_FROM_TURNINGS_ROAD_RAGE        // 4 | 1
                                   : E_RESET_TYPE_AHEAD_PLAYER_ON_COMING;        // 4 | 0
             lfResetSpeed    = KF_ON_COMING_RESET_SPEED;                         // flt_8300DBEC
-            lfResetDistance = 200.0f;                                           // flt_820C4318
+            lfResetDistance = KF_START_FAR_AHEAD;                               // flt_820C4318
         }
         else
         {
             // Behind the player: bring it up from behind, faster than the player.
             luResetFlags    = E_RESET_TYPE_BEHIND_PLAYER_ROAD_RAGE;             // li r9, 3
             lfResetSpeed    = rw::math::vpu::Magnitude(lPlayerVelocity) + KF_FASTER_THAN_PLAYER;
-            lfResetDistance = -60.0f;                                           // flt_820C431C
+            lfResetDistance = KF_START_FAR_BEHIND;                              // flt_820C431C
         }
 
         lpRequest->Construct(E_GLOBAL_RACE_CAR_INDEX_0, lfResetSpeed, lfResetDistance, luResetFlags);
@@ -243,7 +235,7 @@ namespace BrnAI
             // flt_820C431C (-60.0), type 3. Construct stores f1->resetSpeed(+4), f2->resetDistance(+8).
             lpRequest->Construct(leGlobalRaceCarToTeleport,
                                  KF_FASTER_THAN_PLAYER + lfPlayerSpeed,
-                                 -60.0f,
+                                 KF_START_FAR_BEHIND,
                                  E_RESET_TYPE_BEHIND_PLAYER_ROAD_RAGE);
         }
         else
@@ -265,7 +257,7 @@ namespace BrnAI
             // flt_820C4318 (200.0, the reset distance).
             lpRequest->Construct(leGlobalRaceCarToTeleport,
                                  KF_ON_COMING_RESET_SPEED,
-                                 200.0f,
+                                 KF_START_FAR_AHEAD,
                                  leResetType);
         }
     }
@@ -473,9 +465,8 @@ namespace BrnAI
     // == Lerp(10.0f, 180.0f, mfBuzzFrequencyRatio); both floats read from image.bin. Conductor, 2026-09-03.
     f32 BuzzBy::GetBuzzFrequency(const AICar* lpAICar) const
     {
-        const f32 KF_BUZZ_FREQUENCY_MIN = 10.0f;    // flt_820C4320
-        const f32 KF_BUZZ_FREQUENCY_MAX = 180.0f;   // flt_820C4324
-        return KF_BUZZ_FREQUENCY_MIN + (KF_BUZZ_FREQUENCY_MAX - KF_BUZZ_FREQUENCY_MIN) * lpAICar->GetBuzzFrequencyRatio();
+        // PS3 0x9B6DF8 names both ends; the console loads them as VecFloats (lvlx 0x820C4320/4324).
+        return KF_RAPID_BUZZ_TIME + (KF_SLOW_BUZZ_TIME - KF_RAPID_BUZZ_TIME) * lpAICar->GetBuzzFrequencyRatio();
     }
 
 
