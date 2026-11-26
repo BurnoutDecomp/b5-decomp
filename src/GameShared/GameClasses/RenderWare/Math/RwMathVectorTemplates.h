@@ -28,6 +28,16 @@ public:
     Vector2Template(const Vector2Template& lrOther) : mX(lrOther.mX), mY(lrOther.mY) {}
     Vector2Template(Type lX, Type lY) : mX(lX), mY(lY) {}   // (defined inline 2026-09-03: the two-lane init the X360 emits as two stfs; was declared-only -> LNK2019)
 
+    // DecFIGS rwmath fpu/vector2.h:75 declares the copy assignment (LegacySrc 1.02.00 predates it): a lane-by-lane
+    // copy, which ARTIST does through the FPU (ActiveRaceCar::RenderParams::SetCrackedGlassScaleFactorsN
+    // 0x822B83EC..0x822B8400, lfs/stfs per lane; the implicit operator copies words).
+    Vector2Template& operator=(const Vector2Template& lrOther)
+    {
+        mX = lrOther.mX;
+        mY = lrOther.mY;
+        return *this;
+    }
+
     // Additive grow (World-AI group): the canonical rwmath component readers.
     // BrnAStar's distance heuristics read x/y from a Vector2Template<float> &;
     // on X360 these are direct loads of the two leading lanes (lfs 0(rN)/4(rN)).
