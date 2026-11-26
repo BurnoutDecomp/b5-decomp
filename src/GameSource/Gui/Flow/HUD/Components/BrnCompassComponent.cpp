@@ -493,12 +493,10 @@ namespace BrnGui
     //   * format the direction letters on all six view sub-clips for the SKU language.
     void CompassComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFile)
     {
-        CGS_ASSERT_AT(lacName != NULL, "lacName != NULL",
-                      "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 133);
+        const s32 KI_TEMP_STRING_LENGTH = 32;
+        char lacTempString[KI_TEMP_STRING_LENGTH];
 
-        mAptRef = lFile.FindComponent(lacName);
-
-        mAptRef.ResetTimeline();
+        BrnFlaptComponent::Prepare(lacName, lFile, NULL);
 
         BrnFlapt::MovieClipRef lCompassViewParent = mAptRef.FindChildMovieClip("CVParent_mc");
         lCompassViewParent.ResetTimeline();
@@ -524,9 +522,8 @@ namespace BrnGui
         mfSingleViewLength      = lfFrontRight - lCompassViewFrontCentre.GetPosition().mV.x;
         mv2InitialDestMarkerPos = mDestMarkerMovie.GetPosition();
 
-        char lacTempString[32];
-        CgsCore::SnPrintf(lacTempString, 31, "%s_%s", lacName, "playerIcon_anim");
-        lacTempString[31] = '\0';
+        CgsCore::SnPrintf(lacTempString, KI_TEMP_STRING_LENGTH - 1, "%s_%s", lacName, "playerIcon_anim");
+        lacTempString[KI_TEMP_STRING_LENGTH - 1] = '\0';
         mPlayerMarkerAnimator.Prepare(lacTempString, lFile, NULL);
 
         const CgsLanguage::ELanguage leLanguage =

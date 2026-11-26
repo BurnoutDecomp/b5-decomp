@@ -1,7 +1,6 @@
 target_sources(${PROJECT_NAME}
     PRIVATE
         BrnFlaptButtonIcon.cpp
-        BrnGuiFlaptComponent.cpp
         BrnGuiFlaptComponentUtils.cpp
         BrnGuiFlaptHelpItem.cpp
         BrnGuiFlaptIconComponent.cpp

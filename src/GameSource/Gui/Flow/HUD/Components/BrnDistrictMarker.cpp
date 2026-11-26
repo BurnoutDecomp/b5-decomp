@@ -102,12 +102,8 @@ namespace BrnGui
         char lacTempString[KI_TEMP_STRING_LENGTH];
         lacTempString[KI_TEMP_STRING_LENGTH - 1] = '\0';   // X360 hard-NULs [63] first
 
-        CGS_ASSERT(lacName != 0, "lacName != NULL");
-
         // Bind this component's own top-level clip into the base mAptRef (@+0x04).
-        mAptRef = lFile.FindComponent(lacName);
-        CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mpMovieClipInst");
-        mAptRef.mpMovieClipInst->ResetTimeline();
+        BrnFlaptComponent::Prepare(lacName, lFile, NULL);
 
         // Prepare the two container movies (the marker name is their parent prefix).
         mCountyContainerMovie.Prepare("CountyMovie_mc", lFile, lacName);

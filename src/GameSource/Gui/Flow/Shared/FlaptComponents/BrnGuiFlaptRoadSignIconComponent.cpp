@@ -116,13 +116,7 @@ namespace BrnGui
                                              const BrnFlapt::FileRef& lFile)
     {
         CGS_ASSERT_AT(lacName != 0, "lacName", CGS_ARTIST_FILE, 99);
-        CGS_ASSERT(lacName != 0, "lacName != NULL");
-
-        mAptRef = lFile.FindComponent(lacName);
-
-        CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mpMovieClipInst");
-
-        mAptRef.mpMovieClipInst->ResetTimeline();
+        BrnFlaptComponent::Prepare(lacName, lFile, NULL);
 
         mPostMovieClip = mAptRef.FindChildMovieClip("SignPole");
     }

@@ -65,10 +65,7 @@ void OverlayComponent::Construct(const char* /*lacName*/,
 void OverlayComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFile,
                                const char* /*lacParentName*/)
 {
-    CGS_ASSERT_AT(lacName != 0, "lacName != NULL",
-                  "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 133);
-    mAptRef = lFile.FindComponent(lacName);
-    mAptRef.ResetTimeline();
+    BrnFlaptComponent::Prepare(lacName, lFile, NULL);
 
     mAptRef.SetFrameTriggerCallback(reinterpret_cast<void*>(&TransitionCompleteCallback), this);
 

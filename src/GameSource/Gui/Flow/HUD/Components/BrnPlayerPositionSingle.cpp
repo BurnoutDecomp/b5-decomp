@@ -108,14 +108,7 @@ void PlayerPositionSingleComponent::Construct(const char* /*lpacName*/,
 // @ 0x82421D78
 void PlayerPositionSingleComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFile)
 {
-    // Non-gating tripwire (the inlined flapt-component prepare head,
-    // BrnGuiFlaptComponent.h:133).
-    CGS_ASSERT(lacName != NULL, "lacName != NULL");
-
-    // Bind the row's own clip and rewind it.
-    mAptRef = lFile.FindComponent(lacName);
-    CGS_ASSERT(mAptRef.mpMovieClipInst != NULL, "mpMovieClipInst");  // BrnFlaptMovieClipRef.h:272
-    mAptRef.mpMovieClipInst->ResetTimeline();
+    BrnFlaptComponent::Prepare(lacName, lFile, NULL);
 
     // The two colour animators live under "<row>_PlayerColour_anim" /
     // "<row>_TextColour_anim" (127-char scratch, hard NUL at the end).

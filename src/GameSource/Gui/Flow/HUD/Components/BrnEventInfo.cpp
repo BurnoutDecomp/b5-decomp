@@ -150,11 +150,7 @@ void EventInfoComponent::Construct(const char* lacName,
 // ---------------------------------------------------------------------------
 void EventInfoComponent::Prepare(const char* lacFullName, const BrnFlapt::FileRef& lFile)
 {
-    CGS_ASSERT_AT(lacFullName != 0, "lacName != NULL", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 133);
-
-    mAptRef = lFile.FindComponent(lacFullName);
-
-    mAptRef.ResetTimeline();
+    BrnFlaptComponent::Prepare(lacFullName, lFile, NULL);
 
     mpEventInfoComponentName = lacFullName;
     mHUDFileRef              = lFile;

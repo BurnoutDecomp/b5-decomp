@@ -4,6 +4,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the Construct tripwire)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"   // BrnFlapt::MovieClipRef (embedded by value)
+#include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"        // BrnFlapt::FileRef::FindComponent (Prepare)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SnPrintf (Prepare)
 
 // ============================================================================
 // GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h
@@ -17,9 +19,9 @@
 //
 // SOURCE LINES: the declarations sit on the DWARF lines (class h:53, Construct h:64,
 // Prepare h:71/h:75, GetMovieClipRef h:84, SetInvalid h:87, members h:91/h:92) and the
-// header-inline Construct body follows the class, so its assert keeps the original
-// line h:113 that ARTIST bakes into every inlined copy (li r5,0x71 before FireAssert,
-// e.g. FriendsListEntry::Construct @0x82414B28, CompassComponent::Construct @0x82411568).
+// header-inline bodies follow the class with their asserts on the original lines ARTIST
+// bakes into every copy: Construct h:113 (FriendsListEntry::Construct @0x82414B28),
+// Prepare h:133 (RoadSignIcon::Prepare @0x8241CC6C) and h:164. No .cpp in DWARF.
 //
 // LAYOUT (X360 asm of Prepare @ 0x8240E670 and the subclass Construct bodies):
 //   +0x00  mpStateInterface  -- the GUI state channel. The base is NOT polymorphic:
@@ -29,8 +31,8 @@
 //                               mpTransform @ +0x08); Prepare fills it from the file
 // sizeof(BrnFlaptComponent) == 0x0C.
 //
-// Not declared (no X360 ledger row): KU_MAX_COMPONENT_NAME_LEN (h:57) and
-// SetPosition (h:80). All member access is BY NAME; there are no raw-offset hacks.
+// Not declared (no X360 ledger row): SetPosition (h:80). All member access is BY
+// NAME; there are no raw-offset hacks.
 // ============================================================================
 
 namespace CgsGui
@@ -39,10 +41,6 @@ namespace CgsGui
     struct StateInterface;
 }
 
-namespace BrnFlapt
-{
-    struct FileRef;   // used by const-reference in Prepare; full type pulled in by the .cpp
-}
 
 namespace BrnGui
 {
@@ -50,11 +48,13 @@ namespace BrnGui
     // base; see LAYOUT above.
     //
     //
+    //
+    //
     class BrnFlaptComponent
     {
     public:
-        // (h:57 KU_MAX_COMPONENT_NAME_LEN: PS3-only, see the header comment.)
-        //
+        // Longest component key Prepare builds ("<parent>_<name>"), DWARF h:57.
+        static const u8 KU_MAX_COMPONENT_NAME_LEN = 128;
         // Construct -- adopt the state channel and invalidate the clip. X360
         // header-inline (never emitted out of line): the h:113 "lpStateInterface"
         // tripwire, the interface store, the ref clear. DecFIGS declares two further
@@ -63,15 +63,15 @@ namespace BrnGui
         //
         void Construct(CgsGui::StateInterface* lpStateInterface);
 
-        // Prepare @ 0x8240E670 -- resolve the named component within lFile (the
-        // composite key is "lacParentName_lacName" when a parent prefix is given,
-        // else just lacName), bind its MovieClipRef into mAptRef, and reset the
-        // bound clip's timeline. The X360 returns the reset result in r3 as a
-        // tail-call artifact; per the DecFIGS declaration the method returns void.
+        // Prepare -- resolve the named component within lFile (the composite key is
+        // "lacParentName_lacName" when a parent prefix is given, else just lacName),
+        // bind its MovieClipRef into mAptRef, and reset the bound clip's timeline.
+        // Header-inline (asserts name BrnGuiFlaptComponent.h); 0x8240E670 is the copy
+        // ARTIST kept for the out-of-line callers (FlaptIconComponent::Prepare, ...).
         void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile, const char* lacParentName);
 
-        // Prepare(const MovieClipRef*) @ 0x8240E740 -- adopt an already-resolved clip
-        // (assert h:164); bodied in BrnGuiFlaptComponent.cpp (needs MovieClipInstance).
+        // Prepare(const MovieClipRef*) -- adopt an already-resolved clip (assert
+        // h:164); header-inline, out-of-line copy @ 0x8240E740.
         void Prepare(const BrnFlapt::MovieClipRef* lpMovieClipRef);
 
         // (h:80 SetPosition: PS3-only, see the header comment.)
@@ -113,6 +113,59 @@ namespace BrnGui
         CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
         mpStateInterface = lpStateInterface;
         mAptRef.SetInvalid();
+    }
+
+    // Prepare: DWARF locals lpFullName (h:135) and lacTempString (h:140, in the
+    // parent-prefix block). The buffer is kept at function scope: lpFullName still
+    // points into it at the FindComponent call.
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    inline void BrnFlaptComponent::Prepare(const char* lacName,
+                                           const BrnFlapt::FileRef& lFile,
+                                           const char* lacParentName)
+    {
+        CGS_ASSERT_AT(lacName != NULL, "lacName != NULL", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 133);
+
+        const char* lpFullName = lacName;
+
+        char lacTempString[KU_MAX_COMPONENT_NAME_LEN];
+        if (lacParentName != NULL)
+        {
+            CgsCore::SnPrintf(lacTempString, KU_MAX_COMPONENT_NAME_LEN - 1,
+                              "%s_%s", lacParentName, lacName);
+            lacTempString[KU_MAX_COMPONENT_NAME_LEN - 1] = '\0';
+            lpFullName = lacTempString;
+        }
+
+        mAptRef = lFile.FindComponent(lpFullName);
+
+        mAptRef.ResetTimeline();
+    }
+
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    inline void BrnFlaptComponent::Prepare(const BrnFlapt::MovieClipRef* lpMovieClipRef)
+    {
+        CGS_ASSERT_AT(lpMovieClipRef != NULL, "NULL != lpMovieClipRef", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 164);
+
+        mAptRef = *lpMovieClipRef;
+
+        mAptRef.ResetTimeline();
     }
 }
 
