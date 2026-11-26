@@ -124,14 +124,9 @@ namespace MapFile
     // read; the upper bound and empty-cache cases return null.
     const char* MinimalMemoryReader::GetStackEntryName(s32 liIndex)
     {
-        if (liIndex < 0)
-        {
-            // ARTIST 0x82820C8C calls the critical section directly.
-            Assert::gAssertMutex.Enter();
-            Assert::FireAssert("liIndex >= 0",
-                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.cpp", 135));
-            Assert::gAssertMutex.Leave();
-        }
+        // ARTIST 0x82820C8C: BeginAssert/EndAssert inlined (CgsDevelopmentUnity defines them).
+        CGS_ASSERT_AT(liIndex >= 0, "liIndex >= 0",
+            "..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.cpp", 135);
         if (liIndex >= KI_MAX_STACK_RESULTS || maacStackNames[liIndex][0] == '\0')
             return 0;
         return maacStackNames[liIndex];

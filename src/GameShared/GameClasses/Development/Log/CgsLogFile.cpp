@@ -42,25 +42,15 @@ namespace Log
         {
             miFile = CreateFileA(lpcFileName, GENERIC_WRITE, FILE_SHARE_WRITE, NULL,
                                  CREATE_ALWAYS, 0, NULL);
-            if (miFile == INVALID_HANDLE_VALUE)
-            {
-                Assert::gAssertMutex.Enter();
-                Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 79));
-                Assert::gAssertMutex.Leave();
-            }
+            CGS_ASSERT_AT(miFile != INVALID_HANDLE_VALUE, "mFileHandle != INVALID_HANDLE_VALUE",
+                CGS_ARTIST_FILE, 79);
         }
         else
         {
             miFile = CreateFileA(lpcFileName, GENERIC_WRITE, FILE_SHARE_WRITE, NULL,
                                  OPEN_ALWAYS, 0, NULL);
-            if (miFile == INVALID_HANDLE_VALUE)
-            {
-                Assert::gAssertMutex.Enter();
-                Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 85));
-                Assert::gAssertMutex.Leave();
-            }
+            CGS_ASSERT_AT(miFile != INVALID_HANDLE_VALUE, "mFileHandle != INVALID_HANDLE_VALUE",
+                CGS_ARTIST_FILE, 85);
             SetFilePointer(miFile, 0, NULL, FILE_END);
         }
         return true;

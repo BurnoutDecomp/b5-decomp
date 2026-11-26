@@ -227,13 +227,15 @@ namespace CgsDev
 
     void Debug3DImmediateRender::SetProjectionMode(ProjectionMode leMode)
     {
-        if (meProjectionMode != leMode)
+        // ARTIST 0x8281B9B0 compares the argument with the member; 0x8281B9CC reads the member
+        // again after DispatchVertices for the 3D/2D choice.
+        if (leMode != meProjectionMode)
         {
             meProjectionMode = leMode;
             DispatchVertices();
             if (mpRenderBuffer)
             {
-                if (leMode == E_PROJECTION_3D)
+                if (meProjectionMode == E_PROJECTION_3D)
                 {
                     mpRenderBuffer->SetState(sgDepth3D);
                     mpRenderBuffer->SetTransform(mViewProjectionMatrix);
@@ -263,13 +265,8 @@ namespace CgsDev
             }
             else
             {
-                if (leEnable != E_ZTEST_ON)
-                {
-                    // ARTIST 82824504 takes the assertion mutex directly.
-                    Assert::gAssertMutex.Enter();
-                    Assert::FireAssert("leZTestEnable == E_ZTEST_ON", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1703));
-                    Assert::gAssertMutex.Leave();
-                }
+                // ARTIST 82824504: BeginAssert/EndAssert inlined (CgsDevelopmentUnity defines them).
+                CGS_ASSERT_AT(leEnable == E_ZTEST_ON, "leZTestEnable == E_ZTEST_ON", CGS_ARTIST_FILE, 1703);
                 mpRenderBuffer->SetState(lrStates.mpDepthStencilState_ZBufferOn);
             }
             meZTestEnable = leEnable;

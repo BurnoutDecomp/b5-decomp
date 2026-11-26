@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLogFileBuffered.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
-#include "rw/core/debug/DebugCriticalSection.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::StrCpy
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/Log/CgsLogFileBuffered.cpp"
 #include <cstring>
 
@@ -15,33 +15,16 @@ namespace Log
     // and retains the name/buffer for subsequent append-mode flushes.
     bool LogFileBuffered::Open(const char* lpcFileName, char* lpcBuffer, s32 liBufferLength)
     {
-        if (std::strlen(lpcFileName) >= sizeof(macFileName))
-        {
-            // The string-copy assertion at 0x828209CC formats into the shared
-            // assert buffer while holding its mutex.
-            Assert::gAssertMutex.Enter();
-            StrStream lMessage(Assert::gpcMessageBuffer, Assert::giMessageBufferSize, E_PRINTMODE_DECIMAL);
-            const u32 luLength = static_cast<u32>(std::strlen(lpcFileName));
-            lMessage << "String " << lpcFileName
-                     << " is too long. Buffer size = " << static_cast<u32>(sizeof(macFileName))
-                     << ", string length = " << luLength << "\n";
-            Assert::FireAssert(Assert::gpcMessageBuffer,
-                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65));
-            Assert::gAssertMutex.Leave();
-        }
-        std::strcpy(macFileName, lpcFileName);
+        // ARTIST 0x828209CC: the inlined CgsCore::StrCpy (its CgsStringUtils.h:65 assert), with
+        // BeginAssert/EndAssert inlined as CgsDevelopmentUnity defines them.
+        CgsCore::StrCpy(macFileName, sizeof(macFileName), lpcFileName);
         mpcBuffer = lpcBuffer;
         miBufferLength = liBufferLength;
         miBufferPosition = 0;
         miFile = CreateFileA(lpcFileName, GENERIC_WRITE, FILE_SHARE_WRITE, 0,
                              CREATE_ALWAYS, 0, 0);
-        if (miFile == INVALID_HANDLE_VALUE)
-        {
-            Assert::gAssertMutex.Enter();
-            Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 66));
-            Assert::gAssertMutex.Leave();
-        }
+        CGS_ASSERT_AT(miFile != INVALID_HANDLE_VALUE, "mFileHandle != INVALID_HANDLE_VALUE",
+            CGS_ARTIST_FILE, 66);
         CloseHandle(miFile);
         miFile = INVALID_HANDLE_VALUE;
         return true;
@@ -56,14 +39,9 @@ namespace Log
         {
             miFile = CreateFileA(lpcFileName, GENERIC_WRITE, FILE_SHARE_WRITE,
                                  0, OPEN_EXISTING, 0, 0);
-            if (miFile == INVALID_HANDLE_VALUE)
-            {
-                // ARTIST 0x82820BE0 enters and leaves the assert mutex here.
-                Assert::gAssertMutex.Enter();
-                Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 156));
-                Assert::gAssertMutex.Leave();
-            }
+            // ARTIST 0x82820BE0: BeginAssert/EndAssert inlined (CgsDevelopmentUnity defines them).
+            CGS_ASSERT_AT(miFile != INVALID_HANDLE_VALUE, "mFileHandle != INVALID_HANDLE_VALUE",
+                CGS_ARTIST_FILE, 156);
             SetFilePointer(miFile, 0, 0, FILE_END);
             DWORD luWritten;
             WriteFile(miFile, mpcBuffer, static_cast<DWORD>(miBufferPosition), &luWritten, 0);

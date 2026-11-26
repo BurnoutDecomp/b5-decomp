@@ -22,6 +22,53 @@ namespace Assert
     const char* Manager::mpcMapFileName;
     CgsSystem::ThreadLayout* Manager::mpThreadLayout;
 
+    // DWARF CgsAssertManager.cpp:79-87: the shared formatted-assert buffer (internal, no extern in
+    // the DWARF) and the assert mutex.
+    namespace
+    {
+        char gacAssertMessageBuffer[KI_MESSAGEBUFFERSIZE];
+    }
+    char* gpcMessageBuffer = gacAssertMessageBuffer;
+    s32 giMessageBufferSize = KI_MESSAGEBUFFERSIZE;
+    rw::core::debug::detail::DebugCriticalSection gAssertMutex = { 0 };
+
+    // ARTIST82820758 (DWARF cpp:106): this is the manager's actual initialization flag. Set it
+    // before creating the mutex, then seed the native font and process any cache.
+    void Construct()
+    {
+        if (!gAssertManager.mbInitialised)
+        {
+            gAssertManager.mbInitialised = true;
+            gAssertMutex.Create();
+            gAssertManager.mVectorFont.Construct();
+            Vector2 lSize(14.0f, 14.0f);
+            gAssertManager.mVectorFont.SetSize(lSize);
+            Manager::RenderThreadAsserts();
+        }
+    }
+
+    // ARTIST82820810 (DWARF cpp:141): preserve the first capture and normalize null strings to
+    // the exact empty string before the real manager handles/cache-displays it.
+    void FireAssert(const char* lpcExpression, const char* lpcFile, int liLine)
+    {
+        if (!gAssertManager.mbGotAssert)
+            gAssertManager.mCurrentAssert.mStack.Prepare();
+        gAssertManager.HandleAssert(lpcExpression ? lpcExpression : "",
+            lpcFile ? lpcFile : "", liLine);
+    }
+
+    // ARTIST82817548 / 82817558 (DWARF cpp:174 / :191). Defined here, in CgsDevelopmentUnity, the
+    // unity's own assert sites inline them (DebugInterface::GetUI 0x82822660 enters the mutex in place).
+    void BeginAssert()
+    {
+        gAssertMutex.Enter();
+    }
+
+    void EndAssert()
+    {
+        gAssertMutex.Leave();
+    }
+
     // DecFIGS B1CA00 stores only these three fields; ARTIST independently pins
     // all offsets/roles and their zero initial values at global83019000.
     Manager::Manager()

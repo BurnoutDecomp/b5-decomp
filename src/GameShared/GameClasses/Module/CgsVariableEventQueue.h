@@ -91,8 +91,7 @@ namespace CgsModule
         // CgsDev::Internal::CInEventDrawAxis> @ 0x82828868): it asserts the queue is
         // constructed (CgsVariableEventQueue.h:711 inline), then forwards to the three-arg
         // AddEventSafe with liSize == sizeof(EventT). Used by the CgsDev debug-draw publishers
-        // (CgsDev::DebugRender::Draw*). DWARF declares only the three-arg AddEventSafe; this
-        // definition lives in CgsVariableEventQueueSafe.inl with the native assert lock.
+        // (CgsDev::DebugRender::Draw*). DWARF declares only the three-arg AddEventSafe.
         template <typename EventT>
         bool AddEventSafe(const EventT& lrEvent, s32 liType);
 
@@ -464,6 +463,21 @@ namespace CgsModule
         return AddEvent(reinterpret_cast<const Event*>(&lEvent), liEventId, (s32)sizeof(EventT));
     }
 
+    // -------- AddEventSafe<EventT> (typed) --------
+    // X360 0x82828418..0x82828D70 (<16384,16>, the CgsDev::Internal::CInEventDraw* records, emitted
+    // by CgsDevelopmentUnity): the "Not Constructed" assert (h:711), then the three-arg AddEventSafe
+    // with sizeof(EventT). ARTIST enters gAssertMutex in place: BeginAssert is defined in the same
+    // unity TU (CgsAssertManager.cpp) and inlined there.
+    template <s32 BUFSIZE, s32 ALIGN>
+    template <typename EventT>
+    bool VariableEventQueue<BUFSIZE, ALIGN>::AddEventSafe(const EventT& lrEvent, s32 liType)
+    {
+        CGS_ASSERT_STREAM_AT(mbIsConstructed,
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 711);
+
+        return AddEventSafe(reinterpret_cast<const Event*>(&lrEvent), liType, static_cast<s32>(sizeof(EventT)));
+    }
+
     // -------- Append<SRCBUF,SRCALIGN> @ X360 0x82504F68 (dest <18432,16>, src <4096,16>) --------
     template <s32 BUFSIZE, s32 ALIGN>
     template <s32 SRCBUF, s32 SRCALIGN>
@@ -767,21 +781,14 @@ namespace CgsModule
     }
 
     // -------- AddStringEventSafe (DWARF 663) --------
+    // X360 0x82827340 (<16384,16>, its only instance, emitted by CgsDevelopmentUnity): the streamed
+    // "Not Constructed" assert on the shared buffer at h:665 (li r5,0x299 @0x828273C4), then the
+    // three-arg AddEventSafe with the string's length + 1.
     template <s32 BUFSIZE, s32 ALIGN>
     bool VariableEventQueue<BUFSIZE, ALIGN>::AddStringEventSafe(const char* lpacString, s32 liType)
     {
-        if (!mbIsConstructed)
-        {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), CGS_ASSERT_LOCATION(detail::KAC_VEQ_FILE, 624));
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_STREAM_AT(mbIsConstructed,
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 665);
         return AddEventSafe(reinterpret_cast<const Event*>(lpacString), liType, (s32)strlen(lpacString) + 1);
     }
-
-    template <>
-    bool VariableEventQueue<16384, 16>::AddStringEventSafe(const char* lpacString, s32 liType);
 }

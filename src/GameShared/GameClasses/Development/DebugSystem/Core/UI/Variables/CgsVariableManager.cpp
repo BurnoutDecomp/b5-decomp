@@ -65,13 +65,8 @@ namespace CgsDev
             }
 
             MenuItemVariable* lpMenuItem = mMenuItemPool.Allocate();
-            if (!lpMenuItem)
-            {
-                // ARTIST 0x82829B48 enters the mutex directly for this assertion.
-                Assert::gAssertMutex.Enter();
-                Assert::FireAssert("lpMenuItem", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 609));
-                Assert::gAssertMutex.Leave();
-            }
+            // ARTIST 0x82829B48: BeginAssert/EndAssert inlined (CgsDevelopmentUnity defines them).
+            CGS_ASSERT_AT(lpMenuItem, "lpMenuItem", CGS_ARTIST_FILE, 609);
 
             lpMenu->AddMenuItem(lpMenuItem);
             lpVariable->Prepare(lrVariant, lpcName);

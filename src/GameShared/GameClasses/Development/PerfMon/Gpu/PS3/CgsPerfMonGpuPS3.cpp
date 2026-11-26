@@ -120,13 +120,8 @@ namespace CgsDev
 
     void PerfMonGpu::Swap()
     {
-        if (mbProfilingRunning)
-        {
-            // ARTIST 0x82825CE8 calls the critical section directly.
-            Assert::gAssertMutex.Enter();
-            Assert::FireAssert("mbProfilingRunning == false", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0xF8));
-            Assert::gAssertMutex.Leave();
-        }
+        // ARTIST 0x82825CE8: BeginAssert/EndAssert inlined (CgsDevelopmentUnity defines them).
+        CGS_ASSERT_AT(mbProfilingRunning == false, "mbProfilingRunning == false", KAC_ASSERTFILE, 0xF8);
         gValues.miCurrentCPUReadBuffer = (gValues.miCurrentCPUReadBuffer + 1) % KI_NUMBUFFERS;
     }
 

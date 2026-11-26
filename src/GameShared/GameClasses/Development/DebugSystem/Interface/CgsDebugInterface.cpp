@@ -44,15 +44,11 @@ namespace CgsDev
         return *mpDebugManager;
     }
 
+    // ARTIST 0x82822660: the assert's BeginAssert/EndAssert are inlined (gAssertMutex Enter/Leave
+    // at 0x82822684), as CgsDevelopmentUnity defines them in the same TU (CgsAssertManager.cpp).
     DebugUI::DebugUI& DebugInterface::GetUI()
     {
-        if (!mpDebugManager)
-        {
-            // ARTIST 0x82822684 enters the mutex directly for this assertion.
-            Assert::gAssertMutex.Enter();
-            Assert::FireAssert("mpDebugManager", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 158));
-            Assert::gAssertMutex.Leave();
-        }
+        CGS_ASSERT_AT(mpDebugManager, "mpDebugManager", CGS_ARTIST_FILE, 158);
         return *mpDebugManager->mpUI;
     }
 
@@ -67,15 +63,10 @@ namespace CgsDev
     // `mpDebugManager + 0x14C`; DebugInterface is a friend of the manager). This is what
     // BrnDirector::DebugPrinter::ActualPrint @0x821F71D8 and Camera::Utils::Tweaker's on-screen
     // readout both draw through.
+    // (BeginAssert/EndAssert inlined at 0x82822774, as in GetUI.)
     DebugRender& DebugInterface::Get2dRender()
     {
-        if (!mpDebugManager)
-        {
-            // ARTIST 0x82822774 enters the mutex directly for this assertion.
-            Assert::gAssertMutex.Enter();
-            Assert::FireAssert("mpDebugManager", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 190));
-            Assert::gAssertMutex.Leave();
-        }
+        CGS_ASSERT_AT(mpDebugManager, "mpDebugManager", CGS_ARTIST_FILE, 190);
         return mpDebugManager->mBufferedRenderer;
     }
 

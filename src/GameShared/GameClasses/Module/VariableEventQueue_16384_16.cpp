@@ -1,4 +1,4 @@
-#include "GameShared/GameClasses/Module/CgsVariableEventQueueSafe.inl"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_CoarseQueryQueue.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRenderCommon.h"  // CgsDev::Internal::CInEventDraw* record homes
@@ -22,14 +22,7 @@ template s32    CgsModule::VariableEventQueue<16384, 16>::GetNextEvent(const Cgs
 template bool   CgsModule::VariableEventQueue<16384, 16>::AddEvent(const CgsModule::Event*, s32, s32);
 template bool   CgsModule::VariableEventQueue<16384, 16>::AddEventSafe(const CgsModule::Event*, s32, s32);
 template void*  CgsModule::VariableEventQueue<16384, 16>::AllocateEventSafe(s32, s32);
-// ARTIST 0x82827340 uses the same locked diagnostic as the typed overload.
-template <>
-bool CgsModule::VariableEventQueue<16384, 16>::AddStringEventSafe(const char* lpacString, s32 liType)
-{
-    if (!mbIsConstructed)
-        detail::AssertQueueNotConstructed(CGS_ASSERT_LOCATION(detail::KAC_VEQ_FILE, 665));  // ARTIST 0x828273C4
-    return AddEventSafe(reinterpret_cast<const Event*>(lpacString), liType, static_cast<s32>(strlen(lpacString)) + 1);
-}
+template bool   CgsModule::VariableEventQueue<16384, 16>::AddStringEventSafe(const char*, s32);
 template void   CgsModule::VariableEventQueue<16384, 16>::OutputQueueContents() const;
 template char*  CgsModule::VariableEventQueue<16384, 16>::GetFirstWritePointer();
 template const char* CgsModule::VariableEventQueue<16384, 16>::GetFirstWritePointer() const;

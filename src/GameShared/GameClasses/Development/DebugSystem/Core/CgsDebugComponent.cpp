@@ -85,14 +85,9 @@ namespace CgsDev
         const char* lpcPath = GetPath();
         const char* lpcName = GetName();
 
-        if (!lpcName)
-        {
-            // ARTIST 0x82822264 uses the assert mutex directly.
-            Assert::gAssertMutex.Enter();
-            Assert::FireAssert("lpcName", CGS_ASSERT_LOCATION(
-                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugComponent.cpp", 262));
-            Assert::gAssertMutex.Leave();
-        }
+        // ARTIST 0x82822264: BeginAssert/EndAssert inlined (CgsDevelopmentUnity defines them).
+        CGS_ASSERT_AT(lpcName, "lpcName",
+            "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugComponent.cpp", 262);
 
         if (!lpcPath)
             lpcPath = "";

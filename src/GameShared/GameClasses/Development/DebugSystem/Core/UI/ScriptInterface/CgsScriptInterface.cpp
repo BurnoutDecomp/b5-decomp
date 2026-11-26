@@ -1,7 +1,3 @@
-#if defined(_XBOX) && defined(_MSC_VER)
-#pragma auto_inline(off)
-#endif
-
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface.h"
 #include <string.h>   // _stricmp, strstr, strchr, strncpy, memcpy, strlen
 #include <stdlib.h>   // atoi
@@ -412,12 +408,13 @@ namespace CgsDev
             (void)lppcParameters;
             (void)liParameterCount;
 
-            DebugManager& lManager = GetDebugManager();
-            DebugComponent* lpComponent = lManager.FindComponentByName(lpcCommand);
+            // DWARF cpp:833 scopes only lpComponent: the manager is fetched again for the activation
+            // (ARTIST 0x8283303C / 0x8283305C read DebugManager::mpInstance twice).
+            DebugComponent* lpComponent = GetDebugManager().FindComponentByName(lpcCommand);
             if (!lpComponent || lpComponent->IsActive())
                 return false;
 
-            lManager.ActivateComponent(lpComponent);
+            GetDebugManager().ActivateComponent(lpComponent);
             return true;
         }
 

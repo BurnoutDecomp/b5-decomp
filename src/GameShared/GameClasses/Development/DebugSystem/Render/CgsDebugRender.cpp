@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Module/CgsVariableEventQueueSafe.inl"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // the immediate renderer Dispatch2D replays into
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 
