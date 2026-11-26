@@ -93,12 +93,13 @@ namespace CgsSceneManager
     template <u32 KU_MaxResults>
     void CoarseQueryResultBuffer<KU_MaxResults>::Clear()
     {
-        miTotalNumResults              = 0;
+        // ARTIST's store order (SpatialPartitionIO::OutputBuffer::Destruct @0x828BB0D8..F4).
         miTotalBufferSize              = 0;
+        miTotalNumResults              = 0;
         miCurrentResultsStartPosition  = 0;
         miNumResultsAttemptedThisBatch = 0;
-        muNumBatches                   = 0;
         mbInABatch                     = false;
+        muNumBatches                   = 0;
     }
 
     template <u32 KU_MaxResults>
