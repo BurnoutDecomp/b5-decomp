@@ -14,6 +14,7 @@
 #include <new>        // operator new / operator delete
 
 #include "SDKs/EATech/eathread/BrnEAThreadX360.h"
+#include "SDKs/EATech/eathread/eathread.h"   // kTimeoutNone / kTimeoutImmediate (WaitForEnd)
 
 #include "SDKs/EATech/eathread/eathread_pc_dynamicthreadarray.h"
 
@@ -389,53 +390,55 @@ namespace Thread
         }
     }
 
-    // ARTIST82B42DD0. An initially absent record waits for publication; an
-    // already-present record with a null handle takes the ended path directly.
+    // ARTIST 82B42DD0. EAThread's own shape: a started thread is waited on; an unstarted one
+    // is polled until it starts or the deadline passes, then WaitForEnd(timeoutAbsolute) is
+    // called again with the default return-value pointer. ARTIST turns that self tail call
+    // into a loop (0x82B42E38 `li r29,0` then back to the barrier at 0x82B42E3C).
+    // GetThreadTime (0x82B42628) and the one-millisecond ThreadSleep (0x82B42610) are inlined
+    // as GetTickCount + 0x2710 and SleepEx(1, TRUE).
     Thread::Status Thread::WaitForEnd(const u32& timeoutAbsolute, intptr_t* pThreadReturnValue)
     {
-        EAThreadDynamicData* lpData;
-        EAThreadDynamicData* volatile& rpPublishedData = mThreadData.mpData;
-        for (;;)
+        MemoryBarrier();
+
+        if (mThreadData.mpData)
         {
-            // ARTIST82B42E3C: publication can be withdrawn before this fence.
-            MemoryBarrier();
-            lpData = rpPublishedData;
-            if (lpData)
-                break;
-            while (!mThreadData.mpData || !mThreadData.mpData->mhThread)
+            if (mThreadData.mpData->mhThread)
             {
-                const u32 nNow = ::GetTickCount() + 0x2710u;
-                if (nNow >= timeoutAbsolute)
-                    break;
+                // The relative timeout: kTimeoutNone and kTimeoutImmediate pass through
+                // (0x82B42E60 / 0x82B42E68), any other deadline is measured from now.
+                u32 nTimeoutRelative = timeoutAbsolute;
+                if (timeoutAbsolute != kTimeoutNone && timeoutAbsolute != kTimeoutImmediate)
+                {
+                    const u32 nNow = GetThreadTime();
+                    nTimeoutRelative = timeoutAbsolute > nNow ? timeoutAbsolute - nNow : 0;
+                }
+                const DWORD dwResult = ::WaitForSingleObject(mThreadData.mpData->mhThread, nTimeoutRelative);
+                if (dwResult == WAIT_TIMEOUT)
+                    return kStatusRunning;
+
+                ::CloseHandle(mThreadData.mpData->mhThread);
+                mThreadData.mpData->mhThread = 0;
+                mThreadData.mpData->mnStatus = kStatusEnded;
+            }
+
+            if (pThreadReturnValue)
+            {
+                MemoryBarrier();
+                *pThreadReturnValue = mThreadData.mpData->mnReturnValue;
+            }
+            return kStatusEnded;
+        }
+        else
+        {
+            while ((!mThreadData.mpData || !mThreadData.mpData->mhThread) && (GetThreadTime() < timeoutAbsolute))
+            {
                 ::SleepEx(1, TRUE);
                 MemoryBarrier();
             }
-            if (!mThreadData.mpData)
-                return kStatusNone;
-            pThreadReturnValue = 0;
+            if (mThreadData.mpData)
+                return WaitForEnd(timeoutAbsolute);
         }
-
-        if (lpData->mhThread)
-        {
-            u32 nWait = timeoutAbsolute;
-            if (nWait != 0 && nWait != 0xFFFFFFFFu)
-            {
-                const u32 nNow = ::GetTickCount() + 0x2710u;
-                const u32 nDeadline = timeoutAbsolute;
-                nWait = nDeadline > nNow ? nDeadline - nNow : 0;
-            }
-            if (::WaitForSingleObject(mThreadData.mpData->mhThread, nWait) == WAIT_TIMEOUT)
-                return kStatusRunning;
-            ::CloseHandle(mThreadData.mpData->mhThread);
-            mThreadData.mpData->mhThread = 0;
-            mThreadData.mpData->mnStatus = kStatusEnded;
-        }
-        if (pThreadReturnValue)
-        {
-            MemoryBarrier();
-            *pThreadReturnValue = mThreadData.mpData->mnReturnValue;
-        }
-        return kStatusEnded;
+        return kStatusNone;
     }
 
     // 0x82B42EF8

@@ -295,8 +295,14 @@ namespace rw
 
 namespace core
 {
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
     // ARTIST 0x82BC0AA8. The two heaps are constructed before main memory is
     // adopted. The physical heap is shut down when the capacity has no lane two.
+    // Size-optimised like the rest of the rwcore library: both arms join at one
+    // `stb r11,0xa34(r31)` (0x82BC0BA4) instead of duplicating the tail, which only /Os
+    // gives here; the lane-two test is a greater-than (`ble` 0x82BC0B64).
     GeneralResourceAllocator::GeneralResourceAllocator(
         const Resource& lrResource, const ResourceDescriptor& lrCapacity)
         : m_mainAllocator(0, 0, true, false, 0, 0),
@@ -309,7 +315,7 @@ namespace core
         m_mainAllocator.Init(reinterpret_cast<void*>(
             reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]) + luStorageSize),
             lrCapacity.m_baseResourceDescriptors[0].m_size, false, false, 0, 0);
-        if (lrCapacity.m_baseResourceDescriptors[2].m_size != 0)
+        if (lrCapacity.m_baseResourceDescriptors[2].m_size > 0)
         {
             m_physicalAllocator.SetOption(EA::Allocator::GeneralAllocator::kOptionEnableSystemAlloc, 0);
             m_physicalAllocator.Init(lrResource.m_baseResources[2],
@@ -322,6 +328,9 @@ namespace core
             m_hasPhysical = false;
         }
     }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
     // X360 dtor @0x82BC0A50: destroys m_physicalAllocator then m_mainAllocator (reverse declaration
     // order) and restores the IResourceAllocator vtable -- both fall out of ordinary C++ teardown.

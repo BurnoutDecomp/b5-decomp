@@ -79,14 +79,9 @@ namespace renderengine
 
         if (pParams->mbHasCustomBlendFactors)
         {
-            const u32* source = pParams->maBlendFactor;
-            u32* destination = lpMat->maState;
-            int remaining = sizeof(pParams->maBlendFactor) / sizeof(pParams->maBlendFactor[0]);
-            do
-            {
-                *destination++ = *source++;
-            }
-            while (--remaining);
+            // Indexed copy: ARTIST walks the destination (lwzx from dest + (src - dest), 0x82B627E4).
+            for (int liChannel = 0; liChannel < 4; ++liChannel)
+                lpMat->maState[liChannel] = pParams->maBlendFactor[liChannel];
         }
         else
         {
@@ -107,8 +102,9 @@ namespace renderengine
         lpMat->maState[14] = pParams->mbState14;
         lpMat->maState[15] = pParams->muState15;
         lpMat->maState[17] = pParams->muState17;
-        lpMat->maState[18] = 1;
+        // ARTIST order: [17], then [16], then the constant [18] (0x82B62878..0x82B62888).
         lpMat->maState[16] = pParams->mbState16;
+        lpMat->maState[18] = 1;
         return lpMat;
     }
 }

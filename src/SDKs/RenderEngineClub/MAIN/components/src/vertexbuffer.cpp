@@ -18,6 +18,10 @@ namespace renderengine
 {
 // ARTIST 82B61FE0, reached by Xbox2UnSet's tail branch at 82B63058.
 // GetStreamSource adds a reference; release it before comparing the binding.
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x82B61FE0. By placement it is most
+// likely another Device::UnSetResource overload (the vertex-buffer one): ARTIST lays it out in
+// device.cpp's run of resource unbinders, after UnSetResource(D3DResource*) 0x82B61F08 and the
+// vertex-declaration unbinder 0x82B61F90, before UnSetResource(const ProgramBufferData*) 0x82B62088.
 static void UnbindVertexStreams(VertexBuffer* lpBuffer)
 {
     D3DDevice* const device = ::gpD3DDevice;

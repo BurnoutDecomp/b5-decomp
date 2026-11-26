@@ -36,20 +36,26 @@ IndexBuffer* IndexBuffer::Initialize(const rw::Resource& resource, const Paramet
 // ARTIST 82B60760.
 bool IndexBuffer::Lock(u32 flags, Locked& locked)
 {
-    if (!Address) return false;
-    DWORD sdkFlags = 0;
-    if ((flags & LOCK_READ) && !(flags & LOCK_WRITE))
+    // Both failures share the one `return false` at the end (ARTIST 0x82B60800).
+    if (Address)
     {
-        if (XMemGetPageSize(reinterpret_cast<void*>(Address)) <= 4096)
-            sdkFlags = D3DLOCK_READONLY;
+        DWORD sdkFlags = 0;
+        if ((flags & LOCK_READ) && !(flags & LOCK_WRITE))
+        {
+            if (XMemGetPageSize(reinterpret_cast<void*>(Address)) <= 4096)
+                sdkFlags = D3DLOCK_READONLY;
+        }
+        else if ((flags & LOCK_WRITE) && (flags & LOCK_NOOVERWRITE))
+            sdkFlags = D3DLOCK_NOOVERWRITE;
+        void* const indices = D3DIndexBuffer_Lock(this, 0, 0, sdkFlags);
+        locked.indices = indices;
+        if (indices)
+        {
+            locked.indexStride = (Common & D3DINDEXBUFFER_INDEX32) ? D3DFMT_INDEX32 : D3DFMT_INDEX16;
+            return true;
+        }
     }
-    else if ((flags & LOCK_WRITE) && (flags & LOCK_NOOVERWRITE))
-        sdkFlags = D3DLOCK_NOOVERWRITE;
-    void* const indices = D3DIndexBuffer_Lock(this, 0, 0, sdkFlags);
-    locked.indices = indices;
-    if (!indices) return false;
-    locked.indexStride = (Common & D3DINDEXBUFFER_INDEX32) ? D3DFMT_INDEX32 : D3DFMT_INDEX16;
-    return true;
+    return false;
 }
 
 // Native inline call at OcclusionCullManager::Construct 827F2334.
