@@ -139,6 +139,7 @@ namespace CgsDev
         /* mpRwAllocator              */ 0,
     };
 
+    const char* DebugManager::KPC_DEFAULTCOMPONENTPATH = "Debug/Components";
     DebugManager* DebugManager::mpInstance = 0;
 
     // X360 @0x82822370: the three by-value components construct (their vtable stores are the inlined
@@ -425,11 +426,9 @@ namespace CgsDev
             CgsDev::Assert::EndAssert();
         }
 
-        // FLAG: ARTIST 0x8282E29C-0x8282E2A0 defaults a null path to "Debug/Components"
-        // (off_82F31990), NOT "" -- a simple component registers under the Debug/Components menu
-        // section when no path is given.
+        // ARTIST 0x8282E29C-0x8282E2A0: a null path defaults to KPC_DEFAULTCOMPONENTPATH.
         if (!lpcPath)
-            lpcPath = "Debug/Components";
+            lpcPath = KPC_DEFAULTCOMPONENTPATH;
 
         mComponentList.Add(lpComponent);
         lpComponent->mbActive = false;

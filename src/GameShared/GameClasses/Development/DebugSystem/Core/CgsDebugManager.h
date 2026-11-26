@@ -185,6 +185,9 @@ namespace CgsDev
         rw::IResourceAllocator*      mpAllocator;                   // +0x8170 the debug allocator
         char                         macBuildDate[36];              // +0x8174 CalculateBuildDate's string (0x24 bytes)
 
+        // DWARF CgsDebugManager.h:307: the menu section a simple component registers under when it
+        // gives no path (ARTIST .data 0x82F31990, reloaded by RegisterComponentSimple 0x8282E2A0).
+        static const char* KPC_DEFAULTCOMPONENTPATH;
         static DebugManager* mpInstance;
     };
 }

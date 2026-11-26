@@ -205,6 +205,20 @@ public:
         return lsFree != lsNumFree;
     }
 
+    // DecFIGS CgsIndexedPool.h:238; ARTIST 0x82663010 (<GameDataEventSlot,short>, out of line): the
+    // range assert (:241), the free-list assert through the inlined DebugIsIndexFree (:250), then the
+    // element's address.
+    T* GetObject(IndexType lsIndex)
+    {
+        CGS_ASSERT_STREAM_AT(lsIndex >= 0 && lsIndex < msCapacity, "Object not in pool\n",
+            CGS_INDEXED_POOL_ARTIST_HEADER, 241);
+
+        CGS_ASSERT_STREAM_AT(!DebugIsIndexFree(lsIndex), "Object is free\n",
+            CGS_INDEXED_POOL_ARTIST_HEADER, 250);
+
+        return &maElements[lsIndex];
+    }
+
     // DecFIGS CgsIndexedPool.h:357. The resource response consumer
     // releases the typed record through its signed pool index.
     void Push(T* lpObject)

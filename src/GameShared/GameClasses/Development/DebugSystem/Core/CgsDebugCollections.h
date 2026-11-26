@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (DebugLinkedList guards)
 
 #include <new>   // placement-new (the pools default-construct their backing elements)
+#define CGS_ARTIST_DEBUG_COLLECTIONS_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugCollections.h"
 
 // CgsDev::Internal debug collection templates - the three container shapes the whole debug-UI
 // runtime is built from. Recovered from the DecFIGS DWARF
@@ -195,7 +196,8 @@ namespace CgsDev
             // X360 0x82827780: assert the item belongs to this pool, then move it active -> free.
             void Free(T* lpItem)
             {
-                CGS_ASSERT(IsFromPool(lpItem), "IsFromPool(lpItem)");
+                // ARTIST line 672 (DebugStaticPool<VariableMetadata>::Free 0x82827E10).
+                CGS_ASSERT_AT(IsFromPool(lpItem), "IsFromPool(lpItem)", CGS_ARTIST_DEBUG_COLLECTIONS_H_FILE, 672);
                 mActive.Remove(lpItem);
                 mFree.Add(lpItem);
             }
@@ -256,8 +258,9 @@ namespace CgsDev
             // X360 0x828211B8: append to the tail; the new item terminates the list.
             void Add(T* lpItem)
             {
-                CGS_ASSERT(lpItem, "lpItem");
-                CGS_ASSERT(!IsAdded(lpItem), "!IsAdded( lpItem )");
+                // ARTIST lines 338/339 (DebugLinkedList<Window>::Add 0x82820FD0 / 0x82821028).
+                CGS_ASSERT_AT(lpItem, "lpItem", CGS_ARTIST_DEBUG_COLLECTIONS_H_FILE, 338);
+                CGS_ASSERT_AT(!IsAdded(lpItem), "!IsAdded( lpItem )", CGS_ARTIST_DEBUG_COLLECTIONS_H_FILE, 339);
 
                 if (mpList)
                 {

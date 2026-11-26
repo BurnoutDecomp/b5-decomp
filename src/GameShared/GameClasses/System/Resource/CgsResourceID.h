@@ -23,6 +23,10 @@ namespace CgsResource
     public:
         ID() {}
 
+        // DWARF CgsResourceID.h:49 / LegacySrc :114: the name's hash (HashString takes the name's bytes
+        // here; DWARF types it const RwChar*).
+        void Construct(const char* lpcName) { mHash = HashString(reinterpret_cast<const u8*>(lpcName)); }
+
         u64  GetHash() const     { return mHash; }
         void SetHash(u64 luHash) { mHash = luHash; }
 

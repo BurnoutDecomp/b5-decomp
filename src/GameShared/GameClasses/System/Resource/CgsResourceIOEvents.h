@@ -68,6 +68,21 @@ namespace Events
     class LoadBundleRequest : public BundleLoaderEvent
     {
     public:
+        // DWARF CgsResourceIOEvents.h:129 (the PS3 _compile dump names the three flags
+        // lbLiveUpdateReplace / lbAllowFailiure / lbUseHDCache); body as LegacySrc :1449, which predates
+        // the HD-cache flag.
+        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId, const char* lpcFileName,
+                       s32 liPoolId, bool lbLiveUpdateReplace, bool lbAllowFailiure, bool lbUseHDCache)
+        {
+            BundleLoaderEvent::Construct(lpUser, liEventId, lpcFileName, liPoolId, lbLiveUpdateReplace);
+            SetAllowFailiure(lbAllowFailiure);
+            SetUseHDCache(lbUseHDCache);
+        }
+        bool GetAllowFailiure() const { return mbAllowFailiure; }                          // h:132
+        void SetAllowFailiure(bool lbAllowFailiure) { mbAllowFailiure = lbAllowFailiure; }  // h:135
+        void SetUseHDCache(bool lbUseCache) { mbUseHDCache = lbUseCache; }                  // h:138
+        bool GetUseHDCache() const { return mbUseHDCache; }                                // h:141
+
         bool mbAllowFailiure;
         bool mbUseHDCache;
     };
@@ -281,7 +296,19 @@ namespace Events
     // ID members of derived requests are 8-byte aligned, so this base occupies 12 bytes.
     struct PoolEvent : public Event
     {
+        // DWARF CgsResourceIOEvents.h:228-247, bodies as LegacySrc CgsResourceIOEvents.h:1507-1552.
+        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId, s32 liPoolId)
+        {
+            SetUser(lpUser);
+            SetEventId(liEventId);
+            SetPoolId(liPoolId);
+        }
+        void SetUser(CgsModule::BaseEventReceiverQueue* lpUser) { mpUser = lpUser; }   // h:231
         CgsModule::BaseEventReceiverQueue* GetUser() const { return mpUser; }   // h:234
+        s32 GetEventId() const { return miEventId; }                            // h:237
+        void SetEventId(s32 liEventId) { miEventId = liEventId; }               // h:240
+        s32 GetPoolId() const { return miPoolId; }                              // h:243
+        void SetPoolId(s32 liPoolId) { miPoolId = liPoolId; }                   // h:247
 
         CgsModule::BaseEventReceiverQueue* mpUser;   // +0
         s32                                miEventId; // +4
@@ -450,6 +477,24 @@ namespace Events
     // records occupy 24 bytes: pointer widening consumes the old header alignment gap.
     struct AcquireResourceRequest : public PoolEvent
     {
+        // DWARF CgsResourceIOEvents.h:322 / :329, bodies as LegacySrc :1578 / :1589 (the LegacySrc
+        // name-overload's filtered debug print is absent from ARTIST's inlined copies, e.g.
+        // GameDataModule::ProcessGetPVSRequest 0x82670940..0x82670980).
+        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId, s32 liPoolId, ID lResourceId)
+        {
+            PoolEvent::Construct(lpUser, liEventId, liPoolId);
+            SetResourceId(lResourceId);
+        }
+        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId, s32 liPoolId,
+                       const char* lpcResourceId)
+        {
+            ID lId;
+            lId.Construct(lpcResourceId);
+            AcquireResourceRequest::Construct(lpUser, liEventId, liPoolId, lId);
+        }
+        ID GetResourceId() const { return mResourceId; }        // h:332
+        void SetResourceId(ID lId) { mResourceId = lId; }       // h:335
+
         ID mResourceId;       // +16 (8-byte aligned), full 64-bit resource identity
     };
 

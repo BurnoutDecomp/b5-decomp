@@ -6,13 +6,13 @@
 // emission of the four members the X360 ARTIST build attested under the IDA-truncated
 // symbol "BrnResource::GameDataEventSlot,short>":
 //
-//   operator[](s16)        @ 0x82663010  (baked asserts CgsIndexedPool.h:241 / :250)
+//   GetObject(s16)         @ 0x82663010  (baked asserts CgsIndexedPool.h:241 / :250)
 //   Clear()                @ 0x826638D0
 //   GetObjectIndex(T*)     @ 0x82662F50  (assert CgsIndexedPool.h:222)
 //   PushIndex(s16)         @ 0x82663180  (asserts CgsIndexedPool.h:301 / :310)
 //
-template BrnResource::GameDataEventSlot&
-    CgsContainers::IndexedPool<BrnResource::GameDataEventSlot, s16>::operator[](s16);
+template BrnResource::GameDataEventSlot*
+    CgsContainers::IndexedPool<BrnResource::GameDataEventSlot, s16>::GetObject(s16);
 template void
     CgsContainers::IndexedPool<BrnResource::GameDataEventSlot, s16>::Clear();
 template s16

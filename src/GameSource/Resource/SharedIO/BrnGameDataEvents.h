@@ -162,6 +162,9 @@ namespace GameDataIO
         // change). GROW with the remaining Set*/Get* accessors when the dedicated
         // GameDataEvents TU lands -- do NOT fork.
         CgsID GetGameDataId() const { return mId; }
+        s32 GetPoolId() const { return miPoolId; }                 // DWARF BrnGameDataEvents.h:111
+        EAssetSet GetGameDataType() const { return meType; }       // h:117
+        bool GetFailureFlag() const { return mbFailFlag; }         // h:120
     };
 
     // DWARF: BrnGameDataEvents.h:138 -- no own members.
