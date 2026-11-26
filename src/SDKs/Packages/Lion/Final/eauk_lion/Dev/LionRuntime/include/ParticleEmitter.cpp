@@ -39,6 +39,7 @@
 #include <cmath>   // floorf / fabsf -- Blend's de-optimised magic-number floor
 
 #include <vectorintrinsics.h>   // native VMX round-to-nearest (vrfin)
+#include <xtl.h>               // xboxmath.h: XM_2PI / XM_1DIV2PI, the range-reduction constants (g_XMPiConstants0)
 #include <cstdlib>   // rand -- InitialiseParticle's random start frame is the C library's
 
 namespace
@@ -534,9 +535,8 @@ bool cParticleEmitter::IsGenerating(cParticleRandomSeed& arSeed,
 // ================================================================================================
 namespace
 {
-// unk_82FAC100 -- splat4(1/255). See the banner: CRT thunk @0x82C4A110 <- flt_82010C1C.
-// The exact bits matter, so it is written as the image's float, not as `1.0f / 255.0f`.
-const f32 KF_COLOUR_U8_TO_UNIT = 0.003921568859368563f;   // 0x3B808081
+// KF_COLOUR_U8_TO_UNIT (ParticleBehaviour.h) is unk_82FAC100 -- splat4(1/255). See the banner:
+// CRT thunk @0x82C4A110 <- flt_82010C1C.
 
 // flt_820FEC48, loaded twice at 0x8290E038 into both live lanes of slot 3. The DWARF names the
 // slot mvOrientStepAndDragFrameRateConstants, so these are the orient step and the drag
@@ -1947,10 +1947,10 @@ void MultiFrameBehaviour::Process(const cParticleEmitter::ParticleBuildData& arD
 namespace
 {
 
-// unk_82000C60, .rdata: (pi, 2pi, 1/pi, 1/2pi). Only lanes y and w are used -- the range
-// reduction is `x - 2pi * round(x * (1/2pi))`, a `vrfin` (round to nearest) plus a `vnmsubfp`.
-const f32 KF_TWO_PI        = 6.2831854820251465f;    // unk_82000C60 lane y
-const f32 KF_ONE_OVER_2PI  = 0.15915493667125702f;   // unk_82000C60 lane w
+// unk_82000C60, .rdata: (pi, 2pi, 1/pi, 1/2pi), the XDK's g_XMPiConstants0 (xboxmath.h:
+// {XM_PI, XM_2PI, XM_1DIVPI, XM_1DIV2PI}). Only lanes y and w are used -- the range reduction
+// is `x - 2pi * round(x * (1/2pi))`, a `vrfin` (round to nearest) plus a `vnmsubfp` -- so the
+// XDK's own XM_2PI (6.283185307f, 0x40C90FDB) and XM_1DIV2PI (0.159154943f, 0x3E22F983) are used.
 
 // unk_82000BD0 / BE0 / BF0 -- sin(x) = x + c[0]*x^3 + c[1]*x^5 + ... + c[10]*x^23.
 // Read out of the image; they are 1/(2k+1)! with alternating sign, twelve terms.
@@ -1977,10 +1977,10 @@ void LionSinCos(f32 afAngle, f32& arSin, f32& arCos)
 {
     // asm 0x82910540..0x8291056C: x = angle - 2pi * round(angle / 2pi), i.e. fold to [-pi, pi].
     // `vrfin` is round-to-NEAREST (not trunc, not floor), which is what makes the fold symmetric.
-    const __vector4 lScaled = { afAngle * KF_ONE_OVER_2PI, 0.0f, 0.0f, 0.0f };
+    const __vector4 lScaled = { afAngle * XM_1DIV2PI, 0.0f, 0.0f, 0.0f };
     const __vector4 lRounded = __vrfin(lScaled);
     const f32 lfRounded = lRounded.x;
-    const f32 lfX       = afAngle - KF_TWO_PI * lfRounded;
+    const f32 lfX       = afAngle - XM_2PI * lfRounded;
 
     const f32 lfX2 = lfX * lfX;
 

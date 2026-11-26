@@ -40,17 +40,9 @@
 // ----------------------------------------------------------------------------
 namespace
 {
-    inline void SetVec(cVector& arV, f32 aX, f32 aY, f32 aZ, f32 aW)
-    {
-        arV.x = aX;
-        arV.y = aY;
-        arV.z = aZ;
-        arV.w = aW;
-    }
-
     inline void ZeroVec(cVector& arV)
     {
-        SetVec(arV, 0.0f, 0.0f, 0.0f, 0.0f);
+        arV.Set(0.0f, 0.0f, 0.0f, 0.0f);
     }
 
     inline void SetColour(cColour8& arC, u8 aValue)
@@ -101,17 +93,17 @@ void cParticleBehaviour::Init()
     ZeroVec(mRotXYZVelVariance);
     ZeroVec(mRotXYZAccBase);
     ZeroVec(mRotXYZAccVariance);
-    SetVec(mPivotPoint, 0.5f, 0.5f, 0.5f, 0.0f);
+    mPivotPoint.Set(0.5f, 0.5f, 0.5f, 0.0f);
     ZeroVec(mPosBase);
     ZeroVec(mPosVariance);
     ZeroVec(mRingRadius);
-    SetVec(mSizeXYZBase, 0.5f, 0.5f, 0.0f, 0.0f);
+    mSizeXYZBase.Set(0.5f, 0.5f, 0.0f, 0.0f);
     ZeroVec(mSizeXYZVariance);
     ZeroVec(mSizeXYZVelBase);
     ZeroVec(mSizeXYZVelVariance);
     ZeroVec(mSizeXYZAccBase);
     ZeroVec(mSizeXYZAccVariance);
-    SetVec(mVelBase, 0.0f, 1.0f, 0.0f, 0.0f);
+    mVelBase.Set(0.0f, 1.0f, 0.0f, 0.0f);
     ZeroVec(mVelVariance);
     ZeroVec(mRGBADiff);
 
@@ -416,11 +408,10 @@ void cParticleBehaviour::CompileBaseVariance()
 // ----------------------------------------------------------------------------
 namespace
 {
-// unk_82FAC100 / unk_82FAC220, splat across all four lanes. Written as the image's exact
-// floats rather than as 1.0f/255.0f, because the truncation above is sensitive to the last
-// bit: 0x3B808081 is slightly ABOVE the true 1/255, which is what makes the mRGBABase
-// round trip exact.
-const f32 KF_COLOUR_U8_TO_UNIT = 0.003921568859368563f;   // 0x3B808081
+// unk_82FAC220, splat across all four lanes (its partner unk_82FAC100, KF_COLOUR_U8_TO_UNIT,
+// is in ParticleBehaviour.h). Written as the image's exact floats rather than as 1.0f/255.0f,
+// because the truncation above is sensitive to the last bit: 0x3B808081 is slightly ABOVE the
+// true 1/255, which is what makes the mRGBABase round trip exact.
 const f32 KF_COLOUR_UNIT_TO_U8 = 255.0f;                  // 0x437F0000
 
 // `vmulfp128 <255>` + `vminfp <255>` + `vctuxs ...,0`: scale back up, clamp, truncate.

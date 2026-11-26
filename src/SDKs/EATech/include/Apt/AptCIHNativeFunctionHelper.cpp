@@ -88,19 +88,8 @@ extern int        gnAptNativeArgCount;    // dword_8324E760
 // The shared "undefined" value (off_8324D814; storage HOMED in AptGlobals.cpp).
 extern AptValue* gpUndefinedValue;
 
-// ---------------------------------------------------------------------------
-// Local: the X360 "defined movie-clip handle, or a CIHNone" predicate that opens
-// most of these methods -- `type == AptVFT_CharacterInstHandle && isDefined` or
-// `type == AptVFT_CIHNone`. (The console packs the value type in the low 7 bits of
-// the AptValue bitfield word and the defined flag at bit 27; modelled here through
-// the named AptValue accessors.)
-// ---------------------------------------------------------------------------
-static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
-{
-    const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();
-    return (eType == AptVFT_CharacterInstHandle && pValue->getIsDefined())
-        || eType == AptVFT_CIHNone;
-}
+// Most of these methods open on AptValue::isCIH(): a defined movie-clip handle
+// (AptVFT_CharacterInstHandle) or a CIHNone.
 
 // The clip's play-head "playing" bit (bIsPlaying, x64 mnClipActionFlags bit 25); set by
 // sMethod_play, cleared by sMethod_nextFrame. (Console *(spriteBase+0x14) & 0x40.)
@@ -113,7 +102,7 @@ static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
 AptValue* AptCIHNativeFunctionHelper::sMethod_getDepth(AptValue* pContext, int /*nArgCount*/)
 {
     AptCIH* const pNode = static_cast<AptCIH*>(pContext);
-    if (IsClipHandleOrCIHNone(pNode))
+    if (pNode->isCIH())
         return AptInteger::Create(pNode->GetCharacterInst()->GetRenderItem()->GetDepth() - 0x4000);
     return gpUndefinedValue;
 }
@@ -207,11 +196,11 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_setMask(AptValue* pContext, int nA
 {
     // The X360 short-circuits straight to the argument path when there is exactly
     // one argument; otherwise it first requires the receiver to be a clip / CIHNone.
-    if (nArgCount != 1 && IsClipHandleOrCIHNone(pContext))
+    if (nArgCount != 1 && pContext->isCIH())
         return gpUndefinedValue;
 
     AptValue* const pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];
-    if (IsClipHandleOrCIHNone(pArg) && pArg->getIsDefined())   // defined clip OR defined CIHNone (asm has no vtbl re-test)
+    if (pArg->isCIH() && pArg->getIsDefined())   // defined clip OR defined CIHNone (asm has no vtbl re-test)
     {
         // The receiver is the MASTER; SetMask takes the slave node it masks.
         static_cast<AptCIH*>(pContext)->SetMask(static_cast<AptCIH*>(pArg));
@@ -445,7 +434,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_removeMovieClip(AptValue* pContext
     // AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
     gAptActionInterpreter.valueToObject(pContext, 0, pContext, &pResolved);
 
-    if (pResolved && IsClipHandleOrCIHNone(pResolved))
+    if (pResolved && pResolved->isCIH())
     {
         // The cloned node lives in its display-list parent's child display list
         // (the sprite-base instance's embedded AptDisplayList, console offset +0x1C);
@@ -536,14 +525,8 @@ extern void GetBoundingRectClamped(const AptCIH* pThis, float* pOutRect);   // s
 
    // (*dword_8324E8A4)
 
-// Local: the X360 hitTest receiver/arg type gate -- value type 12 (CharacterInst
-// handle) OR 37 (CIHNone), WITHOUT the defined bit (the asm tests only meValueType,
-// unlike IsClipHandleOrCIHNone). A defined-or-not clip handle / none counts.
-static inline bool IsClipHandleOrCIHNoneAnyState(const AptValue* pValue)
-{
-    const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();
-    return eType == AptVFT_CharacterInstHandle || eType == AptVFT_CIHNone;
-}
+// The hitTest target gate is AptValue::isCIH(true): value type 12 (CharacterInst
+// handle) OR 37 (CIHNone), WITHOUT the defined bit (the asm tests only meValueType).
 
 // ===========================================================================
 // sMethod_hitTest @0x82AED730 -- AS hitTest(): two overloads.
@@ -560,7 +543,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_hitTest(AptValue* pContext, int nA
     {
         AptValue* const pTarget = gppAptNativeArgStack[gnAptNativeArgCount - 1];   // arg 0: the other clip
         nResult = 0;
-        if (IsClipHandleOrCIHNoneAnyState(pTarget))
+        if (pTarget->isCIH(true))
         {
             float fThis[4];     // this node's world AABB (left,top,right,bottom)
             float fTarget[4];   // the target's world AABB
@@ -839,8 +822,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_swapDepths(AptValue* pContext, int
     AptCIH* const pNode = static_cast<AptCIH*>(pContext);
 
     // With more than one argument the receiver itself must be a clip handle / CIHNone
-    // (X360: a2 != 1 gates on IsClipHandleOrCIHNone(this) -- when it is, bail).
-    if (nArgCount != 1 && IsClipHandleOrCIHNone(pContext))
+    // (X360: a2 != 1 gates on isCIH() of this -- when it is, bail).
+    if (nArgCount != 1 && pContext->isCIH())
         return gpUndefinedValue;
 
     AptValue* const pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];   // arg 0: the swap target
@@ -854,7 +837,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_swapDepths(AptValue* pContext, int
     AptCIH* pTarget = 0;   // the resolved node to swap with (X360 v29)
     AptCIH* pPrevSlot = 0; // findInst's insert-after out (X360 v31 scratch)
 
-    if (IsClipHandleOrCIHNone(pArg))
+    if (pArg->isCIH())
     {
         // Directly a (defined) clip handle / CIHNone -> it IS the target node.
         pTarget = static_cast<AptCIH*>(pArg);
@@ -920,14 +903,14 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_getBytesTotal(AptValue* pContext, 
     // Build the source .apt path: only a live animation node (tag 9) has one, held
     // in its AptCharacterAnimationInst::mAnimationFilePtr's AptFile::mFileName.
     EAStringC lFilePath;
-    if (IsClipHandleOrCIHNone(pNode) && pInst->GetTypeTag() == 9)
+    if (pNode->isCIH() && pInst->GetTypeTag() == 9)
     {
         AptCharacterAnimationInst* const pAnim = static_cast<AptCharacterAnimationInst*>(pInst);
         lFilePath += pAnim->mAnimationFilePtr.pData->mFileName;
     }
 
     float fBytesTotal = 0.0f;
-    if (IsClipHandleOrCIHNone(pNode) && pInst->GetTypeTag() == 9)
+    if (pNode->isCIH() && pInst->GetTypeTag() == 9)
         fBytesTotal = static_cast<float>(gAptFuncs.pfnGetBytesTotal(
             lFilePath.GetBuffer(), static_cast<AptGetBytesEnum>(0)));
 
@@ -965,7 +948,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_createEmptyMovieClip(AptValue* pCo
         0, AptCharacterHelper::spDefaultMovieCharacter,
         nDepth + 0x4000, &lName, 0);
 
-    if (IsClipHandleOrCIHNone(pInserted))
+    if (pInserted->isCIH())
         static_cast<AptCharacterSpriteInstBase*>(pInserted->GetCharacterInst())->SetCreatedDynamic(true);
 
     return pInserted;

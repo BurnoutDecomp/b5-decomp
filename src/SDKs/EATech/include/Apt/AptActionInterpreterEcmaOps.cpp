@@ -31,17 +31,6 @@ extern AptValue*    gpUndefinedValue;
 extern unsigned int AptGetSwfVersion();
 extern int gnAptSwfVersion;
 
-namespace
-{
-    // A defined string-typed value (meValueType 1 = AptVFT_StringValue, or the boxed
-    // tag 33). Both opcodes branch on this.
-    inline bool IsDefinedString(const AptValue* p)
-    {
-        const AptVirtualFunctionTable_Indices e = p->getVtblIndex();
-        return (e == AptVFT_StringValue || e == static_cast<AptVirtualFunctionTable_Indices>(33))
-            && p->getIsDefined();
-    }
-}
 
 // ---------------------------------------------------------------------------
 // StringEquals @0x82AE9898 (0x13) -- push AptBoolean(toString(top) == toString(under)).
@@ -101,7 +90,7 @@ void AptActionInterpreter::_FunctionAptActionAdd2(AptActionInterpreter* pInterp,
     AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     AptValue* pResult;
-    if (IsDefinedString(pTop) || IsDefinedString(pUnder))
+    if (pTop->isString() || pUnder->isString())
     {
         // String concatenation: under ++ top.
         AptString* pStr = AptString::Create("");

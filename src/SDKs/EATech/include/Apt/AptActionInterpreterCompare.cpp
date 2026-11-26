@@ -56,12 +56,6 @@ namespace
         return true;
     }
 
-    inline bool IsDefinedString(const AptValue* pV)
-    {
-        AptVirtualFunctionTable_Indices t = pV->getVtblIndex();
-        return (t == AptVFT_StringValue || t == AptVFT_StringObject) && pV->getIsDefined();
-    }
-
     // The shared two-operand collapse: release the operands, push the result (AddRef).
     inline void CollapseTwo(AptActionInterpreter* pInterp, AptValue* pResult)
     {
@@ -256,7 +250,7 @@ void AptActionInterpreter::_FunctionAptActionGreater(AptActionInterpreter* pInte
     AptValue* pResult = gpUndefinedValue;
     if (ShouldCompute(pTop, pUnder))
     {
-        if (IsDefinedString(pTop) && IsDefinedString(pUnder))
+        if (pTop->isString() && pUnder->isString())
         {
             // Lexical: strcmp(top, under) < 0  <=>  under > top.
             const char* sTop   = pTop->c_string()->GetInternalString()->GetBuffer();
@@ -292,7 +286,7 @@ void AptActionInterpreter::_FunctionAptActionLessThan2(AptActionInterpreter* pIn
     AptValue* pResult = gpUndefinedValue;
     if (ShouldCompute(pTop, pUnder))
     {
-        if (IsDefinedString(pTop) && IsDefinedString(pUnder))
+        if (pTop->isString() && pUnder->isString())
         {
             // Lexical: strcmp(under, top) < 0  <=>  under < top.
             const char* sUnder = pUnder->c_string()->GetInternalString()->GetBuffer();

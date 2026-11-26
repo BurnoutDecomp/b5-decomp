@@ -115,6 +115,13 @@ struct cColour8
     void Lerp(cColour8 aC0, cColour8 aC1, u8 auWeight);
 };
 
+// The 1/255 colour-unpack scale (0x3B808081, the image's float, slightly above the true 1/255).
+// ARTIST holds it once, as the dynamically initialised splat unk_82FAC100 (CRT thunk 0x82C4A110
+// from flt_82010C1C), and both cParticleBehaviour::Build (ParticleBehaviour.cpp) and the
+// emitter's colour steps (ParticleEmitter.cpp) read that one object: one definition for the
+// Lion unity TU, here in the header both include.
+const f32 KF_COLOUR_U8_TO_UNIT = 0.003921568859368563f;   // 0x3B808081
+
 // Opaque Lion types this TU only references by pointer.
 class cParticleWaveForm;            // wave-form sub-object (modulates a channel)
 class cLionParticleEffectManager;   // owns wave-form allocation pool

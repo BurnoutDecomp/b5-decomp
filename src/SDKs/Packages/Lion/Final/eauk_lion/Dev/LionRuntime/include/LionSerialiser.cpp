@@ -24,10 +24,6 @@ const char* const KPC_SERIALISER_FILE =
     "d:\\p4\\b5_main\\burnout\\main\\code\\sdks\\packages\\lion\\final\\eauk_lion\\dev\\lionruntime\\include/LionSerialiser.cpp";
 const char* const KPC_SERIALISER_TAG_NAME = "cLionSerialiser::Alloc::Data";
 
-const u32 KU_TAG_NAME = 1;
-const u32 KU_TAG_FILE = 5;
-const u32 KU_TAG_LINE = 6;
-
 // `v5[1] = 70` in the pseudocode -- the source line the allocation is stamped with.
 const s32 KI_LINE_ALLOC = 70;
 }  // namespace

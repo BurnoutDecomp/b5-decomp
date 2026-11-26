@@ -28,13 +28,9 @@ namespace
 {
 // The X360 build tags the behaviour allocation with a (line, file, name) TagValuePair
 // chain -- LINE(6)->FILE(5)->NAME(1), head = LINE, matching the sibling pool managers.
-const char* const KPC_MANAGER_FILE =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\sdks\\packages\\lion\\final\\eauk_lion\\dev\\lionruntime\\include/LionParticleEffectManager.cpp";
+// The file hint is __FILE__ (ARTIST: "d:\p4\b5_main\burnout\main\code\sdks\packages\lion\final\eauk_lion\dev\lionruntime\include/LionParticleEffectManager.cpp",
+// Lion_Unity's include form).
 const char* const KPC_TAG_NAME_BEHAVIOUR = "Lion::ParticleEffect::cParticleBehaviour::";
-
-const u32 KU_TAG_NAME = 1;
-const u32 KU_TAG_FILE = 5;
-const u32 KU_TAG_LINE = 6;
 
 // Source line the X360 build stamps onto the behaviour allocation (tag-6 value 0x170).
 const s32 KI_LINE_BEHAVIOUR = 368;
@@ -50,7 +46,7 @@ const u32 KU_DESC_FLAG_SKIP_AUTO_EMITTER = 0x8000;
 cParticleBehaviour* cLionParticleEffectManager::CreateBehaviour()
 {
     EA::TagValuePair lLine(KU_TAG_LINE, KI_LINE_BEHAVIOUR);
-    EA::TagValuePair lFile(KU_TAG_FILE, static_cast<const void*>(KPC_MANAGER_FILE));
+    EA::TagValuePair lFile(KU_TAG_FILE, static_cast<const void*>(__FILE__));
     EA::TagValuePair lName(KU_TAG_NAME, static_cast<const void*>(KPC_TAG_NAME_BEHAVIOUR));
     return static_cast<cParticleBehaviour*>(
         mpAllocator->Alloc(sizeof(cParticleBehaviour), lLine + lFile + lName));

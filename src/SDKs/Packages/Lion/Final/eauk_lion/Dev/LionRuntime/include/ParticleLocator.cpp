@@ -21,14 +21,6 @@
 
 namespace
 {
-    inline void SetVec(cVector& arV, f32 aX, f32 aY, f32 aZ, f32 aW)
-    {
-        arV.x = aX;
-        arV.y = aY;
-        arV.z = aZ;
-        arV.w = aW;
-    }
-
     inline void SetQuat(cQuat& arQ, f32 aX, f32 aY, f32 aZ, f32 aW)
     {
         arQ.x = aX;
@@ -54,11 +46,11 @@ namespace
 // ----------------------------------------------------------------------------
 void cParticleLocator::Init()
 {
-    SetVec(mMat.xa, 1.0f, 0.0f, 0.0f, 0.0f);
-    SetVec(mMat.ya, 0.0f, 1.0f, 0.0f, 0.0f);
-    SetVec(mMat.za, 0.0f, 0.0f, 1.0f, 0.0f);
-    SetVec(mMat.wa, 0.0f, 0.0f, 0.0f, 1.0f);
-    SetVec(mVel,    0.0f, 0.0f, 0.0f, 0.0f);
+    mMat.xa.Set(1.0f, 0.0f, 0.0f, 0.0f);
+    mMat.ya.Set(0.0f, 1.0f, 0.0f, 0.0f);
+    mMat.za.Set(0.0f, 0.0f, 1.0f, 0.0f);
+    mMat.wa.Set(0.0f, 0.0f, 0.0f, 1.0f);
+    mVel.Set(0.0f, 0.0f, 0.0f, 0.0f);
 
     mTime.BuildZero();
     mIndex = 0;
@@ -69,7 +61,7 @@ void cParticleLocator::Init()
     {
         SetQuat(mCacheQuat[luKey], 0.0f, 0.0f, 0.0f, 1.0f);
         mCacheTime[luKey].BuildZero();
-        SetVec(mCachePos[luKey], 0.0f, 0.0f, 0.0f, 0.0f);
+        mCachePos[luKey].Set(0.0f, 0.0f, 0.0f, 0.0f);
     }
 }
 

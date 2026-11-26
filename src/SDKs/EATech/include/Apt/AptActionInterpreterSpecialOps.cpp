@@ -166,18 +166,8 @@ void AptActionInterpreter::_FunctionAptActionReturn(AptActionInterpreter* /*pInt
 // are no-ops on it. (Console: (mTypeFlags & 0xFC000000) == 0x3C000000.)
 static const uint32_t KU_TYPETAG_LEVEL = 15u;
 
-// ---------------------------------------------------------------------------
-// Local: the X360 "defined movie-clip handle, or a CIHNone" predicate that gates
-// the timeline ops -- `type == AptVFT_CharacterInstHandle && isDefined` or
-// `type == AptVFT_CIHNone`. (Console: the low 7 bits of the AptValue bitfield word
-// hold the value type, bit 27 the defined flag; modelled through the named accessors.)
-// ---------------------------------------------------------------------------
-static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
-{
-    const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();
-    return (eType == AptVFT_CharacterInstHandle && pValue->getIsDefined())
-        || eType == AptVFT_CIHNone;
-}
+// The timeline ops gate on AptValue::isCIH(): a defined movie-clip handle
+// (AptVFT_CharacterInstHandle) or a CIHNone.
 
 // AptCIH::jumpToFrame (the play-head seek) and AptActionInterpreter::valueToObject
 // @0x82B07FB8 are homed members (AptCIHNativeFunctionHelper.cpp /
@@ -249,9 +239,9 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame(AptActionInterpreter* pIn
     // Pick the target node: the current-target slot when it is a clip / CIHNone,
     // otherwise the run scope.
     AptCIH* pNode = 0;
-    if (pContext->mpPendingReleaseValue && IsClipHandleOrCIHNone(pContext->mpPendingReleaseValue))
+    if (pContext->mpPendingReleaseValue && pContext->mpPendingReleaseValue->isCIH())
         pNode = static_cast<AptCIH*>(pContext->mpPendingReleaseValue);
-    else if (IsClipHandleOrCIHNone(pContext->mpCIH))
+    else if (pContext->mpCIH->isCIH())
         pNode = pContext->mpCIH;
 
     if (pNode && pNode->getVtblIndex() != AptVFT_None)
@@ -316,13 +306,13 @@ void AptActionInterpreter::_FunctionAptActionPlay(AptActionInterpreter* /*pInter
         return;
 
     AptValue* const pTarget = pContext->mpPendingReleaseValue;
-    if (pTarget && IsClipHandleOrCIHNone(pTarget))
+    if (pTarget && pTarget->isCIH())
     {
         AptCIH* const pTargetNode = static_cast<AptCIH*>(pTarget);
         static_cast<AptCharacterSpriteInstBase*>(pTargetNode->GetCharacterInst())->mbIsPlaying = 1;
         pTargetNode->SetDirtyState(true, true);
     }
-    else if (IsClipHandleOrCIHNone(pNode))
+    else if (pNode->isCIH())
     {
         static_cast<AptCharacterSpriteInstBase*>(pInst)->mbIsPlaying = 1;
         pNode->SetDirtyState(true, true);
@@ -383,7 +373,7 @@ void AptActionInterpreter::_FunctionAptActionRemoveSprite(AptActionInterpreter* 
         AptValue* pResolved = 0;
         pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                            pTop, &pResolved);   // homed member (InterpHelpers.cpp)
-        if (pResolved && IsClipHandleOrCIHNone(pResolved))
+        if (pResolved && pResolved->isCIH())
         {
             // The cloned node lives in its display-list parent's child display list
             // (the parent sprite instance's embedded AptDisplayList, console +0x1C);
@@ -590,7 +580,7 @@ void AptActionInterpreter::_FunctionAptActionTargetPath(AptActionInterpreter* pI
     if (pResolved)
     {
         EAStringC scratch;
-        if (IsClipHandleOrCIHNone(pResolved))
+        if (pResolved->isCIH())
         {
             pInterp->getName(pResolved, &scratch);   // the slash/dot path of the node
         }

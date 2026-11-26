@@ -103,3 +103,11 @@ struct IAllocator
 
 }  // namespace Allocator
 }  // namespace EA
+
+// Tag ids of the allocation hints the Lion runtime chains into Alloc: the debug name, the
+// source file and the source line (ARTIST loads them as immediates, e.g. cLionBlockAlloc::Init
+// 0x8290A8C8/0x8290A8D8/0x8290A8E0: li 6 / li 5 / li 1). Defined once here: the Lion runtime is
+// one unity TU (Lion_Unity.cpp) whose members share them.
+const u32 KU_TAG_NAME = 1;
+const u32 KU_TAG_FILE = 5;
+const u32 KU_TAG_LINE = 6;

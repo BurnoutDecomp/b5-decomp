@@ -16,11 +16,6 @@ const char* const KPC_BLOCKALLOC_FILE =
     "d:\\p4\\b5_main\\burnout\\main\\code\\sdks\\packages\\lion\\final\\eauk_lion\\dev\\lionruntime\\include/LionBlockAlloc.cpp";
 const char* const KPC_BLOCKALLOC_BITS = "cLionBlockAlloc::bits::";
 const char* const KPC_BLOCKALLOC_DATA = "cLionBlockAlloc::data::";
-
-// Tag ids used by the chain (matching the X360 TagValuePair construction order).
-const u32 KU_TAG_NAME = 1;
-const u32 KU_TAG_FILE = 5;
-const u32 KU_TAG_LINE = 6;
 }  // namespace
 
 void cLionBlockAlloc::Init(EA::Allocator::ITaggedAllocator* apAllocator, u32 aItemSize, u32 aItemCount)

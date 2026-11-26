@@ -27,10 +27,6 @@ const char* const KPC_SMALLALLOC_FILE =
     "d:\\p4\\b5_main\\burnout\\main\\code\\sdks\\packages\\lion\\final\\eauk_lion\\dev\\lionruntime\\include/LionSmallAlloc.cpp";
 const char* const KPC_SMALLALLOC_PAGE = "LionSmallAlloc::PageCreate::";
 
-const u32 KU_TAG_NAME = 1;
-const u32 KU_TAG_FILE = 5;
-const u32 KU_TAG_LINE = 6;
-
 // The largest free block carved per pass and the per-page bin index it lands in.
 const u32 KU_MAX_BLOCK   = 0xFE;   // 254 bytes
 const u32 KU_SPLIT_LIMIT = 0x106;  // 262: above this, carve another full 254-byte block

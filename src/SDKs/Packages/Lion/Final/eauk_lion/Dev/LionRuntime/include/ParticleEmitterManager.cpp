@@ -27,13 +27,9 @@ namespace
 {
 // The X360 build tags the emitter-pool allocation with a (line, file, name) TagValuePair
 // chain -- LINE(6)->FILE(5)->NAME(1), head = LINE, matching the sibling pool managers.
-const char* const KPC_MANAGER_FILE =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\sdks\\packages\\lion\\final\\eauk_lion\\dev\\lionruntime\\include/ParticleEmitterManager.cpp";
+// The file hint is __FILE__ (ARTIST: "d:\p4\b5_main\burnout\main\code\sdks\packages\lion\final\eauk_lion\dev\lionruntime\include/ParticleEmitterManager.cpp",
+// Lion_Unity's include form).
 const char* const KPC_TAG_NAME_EMITTER = "Lion::Emitter::";
-
-const u32 KU_TAG_NAME = 1;
-const u32 KU_TAG_FILE = 5;
-const u32 KU_TAG_LINE = 6;
 
 // Source line the X360 build stamps onto the emitter-array allocation (tag-6 value 0x2F).
 const s32 KI_LINE_EMITTERS = 47;
@@ -59,7 +55,7 @@ void cParticleEmitterManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocat
 
     // Allocate the emitter array (X360 mulli by 0x2D0 == sizeof(cParticleEmitter)).
     EA::TagValuePair lLine(KU_TAG_LINE, KI_LINE_EMITTERS);
-    EA::TagValuePair lFile(KU_TAG_FILE, static_cast<const void*>(KPC_MANAGER_FILE));
+    EA::TagValuePair lFile(KU_TAG_FILE, static_cast<const void*>(__FILE__));
     EA::TagValuePair lName(KU_TAG_NAME, static_cast<const void*>(KPC_TAG_NAME_EMITTER));
     mpEmitters = static_cast<cParticleEmitter*>(mpAllocator->Alloc(
         static_cast<size_t>(aEmitterCount) * sizeof(cParticleEmitter),

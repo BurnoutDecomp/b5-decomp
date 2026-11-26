@@ -1,0 +1,36 @@
+// BrnNetworkMessageUnity: one of ARTIST's unity translation units (DWARF compile unit BrnNetworkMessageUnity.cpp),
+// ARTIST 0x82579CC8-0x82580760. Each member also compiles on its own; this file holds only their includes.
+// Include form: as ARTIST's other unity TUs' __FILE__ strings show (relative to this directory).
+// Order: ARTIST's emission passes over the range (MSVC emits bottom-up over the call graph, each
+// level in definition order: 60/65 transitions forward); first member from GCC's _GLOBAL__I_BrnNetwork::UpdateMessage::Construct (DecFIGS).
+
+#include "../Network/Messages/BrnUpdateMessage.cpp"
+#include "../Network/Messages/BrnPlayerFinishedRoundMessage.cpp"
+#include "../Network/Messages/BrnHullSyncMessage.cpp"
+#include "../Network/Messages/BrnTrafficHashMessage.cpp"
+#include "../Network/Messages/BrnCarSelectMessage.cpp"
+#include "../Network/Messages/BrnCrashingTrafficMessage.cpp"
+#include "../Network/Messages/BrnAggressiveDrivingMessage.cpp"
+#include "../Network/Messages/BrnDirtyTrickMessage.cpp"
+#include "../Network/Messages/BrnCameraStatusMessage.cpp"
+#include "../Network/Messages/BrnCameraRequestMessage.cpp"
+#include "../Network/Messages/BrnCameraRequestResponseMessage.cpp"
+#include "../Network/Messages/BrnSelectedRoutesMessage.cpp"
+#include "../Network/Messages/BrnLiveRevengeSyncMessage.cpp"
+#include "../Network/Messages/BrnMarkedManMessage.cpp"
+#include "../Network/Messages/BrnRoadRulesMessage.cpp"
+#include "../Network/Messages/BrnRoadRulesPersonalBestMessage.cpp"
+#include "../Network/Messages/BrnRestartTrafficMessage.cpp"
+#include "../Network/Messages/BrnCollectableMessage.cpp"
+#include "../Network/Messages/BrnImageMessage.cpp"
+#include "../Network/Messages/BrnBurningHomeRunSwitchRunnerMessage.cpp"
+#include "../Network/Messages/BrnBurnoutSkillzMessage.cpp"
+#include "../Network/Messages/BrnShowtimeUpdateMessage.cpp"
+#include "../Network/Messages/BrnShowtimeSwitchMessage.cpp"
+#include "../Network/Messages/BrnFreeburnChallengeMessage.cpp"
+#include "../Network/Messages/BrnFburnChallengeStatusMessage.cpp"
+#include "../Network/Messages/BrnFburnSuccessUpdateMessage.cpp"
+#include "../Network/Messages/BrnFburnChallengeSuccessMessage.cpp"
+#include "../Network/Messages/BrnActiveFburnChallengeMessage.cpp"
+#include "../Network/Messages/BrnCheckpointTriggeredMessage.cpp"
+#include "../Network/Messages/BrnStatsUpdateMessage.cpp"

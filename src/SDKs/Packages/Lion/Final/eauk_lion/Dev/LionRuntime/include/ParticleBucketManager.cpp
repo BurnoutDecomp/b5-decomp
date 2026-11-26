@@ -22,16 +22,11 @@
 namespace
 {
 // The X360 build tags every Lion allocation with a (line, file, name) TagValuePair chain.
-const char* const KPC_MANAGER_FILE =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\sdks\\packages\\lion\\final\\eauk_lion\\dev\\lionruntime\\include/ParticleBucketManager.cpp";
+// The file hint is __FILE__ (ARTIST: "d:\p4\b5_main\burnout\main\code\sdks\packages\lion\final\eauk_lion\dev\lionruntime\include/ParticleBucketManager.cpp",
+// Lion_Unity's include form).
 const char* const KPC_TAG_NAME_BUCKETS  = "Lion::Buckets::";
 const char* const KPC_TAG_NAME_MATRICES = "Lion::Matrices::";
 const char* const KPC_TAG_NAME_VECBITS  = "Lion::VectorBucketActiveBits::";
-
-// Tag ids used by the chain (matching the X360 TagValuePair construction order).
-const u32 KU_TAG_NAME = 1;
-const u32 KU_TAG_FILE = 5;
-const u32 KU_TAG_LINE = 6;
 
 // Source lines the X360 build stamps onto each allocation (the tag-6 values 0x25/0x26/0x3C).
 const s32 KI_LINE_BUCKETS  = 37;
@@ -61,7 +56,7 @@ void cParticleBucketManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocato
 
     // The bucket array (stride == sizeof(cParticleBucket); X360 mulli by 0xE70).
     EA::TagValuePair lBucketsLine(KU_TAG_LINE, KI_LINE_BUCKETS);
-    EA::TagValuePair lBucketsFile(KU_TAG_FILE, static_cast<const void*>(KPC_MANAGER_FILE));
+    EA::TagValuePair lBucketsFile(KU_TAG_FILE, static_cast<const void*>(__FILE__));
     EA::TagValuePair lBucketsName(KU_TAG_NAME, static_cast<const void*>(KPC_TAG_NAME_BUCKETS));
     mpBuckets = static_cast<cParticleBucket*>(mpAllocator->Alloc(
         static_cast<size_t>(mBucketCount) * sizeof(cParticleBucket),
@@ -70,7 +65,7 @@ void cParticleBucketManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocato
     // The shared side-data pool (sized for mMatrixBucketCount matrix buckets == 1024B each;
     // VectorBucketAlloc re-carves it as 4x that many 256B vector buckets).
     EA::TagValuePair lMatricesLine(KU_TAG_LINE, KI_LINE_MATRICES);
-    EA::TagValuePair lMatricesFile(KU_TAG_FILE, static_cast<const void*>(KPC_MANAGER_FILE));
+    EA::TagValuePair lMatricesFile(KU_TAG_FILE, static_cast<const void*>(__FILE__));
     EA::TagValuePair lMatricesName(KU_TAG_NAME, static_cast<const void*>(KPC_TAG_NAME_MATRICES));
     mpMatrices = static_cast<cMatrix*>(mpAllocator->Alloc(
         static_cast<size_t>(mMatrixBucketCount) * KU_MATRIX_BUCKET_STRIDE,
@@ -105,7 +100,7 @@ void cParticleBucketManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocato
     mVectorChunkCount  = (mVectorBucketCount + 31u) >> 5;
 
     EA::TagValuePair lBitsLine(KU_TAG_LINE, KI_LINE_VECBITS);
-    EA::TagValuePair lBitsFile(KU_TAG_FILE, static_cast<const void*>(KPC_MANAGER_FILE));
+    EA::TagValuePair lBitsFile(KU_TAG_FILE, static_cast<const void*>(__FILE__));
     EA::TagValuePair lBitsName(KU_TAG_NAME, static_cast<const void*>(KPC_TAG_NAME_VECBITS));
     mpVectorBucketActiveBits = static_cast<u32*>(mpAllocator->Alloc(
         static_cast<size_t>(mVectorChunkCount) * sizeof(u32),
