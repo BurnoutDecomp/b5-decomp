@@ -166,8 +166,20 @@ namespace CgsSceneManager
         void SetInvalid()    { muId = KU_INVALID_ID; }
         bool IsValid() const { return muId != KU_INVALID_ID; }
 
+        // DWARF CgsVolumeInstanceId.h:121 / :122 / :123 declare the two constructors and the
+        // conversion to uint64_t; LegacySrc (same header, :125..:127) gives their bodies.
+        VolumeInstanceId() {}
+        VolumeInstanceId(u64 lId) { muId = lId; }
+        operator u64() const { return muId; }
+
         u64 muId;
     };
+
+    // DWARF CgsVolumeInstanceId.h:152 `const VolumeInstanceId K_INVALID_VOLUME_INSTANCE_ID` (a
+    // per-TU object; LegacySrc :146 initialises it from all-ones through the uint64_t constructor).
+    // ARTIST loads it from the including TU's data, e.g. 0x82F2FDF0 = FFFFFFFF FFFFFFFF, read by
+    // VehicleInputInterface::CreateArticulatedTraffic 0x8271C9F8 / 0x8271CD28.
+    static const VolumeInstanceId K_INVALID_VOLUME_INSTANCE_ID = 0xFFFFFFFFFFFFFFFFull;
 }
 
 // KeyBits overload for the CgsContainers::IndexedHashTable<VolumeInstanceId,...> instantiation

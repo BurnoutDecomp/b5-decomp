@@ -155,7 +155,7 @@ namespace Vehicle
             CgsID lCgsId_Trailer,
             ETrafficType leTrafficType)
     {
-        CGS_ASSERT_AT(lVolumeInstanceId_Cab.muId != VolumeInstanceId::KU_INVALID_ID,
+        CGS_ASSERT_AT(lVolumeInstanceId_Cab != CgsSceneManager::K_INVALID_VOLUME_INSTANCE_ID,
                    "lVolumeInstanceID_Cab != CgsSceneManager::K_INVALID_VOLUME_INSTANCE_ID", KAC_BRNVEHICLEINPUTINTERFACE_H, 525);
         CGS_ASSERT_AT(rw::math::vpu::IsValid(lInitialTransform_Cab),
                    "RwMathVPU::IsValid( lInitialTransform_Cab )", KAC_BRNVEHICLEINPUTINTERFACE_H, 526);
@@ -165,7 +165,7 @@ namespace Vehicle
                    "RwMathVPU::IsValid( lAngularVelocity_Cab )", KAC_BRNVEHICLEINPUTINTERFACE_H, 528);
         CGS_ASSERT_AT(lCgsId_Cab != 0, "lCgsId_Cab != kCGSID_NULL", KAC_BRNVEHICLEINPUTINTERFACE_H, 529);
 
-        CGS_ASSERT_AT(lVolumeInstanceId_Trailer.muId != VolumeInstanceId::KU_INVALID_ID,
+        CGS_ASSERT_AT(lVolumeInstanceId_Trailer != CgsSceneManager::K_INVALID_VOLUME_INSTANCE_ID,
                    "lVolumeInstanceID_Trailer != CgsSceneManager::K_INVALID_VOLUME_INSTANCE_ID", KAC_BRNVEHICLEINPUTINTERFACE_H, 530);
         CGS_ASSERT_AT(rw::math::vpu::IsValid(lInitialTransform_Trailer),
                    "RwMathVPU::IsValid( lInitialTransform_Trailer )", KAC_BRNVEHICLEINPUTINTERFACE_H, 531);
