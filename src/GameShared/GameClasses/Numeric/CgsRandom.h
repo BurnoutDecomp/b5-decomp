@@ -253,6 +253,19 @@ private:
 // ARTIST 0x8271B18C uses signed bounds and an unsigned modulo of the old seed's
 // high word. The diagnostics use the CgsRandom.h filename at 0x82001F94.
 #define CGS_ARTIST_CGSRANDOM_FILE "..\\..\\..\\GameShared\\GameClasses\\Numeric/CgsRandom.h"
+// DWARF CgsRandom.h:48 declares it in the class; ARTIST has no out-of-line copy and every site
+// expands it with the one assert "luMod > 0" on CgsRandom.h:303 (CheckForForcedDetachment 0x8263AE64,
+// UpdateSpinningDetachment 0x8263AAE0, SelectionHistory::FindRandomOldest 0x82702974, SelectRoutes::
+// GenerateRandomStartPoint 0x82433AE4): the definition sits in the header, below the class. The
+// call sites and the arithmetic are documented in CgsRandom.cpp.
+inline u32 Random::RandomUInt(u32 luMin, u32 luMax)
+{
+    const u32 luMod = luMax - luMin + 1u;
+    CGS_ASSERT_AT(luMod > 0u, "luMod > 0", CGS_ARTIST_CGSRANDOM_FILE, 303);
+
+    return luMin + (RandomUInt() % luMod);
+}
+
 __forceinline s32 Random::RandomInt(s32 liMin, s32 liMax)
 {
     CGS_ASSERT_AT(liMax >= liMin, "liMax >= liMin", CGS_ARTIST_CGSRANDOM_FILE, 320);

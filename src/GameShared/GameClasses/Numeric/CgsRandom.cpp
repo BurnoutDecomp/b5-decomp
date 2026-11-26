@@ -61,13 +61,7 @@ namespace CgsNumeric
     // and luMod == 0 traps on the console (`twi 6, luMod, 0` after the assert, e.g. 0x827029A8).
     // ⚠️ THE OLD BODY reduced by (max - min), one short, so luMax was never drawn, and returned luMin
     // WITHOUT stepping the seed when the two were equal.
-    u32 Random::RandomUInt(u32 luMin, u32 luMax)
-    {
-        const u32 luMod = luMax - luMin + 1u;
-        CGS_ASSERT(luMod > 0u, "luMod > 0");
-
-        return luMin + (RandomUInt() % luMod);
-    }
+    // The body is header-inline (CgsRandom.h, after the class): ARTIST has no out-of-line copy.
 
     // ========================================================================
     // THE TWO BOUNDED FLOAT DRAWS.
