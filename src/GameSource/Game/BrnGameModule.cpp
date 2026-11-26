@@ -1,6 +1,3 @@
-#if defined(_XBOX) && defined(_MSC_VER)
-#pragma auto_inline(off)
-#endif
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp"
 #include <xtl.h>
 #include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
@@ -3473,15 +3470,41 @@ namespace BrnGame
         return true;
     }
 
-    // @ BrnGameModule.cpp:3872 - debug helper: fill liNumBytes at lpDest with the repeating
-    // 32-bit pattern luValue (head/tail handled byte-wise). Used by DebugMemoryInit to stamp
-    // freed module memory with a marker value.
-    void BrnGameModule::DebugSetMemoryToInt(void* lpDest, s32 liNumBytes, u32 luValue)
+    // @ BrnGameModule.cpp:3872 (ARTIST 0x823A8E28) - debug helper: fill liLength bytes at lpStart
+    // with the repeating 32-bit pattern luValue. DWARF locals lpcStart / lacValue / liIndex
+    // (cpp:3874..3876); the PS3 body (0x2DA2F4) and ARTIST share the shape: byte stores until the
+    // pointer is word-aligned, then liLength / 4 word stores, then the liLength & 3 tail bytes, each
+    // byte taken from lacValue by the pointer's low two bits. lacValue holds luValue low byte first
+    // (ARTIST 0x823A8E2C..0x823A8E4C: stb r5, then >>8, >>16, >>24).
+    void BrnGameModule::DebugSetMemoryToInt(void* lpStart, int32_t liLength, uint32_t luValue)
     {
-        u8*       lpByte = static_cast<u8*>(lpDest);
-        const u8* lpPattern = reinterpret_cast<const u8*>(&luValue);
-        for (s32 i = 0; i < liNumBytes; ++i)
-            lpByte[i] = lpPattern[i & 3];
+        unsigned char* lpcStart = static_cast<unsigned char*>(lpStart);
+        unsigned char  lacValue[4];
+        int32_t        liIndex;
+
+        lacValue[0] = static_cast<unsigned char>(luValue);
+        lacValue[1] = static_cast<unsigned char>(luValue >> 8);
+        lacValue[2] = static_cast<unsigned char>(luValue >> 16);
+        lacValue[3] = static_cast<unsigned char>(luValue >> 24);
+
+        while ((reinterpret_cast<int32_t>(lpcStart) & 3) != 0)
+        {
+            *lpcStart = lacValue[reinterpret_cast<int32_t>(lpcStart) & 3];
+            lpcStart++;
+            liLength--;
+        }
+
+        for (liIndex = 0; liIndex < liLength / 4; liIndex++)
+        {
+            *reinterpret_cast<uint32_t*>(lpcStart) = luValue;
+            lpcStart += 4;
+        }
+
+        for (liIndex = (liLength & 3); liIndex > 0; liIndex--)
+        {
+            *lpcStart = lacValue[reinterpret_cast<int32_t>(lpcStart) & 3];
+            lpcStart++;
+        }
     }
 
     // @ BrnGameModule.cpp:1515 - after the GPU vsync wait completes, ask the frame-rate

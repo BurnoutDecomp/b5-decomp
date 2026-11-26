@@ -12,19 +12,6 @@ extern "C" int lua_gettop(lua_State* lpLuaState);
 
 namespace BrnGame
 {
-    // Inlined at ARTIST 0x823C6160..0x823C6174 in LUACBPressButton.
-    LUACallbackHelper::LUACallbackHelper(lua_State* lpLUAHandle)
-    {
-        mpLUAHandle = lpLUAHandle;
-        miNumParams = lua_gettop(lpLUAHandle);
-        miNumResults = 0;
-    }
-
-    s32 LUACallbackHelper::GetNumParams() const
-    {
-        return miNumParams;
-    }
-
     // @ 0x823C0370
     LUACallbackHelper::EArgType LUACallbackHelper::GetParamType(s32 liParamIndex) const
     {

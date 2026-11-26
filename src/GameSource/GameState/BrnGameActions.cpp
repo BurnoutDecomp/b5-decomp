@@ -325,10 +325,10 @@ void OnlineGameResults::Clear()
     miTraitorousTakedownsAgainst = 0;
     miMarkedManTakedownsFor      = 0;
     miNumberOfRounds             = 0;
-    miReserved0x2C               = 0;
-    miReserved0x30               = 0;
+    miNumberOfRoundsPlayed       = 0;
+    miNumberOfPlayers            = 0;
     miEventType                  = -1;
-    miReserved0x38               = 0;
+    mbIsRanked                   = false;
 
     for (s32 liRound = 0; liRound < KI_MAX_ROUNDS; ++liRound)
     {
@@ -397,33 +397,6 @@ void OnlineGameResults::GetStuntResults(s32 liRoundIndex, s32* lpiScore, s32* lp
     *lpiMultiplier = maiRoundStuntMultipliers[liRoundIndex];
 }
 
-// X360 0x82311C30. Copy-assign (the X360 block-copies the 65-word payload, skipping the unused high
-// half of mCarUsed; reconstructed as a faithful full member-wise copy).
-OnlineGameResults& OnlineGameResults::operator=(const OnlineGameResults& lOther)
-{
-    mCarUsed                     = lOther.mCarUsed;
-    mSecondsInEvent              = lOther.mSecondsInEvent;
-    mfMetersDriven               = lOther.mfMetersDriven;
-    miTakedownsFor               = lOther.miTakedownsFor;
-    miTakedownsAgainst           = lOther.miTakedownsAgainst;
-    miTraitorousTakedownsFor     = lOther.miTraitorousTakedownsFor;
-    miTraitorousTakedownsAgainst = lOther.miTraitorousTakedownsAgainst;
-    miMarkedManTakedownsFor      = lOther.miMarkedManTakedownsFor;
-    miNumberOfRounds             = lOther.miNumberOfRounds;
-    miReserved0x2C               = lOther.miReserved0x2C;
-    miReserved0x30               = lOther.miReserved0x30;
-    miEventType                  = lOther.miEventType;
-    miReserved0x38               = lOther.miReserved0x38;
-
-    for (s32 liRound = 0; liRound < KI_MAX_ROUNDS; ++liRound)
-    {
-        maRoundTimes[liRound]             = lOther.maRoundTimes[liRound];
-        mafRoundDistances[liRound]        = lOther.mafRoundDistances[liRound];
-        maiRoundStuntScores[liRound]      = lOther.maiRoundStuntScores[liRound];
-        maiRoundStuntMultipliers[liRound] = lOther.maiRoundStuntMultipliers[liRound];
-    }
-    return *this;
-}
 
 // =============================================================================
 // PrepareForModeAction - the six declared-only SETTERS the mounted event core calls.

@@ -92,11 +92,14 @@ namespace BrnReplays
     // sub-states the call validates but writes nothing and returns 0.
     s32 BaseSerialiser::Write(const void* lpData, s32 liSize)
     {
-        CGS_ASSERT(IsRecording(), "Not recording\n");
-        CGS_ASSERT(mbLocked, "Not locked\n");
-        CGS_ASSERT(mpBuffer != 0, "Buffer not allocated\n");
-        CGS_ASSERT(miBufferSize - miBufferUsed >= liSize,
-                   "Not enough space in buffer\n");
+        CGS_ASSERT_AT(IsRecording(),
+            "Not recording\n", CGS_ARTIST_FILE, 132 /* ARTIST 0x8264C0A8 */);
+        CGS_ASSERT_AT(mbLocked,
+            "Not locked\n", CGS_ARTIST_FILE, 133 /* ARTIST 0x8264C0D0 */);
+        CGS_ASSERT_AT(mpBuffer != 0,
+            "Buffer not allocated\n", CGS_ARTIST_FILE, 134 /* ARTIST 0x8264C0F8 */);
+        CGS_ASSERT_AT(miBufferSize - miBufferUsed >= liSize,
+            "Not enough space in buffer\n", CGS_ARTIST_FILE, 135 /* ARTIST 0x8264C128 */);
 
         if (meMode == E_MODE_RECORDING)
         {

@@ -307,7 +307,7 @@ void ScoringSystem::RemovePlayer(BrnNetwork::NetworkPlayerID lID)
 //     @0x823512AC-B8 loads f3/f2/f1 from 0x60/0x64/0x68 into SetMedalModeTimer, whose own assert
 //     @0x82310958 names f1 "lfGoldTimeLimitSeconds". The stunt target rides the GOLD slot
 //     (StuntAttackMode::Start writes it there).
-//   * Online block (game mode >= 10): miEventType <- leGameMode and miReserved0x30 <- (network-player
+//   * Online block (game mode >= 10): miEventType <- leGameMode and miNumberOfPlayers <- (network-player
 //     count + 1) are reconstructed against named mOnlineGameResults members (the same fields
 //     SaveNetworkRoundData reads back). ARTIST additionally receives the total rounds in r7
 //     and stores that value at +0x4DF8; the target caller and declaration retain this fourth argument.
@@ -359,7 +359,7 @@ void ScoringSystem::OnModeStart(GameStateModuleIO::EGameModeType leGameMode,
         // ARTIST 0x8233823C saves r7; 0x82338300 stores that actual total-round count.
         mOnlineGameResults.miNumberOfRounds = liNumRounds;
         mOnlineGameResults.miEventType    = leGameMode;                       // ASM stw r30,0x4E04
-        mOnlineGameResults.miReserved0x30 = lpParams->miNumNetworkPlayers + 1; // ASM lbz 1(params) / extsb / +1 / stw 0x4E00
+        mOnlineGameResults.miNumberOfPlayers = lpParams->miNumNetworkPlayers + 1; // ASM lbz 1(params) / extsb / +1 / stw 0x4E00
     }
 }
 

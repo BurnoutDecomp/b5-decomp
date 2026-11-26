@@ -5593,7 +5593,7 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
                 CarData* lpLocalCarData = mScoringSystem.GetCarData(lLocalPlayerID);
                 if (lpLocalCarData != NULL)
                 {
-                    lpLocalCarData->SetRoundDisconnected(mScoringSystem.mOnlineGameResults.miReserved0x2C);
+                    lpLocalCarData->SetRoundDisconnected(mScoringSystem.mOnlineGameResults.miNumberOfRoundsPlayed);
                 }
             }
 

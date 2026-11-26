@@ -179,9 +179,13 @@ namespace BrnGameState
     const f32     KF_TIME_RULE_TIMEOUT_PROPORTION = 2.0f;
     const f32     KF_WARNING_TIME_BEFORE_END      = 5.0f;
     const f32     KF_WARNING_SPACING              = 1.0f;
-    // The console reads this one from writable data (value 6, nothing in the image writes it).
-    const int32_t KI_NUM_TIME_WARNINGS            = 6;
     const int32_t KI_DEFAULT_ONLINE_TIME          = 600;
+
+    // Not const in this build: ARTIST keeps it as a writable .data word (0x82CDB888 = 6, among the
+    // unity's other mutable file globals, cf. KF_ROAD_RULE_RESET_TIME 0x82CDB7CC below) and
+    // UpdateTimeRule loads it at run time (0x8235299C lwz). The PS3 DWARF (cpp:55) has the const
+    // form, which MSVC folds to an immediate; the console's load is the merge-window delta.
+    int32_t KI_NUM_TIME_WARNINGS = 6;
 
     // Not const in the original: a mutable global in writable data, initialised to 32.0f, read
     // only by OnStartRule.
@@ -589,7 +593,7 @@ bool RoadRulesManager::UpdateSwitchingRoadRulesOnOrOff(GameStateModuleIO::GameAc
                                                        f32                                                 lfTimeStep,
                                                        bool                                                lbFreeburnActive)
 {
-    const bool lbRoadRulesNotAllowed =
+    bool lbRoadRulesNotAllowed =
         (leGameModeType != GameStateModuleIO::E_MODE_NONE &&
          !GameStateModuleIO::IsOnlineFreeBurnLobby(leGameModeType) &&
          !GameStateModuleIO::IsShowtimeGameMode(leGameModeType)) ||

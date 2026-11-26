@@ -536,8 +536,14 @@ void KeyAnimController::SetParametricTime0To1(f32 lfParametricTime0To1)
                "lfParametricTime0To1 >= 0.0f && lfParametricTime0To1 <= 1.0f", CGS_ARTIST_FILE, 334);          // cpp:334
     CGS_ASSERT_AT(GetLength() > 0.0f, "GetLength() > 0.0f", CGS_ARTIST_FILE, 335);                                // cpp:335
 
-    mfPlaybackTimer = mbReversed ? ((1.0f - lfParametricTime0To1) * GetLength())
-                                 : (GetLength() * lfParametricTime0To1);
+    if (!mbReversed)
+    {
+        mfPlaybackTimer = GetLength() * lfParametricTime0To1;
+    }
+    else
+    {
+        mfPlaybackTimer = (1.0f - lfParametricTime0To1) * GetLength();
+    }
 }
 
 // ============================================================================

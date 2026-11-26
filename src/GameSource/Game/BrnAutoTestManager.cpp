@@ -239,7 +239,7 @@ namespace BrnGame
 
         lrStream << "        <gpumonitor";
         lrStream << " name=\"";
-        lrStream << ((lrData.mpcName != 0) ? lrData.mpcName : "<NULLSTRING>");
+        lrStream << lrData.mpcName;   // operator<<(const char*) supplies "<NULLSTRING>"
         lrStream << "\"";
         lrStream << " currentvalue=\"";
         lrStream << lrData.mfCurrentValue << "\"";
@@ -256,7 +256,7 @@ namespace BrnGame
 
         lrStream << "        <pool";
         lrStream << " name=\"";
-        lrStream << ((lrStats.mpcPoolName != 0) ? lrStats.mpcPoolName : "<NULLSTRING>");
+        lrStream << lrStats.mpcPoolName;   // operator<<(const char*) supplies "<NULLSTRING>" (ARTIST 0x823A9D84)
         lrStream << "\"";
         lrStream << " maxresources=\"";
         lrStream << lrStats.miPoolMaxResources << "\"";

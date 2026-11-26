@@ -89,7 +89,7 @@ void RootInputBuffer::SetVehicleData(
 
 // X360 0x823B80F8 (write-lock; h:186; the IDA-truncated "BrnSou"; phase C3b).
 // The root input's own audio-car-loaded queue @ +0xED50.
-AudioCarLoadedDataQueue* RootInputBuffer::GetAudioCarDataLoadedQueue()
+AudioCarLoadedDataQueue* RootInputBuffer::GetAudioCarLoadedDataQueue()
 {
     CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", CGS_ARTIST_FILE, 186);
     return &mAudioCarDataLoadedQueue;

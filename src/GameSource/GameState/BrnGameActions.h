@@ -2370,7 +2370,6 @@ struct OnlineGameResults : public GameAction<E_ACTION_ONLINE_GAME_RESULT>
     void GetRaceResults(s32 liRoundIndex, CgsSystem::Time* lpRoundTime, f32* lpfRoundDistance) const; // 0x82580C60
     void SetStuntResults(s32 liRoundIndex, s32 liScore, s32 liMultiplier);                  // 0x8230F370
     void GetStuntResults(s32 liRoundIndex, s32* lpiScore, s32* lpiMultiplier) const;        // 0x82580DA8
-    OnlineGameResults& operator=(const OnlineGameResults& lOther);                          // 0x82311C30
 
     // ---- DWARF-confirmed scalar header (0x00..0x24, BrnGameActions.h:5157-5167) ----
     CgsID           mCarUsed;                     // +0x00 (8)  DWARF:5157
@@ -2382,11 +2381,14 @@ struct OnlineGameResults : public GameAction<E_ACTION_ONLINE_GAME_RESULT>
     s32             miTraitorousTakedownsAgainst; // +0x20      DWARF:5165
     s32             miMarkedManTakedownsFor;      // +0x24      DWARF:5167
     // ---- X360-only / behaviour-anchored scalars (PS3 DWARF order diverges past +0x24) ----
-    s32             miNumberOfRounds;             // +0x28  round-count (bounds: "... rounds N")
-    s32             miReserved0x2C;               // +0x2C  zeroed by Clear; name not recoverable
-    s32             miReserved0x30;               // +0x30  zeroed by Clear; name not recoverable
-    s32             miEventType;                  // +0x34  EGameModeType discriminant (Clear -> -1)
-    s32             miReserved0x38;               // +0x38  zeroed by Clear; name not recoverable
+    // +0x28..+0x38 are DWARF's five consecutive members h:5177..5181 (ARTIST keeps them; the
+    // eight counters DWARF declares between miMarkedManTakedownsFor and miNumberOfRounds are not in
+    // this build). mbIsRanked is a bool: Clear `stb` 0x8230F1E0, operator= `lbz/stb` 0x82311C98.
+    s32             miNumberOfRounds;             // +0x28  DWARF:5177 (bounds: "... rounds N")
+    s32             miNumberOfRoundsPlayed;       // +0x2C  DWARF:5178
+    s32             miNumberOfPlayers;            // +0x30  DWARF:5179
+    s32             miEventType;                  // +0x34  DWARF:5180 EGameModeType discriminant (Clear -> -1)
+    bool            mbIsRanked;                   // +0x38  DWARF:5181
     // ---- Per-round arrays (X360 layout; 10 rounds each) ----
     CgsSystem::Time maRoundTimes[KI_MAX_ROUNDS];            // +0x3C (80) race round time
     f32             mafRoundDistances[KI_MAX_ROUNDS];       // +0x8C (40) race round distance

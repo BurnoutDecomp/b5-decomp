@@ -140,12 +140,11 @@ namespace BrnNetwork
 
         u8* lpBytes = GetPayloadBase();
         WirePutS32(lpBytes, 0x0C, GameModeToEvent(lpResults->miEventType));
-        WirePutS32(lpBytes, 0x08, lpResults->miReserved0x30);
+        WirePutS32(lpBytes, 0x08, lpResults->miNumberOfPlayers);
 
-        // The per-entry loop bound comes from OnlineGameResults+0x2C (the committed member at
-        // that offset), which the X360 stores into the GEN count word (+0x04) SerialiseToString
-        // later re-reads.
-        const s32 liEntryCount = lpResults->miReserved0x2C;
+        // The per-entry loop bound is OnlineGameResults::miNumberOfRoundsPlayed (+0x2C), which
+        // the X360 stores into the GEN count word (+0x04) SerialiseToString later re-reads.
+        const s32 liEntryCount = lpResults->miNumberOfRoundsPlayed;
         WirePutS32(lpBytes, 0x04, liEntryCount);
 
         for (s32 liIndex = 0; liIndex < liEntryCount; ++liIndex)

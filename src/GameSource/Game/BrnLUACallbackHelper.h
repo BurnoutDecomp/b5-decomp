@@ -26,6 +26,8 @@ struct lua_State;
 
 extern "C"
 {
+    // lua_gettop(L) -> the number of values on the stack (the callback's argument count).
+    int         lua_gettop(lua_State* lpLuaState);
     // lua_type(L, idx) -> type tag of the value at the stack index (0 == LUA_TNIL,
     // 1 == LUA_TBOOLEAN).
     int         lua_type(lua_State* lpLuaState, int liIndex);
@@ -54,9 +56,22 @@ namespace BrnGame
             E_UNKNOWN = 4,
         };
 
+        // DWARF h:59 / h:62, defined in the class: ARTIST has no out-of-line copy of either and
+        // inlines both at every use (LUACBPressButton 0x823C6160..0x823C6174: mpLUAHandle, then
+        // lua_gettop into miNumParams, then miNumResults = 0).
+        explicit LUACallbackHelper(lua_State* lpLUAHandle)
+        {
+            mpLUAHandle = lpLUAHandle;
+            miNumParams = lua_gettop(lpLUAHandle);
+            miNumResults = 0;
+        }
+
+        s32         GetNumParams() const
+        {
+            return miNumParams;
+        }
+
         // DECLARE-ONLY: bodies for the rest of the class live in other TUs.
-        explicit LUACallbackHelper(lua_State* lpLUAHandle);
-        s32         GetNumParams() const;
         f32         GetFloat32Param(s32 liParamIndex);
 
         // @ 0x823C5D70. Assert the param is a number, then truncate lua_tonumber to s32.

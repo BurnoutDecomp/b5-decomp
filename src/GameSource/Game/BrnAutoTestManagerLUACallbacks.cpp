@@ -32,13 +32,7 @@ namespace BrnGame
         // Inlined LUACallbackHelper(lua_State*): miNumParams = lua_gettop(L), miNumResults = 0.
         LUACallbackHelper lHelper(lpLua);
 
-        if (lHelper.GetNumParams() != 1)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 635));
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_AT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1", CGS_ARTIST_FILE, 635);
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
@@ -60,12 +54,7 @@ namespace BrnGame
     s32 AutoTestManager::LUACBCallDebugFunction(lua_State* lpLua)
     {
         LUACallbackHelper lHelper(lpLua);
-        if (lHelper.GetNumParams() != 1)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 581));
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_AT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1", CGS_ARTIST_FILE, 581);
         gpBurnoutGame->GetDebugManager().CallFunction(lHelper.GetStringParam(0));
         lua_settop(lpLua, 0);
         return 0;
@@ -74,13 +63,10 @@ namespace BrnGame
     s32 AutoTestManager::LUACBRecordLog(lua_State* lpLua)
     {
         LUACallbackHelper lHelper(lpLua);
+        // ARTIST keeps the count in r31 across the assert (0x823C60C8..0x823C6100), not a reload
+        // of lHelper.miNumParams; the local is the tree's baseline shape (78.6), no DWARF local.
         const s32 liNumParams = lHelper.GetNumParams();
-        if (liNumParams > 1)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() <= 1", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 605));
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_AT(liNumParams <= 1, "lHelper.GetNumParams() <= 1", CGS_ARTIST_FILE, 605);
         gpBurnoutGame->mAutoTestManager.DumpGameState(liNumParams ? lHelper.GetStringParam(0) : 0);
         lua_settop(lpLua, 0);
         return 0;
@@ -89,12 +75,7 @@ namespace BrnGame
     s32 AutoTestManager::LUACBAcquirePad(lua_State* lpLua)
     {
         LUACallbackHelper lHelper(lpLua);
-        if (lHelper.GetNumParams() != 0)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 0", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 693));
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_AT(lHelper.GetNumParams() == 0, "lHelper.GetNumParams() == 0", CGS_ARTIST_FILE, 693);
         gpBurnoutGame->mAutoTestManager.mbControlPad = true;
         lua_settop(lpLua, 0);
         return 0;
@@ -103,12 +84,7 @@ namespace BrnGame
     s32 AutoTestManager::LUACBRelinquishPad(lua_State* lpLua)
     {
         LUACallbackHelper lHelper(lpLua);
-        if (lHelper.GetNumParams() != 0)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 0", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 667));
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_AT(lHelper.GetNumParams() == 0, "lHelper.GetNumParams() == 0", CGS_ARTIST_FILE, 667);
         gpBurnoutGame->mAutoTestManager.mbControlPad = false;
         lua_settop(lpLua, 0);
         return 0;
@@ -117,12 +93,7 @@ namespace BrnGame
     s32 AutoTestManager::LUACBActivateDebugComponent(lua_State* lpLua)
     {
         LUACallbackHelper lHelper(lpLua);
-        if (lHelper.GetNumParams() != 1)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 719));
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_AT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1", CGS_ARTIST_FILE, 719);
         CgsDev::DebugManager& lrManager = gpBurnoutGame->GetDebugManager();
         CgsDev::DebugComponent* lpComponent = lrManager.FindComponentByName(lHelper.GetStringParam(0));
         if (lpComponent)
@@ -134,12 +105,7 @@ namespace BrnGame
     s32 AutoTestManager::LUACBDeactivateDebugComponent(lua_State* lpLua)
     {
         LUACallbackHelper lHelper(lpLua);
-        if (lHelper.GetNumParams() != 1)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 747));
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT_AT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1", CGS_ARTIST_FILE, 747);
         gpBurnoutGame->GetDebugManager().DeactivateComponent(lHelper.GetStringParam(0));
         lua_settop(lpLua, 0);
         return 0;

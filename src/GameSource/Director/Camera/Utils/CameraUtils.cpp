@@ -264,7 +264,8 @@ f32 GetZoomFromFOVDegs(f32 lfFOVDegs)
 // Asserts the zoom is non-zero (CameraUtils.h:577).
 f32 GetFOVDegsFromZoom(f32 lfZoom)
 {
-    CGS_ASSERT(!rw::math::fpu::IsZero(lfZoom), "!rw::math::fpu::IsZero(lfZoom)");
+    CGS_ASSERT_AT(!rw::math::fpu::IsZero(lfZoom), "!rw::math::fpu::IsZero(lfZoom)",
+        CGS_ARTIST_CAMERAUTILS_FILE, 577 /* ARTIST 0x821F24E0; DWARF CameraUtils.h:575 */);
 
     return std::atan(1.0f / lfZoom) * KF_TWO_RADS_TO_DEGS;
 }

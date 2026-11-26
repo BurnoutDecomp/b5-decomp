@@ -411,8 +411,8 @@ namespace Io
 
         // X360 0x823B80F8 (write-lock; h:186; the IDA-truncated "BrnSou"): the
         // root input's own audio-car-loaded queue @ +0xED50 -- BridgeWorldToSound's
-        // append target.
-        AudioCarLoadedDataQueue* GetAudioCarDataLoadedQueue();
+        // append target. DWARF name GetAudioCarLoadedDataQueue (h:186).
+        AudioCarLoadedDataQueue* GetAudioCarLoadedDataQueue();
         const AudioCarLoadedDataQueue* GetAudioCarDataLoadedQueueForRead() const;
 
     private:

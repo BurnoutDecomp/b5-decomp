@@ -419,7 +419,7 @@ void ScoringSystem::SaveNetworkRoundData(BrnNetwork::NetworkPlayerID lID, CgsSys
         const CgsSystem::Time lRoundTime = (lfFinishTimeAsScalar == 0.0f) ? GetElapsedTime(lTime) : lFinishTime;
         mOnlineGameResults.mSecondsInEvent += lRoundTime;
 
-        const s32 liRoundIndex = mOnlineGameResults.miReserved0x2C;
+        const s32 liRoundIndex = mOnlineGameResults.miNumberOfRoundsPlayed;
 
         // ARTIST 0x8232BC98 preserves the caller's mode in r26, then switches on it.
         switch (leGameMode)
@@ -461,7 +461,7 @@ void ScoringSystem::SaveNetworkRoundData(BrnNetwork::NetworkPlayerID lID, CgsSys
         }
     }
 
-    ++mOnlineGameResults.miReserved0x2C;
+    ++mOnlineGameResults.miNumberOfRoundsPlayed;
 }
 
 // ----------------------------------------------------------------------------

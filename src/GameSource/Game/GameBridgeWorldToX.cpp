@@ -649,7 +649,7 @@ namespace BrnGame
                 lpWorldOutputBuffer->GetAICarOutputInterface()));
 
         // [3] the queue appends.
-        lpSoundInputBuffer->GetAudioCarDataLoadedQueue()->Append(
+        lpSoundInputBuffer->GetAudioCarLoadedDataQueue()->Append(
             *lpWorldOutputBuffer->GetAudioCarLoadedDataQueue());
         // Both game-event ends are VariableEventQueue<1536,16> (the console append
         // symbol pins both); the root side's nominal 4-byte tag is viewed through
