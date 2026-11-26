@@ -66,13 +66,13 @@ namespace BrnGame
     // through the sound side's pre-update output). Caller holds the world input's
     // write lock + the sound output's read lock (the spine's bracket).
     void BrnGameModule::BridgeSoundToWorld(
-        BrnWorldIO::UpdateInputBuffer* lpWorldInputBuffer,
-        BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer)
+        BrnWorldIO::UpdateInputBuffer* lpWorldInput,
+        const BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer)
     {
-        CGS_ASSERT(lpWorldInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpWorldInput", CGS_ARTIST_FILE, 83));
+        CGS_ASSERT(lpWorldInput != 0, CGS_ASSERT_MESSAGE_AT("lpWorldInput", CGS_ARTIST_FILE, 83));
         CGS_ASSERT(lpSoundOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpSoundOutputBuffer", CGS_ARTIST_FILE, 84));
 
-        lpWorldInputBuffer->GetAudioCarDataLoadedQueue()->Append(
+        lpWorldInput->GetAudioCarDataLoadedQueue()->Append(
             lpSoundOutputBuffer->GetPreUpdateOutput().GetCarDataLoadedQueue());
     }
 

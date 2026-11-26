@@ -1054,8 +1054,8 @@ namespace BrnGame
         // @ 0x823CDC98 (GameBridgeSoundToX.cpp:81; phase C3). The sound -> world
         // pre-update bridge: ONE append -- the world input's audio-car-loaded
         // queue takes the sound pre-update block's queue (asserts cpp:83/:84).
-        void BridgeSoundToWorld(BrnWorldIO::UpdateInputBuffer* lpWorldInputBuffer,
-                                BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer);
+        void BridgeSoundToWorld(BrnWorldIO::UpdateInputBuffer* lpWorldInput,
+                                const BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer);
 
         // @ 0x823CD580 (phase C3b). The world -> sound input bridge: the vehicle-data
         // copy (the update-set bit 0x100 picks the REPLAY active-race-car source), the
