@@ -805,7 +805,7 @@ namespace BrnNetwork
 
     void LiveRevengeManager::RemoveRelationshipFromDebugMenu(s32 liLiveRevengeTableIndex)
     {
-        mDebugComponent.RemovePlayer(&mpLiveRevengeProfile->maRelationshipTable[static_cast<u32>(liLiveRevengeTableIndex)]);
+        mDebugComponent.RemovePlayer(&GetProfile()->maRelationshipTable[static_cast<u32>(liLiveRevengeTableIndex)]);
     }
 
     // ============================================================================

@@ -109,7 +109,7 @@ namespace BrnNetwork
         // picture download on connect, cancel an in-flight download on disconnect, and -- when a
         // download has completed -- copy the result into the owning texture and advance the queue.
         // Called by BrnNetworkManager::ProcessAfterSimulation.
-        u32 Update();
+        void Update();   // void: ProcessAfterSimulation 0x82597960 ignores r3
 
         // X360 0x825616B8 -- register a player's picture slot: early-out when Get(liPlayerID)
         // already finds one; otherwise assert the manager + player manager, classify the player
@@ -189,7 +189,7 @@ namespace BrnNetwork
 
         // X360 0x8254C638 -- on LIVE connect, resolve the local console XUID and (if not already
         // downloading) start downloading the local player's own gamer picture.
-        u32 DownloadLocalGamerPicOnLiveConnect();
+        void DownloadLocalGamerPicOnLiveConnect();   // void: Update 0x825576AC ignores r3
 
         // X360 0x8254C238 -- convert + resize the downloaded compressed picture into the owning
         // player's network texture (the X360 column range [20, 140)).

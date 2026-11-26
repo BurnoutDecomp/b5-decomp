@@ -9,7 +9,9 @@
 // asm. See RealmcMemcardState.h for the per-offset layout map. Every method
 // serialises on the embedded EA::Thread::Mutex (stored as a pointer at +0x00);
 // the &unk_821BA1E4 the X360 passes to Mutex::Lock is the kTimeoutNone ThreadTime
-// default argument, reproduced by calling Lock() with no explicit timeout.
+// default argument, reproduced by calling Lock() with no explicit timeout. The getters take
+// the lock with EA::Thread::AutoMutex: ARTIST (0x82C44DA8) loads the mutex pointer once and
+// unlocks the same register after reading the member, the scoped-lock shape.
 //
 // The task stack (IntVector @ +0x0C) and the start-waiting queue (Allocator64
 // deque @ +0x1C) expose the element-level front/back/push/pop helpers this file
@@ -106,41 +108,35 @@ MemcardState::MemcardState(EA::Thread::Mutex* pMutex)
 // @ 0x82C44D88 -- read the autosave flag under the lock.
 bool MemcardState::GetAutosaveState()
 {
-    mpMutex->Lock();
-    const bool bState = mbAutosaveState;
-    mpMutex->Unlock();
-    return bState;
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
+    return mbAutosaveState;
 }
 
 // @ 0x82C44DE0 -- write the autosave flag under the lock.
-int MemcardState::SetAutosaveState(bool bState)
+void MemcardState::SetAutosaveState(bool bState)
 {
-    mpMutex->Lock();
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
     mbAutosaveState = bState;
-    return mpMutex->Unlock();
 }
 
 // @ 0x82C44E20 -- read the monitor state under the lock.
 int MemcardState::GetMonitorState()
 {
-    mpMutex->Lock();
-    const int iState = miMonitorState;
-    mpMutex->Unlock();
-    return iState;
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
+    return miMonitorState;
 }
 
 // @ 0x82C44E78 -- write the monitor state under the lock.
-int MemcardState::SetMonitorState(int iState)
+void MemcardState::SetMonitorState(int iState)
 {
-    mpMutex->Lock();
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
     miMonitorState = iState;
-    return mpMutex->Unlock();
 }
 
 // @ 0x82C44EB8 -- update the pending-message bitmasks under the lock.
-int MemcardState::SetMessage(int iMode, int iMask)
+void MemcardState::SetMessage(int iMode, int iMask)
 {
-    mpMutex->Lock();
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
     if (iMode == 1)
     {
         muMessageSet   |= static_cast<uint32_t>(iMask);
@@ -154,17 +150,14 @@ int MemcardState::SetMessage(int iMode, int iMask)
             muMessageClear &= ~static_cast<uint32_t>(iMask);
         muMessageSet &= ~static_cast<uint32_t>(iMask);
     }
-    return mpMutex->Unlock();
 }
 
 // Read the hidden-message mask under the lock: lock, load +0x48, unlock,
 //   return the loaded word.
 uint32_t MemcardState::GetHiddenMessages()
 {
-    mpMutex->Lock();
-    const uint32_t luMask = muMessageSet;
-    mpMutex->Unlock();
-    return luMask;
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
+    return muMessageSet;
 }
 
 // @ 0x82C44FA8 -- install a new message filter, deleting the previous one.
@@ -183,63 +176,53 @@ MessageFilter* MemcardState::SetMessageFilter(MessageFilter* pNewFilter)
 // @ 0x82C45288 -- the `main' (bottom-of-stack) running task.
 int MemcardState::GetMainTask()
 {
-    mpMutex->Lock();
-    const int iTask = maTaskStack.GetFront();
-    mpMutex->Unlock();
-    return iTask;
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
+    return maTaskStack.GetFront();
 }
 
 // @ 0x82C45218 -- the `current' (top-of-stack) running task.
 int MemcardState::GetCurrentTask()
 {
-    mpMutex->Lock();
-    const int iTask = maTaskStack.GetBack();
-    mpMutex->Unlock();
-    return iTask;
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
+    return maTaskStack.GetBack();
 }
 
 // @ 0x82C47420 -- push iTaskType as the now-running task.
-int MemcardState::StartTask(int iTaskType)
+void MemcardState::StartTask(int iTaskType)
 {
-    mpMutex->Lock();
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
     maTaskStack.push_back(iTaskType);
-    return mpMutex->Unlock();
 }
 
 // @ 0x82C452F8 -- pop the top running task (iTaskType ignored, as in the X360).
-int MemcardState::StopTask(int /*iTaskType*/)
+void MemcardState::StopTask(int /*iTaskType*/)
 {
-    mpMutex->Lock();
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
     maTaskStack.pop_back();
-    return mpMutex->Unlock();
 }
 
 // @ 0x82C47490 -- replace the top running task (iStopTaskType ignored, as in the
 //   X360): pop the current top, then push iStartTaskType.
-int MemcardState::StopAndStartTask(int /*iStopTaskType*/, int iStartTaskType)
+void MemcardState::StopAndStartTask(int /*iStopTaskType*/, int iStartTaskType)
 {
-    mpMutex->Lock();
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
     maTaskStack.pop_back();
     maTaskStack.push_back(iStartTaskType);
-    return mpMutex->Unlock();
 }
 
 // Dequeue the next task waiting to start (front of the FIFO), under the lock.
 IRunnableTask* MemcardState::GetWaitingToStartTask()
 {
-    mpMutex->Lock();
-    IRunnableTask* const pTask = maStartWaitingQueue.PopFront();
-    mpMutex->Unlock();
-    return pTask;
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
+    return maStartWaitingQueue.PopFront();
 }
 
 // Enqueue pTask at the back of the start-waiting FIFO when set, under the lock.
-int MemcardState::PutInStartWaitingQueue(IRunnableTask* pTask)
+void MemcardState::PutInStartWaitingQueue(IRunnableTask* pTask)
 {
-    mpMutex->Lock();
+    EA::Thread::AutoMutex lAutoMutex(*mpMutex);
     if (pTask)
         maStartWaitingQueue.PushBack(pTask);
-    return mpMutex->Unlock();
 }
 
 } // namespace RealmcCore

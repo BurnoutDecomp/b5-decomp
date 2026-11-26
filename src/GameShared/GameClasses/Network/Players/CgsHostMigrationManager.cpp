@@ -297,26 +297,32 @@ namespace CgsNetwork
     // player to carry them) and append the player to the election list.
     void HostMigrationManager::AddPlayer(NetworkPlayerID liPlayerID)
     {
-        CGS_ASSERT(liPlayerID != KI_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID");
+        // DWARF CgsHostMigrationManager.cpp:741 liArrayIndex, :747 lLocalPlayerID.
+        s32 liArrayIndex;
+
+        CGS_ASSERT_AT(liPlayerID != KI_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID", __FILE__, 743);
 
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "CgsNetwork::HostMigrationManager::AddPlayer"
                                    << ": id " << static_cast<s32>(liPlayerID) << "\n";
 
-        if (liPlayerID != mpPlayerManager->GetLocalPlayerID())
+        NetworkPlayerID lLocalPlayerID;
+        if (!mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID))
+        {
+            lLocalPlayerID = KI_INVALID_PLAYER_ID;
+        }
+        if (liPlayerID != lLocalPlayerID)
         {
             RegisterMessages(liPlayerID);
         }
 
-        s32 liArrayIndex = 0;
-        while (maHostMigrationPlayerIDs[liArrayIndex] != KI_INVALID_PLAYER_ID)
+        for (liArrayIndex = 0; liArrayIndex < KI_MAX_PLAYERS; ++liArrayIndex)
         {
-            ++liArrayIndex;
-            if (liArrayIndex >= KI_MAX_PLAYERS)
+            if (maHostMigrationPlayerIDs[liArrayIndex] == KI_INVALID_PLAYER_ID)
             {
-                CGS_ASSERT(false, "liArrayIndex < KI_MAX_PLAYERS");
                 break;
             }
         }
+        CGS_ASSERT_AT(liArrayIndex < KI_MAX_PLAYERS, "liArrayIndex < KI_MAX_PLAYERS", __FILE__, 764);
         maHostMigrationPlayerIDs[liArrayIndex] = liPlayerID;
     }
 
@@ -470,18 +476,18 @@ namespace CgsNetwork
                 __FILE__, 879 /* ARTIST 0x828836AC */));
         }
 
-        s32 liFreeEntry = 0;
-        while (maMessageData[liFreeEntry].mOwnerPlayer != KI_INVALID_PLAYER_ID)
+        // DWARF CgsHostMigrationManager.cpp:869 liFreeEntry: a search loop, then the bound asserted
+        // (ARTIST 0x828836F0 re-tests it after the loop).
+        s32 liFreeEntry;
+        for (liFreeEntry = 0; liFreeEntry < KI_MAX_NETWORK_PLAYERS; ++liFreeEntry)
         {
-            ++liFreeEntry;
-            if (liFreeEntry >= KI_MAX_NETWORK_PLAYERS)
+            if (maMessageData[liFreeEntry].mOwnerPlayer == KI_INVALID_PLAYER_ID)
             {
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
-                    "liFreeEntry<KI_MAX_NETWORK_PLAYERS",
-                    __FILE__, 892 /* ARTIST 0x8288370C */));
                 break;
             }
         }
+        CGS_ASSERT_AT(liFreeEntry < KI_MAX_NETWORK_PLAYERS, "liFreeEntry<KI_MAX_NETWORK_PLAYERS",
+                      __FILE__, 892 /* ARTIST 0x8288370C */);
 
         HostMigrationNetworkPlayerData& lData = maMessageData[liFreeEntry];
         lData.mOwnerPlayer = liPlayerID;
@@ -515,28 +521,25 @@ namespace CgsNetwork
             "lpNetPlayer",
             __FILE__, 937 /* ARTIST 0x82883908 */));
 
-        s32 liEntry = 0;
-        while (maMessageData[liEntry].mOwnerPlayer != liPlayerID)
+        // DWARF CgsHostMigrationManager.cpp:934 liEntry: the work is done inside the search loop
+        // and the bound asserted after it (ARTIST 0x82883988 re-tests liEntry after the store; no
+        // null test of lpNetPlayer beyond the assert).
+        s32 liEntry;
+        for (liEntry = 0; liEntry < KI_MAX_NETWORK_PLAYERS; ++liEntry)
         {
-            ++liEntry;
-            if (liEntry >= KI_MAX_NETWORK_PLAYERS)
+            if (maMessageData[liEntry].mOwnerPlayer == liPlayerID)
             {
-                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
-                    "liEntry<KI_MAX_NETWORK_PLAYERS",
-                    __FILE__, 957 /* ARTIST 0x828839A8 */));
-                return;
+                if (lpNetPlayer->IsMessageTypeRegistered(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE))
+                    lpNetPlayer->UnRegisterMessageType(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE);
+                if (lpNetPlayer->IsMessageTypeRegistered(KI_MESSAGE_TYPE_NEW_HOST))
+                    lpNetPlayer->UnRegisterMessageType(KI_MESSAGE_TYPE_NEW_HOST);
+
+                maMessageData[liEntry].mOwnerPlayer = KI_INVALID_PLAYER_ID;
+                break;
             }
         }
-
-        if (lpNetPlayer != 0)
-        {
-            if (lpNetPlayer->IsMessageTypeRegistered(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE))
-                lpNetPlayer->UnRegisterMessageType(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE);
-            if (lpNetPlayer->IsMessageTypeRegistered(KI_MESSAGE_TYPE_NEW_HOST))
-                lpNetPlayer->UnRegisterMessageType(KI_MESSAGE_TYPE_NEW_HOST);
-        }
-
-        maMessageData[liEntry].mOwnerPlayer = KI_INVALID_PLAYER_ID;
+        CGS_ASSERT_AT(liEntry < KI_MAX_NETWORK_PLAYERS, "liEntry<KI_MAX_NETWORK_PLAYERS",
+                      __FILE__, 957 /* ARTIST 0x828839A8 */);
     }
 
     // -------------------------------------------------------------------------------

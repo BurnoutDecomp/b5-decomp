@@ -8,6 +8,9 @@
 
 #include <xtl.h>                                            // XMemCpy (Retrieve 0x8257E478)
 
+// ARTIST's assert file string for this source (0x82086468).
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnAggressiveDrivingMessage.cpp"
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::AggressiveDrivingMessage::Construct            @ 0x82579CC8
 //   BrnNetwork::AggressiveDrivingMessage::PackOrUnpack         @ 0x8257A8C0
@@ -149,9 +152,9 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(liNumberOfAggressiveMoves >= 0, "liNumberOfAggressiveMoves >= 0");
-        CGS_ASSERT(liNumberOfAggressiveMoves <= KI_MAX_AGGRESSIVE_MOVES,
-                   "liNumberOfAggressiveMoves <= KI_MAX_AGGRESSIVE_MOVES");
+        CGS_ASSERT_AT(liNumberOfAggressiveMoves >= 0, "liNumberOfAggressiveMoves >= 0", CGS_ARTIST_FILE, 76);
+        CGS_ASSERT_AT(liNumberOfAggressiveMoves <= KI_MAX_AGGRESSIVE_MOVES,
+                      "liNumberOfAggressiveMoves <= KI_MAX_AGGRESSIVE_MOVES", CGS_ARTIST_FILE, 77);
 
         miNumberOfAggressiveMoves = liNumberOfAggressiveMoves;   // stw +0x20
 
@@ -167,7 +170,7 @@ namespace BrnNetwork
         CgsNetwork::Message::PrepareForSend(KI_AGGRESSIVE_DRIVING_MESSAGE_TYPE, lu16Frame);
 
         // This is an unreliable message: the X360 build asserts it never went reliable.
-        CGS_ASSERT(!IsReliable(), "!IsReliable()");
+        CGS_ASSERT_AT(!IsReliable(), "!IsReliable()", CGS_ARTIST_FILE, 87);
     }
 
     bool AggressiveDrivingMessage::Retrieve(s32* lpiNumberOfAggressiveMoves, AggressiveMoveData* lpMoves)
@@ -188,9 +191,11 @@ namespace BrnNetwork
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
             CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
                 "!IsMessageValid()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnAggressiveDrivingMessage.cpp", 222 /* ARTIST 0x8257E4AC */));
+                CGS_ARTIST_FILE, 222 /* ARTIST 0x8257E4AC */));
             return true;
         }
         return false;
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

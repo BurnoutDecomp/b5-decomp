@@ -200,7 +200,7 @@ namespace BrnNetwork
     //   on that player (type 43, length 116, the slot's send/recv messages, the arrived callback,
     //   a no-op delivered callback, manager `this` as user data), then stamps the slot id.
     // ---------------------------------------------------------------------------------
-    bool TeamSelectionManager::AddPlayer( NetworkPlayerID lPlayerID )
+    void TeamSelectionManager::AddPlayer( NetworkPlayerID lPlayerID )
     {
         CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager",
@@ -214,15 +214,9 @@ namespace BrnNetwork
 
         if (lpNetworkPlayer != 0)
         {
-            TeamSelectionData* lpDataEntry = 0;
-            for (s32 liIndex = 0; liIndex < KI_MAX_PLAYERS; ++liIndex)
-            {
-                if (maTeamSelectionData[liIndex].mPlayerID == KI_INVALID_PLAYER_ID)
-                {
-                    lpDataEntry = &maTeamSelectionData[liIndex];
-                    break;
-                }
-            }
+            // The free slot is the one tracking the invalid id (the sibling SelectedRoutesManager::
+            // AddPlayer's DWARF has lpDataEntry but no loop index: the search is the inlined helper).
+            TeamSelectionData* lpDataEntry = GetTeamSelectionDataEntry(KI_INVALID_PLAYER_ID);
             CGS_ASSERT(lpDataEntry != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpDataEntry",
                 CGS_ARTIST_FILE, 514 /* ARTIST 0x82556FD8 */));
@@ -233,14 +227,11 @@ namespace BrnNetwork
                 &lpDataEntry->mMessageSend,
                 &lpDataEntry->mMessageRecv,
                 _TeamSelectionMessageArrivedCallback,
-                // X360 passes the COMDAT-folded no-op delivered callback (a `return` thunk);
-                // a null delivered callback is the same observable behaviour.
-                0,
+                _TeamSelectionMessageDeliveredCallback,
                 this);
 
             lpDataEntry->mPlayerID = lPlayerID;
         }
-        return lpNetworkPlayer != 0;
     }
 
     // ---------------------------------------------------------------------------------
@@ -248,7 +239,7 @@ namespace BrnNetwork
     //   Frees the slot tracking lPlayerID (mark free + re-Construct its two messages), then -- if
     //   the player is still in the registry -- unregisters the reliable message type from it.
     // ---------------------------------------------------------------------------------
-    bool TeamSelectionManager::RemovePlayer( NetworkPlayerID lPlayerID )
+    void TeamSelectionManager::RemovePlayer( NetworkPlayerID lPlayerID )
     {
         TeamSelectionData* lpEntry = GetTeamSelectionDataEntry(lPlayerID);
         if (lpEntry != 0)
@@ -269,8 +260,6 @@ namespace BrnNetwork
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
         if (lpNetworkPlayer != 0)
             lpNetworkPlayer->UnRegisterMessageType(KI_TEAM_SELECT_MESSAGE_TYPE);
-
-        return lpNetworkPlayer != 0;
     }
 
     // ---------------------------------------------------------------------------------
@@ -698,6 +687,16 @@ namespace BrnNetwork
             lpTeamSelectionManager->miNumPlayersAssigned     = liNumPlayers;
             lpTeamSelectionManager->mbReceivedFinalSelection = true;
         }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // _TeamSelectionMessageDeliveredCallback -- empty; ARTIST folds it into the shared bare
+    //   `blr` 0x8284CB38, whose address AddPlayer registers (0x82556FE4).
+    // ---------------------------------------------------------------------------------
+    void TeamSelectionManager::_TeamSelectionMessageDeliveredCallback(
+        bool /*lbDelivered*/, bool /*lbWasReliable*/, CgsNetwork::SignalMessage* /*lpMessage*/,
+        NetworkPlayerID /*lToPlayerID*/, void* /*lpUserData*/ )
+    {
     }
 
 

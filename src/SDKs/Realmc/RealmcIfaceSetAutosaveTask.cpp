@@ -73,7 +73,7 @@ void SetAutosaveTask::Execute()
     if (miEnabled != liCurrentAutosave)
         liResult = 1;
 
-    mpState->mbFieldD8 = static_cast<u8>(mpMemcardState->GetAutosaveState());
+    mpState->mbFieldD8 = mpMemcardState->GetAutosaveState();
 
     void* const lpMemory = RealmcCore::AllocateMem(0, sizeof(MessageSetAutosaveDone));
     MessageSetAutosaveDone* const lpMessage = lpMemory

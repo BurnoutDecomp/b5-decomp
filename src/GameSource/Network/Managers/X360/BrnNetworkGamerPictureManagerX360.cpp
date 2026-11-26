@@ -303,30 +303,25 @@ namespace BrnNetwork
     // On LIVE connect, resolve the local console XUID and -- if not already downloading -- start
     // downloading the local player's own gamer picture.
     // =======================================================================
-    u32 GamerPictureManagerX360::DownloadLocalGamerPicOnLiveConnect()
+    void GamerPictureManagerX360::DownloadLocalGamerPicOnLiveConnect()
     {
         CGS_ASSERT(mpNetworkManager, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager",
             CGS_ARTIST_FILE, 648 /* ARTIST 0x8254C670 */));
 
-        u64 lLocalXuid = 0;
-        u32 luResult = XUserGetXUID(mpNetworkManager->GetLocalUserControllerPort(), &lLocalXuid);
-        if (luResult)
+        // No initialiser: ARTIST 0x8254C67C passes the slot straight to XUserGetXUID.
+        u64 lLocalXuid;
+        if (XUserGetXUID(mpNetworkManager->GetLocalUserControllerPort(), &lLocalXuid) == 0)
         {
-            return luResult;
+            mLocalPlayerGamerPictureData.mXuid = lLocalXuid;
+            if (mDownloadingXuid == 0)
+            {
+                mDownloadingXuid = lLocalXuid;
+                GetBuddyManager(mpNetworkManager)->StartDownloadingPictures(
+                    &mCompressedTexture, 1, &mDownloadingXuid,
+                    reinterpret_cast<void*>(&mbPictureDownloaded));
+            }
         }
-
-        mLocalPlayerGamerPictureData.mXuid = lLocalXuid;
-        if (mDownloadingXuid != 0)
-        {
-            return luResult;
-        }
-
-        mDownloadingXuid = lLocalXuid;
-        GetBuddyManager(mpNetworkManager)->StartDownloadingPictures(
-            &mCompressedTexture, 1, &mDownloadingXuid,
-            reinterpret_cast<void*>(&mbPictureDownloaded));
-        return luResult;
     }
 
     // =======================================================================
@@ -490,23 +485,20 @@ namespace BrnNetwork
     // cancel an in-flight download on disconnect, and -- when a download has completed -- copy the
     // result into the owning texture and advance the queue.
     // =======================================================================
-    u32 GamerPictureManagerX360::Update()
+    void GamerPictureManagerX360::Update()
     {
-        u32 luResult = static_cast<u32>(
-            NetConnStatus(KI_NETCONNSTATUS_ONLINE_SELECTOR, 0, NULL, 0));
-        const bool lbConnected = (luResult == KI_NETCONNSTATUS_CONNECTED);
+        const bool lbConnected =
+            (static_cast<u32>(NetConnStatus(KI_NETCONNSTATUS_ONLINE_SELECTOR, 0, NULL, 0)) == KI_NETCONNSTATUS_CONNECTED);
 
         if (mDownloadingXuid == 0 && !mLocalPlayerGamerPictureData.mbReady)
         {
-            luResult = DownloadLocalGamerPicOnLiveConnect();
+            DownloadLocalGamerPicOnLiveConnect();
         }
 
         if (!lbConnected)
         {
             if (mbWasConnectedLastFrame)
             {
-                // X360 stores CancelPictureDownload's return into the result register; the homed
-                // CancelPictureDownload is void, so luResult keeps its prior value (semantic parity).
                 GetBuddyManager(mpNetworkManager)->CancelPictureDownload();
             }
         }
@@ -534,11 +526,9 @@ namespace BrnNetwork
                 }
                 if (liPlayerIndex >= KI_MAX_GAMER_PICTURES)
                 {
-                    // No slot owns the downloaded XUID any more: just advance the queue. The X360
-                    // returns `this` as a DWORD here; the caller ignores it -- return the pump
-                    // result (semantic parity, no pointer truncation on the 64-bit host).
+                    // No slot owns the downloaded XUID any more: just advance the queue.
                     DownloadNextGamerPicture();
-                    return luResult;
+                    return;
                 }
                 lpDestination = &maGamerPictureData[liPlayerIndex].mTexture;
                 maGamerPictureData[liPlayerIndex].mbReady = true;
@@ -546,9 +536,7 @@ namespace BrnNetwork
 
             CopyTexture(lpDestination);
             DownloadNextGamerPicture();
-            return luResult;
         }
-        return luResult;
     }
 
     // =======================================================================

@@ -705,6 +705,9 @@ namespace BrnNetwork
     void LoginManagerBase::UpdateWaitingForPlayerID()
     {
         PlayerInfoData lPlayerInfo;
+        // Prepared twice, the second time under the assert: ARTIST 0x82561A34/0x82561A3C and the
+        // PS3 build both call PlayerInfoData::Prepare twice.
+        lPlayerInfo.Prepare();
         CGS_ASSERT(lPlayerInfo.Prepare(), CGS_ASSERT_MESSAGE_AT(
             "lPlayerInfo.Prepare()",
             __FILE__, 644 /* ARTIST 0x82561A64 */));

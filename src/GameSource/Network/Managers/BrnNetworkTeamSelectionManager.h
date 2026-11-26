@@ -53,6 +53,7 @@ namespace CgsNetwork
     // Pointer-only on the reliable-message arrived callback (no member access through the
     // base here); forward-declared to avoid pulling the message hierarchy into this header.
     struct ReliableMessage;
+    struct SignalMessage;
 }
 
 namespace BrnNetwork
@@ -157,8 +158,8 @@ namespace BrnNetwork
         void Destruct();
 
         // === per-player registration ===
-        bool AddPlayer( NetworkPlayerID lPlayerID );
-        bool RemovePlayer( NetworkPlayerID lPlayerID );
+        void AddPlayer( NetworkPlayerID lPlayerID );      // void: the one ARTIST caller ignores r3 (0x82599574)
+        void RemovePlayer( NetworkPlayerID lPlayerID );   // void: no ARTIST caller reads r3 (0x82557138, 0x825998BC)
         void Disconnected();
 
         // === driving the state machine ===
@@ -199,6 +200,15 @@ namespace BrnNetwork
         static void _TeamSelectionMessageArrivedCallback( CgsNetwork::ReliableMessage* lpMessage,
                                                           NetworkPlayerID lSendingPlayerID,
                                                           void* lpUserData );
+
+        // The reliable-message delivered callback registered beside it: an empty body, which ARTIST
+        // ICF-folds into the shared bare `blr` 0x8284CB38 (AddPlayer passes that address, 0x82556FE4),
+        // like the sibling SelectedRoutesManager::_SelectedRoutesMessageDeliveredCallback (DWARF :167).
+        // PROVISIONAL NAME: no DWARF/PS3/SDK name found (no DWARF for this class); ARTIST 0x8284CB38 (folded)
+        static void _TeamSelectionMessageDeliveredCallback( bool lbDelivered, bool lbWasReliable,
+                                                            CgsNetwork::SignalMessage* lpMessage,
+                                                            NetworkPlayerID lToPlayerID,
+                                                            void* lpUserData );
 
         // The idle update state's driver: an empty member (the console table slot holds a shared
         // empty body; FLAG: name not recovered).

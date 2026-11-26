@@ -161,10 +161,10 @@ bool MemcardInterfaceImpl::IsResettable()
 // @0x82B52118. This global is shared with XenonUtil::CheckState and the
 // content-system helpers; the selected user's per-state +0xD8 byte seeds the
 // MemcardState autosave flag.
-int MemcardInterfaceImpl::SetSignedUserIndex(int liUserIndex)
+void MemcardInterfaceImpl::SetSignedUserIndex(int liUserIndex)
 {
     gSignedUserIndex = liUserIndex;
-    return mMemcardState.SetAutosaveState(maStates[liUserIndex].mbFieldD8 != 0);
+    mMemcardState.SetAutosaveState(maStates[liUserIndex].mbFieldD8);
 }
 
 // @0x82B52600. Map the UI choice to a Response, then apply it to the held
@@ -181,15 +181,15 @@ void MemcardInterfaceImpl::MessageDone(int liChoice)
 }
 
 // @0x82B52138. The two incoming words pass directly to MemcardState::SetMessage.
-int MemcardInterfaceImpl::SetMessageState(int liMode, int liMask)
+void MemcardInterfaceImpl::SetMessageState(int liMode, int liMask)
 {
-    return mMemcardState.SetMessage(liMode, liMask);
+    mMemcardState.SetMessage(liMode, liMask);
 }
 
 // @0x82B52140.
-int MemcardInterfaceImpl::SetMonitor(int liState)
+void MemcardInterfaceImpl::SetMonitor(int liState)
 {
-    return mMemcardState.SetMonitorState(liState);
+    mMemcardState.SetMonitorState(liState);
 }
 
 // @0x82B52E08. Create the native task, using the currently signed-in user's

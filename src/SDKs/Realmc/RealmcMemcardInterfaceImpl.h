@@ -45,9 +45,9 @@ public:
     void Shutdown();
     int Update(int liArg);
     bool IsResettable();
-    int SetSignedUserIndex(int liUserIndex);
+    void SetSignedUserIndex(int liUserIndex);
     void MessageDone(int liChoice);
-    int SetMessageState(int liMode, int liMask);
+    void SetMessageState(int liMode, int liMask);
     int CheckCard(int liArg);
     int SetActiveCard(int liArg1, int liArg2, int liArg3);
     int BootupCheck(SaveInfo* lpSaveInfo, int liNumEntries,
@@ -56,7 +56,7 @@ public:
     int Save(SaveInfo* lpSaveInfo, int liCount, LoadEntryInfo* lpEntries,
              int liFlags, TitleInfo* lpTitleInfo);
     int SetAutosave(int liEnabled, SaveCheckParams* lpParams);
-    int SetMonitor(int liState);
+    void SetMonitor(int liState);
     int Load(EntryContentName* lpEntryContentName, int liNumEntries,
              LoadEntryInfo* lpEntries, int liFlags, TitleInfo* lpTitleInfo);
 

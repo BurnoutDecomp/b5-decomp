@@ -866,8 +866,11 @@ NetworkPlayerID PlayerManager::GetHostPlayerID()
 // Only a session with no players may lack a local player.
 bool PlayerManager::AmIHost()
 {
-    NetworkPlayerID lLocalPlayerID = K_INVALID_PLAYER_ID;
-    GetNextLocalPlayerID(&lLocalPlayerID);
+    NetworkPlayerID lLocalPlayerID;
+    if (!GetNextLocalPlayerID(&lLocalPlayerID))
+    {
+        lLocalPlayerID = K_INVALID_PLAYER_ID;
+    }
     CGS_ASSERT((lLocalPlayerID != K_INVALID_PLAYER_ID) || (0 == miNumActivePlayers), CGS_ASSERT_MESSAGE_AT(
         "(lLocalPlayerID != K_INVALID_PLAYER_ID) || (0 == miNumActivePlayers)",
         CGS_ARTIST_FILE, 1648 /* ARTIST 0x82873F04 */));

@@ -4259,9 +4259,18 @@ namespace BrnNetwork
         lGameParams.SetTimeLimit(lpGameParamsEvent->miTimeLimit);
         lGameParams.SetLocality(lPlayerInfo.GetLocality());
 
-        static_cast<CgsNetwork::ServerInterfaceGamesX360*>(mpNetworkManager->GetServerInterface()->GetGameComponent())
-            ->SetSessionFlags(lGameParams.Security() == KI_GAME_SECURITY_CLOSED ? KI_SESSION_FLAGS_CLOSED_GAME
-                                                                                 : KI_SESSION_FLAGS_OPEN_GAME);
+        // One call per arm (X360-only code, absent from the PS3 DWARF): ARTIST 0x825693F4 loads the
+        // games component above the branch, the two arms' identical prefix hoisted.
+        if (lGameParams.Security() == KI_GAME_SECURITY_CLOSED)
+        {
+            static_cast<CgsNetwork::ServerInterfaceGamesX360*>(mpNetworkManager->GetServerInterface()->GetGameComponent())
+                ->SetSessionFlags(KI_SESSION_FLAGS_CLOSED_GAME);
+        }
+        else
+        {
+            static_cast<CgsNetwork::ServerInterfaceGamesX360*>(mpNetworkManager->GetServerInterface()->GetGameComponent())
+                ->SetSessionFlags(KI_SESSION_FLAGS_OPEN_GAME);
+        }
         mpNetworkManager->GetServerInterface()->GetGameComponent()->UpdateGameParameters(&lGameParams);
 
         mpNetworkManager->GetSelectedRoutesManager()->SetRouteData(

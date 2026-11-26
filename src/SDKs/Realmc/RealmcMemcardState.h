@@ -71,20 +71,20 @@ public:
     bool GetAutosaveState();
 
     // @ 0x82C44DE0 -- write the autosave flag (+0x04) under the lock.
-    int SetAutosaveState(bool bState);
+    void SetAutosaveState(bool bState);
 
     // @ 0x82C44E20 -- read the monitor state (+0x08) under the lock.
     int GetMonitorState();
 
     // @ 0x82C44E78 -- write the monitor state (+0x08) under the lock.
-    int SetMonitorState(int iState);
+    void SetMonitorState(int iState);
 
     // @ 0x82C44EB8 -- update the pending-message bitmasks under the lock. iMode 1
     //   sets iMask in muMessageSet (and clears it from muMessageClear); iMode 2
     //   sets it in muMessageClear; any other mode clears it from muMessageClear.
     //   In every case iMask is cleared from the opposite mask so a message is
     //   pending in at most one direction.
-    int SetMessage(int iMode, int iMask);
+    void SetMessage(int iMode, int iMask);
 
     // Read the hidden-message mask (+0x48, the word SetMessage mode 1 sets)
     //   under the lock. RealmcIface::XenonMessageFilter's MessageClear handler
@@ -107,18 +107,17 @@ public:
     // @ 0x82C45218 -- the `current' (top-of-stack) running task, or 0 when idle.
     int GetCurrentTask();
 
-    // @ 0x82C47420 -- push iTaskType as the now-running task. Returns the Unlock
-    //   result (propagated by IRunnableTask::Starting).
-    int StartTask(int iTaskType);
+    // @ 0x82C47420 -- push iTaskType as the now-running task.
+    void StartTask(int iTaskType);
 
     // @ 0x82C452F8 -- pop the top running task. iTaskType is accepted for the
     //   IRunnableTask call site but ignored by the body (the X360 pops
     //   unconditionally).
-    int StopTask(int iTaskType);
+    void StopTask(int iTaskType);
 
     // @ 0x82C47490 -- replace the top running task: pop, then push iStartTaskType.
     //   iStopTaskType is accepted for the call site but ignored by the body.
-    int StopAndStartTask(int iStopTaskType, int iStartTaskType);
+    void StopAndStartTask(int iStopTaskType, int iStartTaskType);
 
     // Dequeue and return the next task object waiting to start (front of the
     //   FIFO), or null when the queue is empty. IRunnableTask::operator() runs
@@ -126,8 +125,7 @@ public:
     IRunnableTask* GetWaitingToStartTask();
 
     // Enqueue pTask at the back of the start-waiting FIFO when it is non-null.
-    //   Returns the Unlock result.
-    int PutInStartWaitingQueue(IRunnableTask* pTask);
+    void PutInStartWaitingQueue(IRunnableTask* pTask);
 
 private:
     EA::Thread::Mutex* mpMutex;             // +0x00

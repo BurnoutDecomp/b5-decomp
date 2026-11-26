@@ -545,7 +545,21 @@ static void _GameManagerIdle(void* pData, u32 /*uTick*/)
     }
 }
 
-static s32 _GameManagerHostCb(GameManagerRefT* pGameManager, const char* pParams, LobbyApiCallbackT* pCallback,
+// DWARF lobbygamemanager.c:214 / :234 -- the request wrapper and the game-record reset the
+// request callbacks share (inlined by ARTIST; PS3 -O0 0xEAF67C calls _GameManagerInitGame).
+static s32 _GameManagerLobbyCmd(GameManagerRefT* pGameManager, s32 iKind, const char* pParms,
+                                LobbyApiCallbackT* pCallback, void* pUserData)
+{
+    return LobbyApiRequestCB(pGameManager->pLobbyApi, iKind, pParms, pCallback, pUserData);
+}
+
+static void _GameManagerInitGame(GameManagerRefT* pGameManager)
+{
+    memset(&pGameManager->LastPlay, 0, sizeof(pGameManager->LastPlay));
+    pGameManager->bStarted = 0;
+}
+
+extern "C" s32 GameManagerHostCb(GameManagerRefT* pGameManager, const char* pParams, LobbyApiCallbackT* pCallback,
                               void* pUserData)
 {
     if (pGameManager->eState != ST_IDLE)
@@ -554,55 +568,58 @@ static s32 _GameManagerHostCb(GameManagerRefT* pGameManager, const char* pParams
         return -1;
     }
     char strParams[512];
-    memset(&pGameManager->LastPlay, 0, sizeof(pGameManager->LastPlay));
-    pGameManager->bStarted = 0;
+    _GameManagerInitGame(pGameManager);
     TagFieldDupl(strParams, sizeof(strParams), pParams);
     if (pGameManager->bHostMigration)
     {
-        const s32 iSysFlags = TagFieldGetNumber(TagFieldFind(strParams, "SYSFLAGS"), 0);
-        TagFieldSetNumber(strParams, sizeof(strParams), "SYSFLAGS", iSysFlags | 0x2000);
+        s32 iSysFlags = TagFieldGetNumber(TagFieldFind(strParams, "SYSFLAGS"), 0);
+        iSysFlags |= 0x2000;
+        TagFieldSetNumber(strParams, sizeof(strParams), "SYSFLAGS", iSysFlags);
     }
     const s32 iKind = pGameManager->bGPSGameServ ? FourCC('g', 'p', 's', 'c') : FourCC('g', 'c', 'r', 'e');
     return LobbyApiRequestCB(pGameManager->pLobbyApi, iKind, strParams, pCallback, pUserData);
 }
 
-static s32 _GameManagerJoinCb(GameManagerRefT* pGameManager, const char* pParams, LobbyApiCallbackT* pCallback,
+extern "C" s32 GameManagerJoinCb(GameManagerRefT* pGameManager, const char* pParams, LobbyApiCallbackT* pCallback,
                               void* pUserData)
 {
+    // Shape of the PS3 -O0 body 0xEB1DBC: a guest join of our own game skips the state check
+    // and the game-record reset.
     if (((pGameManager->eState == ST_HOST) || (pGameManager->eState == ST_MEMBER)) &&
         (TagFieldGetNumber(TagFieldFind(pParams, "IDENT"), -1) == pGameManager->LastPlay.iIdent) &&
         (TagFieldGetNumber(TagFieldFind(pParams, "GUESTS"), -1) > 0))
     {
         NetPrintf(("gamemanager: assuming game join request for game we are currently hosting is a guest join\n"));
-        return LobbyApiRequestCB(pGameManager->pLobbyApi, FourCC('g', 'j', 'o', 'i'), pParams, pCallback, pUserData);
     }
-    if ((u32)pGameManager->eState < 2u)
+    else
     {
-        memset(&pGameManager->LastPlay, 0, sizeof(pGameManager->LastPlay));
-        pGameManager->bStarted = 0;
-        return LobbyApiRequestCB(pGameManager->pLobbyApi, FourCC('g', 'j', 'o', 'i'), pParams, pCallback, pUserData);
+        if ((pGameManager->eState != ST_IDLE) && (pGameManager->eState != ST_HOST))
+        {
+            NetPrintf(("gamemanager: can't join game while not in idle or host state\n"));
+            return -1;
+        }
+        _GameManagerInitGame(pGameManager);
     }
-    NetPrintf(("gamemanager: can't join game while not in idle or host state\n"));
-    return -1;
+    return _GameManagerLobbyCmd(pGameManager, FourCC('g', 'j', 'o', 'i'), pParams, pCallback, pUserData);
 }
 
-static s32 _GameManagerQuickJoinCb(GameManagerRefT* pGameManager, const char* pParams, LobbyApiCallbackT* pCallback,
+extern "C" s32 GameManagerQuickJoinCb(GameManagerRefT* pGameManager, const char* pParams, LobbyApiCallbackT* pCallback,
                                    void* pUserData)
 {
-    if (pGameManager->eState == ST_IDLE)
-    {
-        memset(&pGameManager->LastPlay, 0, sizeof(pGameManager->LastPlay));
-        pGameManager->bStarted = 0;
-    }
-    else if (pGameManager->eState != ST_HOST)
+    // PS3 -O0 0xEB1F90: state check, then the record reset unless we host.
+    if ((pGameManager->eState != ST_IDLE) && (pGameManager->eState != ST_HOST))
     {
         NetPrintf(("gamemanager: can't join game while not in idle or host state\n"));
         return -1;
     }
-    return LobbyApiRequestCB(pGameManager->pLobbyApi, FourCC('g', 'q', 'w', 'k'), pParams, pCallback, pUserData);
+    if (pGameManager->eState != ST_HOST)
+    {
+        _GameManagerInitGame(pGameManager);
+    }
+    return _GameManagerLobbyCmd(pGameManager, FourCC('g', 'q', 'w', 'k'), pParams, pCallback, pUserData);
 }
 
-static s32 _GameManagerStartCb(GameManagerRefT* pGameManager, const char* pParams, LobbyApiCallbackT* pCallback,
+extern "C" s32 GameManagerStartCb(GameManagerRefT* pGameManager, const char* pParams, LobbyApiCallbackT* pCallback,
                                void* pUserData)
 {
     if (pGameManager->eState != ST_HOST)
@@ -613,7 +630,7 @@ static s32 _GameManagerStartCb(GameManagerRefT* pGameManager, const char* pParam
     return LobbyApiRequestCB(pGameManager->pLobbyApi, FourCC('g', 's', 't', 'a'), pParams, pCallback, pUserData);
 }
 
-static s32 _GameManagerLeaveCb(GameManagerRefT* pGameManager, const char* pParams, LobbyApiCallbackT* pCallback,
+extern "C" s32 GameManagerLeaveCb(GameManagerRefT* pGameManager, const char* pParams, LobbyApiCallbackT* pCallback,
                                void* pUserData)
 {
     if (pGameManager->eState == ST_IDLE)
@@ -621,12 +638,24 @@ static s32 _GameManagerLeaveCb(GameManagerRefT* pGameManager, const char* pParam
         NetPrintf(("gamemanager: can't leave game while in idle state\n"));
         return -1;
     }
+    // DWARF lobbygamemanager.c:1394/1395 iCmd, strGuest (16 bytes on the X360: li r5,0x10 at
+    // 0x82B1F17C; the PS3 has 20); PS3 -O0 0xEB2170 picks the command in an if/else chain.
+    s32 iCmd;
     char strGuest[16];
     TagFieldGetString(TagFieldFind(pParams, "GUEST"), strGuest, sizeof(strGuest), "");
-    const s32 iKind = ((strGuest[0] != 0) || pGameManager->bHostMigration || (pGameManager->eState != ST_HOST))
-                          ? FourCC('g', 'l', 'e', 'a')
-                          : FourCC('g', 'd', 'e', 'l');
-    return LobbyApiRequestCB(pGameManager->pLobbyApi, iKind, pParams, pCallback, pUserData);
+    if (strGuest[0] != 0)
+    {
+        iCmd = FourCC('g', 'l', 'e', 'a');
+    }
+    else if ((pGameManager->bHostMigration == 0) && (pGameManager->eState == ST_HOST))
+    {
+        iCmd = FourCC('g', 'd', 'e', 'l');
+    }
+    else
+    {
+        iCmd = FourCC('g', 'l', 'e', 'a');
+    }
+    return _GameManagerLobbyCmd(pGameManager, iCmd, pParams, pCallback, pUserData);
 }
 
 // ---- public API --------------------------------------------------------------------------
@@ -640,6 +669,8 @@ extern "C" GameManagerRefT* GameManagerCreate(LobbyApiRefT* pLobbyApi, ConnApiRe
         NetPrintf(("gamemanager: could not allocate module state\n"));
         return NULL;
     }
+    // ARTIST 0x82B1F718 (string 0x82F7DB2C).
+    NetPrintf(("gamemanager: creating with Lobby=0x%08x and ConnApi=0x%08x\n", pLobbyApi, pConnApi));
     memset(pGameManager, 0, sizeof(*pGameManager));
     pGameManager->iMemGroup     = iMemGroup;
     pGameManager->pLobbyApi     = pLobbyApi;
@@ -690,23 +721,23 @@ extern "C" s32 GameManagerRequestCb(GameManagerRefT* pGameManager, s32 iKind, co
 {
     if (iKind == FourCC('g', 'c', 'r', 'e'))
     {
-        return _GameManagerHostCb(pGameManager, pParams, pCallback, pUserData);
+        return GameManagerHostCb(pGameManager, pParams, pCallback, pUserData);
     }
     if (iKind == FourCC('g', 'j', 'o', 'i'))
     {
-        return _GameManagerJoinCb(pGameManager, pParams, pCallback, pUserData);
+        return GameManagerJoinCb(pGameManager, pParams, pCallback, pUserData);
     }
     if (iKind == FourCC('g', 'q', 'w', 'k'))
     {
-        return _GameManagerQuickJoinCb(pGameManager, pParams, pCallback, pUserData);
+        return GameManagerQuickJoinCb(pGameManager, pParams, pCallback, pUserData);
     }
     if (iKind == FourCC('g', 's', 't', 'a'))
     {
-        return _GameManagerStartCb(pGameManager, pParams, pCallback, pUserData);
+        return GameManagerStartCb(pGameManager, pParams, pCallback, pUserData);
     }
     if (iKind == FourCC('g', 'l', 'e', 'a'))
     {
-        return _GameManagerLeaveCb(pGameManager, pParams, pCallback, pUserData);
+        return GameManagerLeaveCb(pGameManager, pParams, pCallback, pUserData);
     }
     return LobbyApiRequestCB(pGameManager->pLobbyApi, iKind, pParams, pCallback, pUserData);
 }

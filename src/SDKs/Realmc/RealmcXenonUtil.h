@@ -92,7 +92,8 @@ public:
         HANDLE   mhNotification;       // +0x0B4  XNotify listener / open file handle (-1 == none)
         XOVERLAPPED mOverlapped;       // +0x0B8  device-selector async op (X360 28 bytes)
         u8       maPad0D4[4];          // +0x0D4  .. +0x0D7
-        u8       mbFieldD8;            // +0x0D8  read by SetSignedUserIndex; cleared on card change
+        bool     mbFieldD8;            // +0x0D8  read by SetSignedUserIndex (passed straight to the bool
+                                       //         SetAutosaveState, ARTIST 0x82B5212C lbz); cleared on card change
         u8       mbContainerOpen;      // +0x0D9  a content container is currently open
         u8       mbFieldDA;            // +0x0DA  selector/card-change state byte
         u8       maOpaqueTailDB[5];   // +0x0DB  .. +0x0DF, untouched by the audited ARTIST users

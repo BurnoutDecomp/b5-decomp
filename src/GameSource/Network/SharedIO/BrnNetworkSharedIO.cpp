@@ -89,8 +89,12 @@ namespace BrnNetworkModuleIO
     // ----------------------------------------------------------------------------------------
     void TelemetryData::AddParameter(const char* lpcParam)
     {
-        CGS_ASSERT(static_cast<s32>(std::strlen(lpcParam) + std::strlen(macBuffer)) <= CgsNetwork::KI_MAX_TELEMETRY_DATA_SIZE,
-                   "static_cast< int32_t >( strlen( lpcParam ) + strlen( macBuffer ) ) <= CgsNetwork::KI_MAX_TELEMETRY_DATA_SIZE");
+        // ARTIST's assert names the header (0x820026F0, line 680): the original body is a header
+        // inline whose COMDAT copies ARTIST scatters (0x82354010, 0x823A6208, 0x823A6290); kept out
+        // of line here, with the original location recorded.
+        CGS_ASSERT_AT(static_cast<s32>(std::strlen(lpcParam) + std::strlen(macBuffer)) <= CgsNetwork::KI_MAX_TELEMETRY_DATA_SIZE,
+                      "static_cast< int32_t >( strlen( lpcParam ) + strlen( macBuffer ) ) <= CgsNetwork::KI_MAX_TELEMETRY_DATA_SIZE",
+                      "..\\..\\..\\GameSource\\Network/SharedIO/BrnNetworkSharedIO.h", 680);
 
         if (std::strlen(macBuffer) != 0)
         {

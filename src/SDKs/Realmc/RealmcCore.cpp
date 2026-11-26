@@ -593,11 +593,11 @@ IRunnableTask::~IRunnableTask()
 // ---------------------------------------------------------------------------
 // IRunnableTask::Starting
 //
-// Call vtable +0x10 (the task type) and return mpMemcardState->StartTask(type).
+// Call vtable +0x10 (the task type) and mpMemcardState->StartTask(type).
 // ---------------------------------------------------------------------------
-int IRunnableTask::Starting()
+void IRunnableTask::Starting()
 {
-    return mpMemcardState->StartTask(GetTaskId());  // vtable slot +0x10
+    mpMemcardState->StartTask(GetTaskId());  // vtable slot +0x10
 }
 
 // ---------------------------------------------------------------------------

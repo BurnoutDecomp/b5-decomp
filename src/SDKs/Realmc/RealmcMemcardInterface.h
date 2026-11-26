@@ -95,9 +95,9 @@ public:
     virtual void Shutdown() = 0;                                  // slot 1  (+0x04)
     virtual int Update(int liArg) = 0;                            // slot 2  (+0x08)
     virtual bool IsResettable() = 0;                              // slot 3  (+0x0C)
-    virtual int SetSignedUserIndex(int liUserIndex) = 0;          // slot 4  (+0x10)
+    virtual void SetSignedUserIndex(int liUserIndex) = 0;         // slot 4  (+0x10)
     virtual void MessageDone(int liChoice) = 0;                   // slot 5  (+0x14)
-    virtual int SetMessageState(int liMode, int liMask) = 0;      // slot 6  (+0x18)
+    virtual void SetMessageState(int liMode, int liMask) = 0;     // slot 6  (+0x18)
     virtual int CheckCard(int liArg) = 0;                         // slot 7  (+0x1C)
     virtual int SetActiveCard(int liArg1, int liArg2, int liArg3) = 0; // slot 8 (+0x20)
     virtual int BootupCheck(SaveInfo* lpSaveInfo, int liNumEntries,
@@ -106,7 +106,7 @@ public:
     virtual int Save(SaveInfo* lpSaveInfo, int liCount, LoadEntryInfo* lpEntries,
                      int liFlags, TitleInfo* lpTitleInfo) = 0;    // slot 11 (+0x2C)
     virtual int SetAutosave(int liEnabled, SaveCheckParams* lpParams) = 0; // slot 12 (+0x30)
-    virtual int SetMonitor(int liState) = 0;                      // slot 13 (+0x34)
+    virtual void SetMonitor(int liState) = 0;                     // slot 13 (+0x34)
     virtual int Load(EntryContentName* lpEntryContentName, int liNumEntries,
                      LoadEntryInfo* lpEntries, int liFlags, TitleInfo* lpTitleInfo) = 0; // slot 14 (+0x38)
 

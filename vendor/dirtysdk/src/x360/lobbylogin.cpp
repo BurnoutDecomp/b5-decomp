@@ -358,13 +358,16 @@ extern "C" void _LobbyLoginLathCallback(LobbyApiRefT* pApiRef, LobbyApiMsgT* pMs
     }
 }
 #include "netconn.h"
-// Native X360-only account metadata helper at ARTIST 82B204B0; exact original name unconfirmed.
-extern "C" void sub_82B204B0(LobbyLoginRefT*, char*, s32, s32);
+// Native X360-only account metadata helper at ARTIST 82B204B0: the Xenon counterpart of the PS3
+// build's _LobbyLoginSetPS3Info (DWARF lobbylogin.c:87), named after DirtySDK's "xenon" platform
+// files (netconnxenon, lobbyapixenon).
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x82B204B0
+extern "C" void _LobbyLoginSetXenonInfo(LobbyLoginRefT*, char*, s32, s32);
 
 extern "C" void _LobbyLoginRequest(LobbyLoginRefT* pLogin, s32 iKind, char* pMsg,
                                    s32 iMsgSize, LobbyApiCallbackT* pCallback)
 {
-    sub_82B204B0(pLogin, pMsg, iMsgSize, iKind == 0x61636374);
+    _LobbyLoginSetXenonInfo(pLogin, pMsg, iMsgSize, iKind == 0x61636374);
     TagFieldSetString(pMsg, iMsgSize, "MAC", NetConnMAC());
     if (iKind == 0x70657273)
     {
@@ -376,7 +379,9 @@ extern "C" void _LobbyLoginRequest(LobbyLoginRefT* pLogin, s32 iKind, char* pMsg
     pLogin->iRequestID = LobbyApiRequestCB(pLogin->pLobbyApi, iKind, pMsg, pCallback, pLogin);
     pLogin->eCurStatus = LOBBYLOGIN_STATUS_NETWORK;
 }
-extern "C" void sub_82B20390(LobbyLoginRefT*);
+// Applies the lobby configuration's XBOX_ADDR_REMAP / XBOX_NAME_REMAP tables.
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x82B20390
+extern "C" void _LobbyLoginRemapConfig(LobbyLoginRefT*);
 extern "C" void _LobbyLoginCreateAccount(LobbyLoginRefT*, s32);
 extern "C" void CheatCalcResponse(const char*, u32, unsigned char*, u32);
 
@@ -400,7 +405,7 @@ extern "C" void _LobbyLoginAuthCallback(LobbyApiRefT*, LobbyApiMsgT* pMsg, void*
                 return;
             }
             TagFieldGetString(TagFieldFind(pMsg->pData, "AUTOPASS"), pLogin->strAutoPassword, sizeof(pLogin->strAutoPassword), "");
-            sub_82B204B0(pLogin, pLogin->strRespBuf, sizeof(pLogin->strRespBuf), 1);
+            _LobbyLoginSetXenonInfo(pLogin, pLogin->strRespBuf, sizeof(pLogin->strRespBuf), 1);
             if (!TagFieldFind(pMsg->pData, "MAIL") && !TagFieldFind(pLogin->strRespBuf, "MAIL"))
             {
                 pLogin->bIncopleteAccount = 1;
@@ -441,7 +446,7 @@ extern "C" void _LobbyLoginAuthCallback(LobbyApiRefT*, LobbyApiMsgT* pMsg, void*
         if (TagFieldGetDelim(TagFieldFind(pMsg->pData, "PERSONAS"), pLogin->Personas.strNames[i], 32, "", i, ',') < 1)
             break;
     pLogin->Personas.iNumNames = i;
-    sub_82B20390(pLogin);
+    _LobbyLoginRemapConfig(pLogin);
     char strVersion[16];
     LobbyApiStatus(pLogin->pLobbyApi, 0x76657273, strVersion, 5);
     if (strcmp(strVersion, "FLM/"))
@@ -516,7 +521,7 @@ extern "C" void _LobbyLoginCreateAccount(LobbyLoginRefT* pLogin, s32 eContext)
     strMsg[0] = 0;
     bool bMailLength = true, bMailForm = true, bPassLength = true;
     TagFieldMerge(strMsg, sizeof(strMsg), pLogin->strTagfBuf);
-    sub_82B204B0(pLogin, strMsg, sizeof(strMsg), 1);
+    _LobbyLoginSetXenonInfo(pLogin, strMsg, sizeof(strMsg), 1);
     TagFieldSetString(strMsg, sizeof(strMsg), "GTAG", pLogin->strUser);
     if (pLogin->strSpam[0])
         TagFieldSetString(strMsg, sizeof(strMsg), "SPAM", pLogin->strSpam);
@@ -793,19 +798,21 @@ done:
     return 0;
 }
 // X360 address/name remap parsers at ARTIST 82B1FD80 and 82B20070.
-extern "C" s32 sub_82B1FD80(LobbyLoginRefT*, const char*);
-extern "C" s32 sub_82B20070(LobbyLoginRefT*, const char*);
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x82B1FD80 (NetConnControl 'xmap')
+extern "C" s32 _LobbyLoginParseAddrRemap(LobbyLoginRefT*, const char*);
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x82B20070 (NetConnControl 'xnam')
+extern "C" s32 _LobbyLoginParseNameRemap(LobbyLoginRefT*, const char*);
 
-extern "C" void sub_82B20390(LobbyLoginRefT* pLogin)
+extern "C" void _LobbyLoginRemapConfig(LobbyLoginRefT* pLogin)
 {
     const char* pConfig = static_cast<const char*>(LobbyApiInfo(pLogin->pLobbyApi, 0x636f6e66));
     char strRemap[512];
     TagFieldGetString(TagFieldFind(pConfig, "XBOX_ADDR_REMAP"), strRemap, sizeof(strRemap), "");
     if (strRemap[0])
-        sub_82B1FD80(pLogin, strRemap);
+        _LobbyLoginParseAddrRemap(pLogin, strRemap);
     TagFieldGetString(TagFieldFind(pConfig, "XBOX_NAME_REMAP"), strRemap, sizeof(strRemap), "");
     if (strRemap[0])
-        sub_82B20070(pLogin, strRemap);
+        _LobbyLoginParseNameRemap(pLogin, strRemap);
 }
 #include <xtl.h>
 #include "platform.h"
@@ -823,7 +830,7 @@ static void _LobbyLoginSetUCS2Field(char* pBuf, s32 iSize, const char* pName, co
     TagFieldSetString(pBuf, iSize, pName, strValue);
 }
 
-extern "C" void sub_82B204B0(LobbyLoginRefT* pLogin, char* pBuf, s32 iSize, s32 bAccount)
+extern "C" void _LobbyLoginSetXenonInfo(LobbyLoginRefT* pLogin, char* pBuf, s32 iSize, s32 bAccount)
 {
     if (!pLogin->strUser[0])
         return;
@@ -887,7 +894,9 @@ extern "C" void sub_82B204B0(LobbyLoginRefT* pLogin, char* pBuf, s32 iSize, s32 
 extern "C" u32 SocketHtonl(u32);
 typedef char LoginNativeServiceSizeCheck[sizeof(XONLINE_SERVICE_INFO) == 12 ? 1 : -1];
 
-extern "C" u32 sub_82B1FCE0(LobbyLoginRefT*, u32 uServiceId)
+// Maps an Xbox LIVE service id to its address ("could not map serviceID" fallback: 'host').
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x82B1FCE0 (export hole)
+extern "C" u32 _LobbyLoginGetServiceAddr(LobbyLoginRefT*, u32 uServiceId)
 {
     XONLINE_SERVICE_INFO service;
     for (s32 i = 0; i < 4; ++i)
@@ -943,7 +952,7 @@ static void _LobbyLoginReadPortRange(const char** ppCursor,
     *pRemapPort = _LobbyLoginReadPortEnd(ppCursor);
 }
 
-extern "C" s32 sub_82B1FD80(LobbyLoginRefT* pLogin, const char* pText)
+extern "C" s32 _LobbyLoginParseAddrRemap(LobbyLoginRefT* pLogin, const char* pText)
 {
     NetPrintfCode("lobbylogin: parsing new-style remap table\n");
 
@@ -1003,7 +1012,7 @@ extern "C" s32 sub_82B1FD80(LobbyLoginRefT* pLogin, const char* pText)
         // The configuration field is '/$<hex service id>'; ARTIST skips the
         // slash and dollar before calling strtol with radix 16.
         const char* pServiceID = pServiceSlash + 2;
-        const u32 uServiceAddress = sub_82B1FCE0(
+        const u32 uServiceAddress = _LobbyLoginGetServiceAddr(
             pLogin, (u32)strtol(pServiceID, NULL, 16));
 
         if (pPortList != NULL)
@@ -1076,7 +1085,7 @@ extern "C" s32 sub_82B1FD80(LobbyLoginRefT* pLogin, const char* pText)
     return 0;
 }
 
-extern "C" s32 sub_82B20070(LobbyLoginRefT* pLogin, const char* pText)
+extern "C" s32 _LobbyLoginParseNameRemap(LobbyLoginRefT* pLogin, const char* pText)
 {
     NetPrintfCode("lobbylogin: parsing new-style remap table\n");
 
@@ -1135,7 +1144,7 @@ extern "C" s32 sub_82B20070(LobbyLoginRefT* pLogin, const char* pText)
         const char* pNextRule = pRemap;
         if (*pRemap == '$')
         {
-            uRemapAddress = sub_82B1FCE0(
+            uRemapAddress = _LobbyLoginGetServiceAddr(
                 pLogin, (u32)strtol(pRemap + 1, NULL, 16));
             strRemapName[0] = '\0';
             ++pNextRule;

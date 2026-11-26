@@ -609,8 +609,8 @@ public:
     IRunnableTask(MessageQueue* pMessageQueue, MemcardState* pMemcardState);
 
     // Register this task as running on its MemcardState:
-    // return mpMemcardState->StartTask(GetTaskId()).
-    int Starting();
+    // mpMemcardState->StartTask(GetTaskId()).
+    void Starting();
 
     // Run the task once, synchronously: Starting(); the two task-body virtuals
     // (+0x0C then +0x08); then StopTask(GetTaskId()). Returns 0.
