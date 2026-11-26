@@ -150,6 +150,18 @@ namespace BrnAI
     const f32       KF_BEHIND_SHUNT_MARKED_MAN_MIN_SPEED  = 90.0f * CgsCore::KF_MPH_TO_MPS;      // :156 bss 0x8300D774
     const f32       KF_BEHIND_SHUNT_MIN_SPEED_DIFFERENCE  = 10.0f * CgsCore::KF_MPH_TO_MPS;      // :157 bss 0x8300D934
 
+    // :160..:167, rdata 0x820C4238..0x820C424C in this order (:159, :162 and :169 have no slot: no
+    // X360 reader). ChooseAggressiveSteeringFan reads the slam-rivals pair (15 at 0x820C4238
+    // anchored; 100 off the earlier 100 at 0x820C3FAC) and the swerving distance, and
+    // ChooseRaceSteeringFan the crash ones (0.1 at 0x820C424C, 50 at 0x820C4244; the 0 offset folds).
+    const f32       KF_ROAD_RAGE_MIN_SLAM_RIVALS_DISTANCE          = 15.0f;                      // :160 rdata 0x820C4238
+    const f32       KF_ROAD_RAGE_MAX_SLAM_RIVALS_DISTANCE          = 100.0f;                     // :161 rdata 0x820C423C
+    const f32       KF_DISTANCE_AWAY_FROM_PLAYER_TO_ALLOW_SWERVING = 5.0f;                       // :163 rdata 0x820C4240
+
+    const f32       KF_CRASH_DISTANCE        = 50.0f;                                            // :165 rdata 0x820C4244
+    const f32       KF_SCHEDULE_CRASH_OFFSET = 0.0f;                                             // :166 rdata 0x820C4248
+    const f32       KF_SCHEDULE_CRASH_FACTOR = 0.1f;                                             // :167 rdata 0x820C424C
+
     // :171, rdata 0x820C4250 (the 6.0 UpdatePlayerTimers caps mfPlayerSlowSpeedTime with, read there
     // directly at 0x827703A8; the PID gains :2798.. follow it at 0x820C4254).
     const f32       KF_PLAYER_SLOW_SPEED_AGGRESSIVE_TIME = 6.0f;
@@ -1077,10 +1089,10 @@ namespace BrnAI
         if (lfScheduleGate > 0.0f)
         {
             const f32 lfDistAhead = lpCar->mfDistanceAheadOfPlayer;          // lfs 0x14F8(car)
-            const f32 lfClamped   = Saturate(lfScheduleGate * 0.1f);         // flt_820C424C == 0.1
+            const f32 lfCrashFactor = Saturate((lfScheduleGate - KF_SCHEDULE_CRASH_OFFSET) * KF_SCHEDULE_CRASH_FACTOR);  // :609
             if (lfDistAhead > 0.0f)
             {
-                if (lfDistAhead < lfClamped * K_NORMAL_SPREAD_HNG)           // flt_820C4244 == 50.0
+                if (lfDistAhead < lfCrashFactor * KF_CRASH_DISTANCE)
                     return 1;
             }
         }
@@ -1350,18 +1362,6 @@ namespace BrnAI
 
         inline f32 Dot2D(Vector2 lA, Vector2 lB) { return rw::math::vpu::Dot(lA, lB).GetFloat(); }
 
-        // The two half-extent vectors the avoidance box is built from. On the X360 these are two
-        // lazily-initialised statics (unk_8300DC90 == (2,0,..), unk_8300DC80 == (0,2,..); the
-        // `dword_8300DCA0 & 1/2` bits are the one-shot guards). Const data on the host.
-        Vector2 MakeHalfExtentX()
-        {
-            return Vector2(2.0f, 0.0f);
-        }
-        Vector2 MakeHalfExtentY()
-        {
-            return Vector2(0.0f, 2.0f);
-        }
-
         // Fill one NearbyVehicle's four HNG boundary lines from a closed 4-corner quad, in the
         // console's order: line[i] runs corner[i] -> corner[i+1] (wrapping).
         void FillHNGQuad(NearbyVehicle* lpVehicle, Vector2 lC0, Vector2 lC1, Vector2 lC2, Vector2 lC3)
@@ -1512,7 +1512,7 @@ namespace BrnAI
             bool lbSpurt = false;
             // 0x82766220 `fcmpu slowTime, 6.0 ; blt -> skip`: taken only on an ordered <, so a
             // NaN slow-speed time is considered (FX-AINAN2; `>=` skipped it).
-            if (!(mfPlayerSlowSpeedTime < 6.0f))        // flt_820C4250 == 6.0
+            if (!(mfPlayerSlowSpeedTime < KF_PLAYER_SLOW_SPEED_AGGRESSIVE_TIME))
             {
                 const f32 lfMySpeed = mpCar->GetSpeed();
                 if (lfMySpeed > lpPlayerCar->GetSpeed() + KF_BEHIND_SHUNT_MIN_SPEED_DIFFERENCE)  // flt_8300D934 == 10 mph
@@ -1540,15 +1540,15 @@ namespace BrnAI
         }
 
         const f32 lfDistance = mpCar->mfBuzzDistanceToPlayer;
-        if (!(lfDistance > 5.0f))                          // flt_820C488C == 5
+        if (!(lfDistance > KF_DISTANCE_AWAY_FROM_PLAYER_TO_ALLOW_SWERVING))
             return 0;
         if (mpCar->GetRouteFindingStyle() == static_cast<ERouteFindingStyle>(6))
             return 0;
-        if (lfDistance > 100.0f)                             // flt_820C3FAC == 100
+        if (lfDistance > KF_ROAD_RAGE_MAX_SLAM_RIVALS_DISTANCE)
             return 0;
 
         const s32 liOpponent = static_cast<s32>(mpCar->miOpponentIndex);
-        if (lfDistance > 15.0f)                             // flt_820C4238 == 15
+        if (lfDistance > KF_ROAD_RAGE_MIN_SLAM_RIVALS_DISTANCE)
             return ((liOpponent % 3) == 0) ? 0 : 5;                                  // andi. r3, r11, 5
         return ((liOpponent % 2) == 0) ? 0 : 6;                                      // rlwinm r3, r11, 0,29,30
     }
@@ -2588,17 +2588,18 @@ namespace BrnAI
         lpVehicle->meGlobalRaceCarIndex =
             static_cast<EGlobalRaceCarIndex>(lpCar->miRaceCarIndex);               // stw +36 (car+0x14C4)
 
-        // The two lazily-built half-extent vectors: X == (2, 0), Y == (0, 2).
-        const Vector2 lHalfX = MakeHalfExtentX();
-        const Vector2 lHalfY = MakeHalfExtentY();
+        // DWARF :2715/:2716 local statics, built on first use (.bss 0x8300DC90 / 0x8300DC80, guard
+        // bits 1 / 2 of 0x8300DCA0; 0x8277D8F8..0x8277D974).
+        static const Vector2 K_BB_X_OFFSET(2.0f, 0.0f);
+        static const Vector2 K_BB_Z_OFFSET(0.0f, 2.0f);
 
         // ARTIST 0x8277D9B4..D4 computes the four corners in full registers.
-        Vector2 lMinusX; lMinusX.mV = __vsubfp(lCentre.mV, lHalfX.mV);
-        Vector2 lPlusX;  lPlusX.mV = __vaddfp(lCentre.mV, lHalfX.mV);
-        Vector2 lC0; lC0.mV = __vaddfp(lMinusX.mV, lHalfY.mV);
-        Vector2 lC1; lC1.mV = __vaddfp(lPlusX.mV, lHalfY.mV);
-        Vector2 lC2; lC2.mV = __vsubfp(lPlusX.mV, lHalfY.mV);
-        Vector2 lC3; lC3.mV = __vsubfp(lMinusX.mV, lHalfY.mV);
+        Vector2 lMinusX; lMinusX.mV = __vsubfp(lCentre.mV, K_BB_X_OFFSET.mV);
+        Vector2 lPlusX;  lPlusX.mV = __vaddfp(lCentre.mV, K_BB_X_OFFSET.mV);
+        Vector2 lC0; lC0.mV = __vaddfp(lMinusX.mV, K_BB_Z_OFFSET.mV);
+        Vector2 lC1; lC1.mV = __vaddfp(lPlusX.mV, K_BB_Z_OFFSET.mV);
+        Vector2 lC2; lC2.mV = __vsubfp(lPlusX.mV, K_BB_Z_OFFSET.mV);
+        Vector2 lC3; lC3.mV = __vsubfp(lMinusX.mV, K_BB_Z_OFFSET.mV);
 
         FillHNGQuad(lpVehicle, lC0, lC1, lC2, lC3);
         return true;
