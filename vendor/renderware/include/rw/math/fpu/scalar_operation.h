@@ -21,6 +21,7 @@
 
 #include <ppcintrinsics.h>
 #include <cmath>
+#include "rw/math/fpu/constants.h"   // EPSILON (IsZero's default tolerance)
 
 namespace rw
 {
@@ -138,9 +139,13 @@ namespace fpu
     // 0x82222D0C/0x82222D20, VehiclePhysics 0x825FDC38/0x825FDC44, BehaviourGameplayExternal
     // 0x82241BEC/0x82241C00. The literal `<=` / `>=` spelling answered FALSE for a NaN on x64, so it is
     // spelled as the two branch tests (crash parity FX-GATE).
-    inline bool IsZero(float lfValue)
+    // rwmath 1.02.00 fpu/scalar.h:390 `IsZero(float value, float tolerance = EPSILON)`: Looker::Zoom
+    // and the camera utils' GetZoomFromFOVDegs / GetFOVDegsFromZoom read rwmath's EPSILON copy at
+    // 0x82001770. KF_IS_ZERO_TOLERANCE above stays for its direct users; IsZero no longer
+    // references it, so it is not emitted into every including TU's .rdata block.
+    inline bool IsZero(float lfValue, float lfTolerance = EPSILON)
     {
-        return !(lfValue > KF_IS_ZERO_TOLERANCE) && !(lfValue < -KF_IS_ZERO_TOLERANCE);
+        return !(lfValue > lfTolerance) && !(lfValue < -lfTolerance);
     }
 
     // ADDITIVE GROW (SmoothMover::UpdateWithLimits* @0x8220D608/@0x8220D820, the

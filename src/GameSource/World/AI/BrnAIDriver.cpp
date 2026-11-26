@@ -123,6 +123,11 @@ namespace BrnAI
     const f32       KF_QUICKTURN_SLOWNESS_DROPOUT = 10.0f * CgsCore::KF_MPH_TO_MPS;              // :130 bss 0x8300D6FC
     const f32       KF_QUICKTURN_SLOWNESS_DROPIN  = 30.0f * CgsCore::KF_MPH_TO_MPS;              // :131 bss 0x8300D960
 
+    // :133 has no initialiser in the bank (static on the console; dynamic on PS3, whose DWARF
+    // records no value): the 1.0 in .rdata 0x820C4218 between :119 and :136, the only slot
+    // there (:123 KF_MAX_DIST_SQUARED_FROM_PARAM_BEFORE_RESET, PS3 400, is unreferenced). It is
+    // the throttle/brake ceiling of DoSlowTurn's two `1.0 - t` arms.
+    const f32       KF_MAX_SLOW_TURN_ACCELERATION      = 1.0f;                                   // :133 rdata 0x820C4218
     const f32       KF_SLOW_TURN_SPEED                 = 20.0f * CgsCore::KF_MPH_TO_MPS;         // :134 bss 0x8300D718
     const f32       KF_SLOW_TURN_DROP_OUT              = rw::math::fpu::Cos(rw::math::fpu::DegToRad(20.0f));  // :135 bss 0x8300D710
     const f32       KF_SLOW_TURN_DIRECTION_CHANGE_TIME = 3.0f;                                   // :136 rdata 0x820C421C
@@ -2167,12 +2172,12 @@ namespace BrnAI
         if ((liPhase % 2) == 0)
         {
             const f32 lfT = SaturateU(lpCar->GetSpeed() / KF_SLOW_TURN_SPEED);      // flt_8300D718
-            mfAccelerator = 1.0f - lfT;                                             // stfs 0x1D28
+            mfAccelerator = KF_MAX_SLOW_TURN_ACCELERATION - lfT;                    // stfs 0x1D28
         }
         else
         {
             const f32 lfT = SaturateU(-(lpCar->GetSpeed() / KF_SLOW_TURN_SPEED));   // the console's fneg
-            mfBrake = 1.0f - lfT;                                                   // stfs 0x1D2C
+            mfBrake = KF_MAX_SLOW_TURN_ACCELERATION - lfT;                          // stfs 0x1D2C
         }
     }
 
