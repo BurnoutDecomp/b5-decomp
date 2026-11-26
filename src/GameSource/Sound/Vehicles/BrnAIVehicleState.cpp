@@ -139,11 +139,14 @@ void AIVehicleState::UpdateParams( f32 af32DeltaTime )
 
     if ( IsAttached() && GetUpdateState().GetCurrent() == E_UPDATE_ATTACHED )
     {
+        // DWARF locals lpInput (cpp:114) and lbRaceCarIsActive (cpp:116); ARTIST 0x826EFD54 loads
+        // the vehicle index before the GetVehicleInterface call.
         BrnSound::Module::SoundLogicModule* lpModule =
             static_cast<BrnSound::Module::SoundLogicModule*>( GetLogicModule() );
-        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicles =
-            lpModule->GetBrnInputStructure()->GetVehicleInterface();
-        if ( !lpVehicles->IsRaceCarActive( static_cast<EActiveRaceCarIndex>( mAttachInfo.muVehicleIndex ) ) )
+        BrnSound::Module::Io::LogicInputBuffer* lpInput = lpModule->GetBrnInputStructure();
+        const bool lbRaceCarIsActive = lpInput->GetVehicleInterface()->IsRaceCarActive(
+            static_cast<EActiveRaceCarIndex>( mAttachInfo.muVehicleIndex ) );
+        if ( !lbRaceCarIsActive )
         {
             // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
 
