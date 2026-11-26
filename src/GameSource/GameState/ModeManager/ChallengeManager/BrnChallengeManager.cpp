@@ -68,6 +68,7 @@
 #include "GameSource/Math/BrnMathUtils.h"                           // BrnMath::Flatten / BrnMath::IsPointInsideBox
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h" // BrnPhysics::Vehicle::RaceCarState members
 #include "rw/math/fpu/scalar_operation.h"
+#include "rw/core/stdc/util.h"   // rw::core::stdc::Min (UpdateArbitrationSuccess)
 #include "rw/math/vpu/vector3_operation.h"                          // operator- / operator* / MagnitudeSquared
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
@@ -4230,13 +4231,15 @@ bool ChallengeManager::UpdateArbitrationSuccess(s32 liActionIndex, TGameActionQu
             // index to +0xE14 first, then re-stores the clamped one).
             const BrnResource::ChallengeListEntry* lpChallenge = mpCurrentChallenge;
             miCurrentArbitrationIndex = liActionIndex + 1;
-            miCurrentArbitrationIndex = rw::math::fpu::Min(miCurrentArbitrationIndex,
-                                                          lpChallenge->GetNumActions() - 1);
+            // DWARF (BrnChallengeManager.cpp:1529 block) names rw::core::stdc::Min, the by-value
+            // int form: ARTIST keeps the stored index in r11 (0x82350578).
+            miCurrentArbitrationIndex = rw::core::stdc::Min(miCurrentArbitrationIndex,
+                                                            lpChallenge->GetNumActions() - 1);
 
             if (miCurrentArbitrationIndex > miCurrentChallengeAction)
             {
-                miCurrentChallengeAction = rw::math::fpu::Min(miCurrentArbitrationIndex,
-                                                              lpChallenge->GetNumActions() - 1);
+                miCurrentChallengeAction = rw::core::stdc::Min(miCurrentArbitrationIndex,
+                                                               lpChallenge->GetNumActions() - 1);
             }
         }
     }

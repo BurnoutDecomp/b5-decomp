@@ -34,18 +34,20 @@ namespace fpu
     static const float KF_IS_ZERO_TOLERANCE = 1.1920929e-7f;
 
     // scalar.h:136-139 / :203-206 -- the generic forms (integral T): `a < b ? a : b`, `a > b ? a : b`.
-    template <typename T> inline T Min(T lLhs, T lRhs) { return (lLhs < lRhs) ? lLhs : lRhs; }
-    template <typename T> inline T Max(T lLhs, T lRhs) { return (lLhs > lRhs) ? lLhs : lRhs; }
+    // Every Min/Max takes its operands by const reference, as scalar.h declares them (the argument
+    // evaluation and the fsel then sit where ARTIST has them, PFXHookNodeBlender::Update 0x824FB75C).
+    template <typename T> inline T Min(const T& lLhs, const T& lRhs) { return (lLhs < lRhs) ? lLhs : lRhs; }
+    template <typename T> inline T Max(const T& lLhs, const T& lRhs) { return (lLhs > lRhs) ? lLhs : lRhs; }
 
     // scalar.h:141-167 -- Min<float>: test = a - b ; fsel(test, b, a).
-    template <> inline float Min<float>(float lfLhs, float lfRhs)
+    template <> inline float Min<float>(const float& lfLhs, const float& lfRhs)
     {
         const float lfTest = lfLhs - lfRhs;
         return static_cast<float>(__fsel(lfTest, lfRhs, lfLhs));
     }
 
     // scalar.h:208-235 -- Max<float>: test = a - b ; fsel(test, a, b).
-    template <> inline float Max<float>(float lfLhs, float lfRhs)
+    template <> inline float Max<float>(const float& lfLhs, const float& lfRhs)
     {
         const float lfTest = lfLhs - lfRhs;
         return static_cast<float>(__fsel(lfTest, lfLhs, lfRhs));
@@ -54,13 +56,13 @@ namespace fpu
     // scalar.h:169-196 / :237-264 -- the double forms are the same fsel, with the difference held
     // in a float (`float test = a - b;`); the selected double operand is returned as it is. No
     // game call site instantiates them today.
-    template <> inline double Min<double>(double ldLhs, double ldRhs)
+    template <> inline double Min<double>(const double& ldLhs, const double& ldRhs)
     {
         const float lfTest = static_cast<float>(ldLhs - ldRhs);
         return __fsel(lfTest, ldRhs, ldLhs);
     }
 
-    template <> inline double Max<double>(double ldLhs, double ldRhs)
+    template <> inline double Max<double>(const double& ldLhs, const double& ldRhs)
     {
         const float lfTest = static_cast<float>(ldLhs - ldRhs);
         return __fsel(lfTest, ldLhs, ldRhs);
