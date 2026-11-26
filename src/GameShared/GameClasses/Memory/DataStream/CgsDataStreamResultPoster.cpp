@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamResultPoster.h"
 
-#include <cstring>  // std::memcpy
+#include "GameShared/GameClasses/Core/X360/CgsCoreX360.h"  // CgsCore::MemCpy
 
 namespace CgsMemory
 {
@@ -101,7 +101,7 @@ namespace CgsMemory
         const s32 liResultSize = lpReader->miResultSize;
         if (liResultSize != 0)
         {
-            std::memcpy(lpReader->mpcResultBuffer + liResultSize * luFirstSlot,
+            CgsCore::MemCpy(lpReader->mpcResultBuffer + liResultSize * luFirstSlot,
                         lpResults,
                         static_cast<size_t>(liResultSize * liResultCount));
         }

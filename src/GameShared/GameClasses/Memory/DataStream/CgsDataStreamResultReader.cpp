@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (End's users-connected assert)
 
 #include <xtl.h>  // native lwsync
+#include "GameShared/GameClasses/Core/X360/CgsCoreX360.h"  // CgsCore::MemCpy
 
 namespace CgsMemory
 {
@@ -88,7 +89,7 @@ namespace CgsMemory
         {
             const s32 liResultSize = miResultSize;
             if (liResultSize > 0)
-                XMemCpy(lpBuffer, mpcResultBuffer + liResultSize * liCursor, liResultSize);
+                CgsCore::MemCpy(lpBuffer, mpcResultBuffer + liResultSize * liCursor, liResultSize);
             ++miNextResult;
             return E_READ_SUCCESS;
         }

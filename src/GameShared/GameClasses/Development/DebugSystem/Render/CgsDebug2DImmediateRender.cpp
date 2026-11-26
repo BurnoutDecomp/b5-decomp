@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <vectorintrinsics.h>
 
-#pragma intrinsic(_rotl)
+
 
 // ARTIST 0x82824048, which IDA names "MaybeDrawText", is no global helper: it is the member
 // Debug2DImmediateRender::DrawText(const char*, f32, f32, f32, RGBA) (DWARF CgsDebug2DImmediateRender.h:114,

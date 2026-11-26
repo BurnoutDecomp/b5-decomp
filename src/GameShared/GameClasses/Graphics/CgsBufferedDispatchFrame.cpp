@@ -1,7 +1,3 @@
-// XDK size optimization matches ARTIST at 0x827F97F8.
-#if defined(_XBOX) && defined(_MSC_VER)
-#pragma optimize("s", on)
-#endif
 
 #include "GameShared/GameClasses/Graphics/CgsBufferedDispatchFrame.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
@@ -55,11 +51,12 @@ void BufferedDispatchFrame::Construct(u32 luFramesPerList, u32 luBinSizeQwords, 
 {
     mapDispatchFrame = new DispatchFrame*[muNumDispatchFrames];
 
-    for (u32 luFrame = 0; luFrame < muNumDispatchFrames; ++luFrame)
+    for (u32 i = 0; i < muNumDispatchFrames; ++i)
     {
-        void* lpStorage = rwAlignedMemoryFunctions.rwmalloc(sizeof(DispatchFrame), 16u);
-        mapDispatchFrame[luFrame] = new(lpStorage) DispatchFrame;
-        mapDispatchFrame[luFrame]->Construct(luFramesPerList, luBinSizeQwords, lpAllocator);
+        // DWARF CgsBufferedDispatchFrame.cpp:47 scopes only i, and DispatchFrame declares no constructor
+        // (CgsDispatcher.h:238): the slot takes the raw aligned block, then Construct (ARTIST 0x827F9864).
+        mapDispatchFrame[i] = static_cast<DispatchFrame*>(rwAlignedMemoryFunctions.rwmalloc(sizeof(DispatchFrame), 16u));
+        mapDispatchFrame[i]->Construct(luFramesPerList, luBinSizeQwords, lpAllocator);
     }
 
     muCurrentFrameForWrite = 0;

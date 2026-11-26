@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"  // CGS_ASSERT
 
 #include <xtl.h>
-#include <cstring>  // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
+#include "GameShared/GameClasses/Core/X360/CgsCoreX360.h"  // CgsCore::MemCpy
 #include "types.hpp"  // uintptr_t (Construct's two 128-byte buffer-alignment tripwires)
 #include <ppcintrinsics.h> // native __lwsync
 
@@ -113,7 +113,7 @@ namespace CgsMemory
         CGS_ASSERT_STREAM_AT(!mbStreaming, "Streaming has already begun so can't syncronously add commands\n", CGS_ARTIST_FILE, 199);
         CGS_ASSERT_STREAM_AT(miNumCommands < miMaxCommands, "No space for more commands\n", CGS_ARTIST_FILE, 200);
 
-        XMemCpy(mpcCommandBuffer + miNumCommands * miCommandSize,
+        CgsCore::MemCpy(mpcCommandBuffer + miNumCommands * miCommandSize,
                     lpCommand,
                     static_cast<size_t>(miCommandSize));
 

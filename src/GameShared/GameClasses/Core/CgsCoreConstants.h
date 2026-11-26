@@ -12,6 +12,9 @@ namespace CgsCore
     // it from memory, e.g. BoostStrategy::KF_ONCOMING_MINSPEED's at 0x82C4C108.
     extern const f32 KF_MPH_TO_MPS;
 
+    // CgsCoreConstants.cpp:51 (DWARF): KF_MPH_TO_MPS is derived from it.
+    extern const f32 KF_MILES_TO_METRES;
+
     // CgsCoreConstants.h (defined CgsCoreConstants.cpp:54). ARTIST storage 0x830180B0 (.bss),
     // filled by the dynamic initialiser 0x82C6D0C0: 1.0f / KF_MPH_TO_MPS read from memory
     // (lfs 0x82001C98; lfs 0x82F31928; fdivs; stfs). Read by e.g. ResetOnTrackDebugComponent::

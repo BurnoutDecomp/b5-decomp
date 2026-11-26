@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamConsumer.h"
 
 #include <xtl.h>
+#include "GameShared/GameClasses/Core/X360/CgsCoreX360.h"  // CgsCore::MemCpy
 
 namespace CgsMemory
 {
@@ -16,7 +17,7 @@ namespace CgsMemory
                                              s32                       liResultDestinationSize)
     {
         CGS_STATIC_ASSERT(sizeof(mShared) == 0x20, "ARTIST SharedData copy");
-        XMemCpy(&mShared, &lpProducer->mShared, sizeof(mShared));
+        CgsCore::MemCpy(&mShared, &lpProducer->mShared, sizeof(mShared));
 
         mpvResultDestination   = lpvResultDestination;
         miResultDestinationSize = liResultDestinationSize;
@@ -52,6 +53,6 @@ namespace CgsMemory
 
         u8* lpDestination = static_cast<u8*>(mShared.mpResultBuffer) + (liStride * liResultIndex);
 
-        XMemCpy(lpDestination, lpvResult, static_cast<size_t>(liStride));
+        CgsCore::MemCpy(lpDestination, lpvResult, static_cast<size_t>(liStride));
     }
 }

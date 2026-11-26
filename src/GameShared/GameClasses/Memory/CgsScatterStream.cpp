@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Memory/CgsScatterStream.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include <cstring>                                    // memcpy (XMemCpy)
+#include "GameShared/GameClasses/Core/X360/CgsCoreX360.h"  // CgsCore::MemCpy
 #include "types.hpp"                                    // uintptr_t
 #define CGS_ARTIST_CGSSCATTERSTREAM_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsScatterStream.cpp"
 // CgsMemory::ScatterStream / ScatterStreamBase - see the header. Faithful port; the
@@ -30,7 +30,7 @@ namespace CgsMemory
             u32 luMoved;
             if (luRemaining <= luBudget)        // the whole rest of this entry fits in the budget
             {
-                memcpy(lpDst, lpSrc, luRemaining);
+                CgsCore::MemCpy(lpDst, lpSrc, luRemaining);
                 luMoved = luRemaining;
                 ++muCurrentEntry;
                 muEntryOffset = 0;
@@ -43,7 +43,7 @@ namespace CgsMemory
             else                                // budget runs out mid-entry
             {
                 luMoved = luBudget;
-                memcpy(lpDst, lpSrc, luBudget);
+                CgsCore::MemCpy(lpDst, lpSrc, luBudget);
                 muEntryOffset += luBudget;
             }
             muStreamPosition += luMoved;         // X360 a1[7] += v13 (loop increment)
