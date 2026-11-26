@@ -152,19 +152,19 @@ namespace BrnNetwork
     }
 
     void
-    AutoLoginManager::AutoLoginProcessComplete(u32 luCompletedProcess)
+    AutoLoginManager::AutoLoginProcessComplete(s32 leCompletedProcess)
     {
-        CGS_ASSERT(luCompletedProcess < KU_AUTO_LOGIN_PROCESS_COUNT,
-                   "leCompletedProcess < E_AUTO_LOGIN_PROCESS_COUNT");
+        CGS_ASSERT_AT(leCompletedProcess < static_cast<s32>(KU_AUTO_LOGIN_PROCESS_COUNT),
+                      "leCompletedProcess < E_AUTO_LOGIN_PROCESS_COUNT", CGS_ARTIST_FILE, 397);
 
-        mProcessesComplete.SetBit(luCompletedProcess);
+        mProcessesComplete.SetBit(leCompletedProcess);
     }
 
     void
     AutoLoginManager::UpdateWaitAutoLogin(f32 lfFrameDelta)
     {
         // Count the frame time down off the wait timer.
-        mTimer -= CgsSystem::Time(lfFrameDelta);
+        mTimer -= lfFrameDelta;
 
         CGS_ASSERT(mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkModule",

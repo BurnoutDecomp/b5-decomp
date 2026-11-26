@@ -135,20 +135,21 @@ void BrnServerInterfaceTelemetry::Update(const BrnNetworkModuleIO::PostSimulatio
 {
     CgsNetwork::ServerInterfaceTelemetry::Update();
 
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    s32 leEventType = lpInput->GetNetworkEventQueue()->GetFirstEvent(&lpEvent, &liSize);
+    // DWARF locals (BrnServerInterfaceTelemetry.cpp:175-177), uninitialised as ARTIST leaves them.
+    const CgsModule::Event* lpEvent;
+    s32 liEventSize;
+    s32 liEventType = lpInput->GetNetworkEventQueue()->GetFirstEvent(&lpEvent, &liEventSize);
 
     while (lpEvent != 0)
     {
-        if (leEventType == BrnNetworkModuleIO::NetworkInTelemetryEvent::KI_EVENT_TYPE)
+        if (liEventType == BrnNetworkModuleIO::NetworkInTelemetryEvent::KI_EVENT_TYPE)
         {
             const BrnNetworkModuleIO::NetworkInTelemetryEvent* lpTelemetryEvent =
                 reinterpret_cast<const BrnNetworkModuleIO::NetworkInTelemetryEvent*>(lpEvent);
             CaptureEvent(lpTelemetryEvent->mEventData.meHook, lpTelemetryEvent->mEventData.macBuffer);
         }
 
-        leEventType = lpInput->GetNetworkEventQueue()->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        liEventType = lpInput->GetNetworkEventQueue()->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
     }
 }
 

@@ -280,7 +280,7 @@ namespace BrnNetwork
         const NetworkEventQueueConcrete* lpQueue = lpInQueue;
 
         const CgsModule::Event* lpEvent = NULL;
-        s32 liSize = 0;
+        s32 liSize;
 
         for (s32 liEventType = lpQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != NULL;

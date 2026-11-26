@@ -113,7 +113,9 @@ namespace BrnNetwork
 
         // X360 0x82556DD0 -- mark one auto-login process complete (set its bit). leCompletedProcess
         // must be < KU_AUTO_LOGIN_PROCESS_COUNT.
-        void AutoLoginProcessComplete(u32 luCompletedProcess);
+        // Signed: ARTIST compares the process with cmpwi (0x82556DE4); the assert text names it
+        // leCompletedProcess (an enum in the original; its enumerators are not recovered).
+        void AutoLoginProcessComplete(s32 leCompletedProcess);
 
     private:
         // ---- per-state update steps (dispatched by ProcessBeforeSimulation) -------------------

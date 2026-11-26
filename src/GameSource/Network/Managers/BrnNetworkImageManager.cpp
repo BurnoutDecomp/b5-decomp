@@ -502,8 +502,8 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------
     void NetworkImageManager::ProcessNetworkEvents(const BrnNetworkModuleIO::NetworkEventQueue* lpQueue)
     {
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
         s32 leEventType = lpQueue->GetFirstEvent(&lpEvent, &liSize);
 
         while ( lpEvent != 0 )

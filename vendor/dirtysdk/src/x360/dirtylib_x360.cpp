@@ -47,14 +47,14 @@ extern "C" void NetCritKill(NetCritT* crit)
 
 extern "C" s32 NetCritTry(NetCritT* crit)
 {
-    if (!crit) crit = &gGlobalCrit;
-    if (crit->owner != GetCurrentThreadId())
+    NetCritT* pCrit = (crit != 0) ? crit : &gGlobalCrit;   // ARTIST 0x82B29AC0 tests the argument
+    if (pCrit->owner != GetCurrentThreadId())
     {
-        if (InterlockedExchange(&crit->lock, 1)) return 0;
-        EnterCriticalSection(&crit->section);
-        crit->owner = GetCurrentThreadId();
+        if (InterlockedExchange(&pCrit->lock, 1) != 0) return 0;
+        EnterCriticalSection(&pCrit->section);
+        pCrit->owner = GetCurrentThreadId();
     }
-    ++crit->count;
+    pCrit->count += 1;
     return 1;
 }
 
@@ -79,14 +79,18 @@ extern "C" void NetCritEnter(NetCritT* crit)
 extern "C" void NetCritLeave(NetCritT* crit)
 {
     if (!crit) crit = &gGlobalCrit;
-    if (crit->count <= 1)
+    // ARTIST 0x82B29C24 tests the nested count first.
+    if (crit->count > 1)
+    {
+        --crit->count;
+    }
+    else
     {
         crit->owner = 0;
         crit->count = 0;
         crit->lock = 0;
         LeaveCriticalSection(&crit->section);
     }
-    else --crit->count;
 }
 
 extern "C" void NetIdleReset(void) { gIdleCount = 0; }

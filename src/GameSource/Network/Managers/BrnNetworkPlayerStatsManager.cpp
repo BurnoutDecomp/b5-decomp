@@ -635,8 +635,8 @@ namespace BrnNetwork
             "lpInput->GetNetworkEventQueue()",
             CGS_ARTIST_FILE, 884 /* ARTIST 0x8255F664 */));
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liEventSize = 0;
+        const CgsModule::Event* lpEvent;
+        s32 liEventSize;
         s32 liEventType = lpInput->GetNetworkEventQueue()->GetFirstEvent(&lpEvent, &liEventSize);
         while (lpEvent != 0)
         {

@@ -133,12 +133,11 @@ namespace BrnNetwork
     // the rival has a (non-empty) name.
     void LiveRevengeDebugComponent::AddPlayer(LiveRevengeRelationship* lpRelationship)
     {
-        const CgsNetwork::PlayerName* lpRivalName = lpRelationship->GetRivalName();
-        CGS_ASSERT(lpRivalName != 0, CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT(lpRelationship->GetRivalName(), CGS_ASSERT_MESSAGE_AT(
             "lpRelationship->GetRivalName()",
             __FILE__, 180 /* ARTIST 0x8258500C */));
 
-        const char* lpcRivalName = lpRivalName->GetPlayerName();
+        const char* lpcRivalName = lpRelationship->GetRivalName()->GetPlayerName();
         if (lpcRivalName[0] != '\0')
         {
             // Two summary variables (status is signed; total-events is unsigned), grouped by rival.

@@ -258,8 +258,8 @@ namespace BrnNetwork
         CGS_ASSERT( lpNetworkEventQueue != 0, "lpNetworkEventQueue" );
 
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
         s32 leEventType = lpNetworkEventQueue->GetFirstEvent( &lpEvent, &liSize );
 
         while ( lpEvent != 0 )
@@ -370,7 +370,7 @@ namespace BrnNetwork
     void EventScoresManager::UpdateUploadEventScores( f32 lfTimeStep )
     {
         // Count the retry timer down by this frame's step.
-        mUploadRetryTimer -= CgsSystem::Time( lfTimeStep );
+        mUploadRetryTimer -=  lfTimeStep ;
 
         // lbReadyToUpload == (miUploadCount == 0) && !((seconds + fraction) > 0), i.e. the retry
         // window has expired and no batch is currently in flight.

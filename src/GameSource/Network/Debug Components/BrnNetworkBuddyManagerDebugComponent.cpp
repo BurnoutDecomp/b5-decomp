@@ -402,7 +402,7 @@ namespace BrnNetwork
         CgsDev::Log::LogChannelOutput& lrLog = CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput;
 
         const CgsModule::Event* lpEvent = NULL;
-        s32 liSize = 0;
+        s32 liSize;
         s32 liEventType = lpEventQueue->GetFirstEvent(&lpEvent, &liSize);
 
         while (lpEvent != NULL)

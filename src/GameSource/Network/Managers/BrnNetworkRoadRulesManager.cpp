@@ -566,8 +566,8 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::ProcessGameActions(
         const BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue )
     {
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
         s32 liActionID = lpGameActionQueue->GetFirstEvent( &lpEvent, &liSize );
 
         while ( lpEvent != 0 )
@@ -1282,8 +1282,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::ProcessNetworkEvents( const BrnNetworkModuleIO::NetworkEventQueue* lpNetworkEventQueue )
     {
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
         s32 liEventType = lpNetworkEventQueue->GetFirstEvent( &lpEvent, &liSize );
 
         while ( lpEvent != 0 )
