@@ -158,8 +158,8 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, void* lrBehaviourControl
 
                     mLookbackRigParams.mRigParams  = Camera::Utils::CameraRig::ParamsBonnetLow;
                     mLookbackRigParams.mbUseShake  = true;
-                    mRigCameraHandle.GetBehaviour()->SetParameters(&mLookbackRigParams);
-                    mRigCameraHandle.GetBehaviour()->StartLookingAtRaceCar(E_ACTIVE_RACE_CAR_INDEX_1, true);
+                    mRigCameraHandle.Get()->SetParameters(&mLookbackRigParams);
+                    mRigCameraHandle.Get()->StartLookingAtRaceCar(E_ACTIVE_RACE_CAR_INDEX_1, true);
 
                     SetState(E_STATE_VALID);
                 }

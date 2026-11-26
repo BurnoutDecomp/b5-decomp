@@ -348,8 +348,11 @@ LightTriggerId StartGameModeParams::GetTrafficLightTriggerId() const
 // -----------------------------------------------------------------------------
 void StartGameModeParams::SetTrafficLightTriggerId(LightTriggerId lTriggerId)
 {
+    // The inlined BrnTraffic::LightTriggerId::IsValid (DWARF BrnTrafficLightTrigger.h:70): the hull
+    // field (bits 8..23) is not 0xFFFF and the low-byte trigger index is not 0xFF (ARTIST 0x82361718
+    // `clrlwi r11,r31,24 ; cmplwi 0xFF`). LightTriggerId is still a u32 typedef in this tree.
     const bool lbIsValid = !(((lTriggerId & 0xFFFF00u) == 0xFFFF00u) ||
-                             (lTriggerId == 255u));
+                             ((lTriggerId & 0xFFu) == 0xFFu));
     CGS_ASSERT(lbIsValid, CGS_ASSERT_MESSAGE_AT("lTriggerId.IsValid()", CGS_ARTIST_FILE, 847));
     mTrafficLightTriggerId = lTriggerId;
 }

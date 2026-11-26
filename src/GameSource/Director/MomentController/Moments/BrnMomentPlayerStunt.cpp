@@ -222,10 +222,10 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
 
                 lpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                     mIceCam, 0, this, 1);
-                mIceCam.GetBehaviour()->SetParameters(
+                mIceCam.Get()->SetParameters(
                     reinterpret_cast<Camera::BehaviourIceAnim::ShotReference*>(&lShotRef));
-                mIceCam.GetBehaviour()->SetUseCollisionPolicy(true);   // +0xE28
-                mIceCam.GetBehaviour()->ClearBaseFirstFrameGate();     // base +0x28 = 0
+                mIceCam.Get()->SetUseCollisionPolicy(true);   // +0xE28
+                mIceCam.Get()->ClearBaseFirstFrameGate();     // base +0x28 = 0
 
                 mbHasCrashed            = false;
                 mbFirstTimeForThisStunt = lbFirstFrame;
@@ -241,12 +241,12 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
     }
 
     case E_STATE_INVALID_FOUND_PREPARING:
-        if (mIceCam.GetBehaviour()->HasFailed())
+        if (mIceCam.Get()->HasFailed())
         {
             Release();   // the live-vtable call (slot 4)
             return;
         }
-        if (!mIceCam.GetBehaviour()->CanSwitchToMeNow())
+        if (!mIceCam.Get()->CanSwitchToMeNow())
         {
             SetCanSwitchToMeNow(false);
             GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
@@ -300,7 +300,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
 
     // The two-phase release ladder.
     const bool lbReleaseCondition =
-        mIceCam.GetBehaviour()->CanSwitchFromMeNow()
+        mIceCam.Get()->CanSwitchFromMeNow()
         || mfLandTime > KF_LANDED_RELEASE_TIME
         || !MomentSharedInfo_IsCrashCameraActive(lSharedInfo);
     const bool lbAbort =
@@ -341,7 +341,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
             // The console releases the handle FIRST, then re-resolves the (still
             // live) pool slot through the kept allocation key to poke it; the
             // behaviour pointer is captured up front here -- the same object.
-            Camera::BehaviourIceAnim* lpBehaviour = mIceCam.GetBehaviour();
+            Camera::BehaviourIceAnim* lpBehaviour = mIceCam.Get();
             mIceCam.Release();
 
             Attrib::RefSpec lShotRef;

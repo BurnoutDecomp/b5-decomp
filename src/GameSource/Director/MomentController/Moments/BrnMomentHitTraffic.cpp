@@ -80,7 +80,7 @@ void MomentHitTraffic::Update(f32 lfTimeStep, void* lrBehaviourController,
                     mHeliCamHandle, 0, this, 1);
                 const Camera::BehaviourParameterBank& lrParameterBank =
                     lpBehaviourManager->GetBehaviourParameterBank();
-                mHeliCamHandle.GetBehaviour()->SetParameters(
+                mHeliCamHandle.Get()->SetParameters(
                     &lrParameterBank.GetGyroCamMomentParams());
                 SetCanSwitchToMeNow(false);
                 GetNonConstCamera().mState.SetHeadFlag(KU_CAMERA_HEAD_FLAG_GYRO_ALLOCATED);
@@ -100,7 +100,7 @@ void MomentHitTraffic::Update(f32 lfTimeStep, void* lrBehaviourController,
         if (!MomentSharedInfo_IsHitTrafficConditionActive(lSharedInfo))
             mfRunningTime += lfTimeStep;
         if (mfRunningTime > KF_HIT_TRAFFIC_MAX_RUNNING_TIME
-            || mHeliCamHandle.GetBehaviour()->HasFailed())
+            || mHeliCamHandle.Get()->HasFailed())
         {
             mHeliCamHandle.Release();
             SetState(E_STATE_INVALID_SEARCHING);

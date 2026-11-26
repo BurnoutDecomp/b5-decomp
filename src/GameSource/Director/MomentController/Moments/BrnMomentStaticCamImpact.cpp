@@ -60,20 +60,20 @@ void MomentStaticCamImpact::Update(f32 lfTimeStep, void* lrBehaviourController,
         {
             lpBehaviourManager->NewBehaviour<Camera::BehaviourFixedCam>(
                 mFixedCam, 0, this, 1);
-            mFixedCam.GetBehaviour()->SetParameters(
+            mFixedCam.Get()->SetParameters(
                 &lpBehaviourManager->GetBehaviourParameterBank().GetStaticCamImpactCamParams());
             SetState(E_STATE_VALID);
         }
         break;
 
     case E_STATE_INVALID_FOUND_PREPARING:
-        if (mFixedCam.GetBehaviour()->HasFailed())
+        if (mFixedCam.Get()->HasFailed())
         {
             Release();   // virtual dispatch (the console build calls through vtable slot 4)
             SetState(E_STATE_INVALID_SEARCHING);
             break;
         }
-        if (!mFixedCam.GetBehaviour()->CanSwitchToMeNow())
+        if (!mFixedCam.Get()->CanSwitchToMeNow())
         {
             SetCanSwitchToMeNow(false);
             GetNonConstCamera().mState.SetHeadFlag(KU_CAMERA_HEAD_FLAG_PREPARING);
@@ -85,7 +85,7 @@ void MomentStaticCamImpact::Update(f32 lfTimeStep, void* lrBehaviourController,
     case E_STATE_VALID:
         SetCanSwitchFromMeNow(false);
         GetNonConstCamera().mState.SetHeadFlag(KU_CAMERA_HEAD_FLAG_VALID);
-        if (mFixedCam.GetBehaviour()->HasFailed())
+        if (mFixedCam.Get()->HasFailed())
         {
             Release();   // virtual dispatch (vtable slot 4)
             SetState(E_STATE_INVALID_SEARCHING);

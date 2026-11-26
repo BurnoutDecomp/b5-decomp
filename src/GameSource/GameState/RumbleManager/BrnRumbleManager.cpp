@@ -152,8 +152,8 @@ namespace BrnGameState
         {
             mau8SurfaceID[leWheelIndex]          = 0xFF;
             mau8NumWheelsOnSurface[leWheelIndex] = 0;
-            mafRumbleVolume[leWheelIndex]        = 0.0f;
             manRumbleID[leWheelIndex]            = -1;
+            mafRumbleVolume[leWheelIndex]        = 0.0f;
 
             leWheelIndex = static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(leWheelIndex + 1);
             CGS_ASSERT(leWheelIndex <= BrnPhysics::Vehicle::eNumDrivenWheels,

@@ -83,8 +83,9 @@ namespace BrnDirector
         void        Destruct() ;
         const char* GetName() const ;
 
-        // Is a behaviour or take armed or running.
-        bool IsActive() const;
+        // Is a behaviour or take armed or running. DWARF h:113, no out-of-line copy on X360 or PS3:
+        // the arbitrator reads `meState == E_STATE_GENERIC_UPDATE` in place (0x821F5BE8 lwz 0x2EC / cmpwi 2).
+        bool IsActive() const { return meState == E_STATE_GENERIC_UPDATE; }
 
         // Bind the debug component RegisterParameters / UnregisterParameters mirror the active
         // parameter block into (spDebugComponent).

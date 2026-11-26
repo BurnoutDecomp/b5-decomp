@@ -154,42 +154,42 @@ void MomentTumbling::SetGyroCamParameters(const void* lSharedInfo)
         {
             if (mbUseRightForThisCrash)
             {
-                mGyroCam.GetBehaviour()->SetParameters(
+                mGyroCam.Get()->SetParameters(
                     &lrNamed.mGyroCamDefaultSideTruckingRightParams);
                 return;
             }
             if (!mbTryLeft)
             {
-                mGyroCam.GetBehaviour()->SetParameters(
+                mGyroCam.Get()->SetParameters(
                     &lrNamed.mGyroCamDefaultSideTruckingRightParams);
                 mbUseRightForThisCrash = true;
             }
             else
             {
-                mGyroCam.GetBehaviour()->SetParameters(
+                mGyroCam.Get()->SetParameters(
                     &lrNamed.mGyroCamDefaultSideTruckingLeftParams);
                 mbUseLeftForThisCrash = true;
             }
             mbTryLeft = !mbTryLeft;
             return;
         }
-        mGyroCam.GetBehaviour()->SetParameters(&lrNamed.mGyroCamDefaultSideTruckingLeftParams);
+        mGyroCam.Get()->SetParameters(&lrNamed.mGyroCamDefaultSideTruckingLeftParams);
         return;
 
     case Parameters::E_SUBTYPE_TRUCKING_FRONT:
-        mGyroCam.GetBehaviour()->SetParameters(&lrNamed.mGyroCamTruckFront);
+        mGyroCam.Get()->SetParameters(&lrNamed.mGyroCamTruckFront);
         return;
 
     case Parameters::E_SUBTYPE_FOLLOW:
-        mGyroCam.GetBehaviour()->SetParameters(&lrNamed.mGyroCamFollow);
+        mGyroCam.Get()->SetParameters(&lrNamed.mGyroCamFollow);
         return;
 
     case Parameters::E_SUBTYPE_LEAD:
-        mGyroCam.GetBehaviour()->SetParameters(&lrNamed.mGyroCamDefaultParams);
+        mGyroCam.Get()->SetParameters(&lrNamed.mGyroCamDefaultParams);
         return;
 
     case Parameters::E_SUBTYPE_SIDE:
-        mGyroCam.GetBehaviour()->SetParameters(&lrNamed.mGyroCamLeft);
+        mGyroCam.Get()->SetParameters(&lrNamed.mGyroCamLeft);
         return;
 
     default:
@@ -205,7 +205,7 @@ void MomentTumbling::SignalIsGoodTimeToPlant()
     CGS_ASSERT(IsValid(), CGS_ASSERT_MESSAGE_AT("IsValid()", CGS_ARTIST_FILE, 265));   //  (non-gating)
     if (mpParameters->meSubType == Parameters::E_SUBTYPE_LEAD)
     {
-        mGyroCam.GetBehaviour()->SignalGoodTimeToPlant();
+        mGyroCam.Get()->SignalGoodTimeToPlant();
     }
 }
 
@@ -310,7 +310,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
                 SetGyroCamParameters(lSharedInfo);
                 if (mbLookingAtTakedown)
                 {
-                    mGyroCam.GetBehaviour()->AttachToRaceCar(
+                    mGyroCam.Get()->AttachToRaceCar(
                         MomentSharedInfo_GetTakedownVictimIndex(lSharedInfo));
                 }
                 SetCanSwitchToMeNow(false);
@@ -329,14 +329,14 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
     }
 
     case E_STATE_INVALID_FOUND_PREPARING:
-        if (mGyroCam.GetBehaviour()->CanSwitchToMeNow())
+        if (mGyroCam.Get()->CanSwitchToMeNow())
         {
             mfRunningTime       = 0.0f;
             mbFirstTryThisCrash = false;
             SetState(E_STATE_VALID);
             break;   // fall into the valid body this frame
         }
-        if (mGyroCam.GetBehaviour()->HasFailed())
+        if (mGyroCam.Get()->HasFailed())
         {
             if (mbFirstTryThisCrash)
             {
@@ -391,12 +391,12 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
     }
 
     // Publish the rig's own switch gates.
-    if (!mGyroCam.GetBehaviour()->CanSwitchFromMeNow())
+    if (!mGyroCam.Get()->CanSwitchFromMeNow())
     {
         SetCanSwitchFromMeNow(false);
         GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_NOT_RELEASABLE);
     }
-    if (!mGyroCam.GetBehaviour()->CanSwitchToMeNow())
+    if (!mGyroCam.Get()->CanSwitchToMeNow())
     {
         SetCanSwitchToMeNow(false);
         GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_NOT_SWITCHABLE);
@@ -429,7 +429,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
         lrBlur.mfWorldBlurAmount       = 1.0f;
     }
 
-    if (mGyroCam.GetBehaviour()->HasFailed())
+    if (mGyroCam.Get()->HasFailed())
     {
         mGyroCam.Release();
         SetState(E_STATE_INVALID_SEARCHING);

@@ -2948,7 +2948,7 @@ namespace BrnDirector
     // the other two are the registered Show Debug Camera Names and Show All Camera Names flags.
     void MainDirector::DebugDisplayCurrentCamera(const Camera::Camera& lrCamera)
     {
-        if (!(mArbitrator.mbCycleNormalCamSelector && mbShowDebugCameraNames) && !mbShowAllCameraNames)
+        if (!(mArbitrator.mbUseDebugCameras && mbShowDebugCameraNames) && !mbShowAllCameraNames)
         {
             return;
         }

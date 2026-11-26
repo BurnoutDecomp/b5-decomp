@@ -213,7 +213,7 @@ namespace BrnDirector
             maRivalBehaviourHandle[muRivalMovieOffset], this,
             KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
 
-        maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()
+        maRivalBehaviourHandle[muRivalMovieOffset].Get()
             ->SetForceMotionBlurEverything(true);   // +0xE2B = 1
 
         const void* lpShotData = const_cast<Attrib::Gen::shotgroup&>(lrOnlineRaceStartShotGroup)
@@ -221,7 +221,7 @@ namespace BrnDirector
         if (!lpShotData)
             lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
 
-        Camera::BehaviourIceAnim* lpBehaviour = maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour();
+        Camera::BehaviourIceAnim* lpBehaviour = maRivalBehaviourHandle[muRivalMovieOffset].Get();
         lpBehaviour->SetParameters(
             static_cast<Camera::BehaviourIceAnim::ShotReference*>(const_cast<void*>(lpShotData)));
 
@@ -234,14 +234,14 @@ namespace BrnDirector
             static_cast<s32>(lrSharedInfo.mpGameState->maeIntroCarID[luRivalIndex]);
 
         lpBehaviour->SetPrimaryVehicleRefToRaceCarIndex(liRivalRaceCar);     // +0xDF0 block
-        maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()
+        maRivalBehaviourHandle[muRivalMovieOffset].Get()
             ->SetSecondaryVehicleRefToRaceCarIndex(liRivalRaceCar);          // +0xE00 block
 
         // Enable the take's collision policy (behaviour +0xE28).
-        maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()->SetUseCollisionPolicy(true);
+        maRivalBehaviourHandle[muRivalMovieOffset].Get()->SetUseCollisionPolicy(true);
 
         // Clear the base first-frame gate (behaviour +0x28 = 0).
-        maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()->ClearBaseFirstFrameGate();
+        maRivalBehaviourHandle[muRivalMovieOffset].Get()->ClearBaseFirstFrameGate();
 
         ++muRivalMovieOffset;
     }
@@ -258,7 +258,7 @@ namespace BrnDirector
         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourInterpolate>(
             mInterpolator, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
 
-        Camera::BehaviourInterpolate* lpInterpolator = mInterpolator.GetBehaviour();
+        Camera::BehaviourInterpolate* lpInterpolator = mInterpolator.Get();
 
         // Seed the interpolation mode + the per-take parameters (the console writes the mode word
         // at the behaviour base's +0x04 == meTimestepType, and points the params pointer at the
@@ -341,8 +341,8 @@ namespace BrnDirector
                         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                             mPlayerBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
 
-                        mPlayerBehaviourHandle.GetBehaviour()->SetUseCollisionPolicy(true);   // +0xE28 = 1
-                        mPlayerBehaviourHandle.GetBehaviour()->ClearBaseFirstFrameGate();     // +0x28 = 0
+                        mPlayerBehaviourHandle.Get()->SetUseCollisionPolicy(true);   // +0xE28 = 1
+                        mPlayerBehaviourHandle.Get()->ClearBaseFirstFrameGate();     // +0x28 = 0
 
                         const void* lpShotData =
                             const_cast<Attrib::Gen::shotgroup&>(lrOnlineRaceStartShotGroup)
@@ -350,23 +350,23 @@ namespace BrnDirector
                         if (!lpShotData)
                             lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
 
-                        Camera::BehaviourIceAnim* lpBehaviour = mPlayerBehaviourHandle.GetBehaviour();
+                        Camera::BehaviourIceAnim* lpBehaviour = mPlayerBehaviourHandle.Get();
                         lpBehaviour->SetParameters(
                             static_cast<Camera::BehaviourIceAnim::ShotReference*>(
                                 const_cast<void*>(lpShotData)));
 
                         // Anchor the player take's eye + look references to the player (the
                         // console writes {kind 0, index -1, 0, valid 1} into both refs).
-                        lpBehaviour->SetPrimaryVehicleRefToPlayer();     // +0xDF0
-                        lpBehaviour->SetSecondaryVehicleRefToPlayer();   // +0xE00
+                        lpBehaviour->GetPrimaryVehicleRef()->SetToPlayer();     // +0xDF0
+                        lpBehaviour->GetSecondaryVehicleRef()->SetToPlayer();   // +0xE00
 
-                        mPlayerBehaviourHandle.GetBehaviour()->SetForceMotionBlurEverything(true); // +0xE2B = 1
+                        mPlayerBehaviourHandle.Get()->SetForceMotionBlurEverything(true); // +0xE2B = 1
 
                         // The player "show" take plays REVERSED (behaviour +0xDE7 == the
                         // embedded KeyAnimController's mbReversed; RESOLVED 2026-08-05).
                         // FLAG: the cntlzw-derived value is a 0/1 boolean of an un-recovered
                         // condition; reproduced as the attested 0/1 result.
-                        mPlayerBehaviourHandle.GetBehaviour()->SetTakeReversed(true);   // +0xDE7
+                        mPlayerBehaviourHandle.Get()->SetTakeReversed(true);   // +0xDE7
 
                         // Mark the state camera behaviour-driven (mState_uFlags |= 0x40).
                         lrCamera.mState_uFlags |= 0x40;
@@ -388,7 +388,7 @@ namespace BrnDirector
             // Rewind the player "show" controller to its take start, then mark the camera
             // behaviour-driven (mState_uFlags |= 0x40 and |= 0x10000000), reset the timers and
             // advance to SHOWING_PLAYER.
-            mPlayerBehaviourHandle.GetBehaviour()->RewindControllerToStart();   // controller += 0.0
+            mPlayerBehaviourHandle.Get()->RewindControllerToStart();   // controller += 0.0
 
             lrCamera.mState_uFlags |= 0x40;
             lrCamera.mState_uFlags |= 0x10000000;
@@ -471,13 +471,13 @@ namespace BrnDirector
                 if (!lpShotData)
                     lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
 
-                Camera::BehaviourIceAnim* lpBehaviour = mPlayerBehaviourHandle.GetBehaviour();
+                Camera::BehaviourIceAnim* lpBehaviour = mPlayerBehaviourHandle.Get();
                 lpBehaviour->SetParameters(
                     static_cast<Camera::BehaviourIceAnim::ShotReference*>(const_cast<void*>(lpShotData)));
-                lpBehaviour->SetPrimaryVehicleRefToPlayer();     // +0xDF0
-                lpBehaviour->SetSecondaryVehicleRefToPlayer();   // +0xE00
-                mPlayerBehaviourHandle.GetBehaviour()->SetForceMotionBlurEverything(true); // +0xE2B
-                mPlayerBehaviourHandle.GetBehaviour()->ClearBaseFirstFrameGate();          // +0x28 = 0
+                lpBehaviour->GetPrimaryVehicleRef()->SetToPlayer();     // +0xDF0
+                lpBehaviour->GetSecondaryVehicleRef()->SetToPlayer();   // +0xE00
+                mPlayerBehaviourHandle.Get()->SetForceMotionBlurEverything(true); // +0xE2B
+                mPlayerBehaviourHandle.Get()->ClearBaseFirstFrameGate();          // +0x28 = 0
 
                 // Blend from the player "show" back over the last rival "show".
                 SetupInterpolator(lrSharedInfo,
@@ -515,7 +515,7 @@ namespace BrnDirector
             // advance to SHOWING_RIVAL.
             lrCamera = mInterpolator.GetCamera();
 
-            if (mInterpolator.GetBehaviour()->HasFinished())
+            if (mInterpolator.Get()->HasFinished())
             {
                 // Report the rival now being shown to the director output interface (the console writes
                 // {requested 1, rival index, show time} into mpOutputInterface @+0x00/+0x04/+0x08
@@ -545,7 +545,7 @@ namespace BrnDirector
             // SHOWING_PLAYER_AGAIN.
             lrCamera = mInterpolator.GetCamera();
 
-            if (mInterpolator.GetBehaviour()->HasFinished())
+            if (mInterpolator.Get()->HasFinished())
             {
                 meState = E_STATE_SHOWING_PLAYER_AGAIN;   // +0x220 = 7
                 lrCamera.mState_uFlags |= 0x4000000;
@@ -570,7 +570,7 @@ namespace BrnDirector
 
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                     mLightsBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
-                mLightsBehaviourHandle.GetBehaviour()->SetForceMotionBlurEverything(true);   // +0xE2B = 1
+                mLightsBehaviourHandle.Get()->SetForceMotionBlurEverything(true);   // +0xE2B = 1
 
                 const void* lpShotData =
                     const_cast<Attrib::Gen::shotgroup&>(lrOnlineRaceStartShotGroup)
@@ -578,7 +578,7 @@ namespace BrnDirector
                 if (!lpShotData)
                     lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
 
-                mLightsBehaviourHandle.GetBehaviour()->SetParameters(
+                mLightsBehaviourHandle.Get()->SetParameters(
                     static_cast<Camera::BehaviourIceAnim::ShotReference*>(const_cast<void*>(lpShotData)));
 
                 meState = E_STATE_SHOWING_LIGHTS;   // +0x220 = 9
@@ -602,7 +602,7 @@ namespace BrnDirector
 
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                     mLightsBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
-                mLightsBehaviourHandle.GetBehaviour()->SetForceMotionBlurEverything(true);   // +0xE2B = 1
+                mLightsBehaviourHandle.Get()->SetForceMotionBlurEverything(true);   // +0xE2B = 1
 
                 const void* lpShotData =
                     const_cast<Attrib::Gen::shotgroup&>(lrOnlineRaceStartShotGroup)
@@ -610,7 +610,7 @@ namespace BrnDirector
                 if (!lpShotData)
                     lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
 
-                mLightsBehaviourHandle.GetBehaviour()->SetParameters(
+                mLightsBehaviourHandle.Get()->SetParameters(
                     static_cast<Camera::BehaviourIceAnim::ShotReference*>(const_cast<void*>(lpShotData)));
 
                 meState = E_STATE_SHOWING_LIGHTS;   // +0x220 = 9

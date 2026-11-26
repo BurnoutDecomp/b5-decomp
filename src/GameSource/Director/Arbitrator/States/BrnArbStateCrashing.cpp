@@ -289,7 +289,7 @@ namespace BrnDirector
         {
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourSpirallingDeathcam>(
                 mDeathcam, this, 0, 1);
-            mDeathcam.GetBehaviour()->SetParameters(
+            mDeathcam.Get()->SetParameters(
                 &lrSharedInfo.mpNamedParameters->GetSpirallingDeathcamParameters());
 
             // A behaviour allocated this frame is not ready this frame.
@@ -884,7 +884,7 @@ namespace BrnDirector
                 static_cast<Camera::BehaviourIceAnim::ShotReference*>(
                     lrTakendown.GetShotListElement(KU_TAKENDOWN_SHOT_INDEX));
 
-            Camera::BehaviourIceAnim* lpTakenDownCam = mTakenDownCam.GetBehaviour();
+            Camera::BehaviourIceAnim* lpTakenDownCam = mTakenDownCam.Get();
             lpTakenDownCam->SetParameters(lpShot);
             lpTakenDownCam->SetSecondaryVehicleRefToRaceCar(mePlayerKillerIndex); // behaviour +0xE00
             lpTakenDownCam->SetUseCollisionPolicy(true);                          // behaviour +0xE28
@@ -920,9 +920,9 @@ namespace BrnDirector
         {
             GetNonConstCamera() = mDeathcam.GetCamera();
 
-            if (!mDeathcam.GetBehaviour()->HasStarted())    // behaviour +0x2F4
+            if (!mDeathcam.Get()->HasStarted())    // behaviour +0x2F4
             {
-                mDeathcam.GetBehaviour()->Start();
+                mDeathcam.Get()->Start();
             }
         }
 

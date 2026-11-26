@@ -190,23 +190,14 @@ namespace BrnDirector
 
         ArbStateTestbed          mArbStateTestbed;            // X360 +0x30 (vtable Construct @+0x30)
 
-        // The normal-camera source selector (X360 +0x2EC): CycleNormalCamera /
-        // GetNormalCamera @0x822087F0/@0x821F5BD8 route to the TESTBED state's camera
-        // (mArbStateTestbed.mCamera == arb +0x40) when this reads 2, else to the
-        // container's current state. FLAG: name inferred from that role (the trimmed
-        // DWARF omits the member; only the ==2 compare is attested).
-        s32                      miDebugCameraMode;           // X360 +0x2EC
-
-        // FLAG: two Arbitrator scratch flags the trimmed DWARF omits but the asm PROVES exist
-        //   (X360 +0x300 / +0x301): Construct seeds +0x300 = 1 and +0x301 = 0, and
-        //   UpdateCameraCycleControl reads/writes +0x301 as the normal-camera cycle selector
-        //   (the (cntlzw & 0x20) toggle). Named here from their role; only mbCycleNormalCamSelector
-        //   is touched by a reconstructed body in this TU.
-        bool                     mbCameraCycleInitialised;    // X360 +0x300 : Construct = 1
-        bool                     mbCycleNormalCamSelector;    // X360 +0x301 : cycle selector toggle
-
-        bool                     mbUseDebugFlyWorld;          // X360 ~+0x302 (DWARF order; not written by Construct)
-        bool                     mbUseDebugCameras;           // X360 ~+0x303 (DWARF order; not written by Construct)
+        // DWARF h:121/:122 put these two straight after the testbed (ArbStateTestbed ends at
+        // +0x2D0 within the arbitrator's +0x30, so X360 +0x300 / +0x301). Construct seeds +0x300 = 1
+        // and +0x301 = 0 (0x82254E90); UpdateCameraCycleControl toggles +0x301 (0x821F5D6C) and
+        // MainDirector::DebugDisplayCurrentCamera gates on it. The word GetNormalCamera /
+        // CycleNormalCamera compare with 2 at +0x2EC is the testbed's meState (testbed +0x2BC,
+        // ArbStateTestbed::IsActive), not an arbitrator member.
+        bool                     mbUseDebugFlyWorld;          // X360 +0x300 (DWARF h:121)
+        bool                     mbUseDebugCameras;           // X360 +0x301 (DWARF h:122)
 
         ArbitratorStateContainer mStateContainer;             // X360 +0x310
         SharedCameraContainer    mSharedCameraContainer;       // X360 +0x38E0 region

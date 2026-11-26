@@ -559,7 +559,7 @@ namespace BrnDirector
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                     mIceCam, const_cast<ArbitratorState*>(lpCallingState), 0, 1);
 
-                Camera::BehaviourIceAnim* lpIceAnim = mIceCam.GetBehaviour();
+                Camera::BehaviourIceAnim* lpIceAnim = mIceCam.Get();
                 lpIceAnim->SetParameters(mpIceAnim);
 
                 // X360: both refs read the SAME GameState::meTakedownVictimID
@@ -611,7 +611,7 @@ namespace BrnDirector
             // FALLTHROUGH
         case E_STATE_ACTIVE:
             lOutCamera = mIceCam.GetCamera();
-            if (mIceCam.GetBehaviour()->HasFinishedOrFailed())
+            if (mIceCam.Get()->HasFinishedOrFailed())
             {
                 meState = E_STATE_FINISHED;
             }
@@ -679,15 +679,15 @@ namespace BrnDirector
                 0, KI_NEW_BEHAVIOUR_LIMIT_2);
 
             // The takedown gyro block, record +2112 on the bank's 204-byte gyro grid.
-            mGyroCam.GetBehaviour()->SetParameters(&lrSharedInfo.mpNamedParameters->mGyroCamTakedownParams);
+            mGyroCam.Get()->SetParameters(&lrSharedInfo.mpNamedParameters->mGyroCamTakedownParams);
 
             const s32 liVictimRaceCarIndex =
                 static_cast<s32>(lrSharedInfo.mpGameState->meTakedownVictimID);
-            mGyroCam.GetBehaviour()->AttachToRaceCar(liVictimRaceCarIndex);
+            mGyroCam.Get()->AttachToRaceCar(liVictimRaceCarIndex);
 
-            mGyroCam.GetBehaviour()->SetUseVehicleAttachmentCollision(true);
+            mGyroCam.Get()->SetUseVehicleAttachmentCollision(true);
 
-            mGyroCam.GetBehaviour()->SetWorldSpaceNormalizedVectorFromCar(
+            mGyroCam.Get()->SetWorldSpaceNormalizedVectorFromCar(
                 NormalizedVectorToPlayer(lrSharedInfo, liVictimRaceCarIndex));
         }
 
@@ -697,11 +697,11 @@ namespace BrnDirector
                 mInterpolaterA, const_cast<ArbitratorState*>(lpCallingState),
                 0, KI_NEW_BEHAVIOUR_LIMIT_1);
 
-            mInterpolaterA.GetBehaviour()->SetParameters(&mInterpolateParams);
-            mInterpolaterA.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+            mInterpolaterA.Get()->SetParameters(&mInterpolateParams);
+            mInterpolaterA.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
             // The blend IN: FROM the live gameplay camera's helper TO the gyro cam's.
-            mInterpolaterA.GetBehaviour()->Setup(
+            mInterpolaterA.Get()->Setup(
                 KF_BLEND_DURATION,
                 lrSharedInfo.mpSharedCameraContainer->GetGameplayCameraHelperIndex(),
                 mGyroCam.GetBehaviourHelperIndex(),
@@ -756,24 +756,24 @@ namespace BrnDirector
             }
 
             const f32 lfBlurAmount =
-                ClampUnit(sinf(mInterpolaterA.GetBehaviour()->GetParametricTime() * KF_PI));
+                ClampUnit(sinf(mInterpolaterA.Get()->GetParametricTime() * KF_PI));
             const f32 lfEaseAmount =
-                sinf(mInterpolaterA.GetBehaviour()->GetParametricTime() * KF_HALF_PI);
+                sinf(mInterpolaterA.Get()->GetParametricTime() * KF_HALF_PI);
 
             lOutCamera.RequestMotionBlur(lfBlurAmount, ClampUnit(lfEaseAmount));
             lOutCamera.mEffects.mfSimTimeScale = KF_UNIT - lfEaseAmount * KF_SLOMO_RAMP;
 
-            if (mInterpolaterA.GetBehaviour()->HasFinished() && mfActiveTime > KF_B3CLASSIC_HANDOFF_TIME)
+            if (mInterpolaterA.Get()->HasFinished() && mfActiveTime > KF_B3CLASSIC_HANDOFF_TIME)
             {
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourInterpolate>(
                     mInterpolaterB, const_cast<ArbitratorState*>(lpCallingState),
                     0, KI_NEW_BEHAVIOUR_LIMIT_1);
 
-                mInterpolaterB.GetBehaviour()->SetParameters(&mInterpolateParams);
-                mInterpolaterB.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+                mInterpolaterB.Get()->SetParameters(&mInterpolateParams);
+                mInterpolaterB.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
                 // The blend OUT, the mirror of Prepare's: FROM the gyro cam TO the gameplay camera.
-                mInterpolaterB.GetBehaviour()->Setup(
+                mInterpolaterB.Get()->Setup(
                     KF_BLEND_DURATION,
                     mGyroCam.GetBehaviourHelperIndex(),
                     lrSharedInfo.mpSharedCameraContainer->GetGameplayCameraHelperIndex(),
@@ -793,15 +793,15 @@ namespace BrnDirector
             lOutCamera.mEffects.mfSimTimeScale = KF_TAKEDOWN_SIM_TIME_SCALE;
 
             const f32 lfBlurAmount =
-                ClampUnit(sinf(mInterpolaterB.GetBehaviour()->GetParametricTime() * KF_PI));
+                ClampUnit(sinf(mInterpolaterB.Get()->GetParametricTime() * KF_PI));
             // The blend-out runs the ease in REVERSE (1 - sin), so the slow-mo returns to normal.
             const f32 lfEaseAmount =
-                KF_UNIT - sinf(mInterpolaterB.GetBehaviour()->GetParametricTime() * KF_HALF_PI);
+                KF_UNIT - sinf(mInterpolaterB.Get()->GetParametricTime() * KF_HALF_PI);
 
             lOutCamera.RequestMotionBlur(lfBlurAmount, ClampUnit(lfEaseAmount));
             lOutCamera.mEffects.mfSimTimeScale = KF_UNIT - lfEaseAmount * KF_SLOMO_RAMP;
 
-            if (mInterpolaterB.GetBehaviour()->HasFinished())
+            if (mInterpolaterB.Get()->HasFinished())
             {
                 meState = E_STATE_FINISHED;
             }
@@ -848,15 +848,15 @@ namespace BrnDirector
                 0, KI_NEW_BEHAVIOUR_LIMIT_2);
 
             // The default gyro block, record +480 (gyro slot 0).
-            mGyroCamA.GetBehaviour()->SetParameters(&lrSharedInfo.mpNamedParameters->mGyroCamDefaultParams);
-            mGyroCamA.GetBehaviour()->AttachToRaceCar(
+            mGyroCamA.Get()->SetParameters(&lrSharedInfo.mpNamedParameters->mGyroCamDefaultParams);
+            mGyroCamA.Get()->AttachToRaceCar(
                 static_cast<s32>(lrSharedInfo.mpAllVehicleData->GetPlayerRCIndex()));
 
             // NOTE: unlike its siblings this player leaves the vehicle-attachment collision
             // select alone on BOTH its rigs -- neither of the console's two blocks here stores
             // the byte, so the destruction-path cameras keep the visibility collision policy.
 
-            mGyroCamA.GetBehaviour()->SetWorldSpaceNormalizedVectorFromCar(
+            mGyroCamA.Get()->SetWorldSpaceNormalizedVectorFromCar(
                 rw::math::vpu::Normalize(lrSharedInfo.mpPlayerTracker->GetImplicitVelocity()));
         }
 
@@ -866,11 +866,11 @@ namespace BrnDirector
                 mGyroCamB, const_cast<ArbitratorState*>(lpCallingState),
                 0, KI_NEW_BEHAVIOUR_LIMIT_2);
 
-            mGyroCamB.GetBehaviour()->SetParameters(&lrSharedInfo.mpNamedParameters->mGyroCamTakedownParams);
-            mGyroCamB.GetBehaviour()->AttachToRaceCar(
+            mGyroCamB.Get()->SetParameters(&lrSharedInfo.mpNamedParameters->mGyroCamTakedownParams);
+            mGyroCamB.Get()->AttachToRaceCar(
                 static_cast<s32>(lrSharedInfo.mpGameState->meTakedownVictimID));
 
-            mGyroCamB.GetBehaviour()->SetWorldSpaceNormalizedVectorFromCar(
+            mGyroCamB.Get()->SetWorldSpaceNormalizedVectorFromCar(
                 rw::math::vpu::Normalize(lrSharedInfo.mpPlayerTracker->GetImplicitVelocity()));
         }
 
@@ -904,15 +904,15 @@ namespace BrnDirector
                 mInterpolaterA, const_cast<ArbitratorState*>(lpCallingState),
                 0, KI_NEW_BEHAVIOUR_LIMIT_1);
 
-            mInterpolaterA.GetBehaviour()->SetParameters(&mInterpolateParams);
-            mInterpolaterA.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+            mInterpolaterA.Get()->SetParameters(&mInterpolateParams);
+            mInterpolaterA.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
             // The camera-taking Setup overload: FROM the synthesised look-at TO the first rig.
-            mInterpolaterA.GetBehaviour()->SetupDuration(KF_BLEND_DURATION);
-            mInterpolaterA.GetBehaviour()->SetupCameraAFromCamera(lFromCamera);
-            mInterpolaterA.GetBehaviour()->SetupCameraBFromHelper(
+            mInterpolaterA.Get()->SetupDuration(KF_BLEND_DURATION);
+            mInterpolaterA.Get()->SetupCameraAFromCamera(lFromCamera);
+            mInterpolaterA.Get()->SetupCameraBFromHelper(
                 mGyroCamA.GetBehaviourHelperIndex(), *lrSharedInfo.mpBehaviourManager);
-            mInterpolaterA.GetBehaviour()->Setup();
+            mInterpolaterA.Get()->Setup();
         }
 
         if (!mGyroCamA.IsWaitingToPrepare() &&
@@ -964,20 +964,20 @@ namespace BrnDirector
 
             lOutCamera.mEffects.mfSimTimeScale = KF_TAKEDOWN_SIM_TIME_SCALE;
             lOutCamera.mDepthOfField.SetBlurriness(
-                sinf(mInterpolaterA.GetBehaviour()->GetParametricTime() * KF_PI));
+                sinf(mInterpolaterA.Get()->GetParametricTime() * KF_PI));
 
-            if (mInterpolaterA.GetBehaviour()->HasFinished() &&
+            if (mInterpolaterA.Get()->HasFinished() &&
                 mfActiveTime > KF_DESTRUCTION_PATH_FLYBACK1)
             {
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourInterpolate>(
                     mInterpolaterB, const_cast<ArbitratorState*>(lpCallingState),
                     0, KI_NEW_BEHAVIOUR_LIMIT_1);
 
-                mInterpolaterB.GetBehaviour()->SetParameters(&mInterpolateParams);
-                mInterpolaterB.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+                mInterpolaterB.Get()->SetParameters(&mInterpolateParams);
+                mInterpolaterB.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
                 // FROM the second rig TO the first (the console's own argument order).
-                mInterpolaterB.GetBehaviour()->Setup(
+                mInterpolaterB.Get()->Setup(
                     KF_DESTRUCTION_PATH_BLEND,
                     mGyroCamB.GetBehaviourHelperIndex(),
                     mGyroCamA.GetBehaviourHelperIndex(),
@@ -992,9 +992,9 @@ namespace BrnDirector
             lOutCamera = mInterpolaterB.GetCamera();
             lOutCamera.mEffects.mfSimTimeScale = KF_TAKEDOWN_SIM_TIME_SCALE;
             lOutCamera.mDepthOfField.SetBlurriness(
-                sinf(mInterpolaterB.GetBehaviour()->GetParametricTime() * KF_PI));
+                sinf(mInterpolaterB.Get()->GetParametricTime() * KF_PI));
 
-            if (mInterpolaterB.GetBehaviour()->HasFinished() &&
+            if (mInterpolaterB.Get()->HasFinished() &&
                 mfActiveTime > KF_DESTRUCTION_PATH_FLYBACK2)
             {
                 meState = E_STATE_FINISHED;
@@ -1039,9 +1039,9 @@ namespace BrnDirector
                 mGyroCamDriveByL, const_cast<ArbitratorState*>(lpCallingState),
                 0, KI_NEW_BEHAVIOUR_LIMIT_2);
 
-            mGyroCamDriveByL.GetBehaviour()->SetParameters(
+            mGyroCamDriveByL.Get()->SetParameters(
                 &lrSharedInfo.mpNamedParameters->mGyroCamDriveByLParams);
-            mGyroCamDriveByL.GetBehaviour()->AttachToRaceCar(liVictimRaceCarIndex);
+            mGyroCamDriveByL.Get()->AttachToRaceCar(liVictimRaceCarIndex);
         }
 
         if (!mGyroCamDriveByR.IsAllocated())
@@ -1050,9 +1050,9 @@ namespace BrnDirector
                 mGyroCamDriveByR, const_cast<ArbitratorState*>(lpCallingState),
                 0, KI_NEW_BEHAVIOUR_LIMIT_2);
 
-            mGyroCamDriveByR.GetBehaviour()->SetParameters(
+            mGyroCamDriveByR.Get()->SetParameters(
                 &lrSharedInfo.mpNamedParameters->mGyroCamDriveByLParams);
-            mGyroCamDriveByR.GetBehaviour()->AttachToRaceCar(liVictimRaceCarIndex);
+            mGyroCamDriveByR.Get()->AttachToRaceCar(liVictimRaceCarIndex);
         }
 
         if (mGyroCamDriveByL.IsWaitingToPrepare() || mGyroCamDriveByR.IsWaitingToPrepare())
@@ -1085,15 +1085,15 @@ namespace BrnDirector
                 mLooseAttachment, const_cast<ArbitratorState*>(lpCallingState),
                 0, KI_NEW_BEHAVIOUR_LIMIT_2);
 
-            mLooseAttachment.GetBehaviour()->SetParameters(&mLooseAttachmentParameters);
+            mLooseAttachment.Get()->SetParameters(&mLooseAttachmentParameters);
 
             CGS_ASSERT(lrSharedInfo.mpGameState->mbTakedownActive,
                        CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpGameState->mbTakedownActive", CGS_ARTIST_FILE, 747));
 
             // The rig hangs off the PLAYER's car and looks at the VICTIM's.
-            mLooseAttachment.GetBehaviour()->AttachTo(
+            mLooseAttachment.Get()->AttachTo(
                 static_cast<s32>(lrSharedInfo.mePlayerActiveRaceCarIndex));
-            mLooseAttachment.GetBehaviour()->SetTarget(
+            mLooseAttachment.Get()->SetTarget(
                 static_cast<s32>(lrSharedInfo.mpGameState->meTakedownVictimID));
         }
 
@@ -1105,10 +1105,10 @@ namespace BrnDirector
 
             // The LOOKBACK blend adopts the THIRD parameter block (the linear one), not the
             // first -- the console addresses this+0xB0, i.e. mInterpolateParamsC.
-            mInterpolaterA.GetBehaviour()->SetParameters(&mInterpolateParamsC);
-            mInterpolaterA.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+            mInterpolaterA.Get()->SetParameters(&mInterpolateParamsC);
+            mInterpolaterA.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
-            mInterpolaterA.GetBehaviour()->Setup(
+            mInterpolaterA.Get()->Setup(
                 KF_SHUTDOWN_LOOKBACK_BLEND,
                 lrSharedInfo.mpSharedCameraContainer->GetGameplayCameraHelperIndex(),
                 mLooseAttachment.GetBehaviourHelperIndex(),
@@ -1166,11 +1166,11 @@ namespace BrnDirector
                     mInterpolaterB, const_cast<ArbitratorState*>(lpCallingState),
                     0, KI_NEW_BEHAVIOUR_LIMIT_1);
 
-                mInterpolaterB.GetBehaviour()->SetParameters(&mInterpolateParamsB);
+                mInterpolaterB.Get()->SetParameters(&mInterpolateParamsB);
 
                 // FROM the loose-attachment rig TO the gyro rig. The loose attachment is dropped
                 // immediately afterwards: the blend has already snapshotted its reference.
-                mInterpolaterB.GetBehaviour()->Setup(
+                mInterpolaterB.Get()->Setup(
                     KF_SHUTDOWN_BLEND_DURATION,
                     mLooseAttachment.GetBehaviourHelperIndex(),
                     mGyroCam.GetBehaviourHelperIndex(),
@@ -1193,16 +1193,16 @@ namespace BrnDirector
                 // manager embeds the parameter bank at +0x12530 and the bank's NamedParameters
                 // payload starts at bank +0x10, so manager +0x12540 is exactly the record the
                 // director hands over as mpNamedParameters. Spelled by name here.
-                mGyroCam.GetBehaviour()->SetParameters(
+                mGyroCam.Get()->SetParameters(
                     &lrSharedInfo.mpNamedParameters->mGyroCamTakedownParams);
 
                 const s32 liVictimRaceCarIndex =
                     static_cast<s32>(lrSharedInfo.mpGameState->meTakedownVictimID);
-                mGyroCam.GetBehaviour()->AttachToRaceCar(liVictimRaceCarIndex);
+                mGyroCam.Get()->AttachToRaceCar(liVictimRaceCarIndex);
 
-                mGyroCam.GetBehaviour()->SetUseVehicleAttachmentCollision(true);
+                mGyroCam.Get()->SetUseVehicleAttachmentCollision(true);
 
-                mGyroCam.GetBehaviour()->SetWorldSpaceNormalizedVectorFromCar(
+                mGyroCam.Get()->SetWorldSpaceNormalizedVectorFromCar(
                     NormalizedVectorToPlayer(lrSharedInfo, liVictimRaceCarIndex));
             }
 
@@ -1228,16 +1228,16 @@ namespace BrnDirector
                 // beat's own loose-attachment block, bind attachment then target, register a
                 // UNIT impact on the embedded impact effect, and finally pin the rig to world
                 // rate so the beat keeps running through the takedown's slow-motion.
-                mZoom1.GetBehaviour()->SetParameters(
+                mZoom1.Get()->SetParameters(
                     &lrSharedInfo.mpNamedParameters->GetLooseAttachmentTakedown1Parameters());
 
-                mZoom1.GetBehaviour()->AttachTo(
+                mZoom1.Get()->AttachTo(
                     static_cast<s32>(lrSharedInfo.mpGameState->meTakedownVictimID));
-                mZoom1.GetBehaviour()->SetTarget(
+                mZoom1.Get()->SetTarget(
                     static_cast<s32>(lrSharedInfo.mePlayerActiveRaceCarIndex));
 
-                mZoom1.GetBehaviour()->GetImpactEffect().RegisterImpact(KF_UNIT);
-                mZoom1.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+                mZoom1.Get()->GetImpactEffect().RegisterImpact(KF_UNIT);
+                mZoom1.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
                 mInterpolaterA.Release();
                 mInterpolaterB.Release();
@@ -1263,16 +1263,16 @@ namespace BrnDirector
                     mZoom2, const_cast<ArbitratorState*>(lpCallingState),
                     0, KI_NEW_BEHAVIOUR_LIMIT_1);
 
-                mZoom2.GetBehaviour()->SetParameters(
+                mZoom2.Get()->SetParameters(
                     &lrSharedInfo.mpNamedParameters->GetLooseAttachmentTakedown2Parameters());
 
-                mZoom2.GetBehaviour()->AttachTo(
+                mZoom2.Get()->AttachTo(
                     static_cast<s32>(lrSharedInfo.mpGameState->meTakedownVictimID));
-                mZoom2.GetBehaviour()->SetTarget(
+                mZoom2.Get()->SetTarget(
                     static_cast<s32>(lrSharedInfo.mePlayerActiveRaceCarIndex));
 
-                mZoom2.GetBehaviour()->GetImpactEffect().RegisterImpact(KF_UNIT);
-                mZoom2.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+                mZoom2.Get()->GetImpactEffect().RegisterImpact(KF_UNIT);
+                mZoom2.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
                 mZoom1.Release();
                 meState = E_STATE_ZOOM2;
@@ -1295,16 +1295,16 @@ namespace BrnDirector
                     mZoom3, const_cast<ArbitratorState*>(lpCallingState),
                     0, KI_NEW_BEHAVIOUR_LIMIT_1);
 
-                mZoom3.GetBehaviour()->SetParameters(
+                mZoom3.Get()->SetParameters(
                     &lrSharedInfo.mpNamedParameters->GetLooseAttachmentTakedown3Parameters());
 
-                mZoom3.GetBehaviour()->AttachTo(
+                mZoom3.Get()->AttachTo(
                     static_cast<s32>(lrSharedInfo.mpGameState->meTakedownVictimID));
-                mZoom3.GetBehaviour()->SetTarget(
+                mZoom3.Get()->SetTarget(
                     static_cast<s32>(lrSharedInfo.mePlayerActiveRaceCarIndex));
 
-                mZoom3.GetBehaviour()->GetImpactEffect().RegisterImpact(KF_UNIT);
-                mZoom3.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+                mZoom3.Get()->GetImpactEffect().RegisterImpact(KF_UNIT);
+                mZoom3.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
                 mZoom2.Release();
                 meState = E_STATE_ZOOM3;
@@ -1418,11 +1418,11 @@ namespace BrnDirector
                 mTakedownDebugCam, this, 0, KI_NEW_BEHAVIOUR_LIMIT_1);
 
             // The bank's SECOND aftertouch-crash block, record +220 (the debug/crash-cam one).
-            mTakedownDebugCam.GetBehaviour()->SetParameters(
+            mTakedownDebugCam.Get()->SetParameters(
                 &lrSharedInfo.mpNamedParameters->mCrashDebugParams);
 
-            mTakedownDebugCam.GetBehaviour()->DisableCollision();
-            mTakedownDebugCam.GetBehaviour()->SetIsTempDebugCrashCamera();
+            mTakedownDebugCam.Get()->DisableCollision();
+            mTakedownDebugCam.Get()->SetIsTempDebugCrashCamera();
         }
 
         if (!mGyroCam.IsAllocated())
@@ -1432,16 +1432,16 @@ namespace BrnDirector
 
             // This state's own rig takes the ZOOMED-OUT takedown block, record +2316 (gyro slot
             // 9) -- NOT the +2112 block the players adopt.
-            mGyroCam.GetBehaviour()->SetParameters(
+            mGyroCam.Get()->SetParameters(
                 &lrSharedInfo.mpNamedParameters->mGyroCamTakedownZoomedOutParams);
 
             const s32 liVictimRaceCarIndex =
                 static_cast<s32>(lrSharedInfo.mpGameState->meTakedownVictimID);
-            mGyroCam.GetBehaviour()->AttachToRaceCar(liVictimRaceCarIndex);
+            mGyroCam.Get()->AttachToRaceCar(liVictimRaceCarIndex);
 
-            mGyroCam.GetBehaviour()->SetUseVehicleAttachmentCollision(true);
+            mGyroCam.Get()->SetUseVehicleAttachmentCollision(true);
 
-            mGyroCam.GetBehaviour()->SetWorldSpaceNormalizedVectorFromCar(
+            mGyroCam.Get()->SetWorldSpaceNormalizedVectorFromCar(
                 NormalizedVectorToPlayer(lrSharedInfo, liVictimRaceCarIndex));
         }
 
@@ -1450,14 +1450,14 @@ namespace BrnDirector
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourInterpolate>(
                 mInterpolator, this, 0, KI_NEW_BEHAVIOUR_LIMIT_1);
 
-            mInterpolator.GetBehaviour()->SetParameters(&mInterpolatorParams);
-            mInterpolator.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+            mInterpolator.Get()->SetParameters(&mInterpolatorParams);
+            mInterpolator.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
             // ⚠️ This blend's "from" helper is the EXTERNAL gameplay behaviour's, taken
             // directly off the shared container -- not GetGameplayCameraHelperIndex()'s
             // bumper/external selection, which every sibling site uses. The console addresses
             // the container's first handle here, so the lookback override cannot redirect it.
-            mInterpolator.GetBehaviour()->Setup(
+            mInterpolator.Get()->Setup(
                 KF_BLEND_DURATION,
                 lrSharedInfo.mpSharedCameraContainer->mGameplayExternal.GetBehaviourHelperIndex(),
                 mGyroCam.GetBehaviourHelperIndex(),
@@ -1555,9 +1555,9 @@ namespace BrnDirector
                 GetNonConstCamera() = mInterpolator.GetCamera();
 
                 const f32 lfBlurAmount =
-                    ClampUnit(sinf(mInterpolator.GetBehaviour()->GetParametricTime() * KF_PI));
+                    ClampUnit(sinf(mInterpolator.Get()->GetParametricTime() * KF_PI));
                 const f32 lfEaseAmount =
-                    ClampUnit(sinf(mInterpolator.GetBehaviour()->GetParametricTime() * KF_HALF_PI));
+                    ClampUnit(sinf(mInterpolator.Get()->GetParametricTime() * KF_HALF_PI));
 
                 GetNonConstCamera().RequestMotionBlur(lfBlurAmount, lfEaseAmount);
                 GetNonConstCamera().mEffects.mfSimTimeScale =

@@ -140,11 +140,11 @@ namespace BrnDirector
             if (!lpShotData)
                 lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
 
-            Camera::BehaviourIceAnim* lpIceBehaviour = mIceCam.GetBehaviour();
+            Camera::BehaviourIceAnim* lpIceBehaviour = mIceCam.Get();
             lpIceBehaviour->SetParameters(
                 static_cast<Camera::BehaviourIceAnim::ShotReference*>(
                     const_cast<void*>(lpShotData)));
-            mIceCam.GetBehaviour()->SetTakeLooping(KB_TAKE_LOOPS);   // +0xDE4 = 1
+            mIceCam.Get()->SetTakeLooping(KB_TAKE_LOOPS);   // +0xDE4 = 1
         }
 
         if (!mLookAroundCarCam.IsAllocated())
@@ -157,7 +157,7 @@ namespace BrnDirector
             // +0x2334).
             const NamedParameters::LookAroundCarCamParameters& lrParams =
                 lrSharedInfo.mpNamedParameters->GetLookAroundCarCamParameters();
-            mLookAroundCarCam.GetBehaviour()->SetParameters(&lrParams);
+            mLookAroundCarCam.Get()->SetParameters(&lrParams);
         }
 
         // The console tail-returns the reveal behaviour's "still waiting to prepare?" query
@@ -290,7 +290,7 @@ namespace BrnDirector
                 // Left the car-mod (livery) screen: back to SELECTING_CAR, rewind the reveal take
                 // to its start.
                 meState = E_STATE_SELECTING_CAR;   // +0x1AC = 2
-                mIceCam.GetBehaviour()->SetControllerParametricTime0To1(KF_TAKE_START_PARAMETRIC_TIME);
+                mIceCam.Get()->SetControllerParametricTime0To1(KF_TAKE_START_PARAMETRIC_TIME);
             }
             break;
         }

@@ -180,10 +180,10 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
             {
                 lpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                     mIceCameraHandle, 0, this, 1);
-                mIceCameraHandle.GetBehaviour()->SetParameters(
+                mIceCameraHandle.Get()->SetParameters(
                     reinterpret_cast<Camera::BehaviourIceAnim::ShotReference*>(
                         const_cast<void*>(lpShotData)));
-                mIceCameraHandle.GetBehaviour()->SetUseCollisionPolicy(true);   // +0xE28
+                mIceCameraHandle.Get()->SetUseCollisionPolicy(true);   // +0xE28
                 SetCanSwitchToMeNow(false);
                 SetState(E_STATE_INVALID_FOUND_PREPARING);
                 GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
@@ -199,13 +199,13 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
     }
 
     case E_STATE_INVALID_FOUND_PREPARING:
-        if (mIceCameraHandle.GetBehaviour()->HasFailed())
+        if (mIceCameraHandle.Get()->HasFailed())
         {
             Release();   // the live-vtable call (slot 4)
             SetState(E_STATE_INVALID_SEARCHING);
             break;
         }
-        if (!mIceCameraHandle.GetBehaviour()->CanSwitchToMeNow())
+        if (!mIceCameraHandle.Get()->CanSwitchToMeNow())
         {
             SetCanSwitchToMeNow(false);
             GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
@@ -220,7 +220,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
         GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_VALID);
 
         if (!GetNonConstCamera().mState.IsFlagSet(Camera::CameraState::E_FLAG_VALID)
-            || mIceCameraHandle.GetBehaviour()->HasFinishedOrFailed())
+            || mIceCameraHandle.Get()->HasFinishedOrFailed())
         {
             Release();   // the live-vtable call (slot 4)
             SetState(E_STATE_INVALID_SEARCHING);

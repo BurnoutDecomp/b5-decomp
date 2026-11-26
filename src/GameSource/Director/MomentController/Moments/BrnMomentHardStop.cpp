@@ -311,10 +311,10 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
         lpBehaviourManager->NewBehaviour<Camera::Behaviour>(mRigCameraHandleB, lpShotB, 0, this, 1);
 
         if (ShotReference_IsIceAnimClassKeyTagged(lpShotA))
-            static_cast<Camera::BehaviourIceAnim*>(mRigCameraHandleA.GetBehaviour())
+            static_cast<Camera::BehaviourIceAnim*>(mRigCameraHandleA.Get())
                 ->SetUseCollisionPolicy(true);
         if (ShotReference_IsIceAnimClassKeyTagged(lpShotB))
-            static_cast<Camera::BehaviourIceAnim*>(mRigCameraHandleB.GetBehaviour())
+            static_cast<Camera::BehaviourIceAnim*>(mRigCameraHandleB.Get())
                 ->SetUseCollisionPolicy(true);
 
         mbUsingA = false;
@@ -369,54 +369,54 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
     {
         ++siHardStopDiagFrames;
         {
-            const s32 liKey = HardStopDiagKey(mRigCameraHandleA.GetBehaviour(), mRigCameraHandleB.GetBehaviour());
+            const s32 liKey = HardStopDiagKey(mRigCameraHandleA.Get(), mRigCameraHandleB.Get());
             siHardStopDiagLastKey = liKey;
         }
         // ---- per-candidate failure logging (name + validity dump) ----
-        if (mRigCameraHandleA.GetBehaviour()->HasFailed())
+        if (mRigCameraHandleA.Get()->HasFailed())
         {
-            Camera::Behaviour* lpBehaviourA = mRigCameraHandleA.GetBehaviour();
+            Camera::Behaviour* lpBehaviourA = mRigCameraHandleA.Get();
             lpDebugLog->Append("Hardstop: Camera A failed", KU_LOG_COLOUR_RED);
             lpDebugLog->Append(lpBehaviourA->GetDebugParametersName(), 0xFFFFFFFFu);
             mRigCameraHandleA.GetCamera().GetValidityAccount().Print(*lpDebugLog);
         }
-        if (mRigCameraHandleB.GetBehaviour()->HasFailed())
+        if (mRigCameraHandleB.Get()->HasFailed())
         {
-            Camera::Behaviour* lpBehaviourB = mRigCameraHandleB.GetBehaviour();
+            Camera::Behaviour* lpBehaviourB = mRigCameraHandleB.Get();
             lpDebugLog->Append("Hardstop: Camera B failed", KU_LOG_COLOUR_RED);
             lpDebugLog->Append(lpBehaviourB->GetDebugParametersName(), 0xFFFFFFFFu);
             mRigCameraHandleB.GetCamera().GetValidityAccount().Print(*lpDebugLog);
         }
 
-        if (mRigCameraHandleA.GetBehaviour()->HasFailed()
-            && mRigCameraHandleB.GetBehaviour()->HasFailed())
+        if (mRigCameraHandleA.Get()->HasFailed()
+            && mRigCameraHandleB.Get()->HasFailed())
         {
             Release();   // the live-vtable call (slot 4)
             SetState(E_STATE_INVALID_SEARCHING);
             break;
         }
 
-        if (mRigCameraHandleA.GetBehaviour()->CanSwitchToMeNow())
+        if (mRigCameraHandleA.Get()->CanSwitchToMeNow())
         {
             mbUsingA = true;
             SetState(E_STATE_VALID);
             CgsCore::SPrintf(lacLine, 64, "HardstopA: %s",
-                             mRigCameraHandleA.GetBehaviour()->GetDebugParametersName());
+                             mRigCameraHandleA.Get()->GetDebugParametersName());
             lpDebugLog->Append(lacLine, KU_LOG_COLOUR_ORANGE);
             CgsCore::SPrintf(lacLine, 64, "HardstopB: %s",
-                             mRigCameraHandleB.GetBehaviour()->GetDebugParametersName());
+                             mRigCameraHandleB.Get()->GetDebugParametersName());
             lpDebugLog->Append(lacLine, KU_LOG_COLOUR_ORANGE);
             mRigCameraHandleB.Release();
         }
-        else if (mRigCameraHandleB.GetBehaviour()->CanSwitchToMeNow())
+        else if (mRigCameraHandleB.Get()->CanSwitchToMeNow())
         {
             mbUsingA = false;
             SetState(E_STATE_VALID);
             CgsCore::SPrintf(lacLine, 64, "HardstopA: %s",
-                             mRigCameraHandleA.GetBehaviour()->GetDebugParametersName());
+                             mRigCameraHandleA.Get()->GetDebugParametersName());
             lpDebugLog->Append(lacLine, KU_LOG_COLOUR_ORANGE);
             CgsCore::SPrintf(lacLine, 64, "HardstopB: %s",
-                             mRigCameraHandleB.GetBehaviour()->GetDebugParametersName());
+                             mRigCameraHandleB.Get()->GetDebugParametersName());
             lpDebugLog->Append(lacLine, KU_LOG_COLOUR_ORANGE);
             mRigCameraHandleA.Release();
         }
@@ -455,8 +455,8 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
 
         // The active candidate's own switch-from gate.
         const bool lbActiveCanSwitchFrom =
-            mbUsingA ? mRigCameraHandleA.GetBehaviour()->CanSwitchFromMeNow()
-                     : mRigCameraHandleB.GetBehaviour()->CanSwitchFromMeNow();
+            mbUsingA ? mRigCameraHandleA.Get()->CanSwitchFromMeNow()
+                     : mRigCameraHandleB.Get()->CanSwitchFromMeNow();
 
         mfRunningTime += lfTimeStep;
 

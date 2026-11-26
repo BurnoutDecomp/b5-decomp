@@ -788,62 +788,79 @@ bool BaseOnlineModeScoring::_GiveRaceWinnerAward(const NetworkAwardData* lpaNetw
 bool BaseOnlineModeScoring::_GiveTakedownsForAward(const NetworkAwardData* lpaNetworkAwardData,
                                                    s32 /*liNumberOfRaceCars*/)
 {
-    return lpaNetworkAwardData[0].miTakedownsFor > lpaNetworkAwardData[1].miTakedownsFor;
+    if (lpaNetworkAwardData[0].miTakedownsFor > lpaNetworkAwardData[1].miTakedownsFor)   // li r3,1 ; bgtlr
+    {
+        return true;
+    }
+    return false;
 }
 
 bool BaseOnlineModeScoring::_GiveTakedownsAgainstAward(const NetworkAwardData* lpaNetworkAwardData,
                                                        s32 /*liNumberOfRaceCars*/)
 {
-    return lpaNetworkAwardData[0].miTakedownsAgainst > lpaNetworkAwardData[1].miTakedownsAgainst;
+    if (lpaNetworkAwardData[0].miTakedownsAgainst > lpaNetworkAwardData[1].miTakedownsAgainst)   // li r3,1 ; bgtlr
+    {
+        return true;
+    }
+    return false;
 }
 
 bool BaseOnlineModeScoring::_GiveMostCrashesAward(const NetworkAwardData* lpaNetworkAwardData,
                                                   s32 /*liNumberOfRaceCars*/)
 {
-    return lpaNetworkAwardData[0].miNumberOfCrashes > lpaNetworkAwardData[1].miNumberOfCrashes;
+    if (lpaNetworkAwardData[0].miNumberOfCrashes > lpaNetworkAwardData[1].miNumberOfCrashes)   // li r3,1 ; bgtlr
+    {
+        return true;
+    }
+    return false;
 }
 
 bool BaseOnlineModeScoring::_GiveFastestLapAward(const NetworkAwardData* lpaNetworkAwardData,
                                                  s32 /*liNumberOfRaceCars*/)
 {
-    return lpaNetworkAwardData[0].mFastestLap > lpaNetworkAwardData[1].mFastestLap;
+    // ARTIST re-normalises the inlined Time comparison (0x82314434 clrlwi/cntlzw/xori): `? true : false`.
+    return (lpaNetworkAwardData[0].mFastestLap > lpaNetworkAwardData[1].mFastestLap) ? true : false;
 }
 
 // The shortest- and longest-distance tests are the same body (the console folds them into one).
 bool BaseOnlineModeScoring::_GiveShortestDistanceAward(const NetworkAwardData* lpaNetworkAwardData,
                                                        s32 /*liNumberOfRaceCars*/)
 {
-    return lpaNetworkAwardData[0].mbFinishedRace;
+    return lpaNetworkAwardData[0].mbFinishedRace ? true : false;   // ARTIST normalises the byte (0x8231449C cntlzw/xori)
 }
 
 bool BaseOnlineModeScoring::_GiveLongestDistanceAward(const NetworkAwardData* lpaNetworkAwardData,
                                                       s32 /*liNumberOfRaceCars*/)
 {
-    return lpaNetworkAwardData[0].mbFinishedRace;
+    return lpaNetworkAwardData[0].mbFinishedRace ? true : false;   // ARTIST normalises the byte (0x8231449C cntlzw/xori)
 }
 
 bool BaseOnlineModeScoring::_GiveTimeInLastPlaceAward(const NetworkAwardData* lpaNetworkAwardData,
                                                       s32 /*liNumberOfRaceCars*/)
 {
-    return lpaNetworkAwardData[0].mTimeInLastPlace > lpaNetworkAwardData[1].mTimeInLastPlace;
+    return (lpaNetworkAwardData[0].mTimeInLastPlace > lpaNetworkAwardData[1].mTimeInLastPlace) ? true : false;
 }
 
 bool BaseOnlineModeScoring::_GiveTimeInFirstPlaceAward(const NetworkAwardData* lpaNetworkAwardData,
                                                        s32 /*liNumberOfRaceCars*/)
 {
-    return lpaNetworkAwardData[0].mTimeInFirstPlace > lpaNetworkAwardData[1].mTimeInFirstPlace;
+    return (lpaNetworkAwardData[0].mTimeInFirstPlace > lpaNetworkAwardData[1].mTimeInFirstPlace) ? true : false;
 }
 
 bool BaseOnlineModeScoring::_GiveMostTimeBoostingAward(const NetworkAwardData* lpaNetworkAwardData,
                                                        s32 /*liNumberOfRaceCars*/)
 {
-    return lpaNetworkAwardData[0].mTimeBoosting > lpaNetworkAwardData[1].mTimeBoosting;
+    return (lpaNetworkAwardData[0].mTimeBoosting > lpaNetworkAwardData[1].mTimeBoosting) ? true : false;
 }
 
 bool BaseOnlineModeScoring::_GiveLongestDriftAward(const NetworkAwardData* lpaNetworkAwardData,
                                                    s32 /*liNumberOfRaceCars*/)
 {
-    return lpaNetworkAwardData[0].mfLongestDrift > lpaNetworkAwardData[1].mfLongestDrift;
+    if (lpaNetworkAwardData[0].mfLongestDrift > lpaNetworkAwardData[1].mfLongestDrift)   // li r3,1 ; bgtlr
+    {
+        return true;
+    }
+    return false;
 }
 }
 

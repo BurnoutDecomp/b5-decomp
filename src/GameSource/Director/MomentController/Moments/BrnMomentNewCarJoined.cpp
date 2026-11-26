@@ -204,18 +204,18 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
             {
                 lpBehaviourManager->NewBehaviour<Camera::BehaviourLooseAttachment>(
                     mLooseAttachment, 0, this, 2);
-                mLooseAttachment.GetBehaviour()->SetParameters(&mLooseAttachmentParameters);
-                mLooseAttachment.GetBehaviour()->AttachTo(
+                mLooseAttachment.Get()->SetParameters(&mLooseAttachmentParameters);
+                mLooseAttachment.Get()->AttachTo(
                     MomentSharedInfo_GetCrashVehicleIndex(lSharedInfo));
-                mLooseAttachment.GetBehaviour()->SetTarget(
+                mLooseAttachment.Get()->SetTarget(
                     MomentSharedInfo_GetNewCarJoinTargetIndex(lSharedInfo));
 
                 lpBehaviourManager->NewBehaviour<Camera::BehaviourInterpolate>(
                     mInterpolaterA, 0, this, 1);
-                mInterpolaterA.GetBehaviour()->SetParameters(&mInterpolateParams);
+                mInterpolaterA.Get()->SetParameters(&mInterpolateParams);
                 // The moment itself runs at 2/7 slow-mo (see the tail); its blend
                 // must not -- the console build stores the enumerator 1 into Behaviour +0x04.
-                mInterpolaterA.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+                mInterpolaterA.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
                 // The blend OUT: FROM the gameplay helper slot TO the loose attachment
                 // (argument direction console-attested: the gameplay slot is the FROM
@@ -230,12 +230,12 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
                 // still false while the references are written); it only evaluates asserts
                 // the console path skips. Swap to the combined call once the overload is
                 // declared -- see the shared-header request in the wave spec.
-                mInterpolaterA.GetBehaviour()->SetupDuration(KF_BLEND_DURATION);
-                mInterpolaterA.GetBehaviour()->SetupCameraAFromHelper(
+                mInterpolaterA.Get()->SetupDuration(KF_BLEND_DURATION);
+                mInterpolaterA.Get()->SetupCameraAFromHelper(
                     Camera::BehaviourHelperIndex(KI_GAMEPLAY_HELPER_SLOT), *lpBehaviourManager);
-                mInterpolaterA.GetBehaviour()->SetupCameraBFromHelper(
+                mInterpolaterA.Get()->SetupCameraBFromHelper(
                     mLooseAttachment.GetBehaviourHelperIndex(), *lpBehaviourManager);
-                mInterpolaterA.GetBehaviour()->Setup();
+                mInterpolaterA.Get()->Setup();
 
                 SetCanSwitchToMeNow(false);
                 GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
@@ -251,13 +251,13 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
         return;
 
     case E_STATE_INVALID_FOUND_PREPARING:
-        if (mInterpolaterA.GetBehaviour()->HasFailed())
+        if (mInterpolaterA.Get()->HasFailed())
         {
             Release();   // the live-vtable call through slot +0x10
             SetState(E_STATE_INVALID_SEARCHING);
             return;
         }
-        if (!mInterpolaterA.GetBehaviour()->CanSwitchToMeNow())
+        if (!mInterpolaterA.Get()->CanSwitchToMeNow())
         {
             SetCanSwitchToMeNow(false);
             GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
@@ -277,12 +277,12 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
 
     // ---- the VALID body ----
     if (mInterpolaterB.IsAllocated()
-        && mInterpolaterB.GetBehaviour()->CanSwitchToMeNow())
+        && mInterpolaterB.Get()->CanSwitchToMeNow())
     {
         // The return blend has taken over: publish its camera, and let go of the
         // moment as soon as it will also switch away.
         SetCamera(mInterpolaterB.GetCamera());
-        if (mInterpolaterB.GetBehaviour()->CanSwitchFromMeNow())
+        if (mInterpolaterB.Get()->CanSwitchFromMeNow())
         {
             Release();   // the live-vtable call
             // The caller's own state store AFTER Release (redundant -- Release already
@@ -305,21 +305,21 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
             // rig's target vector while the return blend runs. That byte is the recovered
             // mbTargetVectorLock and the store is the behaviour's own LockTargetVector(),
             // which the console inlines to exactly this one byte.
-            mLooseAttachment.GetBehaviour()->LockTargetVector();
+            mLooseAttachment.Get()->LockTargetVector();
 
-            mInterpolaterB.GetBehaviour()->SetParameters(&mInterpolateParams);
-            mInterpolaterB.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+            mInterpolaterB.Get()->SetParameters(&mInterpolateParams);
+            mInterpolaterB.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
             // The blend BACK: FROM the loose attachment TO the gameplay helper slot
             // (direction console-attested: the loose attachment's helper index is the
             // FROM helper, the gameplay slot is the TO helper). Same combined-overload shape
             // fallback as the outward blend above.
-            mInterpolaterB.GetBehaviour()->SetupDuration(KF_BLEND_DURATION);
-            mInterpolaterB.GetBehaviour()->SetupCameraAFromHelper(
+            mInterpolaterB.Get()->SetupDuration(KF_BLEND_DURATION);
+            mInterpolaterB.Get()->SetupCameraAFromHelper(
                 mLooseAttachment.GetBehaviourHelperIndex(), *lpBehaviourManager);
-            mInterpolaterB.GetBehaviour()->SetupCameraBFromHelper(
+            mInterpolaterB.Get()->SetupCameraBFromHelper(
                 Camera::BehaviourHelperIndex(KI_GAMEPLAY_HELPER_SLOT), *lpBehaviourManager);
-            mInterpolaterB.GetBehaviour()->Setup();
+            mInterpolaterB.Get()->Setup();
         }
         // Hold interpolater A's output until B takes over.
         SetCamera(mInterpolaterA.GetCamera());

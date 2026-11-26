@@ -389,7 +389,7 @@ void DebugComponent::OnActivate()
         lrArbitrator.GetSharedCameras().mGameplayExternal;
 
     CGS_ASSERT(lrExternalCam.IsAllocated(), "IsAllocated()");
-    RegisterVariable(&lrExternalCam.GetBehaviour()->mbEnableDebugRender, "", "Draw follow-cam pivot");
+    RegisterVariable(&lrExternalCam.Get()->mbEnableDebugRender, "", "Draw follow-cam pivot");
 
     // ---- current camera -----------------------------------------------------------------------
     RegisterVariable(&lrMainDirector.miForcedCameraCarIndex, "Current Camera", "Override Player");
@@ -473,7 +473,7 @@ void DebugComponent::OnActivate()
     RegisterVariable(&lrArbitrator.mbDoRenderMetrics, "RenderMetricsMode");
 
     CGS_ASSERT(lrExternalCam.IsAllocated(), "IsAllocated()");
-    RegisterVariable(&lrExternalCam.GetBehaviour()->mbEnableBoostEffects, "", "Enable Boost Effects");
+    RegisterVariable(&lrExternalCam.Get()->mbEnableBoostEffects, "", "Enable Boost Effects");
 
     SetReadOnly(&lrCameraInfo.mfFOV, true);
     SetReadOnly(&lrCameraInfo.mfX, true);

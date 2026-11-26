@@ -302,7 +302,7 @@ namespace BrnDirector
             // Camera::operator= to `bl sub_821FCDA8`. Removed: it was invented behaviour.
             lrCamera = mDriveThruBehaviourHandle.GetCamera();
 
-            Camera::Behaviour* lpBehaviour = mDriveThruBehaviourHandle.GetBehaviour();
+            Camera::Behaviour* lpBehaviour = mDriveThruBehaviourHandle.Get();
 
             // Camera::Behaviour +0x0C gates the hand-off. That byte is the base's
             // mbCanSwitchFromMeNow (the retired IceAnim fork called it "flag C"), so the

@@ -160,7 +160,7 @@ namespace BrnDirector
                 if (!lpShotData)
                     lpShotData = Attrib::DefaultDataArea(0x18u);
 
-                Camera::BehaviourIceAnim* lpBehaviour = mRaceIntroBehaviourHandle.GetBehaviour();
+                Camera::BehaviourIceAnim* lpBehaviour = mRaceIntroBehaviourHandle.Get();
                 lpBehaviour->SetParameters(
                     static_cast<Camera::BehaviourIceAnim::ShotReference*>(
                         const_cast<void*>(lpShotData)));
@@ -174,18 +174,18 @@ namespace BrnDirector
                     if (lrGameState.meEventType != KI_EVENT_TYPE_15 &&
                         lrGameState.meEventType != KI_EVENT_TYPE_16)
                     {
-                        mRaceIntroBehaviourHandle.GetBehaviour()->SetTakePaused(true);  // +0xDE6
+                        mRaceIntroBehaviourHandle.Get()->SetTakePaused(true);  // +0xDE6
                     }
                 }
                 else
                 {
                     // Multiple shots: the bound take loops (behaviour +0xDE4 == the embedded
                     // KeyAnimController's mbIsLooping; RESOLVED 2026-08-05).
-                    mRaceIntroBehaviourHandle.GetBehaviour()->SetTakeLooping(true);      // +0xDE4
+                    mRaceIntroBehaviourHandle.Get()->SetTakeLooping(true);      // +0xDE4
                 }
 
-                mRaceIntroBehaviourHandle.GetBehaviour()->SetUseCollisionPolicy(true);   // +0xE28
-                mRaceIntroBehaviourHandle.GetBehaviour()->ClearBaseFirstFrameGate();     // base +0x28 = 0
+                mRaceIntroBehaviourHandle.Get()->SetUseCollisionPolicy(true);   // +0xE28
+                mRaceIntroBehaviourHandle.Get()->ClearBaseFirstFrameGate();     // base +0x28 = 0
             }
         }
 
@@ -232,7 +232,7 @@ namespace BrnDirector
             {
                 if (mpRaceStartShotGroup->Num_ShotList() <= 1)
                 {
-                    mRaceIntroBehaviourHandle.GetBehaviour()->SetTakePaused(false);   // +0xDE6 = 0
+                    mRaceIntroBehaviourHandle.Get()->SetTakePaused(false);   // +0xDE6 = 0
                     meState = E_STATE_ACTIVE_COUNTDOWN;   // +0x194 = 3
                 }
                 else
@@ -245,13 +245,13 @@ namespace BrnDirector
                     if (!lpShotData)
                         lpShotData = Attrib::DefaultDataArea(0x18u);
 
-                    Camera::BehaviourIceAnim* lpBehaviour = mRaceIntroBehaviourHandle.GetBehaviour();
+                    Camera::BehaviourIceAnim* lpBehaviour = mRaceIntroBehaviourHandle.Get();
                     lpBehaviour->SetParameters(
                         static_cast<Camera::BehaviourIceAnim::ShotReference*>(
                             const_cast<void*>(lpShotData)));
                     lpBehaviour->SetUseCollisionPolicy(true);       // +0xE28
-                    mRaceIntroBehaviourHandle.GetBehaviour()->ClearBaseFirstFrameGate(); // base +0x28 = 0
-                    mRaceIntroBehaviourHandle.GetBehaviour()->SetForceLooseHeadingSpace(true); // +0xE2A
+                    mRaceIntroBehaviourHandle.Get()->ClearBaseFirstFrameGate(); // base +0x28 = 0
+                    mRaceIntroBehaviourHandle.Get()->SetForceLooseHeadingSpace(true); // +0xE2A
                     meState = E_STATE_ACTIVE_COUNTDOWN;   // +0x194 = 3
                 }
             }
@@ -274,7 +274,7 @@ namespace BrnDirector
                 lrSharedInfo.mpSharedCameraContainer->ForcePrimaryGameplayBehaviourToFinish();
             }
 
-            if (mRaceIntroBehaviourHandle.GetBehaviour()->HasFinishedOrFailed())
+            if (mRaceIntroBehaviourHandle.Get()->HasFinishedOrFailed())
             {
                 const bool lbReleased = mRaceIntroBehaviourHandle.Release();
                 CGS_ASSERT(lbReleased, CGS_ASSERT_MESSAGE_AT("mRaceIntroBehaviourHandle.Release()", CGS_ARTIST_FILE, 192));

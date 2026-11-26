@@ -950,29 +950,6 @@ void BehaviourIceAnim::SetPrimaryVehicleRefToRaceCar(EActiveRaceCarIndex leRaceC
     mPrimaryVehicleRef.SetToRaceCar(leRaceCar);
 }
 
-// ----------------------------------------------------------------------------
-// SetBystanderRefForPostEvent
-// ----------------------------------------------------------------------------
-// The BYSTANDER-ref seed the post-event take runs with, for mBystanderRef (+0xE10). Unlike the
-// two SetToRaceCar setters above this one has no out-of-line callee: the shipped build INLINES
-// the four field writes straight into ArbStatePostEvent::Prepare, in the order
-//     word +0x00 = 0 ; word +0x08 = 0 ; byte +0x0C = 1 ; word +0x04 = -1
-// (the store order is the scheduler's; the values are what matter). Written here through the
-// ref's named fields: the reference kind is the PLAYER CAR, it binds no race-car index, it
-// names no nearest-player rank, and it is marked populated -- i.e. the post-event take frames
-// the player, which is what a "who is watching the winner" bystander anchor means here.
-// FLAG: the four fields' VALUES are attested; their individual ROLES in the bystander case are
-// the base VehicleRef's, taken over unchanged.
-// The member is private, so the setter lives here rather than letting the arbitrator state
-// form the offset.
-// ----------------------------------------------------------------------------
-void BehaviourIceAnim::SetBystanderRefForPostEvent()
-{
-    mBystanderRef.meType         = BrnDirector::VehicleRef::E_PLAYER_CAR;   // +0x00 = 0
-    mBystanderRef.miRaceCarIndex = -1;                                      // +0x04 = -1
-    mBystanderRef.muRef          = 0;                                       // +0x08 = 0
-    mBystanderRef.mbSet          = true;                                    // +0x0C = 1
-}
 
 // ----------------------------------------------------------------------------
 // SetPrimaryVehicleRefToRaceCarIndex / SetSecondaryVehicleRefToRaceCarIndex
@@ -1023,33 +1000,5 @@ void BehaviourIceAnim::SetBystanderRefToRaceCarIndex(s32 liRaceCarIndex)
     CGS_ASSERT(liRaceCarIndex < 8, "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars");
 }
 
-// ----------------------------------------------------------------------------
-// SetPrimaryVehicleRefToPlayer / SetSecondaryVehicleRefToPlayer
-// ----------------------------------------------------------------------------
-// BODIED 2026-09-12 (were declaration-only). The online-race-intro PLAYER "show" take anchors
-// both refs onto the player instead of a numbered race car. Like the bystander seed above, the
-// shipped build inlines the four field writes straight into ArbStateOnlineRaceIntro::Update
-// (both the SHOWING_PLAYER setup and its SHOWING_PLAYER_AGAIN twin), in the order
-//     set-flag byte = 1 ; kind word = 0 ; nearest-player ref word = 0 ; index word = -1
-// -- the reference kind is the PLAYER CAR, it binds no race-car index, it names no
-// nearest-player rank, and it is marked populated. There is no race-car tripwire on this path
-// (no index is bound). Written through the ref's named fields; the refs are private, so the
-// setters live in this behaviour's own TU.
-// ----------------------------------------------------------------------------
-void BehaviourIceAnim::SetPrimaryVehicleRefToPlayer()
-{
-    mPrimaryVehicleRef.meType         = BrnDirector::VehicleRef::E_PLAYER_CAR;
-    mPrimaryVehicleRef.miRaceCarIndex = -1;
-    mPrimaryVehicleRef.muRef          = 0;
-    mPrimaryVehicleRef.mbSet          = true;
-}
-
-void BehaviourIceAnim::SetSecondaryVehicleRefToPlayer()
-{
-    mSecondaryVehicleRef.meType         = BrnDirector::VehicleRef::E_PLAYER_CAR;
-    mSecondaryVehicleRef.miRaceCarIndex = -1;
-    mSecondaryVehicleRef.muRef          = 0;
-    mSecondaryVehicleRef.mbSet          = true;
-}
 
 } } // namespace BrnDirector::Camera

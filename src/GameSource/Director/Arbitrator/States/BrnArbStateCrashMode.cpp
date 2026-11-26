@@ -173,7 +173,7 @@ namespace BrnDirector
             const Camera::BehaviourAftertouchCrash::Parameters& lrParameters =
                 lrManager.GetBehaviourParameterBank().GetNamedParameters().GetAftertouchCrashParameters();
 
-            mAftertouch.GetBehaviour()->SetParameters(&lrParameters);
+            mAftertouch.Get()->SetParameters(&lrParameters);
         }
 
         // The callee already negates (it answers "ready", not "waiting"), so it is returned raw.
@@ -193,7 +193,7 @@ namespace BrnDirector
         const f32 lfCloseupBlend = (lfClampedLow <= KF_UNIT) ? lfClampedLow : KF_UNIT;
 
         // The console re-resolves the behaviour + asserts IsAllocated() inside the pool lookup.
-        Camera::BehaviourAftertouchCrash& lrBehaviour = *mAftertouch.GetBehaviour();
+        Camera::BehaviourAftertouchCrash& lrBehaviour = *mAftertouch.Get();
         lrBehaviour.SetCloseupAmount0To1(lfCloseupBlend);
 
         // Request the close-up time dilation (the camera's slow-mo factor).
@@ -292,7 +292,7 @@ namespace BrnDirector
             GameState&             lrGameState = *lrSharedInfo.mpGameState;
             const EffectInterface& lrEffects   = *lrSharedInfo.mpEffectInterface;
             Camera::Camera&        lrCamera    = GetNonConstCamera();
-            Camera::BehaviourAftertouchCrash& lrBehaviour = *mAftertouch.GetBehaviour();
+            Camera::BehaviourAftertouchCrash& lrBehaviour = *mAftertouch.Get();
 
             // Copy the aftertouch behaviour's produced camera into ours, then mark dirty.
             lrCamera = mAftertouch.GetCamera();

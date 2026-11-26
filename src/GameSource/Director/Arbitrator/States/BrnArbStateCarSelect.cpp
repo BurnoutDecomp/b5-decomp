@@ -270,18 +270,18 @@ namespace BrnDirector
 
         // The X360 inlines BehaviourInterpolate::SetParameters here (the params pointer + the
         // parameters' debug name into the behaviour's own base slot).
-        mInterpolater.GetBehaviour()->SetParameters(&mInterpolaterParams);
+        mInterpolater.Get()->SetParameters(&mInterpolaterParams);
 
         CGS_ASSERT(mInterpolater.IsAllocated(), "IsAllocated()");   // BrnBehaviourManager.h:589
 
         // Setup(from, to, manager, duration): blend the FROM helper's camera into the TO
         // helper's over lfDuration.
-        mInterpolater.GetBehaviour()->SetupCameraAFromHelper(lFromBehaviourHelperIndex,
+        mInterpolater.Get()->SetupCameraAFromHelper(lFromBehaviourHelperIndex,
                                                             *lpBehaviourController);
-        mInterpolater.GetBehaviour()->SetupCameraBFromHelper(lToBehaviourHelperIndex,
+        mInterpolater.Get()->SetupCameraBFromHelper(lToBehaviourHelperIndex,
                                                             *lpBehaviourController);
-        mInterpolater.GetBehaviour()->SetupDuration(lfDuration);
-        mInterpolater.GetBehaviour()->Setup();
+        mInterpolater.Get()->SetupDuration(lfDuration);
+        mInterpolater.Get()->Setup();
     }
 
     // ------------------------------------------------------------------------
@@ -470,7 +470,7 @@ namespace BrnDirector
 
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                 mTransitionCam, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
-            mTransitionCam.GetBehaviour()->ClearBaseFirstFrameGate();
+            mTransitionCam.Get()->ClearBaseFirstFrameGate();
 
             if (static_cast<u32>(lrSharedInfo.mpGameState->miJunkyardPosIndex) > 2u)
             {
@@ -479,7 +479,7 @@ namespace BrnDirector
             }
 
             // The junkyard opens on the right-to-left browse movie.
-            mTransitionCam.GetBehaviour()->SetParameters(mpRightToLeft);
+            mTransitionCam.Get()->SetParameters(mpRightToLeft);
             mbIsLeft = true;
         }
 
@@ -489,8 +489,8 @@ namespace BrnDirector
         {
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                 mIntroNoNewCars, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
-            mIntroNoNewCars.GetBehaviour()->ClearBaseFirstFrameGate();
-            mIntroNoNewCars.GetBehaviour()->SetParameters(mpShotIntroNoNewCars);
+            mIntroNoNewCars.Get()->ClearBaseFirstFrameGate();
+            mIntroNoNewCars.Get()->SetParameters(mpShotIntroNoNewCars);
         }
 
         if (!mIntroNewCars.IsAllocated())
@@ -505,15 +505,15 @@ namespace BrnDirector
 
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                 mIntroNewCars, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
-            mIntroNewCars.GetBehaviour()->ClearBaseFirstFrameGate();
-            mIntroNewCars.GetBehaviour()->SetParameters(mpIntroNewCarsShot);
+            mIntroNewCars.Get()->ClearBaseFirstFrameGate();
+            mIntroNewCars.Get()->SetParameters(mpIntroNewCarsShot);
         }
 
         if (!mLookAroundCarCam.IsAllocated())
         {
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourRotateAboutVehicle>(
                 mLookAroundCarCam, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
-            mLookAroundCarCam.GetBehaviour()->SetParameters(
+            mLookAroundCarCam.Get()->SetParameters(
                 &lrSharedInfo.mpNamedParameters->GetLookAroundCarCamParameters());
         }
 
@@ -549,8 +549,8 @@ namespace BrnDirector
 
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                 mCarUnlockCam, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_UNLOCK);
-            mCarUnlockCam.GetBehaviour()->ClearBaseFirstFrameGate();
-            mCarUnlockCam.GetBehaviour()->SetParameters(lpUnlockShot);
+            mCarUnlockCam.Get()->ClearBaseFirstFrameGate();
+            mCarUnlockCam.Get()->SetParameters(lpUnlockShot);
 
             muRivalUnlockMovie = Camera::Utils::Cycle(muRivalUnlockMovie, 1u,
                                                      mpRivalUnlockShotGroup->Num_ShotList(), 1u);
@@ -581,8 +581,8 @@ namespace BrnDirector
 
         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
             mCarUnlockCam, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_UNLOCK);
-        mCarUnlockCam.GetBehaviour()->ClearBaseFirstFrameGate();
-        mCarUnlockCam.GetBehaviour()->SetParameters(lpUnlockShot);
+        mCarUnlockCam.Get()->ClearBaseFirstFrameGate();
+        mCarUnlockCam.Get()->SetParameters(lpUnlockShot);
     }
 
     // ------------------------------------------------------------------------
@@ -596,8 +596,8 @@ namespace BrnDirector
 
         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
             mIntroNewCars, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
-        mIntroNewCars.GetBehaviour()->ClearBaseFirstFrameGate();
-        mIntroNewCars.GetBehaviour()->SetParameters(mpOutroShot);
+        mIntroNewCars.Get()->ClearBaseFirstFrameGate();
+        mIntroNewCars.Get()->SetParameters(mpOutroShot);
 
         meState = E_STATE_OUTRO;
     }
@@ -606,9 +606,9 @@ namespace BrnDirector
     {
         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
             mIntroNewCars, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
-        mIntroNewCars.GetBehaviour()->ClearBaseFirstFrameGate();
-        mIntroNewCars.GetBehaviour()->SetParameters(mpWaitForAudioShot);
-        mIntroNewCars.GetBehaviour()->SetTakeLooping(KB_TAKE_RUNS_ONCE);
+        mIntroNewCars.Get()->ClearBaseFirstFrameGate();
+        mIntroNewCars.Get()->SetParameters(mpWaitForAudioShot);
+        mIntroNewCars.Get()->SetTakeLooping(KB_TAKE_RUNS_ONCE);
 
         meState = E_STATE_WAIT_FOR_AUDIO;
     }
@@ -639,7 +639,7 @@ namespace BrnDirector
             GetNonConstCamera() = mIntroNoNewCars.GetCamera();
             GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD;
         }
-        mLookAroundCarCam.GetBehaviour()->BecomeSimilarTo(GetNonConstCamera(),
+        mLookAroundCarCam.Get()->BecomeSimilarTo(GetNonConstCamera(),
                                                          *lrSharedInfo.mpAllVehicleData);
 
         if (lrGameState.mbGameIntroFlybyActive)
@@ -781,7 +781,7 @@ namespace BrnDirector
             }
 
             // Park the transition take at its end and reset the per-entry state.
-            mTransitionCam.GetBehaviour()->SetControllerParametricTime0To1(
+            mTransitionCam.Get()->SetControllerParametricTime0To1(
                 KF_TAKE_PARAMETRIC_TIME_END);
             mfTimeBeforeFadeInAfterLiveryChange = 0.0f;
             mbIsFirstCarSelect                  = false;
@@ -810,9 +810,9 @@ namespace BrnDirector
 
                 lrManager.NewBehaviour<Camera::BehaviourIceAnim>(
                     mGameIntro, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
-                mGameIntro.GetBehaviour()->ClearBaseFirstFrameGate();
-                mGameIntro.GetBehaviour()->SetParameters(lpShot);
-                mGameIntro.GetBehaviour()->SetTakeLooping(KB_TAKE_LOOPS);
+                mGameIntro.Get()->ClearBaseFirstFrameGate();
+                mGameIntro.Get()->SetParameters(lpShot);
+                mGameIntro.Get()->SetTakeLooping(KB_TAKE_LOOPS);
 
                 mToCarSelectInterpolater.Release();
                 mToGameplayInterpolater.Release();
@@ -864,9 +864,9 @@ namespace BrnDirector
                 if (lrGameIntroShots.Num_ShotList() < KU_MIN_GAME_INTRO_CHANGE_SHOTS)
                     FireAssert("Not enough ice movies in game intro group", 451);
 
-                mGameIntro.GetBehaviour()->ChangeMovie(
+                mGameIntro.Get()->ChangeMovie(
                     GetShot(lrGameIntroShots, KU_GAME_INTRO_SHOT_PART_TWO), lrResources);
-                mGameIntro.GetBehaviour()->SetTakeLooping(KB_TAKE_RUNS_ONCE);
+                mGameIntro.Get()->SetTakeLooping(KB_TAKE_RUNS_ONCE);
                 meState = E_STATE_GAME_INTRO_PART_TWO;
             }
             break;
@@ -876,15 +876,15 @@ namespace BrnDirector
         case E_STATE_GAME_INTRO_PART_TWO:
             GetNonConstCamera() = mGameIntro.GetCamera();
 
-            if (mGameIntro.GetBehaviour()->HasFinishedOrFailed())
+            if (mGameIntro.Get()->HasFinishedOrFailed())
             {
                 const Attrib::Gen::shotgroup& lrGameIntroShots = lrResources.GetGameIntro();
                 if (lrGameIntroShots.Num_ShotList() < KU_MIN_GAME_INTRO_CHANGE_SHOTS)
                     FireAssert("Not enough ice movies in game intro group", 469);
 
-                mGameIntro.GetBehaviour()->ChangeMovie(
+                mGameIntro.Get()->ChangeMovie(
                     GetShot(lrGameIntroShots, KU_GAME_INTRO_SHOT_PART_THREE), lrResources);
-                mGameIntro.GetBehaviour()->SetTakeLooping(KB_TAKE_RUNS_ONCE);
+                mGameIntro.Get()->SetTakeLooping(KB_TAKE_RUNS_ONCE);
                 meState = E_STATE_GAME_INTRO_PART_THREE;
             }
             break;
@@ -896,7 +896,7 @@ namespace BrnDirector
         case E_STATE_GAME_INTRO_PART_THREE:
             GetNonConstCamera() = mGameIntro.GetCamera();
             GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD;
-            mLookAroundCarCam.GetBehaviour()->BecomeSimilarTo(GetNonConstCamera(),
+            mLookAroundCarCam.Get()->BecomeSimilarTo(GetNonConstCamera(),
                                                              *lrSharedInfo.mpAllVehicleData);
 
             if (!lrGameState.mbGameIntroFlybyActive)
@@ -939,7 +939,7 @@ namespace BrnDirector
             lrSharedInfo.mpSharedCameraContainer->ForcePrimaryGameplayBehaviourToFinish();
 
             GetNonConstCamera() = mIntroNewCars.GetCamera();
-            if (mIntroNewCars.GetBehaviour()->HasFinishedOrFailed())
+            if (mIntroNewCars.Get()->HasFinishedOrFailed())
             {
                 mIntroNewCars.Release();
                 mfTimeInState = 0.0f;
@@ -979,7 +979,7 @@ namespace BrnDirector
                 mCarUnlockCam.Release();
                 // ARTIST 8226FFBC..8226FFCC rewinds the +0x1A8 normal intro.
                 // It brings the picture back after the unlock movie's fade.
-                mIntroNoNewCars.GetBehaviour()->SetControllerParametricTime0To1(
+                mIntroNoNewCars.Get()->SetControllerParametricTime0To1(
                     KF_TAKE_PARAMETRIC_TIME_START);
                 mfTimeInState = 0.0f;
                 meState       = E_STATE_INTRO;
@@ -995,7 +995,7 @@ namespace BrnDirector
             {
                 if (mbIsLeft != lrGameState.mbJunkyardPosIsLeft)
                 {
-                    mTransitionCam.GetBehaviour()->ChangeMovie(
+                    mTransitionCam.Get()->ChangeMovie(
                         lrGameState.mbJunkyardPosIsLeft ? mpRightToLeft : mpLeftToRight,
                         lrResources);
                 }
@@ -1022,10 +1022,10 @@ namespace BrnDirector
             {
                 if (lrGameState.mbJunkyardSelectionChangedMessageReceivedThisFrame &&
                     !lrGameState.mbJunkyardCarModActive &&
-                    mTransitionCam.GetBehaviour()->HasFinishedOrFailed())
+                    mTransitionCam.Get()->HasFinishedOrFailed())
                 {
                     mbIsLeft = !mbIsLeft;
-                    mTransitionCam.GetBehaviour()->ChangeMovie(
+                    mTransitionCam.Get()->ChangeMovie(
                         mbIsLeft ? mpRightToLeft : mpLeftToRight, lrResources);
                     GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD_ENTERING;
                     Camera::EnsureEffectIsPlaying(GetNonConstCamera(),
@@ -1037,7 +1037,7 @@ namespace BrnDirector
                     mbWaitingForCarToSpawn             = true;
                     meState                            = E_STATE_WAIT_FOR_CAR_DROP;
                 }
-                else if (mTransitionCam.GetBehaviour()->GetTimeRemaining()
+                else if (mTransitionCam.Get()->GetTimeRemaining()
                              < KF_MAX_EARLY_OUT_OF_TRANSITION_CAM_SECS &&
                          meState == E_STATE_ACTIVE &&
                          (mbSafeToBeAttachedToCar || lrGameState.mbJunkyardCarModActive))
@@ -1048,7 +1048,7 @@ namespace BrnDirector
                                                     &lrManager,
                                                     KI_INTERPOLATION_METHOD,
                                                     KI_INTERPOLATION_MAPPING);
-                    mLookAroundCarCam.GetBehaviour()->BecomeSimilarTo(
+                    mLookAroundCarCam.Get()->BecomeSimilarTo(
                         mTransitionCam.GetCamera(), *lrSharedInfo.mpAllVehicleData);
                     mfTimeInState = 0.0f;
                     meState       = E_STATE_ROTATE_ABOUT_CAR;
@@ -1082,7 +1082,7 @@ namespace BrnDirector
             {
                 if (mbIsLeft != lrGameState.mbJunkyardPosIsLeft)
                 {
-                    mTransitionCam.GetBehaviour()->ChangeMovie(
+                    mTransitionCam.Get()->ChangeMovie(
                         lrGameState.mbJunkyardPosIsLeft ? mpRightToLeft : mpLeftToRight,
                         lrResources);
                 }
@@ -1101,7 +1101,7 @@ namespace BrnDirector
                      !lrGameState.mbJunkyardCarModActive)
             {
                 mbIsLeft = !mbIsLeft;
-                mTransitionCam.GetBehaviour()->ChangeMovie(
+                mTransitionCam.Get()->ChangeMovie(
                     mbIsLeft ? mpRightToLeft : mpLeftToRight, lrResources);
                 GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD_ENTERING;
                 Camera::EnsureEffectIsPlaying(GetNonConstCamera(),
@@ -1119,9 +1119,9 @@ namespace BrnDirector
             {
                 lrManager.NewBehaviour<Camera::BehaviourIceAnim>(
                     mIdleCam, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
-                mIdleCam.GetBehaviour()->ClearBaseFirstFrameGate();
-                mIdleCam.GetBehaviour()->SetParameters(mpIdle);
-                mIdleCam.GetBehaviour()->SetTakeLooping(KB_TAKE_LOOPS);
+                mIdleCam.Get()->ClearBaseFirstFrameGate();
+                mIdleCam.Get()->SetParameters(mpIdle);
+                mIdleCam.Get()->SetTakeLooping(KB_TAKE_LOOPS);
                 mfTimeInState = 0.0f;
                 meState       = E_STATE_IDLE;
             }
@@ -1176,7 +1176,7 @@ namespace BrnDirector
                     else
                     {
                         mbIsLeft = !mbIsLeft;
-                        mTransitionCam.GetBehaviour()->ChangeMovie(
+                        mTransitionCam.Get()->ChangeMovie(
                             mbIsLeft ? mpRightToLeft : mpLeftToRight, lrResources);
                         mfTimeInState                = 0.0f;
                         mbWaitingForCarToSpawn       = true;
@@ -1212,7 +1212,7 @@ namespace BrnDirector
                 {
                     if (mbIsLeft != lrGameState.mbJunkyardPosIsLeft)
                     {
-                        mTransitionCam.GetBehaviour()->ChangeMovie(
+                        mTransitionCam.Get()->ChangeMovie(
                             lrGameState.mbJunkyardPosIsLeft ? mpRightToLeft : mpLeftToRight,
                             lrResources);
                     }
@@ -1232,7 +1232,7 @@ namespace BrnDirector
                          !lrGameState.mbJunkyardCarModActive)
                 {
                     mbIsLeft = !mbIsLeft;
-                    mTransitionCam.GetBehaviour()->ChangeMovie(
+                    mTransitionCam.Get()->ChangeMovie(
                         mbIsLeft ? mpRightToLeft : mpLeftToRight, lrResources);
                     GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD_ENTERING;
                     Camera::EnsureEffectIsPlaying(GetNonConstCamera(),
@@ -1258,7 +1258,7 @@ namespace BrnDirector
                                                     &lrManager,
                                                     KI_INTERPOLATION_METHOD,
                                                     KI_INTERPOLATION_MAPPING);
-                    mLookAroundCarCam.GetBehaviour()->BecomeSimilarTo(
+                    mLookAroundCarCam.Get()->BecomeSimilarTo(
                         mTransitionCam.GetCamera(), *lrSharedInfo.mpAllVehicleData);
                     mIdleCam.Release();
                     mfTimeInState = 0.0f;

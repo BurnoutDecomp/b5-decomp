@@ -431,7 +431,8 @@ namespace Camera
 
         bool IsAllocated() const { return mbAllocated; }
         BehaviourManager* GetManager() const { return mpManager; }
-        TBehaviour* GetBehaviour() const { return mpBehaviour; }
+        // No GetBehaviour(): DWARF BrnBehaviourManager.h:389.. gives the handle only Get() (:574) and Get() const
+        // (:585), both resolving through the helper pool; mpBehaviour has no accessor.
 
         // Allocate this handle onto a freshly-reserved behaviour. X360-attested
         // (BehaviourHandle::Prepare @0x8224AFF0). Always returns true. Body out-of-line below
@@ -443,6 +444,9 @@ namespace Camera
         // The pool slot this handle names. X360 `BrnDirec(handle[+8], handle[+4])`.
         BehaviourManager::BehaviourHelper& GetHelper() const;
         TBehaviour* Get();
+        // DWARF BrnBehaviourManager.h:585 (X360 line 600): the const overload resolves through the
+        // helper pool too (InterpolaterHelper::HasFinished 0x822086F4 `bl ObjectPool::operator[]`).
+        const TBehaviour* Get() const;
 
         // Drop the manager-side hold and clear the handle. X360-attested
         // (BehaviourHandle::Release @0x8222DD00). Always returns true. Body out-of-line below.
@@ -709,6 +713,13 @@ namespace Camera
     {
         CGS_ASSERT(IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 589));
         return static_cast<TBehaviour*>(GetHelper().GetPoolHandle().Get());
+    }
+
+    template <typename TBehaviour>
+    inline const TBehaviour* BehaviourHandle<TBehaviour>::Get() const
+    {
+        CGS_ASSERT(IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 600));
+        return static_cast<const TBehaviour*>(GetHelper().GetPoolHandle().Get());
     }
 
     // ------------------------------------------------------------------------

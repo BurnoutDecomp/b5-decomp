@@ -174,7 +174,15 @@ void SurvivorMode::OnPlayerUsesPaintShop() { mfRampTimer = 0.0f; }
 void SurvivorMode::FillInGameModeSpecificResults(const ScoringSystem* lpScoringSystem,
                                                 GameStateModuleIO::FinishedModeAction* lpAction)
 {
-    lpAction->miFinishPosition = lpScoringSystem->IsPlayerTotalled() ? 2 : 1;
+    // ARTIST 0x823163B0..B8 branches (li 2 ; bne ; li 1): an if/else, not arithmetic.
+    if (lpScoringSystem->IsPlayerTotalled())
+    {
+        lpAction->miFinishPosition = 2;
+    }
+    else
+    {
+        lpAction->miFinishPosition = 1;
+    }
 }
 
 // X360: BrnGameState::SurvivorMode::GetName.

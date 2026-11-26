@@ -117,8 +117,7 @@ namespace BrnDirector
         bool HasFinished() const
         {
             CGS_ASSERT(IsPrepared(), CGS_ASSERT_MESSAGE_AT("IsPrepared()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 65));            // :65 (non-gating)
-            CGS_ASSERT(mInterpolater.IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 600));   // BrnBehaviourManager.h:600 (non-gating)
-            return mInterpolater.GetBehaviour()->HasFinished();
+            return mInterpolater.Get()->HasFinished();   // the const Get(): BrnBehaviourManager.h:600 assert + pool lookup
         }
 
         // @0x82219998 -- h:68 tripwire (the X360 CALLS IsReady out-of-line, so

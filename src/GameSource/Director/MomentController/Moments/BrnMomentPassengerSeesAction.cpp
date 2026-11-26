@@ -142,7 +142,7 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, void* lrBehaviourControll
                 mWitness.SetToRaceCar(EActiveRaceCarIndex(liCrashVehicle));
                 lpBehaviourManager->NewBehaviour<Camera::BehaviourPassengerCam>(
                     mPassengerCam, 0, this, 1);
-                mPassengerCam.GetBehaviour()->SetParameters(
+                mPassengerCam.Get()->SetParameters(
                     &lpBehaviourManager->GetBehaviourParameterBank().GetPassengerCamMomentParams());
                 SetCanSwitchToMeNow(false);
                 SetState(E_STATE_INVALID_FOUND_PREPARING);
@@ -158,12 +158,12 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, void* lrBehaviourControll
     }
 
     case E_STATE_INVALID_FOUND_PREPARING:
-        if (mPassengerCam.GetBehaviour()->HasFailed())
+        if (mPassengerCam.Get()->HasFailed())
         {
             Release();   // the live-vtable call (slot 4)
             return;
         }
-        if (!mPassengerCam.GetBehaviour()->CanSwitchToMeNow())
+        if (!mPassengerCam.Get()->CanSwitchToMeNow())
         {
             SetCanSwitchToMeNow(false);
             GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);

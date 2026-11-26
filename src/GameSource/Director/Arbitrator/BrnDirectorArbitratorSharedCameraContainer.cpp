@@ -81,8 +81,8 @@ namespace BrnDirector
         // block, which is exactly the state their Update already handles (it no-ops).
         const Camera::BehaviourParameterBank& lrBank =            // X360 manager + 0x12530
             lpBehaviourManager->GetBehaviourParameterBank();
-        mGameplayBumper  .GetBehaviour()->SetParameters(&lrBank.GetGameplayBumperCameraParamsForCar());
-        mGameplayExternal.GetBehaviour()->SetParameters(&lrBank.GetGameplayExternalCameraParamsForCar());
+        mGameplayBumper  .Get()->SetParameters(&lrBank.GetGameplayBumperCameraParamsForCar());
+        mGameplayExternal.Get()->SetParameters(&lrBank.GetGameplayExternalCameraParamsForCar());
 
         // [diag, one-shot -- NOT console code] the bind is a POINTER bind, so it legitimately
         // runs BEFORE any car exists and both blocks are still invalid here; the seed
@@ -184,7 +184,7 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void SharedCameraContainer::ForcePrimaryGameplayBehaviourToFinish()
     {
-        Camera::BehaviourGameplayExternal* lpExternal = mGameplayExternal.GetBehaviour();
+        Camera::BehaviourGameplayExternal* lpExternal = mGameplayExternal.Get();
 
         lpExternal->GetVehicleCollisionPolicy().ResetRadiusSmoothing();    // stfs FLT_MAX, +0x290
         lpExternal->SnapToCar(true);                                       // stb 1, +0xB5D

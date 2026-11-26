@@ -126,8 +126,8 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
             {
                 lpBehaviourManager->NewBehaviour<Camera::BehaviourBystanderCam>(
                     mBystander, 0, this, 1);
-                mBystander.GetBehaviour()->SetParameters(&lrCamParams);
-                mBystander.GetBehaviour()->SetTarget(
+                mBystander.Get()->SetParameters(&lrCamParams);
+                mBystander.Get()->SetTarget(
                     static_cast<EActiveRaceCarIndex>(MomentSharedInfo_GetCrashVehicleIndex(lSharedInfo)));
                 SetCanSwitchToMeNow(false);
                 SetState(E_STATE_INVALID_FOUND_PREPARING);
@@ -146,8 +146,8 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
         {
             lpBehaviourManager->NewBehaviour<Camera::BehaviourBystanderCam>(
                 mBystander, 0, this, 1);
-            mBystander.GetBehaviour()->SetParameters(&lrCamParams);
-            mBystander.GetBehaviour()->SetTarget(
+            mBystander.Get()->SetParameters(&lrCamParams);
+            mBystander.Get()->SetTarget(
                 static_cast<EActiveRaceCarIndex>(MomentSharedInfo_GetTakedownVictimIndex(lSharedInfo)));
             SetCanSwitchToMeNow(false);
             SetState(E_STATE_INVALID_FOUND_PREPARING);
@@ -162,12 +162,12 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
     }
 
     case E_STATE_INVALID_FOUND_PREPARING:
-        if (mBystander.GetBehaviour()->HasFailed())
+        if (mBystander.Get()->HasFailed())
         {
             Release();   // the live-vtable call (slot 4)
             return;
         }
-        if (!mBystander.GetBehaviour()->CanSwitchToMeNow())
+        if (!mBystander.Get()->CanSwitchToMeNow())
         {
             SetCanSwitchToMeNow(false);
             GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
@@ -195,7 +195,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
         lrBlur.mbIsActive              = true;
         lrBlur.mbIsExpensiveMotionBlur = true;
     }
-    if (!mBystander.GetBehaviour()->CanSwitchToMeNow())
+    if (!mBystander.Get()->CanSwitchToMeNow())
     {
         SetCanSwitchToMeNow(false);
         GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_NOT_SWITCHABLE);
@@ -229,7 +229,7 @@ void MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor(f32 lfFac
 {
     CGS_ASSERT(mBystander.IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 589));
 
-    mBystander.GetBehaviour()->SetPerceivedDistanceModificationFactor(lfFactor);
+    mBystander.Get()->SetPerceivedDistanceModificationFactor(lfFactor);
 }
 
 }

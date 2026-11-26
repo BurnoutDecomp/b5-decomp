@@ -385,18 +385,6 @@ public:
     void SetPrimaryVehicleRefToRaceCarIndex(s32 liRaceCarIndex);     // +0xDF0 block
     void SetSecondaryVehicleRefToRaceCarIndex(s32 liRaceCarIndex);   // +0xE00 block
 
-    // The online-race-intro PLAYER "show" take anchors its refs to the player rather than a
-    // numbered race car. The console writes the same 4-word ref layout with a different kind/index:
-    //   ref+0x00 (word)  = 0     (the ref kind: the player ref, not a numbered race car)
-    //   ref+0x04 (word)  = -1    (no race-car index)
-    //   ref+0x08 (word)  = 0
-    //   ref+0x0C (byte)  = 1     (the ref is set / valid)
-    // into mPrimaryVehicleRef @+0xDF0 / mSecondaryVehicleRef @+0xE00. Named setters, BODIED
-    // 2026-09-12 in this behaviour's own TU through the ref's named fields (the same shape as
-    // SetBystanderRefForPostEvent below). FLAG: the ref-kind word's full role (==0 for the
-    // player ref) is what the attested store proves.
-    void SetPrimaryVehicleRefToPlayer();     // +0xDF0 block = {0, -1, 0, 1}
-    void SetSecondaryVehicleRefToPlayer();   // +0xE00 block = {0, -1, 0, 1}
 
     // Seek the embedded key-anim controller back to its take start (mKeyAnimController @+0x680;
     // the online-race-intro ACTIVE state rewinds the player "show" take with 0.0). Named alias of
@@ -447,15 +435,13 @@ public:
     // (which owns the private member).
     void SetSecondaryVehicleRefToRaceCar(EActiveRaceCarIndex leRaceCar);
 
-    // ---- post-event arbitrator-state poke (BrnArbStatePostEvent::Prepare) ---------------
-    // Seed the behaviour's BYSTANDER anchor vehicle reference (mBystanderRef @+0xE10) to the
-    // fixed value the post-event take frames the winner against. ArbStatePostEvent::Prepare
-    // inlines the writes into mBystanderRef directly: word +0x00 = 0, word +0x04 = -1,
-    // word +0x08 = 0, byte +0x0C = 1. Exposed as a named setter so the arbitrator state never
-    // pokes the (private) ref by offset. BODIED below in this behaviour's own TU (which owns
-    // mBystanderRef). FLAG: the four bystander-ref fields' individual roles in the bystander
-    // case are the base VehicleRef's; only the field WRITES are attested.
-    void SetBystanderRefForPostEvent();
+
+    // DWARF BrnBehaviourIceAnim.h:98/:101/:104 -- the three anchor references by pointer. No
+    // standalone ARTIST copy: every caller inlines them (ArbStatePostEvent::Prepare 0x8226E2FC..
+    // 0x8226E308 seeds mBystanderRef through VehicleRef::SetToPlayer, BrnVehicleRef.h:76).
+    Behaviour::VehicleRef* GetPrimaryVehicleRef()   { return &mPrimaryVehicleRef; }
+    Behaviour::VehicleRef* GetSecondaryVehicleRef() { return &mSecondaryVehicleRef; }
+    Behaviour::VehicleRef* GetBystanderVehicleRef() { return &mBystanderRef; }
 
     // ADDITIVE GROW (BrnArbStateTakedown.cpp -- SimpleIceTakedownPlayer::Prepare).
     // Bind the bystander anchor vehicle reference (mBystanderRef @+0xE10) to a specific race car,

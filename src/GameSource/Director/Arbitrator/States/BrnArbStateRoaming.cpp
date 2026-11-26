@@ -326,9 +326,9 @@ namespace BrnDirector
             // same storage MainDirector::ProcessNewVehicleEvents seeds.
             const Camera::BehaviourParameterBank& lrBank =                 // manager +0x12530
                 lrSharedInfo.mpBehaviourManager->GetBehaviourParameterBank();
-            lrContainer.mGameplayBumper.GetBehaviour()->SetParameters(
+            lrContainer.mGameplayBumper.Get()->SetParameters(
                 &lrBank.GetGameplayBumperCameraParamsForCar());            // bank +0x2538
-            lrContainer.mGameplayExternal.GetBehaviour()->SetParameters(
+            lrContainer.mGameplayExternal.Get()->SetParameters(
                 &lrBank.GetGameplayExternalCameraParamsForCar());          // bank +0x2488
 
             // ---- camera cycle request @0x82264554: the base's per-frame flag, ignored while

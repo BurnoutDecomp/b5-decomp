@@ -304,7 +304,7 @@ namespace BrnDirector
             //     li  r11, 2 ; stw r11, 4(r3)                    ; behaviour +0x04
             // and Camera::Behaviour +0x04 is meTimestepType (Timestep::EType), whose value 2 is
             // E_GAME. That is the fourth "ignore the paused world clock" switch.
-            mRoadRunnerCam.GetBehaviour()->SetTimestepType(BrnDirector::Timestep::E_GAME);
+            mRoadRunnerCam.Get()->SetTimestepType(BrnDirector::Timestep::E_GAME);
         }
 
         // Ready once the fly-by behaviour is no longer queued for its first Prepare. X360:
@@ -380,7 +380,7 @@ namespace BrnDirector
         {
             // Whether the road-runner fly-by should keep driving the state camera this frame.
             const bool lbDriveFlyByCamera =
-                ShouldFlyByCameraDrive(lrSharedInfo, *mRoadRunnerCam.GetBehaviour());
+                ShouldFlyByCameraDrive(lrSharedInfo, *mRoadRunnerCam.Get());
 
             mICEMoviePlayer.Update(*lrSharedInfo.mpBehaviourManager);
 
@@ -405,7 +405,7 @@ namespace BrnDirector
             }
 
             // Fade IN of black while the take wants it, OUT otherwise.
-            const char* lpcFadeHook = mRoadRunnerCam.GetBehaviour()->ShouldFadeBlackIn()
+            const char* lpcFadeHook = mRoadRunnerCam.Get()->ShouldFadeBlackIn()
                                           ? "Black_In_BW" : "Black_Out_BW";
             Camera::EnsureEffectIsPlaying(lrCamera, *lrSharedInfo.mpEffectInterface,
                                           lpcFadeHook, KF_UNIT);
@@ -464,13 +464,13 @@ namespace BrnDirector
             {
                 if (!mbHasReversed)
                 {
-                    Camera::BehaviourRoadRunner* lpFlyBy = mRoadRunnerCam.GetBehaviour();
+                    Camera::BehaviourRoadRunner* lpFlyBy = mRoadRunnerCam.Get();
                     lpFlyBy->ClearSmoothingForNextSample();   // stb 0, behaviour +0x08
                     lpFlyBy->ReverseTravelDirection();        // negate behaviour +0x29C/+0x294/+0xA0
                 }
                 mbHasReversed = true;   // +0x884 = 1
 
-                if (!mRoadRunnerCam.GetBehaviour()->ShouldFadeBlackIn())
+                if (!mRoadRunnerCam.Get()->ShouldFadeBlackIn())
                 {
                     Camera::EnsureEffectIsPlaying(lrCamera, *lrSharedInfo.mpEffectInterface,
                                                   "Black_Out_BW", KF_UNIT);
@@ -512,7 +512,7 @@ namespace BrnDirector
             // has reached its end or the fly-by has finished -- replay the snapshot movie and hand
             // off to the gameplay camera.
             const bool lbDriveFlyByCamera =
-                ShouldFlyByCameraDrive(lrSharedInfo, *mRoadRunnerCam.GetBehaviour());
+                ShouldFlyByCameraDrive(lrSharedInfo, *mRoadRunnerCam.Get());
 
             mICEMoviePlayer.Update(*lrSharedInfo.mpBehaviourManager);
 
@@ -530,7 +530,7 @@ namespace BrnDirector
             // X360 case-6 exit condition: the ICE movie has reached its end, OR the fly-by has
             // finished.
             if (mICEMoviePlayer.HasReachedEnd() ||
-                !mRoadRunnerCam.GetBehaviour()->HasFinished())
+                !mRoadRunnerCam.Get()->HasFinished())
             {
                 if (mICEPlayingMovie.mbIsValid)
                 {

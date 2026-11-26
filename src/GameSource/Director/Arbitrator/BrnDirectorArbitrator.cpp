@@ -48,8 +48,8 @@ namespace BrnDirector
     //   9. seed the scalars + flags:
     //        mfSlomoFactor          = 1.0   (+0x4504)
     //        mfTimeCycleCameraHeld  = 0.0   (+0x44F4)
-    //        mbCycleNormalCamSelector = 0   (+0x301)
-    //        mbCameraCycleInitialised = 1   (+0x300)
+    //        mbUseDebugCameras      = 0     (+0x301)
+    //        mbUseDebugFlyWorld     = 1     (+0x300)
     //        mbDoAttractMode        = 0     (+0x44FD)
     //        mbDoRenderMetrics      = 0     (+0x44FE)
     //        mbStartOfGame          = 1     (+0x44FC)
@@ -87,8 +87,8 @@ namespace BrnDirector
         // 9. scalars + flags.
         mfSlomoFactor               = 1.0f;
         mfTimeCycleCameraHeld       = 0.0f;
-        mbCycleNormalCamSelector    = false;
-        mbCameraCycleInitialised    = true;
+        mbUseDebugCameras           = false;
+        mbUseDebugFlyWorld          = true;
         mbDoAttractMode             = false;
         mbDoRenderMetrics           = false;
         mbStartOfGame               = true;
@@ -102,7 +102,7 @@ namespace BrnDirector
     // Clears both out flags, then:
     //   * While the cycle button is HELD: accumulate the timestep into mfTimeCycleCameraHeld.
     //     The first frame the running total lands in the (1.0, 2.0) window, snap it to 2.0,
-    //     FLIP the normal-camera selector (mbCycleNormalCamSelector = !mbCycleNormalCamSelector,
+    //     FLIP the debug-camera switch (mbUseDebugCameras = !mbUseDebugCameras,
     //     the X360 (cntlzw(sel) & 0x20)!=0 idiom == "sel == 0"), and report "changed this
     //     frame".
     //   * On RELEASE: if the accumulated time was a short tap -- in (0.0, 1.0) -- report
@@ -114,25 +114,21 @@ namespace BrnDirector
         lrbCycleCameraOut      = false;   // *a5 = 0
         lrbChangedThisFrameOut = false;   // *a6 = 0
 
-        const f32 lfTimeBeforeUpdate = mfTimeCycleCameraHeld;   // v6
-
+        // DWARF lists no locals: the member is read and written in place (0x821F5D44 fadds).
         if (lbCycleCameraHeld)
         {
-            const f32 lfTimeNow = lfTimestep + mfTimeCycleCameraHeld;   // v7
-            mfTimeCycleCameraHeld = lfTimeNow;
+            mfTimeCycleCameraHeld += lfTimestep;
 
-            if (lfTimeNow > 1.0f && lfTimeNow < 2.0f)
+            if (mfTimeCycleCameraHeld > 1.0f && mfTimeCycleCameraHeld < 2.0f)
             {
-                mfTimeCycleCameraHeld    = 2.0f;
-                // X360: *(this+0x301) = (cntlzw(sel) & 0x20) != 0, i.e. the selector toggles
-                // (count-leading-zeros of a u32 is 0x20 only when the value is zero).
-                mbCycleNormalCamSelector = (!mbCycleNormalCamSelector);
-                lrbChangedThisFrameOut   = true;
+                mfTimeCycleCameraHeld  = 2.0f;
+                mbUseDebugCameras      = !mbUseDebugCameras;   // +0x301 (0x821F5D6C)
+                lrbChangedThisFrameOut = true;
             }
         }
         else
         {
-            if (lfTimeBeforeUpdate > 0.0f && lfTimeBeforeUpdate < 1.0f)
+            if (mfTimeCycleCameraHeld > 0.0f && mfTimeCycleCameraHeld < 1.0f)
             {
                 lrbCycleCameraOut = true;
             }
@@ -592,7 +588,7 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void Arbitrator::CycleNormalCamera()
     {
-        if (miDebugCameraMode == 2)
+        if (mArbStateTestbed.IsActive())
         {
             mArbStateTestbed.RequestCycleCameraThisFrame();
         }
@@ -610,7 +606,7 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     const Camera::Camera& Arbitrator::GetNormalCamera() const
     {
-        if (miDebugCameraMode == 2)
+        if (mArbStateTestbed.IsActive())
         {
             return mArbStateTestbed.GetCamera();
         }
@@ -630,7 +626,7 @@ namespace BrnDirector
     void Arbitrator::DebugCameraFlyWorldLookAt(rw::math::vpu::Vector3 lEye,
                                                rw::math::vpu::Vector3 lLookAt)
     {
-        CGS_ASSERT(mDebugCameraFlyWorld.IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 589));   // BrnBehaviourManager.h:589 (non-gating)
-        mDebugCameraFlyWorld.GetBehaviour()->WarpToLookAt(lEye, lLookAt);
+        // BehaviourHandle::Get (BrnBehaviourManager.h:589 assert, then the helper-pool lookup 0x82234798).
+        mDebugCameraFlyWorld.Get()->WarpToLookAt(lEye, lLookAt);
     }
 }

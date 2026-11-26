@@ -536,7 +536,7 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
         // behaviour -- the console reads it through the handle here (and the behaviour only
         // for the finished flag on the next line).
         mCamera = mOutInterpolator.GetCamera();
-        Camera::BehaviourInterpolate* lpOut = mOutInterpolator.GetBehaviour();
+        Camera::BehaviourInterpolate* lpOut = mOutInterpolator.Get();
         if (lpOut->HasFinished())
         {
             mbHasReachedEnd = true;
@@ -545,7 +545,7 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
     else if (mInInterpolator.IsAllocated())
     {
         mCamera = mInInterpolator.GetCamera();
-        Camera::BehaviourInterpolate* lpIn = mInInterpolator.GetBehaviour();
+        Camera::BehaviourInterpolate* lpIn = mInInterpolator.Get();
         if (lpIn->HasFinished())
         {
             mbInterpolateIn = false;
@@ -567,7 +567,7 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
         lrBehaviourManager.SetBehaviourUpdatesDuringPause(
             mOutInterpolator, mbInterpolateOutUpdatesDuringPause);
 
-        Camera::BehaviourInterpolate* lpOut = mOutInterpolator.GetBehaviour();
+        Camera::BehaviourInterpolate* lpOut = mOutInterpolator.Get();
         lpOut->SetInterpolationMode(mbInterpolateOutUpdatesDuringPause ? 2 : 0);
         lpOut->SetParameters(mpInterpolateOutParams);
         lpOut->SetupDuration(mfInterpolateOutDuration);
@@ -670,31 +670,31 @@ void ICEMoviePlayer::InterpolateFrom(Camera::BehaviourManager& lrBehaviourManage
     lrBehaviourManager.SetBehaviourUpdatesDuringPause(mInInterpolator, lbUpdatesDuringPause);
 
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
-    mInInterpolator.GetBehaviour()->SetInterpolationMode(lbUpdatesDuringPause ? 2 : 0);
+    mInInterpolator.Get()->SetInterpolationMode(lbUpdatesDuringPause ? 2 : 0);
 
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
     {
-        Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.GetBehaviour();
+        Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.Get();
         lpInterpolate->SetParameters(mpInterpolateInParams);
     }
 
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
     {
-        Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.GetBehaviour();
+        Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.Get();
         CGS_ASSERT(!lpInterpolate->HasFinished(), CGS_ASSERT_MESSAGE_AT("Can't setup duration after Setup() has been called", CGS_ARTIST_FILE_BRNBEHAVIOURINTERPOLATE, 304));
         lpInterpolate->SetupDuration(mfInterpolateInDuration);
     }
 
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
     {
-        Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.GetBehaviour();
+        Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.Get();
         CGS_ASSERT(!lpInterpolate->HasFinished(), CGS_ASSERT_MESSAGE_AT("Can't setup camera A after Setup() has been called", CGS_ARTIST_FILE_BRNBEHAVIOURINTERPOLATE, 313));
         lpInterpolate->SetupCameraAFromHelper(mFromBehaviourHelperIndex, lrBehaviourManager);
     }
 
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
     {
-        Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.GetBehaviour();
+        Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.Get();
         CGS_ASSERT(!lpInterpolate->HasFinished(), CGS_ASSERT_MESSAGE_AT("Can't setup camera B after Setup() has been called", CGS_ARTIST_FILE_BRNBEHAVIOURINTERPOLATE, 322));
         // Camera B is the ICE wrapper's live take camera. (SETTLED 2026-08-01: the old FLAG
         // here -- "the source passes a pointer to the wrapper" -- was reading the console's
@@ -704,7 +704,7 @@ void ICEMoviePlayer::InterpolateFrom(Camera::BehaviourManager& lrBehaviourManage
     }
 
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
-    mInInterpolator.GetBehaviour()->Setup();
+    mInInterpolator.Get()->Setup();
 
     mbInterpolateIn = true;
 }

@@ -242,13 +242,13 @@ namespace BrnDirector
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                 mPostEventCam, this, 0, 1);
 
-            mPostEventCam.GetBehaviour()->SetParameters(&lrShot);
+            mPostEventCam.Get()->SetParameters(&lrShot);
 
             // Seed the bystander vehicle ref the post-event take frames the winner against.
-            mPostEventCam.GetBehaviour()->SetBystanderRefForPostEvent();
+            mPostEventCam.Get()->GetBystanderVehicleRef()->SetToPlayer();
 
-            mPostEventCam.GetBehaviour()->SetUseCollisionPolicy(true);   // +0xE28
-            mPostEventCam.GetBehaviour()->ClearBaseFirstFrameGate();     // base +0x28 = 0
+            mPostEventCam.Get()->SetUseCollisionPolicy(true);   // +0xE28
+            mPostEventCam.Get()->ClearBaseFirstFrameGate();     // base +0x28 = 0
 
             meState = E_STATE_PREPARING;   // +0x188 = 1
         }
@@ -316,7 +316,7 @@ namespace BrnDirector
                     reinterpret_cast<Camera::BehaviourIceAnim::ShotReference*>(
                         const_cast<void*>(lpShotData));
 
-                mPostEventCam.GetBehaviour()->ChangeMovie(lpMovieBlock, lrResourceManager);
+                mPostEventCam.Get()->ChangeMovie(lpMovieBlock, lrResourceManager);
             }
 
             // Once the event leaves the POST_EVENT phase, hand control back to roaming.

@@ -28,12 +28,12 @@ int OnlineStuntRunModeScoring::Compare(const void* lpPlayer1, const void* lpPlay
     {
         return 1; // a disconnected p1 always ranks behind p2
     }
-    // Both connected: higher score ranks ahead (descending sort).
-    if (lpP1->miScore <= lpP2->miScore)
+    // Both connected: higher score ranks ahead (descending sort; li r3,-1 ; bgtlr 0x823159F8).
+    if (lpP1->miScore > lpP2->miScore)
     {
-        return 1;
+        return -1;
     }
-    return -1;
+    return 1;
 }
 
 // X360 @ 0x82315A08. qsort comparator establishing the team ranking between two team rows: the
@@ -43,11 +43,11 @@ int OnlineStuntRunModeScoring::CompareTeams(const void* lpTeam1, const void* lpT
     const TeamSortData* lpT1 = static_cast<const TeamSortData*>(lpTeam1);
     const TeamSortData* lpT2 = static_cast<const TeamSortData*>(lpTeam2);
 
-    if (lpT1->miTeamScore <= lpT2->miTeamScore)
+    if (lpT1->miTeamScore > lpT2->miTeamScore)   // li r3,-1 ; bgtlr (0x82315A18)
     {
-        return 1;
+        return -1;
     }
-    return -1;
+    return 1;
 }
 
 // X360 @ 0x82321DB0. Counts the active race cars currently assigned to liTeam. Walks every

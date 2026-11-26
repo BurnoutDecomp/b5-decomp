@@ -125,7 +125,7 @@ namespace BrnDirector
             if (!lpShotData)
                 lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
 
-            Camera::BehaviourIceAnim* lpBehaviour = mIceCam.GetBehaviour();
+            Camera::BehaviourIceAnim* lpBehaviour = mIceCam.Get();
             lpBehaviour->SetParameters(
                 static_cast<Camera::BehaviourIceAnim::ShotReference*>(
                     const_cast<void*>(lpShotData)));
@@ -169,7 +169,7 @@ namespace BrnDirector
             Camera::Camera& lrCamera = GetNonConstCamera();
 
             // Drive the state camera from the behaviour's produced camera and mark it dirty.
-            lrCamera = mIceCam.GetBehaviour()->GetProducedCamera();
+            lrCamera = mIceCam.Get()->GetProducedCamera();
             lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
 
             GameState& lrGameState = *lrSharedInfo.mpGameState;
@@ -179,7 +179,7 @@ namespace BrnDirector
             {
                 ++miRival;   // +0x194
 
-                Camera::BehaviourIceAnim* lpBehaviour = mIceCam.GetBehaviour();
+                Camera::BehaviourIceAnim* lpBehaviour = mIceCam.Get();
 
                 // Re-anchor the take to this rival's car (GameState rival race-car index).
                 lpBehaviour->SetPrimaryVehicleRefToRaceCar(
@@ -209,7 +209,7 @@ namespace BrnDirector
             // "Checkpoint" effect or hand control back to roaming.
             if (!lrGameState.IsRankUpIntroRunning())   // byte +0x1D4
             {
-                if (mIceCam.GetBehaviour()->HasFinishedOrFailed())
+                if (mIceCam.Get()->HasFinishedOrFailed())
                 {
                     // Is the "Checkpoint" effect already the live camera effect?
                     const EffectInterface& lrEffects = *lrSharedInfo.mpEffectInterface;
@@ -249,7 +249,7 @@ namespace BrnDirector
             Camera::Camera& lrCamera = GetNonConstCamera();
 
             // Keep driving the state camera from the behaviour while the hand-off completes.
-            lrCamera = mIceCam.GetBehaviour()->GetProducedCamera();
+            lrCamera = mIceCam.Get()->GetProducedCamera();
             lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
 
             ArbitratorStateContainer& lrContainer = *lrSharedInfo.mpStateContainer;
