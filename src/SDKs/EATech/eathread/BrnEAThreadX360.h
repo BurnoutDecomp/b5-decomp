@@ -359,15 +359,18 @@ namespace Thread
 
         // Start a thread running pFunction(pContext), per pParameters. Returns
         // the new thread's HANDLE (ThreadId) or 0 on failure. (0x82B43F80)
+        // The user-wrapper defaults are EAThread's own (eathread_thread.h:501/:520): a
+        // caller that omits the wrapper calls GetGlobalRunnable*UserWrapper() at the call
+        // site, as ARTIST's callers do (rw::core::filesys::Device::Start bl 0x82B42D88).
         ThreadId Begin(RunnableFunction       pFunction,
                        void*                   pContext     = 0,
                        const ThreadParameters* pParameters  = 0,
-                       RunnableFunctionUserWrapper pUserWrapper = 0);
+                       RunnableFunctionUserWrapper pUserWrapper = GetGlobalRunnableFunctionUserWrapper());
 
         // ARTIST82B442F8: the distinct IRunnable path uses its class entry trampoline.
         ThreadId Begin(IRunnable* pRunnable, void* pContext = 0,
                        const ThreadParameters* pParameters = 0,
-                       RunnableClassUserWrapper pUserWrapper = 0);
+                       RunnableClassUserWrapper pUserWrapper = GetGlobalRunnableClassUserWrapper());
 
         // Poll thread status; optionally writes the return value out. (0x82B42EF8)
         Status GetStatus(intptr_t* pThreadReturnValue = 0);
