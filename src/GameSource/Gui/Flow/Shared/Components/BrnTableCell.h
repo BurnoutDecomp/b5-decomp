@@ -61,8 +61,13 @@ namespace BrnGui
                        const char* lpacParentName, u64 luAptId);
 
         void Clear();
-        bool IsText();
-        bool IsIcon();
+
+        // DWARF BrnTableCell.h:139 / h:153: header-inline, no ARTIST copy. Every TextField-only
+        // method guards on `meComponentType == TEXTFIELD` (`*(cell + 4) == 1`, inlined in
+        // TableRow::SetLocalisedText 0x82489420) and TableRow::Update's icon arm on `== ICON`
+        // (0x824E9AD8).
+        bool IsText() { return meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD; }
+        bool IsIcon() { return meComponentType == E_TABLECELLCOMPONENTTYPES_ICON; }
 
         // The wrapped child component (+0x08). Exposed so a row can register each cell's
         // component with the GUI cache BY NAME (TableRow::AppendExpectedAptComponent reads

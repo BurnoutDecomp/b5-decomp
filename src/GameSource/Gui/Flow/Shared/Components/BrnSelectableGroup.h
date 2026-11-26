@@ -52,7 +52,6 @@ namespace BrnGui
     struct SelectableGroup : public Selectable, public CgsGui::GuiComponent
     {
         static const s32 KI_MAX_SELECTABLES = 100;   // GetHighlighted / Add bound (0x64)
-        static const s32 KI_MAX_ADD         = 128;   // Add's hard index cap (0x80)
         // The Selectable dirty bit (`*(this+0xC) |= 0x10`) under the name the group bodies
         // have always used for it.
         static const u8  KU_FLAG_QUERIED    = E_FLAG_DIRTY;

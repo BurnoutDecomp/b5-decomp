@@ -253,10 +253,12 @@ namespace BrnGui
                                     s32 liNumParams, const char* const* lppacParams,
                                     CgsLanguage::LanguageManager::ParameterFormatType* lpeParamFormats)
     {
-        CGS_ASSERT(mpData != 0, "TableRow::SetLocalisedText() Row data not set"); // X360 line 345
-        CGS_ASSERT(lpacText != 0, "invalid text specified");                       // X360 line 346
-        CGS_ASSERT(maCells[liColumn].IsText(),
-                   "Trying to set localised text to something that is not a textfield in TableRow::SetLocalisedText()"); // X360 line 347
+        CGS_ASSERT_STREAM_AT(mpData != NULL, "TableRow::SetLocalisedText() Row data not set",
+                             CGS_ARTIST_FILE, 345);
+        CGS_ASSERT_STREAM_AT(lpacText != NULL, "invalid text specified", CGS_ARTIST_FILE, 346);
+        CGS_ASSERT_STREAM_AT(maCells[liColumn].IsText(),
+            "Trying to set localised text to something that is not a textfield in TableRow::SetLocalisedText()",
+            CGS_ARTIST_FILE, 347);
 
         TableCell& lrCell = maCells[liColumn];
         lrCell.SetLocalisedText(lpacText, leFormat, liNumParams, lppacParams, lpeParamFormats);
@@ -345,12 +347,12 @@ namespace BrnGui
     // @0x82483340 -- format text into the cell's value buffer (&maCellData[liCell]).
     void TableRowDataSet::SetText(s32 liCell, const char* lpacText)
     {
-        CGS_ASSERT(static_cast<u32>(liCell) < 16,
-                   "TableRowDataSet::SetText() invalid index specified");   // X360 line 496
-        CGS_ASSERT(lpacText != 0,
-                   "TableRowDataSet::SetValue() invalid text specified");   // X360 line 497
-        CGS_ASSERT(std::strlen(lpacText) < KU_MAX_NAME_LENGTH,
-                   "TableRowDataSet::SetText() Text too long");             // X360 line 498
+        CGS_ASSERT_STREAM_AT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+            "TableRowDataSet::SetText() invalid index specified", CGS_ARTIST_FILE, 496);
+        CGS_ASSERT_STREAM_AT(lpacText != NULL,
+            "TableRowDataSet::SetValue() invalid text specified", CGS_ARTIST_FILE, 497);
+        CGS_ASSERT_STREAM_AT(std::strlen(lpacText) < KU_MAX_NAME_LENGTH,
+            "TableRowDataSet::SetText() Text too long", CGS_ARTIST_FILE, 498);
 
         CgsCore::SPrintf(maCellData[liCell].macText, KU_MAX_NAME_LENGTH, "%s", lpacText);
     }
@@ -403,12 +405,6 @@ namespace BrnGui
             "showing_unsel",   // 6 SHOWING_UNHIGHLIGHTED
         };
 
-    }
-
-    // Header-inline on the console (Table::SetupTable's `stb 0x32BF(table) -> 0x301(row)`).
-    void TableRow::SetEnableShowingAnim(bool lbEnable)
-    {
-        mbEnableShowingAnim = lbEnable;
     }
 
     // @0x824E99C8 (158 insns) -- the row's component-slot-5 Update. When the row is queried,

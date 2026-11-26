@@ -45,18 +45,21 @@ namespace BrnGui
     // @ 0x824E3100 -- reset + release every occupied slot, then clear the group state.
     void SelectableGroup::Clear()
     {
-        for (s32 li = 0; li < KI_MAX_SELECTABLES; ++li)
+        // DWARF cpp:76 liItem / cpp:77 lpSelectable. ARTIST re-reads the slot for every call
+        // (0x824E3144/0x824E315C/0x824E3174/0x824E3188), so the calls go through the array.
+        for (s32 liItem = 0; liItem < KI_MAX_SELECTABLES; ++liItem)
         {
-            Selectable* lpSel = maSelectables[li];
-            if (lpSel != 0)
+            Selectable* lpSelectable = maSelectables[liItem];
+            if (lpSelectable != NULL)
             {
-                lpSel->SetActive(false);        // slot 0
-                lpSel->SetHighlighted(false);   // slot 3 (X360 order: after Active, before Highlightable)
-                lpSel->SetHighlightable(false); // slot 1
-                lpSel->SetId(KU64_NO_ID);       // id -> none
-                lpSel->SetDirty();
-                lpSel->Update();                // slot 5
-                maSelectables[li] = 0;
+                maSelectables[liItem]->SetActive(false);        // slot 0
+                maSelectables[liItem]->SetHighlighted(false);   // slot 3 (X360 order: after Active, before Highlightable)
+                maSelectables[liItem]->SetHighlightable(false); // slot 1
+                lpSelectable = maSelectables[liItem];
+                lpSelectable->SetId(KU64_NO_ID);                // id -> none
+                lpSelectable->SetDirty();
+                maSelectables[liItem]->Update();                // slot 5
+                maSelectables[liItem] = NULL;
             }
         }
         miSelectableCount  = 0;
@@ -68,9 +71,13 @@ namespace BrnGui
     // @ 0x824E32F8 -- append a selectable pointer, ++count, dirty.
     void SelectableGroup::Add(Selectable* lpSelectable)
     {
-        CGS_ASSERT(lpSelectable != 0, "SelectableGroup::Add() Invalid selectable");
-        CGS_ASSERT(miSelectableCount < KI_MAX_ADD, "SelectableGroup::Add() Index is invalid.");
-        CGS_ASSERT(miSelectableCount < KI_MAX_SELECTABLES, "SelectableGroup::Add() Group is already full.");
+        // Streamed asserts, ARTIST 0x824E32F8 (cpp:160/161/162).
+        CGS_ASSERT_STREAM_AT(lpSelectable != NULL, "SelectableGroup::Add() Invalid selectable",
+                             CGS_ARTIST_FILE, 160);
+        CGS_ASSERT_STREAM_AT(miSelectableCount >= 0, "SelectableGroup::Add() Index is invalid.",
+                             CGS_ARTIST_FILE, 161);
+        CGS_ASSERT_STREAM_AT(miSelectableCount < KI_MAX_SELECTABLES,
+                             "SelectableGroup::Add() Group is already full.", CGS_ARTIST_FILE, 162);
 
         maSelectables[miSelectableCount] = lpSelectable;
         ++miSelectableCount;
@@ -243,49 +250,46 @@ namespace BrnGui
     // @ 0x824E3490 -- (re)enable the item: Active/Highlightable/Selectable on.
     void SelectableGroup::Enable(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex < miSelectableCount,
-                   "Invalid item to enable. use Add() or SetupMenu() first");
-        Selectable* lpSel = GetSelectable(liIndex);
-        if (lpSel != 0)
+        CGS_ASSERT_STREAM_AT(liIndex >= 0 && liIndex < miSelectableCount,
+                             "Invalid item to enable. use Add() or SetupMenu() first", CGS_ARTIST_FILE, 182);
+        // DWARF cpp:184 lpSelectable; the null assert follows it (cpp:186).
+        Selectable* lpSelectable = GetSelectable(liIndex);
+        CGS_ASSERT_STREAM_AT(lpSelectable != NULL, "Invalid selectable", CGS_ARTIST_FILE, 186);
+        if (lpSelectable != NULL)
         {
-            if (!lpSel->IsActive())
+            if (!lpSelectable->IsActive())
             {
-                lpSel->SetActive(true);
-                lpSel->SetHighlightable(true);
-                lpSel->SetSelectable(true);
+                lpSelectable->SetActive(true);
+                lpSelectable->SetHighlightable(true);
+                lpSelectable->SetSelectable(true);
                 SetDirty();
             }
-        }
-        else
-        {
-            CGS_ASSERT(false, "Invalid selectable");
         }
     }
 
     // @ 0x824E3620 -- disable the item (Active off).
     void SelectableGroup::Disable(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex < miSelectableCount, "Invalid item to enable. use Add() first");
-        Selectable* lpSel = GetSelectable(liIndex);
-        if (lpSel != 0)
+        CGS_ASSERT_STREAM_AT(liIndex >= 0 && liIndex < miSelectableCount,
+                             "Invalid item to enable. use Add() first", CGS_ARTIST_FILE, 230);
+        // DWARF cpp:232 lpSelectable; the null assert follows it (cpp:234).
+        Selectable* lpSelectable = GetSelectable(liIndex);
+        CGS_ASSERT_STREAM_AT(lpSelectable != NULL, "Invalid selectable", CGS_ARTIST_FILE, 234);
+        if (lpSelectable != NULL)
         {
-            if (lpSel->IsActive())
+            if (lpSelectable->IsActive())
             {
                 // Disabling the highlighted item first moves the highlight off it: slot 10
                 // then slot 11 on the group's own vptr (`lwz 0x28` / `lwz 0x2C`, r4 = 0), i.e.
                 // HighlightNext(false) and, only if that found nothing, HighlightPrevious(false).
                 // Neither moving is the console's "last item" tripwire (cpp:246, non-gating).
-                if (lpSel->IsHighlighted() && !HighlightNext(false) && !HighlightPrevious(false))
+                if (lpSelectable->IsHighlighted() && !HighlightNext(false) && !HighlightPrevious(false))
                 {
-                    CGS_ASSERT(false, "Disabling the last item available");
+                    CGS_ASSERT_STREAM_AT(false, "Disabling the last item available", CGS_ARTIST_FILE, 246);
                 }
-                lpSel->SetActive(false);
+                lpSelectable->SetActive(false);
                 SetDirty();
             }
-        }
-        else
-        {
-            CGS_ASSERT(false, "Invalid selectable");
         }
     }
 
@@ -325,15 +329,16 @@ namespace BrnGui
     }
 
     // @ 0x824E3248 -- set every item's id (from the array, or its index when null) + dirty.
-    void SelectableGroup::SetIds(const u64* lpaIds)
+    void SelectableGroup::SetIds(const u64* lpIdArray)
     {
-        for (s32 li = 0; li < miSelectableCount; ++li)
+        // DWARF cpp:127 liIndex / cpp:131 lpSelectable; the id is chosen after the dirty mark
+        // (ARTIST 0x824E32B4 ori before the lpIdArray test).
+        for (s32 liIndex = 0; liIndex < miSelectableCount; ++liIndex)
         {
-            Selectable* lpSel = GetSelectable(li);
-            CGS_ASSERT(lpSel != 0, CGS_ASSERT_MESSAGE_AT("lpSelectable", CGS_ARTIST_FILE, 133 /* ARTIST 0x824E32AC */));
-            const u64 luId = (lpaIds != 0) ? lpaIds[li] : static_cast<u64>(li);
-            lpSel->SetDirty();
-            lpSel->SetId(luId);
+            Selectable* lpSelectable = GetSelectable(liIndex);
+            CGS_ASSERT(lpSelectable != 0, CGS_ASSERT_MESSAGE_AT("lpSelectable", CGS_ARTIST_FILE, 133 /* ARTIST 0x824E32AC */));
+            lpSelectable->SetId((lpIdArray != NULL) ? lpIdArray[liIndex] : static_cast<u64>(liIndex));
+            lpSelectable->SetDirty();
         }
     }
 }

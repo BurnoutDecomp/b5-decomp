@@ -1,6 +1,13 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnTable.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf (Construct's "%s_%d" row names)
 #include <cstring>                                         // std::strlen (Construct's name-length tripwire)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CGS_ASSERT_STREAM_AT
+
+// ARTIST's assert paths: this file, its header (the header-inline accessors), and the
+// header's d:\p4 spelling (TableDataSet::GetRowData).
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTable.cpp"
+#define CGS_ARTIST_TABLE_H_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTable.h"
+#define CGS_ARTIST_TABLE_H_P4_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\shared\\components\\BrnTable.h"
 
 // BrnGui::TableDataSet - the row-data getter for the GUI table component.
 // See BrnTable.h for the recovered layout and the X360 address.
@@ -15,8 +22,8 @@ namespace BrnGui
     // "TableDataSet::GetRowData() invalid index specified" (assert line 477).
     TableRowDataSet* TableDataSet::GetRowData(s32 liRow)
     {
-        CGS_ASSERT(liRow >= 0 && liRow < miNumRowDataSets,
-                   "TableDataSet::GetRowData() invalid index specified");
+        CGS_ASSERT_STREAM_AT(liRow >= 0 && liRow < miNumRowDataSets,
+            "TableDataSet::GetRowData() invalid index specified", CGS_ARTIST_TABLE_H_P4_FILE, 477);
         return mapRowData[liRow];
     }
 
@@ -38,8 +45,8 @@ namespace BrnGui
     // table's own rows (a TableRow IS a Selectable through SelectableGroup).
     TableRow* Table::GetSelectable(s32 liIndex)
     {
-        CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_MAX_ROWS_PER_TABLE),
-                   "Table::GetSelectable() invalid index specified");
+        CGS_ASSERT_STREAM_AT(liIndex >= 0 && liIndex < KI_MAX_ROWS_PER_TABLE,
+            "Table::GetSelectable() invalid index specified", CGS_ARTIST_TABLE_H_FILE, 356);
 
         return static_cast<TableRow*>(SelectableGroup::GetSelectable(liIndex));
     }
@@ -49,7 +56,8 @@ namespace BrnGui
     // BrnTable.h:285), then re-resolves it and forwards to TableRow::SetColourValue.
     void Table::SetColourValue(s32 liRow, s32 liColumn, s32 liColour)
     {
-        CGS_ASSERT(GetSelectable(liRow) != 0, "Invalid selectable specified");
+        CGS_ASSERT_STREAM_AT(GetSelectable(liRow) != NULL, "Invalid selectable specified",
+                             CGS_ARTIST_TABLE_H_FILE, 285);
 
         GetSelectable(liRow)->SetColourValue(liColumn, liColour);
     }
@@ -63,8 +71,9 @@ namespace BrnGui
                                  s32 liNumParams, const char* const* lppacParams,
                                  CgsLanguage::LanguageManager::ParameterFormatType* lpeParamFormats)
     {
-        CGS_ASSERT(GetSelectable(liRow) != 0, "Invalid selectable specified");
-        CGS_ASSERT(lpacText != 0, "Invalid text specified");
+        CGS_ASSERT_STREAM_AT(GetSelectable(liRow) != NULL, "Invalid selectable specified",
+                             CGS_ARTIST_TABLE_H_FILE, 310);
+        CGS_ASSERT_STREAM_AT(lpacText != NULL, "Invalid text specified", CGS_ARTIST_TABLE_H_FILE, 311);
 
         GetSelectable(liRow)->SetLocalisedText(liColumn, lpacText, leFormat,
                                                liNumParams, lppacParams, lpeParamFormats);
@@ -344,9 +353,10 @@ namespace BrnGui
     // UNCONDITIONAL (the console writes slot 16 on overflow; kept, not "fixed").
     bool TableDataSet::AddRowData(TableRowDataSet* lpRowData)
     {
-        CGS_ASSERT(lpRowData != 0, "TableDataSet::AddRowData() Invalid dataset");          // cpp:346
-        CGS_ASSERT(miNumRowDataSets < KI_MAX_DATASETS_PER_TABLE,
-                   "TableDataSet::AddRowData() No room for any more row datasets!");        // cpp:347
+        CGS_ASSERT_STREAM_AT(lpRowData != NULL, "TableDataSet::AddRowData() Invalid dataset",
+                             CGS_ARTIST_FILE, 346);
+        CGS_ASSERT_STREAM_AT(miNumRowDataSets < KI_MAX_DATASETS_PER_TABLE,
+            "TableDataSet::AddRowData() No room for any more row datasets!", CGS_ARTIST_FILE, 347);
 
         mapRowData[miNumRowDataSets] = lpRowData;
         miNumRowDataSets = static_cast<s8>(miNumRowDataSets + 1);
@@ -421,43 +431,42 @@ namespace BrnGui
             SetDirty();
         }
 
-        for (s8 liRow = 0; liRow < miNumRows; ++liRow)
+        for (s32 liIter = 0; liIter < miNumRows; ++liIter)   // DWARF cpp:174 liIter (int32_t)
         {
-            maRows[liRow].Clear();              // row slot 6 == TableRow::Clear
+            maRows[liIter].Clear();             // row slot 6 == TableRow::Clear
         }
     }
 
     // @0x824E6A90 (113 insns) -- see the header note.
     void Table::SetupTable(TableDataSet* lpData, bool lbWrapped, bool lbEnableShowingAnim)
     {
-        CGS_ASSERT(lpData != 0, "Table::SetupTable() Invalid DataSet passed in");           // cpp:92
+        CGS_ASSERT_STREAM_AT(lpData != NULL, "Table::SetupTable() Invalid DataSet passed in", CGS_ARTIST_FILE, 92);
 
         Clear();                                                       // slot 6 -> Table::Clear
         miFirstRowDataSet = 0;
         mpData            = lpData;
 
-        // `lbz 0x40(data) ; cmpw ; ble` -- clamp the row count down to the data set's.
-        if (lpData->GetNumRowDataSets() <= miNumRows)
-        {
-            miNumRows = static_cast<s8>(lpData->GetNumRowDataSets());
-        }
+        // DWARF cpp:101 liNumDataSets: the row count is clamped down to the data set's and
+        // stored unconditionally (ARTIST 0x824E6B58..0x824E6B70).
+        s32 liNumDataSets = lpData->GetNumRowDataSets();
+        miNumRows = static_cast<s8>((liNumDataSets > miNumRows) ? miNumRows : liNumDataSets);
 
-        for (s8 liRow = 0; liRow < miNumRows; ++liRow)
+        // DWARF cpp:89 liIter (int32_t).
+        for (s32 liIter = 0; liIter < miNumRows; ++liIter)
         {
-            TableRow& lrRow = maRows[liRow];
-            if (liRow >= miNumRows)
+            if (liIter < miNumRows)
             {
-                // The console's own dead arm (the loop bound is the same byte): row slot 0
-                // with r4 = 0 == SetActive(false). Kept as shipped.
-                lrRow.SetActive(false);
+                maRows[liIter].SetupRow(miNumColumns, lbEnableShowingAnim);
+                maRows[liIter].SetEnableShowingAnim(mbEnableShowingAnim);   // stb 0x32BF -> row+0x301
+                // slot 7 on the table == SelectableGroup::Add. The row IS the group's item:
+                // TableRow derives from SelectableGroup, whose primary base is Selectable.
+                Add(&maRows[liIter]);
             }
             else
             {
-                lrRow.SetupRow(miNumColumns, lbEnableShowingAnim);
-                lrRow.SetEnableShowingAnim(mbEnableShowingAnim);       // stb 0x32BF -> row+0x301
-                // slot 7 on the table == SelectableGroup::Add. The row IS the group's item:
-                // TableRow derives from SelectableGroup, whose primary base is Selectable.
-                Add(&lrRow);
+                // The console's own dead arm (the loop bound is the same byte): row slot 0
+                // with r4 = 0 == SetActive(false). Kept as shipped.
+                maRows[liIter].SetActive(false);
             }
         }
 
@@ -479,14 +488,16 @@ namespace BrnGui
     // @0x824E49C8 (66 insns) -- see the header note.
     void Table::SetRowData()
     {
-        CGS_ASSERT(mpData != 0, "Table::SetRowData() Table data not set");                  // cpp:270
+        CGS_ASSERT_STREAM_AT(mpData != NULL, "Table::SetRowData() Table data not set", CGS_ARTIST_FILE, 270);
 
-        for (s8 liRow = 0; liRow < miNumRows; ++liRow)
+        // DWARF cpp:271 liIter / cpp:273 liIndex (int32_t). The bound is re-read from mpData
+        // every iteration (`lwz 0x32B8` in the loop).
+        for (s32 liIter = 0; liIter < miNumRows; ++liIter)
         {
-            // The bound is re-read from mpData every iteration (`lwz 0x32B8` in the loop).
-            if (miFirstRowDataSet + liRow < mpData->GetNumRowDataSets())
+            s32 liIndex = miFirstRowDataSet + liIter;
+            if (liIndex < mpData->GetNumRowDataSets())
             {
-                maRows[liRow].SetData(mpData->GetRowData(miFirstRowDataSet + liRow));
+                maRows[liIter].SetData(mpData->GetRowData(liIndex));
             }
         }
 
@@ -498,23 +509,22 @@ namespace BrnGui
     // is on and the window is at the end).
     bool Table::HighlightNext()
     {
-        CGS_ASSERT(mpData != 0, "Table::HighlightNext() Row data not set");                 // cpp:193
+        CGS_ASSERT_STREAM_AT(mpData != NULL, "Table::HighlightNext() Row data not set", CGS_ARTIST_FILE, 193);
 
+        // ARTIST 0x824E6D24: the scroll arm is the fall-through (`<` tested first).
         if (miHighlightedIndex == miNumRows - 1)
         {
-            if (miFirstRowDataSet + miNumRows >= mpData->GetNumRowDataSets())
+            if (miFirstRowDataSet + miNumRows < mpData->GetNumRowDataSets())
             {
-                if (mbWrapped)
-                {
-                    miFirstRowDataSet = 0;
-                    SetRowData();
-                }
-                return SelectableGroup::HighlightNext(false);
+                miFirstRowDataSet = static_cast<s8>(miFirstRowDataSet + 1);
+                SetRowData();
+                return true;
             }
-
-            miFirstRowDataSet = static_cast<s8>(miFirstRowDataSet + 1);
-            SetRowData();
-            return true;
+            else if (mbWrapped)
+            {
+                miFirstRowDataSet = 0;
+                SetRowData();
+            }
         }
 
         return SelectableGroup::HighlightNext(false);
@@ -524,23 +534,22 @@ namespace BrnGui
     // or wrap it to the end.
     bool Table::HighlightPrevious()
     {
-        CGS_ASSERT(mpData != 0, "Table::HighlightPrevious() Row data not set");             // cpp:233
+        CGS_ASSERT_STREAM_AT(mpData != NULL, "Table::HighlightPrevious() Row data not set", CGS_ARTIST_FILE, 233);
 
+        // ARTIST 0x824E6E1C: the scroll arm is the fall-through (`> 0` tested first).
         if (miHighlightedIndex == 0)
         {
-            if (miFirstRowDataSet <= 0)
+            if (miFirstRowDataSet > 0)
             {
-                if (mbWrapped)
-                {
-                    miFirstRowDataSet = static_cast<s8>(mpData->GetNumRowDataSets() - miNumRows);
-                    SetRowData();
-                }
-                return SelectableGroup::HighlightPrevious(false);
+                miFirstRowDataSet = static_cast<s8>(miFirstRowDataSet - 1);
+                SetRowData();
+                return true;
             }
-
-            miFirstRowDataSet = static_cast<s8>(miFirstRowDataSet - 1);
-            SetRowData();
-            return true;
+            else if (mbWrapped)
+            {
+                miFirstRowDataSet = static_cast<s8>(mpData->GetNumRowDataSets() - miNumRows);
+                SetRowData();
+            }
         }
 
         return SelectableGroup::HighlightPrevious(false);
@@ -549,8 +558,9 @@ namespace BrnGui
     // @0x824895F8 (73 insns) -- assert the row exists and the text is non-null, then forward.
     void Table::SetText(s32 liRow, s32 liColumn, const char* lpacText)
     {
-        CGS_ASSERT(GetSelectable(liRow) != 0, "Invalid selectable specified");             // h:268
-        CGS_ASSERT(lpacText != 0, "Invalid text specified");                                // h:269
+        CGS_ASSERT_STREAM_AT(GetSelectable(liRow) != NULL, "Invalid selectable specified",
+                             CGS_ARTIST_TABLE_H_FILE, 268);
+        CGS_ASSERT_STREAM_AT(lpacText != NULL, "Invalid text specified", CGS_ARTIST_TABLE_H_FILE, 269);
 
         GetSelectable(liRow)->SetText(liColumn, lpacText);
     }
@@ -558,7 +568,8 @@ namespace BrnGui
     // @0x82489928 (48 insns) -- assert the row exists, then forward.
     void Table::SetIconState(s32 liRow, s32 liColumn, u32 luState)
     {
-        CGS_ASSERT(GetSelectable(liRow) != 0, "Invalid selectable specified");             // h:341
+        CGS_ASSERT_STREAM_AT(GetSelectable(liRow) != NULL, "Invalid selectable specified",
+                             CGS_ARTIST_TABLE_H_FILE, 341);
 
         GetSelectable(liRow)->SetIconState(liColumn, luState);
     }

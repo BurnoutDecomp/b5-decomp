@@ -66,9 +66,11 @@ void TableCell::SetText(const char* lpacText)
 // defect in the original source, reproduced).
 void TableCell::SetColourValue(u32 luColour)
 {
-    CGS_ASSERT(mpComponent != NULL, "TableCell::SetColourValue() Invalid cell component");
-    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD,
-               "TableCell::SetText() Cannot set text in a non-TextField cell");
+    // Streamed asserts on the header lines (ARTIST 0x82482F70/0x82482FD4, BrnTableCell.h:207/208).
+    CGS_ASSERT_STREAM_AT(mpComponent != NULL, "TableCell::SetColourValue() Invalid cell component",
+                         CGS_ARTIST_FILE, 207);
+    CGS_ASSERT_STREAM_AT(IsText(), "TableCell::SetText() Cannot set text in a non-TextField cell",
+                         CGS_ARTIST_FILE, 208);
 
     static_cast<TextField*>(mpComponent)->SetColour(luColour);
 }
@@ -77,9 +79,12 @@ void TableCell::SetColourValue(u32 luColour)
 // (+0x04 == 2). The X360 body is IconComponent::SetState(u32) inlined.
 void TableCell::SetIconState(u32 luState)
 {
-    CGS_ASSERT(mpComponent != NULL, "TableCell::SetIconState() Invalid cell component");
-    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_ICON,
-               "TableCell::SetIconState() Cannot set state of a non-Icon cell");
+    // Streamed asserts on the header lines (ARTIST 0x824E43B8/0x824E441C, BrnTableCell.h:276/277,
+    // the d:\p4 spelling of the path).
+    CGS_ASSERT_STREAM_AT(mpComponent != NULL, "TableCell::SetIconState() Invalid cell component",
+                         CGS_ARTIST_BRNTABLECELL_FILE, 276);
+    CGS_ASSERT_STREAM_AT(IsIcon(), "TableCell::SetIconState() Cannot set state of a non-Icon cell",
+                         CGS_ARTIST_BRNTABLECELL_FILE, 277);
 
     static_cast<IconComponent*>(mpComponent)->SetState(luState);
 }
@@ -107,22 +112,7 @@ void TableCell::Clear()
     mpComponent     = 0;
 }
 
-// Inlined on the console. Every TextField-only method above guards on
-// `meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD` (the X360 `*(a1 + 4) != 1`), and
-// TableRow::SetLocalisedText asserts this predicate with the message "Trying to set localised
-// text to something that is not a textfield" -- so the predicate is that same compare.
-bool TableCell::IsText()
-{
-    return meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD;
-}
-
-// The icon twin, recovered the same way: TableRow::Update @0x824E99C8 branches its icon arm
-// on `*(cell + 4) == 2` (0x824E9AD8), and every icon-only method above guards on
-// `meComponentType == E_TABLECELLCOMPONENTTYPES_ICON`. Landed 2026-09-02 (first mounted caller).
-bool TableCell::IsIcon()
-{
-    return meComponentType == E_TABLECELLCOMPONENTTYPES_ICON;
-}
+// IsText / IsIcon are header-inline (DWARF BrnTableCell.h:139 / h:153).
 
 // @ 0x82483020 -- the localised-text face of the cell. Four entry guards (BrnTableCell.h
 // lines 232/233/234/235) then a fifth inside the parameterised arm (line 243), in the X360's

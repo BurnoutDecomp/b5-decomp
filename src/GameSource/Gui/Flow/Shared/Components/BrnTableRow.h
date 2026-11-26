@@ -146,7 +146,9 @@ namespace BrnGui
                               s32 liNumParams, const char* const* lppacParams,
                               CgsLanguage::LanguageManager::ParameterFormatType* lpeParamFormats);
 
-        void SetEnableShowingAnim(bool lbEnable);
+        // DWARF BrnTableRow.h:381, header-inline (no ARTIST copy: Table::SetupTable 0x824E6BAC
+        // stores the byte straight into the row).
+        void SetEnableShowingAnim(bool lbEnable) { mbEnableShowingAnim = lbEnable; }
 
     private:
         // @0x824E4EE8 -- derive the row's display state from its component flags + previous
