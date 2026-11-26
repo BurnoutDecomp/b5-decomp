@@ -21,10 +21,10 @@ namespace vpu
 
 inline void Vector3::Set(float x, float y, float z)
 {
-    // VectorIntrinsicUnion u; u.scalarFloat[0..2] = x,y,z; mV = u.vector;
-    mV.v[0] = x;
-    mV.v[1] = y;
-    mV.v[2] = z;
+    // rwmath vector3_type_inline.h:17: the constructor's three-lane fill (the aggregate initialiser with its zeroed
+    // w word, ARTIST ExternallySimulatedBody::Construct 0x8259CF38..0x8259CF44 forms each w address apart).
+    const VectorIntrinsic lValue = { x, y, z };
+    mV = lValue;
 }
 
 inline void Vector3::Set(VecFloat::InParam x, VecFloat::InParam y, VecFloat::InParam z)
@@ -60,30 +60,35 @@ inline void Vector3::Set(VecFloatRef<XSRC_INDEX> x,
 // =====================================================================================
 //  SetComponent / SetX / SetY / SetZ -- single-lane writes
 // =====================================================================================
+// rwmath 1.02.00 writes the single-lane setters as the swizzle-store macros (LegacySrc
+// vector3_type_inline.h); their Xenon bodies are those of the VecFloatRef / VecFloatRefIndex stores
+// (detail/vec_float_type_inline.h): a constant lane from a VecFloat or VecFloatRef<INDEX> is the vrlimi128 lane
+// insert, mask 8 >> D, rotate (S - D) & 3, the source lane of a VecFloat being D itself (LegacySrc) (SetY(VecFloat) in AIDebugComponent::DrawAggressiveWarning
+// 0x82773CF8: vrlimi 4, 0; Vector4::SetX(VecFloat) in VehicleAttribs::SetupAttribsForDonutAI 0x825F62E8: 8, 0),
+// a runtime lane permutes with gSwizzleStoreConstants[D * 4 + S] (0x8327F140).
 
 inline void Vector3::SetComponent(int i, float value)
 {
-    // VectorIntrinsicUnion temp; temp.vector = mV; temp.scalarFloat[i] = value; mV = temp.vector;
-    mV.v[i] = value;
+    detail::VectorIntrinsicUnion temp;
+    temp.vector = mV;
+    temp.scalarFloat[i] = value;
+    mV = temp.vector;
 }
 
 inline void Vector3::SetComponent(int i, VecFloat::InParam value)
 {
-    // vperm gSwizzleStoreConstants[i*4 + X]: copy value X lane into mV lane i.
-    mV.v[i] = value.mV.v[VectorAxisX];
+    { mV = __vperm(mV, value.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((i) * 4 ) + (VectorAxisX))]); };
 }
 
 inline void Vector3::SetComponent(int i, VecFloatRefIndex::InParam value)
 {
-    // vperm gSwizzleStoreConstants[i*4 + value.mIndex]: copy value lane mIndex into mV lane i.
-    mV.v[i] = value.mV.v[value.mIndex];
+    { mV = __vperm(mV, value.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((i) * 4 ) + (value.mIndex))]); };
 }
 
 template<VectorAxis INDEX>
 inline void Vector3::SetComponent(int i, VecFloatRef<INDEX> value)
 {
-    // vperm gSwizzleStoreConstants[i*4 + INDEX]: copy value lane INDEX into mV lane i.
-    mV.v[i] = value.mV.v[INDEX];
+    { mV = __vperm(mV, value.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((i) * 4 ) + (INDEX))]); };
 }
 
 inline void Vector3::SetX(float x)
@@ -93,20 +98,18 @@ inline void Vector3::SetX(float x)
 
 inline void Vector3::SetX(VecFloat::InParam x)
 {
-    // VectorPermuteConstant: mV lane X <- x lane X (other lanes preserved).
-    mV.v[VectorAxisX] = x.mV.v[VectorAxisX];
+    { mV = __vrlimi(mV, x.mV, (0x8 >> (VectorAxisX)), (((int)(VectorAxisX)) - (VectorAxisX)) & 3); };
 }
 
 inline void Vector3::SetX(VecFloatRefIndex::InParam x)
 {
-    // vperm gSwizzleStoreConstants[X*4 + x.mIndex].
-    mV.v[VectorAxisX] = x.mV.v[x.mIndex];
+    { mV = __vperm(mV, x.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((VectorAxisX) * 4 ) + (x.mIndex))]); };
 }
 
 template<VectorAxis INDEX>
 inline void Vector3::SetX(VecFloatRef<INDEX> x)
 {
-    mV.v[VectorAxisX] = x.mV.v[INDEX];
+    { mV = __vrlimi(mV, x.mV, (0x8 >> (VectorAxisX)), (((int)(INDEX)) - (VectorAxisX)) & 3); };
 }
 
 inline void Vector3::SetY(float y)
@@ -116,18 +119,18 @@ inline void Vector3::SetY(float y)
 
 inline void Vector3::SetY(VecFloat::InParam y)
 {
-    mV.v[VectorAxisY] = y.mV.v[VectorAxisX];
+    { mV = __vrlimi(mV, y.mV, (0x8 >> (VectorAxisY)), (((int)(VectorAxisY)) - (VectorAxisY)) & 3); };
 }
 
 inline void Vector3::SetY(VecFloatRefIndex::InParam y)
 {
-    mV.v[VectorAxisY] = y.mV.v[y.mIndex];
+    { mV = __vperm(mV, y.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((VectorAxisY) * 4 ) + (y.mIndex))]); };
 }
 
 template<VectorAxis INDEX>
 inline void Vector3::SetY(VecFloatRef<INDEX> y)
 {
-    mV.v[VectorAxisY] = y.mV.v[INDEX];
+    { mV = __vrlimi(mV, y.mV, (0x8 >> (VectorAxisY)), (((int)(INDEX)) - (VectorAxisY)) & 3); };
 }
 
 inline void Vector3::SetZ(float z)
@@ -137,18 +140,18 @@ inline void Vector3::SetZ(float z)
 
 inline void Vector3::SetZ(VecFloat::InParam z)
 {
-    mV.v[VectorAxisZ] = z.mV.v[VectorAxisX];
+    { mV = __vrlimi(mV, z.mV, (0x8 >> (VectorAxisZ)), (((int)(VectorAxisZ)) - (VectorAxisZ)) & 3); };
 }
 
 inline void Vector3::SetZ(VecFloatRefIndex::InParam z)
 {
-    mV.v[VectorAxisZ] = z.mV.v[z.mIndex];
+    { mV = __vperm(mV, z.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((VectorAxisZ) * 4 ) + (z.mIndex))]); };
 }
 
 template<VectorAxis INDEX>
 inline void Vector3::SetZ(VecFloatRef<INDEX> z)
 {
-    mV.v[VectorAxisZ] = z.mV.v[INDEX];
+    { mV = __vrlimi(mV, z.mV, (0x8 >> (VectorAxisZ)), (((int)(INDEX)) - (VectorAxisZ)) & 3); };
 }
 
 inline void Vector3::SetZero()
@@ -205,12 +208,11 @@ inline Vector3::Vector3()
 
 inline Vector3::Vector3(float x, float y, float z)
 {
-    // ARTIST821F0DD8/821F0E00: scalar inputs assembled, then one raw row copy.
-    VectorIntrinsic lValue;
-    lValue.v[0] = x;
-    lValue.v[1] = y;
-    lValue.v[2] = z;
-    lValue.u[3] = 0;
+    // rwmath vector3_type_inline.h:232 fills x, y, z of a vector and assigns it; the Xenon fill is the aggregate
+    // initialiser, whose zeroed w word is stored through its own address (ARTIST's out-of-line copy 0x821F0DD8:
+    // addi r11,r1,-4 ... stw r10,0(r11); AIDebugComponent::DrawResetOnTrackAISection 0x82767224/0x82767248,
+    // DrawCarControlData 0x8277398C/0x827739B4, ResetOnTrackManager 0x82783E78/0x82783E98).
+    const VectorIntrinsic lValue = { x, y, z };
     mV = lValue;
 }
 

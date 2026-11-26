@@ -295,6 +295,9 @@ namespace vpu
     //
     // ⚠️ CANONICAL SDK HOME is rw/math/vpu/constants_operation.h, absent from this tree;
     //    same "until that header exists" footing as Mask3 above.
+    // rwmath constants_operation_inline.h:101 (DecFIGS :156): the zero register, vspltisw 0, as GetVecFloat_Zero
+    // (ResetPlayerCarAction::HasToChangeLocation 0x822A0254 compares against it).
+    inline Vector3 GetVector3_Zero() { return Vector3(__vspltisw(0)); }
     inline Vector3 GetVector3_XAxis() { { const VectorIntrinsic lResult = { 1.0f, 0.0f, 0.0f, 0.0f }; return Vector3(lResult); } }
     inline Vector3 GetVector3_YAxis() { { const VectorIntrinsic lResult = { 0.0f, 1.0f, 0.0f, 0.0f }; return Vector3(lResult); } }
     inline Vector3 GetVector3_ZAxis() { { const VectorIntrinsic lResult = { 0.0f, 0.0f, 1.0f, 0.0f }; return Vector3(lResult); } }

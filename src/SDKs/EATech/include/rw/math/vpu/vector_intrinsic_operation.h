@@ -93,6 +93,16 @@ namespace vpu
         return (cr & 0x80) == 0x80;
     }
 
+    // x, y and z only: LegacySrc vector_intrinsic_operation_inline.h:251 permutes each operand (X, Y, Z, X) before
+    // the four-lane predicate; the Xenon permute is vrlimi mask 1, rotate 1 (lane X into W). ARTIST
+    // ResetPlayerCarAction::HasToChangeLocation 0x822A0258..0x822A0278 (Vector3 operator==).
+    __forceinline bool _asmIsEqualV3(VectorIntrinsicInParam v0, VectorIntrinsicInParam v1)
+    {
+        bool ret;
+        ::rw::math::vpu::VectorIntrinsic v0comp = __vrlimi(v0, v0, 1, 1); ::rw::math::vpu::VectorIntrinsic v1comp = __vrlimi(v1, v1, 1, 1); { unsigned int cr = 0; __vcmpeqfpR(v0comp, v1comp, &cr); ret = ((cr & 0x80) == 0x80); };
+        return ret;
+    }
+
     // x and y only: each operand's x,y lanes are replicated into z,w (vrlimi mask 3,
     // rotate 2; PS3 permutes X0,Y0,X0,Y0) before the four-lane predicate.
     // ARTIST 0x827DD570..0x827DD594 (CrashNavMapIcon::SetPosition's Vector2 compare).

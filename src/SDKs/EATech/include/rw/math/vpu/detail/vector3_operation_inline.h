@@ -51,13 +51,16 @@ namespace detail
 //  (undecoded _asmIsEqualV3/_asmIsZeroV3/_asmIsSimilarV3 ; IsValid needs IsValid(VecFloat))
 // =====================================================================================
 
-inline bool operator == (Vector3::InParam a, Vector3::InParam b)
+// rwmath vector3_operation_inline.h:22 / :27 (DecFIGS the same): the three-lane predicate _asmIsEqualV3.
+__forceinline bool operator == (Vector3::InParam a, Vector3::InParam b)
 {
-    return a.mV.v[0] == b.mV.v[0]
-        && a.mV.v[1] == b.mV.v[1]
-        && a.mV.v[2] == b.mV.v[2];
+    return _asmIsEqualV3(a.mV, b.mV);
 }
-inline bool operator != (Vector3::InParam a, Vector3::InParam b) { return !(a == b); }
+
+__forceinline bool operator != (Vector3::InParam a, Vector3::InParam b)
+{
+    return !_asmIsEqualV3(a.mV, b.mV);
+}
 bool IsZero(Vector3::InParam v, VecFloat::InParam tolerance);              // FLAGGED: _asmIsZeroV3
 bool IsSimilar(Vector3::InParam a, Vector3::InParam b, VecFloat::InParam epsilon); // FLAGGED: _asmIsSimilarV3
 // rwmath vector3_operation_inline.h: each lane splatted (VecFloat from VecFloatRef) and
@@ -67,14 +70,13 @@ inline bool IsValid(Vector3::InParam v)
     return (IsValid(v.X()) && IsValid(v.Y()) && IsValid(v.Z()));
 }
 
-// IsAnyNaN -- FAITHFUL. The console vcmpeqfp_p predicate tests whether v==v in every lane;
-// a NaN lane fails self-comparison. Lowered to the same per-lane self-compare over [X,Y,Z].
-inline bool IsAnyNaN(Vector3::InParam v)
+// rwmath vector3_operation_inline.h:257: v against itself through _asmIsEqualV3's permute (lane X into W) and the
+// all-equal predicate; a NaN lane fails its self-comparison.
+__forceinline bool IsAnyNaN(Vector3::InParam v)
 {
-    // equal = vcmpeqfp_p(v,v) (all-lanes-equal predicate); return !equal.
-    return !( v.mV.v[0] == v.mV.v[0]
-           && v.mV.v[1] == v.mV.v[1]
-           && v.mV.v[2] == v.mV.v[2] );
+    bool equal;
+    ::rw::math::vpu::VectorIntrinsic v0comp = __vrlimi(v.mV, v.mV, 1, 1); ::rw::math::vpu::VectorIntrinsic v1comp = __vrlimi(v.mV, v.mV, 1, 1); { unsigned int cr = 0; __vcmpeqfpR(v0comp, v1comp, &cr); equal = ((cr & 0x80) == 0x80); };
+    return !equal;
 }
 
 // =====================================================================================

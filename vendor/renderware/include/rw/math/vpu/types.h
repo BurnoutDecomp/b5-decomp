@@ -144,10 +144,23 @@ namespace vpu
             wAxis.mV = row3;
         }
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
-        void SetIdentity()
+        // rwmath matrix44affine_type_inline.h:47 / :72 (DecFIGS matrix44affine.h:64; always_inline in the SDK): the
+        // identity is the twelve-float Set, each row a Vector3::Set (ARTIST inlines it, four three-lane fills with
+        // their zeroed w words, in ExternallySimulatedBody::Construct 0x8259CF30..).
+        __forceinline void Set(float m0, float m1, float m2, float m3, float m4, float m5,
+                               float m6, float m7, float m8, float m9, float m10, float m11)
         {
-            const Vector3 lxAxis(1.0f, 0.0f, 0.0f); xAxis = lxAxis; const Vector3 lyAxis(0.0f, 1.0f, 0.0f); yAxis = lyAxis;
-            const Vector3 lzAxis(0.0f, 0.0f, 1.0f); zAxis = lzAxis; const Vector3 lwAxis(0.0f, 0.0f, 0.0f); wAxis = lwAxis;
+            xAxis.Set(m0, m1, m2);
+            yAxis.Set(m3, m4, m5);
+            zAxis.Set(m6, m7, m8);
+            wAxis.Set(m9, m10, m11);
+        }
+        __forceinline void SetIdentity()
+        {
+            Set(1.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 1.0f,
+                0.0f, 0.0f, 0.0f);
         }
 
         Vector3& Right() { return xAxis; }

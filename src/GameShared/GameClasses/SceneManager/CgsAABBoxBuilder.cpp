@@ -89,18 +89,15 @@ void AABBoxBuilder::CreateFromBox(rw::collision::AABBox* lpBBox,
     if ((guProbeDirectionsOnce & 1u) == 0u)
     {
         guProbeDirectionsOnce |= 1u;
-        // ARTIST 0x82B57E58..68 clears the spare words of the three probe rows.
+        // Vector3::Set's three-lane fill zeroes each row's w word (ARTIST 0x82B57E58..68).
         Vector3 axisX;
         axisX.Set(1.0f, 0.0f, 0.0f);
-        memset(&axisX.mV.u[3], 0, sizeof(u32));
         gaProbeDirections[0] = axisX;
         Vector3 axisY;
         axisY.Set(0.0f, 1.0f, 0.0f);
-        memset(&axisY.mV.u[3], 0, sizeof(u32));
         gaProbeDirections[1] = axisY;
         Vector3 axisZ;
         axisZ.Set(0.0f, 0.0f, 1.0f);
-        memset(&axisZ.mV.u[3], 0, sizeof(u32));
         gaProbeDirections[2] = axisZ;
     }
 

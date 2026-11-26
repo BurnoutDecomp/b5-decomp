@@ -59,6 +59,12 @@ inline void Vector4::Set(VecFloatRef<XSRC_INDEX> x, VecFloatRef<YSRC_INDEX> y,
 // =====================================================================================
 //  SetComponent / SetX / SetY / SetZ / SetW -- single-lane writes
 // =====================================================================================
+// rwmath 1.02.00 writes the single-lane setters as the swizzle-store macros (LegacySrc
+// vector4_type_inline.h); their Xenon bodies are those of the VecFloatRef / VecFloatRefIndex stores
+// (detail/vec_float_type_inline.h): a constant lane from a VecFloat or VecFloatRef<INDEX> is the vrlimi128 lane
+// insert, mask 8 >> D, rotate (S - D) & 3, the source lane of a VecFloat being D itself (LegacySrc) (SetY(VecFloat) in AIDebugComponent::DrawAggressiveWarning
+// 0x82773CF8: vrlimi 4, 0; Vector4::SetX(VecFloat) in VehicleAttribs::SetupAttribsForDonutAI 0x825F62E8: 8, 0),
+// a runtime lane permutes with gSwizzleStoreConstants[D * 4 + S] (0x8327F140).
 
 // DecFIGS vector4_type_inline.h:59 declares the local VectorIntrinsicUnion temp (h:62), as
 // rwmath 1.02.00 writes it: copy the register out, replace one lane, copy it back. ARTIST
@@ -74,19 +80,18 @@ inline void Vector4::SetComponent(int i, float value)
 
 inline void Vector4::SetComponent(int i, VecFloat::InParam value)
 {
-    // vperm gSwizzleStoreConstants[i*4 + X].
-    mV.v[i] = value.mV.v[VectorAxisX];
+    { mV = __vperm(mV, value.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((i) * 4 ) + (VectorAxisX))]); };
 }
 
 inline void Vector4::SetComponent(int i, VecFloatRefIndex::InParam value)
 {
-    mV.v[i] = value.mV.v[value.mIndex];
+    { mV = __vperm(mV, value.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((i) * 4 ) + (value.mIndex))]); };
 }
 
 template<VectorAxis INDEX>
 inline void Vector4::SetComponent(int i, VecFloatRef<INDEX> value)
 {
-    mV.v[i] = value.mV.v[INDEX];
+    { mV = __vperm(mV, value.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((i) * 4 ) + (INDEX))]); };
 }
 
 inline void Vector4::SetX(float x)
@@ -96,18 +101,18 @@ inline void Vector4::SetX(float x)
 
 inline void Vector4::SetX(VecFloat::InParam x)
 {
-    mV.v[VectorAxisX] = x.mV.v[VectorAxisX];
+    { mV = __vrlimi(mV, x.mV, (0x8 >> (VectorAxisX)), (((int)(VectorAxisX)) - (VectorAxisX)) & 3); };
 }
 
 inline void Vector4::SetX(VecFloatRefIndex::InParam x)
 {
-    mV.v[VectorAxisX] = x.mV.v[x.mIndex];
+    { mV = __vperm(mV, x.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((VectorAxisX) * 4 ) + (x.mIndex))]); };
 }
 
 template<VectorAxis INDEX>
 inline void Vector4::SetX(VecFloatRef<INDEX> x)
 {
-    mV.v[VectorAxisX] = x.mV.v[INDEX];
+    { mV = __vrlimi(mV, x.mV, (0x8 >> (VectorAxisX)), (((int)(INDEX)) - (VectorAxisX)) & 3); };
 }
 
 inline void Vector4::SetY(float y)
@@ -117,18 +122,18 @@ inline void Vector4::SetY(float y)
 
 inline void Vector4::SetY(VecFloat::InParam y)
 {
-    mV.v[VectorAxisY] = y.mV.v[VectorAxisX];
+    { mV = __vrlimi(mV, y.mV, (0x8 >> (VectorAxisY)), (((int)(VectorAxisY)) - (VectorAxisY)) & 3); };
 }
 
 inline void Vector4::SetY(VecFloatRefIndex::InParam y)
 {
-    mV.v[VectorAxisY] = y.mV.v[y.mIndex];
+    { mV = __vperm(mV, y.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((VectorAxisY) * 4 ) + (y.mIndex))]); };
 }
 
 template<VectorAxis INDEX>
 inline void Vector4::SetY(VecFloatRef<INDEX> y)
 {
-    mV.v[VectorAxisY] = y.mV.v[INDEX];
+    { mV = __vrlimi(mV, y.mV, (0x8 >> (VectorAxisY)), (((int)(INDEX)) - (VectorAxisY)) & 3); };
 }
 
 inline void Vector4::SetZ(float z)
@@ -138,18 +143,18 @@ inline void Vector4::SetZ(float z)
 
 inline void Vector4::SetZ(VecFloat::InParam z)
 {
-    mV.v[VectorAxisZ] = z.mV.v[VectorAxisX];
+    { mV = __vrlimi(mV, z.mV, (0x8 >> (VectorAxisZ)), (((int)(VectorAxisZ)) - (VectorAxisZ)) & 3); };
 }
 
 inline void Vector4::SetZ(VecFloatRefIndex::InParam z)
 {
-    mV.v[VectorAxisZ] = z.mV.v[z.mIndex];
+    { mV = __vperm(mV, z.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((VectorAxisZ) * 4 ) + (z.mIndex))]); };
 }
 
 template<VectorAxis INDEX>
 inline void Vector4::SetZ(VecFloatRef<INDEX> z)
 {
-    mV.v[VectorAxisZ] = z.mV.v[INDEX];
+    { mV = __vrlimi(mV, z.mV, (0x8 >> (VectorAxisZ)), (((int)(INDEX)) - (VectorAxisZ)) & 3); };
 }
 
 inline void Vector4::SetW(float w)
@@ -159,18 +164,18 @@ inline void Vector4::SetW(float w)
 
 inline void Vector4::SetW(VecFloat::InParam w)
 {
-    mV.v[VectorAxisW] = w.mV.v[VectorAxisX];
+    { mV = __vrlimi(mV, w.mV, (0x8 >> (VectorAxisW)), (((int)(VectorAxisW)) - (VectorAxisW)) & 3); };
 }
 
 inline void Vector4::SetW(VecFloatRefIndex::InParam w)
 {
-    mV.v[VectorAxisW] = w.mV.v[w.mIndex];
+    { mV = __vperm(mV, w.mV, ::rw::math::vpu::detail::gSwizzleStoreConstants[(((VectorAxisW) * 4 ) + (w.mIndex))]); };
 }
 
 template<VectorAxis INDEX>
 inline void Vector4::SetW(VecFloatRef<INDEX> w)
 {
-    mV.v[VectorAxisW] = w.mV.v[INDEX];
+    { mV = __vrlimi(mV, w.mV, (0x8 >> (VectorAxisW)), (((int)(INDEX)) - (VectorAxisW)) & 3); };
 }
 
 inline void Vector4::SetZero()
