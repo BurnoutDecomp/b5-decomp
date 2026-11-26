@@ -299,33 +299,10 @@ void VignetteData::SetToBlend(const VignetteData& lA, f32 lfWa,
 }
 
 // ---- DepthOfFieldData ----------------------------------------------------
-// ⭐ FOUR MEMBERS ONLY. Both expansions read frame+0x90/+0x94/+0x98/+0x9C and write the
-// result's +0/+4/+8/+0xC; mfDofAmount (+0x10 in the struct) is never touched by either the
-// per-layer blend or the fold-in at 0x823FA31C. Adding it here would be an invention that
-// silently changes the DoF amount the moment a world/fx-events layer carries weight.
-void DepthOfFieldData::SetToBlend(const DepthOfFieldData& lA, f32 lfWa,
-                                  const DepthOfFieldData& lB, f32 lfWb)
-{
-    mfNearPlane   = lA.mfNearPlane * lfWa + lB.mfNearPlane * lfWb;
-    mfFocalPlane  = lA.mfFocalPlane * lfWa + lB.mfFocalPlane * lfWb;
-    mfFocalPlane2 = lA.mfFocalPlane2 * lfWa + lB.mfFocalPlane2 * lfWb;
-    mfFarPlane    = lA.mfFarPlane * lfWa + lB.mfFarPlane * lfWb;
-}
-
-void DepthOfFieldData::SetToBlend(const DepthOfFieldData& lA, f32 lfWa,
-                                  const DepthOfFieldData& lB, f32 lfWb,
-                                  const DepthOfFieldData& lC, f32 lfWc,
-                                  const DepthOfFieldData& lD, f32 lfWd)
-{
-    mfNearPlane   = lA.mfNearPlane * lfWa + lB.mfNearPlane * lfWb
-                  + lC.mfNearPlane * lfWc + lD.mfNearPlane * lfWd;
-    mfFocalPlane  = lA.mfFocalPlane * lfWa + lB.mfFocalPlane * lfWb
-                  + lC.mfFocalPlane * lfWc + lD.mfFocalPlane * lfWd;
-    mfFocalPlane2 = lA.mfFocalPlane2 * lfWa + lB.mfFocalPlane2 * lfWb
-                  + lC.mfFocalPlane2 * lfWc + lD.mfFocalPlane2 * lfWd;
-    mfFarPlane    = lA.mfFarPlane * lfWa + lB.mfFarPlane * lfWb
-                  + lC.mfFarPlane * lfWc + lD.mfFarPlane * lfWd;
-}
+// Both SetToBlend forms are header-inline (BrnEffectsData.h). FOUR MEMBERS ONLY: both
+// expansions read frame+0x90/+0x94/+0x98/+0x9C and write the result's +0/+4/+8/+0xC;
+// mfDofAmount (+0x10 in the struct) is never touched by either the per-layer blend or the
+// fold-in at 0x823FA31C.
 
 // ---- BlurData ------------------------------------------------------------
 // 2-way @0x823F3A50: scalars mfOpacity/mfVelocity/mfSharpness/mfNoise/mfAngle folded

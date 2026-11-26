@@ -145,8 +145,11 @@ struct DepthOfFieldData
     f32 mfFocalPlane;
     f32 mfFocalPlane2;
     f32 mfFarPlane;
+    // The five floats DWARF declares (h:181..185), 20 bytes: ARTIST copies the struct as five
+    // words (PfxContainer<DepthOfFieldData>::Add 0x824F6CC8 `li r10,5; mtctr`) and the GUI
+    // container's weight follows it at +0x14 (0x824F6CB8). The frame's following BlurData is
+    // 16-byte aligned by its Vector2 members, so BrnEffectsFrame keeps its layout.
     f32 mfDofAmount;
-    u8  mPad14[12];
 
     void Construct()
     {
@@ -166,12 +169,32 @@ struct DepthOfFieldData
     // at 0x823FA31C likewise writes only lRes+0,+4,+8,+0xC.
     // @0x82678158 -- the ASSET-KEYED Construct (the depthoffieldasset collection named by a PFX group). Body in BrnEffectsData.cpp.
     void Construct(const u64& lruAssetKey);
-    void SetToBlend(const DepthOfFieldData& lA, f32 lfWa,
-                    const DepthOfFieldData& lB, f32 lfWb);
-    void SetToBlend(const DepthOfFieldData& lA, f32 lfWa,
-                    const DepthOfFieldData& lB, f32 lfWb,
-                    const DepthOfFieldData& lC, f32 lfWc,
-                    const DepthOfFieldData& lD, f32 lfWd);
+    // Header-inline (DWARF :210 / :217): ARTIST holds no copy of either and inlines them in
+    // two unity TUs, EvalEffectData<DepthOfFieldData> (BrnGraphicsUnity) and
+    // PfxContainer<DepthOfFieldData>::Add 0x824F6CEC (BrnGuiUnity). DWARF parameter names
+    // (_compile/BrnGuiUnity.cpp).
+    void SetToBlend(const DepthOfFieldData& lValue0, f32 lfWeight0,
+                    const DepthOfFieldData& lValue1, f32 lfWeight1)
+    {
+        mfNearPlane   = lValue0.mfNearPlane * lfWeight0 + lValue1.mfNearPlane * lfWeight1;
+        mfFocalPlane  = lValue0.mfFocalPlane * lfWeight0 + lValue1.mfFocalPlane * lfWeight1;
+        mfFocalPlane2 = lValue0.mfFocalPlane2 * lfWeight0 + lValue1.mfFocalPlane2 * lfWeight1;
+        mfFarPlane    = lValue0.mfFarPlane * lfWeight0 + lValue1.mfFarPlane * lfWeight1;
+    }
+    void SetToBlend(const DepthOfFieldData& lValue0, f32 lfWeight0,
+                    const DepthOfFieldData& lValue1, f32 lfWeight1,
+                    const DepthOfFieldData& lValue2, f32 lfWeight2,
+                    const DepthOfFieldData& lValue3, f32 lfWeight3)
+    {
+        mfNearPlane   = lValue0.mfNearPlane * lfWeight0 + lValue1.mfNearPlane * lfWeight1
+                      + lValue2.mfNearPlane * lfWeight2 + lValue3.mfNearPlane * lfWeight3;
+        mfFocalPlane  = lValue0.mfFocalPlane * lfWeight0 + lValue1.mfFocalPlane * lfWeight1
+                      + lValue2.mfFocalPlane * lfWeight2 + lValue3.mfFocalPlane * lfWeight3;
+        mfFocalPlane2 = lValue0.mfFocalPlane2 * lfWeight0 + lValue1.mfFocalPlane2 * lfWeight1
+                      + lValue2.mfFocalPlane2 * lfWeight2 + lValue3.mfFocalPlane2 * lfWeight3;
+        mfFarPlane    = lValue0.mfFarPlane * lfWeight0 + lValue1.mfFarPlane * lfWeight1
+                      + lValue2.mfFarPlane * lfWeight2 + lValue3.mfFarPlane * lfWeight3;
+    }
 };
 
 struct BlurData
@@ -452,7 +475,7 @@ CGS_STATIC_ASSERT((sizeof(Vector4) == 16), "Vector4 layout drift");
 CGS_STATIC_ASSERT((sizeof(Matrix44Affine) == 64), "Matrix44Affine layout drift");
 CGS_STATIC_ASSERT((sizeof(BrnEffects::BloomData) == 32), "BloomData layout drift");
 CGS_STATIC_ASSERT((sizeof(BrnEffects::VignetteData) == 80), "VignetteData layout drift");
-CGS_STATIC_ASSERT((sizeof(BrnEffects::DepthOfFieldData) == 32), "DepthOfFieldData layout drift");
+CGS_STATIC_ASSERT((sizeof(BrnEffects::DepthOfFieldData) == 20), "DepthOfFieldData layout drift");
 CGS_STATIC_ASSERT((sizeof(BrnEffects::BlurData) == 96), "BlurData layout drift");
 // ONE POINTER, whatever the target's pointer is (guest 4, host 8) -- DWARF BrnEffectsData.h:275.
 // The 496-byte frame stride below is what actually pins the layout; this pins the member set.
