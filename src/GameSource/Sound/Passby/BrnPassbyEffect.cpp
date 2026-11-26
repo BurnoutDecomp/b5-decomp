@@ -172,22 +172,13 @@ const char* Passby3DControl::GetTypeName() const
 //   bl  passbybin::passbybin(this + 0x44, 0, 0)            ; mAttribs
 //   stw 0, 0x78                                            ; mePrepareState = CONSTRUCT_VOICE
 //
-// The console leaves every other leaf member to Attach / AttachController / UpdateParams; here
-// they are value-defined (zero) so nothing is ever read uninitialised on the host.
+// The console leaves every other leaf member to Attach / AttachController / UpdateParams.
 // ---------------------------------------------------------------------------
 PassbyEffect::PassbyEffect()
     : mVoice()
     , mAttribs(0, 0)
-    , meLifetime(E_NOT_PLAYED)
-    , mpPassby3DControl(0)
     , mePrepareState(E_PREPARE_STATE_CONSTRUCT_VOICE)
-    , muSampleId(0)
-    , mfPitchScale(0.0f)
-    , mfVolumeScale(0.0f)
-    , mbPlayerIsBoosting(false)
-    , mbFirstUpdate(false)
 {
-    mPosition.SetZero();
 }
 
 // ---------------------------------------------------------------------------

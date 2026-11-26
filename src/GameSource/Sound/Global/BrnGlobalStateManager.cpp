@@ -277,9 +277,12 @@ void GlobalStateManager::ResourcesAreReady()
         static_cast<u32>(CgsSound::Playback::Name::MakeHash("FX_splice")));
 }
 
-void GlobalStateManager::UpdateParams(f32 af32DeltaTime)
+// ARTIST 0x8269C368: the CPU monitor opened around the base update (DWARF local lMonitor,
+// BrnGlobalStateManager.cpp:191).
+void GlobalStateManager::UpdateParams(f32 lfTimeStep)
 {
-    CgsSound::Logic::StateManager::UpdateParams(af32DeltaTime);
+    PerfMonHelper lMonitor(GetCpuMonitor());
+    CgsSound::Logic::StateManager::UpdateParams(lfTimeStep);
 }
 
 } // namespace Logic

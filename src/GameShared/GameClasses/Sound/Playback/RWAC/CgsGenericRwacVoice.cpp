@@ -127,35 +127,6 @@ void GenericRwacVoice::Update(rw::audio::core::System* apSystem, Voice& arVoice)
             {
                 // rw::math::fpu::Clamp: ARTIST fsel(min - value) then fsel(max - v') (0x826C62F0..F8).
                 const f32 lfValue = rw::math::fpu::Clamp(lrInput.GetValueRaw(), lrInput.GetMin(), lrInput.GetMax());
-                // [DIAG] NOT IN THE X360 BINARY -- BRN_RWAC_PARAM_DIAG=1. The clamp above is
-                // silent: a schema whose maximum is below the value the game computed turns a
-                // live parameter into a constant, with no symptom anywhere else. Print what
-                // was asked for and what was actually pushed.
-                {
-                    static int siDiag = -1;
-                    if (siDiag < 0)
-                    {
-                    }
-                    if (siDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        static u32 suCount = 0u;
-                        if ((suCount++ % 64u) == 0u)
-                        {
-                            *CgsDev::Log::gpDebugPrint
-                                << "[rwac-param] plug " << static_cast<s32>(
-                                       reinterpret_cast<intptr_t>(lpPlugin) & 0xFFFFFF)
-                                << " name=" << static_cast<s32>(
-                                       static_cast<u32>(lrInput.GetName().GetValue()))
-                                << " attr=" << static_cast<s32>(lrMap.mu8Attribute)
-                                << " raw=" << lrInput.GetValueRaw()
-                                << " min=" << lrInput.GetMin()
-                                << " max=" << lrInput.GetMax()
-                                << " pushed=" << lfValue
-                                << (lfValue != lrInput.GetValueRaw() ? "  <-- CLAMPED" : "")
-                                << "\n";
-                        }
-                    }
-                }
                 rw::audio::core::PlugIn::SetAttribute(lpPlugin,
                                                        lrMap.mu8Attribute,
                                                        lfValue);

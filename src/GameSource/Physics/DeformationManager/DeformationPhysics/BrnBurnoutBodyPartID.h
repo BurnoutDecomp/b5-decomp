@@ -93,6 +93,8 @@ namespace Deformation
         // h:56 -- out of line at 0x825C1D40 (BrnBurnoutWheelBodyID.cpp).
         void Set(CgsSceneManager::EntityId lOwningVehicleID, u16 lu16WheelIndex,
                  u16 lu16DeformableObjectIndex, u16 lu16PartPoolIndex);
+        // h:60.
+        void Set(u64 lu64Id) { RigidBodyId::Set(lu64Id); }
 
         // h:80 / h:84 -- the two user ids.
         u16 GetDeformableObjectIndex() const { return GetUserIDA(); }
@@ -100,6 +102,14 @@ namespace Deformation
 
         // h:92.
         CgsPhysics::RigidBodyId GetBaseRigidBodyID() const { return *this; }
+
+        // h:104 -- adopt a plain RigidBodyId (DetachedWheelManager::UpdatePostPhysics builds its
+        // DWARF local lBodyId, cpp:148, from the updated body's mID this way).
+        const BurnoutWheelBodyID& operator=(const CgsPhysics::RigidBodyId& lrId)
+        {
+            Set(lrId.GetRawId());
+            return *this;
+        }
     };
 }
 }

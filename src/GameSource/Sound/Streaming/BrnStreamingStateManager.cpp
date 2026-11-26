@@ -1,7 +1,8 @@
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
 #include "GameSource/Sound/Streaming/BrnStreamingState.h"
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
-#include "GameSource/Sound/Streaming/BrnIStreamUser.h"   // [DIAG] GetCreateParams for the witness
+#include "GameSource/Sound/Streaming/BrnIStreamUser.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags (UpdateParams re-post spew)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 // =============================================================================
 // BrnSound::Logic::Streaming::StreamingStateManager -- out-of-line bodies.
@@ -22,6 +23,8 @@
 // =============================================================================
 
 #define KAC_ARTIST_ASSERT_FILE "..\\..\\..\\GameSource\\Sound/Streaming/BrnStreamingStateManager.h"
+// The unity-path spelling of this file's own asserts (string 0x820AED80).
+#define KAC_STREAMING_STATE_MANAGER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Streaming/BrnStreamingStateManager.cpp"
 
 namespace BrnSound
 {
@@ -30,21 +33,9 @@ namespace Logic
 namespace Streaming
 {
 
-namespace
-{
-    // [DIAG] NOT IN THE X360 BINARY -- the ContentSpec a stream user is asking for.
-    // Named for what it reads: the user's own CreateParams content-spec hash, the
-    // single value that decides which .SNS the StreamsRegistry resolves.
-    u32 DiagSpecOf(const IStreamUser* apUser)
-    {
-        return apUser ? static_cast<u32>(apUser->GetCreateParams().mContentSpecName) : 0u;
-    }
-
-    // [DIAG] A refused request is RE-POSTED and retried every tick, so its witness
-    // would storm the log (and starve the harness). Cap it hard and say so.
-    u32 guDiagRefusals = 0;
-    const u32 KU_DIAG_REFUSAL_CAP = 40;
-}
+// DWARF BrnStreamingStateManager.cpp:29: the re-post spew switch (ARTIST dword_82FFB82C, read
+// by UpdateParams 0x826B0E1C).
+uint32_t KI_SPEW_STREAM_MGR_INFO = 0;
 
 // ---------------------------------------------------------------------------
 // StreamingStateManager::StreamingStateManager()  ctor @ 0x826FBFE0
@@ -469,48 +460,49 @@ CgsSound::Logic::State* StreamingStateManager::GetFreeState(void* apRequest)
     return lpVictim;
 }
 
-void StreamingStateManager::UpdateParams(f32 af32GameDt)
+void StreamingStateManager::UpdateParams(f32 lfTimeStep)
 {
-    CgsSound::Logic::StateManager::UpdateParams(af32GameDt);
-    CGS_ASSERT(mePrepareState == E_PREPARE_FINISHED,
-               "mePrepareState == E_PREPARE_FINISHED");
-    if (mePrepareState != E_PREPARE_FINISHED)
-        return;
+    // ARTIST 0x826B0D38: the CPU monitor spans the whole update (DWARF lMonitor :196), the
+    // prepare-state assert does not return (cpp:199), the dirty-request skip, the re-post spew
+    // on KI_SPEW_STREAM_MGR_INFO, and both counts re-read each iteration.
+    PerfMonHelper lMonitor(GetCpuMonitor());
+    CgsSound::Logic::StateManager::UpdateParams(lfTimeStep);
+    CGS_ASSERT_AT(mePrepareState == E_PREPARE_FINISHED, "mePrepareState == E_PREPARE_FINISHED",
+                  KAC_STREAMING_STATE_MANAGER_FILE, 199);
 
     ProcessStopRequests();
     muNumRePostRequests = 0;
-    for (u32 luIndex = 0; luIndex < muPlayRequestCount; ++luIndex)
+    uint32_t luIndex;
+    for (luIndex = 0; luIndex < muPlayRequestCount; ++luIndex)
     {
-        StreamRequest& lrRequest = maPlayRequests[luIndex];
-        if (lrRequest.mbDirty)
-            continue;
-        CheckForDuplicates(luIndex);
-        StreamingState* lpState = static_cast<StreamingState*>(GetFreeState(&lrRequest));
-        if (lpState)
+        if (!maPlayRequests[luIndex].mbDirty)
         {
-            lpState->Attach(&lrRequest);
-            // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). The request was
-            // ACCEPTED: a StreamingState took it and will bring a voice up.
-
-        }
-        else
-        {
-            // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). REFUSED: no free
-            // state and no lower-priority victim -- the request is re-posted and
-            // will be retried next tick (this is how a stream can queue forever).
-            if (guDiagRefusals < KU_DIAG_REFUSAL_CAP)
+            CheckForDuplicates(luIndex);
+            StreamingState* lpFreeState =
+                static_cast<StreamingState*>(GetFreeState(&maPlayRequests[luIndex]));
+            if (lpFreeState)
             {
-                ++guDiagRefusals;
-
+                lpFreeState->Attach(&maPlayRequests[luIndex]);
             }
-            RePostStreamRequest(lrRequest);
+            else
+            {
+                if (KI_SPEW_STREAM_MGR_INFO)
+                {
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    {
+                        *CgsDev::Log::gpDebugPrint << "[Stream] Re-posting request\n";
+                    }
+                }
+                RePostStreamRequest(maPlayRequests[luIndex]);
+            }
         }
     }
 
     muPlayRequestCount = 0;
-    const u32 luRepostCount = muNumRePostRequests;
-    for (u32 luIndex = 0; luIndex < luRepostCount; ++luIndex)
+    for (luIndex = 0; luIndex < muNumRePostRequests; ++luIndex)
+    {
         PostStreamRequestInternal(maRePostRequests[luIndex]);
+    }
 }
 
 } // namespace Streaming
@@ -518,3 +510,4 @@ void StreamingStateManager::UpdateParams(f32 af32GameDt)
 } // namespace BrnSound
 
 #undef KAC_ARTIST_ASSERT_FILE
+#undef KAC_STREAMING_STATE_MANAGER_FILE

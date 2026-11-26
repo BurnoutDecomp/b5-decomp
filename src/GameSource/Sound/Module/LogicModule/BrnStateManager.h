@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"  // CgsSound::Logic::StateManager (canonical) + CgsSound::Logic::ClassTypeInfo
 #include "GameSource/Sound/BrnResourceRegistrar.h"   // BrnSound::Logic::IResourceRequester + ResourceRegistrar (canonical home)
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // PerfMonHelper
 
 // =============================================================================
 // BrnSound::Logic::BrnStateManager
@@ -115,9 +116,37 @@ public:
     virtual ResourceRegistrar& GetResourceRegistrar();
 
 protected:
+    // BrnStateManager.h:157 / :174 (DWARF) -- the CPU-monitor handle's accessors.
+    void SetCpuMonitor( int32_t liCpuMonitor ) { miCpuMonitor = liCpuMonitor; }
+    int32_t GetCpuMonitor() const { return miCpuMonitor; }
+
     // BrnStateManager.h:94 (DWARF): the CPU-monitor handle used by the
     // performance-monitor bookkeeping. Pinned by name.
     s32 miCpuMonitor;
+};
+
+// BrnStateManager.h:109 (DWARF): the scoped CPU monitor the leaf managers' UpdateParams open
+// (PassbyStateManager::UpdateParams' local lMonitor, BrnPassbyStateManager.cpp:194). ARTIST
+// 0x826D4D18 keeps the copied handle in r16 and hands the same register to StopMonitor.
+struct PerfMonHelper
+{
+public:
+    // h:119.
+    PerfMonHelper( int32_t liCpuMonitor )
+    {
+        miCpuMonitor = liCpuMonitor;
+        CgsDev::PerfMonCpu::StartMonitor( miCpuMonitor );
+    }
+
+    // h:126.
+    ~PerfMonHelper()
+    {
+        CgsDev::PerfMonCpu::StopMonitor( miCpuMonitor );
+    }
+
+private:
+    // h:132.
+    int32_t miCpuMonitor;
 };
 
 } // namespace Logic

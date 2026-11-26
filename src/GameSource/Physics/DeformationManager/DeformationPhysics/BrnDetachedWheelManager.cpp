@@ -13,7 +13,12 @@
 #include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::IsOrthogonal3x3 / IsNormal3x3 (DetachWheel's :95/:96 tripwires)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::UpdateCachedObjectPosition (the real tri-cache producer)
 
+#include "GameSource/World/BrnEntityTypes.h"   // BrnWorld::E_ENTITYTYPE_DETACHED_*_WHEEL (UpdatePostPhysics)
+
 #include <cmath>   // std::sqrt (the vrsqrtefp velocity-magnitude refinement converges to this)
+
+// The unity-path spelling ARTIST's asserts in this file carry (string 0x820991C8).
+#define KAC_DETACHED_WHEEL_MANAGER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.cpp"
 
 // ============================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.cpp
@@ -423,53 +428,49 @@ namespace Deformation
     }
 
     // =============================================================================================
-    // UpdatePostPhysics @0x82627150 (144) -- ⭐ 2026-08-14 (walls leg 4, FILTERED WALK + inner
-    // gate). Drain the sim output's updated-rigid-body queue; every event whose entity owner byte
-    // is a DETACHED wheel (9 == racecar wheel, 10 == traffic wheel; slot index asserted < 20)
-    // updates that wheel slot's transform/velocity from the event. The FILTER is real; the inner
-    // per-wheel update is a LOG-ONCE GATE (dead until a wheel detaches -- 0 detached wheels on
-    // the junkyard path).
+    // UpdatePostPhysics @0x82627150 (144) -- drain the sim output's updated-rigid-body queue; every
+    // event whose entity owner byte is a DETACHED wheel (9 == racecar wheel, 10 == traffic wheel)
+    // updates that wheel slot's transform/velocity from the event. Locals as DWARF names them
+    // (BrnDetachedWheelManager.cpp:138/139/140/143/148).
+    //   0x826271E4  ld r11, 0(event)         ; mID, read once
+    //   0x826271E8  srdi 32 ; srwi 24        ; GetEntityIDOwner() == 9 or 10
+    //   0x82627200  clrlwi r29, r11, 16      ; lBodyId.GetPartPoolIndex()
+    //   0x82627204  cmplwi r29, 0x14         ; IsBitSet's own "invalid index" assert (CgsBitArray.h:203)
+    //   0x82627340  assert :150 on the unity path (string 0x820991C8)
+    //   0x82627360  maWheels[index].Update(event, scene) -- no other bound test
     // =============================================================================================
     void DetachedWheelManager::UpdatePostPhysics(
-        const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
+        const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer,
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
     {
-        const CgsPhysics::PhysicsSimulationIO::OutputBuffer::OutUpdateRigidBodyQueue* lpQueue =
-            lpSimOutput->GetUpdateRigidBodyQueue();
+        const CgsPhysics::PhysicsSimulationIO::OutputBuffer::OutUpdateRigidBodyQueue* lpUpdatedBodyQueue =
+            lpSimModuleOutputBuffer->GetUpdateRigidBodyQueue();
+        int32_t liNumUpdatedBodyEvents = lpUpdatedBodyQueue->GetLength();
 
-        const s32 liNumEvents = lpQueue->GetLength();
-        for ( s32 li = 0; li < liNumEvents; ++li )
+        for ( int32_t liUpdatedBodyEventIndex = 0; liUpdatedBodyEventIndex < liNumUpdatedBodyEvents;
+              ++liUpdatedBodyEventIndex )
         {
-            const CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody& lrEvent =
-                lpQueue->GetEvent(li);
+            const CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody* lpUpdatedBodyEvent =
+                &lpUpdatedBodyQueue->GetEvent(liUpdatedBodyEventIndex);
 
-            // owner byte = bits 56..63 of the event's 8-byte rigid-body handle (entity word high).
-            const u32 luOwner = static_cast<u32>(lrEvent.mID >> 56);
-            if ( luOwner != 9u && luOwner != 10u )   // detached racecar / traffic wheel only
+            if ( lpUpdatedBodyEvent->mID.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL ||
+                 lpUpdatedBodyEvent->mID.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL )
             {
-                continue;
-            }
+                BurnoutWheelBodyID lBodyId;
+                lBodyId = lpUpdatedBodyEvent->mID;
 
-            // ---- inner update, LANDED 2026-09-02 (deform close-out wave) from @0x82627150 ----
-            //   0x826271E4  ld r11, 0(event)         ; the 8-byte packed BurnoutWheelBodyID
-            //   0x826271E8  srdi 32 ; srwi 24        ; owner byte == 9 (racecar wheel) or 10 (traffic)
-            //   0x82627200  clrlwi r29, r11, 16      ; lBodyId.GetPartPoolIndex() == the low 16 bits (muSubB)
-            //   0x82627204  cmplwi r29, 0x14         ; the BitArray "invalid index : N < 20" tripwire (CgsBitArray.h:203)
-            //   0x82627310  IsBitSet(slot)           ; assert "mUsedWheels.IsBitSet(lBodyId.GetPartPoolIndex())" (:150)
-            //   0x82627360  r3 = this + 144*slot ; r4 = event ; r5 = scene  ; bl PhysicalWheel::Update
-            // (DWARF BrnDetachedWheelManager.cpp:148 names the local lBodyId.)
-            const u32 luSlot = static_cast<u32>(lrEvent.mID & 0xFFFFu);
-            CGS_ASSERT(mUsedWheels.IsBitSet(luSlot), "mUsedWheels.IsBitSet(lBodyId.GetPartPoolIndex())");
-            if ( luSlot < static_cast<u32>(KI_MAX_DETACHED_WHEELS) )
-            {
-                // FLAG (type plumbing, same shape as PhysicalBodyPartPool -> PhysicalBodyPart::Update):
+                CGS_ASSERT_AT(mUsedWheels.IsBitSet(lBodyId.GetPartPoolIndex()),
+                              "mUsedWheels.IsBitSet(lBodyId.GetPartPoolIndex())",
+                              KAC_DETACHED_WHEEL_MANAGER_FILE, 150);
+
                 // PhysicalWheel::Update is declared on the Deformation-namespace forward declaration
-                // of OutUpdateRigidBody (BrnPhysicalWheel.h:57) and reads the CgsPhysics event by
-                // byte offset; the queue element IS that event, so the pointer is re-labelled here.
-                maWheels[luSlot].Update(reinterpret_cast<const OutUpdateRigidBody*>(&lrEvent), lpSceneInterface);
+                // of OutUpdateRigidBody (BrnPhysicalWheel.h:57); the queue element IS that event.
+                maWheels[lBodyId.GetPartPoolIndex()].Update(
+                    reinterpret_cast<const OutUpdateRigidBody*>(lpUpdatedBodyEvent), lpSceneInterface);
             }
         }
     }
+
 
     // =============================================================================================
     // ⛔⛔ EmitUpdateTriangleCacheEvent DELETED 2026-08-27 -- a FABRICATED API (see the header's
@@ -480,3 +481,5 @@ namespace Deformation
 
 }
 }
+
+#undef KAC_DETACHED_WHEEL_MANAGER_FILE

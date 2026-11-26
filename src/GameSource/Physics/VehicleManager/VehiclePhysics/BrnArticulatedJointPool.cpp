@@ -521,6 +521,9 @@ void ArticulatedJointPool::RemoveBrokenJointsFromSimulation(ArticulatedJointCrea
 // ============================================================================
 
 
+// This file's path as ARTIST's asserts spell it (string 0x82094F08).
+#define KAC_ARTICULATED_JOINT_POOL_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/VehiclePhysics/BrnArticulatedJointPool.cpp"
+
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -547,23 +550,32 @@ namespace Vehicle
     // header, so naming it here would close an include cycle. Live values: CAB(1), TRAILER(2).
     s32 ArticulatedJointPool::GetIndexOfOtherHalf(s32 liJointIndex, s32 liArticulatedType)
     {
-        CGS_ASSERT(IsJointInUse(liJointIndex), "IsJointInUse( liJointIndex )");            // :359
-        CGS_ASSERT(liArticulatedType > 0 && liArticulatedType < 3,
-                   "leArticulatedType > PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_NONE && leArticulatedType < PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_COUNT");  // :361
+        // ARTIST 0x825D8490: the asserts carry the unity path (string 0x82094F08) and lines
+        // 359 / 361 / 365 / 371.
+        CGS_ASSERT_AT(IsJointInUse(liJointIndex), "IsJointInUse( liJointIndex )",
+                      KAC_ARTICULATED_JOINT_POOL_FILE, 359);
+        CGS_ASSERT_AT(liArticulatedType > 0 && liArticulatedType < 3,
+                      "leArticulatedType > PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_NONE && leArticulatedType < PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_COUNT",
+                      KAC_ARTICULATED_JOINT_POOL_FILE, 361);
 
         if (liArticulatedType == 1)   // E_ARTICULATE_VEHICLE_CAB
         {
-            CGS_ASSERT(static_cast<s32>(GetJoint(liJointIndex)->GetJointId().GetJointPoolIndex())
-                           == liJointIndex,
-                       "GetJointId( liJointIndex ).GetJointPoolIndex() == liJointIndex");   // :365
+            CGS_ASSERT_AT(static_cast<s32>(GetJoint(liJointIndex)->GetJointId().GetJointPoolIndex())
+                              == liJointIndex,
+                          "GetJointId( liJointIndex ).GetJointPoolIndex() == liJointIndex",
+                          KAC_ARTICULATED_JOINT_POOL_FILE, 365);
             return static_cast<s32>(GetJoint(liJointIndex)->GetJointId().GetTrailerVehicleIndex());
         }
 
-        CGS_ASSERT(liArticulatedType == 2,
-                   "leArticulatedType == PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_TRAILER"); // :371
+        CGS_ASSERT_AT(liArticulatedType == 2,
+                      "leArticulatedType == PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_TRAILER",
+                      KAC_ARTICULATED_JOINT_POOL_FILE, 371);
 
-        const EntityId lCabEntityId = GetJoint(liJointIndex)->GetJointId().GetCabEntityId();
-        return static_cast<s32>((lCabEntityId.muValue >> 10) & 0x3FFFu);
+        // The cab's EntityId is read straight from the returned temporary (ARTIST `lwz r11,0(r3)`
+        // on GetCabEntityId's result, 0x825D85B0).
+        return static_cast<s32>((GetJoint(liJointIndex)->GetJointId().GetCabEntityId().muValue >> 10) & 0x3FFFu);
     }
 }
 }
+
+#undef KAC_ARTICULATED_JOINT_POOL_FILE

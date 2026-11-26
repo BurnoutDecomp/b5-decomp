@@ -85,7 +85,7 @@ public:
     // ---- IResourceRequester overrides (pure in IResourceRequester; BrnStateManager
     // declares but does not body them, so the concrete leaf must override+body them). ----
     virtual void                            ResourcesAreReady();    // (stub -- domain cascade; see .cpp FLAG)
-    virtual void UpdateParams(f32 af32DeltaTime);
+    virtual void UpdateParams(f32 lfTimeStep);
 
     const CgsSound::Logic::Content& GetPresentationSpliceBank() const
     {

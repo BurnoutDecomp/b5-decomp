@@ -116,7 +116,7 @@ public:
     // ---- boot + lifecycle virtuals ----
     virtual bool Prepare();                       // @ 0x826EE680
     virtual bool Release();
-    virtual void UpdateParams(f32 af32GameDt);    // @ 0x826B0D38
+    virtual void UpdateParams(f32 lfTimeStep);    // @ 0x826B0D38
     virtual CgsSound::Logic::State* GetFreeState(void* apRequest); // @ 0x826B0EB8
     virtual void ResourcesAreReady();
 

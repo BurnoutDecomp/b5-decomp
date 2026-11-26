@@ -2626,7 +2626,7 @@ namespace Vehicle
     void VehicleManager::RecordNetworkRaceCarsAddedForCollision(
         const VehicleInputInterface* lpInputInterface)
     {
-        CGS_ASSERT(lpInputInterface != 0, "lpInputInterface != NULL");   // :9677
+        CGS_ASSERT_AT(lpInputInterface != 0, "lpInputInterface != NULL", CGS_ARTIST_FILE, 9677);
 
         mNetworkCarsAddedForCollisionThisFrame.UnSetAll();
         mRaceCarsAddedForCollision = *lpInputInterface->GetRaceCarsAddedForCollision();
@@ -2642,8 +2642,8 @@ namespace Vehicle
             // out of the embedded entity word, i.e. the active-race-car slot.
             const u32 luRaceCar = lrEvent.mRaceCarVolumeInstanceId.GetEntityIDEntityIndex();
 
-            CGS_ASSERT(mUsedRaceCars.IsBitSet(luRaceCar),
-                       "mUsedRaceCars.IsBitSet( liRaceCar )");           // :9699
+            CGS_ASSERT_AT(mUsedRaceCars.IsBitSet(luRaceCar),
+                          "mUsedRaceCars.IsBitSet( liRaceCar )", CGS_ARTIST_FILE, 9699);
 
             // `lbz r11,8(evt)` -- VehicleAddedForCollisionEvent::mbAdded.
             if (lrEvent.mbAdded)

@@ -14,6 +14,9 @@
 #include <cstdio>
 #include <cstdlib>
 
+// The unity-path spelling ARTIST's asserts in this file carry (string 0x820B43C8).
+#define KAC_PASSBY_STATE_MANAGER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Passby/BrnPassbyStateManager.cpp"
+
 // ARTIST off_82F2D0C8; DecFIGS names this ePassbyTypes::gaNames.
 namespace AttribSys { namespace Enums { namespace ePassbyTypes {
 const char* const gaNames[KI_NUM_ENUMS] =
@@ -394,14 +397,14 @@ bool PassbyStateManager::Release()
 // ---------------------------------------------------------------------------
 void PassbyStateManager::UpdateParams( f32 lfTimeStep )
 {
-    CgsDev::PerfMonCpu::StartMonitor( miCpuMonitor );
+    PerfMonHelper lMonitor( GetCpuMonitor() );   // :194
     CgsSound::Logic::StateManager::UpdateParams( lfTimeStep );
     UpdateDynamicPropBys( lfTimeStep );
 
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>( GetLogicModule() );
-    const BrnSound::Module::Io::LogicInputBuffer* lpInput = lpModule->GetBrnInputStructure();
-    CGS_ASSERT( lpInput != 0, "lpInput" );
+    BrnSound::Module::Io::LogicInputBuffer* lpInput = lpModule->GetBrnInputStructure();   // :200
+    CGS_ASSERT_AT( lpInput, "lpInput", KAC_PASSBY_STATE_MANAGER_FILE, 201 );
     u32 luAttached = 0;
     if( lpInput->GetVehicleInterface()->IsPlayerCarActive() )
     {
@@ -437,7 +440,6 @@ void PassbyStateManager::UpdateParams( f32 lfTimeStep )
         }
         BrnSound::Debug::DebugComponent::mLogCombined << "\n";
     }
-    CgsDev::PerfMonCpu::StopMonitor( miCpuMonitor );
 }
 
 // ---------------------------------------------------------------------------
@@ -607,3 +609,5 @@ void PassbyStateManager::UpdateDynamicPropBys( f32 /*lfTimeStep*/ )
 } // namespace Passby
 } // namespace Logic
 } // namespace BrnSound
+
+#undef KAC_PASSBY_STATE_MANAGER_FILE
