@@ -33,6 +33,18 @@ namespace vpu
         return __vrlimi(packed, z, 2, (ZAXIS + 2) & 3);
     }
 
+    // rwmath vpu/detail/<platform>/vector_intrinsic_operation_macros.h (DecFIGS ps3/ppu :11, LegacySrc
+    // ps3/ppu/vector_intrinsic_operation_macros.h): the scalar broadcast the Vector3 operators call. The PPU
+    // body is a union fill; the Xenon one stores { f } with three zero words, loads it and splats lane 0
+    // (BrnTraffic::ParamTransform::Initialise 0x82712DBC..0x82712DDC; the same expansion as the VecFloat
+    // operator set's const float& operand, detail/vec_float_operation_inline.h).
+    __forceinline VectorIntrinsic RW_MATH_VPU_CreateVectorFromScalar_R(float f0)
+    {
+        VectorIntrinsic ret;
+        { VectorIntrinsic u = { f0 }; ret = __vspltw(u, 0); }
+        return ret;
+    }
+
     // All four lanes equal: the vcmpeqfp. record form, CR6's "all true" bit returned as a
     // bool. ARTIST 0x8270DFB8..0x8270DFC8 (IsValid(VecFloat) in Vehicle::SetWheelRot):
     // li/stw of the zeroed CR word, vcmpeqfp128., mfocrf, rlwinm 25,31,31.
