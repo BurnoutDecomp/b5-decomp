@@ -1922,7 +1922,7 @@ void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
 
 
 
-        if (lpAICar->GetOpponentIndex() != -1 && !lpAICar->IsPlayerCar() && lpAICar->mbIsInGameMode)   // 0x82795710..0x82795744
+        if (lpAICar->IsOpponent() && lpAICar->mbIsInGameMode)   // 0x82795710..0x82795744: IsOpponent's bool, then the game-mode byte
         {
             mRaceBalancingManager.UpdateOpponentRoute(lpAICar, GetAISectionsData());       // 0x82795748..0x8279575C
         }
@@ -1942,19 +1942,10 @@ void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
         const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);   // 0x8279579C
         if (lpPlayerAICar->HasValidRoute())                                                   // 0x827957A0..0x827957B8
         {
-            CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");
-            if (lpOutputBuffer != 0)
-            {
-                // The console posts ONE UNINITIALISED stack byte as the payload (`addi r4, r1,
-                // var_60` with no store; `li r6, 1`): the event carries no data, only its type. A
-                // zeroed byte here -- the consumer never reads it.
-                u8 luPlayerRouteUpdatedEvent = 0;
-                AIModuleIO::OutputBuffer::GameEventQueue* lpGameEventQueue =
-                    lpOutputBuffer->GetGameEventQueue();
-                lpGameEventQueue->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&luPlayerRouteUpdatedEvent),
-                    AIModuleRoutes::KI_EVENT_PLAYER_ROUTE_UPDATED, 1);
-            }
+            // DWARF :1537 `PlayerRouteUpdatedEvent lPlayerRouteUpdated` (empty: the console posts
+            // one unwritten stack byte, 0x827957D4..0x827957E0); no test of lpOutputBuffer.
+            BrnGameState::GameStateModuleIO::PlayerRouteUpdatedEvent lPlayerRouteUpdated;
+            lpOutputBuffer->GetGameEventQueue()->AddGameEvent(lPlayerRouteUpdated);
         }
     }
 }

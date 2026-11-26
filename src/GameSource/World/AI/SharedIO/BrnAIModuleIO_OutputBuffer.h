@@ -82,6 +82,7 @@
 #include "GameSource/World/AI/SharedIO/BrnAIModuleResultInterface.h"  // AIModuleResultInterface
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"      // RequestInterface<N>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // VariableEventQueue<N,A>
+#include "GameSource/GameState/BrnGameEvents.h"                        // GameStateModuleIO::GameEventQueue
 #include "types.hpp"                                     // u8
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer
 
@@ -133,7 +134,8 @@ namespace AIModuleIO
         AICarOutputInterface*       GetAICarOutputInterface();
 
         // X360 0x8279C658 (R, :232) / 0x8276D680 (W, :233).
-        typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
+        // DWARF BrnAIModuleIO.h:305 `typedef GameEventQueue GameEventQueue`: the game-state queue.
+        typedef BrnGameState::GameStateModuleIO::GameEventQueue GameEventQueue;
         const GameEventQueue* GetGameEventQueue() const;
         GameEventQueue*       GetGameEventQueue();
 

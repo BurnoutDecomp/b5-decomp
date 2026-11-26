@@ -2138,13 +2138,7 @@ namespace BrnAI
         mbHasBlockCheckpoints     = (meRouteFindingStyle == E_ROUTE_FINDING_RACE) ? 1 : 0;
     }
 
-    // DWARF BrnAICar.h:367. 0x8278A6B8 `lbz 0x153A` / 0x8278A6C4 `cmplwi 0xFF` / 0x8278A6D4 `beq ->
-    // no`, then 0x8278A6D8 `lbz 0x1549` / 0x8278A6DC `cmplwi 0` / 0x8278A6E0 `bne -> no`: a car
-    // holding an opponent slot that is not the player's.
-    bool AICar::IsOpponent() const
-    {
-        return miOpponentIndex != -1 && !mbIsPlayer;
-    }
+    // AICar::IsOpponent is defined in BrnAICar.h (DWARF h:367, inlined everywhere).
 
 }
 

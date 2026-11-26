@@ -398,6 +398,11 @@ CGS_STATIC_ASSERT((sizeof(WorldRegionChangeEvent) == 8), "ARTIST world-region ev
 struct PlayerCrashEndingEvent : public GameEvent<E_EVENT_PLAYER_CRASH_ENDING> {};
 CGS_STATIC_ASSERT((sizeof(PlayerCrashEndingEvent) == 1), "empty crash-ending signal");
 
+// DWARF BrnGameEvents.h:1962; no members. AIModule::UpdateCarRoutes posts it as a one-byte
+// signal with nothing stored (0x827957D4..0x827957E0: li r6,1 / li r5,117 / addi r4,r1,0x50).
+struct PlayerRouteUpdatedEvent : public GameEvent<E_EVENT_PLAYER_ROUTE_UPDATED> {};
+CGS_STATIC_ASSERT((sizeof(PlayerRouteUpdatedEvent) == 1), "empty player-route signal");
+
 // ARTIST debug callbacks and ProcessGameEvents cases 1/2; DWARF member names.
 struct TeleportPlayerCarEvent : public GameEvent<E_EVENT_TELEPORT_PLAYER_CAR>
 {

@@ -180,7 +180,11 @@ namespace BrnAI
         // whole into 0x8278A658. The PS3 twin (DecFIGS @0x9CB6D4) inlines OnReachedCheckpoint and
         // IsOpponent from this header and calls InvalidateRoute out of line (@0x9B4DA8). Bodied in
         // BrnAICar_Update.cpp beside the other inlined-away members.
-        bool IsOpponent() const;                                                     // DWARF BrnAICar.h:367
+        // DWARF BrnAICar.h:367, defined in the header (no definition line in the BrnAICar.cpp dump,
+        // no ARTIST copy; PS3 inlines it from here): AIModule::UpdateCarRoutes 0x82795710..0x82795730
+        // and OnRaceCarReachedCheckpoint 0x8278A6B8..0x8278A6E8 inline the `lbz 0x153A != 0xFF` /
+        // `lbz 0x1549 == 0` bool.
+        bool IsOpponent() const { return miOpponentIndex != -1 && !mbIsPlayer; }
         void InvalidateRoute();                                                      // DWARF BrnAICar.h:388
         void OnReachedCheckpoint(s32 liCheckpointIndex, u16 luDestinationAISectionIndex);   // DWARF BrnAICar.h:507
 

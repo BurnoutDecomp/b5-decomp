@@ -6778,21 +6778,22 @@ namespace
     }
 }
 
+// DWARF _compile/BrnTrafficUnity.cpp: loop index luIndex (:13568) and the entry reference
+// lInfo (:13572). ARTIST 0x82726740/0x82726744: an erased entry steps the index back
+// (addi -1) before the loop's own increment (addi +1).
 void TrafficEntityModule::UpdateTrailers_UpdatePurgatory()
 {
-    u32 index = 0;
-    while (index < mTrailerPurgatoryList.GetLength())
+    for (u32 luIndex = 0; luIndex < mTrailerPurgatoryList.GetLength(); ++luIndex)
     {
-        PurgatoryInfo& info = mTrailerPurgatoryList.GetItem(index);
-        --info.muDecisionFramesLeft;
-        if (info.muDecisionFramesLeft != 0)
+        PurgatoryInfo& lInfo = mTrailerPurgatoryList.GetItem(luIndex);
+        --lInfo.muDecisionFramesLeft;
+        if (lInfo.muDecisionFramesLeft == 0)
         {
-            ++index;
-            continue;
+            CGS_ASSERT_AT(!GetVehicle(lInfo.muIndex)->IsAlive(), "!GetVehicle( lInfo.muIndex )->IsAlive()", KAC_ARTIST_ASSERT_SOURCE, 13707);
+            mFreeTrailerStack.Push(lInfo.muIndex);
+            mTrailerPurgatoryList.Erase(luIndex);
+            --luIndex;
         }
-        CGS_ASSERT_AT(!GetVehicle(info.muIndex)->IsAlive(), "!GetVehicle( lInfo.muIndex )->IsAlive()", KAC_ARTIST_ASSERT_SOURCE, 13707);
-        mFreeTrailerStack.Push(info.muIndex);
-        mTrailerPurgatoryList.Erase(index);
     }
 }
 
