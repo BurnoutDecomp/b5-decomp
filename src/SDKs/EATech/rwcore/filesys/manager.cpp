@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled the RenderWare core filesys library for size
+// (record-form cr0 null tests, e.g. AsyncOp::DoClose 0x82BBE028 `cmplwi r3,0`;
+// Stream::readcallback 0x82BC0598 and Handle::~Handle 0x82BBD6A0 match only so).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::core::filesys::Manager -- the RenderWare core filesystem manager singleton.
 //
@@ -273,39 +279,18 @@ namespace rw
             {
                 if (!gpFileSysManager->mDeviceList.Remove(lpDevice, 0))
                     return false;
-                if (lpDevice)
-                    DeviceScalarDeletingDtor(lpDevice, 1);
+                delete lpDevice;
                 return true;
             }
 
             // -----------------------------------------------------------------------------
-            // Manager::`scalar deleting destructor' @0x82BBF5A0
-            //   ~Manager(this);
-            //   if (flags & 1) (*(*off_8327F07C + 12))(off_8327F07C, this, 0);  // Free
-            //   return this;
+            // Manager::DestroyInstance @0x82BBF850 -- delete the singleton (through
+            // Manager::`scalar deleting destructor' 0x82BBF5A0) and clear off_8327F078.
             // -----------------------------------------------------------------------------
-            Manager* ManagerScalarDeletingDtor(Manager* lpManager, char lcFlags)
+            void Manager::DestroyInstance()
             {
-                lpManager->~Manager();
-                if (lcFlags & 1)
-                    gpFileSysAllocator->Free(lpManager, 0);
-                return lpManager;
-            }
-
-            // -----------------------------------------------------------------------------
-            // Manager::DestroyInstance @0x82BBF850
-            //   result = off_8327F078;
-            //   if (off_8327F078) result = scalar_deleting_dtor(off_8327F078, 1);
-            //   off_8327F078 = 0;
-            //   return result;
-            // -----------------------------------------------------------------------------
-            void* Manager::DestroyInstance()
-            {
-                Manager* lpResult = gpFileSysManager;
-                if (gpFileSysManager)
-                    lpResult = ManagerScalarDeletingDtor(gpFileSysManager, 1);
+                delete gpFileSysManager;
                 gpFileSysManager = 0;
-                return lpResult;
             }
         }
     }

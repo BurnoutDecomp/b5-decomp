@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled the RenderWare core filesys library for size
+// (record-form cr0 null tests, e.g. AsyncOp::DoClose 0x82BBE028 `cmplwi r3,0`;
+// Stream::readcallback 0x82BC0598 and Handle::~Handle 0x82BBD6A0 match only so).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::core::filesys::Handle -- constructor, destructor + scalar deleting destructor.
 //
@@ -113,19 +119,6 @@ namespace rw
                 mpDevice      = 0;
                 mpDriver      = 0;
                 mField0       = 0;
-            }
-
-            // Handle::`scalar deleting destructor' @0x82BBDFA8.
-            //   ~Handle(this);
-            //   if (flags & 1)
-            //       (*(*gpFileSysAllocator + 0xC))(gpFileSysAllocator, this, 0);  // Free
-            //   return this;
-            Handle* HandleScalarDeletingDtor(Handle* lpHandle, char lcFlags)
-            {
-                lpHandle->~Handle();
-                if (lcFlags & 1)
-                    gpFileSysAllocator->Free(lpHandle, 0);
-                return lpHandle;
             }
         }
     }

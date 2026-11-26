@@ -126,6 +126,11 @@ namespace rw
 
                 ~Handle();
 
+                // Handle::`scalar deleting destructor' 0x82BBDFA8 (DoOpen/DoClose `delete`)
+                // runs ~Handle and frees through the filesys allocator's Free slot (+0xC):
+                // the class-level delete. Defined below, after gpFileSysAllocator.
+                static void operator delete(void* lpBlock);
+
                 u32           mField0;         // +0x00
                 Handle*       mpOwnerHandle;   // +0x04
                 void*         mpFile;          // +0x08
@@ -161,9 +166,10 @@ namespace rw
             // X360 off_8327F07C -- defined by the device-driver TU; null until installed.
             extern Allocator* gpFileSysAllocator;
 
-            // Handle::`scalar deleting destructor' @0x82BBDFA8: ~Handle, then if (flags & 1)
-            // free `this` through gpFileSysAllocator. Returns lpHandle (X360 r3 == this).
-            Handle* HandleScalarDeletingDtor(Handle* lpHandle, char lcFlags);
+            inline void Handle::operator delete(void* lpBlock)
+            {
+                gpFileSysAllocator->Free(lpBlock, 0);
+            }
         }
     }
 }

@@ -5,8 +5,8 @@
 // rw::core::filesys::detail::ListSingle<T> -- the intrusive singly-linked list the filesys
 // Manager keeps its registered Devices in and each Device keeps its queued AsyncOps in.
 // Nodes link forward through their own `mpNext` member (node +0x00). The console carries one
-// out-of-line copy of InsertAfter / Remove shared by both instantiations; Append is inlined
-// into Manager::RegisterDevice.
+// out-of-line copy of InsertAfter / Remove shared by both instantiations (0x82BBDE70 /
+// 0x82BBDED0); Append is inlined into Manager::RegisterDevice.
 
 namespace rw
 {
@@ -23,77 +23,63 @@ namespace rw
                     T*  mpTail;    // +0x04
                     u32 muCount;   // +0x08
 
-                    // Link lpNode at the tail.
+                    // Link lpNode at the tail. The empty-list arm comes first (rwcore
+                    // list_inlines.h; ARTIST Manager::RegisterDevice 0x82BBE388 falls
+                    // through to `mpHead = lpNode`).
                     void Append(T* lpNode)
                     {
                         T* lpTail = mpTail;
                         lpNode->mpNext = 0;
                         mpTail = lpNode;
                         ++muCount;
-                        if (lpTail)
-                            lpTail->mpNext = lpNode;
-                        else
+                        if (lpTail == 0)
                             mpHead = lpNode;
+                        else
+                            lpTail->mpNext = lpNode;
+                    }
+
+                    // Link lpNode at the head, keeping mpTail current.
+                    void Push(T* lpNode)
+                    {
+                        lpNode->mpNext = mpHead;
+                        mpHead = lpNode;
+                        ++muCount;
+                        if (lpNode->mpNext == 0)
+                            mpTail = lpNode;
                     }
 
                     // Insert lpNode after lpAfter (lpAfter == null -> push front), keeping
-                    // mpTail current and bumping the count.
+                    // mpTail current and bumping the count. ARTIST 0x82BBDE70 lays the
+                    // push-front arm first, as rwcore list_inlines.h orders it.
                     void InsertAfter(T* lpAfter, T* lpNode)
                     {
-                        if (lpAfter)
+                        if (lpAfter == 0)
                         {
-                            if (!lpAfter->mpNext)
+                            Push(lpNode);
+                        }
+                        else
+                        {
+                            if (lpAfter->mpNext == 0)
                                 mpTail = lpNode;
                             lpNode->mpNext = lpAfter->mpNext;
                             lpAfter->mpNext = lpNode;
                             ++muCount;
                         }
-                        else
-                        {
-                            lpNode->mpNext = mpHead;
-                            u32 luPrevCount = muCount;
-                            mpHead = lpNode;
-                            muCount = luPrevCount + 1;
-                            if (!lpNode->mpNext)
-                                mpTail = lpNode;
-                        }
                     }
 
-                    // Unlink lpNode. lpFrom is an optional predecessor node to start the
+                    // Unlink lpNode. lpPrev is an optional predecessor node to start the
                     // forward scan from (null -> scan from mpHead). True if lpNode was
-                    // removed (its link is then cleared).
-                    bool Remove(T* lpNode, T* lpFrom)
+                    // removed (its link is then cleared). ARTIST 0x82BBDED0 tests the
+                    // head case first, as rwcore list_inlines.h orders it.
+                    bool Remove(T* lpNode, T* lpPrev)
                     {
                         bool lbRemoved = false;
 
-                        if (lpNode != mpHead)
-                        {
-                            if (mpHead)
-                            {
-                                if (!lpFrom)
-                                    lpFrom = mpHead;
-                                if (lpFrom->mpNext)
-                                {
-                                    while (lpFrom->mpNext && lpFrom->mpNext != lpNode)
-                                        lpFrom = lpFrom->mpNext;
-
-                                    if (lpFrom->mpNext && lpFrom->mpNext == lpNode)
-                                    {
-                                        lbRemoved = true;
-                                        --muCount;
-                                        lpFrom->mpNext = lpNode->mpNext;
-                                        if (lpNode == mpTail)
-                                            mpTail = lpFrom;
-                                    }
-                                }
-                            }
-                        }
-                        else
+                        if (lpNode == mpHead)
                         {
                             lbRemoved = true;
-                            T* lpTail = mpTail;
                             --muCount;
-                            if (lpNode == lpTail)
+                            if (lpNode == mpTail)
                             {
                                 mpTail = 0;
                                 mpHead = 0;
@@ -101,6 +87,23 @@ namespace rw
                             else
                             {
                                 mpHead = lpNode->mpNext;
+                            }
+                        }
+                        else if (mpHead != 0)
+                        {
+                            if (lpPrev == 0)
+                                lpPrev = mpHead;
+
+                            while (lpPrev->mpNext != 0 && lpPrev->mpNext != lpNode)
+                                lpPrev = lpPrev->mpNext;
+
+                            if (lpPrev->mpNext != 0 && lpPrev->mpNext == lpNode)
+                            {
+                                lbRemoved = true;
+                                --muCount;
+                                lpPrev->mpNext = lpNode->mpNext;
+                                if (lpNode == mpTail)
+                                    mpTail = lpPrev;
                             }
                         }
 

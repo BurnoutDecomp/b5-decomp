@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled the RenderWare core filesys library for size
+// (record-form cr0 null tests, e.g. AsyncOp::DoClose 0x82BBE028 `cmplwi r3,0`;
+// Stream::readcallback 0x82BC0598 and Handle::~Handle 0x82BBD6A0 match only so).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::core::filesys::Device -- the RenderWare core filesystem device scheduler.
 //
@@ -516,21 +522,6 @@ namespace rw
                     mCompletion.Wait(&mCompletionLock, &lTimeoutAbsolute);
                 }
                 return mCompletionLock.Unlock();
-            }
-
-            // -----------------------------------------------------------------------------
-            // Device::`scalar deleting destructor' @0x82BBE3B0
-            //   ~Device(this);
-            //   if (flags & 1)
-            //       (*(*gpFileSysAllocator + 0xC))(gpFileSysAllocator, this, 0);  // Free
-            //   return this;
-            // -----------------------------------------------------------------------------
-            Device* DeviceScalarDeletingDtor(Device* lpDevice, char lcFlags)
-            {
-                lpDevice->~Device();
-                if (lcFlags & 1)
-                    gpFileSysAllocator->Free(lpDevice, 0);
-                return lpDevice;
             }
         }
     }

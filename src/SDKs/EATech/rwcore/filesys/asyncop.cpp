@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled the RenderWare core filesys library for size
+// (record-form cr0 null tests, e.g. AsyncOp::DoClose 0x82BBE028 `cmplwi r3,0`;
+// Stream::readcallback 0x82BC0598 and Handle::~Handle 0x82BBD6A0 match only so).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // The RenderWare filesys operation lifecycle and handle results.
 #include "SDKs/EATech/rwcore/filesys/device.h"  // Device / Manager / Allocator (AsyncOp dispatches here)
 
@@ -91,10 +97,9 @@ namespace rw
                 mpDevice = lpDevice;            // *(a1+64) = Instance
 
                 // Allocate a copy of the path (length incl. NUL) and copy it into mpBuffer.
-                const char* lpEnd = lpcPath;
-                while (*lpEnd++)
-                    ;
-                u32 luLen = static_cast<u32>(lpEnd - lpcPath); // (v12 - a2) incl. NUL
+                // ARTIST 0x82BC0120..0x82BC0154 is the inlined strlen, then + 1 (PS3 DecFIGS
+                // AsyncOp::Open: strlen(path) + 1 -> Manager::Allocate -> memcpy).
+                const size_t luLen = ::strlen(lpcPath) + 1;
                 void* lpPathCopy = gpFileSysAllocator->Alloc(luLen, "rw::core::filesystem::Manager::Allocate", 0, 4, 0);
                 mpBuffer = lpPathCopy;          // *(a1+48) = v15
                 ::memcpy(lpPathCopy, lpcPath, luLen);
@@ -199,10 +204,9 @@ namespace rw
                 mpBuffer      = 0;        // *(a1+48) = 0
                 mu64BytesDone = 0;              // *(a1+56) = 0
 
-                Device* lpDevice = lpFileHandle->mpDevice; // v6 = *(a2+12)
+                mpDevice = lpFileHandle->mpDevice; // *(a1+64) = *(a2+12)
                 mpfnDoIo = &AsyncOp::DoClose;   // *(a1+68) = DoClose
-                mpDevice = lpDevice;            // *(a1+64) = v6
-                lpDevice->InsertOp(this);
+                mpDevice->InsertOp(this);
             }
 
             // -----------------------------------------------------------------------------
@@ -210,9 +214,7 @@ namespace rw
             // -----------------------------------------------------------------------------
             AsyncOp::OpStatus AsyncOp::DoClose(AsyncOp* lpOp)
             {
-                Handle* lpHandle = lpOp->mpFileHandle; // *(a1+16)
-                if (lpHandle)
-                    HandleScalarDeletingDtor(lpHandle, 1);
+                delete lpOp->mpFileHandle;      // Handle::`scalar deleting destructor'
                 lpOp->mpFileHandle = 0;       // *(a1+16) = 0
                 return OPSTATUS_COMPLETE;
             }
@@ -227,27 +229,22 @@ namespace rw
             AsyncOp::OpStatus AsyncOp::DoOpen(AsyncOp* lpOp)
             {
                 void* lpRaw = gpFileSysAllocator->Alloc(sizeof(Handle), "rw::core::filesystem::Manager::Allocate", 0, 4, 0);
-                Handle* lpHandle = 0;
-                if (lpRaw)
-                {
-                    // Handle::Handle(storage, path=mpBuffer(+0x30), openFlags=(u32)mu64Position(+0x24),
-                    //                device=mpDevice(+0x40)). The asm `ld r5,0x20(r31)` passes the full
-                    // doubleword; big-endian byte +0x24 is the LOW 32 bits, which Open stored via
-                    // `std clrldi(r5,32)` = the open-flags arg zero-extended (high word 0, low word = flags).
-                    lpHandle = new (lpRaw) Handle(static_cast<const char*>(lpOp->mpBuffer),
-                                                  static_cast<u32>(lpOp->mu64Position),
-                                                  lpOp->mpDevice);
-                }
-                lpOp->mpFileHandle = lpHandle; // a1[4] (+0x10) = v3
+                // Handle::Handle(storage, path=mpBuffer(+0x30), openFlags=(u32)mu64Position(+0x24),
+                //                device=mpDevice(+0x40)). The asm `ld r5,0x20(r31)` passes the full
+                // doubleword; big-endian byte +0x24 is the LOW 32 bits, which Open stored via
+                // `std clrldi(r5,32)` = the open-flags arg zero-extended (high word 0, low word = flags).
+                // The non-throwing placement new tests the storage itself (ARTIST 0x82BBFAB8:
+                // `cmplwi r3,0` ... `li r3,0`).
+                lpOp->mpFileHandle = new (lpRaw) Handle(static_cast<const char*>(lpOp->mpBuffer),
+                                                        static_cast<u32>(lpOp->mu64Position),
+                                                        lpOp->mpDevice);
 
                 gpFileSysAllocator->Free(lpOp->mpBuffer, 0);  // free the path copy (a1[12] == +0x30)
 
-                Handle* lpResult = lpOp->mpFileHandle;
-                if (lpResult->mpFile)           // *(v4+8)
+                if (lpOp->mpFileHandle->mpFile)  // *(v4+8)
                     return OPSTATUS_COMPLETE;
-                if (lpResult)
-                    HandleScalarDeletingDtor(lpResult, 1);
-                lpOp->mpFileHandle = 0;       // a1[4] = 0
+                delete lpOp->mpFileHandle;      // still null-tested: ARTIST 0x82BBFB10
+                lpOp->mpFileHandle = 0;         // a1[4] = 0
                 return OPSTATUS_FAILED;
             }
 
@@ -294,9 +291,10 @@ namespace rw
                 lpOp->mpFileHandle->mpOwnerHandle->mu64Position = lu64Position;
 
                 lpHandle = lpOp->mpFileHandle;
-                lpOp->mu64ByteCount = lpHandle->mpDriver->Write(
+                const u32 luWritten = lpHandle->mpDriver->Write(
                     lpHandle->mpFile, lpOp->mpBuffer, static_cast<u32>(lpOp->mu64ByteCount),
                     lpHandle->mpOwnerHandle->mpDevice->GetDriver(), lpHandle->mpOwnerHandle->mpFile);
+                lpOp->mu64ByteCount = luWritten;
                 Handle* lpOwner = lpOp->mpFileHandle->mpOwnerHandle;
                 lpOwner->mu64Position = lpOp->mu64ByteCount + lpOwner->mu64Position;
 

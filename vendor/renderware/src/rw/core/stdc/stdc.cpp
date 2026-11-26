@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled RenderWare rwcore for size (record-form cr0
+// tests); StringCompare 0x82BC7298, StringNoCaseCompare 0x82BC72F0 and StringLength
+// 0x82BC73A0 match only so, as the rwcore filesys sources do.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // Canonical RenderWare SDK home for the rwcore standard-C wrappers
 // (EARenderWare rwcore, rw/core/stdc/stdc.cpp). Bodies reconstructed from the
 // Burnout X360 image; see rw/core/stdc/stdc.h for the per-entry-point contracts.

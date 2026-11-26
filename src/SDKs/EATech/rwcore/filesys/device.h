@@ -210,8 +210,16 @@ namespace rw
                 static Manager* CreateInstance(const Options& lrOptions);
                 static void* operator new(size_t luSize);
 
-                // @0x82BBF850 -- destroy + free the singleton and clear off_8327F078.
-                static void* DestroyInstance();
+                // DecFIGS manager.h:353. Manager::`scalar deleting destructor' 0x82BBF5A0
+                // frees through the allocator's Free slot after ~Manager.
+                static void operator delete(void* lpBlock)
+                {
+                    Free(lpBlock);
+                }
+
+                // @0x82BBF850 -- destroy + free the singleton and clear off_8327F078
+                // (DecFIGS manager.h:93: void).
+                static void DestroyInstance();
 
                 // Build a Device for lpDriver and append it to the global manager's device
                 // list (luFlags bit 0: the device is pumped externally, no worker thread).
@@ -226,9 +234,6 @@ namespace rw
             // declared here so the scheduler can read its sort flag / thread params.
             extern Manager* gpFileSysManager;
 
-            // Manager::`scalar deleting destructor' @0x82BBF5A0: ~Manager, then if (flags & 1)
-            // free `this` through gpFileSysAllocator. Returns lpManager (X360 r3 == this).
-            Manager* ManagerScalarDeletingDtor(Manager* lpManager, char lcFlags);
 
             // The RenderWare core filesystem device scheduler. A worker thread drains a
             // priority-ordered list of AsyncOps, optionally coalescing adjacent read ops
@@ -249,6 +254,13 @@ namespace rw
                 // @0x82BBE208 -- stop the worker (unless external), Close the driver, then
                 // tear down the conditions/thread/mutexes and drop the op list.
                 ~Device();
+
+                // Device::`scalar deleting destructor' 0x82BBE3B0 (UnregisterDevice's
+                // `delete`) frees through the allocator's Free slot after ~Device.
+                static void operator delete(void* lpBlock)
+                {
+                    Manager::Free(lpBlock);
+                }
 
                 // @0x82BBF608 -- Open the driver; if external just mark running, else spin
                 // up the worker thread and block until it reports running.
@@ -319,12 +331,6 @@ namespace rw
                 }
             };
 
-            // Device::`scalar deleting destructor' @0x82BBE3B0: the MSVC `delete` thunk --
-            // run ~Device, then if (flags & 1) free the storage through the global filesys
-            // allocator (off_8327F07C) via its vtable slot +0xC (Free(this, 0)). Returns
-            // lpDevice (X360 r3 == this). Modelled as a free helper, mirroring the Handle
-            // scalar deleting destructor in handle.cpp.
-            Device* DeviceScalarDeletingDtor(Device* lpDevice, char lcFlags);
         }
     }
 }

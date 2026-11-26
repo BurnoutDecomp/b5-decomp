@@ -1,3 +1,9 @@
+// XDK size optimization: ARTIST compiled the RenderWare core filesys library for size
+// (record-form cr0 null tests, e.g. AsyncOp::DoClose 0x82BBE028 `cmplwi r3,0`;
+// Stream::readcallback 0x82BC0598 and Handle::~Handle 0x82BBD6A0 match only so).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 // =====================================================================================
 // rw::core::filesys::Stream -- the RenderWare core filesystem streaming reader.
 //
