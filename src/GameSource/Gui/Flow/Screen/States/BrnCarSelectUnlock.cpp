@@ -343,16 +343,18 @@ namespace BrnGui
     // expected-apt-component list with the badge + the two animation clips.
     bool CarSelectUnlock::UpdateLoadResources()
     {
-        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
-            return false;
+        // The loaded arm returns inside the if (ARTIST branches to a shared `return false` tail).
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        {
+            PlayMovie();
 
-        PlayMovie();
-
-        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, KAC_MANUFACTURER_LOGO);
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mAnimComponent.GetName());
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mHelpPromptAnimComponent.GetName());
-        return true;
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, KAC_MANUFACTURER_LOGO);
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mAnimComponent.GetName());
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mHelpPromptAnimComponent.GetName());
+            return true;
+        }
+        return false;
     }
 
     // ---- UpdateWFInit @ 0x824B5B28 ------------------------------------------------

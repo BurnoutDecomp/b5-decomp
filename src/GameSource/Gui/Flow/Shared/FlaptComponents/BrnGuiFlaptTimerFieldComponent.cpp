@@ -128,7 +128,7 @@ namespace BrnGui
         if (mTimerTextField.mpTextFieldInstance != 0)
         {
             mTimerTextField.SetColour(mv4CurrentColour);
-            mTimerTextField.SetLocalisedText(mfCurrentTime, KI_TIMER_TEXT_FORMAT);
+            mTimerTextField.SetLocalisedText(lfTime, KI_TIMER_TEXT_FORMAT);   // the parameter (fmr f1,f31 @0x82427E2C)
         }
     }
 

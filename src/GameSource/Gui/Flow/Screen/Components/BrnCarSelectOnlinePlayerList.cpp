@@ -12,7 +12,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/Components/BrnCarSelectOnlinePlayerList.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
@@ -38,7 +38,7 @@ namespace BrnGui
         for (s32 liRow = 0; liRow < KI_MAX_PLAYERS; ++liRow)
         {
             char lacRowName[32];
-            CgsCore::SPrintf(lacRowName, 32, "ListItem_%d", liRow);
+            CgsCore::SnPrintf(lacRowName, 32, "ListItem_%d", liRow);   // ARTIST bl SnPrintf @0x8241AFC4
             lacRowName[31] = 0;
             maPlayerRows[liRow].Construct(lacRowName, mpStateInterface, GetName());
         }

@@ -233,13 +233,13 @@ namespace BrnGui
     // ================================================================================
     bool OnlineStats::UpdateWFInit()
     {
-        if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+        // The loaded arm returns inside the if (ARTIST branches to a shared `return false` tail).
+        if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
-            return false;
+            ClearExpectedComponent();
+            return true;
         }
-
-        ClearExpectedComponent();
-        return true;
+        return false;
     }
 
     // ================================================================================

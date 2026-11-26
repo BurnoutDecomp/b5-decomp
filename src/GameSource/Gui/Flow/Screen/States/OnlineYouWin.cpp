@@ -226,16 +226,16 @@ bool OnlineYouWin::UpdateLoadResources()
 {
     CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 301);
 
-    if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+    // The loaded arm returns inside the if (ARTIST beq to the shared `return false` tail).
+    if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
     {
-        return false;
+        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_YOU_WIN_RESOURCE_ID], KI_MOVIE_LEVEL);
+        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mModeAnimator.GetName());
+        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mPhotoComponent.GetName());
+        return true;
     }
-
-    mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_YOU_WIN_RESOURCE_ID], KI_MOVIE_LEVEL);
-    mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-    mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mModeAnimator.GetName());
-    mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mPhotoComponent.GetName());
-    return true;
+    return false;
 }
 
 // ---- UpdateWFInit --------------------------------------------------------------
@@ -279,7 +279,6 @@ bool OnlineYouWin::UpdateTaking()
         if (mbUseCamera)
         {
             mTimeUntillClickTextfield.ClearText();
-            mTimeUntillClickTextfield.OutputAptData();
             mPhotoComponent.SetState("Click");
         }
         return true;

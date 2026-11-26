@@ -374,7 +374,12 @@ namespace BrnGui
         {
             return true;
         }
-        return miMostRecentDropInId != mCurrentSetupInfo.mCarId;
+        // Materialised as `li r3,1; bnelr; li r3,0` (@0x824BBC0C): two returns.
+        if (miMostRecentDropInId != mCurrentSetupInfo.mCarId)
+        {
+            return true;
+        }
+        return false;
     }
 
     // ---- CanCarBePainted @ 0x824B52E0 ----------------------------------------------

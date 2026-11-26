@@ -2948,8 +2948,9 @@ namespace BrnGui
     // entries, off_82F278B4 / off_82F278B8, when XUserGetName fails). Literals read from
     // BURNOUT_X360_ARTIST.XEX. They live here because this TU owns the two accessors; the
     // GuiModule TU picks them up by declaration when it grows UpdatePlayerName.
-    const char* const KAPC_PLAYER_NAME_STRING_ID          = "PLAYER_NAME_STRING_ID";    // @0x8206E7DC
-    const char* const KAPC_PLAYER_NAME_QUOTED_STRING_ID   = "PLAYER_NAME_STRING_ID_Q";  // @0x8206E7C4
+    // Non-const pointers: ARTIST loads them from .data (lwz r3, off_82F278AC @0x824EE7B4).
+    const char* KAPC_PLAYER_NAME_STRING_ID          = "PLAYER_NAME_STRING_ID";    // @0x8206E7DC
+    const char* KAPC_PLAYER_NAME_QUOTED_STRING_ID   = "PLAYER_NAME_STRING_ID_Q";  // @0x8206E7C4
 
     // @ 0x824EE7B0 -- `lwz r3, off_82F278AC; blr`. No `this` access, no assert.
     const char* GuiCache::GetPlayerName() const
@@ -4955,17 +4956,19 @@ namespace BrnGui
     // base). Returns 1 (a before b) when a's count is smaller, -1 when larger.
     s32 GuiCache::_SortReplayPlayersActiveByCount(const void* lpA, const void* lpB)
     {
-        const u32 luCountA = *reinterpret_cast<const u32*>(static_cast<const u8*>(lpA) + 0x18);
-        const u32 luCountB = *reinterpret_cast<const u32*>(static_cast<const u8*>(lpB) + 0x18);
-        if (luCountA < luCountB)
+        // qsort comparator over ReplayPlayerActive entries: descending muActiveCount, ties by
+        // name (ARTIST: bge / ble chain, the tie tail-calls LobbyNameCmp @0x824EF04C).
+        const ReplayPlayerActive* lpEntryA = static_cast<const ReplayPlayerActive*>(lpA);
+        const ReplayPlayerActive* lpEntryB = static_cast<const ReplayPlayerActive*>(lpB);
+        if (lpEntryA->muActiveCount < lpEntryB->muActiveCount)
         {
             return 1;
         }
-        if (luCountA <= luCountB)
+        if (lpEntryA->muActiveCount > lpEntryB->muActiveCount)
         {
-            return LobbyNameCmp(static_cast<const char*>(lpA), static_cast<const char*>(lpB));
+            return -1;
         }
-        return -1;
+        return LobbyNameCmp(lpEntryA->mName.macName, lpEntryB->mName.macName);
     }
 
     // @ 0x824F8C58 -- sort the replay-players-active table once. Asserts it has not already

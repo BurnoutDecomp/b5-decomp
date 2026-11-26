@@ -383,27 +383,28 @@ namespace BrnGui
     bool ImageGalleryState::UpdateLoadResources()
     {
         CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 328);
-        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        // The loaded arm returns inside the if (ARTIST branches to a shared `return false` tail).
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
-            return false;
+            SetExpectedAptComponentList();
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KI_RESOURCE_ID_IMAGE_GALLERY],
+                                           KI_APT_MOVIE_LEVEL);
+            return true;
         }
-
-        SetExpectedAptComponentList();
-        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KI_RESOURCE_ID_IMAGE_GALLERY],
-                                       KI_APT_MOVIE_LEVEL);
-        return true;
+        return false;
     }
 
     // The per-frame init poll: once the cache reports every expected component initialised
     // (screen flow layer), clear the list and report done.
     bool ImageGalleryState::UpdateWFInit()
     {
-        if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+        // The loaded arm returns inside the if (ARTIST branches to a shared `return false` tail).
+        if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
-            return false;
+            ClearExpectedComponent();
+            return true;
         }
-        ClearExpectedComponent();
-        return true;
+        return false;
     }
 
     // Enable the four tabs (asking the game for each tab's image count), highlight the first,
@@ -970,11 +971,8 @@ namespace BrnGui
         }
 
         mWhoText.ClearText();
-        mWhoText.OutputAptData();
         mWhereText.ClearText();
-        mWhereText.OutputAptData();
         mWhenText.ClearText();
-        mWhenText.OutputAptData();
 
         mbSelectedImageValid = false;
     }

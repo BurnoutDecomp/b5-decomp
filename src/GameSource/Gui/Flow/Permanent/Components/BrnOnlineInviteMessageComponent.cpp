@@ -259,15 +259,19 @@ void OnlineInviteMessageComponent::ShowMessage(const char* lpcName,
         if (meShowingState == E_SHOWINGSTATE_INVISIBLE)
         {
             mfTimeToRemoveCurrentMessage = mpGuiCache->GetTime() + KF_MESSAGE_DURATION;
-            mAptRef.GotoAndPlayLabel(KAE_TYPE_SIZE_CONVERSION[leType] == E_ONLINE_NOTIFICATION_CHYRON_SIZE_SMALL
-                ? "smallTransin" : "largeTransin");
+            // ARTIST zeroes the format array right after GetTime (stw @0x82415E98), before the label.
+            const s32 laFormats[1] = { 0 };
+            // One call per arm (tail-merged: &mAptRef formed once, @0x82415E94).
+            if (KAE_TYPE_SIZE_CONVERSION[leType] == E_ONLINE_NOTIFICATION_CHYRON_SIZE_SMALL)
+                mAptRef.GotoAndPlayLabel("smallTransin");
+            else
+                mAptRef.GotoAndPlayLabel("largeTransin");
             maTextFields[0].SetLocalisedText(KAPC_TEXT_FIELDS_STINGS_0[leType], 9);
             if (leType == E_ONLINENOTIFICATIONCHYRONTYPE_HOST_START_EVENT ||
                 leType == E_ONLINENOTIFICATIONCHYRONTYPE_NEW_NEWS)
                 maTextFields[1].SetLocalisedText(KAPC_TEXT_FIELDS_STINGS_1[leType], 9);
             else
             {
-                const s32 laFormats[1] = { 0 };
                 maTextFields[1].SetLocalisedText(KAPC_TEXT_FIELDS_STINGS_1[leType],
                     9, 1, &lpcName, laFormats);
             }

@@ -439,13 +439,13 @@ namespace BrnGui
     // on the screen flow layer has finished initialising, then release the watch list.
     bool OnlineScoreboards::UpdateWFInit()
     {
-        if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+        // The loaded arm returns inside the if (ARTIST branches to a shared `return false` tail).
+        if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
-            return false;
+            ClearExpectedComponent();
+            return true;
         }
-
-        ClearExpectedComponent();
-        return true;
+        return false;
     }
 
     // ---- UpdateGetCache @ 0x824917E0 (DWARF cpp:459) ------------------------------

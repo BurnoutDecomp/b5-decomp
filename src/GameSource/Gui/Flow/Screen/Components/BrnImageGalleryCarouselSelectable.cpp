@@ -29,21 +29,30 @@ void ImageGalleryCarouselSelectable::Construct(const char* lpacName,
 // state mirrors highlight x used (or hides when not even highlightable).
 void ImageGalleryCarouselSelectable::Update()
 {
-    if (!IsDirty())
-        return;
-    ClearFlag(E_FLAG_DIRTY);
+    // As ImageGallerySelectable::Update: the flag tests compare with true (cmplwi <flag>
+    // @0x82419A98/AB0/AFC) and each state is its own tail call.
+    if (IsDirty() == true)
+    {
+        ClearFlag(E_FLAG_DIRTY);
 
-    if (IsHighlighted())
-    {
-        AddOutputAptViewState("apt_state", mbUsed ? "selectUsed" : "selectUnused", false);
-    }
-    else if (IsHighlightable())
-    {
-        AddOutputAptViewState("apt_state", mbUsed ? "unselectedUsed" : "unselectedUnused", false);
-    }
-    else
-    {
-        AddOutputAptViewState("apt_state", "invisible", false);
+        if (IsHighlighted() == true)
+        {
+            if (mbUsed)
+                AddOutputAptViewState("apt_state", "selectUsed", false);
+            else
+                AddOutputAptViewState("apt_state", "selectUnused", false);
+        }
+        else if (IsHighlightable() == true)
+        {
+            if (mbUsed)
+                AddOutputAptViewState("apt_state", "unselectedUsed", false);
+            else
+                AddOutputAptViewState("apt_state", "unselectedUnused", false);
+        }
+        else
+        {
+            AddOutputAptViewState("apt_state", "invisible", false);
+        }
     }
 }
 

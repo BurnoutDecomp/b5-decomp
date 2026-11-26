@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (Register/PlayAptMovie/GetAccessPointers/GetOutputEventQueue)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // VariableEventQueue<18432,16> (the in-queue view)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
 
 // BrnGui::ReplayOutro -- the "replay outro" GUI state, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. A full outro FSM twin of the committed BrnGui::ReplayLoading:
@@ -23,10 +24,10 @@ namespace
     // the same view Credits / BootLegal / ReplayLoading cast mpInGuiEventQueue to.
     typedef CgsModule::VariableEventQueue<18432, 16> ReplayInQueue;
 
-    // The "ReplaysOutro" apt movie the loaded outro binds; level 4 (its own layer, above the
-    // loading-screen level 3).
-    const char* const KAC_REPLAYS_OUTRO_MOVIE = "ReplaysOutro";
-    const s32         KI_REPLAYS_OUTRO_LEVEL  = 4;
+    // gGuiResourceIdentifier[160] == "ReplaysOutro" (table @0x82F278E0, entry +0x280
+    // @0x824D50B4), played on level 4.
+    const u32 KU_REPLAYS_OUTRO_RESOURCE = 160;
+    const s32 KI_REPLAYS_OUTRO_LEVEL    = 4;
 
     // Out-queue channel id (the X360 `liType` passed to AddEvent on mpStateInterface+0xC).
     const s32 KI_CHANNEL_GUI_OUT = 40;   // GuiEventOut
@@ -62,12 +63,12 @@ namespace
 // X360 .rdata: the observed outro GUI event id array (&unk_82066A58, count 1) and the outro's
 // static resource list (&unk_82066A60, count 1). The observer word is the same
 // event accepted by UpdateRunning. ARTIST stores it as a single s32.
-// The resource tuple still needs its IDs decoded.
+// The resource tuple is { 0xA0, 5 } (APT_LOADING_SCREEN).
 const s32                    ReplayOutro::KAI_OBSERVED_EVENTS[]  = { KI_EVENT_ACCEPT };   // @0x82066A58
 const s32                    ReplayOutro::KI_NUM_OBSERVED_EVENTS = 1;
 const CgsGui::sResourceTuple ReplayOutro::maResourcesToLoad[]    =
 {
-    { 0u, static_cast<CgsGui::ResourceRequestTypes>(0) },   // @0x82066A60 (values not yet decoded)
+    { KU_REPLAYS_OUTRO_RESOURCE, CgsGui::E_GUI_RESOURCETYPE_APT_LOADING_SCREEN },   // @0x82066A60
 };
 const u32                    ReplayOutro::muNumResourcesToLoad   = 1;       // @0x82066A60 count
 
@@ -117,13 +118,15 @@ bool ReplayOutro::UpdateLoadResources()
     CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 190);
 
     // Stream the outro's static resource list; keep waiting until it is fully loaded.
-    if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
-        return false;
-
-    // Loaded: bind the "ReplaysOutro" apt movie at level 4 (the inlined PlayAptMovie --
-    // { 8, 18, 12, name, level } channel-41 record, size 20) and report ready.
-    mpStateInterface->PlayAptMovie(KAC_REPLAYS_OUTRO_MOVIE, KI_REPLAYS_OUTRO_LEVEL);
-    return true;
+    // The loaded arm returns inside the if (ARTIST branches to a shared `return false` tail).
+    if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad) == true)   // cmplwi 1 @0x824D5090
+    {
+        // Loaded: bind the "ReplaysOutro" apt movie at level 4 (the inlined PlayAptMovie --
+        // { 8, 18, 12, name, level } channel-41 record, size 20) and report ready.
+        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_REPLAYS_OUTRO_RESOURCE], KI_REPLAYS_OUTRO_LEVEL);
+        return true;
+    }
+    return false;
 }
 
 // ------------------------------------------------ UpdateRunning @ 0x824D5118

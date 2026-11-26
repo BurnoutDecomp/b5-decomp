@@ -197,12 +197,14 @@ bool ReplayCredits::UpdateLoadResources()
 {
     CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 255);
 
-    if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
-        return false;
-
-    mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_REPLAYS_CREDITS_RESOURCE],
-                                   KI_CREDITS_MOVIE_LEVEL);
-    return true;
+    // The loaded arm returns inside the if (ARTIST branches to a shared `return false` tail).
+    if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad) == true)   // cmplwi 1 @0x824D5820
+    {
+        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_REPLAYS_CREDITS_RESOURCE],
+                                       KI_CREDITS_MOVIE_LEVEL);
+        return true;
+    }
+    return false;
 }
 
 void ReplayCredits::UpdateRunning()

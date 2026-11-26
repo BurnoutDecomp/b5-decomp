@@ -728,13 +728,13 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mbKeyboardClosed, "mbKeyboardClosed", CGS_ARTIST_FILE, 709);                  // cpp:709
 
-        const bool lbNewData = mbNewData;
         mbKeyboardClosed = false;
 
-        if (!lbNewData)
+        // `== true` (cmplwi 1 @0x824B75B4); the buffer is the result unless no new data.
+        if (mbNewData == true)
         {
-            return 0;
+            return macKeyboardString;
         }
-        return macKeyboardString;
+        return 0;
     }
 }

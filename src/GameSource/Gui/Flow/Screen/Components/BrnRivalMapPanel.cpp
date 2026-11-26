@@ -206,7 +206,6 @@ namespace BrnGui
         // The name row is blanked (`stb 0, 0xA4(this + 0x94)` -- macText[0]) and re-pushed, and
         // the car image is hidden: in offline-player mode there is no rival car to show.
         maTextfields[E_TEXTFIELD_RIVAL_NAME].ClearText();
-        maTextfields[E_TEXTFIELD_RIVAL_NAME].OutputAptData();
         mCarImageIcon.SetState(KAC_STATE_INVISIBLE);
     }
 
@@ -295,11 +294,8 @@ namespace BrnGui
 
         // The three stat rows have no meaning for an offline rival: blank and re-push each.
         maTextfields[E_TEXTFIELD_TEXT1].ClearText();
-        maTextfields[E_TEXTFIELD_TEXT1].OutputAptData();
         maTextfields[E_TEXTFIELD_TEXT2].ClearText();
-        maTextfields[E_TEXTFIELD_TEXT2].OutputAptData();
         maTextfields[E_TEXTFIELD_TEXT3].ClearText();
-        maTextfields[E_TEXTFIELD_TEXT3].OutputAptData();
     }
 
     // @ 0x82430888 -------------------------------------------------------------------
@@ -362,9 +358,7 @@ namespace BrnGui
 
         // Rows 2 and 3 are blanked; row 1 carries the rival's NAME (see below).
         maTextfields[E_TEXTFIELD_TEXT2].ClearText();
-        maTextfields[E_TEXTFIELD_TEXT2].OutputAptData();
         maTextfields[E_TEXTFIELD_TEXT3].ClearText();
-        maTextfields[E_TEXTFIELD_TEXT3].OutputAptData();
 
         // Only re-adopt the name when it actually changed (LobbyNameCmp answers 0 on a match,
         // and the console SKIPS the whole tail then -- @0x82430D18/@0x82430D20).

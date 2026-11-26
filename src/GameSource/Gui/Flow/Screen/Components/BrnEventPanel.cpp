@@ -293,9 +293,7 @@ namespace BrnGui
             maTextfields[E_TEXTFIELD_GOAL_TEXT].SetLocalisedText(lacScratch, LM::E_FORMAT_ID_LOOKUP);
 
             maTextfields[E_TEXTFIELD_ADDITIONAL_TITLE].ClearText();
-            maTextfields[E_TEXTFIELD_ADDITIONAL_TITLE].OutputAptData();
             maTextfields[E_TEXTFIELD_ADDITIONAL_BODY].ClearText();
-            maTextfields[E_TEXTFIELD_ADDITIONAL_BODY].OutputAptData();
             break;
         }
 
@@ -320,9 +318,7 @@ namespace BrnGui
                 KAC_VALUE_TD_COUNT, LM::E_FORMAT_ID_LOOKUP, 1, lacScratch, LM::E_FORMAT_INTEGER);
 
             maTextfields[E_TEXTFIELD_ADDITIONAL_TITLE].ClearText();
-            maTextfields[E_TEXTFIELD_ADDITIONAL_TITLE].OutputAptData();
             maTextfields[E_TEXTFIELD_ADDITIONAL_BODY].ClearText();
-            maTextfields[E_TEXTFIELD_ADDITIONAL_BODY].OutputAptData();
             break;
         }
 
@@ -345,9 +341,7 @@ namespace BrnGui
                 KAC_VALUE_SCORE, LM::E_FORMAT_ID_LOOKUP, 1, lacScratch, LM::E_FORMAT_INTEGER);
 
             maTextfields[E_TEXTFIELD_ADDITIONAL_TITLE].ClearText();
-            maTextfields[E_TEXTFIELD_ADDITIONAL_TITLE].OutputAptData();
             maTextfields[E_TEXTFIELD_ADDITIONAL_BODY].ClearText();
-            maTextfields[E_TEXTFIELD_ADDITIONAL_BODY].OutputAptData();
             break;
         }
 

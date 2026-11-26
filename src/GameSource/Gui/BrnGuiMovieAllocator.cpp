@@ -55,9 +55,13 @@ namespace BrnGui
     // region, including movie texture storage, belongs to the enclosing arena.
     void MovieAllocator::DoFree(const rw::Resource& lrResource)
     {
-        CGS_ASSERT(lrResource.m_baseResources[2] == 0,
-                   "lResource.GetPhysicalMemoryResource() == 0");
-        CGS_ASSERT(lrResource.m_baseResources[0] != 0, "lResource.GetMemoryResource()");
+        // ARTIST's asserts name BrnGuiMovieManager.cpp:1129/1134 (DoFree's original home) and
+        // compare signed (cmpwi): the original read rw::Resource's inline
+        // GetPhysicalMemoryResource()/GetMemoryResource(), which the tree's rw::Resource lacks.
+        CGS_ASSERT_AT(lrResource.m_baseResources[2] == 0, "lResource.GetPhysicalMemoryResource() == 0",
+                      "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 1129);
+        CGS_ASSERT_AT(lrResource.m_baseResources[0] != 0, "lResource.GetMemoryResource()",
+                      "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 1134);
         mMainAllocator.Free(lrResource.m_baseResources[0]);
     }
 

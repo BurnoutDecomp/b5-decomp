@@ -150,7 +150,11 @@ void RoadRuleShotComponent::SetupComponent(EPlayerState lePlayerState,
 void RoadRuleShotComponent::Show(bool lbPose)
 {
     CGS_ASSERT_AT(0 != mpcComponentState, "NULL != mpcComponentState", CGS_ARTIST_FILE, 255);   // :255 (non-gating)
-    mAnimationMovieClip.GotoAndPlayLabel(lbPose ? "pose" : "transin");
+    // One call per arm (tail-merged: &mAnimationMovieClip formed once @0x824155E4).
+    if (lbPose)
+        mAnimationMovieClip.GotoAndPlayLabel("pose");
+    else
+        mAnimationMovieClip.GotoAndPlayLabel("transin");
 }
 
 // @ 0x82415620 -- cpp:295. Jump the anim clip to "showing"/"snap", then -- when

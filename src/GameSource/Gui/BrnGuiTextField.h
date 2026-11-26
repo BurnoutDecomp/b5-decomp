@@ -177,11 +177,12 @@ namespace BrnGui
         // OnlinePreEventMessages::HandleLoadNotification @0x8241A490).
         void RefreshText() { SetText(GetText()); }
 
-        // ADDITIVE GROW (ReplayHudMessageComponent::HideMessage @0x8241C078): blank the
-        // field's displayed text. The X360 caller writes macText[0] = 0 inline (the
-        // stb 0,0xA4(field) store) before re-outputting; exposed by name so that caller
-        // stays off the raw offset. Faithful 1-store accessor (macText is private).
-        void ClearText() { macText[0] = 0; }
+        // DWARF BrnTextField.h:230: blank the field and output it. ARTIST inlines it as
+        // `stb 0,0xA4(field)` relative to the field pointer followed by bl OutputAptData at
+        // every caller (CrashNavPanel::ShowBlank @0x8243A84C, ReplayHudMessageComponent::
+        // HideMessage, RivalMapPanel::SetRivalData, ...); DecFIGS ShowBlank calls only
+        // ClearText twice.
+        void ClearText() { macText[0] = 0; OutputAptData(); }
 
         // ADDITIVE GROW (BrnGui::TextSelection::Construct @0x824E8128): raise the field's
         // autosize flag. DWARF names the helper SetAutoSize (BrnTextField.h); the X360

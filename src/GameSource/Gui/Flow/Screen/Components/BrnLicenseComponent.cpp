@@ -575,11 +575,8 @@ namespace BrnGui
         {
             // The console blanks each field's macText in place then re-pushes the apt data.
             mCompletionMonthField.ClearText();
-            mCompletionMonthField.OutputAptData();
             mCompletionDateField.ClearText();
-            mCompletionDateField.OutputAptData();
             mCompletionYearField.ClearText();
-            mCompletionYearField.OutputAptData();
         }
 
         if (mbShowPoints)
@@ -616,7 +613,6 @@ namespace BrnGui
         else
         {
             mNextRankTextField.ClearText();
-            mNextRankTextField.OutputAptData();
         }
 
         if (mbFinishedGame)
@@ -816,8 +812,15 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::ShowScore()
     {
-        if (!mbShowPoints && mbVisible)
-            SetState(mbForceCentred ? "upgradedAddWins" : "addWin");
+        // `mbVisible == true` (cmplwi 1 @0x8241AAFC); one SetState per arm, "addWin" first (the
+        // calls tail-merge: no `mr r3` before the shared bl @0x8241AB24).
+        if (!mbShowPoints && mbVisible == true)
+        {
+            if (!mbForceCentred)
+                SetState("addWin");
+            else
+                SetState("upgradedAddWins");
+        }
 
         mbShowPoints = true;
     }

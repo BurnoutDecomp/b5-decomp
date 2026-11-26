@@ -199,14 +199,14 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 222);
 
-        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        // The loaded arm returns inside the if (ARTIST branches to a shared `return false` tail).
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
-            return false;
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_PRE_EVENT_MOVIE_RESOURCE],
+                                           KI_APT_MOVIE_LEVEL);
+            return true;
         }
-
-        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_PRE_EVENT_MOVIE_RESOURCE],
-                                       KI_APT_MOVIE_LEVEL);
-        return true;
+        return false;
     }
 
     // ================================================================================

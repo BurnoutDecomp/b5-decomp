@@ -83,10 +83,18 @@ const char* const gaSatNavStateLabels[MapIconBrnBase::E_ICONSTATE_COUNT] =
 // @ 0x82448310
 void CrashNavMapIcon::SetIconText(const char* lpcText, bool lbAlreadyLocalised)
 {
-    if (lpcText != 0 && lbAlreadyLocalised)
-        mIconText.SetLocalisedText(lpcText, CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+    // Nested tests: three tail calls on the field (ARTIST forms &mIconText once, @0x82448314).
+    if (lpcText != 0)
+    {
+        if (lbAlreadyLocalised)
+            mIconText.SetLocalisedText(lpcText, CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+        else
+            mIconText.SetText(lpcText);
+    }
     else
-        mIconText.SetText(lpcText != 0 ? lpcText : "");
+    {
+        mIconText.SetText("");
+    }
 }
 
 // @ 0x8244BA18

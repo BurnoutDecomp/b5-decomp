@@ -40,21 +40,24 @@ void ImageGallerySelectable::Construct(const char* lpacName,
 // mirrors highlighted / highlightable / hidden.
 void ImageGallerySelectable::Update()
 {
-    if (!IsDirty())
-        return;
-    ClearFlag(E_FLAG_DIRTY);
+    // The flag tests compare with true (rlwinm + cmplwi <flag> @0x82419918/30/60), unlike the
+    // other selectables' plain GetFlag tests.
+    if (IsDirty() == true)
+    {
+        ClearFlag(E_FLAG_DIRTY);
 
-    if (IsHighlighted())
-    {
-        AddOutputAptViewState("apt_state", "selected", false);
-    }
-    else if (IsHighlightable())
-    {
-        AddOutputAptViewState("apt_state", "unselected", false);
-    }
-    else
-    {
-        AddOutputAptViewState("apt_state", "invisible", false);
+        if (IsHighlighted() == true)
+        {
+            AddOutputAptViewState("apt_state", "selected", false);
+        }
+        else if (IsHighlightable() == true)
+        {
+            AddOutputAptViewState("apt_state", "unselected", false);
+        }
+        else
+        {
+            AddOutputAptViewState("apt_state", "invisible", false);
+        }
     }
 }
 

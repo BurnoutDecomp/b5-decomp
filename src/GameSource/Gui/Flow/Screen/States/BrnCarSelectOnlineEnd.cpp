@@ -207,17 +207,17 @@ namespace BrnGui
     {
         CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 195);
 
-        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        // The loaded arm returns inside the if (ARTIST branches to a shared `return false` tail).
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
-            return false;
+            mpStateInterface->PlayAptMovie(
+                gGuiResourceIdentifier[KU_CAR_SELECT_ONLINE_END_MOVIE_RESOURCE], KI_APT_MOVIE_LEVEL);
+
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mHostChoosingAnimator.GetName());
+            return true;
         }
-
-        mpStateInterface->PlayAptMovie(
-            gGuiResourceIdentifier[KU_CAR_SELECT_ONLINE_END_MOVIE_RESOURCE], KI_APT_MOVIE_LEVEL);
-
-        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mHostChoosingAnimator.GetName());
-        return true;
+        return false;
     }
 
     // ================================================================================

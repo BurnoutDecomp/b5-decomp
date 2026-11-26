@@ -548,9 +548,7 @@ namespace BrnGui
         ChangeVisiblePanelState(E_PANEL_GENERIC, RivalMapPanel::E_RIVAL_TYPE_COUNT);
 
         mGenericPanelText1.ClearText();       // stb 0 -> +0x5110 (TextField::macText[0])
-        mGenericPanelText1.OutputAptData();
         mGenericPanelText2.ClearText();       // stb 0 -> +0x5238
-        mGenericPanelText2.OutputAptData();
     }
 
     // @ 0x8243A878

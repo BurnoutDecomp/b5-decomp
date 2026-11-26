@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (PlayAptMovie / GetAccessPointers)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // VariableEventQueue<18432,16> (the in-queue view)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
 
 // BrnGui::ReplayLoading -- reconstructed from BURNOUT_X360_ARTIST.XEX. A twin of the
 // committed BrnGui::Credits / BrnGui::ScreenLoading loading-screen states.
@@ -17,21 +18,19 @@ namespace
     // the same view Credits / BootLegal cast mpInGuiEventQueue to.
     typedef CgsModule::VariableEventQueue<18432, 16> ReplayInQueue;
 
-    // The "ReplaysLoading" apt movie the loaded screen binds; level 3 (the loading-screen
-    // idiom shared with Credits' "Credits" @ level 3).
-    const char* KPC_REPLAYS_LOADING_MOVIE = "ReplaysLoading";
-    const s32   KI_REPLAYS_LOADING_LEVEL  = 3;
+    // gGuiResourceIdentifier[161] == "ReplaysLoading" (table @0x82F278E0, ARTIST loads
+    // entry +0x284 @0x824D4A74), played on level 3.
+    const u32 KU_REPLAYS_LOADING_RESOURCE = 161;
+    const s32 KI_REPLAYS_LOADING_LEVEL    = 3;
 
 }
 
 // ---- statics -----------------------------------------------------------------
-// X360 .rdata @0x82066A20 (the screen's single static resource) + @0x82066A28 (count == 1).
-// FLAG: the tuple's id/type words were not decoded in this packet (only the +0x82066A20
-// base and the count of 1 are attested); the element is defined as a placeholder so the
-// state links, and adopted with the real XEX-recovered { muId, meType } when decoded.
+// X360 .rdata @0x82066A20 { 0xA1, 4 } (the screen's single static resource) + @0x82066A28
+// (count == 1).
 const CgsGui::sResourceTuple ReplayLoading::maResourcesToLoad[] =
 {
-    { 0u, static_cast<CgsGui::ResourceRequestTypes>(0) },   // @0x82066A20 (values not yet decoded)
+    { KU_REPLAYS_LOADING_RESOURCE, CgsGui::E_GUI_RESOURCETYPE_APT },   // @0x82066A20
 };
 const u32 ReplayLoading::muNumResourcesToLoad = 1;   // @0x82066A28
 
@@ -60,13 +59,15 @@ bool ReplayLoading::UpdateLoadResources()
     CGS_ASSERT_AT(mpGuiCache != NULL, "mpGuiCache", CGS_ARTIST_FILE, 173);
 
     // Stream the screen's single static resource; keep waiting until it is fully loaded.
-    if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
-        return false;
-
-    // Loaded: bind the "ReplaysLoading" apt movie (the inlined PlayAptMovie -- the
-    // { 8, 18, 12, name, level } channel-41 record, size 20) and report ready.
-    mpStateInterface->PlayAptMovie(KPC_REPLAYS_LOADING_MOVIE, KI_REPLAYS_LOADING_LEVEL);
-    return true;
+    // The loaded arm returns inside the if (ARTIST branches to a shared `return false` tail).
+    if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad) == true)   // cmplwi 1 @0x824D4A50
+    {
+        // Loaded: bind the "ReplaysLoading" apt movie (the inlined PlayAptMovie -- the
+        // { 8, 18, 12, name, level } channel-41 record, size 20) and report ready.
+        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_REPLAYS_LOADING_RESOURCE], KI_REPLAYS_LOADING_LEVEL);
+        return true;
+    }
+    return false;
 }
 
 // ------------------------------------------------ Update @ 0x824DB5B0

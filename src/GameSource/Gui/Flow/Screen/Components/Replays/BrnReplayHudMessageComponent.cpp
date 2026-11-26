@@ -77,11 +77,8 @@ void ReplayHudMessageComponent::HideMessage()
     AddOutputAptViewState("apt_state", "invisible", false);
 
     maTextFields[0].ClearText();
-    maTextFields[0].OutputAptData();
     maTextFields[1].ClearText();
-    maTextFields[1].OutputAptData();
     maTextFields[2].ClearText();
-    maTextFields[2].OutputAptData();
 }
 
 // @ 0x82427AA0 -- per-frame poll. Walk interface -> access-pointers -> serialiser ->

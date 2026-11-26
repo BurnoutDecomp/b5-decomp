@@ -229,14 +229,14 @@ namespace BrnGui
     {
         CGS_ASSERT(mbKeyboardClosed, CGS_ASSERT_MESSAGE_AT("mbKeyboardClosed", CGS_ARTIST_FILE, 1202 /* ARTIST 0x824B7A60 */));   // cpp:1202
 
-        const bool lbHadNewData = (mbNewData == 1);         // `lbz r10, 0x19` read BEFORE the clear
         mbKeyboardClosed = false;                           // `stb r11(0), 0x18`
 
-        if (!lbHadNewData)
+        // `== true` (cmplwi 1 @0x824B7A74); the buffer is the result unless no new data.
+        if (mbNewData == true)
         {
-            return 0;
+            return macKeyboardString;                       // `addi r3, r31, 4`
         }
-        return macKeyboardString;                           // `addi r3, r31, 4`
+        return 0;
     }
 
     // ---- OnEnter @0x824B7640 -------------------------------------------------------
