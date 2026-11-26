@@ -88,6 +88,8 @@ namespace CgsNetwork
         void Resume();
 
     private:
+        // DWARF CgsServerInterfacePingRegions.h:199; ARTIST inlines it (no out-of-line copy).
+        EServerInterfaceError ConvertError(s32 liError, EAction leAction);
         void EndAction(s32 liError);
         bool ResolveRegion(s32 liRegion);
         void HandlePingResults(s32 liPing);

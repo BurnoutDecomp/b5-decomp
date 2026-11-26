@@ -217,17 +217,23 @@ namespace CgsNetwork
 
     void ServerInterfacePingRegions::StopPingRegions()
     {
-        if (meState == E_STATE_PINGING || meState == E_STATE_RESOLVING)
+        // Each state releases the host address itself; the compiler merges the two tails
+        // (ARTIST 0x8287CAE0 branches the pinging path into the resolving one at 0x8287CAEC).
+        if (meState == E_STATE_PINGING)
         {
-            if (meState == E_STATE_PINGING)
+            CGS_ASSERT(miPingRequest > -1, CGS_ASSERT_MESSAGE_AT(
+                "miPingRequest > -1",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePingRegions.cpp", 476 /* ARTIST 0x8287CAC4 */));
+            PingManagerCancelServerRequest(mpPingManagerRefT, static_cast<u32>(miPingRequest));
+            miPingRequest = -1;
+            if (mpHostAddress != 0)
             {
-                CGS_ASSERT(miPingRequest > -1, CGS_ASSERT_MESSAGE_AT(
-                    "miPingRequest > -1",
-                    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePingRegions.cpp", 476 /* ARTIST 0x8287CAC4 */));
-                PingManagerCancelServerRequest(mpPingManagerRefT, static_cast<u32>(miPingRequest));
-                miPingRequest = -1;
+                mpHostAddress->Free(mpHostAddress);
+                mpHostAddress = 0;
             }
-
+        }
+        else if (meState == E_STATE_RESOLVING)
+        {
             if (mpHostAddress != 0)
             {
                 mpHostAddress->Free(mpHostAddress);
@@ -242,13 +248,18 @@ namespace CgsNetwork
         }
     }
 
+    EServerInterfaceError ServerInterfacePingRegions::ConvertError(s32 liError, EAction leAction)
+    {
+        return ServerInterfaceComponent::ConvertError(liError, KA_DS_ERROR_TABLE_LOOKUP[leAction].mpMappingTable,
+                                                      KA_DS_ERROR_TABLE_LOOKUP[leAction].miNumMappings);
+    }
+
     void ServerInterfacePingRegions::EndAction(s32 liError)
     {
-        CGS_ASSERT(meCurrentAction != E_ACTION_COUNT, "Trying to end an action when not doing anything\n");
+        CGS_ASSERT_AT(meCurrentAction != E_ACTION_COUNT, "Trying to end an action when not doing anything\n",
+                      __FILE__, 422 /* ARTIST 0x8287CA10 */);
 
-        const DSErrorToServerInterfaceErrorTable& lrTable = KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-        ServerInterfaceComponent::EndActionCore(
-            ConvertError(liError, lrTable.mpMappingTable, lrTable.miNumMappings));
+        ServerInterfaceComponent::EndActionCore(ConvertError(liError, meCurrentAction));
         meCurrentAction = E_ACTION_COUNT;
     }
 

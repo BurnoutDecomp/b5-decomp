@@ -58,7 +58,8 @@ ServerInterfaceConnection::~ServerInterfaceConnection()
 namespace
 {
     // The per-action display names handed to StartActionCore.
-    const char* const KAPC_CONNECTION_ACTION_NAMES[ServerInterfaceConnection::E_ACTION_COUNT] =
+    // Non-const pointers: ARTIST loads each name from .data (AgreeShareInfo 0x82876F00, table 0x82F334C4).
+    const char* KAPC_CONNECTION_ACTION_NAMES[ServerInterfaceConnection::E_ACTION_COUNT] =
     {
         "Connect To Server",
         "Issue select",
@@ -186,9 +187,9 @@ void ServerInterfaceConnection::Update()
     {
         const LobbyLoginAlertT* lpAlert = LobbyLoginAlert(
             reinterpret_cast<LobbyLoginRefT*>(mpServerInterface->GetLobbyLoginRef()), liContext);
-        const s32 liAlertEnum = LobbyLoginGetAlertEnum(
+        const LobbyLoginAlertE leAlertEnum = LobbyLoginGetAlertEnum(
             reinterpret_cast<LobbyLoginRefT*>(mpServerInterface->GetLobbyLoginRef()), lpAlert);
-        EndActionCore(ConvertError(liAlertEnum, meCurrentAction));
+        EndActionCore(ConvertError(leAlertEnum, meCurrentAction));
     }
 }
 
@@ -227,12 +228,10 @@ void ServerInterfaceConnection::OnEvent(EServerInterfaceEvent leEvent, void* /*l
 
 bool ServerInterfaceConnection::IsLoggedIn() const
 {
-    if (LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), 0x6C6F676E /* 'logn' */, 0, 0) != 1)
-    {
-        return false;
-    }
-    return LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), 0x73746174 /* 'stat' */, 0, 0)
-           != 0x6F66666C /* 'offl' */;
+    // One && expression (ARTIST 0x82877008..0x82877014 builds a single bool).
+    return LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), 0x6C6F676E /* 'logn' */, 0, 0) == 1
+        && LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), 0x73746174 /* 'stat' */, 0, 0)
+               != 0x6F66666C /* 'offl' */;
 }
 
 bool ServerInterfaceConnection::IsFirstLogin() const
@@ -299,11 +298,14 @@ void ServerInterfaceConnection::LogInToServer(const char* lpcUserName, const cha
 
 void ServerInterfaceConnection::AgreeTOS(bool lbAgree)
 {
+    // The answer is converted before the context call (ARTIST 0x82876C68..0x82876C78), as
+    // AgreeShareInfo builds its flag string first.
+    const s32 liAgree = lbAgree ? 1 : 0;
     const s32 liContext =
         LobbyLoginGetContext(reinterpret_cast<LobbyLoginRefT*>(mpServerInterface->GetLobbyLoginRef()));
 
     mpServerInterface->GetMessageBuffer()[0] = 0;
-    TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_SIZE, "TOS", lbAgree ? 1 : 0);
+    TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_SIZE, "TOS", liAgree);
     LobbyLoginSubmitCB(reinterpret_cast<LobbyLoginRefT*>(mpServerInterface->GetLobbyLoginRef()), liContext,
                        mpServerInterface->GetMessageBuffer(),
                        &ServerInterfaceConnection::ServerLoginCallback, this);
@@ -336,29 +338,43 @@ void ServerInterfaceConnection::AgreeShareInfo(bool lbAgreeShare1, bool lbAgreeS
 
 void ServerInterfaceConnection::EndAction(s32 liError)
 {
-    const DSErrorToServerInterfaceErrorTable& lrEntry = KA_CONNECTION_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-    CGS_ASSERT(lrEntry.mpMappingTable, CGS_ASSERT_MESSAGE_AT(
-        "lpMappingTable",
-        __FILE__, 421 /* ARTIST 0x82876B90 */));
-    ServerInterfaceComponent::EndActionCore(
-        ServerInterfaceComponent::ConvertError(liError, lrEntry.mpMappingTable, lrEntry.miNumMappings));
+    ServerInterfaceComponent::EndActionCore(ConvertError(liError, meCurrentAction));
     meCurrentAction = E_ACTION_COUNT;
 }
 
-EServerInterfaceError ServerInterfaceConnection::ConvertError(s32 liLoginAlert, EAction /*leAction*/)
+// The DirtySock-error overload (DWARF cpp:413), inlined into EndAction: both table words are read
+// before the table assert (ARTIST 0x82876B68 / 0x82876B6C), whose message names the local.
+EServerInterfaceError ServerInterfaceConnection::ConvertError(s32 liError, EAction leAction)
 {
+    const DSErrorToServerInterfaceError* lpMappingTable = KA_CONNECTION_DS_ERROR_TABLE_LOOKUP[leAction].mpMappingTable;
+    const s32 liNumMappings = KA_CONNECTION_DS_ERROR_TABLE_LOOKUP[leAction].miNumMappings;
+    CGS_ASSERT(lpMappingTable, CGS_ASSERT_MESSAGE_AT(
+        "lpMappingTable",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceConnection.cpp", 421 /* ARTIST 0x82876B80 */));
+    return ServerInterfaceComponent::ConvertError(liError, lpMappingTable, liNumMappings);
+}
+
+// Out of line in ARTIST (0x82876AE8, an unnamed export hole). The unhandled result is set first
+// (ARTIST `li r3,1` at entry, kept on the not-found path).
+EServerInterfaceError ServerInterfaceConnection::ConvertError(LobbyLoginAlertE liLoginAlert, EAction /*leAction*/)
+{
+    EServerInterfaceError leError = E_SERVER_INTERFACE_ERROR_UNHANDLED;
     if (liLoginAlert == 0)
     {
-        return E_SERVER_INTERFACE_ERROR_NONE;
+        leError = E_SERVER_INTERFACE_ERROR_NONE;
     }
-    for (s32 liIndex = 0; liIndex < 16; ++liIndex)
+    else
     {
-        if (KA_LOGIN_ALERT_ERROR_MAPPINGS[liIndex].miDSCode == liLoginAlert)
+        for (s32 liIndex = 0; liIndex < 16; ++liIndex)
         {
-            return KA_LOGIN_ALERT_ERROR_MAPPINGS[liIndex].meError;
+            if (KA_LOGIN_ALERT_ERROR_MAPPINGS[liIndex].miDSCode == liLoginAlert)
+            {
+                leError = KA_LOGIN_ALERT_ERROR_MAPPINGS[liIndex].meError;
+                break;
+            }
         }
     }
-    return E_SERVER_INTERFACE_ERROR_UNHANDLED;
+    return leError;
 }
 
 void ServerInterfaceConnection::ServerConnectCallback(LobbyLoginRefT* /*lpLoginRef*/, LobbyLoginContextE leContext,
@@ -381,9 +397,9 @@ void ServerInterfaceConnection::ServerConnectCallback(LobbyLoginRefT* /*lpLoginR
         const LobbyLoginAlertT* lpAlert =
             LobbyLoginAlert(reinterpret_cast<LobbyLoginRefT*>(lpConnection->mpServerInterface->GetLobbyLoginRef()),
                             leContext);
-        const s32 liAlertEnum =
+        const LobbyLoginAlertE leAlertEnum =
             LobbyLoginGetAlertEnum(reinterpret_cast<LobbyLoginRefT*>(lpConnection->mpServerInterface->GetLobbyLoginRef()), lpAlert);
-        lpConnection->EndActionCore(lpConnection->ConvertError(liAlertEnum, lpConnection->meCurrentAction));
+        lpConnection->EndActionCore(lpConnection->ConvertError(leAlertEnum, lpConnection->meCurrentAction));
     }
     lpConnection->meCurrentAction = E_ACTION_COUNT;
 }
@@ -393,19 +409,25 @@ void ServerInterfaceConnection::ServerLoginCallback(LobbyLoginRefT* lpLoginRef, 
 {
     ServerInterfaceConnection* lpConnection = static_cast<ServerInterfaceConnection*>(lpUserData);
 
-    if (leStatus == LOBBYLOGIN_STATUS_ALERT)
+    // A switch: ARTIST 0x82876BDC tests ALERT then GOTO and lays the GOTO arm out first.
+    switch (leStatus)
+    {
+    case LOBBYLOGIN_STATUS_GOTO:
+        LobbyLoginGetContext(lpLoginRef);
+        lpConnection->EndActionCore(0);
+        break;
+    case LOBBYLOGIN_STATUS_ALERT:
     {
         const LobbyLoginAlertT* lpAlert =
             LobbyLoginAlert(reinterpret_cast<LobbyLoginRefT*>(lpConnection->mpServerInterface->GetLobbyLoginRef()),
                             leContext);
-        const s32 liAlertEnum =
+        const LobbyLoginAlertE leAlertEnum =
             LobbyLoginGetAlertEnum(reinterpret_cast<LobbyLoginRefT*>(lpConnection->mpServerInterface->GetLobbyLoginRef()), lpAlert);
-        lpConnection->EndActionCore(lpConnection->ConvertError(liAlertEnum, lpConnection->meCurrentAction));
+        lpConnection->EndActionCore(lpConnection->ConvertError(leAlertEnum, lpConnection->meCurrentAction));
+        break;
     }
-    else if (leStatus == LOBBYLOGIN_STATUS_GOTO)
-    {
-        LobbyLoginGetContext(lpLoginRef);
-        lpConnection->EndActionCore(0);
+    default:
+        break;
     }
 }
 

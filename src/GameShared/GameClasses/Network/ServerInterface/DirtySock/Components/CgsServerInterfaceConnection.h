@@ -132,9 +132,10 @@ namespace CgsNetwork
 
     private:
         void EndAction(s32 liError);
-        // Maps a lobby-login alert (the DirtySDK login-alert enum, not modelled yet, so an
-        // s32 here) for the current action onto an EServerInterfaceError.
-        EServerInterfaceError ConvertError(s32 liLoginAlert, EAction leAction);
+        // DWARF CgsServerInterfaceConnection.cpp:376 / :413: one overload maps a lobby-login alert,
+        // the other a DirtySock error through the action's table (inlined into EndAction).
+        EServerInterfaceError ConvertError(LobbyLoginAlertE leLoginAlert, EAction leAction);
+        EServerInterfaceError ConvertError(s32 liError, EAction leAction);
 
         // DirtySDK callbacks registered by address (user data = the component).
         static void ServerConnectCallback(LobbyLoginRefT* lpLoginRef, LobbyLoginContextE leContext,

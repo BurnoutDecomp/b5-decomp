@@ -631,11 +631,11 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::SearchForGames(ServerInterfaceGameSearchParamsBase* lpSearchParams)
     {
-        DirtySockDebugLog("DirtySock: SearchForGames \n");
-        CGS_ASSERT(mpFoundGames != 0, "mpFoundGames");
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "DirtySock: SearchForGames \n";
+        CGS_ASSERT_AT(mpFoundGames != 0, "mpFoundGames", CGS_ARTIST_SERVER_GAMES_FILE, 1176 /* ARTIST 0x82886FEC */);
 
+        // GetMessageBuffer asserts itself (h:719); no second check here.
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
 
         LobbyApiListFlush(mpServerInterface->GetLobbyAPIRef(), KI_LIST_FOUND_GAMES);
         DispListClear(mpFoundGames);
@@ -660,10 +660,10 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::UpdateGameParameters(ServerInterfaceGameParamsBase* lpGameParams)
     {
-        CGS_ASSERT(IsLocalPlayerHost(), "IsLocalPlayerHost()");
+        CGS_ASSERT_AT(IsLocalPlayerHost(), "IsLocalPlayerHost()", CGS_ARTIST_SERVER_GAMES_FILE, 1705 /* ARTIST 0x828874F0 */);
 
+        // GetMessageBuffer asserts itself (h:719); no second check here.
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
 
         lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
         StartAction(E_ACTION_UPDATE_GAME_PARAMS, &DefaultCallback);
@@ -671,11 +671,11 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::LockGame()
     {
-        CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
-        CGS_ASSERT(IsLocalPlayerHost(), "IsLocalPlayerHost()");
+        CGS_ASSERT_AT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()", CGS_ARTIST_SERVER_GAMES_FILE, 1952 /* ARTIST 0x82887EF0 */);
+        CGS_ASSERT_AT(IsLocalPlayerHost(), "IsLocalPlayerHost()", CGS_ARTIST_SERVER_GAMES_FILE, 1953 /* ARTIST 0x82887F20 */);
 
+        // GetMessageBuffer asserts itself (h:719); no second check here.
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
 
         lpcBuffer[0] = 0;
         TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SYSFLAGS",
@@ -685,11 +685,11 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::UnlockGame()
     {
-        CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
-        CGS_ASSERT(IsLocalPlayerHost(), "IsLocalPlayerHost()");
+        CGS_ASSERT_AT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()", CGS_ARTIST_SERVER_GAMES_FILE, 1924 /* ARTIST 0x82887DF0 */);
+        CGS_ASSERT_AT(IsLocalPlayerHost(), "IsLocalPlayerHost()", CGS_ARTIST_SERVER_GAMES_FILE, 1925 /* ARTIST 0x82887E20 */);
 
+        // GetMessageBuffer asserts itself (h:719); no second check here.
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
 
         lpcBuffer[0] = 0;
         TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SYSFLAGS",
@@ -1299,6 +1299,9 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::LeaveGame(bool lbSet, bool lbForce)
     {
+        // ARTIST 0x8289153C..0x82891564 logs through the network stream first.
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "DirtySock: LeaveGame \n";
+
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
         lpcBuffer[0] = 0;
         TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SET", lbSet ? "1" : "0");

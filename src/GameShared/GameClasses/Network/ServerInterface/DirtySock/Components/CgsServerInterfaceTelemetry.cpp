@@ -309,9 +309,14 @@ namespace CgsNetwork
         TelemetryApiControl(mpTelemetryNormalUsage, KI_TELEMETRY_CONTROL_HALT, 0, 0);
     }
 
+    EServerInterfaceError ServerInterfaceTelemetry::ConvertError(s32 liError)
+    {
+        return ServerInterfaceComponent::ConvertError(liError, KA_TELEMETRY_SERVER_INTERFACE_ERROR_MAPPING, 5);
+    }
+
     EServerInterfaceError ServerInterfaceTelemetry::AuthAndConnect()
     {
-        CGS_ASSERT(mpServerInterface != 0, "NULL != mpServerInterface");
+        CGS_ASSERT_AT(mpServerInterface != 0, "NULL != mpServerInterface", __FILE__, 900 /* ARTIST 0x8287B764 */);
 
         char* lpcAuthString = mpServerInterface->GetMessageBuffer();
         lpcAuthString[0] = 0;
@@ -325,8 +330,7 @@ namespace CgsNetwork
             return E_SERVER_INTERFACE_TELEMETRY_ERROR_NO_AUTH_STRING;
         }
 
-        EServerInterfaceError leError = ConvertError(TelemetryApiAuthent(mpTelemetryNormalUsage, lpcAuthString),
-                                                     KA_TELEMETRY_SERVER_INTERFACE_ERROR_MAPPING, 5);
+        EServerInterfaceError leError = ConvertError(TelemetryApiAuthent(mpTelemetryNormalUsage, lpcAuthString));
         if (leError != E_SERVER_INTERFACE_ERROR_NONE)
         {
             return leError;
@@ -338,8 +342,7 @@ namespace CgsNetwork
 
         if (mpTelemetryFirstUsage != 0)
         {
-            leError = ConvertError(TelemetryApiAuthent(mpTelemetryFirstUsage, lpcAuthString),
-                                   KA_TELEMETRY_SERVER_INTERFACE_ERROR_MAPPING, 5);
+            leError = ConvertError(TelemetryApiAuthent(mpTelemetryFirstUsage, lpcAuthString));
             if (leError != E_SERVER_INTERFACE_ERROR_NONE)
             {
                 return leError;

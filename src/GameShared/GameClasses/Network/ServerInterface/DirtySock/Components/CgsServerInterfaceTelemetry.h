@@ -85,6 +85,8 @@ namespace CgsNetwork
         void SetEventMappingTable(EventDataKeys* lpaEventIDsToKeysMapping);
 
     private:
+        // DWARF CgsServerInterfaceTelemetry.cpp:797; ARTIST inlines it into AuthAndConnect.
+        EServerInterfaceError ConvertError(s32 liError);
         void AbandonFirstUsageBuffer();
         EServerInterfaceError AuthAndConnect();
         // DirtySDK telemetry buffer callbacks (user data = the component).
