@@ -400,30 +400,27 @@ void AptRenderTreeManager::Update_ItemNextSiblingChanged(AptCIH* pNode)
 // mpRenderItem (lwz 0x20(a2); lwz 4(.)). pNode (a3) supplies the display-list-derived
 // links + the destination char-inst slot.
 // ---------------------------------------------------------------------------
-AptRenderItem* AptRenderTreeManager::Update_CloneItem(AptCIH* pSourceCIH, AptCIH* pNode, int nTick)
+void AptRenderTreeManager::Update_CloneItem(AptCIH* pSourceCIH, AptCIH* pNode, int nTick)
 {
     AptRenderItem* lpClone =
         pSourceCIH->mpCharacterInst->mpRenderItem->Manager_CloneNewItem(nTick);   // r30
 
-    AptRenderItem* lpResult = 0;
-
     AptCIH* lpFirstChild = pNode->GetFirstChild();
     if (lpFirstChild)
-        lpResult = lpClone->Manager_SetFirstChild(lpFirstChild->mpCharacterInst->mpRenderItem);
+        lpClone->Manager_SetFirstChild(lpFirstChild->mpCharacterInst->mpRenderItem);
 
     AptCIH* lpPrev = pNode->mpDisplayListPrevious;   // *(node+0x14)
     if (lpPrev)
     {
         AptRenderItem* lpPrevWritable = lpPrev->mpCharacterInst->GetRenderItemWritable();
-        lpResult = lpPrevWritable->Manager_SetNextSibling(lpClone);
+        lpPrevWritable->Manager_SetNextSibling(lpClone);
     }
 
     AptCIH* lpNext = pNode->mpDisplayListNext;        // *(node+0x18)
     if (lpNext)
-        lpResult = lpClone->Manager_SetNextSibling(lpNext->mpCharacterInst->mpRenderItem);
+        lpClone->Manager_SetNextSibling(lpNext->mpCharacterInst->mpRenderItem);
 
     pNode->mpCharacterInst->mpRenderItem = lpClone;   // *(*(node+0x20)+4) = clone
-    return lpResult;
 }
 
 // ---------------------------------------------------------------------------
@@ -451,11 +448,11 @@ AptRenderItem* AptRenderTreeManager::Update_CloneItem(AptCIH* pSourceCIH, AptCIH
 // normal sibling chain). When there is no live previous neighbour and no parent the
 // node becomes a render root (Update_SetRootItem).
 // ---------------------------------------------------------------------------
-AptRenderItem* AptRenderTreeManager::Update_ItemMoved(AptCIH* pNode, int nTick)
+void AptRenderTreeManager::Update_ItemMoved(AptCIH* pNode, int nTick)
 {
     AptCharacterInst* lpInst = pNode->mpCharacterInst;   // *(node+0x20)
     if (!lpInst)
-        return 0;
+        return;
 
     AptRenderItem* lpWritable = lpInst->GetRenderItemWritable();   // v9 = r30
 
@@ -517,7 +514,7 @@ AptRenderItem* AptRenderTreeManager::Update_ItemMoved(AptCIH* pNode, int nTick)
         if (lpNext)
             lpNextItem = lpNext->mpCharacterInst->mpRenderItem;   // *(*(next+0x20)+4)
     }
-    return lpWritable->Manager_SetNextSibling(lpNextItem);
+    lpWritable->Manager_SetNextSibling(lpNextItem);
 }
 
 // ---------------------------------------------------------------------------

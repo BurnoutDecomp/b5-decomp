@@ -13,7 +13,6 @@ extern "C" f64 __u64tod(u64 value);
 //   EA::Jobs::AtomicStore     @ 0x82BCC6E8
 //   EA::Jobs::SetAllocator    @ 0x82BC9830
 //   EA::Jobs::TicksToSeconds  @ 0x82BC9988
-//   EA::Jobs::ToJobThreadId   @ 0x82915920
 //
 // Vendor EA code reconstructed in its canonical home.
 // ============================================================================
@@ -56,12 +55,6 @@ namespace Jobs
         if (ldSecondsPerTick == 0.0)
             ldSecondsPerTick = 1.0 / __u64tod(static_cast<u64>(0x02F90838u));
         return static_cast<f32>(static_cast<f64>(uTicks) * ldSecondsPerTick);
-    }
-
-    // @ 0x82915920 -- identity pass-through (thread id -> job-thread id).
-    u32 ToJobThreadId(u32 uThreadId)
-    {
-        return uThreadId;
     }
 }
 }

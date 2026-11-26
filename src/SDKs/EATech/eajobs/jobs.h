@@ -14,7 +14,6 @@
 //   AtomicStore(u32* puLocation, u32 uValue)  @ 0x82BCC6E8
 //   SetAllocator(void* pAllocator)            @ 0x82BC9830
 //   TicksToSeconds(u64 uTicks)                @ 0x82BC9988
-//   ToJobThreadId(u32 uThreadId)              @ 0x82915920
 //
 // Vendor EA code reconstructed in its canonical home; members/names follow the EA
 // SDK convention, not the Brn/Cgs project convention.
@@ -51,10 +50,6 @@ namespace Jobs
     // X360 timebase frequency) in dbl_8327F288; subsequent calls reuse it. Returns a
     // single-precision-rounded result (the X360 frsp's f1 before returning).
     f32 TicksToSeconds(u64 uTicks);
-
-    // @ 0x82915920 -- reinterpret a thread id as a job-thread id (identity pass
-    // through; the X360 round-trips r3 through the stack and returns it unchanged).
-    u32 ToJobThreadId(u32 uThreadId);
 }
 }
 

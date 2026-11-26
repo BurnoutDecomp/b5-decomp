@@ -135,13 +135,13 @@ struct AptRenderTreeManager
     // the display list: re-derive its render item's previous-sibling / parent-first-
     // child and next-sibling manager links (skipping mask-flagged neighbours), or --
     // when it has no live previous/parent neighbour -- make it a root item.
-    AptRenderItem* Update_ItemMoved(AptCIH* pNode, int nTick);
+    void Update_ItemMoved(AptCIH* pNode, int nTick);
 
     // Update_CloneItem @0x82AE0B38 -- clone pSourceCIH's render item into a fresh
     // revision for nTick, splice it into pNode's display-list-derived manager links
     // (first-child / previous-sibling / next-sibling), and install it as pNode's
     // character instance's render item.
-    AptRenderItem* Update_CloneItem(AptCIH* pSourceCIH, AptCIH* pNode, int nTick);
+    void Update_CloneItem(AptCIH* pSourceCIH, AptCIH* pNode, int nTick);
 
     // Update_ItemSetMaskState @0x82AE0880 -- a node's mask state changed (becoming a
     // mask, a4==1, vs. ceasing to be one). Re-derive the node's render item's manager

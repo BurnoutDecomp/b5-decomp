@@ -144,7 +144,8 @@ struct AptRenderItem
 
     // SetIsVisible @0x82AE0708 -- set the is-visible flag (x64 bit 0) + recompute the
     // subtree's mask-driven visibility (PropagateTreeIsVisible) when the bit changes.
-    AptRenderItem* SetIsVisible(bool bVisible);
+    void SetIsVisible(bool bVisible);   // void: ARTIST leaves r3 as PropagateTreeIsVisible returned it
+    bool GetIsHiddenByTree() const;
 
     bool GetIsVisible() const;      // @0x7DEE68
     bool GetIsMask() const;         // @0x7DEE20
@@ -155,10 +156,10 @@ struct AptRenderItem
     // SetHasMask @0x82ADB388 -- set the has-mask flag (x64 bit 2) + (un)bind the mask
     // render item (ref-counted; propagates visibility). Returns the previous mask
     // (X360 r3 = this on the no-op path / the released old mask otherwise).
-    AptRenderItem* SetHasMask(bool bHasMask, AptRenderItem* pMask);
+    void SetHasMask(bool bHasMask, AptRenderItem* pMask);
     // SetIsMask @0x82AEBF28 -- set the is-mask flag (x64 bit 1) + the mask matrix.
     // Returns this (X360 r3).
-    AptRenderItem* SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);
+    void SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);
 
     const AptCharacter* GetCharacterConst() const;        // @0x7DEE04
     AptCharacter*       GetCharacterWritable() const;     // @0x7DEE90
@@ -205,14 +206,15 @@ struct AptRenderItem
     AptRenderItem* Manager_CreateNewRevision(int nTick);
     //   Manager_SetFirstChild/NextSibling -- set THIS item's manager first-child /
     //     next-sibling link (writable-revision side).
-    AptRenderItem* Manager_SetFirstChild(AptRenderItem* pChild);
-    AptRenderItem* Manager_SetNextSibling(AptRenderItem* pSibling);
+    void Manager_SetFirstChild(AptRenderItem* pChild);
+    void Manager_SetNextSibling(AptRenderItem* pSibling);
 
     // PropagateTreeIsVisible @0x82ADA8B8 -- recompute the mask-driven "tree visible"
     // state (x64 mFlags bits 5/7) down this item's first-child + next-sibling subtree.
     // nVisibleMode: 0 = becoming hidden, 1 = becoming shown (x64 sub_140841B00: SetIsVisible(true)
     // propagates 1 clearing the 0x60 bits; SetIsVisible(false) propagates 0 setting 0x20). Recursive.
-    AptRenderItem* PropagateTreeIsVisible(int nVisibleMode);
+    void PropagateTreeIsVisible(bool bVisible);   // ARTIST masks r4 to a bool (clrlwi 24, 0x82ADA958)
+    void SetIsHiddenByTree(bool bNewValue);
 
     // True when this item is already the writable revision for nTick (its
     // creation tick matches, or it is flagged the current/highest revision). @0x7DEF54

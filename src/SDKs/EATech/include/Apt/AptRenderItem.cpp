@@ -376,7 +376,7 @@ AptCXForm* AptRenderItem::GetColorMatrixWritable()
 // ---- flags ----------------------------------------------------------------
 bool AptRenderItem::GetIsVisible() const { return (mFlags & 0x80000000u) != 0; }
 bool AptRenderItem::GetIsMask() const    { return (mFlags & 0x40000000u) != 0; }
-bool AptRenderItem::GetHasMask() const   { return (mFlags & 0x20000000u) != 0 && mpMask != 0; }
+bool AptRenderItem::GetHasMask() const   { return static_cast<bool>(mbHasMask) && mpMask != 0; }   // ARTIST 0x82AD4F54 extracts the bit (rlwinm. 3,31,31): the bitfield read as bool
 AptRenderItem* AptRenderItem::GetMask() const { return mpMask; }
 
 // ---- character ------------------------------------------------------------
@@ -419,12 +419,20 @@ AptRenderItem* AptRenderItem::Manager_GetNextRevision() const { return mpManager
 // IsRenderableForThisTick @0x82AD4FC8 -- drawable on nTick: aged in (created on or
 // before nTick) AND the committed (non-writable, mFlags bit 25 clear) revision. The
 // in-progress writable copy and future-tick items are never drawn.
+// ARTIST returns through `li r3,1` / `beqlr` with record-form tests (0x82AD4FCC `subf.`,
+// 0x82AD4FDC `rlwinm.`).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 bool AptRenderItem::IsRenderableForThisTick(int nTick) const
 {
-    if ((nTick - mCreatedOnTick) < 0)
-        return false;
-    return (mFlags & 0x02000000u) == 0;
+    if ((nTick - mCreatedOnTick) >= 0 && !mbIsHiddenByTree)
+        return true;
+    return false;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // Manager_IsDeletionMark @0x7DEEBC -- mFlags bit 28.
 bool AptRenderItem::Manager_IsDeletionMark() const { return (mFlags & 0x10000000u) != 0; }
@@ -437,6 +445,10 @@ void AptRenderItem::Manager_SetNextRevision(AptRenderItem* pNext) { mpManagerNex
 // whole revision link set in the console's store order -- first-child (+0x30),
 // next-sibling (+0x2C), next-revision (+0x28), mask (+0x1C) -- nulling each slot
 // before its ReleaseReference.
+// ARTIST tests with the record forms (0x82ADB148 `clrlwi.`, 0x82ADB158 `cmplwi r3,0`).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptRenderItem::Manager_SetDeletionMark(bool bMark)
 {
     if (bMark)
@@ -466,9 +478,11 @@ void AptRenderItem::Manager_SetDeletionMark(bool bMark)
             pOld->ReleaseReference();
         }
     }
-    // console: v2[6] = (bMark << 28) & 0x10000000 | (v2[6] & 0xEFFFFFFF) -> x64 bit 3.
-    mFlags = (bMark ? 0x10000000u : 0u) | (mFlags & ~0x10000000u);
+    mbIsDeletionMark = bMark;   // rlwimi of the bool itself, 0x82ADB1A8
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ===========================================================================
 // Render-tree double-buffering (DECOMPILED from the X360 ARTIST.XEX -- the full
@@ -487,95 +501,95 @@ void AptRenderItem::Manager_SetDeletionMark(bool bMark)
 //   nVisibleMode 1 = becoming hidden by an enclosing mask, 0 = becoming shown.
 // Recursive (the console recurses through the mask, every first-child's latest
 // revision, and the masks of hasMask children).
-AptRenderItem* AptRenderItem::PropagateTreeIsVisible(int nVisibleMode)
+// SetIsHiddenByTree -- latch the pending hidden-by-tree flag; showing also clears the applied
+// one. ARTIST has no out-of-line copy; PropagateTreeIsVisible inlines it for the mask
+// (0x82ADA8EC..0x82ADA918) and for each masked child (0x82ADAA4C..0x82ADAA74).
+void AptRenderItem::SetIsHiddenByTree(bool bNewValue)
 {
-    AptRenderItem* result = this;
+    mbPendingHiddenByTree = bNewValue ? 1 : 0;
+    if (!bNewValue)
+        mbIsHiddenByTree = 0;
+}
 
-    // ---- the mask sub-item (mpMask, [c:0x1C]) -----------------------------
-    AptRenderItem* pMask = mpMask;                 // [c:0x1C]
-    AptRenderItem* pChild = mpManagerFirstChild;   // [c:0x30]
+// ARTIST tests with the record forms (0x82ADA8F8 `rlwinm.`, 0x82ADA950, 0x82ADA9DC `clrlwi.`) and
+// reads the first child before the mask's recursion (0x82ADA8CC).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+void AptRenderItem::PropagateTreeIsVisible(bool bVisible)
+{
+    AptRenderItem* pMask = mpMask;
+    AptRenderItem* pChild = mpManagerFirstChild;
 
     if (pMask)
     {
-        pMask = LatestRevision(pMask);             // chase [c:0x28] next-revision
-        // bit26 (0x04000000) := (nVisibleMode == 0); clears bit25-adjacent slot.
-        uint32_t v5 = ((nVisibleMode == 0) ? 0x04000000u : 0u) | (pMask->mFlags & ~0x04000000u);
-        pMask->mFlags = v5;
-        if (nVisibleMode)
-            pMask->mFlags = v5 & ~0x02000000u;       // also clear bit25 (0x02000000)
-        result = pMask->PropagateTreeIsVisible(nVisibleMode);
+        while (pMask->mpManagerNextRevision)
+            pMask = pMask->mpManagerNextRevision;
+        pMask->SetIsHiddenByTree(!bVisible);
+        pMask->PropagateTreeIsVisible(bVisible);
     }
 
-    // ---- the first-child + its next-sibling chain (each latest revision) ---
-    if (pChild)
+    while (pChild)
     {
-        for (;;)
+        while (pChild->mpManagerNextRevision)
+            pChild = pChild->mpManagerNextRevision;
+
+        if (pChild->GetIsMask())
         {
-            pChild = LatestRevision(pChild);        // chase [c:0x28]
-            uint32_t v6 = pChild->mFlags;           // [c:0x18]
+            pChild = pChild->mpManagerNextSibling;
+            continue;
+        }
 
-            if ((v6 & 0x40000000u) == 0)                   // not an isMask node (x64 bit 1; sub_14083DD80 `v8 & 2`)
+        if (bVisible == true)
+        {
+            if (pChild->GetIsVisible() == true)
             {
-                uint32_t v7 = v6 & 0x80000000u;            // isVisible bit (x64 bit 0; sub_14083DD80 `v8 & 1`)
-                if (nVisibleMode == 1)
+                if (pChild->GetIsHiddenByTree() == true)
                 {
-                    if (v7 != 0)
-                    {
-                        bool bTreeVis = ((v6 & 0x04000000u) == 0x04000000u) ||
-                                        ((v6 & 0x02000000u) == 0x02000000u);
-                        if (bTreeVis)
-                        {
-                            uint32_t v9 = v6 & ~0x06000000u;  // clear bits 25+26
-                            pChild->mFlags = v9;
-                            result = pChild->PropagateTreeIsVisible(1);
-                        }
-                    }
-                    else
-                    {
-                        pChild->mFlags = (v6 & ~0x07000000u) | 0x01000000u; // set bit24
-                    }
-                }
-                else
-                {
-                    if (v7 != 0)
-                    {
-                        bool bTreeVis = ((v6 & 0x04000000u) == 0x04000000u) ||
-                                        ((v6 & 0x02000000u) == 0x02000000u);
-                        if (!bTreeVis)
-                        {
-                            uint32_t v9 = v6 | 0x04000000u;  // set bit26
-                            pChild->mFlags = v9;
-                            result = pChild->PropagateTreeIsVisible(0);
-                        }
-                    }
-                    else
-                    {
-                        pChild->mFlags = (v6 & ~0x05000000u) | 0x04000000u; // set bit26, clear bit25
-                    }
-                }
-
-                // If this child has its own mask (bit29) bound, recurse into it.
-                bool bHasOwnMask = ((pChild->mFlags & 0x20000000u) != 0) && (pChild->mpMask != 0);
-                if (bHasOwnMask)
-                {
-                    AptRenderItem* pi = LatestRevision(pChild->mpMask);  // [c:0x1C] -> [c:0x28]
-                    uint32_t v15 = ((nVisibleMode == 0) ? 0x04000000u : 0u) | (pi->mFlags & ~0x04000000u);
-                    pi->mFlags = v15;
-                    if (nVisibleMode)
-                        pi->mFlags = v15 & ~0x02000000u;
-                    result = pi->PropagateTreeIsVisible(nVisibleMode);
+                    pChild->mbPendingHiddenByTree = 0;
+                    pChild->mbIsHiddenByTree = 0;
+                    pChild->PropagateTreeIsVisible(true);
                 }
             }
-
-            // advance to the next sibling's latest revision (loop's [c:0x2C]).
-            pChild = pChild->mpManagerNextSibling;   // [c:0x2C]
-            if (!pChild)
-                break;
+            else
+            {
+                pChild->mbPendingHiddenByTree = 0;
+                pChild->mbIsHiddenByTree = 0;
+                pChild->mbRootNonVisibleItem = 1;
+            }
         }
-    }
+        else
+        {
+            if (pChild->GetIsVisible() == true)
+            {
+                if (!pChild->GetIsHiddenByTree())
+                {
+                    pChild->mbPendingHiddenByTree = 1;
+                    pChild->PropagateTreeIsVisible(false);
+                }
+            }
+            else
+            {
+                pChild->mbRootNonVisibleItem = 0;
+                pChild->mbPendingHiddenByTree = 1;
+            }
+        }
 
-    return result;
+        if (pChild->GetHasMask())
+        {
+            AptRenderItem* pChildMask = pChild->mpMask;
+            while (pChildMask->mpManagerNextRevision)
+                pChildMask = pChildMask->mpManagerNextRevision;
+            pChildMask->SetIsHiddenByTree(!bVisible);
+            pChildMask->PropagateTreeIsVisible(bVisible);
+        }
+
+        pChild = pChild->mpManagerNextSibling;
+    }
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 namespace
 {
@@ -629,66 +643,86 @@ AptRenderItem* AptRenderItem::Manager_CreateNewRevision(int nTick)
 // Manager_GetRenderRevision @0x82ADAC58 -- walk the next-revision chain ([c:0x28])
 // and return the newest revision that is renderable for nTick (aged in + committed,
 // mFlags bit25 clear). Stops at the first non-renderable revision.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 AptRenderItem* AptRenderItem::Manager_GetRenderRevision(int nTick)
 {
-    AptRenderItem* result = this;
-    if (!result)
-        return result;
-    for (AptRenderItem* i = result->mpManagerNextRevision; i; i = i->mpManagerNextRevision) // [c:0x28]
+    AptRenderItem* pResult = this;
+    if (pResult)
     {
-        char bRenderable;
-        if ((nTick - i->mCreatedOnTick) < 0 || (bRenderable = 1, (i->mFlags & 0x02000000u) != 0)) // [c:0x20]/[c:0x18]
-            bRenderable = 0;
-        if (!bRenderable)
-            break;
-        result = i;
+        for (AptRenderItem* pRevision = mpManagerNextRevision; pRevision; pRevision = pRevision->mpManagerNextRevision)
+        {
+            if (!pRevision->IsRenderableForThisTick(nTick))
+                break;
+            pResult = pRevision;
+        }
     }
-    return result;
+    return pResult;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // Manager_UpdateNextSibling @0x82ADACA8 -- commit pRevision as THIS item's next
 // sibling ([c:0x2C]) for the current render walk, under the lock. A deletion-marked
 // revision (bit28) collapses to null; the old/new links are reference-counted.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptRenderItem::Manager_UpdateNextSibling(AptRenderItem* pRevision)
 {
-    AptRenderItem* v2 = pRevision;
-    if (pRevision && (pRevision->mFlags & 0x10000000u) != 0)  // [c:0x18] deletion mark
-        v2 = 0;
-    if (v2 != mpManagerNextSibling)                           // [c:0x2C]
+    if (pRevision && pRevision->mbIsDeletionMark)   // mask test, 0x82ADACCC `rlwinm. 0,3,3`
+        pRevision = 0;
+
+    if (pRevision != mpManagerNextSibling)
     {
-        if (v2)
-            v2->AddReference();                               // atomic ++mRefCount
+        LockAptRenderTreeRevision();
+        if (pRevision)
+            pRevision->AddReference();
         if (mpManagerNextSibling)
         {
             AptRenderItem* pOld = mpManagerNextSibling;
             mpManagerNextSibling = 0;
             pOld->ReleaseReference();
         }
-        mpManagerNextSibling = v2;
+        mpManagerNextSibling = pRevision;
+        UnlockAptRenderTreeRevision();
     }
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // Manager_UpdateMask @0x82ADB1B8 -- commit pRevision as THIS item's mask link
 // ([c:0x1C]) for the current render walk (same deletion-mark collapse + ref-count
 // + lock as Manager_UpdateNextSibling).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptRenderItem::Manager_UpdateMask(AptRenderItem* pRevision)
 {
-    AptRenderItem* v2 = pRevision;
-    if (pRevision && (pRevision->mFlags & 0x10000000u) != 0)  // [c:0x18] deletion mark
-        v2 = 0;
-    if (v2 != mpMask)                                         // [c:0x1C]
+    if (pRevision && pRevision->mbIsDeletionMark)   // mask test, 0x82ADACCC `rlwinm. 0,3,3`
+        pRevision = 0;
+
+    if (pRevision != mpMask)
     {
-        if (v2)
-            v2->AddReference();
+        LockAptRenderTreeRevision();
+        if (pRevision)
+            pRevision->AddReference();
         if (mpMask)
         {
             AptRenderItem* pOld = mpMask;
             mpMask = 0;
             pOld->ReleaseReference();
         }
-        mpMask = v2;
+        mpMask = pRevision;
+        UnlockAptRenderTreeRevision();
     }
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // Manager_UpdateFirstChild -- the first-child counterpart of the two above
 // ([c:0x30]); the AptRenderTreeManager render walk and the custom-control Render
@@ -696,290 +730,281 @@ void AptRenderItem::Manager_UpdateMask(AptRenderItem* pRevision)
 // per-address export; reconstructed identically to its committed
 // Update_NextSibling/Mask instruction-twin siblings (deletion-mark collapse +
 // ref-counted link swap under the lock).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptRenderItem::Manager_UpdateFirstChild(AptRenderItem* pRevision)
 {
-    AptRenderItem* v2 = pRevision;
-    if (pRevision && (pRevision->mFlags & 0x10000000u) != 0)  // [c:0x18] deletion mark
-        v2 = 0;
-    if (v2 != mpManagerFirstChild)                           // [c:0x30]
+    if (pRevision && pRevision->mbIsDeletionMark)   // mask test, 0x82ADACCC `rlwinm. 0,3,3`
+        pRevision = 0;
+
+    if (pRevision != mpManagerFirstChild)
     {
-        if (v2)
-            v2->AddReference();
+        LockAptRenderTreeRevision();
+        if (pRevision)
+            pRevision->AddReference();
         if (mpManagerFirstChild)
         {
             AptRenderItem* pOld = mpManagerFirstChild;
             mpManagerFirstChild = 0;
             pOld->ReleaseReference();
         }
-        mpManagerFirstChild = v2;
+        mpManagerFirstChild = pRevision;
+        UnlockAptRenderTreeRevision();
     }
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // Manager_SetFirstChild @0x82ADAF58 -- set THIS item's writable-revision first-child
 // link ([c:0x30]): reference the new child, recompute its mask-driven visibility
 // against this parent's flags (PropagateTreeIsVisible), then swap the link under the
 // lock (releasing the old child). The visibility recompute is the console's exact
 // bit arithmetic on the child's mFlags ([c:0x18]).
-AptRenderItem* AptRenderItem::Manager_SetFirstChild(AptRenderItem* pChild)
+// ARTIST tests with the record forms (0x82ADAFA0 `rlwinm.`, 0x82ADAFD4 `clrlwi.`) and swaps the
+// link under the render-tree revision lock (0x82ADB0C4..); void like Manager_SetNextSibling.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+void AptRenderItem::Manager_SetFirstChild(AptRenderItem* pChild)
 {
-    AptRenderItem* result = 0;
-
     if (pChild)
     {
-        pChild->AddReference();                          // atomic ++mRefCount [c:0x24]
-        uint32_t v11 = pChild->mFlags;                   // [c:0x18]
-        if ((v11 & 0x80000000u) != 0)                           // child isVisible (x64 bit 0: sub_14083C4A0 `flags & 1`)
+        pChild->AddReference();
+        if (!pChild->GetIsVisible())
         {
-            uint32_t v15 = v11 & ~0x01000000u;            // clear bit24
-            pChild->mFlags = v15;
-            uint32_t v16 = mFlags;                       // parent [c:0x18]
-            // x64 sub_14083C4A0 / X360 0x82ADAF58: the set-0x20 + Propagate(0) arm runs when
-            // the parent is INVISIBLE (bit 0 clear) OR its tree-state bits (0x60) are set.
-            bool bParentVisible = ((v16 & 0x80000000u) == 0) ||
-                                  ((v16 & 0x04000000u) == 0x04000000u) ||
-                                  ((v16 & 0x02000000u) == 0x02000000u);
-
-            if (bParentVisible)
+            if (!GetIsHiddenByTree() && !mbRootNonVisibleItem)
             {
-                bool bChildTreeVis = ((v15 & 0x04000000u) == 0x04000000u) ||
-                                     ((v15 & 0x02000000u) == 0x02000000u);
-                if (!bChildTreeVis)
-                {
-                    pChild->mFlags = v15 | 0x04000000u;  // set bit26
-                    pChild->PropagateTreeIsVisible(0);
-                }
+                pChild->mbPendingHiddenByTree = 0;
+                pChild->mbIsHiddenByTree = 0;
+                pChild->mbRootNonVisibleItem = 1;
             }
             else
             {
-                bool bChildTreeVis = ((v15 & 0x04000000u) == 0x04000000u) ||
-                                     ((v15 & 0x02000000u) == 0x02000000u);
-                if (bChildTreeVis)
-                {
-                    pChild->mFlags = v15 & ~0x06000000u;  // clear bits 25+26
-                    pChild->PropagateTreeIsVisible(1);
-                }
+                pChild->mbRootNonVisibleItem = 0;
+                pChild->mbPendingHiddenByTree = 1;
             }
         }
         else
         {
-            // child invisible: stamp its tree-invisible state from the parent's flags.
-            uint32_t v12 = mFlags;                       // parent [c:0x18]
-            bool bParentTreeVis = ((v12 & 0x04000000u) == 0x04000000u) ||
-                                  ((v12 & 0x02000000u) == 0x02000000u);
-            uint32_t v14;
-            if (bParentTreeVis || (v12 & 0x01000000u) != 0)
-                v14 = (v11 & ~0x05000000u) | 0x04000000u; // set bit26, clear bit25
-            else
-                v14 = (v11 & ~0x07000000u) | 0x01000000u; // set bit24, clear bits 25+26
-            pChild->mFlags = v14;
+            pChild->mbRootNonVisibleItem = 0;
+            if (mbIsVisible && GetIsHiddenByTree() != true)
+            {
+                if (pChild->GetIsHiddenByTree() == true)
+                {
+                    pChild->mbPendingHiddenByTree = 0;
+                    pChild->mbIsHiddenByTree = 0;
+                    pChild->PropagateTreeIsVisible(true);
+                }
+            }
+            else if (!pChild->GetIsHiddenByTree())
+            {
+                pChild->mbPendingHiddenByTree = 1;
+                pChild->PropagateTreeIsVisible(false);
+            }
         }
     }
 
-    result = mpManagerFirstChild;                        // [c:0x30]
-    if (result)
+    LockAptRenderTreeRevision();
+    if (mpManagerFirstChild)
     {
+        AptRenderItem* pOldChild = mpManagerFirstChild;
         mpManagerFirstChild = 0;
-        result->ReleaseReference();
+        pOldChild->ReleaseReference();
     }
     mpManagerFirstChild = pChild;
-    return result;
+    UnlockAptRenderTreeRevision();
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // Manager_SetNextSibling @0x82ADAD90 -- the next-sibling counterpart of
 // Manager_SetFirstChild ([c:0x2C]); the same reference + visibility recompute +
 // locked link swap, with the visible/invisible branches mirrored as in the console.
-AptRenderItem* AptRenderItem::Manager_SetNextSibling(AptRenderItem* pSibling)
+// ARTIST tests with the record forms (0x82ADADDC `rlwinm.`, 0x82ADAE0C `clrlwi.`) and swaps the
+// link under the render-tree revision lock (0x82ADAEE4..0x82ADAF4C); void: r3 is left as the last
+// call returned it.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+void AptRenderItem::Manager_SetNextSibling(AptRenderItem* pSibling)
 {
-    AptRenderItem* result = 0;
-
     if (pSibling)
     {
-        pSibling->AddReference();                        // atomic ++mRefCount [c:0x24]
-        uint32_t v11 = pSibling->mFlags;                 // [c:0x18]
-        if ((v11 & 0x80000000u) != 0)                           // sibling isVisible (x64 bit 0: sub_14083C590 `flags & 1`)
+        pSibling->AddReference();
+        if (!pSibling->GetIsVisible())
         {
-            uint32_t v16 = v11 & ~0x01000000u;            // clear bit24
-            pSibling->mFlags = v16;
-            uint32_t v17 = mFlags;                       // this [c:0x18]
-            bool bSelfVisible = ((v17 & 0x04000000u) == 0x04000000u) ||
-                                ((v17 & 0x02000000u) == 0x02000000u);
-            uint32_t v20 = v16 & 0x04000000u;
-            if (bSelfVisible)   // self 0x60 bits set (x64 sub_14083C590: `(flags & 0x60) != 0` arm)
+            if (!GetIsHiddenByTree())
             {
-                bool bSibTreeVis = (v20 == 0x04000000u) ||
-                                   ((v16 & 0x02000000u) == 0x02000000u);
-                if (!bSibTreeVis)
-                {
-                    pSibling->mFlags = v16 | 0x04000000u; // set bit26
-                    pSibling->PropagateTreeIsVisible(0);
-                }
+                pSibling->mbPendingHiddenByTree = 0;
+                pSibling->mbIsHiddenByTree = 0;
+                pSibling->mbRootNonVisibleItem = 1;
             }
-            else                // self 0x60 bits clear
+            else
             {
-                bool bSibTreeVis = (v20 == 0x04000000u) ||
-                                   ((v16 & 0x02000000u) == 0x02000000u);
-                if (bSibTreeVis)
-                {
-                    pSibling->mFlags = v16 & ~0x06000000u; // clear bits 25+26
-                    pSibling->PropagateTreeIsVisible(1);
-                }
+                pSibling->mbRootNonVisibleItem = 0;
+                pSibling->mbPendingHiddenByTree = 1;
             }
         }
         else
         {
-            uint32_t v12 = mFlags;                       // this [c:0x18]
-            bool bSelfTreeVis = ((v12 & 0x04000000u) == 0x04000000u) ||
-                                ((v12 & 0x02000000u) == 0x02000000u);
-            uint32_t v15;
-            if (bSelfTreeVis)
-                v15 = (v11 & ~0x05000000u) | 0x04000000u; // set bit26, clear bit25
-            else
-                v15 = (v11 & ~0x07000000u) | 0x01000000u; // set bit24, clear bits 25+26
-            pSibling->mFlags = v15;
+            pSibling->mbRootNonVisibleItem = 0;
+            if (GetIsHiddenByTree() == true)
+            {
+                if (!pSibling->GetIsHiddenByTree())
+                {
+                    pSibling->mbPendingHiddenByTree = 1;
+                    pSibling->PropagateTreeIsVisible(false);
+                }
+            }
+            else if (pSibling->GetIsHiddenByTree() == true)
+            {
+                pSibling->mbPendingHiddenByTree = 0;
+                pSibling->mbIsHiddenByTree = 0;
+                pSibling->PropagateTreeIsVisible(true);
+            }
         }
     }
 
-    result = mpManagerNextSibling;                       // [c:0x2C]
-    if (result)
+    LockAptRenderTreeRevision();
+    if (mpManagerNextSibling)
     {
+        AptRenderItem* pOldSibling = mpManagerNextSibling;
         mpManagerNextSibling = 0;
-        result->ReleaseReference();
+        pOldSibling->ReleaseReference();
     }
     mpManagerNextSibling = pSibling;
-    return result;
+    UnlockAptRenderTreeRevision();
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // SetIsVisible @0x82AE0708 -- set the is-visible flag (bit31). When the bit changes
 // and the node is not masked, recompute the subtree's mask-driven visibility.
-AptRenderItem* AptRenderItem::SetIsVisible(bool bVisible)
+// GetIsHiddenByTree -- either hidden-by-tree flag set. ARTIST has no out-of-line copy; its
+// callers materialise the bool from both `(flags & bit) == bit` tests (SetIsVisible 0x82AE0754,
+// SetHasMask 0x82ADB3FC).
+bool AptRenderItem::GetIsHiddenByTree() const
 {
-    AptRenderItem* result = this;
-    uint32_t v4 = mFlags;                                // [c:0x18]
-    if (bVisible != ((v4 & 0x80000000u) != 0))               // bit changed (x64 bit 0: sub_140841B00 `a2 != (flags & 1)`)
-    {
-        bool bSkipPropagate = false;
-        int v6 = 0;
-        if (bVisible)
-        {
-            if ((v4 & 0x01000000u) == 0)                 // bit24 (tree-invisible-by-parent) clear
-            {
-                bSkipPropagate = true;
-            }
-            else
-            {
-                uint32_t v5 = v4 & ~0x01000000u;          // clear bit24
-                mFlags = v5;
-                if ((v5 & 0x40000000u) != 0)                    // isMask (x64 bit 1) -> no propagate
-                    bSkipPropagate = true;
-                else
-                    v6 = 1;
-            }
-        }
-        else
-        {
-            bool bTreeVis = ((v4 & 0x04000000u) == 0x04000000u) ||
-                            ((v4 & 0x02000000u) == 0x02000000u);
-            if (bTreeVis)
-            {
-                bSkipPropagate = true;
-            }
-            else
-            {
-                uint32_t v8 = (v4 & ~0x07000000u) | 0x01000000u;  // set bit24, clear 25+26
-                mFlags = v8;
-                if ((v8 & 0x40000000u) != 0)                    // isMask (x64 bit 1)
-                    bSkipPropagate = true;
-                else
-                    v6 = 0;
-            }
-        }
-        if (!bSkipPropagate)
-            result = PropagateTreeIsVisible(v6);
-
-        // bit31 := bVisible (console cntlzw idiom).
-        mFlags = (bVisible ? 0x80000000u : 0u) | (mFlags & ~0x80000000u);
-    }
-    return result;
+    return mbPendingHiddenByTree == 1 || mbIsHiddenByTree == 1;
 }
+
+// ARTIST tests with the record forms (0x82AE0734 `rlwinm.`, 0x82AE077C `clrlwi.`).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+void AptRenderItem::SetIsVisible(bool bVisible)
+{
+    if (bVisible == mbIsVisible)
+        return;
+
+    if (bVisible)
+    {
+        if (mbRootNonVisibleItem)
+        {
+            mbRootNonVisibleItem = 0;
+            if (!GetIsMask())
+                PropagateTreeIsVisible(1);
+        }
+    }
+    else if (!GetIsHiddenByTree())
+    {
+        mbPendingHiddenByTree = 0;
+        mbIsHiddenByTree = 0;
+        mbRootNonVisibleItem = 1;
+        if (!GetIsMask())
+            PropagateTreeIsVisible(0);
+    }
+
+    mbIsVisible = bVisible ? 1 : 0;
+}
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // SetHasMask @0x82ADB388 -- set the has-mask flag (bit29) from bHasMask, (re)bind
 // pMask as the mask link ([c:0x1C]) under the lock with the visibility recompute,
 // then clear bit29 when no mask remains.
-AptRenderItem* AptRenderItem::SetHasMask(bool bHasMask, AptRenderItem* pMask)
+// ARTIST tests the old mask with the record form (0x82ADB4AC `cmplwi r3,0`); void: r3 is left as
+// the last call returned it. The mask swap runs under the render-tree revision lock
+// (0x82ADB468..0x82ADB4D4).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+void AptRenderItem::SetHasMask(bool bHasMask, AptRenderItem* pMask)
 {
-    AptRenderItem* result = this;
-    AptRenderItem* v3 = this;
-    AptRenderItem* v5 = mpMask;                          // [c:0x1C]
+    mbHasMask = bHasMask ? 1 : 0;
 
-    // bit29 := bHasMask.
-    mFlags = ((bHasMask ? 0x20000000u : 0u)) | (mFlags & ~0x20000000u);
-
-    if (v5 != pMask)
+    if (mpMask != pMask)
     {
         if (pMask)
         {
-            pMask->AddReference();                       // atomic ++mRefCount
-            uint32_t v11 = mFlags;                       // [c:0x18]
-            int v14;
-            uint32_t v15;
-            bool bTreeVis = ((v11 & 0x04000000u) == 0x04000000u) ||
-                            ((v11 & 0x02000000u) == 0x02000000u);
-            if ((v11 & 0x80000000u) == 0 || bTreeVis)           // self invisible (x64 bit 0), or tree-hidden
+            pMask->AddReference();
+            if (GetIsVisible() && GetIsHiddenByTree() != true)
             {
-                v14 = 0;
-                v15 = (pMask->mFlags & ~0x05000000u) | 0x04000000u; // set bit26, clear bit25
+                pMask->mbPendingHiddenByTree = 0;
+                pMask->mbIsHiddenByTree = 0;
+                pMask->mbRootNonVisibleItem = 0;
+                pMask->PropagateTreeIsVisible(true);
             }
             else
             {
-                v14 = 1;
-                v15 = pMask->mFlags & ~0x07000000u;       // clear bits 24..26
+                pMask->mbRootNonVisibleItem = 0;
+                pMask->mbPendingHiddenByTree = 1;
+                pMask->PropagateTreeIsVisible(false);
             }
-            pMask->mFlags = v15;
-            pMask->PropagateTreeIsVisible(v14);
         }
 
-        result = v3->mpMask;                             // [c:0x1C]
-        if (result)
+        LockAptRenderTreeRevision();
+        if (mpMask)
         {
-            v3->mpMask = 0;
-            result->ReleaseReference();
+            AptRenderItem* pOldMask = mpMask;
+            mpMask = 0;
+            pOldMask->ReleaseReference();
         }
-        v3->mpMask = pMask;
+        mpMask = pMask;
+        UnlockAptRenderTreeRevision();
     }
 
-    if (!v3->mpMask)
-        v3->mFlags &= ~0x20000000u;                      // no mask -> clear bit29
-    return result;
+    if (!mpMask)
+        mbHasMask = 0;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // SetIsMask @0x82AEBF28 -- set the is-mask flag (bit30) + (re)bind the mask matrix
 // ([c:0x10]): when becoming a mask, copy the matrix in (SetMaskMatrix); when
 // clearing, free the existing mask matrix back to the pool.
-AptRenderItem* AptRenderItem::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix)
+// ARTIST tests the old matrix with the record form (0x82AEBF6C `cmplwi r4,0`); void: r3 is left as
+// SetMaskMatrix returned it.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+void AptRenderItem::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix)
 {
-    AptRenderItem* result = this;
-    AptRenderItem* v3 = this;
-    unsigned v4 = bIsMask ? 1u : 0u;
+    if (bIsMask == GetIsMask() && mpMaskPositionMatrix == pMaskMatrix)
+        return;
 
-    // change iff the bit30 state differs, or the mask matrix pointer differs.
-    if (((unsigned)bIsMask != ((mFlags & 0x40000000u) ? 1u : 0u)) ||
-        (mpMaskPositionMatrix != pMaskMatrix))           // [c:0x10]
+    if (!bIsMask)
     {
-        if (bIsMask)
-        {
-            SetMaskMatrix(pMaskMatrix);
-        }
-        else
-        {
-            if (mpMaskPositionMatrix)                     // [c:0x10]
-                gpNonGCPoolManager->Deallocate(mpMaskPositionMatrix, sizeof(AptMatrix));
-            v3->mpMaskPositionMatrix = 0;
-        }
-        // bit30 := bIsMask.
-        v3->mFlags = ((v4 != 0) ? 0x40000000u : 0u) | (v3->mFlags & ~0x40000000u);
+        if (mpMaskPositionMatrix)
+            gpNonGCPoolManager->Deallocate(mpMaskPositionMatrix, sizeof(AptMatrix));
+        mpMaskPositionMatrix = 0;
     }
-    return result;
+    else
+    {
+        SetMaskMatrix(pMaskMatrix);
+    }
+
+    mbIsMask = bIsMask ? 1 : 0;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // Render-traversal helpers (PS3 External PushMatrices @0x7F21E4 / PopMatrices
