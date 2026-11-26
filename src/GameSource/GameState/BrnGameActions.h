@@ -1731,7 +1731,7 @@ CGS_STATIC_ASSERT((sizeof(ResetPlayerCarAction) == 80),
 //             CarSelectManager::EnterJunkyardAtStartOfGame @0x82393178..0x823931E0 (by pointer)
 //   consumer  MainDirector::ProcessInputQueue case 64 (BrnMainDirector.cpp:753, X360
 //             `lbz r11, 0x30(r30)` @0x82238418 -> maGameState.mbJunkyardPosIsLeft)
-struct CGS_ALIGN(16) CarSelectionChangedAction
+struct CGS_ALIGN(16) CarSelectionChangedAction : public GameAction<E_ACTION_CAR_SELECTION_CHANGED>   // DWARF h:3898
 {
     CgsID   mJunkyardId;        // +0x00
     u8      maReserved0x08[8];  // +0x08  never written by any producer

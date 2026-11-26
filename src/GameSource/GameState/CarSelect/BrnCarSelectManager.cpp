@@ -50,7 +50,8 @@ static const f32 KF_DEBUG_TROPHY_CAR_DEFORM = 0.85f;
 // X360-baked tuning constants (the float rodata the bodies compare against). The DWARF declares the
 // named class-scope KF_* statics at BrnCarSelectManager.cpp:30-41; only the immediates the
 // reconstructed bodies use are recovered, named by their X360 rodata address + meaning.
-//   flt_82001CC0 ==  0.0 : the timer-reset value.
+//   flt_82001CC0 ==  0.0 : the timer-reset value, written as the literal 0.0f (no DWARF constant;
+//                          a named const changes the XDK's CSE, UpdateUnlockState 0x82398BF4).
 //   flt_82001D9C ==  2.0 : KF_CARSELECT_TRANSITION_IN_MIN_TIME_NO_CARS      (Update case 1, no unlock cars).
 //   flt_820095C0 ==  6.0 : KF_CARSELECT_TRANSITION_IN_MIN_TIME_WITH_CARS    (Update case 1, has unlock cars).
 //   flt_82001DA0 ==  0.5 : KF_CARSELECT_TRANSITION_IN_REQUEST_STREAMING     (Update case 1 stream-kick).
@@ -60,7 +61,6 @@ static const f32 KF_DEBUG_TROPHY_CAR_DEFORM = 0.85f;
 //   flt_82029F18 ==  1.5 : KF_CARSELECT_CHANGE_CAR_TELEPORT_DELAY           (UpdateRequestCarChange).
 //   flt_820037C8 == -1.0 : the "no unlock target" deform sentinel (EnterJunkyardAtStartOfGame).
 // ----------------------------------------------------------------------------
-static const f32 KF_TIMER_RESET                        =  0.0f;  // flt_82001CC0
 static const f32 KF_TRANSITION_IN_MIN_TIME_NO_CARS     =  2.0f;  // flt_82001D9C
 static const f32 KF_TRANSITION_IN_MIN_TIME_WITH_CARS   =  6.0f;  // flt_820095C0
 static const f32 KF_TRANSITION_IN_REQUEST_STREAMING    =  0.5f;  // flt_82001DA0
@@ -453,7 +453,7 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
         CgsDev::Assert::EndAssert();
     }
 
-    mfStateTimer     = KF_TIMER_RESET;              // X360 *(this+4) = 0.0
+    mfStateTimer     = 0.0f;              // X360 *(this+4) = 0.0
     meState          = E_STATE_CAR_MODIFICATION;    // 5
     mbInCarModScreen = true;                        // X360 *(this+115) = 1
 
@@ -632,7 +632,7 @@ void CarSelectManager::StartUnlockState(GameStateModuleIO::GameActionQueue* lpAc
     mCurrentCarToUnlock           = 0;       // X360 *(this+12) (8B) = 0
     mbCurrentCarTickerVisible     = false;   // X360 *(this+104) = 0
     mfStateTimer                  = KF_CARSELECT_UNLOCK_MIN_TIME;  // 7.0
-    mfCarUnlockFadedOutTargetTime = KF_TIMER_RESET;               // 0.0
+    mfCarUnlockFadedOutTargetTime = 0.0f;               // 0.0
 }
 
 // ============================================================================
@@ -651,129 +651,78 @@ void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpA
     CGS_ASSERT_STREAM_AT(meState == E_STATE_DISPLAY_UNLOCKED_CARS || meState == E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS,
                          "CarSelectManager: State needs to be in Unlock sequence.", KAC_CSM_FILE, 758);
 
-    const f32 lfTimer = mfStateTimer;
-    if (!(lfTimer >= KF_CARSELECT_UNLOCK_MIN_TIME && !mbWaitingForStreaming &&
-          !mbCurrentCarTickerVisible && lfTimer > mfCarUnlockFadedOutTargetTime))
-        return;
-
-    if (muUnlockCount == 0)
+    if (mfStateTimer >= KF_CARSELECT_UNLOCK_MIN_TIME && !mbWaitingForStreaming &&
+        !mbCurrentCarTickerVisible && mfStateTimer > mfCarUnlockFadedOutTargetTime)
     {
-        EndUnlockState(lpActionQueue);
-        return;
-    }
-
-    mCurrentCarToUnlock = GetNextUnlockCarID(mCurrentCarToUnlock);
-
-    CgsID lUnlockCarId = mCurrentCarToUnlock;
-    const BrnProgression::CarData* lpUnlockCarData = GetProfileCarData(lUnlockCarId);
-    if (lpUnlockCarData == 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpUnlockCarData", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 777));
-        CgsDev::Assert::EndAssert();
-    }
-
-    // NewCarUnlockedAction (16B). X360 0x82398920 builds the payload as: carId(8B) @+0x00,
-    // the unlock-variant s32 @+0x08 (switch on CarData word +0x10: 1->1, 2->2, 3->3, else 0), and
-    // 7.0f @+0x0C. The variant selects the unlock fanfare/category on the HUD.
-    {
-        u8 lacUnlocked[16];
-        std::memset(lacUnlocked, 0, sizeof(lacUnlocked));
-        const CgsID lCarId = lpUnlockCarData->GetId();
-        std::memcpy(lacUnlocked, &lCarId, sizeof(lCarId));                         // carId @+0x00
-        const s32 liUnlockType = lpUnlockCarData->GetUnlockType();                 // CarData +0x10
-        s32 liVariant;
-        switch (liUnlockType)
+        if (muUnlockCount == 0)
         {
-            case 1:  liVariant = 1; break;
-            case 2:  liVariant = 2; break;
-            case 3:  liVariant = 3; break;
-            default: liVariant = 0; break;
+            EndUnlockState(lpActionQueue);
         }
-        std::memcpy(lacUnlocked + 0x08, &liVariant, sizeof(liVariant));            // unlock-variant @+0x08
-        const f32 lfFanfare = KF_CARSELECT_UNLOCK_MIN_TIME;                        // 7.0 (X360 v19)
-        std::memcpy(lacUnlocked + 0x0C, &lfFanfare, sizeof(lfFanfare));            // 7.0f @+0x0C
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacUnlocked), KI_ACTION_NEW_CAR_UNLOCKED, 16);
-    }
+        else
+        {
+            // DWARF cpp:776 / :780 / :823 / :826 / :827 / :852 locals.
+            mCurrentCarToUnlock = GetNextUnlockCarID(mCurrentCarToUnlock);
 
-    if (mpGameStateModule == 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpGameStateModule", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 816));
-        CgsDev::Assert::EndAssert();
-    }
-    mpGameStateModule->SetCarUnlockAlreadyShown(lpUnlockCarData->GetId());
-    mpGameStateModule->OnSpecialEventPlayerCarChange(mCurrentCarToUnlock, 0, lpActionQueue, true);
+            const BrnProgression::CarData* lpUnlockCarData = GetProfileCarData(mCurrentCarToUnlock);
+            CGS_ASSERT_AT(lpUnlockCarData, "lpUnlockCarData", KAC_CSM_FILE, 777);
 
-    const BrnTrigger::SpawnLocation* lpUnlockSpawnLocation = maSpawnLocations[3];
-    if (lpUnlockSpawnLocation == 0)   // X360 *(v2+13) byte 0x34 == maSpawnLocations[3]
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 824));
-        CgsDev::Assert::EndAssert();
-    }
+            // The presentation type follows the car's unlock type (ARTIST tests 1, 2, 3 in turn,
+            // 0x82398A78..0x82398AB0); the hold is the unlock sequence's own minimum (7.0, the same
+            // constant flt_8202AE2C the timer test reads).
+            GameStateModuleIO::NewCarUnlockedAction lNewCarUnlockedAction;
+            lNewCarUnlockedAction.mCarModelId               = lpUnlockCarData->GetId();
+            lNewCarUnlockedAction.mfMinPresentationDuration = KF_CARSELECT_UNLOCK_MIN_TIME;
+            switch (lpUnlockCarData->GetUnlockType())
+            {
+                case BrnProgression::CarData::E_UNLOCK_TYPE_GIFT:
+                    lNewCarUnlockedAction.meType = GameStateModuleIO::NewCarUnlockedAction::E_TYPE_GIFT;
+                    break;
+                case BrnProgression::CarData::E_UNLOCK_TYPE_TROPHY:
+                    lNewCarUnlockedAction.meType = GameStateModuleIO::NewCarUnlockedAction::E_TYPE_TROPHY;
+                    break;
+                case BrnProgression::CarData::E_UNLOCK_TYPE_SHUTDOWN_RIVAL:
+                    lNewCarUnlockedAction.meType = GameStateModuleIO::NewCarUnlockedAction::E_TYPE_SHUTDOWN_RIVAL;
+                    break;
+                default:
+                    lNewCarUnlockedAction.meType = GameStateModuleIO::NewCarUnlockedAction::E_TYPE_UNLOCK;
+                    break;
+            }
+            lpActionQueue->AddGameAction(lNewCarUnlockedAction);
 
-    // ResetPlayerCarAction (80B).
-    // ⛔ CORRECTED 2026-08-01 -- the "FLAG: full ResetPlayerCarAction layout not in exports" was
-    // wrong: the layout is fully attested at 0x82398B3C..0x82398B9C (payload base == var_B0,
-    // size 0x50, r25 == 0, r28 == 1, r23 == 2), and it is the SAME record the other four builders
-    // in this class emit. Every field of the old body was at the wrong offset and the spawn
-    // transform was missing entirely. See BrnCarSelectManager_CarChange.cpp SpawnInStartCar for the
-    // annotated master copy.
-    //   +0x00 mPosition (16B)   +0x10 mDirection (16B)   +0x20 car id (8B)   +0x28 0 (8B)
-    //   +0x30 8 (s32)           +0x34 deform (f32)       +0x38 1 (s32)       +0x3C 2 (s32)
-    //   +0x40 1  +0x41 1  +0x42 0  +0x43 0
-    // ⚠️ +0x3C is 2 HERE and 0 in SpawnInStartCar/EndUnlockState (`li r23, 2` @0x82398A74) -- the
-    // unlock sequence is the one path that sets it; recorded as the console's literal.
-    {
-        u8 lacReset[80];
-        std::memset(lacReset, 0, sizeof(lacReset));
-        const CgsID lCarId        = lpUnlockCarData->GetId();
-        const f32   lfDeform      = lpUnlockCarData->GetUnlockDeformationAmount();
-        const s32   liCarSelType  = 8;
-        const s32   liInCarSelect = 1;
-        const s32   liUnlockMode  = 2;
-        std::memcpy(lacReset + 0x00, &lpUnlockSpawnLocation->mPosition,  sizeof(Vector3));
-        std::memcpy(lacReset + 0x10, &lpUnlockSpawnLocation->mDirection, sizeof(Vector3));
-        std::memcpy(lacReset + 0x20, &lCarId,        sizeof(lCarId));
-        std::memcpy(lacReset + 0x30, &liCarSelType,  sizeof(liCarSelType));
-        std::memcpy(lacReset + 0x34, &lfDeform,      sizeof(lfDeform));
-        std::memcpy(lacReset + 0x38, &liInCarSelect, sizeof(liInCarSelect));
-        std::memcpy(lacReset + 0x3C, &liUnlockMode,  sizeof(liUnlockMode));
-        lacReset[0x40] = 1;
-        lacReset[0x41] = 1;
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacReset), KI_ACTION_RESET_PLAYER_CAR, 80);
-    }
+            CGS_ASSERT_AT(mpGameStateModule, "mpGameStateModule", KAC_CSM_FILE, 816);
+            mpGameStateModule->SetCarUnlockAlreadyShown(lpUnlockCarData->GetId());
+            mpGameStateModule->OnSpecialEventPlayerCarChange(mCurrentCarToUnlock, 0, lpActionQueue, true);
 
-    // CarSelectChangeColourAction (8B): the unlocked car's palette + colour indices.
-    // X360 0x82398920: `GetCarColourAndPalette(.., &v17 + 4, &v17)` then `AddEvent(&v17, 79, 8)`
-    // -- the COLOUR goes to payload+4 and the PALETTE to payload+0.
-    {
-        GameStateModuleIO::CarSelectChangeColourAction lColour;
-        u32 liColour  = 0;
-        u32 liPalette = 0;
-        mpProgressionManager->GetCarColourAndPalette(mCurrentCarToUnlock, liColour, liPalette);
-        lColour.muPaletteIndex = static_cast<u32>(liPalette);
-        lColour.muColourIndex  = static_cast<u32>(liColour);
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lColour),
-            KI_ACTION_CAR_SELECT_CHANGE_COLOUR, static_cast<s32>(sizeof(lColour)));
-    }
+            const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[BrnTrigger::SpawnLocation::E_TYPE_CAR_UNLOCK];
+            CGS_ASSERT_AT(lpSpawnLocation, "lpSpawnLocation", KAC_CSM_FILE, 824);
 
-    // CarSelectionChanged suffix (8B): the new unlock-target id.
-    {
-        CgsID lCurrent = mCurrentCarToUnlock;
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lCurrent), KI_ACTION_CAR_CHANGED_SUFFIX, 8);
-    }
+            // The unlocked car is dropped by the shutdown crane (`li r23, 2` at 0x82398A74 into +0x3C).
+            GameStateModuleIO::ResetPlayerCarAction lResetPlayerCarAction;
+            GameStateModuleIO::ResetPlayerCarAction::CarSelectType leResetCarSelectType =
+                GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DROP_SHUTDOWN;
+            lResetPlayerCarAction.Construct();
+            lResetPlayerCarAction.SetLocation(lpSpawnLocation->GetPosition(), lpSpawnLocation->GetDirection());
+            lResetPlayerCarAction.SetCarData(lpUnlockCarData->GetId(), 0);
+            lResetPlayerCarAction.SetDeformAmount(lpUnlockCarData->GetUnlockDeformationAmount());
+            lResetPlayerCarAction.SetDeformationResetType(1);
+            lResetPlayerCarAction.SetInCarSelect(true);
+            lResetPlayerCarAction.SetCarSelectType(leResetCarSelectType);
+            lResetPlayerCarAction.SetCarSelectDontStreamAudio(true);
+            lpActionQueue->AddGameAction(lResetPlayerCarAction);
 
-    mbCurrentCarTickerVisible     = true;            // X360 *(this+104) = 1
-    mfCarUnlockFadedOutTargetTime = KF_TIMER_RESET;  // 0.0
-    RequestStreamingForUnlock(lpActionQueue);
-    mfStateTimer = KF_TIMER_RESET;                   // 0.0
-    --muUnlockCount;
+            UpdateCarColour(mCurrentCarToUnlock, lpActionQueue);
+
+            GameStateModuleIO::CarUnlockAction lCarUnlockAction;
+            lCarUnlockAction.mCurrentCarToUnlock = mCurrentCarToUnlock;
+            lpActionQueue->AddGameAction(lCarUnlockAction);
+
+            mbCurrentCarTickerVisible     = true;
+            mfCarUnlockFadedOutTargetTime = 0.0f;
+            RequestStreamingForUnlock(lpActionQueue);
+            mfStateTimer = 0.0f;
+            --muUnlockCount;
+        }
+    }
 }
 
 // ============================================================================
@@ -801,100 +750,49 @@ void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActi
         }
     }
 
-    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[1];   // X360 *(this+44)
-    if (lpSpawnLocation == 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 898));
-        CgsDev::Assert::EndAssert();
-    }
+    // DWARF cpp:897 / :902 / :905 / :917 / :928 / :941 locals. The unlocked car drops in at the
+    // left car-select spawn point (maSpawnLocations[1], lwz 0x2C at 0x82392D24), which becomes the
+    // last spawn location (stw 1 to +0x3C at 0x82392D5C).
+    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT];
+    CGS_ASSERT_AT(lpSpawnLocation, "lpSpawnLocation", KAC_CSM_FILE, 898);
 
-    mbCurrentCarTickerVisible = true;   // X360 *(this+60) = 1
+    meLastSpawnLocationType = BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
 
-    // X360: GetProfileCarData(this, &mCurrentCarToUnlock) -- the just-unlocked car being settled.
-    CgsID lUnlockCarId = mCurrentCarToUnlock;
-    const BrnProgression::CarData* lpCarData = GetProfileCarData(lUnlockCarId);
+    const BrnProgression::CarData* lpCarData = GetProfileCarData(mCurrentCarToUnlock);
 
-    // ResetPlayerCarAction (80B).
-    // ⛔ CORRECTED 2026-08-01 -- the transform was NOT "modelled opaque", it was simply missing, and
-    // every remaining field sat at the wrong offset. Attested at 0x82392D64..0x82392DC8 (payload
-    // base == var_90, size 0x50, r30 == 0, r28 == 1):
-    //   +0x00 mPosition (16B)   +0x10 mDirection (16B)   +0x20 mCurrentCarToUnlock (8B)  +0x28 0
-    //   +0x30 8 (s32)           +0x34 deform (f32)       +0x38 1 (s32)                   +0x3C 0
-    //   +0x40 1  +0x41 1  +0x42 0  +0x43 0
-    {
-        u8 lacReset[80];
-        std::memset(lacReset, 0, sizeof(lacReset));
-        const CgsID lCarId        = mCurrentCarToUnlock;
-        const s32   liCarSelType  = 8;
-        const s32   liInCarSelect = 1;
-        std::memcpy(lacReset + 0x00, &lpSpawnLocation->mPosition,  sizeof(Vector3));
-        std::memcpy(lacReset + 0x10, &lpSpawnLocation->mDirection, sizeof(Vector3));
-        std::memcpy(lacReset + 0x20, &lCarId,        sizeof(lCarId));
-        std::memcpy(lacReset + 0x30, &liCarSelType,  sizeof(liCarSelType));
-        if (lpCarData != 0)
-        {
-            const f32 lfDeform = lpCarData->GetUnlockDeformationAmount();
-            std::memcpy(lacReset + 0x34, &lfDeform, sizeof(lfDeform));
-        }
-        std::memcpy(lacReset + 0x38, &liInCarSelect, sizeof(liInCarSelect));
-        lacReset[0x40] = 1;
-        lacReset[0x41] = 1;
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacReset), KI_ACTION_RESET_PLAYER_CAR, 80);
-    }
+    GameStateModuleIO::ResetPlayerCarAction lResetPlayerCarAction;
+    lResetPlayerCarAction.Construct();
+    lResetPlayerCarAction.SetLocation(lpSpawnLocation->GetPosition(), lpSpawnLocation->GetDirection());
+    lResetPlayerCarAction.SetCarData(mCurrentCarToUnlock, 0);
+    lResetPlayerCarAction.SetDeformAmount(lpCarData->GetUnlockDeformationAmount());
+    lResetPlayerCarAction.SetInCarSelect(true);
+    lResetPlayerCarAction.SetCarSelectType(GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP);   // DWARF call list: SetInCarSelect, SetCarSelectType, SetCarSelectDontStreamAudio
+    lResetPlayerCarAction.SetCarSelectDontStreamAudio(true);
+    lResetPlayerCarAction.SetDeformationResetType(1);
+    lpActionQueue->AddGameAction(lResetPlayerCarAction);
 
-    const u32 luSpawnType = static_cast<u32>(lpSpawnLocation->GetType());
-    if (luSpawnType >= static_cast<u32>(BrnTrigger::SpawnLocation::E_TYPE_COUNT))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_SPAWNLOC_FILE, 152));
-        CgsDev::Assert::EndAssert();
-    }
+    GameStateModuleIO::CarSelectionChangedAction lCarSelectionChangedAction;
+    lCarSelectionChangedAction.mJunkyardId          = mJunkyardId;
+    lCarSelectionChangedAction.mPosition            = lpSpawnLocation->GetPosition();
+    lCarSelectionChangedAction.mDirection           = lpSpawnLocation->GetDirection();
+    lCarSelectionChangedAction.mbIsLeft             = lpSpawnLocation->GetType() == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+    lCarSelectionChangedAction.mbPlayCraneDropAudio = false;
+    lpActionQueue->AddGameAction(lCarSelectionChangedAction);
 
-    // CarSelectionChangedAction (64B): junkyard id + the spawn transform + the "pos is left" bit.
-    // ⛔ CORRECTED 2026-08-01 -- the bit VALUE here was already right (type == 1) but it was stamped
-    // at +0x10, on top of where the console puts the spawn POSITION, and the consumer
-    // (MainDirector::ProcessInputQueue case 64, `lbz r11, 0x30(r30)`) reads +0x30. X360
-    // 0x82392DCC..: +0x00 mJunkyardId, +0x10 mPosition, +0x20 mDirection, +0x30 the bit, +0x31 0.
-    {
-        u8 lacChanged[64];
-        std::memset(lacChanged, 0, sizeof(lacChanged));
-        std::memcpy(lacChanged + 0x00, &mJunkyardId,                 sizeof(mJunkyardId));
-        std::memcpy(lacChanged + 0x10, &lpSpawnLocation->mPosition,  sizeof(Vector3));
-        std::memcpy(lacChanged + 0x20, &lpSpawnLocation->mDirection, sizeof(Vector3));
-        lacChanged[0x30] = (luSpawnType == 1) ? 1 : 0;
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacChanged), KI_ACTION_CAR_SELECTION_CHANGED, 64);
-    }
-
-    if (static_cast<u32>(lpSpawnLocation->GetType()) >= static_cast<u32>(BrnTrigger::SpawnLocation::E_TYPE_COUNT))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_SPAWNLOC_FILE, 152));
-        CgsDev::Assert::EndAssert();
-    }
-
-    // CarSelectionChangedDropInAction (16B): the unlocked car id + the "is type 1" bit.
-    {
-        u8 lacDropIn[16];
-        std::memset(lacDropIn, 0, sizeof(lacDropIn));
-        std::memcpy(lacDropIn, &mCurrentCarToUnlock, sizeof(mCurrentCarToUnlock));
-        lacDropIn[8] = (static_cast<u32>(lpSpawnLocation->GetType()) == 1) ? 1 : 0;
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacDropIn), KI_ACTION_CAR_SELECTION_DROPIN, 16);
-    }
+    GameStateModuleIO::CarSelectionChangedDropInAction lCarSelectDropInAction;
+    lCarSelectDropInAction.mCarId   = mCurrentCarToUnlock;
+    lCarSelectDropInAction.mbIsLeft = lpSpawnLocation->GetType() == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+    lpActionQueue->AddGameAction(lCarSelectDropInAction);
 
     mpGameStateModule->OnSpecialEventPlayerCarChange(mCurrentCarToUnlock, 0, lpActionQueue, true);
 
-    // X360 tail: mDesiredCarId(+0x48) = mCurrentCarToUnlock(+0x60); muUnlockCount(+0x5C) = 0. (The
-    // X360 also scribbles a {0, spawnLoc} scratch value back into mCurrentCarToUnlock; inert.)
-    mDesiredCarId = mCurrentCarToUnlock;
-    muUnlockCount = 0;
+    mDesiredCarId       = mCurrentCarToUnlock;
+    mCurrentCarToUnlock = 0;
+    muUnlockCount       = 0;
 
-    u8 lacUnlockEnd[1] = { 0 };
-    AsActionQueue(lpActionQueue)->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(lacUnlockEnd), KI_ACTION_CAR_UNLOCK_END, 1);
+    // Empty record, posted with its never-written byte (sp+0x50, 0x82392ECC).
+    GameStateModuleIO::CarUnlockEndAction lCarUnlockEndAction;
+    lpActionQueue->AddGameAction(lCarUnlockEndAction);
 
     StartCarSelectState(lpActionQueue);
 }
@@ -965,7 +863,7 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
     if (!mbInCarModScreen)
         mpGameStateModule->RequestStreamingForVehicleSelection(lpActionQueue, mDesiredCarId);
 
-    mfStateTimer = KF_TIMER_RESET;                  // 0.0
+    mfStateTimer = 0.0f;                  // 0.0
     meState      = E_STATE_STARTING_CHANGING_CAR;   // 7
 }
 
@@ -984,71 +882,64 @@ void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* 
     CGS_ASSERT_STREAM_AT(meState == E_STATE_STARTING_CHANGING_CAR || meState == E_STATE_CHANGING_CAR,
                          "CarSelectManager: State needs to be in E_STATE_CHANGING_CAR.", KAC_CSM_FILE, 679);
 
+    // ARTIST tests state 7, then state 8 (0x82398770 / 0x82398840): the two states are an
+    // if / else-if, and the car-id test lays the teleport arm first (DWARF cpp:689 assert before
+    // the cpp:699 drop-in local), i.e. the test is `!=`.
     if (meState == E_STATE_STARTING_CHANGING_CAR)   // 7
     {
         if (mfStateTimer >= KF_CARSELECT_DELAY_BEFORE_CHANGE_CAR)   // >= 1.0
         {
-            const CgsID lActiveCarId = mpGameStateModule->GetActivePlayerCarId();
-            if (lActiveCarId == mDesiredCarId)
+            if (mpGameStateModule->GetActivePlayerCarId() != mDesiredCarId)
             {
-                // DWARF cpp:699.
-                GameStateModuleIO::CarSelectionChangedDropInAction lCarSelectDropInAction;
-                lCarSelectDropInAction.mbIsLeft = meLastSpawnLocationType == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
-                lCarSelectDropInAction.mCarId   = mDesiredCarId;
-                lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCarSelectDropInAction),
-                                        GameStateModuleIO::E_ACTION_CAR_SELECTION_CHANGED_DROPIN,
-                                        static_cast<s32>(sizeof(lCarSelectDropInAction)));
-                meState = E_STATE_CHANGING_CAR;   // 8
-            }
-            else
-            {
-                if (mpGameStateModule == 0)
-                {
-                    CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("mpGameStateModule", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 689));
-                    CgsDev::Assert::EndAssert();
-                }
+                CGS_ASSERT_AT(mpGameStateModule, "mpGameStateModule", KAC_CSM_FILE, 689);
                 mpGameStateModule->OnSpecialEventPlayerCarChange(mDesiredCarId, 0, lpActionQueue, true);
                 TeleportCurrentVehicle(lpActionQueue);
                 mbWaitingForStreaming = true;     // X360 *(this+88) = 1
                 meState               = E_STATE_CHANGING_CAR;   // 8
             }
+            else
+            {
+                // DWARF cpp:699; AddGameAction (BrnGameActions.h:501).
+                GameStateModuleIO::CarSelectionChangedDropInAction lCarSelectDropInAction;
+                lCarSelectDropInAction.mbIsLeft = meLastSpawnLocationType == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+                lCarSelectDropInAction.mCarId   = mDesiredCarId;
+                lpActionQueue->AddGameAction(lCarSelectDropInAction);
+                meState = E_STATE_CHANGING_CAR;   // 8
+            }
         }
-        return;
     }
+    else if (meState == E_STATE_CHANGING_CAR)   // 8: wait for streaming, then back to the prior screen
+    {
+        if (!mbWaitingForStreaming)
+        {
+            mfStateTimer = 0.0f;   // 0.0
+            if (mbInCarModScreen)
+            {
+                meState = E_STATE_CAR_MODIFICATION;   // 5
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: Changing Car, then back to CarMod state.\n";
+            }
+            else
+            {
+                meState = E_STATE_CAR_SELECT;         // 4
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: Changing Car, then back to CarSelect state.\n";
+            }
 
-    // state 8: wait for streaming to finish, then return to the prior screen.
-    if (mbWaitingForStreaming)
-        return;
-
-    mfStateTimer = KF_TIMER_RESET;   // 0.0
-    if (mbInCarModScreen)
-    {
-        meState = E_STATE_CAR_MODIFICATION;   // 5
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-            *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: Changing Car, then back to CarMod state.\n";
-    }
-    else
-    {
-        meState = E_STATE_CAR_SELECT;         // 4
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-            *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: Changing Car, then back to CarSelect state.\n";
-    }
-
-    if (mCacheDuringChangeCarId)   // X360 v7[21] (hi-word of mCacheDuringChangeCarId)
-    {
-        RequestChangeCar(mCacheDuringChangeCarId);
-        mCacheDuringChangeCarId = 0;   // X360 *(this+10) = 0
-    }
-    else
-    {
-        // DWARF cpp:736.
-        GameStateModuleIO::CarSelectionDropInCompleteAction lCarSelectDropInCompleteAction;
-        lCarSelectDropInCompleteAction.mbIsLeft = meLastSpawnLocationType == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
-        lCarSelectDropInCompleteAction.mCarId   = mDesiredCarId;
-        lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCarSelectDropInCompleteAction),
-                                GameStateModuleIO::E_ACTION_CAR_SELECTION_DROPIN_COMPLETE,
-                                static_cast<s32>(sizeof(lCarSelectDropInCompleteAction)));
+            if (mCacheDuringChangeCarId)   // X360 v7[21] (hi-word of mCacheDuringChangeCarId)
+            {
+                RequestChangeCar(mCacheDuringChangeCarId);
+                mCacheDuringChangeCarId = 0;   // X360 *(this+10) = 0
+            }
+            else
+            {
+                // DWARF cpp:736; AddGameAction (BrnGameActions.h:501).
+                GameStateModuleIO::CarSelectionDropInCompleteAction lCarSelectDropInCompleteAction;
+                lCarSelectDropInCompleteAction.mbIsLeft = meLastSpawnLocationType == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+                lCarSelectDropInCompleteAction.mCarId   = mDesiredCarId;
+                lpActionQueue->AddGameAction(lCarSelectDropInCompleteAction);
+            }
+        }
     }
 }
 
@@ -1072,7 +963,7 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
 
     meState          = E_STATE_NONE;   // 0
     mbInCarModScreen = false;          // X360 *(this+115) = 0
-    mfStateTimer     = KF_TIMER_RESET; // 0.0
+    mfStateTimer     = 0.0f; // 0.0
 
     // DWARF cpp:973: the end of the offline junkyard mod screen.
     GameStateModuleIO::CarSelectModificationScreen lModScreenAction;
@@ -1349,7 +1240,7 @@ void CarSelectManager::ExitJunkyard(GameStateModuleIO::GameActionQueue* lpAction
     CGS_ASSERT_STREAM_AT(meState == E_STATE_CAR_MODIFICATION,
                          "CarSelectManager: State needs to be in E_STATE_CAR_MODIFICATION.", KAC_CSM_FILE, 503);
 
-    mfStateTimer = KF_TIMER_RESET;   // 0.0
+    mfStateTimer = 0.0f;   // 0.0
     meState      = E_STATE_EXITING;  // 9
 
     // DWARF cpp:508.
@@ -1377,7 +1268,7 @@ void CarSelectManager::ForceExitJunkyard(GameStateModuleIO::GameActionQueue* lpA
 {
     // X360 asm: mfStateTimer = 0.0; meState = 9 (li r9,9); mbWaitingForStreaming = 0;
     // mDesiredCarId(+0x48) = mStartCarId(+0x40) (the abort carries the entry car id back through exit).
-    mfStateTimer          = KF_TIMER_RESET;        // 0.0
+    mfStateTimer          = 0.0f;        // 0.0
     meState               = E_STATE_EXITING;       // 9
     mbWaitingForStreaming = false;                 // X360 *(this+88) = 0
     mDesiredCarId         = mStartCarId;           // X360 *(this+0x48) = *(this+0x40)
