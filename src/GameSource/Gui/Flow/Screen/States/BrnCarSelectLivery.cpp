@@ -190,13 +190,15 @@ namespace BrnGui
 
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
+        // Selectable::K_INVALID_ID (DWARF uint64_t 4294967295): ARTIST builds it once
+        // (li -1; clrldi r28,32 at 0x824D6A78) for all three ids.
         mCarSelector.Construct(mpacCarSelectorName, mpStateInterface, 0,
-                               static_cast<u64>(-1));
+                               Selectable::K_INVALID_ID);
 
         mOptionToggles.Construct(KAC_OPTION_NAME, mpStateInterface, E_OPTIONTOGGLE_COUNT, 0,
-                                 static_cast<u64>(-1));
+                                 Selectable::K_INVALID_ID);
         mColourMenuToggle.Construct(KAC_PAINT_COLOUR_OPTION_NAME, mpStateInterface, 0,
-                                    static_cast<u64>(-1));
+                                    Selectable::K_INVALID_ID);
         mColourMenuToggle.Clear();   // toggle slot 6
 
         mOnlineCountdown.Construct(KAC_ONLINE_COUNTDOWN_NAME, mpStateInterface, 0);

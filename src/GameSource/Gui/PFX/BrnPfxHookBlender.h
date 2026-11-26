@@ -15,25 +15,15 @@ namespace rw { namespace graphics { namespace postfx { struct ColourCube; } } }
 // The runtime half of the GUI post-FX hook system (DecFIGS DWARF BrnPfxHookBlender.h):
 //
 //   ColourCubeInfo      -- one loaded 3D-tint colour cube and the resource id it answers to
-//   PfxContainer<T>     -- the per-type weighted blend accumulator (BloomBlend etc. below)
+//   PfxContainer<T>     -- the per-type weighted blend accumulator
 //   PFXNodeFader        -- ONE hook node's fade envelope (wait / fade in / hold / fade out /
 //                          finished) and the five asset-keyed effect payloads it carries
 //   PFXHookNodeBlender  -- ONE playing hook: up to KU_MAX_CONCURRENT_NODES faders and the six
 //                          accumulators they fold into every frame
 //
-// The accumulators' Add bodies are the ARTIST ones (asserts cite
-// "..\\..\\..\\GameSource\\Gui/PFX/BrnPfxHookBlender.cpp", line 84):
-//   if (!lpSrc) return this;                       // null source is a no-op
-//   mfCount += 1.0f;
-//   if (mfWeight < lfWeight) { ASSERT(lfWeight<=1.0f); mfWeight = lfWeight; }
-//   if (mfCount == 1.0f) copy the payload straight from the source;
-//   else                 payload = src*lfWeight + payload*(1 - lfWeight)
-//                                  (per scalar member and per vector lane).
-//
-// NOTE: the accumulator layouts are proven by the Add bodies' load/store offsets, not by the
-// post-FX *Data structs (those carry SIMD alignment padding that these tightly packed blend
-// payloads do not). Members are accessed by name only.
-//
+// The containers' members, the fader's and the blender's out-of-line members are defined in
+// BrnPfxHookBlender.cpp, the original single file (DWARF lines cpp:57..645).
+// =============================================================================
 
 namespace BrnGui
 {
@@ -46,137 +36,41 @@ namespace BrnGui
         u64                                                        muResourceId;   // :45
     };
 
-    // ---- BloomData accumulator (Add @ 0x824F6810) ----------------------------
-    // payload == BrnEffects::BloomData (32B) then weight @0x20, count @0x24.
-    struct BloomBlend
+    // BrnPfxHookBlender.h:60 -- the per-type weighted blend accumulator one hook (or the
+    // arbitrator's final mix) folds its nodes' payloads into. The members are defined in
+    // BrnPfxHookBlender.cpp, as ARTIST's assert path for Add shows (cpp:84); ARTIST keeps
+    // out-of-line copies of the ones it does not inline (Add 0x824F6810/0x824F69E8/
+    // 0x824F6B70/0x824F6C40/0x824F6D60, Construct 0x824F6968/0x824F6AD0).
+    template <typename T>
+    struct PfxContainer
     {
-        BrnEffects::BloomData mData;   // +0x00 .. +0x1F
-        f32                   mfWeight; // +0x20
-        f32                   mfCount;  // +0x24
+        void Construct();                                   // :64
+        void Add(const T* lpEffectsData, float lfWeight);   // :69
+        f32 GetWeight() const;                              // :73
+        const T& GetData() const;                           // :77
+        f32 GetCount() const;                               // :81
 
-        // Inlined at every console site (PFXHookNodeBlender::Initialise/Update @0x82504510 /
-        // @0x824FB598, EffectsArbitrator::GenerateEffectFrameEvents): the BloomData defaults
-        // (0.98, 0.77, unk_82FFAED0) then the two bookkeeping fields at 0.0f.
-        BloomBlend* Construct() { mData.Construct(); mfWeight = 0.0f; mfCount = 0.0f; return this; }
-        BloomBlend* Add(const BrnEffects::BloomData* lpSrc, f32 lfWeight);
-        f32 GetWeight() const { return mfWeight; }
-        f32 GetCount() const  { return mfCount; }
-        const BrnEffects::BloomData& GetData() const { return mData; }
+    private:
+        T   mData;      // :84
+        f32 mfWeight;   // :85
+        f32 mfCount;    // :86
     };
 
-    // ---- DepthOfFieldData accumulator (Add @ 0x824F6C40) ---------------------
-    // Tightly packed 5-float payload (the X360 1-weight copy moves exactly 5
-    // dwords and the blend touches the first four lanes); weight @0x14, count
-    // @0x18. This payload is NOT the padded BrnEffects::DepthOfFieldData; the
-    // five fields are spelled here by name so member access stays honest.
-    struct DepthOfFieldBlend
+    // BrnPfxHookBlender.h:91 -- the 3D tint is a colour cube, not a blend: the last enabled
+    // node wins outright (BrnPfxHookBlender.cpp:57/114/150/181/212).
+    template <>
+    struct PfxContainer<BrnEffects::TintData>
     {
-        f32 mfNearPlane;   // +0x00
-        f32 mfFocalPlane;  // +0x04
-        f32 mfFocalPlane2; // +0x08
-        f32 mfFarPlane;    // +0x0C
-        f32 mfDofAmount;   // +0x10  (copied at count==1, NOT blended)
-        f32 mfWeight;      // +0x14
-        f32 mfCount;       // +0x18
+        void Construct();                                                       // :93
+        void Add(const BrnEffects::TintData* lpEffectsData, f32 lfWeight);      // :95
+        f32 GetWeight() const;                                                  // :96
+        const BrnEffects::TintData& GetData() const;                            // :97
+        f32 GetCount() const;                                                   // :98
 
-        // Inlined at the console sites: {0, 0, 0, 0, 1.0} then the two bookkeeping 0.0f
-        // (PFXHookNodeBlender::Initialise @0x82504510 stores +2720..+2744 exactly so).
-        DepthOfFieldBlend* Construct()
-        {
-            mfNearPlane = 0.0f; mfFocalPlane = 0.0f; mfFocalPlane2 = 0.0f; mfFarPlane = 0.0f;
-            mfDofAmount = 1.0f; mfWeight = 0.0f; mfCount = 0.0f; return this;
-        }
-        DepthOfFieldBlend* Add(const DepthOfFieldBlend* lpSrc, f32 lfWeight);
-        // The fader carries a padded BrnEffects::DepthOfFieldData; its five leading floats ARE
-        // this payload (same names, same order), which is what the console's Add reads.
-        DepthOfFieldBlend* Add(const BrnEffects::DepthOfFieldData* lpSrc, f32 lfWeight)
-        {
-            return Add(reinterpret_cast<const DepthOfFieldBlend*>(lpSrc), lfWeight);
-        }
-        f32 GetWeight() const { return mfWeight; }
-        f32 GetCount() const  { return mfCount; }
-    };
-
-    // ---- TintData2d accumulator (Add @ 0x824F6D60) ---------------------------
-    // payload == BrnEffects::TintData2d (one Vector4, 16B) then weight @0x10,
-    // count @0x14.
-    struct TintData2dBlend
-    {
-        BrnEffects::TintData2d mData;    // +0x00 .. +0x0F
-        f32                    mfWeight; // +0x10
-        f32                    mfCount;  // +0x14
-
-        // Inlined at the console sites: the default colour (unk_82FFB230) then 0.0f / 0.0f.
-        TintData2dBlend* Construct() { mData.Construct(); mfWeight = 0.0f; mfCount = 0.0f; return this; }
-        TintData2dBlend* Add(const BrnEffects::TintData2d* lpSrc, f32 lfWeight);
-        f32 GetWeight() const { return mfWeight; }
-        f32 GetCount() const  { return mfCount; }
-        const BrnEffects::TintData2d& GetData() const { return mData; }
-    };
-
-    // ---- BlurData accumulator (Add @ 0x824F6B70) -----------------------------
-    // payload == BrnEffects::BlurData (96B) then weight @0x60, count @0x64. The
-    // blend path delegates to BrnEffects::BlurData::SetToBlend; the copy path is a
-    // straight 96-byte memcpy of the payload.
-    struct BlurBlend
-    {
-        BrnEffects::BlurData mData;    // +0x00 .. +0x5F
-        f32                  mfWeight; // +0x60
-        f32                  mfCount;  // +0x64
-
-        // Construct @ 0x824F6AD0 -- seed the payload with the BlurData defaults
-        // (the same 5 scalar @0..0x10 + 4 Vector2 @0x20/0x30/0x40/0x50 store set
-        // BrnEffects::BlurData::Construct writes) then zero the two bookkeeping
-        // fields mfWeight@0x60 / mfCount@0x64 (both 0.0f). Returns this (the X360
-        // body returns its result pointer).
-        BlurBlend* Construct();
-
-        BlurBlend* Add(const BrnEffects::BlurData* lpSrc, f32 lfWeight);
-        f32 GetWeight() const { return mfWeight; }
-        f32 GetCount() const  { return mfCount; }
-        const BrnEffects::BlurData& GetData() const { return mData; }
-    };
-
-    // ---- VignetteData accumulator (Add @ 0x824F69E8) -------------------------
-    // payload == BrnEffects::VignetteData (80B) then weight @0x50, count @0x54. The
-    // blend path delegates to BrnEffects::VignetteData::SetToBlend; the copy path is
-    // a straight 80-byte memcpy of the payload.
-    struct VignetteBlend
-    {
-        BrnEffects::VignetteData mData;    // +0x00 .. +0x4F (80B)
-        f32                      mfWeight; // +0x50
-        f32                      mfCount;  // +0x54
-
-        // Construct @ 0x824F6968 -- seed the payload with the VignetteData defaults
-        // (mfAngle@0x00, mfSharpness@0x04, and the four 16-byte vector members
-        // mv2Amount@0x10 / mv2Centre@0x20 / mv4InnerColour@0x30 / mv4OuterColour@0x40
-        // that BrnEffects::VignetteData::Construct writes) then zero the two
-        // bookkeeping fields mfWeight@0x50 / mfCount@0x54 (both 0.0f). Returns this.
-        VignetteBlend* Construct();
-
-        VignetteBlend* Add(const BrnEffects::VignetteData* lpSrc, f32 lfWeight);
-        f32 GetWeight() const { return mfWeight; }
-        f32 GetCount() const  { return mfCount; }
-        const BrnEffects::VignetteData& GetData() const { return mData; }
-    };
-
-    // ---- TintData (3D colour cube) accumulator --------------------------------
-    // PfxContainer<BrnEffects::TintData>: the cube pointer, then weight, then count. The
-    // console never calls an Add for this one -- PFXHookNodeBlender::Update stores the
-    // three fields directly (@0x824FB598: +2784 cube, +2788 weight, +2792 count = 1.0).
-    struct TintDataBlend
-    {
-        BrnEffects::TintData mData;    // the cube pointer
-        f32                  mfWeight;
-        f32                  mfCount;
-
-        TintDataBlend* Construct() { mData.Construct(); mfWeight = 0.0f; mfCount = 0.0f; return this; }
-        // DWARF BrnPfxHookBlender.cpp:114; ARTIST inlines it into PFXHookNodeBlender::Update
-        // (0x824FB95C: count 1.0, weight, cube) and keeps no copy.
-        TintDataBlend* Add(const BrnEffects::TintData* lpEffectsData, f32 lfWeight);
-        f32 GetWeight() const { return mfWeight; }
-        f32 GetCount() const  { return mfCount; }
-        const BrnEffects::TintData& GetData() const { return mData; }
+    private:
+        BrnEffects::TintData mData;      // :100
+        f32                  mfWeight;   // :101
+        f32                  mfCount;    // :102
     };
 
     // BrnPfxHookBlender.h:115 -- one node of a playing hook.
@@ -236,9 +130,8 @@ namespace BrnGui
     class PFXHookNodeBlender
     {
     public:
-        // :213 -- inlined everywhere the console constructs one (EffectsArbitrator::Construct
-        // stores the five blenders' first word 0): no hook bound.
-        void Construct() { mpHook = 0; }
+        // :213 (BrnPfxHookBlender.cpp:503) -- no hook bound.
+        void Construct();
         // :225 @0x82504510 -- bind a hook and initialise one fader per node.
         void Initialise(const PFXHook* lpHook, ColourCubeInfo* lpaColourCubes, u32 luCubeCount,
                         f32 lfMaximumBloomWeight, f32 lfMaximumVignetteWeight,
@@ -247,8 +140,8 @@ namespace BrnGui
         // :229 @0x824FB598 -- reset the six accumulators, advance every fader, fold each
         // live one in at min(its weight, the per-type maximum), then advance the clock.
         void Update(f32 lfTimestep);
-        void Stop()                      { mpHook = 0; }               // :233 (inlined; no export)
-        void ForceTime(f32 lfTime)       { mfTime = lfTime; }          // :236 (inlined; no export)
+        void Stop();                     // :233 (BrnPfxHookBlender.cpp:645)
+        void ForceTime(f32 lfTime);      // :236 (BrnPfxHookBlender.cpp:610)
         // :240 @0x824ECFC0 -- true while the blender is still working: false if it has no
         // hook, the hook has no nodes, or every live node slot has reached the finished
         // state; otherwise true (some node is still blending).
@@ -257,23 +150,23 @@ namespace BrnGui
         const PFXHook* GetHook() const   { return mpHook; }            // :248
         // :252 @0x824F6058 -- every fader.
         void StartFadeOut(f32 lfFadeOutTimeOverride);
-        const BloomBlend&        GetBloom() const        { return mBlendedBloomData; }        // :256
-        const VignetteBlend&     GetVignette() const     { return mBlendedVignetteData; }     // :260
-        const BlurBlend&         GetBlur() const         { return mBlendedBlurData; }         // :264
-        const DepthOfFieldBlend& GetDepthOfField() const { return mBlendedDepthOfFieldData; } // :268
-        const TintData2dBlend&   Get2DTint() const       { return mBlendedTint2DData; }       // :272
-        const TintDataBlend&     Get3DTint() const       { return mBlendedTint3DData; }       // :276
+        const PfxContainer<BrnEffects::BloomData>&        GetBloom() const        { return mBlendedBloomData; }        // :256
+        const PfxContainer<BrnEffects::VignetteData>&     GetVignette() const     { return mBlendedVignetteData; }     // :260
+        const PfxContainer<BrnEffects::BlurData>&         GetBlur() const         { return mBlendedBlurData; }         // :264
+        const PfxContainer<BrnEffects::DepthOfFieldData>& GetDepthOfField() const { return mBlendedDepthOfFieldData; } // :268
+        const PfxContainer<BrnEffects::TintData2d>&       Get2DTint() const       { return mBlendedTint2DData; }       // :272
+        const PfxContainer<BrnEffects::TintData>&         Get3DTint() const       { return mBlendedTint3DData; }       // :276
 
     private:
         const PFXHook*    mpHook;                                   // :302  +0x000
         PFXNodeFader      maNodeStates[KU_MAX_CONCURRENT_NODES];    // :303  +0x010 (stride 0x130)
         f32               mfTime;                                   // :304  +0x990
-        BloomBlend        mBlendedBloomData;                        // :306  +0x9A0
-        VignetteBlend     mBlendedVignetteData;                     // :307  +0x9D0
-        BlurBlend         mBlendedBlurData;                         // :308  +0xA30
-        DepthOfFieldBlend mBlendedDepthOfFieldData;                 // :309  +0xAA0
-        TintData2dBlend   mBlendedTint2DData;                       // :310  +0xAC0
-        TintDataBlend     mBlendedTint3DData;                       // :311  +0xAE0
+        PfxContainer<BrnEffects::BloomData>        mBlendedBloomData;         // :306  +0x9A0
+        PfxContainer<BrnEffects::VignetteData>     mBlendedVignetteData;      // :307  +0x9D0
+        PfxContainer<BrnEffects::BlurData>         mBlendedBlurData;          // :308  +0xA30
+        PfxContainer<BrnEffects::DepthOfFieldData> mBlendedDepthOfFieldData;  // :309  +0xAA0
+        PfxContainer<BrnEffects::TintData2d>       mBlendedTint2DData;        // :310  +0xAC0
+        PfxContainer<BrnEffects::TintData>         mBlendedTint3DData;        // :311  +0xAE0
         f32               mfMaximumBloomWeight;                     // :313  +0xAEC
         f32               mfMaximumVignetteWeight;                  // :314  +0xAF0
         f32               mfMaximumBlurWeight;                      // :315  +0xAF4

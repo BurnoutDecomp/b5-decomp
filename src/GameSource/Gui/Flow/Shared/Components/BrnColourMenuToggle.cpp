@@ -74,14 +74,14 @@ namespace BrnGui
         CGS_ASSERT(lpStateInterface != 0, "Invalid state interface"); // @0x824E8C14 (cmplwi r22,0)
 
         // X360: GuiComponent::Construct(this + 0x18, name, stateInterface, parentName).
-        mGuiComponentBase.Construct(lpacName, lpStateInterface, lpacParentName);
+        CgsGui::GuiComponent::Construct(lpacName, lpStateInterface, lpacParentName);
 
-        mu64Id  = lu64AptId;   // std r19 -> +0x10
-        muFlags = 0;           // stb 0  -> +0x0C
+        SetId(lu64AptId);   // std r19 -> +0x10
+        ClearFlags();       // stb 0  -> +0x0C
 
         // Child colour selections are parented on THIS component's own name buffer
-        // (X360 passes r27 == this + 0x1C == mGuiComponentBase.macName).
-        const char* lpacChildParent = mGuiComponentBase.GetName();
+        // (X360 passes r27 == this + 0x1C, the GuiComponent's name).
+        const char* lpacChildParent = GetName();
 
         for (s32 li = 0; li < KI_NUM_ITEMS; ++li)
         {
@@ -105,7 +105,7 @@ namespace BrnGui
         if (GetFocusedSelectionNav()->HighlightIndex(liIndex))   // picker slot 12 (+0x30)
         {
             HighlightNeighbours();
-            muFlags |= KU_FLAG_QUERIED;   // *(this+0xC) |= 0x10
+            SetDirty();   // *(this+0xC) |= 0x10
             return true;
         }
         return false;
@@ -119,7 +119,7 @@ namespace BrnGui
         if (GetFocusedSelectionNav()->HighlightNext(false))
         {
             HighlightNeighbours();
-            muFlags |= KU_FLAG_DIRTY;                                       // *(this+0xC) |= 0x10
+            SetDirty();   // *(this+0xC) |= 0x10
             return true;
         }
         return false;
@@ -132,7 +132,7 @@ namespace BrnGui
         if (GetFocusedSelectionNav()->HighlightPrevious(false))
         {
             HighlightNeighbours();
-            muFlags |= KU_FLAG_DIRTY;                                       // *(this+0xC) |= 0x10
+            SetDirty();   // *(this+0xC) |= 0x10
             return true;
         }
         return false;
@@ -171,7 +171,7 @@ namespace BrnGui
                 liActiveCount, lbActive, lppTopColours, lppBottomColours, lpu64Ids);
         }
 
-        muFlags |= KU_FLAG_DIRTY;   // *(this+0xC) |= 0x10
+        SetDirty();   // *(this+0xC) |= 0x10
     }
 
     // @ 0x824E8DE8 -- re-seat the four flanking pickers around the centre one, then hide the
@@ -227,28 +227,28 @@ namespace BrnGui
     }
 
     // @ 0x824E8D08 -- lazy apt refresh. When the dirty bit is set: clear it, resolve the
-    // current view-state off muFlags (bit0 active / bit2 enabled / bit3 highlighted), re-push
+    // current view-state off the Selectable flags (bit0 active / bit2 enabled / bit3 highlighted), re-push
     // the "apt_state" output, then Update every embedded colour selection (vtable slot 5 ==
     // byte +0x14). When not dirty, do nothing.
     void ColourMenuToggle::Update()
     {
-        if ((muFlags & KU_FLAG_DIRTY) == 0)
+        if (!IsDirty())
             return;
 
-        muFlags ^= KU_FLAG_DIRTY;   // clear the dirty bit (it was set)
+        ClearFlag(E_FLAG_DIRTY);   // clear the dirty bit (it was set)
 
         MenuToggleStates leState;
-        if ((muFlags & KU_FLAG_ACTIVE) == 0)
+        if (!IsActive())
             leState = E_MENUTOGGLESTATES_INVISIBLE;
-        else if ((muFlags & KU_FLAG_ENABLED) == 0)
+        else if (!IsSelectable())
             leState = E_MENUTOGGLESTATES_DISABLED;
-        else if ((muFlags & KU_FLAG_HIGHLIGHTED) == 0)
+        else if (!IsHighlighted())
             leState = E_MENUTOGGLESTATES_UNHIGHLIGHTED;
         else
             leState = E_MENUTOGGLESTATES_HIGHLIGHTED;
 
         // X360: CgsGui::GuiComponent::AddOutputAptViewState(this + 0x18, ...).
-        mGuiComponentBase.AddOutputAptViewState("apt_state", KAC_STATE_NAMES[leState], false);
+        AddOutputAptViewState("apt_state", KAC_STATE_NAMES[leState], false);
 
         // Update each embedded colour selection via its component Update virtual.
         for (s32 li = 0; li < KI_NUM_ITEMS; ++li)

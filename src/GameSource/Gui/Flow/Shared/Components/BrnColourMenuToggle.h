@@ -29,6 +29,7 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsID (u64)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"   // CgsGui::GuiComponent (identity base)
 #include "GameSource/Gui/BrnGuiTextField.h"                           // BrnGui::TextField (mTitleText)
+#include "GameSource/Gui/Flow/Shared/Components/BrnSelectable.h"      // BrnGui::Selectable (primary base)
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h" // BrnGui::SelectableGroup (picker nav base)
 #include "GameSource/Gui/Flow/Shared/Components/BrnColourSelection.h" // BrnGui::ColourSelection (by value, x5)
 
@@ -36,25 +37,20 @@ namespace CgsGui { struct StateInterface; }
 
 namespace BrnGui
 {
-    class ColourMenuToggle
+    // DWARF BrnColourMenuToggle.h:48 `ColourMenuToggle : public CgsGui::GuiComponent`; the dumper
+    // prints one base, as for MenuToggle and SelectableGroup. ARTIST's implicit ctor (0x82500B88)
+    // stores the Selectable-headed vtable 0x82074730 at +0 (Selectable::SetActive/SetHighlightable/
+    // SetSelectable/SetHighlighted, then this class's Select, Update and Clear in slots 4..6) and
+    // the GuiComponent subobject's 0x8207472C at +0x18: Selectable first, GuiComponent second.
+    struct ColourMenuToggle : public Selectable, public CgsGui::GuiComponent
     {
-    public:
         // The five colour pickers + the focused (central) one.
         static const s32 KI_NUM_ITEMS   = 5;
         static const s32 KI_CENTRE_ITEM = 2;      // element[2] -- the central/focused picker
-        // Dirty / queried flag bit (methods OR *(this+0xC) |= 0x10).
-        static const u8  KU_FLAG_DIRTY   = 0x10;
-        static const u8  KU_FLAG_QUERIED = 0x10;
         // The picker's per-child "no id" sentinel (SelectableGroup::KU64_NO_ID).
         static const u64 KU64_NO_ID = 0xFFFFFFFFull;
         // One colour picker occupies 0x1338 (4920) bytes on the console.
         static const u32 KU_COLOUR_SELECTION_STRIDE = 0x1338;
-
-        // muFlags state bits sampled by Update() to pick the apt view-state name (inferred
-        // from the state ladder: bit0 active, bit2 enabled, bit3 highlighted).
-        static const u8 KU_FLAG_ACTIVE      = 0x01;
-        static const u8 KU_FLAG_ENABLED     = 0x04;
-        static const u8 KU_FLAG_HIGHLIGHTED = 0x08;
 
         // DWARF BrnColourMenuToggle.h:164 -- the apt view-state ladder Update() maps to.
         enum MenuToggleStates
@@ -67,8 +63,9 @@ namespace BrnGui
             E_MENUTOGGLESTATES_COUNT         = 5,
         };
 
-        // @ 0x824E5670 -- clear every embedded colour selection.
-        void Clear();
+        // @ 0x824E5670 (cpp:288) -- clear every embedded colour selection. Virtual (DWARF): slot 6,
+        // which CarSelectLivery::OnEnter/OnLeave dispatch (0x824D6AE4 / 0x824D6CC8).
+        virtual void Clear();
         // @ 0x824E8B70 -- construct the five pickers + title text; mark loaded.
         void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                        const char* lpacParentName, u64 lu64AptId);
@@ -89,17 +86,17 @@ namespace BrnGui
         // @ 0x824EA1A0 / 0x824EA220 -- move the focused picker's highlight next/prev.
         bool HighlightNext();
         bool HighlightPrevious();
-        // @ 0x824E56C8 -- tail-call the focused picker's Select().
-        void Select();
+        // @ 0x824E56C8 (cpp:305, virtual) -- tail-call the focused picker's Select().
+        virtual void Select();
         // @ 0x824EA110 -- set the title text, push a top/bottom colour gradient into all five
         // pickers, then dirty the component.
         void SetupMenuToggleGradient(s32 liActiveCount, bool lbActive, const char* lpacText,
                                      const rw::math::vpu::Vector4** lppTopColours,
                                      const rw::math::vpu::Vector4** lppBottomColours,
                                      u64* lpu64Ids);
-        // @ 0x824E8D08 -- when dirtied, resolve the current apt view-state and re-push it,
-        // then Update every embedded colour selection.
-        void Update();
+        // @ 0x824E8D08 (cpp:228, virtual) -- when dirtied, resolve the current apt view-state and
+        // re-push it, then Update every embedded colour selection.
+        virtual void Update();
 
         // @ 0x824E8DE8 -- after the centre picker's highlight has moved, re-seat the four
         // flanking pickers' highlights and hide the swatch/plate pair of any picker that has
@@ -114,48 +111,16 @@ namespace BrnGui
             return maColourSelection[KI_CENTRE_ITEM].miHighlightedIndex;
         }
 
-        // The component's flag byte, as the owning screen state samples it (+0xC).
-        bool IsHighlighted() const { return (muFlags & KU_FLAG_HIGHLIGHTED) != 0; }
-
-        // ADDITIVE GROW (BrnGui::CarSelectLivery, 2026-08-02). Component vtable slots 0..3,
-        // which SetupPaintColourToggle and HandleControllerInput reach as
-        // `(*(*(this + 0x2860) + 0/4/8/0xC))(this + 0x2860, x)`. The toggle's head carries the
-        // same Selectable flag byte at +0x0C that SelectableGroup models, so these reproduce
-        // Selectable::SetActive / SetHighlightable / SetSelectable / SetHighlighted on it.
-        bool SetActive(bool lbActive)               { return SetStateFlag(KU_FLAG_ACTIVE, lbActive); }
-        bool SetHighlightable(bool lbHighlightable) { return SetStateFlag(0x02, lbHighlightable); }
-        bool SetSelectable(bool lbSelectable)       { return SetStateFlag(KU_FLAG_ENABLED, lbSelectable); }
-        bool SetHighlighted(bool lbHighlighted)     { return SetStateFlag(KU_FLAG_HIGHLIGHTED, lbHighlighted); }
-
-        // Mark the component dirty so the next Update() re-pushes its apt view state
-        // (`*(this+0xC) |= 0x10`). CarSelectLivery's SetupPaintColourToggle does this
-        // explicitly after re-seating the picker.
-        void SetDirty() { muFlags = static_cast<u8>(muFlags | KU_FLAG_DIRTY); }
+        // The flag surface (IsHighlighted, SetDirty, the SetActive/SetHighlightable/
+        // SetSelectable/SetHighlighted virtuals CarSelectLivery dispatches through slots 0..3)
+        // is the Selectable base's; the apt name and view-state output are GuiComponent's.
 
     private:
-        // The shared body of the four flag setters (see SelectableGroup::SetStateFlag).
-        bool SetStateFlag(u8 luBit, bool lbSet)
-        {
-            const u8 luFlags = muFlags;
-            if (lbSet == ((luFlags & luBit) != 0))
-                return false;
-            muFlags = static_cast<u8>(lbSet ? (luFlags | luBit) : (luFlags ^ luBit));
-            muFlags = static_cast<u8>(muFlags | KU_FLAG_DIRTY);
-            return true;
-        }
-
         // The focused picker (element[2]) -- the toggle's virtual delegation target
         // (Select / HighlightNext(false) / HighlightPrevious(false) / HighlightIndex).
         ColourSelection* GetFocusedSelectionNav() { return &maColourSelection[KI_CENTRE_ITEM]; }
 
-        // ---- members ----------------------------------------------------------------
-        void* mppVTable;                        // +0x00 (component vtable pointer)
-        u8    maHeadReserved[0x08];             // +0x04..+0x0B (identity head)
-        u8    muFlags;                          // +0x0C (methods OR in 0x10)
-        u8    maPadD[3];                        // +0x0D..+0x0F
-        u64   mu64Id;                           // +0x10
-        CgsGui::GuiComponent mGuiComponentBase; // +0x18
-
+        // ---- members (after the Selectable head +0x00..+0x17 and GuiComponent at +0x18) ----
         ColourSelection maColourSelection[KI_NUM_ITEMS];   // +0xA8 (stride 0x1338; [2] @ +0x2718)
 
         TextField mTitleText;                   // +0x60C0

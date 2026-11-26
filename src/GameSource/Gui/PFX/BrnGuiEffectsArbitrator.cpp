@@ -122,57 +122,48 @@ namespace BrnGui
     void EffectsArbitrator::ResourceUpdate(CgsGui::ModelIO::InputBuffer* lpGuiModelInputBuffer,
                                            const CgsGui::ModelIO::OutputBuffer* lpGuiModelOutputBuffer)
     {
-        CGS_ASSERT_AT(lpGuiModelInputBuffer != 0, "lpGuiModelInputBuffer != NULL", CGS_ARTIST_FILE, 171);     // :171
-        CGS_ASSERT_AT(lpGuiModelOutputBuffer != 0, "lpGuiModelOutputBuffer != NULL", CGS_ARTIST_FILE, 172);   // :172
+        CGS_ASSERT_AT(lpGuiModelInputBuffer != NULL, "lpGuiModelInputBuffer != NULL", CGS_ARTIST_FILE, 171);     // :171
+        CGS_ASSERT_AT(lpGuiModelOutputBuffer != NULL, "lpGuiModelOutputBuffer != NULL", CGS_ARTIST_FILE, 172);   // :172
 
-        const CgsGui::ModelIO::OutputBuffer::GuiNotificationQueue* lpNotifications =
+        // DWARF locals: lpLoadNotifications (cpp:175), lpEvent / liEventSize / liEventId
+        // (cpp:179..181), lpLoadNotification (cpp:191), luIndex (cpp:213). No null guard after
+        // the streamed assert (ARTIST 0x825178D8 walks the queue unconditionally).
+        const CgsGui::ModelIO::OutputBuffer::GuiNotificationQueue* lpLoadNotifications =
             lpGuiModelOutputBuffer->GetLoadNotifications();
-        CGS_ASSERT(lpNotifications != 0, "Invalid queue in EffectsArbitrator::Update");   // :177
-        if (lpNotifications == 0)
-        {
-            return;
-        }
+        CGS_ASSERT_STREAM_AT(lpLoadNotifications != NULL, "Invalid queue in EffectsArbitrator::Update",
+                             CGS_ARTIST_FILE, 177);                                                         // :177
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liId = lpNotifications->GetFirstEvent(&lpEvent, &liSize);
-        while (lpEvent != 0)
+        const CgsModule::Event* lpEvent;
+        int32_t liEventSize;
+        int32_t liEventId = lpLoadNotifications->GetFirstEvent(&lpEvent, &liEventSize);
+        while (lpEvent != NULL)
         {
-            if (liId == KI_LOAD_NOTIFICATION_EVENT_ID)
+            if (liEventId == KI_LOAD_NOTIFICATION_EVENT_ID)
             {
-                const CgsGui::GuiEventLoadNotification* lpNotification =
+                const CgsGui::GuiEventLoadNotification* lpLoadNotification =
                     static_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent);
-                const u32 luRequestId = lpNotification->muLoadRequestId;
-                if (luRequestId == KU_PFX_HOOK_BUNDLE_REQUEST_ID)
+                if (lpLoadNotification->muLoadRequestId == KU_PFX_HOOK_BUNDLE_REQUEST_ID)
                 {
-                    mpHookInfo = CgsResource::ResourcePtr<PFXHookBundle>(lpNotification->mResourceHandle);
-                    CGS_ASSERT_AT(!mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr),
+                    // ResourcePtr::operator=(const ResourceHandle&): one CreateFromHandle
+                    // straight into the member (ARTIST 0x82517980).
+                    mpHookInfo = lpLoadNotification->mResourceHandle;
+                    CGS_ASSERT_AT(mpHookInfo != CgsResource::NULLResourcePtr,
                                "mpHookInfo != CgsResource::NULLResourcePtr", CGS_ARTIST_FILE, 198);           // :198
                     Acquire3dTints(lpGuiModelInputBuffer);
                 }
-                else if (luRequestId - KU_PFX_COLOURCUBE_REQUEST_BASE <= 5u)
+                else if (lpLoadNotification->muLoadRequestId - KU_PFX_COLOURCUBE_REQUEST_BASE <= 5u)
                 {
-                    const u32 luCount = muColourCubeCount;
-                    if (luCount != 0)
+                    for (uint32_t luIndex = 0; luIndex < muColourCubeCount; ++luIndex)
                     {
-                        u32 luIndex = 0;
-                        while (mauColourCubeRequestIds[luIndex] != luRequestId)
+                        if (mauColourCubeRequestIds[luIndex] == lpLoadNotification->muLoadRequestId)
                         {
-                            if (++luIndex >= luCount)
-                            {
-                                luIndex = luCount;   // not one of ours after all
-                                break;
-                            }
-                        }
-                        if (luIndex < luCount)
-                        {
-                            maColourCubes[luIndex].mpColourCube =
-                                CgsResource::ResourcePtr<rw::graphics::postfx::ColourCube>(lpNotification->mResourceHandle);
+                            maColourCubes[luIndex].mpColourCube = lpLoadNotification->mResourceHandle;
+                            break;
                         }
                     }
                 }
             }
-            liId = lpNotifications->GetNextEvent(lpEvent, &lpEvent, &liSize);
+            liEventId = lpLoadNotifications->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }
     }
 
@@ -219,37 +210,36 @@ namespace BrnGui
     // ------------------------------------------------------------------------------------
     // GetHookFromName @0x82502C78 (:527) / GetHookFromGUID @0x82502D70 (:554)
     // ------------------------------------------------------------------------------------
+    // DWARF locals: int32_t liIndex (cpp:530 / :556); the bundle is read through
+    // ResourcePtr::operator-> at every use (ARTIST 0x82502CF8/0x82502D10/0x82502D3C/0x82502D58)
+    // and the name compare is the CRT's _strnicmp (0x82502D24).
     const PFXHook* EffectsArbitrator::GetHookFromName(const char* lpcName)
     {
-        CGS_ASSERT_AT(!mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr),
+        CGS_ASSERT_AT(mpHookInfo != CgsResource::NULLResourcePtr,
                    "mpHookInfo != CgsResource::NULLResourcePtr", CGS_ARTIST_FILE, 527);                   // :527
-        CGS_ASSERT_AT(lpcName != 0, "lpcName != NULL", CGS_ARTIST_FILE, 528);                                // :528
-        const PFXHookBundle* lpBundle = mpHookInfo.operator->();
-        for (s32 liHook = 0; liHook < lpBundle->miHookCount; ++liHook)
+        CGS_ASSERT_AT(lpcName != NULL, "lpcName != NULL", CGS_ARTIST_FILE, 528);                             // :528
+        for (int32_t liIndex = 0; liIndex < mpHookInfo->miHookCount; ++liIndex)
         {
-            const PFXHook* lpHook = lpBundle->mpaHooks[liHook];
-            if (_strnicmp(lpHook->macName, lpcName, KI_MAX_PFX_ID_LENGTH) == 0)
+            if (_strnicmp(mpHookInfo->mpaHooks[liIndex]->macName, lpcName, KI_MAX_PFX_ID_LENGTH) == 0)
             {
-                return lpHook;
+                return mpHookInfo->mpaHooks[liIndex];
             }
         }
-        return 0;
+        return NULL;
     }
 
     const PFXHook* EffectsArbitrator::GetHookFromGUID(u32 luGuid)
     {
-        CGS_ASSERT_AT(!mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr),
+        CGS_ASSERT_AT(mpHookInfo != CgsResource::NULLResourcePtr,
                    "mpHookInfo != CgsResource::NULLResourcePtr", CGS_ARTIST_FILE, 554);                   // :554
-        const PFXHookBundle* lpBundle = mpHookInfo.operator->();
-        for (s32 liHook = 0; liHook < lpBundle->miHookCount; ++liHook)
+        for (int32_t liIndex = 0; liIndex < mpHookInfo->miHookCount; ++liIndex)
         {
-            const PFXHook* lpHook = lpBundle->mpaHooks[liHook];
-            if (lpHook->muId == luGuid)
+            if (mpHookInfo->mpaHooks[liIndex]->muId == luGuid)
             {
-                return lpHook;
+                return mpHookInfo->mpaHooks[liIndex];
             }
         }
-        return 0;
+        return NULL;
     }
 
     // The three-step lookup the console inlines at StartHook (:596), EventUpdate's 496 arm
@@ -599,7 +589,7 @@ namespace BrnGui
             {
                 GuiPFXHookEnumeration lEnumeration;
                 lEnumeration.miHookNameCount = -1;
-                if (!mpHookInfo.IsEqual(&CgsResource::NULLResourcePtr))
+                if (mpHookInfo != CgsResource::NULLResourcePtr)
                 {
                     const PFXHookBundle* lpBundle = mpHookInfo.operator->();
                     lEnumeration.miHookNameCount = lpBundle->miHookCount;
@@ -658,11 +648,11 @@ namespace BrnGui
         BrnEffectsFrame* lpFrame1 = lpRenderOutput->GetFXEventsEffectsFrame(0);
         BrnEffectsFrame* lpFrame2 = lpRenderOutput->GetFXEventsEffectsFrame(1);
 
-        BloomBlend        lBloom;        lBloom.Construct();
-        VignetteBlend     lVignette;     lVignette.Construct();
-        BlurBlend         lBlur;         lBlur.Construct();
-        DepthOfFieldBlend lDepthOfField; lDepthOfField.Construct();
-        TintData2dBlend   lTint2d;       lTint2d.Construct();
+        PfxContainer<BrnEffects::BloomData>        lBloom;        lBloom.Construct();
+        PfxContainer<BrnEffects::VignetteData>     lVignette;     lVignette.Construct();
+        PfxContainer<BrnEffects::BlurData>         lBlur;         lBlur.Construct();
+        PfxContainer<BrnEffects::DepthOfFieldData> lDepthOfField; lDepthOfField.Construct();
+        PfxContainer<BrnEffects::TintData2d>       lTint2d;       lTint2d.Construct();
         bool lbFrame1HasTint = false;
         bool lbFrame2HasTint = false;
 
@@ -745,12 +735,12 @@ namespace BrnGui
             {
                 if (lbCrossFading && lrOutgoing.GetDepthOfField().GetCount() > 0.0f)
                 {
-                    lDepthOfField.Add(&lrCurrent.GetDepthOfField(), lfCrossFade * lrCurrent.GetDepthOfField().GetWeight());
-                    lDepthOfField.Add(&lrOutgoing.GetDepthOfField(), (1.0f - lfCrossFade) * lrOutgoing.GetDepthOfField().GetWeight());
+                    lDepthOfField.Add(&lrCurrent.GetDepthOfField().GetData(), lfCrossFade * lrCurrent.GetDepthOfField().GetWeight());
+                    lDepthOfField.Add(&lrOutgoing.GetDepthOfField().GetData(), (1.0f - lfCrossFade) * lrOutgoing.GetDepthOfField().GetWeight());
                 }
                 else
                 {
-                    lDepthOfField.Add(&lrCurrent.GetDepthOfField(), lrCurrent.GetDepthOfField().GetWeight());
+                    lDepthOfField.Add(&lrCurrent.GetDepthOfField().GetData(), lrCurrent.GetDepthOfField().GetWeight());
                 }
             }
             if (lrCurrent.Get2DTint().GetCount() > 0.0f)
@@ -795,13 +785,7 @@ namespace BrnGui
         lpFrame1->SetVignetteData(lVignette.GetData(), lfFrame1Vignette);
         lpFrame1->SetBlurData(lBlur.GetData(), lfFrame1Blur);
         {
-            BrnEffects::DepthOfFieldData lDof;
-            lDof.mfNearPlane   = lDepthOfField.mfNearPlane;
-            lDof.mfFocalPlane  = lDepthOfField.mfFocalPlane;
-            lDof.mfFocalPlane2 = lDepthOfField.mfFocalPlane2;
-            lDof.mfFarPlane    = lDepthOfField.mfFarPlane;
-            lDof.mfDofAmount   = lDepthOfField.mfDofAmount;
-            lpFrame1->SetDepthOfFieldData(lDof, lfFrame1DepthOfField);
+            lpFrame1->SetDepthOfFieldData(lDepthOfField.GetData(), lfFrame1DepthOfField);
         }
         lpFrame1->SetTintData2d(lTint2d.GetData(), lfFrame1Tint2d);
 
@@ -889,7 +873,7 @@ namespace BrnGui
         }
         // depth of field
         {
-            DepthOfFieldBlend lFrame2Dof; lFrame2Dof.Construct();
+            PfxContainer<BrnEffects::DepthOfFieldData> lFrame2Dof; lFrame2Dof.Construct();
             f32 lfWeight = 0.0f;
             if (lbMenuPhase && lrMenu.GetDepthOfField().GetCount() > 0.0f)
             {
@@ -900,8 +884,8 @@ namespace BrnGui
             {
                 if (lbBackgroundCrossFading && lrBgOut.GetDepthOfField().GetCount() > 0.0f)
                 {
-                    lFrame2Dof.Add(&lrBgCur.GetDepthOfField(), lfBackgroundFade * lrBgCur.GetDepthOfField().GetWeight());
-                    lFrame2Dof.Add(&lrBgOut.GetDepthOfField(), (1.0f - lfBackgroundFade) * lrBgOut.GetDepthOfField().GetWeight());
+                    lFrame2Dof.Add(&lrBgCur.GetDepthOfField().GetData(), lfBackgroundFade * lrBgCur.GetDepthOfField().GetWeight());
+                    lFrame2Dof.Add(&lrBgOut.GetDepthOfField().GetData(), (1.0f - lfBackgroundFade) * lrBgOut.GetDepthOfField().GetWeight());
                     lfWeight = (1.0f - lfFrame1DepthOfField) * lFrame2Dof.GetWeight();
                 }
                 else
@@ -910,13 +894,7 @@ namespace BrnGui
                     lfWeight   = (1.0f - lfFrame1DepthOfField) * lrBgCur.GetDepthOfField().GetWeight();
                 }
             }
-            BrnEffects::DepthOfFieldData lDof;
-            lDof.mfNearPlane   = lFrame2Dof.mfNearPlane;
-            lDof.mfFocalPlane  = lFrame2Dof.mfFocalPlane;
-            lDof.mfFocalPlane2 = lFrame2Dof.mfFocalPlane2;
-            lDof.mfFarPlane    = lFrame2Dof.mfFarPlane;
-            lDof.mfDofAmount   = lFrame2Dof.mfDofAmount;
-            lpFrame2->SetDepthOfFieldData(lDof, lfWeight);
+            lpFrame2->SetDepthOfFieldData(lFrame2Dof.GetData(), lfWeight);
         }
         // 2D tint
         if (lbMenuPhase && lrMenu.Get2DTint().GetCount() > 0.0f)
