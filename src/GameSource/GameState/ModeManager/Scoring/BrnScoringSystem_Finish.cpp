@@ -33,6 +33,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "rw/math/fpu/scalar_operation.h"
 // KI_MAX_LANDMARKS_IN_MODE (== 16) lives in GameStateModuleIO, already pulled in by the
 // keystone via BrnGameStateSharedIO.h; no extra include needed beyond the assert macro.
 
@@ -46,7 +47,9 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     void ScoringSystem::SetCheckpointDistances(u32 luCheckpoint, f32 lfDistance)
     {
-        CGS_ASSERT_AT(lfDistance == lfDistance,
+        // DWARF (BrnGameStateScoringAndModesUnity) lists rw::math::fpu::IsValid(float) here; ARTIST
+        // materialises its bool (li 1 ; fcmpu f31,f31 ; bne ; li 0 ; clrlwi, 0x82310C4C).
+        CGS_ASSERT_AT(rw::math::fpu::IsValid(lfDistance),
                    "RwMathFPU::IsValid( lfDistanceToFinish )", CGS_ARTIST_FILE, 1793);
         CGS_ASSERT_AT(luCheckpoint < static_cast<u32>(GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE),
                    "( luCheckpointIndexFromFinish >= 0 ) && ( luCheckpointIndexFromFinish < (uint32_t)KI_MAX_LANDMARKS_IN_MODE )", CGS_ARTIST_FILE, 1794);

@@ -5,6 +5,7 @@
 // rw::math::vpu::Matrix44 (DWARF matrix44.h:111). vendor/renderware/include is on every
 // translation unit's include path and rw/math/vpu/types.h is a leaf header (no further includes).
 #include "rw/math/vpu/types.h"
+#include "rw/math/fpu/scalar_operation.h"   // IsValid(float), for IsValid(Vector3Template)
 
 namespace rw { namespace math { namespace fpu {
 template <typename Type>
@@ -144,16 +145,14 @@ struct Matrix33Template
     Type mRow2X, mRow2Y, mRow2Z;
 };
 
-// X360 0x8231A5C8: rw::math::fpu::IsValid<float>(Vector3Template<float> const&). Per-lane
-// self-equality NaN test: `lfs f0,N(r3); fcmpu f0,f0; bne` for N in {0,4,8} (mX/mY/mZ),
-// short-circuiting to the false sink the moment a lane fails. Returns true iff every lane
-// equals itself (x==x && y==y && z==z), i.e. none of the three lanes is NaN.
+// X360 0x8231A5C8: rw::math::fpu::IsValid<float>(Vector3Template<float> const&). rwmath 1.02.00
+// fpu/vector3_operation.h:370 `return (IsValid(v.x) && IsValid(v.y) && IsValid(v.z));`: ARTIST
+// materialises each lane's IsNaN bool (li 1 ; fcmpu f0,f0 ; bne ; li 0 ; clrlwi ; cmplwi) and
+// short-circuits to the false sink the moment a lane fails.
 template <typename Type>
 inline bool IsValid(const Vector3Template<Type>& lrVector)
 {
-    return lrVector.mX == lrVector.mX
-        && lrVector.mY == lrVector.mY
-        && lrVector.mZ == lrVector.mZ;
+    return (IsValid(lrVector.mX) && IsValid(lrVector.mY) && IsValid(lrVector.mZ));
 }
 
 // X360 0x823C24F0: rw::math::fpu::Mult<float>(Matrix33Template<float> const& lLhs,

@@ -153,7 +153,27 @@ namespace fpu
     // ADDITIVE GROW (SmoothMover::UpdateWithLimits* @0x8220D608/@0x8220D820, the
     // "RwMathFPU::IsValid(...)" tripwires): finite-value check -- the console emits it
     // as the fcmpu f0,f0 NaN self-compare, reproduced exactly.
-    inline bool IsValid(float lfValue) { return lfValue == lfValue; }
+    // rwmath 1.02.00 fpu/scalar.h:387 `IsValid(float value) { return !IsNaN(value); }`, with the
+    // platform IsNaN pair (DWARF BrnGameStateScoringAndModesUnity lists IsValid(float),
+    // IsNaN(float) and IsNaN(double) with the local `bool result`; LegacySrc has only the PS3
+    // scalar_platform.h, whose body is inline asm). ARTIST materialises that bool at every
+    // inlined site: li 1 ; fcmpu ; bne ; li 0 ; clrlwi (SetCheckpointDistances 0x82310C4C,
+    // SmoothMover 0x8220D790, IsValid<float>(Vector3) 0x8231A5CC). It compares the float register
+    // itself, with no fmr for a conversion, so the Xenon IsNaN(float) tests the float directly
+    // rather than forwarding to IsNaN(double) as the PS3 header does.
+    inline bool IsNaN(double value)
+    {
+        bool result = (value != value);
+        return result;
+    }
+
+    inline bool IsNaN(float value)
+    {
+        bool result = (value != value);
+        return result;
+    }
+
+    inline bool IsValid(float lfValue) { return !IsNaN(lfValue); }
 
     // rwmath 1.02.00 include/rw/math/fpu/scalar.h:375, verbatim. AIDriver::StartDrift calls it
     // (DWARF BrnAIDriver.cpp:1450 lists rw::math::fpu::SgnNonZero<float>); the console folds it
