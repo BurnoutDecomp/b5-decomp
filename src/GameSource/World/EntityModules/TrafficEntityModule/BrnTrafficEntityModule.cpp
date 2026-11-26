@@ -5561,52 +5561,49 @@ void TrafficEntityModule::AddVehiclesToTargetList()
     if ( miDEBUGFlowtypeOverride >= 0
          && static_cast<u32>( miDEBUGFlowtypeOverride ) < mpData->muNumFlowTypes )
     {
-        // ARTIST uses this 16-entry local list as a byte set: Contains/FindFirstInstanceOf
-        // load the candidate and entries with lbz/lbzx, and Append copies one byte with
-        // lbz/stbx (0x8270B970, 0x8270D680). Use the existing Array<char,16> instantiation as byte storage;
-        // no signed numeric operation observes the element type, and the streamer consumes
-        // the same storage as u8 bytes.
+        // DWARF BrnTrafficEntityModule.cpp:8172: Array<uint8_t,16u> lAssetIds (ARTIST compares
+        // the bytes unsigned: FindFirstInstanceOf 0x8270D680 lbzx + cmplw, no extsb).
+        // DWARF locals lpFlowType (:8170), lAssetIds (:8172), luVehicleTypeIndex (:8175),
+        // luVehicleType (:8178), lpVehicleType (:8180); the streamer gets &lAssetIds[0]
+        // (operator[], :8172 block).
         const FlowType* lpFlowType = mpData->mpapFlowTypes[miDEBUGFlowtypeOverride];
-        CgsContainers::Array<char, 16> laAssetIds;
-        laAssetIds.Construct();
+        CgsContainers::Array<u8, 16> lAssetIds;
+        lAssetIds.Construct();
 
-        for (u32 luIndex = 0; luIndex < lpFlowType->muNumVehicleTypes; ++luIndex)
+        for (u32 luVehicleTypeIndex = 0; luVehicleTypeIndex < lpFlowType->muNumVehicleTypes; ++luVehicleTypeIndex)
         {
-            const u16 luVehicleTypeId = lpFlowType->mpauVehicleTypeIds[luIndex];
-            const u8* lpAssetId = &mpData->mpaVehicleTypes[luVehicleTypeId].muAssetId;
-            const char& lrAssetId = *reinterpret_cast<const char*>(lpAssetId);
-            if (!laAssetIds.Contains(lrAssetId))
+            const u32 luVehicleType = lpFlowType->mpauVehicleTypeIds[luVehicleTypeIndex];
+            const VehicleTypeData* lpVehicleType = &mpData->mpaVehicleTypes[luVehicleType];
+            if (!lAssetIds.Contains(lpVehicleType->muAssetId))
             {
-                laAssetIds.Append(lrAssetId);
+                lAssetIds.Append(lpVehicleType->muAssetId);
             }
         }
 
-        mStreamer.AddVehiclesToTargetList(
-            laAssetIds.GetLength(),
-            reinterpret_cast<const u8*>(&laAssetIds.GetItem(0)));
+        mStreamer.AddVehiclesToTargetList(lAssetIds.GetLength(), &lAssetIds[0]);
         return;
     }
 
-    u16 luHull;
-    if ( mbReplayPlayback )
+    // DWARF local luRaceCarHull is a uint32_t (:8143; ARTIST lhz straight into r4, no clrlwi).
+    // ARTIST lays the live-hull arm out first and the replay arm last (bne 0x82722614).
+    u32 luRaceCarHull;
+    if ( !mbReplayPlayback )
     {
-        // ARTIST 0x82722614–0x82722624 selects the recorded player hull.
-        luHull = mTrafficEntitySerialiser.GetStaticLayout()->muLocalPlayerHull;
-    }
-    else
-    {
-        const CgsContainers::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrPlayerHulls =
-            maaRaceCarHulls[meLocalPlayerIndex];
-        if ( lrPlayerHulls.GetLength() == 0 )
+        if ( maaRaceCarHulls[meLocalPlayerIndex].GetLength() == 0 )
         {
             return;
         }
-        luHull = lrPlayerHulls.GetItem( 0 );
+        luRaceCarHull = maaRaceCarHulls[meLocalPlayerIndex][0];
+    }
+    else
+    {
+        // ARTIST 0x82722614–0x82722624 selects the recorded player hull.
+        luRaceCarHull = mTrafficEntitySerialiser.GetStaticLayout()->muLocalPlayerHull;
     }
 
-    if ( luHull != KU_INVALID_HULL )
+    if ( luRaceCarHull != KU_INVALID_HULL )
     {
-        const Hull* lpHull = GetHull( luHull );
+        const Hull* lpHull = GetHull( luRaceCarHull );
         CGS_ASSERT_AT( lpHull != 0, "lpHull" , KAC_ARTIST_ASSERT_SOURCE, 8287);            // baked .cpp line 8287
 
         mStreamer.AddVehiclesToTargetList( lpHull->muNumVehicleAssets,

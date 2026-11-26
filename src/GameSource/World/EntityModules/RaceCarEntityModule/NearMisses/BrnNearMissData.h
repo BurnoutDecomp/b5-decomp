@@ -13,8 +13,8 @@
 //
 // LAYOUT (X360-authoritative, recovered store-for-store from the member accessors of both
 // instantiations; A = the "near" capacity, B = the "long" capacity):
-//   +0x00  mauCurrentFrameNearTraffic        Array<s32,A>              (count word @ +0x10)
-//   +0x14  mauPreviousFrameNearTraffic  Array<s32,A>              (count word @ +0x24)
+//   +0x00  mauCurrentFrameNearTraffic        Array<u32,A>              (count word @ +0x10)
+//   +0x14  mauPreviousFrameNearTraffic  Array<u32,A>              (count word @ +0x24)
 //   +0x28  maRecentTrafficNearMisses            Array<VehicleTimePair,A>  (count word @ +0x48)
 //   +0x4C  maRecentTrafficContacted           Array<VehicleTimePair,A>  (count word @ +0x6C)
 //   +0x70  maRecentlyCrashedTraffic             Array<VehicleTimePair,B>  (count word @ +0xA8 for B=7 / +0xB0 for B=8)
@@ -223,7 +223,7 @@ namespace BrnWorld
 
         // BackupNearArray -- <4,7> @0x822E4BE8 / <4,8> @0x822E42A8. Snapshot the live
         // near-section list into the backup (clear backup first), then clear the live list.
-        // Both are Array<s32,A> (section-index ints), distinct from the VehicleTimePair lists.
+        // Both are Array<u32,A> (AISectionId lists), distinct from the VehicleTimePair lists.
         void BackupNearArray()
         {
             mauPreviousFrameNearTraffic.Clear();
@@ -240,14 +240,14 @@ namespace BrnWorld
         // NearMissManager caller (AddNearRaceCar/AddNearTraffic). (DWARF cpp:212)
         void AddNear(u32 luEntityId)
         {
-            if (mauCurrentFrameNearTraffic.GetLength() < A) { mauCurrentFrameNearTraffic.Append(static_cast<s32>(luEntityId)); }
+            if (mauCurrentFrameNearTraffic.GetLength() < A) { mauCurrentFrameNearTraffic.Append(luEntityId); }
         }
 
         // IsContainedInNearArray -- is luEntityId already in the current-frame near-section list?
-        // Array<s32,A>::Contains on mauCurrentFrameNearTraffic. Non-const per DWARF (cpp:516).
+        // Array<u32,A>::Contains on mauCurrentFrameNearTraffic. Non-const per DWARF (cpp:516).
         bool IsContainedInNearArray(u32 luEntityId)
         {
-            return mauCurrentFrameNearTraffic.Contains(static_cast<s32>(luEntityId));
+            return mauCurrentFrameNearTraffic.Contains(luEntityId);
         }
 
         // ---- queries (const) ----
@@ -257,13 +257,15 @@ namespace BrnWorld
         // BackupNearArray populated). NearMissManager::Update iterates these to replay each
         // remembered vehicle. The X360 inlines both as mauPreviousFrameNearTraffic.GetLength()/GetItem
         // (count @ +0x24, GetItem on the +0x14 array) -- see NearMissManager::Update.
-        u32 GetNumPreviousFrameNearElements() const
+        // Non-const per DWARF (cpp:531/545): ARTIST's NearMissManager::Update calls the
+        // non-const Array<u32,4>::GetItem (0x822B02F0, asserts CgsArray.h:556/557).
+        u32 GetNumPreviousFrameNearElements()
         {
             return mauPreviousFrameNearTraffic.GetLength();
         }
-        u32 GetPreviousFrameNearElement(u32 luIndex) const
+        u32 GetPreviousFrameNearElement(u32 luIndex)
         {
-            return static_cast<u32>(mauPreviousFrameNearTraffic.GetItem(luIndex));
+            return mauPreviousFrameNearTraffic.GetItem(luIndex);
         }
 
         // HasRecentlyCrashed -- <4,7> @0x822E46F0 / <4,8> @0x822E3DB0.
@@ -327,8 +329,11 @@ namespace BrnWorld
 
     private:
         // Head: section-index working list (count @ +0x10) and its backup (count @ +0x24).
-        CgsContainers::Array<s32, A>             mauCurrentFrameNearTraffic;        // +0x00
-        CgsContainers::Array<s32, A>             mauPreviousFrameNearTraffic;  // +0x14
+        // DWARF h:132/133: Array<BrnAI::AISectionId,4u>, AISectionId = uint32_t
+        // (SharedClasses/AI/AISectionsData.h:214); ARTIST compares the elements unsigned
+        // (FindFirstInstanceOf 0x822B0258: cmplw).
+        CgsContainers::Array<u32, A>             mauCurrentFrameNearTraffic;        // +0x00
+        CgsContainers::Array<u32, A>             mauPreviousFrameNearTraffic;  // +0x14
         // Remembered-vehicle record lists.
         CgsContainers::Array<VehicleTimePair, A> maRecentTrafficNearMisses;            // +0x28
         CgsContainers::Array<VehicleTimePair, A> maRecentTrafficContacted;           // +0x4C

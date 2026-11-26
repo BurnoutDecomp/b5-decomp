@@ -12,10 +12,11 @@
 // The three out-of-line functions in this TU:
 //   OutputBuffer_PreScene::GetSceneInputInterface() const  @ 0x827A31C8 (R, :90)  -> &mSceneInputInterface(+16)
 //   OutputBuffer_PreScene::GetSceneInputInterface()        @ 0x822BCF38 (W, :91)  -> &mSceneInputInterface(+16)
-//   InputBuffer_PreScene::GetInputInterface()              @ 0x827A3270 (W, :119) -> &mInputInterface(+4)
+//   InputBuffer_PreScene::GetInputInterface()              @ 0x827A3120 (W, :65)  -> &mInputInterface(+4)
 // (The read-lock @0x827A31C8 is the const overload, the write-lock @0x822BCF38 the mutable one;
-// both return the same +16 member. The write-lock @0x827A3270 is the separate input buffer's
-// +4 accessor.)
+// both return the same +16 member. The write-lock @0x827A3120 is the separate input buffer's
+// +4 accessor: DWARF BrnTriggerEntityModuleIO.h:65 GetManagementInputInterface(); its caller
+// WorldModule::BridgeTrafficToTrigger_PreScene 0x827AD7FC passes the pre-scene trigger buffer.)
 #include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
@@ -66,12 +67,12 @@ namespace TriggerEntityModuleIO
         return &mSceneInputInterface;
     }
 
-    // X360 0x827A3270 (W, :119) -- mutable input-interface accessor; returns &mInputInterface
-    // (this + 4).
+    // X360 0x827A3120 (W, :65) -- mutable input-interface accessor; returns &mInputInterface
+    // (this + 4). ARTIST li r5,0x41 (DWARF BrnTriggerEntityModuleIO.h:65).
     InputBuffer_PreScene::InputInterface*
     InputBuffer_PreScene::GetInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 119));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 65));
         return &mInputInterface;
     }
 }

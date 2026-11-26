@@ -15,19 +15,22 @@ namespace BrnWorld
 {
 namespace TriggerEntityModuleIO
 {
-    // X360 0x822BCE90 (R, :64) -- const trigger-query input queue accessor; read-lock guarded,
-    // returns &mQueryInputInterface (this + 4). Read by PreSceneUpdate.
+    // X360 0x822BCFE0 (R, :118) -- const trigger-query input queue accessor; read-lock guarded,
+    // returns &mQueryInputInterface (this + 4). Read by ProcessTriggerQueryEvents.
+    // ARTIST li r5,0x76 (DWARF BrnTriggerEntityModuleIO.h:118).
     const TriggerQueryQueue* InputBuffer_PostScene::GetQueryInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 118));
         return &mQueryInputInterface;
     }
 
-    // X360 0x827A3120 (W, :65) -- mutable trigger-query input queue accessor; write-lock guarded,
-    // returns &mQueryInputInterface (this + 4). Filled by the input->trigger bridges.
+    // X360 0x827A3270 (W, :119) -- mutable trigger-query input queue accessor; write-lock guarded,
+    // returns &mQueryInputInterface (this + 4). Its only caller is
+    // WorldModule::BridgeInputToEntityModules' post-scene query append.
+    // ARTIST li r5,0x77 (DWARF BrnTriggerEntityModuleIO.h:119).
     TriggerQueryQueue* InputBuffer_PostScene::GetQueryInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 65));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 119));
         return &mQueryInputInterface;
     }
 
@@ -55,10 +58,10 @@ namespace TriggerEntityModuleIO
         return &mOutputInterface;
     }
 
-    // X360 0x822BCFE0 (R, :118) -- const pre-scene input-interface accessor; read-lock guarded,
-    // returns &mInputInterface (this + 4). Read by ProcessTriggerQueryEvents. Const overload of
-    // GetInputInterface (the write overload @0x827A3270 :119 is committed in
-    // BrnTriggerEntityModuleIO_Accessors.cpp).
+    // X360 0x822BCE90 (R, :64) -- const pre-scene input-interface accessor; read-lock guarded,
+    // returns &mInputInterface (this + 4). Read by PreSceneUpdate. Const overload of
+    // GetInputInterface (DWARF h:64 GetManagementInputInterface() const; the write overload
+    // @0x827A3120 :65 is in BrnTriggerEntityModuleIO_Accessors.cpp).
     const InputBuffer_PreScene::InputInterface*
     InputBuffer_PreScene::GetInputInterface() const
     {
