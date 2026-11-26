@@ -223,21 +223,20 @@ namespace BrnNetwork
     {
         mGameParameters = *lpParams;
 
-        EProcess leProcess;
+        // No process local (DWARF lists none): one StartProcess per case, tail-merged by the
+        // compiler (ARTIST 0x82566B40 / 0x82566B58).
         if (lbPerformingInvite && mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame())
         {
-            leProcess = E_PROCESS_LEAVE_AND_JOIN_GAME;
+            StartProcess(E_PROCESS_LEAVE_AND_JOIN_GAME, lCallback, lpCallbackUserData);
         }
         else if (mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame())
         {
-            leProcess = E_PROCESS_LEAVE_AND_JOIN_GAME;
+            StartProcess(E_PROCESS_LEAVE_AND_JOIN_GAME, lCallback, lpCallbackUserData);
         }
         else
         {
-            leProcess = E_PROCESS_JOIN_GAME;
+            StartProcess(E_PROCESS_JOIN_GAME, lCallback, lpCallbackUserData);
         }
-
-        StartProcess(leProcess, lCallback, lpCallbackUserData);
     }
 
     void MatchMakingManager::QuickJoinGame(bool lbRanked, bool lbFreeburn, Callback lCallback, void* lpCallbackUserData)
@@ -294,15 +293,16 @@ namespace BrnNetwork
     // when an action refuses to start.
     void MatchMakingManager::SetNextAction()
     {
+        // DWARF BrnNetworkMatchMakingManager.cpp:465 leNextAction, read before the bound test
+        // (ARTIST 0x8254481C loads it ahead of the first compare).
         bool lbSuccess;
-        if (mun8NextAction == ProcessActions::KI_MAX_ACTIONS
-            || maProcessActions[meCurrentProcess].maeAction[mun8NextAction] == E_ACTION_COUNT)
+        const EAction leNextAction = maProcessActions[meCurrentProcess].maeAction[mun8NextAction];
+        if (mun8NextAction == ProcessActions::KI_MAX_ACTIONS || leNextAction == E_ACTION_COUNT)
         {
             lbSuccess = true;
         }
         else
         {
-            const EAction leNextAction = maProcessActions[meCurrentProcess].maeAction[mun8NextAction];
             if ((this->*maActionFunctions[leNextAction])())
             {
                 ++mun8NextAction;
@@ -323,8 +323,9 @@ namespace BrnNetwork
         CgsNetwork::ServerInterfaceDirtySock::EStatus leStatus = CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE;
         if (mun8NextAction != 0)
         {
-            const EAction leLastAction = maProcessActions[meCurrentProcess].maeAction[mun8NextAction - 1];
-            leStatus = mpNetworkManager->GetServerInterface()->GetStatus(maeComponentToUse[leLastAction]);
+            // DWARF :670 lists only leStatus here.
+            leStatus = mpNetworkManager->GetServerInterface()->GetStatus(
+                maeComponentToUse[maProcessActions[meCurrentProcess].maeAction[mun8NextAction - 1]]);
         }
 
         switch (leStatus)
@@ -354,11 +355,12 @@ namespace BrnNetwork
 
         case CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE:
         {
+            // DWARF :689 leNextAction, read before the bound test (ARTIST 0x8254499C).
+            const EAction leNextAction = maProcessActions[meCurrentProcess].maeAction[mun8NextAction];
             if (mun8NextAction == ProcessActions::KI_MAX_ACTIONS)
             {
                 return true;
             }
-            const EAction leNextAction = maProcessActions[meCurrentProcess].maeAction[mun8NextAction];
             if (leNextAction == E_ACTION_COUNT
                 || mpNetworkManager->GetServerInterface()->GetStatus(maeComponentToUse[leNextAction])
                        == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)

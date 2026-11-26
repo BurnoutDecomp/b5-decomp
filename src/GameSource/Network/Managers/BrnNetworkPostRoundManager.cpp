@@ -158,12 +158,13 @@ namespace BrnNetwork
         InitialiseUpdateArray();
         InitialiseActionArray();
 
+        // Store order of ARTIST 0x82576480..0x82576498 (and the PS3 body 0x5DD808).
         mpNetworkManager   = lpNetworkManager;
+        mun8CurrentAction  = 0;
+        meCurrentProcess   = E_PROCESS_COUNT;
         mCallback          = 0;
         mpCallbackUserData = 0;
         meSubState         = E_SUBSTATE_NONE;
-        mun8CurrentAction  = 0;
-        meCurrentProcess   = E_PROCESS_COUNT;
         mbDidTheUserQuit   = false;
     }
 

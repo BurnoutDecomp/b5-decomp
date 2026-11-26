@@ -1162,8 +1162,8 @@ namespace BrnNetwork
             __FILE__, 5635 /* ARTIST 0x825634F0 */);
 
         BrnNetworkModuleIO::NetworkOutCamPicCompressedEvent lCompressedEvent;
-        lCompressedEvent.miCompressedPixelSize = KI_COMPRESSED_CAMERA_PIC_SIZE;
         lCompressedEvent.meCompressedFormat    = renderengine::PIXELFORMAT_DXT1;
+        lCompressedEvent.miCompressedPixelSize = KI_COMPRESSED_CAMERA_PIC_SIZE;
         lCompressedEvent.mpcCompressedPixels   = static_cast<char*>(lpPixels);
         lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lCompressedEvent);
     }

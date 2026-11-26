@@ -70,8 +70,8 @@ namespace CgsNetwork
     struct ServerInterfaceUsersetParamsBase : public ServerInterfaceStructureInterface
     {
     public:
-        ServerInterfaceUsersetParamsBase();
-        virtual ~ServerInterfaceUsersetParamsBase();
+        // Implicit ctor/dtor: DWARF places both at the class line (h:55); the virtual dtor
+        // comes from ServerInterfaceStructureInterface.
 
         // CgsServerInterfaceUsersetParams.cpp:51 -- reset to defaults, returns true. [+0x18]
         virtual bool Prepare();

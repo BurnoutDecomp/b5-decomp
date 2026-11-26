@@ -465,7 +465,7 @@ namespace BrnNetwork
         SelectedRoutesMessage* lpSelectedRoutesMessage =
             static_cast<SelectedRoutesMessage*>(lpMessage);
 
-        s32   liRoundNum = 0;
+        s32   liRoundNum;
         Event lEvent;
         lpSelectedRoutesMessage->Retrieve(&liRoundNum, &lEvent);
 

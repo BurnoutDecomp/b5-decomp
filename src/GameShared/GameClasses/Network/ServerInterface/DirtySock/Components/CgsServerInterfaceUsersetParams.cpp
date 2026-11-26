@@ -44,14 +44,6 @@ namespace CgsNetwork
     // header, forward-declared here as the two serialise bodies below both call it.
     int ConvertUsersetFlags(int lxFlags, unsigned int luIndex);
 
-    ServerInterfaceUsersetParamsBase::ServerInterfaceUsersetParamsBase()
-    {
-    }
-
-    ServerInterfaceUsersetParamsBase::~ServerInterfaceUsersetParamsBase()
-    {
-    }
-
     // Prepare @ 0x8287C708 -- reset the userset-params block to defaults; returns true.
     //   Clears the three string fields to "" via the setters, zeroes the host-name
     //   buffer's first byte, and seeds the scalar defaults.

@@ -343,15 +343,14 @@ namespace BrnNetwork
     {
         const u32 KU_CONNECTION_TELEMETRY_BASE = 0x40;
 
-        // FLAG: the console fills only the first character of its stack buffer; the second
-        // character terminates the string on the host.
-        char lacConnectionData[2];
-        lacConnectionData[0] = static_cast<char>((luConnectionFlags << 3) | KU_CONNECTION_TELEMETRY_BASE
-                                                 | luConnectionStatus);
-        lacConnectionData[1] = '\0';
+        // DWARF BrnNetworkPlayer.cpp:2495 char lacTelemetryData[2]; the console fills only the
+        // first character (ARTIST 0x82582B6C stores one byte, no terminator).
+        char lacTelemetryData[2];
+        lacTelemetryData[0] = static_cast<char>((luConnectionFlags << 3) | KU_CONNECTION_TELEMETRY_BASE
+                                                | luConnectionStatus);
 
         mpNetworkModule->GetNetworkManager()->CaptureTelemetryEvent(E_TELEMETRY_DIRTYSOCK_CONNECTION,
-                                                                    lacConnectionData);
+                                                                    lacTelemetryData);
     }
 
     // ---- per-frame helpers -------------------------------------------------------------

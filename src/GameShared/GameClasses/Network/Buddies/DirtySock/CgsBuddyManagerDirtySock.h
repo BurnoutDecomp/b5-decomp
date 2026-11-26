@@ -193,12 +193,15 @@ namespace CgsNetwork
         // (not temporary) buddy.
         bool IsFullBuddy(s32 liIndex)
         {
-            if (mpBuddies == 0)
+            if (mpBuddies)
             {
-                return false;
+                HLBBudT* lpBuddy = CgsNetwork::DirtySock::HLBListGetBuddyByIndex(mpBuddies, liIndex);
+                if (lpBuddy)
+                {
+                    return CgsNetwork::DirtySock::HLBBudIsRealBuddy(lpBuddy) == 1;
+                }
             }
-            HLBBudT* lpBuddy = CgsNetwork::DirtySock::HLBListGetBuddyByIndex(mpBuddies, liIndex);
-            return lpBuddy != 0 && CgsNetwork::DirtySock::HLBBudIsRealBuddy(lpBuddy) == 1;
+            return false;
         }
         EBuddyErrorCodes _ConvertError(s32 liApiError);
         void _BuddyManagerDebugPrint(void* lpContext, const char* lpcText);

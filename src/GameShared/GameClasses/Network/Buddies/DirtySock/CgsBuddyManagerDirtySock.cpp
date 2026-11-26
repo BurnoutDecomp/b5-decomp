@@ -110,11 +110,12 @@ namespace CgsNetwork
     // =========================================================================
     s32 BuddyManagerBase::GetNumBuddies()
     {
-        if (mpBuddies)
+        // The null test first: ARTIST 0x8287D688 falls through to the `return 0` blr.
+        if (mpBuddies == 0)
         {
-            return HLBListGetBuddyCount(mpBuddies);
+            return 0;
         }
-        return 0;
+        return HLBListGetBuddyCount(mpBuddies);
     }
 
     // =========================================================================
@@ -124,12 +125,13 @@ namespace CgsNetwork
     // =========================================================================
     s32 BuddyManagerBase::GetNumFullBuddies()
     {
-        const s32 liBuddyCount = mpBuddies ? HLBListGetBuddyCount(mpBuddies) : 0;
-
+        // DWARF CgsBuddyManagerDirtySock.cpp:482-484 locals; the count comes from GetNumBuddies.
+        s32 liBuddyIndex;
+        const s32 liNumBuddies = GetNumBuddies();
         s32 liNumFullBuddies = 0;
-        for (s32 liIndex = 0; liIndex < liBuddyCount; ++liIndex)
+        for (liBuddyIndex = 0; liBuddyIndex < liNumBuddies; ++liBuddyIndex)
         {
-            if (IsFullBuddy(liIndex))
+            if (IsFullBuddy(liBuddyIndex))
             {
                 ++liNumFullBuddies;
             }
@@ -163,18 +165,18 @@ namespace CgsNetwork
     // =========================================================================
     s32 BuddyManagerBase::GetNumOnlineBuddies()
     {
-        s32 liBuddyCount = mpBuddies ? HLBListGetBuddyCount(mpBuddies) : 0;
-
-        s32 liOnline = 0;
-        for (s32 liIndex = 0; liIndex < liBuddyCount; ++liIndex)
+        // DWARF CgsBuddyManagerDirtySock.cpp:516-518 locals; the count comes from GetNumBuddies.
+        const s32 liNumBuddies = GetNumBuddies();
+        s32 liOnlineBuddyCount = 0;
+        for (s32 liBuddyIndex = 0; liBuddyIndex < liNumBuddies; ++liBuddyIndex)
         {
-            HLBBudT* lpBuddy = HLBListGetBuddyByIndex(mpBuddies, liIndex);
+            HLBBudT* lpBuddy = HLBListGetBuddyByIndex(mpBuddies, liBuddyIndex);
             if (HLBBudGetState(lpBuddy))
             {
-                ++liOnline;
+                ++liOnlineBuddyCount;
             }
         }
-        return liOnline;
+        return liOnlineBuddyCount;
     }
 
     // =========================================================================
@@ -290,17 +292,11 @@ namespace CgsNetwork
             "mpBuddies",
             CGS_ARTIST_FILE, 1350 /* ARTIST 0x8287DDA4 */);
 
-        s32          liCount = 0;
-        const char** lpWrite = lpaNames;
-        for (s32 liIndex = 0; ; ++liIndex)
+        // DWARF CgsBuddyManagerDirtySock.cpp:1347/1348 liBuddyIndex / liBuddyCount, :1356 lpBuddy.
+        s32 liBuddyCount = 0;
+        for (s32 liBuddyIndex = 0; liBuddyIndex < GetNumBuddies(); ++liBuddyIndex)
         {
-            s32 liBuddyCount = mpBuddies ? HLBListGetBuddyCount(mpBuddies) : 0;
-            if (liIndex >= liBuddyCount)
-            {
-                break;
-            }
-
-            HLBBudT* lpBuddy = HLBListGetBuddyByIndex(mpBuddies, liIndex);
+            HLBBudT* lpBuddy = HLBListGetBuddyByIndex(mpBuddies, liBuddyIndex);
             if (lpBuddy && HLBBudIsRealBuddy(lpBuddy) == 1)
             {
                 const char* lpcBuddyName = HLBBudGetName(lpBuddy);
@@ -308,12 +304,11 @@ namespace CgsNetwork
                     "lpcBuddyName",
                     CGS_ARTIST_FILE, 1366 /* ARTIST 0x8287DE20 */);
 
-                *lpWrite = lpcBuddyName;
-                ++liCount;
-                ++lpWrite;
+                lpaNames[liBuddyCount] = lpcBuddyName;
+                ++liBuddyCount;
             }
         }
-        return liCount;
+        return liBuddyCount;
     }
 
     // =========================================================================

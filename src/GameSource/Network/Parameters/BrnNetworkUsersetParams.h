@@ -24,7 +24,7 @@ namespace BrnNetwork
     class UsersetParams : public CgsNetwork::ServerInterfaceUsersetParamsX360
     {
     public:
-        virtual ~UsersetParams();
+        // Implicit ctor/dtor (DWARF BrnNetworkUsersetParams.h:47, the class line).
 
         // Chain to the platform Prepare; true on success.
         virtual bool Prepare() ;

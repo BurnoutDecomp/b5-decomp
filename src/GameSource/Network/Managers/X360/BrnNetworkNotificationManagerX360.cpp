@@ -52,8 +52,8 @@ namespace BrnNetwork
     // manager's local slot mbReady).
     void NetworkNotificationManagerX360::ProcessNotifications()
     {
-        unsigned long luId    = 0;   // var_2C (pdwId)
-        unsigned long luParam = 0;   // var_30 (pParam)
+        unsigned long luId;      // var_2C (pdwId); no initialiser: ARTIST 0x8254C790 stores none
+        unsigned long luParam;   // var_30 (pParam)
         while (XNotifyGetNext(mhNotifier, 0, &luId, &luParam))
         {
             if (luId == KU_XN_SYS_SIGNINCHANGED)

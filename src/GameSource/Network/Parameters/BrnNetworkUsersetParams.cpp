@@ -9,10 +9,6 @@
 
 namespace BrnNetwork
 {
-    UsersetParams::~UsersetParams()
-    {
-    }
-
     bool UsersetParams::Prepare()
     {
         return CgsNetwork::ServerInterfaceUsersetParamsX360::Prepare();
