@@ -2,6 +2,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include <vectorintrinsics.h>
+// ARTIST asserts on the unity path of BrnEffectControl.cpp, where the Brn3DUserSpaceEffectControl
+// bodies live on the original (AttachEmitterPosition asserts on cpp:257..260, 0x82696918..).
+#define BRN_EFFECTCONTROL_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Module/LogicModule/BrnEffectControl.cpp"
 
 // =============================================================================
 // BrnSound::Logic::Brn3DUserSpaceEffectControl -- out-of-line bodies.
@@ -109,10 +112,10 @@ void Brn3DUserSpaceEffectControl::AttachTransform(const Matrix44Affine* apTransf
 // camera translation twice and places audible collisions kilometres away.
 void Brn3DUserSpaceEffectControl::AttachEmitterPosition(const Vector3* apPosition)
 {
-    CGS_ASSERT(mpTransform != 0, "mpTransform");
-    CGS_ASSERT(apPosition != 0, "lpPosition");
-    CGS_ASSERT(rw::math::vpu::IsValid(*mpTransform), "IsValid( *mpTransform )");
-    CGS_ASSERT(rw::math::vpu::IsValid(*apPosition), "IsValid( *lpPosition )");
+    CGS_ASSERT_AT(mpTransform != 0, "mpTransform", BRN_EFFECTCONTROL_CPP_FILE, 257);
+    CGS_ASSERT_AT(apPosition != 0, "lpPosition", BRN_EFFECTCONTROL_CPP_FILE, 258);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(*mpTransform), "IsValid( *mpTransform )", BRN_EFFECTCONTROL_CPP_FILE, 259);
+    CGS_ASSERT_AT(rw::math::vpu::IsValid(*apPosition), "IsValid( *lpPosition )", BRN_EFFECTCONTROL_CPP_FILE, 260);
 
     // ARTIST82696BA0..82696C14: transpose the rotation, rotate the
     // negated translation, then accumulate the world position. These are the

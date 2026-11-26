@@ -8,6 +8,10 @@
 
 #include <new>
 
+// The Allocator bodies are header-inline on the original (DWARF CgsTestBedAllocator.h:2xx..7xx); ARTIST
+// asserts on the header path (string 0x820AB848).
+#define CGS_TESTBEDALLOCATOR_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/CgsTestBedAllocator.h"
+
 // CgsTestBedAllocator.cpp:10/11 - the optional "tag the next allocation" debug string + whether to
 // clear it after a single use. Defaults: no pending string, clear-after-use.
 const char* gpcDebugAllocString          = 0;
@@ -83,8 +87,9 @@ namespace TestBed
     // -------------------------------------------------------------------------------------------
     void Allocator::SetAllocator(rw::IResourceAllocator* lpAllocator)
     {
-        CGS_ASSERT(!mpAllocator || lpAllocator == mpAllocator,
-                   "Testbed::Allocator::SetAllocator(): mpAllocator is already set\n");
+        CGS_ASSERT_STREAM_AT(!mpAllocator || lpAllocator == mpAllocator,
+                             "Testbed::Allocator::SetAllocator(): mpAllocator is already set\n",
+                             CGS_TESTBEDALLOCATOR_H_FILE, 247);
         mpAllocator = lpAllocator;
     }
 
@@ -101,8 +106,9 @@ namespace TestBed
             lpHeader = lpHeader->mpNext;
             if (mpFirstHeader == lpHeader)
             {
-                CGS_ASSERT(false,
-                           "Cycle in allocation list. Makes no bloody sense whatsoever, but there it is...\n");
+                CGS_ASSERT_STREAM_AT(false,
+                                     "Cycle in allocation list. Makes no bloody sense whatsoever, but there it is...\n",
+                                     CGS_TESTBEDALLOCATOR_H_FILE, 287);
             }
         }
     }
@@ -116,23 +122,22 @@ namespace TestBed
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
-            const char* lpcName = mpcName;
-            if (!lpcName)
-                lpcName = "<NULLSTRING>";
-            *CgsDev::Log::gpDebugPrint << "Dumping all allocations [" << lpcName << "]:\n";
+            *CgsDev::Log::gpDebugPrint << "Dumping all allocations [" << mpcName << "]:\n";
         }
 
-        Header* lpHeader   = mpFirstHeader;
-        s32     liNumBlocks = 0;
+        // DWARF locals lpHeader (h:298) and size_t luCount (h:299); the streamed assert's lStrStream (h:309).
+        Header* lpHeader = mpFirstHeader;
+        size_t  luCount  = 0;
         while (lpHeader)
         {
             lpHeader->Dump(mHistory);
             lpHeader = lpHeader->mpNext;
-            ++liNumBlocks;
+            ++luCount;
             if (mpFirstHeader == lpHeader)
             {
-                CGS_ASSERT(false,
-                           "Cycle in allocation list. Makes no bloody sense whatsoever, but there it is...\n");
+                CGS_ASSERT_STREAM_AT(false,
+                                     "Cycle in allocation list. Makes no bloody sense whatsoever, but there it is...\n",
+                                     CGS_TESTBEDALLOCATOR_H_FILE, 309);
             }
         }
 
@@ -141,7 +146,7 @@ namespace TestBed
             *CgsDev::Log::gpDebugPrint << "Total of "
                                        << (u64)muBytesAllocated
                                        << " bytes of user memory allocated in "
-                                       << liNumBlocks
+                                       << luCount
                                        << " allocations.\n";
         }
     }
@@ -161,16 +166,13 @@ namespace TestBed
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
-            const char* lpcName = mpcName;          // lwz 0x18(header)
-            if (!lpcName)                           // cmplwi 0 -> beq
-                lpcName = "<NULLSTRING>";
             *CgsDev::Log::gpDebugPrint << "  "
                                        << mResource.m_baseResources[0]   // lwz 4(header) - block base ptr, hex
                                        << ": "
                                        << (u32)muSize                    // lwz 0x1C(header) - decimal u32
                                        << " bytes allocated."
                                        << "\""
-                                       << lpcName
+                                       << mpcName                        // null -> "<NULLSTRING>" inside operator<<(const char*) (0x826962C0)
                                        << "\" "
                                        << "\n";
         }
@@ -223,18 +225,21 @@ namespace TestBed
     // -------------------------------------------------------------------------------------------
     void Allocator::History::DumpAllPossibleDanglers(u8* lpAddress)
     {
+        // DWARF (BrnSoundUnity, CgsTestBedAllocator.h:131..135): lbFound, luiStartCounting, i,
+        // luiPositionToInspect.
         bool lbFoundDangler = false;
-        u32  luPosition     = muCurrentPosition + KU_HISTORY_LENGTH - 1;
-        for (u32 luCount = KU_HISTORY_LENGTH; luCount != 0; --luCount)
+        u32  luiStartCounting = muCurrentPosition + KU_HISTORY_LENGTH - 1;
+        for (u32 i = KU_HISTORY_LENGTH; i != 0; --i)   // ARTIST counts down (0x82695EFC..0x82695F0C)
         {
-            const Entry& lrEntry = maHistory[luPosition++ % KU_HISTORY_LENGTH];
+            u32 luiPositionToInspect = luiStartCounting++ % KU_HISTORY_LENGTH;
+            const Entry& lrEntry = maHistory[luiPositionToInspect];
             if (lrEntry.muSize > 0 && lpAddress >= lrEntry.mpStartMem && lpAddress <= lrEntry.mpEndMem)
             {
                 lbFoundDangler = true;
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                 {
                     *CgsDev::Log::gpDebugPrint << "PossibleDangler: "
-                                               << (lrEntry.mpcName ? lrEntry.mpcName : "<NULLSTRING>")
+                                               << lrEntry.mpcName
                                                << "\t"
                                                << "Size: "
                                                << (u32)lrEntry.muSize
@@ -244,6 +249,7 @@ namespace TestBed
                                                << "\t"
                                                << "End: "
                                                << static_cast<void*>(lrEntry.mpEndMem)
+                                               << "\t"      // ARTIST streams the separator once more (0x82695EC8)
                                                << "\n";
                 }
             }
@@ -262,7 +268,7 @@ namespace TestBed
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "Dumping all allocations ["
-                                       << (mpcName ? mpcName : "<NULLSTRING>")
+                                       << mpcName
                                        << "]:\n";
         }
 

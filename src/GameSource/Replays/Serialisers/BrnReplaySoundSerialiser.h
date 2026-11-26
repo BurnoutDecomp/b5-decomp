@@ -54,6 +54,12 @@ namespace BrnReplays
         // ARTIST8264C9F8, called on SoundLogicModule's native13600 member.
         void Construct();
 
+        // Empty, as its DWARF siblings GameModuleSerialiser::Destruct / RaceCarEntitySerialiser::
+        // Destruct (public, out of line; PS3 0x7B6864 / 0x7B6858 are a bare blr). ARTIST
+        // SoundLogicModule::Destruct calls it on mSoundSerialiser (0x82697870, r3 = this+0x13600);
+        // the body is ICF-folded into the shared blr 0x8284CB38.
+        void Destruct();
+
         // The count guards test `> N` (unsigned), i.e. valid range [0, N]. The rodata assert
         // strings name SoundSerialiserStaticLayout::KI_MAX_COLLISIONS/KI_MAX_SCRAPES and
         // SoundSerialiserFrame::KI_MAX_TRAFFIC_ENTITIES; the comparison values are 8 / 4 / 6.

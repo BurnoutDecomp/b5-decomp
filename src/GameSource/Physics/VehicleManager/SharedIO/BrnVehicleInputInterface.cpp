@@ -155,43 +155,43 @@ namespace Vehicle
             CgsID lCgsId_Trailer,
             ETrafficType leTrafficType)
     {
-        CGS_ASSERT(lVolumeInstanceId_Cab.muId != VolumeInstanceId::KU_INVALID_ID,
-                   "lVolumeInstanceID_Cab != CgsSceneManager::K_INVALID_VOLUME_INSTANCE_ID"); // :525
-        CGS_ASSERT(rw::math::vpu::IsValid(lInitialTransform_Cab),
-                   "RwMathVPU::IsValid( lInitialTransform_Cab )"); // :526
-        CGS_ASSERT(rw::math::vpu::IsValid(lInitialVelocity_Cab),
-                   "RwMathVPU::IsValid( lInitialVelocity_Cab )"); // :527
-        CGS_ASSERT(rw::math::vpu::IsValid(lAngularVelocity_Cab),
-                   "RwMathVPU::IsValid( lAngularVelocity_Cab )"); // :528
-        CGS_ASSERT(lCgsId_Cab != 0, "lCgsId_Cab != kCGSID_NULL"); // :529
+        CGS_ASSERT_AT(lVolumeInstanceId_Cab.muId != VolumeInstanceId::KU_INVALID_ID,
+                   "lVolumeInstanceID_Cab != CgsSceneManager::K_INVALID_VOLUME_INSTANCE_ID", KAC_BRNVEHICLEINPUTINTERFACE_H, 525);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lInitialTransform_Cab),
+                   "RwMathVPU::IsValid( lInitialTransform_Cab )", KAC_BRNVEHICLEINPUTINTERFACE_H, 526);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lInitialVelocity_Cab),
+                   "RwMathVPU::IsValid( lInitialVelocity_Cab )", KAC_BRNVEHICLEINPUTINTERFACE_H, 527);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lAngularVelocity_Cab),
+                   "RwMathVPU::IsValid( lAngularVelocity_Cab )", KAC_BRNVEHICLEINPUTINTERFACE_H, 528);
+        CGS_ASSERT_AT(lCgsId_Cab != 0, "lCgsId_Cab != kCGSID_NULL", KAC_BRNVEHICLEINPUTINTERFACE_H, 529);
 
-        CGS_ASSERT(lVolumeInstanceId_Trailer.muId != VolumeInstanceId::KU_INVALID_ID,
-                   "lVolumeInstanceID_Trailer != CgsSceneManager::K_INVALID_VOLUME_INSTANCE_ID"); // :530
-        CGS_ASSERT(rw::math::vpu::IsValid(lInitialTransform_Trailer),
-                   "RwMathVPU::IsValid( lInitialTransform_Trailer )"); // :531
-        CGS_ASSERT(rw::math::vpu::IsValid(lInitialVelocity_Trailer),
-                   "RwMathVPU::IsValid( lInitialVelocity_Trailer )"); // :532
-        CGS_ASSERT(rw::math::vpu::IsValid(lAngularVelocity_Trailer),
-                   "RwMathVPU::IsValid( lAngularVelocity_Trailer )"); // :533
-        CGS_ASSERT(lCgsId_Trailer != 0, "lCgsId_Trailer != kCGSID_NULL"); // :534
-        CGS_ASSERT(leTrafficType >= E_TRAFFIC_TYPE_POTENTIAL
+        CGS_ASSERT_AT(lVolumeInstanceId_Trailer.muId != VolumeInstanceId::KU_INVALID_ID,
+                   "lVolumeInstanceID_Trailer != CgsSceneManager::K_INVALID_VOLUME_INSTANCE_ID", KAC_BRNVEHICLEINPUTINTERFACE_H, 530);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lInitialTransform_Trailer),
+                   "RwMathVPU::IsValid( lInitialTransform_Trailer )", KAC_BRNVEHICLEINPUTINTERFACE_H, 531);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lInitialVelocity_Trailer),
+                   "RwMathVPU::IsValid( lInitialVelocity_Trailer )", KAC_BRNVEHICLEINPUTINTERFACE_H, 532);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lAngularVelocity_Trailer),
+                   "RwMathVPU::IsValid( lAngularVelocity_Trailer )", KAC_BRNVEHICLEINPUTINTERFACE_H, 533);
+        CGS_ASSERT_AT(lCgsId_Trailer != 0, "lCgsId_Trailer != kCGSID_NULL", KAC_BRNVEHICLEINPUTINTERFACE_H, 534);
+        CGS_ASSERT_AT(leTrafficType >= E_TRAFFIC_TYPE_POTENTIAL
                        && leTrafficType < E_TRAFFIC_TYPE_COUNT,
-                   "leTrafficType >= E_TRAFFIC_TYPE_POTENTIAL && leTrafficType < E_TRAFFIC_TYPE_COUNT"); // :535
+                   "leTrafficType >= E_TRAFFIC_TYPE_POTENTIAL && leTrafficType < E_TRAFFIC_TYPE_COUNT", KAC_BRNVEHICLEINPUTINTERFACE_H, 535);
 
         CreateArticulatedTrafficEvent lEvent;
-        lEvent.mInitialTransform_Cab = lInitialTransform_Cab;
-        lEvent.mInitialTransform_Trailer = lInitialTransform_Trailer;
-        lEvent.mInitialVelocity_Cab = lInitialVelocity_Cab;
-        lEvent.mInitialVelocity_Trailer = lInitialVelocity_Trailer;
-        lEvent.mAngularVelocity_Cab = lAngularVelocity_Cab;
-        lEvent.mAngularVelocity_Trailer = lAngularVelocity_Trailer;
         lEvent.mVolumeInstanceID_Cab = lVolumeInstanceId_Cab;
-        lEvent.mVolumeInstanceID_Trailer = lVolumeInstanceId_Trailer;
+        lEvent.mInitialTransform_Cab = lInitialTransform_Cab;
+        lEvent.mInitialVelocity_Cab = lInitialVelocity_Cab;
+        lEvent.mAngularVelocity_Cab = lAngularVelocity_Cab;
         lEvent.mAssetAttribKey_Cab = lAssetAttribKey_Cab;
-        lEvent.mAssetAttribKey_Trailer = lAssetAttribKey_Trailer;
         lEvent.mModelHandle_Cab = lModelHandle_Cab;
-        lEvent.mModelHandle_Trailer = lModelHandle_Trailer;
         lEvent.mCgsId_Cab = lCgsId_Cab;
+        lEvent.mVolumeInstanceID_Trailer = lVolumeInstanceId_Trailer;
+        lEvent.mInitialTransform_Trailer = lInitialTransform_Trailer;
+        lEvent.mInitialVelocity_Trailer = lInitialVelocity_Trailer;
+        lEvent.mAngularVelocity_Trailer = lAngularVelocity_Trailer;
+        lEvent.mAssetAttribKey_Trailer = lAssetAttribKey_Trailer;
+        lEvent.mModelHandle_Trailer = lModelHandle_Trailer;
         lEvent.mCgsId_Trailer = lCgsId_Trailer;
         lEvent.meTrafficType = leTrafficType;
 

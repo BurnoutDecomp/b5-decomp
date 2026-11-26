@@ -415,10 +415,11 @@ bool SoundLogicModule::Release()
     }
 }
 
-// ARTIST 0x82697850. The serialiser Destruct call folds to the shared blr.
+// ARTIST 0x82697850. The serialiser Destruct call (0x82697870) folds to the shared blr 0x8284CB38.
 void SoundLogicModule::Destruct()
 {
     CgsModule::ModuleSingleBuffered::Destruct();
+    mSoundSerialiser.Destruct();
     maTriggerActions.Clear();
     miCommandStreamUsage = 0;
 }
@@ -1118,22 +1119,24 @@ void SoundLogicModule::ProcessGameEventQueue(
     typedef CgsSound::Io::MessageHeader MH;
     using BrnGameState::GameStateModuleIO::VehicleImpactEvent;
 
-    static s32 siDiagImpactLines = 0;
-
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    s32 liType = apEvents->GetFirstEvent(&lpEvent, &liSize);
+    // DWARF locals (BrnSoundUnity): lpEvent (cpp:1028), liEventId (:1030), liEventSize (:1031), all
+    // uninitialised (ARTIST stores nothing before GetFirstEvent); lpImpactEvent (:1040), lMessage (:1043).
+    const CgsModule::Event* lpEvent;
+    s32 liEventId;
+    s32 liEventSize;
+    liEventId = apEvents->GetFirstEvent(&lpEvent, &liEventSize);
     while (lpEvent)
     {
-        if (liType == BrnGameState::GameStateModuleIO::E_EVENT_VEHICLE_IMPACT)
+        if (liEventId == BrnGameState::GameStateModuleIO::E_EVENT_VEHICLE_IMPACT)
         {
-            const VehicleImpactEvent& lrImpact =
-                *reinterpret_cast<const VehicleImpactEvent*>(lpEvent);
-            PostSoundMessage(mMessageQueue, 19, 2, MH::KU16_NO_DESTINATION, 4,
-                             MH::E_EFFECT_TYPE_OBJECT, lrImpact);
-
+            const VehicleImpactEvent* lpImpactEvent =
+                reinterpret_cast<const VehicleImpactEvent*>(lpEvent);
+            CgsSound::Io::Message<VehicleImpactEvent> lMessage;
+            lMessage.Construct(19, 2, MH::KU16_NO_DESTINATION, 4, MH::E_EFFECT_TYPE_OBJECT);
+            lMessage.mData = *lpImpactEvent;
+            QueueSoundMessage(mMessageQueue, lMessage);   // PostMessage<VehicleImpactEvent>
         }
-        liType = apEvents->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        liEventId = apEvents->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
     }
 }
 

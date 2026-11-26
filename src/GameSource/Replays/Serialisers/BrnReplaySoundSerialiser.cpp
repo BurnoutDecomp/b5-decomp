@@ -27,6 +27,11 @@ namespace BrnReplays
         mbExtraFlag = false;
     }
 
+    // ICF-folded into ARTIST's shared blr 0x8284CB38 (see the declaration).
+    void SoundSerialiser::Destruct()
+    {
+    }
+
     // @ 0x82682340 -- return the serialiser's static buffer viewed as the structured
     // SoundSerialiser static layout (asserting the buffer is large enough).
     SoundSerialiserStaticLayout* SoundSerialiser::GetStaticLayout()

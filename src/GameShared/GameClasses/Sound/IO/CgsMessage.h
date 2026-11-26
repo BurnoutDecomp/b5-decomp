@@ -65,15 +65,17 @@ public:
         SetEffectId(KU16_NO_DESTINATION, E_EFFECT_TYPE_NONE);
     }
 
-    // CgsMessage.cpp:99 (PS3 0x82E8B8).
+    // CgsMessage.cpp:99 (PS3 0x82E8B8). The setters run in declaration order: ARTIST's inlined copy in
+    // SoundLogicModule::ProcessGameEventQueue stores the event id, state manager, instance, effect id
+    // and effect type in that order (0x826EC3AC..0x826EC3C4).
     void Construct(s16 ai16EventId, u16 au16StateManagerId,
                    u16 au16InstanceId, u16 au16EffectId,
                    eEffectTypes aeEffectType)
     {
+        SetEventId(ai16EventId);
         SetStateManagerId(au16StateManagerId);
         SetInstanceID(au16InstanceId);
         SetEffectId(au16EffectId, aeEffectType);
-        SetEventId(ai16EventId);
     }
 
     // CgsMessage.cpp:119, ARTIST 0x82689868: clears the event id and the state manager.

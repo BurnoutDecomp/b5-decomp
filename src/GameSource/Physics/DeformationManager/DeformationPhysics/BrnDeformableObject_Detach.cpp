@@ -7,6 +7,8 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnTagPoint.h"           // TagPoint::GetJointIndex
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                                       // CgsNumeric::Random
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                          // CGS_ASSERT
+// ARTIST asserts on the unity path of BrnDeformableObject.cpp (CheckForDetachment cpp:2244, 0x8263AD10).
+#define BRN_DEFORMABLEOBJECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.cpp"
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"                                          // PhysicsModuleIO::OutputBuffer::GetDeformationOutputInterface (the notification emit)
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"     // DeformationOutputInterface::mDetachedPartNotificationQueue
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"                 // DetachedPartNotificationEvent
@@ -255,25 +257,20 @@ namespace Deformation
     // =============================================================================================
     s32 DeformableObject::GetNonDetachedJointedPart(s32 liIndex)
     {
-        const s32 liNumParts = miNumIKBodyParts;          // v2 = *(a1 + 26232)
-        if ( liNumParts <= 0 )                            // v2 <= 0 -> none
-            return -1;
-
-        s32 liSkip = liIndex;                              // a2 (consumed on each qualifier)
-        s32 liPart = 0;                                    // v3
-        for ( ; ; )
+        // DWARF locals liPartIndex (cpp:2098) and lpPart (cpp:2100, inner block).
+        for ( s32 liPartIndex = 0; liPartIndex < miNumIKBodyParts; ++liPartIndex )
         {
-            if ( maPartStates[liPart] == KU_PART_STATE_ATTACHED_IK )       // *(a1 + 26180 + v3) == 2
+            if ( maPartStates[liPartIndex] == KU_PART_STATE_ATTACHED_IK )
             {
-                if ( maIKParts[liPart].GetNumberOfJoints() != 0 )          // *(*i + 452)
+                IKBodyPart* lpPart = &maIKParts[liPartIndex];
+                if ( lpPart->GetNumberOfJoints() != 0 )
                 {
-                    if ( liSkip-- == 0 )                                   // a2-- == 0 -> found
-                        return liPart;
+                    if ( liIndex-- == 0 )   // ARTIST decrements before the branch (0x825B9D90)
+                        return liPartIndex;
                 }
             }
-            if ( ++liPart >= liNumParts )                                  // ++v3 >= v2 -> exhausted
-                return -1;
         }
+        return -1;
     }
 
     // =============================================================================================
@@ -307,23 +304,24 @@ namespace Deformation
              && meAbsorptionSet != E_ABSORPTIONSET_INVINCIBLE   // +26460 (asm-proven)
              && miNumIKBodyParts > 0 )
         {
-            const s32 liNumParts = miNumIKBodyParts;       // _R31[6558] bound
-            for ( s32 li = 0; li < liNumParts; ++li )      // v8 = &maPartStates[li], v9 = &maIKParts[li]
+            // DWARF liPartIndex (cpp:2185); ARTIST re-reads miNumIKBodyParts every pass (0x8263AD54).
+            for ( s32 liPartIndex = 0; liPartIndex < miNumIKBodyParts; ++liPartIndex )
             {
-                const u8 lu8State = maPartStates[li];      // v12 = *v8
 
                 // asm 0x8263AC3C: `lbz r10, 26409(r31) ; cmplwi 0 ; beq -> next part`. +26409 is a
                 // BYTE and it is mbIKUpdateRequired -- the flag UpdateIKAndLocators asserts is set
                 // immediately before calling this function, i.e. the gate is OPEN on every
                 // deforming frame. (It used to read mbForceWheelsToDetach, which no writer exists
                 // for anywhere in the tree -- see the file-header table.)
-                if ( lu8State == KU_PART_STATE_ATTACHED_IK && mbIKUpdateRequired )   // +26409 (asm-proven)
+                if ( maPartStates[liPartIndex] == KU_PART_STATE_ATTACHED_IK && mbIKUpdateRequired )   // +26409 (asm-proven)
                 {
                     // IKBodyPart::CheckForDetachment(part, impulse, &detachJointOut). The asm passes
                     // a2 (the accumulated-impulse arg) + a 16-byte scratch out (v17).
-                    s32 liDetachJointOut = 0;                          // v17[] scratch
-                    const f32 lfImpulse = lfTimeStep;                  // a2 (the impulse arg; see note below)
-                    if ( maIKParts[li].CheckForDetachment(lfImpulse, liDetachJointOut) )
+                    // DWARF liTagPointToHangFrom (cpp:2200) is not initialised (ARTIST stores nothing to
+                    // its stack slot before the call), lbDetachPart (cpp:2201), lbAddJoint (cpp:2222).
+                    s32 liTagPointToHangFrom;
+                    bool lbDetachPart = maIKParts[liPartIndex].CheckForDetachment(lfTimeStep, liTagPointToHangFrom);
+                    if ( lbDetachPart )
                     {
                         // ⭐⭐⭐ CORRECTED 2026-09-05 (detach wave) -- THE HINGE ARGUMENT WAS DROPPED, AND
                         // WITH IT THE CONSOLE'S ENTIRE FIRST STAGE OF SHEDDING A PANEL.
@@ -354,40 +352,41 @@ namespace Deformation
                         // 750 [detach-gate] lines of run shape_B1, `nHinged` is 0 on EVERY line of EVERY
                         // car, so no part had ever hinged in this build. A wreck therefore threw off the
                         // bumper, grille, bonnet, door and wing that retail leaves swinging on the car.
-                        DetachPart(lpInput, lpOutput, lpPartMgr, li,
-                                   /*liJointIndex*/ liDetachJointOut,             // 0x8263AC64 (r8)
-                                   /*lbHinge*/ (liDetachJointOut != -1));         // 0x8263AC88 (r9)
+                        bool lbAddJoint = ( liTagPointToHangFrom != -1 );          // 0x8263AC88 (r9)
+                        DetachPart(lpInput, lpOutput, lpPartMgr, liPartIndex,
+                                   /*liJointIndex*/ liTagPointToHangFrom,         // 0x8263AC64 (r8)
+                                   /*lbHinge*/ lbAddJoint);
                     }
                 }
-                else if ( lu8State == KU_PART_STATE_HINGED )
+                else if ( maPartStates[liPartIndex] == KU_PART_STATE_HINGED )
                 {
                     // Structural-part predicate: type == 84 || type == 85 (the asm's v13/v14 latch).
-                    const s32 liType = static_cast<s32>(maIKParts[li].GetPartType());   // *(*v9 + 476)
-                    const bool lbStructural =
-                        ( liType == KI_BODY_PART_STRUCTURAL_A || liType == KI_BODY_PART_STRUCTURAL_B );
+                    bool lbIsExhaust =                                             // DWARF cpp:2234 (no type local)
+                        ( maIKParts[liPartIndex].GetPartType() == KI_BODY_PART_STRUCTURAL_A
+                          || maIKParts[liPartIndex].GetPartType() == KI_BODY_PART_STRUCTURAL_B );
 
                     // Run the joint-break test unless this is an exhaust and it is the last one.
                     // asm 0x8263ACC8: `lhz r11, 0x6720(r31) ; extsh ; cmpwi 1 ; ble -> next part`,
                     // reached only when the type-84/85 latch is set. +26400 is a 16-BIT load and it
                     // is miNumAttachedExhausts -- which is exactly what part types 84/85 are, as
                     // _Lifecycle's seeding loop (count attached type-84/85 parts) confirms.
-                    if ( !lbStructural || miNumAttachedExhausts > 1 )   // +26400 (asm-proven, lhz)
+                    if ( !lbIsExhaust || miNumAttachedExhausts > 1 )    // +26400 (asm-proven, lhz)
                     {
-                        // asm 0x8263ACD8: `lhz r11, 4(r28)` (r28 == &maIKParts[li].mpSpec, so +4 is
+                        // asm 0x8263ACD8: `lhz r11, 4(r28)` (r28 == &maIKParts[liPartIndex].mpSpec, so +4 is
                         // the part's pool index) ; `extsh r4, r11` ; r3=partMgr, r5=lpInput,
                         // r6=lpOutput ; `bl 0x8260E3C0` == DetachedPartManager::TestJointForBreaking.
-                        const s32 liJointHandle = maIKParts[li].GetPartPoolIndex();   // v9[2]
+                        const s32 liJointHandle = maIKParts[liPartIndex].GetPartPoolIndex();   // v9[2]
                         if ( lpPartMgr->TestJointForBreaking(liJointHandle, lpInput, lpOutput) )
                         {
                             // The joint broke. There must be a hinged part to consume.
-                            CGS_ASSERT(mi16NumHingedParts > 0, "mi16NumHingedParts > 0");
+                            CGS_ASSERT_AT(mi16NumHingedParts > 0, "mi16NumHingedParts > 0", BRN_DEFORMABLEOBJECT_CPP_FILE, 2244);
 
                             // vspltisw v0,0 / stvx128 v0,r31,3904 -> zero the spin accumulator (+3904).
                             mAngularVelocitySum.mV = __vspltisw(0);
 
-                            maPartStates[li] = KU_PART_STATE_DETATCHED;   // *v8 = 4
+                            maPartStates[liPartIndex] = KU_PART_STATE_DETATCHED;   // *v8 = 4
                             --mi16NumHingedParts;                         // --*(_R31 + 26288) (lhz/sth)
-                            if ( lbStructural )                           // if ( v16 )
+                            if ( lbIsExhaust )                            // if ( v16 )
                                 --miNumAttachedExhausts;                  // --*(_R31 + 26400) (lhz/sth)
                         }
                     }
@@ -440,40 +439,33 @@ namespace Deformation
              && ( mi8NumPartsToForceHinging - mi16NumHingedParts ) > 0 )   // +26417 - +26288
         {
             // (1) random part ordinal -> resolve to a real attached jointed part.
-            // 0x8263ADC4..0x8263AE00: ONE LCG step, then r4 = (u32)(oldSeed >> 32) % 11 (mulhwu
-            // 0xBA2E8BA3, srwi 3, mulli 11, subf; PS3 0x757C08 `% 0xB`). GetNonDetachedJointedPart
-            // walks that many qualifying parts. (Crash parity G20-D1, 2026-09-23: the tree passed the
-            // raw 32-bit draw as the skip count, so the walk ran off the end and returned -1 ~always
-            // -- a shut-down rival's ten forced hinges never happened.)
-            const u32 luPartDraw = lpRandom->RandomUInt() % 11u;
-            const s32 liPart = GetNonDetachedJointedPart(static_cast<s32>(luPartDraw));
-            if ( liPart != -1 )
+            // 0x8263ADC4..0x8263AE00: RandomUInt(0, 10) inlined (one LCG step, (u32)(oldSeed >> 32) % 11;
+            // PS3 0x757C08 `% 0xB`). GetNonDetachedJointedPart walks that many qualifying parts.
+            // (Crash parity G20-D1, 2026-09-23: the tree once passed the raw 32-bit draw as the skip
+            // count, so the walk ran off the end and returned -1 ~always.)
+            // DWARF locals: liPartIndex (cpp:2285), liJointIndex (cpp:2292), liTagPointIndex (cpp:2295).
+            s32 liPartIndex = GetNonDetachedJointedPart(lpRandom->RandomUInt(0, 10));
+            if ( liPartIndex != -1 )
             {
                 // (2) the chosen part must be ATTACHED_IK.
-                CGS_ASSERT(maPartStates[liPart] == KU_PART_STATE_ATTACHED_IK,
-                           "maPartStates[ liPartIndex ] == E_PART_STATE_ATTACHED_IK");
+                CGS_ASSERT_AT(maPartStates[liPartIndex] == KU_PART_STATE_ATTACHED_IK,
+                              "maPartStates[ liPartIndex ] == E_PART_STATE_ATTACHED_IK", BRN_DEFORMABLEOBJECT_CPP_FILE, 2291);
 
-                IKBodyPart& lrPart = maIKParts[liPart];               // v12 = 16*v11 + v5
-                const u32 luNumJoints = static_cast<u32>(lrPart.GetNumberOfJoints());   // *(*(v12+25388)+452)
-                CGS_ASSERT(luNumJoints > 0, "luMod > 0");             // CgsRandom modulo guard
+                // (3) random joint index in [0, jointCount): RandomUInt(0, n - 1) inlined, its
+                // "luMod > 0" assert on CgsRandom.h:303 (0x8263AE64).
+                s32 liJointIndex = lpRandom->RandomUInt(0, maIKParts[liPartIndex].GetNumberOfJoints() - 1);
 
-                // (3) random joint index in [0, jointCount).
-                const u32 luJointDraw = lpRandom->RandomUInt();
-                const s32 liTargetJoint = ( luNumJoints != 0 )
-                                            ? static_cast<s32>( luJointDraw % luNumJoints )
-                                            : 0;
-
-                // Find the tag point whose joint index matches the drawn target joint.
-                s32 liTagPoint = 0;                                    // v15
-                const s32 liNumTagPoints = lrPart.GetNumberOfTagPoints();   // *(*(v12+25388)+472)
-                for ( ; liTagPoint < liNumTagPoints; ++liTagPoint )
+                // Find the tag point whose joint index matches the drawn joint (the bound is re-read
+                // every pass, 0x8263AEF0..0x8263AEF8).
+                s32 liTagPointIndex;
+                for ( liTagPointIndex = 0; liTagPointIndex < maIKParts[liPartIndex].GetNumberOfTagPoints(); ++liTagPointIndex )
                 {
-                    if ( lrPart.GetTagPoint(liTagPoint)->GetJointIndex() == liTargetJoint )
+                    if ( maIKParts[liPartIndex].GetTagPoint(liTagPointIndex)->GetJointIndex() == liJointIndex )
                         break;
                 }
 
                 // DetachPart as a hinge (lbHinge == true) hanging from the located tag point.
-                DetachPart(lpInput, lpOutput, lpPartMgr, liPart, liTagPoint, /*lbHinge*/ true);
+                DetachPart(lpInput, lpOutput, lpPartMgr, liPartIndex, liTagPointIndex, /*lbHinge*/ true);
             }
         }
 

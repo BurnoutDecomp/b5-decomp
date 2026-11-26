@@ -300,6 +300,18 @@ namespace Io
             s32 miPreviousGameModeState;   // +4   GameStateModuleIO::EGameModeState
             s32 miCurrentGameModeType;     // +8   GameStateModuleIO::EGameModeType
             s32 miCurrentGameModeState;    // +12  EGameModeState, -1 (E_GMS_INVALID) with no mode
+
+            // DWARF BrnGameStateSharedIO.h:625 GameModeOutputInterface::Construct = State::Construct (h:603)
+            // on mPreviousState then mCurrentState, all four words -1; both header-inline (ARTIST
+            // RootInputBuffer::Construct 0x826C824C..0x826C8270 forms the member address once and stores
+            // the current state's words (+8, +C) before the previous state's (+0, +4)).
+            void Construct()
+            {
+                miCurrentGameModeType   = -1;
+                miCurrentGameModeState  = -1;
+                miPreviousGameModeType  = -1;
+                miPreviousGameModeState = -1;
+            }
         };
         struct UpdateInfo                    { u8 mData[1]; };       // single-byte copy (SetUpdateInfo)
         struct AICarOutputInterface          { u8 mData[0x14E8]; };  // memcpy 0x14E8 (SetAICarOutputInterface)
@@ -524,17 +536,24 @@ namespace Io
         mGameActionQueue.Construct();               // VEQ Construct runs Clear() itself
         mGameEventQueue.Construct();                // the C4 fix: BridgeWorldToSound's append target
         mDeformationInterface.Construct();          // DeformationOutputInterface::Construct @0x8228F1B0 (this+0xB490)
-        mPhysicalTrafficStates.Construct();         // PhysicalTrafficState,20 @0x826C82CC
         mWorldLoadInterface.Construct();            // EventQueue<SoundWorldLoadEvent,25>
-        mpGuiEventQueue = 0;
-        std::memset(&mGameModeInterface, 0xFF, sizeof(mGameModeInterface));   // -1 x4 words
-        std::memset(&mReplayStatusInterface, 0, sizeof(mReplayStatusInterface));
+        mpGuiEventQueue = 0;                                                   // stwx 0 @+0xEBA8
+        mGameModeInterface.Construct();                                        // -1 x4 words @+0xEBAC
+        // The replay status interface's own DWARF Construct (BrnReplayStatusInterface.h:52), inlined
+        // by ARTIST at 0x826C8274..0x826C82A0: flags 0, the six reels' mbUsed, both reels -1, 0.0f.
+        mReplayStatusInterface.Construct();
         mTrafficOutputInterface.mu16EntityCount = 0;                          // sth 0 @+0x6AB0
+        // ARTIST constructs the traffic-state queue only here, after the inline stores (0x826C82A8).
+        mPhysicalTrafficStates.Construct();         // PhysicalTrafficState,20 @0x8228DB90
         mUpdateInfo.mData[0] = 0;                                             // stb 0 @+0xEBBC
         mAudioCarDataLoadedQueue.Construct();
         mPropBecamePhysicalEventQueue.Construct();
         mPropUpdateNotificationQueue.Construct();
-        std::memset(&mGuiAudioEventResults, 0, sizeof(mGuiAudioEventResults)); // the results word
+        // ARTIST then inlines AICarOutputInterface::Construct on mAICarOutputInterface (35 x
+        // {FLT_MAX 0x82F2E758, 0x7FFF}, 0x826C82DC..0x826C8314); the member is opaque storage here
+        // (its type is the world lane's BrnAI::AIModuleIO::AICarOutputInterface): not reproduced.
+        mGuiAudioEventResults.miStuntResultScore = 0;                         // stw 0 @+0x13730
+        mGuiAudioEventResults.mfShowtimeScore    = 0.0f;                      // stfs 0.0 @+0x13734
         // ⚠️ CORRECTED (C4): the console stores literal 0 here (`li r30,0` ... `stw r30,
         // 0x2F10(r31)`) == E_ACTIVE_RACE_CAR_INDEX_0 -- NOT the -1 INVALID sentinel the
         // C3b bring-up seeded. SetVehicleData republishes the live value each bridged frame.
