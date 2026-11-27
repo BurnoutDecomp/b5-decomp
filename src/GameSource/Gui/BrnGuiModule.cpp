@@ -1109,7 +1109,7 @@ void GuiModule::Destruct()
     }
 
     // Keep the event switch separate from the incoming queue traversal.
-    __declspec(noinline) void GuiModule::ProcessIncomingEvent(
+    void GuiModule::ProcessIncomingEvent(
         const CgsModule::Event* lpEvent, s32 liId, s32 liSize,
         CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
         CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer,

@@ -250,7 +250,7 @@ void GuiOverlaysDirector::HandleShowFreeBurnIntroRequest(const GuiEventNetworkSh
 }
 
 // Keep overlay dispatch separate from queue traversal for the native emulator build.
-__declspec(noinline) void GuiOverlaysDirector::DispatchOverlayEvent(const CgsModule::Event* lpEvent,
+void GuiOverlaysDirector::DispatchOverlayEvent(const CgsModule::Event* lpEvent,
                                                                    s32 liEventType)
 {
     switch (liEventType)

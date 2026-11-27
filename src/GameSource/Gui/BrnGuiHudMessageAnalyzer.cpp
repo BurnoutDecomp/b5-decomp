@@ -1694,7 +1694,7 @@ namespace
 }
 
 // Keep the event switch separate from the queue iterator.
-__declspec(noinline) void HudMessageAnalyzer::ProcessInputEvent(const CgsModule::Event* lpEvent,
+void HudMessageAnalyzer::ProcessInputEvent(const CgsModule::Event* lpEvent,
                                                           s32 liEventType, bool& lbHadWreckEvent)
 {
             switch (liEventType)

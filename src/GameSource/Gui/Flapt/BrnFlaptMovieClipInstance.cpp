@@ -448,7 +448,7 @@ void MovieClipInstance::ProcessFScript(const FScriptCommand* lpStream,
     }
 }
 
-__declspec(noinline) void MovieClipInstance::ProcessFScriptCommand(
+void MovieClipInstance::ProcessFScriptCommand(
     const FScriptCommand& lrCommand, u32 luCurrentKeyFrame)
 {
     switch (lrCommand.muCommand)

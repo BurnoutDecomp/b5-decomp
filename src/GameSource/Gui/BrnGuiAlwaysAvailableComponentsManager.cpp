@@ -222,7 +222,7 @@ namespace BrnGui
         }
     }
 
-    __declspec(noinline) void AlwaysAvailableComponentsManager::ProcessIncomingEvent(
+    void AlwaysAvailableComponentsManager::ProcessIncomingEvent(
         const CgsModule::Event* lpEvent, s32 liId)
     {
         switch (liId)
