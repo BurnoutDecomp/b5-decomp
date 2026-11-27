@@ -1,6 +1,8 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT_AT
+#include "GameSource/Network/Utilities/BrnNetworkRounder.h"      // NetworkRounder::RoundFloatToAccuracy
 
 // Minimal-slice home for BrnGameState::BurnoutSkillzData -- the per-event "burnout skillz"
 // tally that BrnScoringSystem embeds BY VALUE and calls into. This is a complete, compilable
@@ -50,7 +52,8 @@ struct BurnoutSkillzData
         E_BURNOUT_SKILL_COUNT                   = 14,
     };
 
-    // Bodies live in this type's own TU. DecFIGS describes the parameter and scalar types.
+    // Clear lives in this type's own TU; the accessors are header-inline below (their asserts name
+    // this header in ARTIST). DecFIGS describes the parameter and scalar types.
     // (float32_t -> f32 per project scalar types).
     void Clear();                                              // BrnBurnoutSkillzData.h:85
     f32  GetBurnoutSkill(EBurnoutSkillType eSkill) const;      // BrnBurnoutSkillzData.h:90
@@ -72,4 +75,44 @@ private:
 // Postfix increment used to iterate EBurnoutSkillType (BrnBurnoutSkillzData.h:107).
 // Declare-only -- body lives in the BurnoutSkillzData TU.
 BurnoutSkillzData::EBurnoutSkillType operator++(BurnoutSkillzData::EBurnoutSkillType& eSkill, int);
+
+// Header-inline accessors (DWARF h:90/:96/:101; ARTIST asserts at h:135/:147/:161, inlined into
+// BrnNetwork::BurnoutSkillzMessage::PackOrUnpack 0x8257F338, out-of-line copies 0x8230FC60 /
+// 0x8231C9A8 / 0x8230FCD8).
+#define CGS_ARTIST_BRNBURNOUTSKILLZDATA_H "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h"
+inline f32 BurnoutSkillzData::GetBurnoutSkill(EBurnoutSkillType eSkill) const
+{
+    CGS_ASSERT_AT(eSkill >= E_BURNOUT_SKILL_START,
+        "leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_BRNBURNOUTSKILLZDATA_H, 135 /* ARTIST 0x8230FC8C */);
+
+    CGS_ASSERT_AT(eSkill < E_BURNOUT_SKILL_COUNT,
+        "leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_BRNBURNOUTSKILLZDATA_H, 136 /* ARTIST 0x8230FCB0 */);
+
+
+    return mafBurnoutSkilz[eSkill];
+}
+
+// Store one skill sample, snapped to the skill's rounding accuracy (ARTIST 0x8231CA18 rounds the
+// incoming sample in its parameter slot).
+inline void BurnoutSkillzData::SetBurnoutSkill(EBurnoutSkillType eSkill, f32 lfVal)
+{
+    CGS_ASSERT_AT(eSkill >= E_BURNOUT_SKILL_START, "leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_BRNBURNOUTSKILLZDATA_H, 147);
+    CGS_ASSERT_AT(eSkill < E_BURNOUT_SKILL_COUNT, "leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_BRNBURNOUTSKILLZDATA_H, 148);
+
+    const f32 lfAccuracy = GetSkillAccuracy(eSkill);
+
+    BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfVal, lfAccuracy);
+
+    mafBurnoutSkilz[eSkill] = lfVal;
+}
+
+// The fixed rounding accuracy of a skill sample (ARTIST 0x8230FD44 loads 0.005 with lfs).
+inline f32 BurnoutSkillzData::GetSkillAccuracy(EBurnoutSkillType eSkill)
+{
+    CGS_ASSERT_AT(eSkill >= E_BURNOUT_SKILL_START, "leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_BRNBURNOUTSKILLZDATA_H, 161);
+    CGS_ASSERT_AT(eSkill < E_BURNOUT_SKILL_COUNT, "leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_BRNBURNOUTSKILLZDATA_H, 162);
+
+    return 0.005f;
+}
+#undef CGS_ARTIST_BRNBURNOUTSKILLZDATA_H
 }
