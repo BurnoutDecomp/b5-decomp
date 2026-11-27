@@ -72,7 +72,7 @@ namespace
     // being pulled back in line with the car instead of trailing it.
     const f32 KF_YAW_RETURN_RATE_LERP   = 0.05f;   // flt_82CDAD50 (0x3D4CCCCD, dumped)
 
-    const f32 KF_ZERO = 0.0f;   // flt_82001CC0
+    // KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0; one name could not be defined in several unity members)
 }
 
 // @ 0x8223F808  (DWARF declares void; the X360 tail-returns the SmoothMover::Update result
@@ -149,18 +149,18 @@ void CameraSphericalRotationController::Update(f32 lfTimestep, Vector2 lStick,
 
         mfYawVelocity += lfTargetDelta * KF_YAW_RETURN_BLEND;
         mfYawDegs     += mfYawVelocity * lfTimestep;
-        mfYawDegs      = GetSmallestDifferenceBetweenDegsAngles(KF_ZERO, mfYawDegs);
+        mfYawDegs      = GetSmallestDifferenceBetweenDegsAngles(0.0f, mfYawDegs);
 
         lPitchMoverParams.mbUseCentering = false;
         mPitchMover.Update(lfTimestep, mStickVector.mV.v[1], lPitchMoverParams);
-        mfYawReturnRate = KF_ZERO;
+        mfYawReturnRate = 0.0f;
     }
 
     // Rotated tracking: near-zero yaw counts as un-rotated (accumulate the un-rotated time).
     if (mfYawDegs > KF_YAW_ROTATED_EPSILON || mfYawDegs < -KF_YAW_ROTATED_EPSILON)
     {
         mbIsRotated     = true;
-        mfUnRotatedTime = KF_ZERO;
+        mfUnRotatedTime = 0.0f;
     }
     else
     {

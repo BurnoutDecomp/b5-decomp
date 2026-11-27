@@ -63,8 +63,8 @@ namespace Utils
 
 namespace
 {
-    const f32 KF_DEGREES_TO_RADIANS = 0.017453292f;   // flt_82001744 == 0x3C8EFA35
-    const f32 KF_HALF               = 0.5f;           // flt_82001DA0 == 0x3F000000 (the box centre)
+    // KF_DEGREES_TO_RADIANS: rwmath's DEGREES_TO_RADIANS (fpu/constants.h:56; the unity's copy 0x82001744)
+    // KF_HALF: the pooled literal 0.5f at its uses (ARTIST __real 0x82001DA0; one name could not be defined in several unity members)
     const f32 KF_MIRROR             = -1.0f;          // flt_820037C8 == 0xBF800000 (lbReverse)
 }
 
@@ -81,16 +81,16 @@ void CameraRig::Construct(const Params& lrData, const AABBox& lrAABB, bool lbRev
     rw::math::vpu::Matrix44Affine lOffsetFromCar;
     lOffsetFromCar.SetIdentity();
     lOffsetFromCar.Pos() = Mult(lrData.mOffsetFromTarget, lSize)
-                         + ConsoleVpu::MultiplyAdd(lSize, KF_HALF, lrAABB.mMin);
+                         + ConsoleVpu::MultiplyAdd(lSize, 0.5f, lrAABB.mMin);
 
     // :39 -- yaw about Y first, then pitch about X, then roll about Z (row vectors: Rz * Rx * Ry). Each angle is one
     // fmuls to radians.
     rw::math::vpu::Matrix44Affine lRotation;
     lRotation = ConsoleVpu::Mult(
-        ConsoleVpu::Matrix44AffineFromAxisRotationAngle(GetVector3_ZAxis(), lrData.mfRoll * KF_DEGREES_TO_RADIANS),
+        ConsoleVpu::Matrix44AffineFromAxisRotationAngle(GetVector3_ZAxis(), lrData.mfRoll * rw::math::fpu::DEGREES_TO_RADIANS),
         ConsoleVpu::Mult(
-            ConsoleVpu::Matrix44AffineFromAxisRotationAngle(GetVector3_XAxis(), lrData.mfPitch * KF_DEGREES_TO_RADIANS),
-            ConsoleVpu::Matrix44AffineFromAxisRotationAngle(GetVector3_YAxis(), lrData.mfYaw * KF_DEGREES_TO_RADIANS)));
+            ConsoleVpu::Matrix44AffineFromAxisRotationAngle(GetVector3_XAxis(), lrData.mfPitch * rw::math::fpu::DEGREES_TO_RADIANS),
+            ConsoleVpu::Matrix44AffineFromAxisRotationAngle(GetVector3_YAxis(), lrData.mfYaw * rw::math::fpu::DEGREES_TO_RADIANS)));
 
     // :40 -- where the camera sits relative to the point it rotates about.
     rw::math::vpu::Matrix44Affine lOffsetFromRotationCentre;

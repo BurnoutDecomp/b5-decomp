@@ -36,7 +36,7 @@ namespace BrnDirector
     {
         // The default attrib data-area size requested when a shot's parameter block is absent
         // (the console requests Attrib::DefaultDataArea(0x18)). Same as the sibling states.
-        const u32 KU_SHOT_DEFAULT_DATA_AREA_SIZE = 0x18u;
+        // KU_SHOT_DEFAULT_DATA_AREA_SIZE: the literal size at its uses (no DWARF name; one name could not be defined in several unity members)
 
         // The two trailing arguments the BehaviourManager::NewBehaviour<TBehaviour> allocation
         // request carries (owner null, reference limit 1). RETYPED 2026-07-29: the first is
@@ -47,18 +47,18 @@ namespace BrnDirector
         // LITERAL, so it is not a null-pointer constant and will not convert to `const void*`.
         // (That is the Step-0 defect the previous wave recorded as "one of the two call sites'
         // arg lists is wrong" -- it was the TYPE, not the count.)
-        const void* const KPC_NEW_BEHAVIOUR_OWNER   = 0;
-        const s32         KI_NEW_BEHAVIOUR_REFLIMIT = 1;
+        // KPC_NEW_BEHAVIOUR_OWNER: NewBehaviour's DWARF lpDebugMomentOwner argument (BrnBehaviourManager.h:185), NULL at its uses
+        // KI_NEW_BEHAVIOUR_REFLIMIT: NewBehaviour's DWARF liRefLimit argument (BrnBehaviourManager.h:185) at its uses
 
         // CalculateStateTimes constants (asm-attested rodata: flt_82003F40 / flt_82001CC0 /
         // flt_82001D9C / flt_82001C98).
         const f32 KF_FIXED_TIME_DEDUCTION = 0.25f;   // flt_82003F40: subtracted from lfMaxTime
-        const f32 KF_ZERO                 = 0.0f;    // flt_82001CC0: the >0 assert compare / resets
+        // KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0; one name could not be defined in several unity members)
         const f32 KF_MOVE_SEGMENTS_SCALE  = 2.0f;    // flt_82001D9C: per-rival move-segment weight
         const f32 KF_FULL_SHOW_TIME       = 1.0f;    // flt_82001C98: the clamped per-show time cap
 
         // The hook the intro epilogue keeps in force / stops on the state camera.
-        const char* const KPC_HOOK_BLACK_FADE_IN_QUICK = "BlackFadeIn_Quick";
+        // KPC_HOOK_BLACK_FADE_IN_QUICK: the hook-name literal at its uses (no DWARF name; one name could not be defined in two unity members)
 
         // The minimum number of shots the online-race-start group must carry (the case-1 assert
         // "lOnlineRaceStartShotGroup.Num_ShotList() >= E_ICE_MOVIE_MIN_COUNT").
@@ -149,7 +149,7 @@ namespace BrnDirector
         if (luNumRivals != 0)
         {
             const f32 lfBudget = lfMaxTime - KF_FIXED_TIME_DEDUCTION;
-            CGS_ASSERT_AT(lfBudget > KF_ZERO, "lfMaxTime > 0.0f", CGS_ARTIST_FILE, 89);
+            CGS_ASSERT_AT(lfBudget > 0.0f, "lfMaxTime > 0.0f", CGS_ARTIST_FILE, 89);
 
             // Total weighted time: (numRivals+1) shows + 2*(numRivals+1) moves.
             const f32 lfShowCount      = static_cast<f32>(luNumRivals + 1);
@@ -179,8 +179,8 @@ namespace BrnDirector
         else
         {
             mfTimeToSpendLookingAtPlayer = lfMaxTime;
-            mfTimeToSpendLookingAtRival  = KF_ZERO;
-            mfTimeToSpendInterpolating   = KF_ZERO;
+            mfTimeToSpendLookingAtRival  = 0.0f;
+            mfTimeToSpendInterpolating   = 0.0f;
         }
     }
 
@@ -211,7 +211,7 @@ namespace BrnDirector
         // Allocate the rival "show" behaviour into the handle at the current cursor.
         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
             maRivalBehaviourHandle[muRivalMovieOffset], this,
-            KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
+            NULL, 1);
 
         maRivalBehaviourHandle[muRivalMovieOffset].Get()
             ->SetForceMotionBlurEverything(true);   // +0xE2B = 1
@@ -219,7 +219,7 @@ namespace BrnDirector
         const void* lpShotData = const_cast<Attrib::Gen::shotgroup&>(lrOnlineRaceStartShotGroup)
                                      .GetShotListData(static_cast<s32>(luShotIndex));
         if (!lpShotData)
-            lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
+            lpShotData = Attrib::DefaultDataArea(0x18u);
 
         Camera::BehaviourIceAnim* lpBehaviour = maRivalBehaviourHandle[muRivalMovieOffset].Get();
         lpBehaviour->SetParameters(
@@ -256,7 +256,7 @@ namespace BrnDirector
                                                     const Camera::Camera& lrToCamera)
     {
         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourInterpolate>(
-            mInterpolator, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
+            mInterpolator, this, NULL, 1);
 
         Camera::BehaviourInterpolate* lpInterpolator = mInterpolator.Get();
 
@@ -339,7 +339,7 @@ namespace BrnDirector
 
                         // Allocate + configure the player "show" behaviour (shot index 1).
                         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                            mPlayerBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
+                            mPlayerBehaviourHandle, this, NULL, 1);
 
                         mPlayerBehaviourHandle.Get()->SetUseCollisionPolicy(true);   // +0xE28 = 1
                         mPlayerBehaviourHandle.Get()->ClearBaseFirstFrameGate();     // +0x28 = 0
@@ -348,7 +348,7 @@ namespace BrnDirector
                             const_cast<Attrib::Gen::shotgroup&>(lrOnlineRaceStartShotGroup)
                                 .GetShotListData(/*liShotIndex*/ 1);
                         if (!lpShotData)
-                            lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
+                            lpShotData = Attrib::DefaultDataArea(0x18u);
 
                         Camera::BehaviourIceAnim* lpBehaviour = mPlayerBehaviourHandle.Get();
                         lpBehaviour->SetParameters(
@@ -461,7 +461,7 @@ namespace BrnDirector
             {
                 // Last rival: interpolate back to the player "show".
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                    mPlayerBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
+                    mPlayerBehaviourHandle, this, NULL, 1);
 
                 const Attrib::Gen::shotgroup& lrOnlineRaceStartShotGroup =
                     lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStart();
@@ -469,7 +469,7 @@ namespace BrnDirector
                     const_cast<Attrib::Gen::shotgroup&>(lrOnlineRaceStartShotGroup)
                         .GetShotListData(/*liShotIndex*/ 1);
                 if (!lpShotData)
-                    lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
+                    lpShotData = Attrib::DefaultDataArea(0x18u);
 
                 Camera::BehaviourIceAnim* lpBehaviour = mPlayerBehaviourHandle.Get();
                 lpBehaviour->SetParameters(
@@ -569,14 +569,14 @@ namespace BrnDirector
                     lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStart();
 
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                    mLightsBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
+                    mLightsBehaviourHandle, this, NULL, 1);
                 mLightsBehaviourHandle.Get()->SetForceMotionBlurEverything(true);   // +0xE2B = 1
 
                 const void* lpShotData =
                     const_cast<Attrib::Gen::shotgroup&>(lrOnlineRaceStartShotGroup)
                         .GetShotListData(/*liShotIndex*/ 0);
                 if (!lpShotData)
-                    lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
+                    lpShotData = Attrib::DefaultDataArea(0x18u);
 
                 mLightsBehaviourHandle.Get()->SetParameters(
                     static_cast<Camera::BehaviourIceAnim::ShotReference*>(const_cast<void*>(lpShotData)));
@@ -601,14 +601,14 @@ namespace BrnDirector
                     lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStart();
 
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                    mLightsBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
+                    mLightsBehaviourHandle, this, NULL, 1);
                 mLightsBehaviourHandle.Get()->SetForceMotionBlurEverything(true);   // +0xE2B = 1
 
                 const void* lpShotData =
                     const_cast<Attrib::Gen::shotgroup&>(lrOnlineRaceStartShotGroup)
                         .GetShotListData(/*liShotIndex*/ 0);
                 if (!lpShotData)
-                    lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
+                    lpShotData = Attrib::DefaultDataArea(0x18u);
 
                 mLightsBehaviourHandle.Get()->SetParameters(
                     static_cast<Camera::BehaviourIceAnim::ShotReference*>(const_cast<void*>(lpShotData)));
@@ -675,12 +675,12 @@ namespace BrnDirector
         if (lrGameState.mbOnlineRaceIntroCanUseBars)
         {
             Camera::EnsureEffectIsStopped(lrCamera, *lrSharedInfo.mpEffectInterface,
-                                          KPC_HOOK_BLACK_FADE_IN_QUICK);
+                                          "BlackFadeIn_Quick");
         }
         else if ((lrCamera.mState_uFlags & 2) == 0)
         {
             lrCamera = lrSharedInfo.mpSharedCameraContainer->GetSelectedGameplayCamera();
-            Camera::RequestStartEffectHookReset(lrCamera, KPC_HOOK_BLACK_FADE_IN_QUICK,
+            Camera::RequestStartEffectHookReset(lrCamera, "BlackFadeIn_Quick",
                                                 KF_FULL_SHOW_TIME);
         }
 

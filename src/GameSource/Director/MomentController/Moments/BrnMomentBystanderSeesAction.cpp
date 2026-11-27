@@ -24,11 +24,11 @@ namespace BrnDirector
 namespace
 {
     // Camera-state head bits (the moment family's shared vocabulary):
-    const u32 KU_HEAD_FLAG_SEARCHING      = 18;
-    const u32 KU_HEAD_FLAG_ALLOCATED      = 19;
-    const u32 KU_HEAD_FLAG_PREPARING      = 20;
-    const u32 KU_HEAD_FLAG_INHIBITED      = 23;
-    const u32 KU_HEAD_FLAG_NOT_SWITCHABLE = 24;   // (valid but the behaviour can't be switched to yet)
+    // KU_HEAD_FLAG_SEARCHING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_ALLOCATED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_PREPARING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_INHIBITED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_NOT_SWITCHABLE: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
 
     // The motion blur the valid body forces on the mirrored camera each frame.
     const f32 KF_BYSTANDER_CARS_BLUR_AMOUNT  = 0.25f;
@@ -66,7 +66,7 @@ bool MomentBystanderSeesAction::Release()
     mBystander.Release();
     SetConditionsNotMet();
     SetCanSwitchToMeNow(false);
-    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+    GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
     SetState(E_STATE_INVALID_SEARCHING);
     return true;
 }
@@ -128,7 +128,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, Camera::BehaviourMana
                     static_cast<EActiveRaceCarIndex>(lrSharedInfo.mePlayerActiveRaceCarIndex));
                 SetCanSwitchToMeNow(false);
                 SetState(E_STATE_INVALID_FOUND_PREPARING);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_FOR_BEHAVIOUR_TO_PREPARE);
                 return;
             }
         }
@@ -136,7 +136,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, Camera::BehaviourMana
         {
             SetConditionsNotMet();
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
             return;
         }
         else if (!IsInhibited())
@@ -148,13 +148,13 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, Camera::BehaviourMana
                 static_cast<EActiveRaceCarIndex>(lrSharedInfo.mpGameState->meTakedownVictimID));
             SetCanSwitchToMeNow(false);
             SetState(E_STATE_INVALID_FOUND_PREPARING);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_FOR_BEHAVIOUR_TO_PREPARE);
             return;
         }
 
         // Inhibited (either condition path).
         SetCanSwitchToMeNow(false);
-        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
+        GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_INHIBITED);
         return;
     }
 
@@ -167,7 +167,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, Camera::BehaviourMana
         if (!mBystander.Get()->CanSwitchToMeNow())
         {
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_TO_CUT_TO_BEHAVIOUR);
             return;
         }
         SetState(E_STATE_VALID);
@@ -195,7 +195,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, Camera::BehaviourMana
     if (!mBystander.Get()->CanSwitchToMeNow())
     {
         SetCanSwitchToMeNow(false);
-        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_NOT_SWITCHABLE);
+        GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_BEHAVIOUR_NOCUTTO);
     }
 
     if ((!lrSharedInfo.mpGameState->mbCrashActive

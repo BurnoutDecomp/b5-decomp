@@ -28,10 +28,10 @@ namespace
     const f32 KF_PASSENGER_CRASH_WINDOW = 0.5f;
 
     // Camera-state head bits (the moment family's shared vocabulary):
-    const u32 KU_HEAD_FLAG_SEARCHING = 18;
-    const u32 KU_HEAD_FLAG_ALLOCATED = 19;
-    const u32 KU_HEAD_FLAG_PREPARING = 20;   // (also the valid body's expired hold)
-    const u32 KU_HEAD_FLAG_INHIBITED = 23;
+    // KU_HEAD_FLAG_SEARCHING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_ALLOCATED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_PREPARING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_INHIBITED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
 }
 
 namespace detail
@@ -66,7 +66,7 @@ bool MomentPassengerSeesAction::Release()
     mPassengerCam.Release();
     SetConditionsNotMet();
     SetCanSwitchToMeNow(false);
-    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+    GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
     SetState(E_STATE_INVALID_INACTIVE);
     return true;
 }
@@ -137,7 +137,7 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, Camera::BehaviourManager&
                 if (IsInhibited())
                 {
                     SetCanSwitchToMeNow(false);
-                    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
+                    GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_INHIBITED);
                     return;
                 }
                 mWitness.SetToRaceCar(EActiveRaceCarIndex(liCrashVehicle));
@@ -147,14 +147,14 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, Camera::BehaviourManager&
                     &lpBehaviourManager->GetBehaviourParameterBank().GetPassengerCamMomentParams());
                 SetCanSwitchToMeNow(false);
                 SetState(E_STATE_INVALID_FOUND_PREPARING);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_FOR_BEHAVIOUR_TO_PREPARE);
                 return;
             }
         }
 
         SetConditionsNotMet();
         SetCanSwitchToMeNow(false);
-        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+        GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
         return;
     }
 
@@ -167,7 +167,7 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, Camera::BehaviourManager&
         if (!mPassengerCam.Get()->CanSwitchToMeNow())
         {
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_TO_CUT_TO_BEHAVIOUR);
             return;
         }
         SetState(E_STATE_VALID);
@@ -186,7 +186,7 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, Camera::BehaviourManager&
     if (mfTimeCrashing > KF_PASSENGER_CRASH_WINDOW)
     {
         SetCanSwitchToMeNow(false);
-        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
+        GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_TO_CUT_TO_BEHAVIOUR);
         return;
     }
     if (!lrSharedInfo.mpGameState->mbCrashActive)

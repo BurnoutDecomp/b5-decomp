@@ -32,7 +32,7 @@ namespace
     //   23 -- raised while searching inhibited
     const u32 KU_CAMERA_HEAD_FLAG_SEARCHING     = 18;
     const u32 KU_CAMERA_HEAD_FLAG_GYRO_ALLOCATED = 19;
-    const u32 KU_CAMERA_HEAD_FLAG_INHIBITED      = 23;
+    // KU_CAMERA_HEAD_FLAG_INHIBITED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
 }
 
 namespace detail
@@ -87,7 +87,7 @@ void MomentHitTraffic::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehavi
             else
             {
                 SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_CAMERA_HEAD_FLAG_INHIBITED);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_INHIBITED);
             }
         }
         else

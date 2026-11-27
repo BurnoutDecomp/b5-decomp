@@ -56,17 +56,17 @@ namespace BrnDirector
     // / BrnArbStateRankUp.cpp each define this same local constant rather than sharing a global one).
     namespace
     {
-        const s32 KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN = 2;
+        // KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN: the camera-state bit of DWARF CameraState::E_FLAG_VALID (BrnCameraState.h:56) at its uses
         // The camera flag word's takedown bit, raised by ArbStateTakedown::Update on every arm.
         const s32 KI_CAMERA_DIRTY_TAKEDOWN         = 0x800;
-        const f32 KF_UNIT                          = 1.0f;   // flt_82001C98
+        // KF_UNIT: the pooled literal 1.0f at its uses (ARTIST __real 0x82001C98; one name could not be defined in several unity members)
         const f32 KF_TAKEDOWN_SIM_TIME_SCALE     = 0.2857143f;   // flt_8200177C (case DRIVEBY/ACTIVE constant)
 
         // Construct's moment-selector tuning. Both are rodata loads in the console body:
         // the three AddMoment records share one weighting (flt_82001DA0 == 0.5f), and the
         // recency factor is flt_8200AE70 == 0.995f.
-        const f32 KF_MOMENT_WEIGHTING = 0.5f;
-        const f32 KF_RECENCY_FACTOR   = 0.995f;
+        // KF_MOMENT_WEIGHTING: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001DA0)
+        // KF_RECENCY_FACTOR: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x8200AE70)
 
         // ShutdownTakedownPlayer::Construct's three loose-attachment overrides, written
         // straight after Parameters::Construct seeds the block (flt_82004FDC / flt_82004D04 /
@@ -78,12 +78,12 @@ namespace BrnDirector
         // The per-frame blur / slow-mo curve every player drives off its blend's parametric
         // time. Both angles are rodata loads (PI and PI/2); the slow-mo ramp is 5/7, the
         // complement of the KF_TAKEDOWN_SIM_TIME_SCALE 2/7 the players hold at.
-        const f32 KF_PI         = 3.1415927f;
-        const f32 KF_HALF_PI    = 1.5707964f;
+        // KF_PI: rwmath's PI (fpu/constants.h:65; the unity's copy 0x8200174C)
+        // KF_HALF_PI: rwmath's HALF_PI (fpu/constants.h:71; the unity's copy 0x82001754)
         const f32 KF_SLOMO_RAMP = 0.7142857f;
 
         // Blend durations, each a rodata load at its own Setup site.
-        const f32 KF_BLEND_DURATION          = 0.5f;
+        // KF_BLEND_DURATION: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001DA0)
         const f32 KF_SHUTDOWN_BLEND_DURATION = 2.0f;
         const f32 KF_SHUTDOWN_LOOKBACK_BLEND = 0.2f;
         const f32 KF_DESTRUCTION_PATH_BLEND  = 1.0f;
@@ -391,15 +391,15 @@ namespace BrnDirector
 
         mMomentSelector.AddMoment(Moment::E_MOMENT_BYSTANDER_SEES_ACTION,
                                   MomentParameterBank::E_PARAM_BYSTANDER_CLOSE_TAKEDOWN_ONLY,
-                                  KF_MOMENT_WEIGHTING, /*mbCanBeInhibited*/ false);
+                                  0.5f, /*mbCanBeInhibited*/ false);
         mMomentSelector.AddMoment(Moment::E_MOMENT_TUMBLING,
                                   MomentParameterBank::E_PARAM_TUMBLING_TRUCKING_SIDE_TAKEDOWN_ONLY,
-                                  KF_MOMENT_WEIGHTING, /*mbCanBeInhibited*/ false);
+                                  0.5f, /*mbCanBeInhibited*/ false);
         mMomentSelector.AddMoment(Moment::E_MOMENT_TUMBLING,
                                   MomentParameterBank::E_PARAM_TUMBLING_LEAD_TAKEDOWN_ONLY,
-                                  KF_MOMENT_WEIGHTING, /*mbCanBeInhibited*/ false);
+                                  0.5f, /*mbCanBeInhibited*/ false);
 
-        mMomentSelector.SetRecencyFactor(KF_RECENCY_FACTOR);
+        mMomentSelector.SetRecencyFactor(0.995f);
 
         // A second, redundant store of meSelectionMode after SetRecencyFactor
         // (`stw 0, 0x608(this)` == selector +0x1DC, no call) -- an inlined SetSelectionMode
@@ -503,13 +503,13 @@ namespace BrnDirector
             // dirty-flags word has KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN set); default to the right
             // seat when neither/the left one isn't.
             const Camera::Camera& lrLeftProduced = mGyroCamDriveByL.GetCamera();
-            const bool lbLeftIsDriving = (lrLeftProduced.mState_uFlags & KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN) != 0;
+            const bool lbLeftIsDriving = (lrLeftProduced.mState_uFlags & (1 << Camera::CameraState::E_FLAG_VALID)) != 0;
 
             lOutCamera = lbLeftIsDriving ? lrLeftProduced : mGyroCamDriveByR.GetCamera();
 
             if (mfActiveTime == 0.0f)
             {
-                Camera::RequestStartEffectHook(lOutCamera, "Takedown", KF_UNIT);
+                Camera::RequestStartEffectHook(lOutCamera, "Takedown", 1.0f);
             }
 
             lOutCamera.mEffects.mfSimTimeScale = KF_TAKEDOWN_SIM_TIME_SCALE;
@@ -524,7 +524,7 @@ namespace BrnDirector
         case E_STATE_FINISHED:
         {
             const Camera::Camera& lrLeftProduced = mGyroCamDriveByL.GetCamera();
-            const bool lbLeftIsDriving = (lrLeftProduced.mState_uFlags & KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN) != 0;
+            const bool lbLeftIsDriving = (lrLeftProduced.mState_uFlags & (1 << Camera::CameraState::E_FLAG_VALID)) != 0;
             lOutCamera = lbLeftIsDriving ? lrLeftProduced : mGyroCamDriveByR.GetCamera();
             break;
         }
@@ -534,7 +534,7 @@ namespace BrnDirector
             break;
         }
 
-        lOutCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+        lOutCamera.mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
         mfActiveTime = lrSharedInfo.mfTimestep + mfActiveTime;
         return lOutCamera;
     }
@@ -626,7 +626,7 @@ namespace BrnDirector
             break;
         }
 
-        lOutCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+        lOutCamera.mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
         mfActiveTime = lrSharedInfo.mfTimestep + mfActiveTime;
         return lOutCamera;
     }
@@ -702,7 +702,7 @@ namespace BrnDirector
 
             // The blend IN: FROM the live gameplay camera's helper TO the gyro cam's.
             mInterpolaterA.Get()->Setup(
-                KF_BLEND_DURATION,
+                0.5f,
                 lrSharedInfo.mpSharedCameraContainer->GetGameplayCameraHelperIndex(),
                 mGyroCam.GetBehaviourHelperIndex(),
                 lrSharedInfo.mpBehaviourManager);
@@ -752,16 +752,16 @@ namespace BrnDirector
 
             if (mfActiveTime == 0.0f)
             {
-                Camera::RequestStartEffectHook(lOutCamera, "Takedown", KF_UNIT);
+                Camera::RequestStartEffectHook(lOutCamera, "Takedown", 1.0f);
             }
 
             const f32 lfBlurAmount =
-                ClampUnit(sinf(mInterpolaterA.Get()->GetParametricTime() * KF_PI));
+                ClampUnit(sinf(mInterpolaterA.Get()->GetParametricTime() * rw::math::fpu::PI));
             const f32 lfEaseAmount =
-                sinf(mInterpolaterA.Get()->GetParametricTime() * KF_HALF_PI);
+                sinf(mInterpolaterA.Get()->GetParametricTime() * rw::math::fpu::HALF_PI);
 
             lOutCamera.RequestMotionBlur(lfBlurAmount, ClampUnit(lfEaseAmount));
-            lOutCamera.mEffects.mfSimTimeScale = KF_UNIT - lfEaseAmount * KF_SLOMO_RAMP;
+            lOutCamera.mEffects.mfSimTimeScale = 1.0f - lfEaseAmount * KF_SLOMO_RAMP;
 
             if (mInterpolaterA.Get()->HasFinished() && mfActiveTime > KF_B3CLASSIC_HANDOFF_TIME)
             {
@@ -774,7 +774,7 @@ namespace BrnDirector
 
                 // The blend OUT, the mirror of Prepare's: FROM the gyro cam TO the gameplay camera.
                 mInterpolaterB.Get()->Setup(
-                    KF_BLEND_DURATION,
+                    0.5f,
                     mGyroCam.GetBehaviourHelperIndex(),
                     lrSharedInfo.mpSharedCameraContainer->GetGameplayCameraHelperIndex(),
                     lrSharedInfo.mpBehaviourManager);
@@ -793,13 +793,13 @@ namespace BrnDirector
             lOutCamera.mEffects.mfSimTimeScale = KF_TAKEDOWN_SIM_TIME_SCALE;
 
             const f32 lfBlurAmount =
-                ClampUnit(sinf(mInterpolaterB.Get()->GetParametricTime() * KF_PI));
+                ClampUnit(sinf(mInterpolaterB.Get()->GetParametricTime() * rw::math::fpu::PI));
             // The blend-out runs the ease in REVERSE (1 - sin), so the slow-mo returns to normal.
             const f32 lfEaseAmount =
-                KF_UNIT - sinf(mInterpolaterB.Get()->GetParametricTime() * KF_HALF_PI);
+                1.0f - sinf(mInterpolaterB.Get()->GetParametricTime() * rw::math::fpu::HALF_PI);
 
             lOutCamera.RequestMotionBlur(lfBlurAmount, ClampUnit(lfEaseAmount));
-            lOutCamera.mEffects.mfSimTimeScale = KF_UNIT - lfEaseAmount * KF_SLOMO_RAMP;
+            lOutCamera.mEffects.mfSimTimeScale = 1.0f - lfEaseAmount * KF_SLOMO_RAMP;
 
             if (mInterpolaterB.Get()->HasFinished())
             {
@@ -817,7 +817,7 @@ namespace BrnDirector
             break;
         }
 
-        lOutCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+        lOutCamera.mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
         mfActiveTime = lrSharedInfo.mfTimestep + mfActiveTime;
         return lOutCamera;
     }
@@ -908,7 +908,7 @@ namespace BrnDirector
             mInterpolaterA.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
             // The camera-taking Setup overload: FROM the synthesised look-at TO the first rig.
-            mInterpolaterA.Get()->SetupDuration(KF_BLEND_DURATION);
+            mInterpolaterA.Get()->SetupDuration(0.5f);
             mInterpolaterA.Get()->SetupCameraAFromCamera(lFromCamera);
             mInterpolaterA.Get()->SetupCameraBFromHelper(
                 mGyroCamA.GetBehaviourHelperIndex(), *lrSharedInfo.mpBehaviourManager);
@@ -959,12 +959,12 @@ namespace BrnDirector
 
             if (mfActiveTime == 0.0f)
             {
-                Camera::RequestStartEffectHook(lOutCamera, "Takedown", KF_UNIT);
+                Camera::RequestStartEffectHook(lOutCamera, "Takedown", 1.0f);
             }
 
             lOutCamera.mEffects.mfSimTimeScale = KF_TAKEDOWN_SIM_TIME_SCALE;
             lOutCamera.mDepthOfField.SetBlurriness(
-                sinf(mInterpolaterA.Get()->GetParametricTime() * KF_PI));
+                sinf(mInterpolaterA.Get()->GetParametricTime() * rw::math::fpu::PI));
 
             if (mInterpolaterA.Get()->HasFinished() &&
                 mfActiveTime > KF_DESTRUCTION_PATH_FLYBACK1)
@@ -992,7 +992,7 @@ namespace BrnDirector
             lOutCamera = mInterpolaterB.GetCamera();
             lOutCamera.mEffects.mfSimTimeScale = KF_TAKEDOWN_SIM_TIME_SCALE;
             lOutCamera.mDepthOfField.SetBlurriness(
-                sinf(mInterpolaterB.Get()->GetParametricTime() * KF_PI));
+                sinf(mInterpolaterB.Get()->GetParametricTime() * rw::math::fpu::PI));
 
             if (mInterpolaterB.Get()->HasFinished() &&
                 mfActiveTime > KF_DESTRUCTION_PATH_FLYBACK2)
@@ -1010,7 +1010,7 @@ namespace BrnDirector
             break;
         }
 
-        lOutCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+        lOutCamera.mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
         mfActiveTime = lrSharedInfo.mfTimestep + mfActiveTime;
         return lOutCamera;
     }
@@ -1208,15 +1208,15 @@ namespace BrnDirector
 
             // The frame's camera is the LOOKBACK blend's, whichever of the two arms above ran.
             lOutCamera = mInterpolaterA.GetCamera();
-            lOutCamera.RequestMotionBlur(0.0f, KF_UNIT);
+            lOutCamera.RequestMotionBlur(0.0f, 1.0f);
             lOutCamera.mEffects.mfSimTimeScale =
-                (mfActiveTime < KF_SHUTDOWN_GYRO_TIME) ? KF_TAKEDOWN_SIM_TIME_SCALE : KF_UNIT;
+                (mfActiveTime < KF_SHUTDOWN_GYRO_TIME) ? KF_TAKEDOWN_SIM_TIME_SCALE : 1.0f;
             break;
         }
 
         case E_STATE_FLYBACK:
             lOutCamera = mInterpolaterB.GetCamera();
-            lOutCamera.RequestMotionBlur(KF_UNIT, KF_UNIT);
+            lOutCamera.RequestMotionBlur(1.0f, 1.0f);
 
             if (mfActiveTime > KF_SHUTDOWN_FLYBACK_TIME)
             {
@@ -1236,7 +1236,7 @@ namespace BrnDirector
                 mZoom1.Get()->SetTarget(
                     static_cast<s32>(lrSharedInfo.mePlayerActiveRaceCarIndex));
 
-                mZoom1.Get()->GetImpactEffect().RegisterImpact(KF_UNIT);
+                mZoom1.Get()->GetImpactEffect().RegisterImpact(1.0f);
                 mZoom1.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
                 mInterpolaterA.Release();
@@ -1250,11 +1250,11 @@ namespace BrnDirector
         case E_STATE_ZOOM1:
             lOutCamera = mZoom1.GetCamera();
             lOutCamera.mEffects.mfSimTimeScale = KF_ZOOM_SIM_TIME_SCALE;
-            lOutCamera.RequestMotionBlur(0.0f, KF_UNIT);
+            lOutCamera.RequestMotionBlur(0.0f, 1.0f);
 
             if (mfActiveTime < KF_SHUTDOWN_ZOOM1_FLASH_END)
             {
-                Camera::RequestStartEffectHook(lOutCamera, KPC_FLASH_HOOK, KF_UNIT);
+                Camera::RequestStartEffectHook(lOutCamera, KPC_FLASH_HOOK, 1.0f);
             }
 
             if (mfActiveTime > KF_SHUTDOWN_ZOOM2_TIME)
@@ -1271,7 +1271,7 @@ namespace BrnDirector
                 mZoom2.Get()->SetTarget(
                     static_cast<s32>(lrSharedInfo.mePlayerActiveRaceCarIndex));
 
-                mZoom2.Get()->GetImpactEffect().RegisterImpact(KF_UNIT);
+                mZoom2.Get()->GetImpactEffect().RegisterImpact(1.0f);
                 mZoom2.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
                 mZoom1.Release();
@@ -1282,11 +1282,11 @@ namespace BrnDirector
         case E_STATE_ZOOM2:
             lOutCamera = mZoom2.GetCamera();
             lOutCamera.mEffects.mfSimTimeScale = KF_ZOOM_SIM_TIME_SCALE;
-            lOutCamera.RequestMotionBlur(0.0f, KF_UNIT);
+            lOutCamera.RequestMotionBlur(0.0f, 1.0f);
 
             if (mfActiveTime < KF_SHUTDOWN_ZOOM2_FLASH_END)
             {
-                Camera::RequestStartEffectHook(lOutCamera, KPC_FLASH_HOOK, KF_UNIT);
+                Camera::RequestStartEffectHook(lOutCamera, KPC_FLASH_HOOK, 1.0f);
             }
 
             if (mfActiveTime > KF_SHUTDOWN_ZOOM3_TIME)
@@ -1303,7 +1303,7 @@ namespace BrnDirector
                 mZoom3.Get()->SetTarget(
                     static_cast<s32>(lrSharedInfo.mePlayerActiveRaceCarIndex));
 
-                mZoom3.Get()->GetImpactEffect().RegisterImpact(KF_UNIT);
+                mZoom3.Get()->GetImpactEffect().RegisterImpact(1.0f);
                 mZoom3.Get()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
 
                 mZoom2.Release();
@@ -1314,11 +1314,11 @@ namespace BrnDirector
         case E_STATE_ZOOM3:
             lOutCamera = mZoom3.GetCamera();
             lOutCamera.mEffects.mfSimTimeScale = KF_ZOOM_SIM_TIME_SCALE;
-            lOutCamera.RequestMotionBlur(0.0f, KF_UNIT);
+            lOutCamera.RequestMotionBlur(0.0f, 1.0f);
 
             if (mfActiveTime < KF_SHUTDOWN_ZOOM3_FLASH_END)
             {
-                Camera::RequestStartEffectHook(lOutCamera, KPC_FLASH_HOOK, KF_UNIT);
+                Camera::RequestStartEffectHook(lOutCamera, KPC_FLASH_HOOK, 1.0f);
             }
 
             if (mfActiveTime > KF_SHUTDOWN_FINISH_TIME)
@@ -1329,8 +1329,8 @@ namespace BrnDirector
 
         case E_STATE_FINISHED:
             lOutCamera = mZoom3.GetCamera();
-            lOutCamera.mEffects.mfSimTimeScale = KF_UNIT;
-            lOutCamera.RequestMotionBlur(0.0f, KF_UNIT);
+            lOutCamera.mEffects.mfSimTimeScale = 1.0f;
+            lOutCamera.RequestMotionBlur(0.0f, 1.0f);
             break;
 
         default:
@@ -1338,7 +1338,7 @@ namespace BrnDirector
             break;
         }
 
-        lOutCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+        lOutCamera.mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
         mfActiveTime = lrSharedInfo.mfTimestep + mfActiveTime;
         return lOutCamera;
     }
@@ -1458,7 +1458,7 @@ namespace BrnDirector
             // bumper/external selection, which every sibling site uses. The console addresses
             // the container's first handle here, so the lookback override cannot redirect it.
             mInterpolator.Get()->Setup(
-                KF_BLEND_DURATION,
+                0.5f,
                 lrSharedInfo.mpSharedCameraContainer->mGameplayExternal.GetBehaviourHelperIndex(),
                 mGyroCam.GetBehaviourHelperIndex(),
                 lrSharedInfo.mpBehaviourManager);
@@ -1555,14 +1555,14 @@ namespace BrnDirector
                 GetNonConstCamera() = mInterpolator.GetCamera();
 
                 const f32 lfBlurAmount =
-                    ClampUnit(sinf(mInterpolator.Get()->GetParametricTime() * KF_PI));
+                    ClampUnit(sinf(mInterpolator.Get()->GetParametricTime() * rw::math::fpu::PI));
                 const f32 lfEaseAmount =
-                    ClampUnit(sinf(mInterpolator.Get()->GetParametricTime() * KF_HALF_PI));
+                    ClampUnit(sinf(mInterpolator.Get()->GetParametricTime() * rw::math::fpu::HALF_PI));
 
                 GetNonConstCamera().RequestMotionBlur(lfBlurAmount, lfEaseAmount);
                 GetNonConstCamera().mEffects.mfSimTimeScale =
-                    Camera::Utils::SineLerp(KF_FAILSAFE_SIM_TIME_FLOOR, KF_UNIT, mfActiveTime);
-                GetNonConstCamera().mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+                    Camera::Utils::SineLerp(KF_FAILSAFE_SIM_TIME_FLOOR, 1.0f, mfActiveTime);
+                GetNonConstCamera().mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
 
                 mfFailsafeTimer = KF_MIN_FAILSAFE_TIME;
             }
@@ -1604,8 +1604,8 @@ namespace BrnDirector
                     mfFailsafeTimer = lrSharedInfo.mfTimestep + mfFailsafeTimer;
 
                     GetNonConstCamera() = mInterpolator.GetCamera();
-                    GetNonConstCamera().RequestMotionBlur(0.0f, KF_UNIT);
-                    GetNonConstCamera().mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+                    GetNonConstCamera().RequestMotionBlur(0.0f, 1.0f);
+                    GetNonConstCamera().mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
                 }
             }
             lbCameraProduced     = true;
@@ -1660,7 +1660,7 @@ namespace BrnDirector
             {
                 Camera::EnsureEffectIsPlaying(GetNonConstCamera(),
                                               *lrSharedInfo.mpEffectInterface,
-                                              "Car_Reset", KF_UNIT);
+                                              "Car_Reset", 1.0f);
                 mbHasTriggeredFlash = true;
             }
         }

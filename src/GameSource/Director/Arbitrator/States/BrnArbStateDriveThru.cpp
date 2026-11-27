@@ -82,19 +82,19 @@ namespace BrnDirector
     {
         // The blend the "Car_Reset" camera effect plays at (flt_82001C98 == 1.0; shared with
         // BrnArbStatePostEvent's / BrnArbStateRaceIntro's KF_CAR_RESET_BLEND).
-        const f32 KF_CAR_RESET_BLEND = 1.0f;
+        // KF_CAR_RESET_BLEND: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001C98)
 
         // The default attrib data-area size requested when a shot's parameter block is absent
         // (X360: li r3, 0x18 -> Attrib::DefaultDataArea(0x18)). Same as the sibling arbitrator
         // states (race-intro / rank-up / online-car-select).
-        const u32 KU_SHOT_DEFAULT_DATA_AREA_SIZE = 0x18u;
+        // KU_SHOT_DEFAULT_DATA_AREA_SIZE: the literal size at its uses (no DWARF name; one name could not be defined in several unity members)
 
         // The two trailing selectors the BehaviourManager::NewBehaviour<TBehaviour> allocation
         // request carries (X360 li r7,0 / li r8,1). Same as the sibling arbitrator states.
         // (ARG_A retyped with the NewBehaviour owner-slot reconcile: the r7 slot
         // carries the owning-object pointer -- NULL at this site.)
-        const void* const KI_NEW_BEHAVIOUR_ARG_A = 0;
-        const s32 KI_NEW_BEHAVIOUR_ARG_B = 1;
+        // KI_NEW_BEHAVIOUR_ARG_A: NewBehaviour's DWARF lpDebugMomentOwner argument (BrnBehaviourManager.h:185), NULL at its uses
+        // KI_NEW_BEHAVIOUR_ARG_B: NewBehaviour's DWARF liRefLimit argument (BrnBehaviourManager.h:185) at its uses
     }
 
     // ------------------------------------------------------------------------
@@ -251,7 +251,7 @@ namespace BrnDirector
 
             const void* lpShotData = lrShotGroup.GetShotListData(lbUseSecondShot);
             if (!lpShotData)
-                lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
+                lpShotData = Attrib::DefaultDataArea(0x18u);
 
             // TBehaviour == the generic Camera::Behaviour base (not a concrete behaviour type
             // already pinned at the call site, unlike the sibling states' NewBehaviour<BehaviourIceAnim>
@@ -260,7 +260,7 @@ namespace BrnDirector
             // is passed directly into NewBehaviour, not to a follow-up SetParameters call).
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::Behaviour>(
                 mDriveThruBehaviourHandle, lpShotData, this,
-                KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+                NULL, 1);
         }
 
         return false;
@@ -325,7 +325,7 @@ namespace BrnDirector
             if (!lbSkipFlash)
             {
                 Camera::EnsureEffectIsPlaying(lrCamera, *lrSharedInfo.mpEffectInterface,
-                                              "Car_Reset", KF_CAR_RESET_BLEND);
+                                              "Car_Reset", 1.0f);
                 meState = E_STATE_CHANGING_TO_ROAMING;   // +0x1B8 = 3
                 break;
             }

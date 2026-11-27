@@ -1537,7 +1537,7 @@ static const f32 KF_ONE_DRIVE_THRU          =   0.02857142873108387f;  // flt_82
 static const f32 KF_COMPLETE                = 100.0f;   // flt_820049E0
 static const f32 KF_COMPLETE_EPSILON        =   1.52587890625e-05f;    // flt_82029B74 == 2^-16
 static const f32 KF_ONE_HUNDRED_AND_ONE     = 101.0f;   // flt_8203179C -- yes, really; see the tail
-static const f32 KF_ZERO                    =   0.0f;   // flt_82001CC0
+// KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0)
 
 // The authored per-rank contribution to the completion percentage, flt_82CDB964[]. Six entries,
 // one per progression rank, and they sum to exactly 100 -- which is the internal cross-check on
@@ -1639,7 +1639,7 @@ s32 ProgressionManager::GetNumberOfBeatenRivals()
 // ===================================================================================
 f32 ProgressionManager::GetPercentageOfEventsCompleted()
 {
-    f32 lfRankSum = KF_ZERO;
+    f32 lfRankSum = 0.0f;
 
     // `extsb r31, r3` -- the rank is a signed byte.
     const s32 liRank = GetProgressionRank();
@@ -1669,10 +1669,10 @@ f32 ProgressionManager::GetPercentageOfEventsCompleted()
     const ProgressionData* lpProgressionData = GetProgressionData();
     if (lpProgressionData == 0)
     {
-        return KF_ZERO;
+        return 0.0f;
     }
 
-    f32 lfFractionOfNextRank = KF_ZERO;
+    f32 lfFractionOfNextRank = 0.0f;
     if (luTotalWins != 0)
     {
         // GetProgressionRankData owns the "luIndex < muProgressionRankCount" assert the
@@ -1685,7 +1685,7 @@ f32 ProgressionManager::GetPercentageOfEventsCompleted()
         lfFractionOfNextRank = static_cast<f32>(luTotalWins) / static_cast<f32>(liMedalThreshold);
     }
 
-    f32 lfNextRankContribution = KF_ZERO;
+    f32 lfNextRankContribution = 0.0f;
     if (liNextRankIndex < KI_RANK_COMPLETION_COUNT)
     {
         lfNextRankContribution = KAF_RANK_COMPLETION_CONTRIBUTION[liNextRankIndex];
@@ -1727,8 +1727,8 @@ f32 ProgressionManager::ComputeCompletionPercentage()
     // same member sits at +0x30 there; read by name, so the widening is irrelevant).
     // ⚠️ Each term is guarded on its own NUMERATOR being non-zero, and only then is the
     // StreetData fetched -- so a zero tally never touches the resource. Faithful.
-    f32 lfTimeRoadRulesFraction  = KF_ZERO;
-    f32 lfCrashRoadRulesFraction = KF_ZERO;
+    f32 lfTimeRoadRulesFraction  = 0.0f;
+    f32 lfCrashRoadRulesFraction = 0.0f;
 
     const BrnStreetData::StreetData* lpStreetData =
         (mpStreetManager != 0) ? mpStreetManager->GetStreetData() : 0;
@@ -1754,10 +1754,10 @@ f32 ProgressionManager::ComputeCompletionPercentage()
     // ---- term 3: rivals beaten -------------------------------------------------------
     // ⚠️ The guard is `fcmpu f30, f31` on the BEATEN count (the numerator), not on the
     // rival total -- zero beaten short-circuits, and a zero denominator is not checked.
-    f32       lfRivalsFraction = KF_ZERO;
+    f32       lfRivalsFraction = 0.0f;
     const f32 lfBeatenRivals   = static_cast<f32>(GetNumberOfBeatenRivals());
     const f32 lfTrueRivals     = static_cast<f32>(GetTrueNumberOfRivals());
-    if (lfBeatenRivals != KF_ZERO)
+    if (lfBeatenRivals != 0.0f)
     {
         lfRivalsFraction = lfBeatenRivals / lfTrueRivals;
     }
@@ -1770,9 +1770,9 @@ f32 ProgressionManager::ComputeCompletionPercentage()
     // totals on the StuntManager (+0x5C4/+0x5C6/+0x5C8, s16). The console evaluates them
     // in the order JUMP, BILLBOARD, SMASH -- the same index feeds both sides of each
     // fraction, so the ordering is presentation only.
-    f32 lfJumpFraction      = KF_ZERO;
-    f32 lfSmashFraction     = KF_ZERO;
-    f32 lfBillboardFraction = KF_ZERO;
+    f32 lfJumpFraction      = 0.0f;
+    f32 lfSmashFraction     = 0.0f;
+    f32 lfBillboardFraction = 0.0f;
     if (mpStuntManager != 0)
     {
         const s32 liJumpsDone = mProfile.GetStuntElementCount(BrnGameState::E_STUNT_ELEMENT_TYPE_JUMP);
@@ -1800,7 +1800,7 @@ f32 ProgressionManager::ComputeCompletionPercentage()
     // ---- term 5: drive-thrus found ---------------------------------------------------
     // `GetDriveThrusFound()` is called TWICE -- once as the guard, once for the value.
     // The scale is 1/35, i.e. the authored total number of drive-thrus.
-    f32 lfDriveThruTerm = KF_ZERO;
+    f32 lfDriveThruTerm = 0.0f;
     if (mProfile.GetDriveThrusFound() != 0)
     {
         lfDriveThruTerm = static_cast<f32>(mProfile.GetDriveThrusFound()) * KF_ONE_DRIVE_THRU;
@@ -1812,7 +1812,7 @@ f32 ProgressionManager::ComputeCompletionPercentage()
     // then -- if the count is non-zero -- COUNTS THE WHOLE LIST A SECOND TIME to produce
     // the numerator it actually divides. Reproduced as one count plus the same guard: the
     // second walk is byte-identical to the first and cannot produce a different answer.
-    f32       lfEventsFoundFraction = KF_ZERO;
+    f32       lfEventsFoundFraction = 0.0f;
     const u32 luEventCount          = mProfile.GetEventCount();
     u32       luEventsFound         = 0;
     for (u32 luEvent = 0; luEvent < luEventCount; ++luEvent)
@@ -1833,9 +1833,9 @@ f32 ProgressionManager::ComputeCompletionPercentage()
 
     // `fneg f13, f0 / fsel f0, f13, f31, f0` == "(-total >= 0) ? 0 : total", the low clamp;
     // `fsubs f13, f31, f0 / fsel f30, f13, f0, f31` == "(100 - total >= 0) ? total : 100".
-    if (lfTotal <= KF_ZERO)
+    if (lfTotal <= 0.0f)
     {
-        lfTotal = KF_ZERO;
+        lfTotal = 0.0f;
     }
     if (lfTotal > KF_COMPLETE)
     {

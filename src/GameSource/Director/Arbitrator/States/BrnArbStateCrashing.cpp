@@ -88,7 +88,7 @@ namespace BrnDirector
 
         // How fast a moment's recency score decays between selections (flt_8200AE70). The same
         // value ArbStateTakedown::Construct @0x8225A318 uses.
-        const f32 KF_RECENCY_FACTOR = 0.995f;
+        // KF_RECENCY_FACTOR: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x8200AE70)
 
         // Only ONE of this state's moments may be live at a time.
         const u32 KU_MAX_ACTIVE_MOMENTS = 1;
@@ -110,7 +110,7 @@ namespace BrnDirector
 
         // The camera-state "follow the car" bit, cleared on the wrecked exit
         // (`ld / and 0xFFFFFFFD / std`). Same bit ArbStateCarSelect names KI_CAMERA_STATE_FOLLOW.
-        const s32 KI_CAMERA_STATE_FOLLOW = 0x00000002;
+        // KI_CAMERA_STATE_FOLLOW: the camera-state bit of DWARF CameraState::E_FLAG_VALID (BrnCameraState.h:56) at its uses
 
         // The screen-effect hooks this state requests.
         const char* const KPC_HOOK_CRASH             = "Crash";
@@ -125,8 +125,8 @@ namespace BrnDirector
         const CgsDev::RGBA KU_PRINT_COLOUR_OK   = static_cast<CgsDev::RGBA>(-16711936);  // 0xFF00FF00
 
         // The source-file string every assert in this TU cites.
-        const char* const KPC_SOURCE_FILE =
-            "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCrashing.cpp";
+#define CGS_ARTIST_FILE \
+            "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCrashing.cpp"
 
         // The take the taken-down camera plays is the FIRST shot of the resource manager's
         // "takendown" shot group.
@@ -214,7 +214,7 @@ namespace BrnDirector
                                   MomentParameterBank::E_PARAM_BYSTANDER_FAR_CRASH_ONLY,
                                   KF_LONG_SHOT_WEIGHTING, /*mbCanBeInhibited*/ false);
 
-        mMomentSelector.SetRecencyFactor(KF_RECENCY_FACTOR);
+        mMomentSelector.SetRecencyFactor(0.995f);
 
         // A second, redundant store of meSelectionMode between SetRecencyFactor and
         // SetMaxActiveMoments (`stw 0, 0x3A4(this)` == selector +0x1DC, no call) -- an inlined
@@ -546,7 +546,7 @@ namespace BrnDirector
         if (!lrSharedInfo.mpGameState->mbImpactTimeActive &&
             mTakenDownCam.IsAllocated() &&
             !mTakenDownCam.IsBehaviourWaitingToPrepare() &&
-            (mTakenDownCam.GetCamera().mState_uFlags & KI_CAMERA_STATE_FOLLOW) != 0)
+            (mTakenDownCam.GetCamera().mState_uFlags & (1 << Camera::CameraState::E_FLAG_VALID)) != 0)
         {
             GetNonConstCamera() = mTakenDownCam.GetCamera();
         }
@@ -575,7 +575,7 @@ namespace BrnDirector
         if (lpbHasChangedState == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpbHasChangedState != NULL", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 569));
+            CgsDev::Assert::FireAssert("lpbHasChangedState != NULL", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 569));
             CgsDev::Assert::EndAssert();
         }
 
@@ -630,7 +630,7 @@ namespace BrnDirector
                                               *lrSharedInfo.mpEffectInterface,
                                               KPC_HOOK_BLACK_FADE_IN, KF_EFFECT_BLEND);
 
-                GetNonConstCamera().mState_uFlags &= ~KI_CAMERA_STATE_FOLLOW;
+                GetNonConstCamera().mState_uFlags &= ~(1 << Camera::CameraState::E_FLAG_VALID);
 
                 meState = E_STATE_CHANGING_TO_ROAMING;
                 *lpbHasChangedState = true;
@@ -817,7 +817,7 @@ namespace BrnDirector
 
         default:
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("unhandled state", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 441));
+            CgsDev::Assert::FireAssert("unhandled state", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 441));
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -848,7 +848,7 @@ namespace BrnDirector
             if (lrSharedInfo.mpDebugPrinter == 0)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lSharedInfo.mpDebugPrinter != NULL", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 273));
+                CgsDev::Assert::FireAssert("lSharedInfo.mpDebugPrinter != NULL", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 273));
                 CgsDev::Assert::EndAssert();
             }
             lrSharedInfo.mpDebugPrinter->Print("");
@@ -874,7 +874,7 @@ namespace BrnDirector
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "lSharedInfo.mpDirectorResourceManager->GetTakendown().Num_ShotList()>0",
-                    CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 289));
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 289));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -998,3 +998,4 @@ namespace BrnDirector
         return true;                  // li r3, 1
     }
 }
+#undef CGS_ARTIST_FILE

@@ -15,6 +15,7 @@
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCrashing.h"  // BrnDirector::ArbStateCrashing (real layout)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateTakedown.h"  // BrnDirector::ArbStateTakedown (real layout)
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                // BrnDirector::SharedPlaylists
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT_AT
 
 // ----------------------------------------------------------------------------
 // BrnDirector::ArbitratorStateContainer -- the fixed set of 11 director arbitrator
@@ -108,9 +109,10 @@ namespace BrnDirector
         void UpdateAll(ArbStateSharedInfo& lrSharedInfo);
         void ReleaseAll(ArbStateSharedInfo& lrSharedInfo);
 
-        // X360 0x821F5A60. Returns the active state, asserting it is non-null
-        // ("mpCurrentState != NULL"). mpCurrentState is the source build's +0x35CC word.
-        ArbitratorState* GetCurrentState() const;
+        // DWARF h:101 / h:104, header-inline (ARTIST's assert file is this header): the non-const
+        // body asserts at h:131 (out-of-line copy 0x821F5A60), the const one at h:140 (0x821F5C24).
+        ArbitratorState& GetCurrentState();
+        const ArbitratorState& GetCurrentState() const;
 
         // The state registered for a given EState index. The X360 reaches the embedded
         // sub-states by their fixed interior offsets (e.g. container+0x1C60 == the crash-mode
@@ -160,6 +162,20 @@ namespace BrnDirector
         ArbitratorState*      mArrayOfStatePointers[E_NUM_STATES];
         ArbitratorState*      mpCurrentState;
     };
+
+    inline ArbitratorState& ArbitratorStateContainer::GetCurrentState()
+    {
+        CGS_ASSERT_AT(mpCurrentState != NULL, "mpCurrentState != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\arbitrator\\BrnDirectorArbitratorStateContainer.h", 131);
+        return *mpCurrentState;
+    }
+
+    inline const ArbitratorState& ArbitratorStateContainer::GetCurrentState() const
+    {
+        CGS_ASSERT_AT(mpCurrentState != NULL, "mpCurrentState != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\arbitrator\\BrnDirectorArbitratorStateContainer.h", 140);
+        return *mpCurrentState;
+    }
 }
 
 #endif

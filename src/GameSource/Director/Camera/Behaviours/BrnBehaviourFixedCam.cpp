@@ -37,7 +37,7 @@ namespace
     const f32 KF_MIN_DISTANCE          = 5.0f;          // lMinDistance  flt_8200426C (0x40A00000)
     const f32 KF_MAX_DISTANCE_SQUARED  = 400.0f;        // the fail test flt_8200889C (0x43C80000)
     const f32 KF_ZERO_TOLERANCE        = 1.1920929e-7f; // IsZero        flt_82001770 (0x34000000)
-    const f32 KF_DEGREES_TO_RADIANS    = 0.017453292f;  // the dutch     flt_82001744 (0x3C8EFA35)
+    // KF_DEGREES_TO_RADIANS: rwmath's DEGREES_TO_RADIANS (fpu/constants.h:56; the unity's copy 0x82001744)
 
     // The validity-account flags Update raises (names from the account's recovered table).
 
@@ -159,7 +159,7 @@ bool BehaviourFixedCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrIn
 
         if (!IsTweakerAttached())
         {
-            mBaseTranform = Mult(MakeRotationZ(mfDutch * KF_DEGREES_TO_RADIANS), mBaseTranform);
+            mBaseTranform = Mult(MakeRotationZ(mfDutch * rw::math::fpu::DEGREES_TO_RADIANS), mBaseTranform);
         }
 
         mbPositionSet = true;
@@ -181,7 +181,7 @@ bool BehaviourFixedCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrIn
 
     if (IsTweakerAttached())
     {
-        lrCamera.mTransform = Mult(MakeRotationZ(mpParameters->mfMaxDutch * KF_DEGREES_TO_RADIANS),
+        lrCamera.mTransform = Mult(MakeRotationZ(mpParameters->mfMaxDutch * rw::math::fpu::DEGREES_TO_RADIANS),
                                    mBaseTranform);
     }
 

@@ -154,7 +154,7 @@ namespace BrnGameState
         // from the PS3 DecFIGS ScoringSystem::ClearData (0x1E364C, same source): flt_82CDB7D0 == FLT_MAX
         // (3.4028235e38). The X360 0x8232A4A8 stores the same flt_82CDB7D0 along this path. The sibling
         // BrnScoringSystem_Lookup.cpp uses the identical literal so the seed/equality test is consistent.
-        const f32 KF_INVALID_RACE_DISTANCE = FLT_MAX;   // ARTIST flt_82CDB7D0: 0x7F7FFFFF
+        // KF_INVALID_RACE_DISTANCE: BrnWorld::KF_INVALID_DISTANCE (BrnWorldSharedConstants.h:39) at its uses
 
     }
 
@@ -314,9 +314,9 @@ namespace BrnGameState
             const EActiveRaceCarIndex leIdx = lpActive->maCarsInTheRace[liSlot].meActiveRaceCarIndex; // +0x30
 
             RaceCarPositioningData& lPos = maRaceCarPositioningData[liSlot];   // this+0x59C0, stride 24
-            lPos.mfDistanceToNextCheckpoint = KF_INVALID_RACE_DISTANCE;        // +0x04 (flt_82CDB7D0 seed)
+            lPos.mfDistanceToNextCheckpoint = BrnWorld::KF_INVALID_DISTANCE;        // +0x04 (flt_82CDB7D0 seed)
             lPos.miCurrentCheckpoint        = -1;                              // +0x0C
-            lPos.mfDistanceToFinish         = KF_INVALID_RACE_DISTANCE;        // +0x08 (seed)
+            lPos.mfDistanceToFinish         = BrnWorld::KF_INVALID_DISTANCE;        // +0x08 (seed)
             lPos.meActiveRaceCarIndex       = E_ACTIVE_RACE_CAR_INDEX_INVALID; // +0x00
             lPos.miFinishPosition           = 8;                              // +0x10 (KI_MAX_ACTIVE_RACE_CARS)
             lPos.mbDisconnected             = false;                          // +0x14
@@ -344,12 +344,12 @@ namespace BrnGameState
             lPos.miFinishPosition           = lpScore->GetFinishPosition();   // +0x10 (CarScoreData+0x14)
             lPos.mbDisconnected             = lpScore->GetDisconnected();     // +0x14 (CarScoreData+0x69)
 
-            if (lfAIDist == KF_INVALID_RACE_DISTANCE)   // AI gave no usable distance
+            if (lfAIDist == BrnWorld::KF_INVALID_DISTANCE)   // AI gave no usable distance
             {
                 // X360: if mfDistanceToFinish was already set (!= sentinel) the recompute is skipped
                 // and the +0x08 store is bypassed (goto LABEL_16). The seed above leaves it == sentinel,
                 // so on the normal path this recomputes; the guard is preserved for fidelity.
-                if (lPos.mfDistanceToFinish == KF_INVALID_RACE_DISTANCE)
+                if (lPos.mfDistanceToFinish == BrnWorld::KF_INVALID_DISTANCE)
                 {
                     f32 lfGuessDistToCheckpoint = 0.0f;
                     if (lpActive->IsRaceCarActive(leIdx))

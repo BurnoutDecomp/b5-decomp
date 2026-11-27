@@ -114,11 +114,11 @@ namespace
     // pi/2 -- GetPitchAboutPointRads returns (pi/2 - acos(dir.y)) == asin(dir.y).
     // Also the near-vertical gate and the den==0 arm of the Euler decomposition below;
     // DUMPED as flt_82001754 == 1.570796371 (and its negative flt_82005560).
-    const f32 KF_HALF_PI = 1.5707964f;
+    // KF_HALF_PI: rwmath's HALF_PI (fpu/constants.h:71; the unity's copy 0x82001754) at its uses
 
     // pi -- the den<0 arm of the Euler decomposition's atan2. DUMPED as
     // flt_8200174C == 3.141592741.
-    const f32 KF_PI = 3.1415927f;
+    // KF_PI: rwmath's PI (fpu/constants.h:65; the unity's copy 0x8200174C) at its uses
 
     // The +/-1 clamp band EulerAnglesZXYFromMatrix44Affine puts every source row through.
     // DUMPED as flt_820037C8 == -1 and flt_82001C98 == +1; the console's vmaxfp/vminfp
@@ -183,12 +183,12 @@ namespace
     f32 ATan2(f32 lfNumerator, f32 lfDenominator)
     {
         if (lfDenominator == 0.0f)
-            return CopyNativeSign(KF_HALF_PI, lfNumerator);
+            return CopyNativeSign(rw::math::fpu::HALF_PI, lfNumerator);
 
         const f32 lfAngle = std::atan(lfNumerator / lfDenominator);
 
         if (lfDenominator < 0.0f)
-            return lfAngle + CopyNativeSign(KF_PI, lfNumerator);
+            return lfAngle + CopyNativeSign(rw::math::fpu::PI, lfNumerator);
 
         return lfAngle;
     }
@@ -293,7 +293,7 @@ f32 GetPitchAboutPointRads(Vector3 lCentre, Vector3 lPoint)
     CGS_ASSERT(!rw::math::vpu::IsZero(lCentreToPoint), "!IsZero(lCentreToPoint)");
 
     const Vector3 lDir = rw::math::vpu::Normalize(lCentreToPoint);
-    return KF_HALF_PI - std::acos(lDir.mV.y);
+    return rw::math::fpu::HALF_PI - std::acos(lDir.mV.y);
 }
 
 // ----------------------------------------------------------------------------------------
@@ -495,7 +495,7 @@ Vector3 EulerAnglesZXYFromMatrix44Affine(Matrix44Affine lIn, Vector3* lpLastAngl
     lEulerAngles.mV.x = std::asin(-lZaxis.mV.y);
     lEulerAngles.mV.w = 0.0f;
 
-    if (KF_HALF_PI > lEulerAngles.mV.x && lEulerAngles.mV.x > -KF_HALF_PI)
+    if (rw::math::fpu::HALF_PI > lEulerAngles.mV.x && lEulerAngles.mV.x > -rw::math::fpu::HALF_PI)
     {
         lEulerAngles.mV.y = ATan2(lZaxis.mV.x, lZaxis.mV.z);
         lEulerAngles.mV.z = ATan2(lXaxis.mV.y, lYaxis.mV.y);

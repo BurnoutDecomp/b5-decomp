@@ -17,6 +17,7 @@
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"      // Utils::RotateMatrix44AffineByEulerAnglesZXY
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"          // Random::RandomFloat / ::RandomVector
 #include "rw/math/vpu/types.h"                                 // Vector3 / Matrix44Affine (complete)
+#include "rw/math/fpu/constants.h"                          // DEGREES_TO_RADIANS
 #include <xtl.h>
 #include <xboxmath.h>
 
@@ -26,18 +27,18 @@ namespace Camera
 {
 namespace Utils
 {
-namespace
-{
-    // ------------------------------------------------------------------------
-    // The shake's lane primitives use the original VMX operations directly.
-    // ------------------------------------------------------------------------
+    // The shake's lane primitives use the original VMX operations directly (namespace-scope
+    // typedefs, as BrnCameraShakeICEController.cpp declares them: one Utils::Vector3 in the unity).
     typedef rw::math::vpu::Vector3     Vector3;
     typedef rw::math::vpu::Matrix44Affine Matrix44Affine;
+namespace
+{
+
 
     // The .rdata scalar at 0x82001744, splatted at 0x8222166C. pi/180: the Parameters'
     // magnitudes are authored in DEGREES (all four serialiser labels say so) and
     // RotateMatrix44AffineByEulerAnglesZXY takes RADIANS.
-    const f32 KF_DEGREES_TO_RADIANS = 0.017453292f;
+    // KF_DEGREES_TO_RADIANS: rwmath's DEGREES_TO_RADIANS (fpu/constants.h:56; the unity's copy 0x82001744)
 
     Vector3 ShakeAdd(const Vector3& a, const Vector3& b)
     {
@@ -161,7 +162,7 @@ void CameraShake::Update(Matrix44Affine& lrTransform, const Parameters& lrParams
     // ImpactShakeController::Update @0x822438AC passes *this * 15.0f) both read as a shake
     // AMOUNT rather than a speed ratio. Left alone rather than churned.
     const Vector3 lEulerAnglesRads = ShakeScale(ShakeAdd(lShakeAngles, lNewWobble),
-                                           KF_DEGREES_TO_RADIANS * lfSpeedRatio);
+                                           rw::math::fpu::DEGREES_TO_RADIANS * lfSpeedRatio);
 
     // ---- build the rotation and pre-multiply --------------------------------
     // The console materialises an IDENTITY on the stack (three 1.0f from flt_82001C98 on the

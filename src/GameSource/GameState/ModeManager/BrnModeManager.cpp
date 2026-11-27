@@ -1909,12 +1909,12 @@ static const f32 KF_TEAM_RED_COUNTDOWN_BONUS_ONLINE_HOME_RUN  = 3.0f;   // flt_8
 static const f32 KF_METRES_TO_YARDS = 1.0936132669448853f;
 // The burning-route upload score is the finish time in MILLISECONDS.
 // Image-dumped: flt_820DB5C8 == 0x447A0000 == 1000.0f.
-static const f32 KF_SECONDS_TO_MILLISECONDS = 1000.0f;
+// KF_SECONDS_TO_MILLISECONDS: the literal 1000.0f at its uses (no DWARF name in this file)
 // The "player aborted / did not really finish" sentinel ShowModeResults writes into the results
 // record's time field. Image-dumped: flt_820282B4 == 0x4CBEBC20 == 100000000.0f (1.0e8 s).
 static const f32 KF_ABORTED_FINISH_TIME = 100000000.0f;
 // flt_82001CC0 == 0x00000000 == 0.0f (the shared zero constant the whole image uses).
-static const f32 KF_ZERO = 0.0f;
+// KF_ZERO: the literal 0.0f at its uses (no DWARF name in this file)
 // flt_82001C98 == 0x3F800000 == 1.0f -- the timestep multiplier FinishCurrentMode restores for
 // OFFLINE_SHOWTIME (i.e. the end of crash-mode impact time).
 static const f32 KF_NORMAL_TIMESTEP_MULTIPLIER = 1.0f;
@@ -2001,7 +2001,7 @@ f32 ModeManager::GetCountdownTimeForMode() const
     if ((meCurrentGameModeType <= GameStateModuleIO::E_MODE_NONE) ||
         (static_cast<s32>(meCurrentGameModeType) >= KI_GAME_MODE_SLOTS))
     {
-        return KF_ZERO;
+        return 0.0f;
     }
 
     const f32 lfCountdownTime = KAF_COUNTDOWN_TIME_FOR_MODE[meCurrentGameModeType];
@@ -2593,7 +2593,7 @@ void ModeManager::ShowModeResults(
                                                      : mScoringSystem.GetStuntScorer();
         const s32 liStuntScore = lpStuntScorer->GetCurrentScore();   // scorer+0x10
 
-        lAction.mfField18 = KF_ZERO;         // record+0x18 (flt_82001CC0)
+        lAction.mfField18 = 0.0f;         // record+0x18 (flt_82001CC0)
         lAction.miField10 = 0;               // record+0x10
         lAction.miField14 = 1;               // record+0x14
         lAction.miField08 = liStuntScore;    // record+0x08
@@ -2689,7 +2689,7 @@ void ModeManager::ShowModeResults(
     }
     else if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ROAD_RAGE)
     {
-        lAction.mfField0C = KF_ZERO;                  // flt_82001CC0 == 0.0f (road rage has no time)
+        lAction.mfField0C = 0.0f;                  // flt_82001CC0 == 0.0f (road rage has no time)
     }
     else
     {
@@ -2744,7 +2744,7 @@ void ModeManager::ShowModeResults(
                     // Burning route uploads the finish time in ms; stunt attack uploads the score.
                     const s32 liScoreToUpload =
                         (leGameModeType == GameStateModuleIO::E_MODE_BURNING_ROUTE)
-                            ? static_cast<s32>(lAction.mfField0C * KF_SECONDS_TO_MILLISECONDS)
+                            ? static_cast<s32>(lAction.mfField0C * 1000.0f)
                             : lAction.miField08;
 
                     CGS_ASSERT_AT(lpGameActionQueue != 0, "lpGameActionQueue", CGS_ARTIST_FILE, 3439);   // :3439

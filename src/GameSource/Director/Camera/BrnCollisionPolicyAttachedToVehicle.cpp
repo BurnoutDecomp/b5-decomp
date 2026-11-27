@@ -62,10 +62,10 @@ namespace Camera
 namespace
 {
     // The literals the bodies load, read from the image.
-    const f32 KF_DEGREES_TO_RADIANS      = 0.017453292f;  // flt_82001744 == 0x3C8EFA35  GenerateSceneQueries 0x82252700,
+    // KF_DEGREES_TO_RADIANS: rwmath's DEGREES_TO_RADIANS (fpu/constants.h:56; the unity's copy 0x82001744)
                                                           //   CalculateFrustumLineTests 0x8220DE44,
                                                           //   the resolver's ProcessSceneQueryResults 0x822243D0
-    const f32 KF_RADIANS_TO_DEGREES      = 57.29578f;     // flt_82001748 == 0x42652EE1  UpdateMinElevation 0x822406A8
+    // KF_RADIANS_TO_DEGREES: rwmath's RADIANS_TO_DEGREES (fpu/constants.h:59; the unity's copy 0x82001748)
     const f32 KF_RESOLVE_MIN_DISTANCE    = 1.0f;          // flt_82001C98 == 0x3F800000  ResolveCollisions 0x8222498C
     const f32 KF_RADIUS_TOLERANCE        = 0.01f;         // flt_82002138 == 0x3C23D70A  UpdateRadius 0x8220E4D4,
                                                           //                             UpdateMinElevation 0x822405EC
@@ -94,7 +94,7 @@ namespace
 
     // rw::math's splat of pi / 2: the .bss VecFloat 0x830180F0 its CRT thunk 0x82C6D200 fills from the .data float
     // 0x82F3192C == 0x3FC90FDB (GetHeightAboveTraffic 0x821F90E4).
-    const f32 KF_HALF_PI = 1.5707964f;
+    // KF_HALF_PI: rwmath's HALF_PI (fpu/constants.h:71; the unity's copy 0x82001754)
 
     // The SmoothMover parameters UpdateMinElevation builds on its stack (0x822405F4..0x82240660), field by field.
     const f32 KF_MIN_ELEVATION_MAX       = 70.0f;         // flt_820051BC == 0x428C0000  +0x00 mfMaxValue
@@ -298,7 +298,7 @@ void CollisionPolicyAttachedToVehicle::GenerateSceneQueries(const CollisionPolic
     {
         const Vector3 lVehiclePosition = AttachedVehiclePosition(mAttachedTo.Get(lrSharedInfo.mpAllVehicleData));
         const f32 lfPitch        = Utils::GetPitchAboutPointRads(lVehiclePosition, lrCamera.mTransform.wAxis);
-        const f32 lfMinimumPitch = mPitchMover.mfCurrentValue * KF_DEGREES_TO_RADIANS;
+        const f32 lfMinimumPitch = mPitchMover.mfCurrentValue * rw::math::fpu::DEGREES_TO_RADIANS;
         if (lfMinimumPitch > lfPitch)
             Utils::ApplyPitchAboutPointRads(lrCamera.mTransform, lVehiclePosition, VecFloat(lfMinimumPitch - lfPitch));
     }
@@ -473,7 +473,7 @@ void CollisionPolicyAttachedToVehicle::UpdateMinElevation(const CollisionPolicyS
     {
         const Vector3 lVehiclePosition = AttachedVehiclePosition(mAttachedTo.Get(lrSharedInfo.mpAllVehicleData));
         const f32 lfPitchDegrees =
-            Utils::GetPitchAboutPointRads(lVehiclePosition, lrCamera.mTransform.wAxis) * KF_RADIANS_TO_DEGREES;
+            Utils::GetPitchAboutPointRads(lVehiclePosition, lrCamera.mTransform.wAxis) * rw::math::fpu::RADIANS_TO_DEGREES;
         mPitchMover.mfCurrentValue = ((lfPitchDegrees - mPitchMover.mfCurrentValue) >= 0.0f)
                                          ? lfPitchDegrees : mPitchMover.mfCurrentValue;
 
@@ -576,7 +576,7 @@ void FrustrumCollisionResolver::CalculateFrustumLineTests(VecFloat lDesiredNearC
                                                           Vector3& lStart, Vector3& lEnd)
 {
     f32 lfNewClipDistance = static_cast<f32>(lDesiredNearClip) * KF_VPU_TWO;
-    const f32 lfFieldOfView = (lCamera.mfFOV + kfFOVBodgeAmount) * KF_DEGREES_TO_RADIANS;
+    const f32 lfFieldOfView = (lCamera.mfFOV + kfFOVBodgeAmount) * rw::math::fpu::DEGREES_TO_RADIANS;
     const f32 lfTanHalfFOV  = XboxMath::XMVectorTan(KF_VPU_HALF * lfFieldOfView);
 
     f32 lfViewportHalfWidth = lfTanHalfFOV * lfNewClipDistance;
@@ -680,7 +680,7 @@ bool FrustrumCollisionResolver::ProcessSceneQueryResults(const CollisionPolicySh
     lPlaneNormalOut.SetZero();
 
     const f32 lfTwiceNearClip      = lCamera.GetNearClipDistance() * KF_NEAR_CLIP_DOUBLING;
-    const f32 lfFieldOfView        = (lCamera.mfFOV + kfFOVBodgeAmount) * KF_DEGREES_TO_RADIANS;
+    const f32 lfFieldOfView        = (lCamera.mfFOV + kfFOVBodgeAmount) * rw::math::fpu::DEGREES_TO_RADIANS;
     const f32 lfInverseAspectRatio = KF_ASPECT_NUMERATOR / lCamera.mfAspectRatio;
     const Vector3 lForward         = LaneScale(lCamera.mTransform.zAxis, lfTwiceNearClip);
     const f32 lfTanHalfFOV         = XboxMath::XMVectorTan(KF_VPU_HALF * lfFieldOfView);
@@ -886,7 +886,7 @@ VecFloat FrustrumCollisionResolver::GetHeightAboveTraffic(VecFloat lvfTopCurveFa
                                                           VecFloat lvfDistanceFromCentre)
 {
     const f32 lfClampedDistanceFromCentre = VmxMin(KF_VPU_TWO, VmxMax(0.0f, static_cast<f32>(lvfDistanceFromCentre)));
-    const f32 lfCosDistance               = XboxMath::XMVectorCos(lfClampedDistanceFromCentre * KF_HALF_PI);
+    const f32 lfCosDistance               = XboxMath::XMVectorCos(lfClampedDistanceFromCentre * rw::math::fpu::HALF_PI);
     const f32 lfEllipsoidCurveHeight      = VmxMax(lfCosDistance, 0.0f) * static_cast<f32>(lvfTopCurveFactor);
     return VecFloat(Utils::ConsoleVpu::MultiplyAdd(VmxMin(lfCosDistance, 0.0f), lvfBottomCurveFactor,
                                                    lfEllipsoidCurveHeight));

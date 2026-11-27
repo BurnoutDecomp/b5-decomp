@@ -47,7 +47,7 @@ namespace
     }
 
     // Degrees to radians (0x3C8EFA35), the spin's conversion.
-    const f32 KF_DEGS_TO_RADS = 0.017453292f;
+    // KF_DEGS_TO_RADS: rwmath's DEGREES_TO_RADIANS (fpu/constants.h:56; the unity's copy 0x82001744)
 
     // vmaxfp / vminfp on one broadcast lane: a NaN operand gives a NaN (the first operand's when
     // both are), and -0 orders below +0. Not the fsel rw::math::fpu forms.
@@ -239,7 +239,7 @@ bool BehaviourFailsafe::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSh
 
     // The spin.
     mfRotationOffset = Utils::ConsoleVpu::MultiplyAdd(lfTimestep, sfRotationRate, mfRotationOffset);
-    const rw::math::vpu::Matrix44Affine lSpin = RotationY(mfRotationOffset * KF_DEGS_TO_RADS);
+    const rw::math::vpu::Matrix44Affine lSpin = RotationY(mfRotationOffset * rw::math::fpu::DEGREES_TO_RADIANS);
 
     const ::Vector3 lEye = Utils::ConsoleVpu::TransformPoint(
         lLaggedCarToWorld, Utils::ConsoleVpu::TransformPoint(lSpin, lLocalEye));

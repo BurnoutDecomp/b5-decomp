@@ -473,10 +473,10 @@ void BehaviourGameplayExternal::Parameters::Construct()
 void BehaviourGameplayExternal::ModifyTargetAngles(const Parameters& lrCameraAttribs,
                                                    Vector3& lrTargetAngles)
 {
-    const f32 KF_PI = 3.1415927f;                                  // flt_8200174C
+    // KF_PI: rwmath's PI (fpu/constants.h:65; the unity's copy 0x8200174C)
 
-    const f32 lfPitchBound = KF_PI / lrCameraAttribs.mrPitchLimit;
-    const f32 lfRollBound  = KF_PI / lrCameraAttribs.mrRollLimit;
+    const f32 lfPitchBound = rw::math::fpu::PI / lrCameraAttribs.mrPitchLimit;
+    const f32 lfRollBound  = rw::math::fpu::PI / lrCameraAttribs.mrRollLimit;
 
     // .cpp:625 / :626 -- Min(+bound, Max(-bound, v)), in that order on both builds. The DWARF's
     // vpu::Clamp on VecFloats (vmaxfp / vminfp above), so a NaN angle stays NaN.
@@ -1022,10 +1022,10 @@ void BehaviourGameplayExternal::CalculateCameraTransform(const Parameters& /*lrC
                                                          f32 /*lfSpeedMPH*/,
                                                          f32 /*lfTimestep*/)
 {
-    const f32 KF_DEGS_TO_RADS = 0.017453292f;   // flt_82001744, dumped
+    // KF_DEGS_TO_RADS: rwmath's DEGREES_TO_RADIANS (fpu/constants.h:56; the unity's copy 0x82001744)
 
     // .cpp:817 -- seat the frame as a pure rotation about X by the authored down-angle.
-    const f32 lfDownAngleRads = mpParameters->mfDownAngle * KF_DEGS_TO_RADS;
+    const f32 lfDownAngleRads = mpParameters->mfDownAngle * rw::math::fpu::DEGREES_TO_RADIANS;
     lrCameraMatrix = rw::math::vpu::MakeRotationX(lfDownAngleRads);
 
     // .cpp:819 -- the pivot arm, scaled.
@@ -1604,8 +1604,8 @@ namespace
     const f32 KF_CAMERA_DISTANCE_SCALE_MAX     = 2.3f;         // flt_82CDAD68 (same value)
 
     const f32 KF_DEGREES_TO_HALF_ANGLE_RADIANS = 0.0087266462f; // flt_82002518 == PI/360
-    const f32 KF_DEGREES_TO_RADIANS            = 0.017453292f;  // flt_82001744
-    const f32 KF_RADIANS_TO_DEGREES            = 57.295780f;    // flt_82001748
+    // KF_DEGREES_TO_RADIANS: rwmath's DEGREES_TO_RADIANS (fpu/constants.h:56; the unity's copy 0x82001744)
+    // KF_RADIANS_TO_DEGREES: rwmath's RADIANS_TO_DEGREES (fpu/constants.h:59; the unity's copy 0x82001748)
 }
 
 // The three DecFIGS-named file-scope tunables Update reads that the header declares but the
@@ -2115,8 +2115,8 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
                              * 1.2f);
         CGS_ASSERT(lfFOV > 0.0f, "FOV is <value> after scaling, was <value> before");  // :520
         lCamera.SetFOV(rw::math::fpu::Clamp(lfScaledFOVRads,
-                                            KF_DEGREES_TO_RADIANS, 2.79252672f)
-                       * KF_RADIANS_TO_DEGREES);
+                                            rw::math::fpu::DEGREES_TO_RADIANS, 2.79252672f)
+                       * rw::math::fpu::RADIANS_TO_DEGREES);
 
         // .cpp:561 -- flag 6 tracks a lookback TRANSITION. ⚠️ The console's two arms are
         // (!starting && ending) and (starting && !ending), i.e. an EXCLUSIVE test -- both set

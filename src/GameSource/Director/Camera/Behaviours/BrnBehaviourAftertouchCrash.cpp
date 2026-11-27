@@ -107,7 +107,7 @@ namespace
 
     // rw::math::fpu::SMALL_FLOAT (flt_82001740 == 0x37800000 == 2^-16), the tolerance of the
     // "has the camera reached its desired direction" test (PS3 names it; X360 0x82228AB4).
-    const f32 KF_SMALL_FLOAT = 1.52587890625e-05f;
+    // KF_SMALL_FLOAT: rwmath's SMALL_FLOAT (fpu/constants.h:53; the unity's copy 0x82001740)
 
     // CgsCore::K_V3D_YAXIS @0x83017FA0 -- a .bss constant the CRT thunk @0x82C6CDC0 fills with
     // (0.0f, 1.0f, 0.0f, 0): flt_82001CC0 / flt_82001C98 / flt_82001CC0 / `li r9, 0`. It has no
@@ -115,7 +115,7 @@ namespace
     const Vector3 K_V3D_YAXIS(0.0f, 1.0f, 0.0f);
 
     // flt_82001744 (0x3C8EFA35) -- degrees to radians, the rig's pitch conversion.
-    const f32 KF_DEGS_TO_RADS = 0.017453292f;
+    // KF_DEGS_TO_RADS: rwmath's DEGREES_TO_RADIANS (fpu/constants.h:56; the unity's copy 0x82001744)
 
     // The rotations Update builds, with the console's sine and cosine (FX-GATE, crash parity 2026-09-25). The
     // shared vendor rw::math::vpu::MakeRotationX/Y/Z (std::sin / std::cos) stay as they are for their other
@@ -691,7 +691,7 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // The look length is the GuardedRoot of |look|^2 (vmsum3fp128 @0x82228AB0) computed alongside (var_220).
     const f32 lfLookLength = GuardedRoot(Dot3(lLookDirection, lLookDirection));
     if (!IsZeroVmx(mWorldSpaceNormalizedVectorFromCar - mDesiredWorldSpaceNormalizedVectorFromCar,
-                   KF_SMALL_FLOAT))
+                   rw::math::fpu::SMALL_FLOAT))
     {
         if (!lbManualCameraControl)
         {
@@ -762,7 +762,7 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // 1000 random frames (FX-GATE 2026-09-25).
     lCameraTransform.wAxis.SetY(lCameraTransform.wAxis.GetY().GetFloat() + mfHeight);
     lCameraTransform = Utils::ConsoleVpu::Mult(
-        RotationX(lrParameters.mfPitch * KF_DEGS_TO_RADS), lCameraTransform);
+        RotationX(lrParameters.mfPitch * rw::math::fpu::DEGREES_TO_RADIANS), lCameraTransform);
 
     // .cpp:394..:400 -- smooth small camera moves: within KF_SMOOTHING_STOP_DISTANCE_SQ of last
     // frame's position the camera goes KF_SMOOTHING_FACTOR of the way (`vcmpgtfp. v11, KF, |d|^2`

@@ -262,7 +262,7 @@ namespace
 
     // flt_82001CC0 == 0.0f -- the dispatch threshold in MoveAlongTrafficLane and the
     // `lfDistToMove >= 0.0f` assert's comparand.
-    const f32 KF_ZERO = 0.0f;
+    // KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0; one name could not be defined in several unity members)
 
     // flt_82002540 == 0x38D1B717 (9.9999997e-05) -- the BACKWARD walk's guard, read with x360rd
     // (OWNERLIST 2026-09-27, lane L5). MoveAlongTrafficLaneBackwards @0x8222B100 keeps the parameter
@@ -366,7 +366,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneForwards(
                                     - lpaCumulativeLengths[luCurrentRung];
     u32        luNumSegments        = lpSection->GetNumSegments();
 
-    CGS_ASSERT_AT(lfDistToMove >= KF_ZERO, "lfDistToMove >= 0.0f", CGS_ARTIST_FILE, 286);
+    CGS_ASSERT_AT(lfDistToMove >= 0.0f, "lfDistToMove >= 0.0f", CGS_ARTIST_FILE, 286);
 
     for (;;)
     {
@@ -401,7 +401,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneForwards(
                 return;
             }
 
-            lfParamAlong  = KF_ZERO;
+            lfParamAlong  = 0.0f;
             luCurrentRung = 0;
             lpPositionInOut->muSection = luNewSection;
 
@@ -441,7 +441,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneForwards(
     *lpTransformOut = Utils::CreateLookAt(lNewPosition,
                                           rw::math::vpu::Add(lNewPosition, lNewAt));
 
-    CGS_ASSERT(lfNewParam >= KF_ZERO, "lfParamAlong >= 0.0f");
+    CGS_ASSERT(lfNewParam >= 0.0f, "lfParamAlong >= 0.0f");
 
     lpPositionInOut->mfParamAlongSection = lfNewParam;
     lpPositionInOut->muRung              = static_cast<u8>(static_cast<s64>(lfNewParam));
@@ -493,7 +493,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneBackwards(
     f32        lfSegmentLength      = lpaCumulativeLengths[luCurrentRung + 1]
                                     - lpaCumulativeLengths[luCurrentRung];
 
-    CGS_ASSERT_AT(lfDistToMove >= KF_ZERO, "lfDistToMove >= 0.0f", CGS_ARTIST_FILE, 405);
+    CGS_ASSERT_AT(lfDistToMove >= 0.0f, "lfDistToMove >= 0.0f", CGS_ARTIST_FILE, 405);
 
     for (;;)
     {
@@ -583,7 +583,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneBackwards(
     *lpTransformOut = Utils::CreateLookAt(lNewPosition,
                                           rw::math::vpu::Subtract(lNewPosition, lNewAt));
 
-    CGS_ASSERT(lfNewParam >= KF_ZERO, "lfParamAlong >= 0.0f");
+    CGS_ASSERT(lfNewParam >= 0.0f, "lfParamAlong >= 0.0f");
 
     lpPositionInOut->mfParamAlongSection = lfNewParam;
     lpPositionInOut->muRung              = static_cast<u8>(static_cast<s64>(lfNewParam));
@@ -604,7 +604,7 @@ void TrafficLaneTruck::MoveAlongTrafficLane(BrnTraffic::Directions lePreferredDi
     CGS_ASSERT_AT(lpPositionInOut->mbValid, "lpPositionInOut->mbValid", CGS_ARTIST_FILE, 517);
 
     // ARTIST 0x8222BCB4 takes the forwards path only for an ordered >= comparison.
-    if (!(lfDistToMove >= KF_ZERO))
+    if (!(lfDistToMove >= 0.0f))
         MoveAlongTrafficLaneBackwards(lePreferredDirection, lrWorldMap, -lfDistToMove,
                                       lpPositionInOut, lpTransformOut);
     else
@@ -664,7 +664,7 @@ void TrafficLaneTruck::Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTim
         return;
 
     const f32 lfDistToMove    = mfSpeed * lfTimestep;
-    const f32 lfBlendDistance = (lfDistToMove < KF_ZERO) ? -mfBlendDistance : mfBlendDistance;
+    const f32 lfBlendDistance = (lfDistToMove < 0.0f) ? -mfBlendDistance : mfBlendDistance;
 
     rw::math::vpu::Matrix44Affine        lTransformA;
     rw::math::vpu::Matrix44Affine        lTransformB;
@@ -768,10 +768,10 @@ void BehaviourRoadRunner::Construct()
     // post box's own head word). Reached through the named sub-objects; the interiors are
     // un-homed (see the header FLAG), so the console's single head store is expressed as a
     // whole-object reset.
-    mTopLeftBottomRight = LineTestNearestPostBox();     // *(this+176) = 0
-    mTopRightBottomLeft = LineTestNearestPostBox();     // *(this+256) = 0
-    mLineTestFineA      = LineTestFinePostBox();        // *(this+336) = 0
-    mLineTestFineB      = LineTestFinePostBox();        // *(this+344) = 0
+    mTopLeftBottomRight.Construct();               // *(this+176) = 0
+    mTopRightBottomLeft.Construct();               // *(this+256) = 0
+    mLineTestFineA.Construct();                     // *(this+336) = 0
+    mLineTestFineB.Construct();                     // *(this+344) = 0
 
     // The shake transform the console builds with four stvx128s at +0x200/+0x210/+0x220/+0x230
     // (r10 = this+512, offsets 0/16/32/48) from two register constants.

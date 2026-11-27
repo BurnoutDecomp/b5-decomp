@@ -30,8 +30,8 @@ namespace
     const f32 KF_IS_ZERO_EPSILON = 1.1920928955078125e-07f;
 
     // flt_82001C98 / flt_82001CC0.
-    const f32 KF_ONE  = 1.0f;
-    const f32 KF_ZERO = 0.0f;
+    // KF_ONE: the pooled literal 1.0f at its uses (ARTIST __real 0x82001C98; one name could not be defined in several unity members)
+    // KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0; one name could not be defined in several unity members)
 
     // rw::math::fpu::IsZero(x), as PostCollisionUpdate inlines it (0x82252B84..0x82252BB0):
     //   fcmpu x, flt_82001770 (+EPS) ; bgt -> 0 ; li 1 ; fcmpu x, flt_82002514 (-EPS) ; bge -> keep 1 ; 0
@@ -188,8 +188,8 @@ BehaviourInterpolate::Construct()
     //   interpolate behaviour.
     //   DELETE-WHEN: VisibilityCollisionPolicy::Construct is bodied.
 
-    mfDuration           = KF_ZERO;
-    mfRunningTime        = KF_ZERO;
+    mfDuration           = 0.0f;
+    mfRunningTime        = 0.0f;
     mbHasFinished        = false;
     mbUseCollisionPolicy = false;
     mbSetup              = false;
@@ -220,7 +220,7 @@ BehaviourInterpolate::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
     mFromCamera.Prepare(*lrInfo.mpInterpolateLockInterface);
     mToCamera.Prepare(*lrInfo.mpInterpolateLockInterface);
 
-    mfRunningTime = KF_ZERO;
+    mfRunningTime = 0.0f;
     SetNotPrepared();
 
     return true;
@@ -315,9 +315,9 @@ BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourShare
     CGS_ASSERT_AT(!IsZero(mfDuration), "!rw::math::fpu::IsZero(mfDuration)", CGS_ARTIST_FILE, 145);            // :145
 
     f32 lfParametricTime = mfRunningTime / mfDuration;
-    if (lfParametricTime >= KF_ONE)
+    if (lfParametricTime >= 1.0f)
     {
-        lfParametricTime = KF_ONE;
+        lfParametricTime = 1.0f;
         mbHasFinished    = true;
     }
     else if (!mbHasFailed)

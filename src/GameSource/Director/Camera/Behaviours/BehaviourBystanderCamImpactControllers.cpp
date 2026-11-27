@@ -72,8 +72,8 @@ namespace
     const f32 KF_FADE_NEAR_SQ        = 25.0f;     // flt_82CDAD74  distance-fade near radius^2
     const f32 KF_FADE_FAR_SQ         = 6400.0f;   // flt_82CDAD70  distance-fade far radius^2
     const f32 KF_MAX_IMPACT_STRENGTH = 0.5f;      // flt_82001DA0  first clamp's upper bound
-    const f32 KF_UNIT                = 1.0f;      // flt_82001C98
-    const f32 KF_ZERO                = 0.0f;      // flt_82001CC0
+    // KF_UNIT: the pooled literal 1.0f at its uses (ARTIST __real 0x82001C98; one name could not be defined in several unity members)
+    // KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0; one name could not be defined in several unity members)
 }
 
 // ============================================================================
@@ -224,7 +224,7 @@ void ImpactShakeController::Update(Camera& lrCamera, f32 lfTimestep,
     }
 
     // clamp(strength, 0.0, 0.5) -- the console's fneg/fsel lower bound then fsub/fsel upper.
-    if (lfStrength < KF_ZERO)                { lfStrength = KF_ZERO; }
+    if (lfStrength < 0.0f)                { lfStrength = 0.0f; }
     if (lfStrength > KF_MAX_IMPACT_STRENGTH) { lfStrength = KF_MAX_IMPACT_STRENGTH; }
 
     // Distance fade. asm: lvx camera+0x30 and (vehicle + 0x1F0) + 0x30 -- the position row of
@@ -235,14 +235,14 @@ void ImpactShakeController::Update(Camera& lrCamera, f32 lfTimestep,
     if (lfDistSq > KF_FADE_NEAR_SQ)
     {
         const f32 lfClamped = (lfDistSq < KF_FADE_FAR_SQ) ? lfDistSq : KF_FADE_FAR_SQ;
-        const f32 lfFade    = KF_UNIT -
+        const f32 lfFade    = 1.0f -
                               ((lfClamped - KF_FADE_NEAR_SQ) / (KF_FADE_FAR_SQ - KF_FADE_NEAR_SQ));
         lfStrength = lfFade * lfStrength;
     }
 
     // clamp(strength, 0.0, 1.0).
-    if (lfStrength < KF_ZERO) { lfStrength = KF_ZERO; }
-    if (lfStrength > KF_UNIT) { lfStrength = KF_UNIT; }
+    if (lfStrength < 0.0f) { lfStrength = 0.0f; }
+    if (lfStrength > 1.0f) { lfStrength = 1.0f; }
 
     mImpactEffect.RegisterImpact(lfStrength / Utils::GetZoomFromFOVDegs(lrCamera.mfFOV));
 

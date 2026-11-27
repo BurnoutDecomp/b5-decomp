@@ -41,20 +41,20 @@ namespace Camera
 namespace
 {
     // BehaviourRig::Parameters::Construct @0x821F9680 -- the rig block's seed.
-    const f32 KF_DEFAULT_SHAKE_XY_MAGNITUDE_DEGS  = 0.6f;    // flt_82004D00 -> +0x50
-    const f32 KF_DEFAULT_SHAKE_Z_MAGNITUDE_DEGS   = 0.0f;    // flt_82001CC0 -> +0x54
-    const f32 KF_DEFAULT_SHAKE_XY_WOBBLE_DEGS     = 1.15f;   // flt_820047BC -> +0x58
-    const f32 KF_DEFAULT_SHAKE_WOBBLE_CENTERING   = 0.11f;   // flt_820047C0 -> +0x5C
-    const f32 KF_DEFAULT_SPRING_ACCEL_FACTOR      = 10.0f;   // flt_82004A20 -> +0xF0
-    const f32 KF_DEFAULT_SPRING_MASS              = 1.0f;    // flt_82001C98 -> +0xF4
-    const f32 KF_DEFAULT_SPRING_STIFFNESS         = 40.0f;   // flt_82004D0C -> +0xF8
-    const f32 KF_DEFAULT_SPRING_DAMPENING         = 5.0f;    // flt_8200426C -> +0xFC
-    const f32 KF_DEFAULT_SPRING_MIN_STRETCH       = -1.0f;   // flt_820037C8 -> +0x100
-    const f32 KF_DEFAULT_SPRING_MAX_STRETCH       = 1.5f;    // flt_82004D04 -> +0x104
-    const f32 KF_DEFAULT_DOF_NEAR                 = 0.0f;    // flt_82001CC0 -> +0x108
-    const f32 KF_DEFAULT_DOF_FAR                  = 2000.0f; // flt_82004D08 -> +0x10C
-    const f32 KF_DEFAULT_DOF_BLUR_DEPTH           = 10.0f;   // flt_82004A20 -> +0x110
-    const f32 KF_DEFAULT_DOF_INTENSITY            = 0.0f;    // flt_82001CC0 -> +0x114
+    // KF_DEFAULT_SHAKE_XY_MAGNITUDE_DEGS: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82004D00)
+    // KF_DEFAULT_SHAKE_Z_MAGNITUDE_DEGS: the literal at its uses (no DWARF name; ARTIST loads the value from the shared literal pool 0x82001CC0)
+    // KF_DEFAULT_SHAKE_XY_WOBBLE_DEGS: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x820047BC)
+    // KF_DEFAULT_SHAKE_WOBBLE_CENTERING: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x820047C0)
+    // KF_DEFAULT_SPRING_ACCEL_FACTOR: the literal at its uses (no DWARF name; ARTIST loads the value from the shared literal pool 0x82004A20)
+    // KF_DEFAULT_SPRING_MASS: the literal at its uses (no DWARF name; ARTIST loads the value from the shared literal pool 0x82001C98)
+    // KF_DEFAULT_SPRING_STIFFNESS: the literal at its uses (no DWARF name; ARTIST loads the value from the shared literal pool 0x82004D0C)
+    // KF_DEFAULT_SPRING_DAMPENING: the literal at its uses (no DWARF name; ARTIST loads the value from the shared literal pool 0x8200426C)
+    // KF_DEFAULT_SPRING_MIN_STRETCH: the literal at its uses (no DWARF name; ARTIST loads the value from the shared literal pool 0x820037C8)
+    // KF_DEFAULT_SPRING_MAX_STRETCH: the literal at its uses (no DWARF name; ARTIST loads the value from the shared literal pool 0x82004D04)
+    // KF_DEFAULT_DOF_NEAR: the literal at its uses (no DWARF name; ARTIST loads the value from the shared literal pool 0x82001CC0)
+    // KF_DEFAULT_DOF_FAR: the literal at its uses (no DWARF name; ARTIST loads the value from the shared literal pool 0x82004D08)
+    // KF_DEFAULT_DOF_BLUR_DEPTH: the literal at its uses (no DWARF name; ARTIST loads the value from the shared literal pool 0x82004A20)
+    // KF_DEFAULT_DOF_INTENSITY: the literal at its uses (no DWARF name; ARTIST loads the value from the shared literal pool 0x82001CC0)
 
     // BehaviourRig::Update @0x822427C0.
     const f32 KF_TWEAK_FOV_MIN                    = 5.0f;    // flt_8200426C (the tweaker's FOV clamp)
@@ -99,21 +99,21 @@ void BehaviourRig::Parameters::Construct()
 
     mRigParams = Utils::CameraRig::ParamsFrontQuarterClose;
 
-    mShakeParams.mfXYShakeMagnitudeDegs  = KF_DEFAULT_SHAKE_XY_MAGNITUDE_DEGS;
-    mShakeParams.mfZShakeMagnitudeDegs   = KF_DEFAULT_SHAKE_Z_MAGNITUDE_DEGS;
-    mShakeParams.mfXYWobbleMagnitudeDegs = KF_DEFAULT_SHAKE_XY_WOBBLE_DEGS;
-    mShakeParams.mfWobbleCenteringFactor = KF_DEFAULT_SHAKE_WOBBLE_CENTERING;
+    mShakeParams.mfXYShakeMagnitudeDegs  = 0.6f;
+    mShakeParams.mfZShakeMagnitudeDegs   = 0.0f;
+    mShakeParams.mfXYWobbleMagnitudeDegs = 1.15f;
+    mShakeParams.mfWobbleCenteringFactor = 0.11f;
 
-    mfSpringAccelFactor = KF_DEFAULT_SPRING_ACCEL_FACTOR;
-    mfSpringMass        = KF_DEFAULT_SPRING_MASS;
-    mfSpringStiffness   = KF_DEFAULT_SPRING_STIFFNESS;
-    mfSpringDampening   = KF_DEFAULT_SPRING_DAMPENING;
-    mfSpringMinStretch  = KF_DEFAULT_SPRING_MIN_STRETCH;
-    mfSpringMaxStretch  = KF_DEFAULT_SPRING_MAX_STRETCH;
-    mfDOFNear           = KF_DEFAULT_DOF_NEAR;
-    mfDOFFar            = KF_DEFAULT_DOF_FAR;
-    mfDOFBlurDepth      = KF_DEFAULT_DOF_BLUR_DEPTH;
-    mfDOFIntensity      = KF_DEFAULT_DOF_INTENSITY;
+    mfSpringAccelFactor = 10.0f;
+    mfSpringMass        = 1.0f;
+    mfSpringStiffness   = 40.0f;
+    mfSpringDampening   = 5.0f;
+    mfSpringMinStretch  = -1.0f;
+    mfSpringMaxStretch  = 1.5f;
+    mfDOFNear           = 0.0f;
+    mfDOFFar            = 2000.0f;
+    mfDOFBlurDepth      = 10.0f;
+    mfDOFIntensity      = 0.0f;
 
     mbUseAccelSpring    = false;
     mbUseShake          = true;

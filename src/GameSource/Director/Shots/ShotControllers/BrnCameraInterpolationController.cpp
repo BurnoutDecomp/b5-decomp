@@ -75,9 +75,9 @@ namespace
         "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/"
         "BrnCameraInterpolationController.cpp";
 
-    const f32 KF_ZERO = 0.0f;   // flt_82001CC0
-    const f32 KF_ONE  = 1.0f;
-    const f32 KF_HALF = 0.5f;
+    // KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0; one name could not be defined in several unity members)
+    // KF_ONE: the pooled literal 1.0f at its uses (ARTIST __real 0x82001C98; one name could not be defined in several unity members)
+    // KF_HALF: the pooled literal 0.5f at its uses (ARTIST __real 0x82001DA0; one name could not be defined in several unity members)
 
     // The two selector bytes BehaviourInterpolate stamps into the camera effects.
     // mu8BlendCurve values, from the jump table at 0x82251418:
@@ -302,7 +302,7 @@ Matrix44Affine CameraInterpolationController::RotateAboutPivot(
         Camera::Utils::Interpolater& lrLookAtInterpolater,
         f32                          lfT)
 {
-    CGS_ASSERT_AT(lfT >= KF_ZERO && lfT <= KF_ONE, "lT >= 0.0f && lT <= 1.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnCameraInterpolationController.cpp", 212);   // cpp:212
+    CGS_ASSERT_AT(lfT >= 0.0f && lfT <= 1.0f, "lT >= 0.0f && lT <= 1.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnCameraInterpolationController.cpp", 212);   // cpp:212
 
     const Matrix44Affine lInversePivot =
         rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lrPivot);
@@ -368,7 +368,7 @@ void CameraInterpolationController::Update(Camera::Camera&       lrCamera,
                                            const Matrix44Affine& lrEyeTarget)
 {
     const f32 lfRawBlend = lrCamera.GetEffects().mfGameCameraBlend;
-    if (lfRawBlend == KF_ZERO)
+    if (lfRawBlend == 0.0f)
     {
         return;
     }
@@ -380,15 +380,15 @@ void CameraInterpolationController::Update(Camera::Camera&       lrCamera,
     case KU_MAPPING_LINEAR:
         break;
     case KU_MAPPING_SINE:
-        lfT = Camera::Utils::SineLerp(KF_ZERO, KF_ONE, lfRawBlend);
+        lfT = Camera::Utils::SineLerp(0.0f, 1.0f, lfRawBlend);
         break;
     case KU_MAPPING_EXPONENTIAL:
-        lfT = Camera::Utils::ExponentialLerp(KF_ZERO, KF_ONE, lfRawBlend);
+        lfT = Camera::Utils::ExponentialLerp(0.0f, 1.0f, lfRawBlend);
         break;
     case KU_MAPPING_CUBIC_POWER:
     {
         const f64 ldExponent = static_cast<f64>((lfRawBlend * lfRawBlend) * lfRawBlend) * 100.0;
-        lfT = KF_ONE - static_cast<f32>(std::pow(static_cast<f64>(0.9f), ldExponent));
+        lfT = 1.0f - static_cast<f32>(std::pow(static_cast<f64>(0.9f), ldExponent));
         break;
     }
     default:
@@ -403,11 +403,11 @@ void CameraInterpolationController::Update(Camera::Camera&       lrCamera,
     if (lrCamera.GetState().IsFlagSet(Camera::CameraState::E_FLAG_HIDE_PLAYER) ||
         lrTo.GetState().IsFlagSet(Camera::CameraState::E_FLAG_HIDE_PLAYER))
     {
-        if (lfT >= KF_HALF)
+        if (lfT >= 0.5f)
         {
             lrCamera = lrTo;
         }
-        lrCamera.GetEffects().mfGameCameraBlend = KF_ZERO;
+        lrCamera.GetEffects().mfGameCameraBlend = 0.0f;
         return;
     }
 
@@ -471,7 +471,7 @@ void CameraInterpolationController::Update(Camera::Camera&       lrCamera,
     lrCamera.mfCustomNearClipDistance    = lfNearClip;
 
     // The handshake: consume the blend so a frame without a producer is inert.
-    lrCamera.GetEffects().mfGameCameraBlend = KF_ZERO;
+    lrCamera.GetEffects().mfGameCameraBlend = 0.0f;
 }
 
 } // namespace BrnDirector

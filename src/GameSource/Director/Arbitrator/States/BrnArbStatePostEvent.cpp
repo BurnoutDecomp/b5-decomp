@@ -42,11 +42,11 @@ namespace BrnDirector
     {
         // The blend the ACTIVE-state "Car_Reset" camera effect plays at (1.0; shared with
         // BrnArbStateRaceIntro's KF_CAR_RESET_BLEND).
-        const f32 KF_CAR_RESET_BLEND = 1.0f;
+        // KF_CAR_RESET_BLEND: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001C98)
 
         // The dirty-flag bit Update raises on the state's camera while a post-event behaviour
         // is driving it (mCamera.mState_uFlags |= 2).
-        const s32 KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN = 2;
+        // KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN: the camera-state bit of DWARF CameraState::E_FLAG_VALID (BrnCameraState.h:56) at its uses
 
         // The rank-up-reveal gate the ACTIVE state checks before swapping the post-event movie
         // (GameState rank-up rank > 4).
@@ -282,7 +282,7 @@ namespace BrnDirector
         {
             // Drive the state camera from the behaviour and mark it behaviour-driven.
             lrCamera = mPostEventCam.GetCamera();
-            lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+            lrCamera.mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
 
             // Rank-up reveal: when a rank-up message was received this frame and the new rank
             // is past 4, swap the post-event take to the rank-up completion movie. FLAG: the
@@ -328,7 +328,7 @@ namespace BrnDirector
                     // First time: play the one-shot "Car_Reset" flash, force the gameplay
                     // camera to finish, and latch the flash gate.
                     Camera::EnsureEffectIsPlaying(lrCamera, *lrSharedInfo.mpEffectInterface,
-                                                  "Car_Reset", KF_CAR_RESET_BLEND);
+                                                  "Car_Reset", 1.0f);
                     lrSharedInfo.mpSharedCameraContainer->ForcePrimaryGameplayBehaviourToFinish();
                     mbPlayedFlash = true;   // +0x184 = 1
                 }
@@ -340,7 +340,7 @@ namespace BrnDirector
             // Drive the state camera from the behaviour one last frame, then hand control back
             // to roaming.
             lrCamera = mPostEventCam.GetCamera();
-            lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+            lrCamera.mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
             ArbUtils::ChangeToState<EState>(
                 this, lrSharedInfo, ArbitratorStateContainer::E_STATE_ROAMING,
                 meState, E_STATE_CHANGING_TO_ROAMING);

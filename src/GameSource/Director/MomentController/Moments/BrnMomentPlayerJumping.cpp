@@ -41,7 +41,7 @@ namespace
     const f32 KF_GROUNDED_EPSILON = 1.1920928955078125e-7f;
 
     // flt_82001CC0 == 0: Release's cooldown, the jump timer's reset, VALID's "landed" compare.
-    const f32 KF_ZERO = 0.0f;
+    // KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0; one name could not be defined in several unity members)
 
     // flt_82001C98 == 0x3F800000: the Jump_Effect start hook's blend amount (0x82275ABC).
     const f32 KF_JUMP_EFFECT_BLEND = 1.0f;
@@ -55,9 +55,9 @@ namespace
     const s32 KI_ACTION_FLAG_JUMP = 0x8;
 
     // The moment camera's head bits (`oris 4` / `oris 8` / `oris 0x80` on the head word at moment +0x148).
-    const u32 KU_HEAD_FLAG_SEARCHING = 18;
-    const u32 KU_HEAD_FLAG_PREPARING = 19;
-    const u32 KU_HEAD_FLAG_INHIBITED = 23;
+    // KU_HEAD_FLAG_SEARCHING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_PREPARING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_INHIBITED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
 
     // The produced camera's state bits VALID raises (`ori 0x80` / `ori 2` on the u64 at camera +0x140).
 
@@ -253,7 +253,7 @@ bool MomentPlayerJumping::Prepare(Camera::BehaviourManager& lrBehaviourControlle
 // ============================================================================
 bool MomentPlayerJumping::Release()
 {
-    mfCooldownTimer = KF_ZERO;
+    mfCooldownTimer = 0.0f;
     mRigCollection.Release();
     mBystanderCollection.Release();
     mDroppedRigCollection.Release();
@@ -261,7 +261,7 @@ bool MomentPlayerJumping::Release()
     mInterpolater.Release();
     SetConditionsNotMet();
     SetCanSwitchToMeNow(false);
-    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+    GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
     SetState(E_STATE_INVALID_SEARCHING);
     return true;
 }
@@ -457,21 +457,21 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBeh
             if (IsInhibited())
             {
                 SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_INHIBITED);
                 return;
             }
             meType = E_TYPE_ATTACHED_RIG_SHOT;
             const bool lbPrepared = PrepareCameras(lrBehaviourManager);
             CGS_ASSERT(lbPrepared, "PrepareCameras(lBehaviourManager)");   // :285
-            mfJumpTimer = KF_ZERO;
+            mfJumpTimer = 0.0f;
             SetCanSwitchToMeNow(false);
             SetState(E_STATE_INVALID_FOUND_PREPARING);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_TO_CUT_TO_BEHAVIOUR);
             return;
         }
         SetConditionsNotMet();
         SetCanSwitchToMeNow(false);
-        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+        GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
         return;
     }
 
@@ -481,7 +481,7 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBeh
         if (leStatus == E_STATUS_WAITING)
         {
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_TO_CUT_TO_BEHAVIOUR);
             return;
         }
         if (leStatus == E_STATUS_READY)
@@ -523,7 +523,7 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBeh
 
     if (mfJumpTimer > KF_MAX_JUMP_TIME
         || lbCameraFailed
-        || lrSharedInfo.mpPlayerCar->mRaceCarState.mfTimeInAir == KF_ZERO
+        || lrSharedInfo.mpPlayerCar->mRaceCarState.mfTimeInAir == 0.0f
         || !lrSharedInfo.mpGameState->mbCanUseSlomo)
     {
         Release();

@@ -137,12 +137,12 @@ void Behaviour::Fail(Camera& lrCamera, ValidityAccount::EFailedFlag leFailedFlag
 // `meTimestepType > E_TIMESTEP_INVALID`: with the canonical enum the default passes.
 void Behaviour::Construct()
 {
-    meTimestepType         = BrnDirector::Timestep::E_WORLD;
-    mbIsPrepared           = false;
+    SetNotPrepared();      // DWARF call list (Behaviour.h:404); ARTIST stores +0x08 first
     mbHasFailed            = false;
     mbTweakerAttached      = false;
     mbCanSwitchToMeNow     = false;
     mbCanSwitchFromMeNow   = false;
+    meTimestepType         = BrnDirector::Timestep::E_WORLD;
     mpcDebugParametersName = 0;
 }
 

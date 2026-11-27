@@ -41,7 +41,7 @@ namespace Utils
 namespace
 {
     // Degrees -> radians (pi/180). Pinned from the Track asm (0.017453292).
-    const f32 KF_DEGS_TO_RADS = 0.017453292f;
+    // KF_DEGS_TO_RADS: rwmath's DEGREES_TO_RADIANS (fpu/constants.h:56; the unity's copy 0x82001744)
 
     // Half-degree -> radians (pi/360). The Track look-tolerance cosine argument multiplies
     // (mfTrackingTolerance * cameraFOV) by this. Pinned from the Track asm (0.0087266462).
@@ -123,8 +123,8 @@ void Looker::Track(VecFloat lvTimeStep,
         // Fixed-offset path: rotate the adjusted look-at by the explicit ZXY Euler offsets
         // (the initial X/Y look-offset ranges, converted degrees->radians) and install it.
         const Vector3 lEulerAngles =
-            Vector3(lrParams.mfInitialXLookOffsetRange * KF_DEGS_TO_RADS,
-                    lrParams.mfInitialYLookOffsetRange * KF_DEGS_TO_RADS, 0.0f);
+            Vector3(lrParams.mfInitialXLookOffsetRange * rw::math::fpu::DEGREES_TO_RADIANS,
+                    lrParams.mfInitialYLookOffsetRange * rw::math::fpu::DEGREES_TO_RADIANS, 0.0f);
         RotateMatrix44AffineByEulerAnglesZXY(lAdjustedLookAt, lEulerAngles);
         lrCamera.SetTransform(lAdjustedLookAt);
     }

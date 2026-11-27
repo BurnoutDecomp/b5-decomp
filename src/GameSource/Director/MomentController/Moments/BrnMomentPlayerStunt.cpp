@@ -25,9 +25,9 @@ namespace BrnDirector
 namespace
 {
     // Camera-state head bits (the moment family's shared vocabulary):
-    const u32 KU_HEAD_FLAG_SEARCHING      = 18;
-    const u32 KU_HEAD_FLAG_PREPARING      = 20;
-    const u32 KU_HEAD_FLAG_INHIBITED      = 23;
+    // KU_HEAD_FLAG_SEARCHING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_PREPARING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_INHIBITED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
     const u32 KU_HEAD_FLAG_KEEP_RUNNING   = 29;   // (holding the released gate while the stunt runs)
 
     // Camera-state CURRENT flags the valid body publishes (roles not recovered):
@@ -128,7 +128,7 @@ bool MomentPlayerStunt::Release()
     mIceCam.Release();
     SetConditionsNotMet();
     SetCanSwitchToMeNow(false);
-    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+    GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
     SetState(E_STATE_INVALID_SEARCHING);
     return true;
 }
@@ -195,7 +195,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager& lrB
         {
             SetConditionsNotMet();
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
         }
         else if (lrSharedInfo.mpGameState->miActionRequestedCamera > 0
                  && lrSharedInfo.mbAllowStuntMoment
@@ -225,7 +225,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager& lrB
             else
             {
                 SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_INHIBITED);
             }
         }
         return;
@@ -240,7 +240,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager& lrB
         if (!mIceCam.Get()->CanSwitchToMeNow())
         {
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_TO_CUT_TO_BEHAVIOUR);
             return;
         }
         SetState(E_STATE_VALID);

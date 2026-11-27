@@ -165,7 +165,7 @@ namespace
     }
 
     // Degrees -> radians. The console spells it as a `fmuls` against flt_82001744.
-    const f32 KF_DEGS_TO_RADS = 0.017453292f;
+    // KF_DEGS_TO_RADS: rwmath's DEGREES_TO_RADIANS (fpu/constants.h:56; the unity's copy 0x82001744)
 
     // The yaw the free-look controller is overridden to while LOOKBACK is held
     // (`lfs f12, flt_820025FC` behind `lbz +0x20`). A half turn: the orbit swings to the
@@ -358,10 +358,10 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
                                          : mRotationController.GetYawRotationAngleDegs();
 
     Vector3 lOffsetDirection =
-        rw::math::vpu::TransformVector(XMMatrixRotationX(lfPitchDegs * KF_DEGS_TO_RADS),
+        rw::math::vpu::TransformVector(XMMatrixRotationX(lfPitchDegs * rw::math::fpu::DEGREES_TO_RADIANS),
                                        lSeedDirection);
     lOffsetDirection =
-        rw::math::vpu::TransformVector(XMMatrixRotationY(lfYawDegs * KF_DEGS_TO_RADS),
+        rw::math::vpu::TransformVector(XMMatrixRotationY(lfYawDegs * rw::math::fpu::DEGREES_TO_RADIANS),
                                        lOffsetDirection);
 
     // The frame the orbit is expressed in: a look-at built from the re-seated offset direction

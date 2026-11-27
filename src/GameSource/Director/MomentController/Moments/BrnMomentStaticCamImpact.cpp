@@ -24,7 +24,7 @@ namespace
     //   28 -- raised every valid frame
     const u32 KU_CAMERA_HEAD_FLAG_RELEASED  = 18;
     const u32 KU_CAMERA_HEAD_FLAG_PREPARING = 19;
-    const u32 KU_CAMERA_HEAD_FLAG_INHIBITED = 23;
+    // KU_CAMERA_HEAD_FLAG_INHIBITED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
     const u32 KU_CAMERA_HEAD_FLAG_VALID     = 28;
 }
 
@@ -62,7 +62,7 @@ void MomentStaticCamImpact::Update(f32 lfTimeStep, Camera::BehaviourManager& lrB
         else
         {
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_CAMERA_HEAD_FLAG_INHIBITED);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_INHIBITED);
         }
         break;
 

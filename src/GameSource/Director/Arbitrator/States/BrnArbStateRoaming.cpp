@@ -39,7 +39,7 @@ namespace BrnDirector
     {
         // Tuning literals the X360 loads from the .rdata float pool (the IEEE-754 patterns the
         // asm references). KF_UNIT is the 1.0f the bulk of the effect requests blend at.
-        const f32 KF_UNIT                    = 1.0f;        // flt_82001C98
+        // KF_UNIT: the pooled literal 1.0f at its uses (ARTIST __real 0x82001C98; one name could not be defined in several unity members)
         const f32 KF_DAMAGE_CRIT_BASE_BLEND  = 0.75f;       // flt_82004018
         const f32 KF_STUNT_LANDED_FLASH      = 1.25f;       // flt_820092CC
         const f32 KF_NEAREST_CAR_FX_RANGE_SQ = 10000.0f;    // flt_82005D9C / flt_820092EC
@@ -79,7 +79,7 @@ namespace BrnDirector
 
         // Construct's three establishing-shot candidate weights: ONE register (f31) loaded once
         // from flt_82001DA0 and reused for all three records. Read 2026-08-01.
-        const f32 KF_MOMENT_WEIGHTING = 0.5f;               // flt_82001DA0
+        // KF_MOMENT_WEIGHTING: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001DA0)
 
         // Update's prologue shake-fade divisors. Both are WRITABLE .data words at 0x82CDAD88 /
         // 0x82CDAD84 (not .rdata), both 1.0f in the shipped image, and the console really does
@@ -151,11 +151,11 @@ namespace BrnDirector
         // (f31, loaded once at 0x82259C40 from flt_82001DA0 == 0.5f, read out of the .rdata image
         // with scratchpad\afw_id1b.py) and all three store 0 into the trailing bool.
         mMomentSelector.AddMoment(Moment::E_MOMENT_PLAYER_JUMPING,  MomentParameterBank::E_PARAM_NONE,
-                                  KF_MOMENT_WEIGHTING, /*mbCanBeInhibited*/ false);
+                                  0.5f, /*mbCanBeInhibited*/ false);
         mMomentSelector.AddMoment(Moment::E_MOMENT_PLAYER_STUNT,    MomentParameterBank::E_PARAM_NONE,
-                                  KF_MOMENT_WEIGHTING, /*mbCanBeInhibited*/ false);
+                                  0.5f, /*mbCanBeInhibited*/ false);
         mMomentSelector.AddMoment(Moment::E_MOMENT_NEW_CAR_JOINED,  MomentParameterBank::E_PARAM_NONE,
-                                  KF_MOMENT_WEIGHTING, /*mbCanBeInhibited*/ false);
+                                  0.5f, /*mbCanBeInhibited*/ false);
     }
 
     // ------------------------------------------------------------------------
@@ -211,8 +211,8 @@ namespace BrnDirector
         mfTimeInShowtimeIntro = 0.0f;      // +0x3A4
         mfBordersTime         = 0.0f;      // +0x3A8
         mfTimeUntilNextStrobe = 0.0f;      // +0x3B4
-        mfNormalShakeAmount   = KF_UNIT;   // +0x3B0 = 1.0
-        mfWreckedEffectAmount = KF_UNIT;   // +0x3C8 = 1.0
+        mfNormalShakeAmount   = 1.0f;   // +0x3B0 = 1.0
+        mfWreckedEffectAmount = 1.0f;   // +0x3C8 = 1.0
         mu8ImpactShakeType    = 7;         // +0x3C4
 
         return lbPrepared;
@@ -600,7 +600,7 @@ namespace BrnDirector
                 CGS_ASSERT(lrGameState.meActivePaybackType != BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING,
                            "lSharedInfo.mpGameState->meActivePayback");
                 Camera::RequestStartEffectHook(
-                    lrCamera, KAPC_PAYBACK_EFFECT_NAMES[lrGameState.meActivePaybackType], KF_UNIT);
+                    lrCamera, KAPC_PAYBACK_EFFECT_NAMES[lrGameState.meActivePaybackType], 1.0f);
             }
         }
 
@@ -664,11 +664,11 @@ namespace BrnDirector
 
             if ((lrGameState.miThisFramesActionFlags & 0x10) != 0)   // smash action this frame
             {
-                Camera::RequestStartEffectHook(lrCamera, "Smash_Effect", KF_UNIT);
+                Camera::RequestStartEffectHook(lrCamera, "Smash_Effect", 1.0f);
             }
             if ((lrGameState.miThisFramesActionFlags & 0x04) != 0)   // billboard action this frame
             {
-                Camera::RequestStartEffectHook(lrCamera, "Billboard_Effect", KF_UNIT);
+                Camera::RequestStartEffectHook(lrCamera, "Billboard_Effect", 1.0f);
                 mbStartedJumpEffect = true;     // +0x39D
             }
 
@@ -692,7 +692,7 @@ namespace BrnDirector
                 const f32 lfBlurRaw     = mfTimeInShowtimeIntro * KF_SHOWTIME_BLUR_RAMP;
                 const f32 lfBlurClamped = (lfBlurRaw < KF_SHOWTIME_BLUR_MAX) ? lfBlurRaw : KF_SHOWTIME_BLUR_MAX;
                 const f32 lfBlur = (lfBlurClamped > 0.0f) ? lfBlurClamped : 0.0f;
-                const f32 lfBarsRaw  = KF_UNIT - lfBlurClamped;
+                const f32 lfBarsRaw  = 1.0f - lfBlurClamped;
                 const f32 lfBars = (lfBarsRaw > 0.0f) ? lfBarsRaw : 0.0f;
                 lrCamera.SetShowtimeBlurAndBars(lfBlur, lfBars, /*lbHasStart*/ true, /*lbHasStop*/ true);
             }
@@ -707,7 +707,7 @@ namespace BrnDirector
                 (mfBordersTime > KF_FP_EPSILON || mfBordersTime < -KF_FP_EPSILON);
             if (lbBordersActive)
             {
-                const f32 lfPostFX = (KF_UNIT - (mfBordersTime / KF_SHOWTIME_BORDERS_DUR)) * KF_SHOWTIME_POSTFX_SCALE;
+                const f32 lfPostFX = (1.0f - (mfBordersTime / KF_SHOWTIME_BORDERS_DUR)) * KF_SHOWTIME_POSTFX_SCALE;
                 lrCamera.SetRequestedPostFX(lfPostFX);
                 const f32 lfDecayed = mfBordersTime - lrSharedInfo.mfSimTimestep;
                 mfBordersTime = (lfDecayed > 0.0f) ? lfDecayed : 0.0f;
@@ -764,11 +764,11 @@ namespace BrnDirector
             // asm 0x82234B7C: lbz +0x1B5 -> mbPlayerPerformedStunt (the smash-event gate).
             if (lrGameState.mbPlayerPerformedStunt)            // +0x1B5
             {
-                Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, "Smash_Effect", KF_UNIT);
+                Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, "Smash_Effect", 1.0f);
                 // asm 0x82234BA4: stfs f0, 0x3AC(r31) -> mfImpactShakeAmount (pseudocode *(a1+940)=1.0,
                 // 940=0x3AC); the smash event pre-loads mfImpactShakeAmount so the tail's
                 // if(mfImpactShakeAmount>0) SetImpactShake path fires. (+0x3AC, NOT +0x3B0 mfNormalShakeAmount.)
-                mfImpactShakeAmount = KF_UNIT;   // +0x3AC
+                mfImpactShakeAmount = 1.0f;   // +0x3AC
                 mu8ImpactShakeType  = 8;         // +0x3C4
             }
             break;
@@ -783,7 +783,7 @@ namespace BrnDirector
             // asm 0x82234BC0: lbz +0x1B4 -> mbPlayerHitCheckpointThisFrame (checkpoint hook).
             if (lrGameState.mbPlayerHitCheckpointThisFrame)    // +0x1B4
             {
-                Camera::RequestStartEffectHook(lrCamera, "Checkpoint", KF_UNIT);
+                Camera::RequestStartEffectHook(lrCamera, "Checkpoint", 1.0f);
             }
             break;
         }
@@ -796,7 +796,7 @@ namespace BrnDirector
             // BridgeGameStateToDirector publishes ScoringOutputInterface::mabPlayerEliminated[player]).
             if (lrGameState.mbPlayerEliminated)                  // +0x1D0
             {
-                Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, "Damage_Crit", KF_UNIT);
+                Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, "Damage_Crit", 1.0f);
                 break;
             }
             // asm 0x82234CB4: lbz +0x1D1 -> GameState::mbModeTimeExpired (X360-only member; the
@@ -810,7 +810,7 @@ namespace BrnDirector
                     lrSharedInfo.mpAllVehicleData->SqDistanceOfNearestOpposingTeamMember(liRivalTeam);
                 if (lfSqDist < KF_NEAREST_CAR_FX_RANGE_SQ)
                 {
-                    const f32 lfWreck = KF_UNIT - mfWreckedEffectAmount;
+                    const f32 lfWreck = 1.0f - mfWreckedEffectAmount;
                     Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, "Wrecked", lfWreck * lfWreck);
                     const f32 lfNext = mfWreckedEffectAmount - lrSharedInfo.mfTimestep;
                     mfWreckedEffectAmount = lfNext;
@@ -819,7 +819,7 @@ namespace BrnDirector
                         break;
                     }
                 }
-                mfWreckedEffectAmount = KF_UNIT;
+                mfWreckedEffectAmount = 1.0f;
             }
             break;
         }
@@ -835,13 +835,13 @@ namespace BrnDirector
                 const f32 lfClamped = ((KF_NEAREST_CAR_FX_RANGE_SQ - lfPlayerSqDist) > 0.0f)
                                           ? KF_NEAREST_CAR_FX_RANGE_SQ : lfPlayerSqDist;
                 const f32 lfBlend =
-                    -(((lfClamped - KF_NEAREST_CAR_FX_RANGE_SQ) * KF_NEAREST_CAR_FX_FALLOFF) - KF_UNIT);
+                    -(((lfClamped - KF_NEAREST_CAR_FX_RANGE_SQ) * KF_NEAREST_CAR_FX_FALLOFF) - 1.0f);
                 Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, "Damage_Crit", lfBlend);
             }
             // asm 0x82234C58: lbz +0x1B4 -> mbPlayerHitCheckpointThisFrame (as in cases 10..16).
             if (lrGameState.mbPlayerHitCheckpointThisFrame)    // +0x1B4
             {
-                Camera::RequestStartEffectHook(lrCamera, "Checkpoint", KF_UNIT);
+                Camera::RequestStartEffectHook(lrCamera, "Checkpoint", 1.0f);
             }
             break;
         }
@@ -867,14 +867,14 @@ namespace BrnDirector
         else if (lrGameState.mbPlayerCheckedTraffic)           // +0x1B3
         {
             mu8ImpactShakeType  = 9;                           // stb 9, +0x3C4
-            mfImpactShakeAmount = KF_UNIT;                     // +0x3AC = 1.0
+            mfImpactShakeAmount = 1.0f;                     // +0x3AC = 1.0
         }
         // else: leave mfImpactShakeAmount untouched (asm falls through 0x82234F10 -> 0x82234F2C).
 
         // Apply the shake into the camera's effects block.
         if (mfImpactShakeAmount > 0.0f)
         {
-            lrCamera.SetImpactShake(mfImpactShakeAmount, KF_UNIT, mu8ImpactShakeType);
+            lrCamera.SetImpactShake(mfImpactShakeAmount, 1.0f, mu8ImpactShakeType);
         }
         else
         {

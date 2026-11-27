@@ -40,11 +40,11 @@ namespace
 
     // Camera-state head bits the moment raises (the moment family's shared per-bit
     // vocabulary -- BrnCameraState.h; bit roles not yet recovered):
-    const u32 KU_HEAD_FLAG_SEARCHING = 18;   // searching, condition absent
-    const u32 KU_HEAD_FLAG_ALLOCATED = 19;   // entering FOUND_PREPARING
-    const u32 KU_HEAD_FLAG_PREPARING = 20;   // waiting on the candidates
-    const u32 KU_HEAD_FLAG_INHIBITED = 23;   // searching inhibited
-    const u32 KU_HEAD_FLAG_VALID     = 28;   // valid, mirroring the winner
+    // KU_HEAD_FLAG_SEARCHING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_ALLOCATED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_PREPARING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_INHIBITED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_VALID: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
 
     // The camera-state CURRENT flags the VALID body touches (roles not recovered):
     // SetFlag(8) is raised each valid frame; IsFlagSet(1) gates staying valid.
@@ -181,7 +181,7 @@ bool MomentHardStop::Release()
     mRigCameraHandleB.Release();
     SetConditionsNotMet();
     SetCanSwitchToMeNow(false);
-    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+    GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
     SetState(E_STATE_INVALID_INACTIVE);
     return true;
 }
@@ -237,13 +237,13 @@ void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
         {
             SetConditionsNotMet();
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
             break;
         }
         if (IsInhibited())
         {
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_INHIBITED);
             break;
         }
 
@@ -307,7 +307,7 @@ void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
         SetCanSwitchToMeNow(false);
         mfRunningTime = 0.0f;
         SetState(E_STATE_INVALID_FOUND_PREPARING);
-        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
+        GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_FOR_BEHAVIOUR_TO_PREPARE);
 
         // ---- every KU_CRASHES_BEFORE_FORCE_ULTRA_SLOMOth high-energy world crash
         //      (type 3, mode -1, analysis bit 3) rolls a random ultra-slo-mo scale ----
@@ -409,7 +409,7 @@ void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
         else
         {
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_TO_CUT_TO_BEHAVIOUR);
             break;
         }
     }
@@ -419,7 +419,7 @@ void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
     case E_STATE_VALID:
     {
         SetCanSwitchFromMeNow(false);
-        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_VALID);
+        GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTFROM_MONEY_SHOT);
 
         // Mirror the winner (camera + its shot-selection info), attach the crash
         // analysis, raise the per-frame hard-stop state flag, and (when rolled)

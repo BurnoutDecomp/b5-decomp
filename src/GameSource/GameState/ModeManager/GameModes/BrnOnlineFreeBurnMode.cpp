@@ -6,15 +6,15 @@
 namespace BrnGameState
 {
 // EGameModeState (GameStateModuleIO) state-machine ids (named file-local, mirroring BrnGameMode.cpp).
-enum
-{
-    KI_GMS_COUNTDOWN      = 0,
-    KI_GMS_INTRO          = 1,
-    KI_GMS_IN_PROGRESS    = 2,
-    KI_GMS_QUIT           = 5,
-    KI_GMS_ONLINE_LOADING = 6,
-    KI_GMS_ONLINE_SPLASH  = 7
-};
+// The game-mode state ids are DWARF GameStateModuleIO::EGameModeState (BrnGameStateSharedIO.h:93),
+// E_GMS_COUNTDOWN .. E_GMS_ONLINE_SPLASH, used directly (one file-local copy per mode could not
+// live in the BrnGameStateScoringAndModesUnity TU).
+//
+//
+//
+//
+//
+//
 
 // X360: BrnGameState::OnlineFreeBurnMode::GetName.
 const char* OnlineFreeBurnMode::GetName() const
@@ -41,47 +41,47 @@ void OnlineFreeBurnMode::SendEvent(EGameModeEvent leEvent)
 {
     if (leEvent == E_GME_ABORT)
     {
-        SetCurrentState(KI_GMS_QUIT);
+        SetCurrentState(GameStateModuleIO::E_GMS_QUIT);
         return;
     }
     if (leEvent == E_GME_RESTART)
     {
-        SetCurrentState(KI_GMS_ONLINE_LOADING);
+        SetCurrentState(GameStateModuleIO::E_GMS_ONLINE_LOADING);
         return;
     }
 
     switch (meCurrentState)
     {
-        case KI_GMS_COUNTDOWN:
+        case GameStateModuleIO::E_GMS_COUNTDOWN:
             if (leEvent == E_GME_NEXT)
             {
-                SetCurrentState(KI_GMS_IN_PROGRESS);
+                SetCurrentState(GameStateModuleIO::E_GMS_IN_PROGRESS);
             }
             break;
-        case KI_GMS_INTRO:
+        case GameStateModuleIO::E_GMS_INTRO:
             if (leEvent == E_GME_NEXT)
             {
-                SetCurrentState(KI_GMS_ONLINE_SPLASH);
+                SetCurrentState(GameStateModuleIO::E_GMS_ONLINE_SPLASH);
             }
             break;
-        case KI_GMS_IN_PROGRESS:
+        case GameStateModuleIO::E_GMS_IN_PROGRESS:
             if (leEvent == E_GME_NEXT)
             {
-                SetCurrentState(KI_GMS_QUIT);
+                SetCurrentState(GameStateModuleIO::E_GMS_QUIT);
             }
             break;
-        case KI_GMS_QUIT:
+        case GameStateModuleIO::E_GMS_QUIT:
             break;
-        case KI_GMS_ONLINE_LOADING:
+        case GameStateModuleIO::E_GMS_ONLINE_LOADING:
             if (leEvent == E_GME_NEXT)
             {
-                SetCurrentState(KI_GMS_INTRO);
+                SetCurrentState(GameStateModuleIO::E_GMS_INTRO);
             }
             break;
-        case KI_GMS_ONLINE_SPLASH:
+        case GameStateModuleIO::E_GMS_ONLINE_SPLASH:
             if (leEvent == E_GME_NEXT)
             {
-                SetCurrentState(KI_GMS_COUNTDOWN);
+                SetCurrentState(GameStateModuleIO::E_GMS_COUNTDOWN);
             }
             break;
         default:

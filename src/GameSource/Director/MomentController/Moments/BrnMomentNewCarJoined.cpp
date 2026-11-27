@@ -85,14 +85,14 @@ namespace
 {
     // Camera-state head bits (the moment family's shared vocabulary; the values are
     // the bit indices the console build sets in the head doubleword at camera +0x138):
-    const u32 KU_HEAD_FLAG_SEARCHING = 18;
-    const u32 KU_HEAD_FLAG_ALLOCATED = 19;
-    const u32 KU_HEAD_FLAG_PREPARING = 20;
-    const u32 KU_HEAD_FLAG_INHIBITED = 23;
+    // KU_HEAD_FLAG_SEARCHING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_ALLOCATED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_PREPARING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_INHIBITED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
 
     // The blend duration both interpolaters are set up with (1.0f;
     // the same constant the console build re-uses for the start-hook blend amount below).
-    const f32 KF_BLEND_DURATION = 1.0f;
+    // KF_BLEND_DURATION: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001C98)
 
     // The border post-FX amount stamped on the moment's camera every frame it is
     // past PREPARING. FLAG: the console reads a mutable data-segment global
@@ -157,7 +157,7 @@ bool MomentNewCarJoined::Release()
     mLooseAttachment.Release();
     SetConditionsNotMet();                                          // 0 -> +0x17A
     SetCanSwitchToMeNow(false);                                     // 0 -> +0x178
-    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING); // sets a bit in +0x148
+    GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET); // sets a bit in +0x148
     SetState(E_STATE_INVALID_SEARCHING);                            // 1 -> +0x174
     return true;
 }
@@ -198,7 +198,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
             if (IsInhibited())
             {
                 SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_INHIBITED);
             }
             else
             {
@@ -230,7 +230,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
                 // still false while the references are written); it only evaluates asserts
                 // the console path skips. Swap to the combined call once the overload is
                 // declared -- see the shared-header request in the wave spec.
-                mInterpolaterA.Get()->SetupDuration(KF_BLEND_DURATION);
+                mInterpolaterA.Get()->SetupDuration(1.0f);
                 mInterpolaterA.Get()->SetupCameraAFromHelper(
                     Camera::BehaviourHelperIndex(KI_GAMEPLAY_HELPER_SLOT), *lpBehaviourManager);
                 mInterpolaterA.Get()->SetupCameraBFromHelper(
@@ -238,7 +238,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
                 mInterpolaterA.Get()->Setup();
 
                 SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_FOR_BEHAVIOUR_TO_PREPARE);
                 SetState(E_STATE_INVALID_FOUND_PREPARING);
             }
         }
@@ -246,7 +246,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
         {
             SetConditionsNotMet();
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
         }
         return;
 
@@ -260,7 +260,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
         if (!mInterpolaterA.Get()->CanSwitchToMeNow())
         {
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_TO_CUT_TO_BEHAVIOUR);
             return;
         }
         mfTimeInState = 0.0f;
@@ -314,7 +314,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
             // (direction console-attested: the loose attachment's helper index is the
             // FROM helper, the gameplay slot is the TO helper). Same combined-overload shape
             // fallback as the outward blend above.
-            mInterpolaterB.Get()->SetupDuration(KF_BLEND_DURATION);
+            mInterpolaterB.Get()->SetupDuration(1.0f);
             mInterpolaterB.Get()->SetupCameraAFromHelper(
                 mLooseAttachment.GetBehaviourHelperIndex(), *lpBehaviourManager);
             mInterpolaterB.Get()->SetupCameraBFromHelper(

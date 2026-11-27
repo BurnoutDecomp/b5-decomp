@@ -58,7 +58,7 @@ namespace
 
     // flt_82001DA0 (0.5f) is what the `vcfsx v12, v0(1), 1` idiom @0x82209390 builds: the half in
     // (max - min) * 0.5.
-    const f32 KF_HALF = 0.5f;
+    // KF_HALF: the pooled literal 0.5f at its uses (ARTIST __real 0x82001DA0; one name could not be defined in several unity members)
 
     // rw::math::vpu::detail::gIVector rows 0 and 2 (0x82181500 / 0x82181520, x360rd): the car-space
     // X and Z unit axes the left-of-action-line accumulator steps along.
@@ -93,7 +93,7 @@ void CrashAnalyser::Update(const DirectorIO::InputBuffer* lpInput, const GameSta
             const Vector3&        lrNormal       = lpPlayerCrashInfo->mvCollisionNormal;
 
             // cpp:167 / :168 -- the car box's half extents and their reciprocal (One / half).
-            const Vector3 lHalfExtents = (lpPlayerVehicleInfo->mAABB.mMax - lpPlayerVehicleInfo->mAABB.mMin) * KF_HALF;
+            const Vector3 lHalfExtents = (lpPlayerVehicleInfo->mAABB.mMax - lpPlayerVehicleInfo->mAABB.mMin) * 0.5f;
             const Vector3 lReciprocalHalfExtents(rw::math::vpu::detail::Vector3NativeReciprocal(lHalfExtents.mV));
 
             // cpp:170 -- the contact normal with its component along the car's up axis removed.

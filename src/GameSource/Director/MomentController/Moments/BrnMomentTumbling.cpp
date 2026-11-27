@@ -36,14 +36,14 @@ namespace
     const f32 KF_TUMBLE_LAPSED_TIMEOUT = 0.5f;
 
     // Camera-state head bits (the moment family's shared vocabulary):
-    const u32 KU_HEAD_FLAG_SEARCHING       = 18;
-    const u32 KU_HEAD_FLAG_ALLOCATED       = 19;
-    const u32 KU_HEAD_FLAG_PREPARING       = 20;
+    // KU_HEAD_FLAG_SEARCHING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_ALLOCATED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_PREPARING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
     const u32 KU_HEAD_FLAG_LAPSED          = 21;
     const u32 KU_HEAD_FLAG_TIMED_OUT       = 22;
-    const u32 KU_HEAD_FLAG_INHIBITED       = 23;
-    const u32 KU_HEAD_FLAG_NOT_SWITCHABLE  = 24;
-    const u32 KU_HEAD_FLAG_VALID           = 28;   // (not raised here; family doc)
+    // KU_HEAD_FLAG_INHIBITED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_NOT_SWITCHABLE: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_VALID: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
     const u32 KU_HEAD_FLAG_NOT_RELEASABLE  = 30;
 
     // The camera-state CURRENT flag the valid body raises while framing the
@@ -106,7 +106,7 @@ bool MomentTumbling::Release()
     mGyroCam.Release();
     SetConditionsNotMet();
     SetCanSwitchToMeNow(false);
-    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+    GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
     SetState(E_STATE_INVALID_INACTIVE);
     return true;
 }
@@ -305,19 +305,19 @@ void MomentTumbling::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
                 SetCanSwitchToMeNow(false);
                 mfRunningTime = 0.0f;
                 SetState(E_STATE_INVALID_FOUND_PREPARING);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_FOR_BEHAVIOUR_TO_PREPARE);
             }
             else
             {
                 SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_INHIBITED);
             }
         }
         else
         {
             SetConditionsNotMet();
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
         }
         return;
     }
@@ -342,7 +342,7 @@ void MomentTumbling::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
             return;
         }
         SetCanSwitchToMeNow(false);
-        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
+        GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_TO_CUT_TO_BEHAVIOUR);
         return;
 
     case E_STATE_VALID:
@@ -393,7 +393,7 @@ void MomentTumbling::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
     if (!mGyroCam.Get()->CanSwitchToMeNow())
     {
         SetCanSwitchToMeNow(false);
-        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_NOT_SWITCHABLE);
+        GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_BEHAVIOUR_NOCUTTO);
     }
 
     // While the keep condition has lapsed, integrate the running time.

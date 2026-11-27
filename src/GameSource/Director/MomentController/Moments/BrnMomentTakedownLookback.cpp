@@ -37,14 +37,14 @@ namespace BrnDirector
 
 namespace
 {
-    const f32 KF_ZERO                     = 0.0f;    // flt_82001CC0 (the behind / band near-edge tests)
-    const f32 KF_ONE                      = 1.0f;    // flt_82001C98 (the band far edge: one second)
+    // KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0; one name could not be defined in several unity members)
+    // KF_ONE: the pooled literal 1.0f at its uses (ARTIST __real 0x82001C98; one name could not be defined in several unity members)
     const f32 KF_MAX_DISTANCE_TO_VICTIM   = 60.0f;   // flt_82004C6C == 0x42700000 (the PS3 splats 0x42700000 too)
 
     // The moment camera's head bits (the family's shared vocabulary; `oris r11, r11, 4` / `oris r11, r11, 0x80` on
     // the camera state's head word at moment +0x148).
-    const u32 KU_HEAD_FLAG_SEARCHING = 18;
-    const u32 KU_HEAD_FLAG_INHIBITED = 23;
+    // KU_HEAD_FLAG_SEARCHING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_INHIBITED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
 }
 
 // ============================================================================
@@ -80,7 +80,7 @@ bool MomentTakedownLookback::Release()
     mRigCameraHandle.Release();
     SetConditionsNotMet();
     SetCanSwitchToMeNow(false);
-    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+    GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
     SetState(E_STATE_INVALID_INACTIVE);
     return true;
 }
@@ -147,8 +147,8 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager
             const f32     lfTimeToVictimOvertakingUs =                                                      // :99
                 ConsoleVpu::Divide(-lfZDistanceToVictim, ConsoleVpu::Dot3(lPlayerZ, lNetVictimVel));
 
-            if (((KF_ZERO > lfTimeToVictimOvertakingUs) || (lfTimeToVictimOvertakingUs > KF_ONE))
-                && (KF_ZERO > lfZDistanceToVictim)
+            if (((0.0f > lfTimeToVictimOvertakingUs) || (lfTimeToVictimOvertakingUs > 1.0f))
+                && (0.0f > lfZDistanceToVictim)
                 && (KF_MAX_DISTANCE_TO_VICTIM > lfDistanceToVictim))
             {
                 if (!IsInhibited())
@@ -165,7 +165,7 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager
                 else
                 {
                     SetCanSwitchToMeNow(false);
-                    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
+                    GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_INHIBITED);
                 }
                 break;
             }
@@ -173,7 +173,7 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager
 
         SetConditionsNotMet();
         SetCanSwitchToMeNow(false);
-        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+        GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
         break;
     }
 
@@ -191,7 +191,7 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager
         const f32     lfDistanceToVictim  = ConsoleVpu::Dot3(lToVictimNormalized, lToVictim);               // :138
         const f32     lfZDistanceToVictim = ConsoleVpu::Dot3(lPlayerZ, lToVictim);                          // :139
 
-        if ((KF_ZERO > lfZDistanceToVictim) && (KF_MAX_DISTANCE_TO_VICTIM > lfDistanceToVictim))
+        if ((0.0f > lfZDistanceToVictim) && (KF_MAX_DISTANCE_TO_VICTIM > lfDistanceToVictim))
         {
             SetCamera(mRigCameraHandle.GetCamera());
         }

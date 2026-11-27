@@ -29,8 +29,8 @@ namespace
 {
 
     const f32 KF_EPSILON      = 1.1920929e-07f;      // the vector IsZero tolerance (0x34000000)
-    const f32 KF_SMALL_FLOAT  = 1.52587890625e-05f;  // the IsSimilar tolerance (0x37800000)
-    const f32 KF_DEGS_TO_RADS = 0.017453292f;        // 0x3C8EFA35
+    // KF_SMALL_FLOAT: rwmath's SMALL_FLOAT (fpu/constants.h:53; the unity's copy 0x82001740)
+    // KF_DEGS_TO_RADS: rwmath's DEGREES_TO_RADIANS (fpu/constants.h:56; the unity's copy 0x82001744)
 
     // The console's vector IsZero: the three lanes' magnitudes compared `> tolerance` by one
     // vcmpgtfp. (x copied into w), true when no lane is above it -- a NaN lane counts as zero.
@@ -388,7 +388,7 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
 
     const f32 lfDesiredVectorLength = GuardedRoot(Utils::ConsoleVpu::Dot3(lDesiredVector, lDesiredVector));
 
-    if (!IsZeroVmx(mWorldSpaceNormalizedVectorFromCar - mDesiredWorldSpaceNormalizedVectorFromCar, KF_SMALL_FLOAT))
+    if (!IsZeroVmx(mWorldSpaceNormalizedVectorFromCar - mDesiredWorldSpaceNormalizedVectorFromCar, rw::math::fpu::SMALL_FLOAT))
     {
         // `fcmpu len, 2.0 ; bge` -> the maximum (a NaN length too), else the minimum.
         const f32 lfTargetBlend = (lfDesiredVectorLength < 2.0f) ? mpParameters->mfMinimumBlendFactor
@@ -458,7 +458,7 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
     Matrix44Affine lTransform = Utils::CreateLookAt(
         Utils::ConsoleVpu::MultiplyAdd(mWorldSpaceNormalizedVectorFromCar, mfDistance, lCarPosition), lCarPosition);
     lTransform.wAxis.mV.y += mfHeight;
-    lTransform = Utils::ConsoleVpu::Mult(RotationX(mSourceShot.Pitch() * KF_DEGS_TO_RADS), lTransform);
+    lTransform = Utils::ConsoleVpu::Mult(RotationX(mSourceShot.Pitch() * rw::math::fpu::DEGREES_TO_RADIANS), lTransform);
 
     mShake.Update(lTransform, mpParameters->mShakeParams, mRandom, lfTimestep, 1.0f);
 

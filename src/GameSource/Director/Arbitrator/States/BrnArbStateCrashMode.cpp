@@ -28,8 +28,8 @@ namespace BrnDirector
     namespace
     {
         // ---- shared read-only literals the console loads -------------------------------
-        const f32 KF_UNIT          = 1.0f;
-        const f32 KF_ZERO          = 0.0f;
+        // KF_UNIT: the pooled literal 1.0f at its uses (ARTIST __real 0x82001C98; one name could not be defined in several unity members)
+        // KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0; one name could not be defined in several unity members)
         const f32 KF_POSTFX_SCALE  = 1.0f;          // borders post-FX scale
         const f32 KF_HIT_COUNT_CAP = 5.0f;          // vehicle-hit-count blur cap
 
@@ -120,7 +120,7 @@ namespace BrnDirector
         mbBlurShake      = false;          // +0x1B5 = 0
 
         mfBlurRampSpeed  = KF_DEFAULT_BLUR_RAMP_SPEED;  // +0x1B0
-        mfMaximumBlur    = KF_UNIT;        // +0x1AC = 1.0
+        mfMaximumBlur    = 1.0f;        // +0x1AC = 1.0
         mfTiltAngle      = 0.0f;           // +0x1B8
 
         mfTiltChangeTime  = KF_CAMERA_TILT_CHANGE_TIME; // +0x1C0
@@ -184,7 +184,7 @@ namespace BrnDirector
         // closeupAmount = clamp(mfCloseupTime / KF_CLOSEUP_BLEND_IN_DURATION, 0, 1)
         const f32 lfRawBlend     = mfCloseupTime / KF_CLOSEUP_BLEND_IN_DURATION;
         const f32 lfClampedLow   = ClampToNonNegative(lfRawBlend);
-        const f32 lfCloseupBlend = (lfClampedLow <= KF_UNIT) ? lfClampedLow : KF_UNIT;
+        const f32 lfCloseupBlend = (lfClampedLow <= 1.0f) ? lfClampedLow : 1.0f;
 
         // The console re-resolves the behaviour + asserts IsAllocated() inside the pool lookup.
         Camera::BehaviourAftertouchCrash& lrBehaviour = *mAftertouch.Get();
@@ -311,12 +311,12 @@ namespace BrnDirector
                 // No flash left: keep the "Showtime" post-FX playing, blended by how little boost
                 // the player has.
                 Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, "Showtime",
-                                              KF_UNIT - lrGameState.mfPlayerBoostPercentage);
+                                              1.0f - lrGameState.mfPlayerBoostPercentage);
             }
             else
             {
                 mfFlashTime -= lrSharedInfo.mfSimTimestep;
-                Camera::RequestStartEffectHook(lrCamera, "2dFlash", KF_UNIT);
+                Camera::RequestStartEffectHook(lrCamera, "2dFlash", 1.0f);
             }
 
             // ---- periodic slow-mo close-up ----------------------------------------------
@@ -403,7 +403,7 @@ namespace BrnDirector
                 // 0x1E0` -> extsw/fcfid, i.e. ShowTimeInfo::miComboLevel as a float).
                 const s32 liComboLevel = lrGameState.mShowTimeInfo.miComboLevel;              // +0x1E0
                 const f32 lfHitCount = static_cast<f32>(liComboLevel);
-                const f32 lfHitFloor = (KF_UNIT - lfHitCount >= 0.0f) ? KF_UNIT : lfHitCount; // max(1, cnt)
+                const f32 lfHitFloor = (1.0f - lfHitCount >= 0.0f) ? 1.0f : lfHitCount; // max(1, cnt)
                 const f32 lfHitScale = (KF_HIT_COUNT_CAP - lfHitFloor >= 0.0f) ? lfHitFloor
                                                                               : KF_HIT_COUNT_CAP; // min(.,5)
 
@@ -418,7 +418,7 @@ namespace BrnDirector
                     const f32 lfNextBlur = mfCurrentBlur - mfBlurRampSpeed * lrSharedInfo.mfSimTimestep;
                     const f32 lfRatioClamped = (-lfRampRatio >= 0.0f) ? 0.0f : lfRampRatio; // ratio<=0 -> 0
                     mfCurrentBlur = (lfNextBlur - KF_BLUR_BASELINE >= 0.0f) ? lfNextBlur : KF_BLUR_BASELINE; // max(next,baseline)
-                    lfBlurFraction = (KF_UNIT - lfRatioClamped >= 0.0f) ? lfRatioClamped : KF_UNIT;          // min(.,1)
+                    lfBlurFraction = (1.0f - lfRatioClamped >= 0.0f) ? lfRatioClamped : 1.0f;          // min(.,1)
                 }
                 else
                 {
@@ -430,13 +430,13 @@ namespace BrnDirector
                     const f32 lfNextBlur = mfCurrentBlur + mfBlurRampSpeed * lrSharedInfo.mfSimTimestep;
                     const f32 lfRatioClamped = (-lfRampRatio >= 0.0f) ? 0.0f : lfRampRatio; // ratio<=0 -> 0
                     mfCurrentBlur = (lfNextBlur - mfMaximumBlur >= 0.0f) ? mfMaximumBlur : lfNextBlur; // min(next,max)
-                    lfBlurFraction = (KF_UNIT - lfRatioClamped >= 0.0f) ? lfRatioClamped : KF_UNIT;    // min(.,1)
+                    lfBlurFraction = (1.0f - lfRatioClamped >= 0.0f) ? lfRatioClamped : 1.0f;    // min(.,1)
                 }
 
                 const f32 lfShakeAmount = lfBlurFraction * lfHitScale;
                 if (mbBlurShake)
                 {
-                    lrCamera.RequestMotionBlurShake(lfShakeAmount, KF_UNIT, KU8_BLUR_SHAKE_TYPE);
+                    lrCamera.RequestMotionBlurShake(lfShakeAmount, 1.0f, KU8_BLUR_SHAKE_TYPE);
                 }
             }
             else
@@ -458,12 +458,12 @@ namespace BrnDirector
                     lfBlur = mfCurrentBlur * mfCurrentBlur;   // squared ramp
                 }
                 const f32 lfBlurNonNeg = ClampToNonNegative(lfBlur);
-                const f32 lfBlurClamped = (KF_UNIT - lfBlurNonNeg >= 0.0f) ? lfBlurNonNeg : KF_UNIT; // min(.,1)
+                const f32 lfBlurClamped = (1.0f - lfBlurNonNeg >= 0.0f) ? lfBlurNonNeg : 1.0f; // min(.,1)
                 lrCamera.RequestMotionBlur(lfBlurClamped, lfBlurClamped);
             }
 
             // ---- borders post-FX --------------------------------------------------------
-            lrCamera.SetRequestedBorderPostFX((mfBordersTime > 0.0f) ? KF_POSTFX_SCALE : KF_ZERO);
+            lrCamera.SetRequestedBorderPostFX((mfBordersTime > 0.0f) ? KF_POSTFX_SCALE : 0.0f);
             mfBordersTime = ClampToNonNegative(mfBordersTime - lrSharedInfo.mfSimTimestep);
 
             // ---- hand off to post-event when the event ends -----------------------------

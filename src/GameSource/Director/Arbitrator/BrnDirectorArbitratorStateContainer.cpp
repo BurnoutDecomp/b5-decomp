@@ -41,14 +41,14 @@ namespace BrnDirector
     // X360 0x821F5A60. Return the active state, asserting it has been set
     // (BrnDirectorArbitratorStateContainer.h:131 "mpCurrentState != NULL"). The source
     // reads/returns the +0x35CC word; here that is mpCurrentState, accessed by name.
-    ArbitratorState* ArbitratorStateContainer::GetCurrentState() const
-    {
-        CGS_ASSERT_AT(mpCurrentState != 0,
-            "mpCurrentState != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\arbitrator\\BrnDirectorArbitratorStateContainer.h", 131 /* ARTIST 0x821F5A88 */);
-
-        return mpCurrentState;
-    }
+    // GetCurrentState is header-inline (DWARF h:101/:104): BrnDirectorArbitratorStateContainer.h.
+    //
+    //
+    //
+    //
+    //
+    //
+    //
 
     // The state registered for a given EState index. The X360 reaches a sibling state either
     // through this table (`container + 0x35A0 + 4*index`) or by its fixed interior offset when

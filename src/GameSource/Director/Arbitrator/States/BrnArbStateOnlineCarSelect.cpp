@@ -40,7 +40,7 @@ namespace BrnDirector
     {
         // The default attrib data-area size requested when a shot's parameter block is absent
         // (the console requests Attrib::DefaultDataArea(0x18)). Same as the race-intro/rank-up states.
-        const u32 KU_SHOT_DEFAULT_DATA_AREA_SIZE = 0x18u;
+        // KU_SHOT_DEFAULT_DATA_AREA_SIZE: the literal size at its uses (no DWARF name; one name could not be defined in several unity members)
 
         // The two trailing selectors the BehaviourManager::NewBehaviour<TBehaviour> allocation
         // request carries (owner null, reference limit 1). Same as the sibling arbitrator states.
@@ -49,26 +49,26 @@ namespace BrnDirector
         // whose value is 0 stopped being a null-pointer constant in C++11, so the old `s32` form
         // matched no NewBehaviour overload under /std:c++17 /permissive-. ArbStateDriveThru
         // already spells it `const void* const`; matched here.
-        const void* const KI_NEW_BEHAVIOUR_ARG_A = 0;
-        const s32         KI_NEW_BEHAVIOUR_ARG_B = 1;
+        // KI_NEW_BEHAVIOUR_ARG_A: NewBehaviour's DWARF lpDebugMomentOwner argument (BrnBehaviourManager.h:185), NULL at its uses
+        // KI_NEW_BEHAVIOUR_ARG_B: NewBehaviour's DWARF liRefLimit argument (BrnBehaviourManager.h:185) at its uses
 
         // The reveal take LOOPS. RESOLVED 2026-08-05: the flag the console raises at behaviour
         // +0xDE4 is the embedded KeyAnimController's own mbIsLooping (+0x764), not a "reset byte".
-        const bool KB_TAKE_LOOPS = true;
+        // KB_TAKE_LOOPS: the literal at its uses (no DWARF name)
 
         // The blend every car-select screen-fade camera-PFX hook plays at (flt_82001C98 == 1.0).
         const f32 KF_FADE_BLEND = 1.0f;
 
         // The parametric time the reveal take is rewound to when the car-select re-enters the
         // SELECTING_CAR state from the livery screen (flt_82001CC0 == 0.0).
-        const f32 KF_TAKE_START_PARAMETRIC_TIME = 0.0f;
+        // KF_TAKE_START_PARAMETRIC_TIME: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001CC0)
 
         // The screen-fade camera-PFX hook names the state requests.
         const char* const KPC_HOOK_BLACK_OUT_BW       = "Black_Out_BW";
         const char* const KPC_HOOK_BLACK_OUT_NO_BW    = "Black_Out(No_B_W)";
         const char* const KPC_HOOK_BLACK_IN_BW        = "Black_In_BW";
         const char* const KPC_HOOK_BLACK_IN_NO_BW     = "Black_In(No_B_W)";
-        const char* const KPC_HOOK_BLACK_FADE_IN_QUICK = "BlackFadeIn_Quick";
+        // KPC_HOOK_BLACK_FADE_IN_QUICK: the hook-name literal at its uses (no DWARF name; one name could not be defined in two unity members)
 
         // The game modes (GameState::meEventType, EGameModeType) the car-select treats as
         // "online race" modes that may start a race intro: 10, 11, 12, 13, 14, 17 -- the
@@ -129,20 +129,20 @@ namespace BrnDirector
             {
                 // ---- the ICE-anim "reveal" cam --------------------------------------------------
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                    mIceCam, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+                    mIceCam, this, NULL, 1);
 
                 // DWARF call list: the generated shotgroup::ShotList(0) accessor (GetAttributePointer
                 // with the 24-byte DefaultDataArea fallback, 0x82271090..0x822710A0).
                 mIceCam.Get()->SetParameters(
                     &lrSharedInfo.mpDirectorResourceManager->GetOnlineCarSelect().ShotList(0));
-                mIceCam.Get()->SetTakeLooping(KB_TAKE_LOOPS);   // +0xDE4 = 1
+                mIceCam.Get()->SetTakeLooping(true);   // +0xDE4 = 1
             }
 
             if (!mLookAroundCarCam.IsAllocated())
             {
                 // ---- the rotate-about-vehicle "look around car" cam -----------------------------
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourRotateAboutVehicle>(
-                    mLookAroundCarCam, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+                    mLookAroundCarCam, this, NULL, 1);
 
                 // Configure it from the "look around car" named-parameter block (NamedParameters
                 // +0x2334).
@@ -245,7 +245,7 @@ namespace BrnDirector
             // Unless the car is showable, re-arm the quick black fade-in.
             if (!lrGameState.mbOnlineCarSelectCarIsShowable)
             {
-                Camera::RequestStartEffectHookReset(lrCamera, KPC_HOOK_BLACK_FADE_IN_QUICK, KF_FADE_BLEND);
+                Camera::RequestStartEffectHookReset(lrCamera, "BlackFadeIn_Quick", KF_FADE_BLEND);
             }
 
             // In the INTRO event state with the game saying the car-select can start the intro,
@@ -284,7 +284,7 @@ namespace BrnDirector
                 // Left the car-mod (livery) screen: back to SELECTING_CAR, rewind the reveal take
                 // to its start.
                 meState = E_STATE_SELECTING_CAR;   // +0x1AC = 2
-                mIceCam.Get()->SetControllerParametricTime0To1(KF_TAKE_START_PARAMETRIC_TIME);
+                mIceCam.Get()->SetControllerParametricTime0To1(0.0f);
             }
             break;
         }

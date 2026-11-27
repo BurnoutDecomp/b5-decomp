@@ -63,12 +63,12 @@ namespace BrnGameState
         // flt_82020B30 rodata pair). Matches the inline idiom the sibling
         // BrnStuntModeScoring_Lifecycle.cpp / _Queries.cpp use for the same RwMathFPU::IsZero
         // checks (RwMathFPU has no committed home; the comparison is reproduced inline).
-        const f32 KF_SCORE_EPSILON = 1.1920929e-7f;
+        // RwMathFPU::IsZero is rwmath's fpu::IsZero (fpu/scalar.h:390, EPSILON tolerance),
 
-        inline bool RwMathFPU_IsZero(f32 lfValue)
-        {
-            return (lfValue <= KF_SCORE_EPSILON) && (lfValue >= -KF_SCORE_EPSILON);
-        }
+        // called directly as the assert text names it (ARTIST reads the EPSILON pair).
+        //
+        //
+        //
 
         // --- StuntModeScoring combo tuning constants (BrnStuntModeScoring.cpp anon-ns block) -----
         // Names are role-attested from the per-method semantics; the magnitudes are RECOVERED as
@@ -104,10 +104,10 @@ void StuntModeScoring::BeginCombo()
     miComboMultiplier        = 1;      // X360 stw 1, 0x24
 
     // X360 lfs 0x1C -> RwMathFPU::IsZero assert (BrnStuntModeScoring.cpp:1460).
-    CGS_ASSERT_AT(RwMathFPU_IsZero(mfPendingGuaranteedScore),
+    CGS_ASSERT_AT(rw::math::fpu::IsZero(mfPendingGuaranteedScore),
                "RwMathFPU::IsZero(mfPendingGuaranteedScore)", CGS_ARTIST_FILE, 1460);
     // X360 lfs 0x18 -> RwMathFPU::IsZero assert (BrnStuntModeScoring.cpp:1461).
-    CGS_ASSERT_AT(RwMathFPU_IsZero(mfPendingNonGuaranteedScore),
+    CGS_ASSERT_AT(rw::math::fpu::IsZero(mfPendingNonGuaranteedScore),
                "RwMathFPU::IsZero(mfPendingNonGuaranteedScore)", CGS_ARTIST_FILE, 1461);
 }
 
@@ -213,7 +213,7 @@ void StuntModeScoring::UpdateCombo(f32 lfDelta, const ActiveRaceCarOutputInterfa
             if (mbTimeLimitExpired)  // X360 lbz 0x2E
             {
                 // X360: f0 = mfComboScore (0x20); RwMathFPU::IsZero check.
-                if (RwMathFPU_IsZero(mfComboScore) && !HasAnyPendingScore())
+                if (rw::math::fpu::IsZero(mfComboScore) && !HasAnyPendingScore())
                 {
                     EndCombo();  // X360 vtable +0x20 dispatch on `this`
                 }

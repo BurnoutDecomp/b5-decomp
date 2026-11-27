@@ -60,12 +60,12 @@ namespace BrnGameState
         // RwMathFPU::IsZero's +/- dead-band (X360 epsilon 1.1920929e-7). Matches the inline
         // idiom the sibling BrnStuntModeScoring_Queries.cpp uses for the same RwMathFPU::IsZero
         // checks (RwMathFPU has no committed home; the comparison is reproduced inline).
-        const f32 KF_SCORE_EPSILON = 1.1920929e-7f;
+        // RwMathFPU::IsZero is rwmath's fpu::IsZero (fpu/scalar.h:390, EPSILON tolerance),
 
-        inline bool RwMathFPU_IsZero(f32 lfValue)
-        {
-            return (lfValue <= KF_SCORE_EPSILON) && (lfValue >= -KF_SCORE_EPSILON);
-        }
+        // called directly as the assert text names it (ARTIST reads the EPSILON pair).
+        //
+        //
+        //
     }
 
 // ----------------------------------------------------------------------------
@@ -112,7 +112,7 @@ void StuntModeScoring::Construct(AchievementManager* lpAchievementManager)
 void StuntModeScoring::Activate(s32 liTargetScore)
 {
     CGS_ASSERT_AT(miCurrentScore == 0, "miCurrentScore == 0", CGS_ARTIST_FILE, 655);
-    CGS_ASSERT_AT(RwMathFPU_IsZero(mfComboScore), "RwMathFPU::IsZero(mfComboScore)", CGS_ARTIST_FILE, 656);
+    CGS_ASSERT_AT(rw::math::fpu::IsZero(mfComboScore), "RwMathFPU::IsZero(mfComboScore)", CGS_ARTIST_FILE, 656);
     CGS_ASSERT_AT(miComboMultiplier == 1, "miComboMultiplier == 1", CGS_ARTIST_FILE, 657);
     CGS_ASSERT_AT(!mbTimeLimitExpired, "!mbTimeLimitExpired", CGS_ARTIST_FILE, 658);
     CGS_ASSERT_AT(!mbPlayerCarCrashing, "!mbPlayerCarCrashing", CGS_ARTIST_FILE, 659);

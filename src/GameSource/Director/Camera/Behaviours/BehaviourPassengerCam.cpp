@@ -25,6 +25,7 @@ void BehaviourPassengerCam::Construct()
     // inlined Behaviour::Construct (see Behaviour.cpp). Named base call now that the base
     // has a home. (stw 4 stores 0 == E_WORLD under the canonical Timestep::EType.)
     Behaviour::Construct();
+    SetNotPrepared();   // DWARF call list (BrnDirectorUnity CU); ARTIST stb 8 last, 0x821F9E64
 }
 
 // @ 0x821F9E70 -- assert the parameter block was adopted, then report success;

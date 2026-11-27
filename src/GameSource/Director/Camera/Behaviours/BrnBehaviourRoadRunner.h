@@ -8,7 +8,7 @@
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"           // Utils::TransitionSmoother (mHeight)
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"          // WorldMap::LanePosition (the truck's lane)
 #include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"        // BrnTraffic::Directions (the lane walkers' first arg)
-
+#include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"  // LineTestNearestPostBox / LineTestFinePostBox
 // The lane walkers take a `const BrnTraffic::Section&`; the .cpp includes the real home
 // (BrnTrafficSection.h) before this header's users need the layout, so a forward declaration
 // keeps the traffic headers out of every behaviour TU.
@@ -162,17 +162,17 @@ public:
 };
 
 // ----------------------------------------------------------------------------
-// The two scene-query post boxes the road runner uses. FLAG: neither
-// `LineTestNearestPostBox` nor `LineTestFinePostBox` exists as a named type anywhere in the
-// tree -- the generic BrnDirector::PostBox<T> (Utils/BrnPostBox.h) is instantiated for the
-// line-test result events, but the DWARF names these two aliases and the road runner embeds
-// them BY VALUE. Their console sizes are pinned by the gaps between the members either side
-// (nearest: +0xB0 -> +0x100 == 0x50; fine: +0x150 -> +0x158 == 8). Modelled as named, sized
-// sub-objects until the post-box aliases are homed; the .cpp NEVER reaches inside one.
-// DELETE-WHEN: Utils/BrnPostBox.h grows the two aliases.
+// The two scene-query post boxes the road runner uses: the DWARF typedefs
+// LineTestNearestPostBox / LineTestFinePostBox (BrnDirectorPostOfficeTypes.h:61/:62, PostBox<T>
+// over the line-test result events), embedded BY VALUE (nearest: +0xB0 -> +0x100 == 0x50;
+// fine: +0x150 -> +0x158 == 8). Construct() resets each one to E_STATE_EMPTY (the single
+// head store ARTIST makes per box).
+//
+//
+//
 // ----------------------------------------------------------------------------
-struct LineTestNearestPostBox { u8 maOpaque[0x50]; };   // FLAG: size console-pinned, interior un-homed
-struct LineTestFinePostBox    { u8 maOpaque[0x08]; };   // FLAG: size console-pinned, interior un-homed
+// LineTestNearestPostBox / LineTestFinePostBox: the DWARF PostBox typedefs
+// (BrnDirectorPostOfficeTypes.h:61/:62, namespace BrnDirector) the road runner embeds by value.
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::BehaviourRoadRunner

@@ -27,7 +27,7 @@ namespace
 {
     // E_STUNT_TYPE_CAR_LEAP / takedown award magnitudes (X360 literals, fed to UpdateScore).
     const f32 KF_STUNT_AWARD          = 3000.0f;   // flt_8202112C
-    const f32 KF_ZERO                 = 0.0f;      // flt_82001CC0
+    // KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0)
 
     // Stunt-type ids the online scorer awards directly (indices into the base's per-type machinery).
     const EStuntType KE_STUNT_TYPE_TAKEDOWN = static_cast<EStuntType>(15);  // DealWithTakedown
@@ -192,7 +192,7 @@ void StuntModeScoringOnline::DealWithTakedown()
         if (RegisterStunt())
         {
             UpdateScore(KF_STUNT_AWARD, KE_STUNT_TYPE_TAKEDOWN, false);
-            UpdateStuntRating(KE_STUNT_TYPE_TAKEDOWN, KF_ZERO, KF_ZERO, KF_ZERO);
+            UpdateStuntRating(KE_STUNT_TYPE_TAKEDOWN, 0.0f, 0.0f, 0.0f);
         }
     }
 }
@@ -476,7 +476,7 @@ void StuntModeScoringOnline::UpdateCarLeapStunts(const ActiveRaceCarOutputInterf
                 if (RegisterStunt())
                 {
                     UpdateScore(KF_STUNT_AWARD, KE_STUNT_TYPE_CAR_LEAP, false);
-                    UpdateStuntRating(KE_STUNT_TYPE_CAR_LEAP, KF_ZERO, KF_ZERO, KF_ZERO);
+                    UpdateStuntRating(KE_STUNT_TYPE_CAR_LEAP, 0.0f, 0.0f, 0.0f);
                     // X360 also bumps a u16 car-leap counter at base +0x7E (++*(a1+0x7E)); that slot has
                     // no reconstructed base accessor and lives inside this flagged path -- omitted.
                 }

@@ -71,7 +71,7 @@ static const f32 KI_DEPTH_OF_FIELD_MIN_FALLOFF_DISTANCE = 0.001f;     // flt_820
 static const f32 KF_TURNS_TO_RADIANS = 6.2831855f;
 
 // flt_82001748. Radians -> degrees (the camera FOV is in degrees).
-static const f32 KF_RADIANS_TO_DEGREES = 57.29578f;
+// KF_RADIANS_TO_DEGREES: rwmath's RADIANS_TO_DEGREES (fpu/constants.h:59; the unity's copy 0x82001748)
 
 // dbl_82004640. HALF the camera aperture in millimetres: FOV/2 = atan(aperture/2 / lens).
 // The console evaluates this arm in DOUBLE precision (lfd + atan2 + frsp), reproduced here.
@@ -446,7 +446,7 @@ void KeyAnimController::UpdateLens(const ICE::ICETake& lrTake, Camera::Camera* l
     // Camera.h:424, not this file -- so it comes along with the named call.)
     const f32 lfFOV =
         static_cast<f32>(std::atan2(KF_HALF_APERTURE_MM, static_cast<f64>(lfLensLength)))
-        * KF_RADIANS_TO_DEGREES;
+        * rw::math::fpu::RADIANS_TO_DEGREES;
 
     lpCamera->SetFOV(lfFOV);
 }

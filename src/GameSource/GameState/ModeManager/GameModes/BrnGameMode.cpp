@@ -25,18 +25,18 @@ namespace BrnGameState
 //   4 Results    5 Quit   6 OnlineLoading  7 OnlineSplash
 // E_GMS_COUNT == 8.
 // ---------------------------------------------------------------------------
-enum
-{
-    KI_GMS_COUNTDOWN       = 0,
-    KI_GMS_INTRO           = 1,
-    KI_GMS_IN_PROGRESS     = 2,
-    KI_GMS_OUTRO           = 3,
-    KI_GMS_RESULTS         = 4,
-    KI_GMS_QUIT            = 5,
-    KI_GMS_ONLINE_LOADING  = 6,
-    KI_GMS_ONLINE_SPLASH   = 7,
-    KI_GMS_COUNT           = 8
-};
+// The game-mode state ids are DWARF GameStateModuleIO::EGameModeState (BrnGameStateSharedIO.h:93),
+// E_GMS_COUNTDOWN .. E_GMS_ONLINE_SPLASH, used directly (one file-local copy per mode could not
+// live in the BrnGameStateScoringAndModesUnity TU).
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 // Car-strength -> max-player-wrecks thresholds. X360-attested file-scope consts in
 // BrnGameMode.cpp (DecFIGS BrnGameMode.cpp:38-44). Only the *_STRENGTH cut-offs and
@@ -169,7 +169,7 @@ void GameMode::Construct(ModeManager* lpModeManager)
     // The console's `stw 8, 0x24(r31)` restated as a post-condition. This is the tripwire for the
     // exact defect this round closed: if the publish leg is ever short again, the array's own bounds
     // assert would only fire later, from inside whichever state transition happened to be first.
-    CGS_ASSERT(maGameModeStates.GetCount() == KI_GMS_COUNT,
+    CGS_ASSERT(maGameModeStates.GetCount() == GameStateModuleIO::E_GMS_COUNT,
                "maGameModeStates.GetCount() == GameStateModuleIO::E_GMS_COUNT");
 
     mbVisibleCars  = false;   // console 0x8232FB0C `stb r21,0xB3(r31)`
@@ -335,7 +335,7 @@ void GameMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
 
     if (meCurrentState != -1)
     {
-        CGS_ASSERT_AT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT,
+        CGS_ASSERT_AT(meCurrentState >= 0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT,
                    "meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_FILE, 159);
 
         maGameModeStates[meCurrentState]->Update();
@@ -405,45 +405,45 @@ void GameMode::SendEvent(EGameModeEvent leEvent)
 {
     if (leEvent == E_GME_ABORT)
     {
-        SetCurrentState(KI_GMS_QUIT);
+        SetCurrentState(GameStateModuleIO::E_GMS_QUIT);
         return;
     }
     if (leEvent == E_GME_RESTART)
     {
-        SetCurrentState(KI_GMS_INTRO);
+        SetCurrentState(GameStateModuleIO::E_GMS_INTRO);
         return;
     }
 
     switch (meCurrentState)
     {
-        case KI_GMS_COUNTDOWN:
+        case GameStateModuleIO::E_GMS_COUNTDOWN:
             if (leEvent == E_GME_NEXT)
             {
-                SetCurrentState(KI_GMS_IN_PROGRESS);
+                SetCurrentState(GameStateModuleIO::E_GMS_IN_PROGRESS);
             }
             break;
-        case KI_GMS_INTRO:
+        case GameStateModuleIO::E_GMS_INTRO:
             if (leEvent == E_GME_NEXT || leEvent == E_GME_USER_ACCEPT)
             {
-                SetCurrentState(KI_GMS_COUNTDOWN);
+                SetCurrentState(GameStateModuleIO::E_GMS_COUNTDOWN);
             }
             break;
-        case KI_GMS_IN_PROGRESS:
+        case GameStateModuleIO::E_GMS_IN_PROGRESS:
             if (leEvent == E_GME_NEXT)
             {
-                SetCurrentState(KI_GMS_OUTRO);
+                SetCurrentState(GameStateModuleIO::E_GMS_OUTRO);
             }
             break;
-        case KI_GMS_OUTRO:
+        case GameStateModuleIO::E_GMS_OUTRO:
             if (leEvent == E_GME_NEXT)
             {
-                SetCurrentState(KI_GMS_RESULTS);
+                SetCurrentState(GameStateModuleIO::E_GMS_RESULTS);
             }
             break;
-        case KI_GMS_RESULTS:
+        case GameStateModuleIO::E_GMS_RESULTS:
             if (leEvent == E_GME_USER_ACCEPT)
             {
-                SetCurrentState(KI_GMS_QUIT);
+                SetCurrentState(GameStateModuleIO::E_GMS_QUIT);
             }
             break;
         default:
@@ -546,13 +546,13 @@ f32 GameMode::GetOutroTimeout() const
 // ===========================================================================
 void GameMode::SetCurrentState(s32 liState)
 {
-    CGS_ASSERT_AT(liState >= 0 && liState < KI_GMS_COUNT, "leState >=0 && leState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_BRNGAMEMODE_FILE, 483);
+    CGS_ASSERT_AT(liState >= 0 && liState < GameStateModuleIO::E_GMS_COUNT, "leState >=0 && leState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_BRNGAMEMODE_FILE, 483);
 
     if (meCurrentState != liState)
     {
         if (meCurrentState != -1)
         {
-            CGS_ASSERT_AT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT, "meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_BRNGAMEMODE_FILE, 489);
+            CGS_ASSERT_AT(meCurrentState >= 0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT, "meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_BRNGAMEMODE_FILE, 489);
 
             maGameModeStates[meCurrentState]->OnLeave();
         }

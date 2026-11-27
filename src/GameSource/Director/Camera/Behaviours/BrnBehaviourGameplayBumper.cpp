@@ -447,7 +447,7 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     // all four wheels off the road, the above-ground query invalid or >= 1.0 m, and airtime
     // running -> jumping; the frame the latch drops, the landing feeds the shake floor with
     // min(airtime, 2.0) * 3.0 (flt_82001D9C / flt_82004270, both dumped).
-    const f32 KF_IMPACT_FORCE_SCALE = 3.0f;                       // flt_82004270, dumped
+    // KF_IMPACT_FORCE_SCALE: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82004270)
     {
         bool lbAllWheelsOffGround = true;
         for (s32 liWheel = 0; liWheel < 4; ++liWheel)
@@ -465,7 +465,7 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
         {
             mbJumping = false;                                    // stb 0, +0x1C
             const f32 lfImpactForce =
-                ((lrCar.mfTimeInAir >= 2.0f) ? 2.0f : lrCar.mfTimeInAir) * KF_IMPACT_FORCE_SCALE;
+                ((lrCar.mfTimeInAir >= 2.0f) ? 2.0f : lrCar.mfTimeInAir) * 3.0f;
             mfImpactShakeFactor = (mfImpactShakeFactor >= lfImpactForce) ? mfImpactShakeFactor
                                                                          : lfImpactForce;
         }
@@ -501,7 +501,7 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
                         mpParameters->mImpactShakeParams,
                         *lrInfo.mpRandom,
                         lrInfo.GetTimestep(GetTimestepType()) * KF_IMPACT_SHAKE_FREQ_MUL,
-                        mfImpactShakeFactor * KF_IMPACT_FORCE_SCALE);
+                        mfImpactShakeFactor * 3.0f);
 
     // ---- 13. the camera-state flags and the per-frame shake request ---------------------------
     // @0x82227158..0x822271F0. NEW_THIS_FRAME follows a lookback EDGE on the shared 2D

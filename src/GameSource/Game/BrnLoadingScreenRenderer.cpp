@@ -304,7 +304,7 @@ namespace BrnGame
         const u8 luFgA   = static_cast<u8>(lfFGAlphaFade * 255.0f + 0.5f);
         const RGBA8 lBgCol = { luBlack, luBlack, luBlack, 255 };
         const RGBA8 lFgCol = { luBlack, luBlack, luBlack, luFgA };
-        Vector2 laC[4];
+        CgsGraphics::Vector2 laC[4];
 
         // Background / car: full-screen quad, sampling only the 1280x720 image region of
         // the 2048x1024 texture; greys up from black during the first fade stage.

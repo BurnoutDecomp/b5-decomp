@@ -11,14 +11,14 @@ const f32 OnlineShowtimeMode::KF_INTRO_DURATION_SECONDS = 0.0002f;
 
 // EGameModeState (GameStateModuleIO) state-machine ids, X360-attested by the raw 0..7 the
 // SetCurrentState pseudocode passes (named file-local, mirroring the committed BrnGameMode.cpp).
-enum
-{
-    KI_GMS_INTRO       = 1,
-    KI_GMS_IN_PROGRESS = 2,
-    KI_GMS_OUTRO       = 3,
-    KI_GMS_RESULTS     = 4,
-    KI_GMS_QUIT        = 5
-};
+// The game-mode state ids are DWARF GameStateModuleIO::EGameModeState (BrnGameStateSharedIO.h:93),
+// E_GMS_COUNTDOWN .. E_GMS_ONLINE_SPLASH, used directly (one file-local copy per mode could not
+// live in the BrnGameStateScoringAndModesUnity TU).
+//
+//
+//
+//
+//
 
 // X360: BrnGameState::OnlineShowtimeMode::GetName (0x827E25F0).
 const char* OnlineShowtimeMode::GetName() const
@@ -41,42 +41,42 @@ void OnlineShowtimeMode::SendEvent(EGameModeEvent leEvent)
 {
     if (leEvent == E_GME_ABORT)
     {
-        SetCurrentState(KI_GMS_QUIT);
+        SetCurrentState(GameStateModuleIO::E_GMS_QUIT);
         return;
     }
     if (leEvent == E_GME_RESTART)
     {
-        SetCurrentState(KI_GMS_INTRO);
+        SetCurrentState(GameStateModuleIO::E_GMS_INTRO);
         return;
     }
 
     switch (meCurrentState)
     {
-        case KI_GMS_INTRO:
+        case GameStateModuleIO::E_GMS_INTRO:
             if (leEvent == E_GME_NEXT || leEvent == E_GME_USER_ACCEPT)
             {
-                SetCurrentState(KI_GMS_IN_PROGRESS);
+                SetCurrentState(GameStateModuleIO::E_GMS_IN_PROGRESS);
             }
             break;
-        case KI_GMS_IN_PROGRESS:
+        case GameStateModuleIO::E_GMS_IN_PROGRESS:
             if (leEvent == E_GME_NEXT)
             {
-                SetCurrentState(KI_GMS_OUTRO);
+                SetCurrentState(GameStateModuleIO::E_GMS_OUTRO);
             }
             break;
-        case KI_GMS_OUTRO:
+        case GameStateModuleIO::E_GMS_OUTRO:
             if (leEvent == E_GME_NEXT)
             {
-                SetCurrentState(KI_GMS_RESULTS);
+                SetCurrentState(GameStateModuleIO::E_GMS_RESULTS);
             }
             break;
-        case KI_GMS_RESULTS:
+        case GameStateModuleIO::E_GMS_RESULTS:
             if (leEvent == E_GME_USER_ACCEPT || leEvent == E_GME_NEXT)
             {
-                SetCurrentState(KI_GMS_QUIT);
+                SetCurrentState(GameStateModuleIO::E_GMS_QUIT);
             }
             break;
-        case KI_GMS_QUIT:
+        case GameStateModuleIO::E_GMS_QUIT:
             break;
         default:
             CGS_FAIL_AT(

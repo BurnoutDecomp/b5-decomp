@@ -45,9 +45,9 @@ namespace Camera
 namespace
 {
     // ---- Parameters::Construct's authored defaults (@0x821F9A00, each read at its load site) ----
-    const f32 KF_DEFAULT_SHAKE_XY_MAGNITUDE_DEGS      = 0.0f;    // +0x08  flt_82001CC0 (over the seed's 0.06)
-    const f32 KF_DEFAULT_SHAKE_WOBBLE_CENTERING       = 0.25f;   // +0x14  flt_82003F40 (over the seed's 0.11)
-    const f32 KF_DEFAULT_SHAKE_XY_WOBBLE_DEGS         = 1.0f;    // +0x10  flt_82001C98 (over the seed's 1.15)
+    // KF_DEFAULT_SHAKE_XY_MAGNITUDE_DEGS: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001CC0)
+    // KF_DEFAULT_SHAKE_WOBBLE_CENTERING: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82003F40)
+    // KF_DEFAULT_SHAKE_XY_WOBBLE_DEGS: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001C98)
     const f32 KF_DEFAULT_VELOCITY_INFLUENCE           = 0.5f;    // +0x7C  flt_82001DA0
     const f32 KF_DEFAULT_MAX_INITIAL_DISTANCE_KM      = 40.0f;   // +0x80  flt_82004D0C
     const f32 KF_DEFAULT_DISTANCE_FOR_FAIL_KM         = 80.0f;   // +0x84  flt_82004A18
@@ -60,7 +60,7 @@ namespace
 
     // ---- Update's constants ----
     const f32 KF_KM_TO_M                              = 1000.0f; // f30    flt_82009E10 (0x447A0000)
-    const f32 KF_SHAKE_SCALE                          = 1.0f;    // f2     flt_82001C98
+    // KF_SHAKE_SCALE: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001C98)
     const f32 KF_LEAVE_FRAME_LOOKAHEAD_SECS           = 0.5f;    // lfSecs flt_82001DA0
 
     // The validity-account flags Update raises (names from the account's recovered table).
@@ -86,9 +86,9 @@ void BehaviourBystanderCam::Parameters::Construct()
     mType = eBehaviourBystanderCam;                                       // stw 5, 0(r8)
 
     mShakeParams.Construct();                                             // +0x14 / +0x10 / +0x08 / +0x0C
-    mShakeParams.mfXYShakeMagnitudeDegs  = KF_DEFAULT_SHAKE_XY_MAGNITUDE_DEGS;   // stfs f7,  8(r8)
-    mShakeParams.mfWobbleCenteringFactor = KF_DEFAULT_SHAKE_WOBBLE_CENTERING;    // stfs f11, 0x14(r8)
-    mShakeParams.mfXYWobbleMagnitudeDegs = KF_DEFAULT_SHAKE_XY_WOBBLE_DEGS;      // stfs f6,  0x10(r8)
+    mShakeParams.mfXYShakeMagnitudeDegs  = 0.0f;   // stfs f7,  8(r8)
+    mShakeParams.mfWobbleCenteringFactor = 0.25f;    // stfs f11, 0x14(r8)
+    mShakeParams.mfXYWobbleMagnitudeDegs = 1.0f;      // stfs f6,  0x10(r8)
 
     mLookerParams.Construct();                                            // bl 0x821F8D80
     mLookerParams.mbUseZoom = true;                                       // stb 1, 0x77(r8)
@@ -257,7 +257,7 @@ bool BehaviourBystanderCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
                    mTarget.GetVehicle(lrInfo).mRaceCarState.mLinearVelocity, mTarget.GetVehicle(lrInfo).mAABB);
     mTransform = lrCamera.mTransform;
 
-    mShake.Update(lrCamera.mTransform, mpParameters->mShakeParams, mRandom, lfTimestep, KF_SHAKE_SCALE);
+    mShake.Update(lrCamera.mTransform, mpParameters->mShakeParams, mRandom, lfTimestep, 1.0f);
 
     mfSquaredDistanceToTarget = MagnitudeSquared(mTarget.GetTransform(lrInfo).wAxis - mTransform.wAxis);
 

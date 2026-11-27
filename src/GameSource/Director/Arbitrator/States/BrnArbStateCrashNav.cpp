@@ -42,8 +42,8 @@ namespace BrnDirector
     namespace
     {
         // ---- shared .rdata literals the X360 loads (IEEE-754 patterns the asm references) ----
-        const f32 KF_UNIT = 1.0f;   // flt_82001C98 (the EnsureEffectIsPlaying blend)
-        const f32 KF_ZERO = 0.0f;   // flt_82001CC0
+        // KF_UNIT: the pooled literal 1.0f at its uses (ARTIST __real 0x82001C98; one name could not be defined in several unity members)
+        // KF_ZERO: the pooled literal 0.0f at its uses (ARTIST __real 0x82001CC0; one name could not be defined in several unity members)
 
         // The crash-nav per-frame depth-of-field "blurriness" the fly-by camera requests
         // (SF_CRASHNAV_BLURRINESS, loaded as flt_82CDA4E0 into the camera's running-blur lane each
@@ -92,8 +92,8 @@ namespace BrnDirector
 
         // BehaviourManager::NewBehaviour's owner / ref-limit slots (X360 r6 = 0, r7 = 1). Same
         // pair the other arbitrator states pass; named identically to BrnArbStateOnlineRaceIntro.
-        const void* const KPC_NEW_BEHAVIOUR_OWNER   = 0;
-        const s32         KI_NEW_BEHAVIOUR_REFLIMIT = 1;
+        // KPC_NEW_BEHAVIOUR_OWNER: NewBehaviour's DWARF lpDebugMomentOwner argument (BrnBehaviourManager.h:185), NULL at its uses
+        // KI_NEW_BEHAVIOUR_REFLIMIT: NewBehaviour's DWARF liRefLimit argument (BrnBehaviourManager.h:185) at its uses
 
         // Squared distance between the player car position and the crash-nav camera position. The
         // X360 loads the player position from the shared-info player-car (the lvx128 at player-car
@@ -289,7 +289,7 @@ namespace BrnDirector
             if (!mRoadRunnerCam.IsAllocated())
             {
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourRoadRunner>(
-                    mRoadRunnerCam, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
+                    mRoadRunnerCam, this, NULL, 1);
 
                 // ⭐ Keep the fly-by ticking while the simulation is frozen. X360 sub_82212B28 is
                 // BehaviourHandle<T>::SetUpdatesDuringPause (identified by its own assert:
@@ -392,7 +392,7 @@ namespace BrnDirector
                 // depth-of-field blurriness (DOF blurriness lane + border post-FX cleared).
                 lrCamera = mRoadRunnerCam.GetCamera();
                 lrCamera.GetDepthOfField().SetBlurriness(SF_CRASHNAV_BLURRINESS);  // camera +0x134
-                lrCamera.SetRequestedBorderPostFX(KF_ZERO);                        // camera +0x110
+                lrCamera.SetRequestedBorderPostFX(0.0f);                        // camera +0x110
             }
             else
             {
@@ -410,7 +410,7 @@ namespace BrnDirector
             const char* lpcFadeHook = mRoadRunnerCam.Get()->ShouldFadeBlackIn()
                                           ? "Black_In_BW" : "Black_Out_BW";
             Camera::EnsureEffectIsPlaying(lrCamera, *lrSharedInfo.mpEffectInterface,
-                                          lpcFadeHook, KF_UNIT);
+                                          lpcFadeHook, 1.0f);
 
             // Once the fly-by has spent long enough AND the player has flown past the OUTER
             // distance gate, fade to black and turn the take about (-> ACTIVE_TURNABOUT).
@@ -420,7 +420,7 @@ namespace BrnDirector
                     KF_MAX_CRASH_NAV_PIC_PARADISE_OUTER_DISTANCE_SQ)
             {
                 Camera::EnsureEffectIsPlaying(lrCamera, *lrSharedInfo.mpEffectInterface,
-                                              "Black_In_BW", KF_UNIT);
+                                              "Black_In_BW", 1.0f);
                 mfTimeInState = 0.0f;          // +0x880 = 0.0
                 mbHasReversed = false;         // +0x884 = 0
                 meState       = E_STATE_ACTIVE_TURNABOUT;  // +0x878 = 4
@@ -458,7 +458,7 @@ namespace BrnDirector
             // crash-nav blurriness).
             lrCamera = mRoadRunnerCam.GetCamera();
             lrCamera.GetDepthOfField().SetBlurriness(SF_CRASHNAV_BLURRINESS);  // camera +0x134
-            lrCamera.SetRequestedBorderPostFX(KF_ZERO);                        // camera +0x110
+            lrCamera.SetRequestedBorderPostFX(0.0f);                        // camera +0x110
 
             // Once past the turnabout time threshold: flip the take's travel direction (one shot,
             // latched by mbHasReversed) and, unless the take wants the IN fade, start the OUT fade.
@@ -475,7 +475,7 @@ namespace BrnDirector
                 if (!mRoadRunnerCam.Get()->ShouldFadeBlackIn())
                 {
                     Camera::EnsureEffectIsPlaying(lrCamera, *lrSharedInfo.mpEffectInterface,
-                                                  "Black_Out_BW", KF_UNIT);
+                                                  "Black_Out_BW", 1.0f);
                 }
             }
 
@@ -522,7 +522,7 @@ namespace BrnDirector
             {
                 lrCamera = mRoadRunnerCam.GetCamera();
                 lrCamera.GetDepthOfField().SetBlurriness(SF_CRASHNAV_BLURRINESS);  // camera +0x134
-                lrCamera.SetRequestedBorderPostFX(KF_ZERO);                        // camera +0x110
+                lrCamera.SetRequestedBorderPostFX(0.0f);                        // camera +0x110
             }
             else
             {

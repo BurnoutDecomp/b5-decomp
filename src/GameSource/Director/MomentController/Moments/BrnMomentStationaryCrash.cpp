@@ -27,15 +27,15 @@ namespace BrnDirector
 namespace
 {
     const f32 KF_TWO_PI  = 6.2831855f;    // a full integrated turn -> the tumbling variant
-    const f32 KF_HALF_PI = 1.5707964f;    // max rotation rate for the stationary take
+    // KF_HALF_PI: rwmath's HALF_PI (fpu/constants.h:71; the unity's copy 0x82001754)
     const f32 KF_MAX_SPEED_SQ = 100.0f;   // |velocity|^2 eligibility bound (a single-lane vector compare)
 
     // Camera-state head bits (the moment family's shared vocabulary):
-    const u32 KU_HEAD_FLAG_SEARCHING = 18;
-    const u32 KU_HEAD_FLAG_ALLOCATED = 19;
-    const u32 KU_HEAD_FLAG_PREPARING = 20;
-    const u32 KU_HEAD_FLAG_INHIBITED = 23;
-    const u32 KU_HEAD_FLAG_VALID     = 28;
+    // KU_HEAD_FLAG_SEARCHING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_ALLOCATED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_PREPARING: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_INHIBITED: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
+    // KU_HEAD_FLAG_VALID: the DWARF ValidityAccount reason (BrnCameraValidityAccount.h:78/:100) at its uses
 }
 
 namespace detail
@@ -136,7 +136,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager&
         const rw::math::vpu::Vector3& lv3Velocity =
             lrSharedInfo.mpPlayerCar->mRaceCarState.mLinearVelocity;
         if (KF_MAX_SPEED_SQ > rw::math::vpu::Dot(lv3Velocity, lv3Velocity)
-            && lfRotationRate < KF_HALF_PI)
+            && lfRotationRate < rw::math::fpu::HALF_PI)
         {
             const DirectorResourceManager* lpResourceManager =
                 lpBehaviourManager->GetDirectorResourceManager();
@@ -165,12 +165,12 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager&
                 // Too far into the crash for the take to fit.
                 SetConditionsNotMet();
                 SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
             }
             else if (IsInhibited())
             {
                 SetCanSwitchToMeNow(false);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_INHIBITED);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_INHIBITED);
             }
             else
             {
@@ -182,14 +182,14 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager&
                 mIceCameraHandle.Get()->SetUseCollisionPolicy(true);   // +0xE28
                 SetCanSwitchToMeNow(false);
                 SetState(E_STATE_INVALID_FOUND_PREPARING);
-                GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
+                GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_FOR_BEHAVIOUR_TO_PREPARE);
             }
         }
         else
         {
             SetConditionsNotMet();
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET);
         }
         break;
     }
@@ -204,7 +204,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager&
         if (!mIceCameraHandle.Get()->CanSwitchToMeNow())
         {
             SetCanSwitchToMeNow(false);
-            GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_PREPARING);
+            GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTTO_WAITING_TO_CUT_TO_BEHAVIOUR);
             break;
         }
         SetState(E_STATE_VALID);
@@ -213,7 +213,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, Camera::BehaviourManager&
     case E_STATE_VALID:
         SetCamera(mIceCameraHandle.GetCamera());
         SetCanSwitchFromMeNow(false);
-        GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_VALID);
+        GetNonConstCamera().mState.SetHeadFlag(Camera::ValidityAccount::E_NOCUTFROM_MONEY_SHOT);
 
         if (!GetNonConstCamera().mState.IsFlagSet(Camera::CameraState::E_FLAG_VALID)
             || mIceCameraHandle.Get()->HasFinishedOrFailed())

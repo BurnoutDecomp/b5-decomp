@@ -155,7 +155,7 @@ namespace BrnDirector
         // behaviour +0xDE4 is the embedded KeyAnimController's own mbIsLooping (+0x764), not
         // a "reset byte" -- 1 loops the take (the ambient game-intro part-one shot and the
         // idle cam), 0 runs it once to the end so HasFinished() can fire.
-        const bool KB_TAKE_LOOPS     = true;
+        // KB_TAKE_LOOPS: the literal at its uses (no DWARF name)
         const bool KB_TAKE_RUNS_ONCE = false;
 
         // The interpolation the state runs onto / off the look-around-car camera
@@ -168,7 +168,7 @@ namespace BrnDirector
         // The camera-state flag bits the junkyard states raise/clear on their produced camera
         // (X360 `mCamera.mState_uFlags |= <bit>` / `&= ~<bit>`; the bit VALUES are asm, the
         // ROLE names are inferred from which state raises each).
-        const s32 KI_CAMERA_STATE_FOLLOW            = 0x00000002;
+        // KI_CAMERA_STATE_FOLLOW: the camera-state bit of DWARF CameraState::E_FLAG_VALID (BrnCameraState.h:56) at its uses
         const s32 KI_CAMERA_STATE_JUNKYARD_ENTERING = 0x00200000;
         const s32 KI_CAMERA_STATE_JUNKYARD          = 0x00400000;
         const s32 KI_CAMERA_STATE_JUNKYARD_NEW_CARS = 0x00800000;
@@ -179,8 +179,8 @@ namespace BrnDirector
         const char* const KPC_HOOK_JUNK_CAR_SELECT     = "Junk_Car_Select";
         const char* const KPC_HOOK_FADE_OUT_BLACK_JUNK = "FadeOutBlack_Junk";
 
-        const char* const KPC_SOURCE_FILE =
-            "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCarSelect.cpp";
+#define CGS_ARTIST_FILE \
+            "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCarSelect.cpp"
 
         // The five junkyards' world positions, in the order their shot-group pairs are staged
         // in the DirectorResourceManager (+1064.. -- MotorCity, WestAcres, SouthBay,
@@ -208,7 +208,7 @@ namespace BrnDirector
         void FireAssert(const char* lpcText, s32 liLine)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lpcText, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, liLine));
+            CgsDev::Assert::FireAssert(lpcText, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, liLine));
             CgsDev::Assert::EndAssert();
         }
 
@@ -219,7 +219,7 @@ namespace BrnDirector
             CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStream << lpcText << liValue;
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, liLine));
+            CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, liLine));
             CgsDev::Assert::EndAssert();
         }
 
@@ -521,7 +521,7 @@ namespace BrnDirector
         {
             // Still queued: hold the live gameplay camera and drop its "follow" bit.
             GetNonConstCamera() = lrSharedInfo.mpSharedCameraContainer->GetSelectedGameplayCamera();
-            GetNonConstCamera().mState_uFlags &= ~KI_CAMERA_STATE_FOLLOW;
+            GetNonConstCamera().mState_uFlags &= ~(1 << Camera::CameraState::E_FLAG_VALID);
             return true;
         }
 
@@ -812,7 +812,7 @@ namespace BrnDirector
                     mGameIntro, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
                 mGameIntro.Get()->ClearBaseFirstFrameGate();
                 mGameIntro.Get()->SetParameters(lpShot);
-                mGameIntro.Get()->SetTakeLooping(KB_TAKE_LOOPS);
+                mGameIntro.Get()->SetTakeLooping(true);
 
                 mToCarSelectInterpolater.Release();
                 mToGameplayInterpolater.Release();
@@ -1121,7 +1121,7 @@ namespace BrnDirector
                     mIdleCam, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
                 mIdleCam.Get()->ClearBaseFirstFrameGate();
                 mIdleCam.Get()->SetParameters(mpIdle);
-                mIdleCam.Get()->SetTakeLooping(KB_TAKE_LOOPS);
+                mIdleCam.Get()->SetTakeLooping(true);
                 mfTimeInState = 0.0f;
                 meState       = E_STATE_IDLE;
             }
@@ -1282,7 +1282,7 @@ namespace BrnDirector
             if (lrGameState.meJunkyardState == GameState::E_JY_INACTIVE)
             {
                 StartOutroMovie(lrSharedInfo);
-                GetNonConstCamera().mState_uFlags &= ~KI_CAMERA_STATE_FOLLOW;
+                GetNonConstCamera().mState_uFlags &= ~(1 << Camera::CameraState::E_FLAG_VALID);
                 if (mbIsFirstCarSelect)
                 {
                     GetNonConstCamera().GetEffects().mbSetTimeOfDay = true;
@@ -1390,3 +1390,4 @@ namespace BrnDirector
         mfTimeInState += lrSharedInfo.mfTimestep;
     }
 }
+#undef CGS_ARTIST_FILE

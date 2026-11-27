@@ -36,7 +36,7 @@ namespace BrnDirector
     {
         // The default attrib data-area size requested when a shot's parameter block is absent
         // (Attrib::DefaultDataArea(0x18)). Same as the race-intro state.
-        const u32 KU_SHOT_DEFAULT_DATA_AREA_SIZE = 0x18u;
+        // KU_SHOT_DEFAULT_DATA_AREA_SIZE: the literal size at its uses (no DWARF name; one name could not be defined in several unity members)
 
         // The two trailing arguments the BehaviourManager::NewBehaviour<TBehaviour> allocation
         // request carries (0 and 1). The third parameter is NewBehaviour's OWNER slot -- a
@@ -45,19 +45,19 @@ namespace BrnDirector
         // `const s32` meant the call matched no overload at all: a `const s32` variable is not
         // an integer LITERAL, so it is not a null-pointer constant and will not convert to
         // `const void*`.
-        const void* const KPC_NEW_BEHAVIOUR_OWNER   = 0;
-        const s32         KI_NEW_BEHAVIOUR_REFLIMIT = 1;
+        // KPC_NEW_BEHAVIOUR_OWNER: NewBehaviour's DWARF lpDebugMomentOwner argument (BrnBehaviourManager.h:185), NULL at its uses
+        // KI_NEW_BEHAVIOUR_REFLIMIT: NewBehaviour's DWARF liRefLimit argument (BrnBehaviourManager.h:185) at its uses
 
         // The dirty-flag bit Update raises on the state's camera while the rank-up behaviour is
         // driving it (mCamera.mState_uFlags |= 2). Same as the race-intro state.
-        const s32 KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN = 2;
+        // KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN: the camera-state bit of DWARF CameraState::E_FLAG_VALID (BrnCameraState.h:56) at its uses
 
         // The blend the end-of-take "Checkpoint" camera effect hook plays at.
         const f32 KF_CHECKPOINT_BLEND = 1.0f;
 
         // The parametric time a freshly-swapped take is rewound to each frame the rank-up
         // advances to the next rival's shot.
-        const f32 KF_TAKE_START_PARAMETRIC_TIME = 0.0f;
+        // KF_TAKE_START_PARAMETRIC_TIME: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001CC0)
 
         // The end-of-take camera effect hook name the rank-up state requests / checks against.
         const char* const KPC_CHECKPOINT_HOOK = "Checkpoint";
@@ -118,12 +118,12 @@ namespace BrnDirector
 
             // Allocate the ICE-anim behaviour into the handle.
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                mIceCam, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
+                mIceCam, this, NULL, 1);
 
             // Load the first rival's shot (index miRival == 0).
             const void* lpShotData = lrRankUpShots.GetShotListData(miRival);
             if (!lpShotData)
-                lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
+                lpShotData = Attrib::DefaultDataArea(0x18u);
 
             Camera::BehaviourIceAnim* lpBehaviour = mIceCam.Get();
             lpBehaviour->SetParameters(
@@ -170,7 +170,7 @@ namespace BrnDirector
 
             // Drive the state camera from the behaviour's produced camera and mark it dirty.
             lrCamera = mIceCam.Get()->GetProducedCamera();
-            lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+            lrCamera.mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
 
             GameState& lrGameState = *lrSharedInfo.mpGameState;
 
@@ -193,7 +193,7 @@ namespace BrnDirector
 
                 const void* lpShotData = lrRankUpShots.GetShotListData(liShotIndex);
                 if (!lpShotData)
-                    lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
+                    lpShotData = Attrib::DefaultDataArea(0x18u);
 
                 lpBehaviour->ChangeMovie(
                     static_cast<Camera::BehaviourIceAnim::ShotReference*>(
@@ -201,7 +201,7 @@ namespace BrnDirector
                     *lrSharedInfo.mpDirectorResourceManager);
 
                 // Rewind the freshly-swapped take to its start.
-                lpBehaviour->SetControllerParametricTime0To1(KF_TAKE_START_PARAMETRIC_TIME);
+                lpBehaviour->SetControllerParametricTime0To1(0.0f);
             }
 
             // Once the rank-up is no longer actively driving (the "rank-up intro running" gate
@@ -250,7 +250,7 @@ namespace BrnDirector
 
             // Keep driving the state camera from the behaviour while the hand-off completes.
             lrCamera = mIceCam.Get()->GetProducedCamera();
-            lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+            lrCamera.mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
 
             ArbitratorStateContainer& lrContainer = *lrSharedInfo.mpStateContainer;
             if (lrContainer.GetState(ArbitratorStateContainer::E_STATE_ROAMING)->Prepare(lrSharedInfo))

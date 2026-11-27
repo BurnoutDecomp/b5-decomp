@@ -29,7 +29,7 @@ namespace
     const f32 KF_START_FOV_DEGS = 50.0f;
 
     // The scale on the shake angle.
-    const f32 KF_SHAKE_SCALE = 1.0f;
+    // KF_SHAKE_SCALE: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001C98)
 }
 
 void BehaviourHeliCam::Construct()
@@ -99,7 +99,7 @@ bool BehaviourHeliCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
 
     Matrix44Affine lShakenTransform = mTransform;
     mCameraShake.Update(lShakenTransform, mpParameters->mShakeParams, mRandom, lfTimestep,
-                        KF_SHAKE_SCALE);
+                        1.0f);
     lrCamera.mTransform = lShakenTransform;
     lrCamera.ValidateTransformWithDebugInfo();
 

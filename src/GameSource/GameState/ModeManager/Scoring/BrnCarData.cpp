@@ -269,11 +269,11 @@ namespace BrnGameState
     // win the nearest-car comparisons.
     void RaceCarPositioningData::Construct()
     {
-        const f32 KF_INVALID_RACE_DISTANCE = FLT_MAX;   // flt_82CDB7D0 == FLT_MAX
+        // KF_INVALID_RACE_DISTANCE: BrnWorld::KF_INVALID_DISTANCE (BrnWorldSharedConstants.h:39) at its uses
 
         meActiveRaceCarIndex       = E_ACTIVE_RACE_CAR_INDEX_INVALID;   // +0x00  (-1)
-        mfDistanceToNextCheckpoint = KF_INVALID_RACE_DISTANCE;          // +0x04
-        mfDistanceToFinish         = KF_INVALID_RACE_DISTANCE;          // +0x08
+        mfDistanceToNextCheckpoint = BrnWorld::KF_INVALID_DISTANCE;          // +0x04
+        mfDistanceToFinish         = BrnWorld::KF_INVALID_DISTANCE;          // +0x08
         miCurrentCheckpoint        = -1;                                // +0x0C
         miFinishPosition           = E_ACTIVE_RACE_CAR_INDEX_COUNT;     // +0x10  (8)
         mbDisconnected             = false;                             // +0x14

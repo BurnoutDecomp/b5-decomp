@@ -301,7 +301,7 @@ namespace BrnDirector
             // ARTIST @0x8226AF3C..0x8226AF78: the first valid car-select camera
             // ends the startup cover. ConstructAll @0x8224F088/0x8224F0B0 maps
             // container+0x2F70 to pointer-table slot8, E_STATE_CAR_SELECT.
-            if (mStateContainer.GetCurrentState() ==
+            if (&mStateContainer.GetCurrentState() ==
                     mStateContainer.GetState(ArbitratorStateContainer::E_STATE_CAR_SELECT) &&
                 GetNormalCamera().GetState().IsFlagSet(Camera::CameraState::E_FLAG_VALID))
             {
@@ -423,7 +423,7 @@ namespace BrnDirector
 
         // ---- 3: CRASH_NAV --------------------------------------------------------------
         case E_STATE_CRASH_NAV:
-            lrCameraInOut = mStateContainer.GetCurrentState()->GetCamera();
+            lrCameraInOut = mStateContainer.GetCurrentState().GetCamera();
             // Console 0x8226B3D8..0x8226B3EC: `lwz 0x24(info) ; lbz 0x101 ; bne ; li 2 ;
             // stw 0x44F8` -- back to NORMAL once the crash nav is no longer shown. (The old gate
             // here called GameState +0x101 "un-homed"; it is the named mbCrashNavShown.)
@@ -594,7 +594,7 @@ namespace BrnDirector
         }
         else
         {
-            mStateContainer.GetCurrentState()->RequestCycleCameraThisFrame();
+            mStateContainer.GetCurrentState().RequestCycleCameraThisFrame();
         }
     }
 
@@ -610,7 +610,7 @@ namespace BrnDirector
         {
             return mArbStateTestbed.GetCamera();
         }
-        return mStateContainer.GetCurrentState()->GetCamera();
+        return mStateContainer.GetCurrentState().GetCamera();
     }
 
     // ------------------------------------------------------------------------

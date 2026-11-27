@@ -55,7 +55,7 @@ namespace BrnGame
 namespace
 {
     // The PS3 unity build's baked assert path for this TU.
-    const char* const KPC_ASSERT_FILE = "..\\..\\..\\GameSource\\Game/GameBridgeWorldToGui.cpp";
+#define CGS_ARTIST_ASSERT_FILE "..\\..\\..\\GameSource\\Game/GameBridgeWorldToGui.cpp"
 }
 
 // ============================================================================
@@ -76,7 +76,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         lacMessage[0] = '\0';
         CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStream << "Invalid active vehicle interface in BrnGameModule::BridgeWorldVehicleDataToGui";
-        CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 231));
+        CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(CGS_ARTIST_ASSERT_FILE, 231));
         CgsDev::Assert::EndAssert();
         return;   // the console's null interface would crash on the next read; honest early-out
     }
@@ -305,7 +305,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         lacMessage[0] = '\0';
         CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStream << "Invalid Boost Info struct in BrnGameModule::BridgeWorldVehicleDataToGui";
-        CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 316));
+        CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(CGS_ARTIST_ASSERT_FILE, 316));
         CgsDev::Assert::EndAssert();
         return;
     }
@@ -418,7 +418,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
             lacMessage[0] = 0;
             CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStream << "Invalid race car state in BrnGameModule::BridgeWorldToGui";
-            CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 359));
+            CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(CGS_ARTIST_ASSERT_FILE, 359));
             CgsDev::Assert::EndAssert();
         }
         else
@@ -587,7 +587,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                 else
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("Unknown car type", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 466));
+                    CgsDev::Assert::FireAssert("Unknown car type", CGS_ASSERT_LOCATION(CGS_ARTIST_ASSERT_FILE, 466));
                     CgsDev::Assert::EndAssert();
                 }
 
@@ -975,3 +975,4 @@ void BrnGameModule::BridgeWorldImpactInformationToGui(
 } // namespace BrnGame
 
 #undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_ASSERT_FILE

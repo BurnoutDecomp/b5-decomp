@@ -51,11 +51,11 @@ namespace BrnDirector
         const s32 KI_EVENT_TYPE_CAR_RESET = 7;
 
         // The blend the COUNTDOWN-state "Car_Reset" camera effect plays at.
-        const f32 KF_CAR_RESET_BLEND = 1.0f;
+        // KF_CAR_RESET_BLEND: the literal at its uses: no DWARF name, ARTIST loads the value from the shared literal pool, and one name could not be defined in several unity members (0x82001C98)
 
         // The dirty-flag bit Update raises on the state's camera while an intro behaviour is
         // driving it (mCamera.mState_uFlags |= 2).
-        const s32 KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN = 2;
+        // KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN: the camera-state bit of DWARF CameraState::E_FLAG_VALID (BrnCameraState.h:56) at its uses
     }
 
     // ------------------------------------------------------------------------
@@ -223,7 +223,7 @@ namespace BrnDirector
         {
             // Drive the state camera from the behaviour and mark it behaviour-driven.
             lrCamera = mRaceIntroBehaviourHandle.GetCamera();
-            lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+            lrCamera.mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
 
             // Once the event reaches the countdown, either resume the single-shot take and
             // advance, or (for multi-shot groups) re-allocate the behaviour for the countdown
@@ -261,14 +261,14 @@ namespace BrnDirector
         case E_STATE_ACTIVE_COUNTDOWN:
         {
             lrCamera = mRaceIntroBehaviourHandle.GetCamera();
-            lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+            lrCamera.mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
 
             if (lrGameState.meEventType == KI_EVENT_TYPE_CAR_RESET)
             {
                 if (lrGameState.mEventState.GetCurrent() == GameState::E_EVENT_STATE_ACTIVE)
                 {
                     Camera::EnsureEffectIsPlaying(lrCamera, *lrSharedInfo.mpEffectInterface,
-                                                  "Car_Reset", KF_CAR_RESET_BLEND);
+                                                  "Car_Reset", 1.0f);
                 }
                 // Force the live gameplay camera to finish so the intro keeps control.
                 lrSharedInfo.mpSharedCameraContainer->ForcePrimaryGameplayBehaviourToFinish();

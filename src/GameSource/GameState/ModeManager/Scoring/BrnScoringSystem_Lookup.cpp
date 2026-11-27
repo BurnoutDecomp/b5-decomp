@@ -479,7 +479,7 @@ namespace
     // X360 0x8232A4A8 confirms the same flt_82CDB7D0 store path; the PS3 supplies the literal value.
     // RaceCarPositioningData's own distances are seeded with the same sentinel via its Construct()
     // (kept named, not hard-coded here).
-    const f32 KF_INVALID_RACE_DISTANCE = FLT_MAX;   // flt_82CDB7D0 == FLT_MAX (PS3 0x1E364C)
+    // KF_INVALID_RACE_DISTANCE: BrnWorld::KF_INVALID_DISTANCE (BrnWorldSharedConstants.h:39) at its uses
 }
 
 // X360 0x8232A4A8. Full scoring-state reset. NAMED-MEMBER semantic-parity reconstruction (NOT a
@@ -549,8 +549,8 @@ void ScoringSystem::ClearData(bool lbResetCarData)
     SetCheckPointDistancesToFinishReady(false);                // ASM stb r30,0x5CE0
 
     // ---- race / player distance + timing scalars ----
-    mfTotalRaceDistance                = KF_INVALID_RACE_DISTANCE;  // ASM stfs f0(flt_82CDB7D0==FLT_MAX),0x5CE4
-    mfPlayerDistanceToFinishLastFrame  = KF_INVALID_RACE_DISTANCE;  // ASM stfs f0,0x5CE8
+    mfTotalRaceDistance                = BrnWorld::KF_INVALID_DISTANCE;  // ASM stfs f0(flt_82CDB7D0==FLT_MAX),0x5CE4
+    mfPlayerDistanceToFinishLastFrame  = BrnWorld::KF_INVALID_DISTANCE;  // ASM stfs f0,0x5CE8
     mfPlayerTimeHeadingTheWrongWay     = 0.0f;                      // ASM stfs f31,0x5CEC
     mfPlayerTimeStationary             = 0.0f;                      // ASM stfs f31,0x5CF0
     mfPlayerTimeWithoutInput           = 0.0f;                      // ASM stfs f31,0x5CF4
