@@ -648,20 +648,20 @@ namespace BrnNetwork
     // view-download -> view-select -> stats-download -> results.
     void NetworkPlayerStatsManager::ProcessBeforeSimulation(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer)
     {
-        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");
-        CGS_ASSERT(meCurrentStatus != E_STATS_STATUS_UNPREPARED,
-                   "Trying to use the stats manager before it's prepared");
+        CGS_ASSERT_AT(lpOutputBuffer != 0, "lpOutputBuffer", CGS_ARTIST_FILE, 278);
+        CGS_ASSERT_STREAM_AT(meCurrentStatus != E_STATS_STATUS_UNPREPARED,
+                   "Trying to use the stats manager before it's prepared", CGS_ARTIST_FILE, 281);
 
         ValidateQueueAndPostGettingStatsEvents(lpOutputBuffer);
 
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetStateManager() != 0, "mpNetworkManager->GetStateManager()");
+        CGS_ASSERT_AT(mpNetworkManager != 0, "mpNetworkManager", CGS_ARTIST_FILE, 285);
+        CGS_ASSERT_AT(mpNetworkManager->GetStateManager() != 0, "mpNetworkManager->GetStateManager()", CGS_ARTIST_FILE, 286);
         if (!mpNetworkManager->GetStateManager()->IsIdle())
         {
             return;
         }
 
-        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, "mpServerInterfacePlayerInfo");
+        CGS_ASSERT_AT(mpServerInterfacePlayerInfo != 0, "mpServerInterfacePlayerInfo", CGS_ARTIST_FILE, 293);
 
         switch (meCurrentStatus)
         {
@@ -725,9 +725,9 @@ namespace BrnNetwork
         {
             bool lbFinished = false;
 
-            CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
-            CGS_ASSERT(mpServerInterface->GetCustomCommandsComponent() != 0,
-                       "mpServerInterface->GetCustomCommandsComponent()");
+            CGS_ASSERT_AT(mpServerInterface != 0, "mpServerInterface", CGS_ARTIST_FILE, 374);
+            CGS_ASSERT_AT(mpServerInterface->GetCustomCommandsComponent() != 0,
+                       "mpServerInterface->GetCustomCommandsComponent()", CGS_ARTIST_FILE, 375);
 
             ServerInterfaceCustomCommands* lpCustomCommands = mpServerInterface->GetCustomCommandsComponent();
             const s32 liStatus = lpCustomCommands->GetStatus();
@@ -753,7 +753,7 @@ namespace BrnNetwork
         }
 
         default:
-            CGS_FAIL("Unknown StatsManager Status");
+            CGS_FAIL_AT("Unknown StatsManager Status", CGS_ARTIST_FILE, 407);
             break;
         }
     }

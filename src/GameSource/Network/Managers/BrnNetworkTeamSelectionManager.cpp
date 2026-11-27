@@ -77,7 +77,7 @@ namespace BrnNetwork
         maActionFunctions[4] = &TeamSelectionManager::ActionWaitFinalTeamSelection;
 
         for (s32 liCheck = 0; liCheck < KI_NUM_ACTION_FUNCTIONS; ++liCheck)
-            CGS_ASSERT(maActionFunctions[liCheck] != 0, "No update function supplied for this substate");
+            CGS_ASSERT_AT(maActionFunctions[liCheck] != 0, "No update function supplied for this substate", CGS_ARTIST_FILE, 147);
 
         // Fill every action slot with the "no action" sentinel (X360 fills 8 slots with 5).
         for (s32 liFill = 0; liFill < KI_NUM_PROCESSES * KI_ACTIONS_PER_PROCESS; ++liFill)
@@ -93,8 +93,8 @@ namespace BrnNetwork
         // Assert no active process row was left with the sentinel still in slot 0 (X360 walks the
         // 4 process rows at stride 2 and asserts slot[0] != 5).
         for (s32 liProcess = 0; liProcess < KI_NUM_PROCESSES; ++liProcess)
-            CGS_ASSERT(maProcessActions[liProcess * KI_ACTIONS_PER_PROCESS] != KI_NO_ACTION,
-                       "No actions supplied for this process");
+            CGS_ASSERT_STREAM_AT(maProcessActions[liProcess * KI_ACTIONS_PER_PROCESS] != KI_NO_ACTION,
+                       "No actions supplied for this process", CGS_ARTIST_FILE, 181);
     }
 
     // ---------------------------------------------------------------------------------

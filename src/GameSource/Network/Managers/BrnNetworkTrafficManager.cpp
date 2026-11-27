@@ -601,15 +601,15 @@ namespace BrnNetwork
         }
 
         // The console logs "NWTRAF: IGNORING reset message fr=... in favour of reset message fr=...".
-        CGS_ASSERT(mBufferedRestartTrafficMessage.mu16RestartFrame != CgsNetwork::KU16_INVALID_FRAME,
-                   "mBufferedRestartTrafficMessage.mu16RestartFrame != KU16_INVALID_FRAME");
+        CGS_ASSERT_AT(mBufferedRestartTrafficMessage.mu16RestartFrame != CgsNetwork::KU16_INVALID_FRAME,
+                   "mBufferedRestartTrafficMessage.mu16RestartFrame != KU16_INVALID_FRAME", CGS_ARTIST_FILE, 1164);
 
         if (lu16RestartFrame == mBufferedRestartTrafficMessage.mu16RestartFrame)
         {
             for (s32 liIndex = 0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liIndex)
             {
-                CGS_ASSERT(mBufferedRestartTrafficMessage.mau16ActiveHulls[liIndex] == lRestartMessage.mau16ActiveHulls[liIndex],
-                           "We've been told to restart the traffic twice on the same frame, but the hulls to activate are different");
+                CGS_ASSERT_STREAM_AT(mBufferedRestartTrafficMessage.mau16ActiveHulls[liIndex] == lRestartMessage.mau16ActiveHulls[liIndex],
+                           "We've been told to restart the traffic twice on the same frame, but the hulls to activate are different", CGS_ARTIST_FILE, 1172);
             }
         }
     }

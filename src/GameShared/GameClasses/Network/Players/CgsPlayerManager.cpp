@@ -499,23 +499,23 @@ void PlayerManager::AddPlayer(const CgsSystem::TimerStatus* lpTimerStatus, const
                               NetworkPlayerID lPlayerID, s32 liConnectionIndex,
                               CgsSystem::EFrameRate leRemoteConsoleFrameRate, bool lbLocal)
 {
-    CGS_ASSERT(liConnectionIndex < KI_MAX_PLAYERS, "liConnectionIndex < KI_MAX_PLAYERS");
-    CGS_ASSERT(liConnectionIndex >= 0, "liConnectionIndex >= 0");
-    CGS_ASSERT(maActivePlayers[liConnectionIndex].GetNetworkPlayer() == NULL,
-               "maActivePlayers[liConnectionIndex].GetNetworkPlayer() == NULL");
-    CGS_ASSERT(miNumInactivePlayers > 0, "miNumInactivePlayers > 0");
-    CGS_ASSERT(meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ||
+    CGS_ASSERT_AT(liConnectionIndex < KI_MAX_PLAYERS, "liConnectionIndex < KI_MAX_PLAYERS", CGS_ARTIST_FILE, 1262);
+    CGS_ASSERT_AT(liConnectionIndex >= 0, "liConnectionIndex >= 0", CGS_ARTIST_FILE, 1263);
+    CGS_ASSERT_AT(maActivePlayers[liConnectionIndex].GetNetworkPlayer() == NULL,
+               "maActivePlayers[liConnectionIndex].GetNetworkPlayer() == NULL", CGS_ARTIST_FILE, 1264);
+    CGS_ASSERT_AT(miNumInactivePlayers > 0, "miNumInactivePlayers > 0", CGS_ARTIST_FILE, 1265);
+    CGS_ASSERT_AT(meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ||
                    meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
-               "meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ");
-    CGS_ASSERT(mpServerInterface, "mpServerInterface");
+               "meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ", CGS_ARTIST_FILE, 1267);
+    CGS_ASSERT_AT(mpServerInterface, "mpServerInterface", CGS_ARTIST_FILE, 1268);
 
     PlayerData* lpPlayerData;
     if (lbLocal)
     {
         lpPlayerData = AssignActiveLocalPlayer(liConnectionIndex);
         lpPlayerData->SetPlayerID(lPlayerID);
-        CGS_ASSERT(mLocalPlayerID == K_INVALID_PLAYER_ID,
-                   "More than one local player with D_ONLY_ONE_LOCAL_PLAYER defined\n");
+        CGS_ASSERT_STREAM_AT(mLocalPlayerID == K_INVALID_PLAYER_ID,
+                   "More than one local player with D_ONLY_ONE_LOCAL_PLAYER defined\n", CGS_ARTIST_FILE, 1276);
         mLocalPlayerID = lPlayerID;
     }
     else

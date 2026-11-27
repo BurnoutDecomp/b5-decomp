@@ -336,7 +336,7 @@ namespace BrnNetwork
             AggressiveMoveData& lTopMove = lpData->maBuffer[liBestIndex];
             if (lTopMove.meAggressiveMoveType == E_AGGRESSIVE_MOVE_TAKE_DOWN)
             {
-                CGS_FAIL("Too many takedowns?!");
+                CGS_FAIL_STREAM_AT("Too many takedowns?!", CGS_ARTIST_FILE, 495);
                 return false;
             }
 

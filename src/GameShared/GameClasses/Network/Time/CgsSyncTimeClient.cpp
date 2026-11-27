@@ -67,14 +67,14 @@ namespace CgsNetwork
     {
         mHostPlayerID = lHostPlayerID;
 
-        CGS_ASSERT(mHostPlayerID != KI_INVALID_PLAYER_ID,
-                   "mHostPlayerID != K_INVALID_PLAYER_ID");
+        CGS_ASSERT_AT(mHostPlayerID != KI_INVALID_PLAYER_ID,
+                   "mHostPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 96);
 
         // We must not be the host ourselves: the host has no registered SyncTime player
         // slot for itself. (Original streamed the message through a StrStream.)
         NetworkPlayer* lpHostPlayer = mpPlayerManager->GetPlayerByID(mHostPlayerID);
-        CGS_ASSERT(lpHostPlayer != 0,
-                   "Trying to prepare the sync time client when we are host.\n");
+        CGS_ASSERT_STREAM_AT(lpHostPlayer != 0,
+                   "Trying to prepare the sync time client when we are host.\n", CGS_ARTIST_FILE, 101);
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_CLIENT);
 
@@ -103,12 +103,12 @@ namespace CgsNetwork
     bool
     SyncTimeClient::Release()
     {
-        CGS_ASSERT(mHostPlayerID != KI_INVALID_PLAYER_ID,
-                   "mHostPlayerID != K_INVALID_PLAYER_ID");
+        CGS_ASSERT_AT(mHostPlayerID != KI_INVALID_PLAYER_ID,
+                   "mHostPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 280);
 
         NetworkPlayer* lpHostPlayer = mpPlayerManager->GetPlayerByID(mHostPlayerID);
-        CGS_ASSERT(lpHostPlayer != 0,
-                   "We are trying to release the sync time client when the local player is host\n");
+        CGS_ASSERT_STREAM_AT(lpHostPlayer != 0,
+                   "We are trying to release the sync time client when the local player is host\n", CGS_ARTIST_FILE, 285);
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_NONE);
         mHostPlayerID = KI_INVALID_PLAYER_ID;

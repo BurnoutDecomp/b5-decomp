@@ -391,8 +391,8 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ScoreboardManager::AddColumnInfoToScoreboard(Scoreboard* lpScoreboard)
     {
-        CGS_ASSERT(mpRankings->GetNumberOfColumns() < KI_MAX_SCOREBOARD_COLUMNS,
-                   "mpRankings->GetNumberOfColumns() < KI_MAX_SCOREBOARD_COLUMNS");
+        CGS_ASSERT_AT(mpRankings->GetNumberOfColumns() < KI_MAX_SCOREBOARD_COLUMNS,
+                   "mpRankings->GetNumberOfColumns() < KI_MAX_SCOREBOARD_COLUMNS", CGS_ARTIST_FILE, 875);
 
         for (s32 liColumnCounter = 0; liColumnCounter < KI_MAX_SCOREBOARD_COLUMNS; ++liColumnCounter)
         {
@@ -411,7 +411,7 @@ namespace BrnNetwork
                 // there is no E_DATATYPE value == 9, so don't use E_DATATYPE_COUNT (==8).
                 if (static_cast<s32>(leDataType) == 9)
                 {
-                    CGS_FAIL("Unknown scoreboard datatype recieved from server");
+                    CGS_FAIL_STREAM_AT("Unknown scoreboard datatype recieved from server", CGS_ARTIST_FILE, 923);
                     leDataType = ScoreboardColumn::E_DATATYPE_STRING;
                 }
             }

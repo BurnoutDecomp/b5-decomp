@@ -146,11 +146,11 @@ namespace CgsNetwork
 
     s32 ServerInterfaceRankings::GetNumberOfColumns()
     {
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
+        CGS_ASSERT_AT(mpLobbyRank != 0, "mpLobbyRank", CGS_ARTIST_FILE, 283);
 
         const s32 liNoOfColumns = LobbyRankColumnCount(mpLobbyRank);
-        CGS_ASSERT(liNoOfColumns != KI_RANK_ERROR_LIST_NOT_DOWNLOADED, "List not downloaded");
-        CGS_ASSERT(liNoOfColumns >= 0, "liNoOfColumns >= 0");
+        CGS_ASSERT_STREAM_AT(liNoOfColumns != KI_RANK_ERROR_LIST_NOT_DOWNLOADED, "List not downloaded", CGS_ARTIST_FILE, 287);
+        CGS_ASSERT_AT(liNoOfColumns >= 0, "liNoOfColumns >= 0", CGS_ARTIST_FILE, 288);
         return liNoOfColumns;
     }
 
@@ -177,19 +177,19 @@ namespace CgsNetwork
 
     s32 ServerInterfaceRankings::GetNumberOfIndexes(s32 liCategory)
     {
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
+        CGS_ASSERT_AT(mpLobbyRank != 0, "mpLobbyRank", CGS_ARTIST_FILE, 352);
 
         const s32 liNoOfIndexes = LobbyRankIndexCount(mpLobbyRank, liCategory);
-        CGS_ASSERT(liCategory >= 0, "Error getting indexes");
+        CGS_ASSERT_STREAM_AT(liCategory >= 0, "Error getting indexes", CGS_ARTIST_FILE, 354);
         return liNoOfIndexes;
     }
 
     s32 ServerInterfaceRankings::GetNumberOfVariations(s32 liCategory, s32 liIndex)
     {
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
+        CGS_ASSERT_AT(mpLobbyRank != 0, "mpLobbyRank", CGS_ARTIST_FILE, 372);
 
         const s32 liNoOfVariations = LobbyRankVariationCount(mpLobbyRank, liCategory, liIndex);
-        CGS_ASSERT(liCategory >= 0, "Error getting variation");
+        CGS_ASSERT_STREAM_AT(liCategory >= 0, "Error getting variation", CGS_ARTIST_FILE, 374);
         return liNoOfVariations;
     }
 

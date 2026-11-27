@@ -147,8 +147,8 @@ namespace BrnNetwork
                                                KI_MIN_STREET_DATA_VERSION,
                                                KI_MAX_STREET_DATA_VERSION) | lxResult;
 
-        CGS_ASSERT(miStreetDataVersion == KI_EXPECTED_STREET_DATA_VERSION,
-                   "Received street data from player with different street data version. You need to play the same versions of the game!\n");
+        CGS_ASSERT_STREAM_AT(miStreetDataVersion == KI_EXPECTED_STREET_DATA_VERSION,
+                   "Received street data from player with different street data version. You need to play the same versions of the game!\n", CGS_ARTIST_FILE, 200);
 
         return lxResult;
     }

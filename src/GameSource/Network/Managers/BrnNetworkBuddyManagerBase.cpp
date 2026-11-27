@@ -198,8 +198,8 @@ namespace BrnNetwork
         }
 
         miCachedNumBuddiesAtLastChange = 0;
-        mfTimeUntilRetryGetServerBuddies = -1.0f;
         mfBuddyListChangedTimer = -1.0f;
+        mfTimeUntilRetryGetServerBuddies = -1.0f;
     }
 
     // =======================================================================
@@ -220,13 +220,13 @@ namespace BrnNetwork
         mbOverwriteFriendsList = false;
         meState = E_BUDDY_MANAGER_STATE_START;
         mDebugComponent.Destruct();
+        mpNetworkModule = NULL;
 
         for (s32 li = 0; li < KI_MAX_BUDDIES; ++li)
         {
             maServerBuddyList[li].Clear();
         }
 
-        mpNetworkModule = NULL;
         miNextBuddyToSend = 100;
 
         CgsNetwork::BuddyManagerX360::Destruct();

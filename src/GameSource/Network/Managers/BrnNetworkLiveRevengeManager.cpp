@@ -159,10 +159,10 @@ namespace BrnNetwork
 
         if (meLiveRevengeUploadStatus == E_LIVE_REVENGE_UPLOAD_STATUS_IN_PROGRESS)
         {
-            CGS_ASSERT(mpNetworkManager, "mpNetworkManager");
-            CGS_ASSERT(mpNetworkManager->GetServerInterface(), "mpNetworkManager->GetServerInterface()");
-            CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetCustomCommandsComponent(),
-                       "mpNetworkManager->GetServerInterface()->GetCustomCommandsComponent()");
+            CGS_ASSERT_AT(mpNetworkManager, "mpNetworkManager", CGS_ARTIST_FILE, 227);
+            CGS_ASSERT_AT(mpNetworkManager->GetServerInterface(), "mpNetworkManager->GetServerInterface()", CGS_ARTIST_FILE, 228);
+            CGS_ASSERT_AT(mpNetworkManager->GetServerInterface()->GetCustomCommandsComponent(),
+                       "mpNetworkManager->GetServerInterface()->GetCustomCommandsComponent()", CGS_ARTIST_FILE, 229);
 
             ServerInterfaceCustomCommands* lpCustomCommands =
                 mpNetworkManager->GetServerInterface()->GetCustomCommandsComponent();
@@ -208,8 +208,8 @@ namespace BrnNetwork
 
         if (mbProfileIsDirty)
         {
-            CGS_ASSERT(IsTableValid(),
-                       "If this assert fires then it the live revenge manager is corrupting the profile. Deleting your save game will fix this for now (tell Alex Veal).\n");
+            CGS_ASSERT_STREAM_AT(IsTableValid(),
+                       "If this assert fires then it the live revenge manager is corrupting the profile. Deleting your save game will fix this for now (tell Alex Veal).\n", CGS_ARTIST_FILE, 271);
 
             BrnNetworkModuleIO::NetworkOutAutosaveProfile lAutosaveEvent;
             mpNetworkModule->GetNetworkEventQueue()->AddEvent(lAutosaveEvent);
@@ -672,10 +672,10 @@ namespace BrnNetwork
     // per-player mapping and the top-rival list, then rebuild the top rivals from the loaded table.
     void LiveRevengeManager::HandleLiveRevengeProfileLoadedEvent(const LiveRevengeProfile* lpLiveRevengeProfile)
     {
-        CGS_ASSERT(lpLiveRevengeProfile, "lpLiveRevengeProfile");
-        CGS_ASSERT(mpLiveRevengeProfile->ValidateProfile(), "mpLiveRevengeProfile->ValidateProfile()");
-        CGS_ASSERT(IsTableValid(),
-                   "If this fires then save/load has probably corrupted the profile. Deleting your save game will fix this for now (tell Alex Veal)\n");
+        CGS_ASSERT_AT(lpLiveRevengeProfile, "lpLiveRevengeProfile", CGS_ARTIST_FILE, 1676);
+        CGS_ASSERT_AT(mpLiveRevengeProfile->ValidateProfile(), "mpLiveRevengeProfile->ValidateProfile()", CGS_ARTIST_FILE, 1678);
+        CGS_ASSERT_STREAM_AT(IsTableValid(),
+                   "If this fires then save/load has probably corrupted the profile. Deleting your save game will fix this for now (tell Alex Veal)\n", CGS_ARTIST_FILE, 1679);
 
         ResetRevengeTableMappings();
         ClearTopRivals();

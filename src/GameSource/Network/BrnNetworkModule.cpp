@@ -388,7 +388,7 @@ namespace BrnNetwork
                                                   BrnUpdateSet                                        lUpdateSet)
     {
         u32 luAvailableMemory = BrnResource::GetAvailableMemory();
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 426);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSimPM);
         mbIsUpdating = true;
@@ -402,8 +402,8 @@ namespace BrnNetwork
             mNetworkManager.GetServerInterface()->GetGameComponent()->IsGameStarted() &&
             lpInputBuffer->GetGameStateToNetworkInterface()->GetIsInOnlineGameMode())
         {
-            CGS_ASSERT(mTimerStatusOutputInterface.GetSimTimerStatus()->GetTimeStepMultiplier() == 1.0f,
-                       "Some criminal has put an online game into slowmo!\n");
+            CGS_ASSERT_STREAM_AT(mTimerStatusOutputInterface.GetSimTimerStatus()->GetTimeStepMultiplier() == 1.0f,
+                       "Some criminal has put an online game into slowmo!\n", CGS_ARTIST_FILE, 444);
         }
         CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim2PM);
 
@@ -431,7 +431,7 @@ namespace BrnNetwork
         GetInputGuiEventQueue()->Append(*lpInputBuffer->GetGuiEventQueue());
         CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim5PM);
 
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 475);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSim6PM);
         mNetworkManager.ProcessAfterSimulation(lpInputBuffer, lUpdateSet);
@@ -439,7 +439,7 @@ namespace BrnNetwork
         // inert unless BRN_NET_HOST or BRN_NET_JOIN is set.
         CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim6PM);
 
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 480);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSim7PM);
         lpInputBuffer->UnlockForRead();
@@ -451,7 +451,7 @@ namespace BrnNetwork
         mbIsUpdating = false;
         CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSimPM);
 
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 498);
     }
 
     // The other member accessors are header inline, as DecFIGS places them (BrnNetworkModule.h:

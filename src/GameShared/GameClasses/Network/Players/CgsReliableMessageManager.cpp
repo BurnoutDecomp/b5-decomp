@@ -271,23 +271,23 @@ bool ReliableMessageManager::Prepare(PlayerManager* lpPlayerManager,
 void ReliableMessageManager::AddBufferedReliableMessage(NetworkPlayerID lPlayerID,
                                                         Message* lpMsg, s32 liLength)
 {
-    CGS_ASSERT(lpMsg, "lpMsg");
-    CGS_ASSERT(lpMsg->IsMessageValid(), "lpMsg->IsMessageValid()");
-    CGS_ASSERT(liLength <= KI_MAX_RELIABLE_MESSAGE_SIZE, "liLength <= KI_MAX_RELIABLE_MESSAGE_SIZE");
+    CGS_ASSERT_AT(lpMsg, "lpMsg", CGS_ARTIST_FILE, 271);
+    CGS_ASSERT_AT(lpMsg->IsMessageValid(), "lpMsg->IsMessageValid()", CGS_ARTIST_FILE, 272);
+    CGS_ASSERT_AT(liLength <= KI_MAX_RELIABLE_MESSAGE_SIZE, "liLength <= KI_MAX_RELIABLE_MESSAGE_SIZE", CGS_ARTIST_FILE, 275);
 
     BufferedSendMessageData* lpFreeSlot = 0;
     for (s32 liAttempt = 0; liAttempt < KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER; ++liAttempt)
     {
-        CGS_ASSERT(miReliableMessageSendIndex >= 0, "miReliableMessageSendIndex >= 0");
-        CGS_ASSERT(miReliableMessageSendIndex < KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER,
-                   "miReliableMessageSendIndex < KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER");
-        CGS_ASSERT(maReliableMessageSendData[miReliableMessageSendIndex].mpMsg,
-                   "maReliableMessageSendData[miReliableMessageSendIndex].mpMsg");
+        CGS_ASSERT_AT(miReliableMessageSendIndex >= 0, "miReliableMessageSendIndex >= 0", CGS_ARTIST_FILE, 280);
+        CGS_ASSERT_AT(miReliableMessageSendIndex < KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER,
+                   "miReliableMessageSendIndex < KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER", CGS_ARTIST_FILE, 281);
+        CGS_ASSERT_AT(maReliableMessageSendData[miReliableMessageSendIndex].mpMsg,
+                   "maReliableMessageSendData[miReliableMessageSendIndex].mpMsg", CGS_ARTIST_FILE, 282);
 
         if (!mabValidSendData.IsBitSet(static_cast<u32>(miReliableMessageSendIndex)))
         {
-            CGS_ASSERT(!maReliableMessageSendData[miReliableMessageSendIndex].mpMsg->IsMessageValid(),
-                       "!maReliableMessageSendData[miReliableMessageSendIndex].mpMsg->IsMessageValid()");
+            CGS_ASSERT_AT(!maReliableMessageSendData[miReliableMessageSendIndex].mpMsg->IsMessageValid(),
+                       "!maReliableMessageSendData[miReliableMessageSendIndex].mpMsg->IsMessageValid()", CGS_ARTIST_FILE, 288);
             lpFreeSlot = &maReliableMessageSendData[miReliableMessageSendIndex];
             break;
         }
@@ -300,7 +300,7 @@ void ReliableMessageManager::AddBufferedReliableMessage(NetworkPlayerID lPlayerI
 
     if (lpFreeSlot == 0)
     {
-        CGS_FAIL("Failed to find a reliable message buffer to use");
+        CGS_FAIL_STREAM_AT("Failed to find a reliable message buffer to use", CGS_ARTIST_FILE, 306);
         return;
     }
 

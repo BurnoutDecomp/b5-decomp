@@ -184,7 +184,7 @@ namespace CgsNetwork
             lLookupPlayerID = lHostPlayerID;
             break;
         default:
-            CGS_FAIL("Sync time Message Manager in state none");
+            CGS_FAIL_STREAM_AT("Sync time Message Manager in state none", CGS_ARTIST_FILE, 183);
             return;
         }
 

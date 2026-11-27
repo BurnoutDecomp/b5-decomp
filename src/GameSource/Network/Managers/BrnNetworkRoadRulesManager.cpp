@@ -67,7 +67,7 @@ namespace BrnNetwork
             }
         }
 
-        CGS_FAIL( "Unable to find a free road rules data entry\n" );
+        CGS_FAIL_STREAM_AT( "Unable to find a free road rules data entry\n" , CGS_ARTIST_FILE, 1316);
         return 0;
     }
 

@@ -796,7 +796,7 @@ namespace BrnNetwork
                                                    BrnUpdateSet                                        luUpdateSet)
     {
         u32 luAvailableMemory = BrnResource::GetAvailableMemory();
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1334);
 
         const bool lbAreWePlaying = GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame();
 
@@ -813,84 +813,84 @@ namespace BrnNetwork
         CgsDev::PerfMonCpu::StartMonitor(miCGSNetworkAfterSimPM);
         CgsNetwork::NetworkManager::Update(mpGameTimerStatus, GetTimeManager()->GetU16FrameCount(), lbAreWePlaying);
         CgsDev::PerfMonCpu::StopMonitor(miCGSNetworkAfterSimPM);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1357);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkBuddyPM);
         GetBuddyManager()->Update(lpInputBuffer, mfTimeStep,
                                   GetStateManager()->IsReadyToJoinGameSession(),
                                   GetStateManager()->IsReadyToJoinGameSession());
         CgsDev::PerfMonCpu::StopMonitor(miNetworkBuddyPM);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1374);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkTrafficPM);
         GetTrafficManager()->Update(lbAreWePlaying);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1378);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkTrafficPM);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkAggressiveDrivingPM);
         GetAggressiveDrivingManager()->ProcessAfterSimulation(lpInputBuffer);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1382);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkAggressiveDrivingPM);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkDirtyTrickPM);
         GetDirtyTrickManager()->ProcessAfterSimulation(lpInputBuffer);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1386);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkDirtyTrickPM);
 
         GetNetworkImageManager()->ProcessAfterSimulation(lpInputBuffer);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1390);
 
         CgsDev::PerfMonCpu::StartMonitor(miGamerPicUpdatPM);
         GetGamerPictureManager()->Update();
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1394);
         CgsDev::PerfMonCpu::StopMonitor(miGamerPicUpdatPM);
 
         CgsDev::PerfMonCpu::StartMonitor(miCameraUpdatePM);
         GetCamera()->Update();
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1399);
         CgsDev::PerfMonCpu::StopMonitor(miCameraUpdatePM);
 
         GetTextureCompressor()->Update();
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1403);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkNotificationPM);
         GetNetworkNotificationManager()->Update();
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1407);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkNotificationPM);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkInvitePM);
         GetNetworkInviteManager()->Update();
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1411);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkInvitePM);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkStatsPM);
         GetStatsManager()->ProcessAfterSimulation(lpInputBuffer);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1415);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkStatsPM);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkLiveRevengePM);
         GetLiveRevengeManager()->ProcessAfterSimulation(lpInputBuffer);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1419);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkLiveRevengePM);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkRoutesManagerPM);
         GetSelectedRoutesManager()->Update();
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1424);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkRoutesManagerPM);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkStateManagerPM);
         GetStateManager()->Update(lpInputBuffer);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1429);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkStateManagerPM);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkRoadRulesManagerPM);
         GetRoadRulesManager()->ProcessAfterSimulation(lpInputBuffer, lbAreWePlaying);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1435);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkRoadRulesManagerPM);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkChallengeManagerPM);
         GetChallengeSuccessManager()->ProcessAfterSimulation(lpInputBuffer);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1441);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkChallengeManagerPM);
 
         // A route change made while in a game republishes the game parameters.
@@ -901,7 +901,7 @@ namespace BrnNetwork
             GetSelectedRoutesManager()->SetRoutesChanged(false);
             OutputGameParameters();
         }
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1451);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkManagerSelectedRoutesPM);
 
         GetEventScoresManager()->ProcessAfterSimulation(lpInputBuffer);
@@ -909,22 +909,22 @@ namespace BrnNetwork
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkManagerOutputPlayerStatsPM);
         OutputPlayerStatsToGui(mPlayerIDStatsGet);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1461);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkManagerOutputPlayerStatsPM);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkManagerPostUpdatePM);
         CgsNetwork::NetworkManager::PostUpdate(mpGameTimerStatus, GetTimeManager()->GetU16FrameCount());
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1466);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkManagerPostUpdatePM);
 
         CgsDev::PerfMonCpu::StartMonitor(miNetworkManagerMiscPM);
         GetTimeManager()->NextFrame(mpGameTimerStatus);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1471);
         mpGameTimerStatus = NULL;
         const s32 liFramesSinceStart = GetTimeManager()->GetFramesSinceStart();
         mpNetworkModule->GetNetworkToGameStateInterface()->SetFramesSinceStart(liFramesSinceStart);
         CgsDev::PerfMonCpu::StopMonitor(miNetworkManagerMiscPM);
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 1480);
     }
 
     // ----------------------------------------------------------------------------------------

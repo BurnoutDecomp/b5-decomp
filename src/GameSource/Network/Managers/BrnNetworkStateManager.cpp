@@ -57,10 +57,10 @@ namespace BrnNetwork
     // on to the car-select wait. The asserts are non-fatal, so the store runs on every path.
     void StateManager::TeamSelectionFinishedCallback(bool lbSuccess, void* lpUserData)
     {
-        CGS_ASSERT(lbSuccess, "Team selection has failed somehow\n");
+        CGS_ASSERT_STREAM_AT(lbSuccess, "Team selection has failed somehow\n", CGS_ARTIST_FILE, 5659);
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
+        CGS_ASSERT_AT(lpStateManager != 0, "lpStateManager", CGS_ARTIST_FILE, 5663);
 
         lpStateManager->meState = E_STATE_WAIT_CAR_SELECT;
     }
@@ -2209,11 +2209,11 @@ namespace BrnNetwork
     void StateManager::UpdateLogin(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
         u32 luAvailableMemory = BrnResource::GetAvailableMemory();
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4705);
 
         if (mpNetworkManager->GetLoginManager()->Update(lpInput))
         {
-            BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+            BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4716);
 
             const bool lbLoggedIn = mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn();
             const LoginManagerBase::ESignInType leSignInType = mpNetworkManager->GetLoginManager()->GetCompletedSignInType();
@@ -2225,34 +2225,34 @@ namespace BrnNetwork
             {
                 // FLAG: the console logs "Finished Signing In. SignInType=" <type> "\n" to the
                 // unhomed network debug stream here; the log line is not reproduced.
-                BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+                BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4729);
 
-                CGS_ASSERT(mpNetworkManager->GetVoIPManager()->Prepare(mpNetworkManager->GetPlayerManager(), mpNetworkManager->GetTimeManager(), mpNetworkManager->GetServerInterface(), mpNetworkManager->GetBuddyManager(), true ),
-                           "mpNetworkManager->GetVoIPManager()->Prepare(mpNetworkManager->GetPlayerManager(), mpNetworkManager->GetTimeManager(), mpNetworkManager->GetServerInterface(), mpNetworkManager->GetBuddyManager(), true )");
+                CGS_ASSERT_AT(mpNetworkManager->GetVoIPManager()->Prepare(mpNetworkManager->GetPlayerManager(), mpNetworkManager->GetTimeManager(), mpNetworkManager->GetServerInterface(), mpNetworkManager->GetBuddyManager(), true ),
+                           "mpNetworkManager->GetVoIPManager()->Prepare(mpNetworkManager->GetPlayerManager(), mpNetworkManager->GetTimeManager(), mpNetworkManager->GetServerInterface(), mpNetworkManager->GetBuddyManager(), true )", CGS_ARTIST_FILE, 4732);
                 mpNetworkManager->GetVoIPManager()->SetGameSendingHeadsetStatus(true);
-                BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+                BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4734);
 
                 CgsGui::GuiEventNetworkConnected lConnectedEvent;
                 lConnectedEvent.maData[0] = mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsFirstLogin();
                 lConnectedEvent.maData[1] = mpNetworkManager->GetServerInterface()->GetServerInfoComponent()->IsNewsUpdated();
                 mpNetworkModule->AddOutputGuiEvent(lConnectedEvent);
-                BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+                BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4740);
 
                 // The console's PlayerInfoData constructor runs Prepare itself; the tree's does not yet.
                 PlayerInfoData lPlayerInfo;
                 lPlayerInfo.Prepare();
-                BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+                BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4747);
 
-                CGS_ASSERT(lPlayerInfo.Prepare(), "lPlayerInfo.Prepare()");
+                CGS_ASSERT_AT(lPlayerInfo.Prepare(), "lPlayerInfo.Prepare()", CGS_ARTIST_FILE, 4749);
                 mpNetworkManager->GetServerInterface()->GetPlayerInfoComponent()->GetLocalPlayerInfo(&lPlayerInfo);
-                BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+                BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4751);
 
                 BrnNetworkModuleIO::NetworkOutLocalPlayerConnected lLocalPlayerConnectedEvent;
                 lLocalPlayerConnectedEvent.mPlayerID = lPlayerInfo.GetID();
-                CGS_ASSERT(lPlayerInfo.GetID() != CgsNetwork::K_INVALID_PLAYER_ID,
-                           "lPlayerInfo.GetID() != CgsNetwork::K_INVALID_PLAYER_ID");
+                CGS_ASSERT_AT(lPlayerInfo.GetID() != CgsNetwork::K_INVALID_PLAYER_ID,
+                           "lPlayerInfo.GetID() != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 4754);
                 mpNetworkModule->GetNetworkEventQueue()->AddEvent(lLocalPlayerConnectedEvent);
-                BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+                BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4756);
 
                 bool lbAgreeToShareInfoEA;
                 bool lbAgreeToShareInfoPartners;
@@ -2263,7 +2263,7 @@ namespace BrnNetwork
 
                 lPlayerInfo.Prepare();
                 mpNetworkManager->GetServerInterface()->GetPlayerInfoComponent()->GetLocalPlayerInfo(&lPlayerInfo);
-                CGS_ASSERT(lPlayerInfo.GetID() > 0, "lPlayerInfo.GetID() > 0");
+                CGS_ASSERT_AT(lPlayerInfo.GetID() > 0, "lPlayerInfo.GetID() > 0", CGS_ARTIST_FILE, 4767);
                 mpNetworkManager->GetGamerPictureManager()->AddPlayer(lPlayerInfo.GetID());
 
                 if (mpNetworkManager->GetServerInterface()->GetDownloadableConfigComponent()->IsGamertagInFeverList(lPlayerInfo.GetName()))
@@ -2292,7 +2292,7 @@ namespace BrnNetwork
                     }
                     OnFullConnection();
                 }
-                BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+                BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4804);
 
                 if (mbSuspendAfterSignIn)
                 {
@@ -2317,11 +2317,11 @@ namespace BrnNetwork
                 mpNetworkModule->AddOutputGuiEvent(lDisconnectedEvent);
 
                 mpNetworkManager->GetBuddyManager()->CancelInvites();
-                BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+                BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4843);
             }
 
             mbSuspendAfterSignIn = false;
-            BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+            BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4847);
 
             if (!lbLoggedIn)
             {
@@ -2331,7 +2331,7 @@ namespace BrnNetwork
             }
         }
 
-        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luAvailableMemory, CGS_ARTIST_FILE, 4859);
     }
 } // namespace BrnNetwork
 
@@ -4408,16 +4408,16 @@ namespace BrnNetwork
     void StateManager::UpdateEvents(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
         u32 luMemory = BrnResource::GetAvailableMemory();
-        BRN_RESOURCE_MEMORY_CHECK(luMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luMemory, CGS_ARTIST_FILE, 387);
 
         ProcessGuiEvents(lpInput->GetGuiEventQueue());
-        BRN_RESOURCE_MEMORY_CHECK(luMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luMemory, CGS_ARTIST_FILE, 391);
 
         ProcessGameStateActions(lpInput->GetGameActionQueue());
-        BRN_RESOURCE_MEMORY_CHECK(luMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luMemory, CGS_ARTIST_FILE, 393);
 
         ProcessNetworkEvents(lpInput->GetNetworkEventQueue());
-        BRN_RESOURCE_MEMORY_CHECK(luMemory);
+        BRN_RESOURCE_MEMORY_CHECK_AT(luMemory, CGS_ARTIST_FILE, 395);
     }
 
     // ------------------------------------------------------------------------------------
