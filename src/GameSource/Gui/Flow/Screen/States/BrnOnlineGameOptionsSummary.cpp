@@ -599,9 +599,9 @@ namespace BrnGui
                 mpGuiCache->GetFreeburnChallengeManager()->GetCurrentChallenge();
 
             GuiChallengeSelectedEvent lChallengeSelected;
-            lChallengeSelected.miSelectorAction = KI_CHALLENGE_SELECTOR_ACTION_CREATE;
+            lChallengeSelected.meAction = KI_CHALLENGE_SELECTOR_ACTION_CREATE;
             lChallengeSelected.mChallengeID     = lpChallenge->GetChallengeID();
-            lChallengeSelected.miChall          = static_cast<s32>(lpChallenge->GetChallengeStyle());
+            lChallengeSelected.meFreeburnChallengeStyle          = static_cast<s32>(lpChallenge->GetChallengeStyle());
             mpStateInterface->OutputGuiEvent(lChallengeSelected);
         }
     }

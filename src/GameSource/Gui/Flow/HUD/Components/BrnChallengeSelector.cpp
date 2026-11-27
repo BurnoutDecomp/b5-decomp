@@ -258,11 +258,11 @@ void ChallengeSelector::Hide()
     // stored between var_28 @+0x08 and the payload copy @+0x10).
     GuiChallengeSelectedEvent lEvent;
     lEvent.mChallengeID     = lpEntry->GetChallengeID();  // ld 0xC0 -> mChallengeID
-    lEvent.miSelectorAction = KI_SELECTOR_ACTION_HIDE;    // li 3
+    lEvent.meAction = KI_SELECTOR_ACTION_HIDE;    // li 3
     // bl 0x823542A0 -- the IDB names that address `BrnResource::ChallengeListEntry::GetChall`,
     // which is the 41-char-truncated form of GetChallengeStyle (one binary function, see
     // ChallengeListEntry.h). It returns 1/2/3, stored into the event's 32-bit +0x0C word.
-    lEvent.miChall          = static_cast<s32>(lpEntry->GetChallengeStyle());
+    lEvent.meFreeburnChallengeStyle          = static_cast<s32>(lpEntry->GetChallengeStyle());
 
     PostChallengeSelected(mpStateInterface, lEvent);
 }
@@ -424,10 +424,10 @@ void ChallengeSelector::SelectAvailableChallenge(s32 liAvailableChallengeIndex, 
         // mOutEventQueue.AddEvent(&wrapper, /*channel*/40, /*size*/32) (`li r5,0x28` / `li r6,0x20`).
         GuiChallengeSelectedEvent lEvent;
         lEvent.mChallengeID     = lpChallengeEntry->GetChallengeID();   // ld r11, 0xC0(r30)
-        lEvent.miSelectorAction = KI_SELECTOR_ACTION_SELECT;            // li r11, 2
+        lEvent.meAction = KI_SELECTOR_ACTION_SELECT;            // li r11, 2
         // bl 0x823542A0 -- IDB name `BrnResource::ChallengeListEntry::GetChall` is the
         // 41-char-truncated form of GetChallengeStyle (see ChallengeListEntry.h).
-        lEvent.miChall          = static_cast<s32>(lpChallengeEntry->GetChallengeStyle());
+        lEvent.meFreeburnChallengeStyle          = static_cast<s32>(lpChallengeEntry->GetChallengeStyle());
 
         PostChallengeSelected(mpStateInterface, lEvent);
     }

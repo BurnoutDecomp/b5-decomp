@@ -5738,9 +5738,9 @@ namespace BrnGui
         if (mChallengeListComponent.GetHighlightedChallengeID() != 0 && ShouldShowButton())
         {
             GuiChallengeSelectedEvent lChallengeSelected;
-            lChallengeSelected.miSelectorAction = KI_SELECTOR_ACTION_HIGHLIGHT;
+            lChallengeSelected.meAction = KI_SELECTOR_ACTION_HIGHLIGHT;
             lChallengeSelected.mChallengeID     = mChallengeListComponent.GetHighlightedChallengeID();
-            lChallengeSelected.miChall = static_cast<s32>(
+            lChallengeSelected.meFreeburnChallengeStyle = static_cast<s32>(
                 mpGuiCache->GetFreeburnChallengeList()->GetChallengeData(lChallengeSelected.mChallengeID)
                     ->GetChallengeStyle());
             OutputGuiEventRecord(mpStateInterface, lChallengeSelected);
@@ -5791,11 +5791,11 @@ namespace BrnGui
             {
                 GuiChallengeSelectedEvent lChallengeSelected;
                 lChallengeSelected.mChallengeID     = mChallengeListComponent.GetHighlightedChallengeID();
-                lChallengeSelected.miSelectorAction = KI_SELECTOR_ACTION_SELECT;
+                lChallengeSelected.meAction = KI_SELECTOR_ACTION_SELECT;
 
                 if (lChallengeSelected.mChallengeID != 0 && mChallengeListComponent.mbShowButton)
                 {
-                    lChallengeSelected.miChall =
+                    lChallengeSelected.meFreeburnChallengeStyle =
                         mChallengeListComponent.GetChallengeStyle(lChallengeSelected.mChallengeID);
                     OutputGuiEventRecord(mpStateInterface, lChallengeSelected);
 
@@ -5827,12 +5827,12 @@ namespace BrnGui
                 {
                     GuiChallengeSelectedEvent lChallengeSelected;
                     lChallengeSelected.mChallengeID     = mChallengeListComponent.GetHighlightedChallengeID();
-                    lChallengeSelected.miSelectorAction = KI_SELECTOR_ACTION_UNHIGHLIGHT;
-                    lChallengeSelected.miChall =
+                    lChallengeSelected.meAction = KI_SELECTOR_ACTION_UNHIGHLIGHT;
+                    lChallengeSelected.meFreeburnChallengeStyle =
                         mChallengeListComponent.GetChallengeStyle(lChallengeSelected.mChallengeID);
                     OutputGuiEventRecord(mpStateInterface, lChallengeSelected);
 
-                    lChallengeSelected.miSelectorAction = KI_SELECTOR_ACTION_CLEAR;
+                    lChallengeSelected.meAction = KI_SELECTOR_ACTION_CLEAR;
                     OutputGuiEventRecord(mpStateInterface, lChallengeSelected);
                 }
 
@@ -5865,18 +5865,18 @@ namespace BrnGui
             if (mChallengeListComponent.GetHighlightedChallengeID() != 0 && mpGuiCache->IsLocalPlayerHost())
             {
                 GuiChallengeSelectedEvent lChallengeSelected;
-                lChallengeSelected.miSelectorAction = mChallengeListComponent.mbShowButton
+                lChallengeSelected.meAction = mChallengeListComponent.mbShowButton
                                                           ? KI_SELECTOR_ACTION_HIGHLIGHT
                                                           : KI_SELECTOR_ACTION_UNHIGHLIGHT;
                 lChallengeSelected.mChallengeID = mChallengeListComponent.GetHighlightedChallengeID();
-                lChallengeSelected.miChall = static_cast<s32>(
+                lChallengeSelected.meFreeburnChallengeStyle = static_cast<s32>(
                     mpGuiCache->GetFreeburnChallengeList()->GetChallengeData(lChallengeSelected.mChallengeID)
                         ->GetChallengeStyle());
                 OutputGuiEventRecord(mpStateInterface, lChallengeSelected);
 
                 if (!mChallengeListComponent.mbShowButton)
                 {
-                    lChallengeSelected.miSelectorAction = KI_SELECTOR_ACTION_CLEAR;
+                    lChallengeSelected.meAction = KI_SELECTOR_ACTION_CLEAR;
                     OutputGuiEventRecord(mpStateInterface, lChallengeSelected);
                 }
             }

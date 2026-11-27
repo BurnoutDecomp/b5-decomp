@@ -55,27 +55,20 @@ namespace BrnGui
 //     base = (liIndex > 0) ? 2 : 0
 //     if (liIndex >= miTotalOptions - 1)  meDirtyArrowConfiguration = base
 //     else                              meDirtyArrowConfiguration = base + 1
-FriendsListComponent* FriendsListComponent::SetDirty()
+// DWARF h:494 / cpp:2435 (local leCurrentArrowState cpp:2437). PS3 0x39B3C8 computes 2 * (option > 0), then adds one while the option is not
+// the last; ARTIST inlines it into SetDirty (0x8241F160..0x8241F184).
+FriendsListComponent::EArrowConfigurations FriendsListComponent::GetArrowState()
 {
-    const s32 liSelectedIndex = miCurrentlyHighlightedOption; // extsb -- sign-extended
-
-    mbDirty     = 1;
-    meDirtyCurrentState = meCurrentState;
-    meDirtyBranchState = meBranchState;
-    meDirtyListType = meListType;
-    miDirtyCurrentlyActiveSlots = miCurrentlyActiveSlots;
-    miDirtyCurrentlyHighlightedSlot = miCurrentlyHighlightedSlot;
-
-    s32 liBase = 0;
-    if ( liSelectedIndex > 0 )
-        liBase = 2;
-
-    if ( liSelectedIndex >= static_cast<s32>( miTotalOptions ) - 1 )
-        meDirtyArrowConfiguration = static_cast<u32>( liBase );
-    else
-        meDirtyArrowConfiguration = static_cast<u32>( liBase + 1 );
-
-    return this;
+    EArrowConfigurations leCurrentArrowState = E_ARROWS_NONE;
+    if (miCurrentlyHighlightedOption > 0)
+    {
+        leCurrentArrowState = E_ARROWS_UP_ONLY;
+    }
+    if (miCurrentlyHighlightedOption < miTotalOptions - 1)
+    {
+        leCurrentArrowState = static_cast<EArrowConfigurations>(leCurrentArrowState + E_ARROWS_DOWN_ONLY);
+    }
+    return leCurrentArrowState;
 }
 
 // @ 0x82410958 -- post-increment on the friends-list branch enum: advance the referenced enum
@@ -384,7 +377,7 @@ void FriendsListComponent::WithdrawBranches()
 }
 
 // @0x82422CB0 SetEntryData ---------------------------------------------------------------
-void FriendsListComponent::SetEntryData(s32 liRow, const char* lpcText, s32 leStatus,
+void FriendsListComponent::SetEntryData(s8 liRow, const char* lpcText, s32 leStatus,
                                         bool lbLocalise)
 {
     CGS_ASSERT(liRow >= 0 && liRow < KI_VISIBLE_ROWS, "Invalid index: \n");   // cpp:0x339
@@ -464,25 +457,14 @@ void FriendsListComponent::HandleNotConnected()
     miCurrentlyHighlightedOption = 0;                                        // @0x8242B97C
     meBranchState = 0;                                           // @0x8242B980
     SetEntryData(0, "FRIENDSLIST_NOT_CONNECTED",
-                 FriendsListEntry::E_FRIENDLISTENTRYSTATE_NOFRIENDS,
-                 true);                                          // status 1 @0x8242B984
+                 FriendsListEntry::E_FRIENDLISTENTRYSTATE_YOUOFFLINE,
+                 true);                                          // status 1 (`li r6, 1` @0x8242B96C)
     Highlight(miCurrentlyHighlightedSlot);
 
     for (s32 liRow = miCurrentlyActiveSlots; liRow < KI_VISIBLE_ROWS; ++liRow)
         maEntries[liRow].Invalidate();                           // @0x8242B9B4
 
-    mbDirty = 1;                                                 // snapshot tail @0x8242B9CC
-    meDirtyCurrentState = meCurrentState;
-    meDirtyBranchState = static_cast<u32>(meBranchState);
-    meDirtyListType = static_cast<u32>(meListType);
-    miDirtyCurrentlyActiveSlots = static_cast<u8>(miCurrentlyActiveSlots);
-    miDirtyCurrentlyHighlightedSlot = static_cast<u8>(miCurrentlyHighlightedSlot);
-    u32 luIndicator = 0;
-    if (miCurrentlyHighlightedOption > 0)
-        luIndicator = 2;
-    if (miCurrentlyHighlightedOption <= static_cast<s32>(miTotalOptions) - 1)
-        ++luIndicator;
-    meDirtyArrowConfiguration = luIndicator;
+    SetDirty();   // inlined by ARTIST (the snapshot tail, e.g. 0x8242B9CC)
 }
 
 // @0x8242BA40 HandleNoFriends -------------------------------------------------------------------
@@ -522,18 +504,7 @@ void FriendsListComponent::HandleNoFriends()
     for (s32 liRow = miCurrentlyActiveSlots; liRow < KI_VISIBLE_ROWS; ++liRow)
         maEntries[liRow].Invalidate();                           // @0x8242BB64
 
-    mbDirty = 1;                                                 // @0x8242BB9C
-    meDirtyCurrentState = meCurrentState;
-    meDirtyBranchState = static_cast<u32>(meBranchState);
-    meDirtyListType = static_cast<u32>(meListType);
-    miDirtyCurrentlyActiveSlots = static_cast<u8>(miCurrentlyActiveSlots);
-    miDirtyCurrentlyHighlightedSlot = static_cast<u8>(miCurrentlyHighlightedSlot);
-    u32 luIndicator = 0;
-    if (miCurrentlyHighlightedOption > 0)
-        luIndicator = 2;
-    if (miCurrentlyHighlightedOption <= static_cast<s32>(miTotalOptions) - 1)
-        ++luIndicator;
-    meDirtyArrowConfiguration = luIndicator;
+    SetDirty();   // inlined by ARTIST (the snapshot tail, e.g. 0x8242B9CC)
 }
 
 // @0x8242BBE8 ShowSpecificFriend ------------------------------------------------------------------
@@ -771,19 +742,11 @@ void FriendsListComponent::ShowFriendsList()
 
     SetDirty();                                                  // inlined @0x8243FFA4..C4
 
-    struct ShownRequest                                          // wrapper {1,94,12} + payload byte
-    {
-        s32 miOutEventSize;
-        s32 miOutEventType;
-        s32 miOutEventOffset;
-        u8  mubPayload;                                          // stb 1, var_14 @0x8243FFE4
-    } lRequest;
-    lRequest.miOutEventSize   = 1;                               // payload width
-    lRequest.miOutEventType   = 94;                              // 0x5E
-    lRequest.miOutEventOffset = 12;
-    lRequest.mubPayload       = 1;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lRequest), 40, 16);          // @0x8243FFF8
+    // DWARF local lFriendListShowingEvent (cpp:1993): GuiEventFriendListShowing (X360 id 94),
+    // posted through the inlined OutputGuiEvent (@0x8243FFF8).
+    GuiEventFriendListShowing lFriendListShowingEvent;
+    lFriendListShowingEvent.mbNowShowing = true;
+    mpStateInterface->OutputGuiEvent(lFriendListShowingEvent);
 
     RequestRefreshedData();                                      // @0x82440000
 
@@ -1034,26 +997,6 @@ void FriendsListComponent::UpdateAllShortcutsEntryData()
 
 namespace
 {
-    // Original StateInterface::OutputGuiEvent wraps raw payloads on channel 40.
-    template<class T> void FriendsOutput(CgsGui::StateInterface* state, T& event)
-    {
-        state->OutputGuiEvent(event);
-    }
-
-    void FriendsShown(CgsGui::StateInterface* state, bool shown)
-    {
-        struct Record { s32 size, type, offset; u8 shown; } record = {1, 94, 12, shown};
-        state->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&record), 40, sizeof(record));
-    }
-
-    void FriendsChallenge(CgsGui::StateInterface* state, GuiCache* cache, CgsID id, s32 action)
-    {
-        const BrnResource::ChallengeListEntry* entry = cache->GetFreeburnChallengeList()->GetChallengeData(id);
-        GuiChallengeSelectedEvent event = {id, action, static_cast<s32>(entry->GetChallengeStyle())};
-        FriendsOutput(state, event);
-    }
-
     void FriendsAudio(CgsGui::StateInterface* state)
     {
         GuiAudioTriggerEvent event;
@@ -1067,18 +1010,21 @@ void FriendsListComponent::ShowShortcutList()
 {
     const s32 mode = mpGuiCache->GetGameMode();
     if (mode != -1 && mode != 15) return;
-    miCurrentlyHighlightedSlot = miCurrentlyHighlightedOption = 0;
+    miCurrentlyHighlightedSlot   = 0;
+    miCurrentlyHighlightedOption = 0;
     meListType = 2;
     meCurrentState = 1;
     meBranchState = 0;
     SetDirty();
-    FriendsShown(mpStateInterface, true);
+    GuiEventFriendListShowing lFriendListShowingEvent;   // DWARF local (e.g. cpp:2069)
+    lFriendListShowingEvent.mbNowShowing = true;
+    mpStateInterface->OutputGuiEvent(lFriendListShowingEvent);
     UpdateAllEntryData();
     if (!CgsSystem::HardwareInit::IsHardDiskAvailable() && !s_sbHddOverlayShown)
     {
         GuiOverlayRequest event;
-        event.Construct("OnReqHDD");
-        FriendsOutput(mpStateInterface, event);
+        event.Construct(CgsIDCompress("OnReqHDD"));   // ARTIST 0x8244189C: CgsIDCompress, then the inline id/count/flags stores
+        mpStateInterface->OutputGuiEvent(event);
         s_sbHddOverlayShown = true;
     }
 }
@@ -1086,12 +1032,15 @@ void FriendsListComponent::ShowShortcutList()
 // ARTIST 0x824418D0.
 void FriendsListComponent::ShowChallengesList()
 {
-    miCurrentlyHighlightedSlot = miCurrentlyHighlightedOption = 0;
+    miCurrentlyHighlightedSlot   = 0;
+    miCurrentlyHighlightedOption = 0;
     meListType = 3;
     meCurrentState = 1;
     meBranchState = 0;
     SetDirty();
-    FriendsShown(mpStateInterface, true);
+    GuiEventFriendListShowing lFriendListShowingEvent;   // DWARF local (e.g. cpp:2069)
+    lFriendListShowingEvent.mbNowShowing = true;
+    mpStateInterface->OutputGuiEvent(lFriendListShowingEvent);
     UpdateAllEntryData();
 }
 
@@ -1113,8 +1062,15 @@ void FriendsListComponent::Close()
     if (meCurrentState == 0) return;
     if (meListType == 3)
     {
-        FriendsChallenge(mpStateInterface, mpGuiCache, maChallengesAvailable[miCurrentlyHighlightedOption], 3);
-        FriendsChallenge(mpStateInterface, mpGuiCache, maChallengesAvailable[miCurrentlyHighlightedOption], 1);
+        CgsID lChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
+        GuiChallengeSelectedEvent lChallengeSelected;
+        lChallengeSelected.mChallengeID = lChallengeID;
+        lChallengeSelected.meFreeburnChallengeStyle = static_cast<s32>(
+            mpGuiCache->GetFreeburnChallengeList()->GetChallengeData(lChallengeID)->GetChallengeStyle());
+        lChallengeSelected.meAction = GuiChallengeSelectedEvent::E_ACTION_HIDDEN;
+        mpStateInterface->OutputGuiEvent(lChallengeSelected);
+        lChallengeSelected.meAction = GuiChallengeSelectedEvent::E_ACTION_CANCELED;
+        mpStateInterface->OutputGuiEvent(lChallengeSelected);
     }
     meCurrentState = 5;
     SetDirty();
@@ -1124,15 +1080,36 @@ void FriendsListComponent::Close()
 // ARTIST 0x82442868.
 void FriendsListComponent::HandleDPadLeft()
 {
-    if (meCurrentState != 2) return;
-    if (meListType == 1) ShowShortcutList();
-    else if (meListType == 3)
+    // ARTIST 0x82442880..0x824428BC: the closed state is tested first, then the open state;
+    // the other lists close in place (DWARF lists the inlined SetDirty here, not Close).
+    if (meCurrentState == 0 || meCurrentState != 2) return;
+    // A switch on the list type: ARTIST tests 1 and 3 and runs the default (close in place)
+    // inline, the challenge case after it and the shared ShowShortcutList tail last.
+    switch (meListType)
     {
-        FriendsChallenge(mpStateInterface, mpGuiCache, maChallengesAvailable[miCurrentlyHighlightedOption], 3);
-        FriendsChallenge(mpStateInterface, mpGuiCache, maChallengesAvailable[miCurrentlyHighlightedOption], 1);
+    case 1:
         ShowShortcutList();
+        break;
+    case 3:
+    {
+        CgsID lChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
+        GuiChallengeSelectedEvent lChallengeSelected;
+        lChallengeSelected.mChallengeID = lChallengeID;
+        lChallengeSelected.meFreeburnChallengeStyle = static_cast<s32>(
+            mpGuiCache->GetFreeburnChallengeList()->GetChallengeData(lChallengeID)->GetChallengeStyle());
+        lChallengeSelected.meAction = GuiChallengeSelectedEvent::E_ACTION_HIDDEN;
+        mpStateInterface->OutputGuiEvent(lChallengeSelected);
+        lChallengeSelected.meAction = GuiChallengeSelectedEvent::E_ACTION_CANCELED;
+        mpStateInterface->OutputGuiEvent(lChallengeSelected);
+        ShowShortcutList();
+        break;
     }
-    else Close();
+    default:
+        meCurrentState = 5;
+        SetDirty();
+        Invalidate();
+        break;
+    }
 }
 
 // ARTIST 0x82441988.
@@ -1145,7 +1122,15 @@ bool FriendsListComponent::SelectPrevious()
         --miCurrentlyHighlightedSlot;
         Highlight(miCurrentlyHighlightedSlot);
         if (meListType == 3)
-            FriendsChallenge(mpStateInterface, mpGuiCache, maChallengesAvailable[miCurrentlyHighlightedOption], 2);
+            {
+                CgsID lChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
+                GuiChallengeSelectedEvent lChallengeSelected;
+                lChallengeSelected.mChallengeID = lChallengeID;
+                lChallengeSelected.meAction = GuiChallengeSelectedEvent::E_ACTION_SHOWN;
+                lChallengeSelected.meFreeburnChallengeStyle = static_cast<s32>(
+                    mpGuiCache->GetFreeburnChallengeList()->GetChallengeData(lChallengeID)->GetChallengeStyle());
+                mpStateInterface->OutputGuiEvent(lChallengeSelected);
+            }
         return true;
     }
     if (miCurrentlyHighlightedSlot == 0 && miCurrentlyHighlightedOption > 0)
@@ -1167,7 +1152,15 @@ bool FriendsListComponent::SelectNext()
         ++miCurrentlyHighlightedSlot;
         Highlight(miCurrentlyHighlightedSlot);
         if (meListType == 3)
-            FriendsChallenge(mpStateInterface, mpGuiCache, maChallengesAvailable[miCurrentlyHighlightedOption], 2);
+            {
+                CgsID lChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
+                GuiChallengeSelectedEvent lChallengeSelected;
+                lChallengeSelected.mChallengeID = lChallengeID;
+                lChallengeSelected.meAction = GuiChallengeSelectedEvent::E_ACTION_SHOWN;
+                lChallengeSelected.meFreeburnChallengeStyle = static_cast<s32>(
+                    mpGuiCache->GetFreeburnChallengeList()->GetChallengeData(lChallengeID)->GetChallengeStyle());
+                mpStateInterface->OutputGuiEvent(lChallengeSelected);
+            }
         return true;
     }
     if (miCurrentlyHighlightedSlot == 4 && miCurrentlyHighlightedOption < static_cast<s32>(miTotalOptions) - 1)
@@ -1250,7 +1243,9 @@ void FriendsListComponent::Update()
 {
     if (mbTriggerHideFriendsList)
     {
-        FriendsShown(mpStateInterface, false);
+        GuiEventFriendListShowing lFriendListShowingEvent;   // DWARF local (e.g. cpp:2069)
+        lFriendListShowingEvent.mbNowShowing = false;
+        mpStateInterface->OutputGuiEvent(lFriendListShowingEvent);
         mbTriggerHideFriendsList = false;
     }
     for (s32 i = 0; i < KI_VISIBLE_ROWS; ++i) maEntries[i].Update();
@@ -1429,7 +1424,7 @@ void FriendsListComponent::HandleBranchDPadRightShortcuts()
         const s32 type = branch == 2 ? 1 : 0;
         memcpy(event.maData, &type, sizeof(type));
         event.maData[4] = branch != 0;
-        FriendsOutput(mpStateInterface, event);
+        mpStateInterface->OutputGuiEvent(event);
     }
     else if (branch >= 3 && branch <= 11)
     {
@@ -1483,7 +1478,7 @@ void FriendsListComponent::HandleDPadRightShortcuts()
     {
         const BrnResource::ChallengeListEntry* entry = mpGuiCache->GetFreeburnChallengeManager()->GetCurrentChallenge();
         GuiChallengeSelectedEvent event = {entry->GetChallengeID(), 1, static_cast<s32>(entry->GetChallengeStyle())};
-        FriendsOutput(mpStateInterface, event);
+        mpStateInterface->OutputGuiEvent(event);
         break;
     }
     case 15:
@@ -1500,20 +1495,35 @@ void FriendsListComponent::HandleDPadRightShortcuts()
 // ARTIST 0x8242B498.
 void FriendsListComponent::UpdateAllFriendsEntryData()
 {
+    // DWARF locals liStartFriend / liDifferenceToChange (cpp:2673/2674) and the loop's
+    // liScreenEntryIndex (cpp:2690); the filled row is the tested arm (ARTIST 0x8242B508 `bge`
+    // to the Invalidate placed last).
+    int32_t liStartFriend;
+    int32_t liDifferenceToChange;
+
     miCurrentlyActiveSlots = 0;
-    s32 first = miCurrentlyHighlightedOption - miCurrentlyHighlightedSlot;
-    if (miTotalOptions >= 5)
+    liStartFriend = miCurrentlyHighlightedOption - miCurrentlyHighlightedSlot;
+    if (miTotalOptions >= KI_VISIBLE_ROWS)
     {
-        const s32 excess = first - static_cast<s32>(miTotalOptions) + 5;
-        if (excess > 0) { first -= excess; miCurrentlyHighlightedOption -= static_cast<s8>(excess); }
+        liDifferenceToChange = liStartFriend - static_cast<s32>(miTotalOptions) + KI_VISIBLE_ROWS;
+        if (liDifferenceToChange > 0)
+        {
+            miCurrentlyHighlightedOption = static_cast<s8>(miCurrentlyHighlightedOption - liDifferenceToChange);
+            liStartFriend -= liDifferenceToChange;
+        }
     }
-    for (s32 i = 0; i < 5; ++i)
+    for (int32_t liScreenEntryIndex = 0; liScreenEntryIndex < KI_VISIBLE_ROWS; ++liScreenEntryIndex)
     {
-        if (i >= static_cast<s32>(miTotalOptions)) maEntries[i].Invalidate();
-        else
+        if (liScreenEntryIndex < static_cast<s32>(miTotalOptions))
         {
             ++miCurrentlyActiveSlots;
-            SetEntryData(i, maFullBuddyList[first + i].mPlayerName.macName, maeFullBuddyEntryState[first + i], false);
+            SetEntryData(static_cast<s8>(liScreenEntryIndex),
+                         maFullBuddyList[liStartFriend + liScreenEntryIndex].mPlayerName.macName,
+                         maeFullBuddyEntryState[liStartFriend + liScreenEntryIndex], false);
+        }
+        else
+        {
+            maEntries[liScreenEntryIndex].Invalidate();
         }
     }
     while (miCurrentlyHighlightedSlot >= miCurrentlyActiveSlots) { --miCurrentlyHighlightedSlot; --miCurrentlyHighlightedOption; }
@@ -1617,10 +1627,11 @@ void FriendsListComponent::HandleDPadRightFriends()
     if (mpGuiCache->muFriendsPanelBranchMirror != 0) return;
     GuiEventOnlineInviteEvent event = {};
     event.meRequestedAction = 6;
-    FriendsOutput(mpStateInterface, event);
+    mpStateInterface->OutputGuiEvent(event);
     mpGuiCache->muFriendsPanelBranchMirror = 4;
     miCurrentlyActiveSlots = 1;
-    miCurrentlyHighlightedSlot = miCurrentlyHighlightedOption = 0;
+    miCurrentlyHighlightedSlot   = 0;
+    miCurrentlyHighlightedOption = 0;
     maEntries[1].Invalidate();
     SetDirty();
 }
@@ -1644,7 +1655,7 @@ void FriendsListComponent::HandleBranchDPadRightFriends()
     {
         GuiEventOnlineShowProfile event;
         event.mFriendToView.Construct(maEntries[miCurrentlyHighlightedSlot].GetNameField().GetText());
-        FriendsOutput(mpStateInterface, event);
+        mpStateInterface->OutputGuiEvent(event);
     }
     else if (branch == 2 || branch == 4 || branch == 5 || branch == 6 || branch == 7 || branch == 9)
     {
@@ -1654,7 +1665,7 @@ void FriendsListComponent::HandleBranchDPadRightFriends()
             event.mFriendToAddress.Construct(branch == 2 ? "" : maEntries[miCurrentlyHighlightedSlot].GetNameField().GetText());
             event.meRequestedAction = branch == 2 ? 5 : branch == 4 ? 0 : branch == 5 ? 4 : branch == 6 ? 1 : branch == 7 ? 2 : 3;
             if (branch == 6) event.mbHasOnlineGameBeenStarted = mpGuiCache->IsOnlineStartInProgress();
-            FriendsOutput(mpStateInterface, event);
+            mpStateInterface->OutputGuiEvent(event);
             if (branch == 4) { mpGuiCache->muFriendsPanelBranchMirror = 1; mpGuiCache->mbOnlineGameOptionsChanged = true; }
             else if (branch == 6) mpGuiCache->muFriendsPanelBranchMirror = 2;
             else if (branch == 9) mpGuiCache->muFriendsPanelBranchMirror = 3;
@@ -1694,7 +1705,15 @@ void FriendsListComponent::UpdateAllChallengesEntryData()
     }
     while (miCurrentlyHighlightedSlot >= miCurrentlyActiveSlots) { --miCurrentlyHighlightedSlot; --miCurrentlyHighlightedOption; }
     Highlight(miCurrentlyHighlightedSlot);
-    FriendsChallenge(mpStateInterface, mpGuiCache, maChallengesAvailable[miCurrentlyHighlightedOption], 2);
+    {
+        CgsID lChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
+        GuiChallengeSelectedEvent lChallengeSelected;
+        lChallengeSelected.mChallengeID = lChallengeID;
+        lChallengeSelected.meAction = GuiChallengeSelectedEvent::E_ACTION_SHOWN;
+        lChallengeSelected.meFreeburnChallengeStyle = static_cast<s32>(
+            mpGuiCache->GetFreeburnChallengeList()->GetChallengeData(lChallengeID)->GetChallengeStyle());
+        mpStateInterface->OutputGuiEvent(lChallengeSelected);
+    }
     SetDirty();
 }
 
@@ -1703,17 +1722,17 @@ void FriendsListComponent::HandleDPadRightChallenges()
 {
     GuiChallengeSelectedEvent lSelected;
     lSelected.mChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
-    lSelected.miSelectorAction = 0;
-    lSelected.miChall = mpGuiCache->GetFreeburnChallengeList()
+    lSelected.meAction = 0;
+    lSelected.meFreeburnChallengeStyle = mpGuiCache->GetFreeburnChallengeList()
         ->GetChallengeData(lSelected.mChallengeID)->GetChallengeStyle();
     mpStateInterface->OutputGuiEvent(lSelected);
-    lSelected.miSelectorAction = 3;
+    lSelected.meAction = 3;
     mpStateInterface->OutputGuiEvent(lSelected);
     if (mpGuiCache->GetOnlineGameModeOptions()->meGameMode != 15)
     {
         GuiEventNetworkGameParams event = *mpGuiCache->GetOnlineGameModeOptions();
         event.meGameMode = 15;
-        FriendsOutput(mpStateInterface, event);
+        mpStateInterface->OutputGuiEvent(event);
     }
     meCurrentState = 5;
     SetDirty();

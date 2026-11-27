@@ -977,19 +977,28 @@ namespace BrnGui
     // stack-build this 16-byte record and post it through
     // StateInterface::OutputGuiEvent<GuiChallengeSelectedEvent> (@0x82436778, channel 40) -- and
     // cross-checked against the consumer GameBridgeGUIToX case 573, which reads mChallengeID
-    // (u64 @0x00), miSelectorAction (s32 @0x08) and miChall (s32 @0x0C). So it is modelled with
+    // (u64 @0x00), meAction (s32 @0x08) and meFreeburnChallengeStyle (s32 @0x0C). So it is modelled with
     // real fields rather than a GuiEvent<573> header + opaque maPayload (the producers write a raw
     // CgsID at offset 0, i.e. there is NO GuiEvent header inside the payload). sizeof == 16, align 8
     // and GetEventType() == 573 are preserved, so the AddGuiEvent<T> / OutputGuiEvent<T> template
     // instantiations are unaffected.
     struct CGS_ALIGN(8) GuiChallengeSelectedEvent
     {
+        // DWARF BrnGuiEventTypeDefs.h:6542.
+        enum EFreeburnChallengeAction
+        {
+            E_ACTION_CHOSEN   = 0,
+            E_ACTION_CANCELED = 1,
+            E_ACTION_SHOWN    = 2,
+            E_ACTION_HIDDEN   = 3,
+        };
+
         u64 mChallengeID;      // +0x00  highlighted challenge id (CgsID)
-        s32 miSelectorAction;  // +0x08  selector/action code (Hide posts 3; Close posts 3 then 1; SelectPrevious posts 2)
-        s32 miChall;           // +0x0C  the challenge STYLE: all three producers fill it from
+        s32 meAction;  // +0x08  selector/action code (Hide posts 3; Close posts 3 then 1; SelectPrevious posts 2)
+        s32 meFreeburnChallengeStyle;           // +0x0C  the challenge STYLE: all three producers fill it from
                                //        BrnResource::ChallengeListEntry::GetChallengeStyle()
                                //        @0x823542A0 (1=NORMAL, 2=ROAD_RULES_TIME, 3=ROAD_RULES_CRASH).
-                               //        FLAG consumer-named: the field name `miChall` was taken from
+                               //        FLAG consumer-named: the field name `meFreeburnChallengeStyle` was taken from
                                //        the IDB's 41-char-TRUNCATED symbol "…ChallengeListEntry::GetChall";
                                //        there is no such method (see ChallengeListEntry.h).
         s32 GetEventType() const { return 573; }

@@ -2336,7 +2336,7 @@ namespace BrnGui
                 // the console these five selector arms never pass their gate.
                 const GuiChallengeSelectedEvent* lpSelected =
                     reinterpret_cast<const GuiChallengeSelectedEvent*>(lpEvent);
-                switch (lpSelected->miSelectorAction)
+                switch (lpSelected->meAction)
                 {
                 case 0:
                 case 1:

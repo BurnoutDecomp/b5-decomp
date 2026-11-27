@@ -82,13 +82,27 @@ namespace BrnGui
             E_FRIENDLISTBRANCH_COUNT           = 13,
         };
 
+        // DWARF BrnFriendsList.h:115 -- the scroll-arrow indicator SetDirty snapshots.
+        enum EArrowConfigurations
+        {
+            E_ARROWS_NONE      = 0,
+            E_ARROWS_DOWN_ONLY = 1,
+            E_ARROWS_UP_ONLY   = 2,
+            E_ARROWS_BOTH      = 3,
+            E_ARROWS_COUNT     = 4,
+        };
+
         // @ 0x82473580 -- latch the (non-NULL) GuiCache pointer and cache its far field.
         // DWARF h:263 declares it void; the body is header-inline below (assert h:665).
         void SetGuiCachePointer(GuiCache* lpGuiCache);
 
+        // DWARF h:494 -- the scroll-arrow indicator for the highlighted option (no ARTIST copy;
+        // SetDirty inlines it, PS3 0x39B3C8).
+        EArrowConfigurations GetArrowState();
+
         // @ 0x8241F120 -- snapshot the current selection into the dirty region, raise the
-        // dirty flag, and store the scroll-arrow indicator. Returns `this`.
-        FriendsListComponent* SetDirty();
+        // dirty flag, and store the scroll-arrow indicator (DWARF h:500, void).
+        void SetDirty();
         // ---- [friends wave] remaining reconstructed surface ----
         void Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface,
                        const char* lpacParentName);                                     // 0x82422B20
@@ -126,7 +140,7 @@ namespace BrnGui
         void ShowFriendsListBranch();                                                   // 0x82422E18
         void ShowShortcutsBranch();                                                     // 0x82423120
         void Highlight(s8 li8Row);                                                      // 0x82414960 (DWARF h: Highlight(int8_t))
-        void SetEntryData(s32 liRow, const char* lpcText, s32 leStatus, bool lbLocalise); // 0x82422CB0
+        void SetEntryData(s8 liRow, const char* lpcText, s32 leStatus, bool lbLocalise); // 0x82422CB0 (DWARF int8_t index)
         void HandleNotConnected();                                                      // 0x8242B948
         void HandleNoFriends();                                                         // 0x8242BA40
         void HandleDPadLeft();                                                          // 0x82442868
@@ -197,11 +211,26 @@ namespace BrnGui
         s32   meDirtyCurrentState;                                  // +0x4108
         s32   meDirtyBranchState;                                   // +0x410C
         s32   meDirtyListType;                                      // +0x4110
-        s32   meDirtyArrowConfiguration;                            // +0x4114 EArrowConfigurations (0..3)
+        EArrowConfigurations meDirtyArrowConfiguration;             // +0x4114 (DWARF type)
         bool  mbDirty;                                              // +0x4118
         s8    miDirtyCurrentlyActiveSlots;                          // +0x4119
         s8    miDirtyCurrentlyHighlightedSlot;                      // +0x411A
     };
+
+    // DWARF: defined in the header (listed without a line in the BrnGuiComponentUnity CU, as the
+    // header-inline SetGuiCachePointer is in BrnGuiHUDUnity); ARTIST keeps a COMDAT 0x8241F120 for
+    // the sites that call it (Close 0x8243987C). In ARTIST's store order (0x8241F148..0x8241F15C):
+    // the flag, the two states, the two slot bytes, then the list type.
+    inline void FriendsListComponent::SetDirty()
+    {
+        mbDirty                         = true;
+        meDirtyCurrentState             = meCurrentState;
+        meDirtyBranchState              = meBranchState;
+        miDirtyCurrentlyActiveSlots     = miCurrentlyActiveSlots;
+        miDirtyCurrentlyHighlightedSlot = miCurrentlyHighlightedSlot;
+        meDirtyListType                 = meListType;
+        meDirtyArrowConfiguration       = GetArrowState();
+    }
 
     // DWARF: defined in the header (ARTIST's COMDAT 0x82473580 asserts BrnFriendsList.h:665).
     inline void FriendsListComponent::SetGuiCachePointer(GuiCache* lpGuiCache)
