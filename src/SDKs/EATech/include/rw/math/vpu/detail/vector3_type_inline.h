@@ -40,10 +40,16 @@ inline void Vector3::Set(VecFloatRefIndex::InParam x,
                          VecFloatRefIndex::InParam y,
                          VecFloatRefIndex::InParam z)
 {
-    // Each arg: vspltw(lvsl) broadcasts its referenced lane, then the same vperm assemble.
-    mV.v[0] = x.mV.v[x.mIndex];
-    mV.v[1] = y.mV.v[y.mIndex];
-    mV.v[2] = z.mV.v[z.mIndex];
+    // rwmath vector3_type_inline.h:29: each argument splatted through vspltw(lvsl(4 * mIndex), 0) + vperm, then
+    // the :23 assemble -- vperm(x, y, {X0, Y1, X0, X0}) with z's lane inserted -- whose Xenon form is the tree's
+    // _asmCreateVectorAxis<X, Y, Z> (vperm with the 00010203 14151617 00010203 00010203 control, then vrlimi128 2, 0).
+    // ARTIST GlobalIrradianceManager::ComputeIrradiance 0x827CA9C4..0x827CAA0C (lvsl/vspltw, three vperm splats,
+    // lvx of the control from 0x82CDA350, vperm, vrlimi128 v13,v0,2,0); world CR-32c.
+    VectorIntrinsic xV, yV, zV;
+    { VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(x.mIndex))), 0); xV = __vperm(x.mV, x.mV, permConstant); }
+    { VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(y.mIndex))), 0); yV = __vperm(y.mV, y.mV, permConstant); }
+    { VectorIntrinsic permConstant = __vspltw(__lvsl(0, (4*(int)(z.mIndex))), 0); zV = __vperm(z.mV, z.mV, permConstant); }
+    mV = _asmCreateVectorAxis<VectorAxisX, VectorAxisY, VectorAxisZ>(xV, yV, zV);
 }
 
 template<VectorAxis XSRC_INDEX, VectorAxis YSRC_INDEX, VectorAxis ZSRC_INDEX>

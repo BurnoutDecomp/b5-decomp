@@ -55,6 +55,27 @@ inline MaskScalar CompGreaterThan(VecFloat::InParam a, VecFloat::InParam b)
 {
     return MaskScalar(__vcmpgtfp(a.mV, b.mV));
 }
+// rwmath 1.02.00 detail/scalar_operation_inline.h:129 (declared vpu/scalar.h:62): two Newton steps on the vrefp
+// estimate, each with its own one, and no final multiply (ARTIST BrnTraffic::FuzzyEnvelopeSet4::SetEnvelope
+// 0x82752598: vcfsx(vspltisw 1, 0) 0x827526CC/0x827526E0, vrefp 0x8275270C/0x82752714, vnmsubfp + vmaddfp twice
+// 0x82752724..0x82752740; world CR-32a, DWARF SetEnvelope cpp:60 lists Reciprocal).
+inline VecFloat Reciprocal(VecFloat::InParam a)
+{
+    VectorIntrinsic result;
+    {
+        VectorIntrinsic secondEstimate;
+        {
+            VectorIntrinsic estimate, vOne;
+            estimate = __vrefp(a.mV);
+            vOne = __vcfsx(__vspltisw(1), 0);
+            secondEstimate = __vmaddfp(estimate, __vnmsubfp(estimate, a.mV, vOne), estimate);
+        }
+        VectorIntrinsic vOne;
+        vOne = __vcfsx(__vspltisw(1), 0);
+        result = __vmaddfp(secondEstimate, __vnmsubfp(secondEstimate, a.mV, vOne), secondEstimate);
+    }
+    return VecFloat(result);
+}
 // rwmath 1.02.00 detail/scalar_operation_inline.h:136: one Newton step on the vrefp estimate,
 // est + est * (1 - est * a) (ARTIST rw::collision::FeatureEdge::FeatureEdge 0x82BA8630..0x82BA8638:
 // vrefp, vnmsubfp against vcfsx(vspltisw 1, 0), vmaddfp).

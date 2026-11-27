@@ -132,6 +132,13 @@ namespace vpu
         Matrix44(VectorIntrinsicInParam x, VectorIntrinsicInParam y, VectorIntrinsicInParam z, VectorIntrinsicInParam w)
             : xAxis(x), yAxis(y), zAxis(z), wAxis(w) {}
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
+        // rwmath matrix44.h:73-80 / matrix44_type_inline.h:33/:39/:86/:91 (DecFIGS matrix44_type_inline.h:47/:52/:92/:112):
+        // a row by index and an element as a runtime lane reference (GlobalIrradianceManager::ComputeIrradianceMatrix
+        // 0x827B1160 stores through GetElem: the 0x8327F140 swizzle table + vperm per element; world CR-32b).
+        Vector4& GetRow(int i) { return reinterpret_cast<Vector4*>(this)[i]; }
+        const Vector4& GetRow(int i) const { return reinterpret_cast<const Vector4*>(this)[i]; }
+        VecFloatRefIndex GetElem(int row, int column) { return GetRow(row).GetComponent(column); }
+        const VecFloatRefIndex GetElem(int row, int column) const { return GetRow(row).GetComponent(column); }
         // rwmath matrix44_type_inline.h:78 (DecFIGS the same line; always_inline in the SDK): the four
         // rows from the unit axis registers, as ARTIST loads them in Debug3DImmediateRender::
         // SetProjectionMode 0x8281B9F0..0x8281BA6C (lvx from 0x82181500/10/20/30).
