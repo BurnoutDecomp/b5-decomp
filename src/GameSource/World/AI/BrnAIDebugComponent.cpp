@@ -594,10 +594,15 @@ void AIDebugComponent::AssertNativeLayout()
 // ARTIST 0x82767090: the portal-target flag at +0x2e is deliberately untouched.
 void AIDebugComponent::Construct(AIModule* lpAIModule)
 {
-    CGS_ASSERT(lpAIModule != 0, "lpAIModule != NULL");
+    // The PS3 0x9B5668 member order (ControlData / AggressiveTargetPoints / AggressiveWarning
+    // before DirectVector / DestinationVector), with miCurrentAICar stored after the drift flags
+    // as ARTIST does (0x82767180): the base DebugComponent::Construct (ARTIST bl 0x8284CB38, the
+    // folded empty body), the :204 assert, then the members; mbDrawPortalTargets (+0x2E) is not
+    // initialised (no store in either build).
+    CgsDev::DebugComponent::Construct();
+    CGS_ASSERT_AT(lpAIModule != 0, "lpAIModule != NULL", CGS_ARTIST_UNITY_BRNAIDEBUGCOMPONENT_CPP_FILE, 204);
     mpAIModule = lpAIModule;
     mpAISectionsData = 0;
-    miCurrentAICar = 0;
     mbDrawCarUnderSection = false;
     mbDrawAICarStatesTable = false;
     mbDrawSpeedCalculationStateOnTable = false;
@@ -620,11 +625,11 @@ void AIDebugComponent::Construct(AIModule* lpAIModule)
     mbDrawResetOnTrackSection = false;
     mbDrawAllDriverData = false;
     mbDrawRacingLines = false;
-    mbDrawDirectVector = false;
-    mbDrawDestinationVector = false;
     mbDrawControlData = false;
     mbDrawAggressiveTargetPoints = false;
     mbDrawAggressiveWarning = false;
+    mbDrawDirectVector = false;
+    mbDrawDestinationVector = false;
     mbDrawNearbyVehicles = false;
     mbDrawCarIndices = false;
     mbDrawChevrons = false;
@@ -633,11 +638,9 @@ void AIDebugComponent::Construct(AIModule* lpAIModule)
     mbDrawDriftingDebug = false;
     mbAlwaysWantToDrift = false;
     mbShowDriftTarget = false;
+    miCurrentAICar = 0;
     mfCruisingSpeed = KF_DEFAULT_CRUISE_SPEED;
-    mPIDDebugData.meCoefficientToBeTuned = E_COEFFICIENT_COUNT;
-    mPIDDebugData.mfPCoefficient = 0.0f;
-    mPIDDebugData.mfICoefficient = 0.0f;
-    mPIDDebugData.mfDCoefficient = 0.0f;
+    mPIDDebugData.Clear();
 }
 
 // Inlined by AIModule::Destruct at 0x8276E3C0..0x8276E400.

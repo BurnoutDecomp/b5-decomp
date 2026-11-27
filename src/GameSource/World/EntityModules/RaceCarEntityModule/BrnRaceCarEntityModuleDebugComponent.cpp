@@ -132,30 +132,33 @@ namespace
 void RaceCarEntityModuleDebugComponent::Construct(RaceCarEntityModule* lpRaceCarEntityModule)
 {
     CgsDev::DebugComponent::Construct();   // ARTIST 0x822A7874 (folded at 0x8284CB38)
-    CGS_ASSERT_AT(lpRaceCarEntityModule != 0, "lpRaceCarEntityModule != NULL", __FILE__, 64);
+    CGS_ASSERT_AT(lpRaceCarEntityModule != 0, "lpRaceCarEntityModule != NULL",
+                  "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleDebugComponent.cpp",
+                  64);   // ARTIST file string 0x820171B8
 
     mpRaceCarEntityModule = lpRaceCarEntityModule;
 
-    mbRenderCarDamageState       = false;
-    mbRenderCarSreamingState     = false;
-    mbRenderLastResetInfo        = false;
-    mbRenderPlayerResetPositions = false;
-    mbForceOnlineFreeburnSpawnPosition = false;
-
-    miLastDriftDistance    = 0;
-    miLastInAirDistance    = 0;
-    miLastOncomingDistance = 0;
+    // ARTIST's store order (0x822A7914..0x822A797C; the identity rows are built on the stack and
+    // copied in between):
+    mbRenderTailgateCones    = false;     // +0x140
+    mfAverageSpeed           = 0.0f;      // +0x148
+    mbShowEngineState        = false;     // +0x142
+    mbRenderCarDamageState   = false;     // +0x10
+    mbRenderCarSreamingState = false;     // +0x11
+    miLastDriftDistance      = 0;         // +0x18
+    miLastInAirDistance      = 0;         // +0x1C
+    miLastOncomingDistance   = 0;         // +0x20
+    miAverageSpeedFrameCount = 0;         // +0x14C
+    mbTrafficRelatedData     = false;     // +0x150
+    mbRenderLastResetInfo    = false;     // +0x12
+    mbRenderPlayerResetPositions = false; // +0x13
 
     // Identity rotation, zero translation, zero w lanes -- the four rows the console builds on
     // the stack and copies in.
     mLastResetTransform.SetIdentity();
 
-    mbRenderTailgateCones    = false;
-    mbShowEngineState        = false;
-    mbDrawResetOnWaterHeight = false;
-    mfAverageSpeed           = 0.0f;
-    miAverageSpeedFrameCount = 0;
-    mbTrafficRelatedData     = false;
+    mbDrawResetOnWaterHeight = false;     // +0x143
+    mbForceOnlineFreeburnSpawnPosition = false;   // +0x16
 }
 
 // ARTIST RaceCarEntityModule::Destruct 822F3E1C..822F3E54 inlines this teardown.

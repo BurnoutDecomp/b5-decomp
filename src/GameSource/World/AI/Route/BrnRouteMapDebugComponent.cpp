@@ -50,9 +50,6 @@ namespace
 
     // Section/colour-mode tuning constants (BrnRouteMapDebugComponent.cpp:34-55 in the DWARF). Only
     // the ones this TU's bodies actually load are pinned to their X360 literal values.
-    const f32  KF_MAP_SCALE_DEFAULT   = 0.1f;   // flt_820C424C (Construct)
-    const f32  KF_MAP_OFFSET_X_DEFAULT = 580.0f; // flt_820C5708
-    const f32  KF_MAP_OFFSET_Y_DEFAULT = 450.0f; // flt_8203869C
 
     // High-detail map: above this on-screen section count the draw loop stops unless mbHighDetailMap.
     const s32  KI_LOW_DETAIL_SECTION_LIMIT = 2500;   // cmpwi r21, 0x9C4
@@ -110,49 +107,45 @@ namespace BrnAI
 // ====================================================================================================
 void RouteMapDebugComponent::Construct(RouteMapModule* lpRouteMapModule, AIModule* lpAIModule)
 {
-    // The X360 calls the base init first (BaseCollisionGenerator::Destruct is the de-virtualised
-    // base two-phase reset that the inliner folded in); reproduce it as the base Construct.
+    // ARTIST's store order for the zero members (0x82767ED0..0x82767F20, the same as the PS3
+    // body's), then the defaults and the colour-mode list element by element (the X360 schedules
+    // their value stores first, the list's 0 last at 0x82767F20). The three map defaults are
+    // plain literals: ARTIST reads 580.0 from a pooled literal beside this function's strings
+    // (0x820C5708) and 450.0 from the shared literal 0x8203869C, so they were not named consts.
     CgsDev::DebugComponent::Construct();   // ARTIST 0x82767E40 (folded at 0x8284CB38)
-    CGS_ASSERT_AT(lpRouteMapModule != NULL, "lpRouteMapModule != NULL", __FILE__, 88);
+    CGS_ASSERT_AT(lpRouteMapModule != NULL, "lpRouteMapModule != NULL", CGS_ARTIST_UNITY_BRNROUTEMAPDEBUGCOMPONENT_CPP_FILE, 88);
 
-    mpRouteMapModule = lpRouteMapModule;     // +0x0C
-    mpAIModule       = lpAIModule;            // +0x14
-
-    // Colour-mode dropdown: {0,"Plain"}, {1,"Type"}, {2,"Speed"}.
-    maColourModeList[0].miValue = 0;          // +0x40
-    maColourModeList[0].mpcName = "Plain";    // +0x44
-    maColourModeList[1].miValue = 1;          // +0x48
-    maColourModeList[1].mpcName = "Type";     // +0x4C
-    maColourModeList[2].miValue = 2;          // +0x50
-    maColourModeList[2].mpcName = "Speed";    // +0x54
-
-    mfMapScale   = KF_MAP_SCALE_DEFAULT;      // +0x18
-    mfMapOffsetX = KF_MAP_OFFSET_X_DEFAULT;   // +0x1C
-    mfMapOffsetY = KF_MAP_OFFSET_Y_DEFAULT;   // +0x20
-
-    mpAISectionsData = NULL;                  // +0x10 (resolved later in OnActivate)
-
-    // Every toggle starts off (the X360 stb r11(=0) sweep over +0x2C..+0x3B).
-    mbDrawAISectionMap            = false;    // +0x2C
-    mbHighDetailMap              = false;     // +0x2D
-    mbDrawCarsInMap              = false;     // +0x2E
-    mbDrawCarRoutesInMap         = false;     // +0x2F
-    mbDrawMasterRouteInMap       = false;     // +0x30
-    mbDrawAStarInMap             = false;     // +0x31
-    mbCarInfoInMap               = false;     // +0x32
-    mbDrawDeadEndsInMap          = false;     // +0x33
-    mbDrawEventBlockSectionsInMap = false;    // +0x34
-    mbOnlyDrawOneCar             = false;     // +0x35
-    mbOnlyDrawDataForPlayerSection = false;   // +0x36
-    mbDrawPortals                = false;     // +0x37
-    mbDrawPortalIds              = false;     // +0x38
-    mbDrawPortalLines            = false;     // +0x39
-    mbDrawHNGAsPlanes            = false;     // +0x3A
-    mbShowSectionInfo            = false;     // +0x3B
-
-    miCarIndex       = 0;                      // +0x24
-    miMapColourMode  = 0;                      // +0x28
-    miAISectionIndex = 0;                      // +0x3C
+    mpRouteMapModule = lpRouteMapModule;           // +0x0C
+    mpAIModule       = lpAIModule;                 // +0x14
+    mpAISectionsData = NULL;                       // +0x10
+    mbDrawAISectionMap             = false;        // +0x2C
+    mbHighDetailMap                = false;        // +0x2D
+    mbDrawDeadEndsInMap            = false;        // +0x33
+    mbDrawCarsInMap                = false;        // +0x2E
+    mbDrawCarRoutesInMap           = false;        // +0x2F
+    mbDrawMasterRouteInMap         = false;        // +0x30
+    mbCarInfoInMap                 = false;        // +0x32
+    mbOnlyDrawOneCar               = false;        // +0x35
+    mbDrawAStarInMap               = false;        // +0x31
+    mbDrawEventBlockSectionsInMap  = false;        // +0x34
+    miCarIndex                     = 0;            // +0x24
+    miMapColourMode                = 0;            // +0x28
+    mbDrawPortals                  = false;        // +0x37
+    mbDrawPortalIds                = false;        // +0x38
+    mbDrawPortalLines              = false;        // +0x39
+    mbDrawHNGAsPlanes              = false;        // +0x3A
+    mbOnlyDrawDataForPlayerSection = false;        // +0x36
+    mbShowSectionInfo              = false;        // +0x3B
+    miAISectionIndex               = 0;            // +0x3C
+    mfMapScale   = 0.1f;                           // +0x18
+    mfMapOffsetX = 580.0f;                         // +0x1C
+    mfMapOffsetY = 450.0f;                         // +0x20
+    maColourModeList[0].miValue = 0;               // +0x40
+    maColourModeList[0].mpcName = "Plain";         // +0x44
+    maColourModeList[1].miValue = 1;               // +0x48
+    maColourModeList[1].mpcName = "Type";          // +0x4C
+    maColourModeList[2].miValue = 2;               // +0x50
+    maColourModeList[2].mpcName = "Speed";         // +0x54
 }
 
 // ====================================================================================================
