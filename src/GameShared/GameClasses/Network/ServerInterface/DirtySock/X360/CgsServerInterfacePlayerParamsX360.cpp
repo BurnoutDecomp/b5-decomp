@@ -9,11 +9,9 @@
 //   CgsNetwork::ServerInterfacePlayerParamsX360::GetNetworkAddress    @ 0x8287A308
 //   CgsNetwork::ServerInterfacePlayerParamsX360::SerialiseFromPlayer  @ 0x8287A340
 //
-// GetNetworkAddress is static: it copies lpSource's 36-byte secure network
-// address (macNetworkAddress, +0x60) into the caller-supplied lpDestination
-// buffer and returns that buffer. (ASM: the memcpy dest is the untouched
-// incoming r3 and its src is r4+0x60 -- both are plain explicit arguments,
-// there is no implicit `this` read here.)
+// GetNetworkAddress returns the 36-byte secure network address (mNetworkAddress,
+// +0x60) by value: the XDK passes the return slot in r3 and `this` in r4, and
+// copies the XNADDR with memcpy (0x8287A324).
 //
 // SerialiseFromPlayer chains to the shared base (which fills the name / ident /
 // presence / addresses + parses the USERPARAMS structure), then finds the '^'
@@ -56,14 +54,13 @@ bool ServerInterfacePlayerParamsX360::Prepare()
     }
 
     // The 36-byte secure address is the XNADDR the XDK fills in place.
-    XNetGetTitleXnAddr(reinterpret_cast<XNADDR*>(macNetworkAddress));
+    XNetGetTitleXnAddr(&mNetworkAddress);
     return true;
 }
 
-void* ServerInterfacePlayerParamsX360::GetNetworkAddress(void* lpDestination, const ServerInterfacePlayerParamsX360* lpSource)
+XNADDR ServerInterfacePlayerParamsX360::GetNetworkAddress() const
 {
-    std::memcpy(lpDestination, lpSource->macNetworkAddress, 36);
-    return lpDestination;
+    return mNetworkAddress;
 }
 
 void ServerInterfacePlayerParamsX360::SerialiseFromPlayer(const LobbyApiPlayerT* lpPlayer)
@@ -73,7 +70,7 @@ void ServerInterfacePlayerParamsX360::SerialiseFromPlayer(const LobbyApiPlayerT*
     const char* lpcMarker  = std::strchr(lpPlayer->strMachineAddr, '^');
     if (lpcMarker != 0)
     {
-        TagFieldGetBinary(lpcMarker, macNetworkAddress, 36);
+        TagFieldGetBinary(lpcMarker, &mNetworkAddress, sizeof(mNetworkAddress));
     }
 }
 

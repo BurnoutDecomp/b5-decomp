@@ -24,27 +24,10 @@
 
 #include <cstring>   // std::memcpy (X360 GetXuidForPlayer / ShowGamerCard)
 
-// ------------------------------------------------------------------------------------
-// Xbox Guide / Live entry points used by the show / sign-in / notification paths. The
-// game declares these as extern "C" free functions, mirroring the committed precedent in
-// CgsBuddyManagerDirtySockX360.cpp / the System/X360 glue. The argument shapes are taken
-// from the X360 call sites (register usage), not the PPC Hex-Rays.
-// ------------------------------------------------------------------------------------
-extern "C"
-{
-    // Guide UI -- keyed by the signed-in controller/user index, for a 64-bit XUID. 0 == success.
-    // (r3 = user index, r4 = the full 64-bit XUID; matches the committed CgsBuddyManagerDirtySockX360.)
-    u32 XShowGamerCardUI(u32 luUserIndex, u64 luXuid);
-    // Pop the sign-in UI for cPanes panes with dwFlags. 0 == success.
-    u32 XShowSigninUI(u32 luPanes, u32 luFlags);
-    // Sign-in state: KI_SIGNIN_STATE_LIVE (2) == XUserSigninState_SignedInToLive.
-    s32 XUserGetSigninState(u32 luUserIndex);
-
-    // Live notification listener. CloseHandle closes it on Release.
-    void* XNotifyCreateListener(unsigned long long luAreas);
-    int   XNotifyGetNext(void* lpListener, u32 luMsgFilter, u32* lpidNotification, void* lpParam);
-    int   CloseHandle(void* lpObject);
-}
+// Xbox Guide / Live entry points used by the show / sign-in / notification paths: the XDK's own
+// declarations (XShowGamerCardUI, XShowSigninUI, XUserGetSigninState, XNotifyCreateListener,
+// XNotifyGetNext, CloseHandle).
+#include <xtl.h>
 
 #include "dirtyaddr.h"   // DirtyAddrToHostAddr
 
@@ -344,8 +327,8 @@ namespace BrnNetwork
     // X360 0x8254D0B0 -- poll the Live notification queue for the sign-in-completed event.
     bool NetworkGamerCardManagerX360::IsSignedInToLive()
     {
-        u32  luNotification = 0;
-        u32  luParam[3]     = { 0, 0, 0 };
+        DWORD     luNotification = 0;
+        ULONG_PTR luParam[3]     = { 0, 0, 0 };
         if (XNotifyGetNext(mNotifyListener, 0, &luNotification, luParam))
         {
             if (luNotification == static_cast<u32>(KI_NOTIFY_SIGNIN_CHANGED))

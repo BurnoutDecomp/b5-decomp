@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "../Components/CgsServerInterfacePlayerParams.h"   // ServerInterfacePlayerParamsBase
+#include <xtl.h>                                             // XNADDR (winsockx.h)
 
 // ===========================================================================
 // CgsNetwork::ServerInterfacePlayerParamsX360
@@ -17,12 +18,12 @@
 //
 // LAYOUT (X360 asm @ 0x8287A308 GetNetworkAddress / 0x8287A340 SerialiseFromPlayer):
 //   the base ends at +0x60 (meFirewallSetting at +0x5C); the X360 leaf adds:
-//     +0x60  macNetworkAddress[36]   (char) -- the 36-byte secure network address
+//     +0x60  mNetworkAddress   XNADDR -- the 36-byte secure network address
 //
-// GetNetworkAddress is static: it copies the 36 bytes at lpSource's +0x60 into
-// the caller-supplied lpDestination buffer; SerialiseFromPlayer chains to the
-// base then locates the '^' structure marker in the lobby record and decodes
-// the 36-byte binary blob into this object's own macNetworkAddress.
+// GetNetworkAddress returns the address by value (the caller's return slot in r3, this
+// in r4: ARTIST 0x8287A308 copies r4+0x60 into r3); SerialiseFromPlayer chains to the
+// base then locates the '^' structure marker in the lobby record and decodes the
+// 36-byte binary blob into mNetworkAddress.
 // ===========================================================================
 
 namespace CgsNetwork
@@ -43,16 +44,14 @@ namespace CgsNetwork
         // TagFieldGetBinary result), or NULL if the record has no '^' marker.
         virtual void SerialiseFromPlayer(const LobbyApiPlayerT* lpPlayer);
 
-        // @ X360 0x8287A308 -- static: copy the 36-byte secure network address
-        // out of lpSource->macNetworkAddress into the raw lpDestination buffer.
-        // Reached from BrnNetwork::CameraX360::PlayerFinalised. (ASM: memcpy's
-        // dest is the untouched incoming r3, its src is r4+0x60 -- i.e. both
-        // pointers are explicit arguments; there is no implicit `this` here.)
-        static void* GetNetworkAddress(void* lpDestination, const ServerInterfacePlayerParamsX360* lpSource);
+        // @ X360 0x8287A308 -- the secure network address, by value. Its one caller,
+        // BrnNetwork::CameraX360::PlayerFinalised (0x825951D4), passes a stack return slot
+        // in r3 and copies the result out of it (memcpy 0x24, 0x825951E4).
+        XNADDR GetNetworkAddress() const;
 
     protected:
         // CgsServerInterfacePlayerParamsX360 leaf member, +0x60 (after the base).
-        char macNetworkAddress[36];
+        XNADDR mNetworkAddress;
     };
 }
 

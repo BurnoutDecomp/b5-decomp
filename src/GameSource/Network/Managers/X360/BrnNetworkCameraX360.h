@@ -4,103 +4,55 @@
 // BrnNetwork::CameraX360 -- owning header
 //   b5-decomp/src/GameSource/Network/Managers/X360/BrnNetworkCameraX360.{h,cpp}
 //
-// The GAME-side (BrnNetwork) Xbox-360 online spectator / network-camera manager owned by
-// BrnNetworkManager. It lets a player request and stream another (remote) player's live
-// "vision camera" picture over the network:
-//   * it owns an XVID streaming engine (XCamCreateStreamEngine) plus a raw UDP "vision-data
-//     protocol" (VDP) socket used to ship the compressed video packets peer-to-peer;
-//   * it keeps a fixed table of KI_MAX_REMOTE_PLAYERS remote-player feed slots, each holding
-//     the per-feed stream descriptor, the decoded NetworkTexture, the four reliable
-//     request/status messages and the per-frame timing latches;
-//   * it owns the local player's own camera textures (raw + DXT-compressed) and the
-//     compressed-scratch + decoded textures used while receiving a remote feed;
+// The GAME-side (BrnNetwork) Xbox-360 online camera manager owned by BrnNetworkManager. It lets
+// a player request and stream another (remote) player's live camera picture over the network:
+//   * it owns an XDK camera stream engine (XCamCreateStreamEngine, IXCamStreamEngine in
+//     <xcam.h>) plus a VDP UDP socket the encoded video packets travel on peer-to-peer;
+//   * it keeps a table of KI_MAX_ALLOWABLE_PLAYERS remote machines, each holding the peer's
+//     XNADDR and XUID (the stream engine's per-console key), its decoded picture, the four
+//     reliable request/status messages and the per-frame timing latches;
 //   * the reliable handshake (CameraRequestMessage / CameraRequestResponseMessage /
 //     CameraStatusMessage) is registered per remote player through CgsNetwork::NetworkPlayer
 //     and routed back here through the static *Callback trampolines.
 //
-// Lifecycle is the manager pattern shared with BrnNetwork::GamerPictureManagerX360 /
-// BrnNetwork::BuddyManagerX360:
-//   Construct(manager, textureCompressor) -- placement-construct the textures, latch deps
-//   Prepare(heap) / PrepareTextures(heap)  -- create the stream engine + socket + textures
-//   Update()                               -- per-frame: request/stream/receive + status
-//   Release() / Destruct()                 -- tear the engine/socket/textures down
-//   AddPlayer/RemovePlayer/Disconnected    -- maintain the remote-player feed table
+// The X360 class has no DWARF. Its PS3 sibling BrnNetwork::CameraPS3 (DecFIGS
+// GameSource/Network/PS3/BrnNetworkCameraPS3.h) has the same method set, the same Machine
+// record and the same feed-request timer; ARTIST's offsets show the X360 Machine is the PS3
+// one with the peer's XNADDR and XUID in front of it (PS3 h:182-211: miIPAddress, mPlayerID,
+// meLastPictureDecodeState, meLastDataReceivedState, mLastDataReceivedTime,
+// mLastPictureDecodeTime, mCameraPicture, mbSendToPlayer, mbReceiveFromPlayer, the six
+// messages), so the record and its members carry the PS3 names.
 //
-// MEMBER LAYOUT (X360-authoritative; absolute byte offsets from `this`, every offset below a
-// store/load immediate in the BrnNetworkCameraX360.cpp ARTIST asm). The object is dominated by
-// a 256-entry receive-packet ring and an 8-entry remote-player table:
-//
-//   VideoPacket (stride 1072 == 0x430; ResetVideoPackets walks 256 of them, ReceiveVideoData /
-//   SendVideoData stride them by 1072):
-//     +0x000  maDatagramHeader[8]    u8      (the leading VDP datagram bytes)
-//     +0x008  muReceiveLength        u16     (payload length passed to the stream engine)
-//     +0x00A  maReceivePayload       char    (the rest of the 1040-byte datagram)
-//     +0x410  mOverlapped             CgsXOverlapped (28-byte XOVERLAPPED async I/O; +0x410)
-//     +0x42C  mbInUse                 bool    (ReceiveVideoData latches +0x42C == +1068)
-//
-//   +0x00000  maVideoPackets[256]     (256 * 0x430 == 0x43000)
-//   +0x43000  mpStreamEngine          IXCamStreamEngine*
-//
-//   RemotePlayerData (stride 360 == 0x168; base S == this + 274440; the table walks 8 of them;
-//   the feed-slot loops compare miPlayerID @ S+52 against -1/the wanted id):
-//     +0x00  maStreamDescriptor[36]  char  (the per-feed XCAM stream descriptor handed to the
-//                                           stream-engine vtable; its leading word is the
-//                                           manager back-pointer the asm derefs as **slot)
-//     +0x28  mXuid                   u64   (remote player's XUID; AddPlayer stores it)
-//     +0x30  miNetworkPlayerIndex    s32   (the server network-player index; -1 == none)
-//     +0x34  miPlayerID              s32   (-1 == free slot)
-//     +0x38  meReceiveState          s32   (0 idle / 1 first-frame / 2 timed; +0x38 == S+56)
-//     +0x3C  meVideoFrameState       s32   (0 idle / 1 first-frame / 2 timed; +0x3C == S+60)
-//     +0x40  mLastVideoFrameTime     CgsSystem::Time (8B; S+64)
-//     +0x44  mLastReceiveTime        CgsSystem::Time (8B; S+72)
-//     +0x50  mDecodedTexture         CgsNetwork::NetworkTexture (28 bytes; S+80)
-//     +0x6C  mbFeedActive            bool  (S+108: a remote feed is currently being received)
-//     +0x6D  mbFeedRequested         bool  (S+109: our feed request has been accepted)
-//     +0x70  mStatusMessageSend / +0x94 Recv      CameraStatusMessage (0x24 each)
-//     +0xB8  mRequestMessageSend / +0xE4 Recv     CameraRequestMessage (0x2C each)
-//     +0x110 mResponseMessageSend / +0x13C Recv   CameraRequestResponseMessage (0x2C each)
-//     (ResetRemotePlayers constructs the six messages at these offsets; the constructor
-//     stores their message-table pointers at the same places.)
-//
-//   After the table (this + 277320 == 0x43B48):
-//     +277320 (0x43B48)  mpNetworkManager   BrnNetworkManager*
-//     +277324 (0x43B4C)  mVDPSocket         s32   (the VDP UDP socket; -1 == INVALID_SOCKET)
-//     +277328 (0x43B50)  mLocalCameraTexture     CgsNetwork::NetworkTexture (the raw local cam)
-//     +277356 (0x43B6C)  mReceivedCameraTexture  CgsNetwork::NetworkTexture (decoded remote feed)
-//     +277384 (0x43B88)  miNumberActiveFeeds     s32
-//     +277388 (0x43B8C)  mRequestTimer           CgsSystem::Time (8B; next-request countdown)
-//     +277392 (0x43B90)  -- the timer's fraction word (part of mRequestTimer)
-//     +277396 (0x43B94)  miRequestedPlayerID     s32   (-1 == none)
-//     +277400 (0x43B98)  mpTextureCompressor     CgsNetwork::NetworkTextureDXTCompress*
-//     +277404 (0x43B9C)  miUserSetting           s32   (1 == camera enabled by the user)
-//     +277408 (0x43BA0)  mbPrepared              bool
-//     +277409 (0x43BA1)  mbGameEnabled           bool
-//     +277410 (0x43BA2)  mbFeedActiveAny         bool   (any remote feed currently active)
-//   sizeof == 0x43BA8 (8-byte alignment from mXuid). BrnNetworkManager reserves 0x43C20 for it
-//   because the texture compressor that follows is 128-byte aligned.
-//
-// The constructor is compiler-generated: it only default-constructs the per-slot timers,
-// the request timer and the message-table pointers of the six per-slot messages.
-//
-// The X360 byte offsets are 32-bit-pointer/Xenon layout facts; on a 64-bit host the embedded
-// NetworkTexture / message sub-objects and the pointers widen, so the absolute offsets are NOT
-// static_asserted -- members are accessed BY NAME. _AssertLayout() pins the recovered
-// RELATIONSHIPS (the per-entry field order and the table-vs-tail member order), mirroring the
-// sibling BrnNetwork::GamerPictureManagerX360::_AssertLayout.
-//
-// The SDK supplies the stream engine, socket API and overlapped record. The camera feed
-// pumps and their player integration still need reconstruction.
+// MEMBER LAYOUT (X360-authoritative; every offset is a load/store immediate in ARTIST):
+//   VideoPacket (stride 0x430; 256 of them):
+//     +0x000  the received VDP datagram (ReceiveFrom reads KI_VDP_PACKET_SIZE bytes here; the
+//             u16 at +0x8 is the stream-engine payload length, the payload starts at +0xA)
+//     +0x410  mOverlapped  CgsXOverlapped (the SubmitNetworkData completion record)
+//     +0x42C  mbInUse
+//   +0x00000  maVideoPackets[256]
+//   +0x43000  mpStreamEngine           IXCamStreamEngine*
+//   +0x43008  maPlayers[8]             Machine (stride 0x168)
+//   +0x43B48  mpNetworkManager
+//   +0x43B4C  mVDPSocket               (-1 == INVALID_SOCKET)
+//   +0x43B50  mLocalCameraPicture      NetworkTexture (the local preview frame)
+//   +0x43B6C  mReceivedCameraPicture   NetworkTexture (a remote frame before conversion)
+//   +0x43B88  miNumPlayersSendingTo
+//   +0x43B8C  mRequestTimer            CgsSystem::Time
+//   +0x43B94  miRequestedPlayerID
+//   +0x43B98  mpTextureCompressor
+//   +0x43B9C  miUserSetting
+//   +0x43BA0  mbPrepared / +0x43BA1 mbGameEnabled / +0x43BA2 mbReceivingFromAnyPlayer
 //
 // Original home (from the asm assert strings):
-//   ..\..\..\GameSource\Network/X360/BrnNetworkCameraX360.cpp
+//   d:\p4\b5_main\burnout\main\code\gamesource\unity\../Network/X360/BrnNetworkCameraX360.cpp
 // ===================================================================================
 
 #include "types.hpp"
 #include <cstddef>   // offsetof
-#include "GameShared/GameClasses/System/CgsXOverlapped.h"                  // CgsSystem::CgsXOverlapped
+#include "GameShared/GameClasses/System/CgsXOverlapped.h"                  // CgsSystem::CgsXOverlapped (<xtl.h>: XNADDR, XUID)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                  // CgsSystem::Time
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"     // CgsNetwork::NetworkTexture
-#include "GameSource/Network/Messages/BrnCameraStatusMessage.h"           // CameraStatusMessage
+#include "GameSource/Network/Messages/BrnCameraStatusMessage.h"           // CameraStatusMessage, ECameraStatus
 #include "GameSource/Network/Messages/BrnCameraRequestMessage.h"          // CameraRequestMessage
 #include "GameSource/Network/Messages/BrnCameraRequestResponseMessage.h"  // CameraRequestResponseMessage
 #include "GameShared/Jobs/DXTCompress/CgsNetworkTextureDXTCompress.h"      // NetworkTextureDXTCompress + CompressionCompleteCallback
@@ -121,117 +73,108 @@ namespace BrnNetwork
     class CameraX360
     {
     public:
-        // The maximum number of simultaneous remote-player camera feeds (the X360 table walks
-        // are all bound by 8, e.g. ResetRemotePlayers' `li r30, 8`).
-        static const s32 KI_MAX_REMOTE_PLAYERS = 8;
+        // PS3 sibling h:214-218.
+        static const s32 KI_MAX_NUM_VIDEO_PACKETS  = 256;
+        static const s32 KI_MAX_PLAYERS_TO_SEND_TO = 3;
+        static const s32 KI_MAX_REMOTE_CONSOLES    = 4;
+        static const s32 KI_MAX_ALLOWABLE_PLAYERS  = 8;
 
-        // The receive-packet ring size (ResetVideoPackets / ReceiveVideoData / SendVideoData all
-        // loop 256 times).
-        static const s32 KI_MAX_VIDEO_PACKETS = 256;
-
-        // The invalid-player / invalid-socket sentinels (`li rN, -1`).
-        static const s32 KI_INVALID_PLAYER_ID = -1;
-        static const s32 KI_INVALID_SOCKET    = -1;
-
-        // The VDP receive datagram size handed to ReceiveFrom (`li r5, 1040`).
+        // The VDP datagram ReceiveFrom reads into a packet (`li r5, 1040`, ARTIST 0x8258BC7C).
         static const s32 KI_VDP_PACKET_SIZE = 1040;
 
-        // The datagram and its asynchronous receive state (stride 0x430).
+        // The VDP datagram (KI_VDP_PACKET_SIZE bytes; ReceiveFrom reads one whole, SendVideoData sends
+        // its header and payload). Member names are ours: no DWARF/PS3 declaration exists.
+        struct VideoDataPacket
+        {
+            u16  mu16GameDataSize;        // +0x0 the VDP header word (SendVideoData stores 4, 0x8258BA38)
+            u8   maReserved[6];           // +0x2 (never written)
+            u16  mu16DataSize;            // +0x8 the stream-engine network-data size
+            char macData[KI_VDP_PACKET_SIZE - 10]; // +0xA the stream-engine network data
+        };
+
+        // A received datagram and its asynchronous submit state (stride 0x430).
         struct VideoPacket
         {
-            u8 maDatagramHeader[8];
-            u16 muReceiveLength;
-            char maReceivePayload[KI_VDP_PACKET_SIZE - 8 - sizeof(u16)];
-            CgsSystem::CgsXOverlapped mOverlapped;
-            bool mbInUse;
+            VideoDataPacket mPacket;              // +0x000
+            CgsSystem::CgsXOverlapped mOverlapped; // +0x410
+            bool mbInUse;                         // +0x42C
         };
 
-        // One remote-player camera-feed slot (stride 0x168). See the header layout note above
-        // for the field map; the embedded NetworkTexture + reliable messages are by name.
-        struct RemotePlayerData
+        // One remote machine (stride 0x168); PS3 sibling Machine, h:182.
+        struct Machine
         {
-            char                          maStreamDescriptor[36]; // +0x00 XCAM per-feed descriptor
-            u32                           mu32Pad24;              // +0x24 align mXuid to +0x28
-            u64                           mXuid;                  // +0x28
-            s32                           miNetworkPlayerIndex;   // +0x30 (-1 == none)
-            s32                           miPlayerID;             // +0x34 (-1 == free)
-            s32                           meReceiveState;         // +0x38
-            s32                           meVideoFrameState;      // +0x3C
-            CgsSystem::Time               mLastVideoFrameTime;    // +0x40
-            CgsSystem::Time               mLastReceiveTime;       // +0x48
-            CgsNetwork::NetworkTexture    mDecodedTexture;        // +0x50
-            bool                          mbFeedActive;           // +0x6C (== S+108)
-            bool                          mbFeedRequested;        // +0x6D (== S+109)
-            CameraStatusMessage           mStatusMessageSend;     // +0x70
-            CameraStatusMessage           mStatusMessageRecv;     // +0x94
-            CameraRequestMessage          mRequestMessageSend;    // +0xB8
-            CameraRequestMessage          mRequestMessageRecv;    // +0xE4
-            CameraRequestResponseMessage  mResponseMessageSend;   // +0x110
-            CameraRequestResponseMessage  mResponseMessageRecv;   // +0x13C
+            // PS3 h:188.
+            enum ETimeState
+            {
+                E_WAIT_STATE_1   = 0,
+                E_WAIT_STATE_2   = 1,
+                E_STATE_TIME_SET = 2,
+            };
+
+            XNADDR                        mXNAddr;                    // +0x00 the stream engine's console key
+            XUID                          mXuid;                      // +0x28 RegisterRemoteConsole's one-entry XUID list
+            s32                           miIPAddress;                // +0x30 the VDP peer address (-1 == none)
+            s32                           mPlayerID;                  // +0x34 (-1 == free entry)
+            ETimeState                    meLastPictureDecodeState;   // +0x38
+            ETimeState                    meLastDataReceivedState;    // +0x3C
+            CgsSystem::Time               mLastDataReceivedTime;      // +0x40
+            CgsSystem::Time               mLastPictureDecodeTime;     // +0x48
+            CgsNetwork::NetworkTexture    mCameraPicture;             // +0x50
+            bool                          mbSendToPlayer;             // +0x6C
+            bool                          mbReceiveFromPlayer;        // +0x6D
+            CameraStatusMessage           mStatusMessageSend;         // +0x70
+            CameraStatusMessage           mStatusMessageRecv;         // +0x94
+            CameraRequestMessage          mRequestMessageSend;        // +0xB8
+            CameraRequestMessage          mRequestMessageRecv;        // +0xE4
+            CameraRequestResponseMessage  mRequestResponseMessageSend; // +0x110
+            CameraRequestResponseMessage  mRequestResponseMessageRecv; // +0x13C
         };
 
-        // X360 0x8258B410 -- latch the manager + compressor, placement-construct the local /
-        // received textures and every remote slot's texture, reset the packet ring + feed table.
+        // X360 0x8258B410 -- latch the manager + compressor, construct the textures, reset the
+        // packet ring + the machine table.
         void Construct(BrnNetworkManager* lpNetworkManager,
                        CgsNetwork::NetworkTextureDXTCompress* lpTextureCompressor);
 
         // X360 0x8258B618 -- tear the textures down, reset the ring + table, drop the deps.
         void Destruct();
 
-        // X360 0x82593B28 -- create the XVID stream engine + VDP socket + textures, mark prepared.
+        // X360 0x82593B28 -- create the stream engine + VDP socket + textures, mark prepared.
         bool Prepare(CgsMemory::HeapMalloc* lpHeapMalloc);
 
         // X360 0x8258B530 -- release the textures, close the socket + stream engine, reset state.
         bool Release();
 
-        // X360 0x825920A8 -- the per-frame tick (request-timer fire -> RequestFeed, then while in
-        // game: GetRemoteCameraPictures / SendVideoData / ReceiveVideoData, UpdateCameraStatus,
-        // GetLocalCameraPicture). DECLARATION-ONLY (depends on the un-homed stream-engine /
-        // socket pump below).
+        // X360 0x825920A8 -- the per-frame tick.
         void Update();
 
-        // X360 0x82592268 -- register a remote player: assert the player manager, resolve a free
-        // slot, latch its XUID, and register the three reliable message types on its NetworkPlayer.
+        // X360 0x82592268 / 0x8258B798 / 0x82592038 / 0x82595188 -- maintain the machine table.
         void AddPlayer(s32 liPlayerID);
-
-        // X360 0x8258B798 -- free a player's feed slot, unregister its reliable messages, reset
-        // the slot, and clear mbFeedActiveAny when no feed remains.
         void RemovePlayer(s32 liPlayerID);
-
-        // X360 0x82592038 -- a network disconnect: RemovePlayer every populated slot, reset the
-        // request timer / requested player.
         void Disconnected();
-
-        // X360 0x82595188 -- a player has finalised: copy its resolved network address into its
-        // feed slot (X360 ServerInterfacePlayerParamsX360::GetNetworkAddress).
         void PlayerFinalised(s32 liPlayerID);
 
-        // X360 0x825872A8 -- on game start, tear down any active stream feeds (stream-engine
-        // vtable) and reset the request timer. DECLARATION-ONLY (un-homed stream-engine vtable).
+        // X360 0x825872A8 -- on game start, unregister every machine we stream with.
         void OnGameStart();
 
-        // X360 0x82593B28's helper -- (re)allocate the local + received + per-slot textures.
-        void PrepareTextures(CgsMemory::HeapMalloc* lpHeapMalloc);
-
-        // X360 0x82586A48 -- reset every remote feed slot (sentinels + zeroed state) and
-        // (re)construct its embedded reliable messages; release its decoded texture.
-        void ResetRemotePlayers();
-
-        // X360 0x825869F8 -- reset the 256-entry receive-packet ring.
-        void ResetVideoPackets();
-
-        // X360 0x82595410 -- the decoded camera texture for a player (the local one when the id is
-        // the local player / -1; the timed remote feed otherwise), or null when unavailable.
+        // X360 0x82595410 -- the camera picture for a player (the local one for the local player
+        // or -1; a remote machine's while its decode and data latches are recent), or null.
         CgsNetwork::NetworkTexture* GetCameraPicture(s32 liPlayerID);
 
         // X360 0x825977C0 -- GetCameraPicture(miRequestedPlayerID).
         CgsNetwork::NetworkTexture* GetRequestedCameraPicture();
 
-        // Select whose feed to watch (the manager's server-interface events and the state
-        // manager call it). A change first releases the feed requested from the previous
-        // player; a local player or -1 is latched at once, a remote player only when it owns
-        // a feed slot, with the request timer stamped from the manager's current time.
+        // X360 0x82586890 -- queue the local camera picture for DXT compression.
+        void GetCompressedLocalCameraPicture(
+            CgsNetwork::NetworkTexture* lpDstTexture,
+            s32 liQualitySetting,
+            CgsNetwork::NetworkTextureDXTCompress::CompressionCompleteCallback lCompleteCallback,
+            void* lpCompleteData);
+
+        // X360 0x825976A8 -- select whose feed to watch (PS3 h:117).
         void RequestFeed(s32 liPlayerID);
+
+        // X360 0x825952C0 -- tell a player we no longer want its feed (PS3 h:121).
+        void ReleaseFeed(s32 liPlayerID);
 
         // The player whose feed is being watched (-1 == none).
         s32 GetRequestedPlayerID() const { return miRequestedPlayerID; }
@@ -240,102 +183,88 @@ namespace BrnNetwork
         // friends-only value, 2, as the mugshot privilege).
         s32 GetUserSetting() const { return miUserSetting; }
 
-        // X360 0x82587390 -- the local camera availability/status (0 none / 1 available /
-        // 2 in-use / 3 connecting) advertised to the lobby.
-        s32 GetLocalCameraStatus();
+        // X360 0x82587370 / 0x82587380.
+        void SetUserSetting(s32 liUserSetting);
+        void SetGameEnabled(bool lbGameEnabled);
+
+        // X360 0x82587390 (PS3 h:135).
+        ECameraStatus GetLocalCameraStatus();
+
+    private:
+        // Find the machine of lPlayerID, or null (PS3 h:244; ARTIST inlines it at every walk).
+        Machine* GetMachineEntry(s32 lPlayerID);
+
+        // X360 0x82591FA0 / 0x82586A48 / 0x825869F8.
+        void PrepareTextures(CgsMemory::HeapMalloc* lpHeapMalloc);
+        void ResetRemotePlayers();
+        void ResetVideoPackets();
+
+        // X360 0x8258B928 -- resend the feed request for the requested player (PS3 h:251).
+        void RequestFeed();
+
+        // X360 0x825866B0 / 0x825867E8 -- pull decoded frames out of the stream engine.
+        void GetRemoteCameraPictures();
+        void GetLocalCameraPicture();
 
         // X360 0x8258B6F8 -- stamp the local camera status into the local player's menu data.
         void UpdateCameraStatus();
 
-        // queue the local camera picture for DXT compression for transmission
-        // at compression quality liQualitySetting.
-        // DECLARATION-ONLY (depends on the un-homed XCamGetStatus + stream-engine geometry).
-        s32 GetCompressedLocalCameraPicture(
-            CgsNetwork::NetworkTexture* lpDstTexture,
-            s32 liQualitySetting,
-            CgsNetwork::NetworkTextureDXTCompress::CompressionCompleteCallback lCompleteCallback,
-            void* lpCompleteData);
+        // X360 0x825871A0 -- (re)register a machine with the stream engine for the directions it
+        // still streams, or unregister it when it streams in neither.
+        void UnregisterPlayer(s32 lPlayerID);
 
-        // X360 0x82587370 -- store the user's camera on/off setting.
-        void SetUserSetting(s32 liUserSetting);
-
-        // X360 0x82587380 -- store the game-enabled flag.
-        void SetGameEnabled(bool lbGameEnabled);
-
-        // ---- the reliable-message arrival/delivery trampolines (registered per NetworkPlayer) --
-        // X360 0x8258BD60 / 0x82586FD0 / 0x82587060. DECLARATION-ONLY where they pivot on the
-        // un-homed stream-engine vtable (the response-arrived path activates the feed via a
-        // vtable call); declared here so AddPlayer can take their address.
-        static void _RequestMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
-                                                    s32 liFromPlayerID,
-                                                    void* lpCamera);
-        static void _RequestMessageDeliveredCallback(bool lbDelivered, bool lbWasReliable,
-                                                      CgsNetwork::SignalMessage* lpMessage,
-                                                      s32 liToPlayerID,
-                                                      void* lpUserData);
-        static void _RequestResponseMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
-                                                            s32 liFromPlayerID,
-                                                            void* lpCamera);
-
-    private:
-        // X360 0x82586AF8 / 0x82586C50 -- open/close the VDP UDP socket. DECLARATION-ONLY
-        // (Winsock/XDK socket layer is un-homed glue).
+        // X360 0x82586AF8 / 0x82586C50 -- open/close the VDP UDP socket.
         void OpenSocket();
         void CloseSocket();
 
-        // X360 0x82586D50 -- recv one datagram into lpcData (returns bytes; *lpnIPAddress = peer
-        // IP). DECLARATION-ONLY (Winsock layer un-homed).
-        s32 ReceiveFrom(char* lpcData, s32 liDataSize, s32* lpnIPAddress);
+        // Send one datagram to liIPAddress on the VDP port. PROVISIONAL NAME: no DWARF/PS3/SDK name
+        // found; ARTIST holds no copy and inlines it into SendVideoData (its assert line 1076 sits
+        // between CloseSocket's 1051 and ReceiveFrom's 1114, ARTIST 0x8258BB0C).
+        void SendTo(const char* lpcData, s32 liDataSize, s32 liIPAddress);
 
-        // X360 0x8258BB70 / 0x8258BA18 -- the per-frame VDP receive / send pumps. DECLARATION-ONLY
-        // (stream-engine vtable + socket layer un-homed).
+        // X360 0x82586D50 -- receive one datagram (returns its size; *lpnIPAddress = the sender).
+        s32 ReceiveFrom(char* lppData, s32 liDataSize, s32* lpnIPAddress);
+
+        // X360 0x8258BB70 / 0x8258BA18 -- the per-frame VDP receive / send pumps.
         void ReceiveVideoData();
         void SendVideoData();
 
-        // X360 0x825866B0 -- decode each active remote feed into mReceivedCameraTexture and
-        // convert it into the slot's texture. DECLARATION-ONLY (stream-engine vtable un-homed).
-        void GetRemoteCameraPictures();
-
-        // X360 0x825867E8 -- pump the local camera picture out of the stream engine.
-        // DECLARATION-ONLY (stream-engine vtable un-homed).
-        void GetLocalCameraPicture();
-
-        // X360 0x8258B928 -- send a feed request for the requested player. DECLARATION-ONLY
-        // (the requested-player resolution chains through the un-homed player-finalised state).
-        void RequestFeed();
-
-        // X360 0x825952C0 -- send a feed-release request + tear the slot down. DECLARATION-ONLY
-        // (un-homed ServerInterfacePlayerInfoDataX360 derived local-player-info layout).
-        void ReleaseFeed(s32 liPlayerID);
-
-        // X360 0x825871A0 -- tear an active/requested feed slot's stream off the engine.
-        // DECLARATION-ONLY (un-homed stream-engine vtable).
-        void UnregisterPlayer(s32 liPlayerID);
-
-        // Find the populated slot for liPlayerID, or null. (Spelt inline by the X360 everywhere
-        // the feed table is walked; factored out here for the bodied callers.)
-        RemotePlayerData* GetSlotForPlayer(s32 liPlayerID);
+        // ---- the reliable-message trampolines (registered per NetworkPlayer; PS3 h:278-303) ----
+        static void _RequestMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
+                                                    s32 lSendingPlayerID,
+                                                    void* lpUserData);
+        static void _RequestMessageDeliveredCallback(bool lbSuccess, bool lbFakeNack,
+                                                      CgsNetwork::SignalMessage* lpAck,
+                                                      s32 lRecvingPlayerID,
+                                                      void* lpUserData);
+        static void _RequestResponseMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
+                                                            s32 lSendingPlayerID,
+                                                            void* lpUserData);
+        static void _RequestResponseMessageDeliveredCallback(bool lbSuccess, bool lbFakeNack,
+                                                              CgsNetwork::SignalMessage* lpAck,
+                                                              s32 lRecvingPlayerID,
+                                                              void* lpUserData);
 
         // -- the receive-packet ring ----------------------------------------------------------
-        VideoPacket             maVideoPackets[KI_MAX_VIDEO_PACKETS]; // +0x00000
-        IXCamStreamEngine*      mpStreamEngine;                       // +274432
+        VideoPacket             maVideoPackets[KI_MAX_NUM_VIDEO_PACKETS]; // +0x00000
+        IXCamStreamEngine*      mpStreamEngine;                           // +0x43000
 
-        // -- the remote-player feed table -----------------------------------------------------
-        RemotePlayerData        maRemotePlayers[KI_MAX_REMOTE_PLAYERS]; // +274440
+        // -- the remote machines ---------------------------------------------------------------
+        Machine                 maPlayers[KI_MAX_ALLOWABLE_PLAYERS];      // +0x43008
 
         // -- deps + local textures + state ----------------------------------------------------
-        BrnNetworkManager*                     mpNetworkManager;        // +277320
-        s32                                    mVDPSocket;              // +277324
-        CgsNetwork::NetworkTexture             mLocalCameraTexture;     // +277328
-        CgsNetwork::NetworkTexture             mReceivedCameraTexture;  // +277356
-        s32                                    miNumberActiveFeeds;     // +277384
-        CgsSystem::Time                        mRequestTimer;           // +277388
-        s32                                    miRequestedPlayerID;     // +277396
-        CgsNetwork::NetworkTextureDXTCompress* mpTextureCompressor;     // +277400
-        s32                                    miUserSetting;           // +277404
-        bool                                   mbPrepared;              // +277408
-        bool                                   mbGameEnabled;           // +277409
-        bool                                   mbFeedActiveAny;         // +277410
+        BrnNetworkManager*                     mpNetworkManager;          // +0x43B48
+        SOCKET                                 mVDPSocket;                // +0x43B4C
+        CgsNetwork::NetworkTexture             mLocalCameraPicture;       // +0x43B50
+        CgsNetwork::NetworkTexture             mReceivedCameraPicture;    // +0x43B6C
+        s32                                    miNumPlayersSendingTo;     // +0x43B88
+        CgsSystem::Time                        mRequestTimer;             // +0x43B8C
+        s32                                    miRequestedPlayerID;       // +0x43B94
+        CgsNetwork::NetworkTextureDXTCompress* mpTextureCompressor;       // +0x43B98
+        s32                                    miUserSetting;             // +0x43B9C
+        bool                                   mbPrepared;                // +0x43BA0
+        bool                                   mbGameEnabled;             // +0x43BA1
+        bool                                   mbReceivingFromAnyPlayer;  // +0x43BA2
 
         static void _AssertLayout();
     };
