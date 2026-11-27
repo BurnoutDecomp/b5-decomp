@@ -273,13 +273,11 @@ namespace vpu
     // value) and vC = the degenerate-axis mask -- PPC `vsel vD,vA,vB,vC` is `vC ? vB : vA`.
     // The SDK also declares a Mask3-masked overload (:745-750); it has no consumer in this
     // tree yet and is not reproduced.
-    inline Vector3 Select(MaskScalar lMask, Vector3 lTrueValue, Vector3 lFalseValue)
+    // The Xenon body is that vsel itself (ARTIST rw::collision::FeatureEdge::FeatureEdge 0x82BA8640
+    // vsel v0,v7(zero),v0(delta*recip),v9(mask): dir = Select(nonZero, ..., GetVector3_Zero())).
+    inline Vector3 Select(MaskScalar::InParam mask, Vector3::InParam trueValue, Vector3::InParam falseValue)
     {
-        { const VectorIntrinsic lResult = {
-            lMask.mV.x != 0.0f ? lTrueValue.mV.x : lFalseValue.mV.x,
-            lMask.mV.y != 0.0f ? lTrueValue.mV.y : lFalseValue.mV.y,
-            lMask.mV.z != 0.0f ? lTrueValue.mV.z : lFalseValue.mV.z,
-            lMask.mV.w != 0.0f ? lTrueValue.mV.w : lFalseValue.mV.w }; return Vector3(lResult); }
+        return Vector3(__vsel(falseValue.mV, trueValue.mV, mask.mV));
     }
 
     // The three world basis vectors -- LegacySrc constants_operation.h, whose bodies

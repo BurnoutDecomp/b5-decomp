@@ -55,6 +55,55 @@ inline MaskScalar CompGreaterThan(VecFloat::InParam a, VecFloat::InParam b)
 {
     return MaskScalar(__vcmpgtfp(a.mV, b.mV));
 }
+// rwmath 1.02.00 detail/scalar_operation_inline.h:136: one Newton step on the vrefp estimate,
+// est + est * (1 - est * a) (ARTIST rw::collision::FeatureEdge::FeatureEdge 0x82BA8630..0x82BA8638:
+// vrefp, vnmsubfp against vcfsx(vspltisw 1, 0), vmaddfp).
+inline VecFloat ReciprocalFast(VecFloat::InParam a)
+{
+    VectorIntrinsic result;
+    {
+        VectorIntrinsic estimate, vOne;
+        estimate = __vrefp(a.mV);
+        vOne = __vcfsx(__vspltisw(1), 0);
+        result = __vmaddfp(estimate, __vnmsubfp(estimate, a.mV, vOne), estimate);
+    }
+    return VecFloat(result);
+}
+// rwmath 1.02.00 detail/scalar_operation_inline.h:150: a * the once-refined vrsqrtefp estimate, zero for a
+// zero input. Xenon refinement est + (est * 0.5) * (1 - a * est * est) as ARTIST FeatureEdge::FeatureEdge
+// 0x82BA85FC..0x82BA8620 (vrsqrtefp; vmulfp est*est, est*half; vnmsubfp; vmaddfp; vmulfp a; vsel against
+// the vcmpeqfp(zero, a) mask), the one-step form of Magnitude(Vector2)'s refinement (MainMapComponent::
+// SnapToLocation 0x8245ECC4).
+inline VecFloat SqrtFast(VecFloat::InParam a)
+{
+    VectorIntrinsic ret;
+    {
+        const VectorIntrinsic zero = __vspltisw(0);
+        VectorIntrinsic isZeroMask;
+        isZeroMask = __vcmpeqfp(zero, a.mV);
+        VectorIntrinsic recipSqrt;
+        {
+            VectorIntrinsic estimate;
+            estimate = __vrsqrtefp(a.mV);
+            VectorIntrinsic vOne, vHalf;
+            vOne = __vcfsx(__vspltisw(1), 0);
+            vHalf = __vcfsx(__vspltisw(1), 1);
+            recipSqrt = __vmaddfp(__vmulfp(estimate, vHalf), __vnmsubfp(a.mV, __vmulfp(estimate, estimate), vOne), estimate);
+        }
+        VectorIntrinsic result;
+        result = __vmulfp(a.mV, recipSqrt);
+        ret = __vsel(result, zero, isZeroMask);
+    }
+    return VecFloat(ret);
+}
+// rwmath 1.02.00 detail/scalar_operation_inline.h:287: vsel(falseValue, trueValue, mask) (ARTIST
+// FeatureEdge::FeatureEdge 0x82BA8624 vsel v0,v8(zero),v0(sqrt),v9(mask)).
+inline VecFloat Select(MaskScalar::InParam mask, VecFloat::InParam trueValue, VecFloat::InParam falseValue)
+{
+    VectorIntrinsic result;
+    result = __vsel(falseValue.mV, trueValue.mV, mask.mV);
+    return VecFloat(result);
+}
 // DecFIGS scalar.h / scalar_operation_inline.h: IsValid is !IsNaN, and the platform IsNaN
 // is !_asmIsEqualV4(value, value) (LegacySrc ps3/ppu/scalar_operation_platform_inline.h).
 // ARTIST 0x8270DFB8 (Vehicle::SetWheelRot's "RwMath::IsValid( lfValue )").

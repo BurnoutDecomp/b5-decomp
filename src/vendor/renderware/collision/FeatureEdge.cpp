@@ -4,6 +4,9 @@
 #pragma optimize("s", on)
 #endif
 #include "vendor/renderware/collision/FeatureEdge.hpp"
+#include "SDKs/EATech/include/rw/math/vpu/scalar.h"
+#include "SDKs/EATech/include/rw/math/vpu/constants.h"
+#include "rw/math/vpu/vector3_operation.h"
 
 #include <cmath>
 #include <cfloat>
@@ -53,44 +56,20 @@ namespace
 // ---------------------------------------------------------------------------
 // FeatureEdge::FeatureEdge @ 0x82BA85B8
 //
-// Stores (in asm store order):
-//   stvx128 v13, r0, r3        -> base = arP1                  (this+0x00)
-//   ... compute direction ...
-//   stvx128 v0,  r3, r11(0x30) -> length = length-guarded      (this+0x30)
-//   stvx128 v0,  r3, r10(0x10) -> dir = (P2-P1) * 1/len        (this+0x10)
-// (pn @+0x20 is NOT written by the ctor; Feature::BuildEdgePlanes fills it.)
-//
-// The direction maths mirrors the VMX idiom (canonical rwccore.h:869-880):
-//   delta   = P2 - P1
-//   lenSq   = dot3(delta, delta)                 (vmsum3fp128)
-//   recip   = 1/sqrt(lenSq) refined once (vrsqrtefp + Newton-Raphson)
-//   length  = lenSq * recip   (== |delta|)       guarded: 0 when degenerate
-//   invLen  = 1/length refined once (vrefp + Newton-Raphson)
-//   dir     = delta * invLen                     guarded by the same mask
+// The SDK's text (rwccore.h:869-880): base, then the rwmath MagnitudeSquared / CompGreaterThan
+// against VEC_EPSILON / Select of SqrtFast and of delta * ReciprocalFast(length), whose Xenon bodies
+// (rw/math/vpu/detail/scalar_operation_inline.h) this function attests: vmsum3fp, the once-refined
+// vrsqrtefp with its zero guard, the vsel pair, vrefp + one refinement, the guarded dir. pn @+0x20 is
+// not written here; Feature::BuildEdgePlanes fills it.
 // ---------------------------------------------------------------------------
-FeatureEdge::FeatureEdge(const rw::math::vpu::Vector3& arP1, const rw::math::vpu::Vector3& arP2)
+FeatureEdge::FeatureEdge(const rw::math::vpu::Vector3& p1, const rw::math::vpu::Vector3& p2)
 {
-    base = arP1;
-    const __vector4 zero = __vspltisw(0);
-    const __vector4 one = __vcfsx(__vspltisw(1), 0);
-    const __vector4 half = __vcfsx(__vspltisw(1), 1);
-    const __vector4 delta = __vsubfp(arP2.mV, arP1.mV);
-    const __vector4 square = __vmsum3fp(delta, delta);
-    const __vector4 estimate = __vrsqrtefp(square);
-    const __vector4 equalZero = __vcmpeqfp(zero, square);
-    const __vector4 valid = __vcmpgtfp(square, VEC_EPSILON.mV);
-    const __vector4 squareEstimate = __vmulfp(estimate, estimate);
-    const __vector4 halfEstimate = __vmulfp(estimate, half);
-    const __vector4 correction = __vnmsubfp(square, squareEstimate, one);
-    const __vector4 refined = __vmaddfp(halfEstimate, correction, estimate);
-    __vector4 distance = __vmulfp(square, refined);
-    distance = __vsel(distance, zero, equalZero);
-    distance = __vsel(zero, distance, valid);
-    length.mV = distance;
-    const __vector4 reciprocal = __vrefp(distance);
-    const __vector4 reciprocalCorrection = __vnmsubfp(reciprocal, distance, one);
-    const __vector4 inverse = __vmaddfp(reciprocal, reciprocalCorrection, reciprocal);
-    dir.mV = __vsel(zero, __vmulfp(delta, inverse), valid);
+    base = p1;
+    rw::math::vpu::Vector3 delta = p2 - p1;
+    rw::math::vpu::VecFloat lengthSq = MagnitudeSquared(delta);
+    rw::math::vpu::MaskScalar nonZero = rw::math::vpu::CompGreaterThan(lengthSq, VEC_EPSILON);
+    length = rw::math::vpu::Select(nonZero, rw::math::vpu::SqrtFast(lengthSq), rw::math::vpu::GetVecFloat_Zero());
+    dir = rw::math::vpu::Select(nonZero, delta * rw::math::vpu::ReciprocalFast(length), rw::math::vpu::GetVector3_Zero());
 }
 
 // ---------------------------------------------------------------------------
