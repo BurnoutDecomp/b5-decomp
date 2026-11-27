@@ -91,6 +91,12 @@ namespace BrnGui
         void DisplayNewAchievementNotification(const AchievementsBitArray* lpAchievementsToShow);
 
     private:
+        // DWARF BrnAchievementPopupComponent.h:94..96 and :114 (class statics).
+        static const char* KAPC_ANIM_IN_FRAME;
+        static const char* KAPC_ANIM_OUT_FRAME;
+        static const char* KAPC_BLANK_FRAME;
+        static const char  KAC_ACHIEVEMENTICON_NAME[];
+
         AchievementsBitArray   mAchievementsToShow;          // +0x10
         s32                    miCurrentAchievementShowing;  // +0x18
         ComponentState         meComponentState;             // +0x1C

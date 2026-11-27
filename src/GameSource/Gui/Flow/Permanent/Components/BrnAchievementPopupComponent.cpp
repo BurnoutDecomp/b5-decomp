@@ -35,8 +35,15 @@
 namespace BrnGui
 {
     // The embedded icon's child-clip name within the pop-up movie (X360 .rdata
-    // "AchievementIcon_mc"); the DWARF names this KAC_ACHIEVEMENTICON_NAME.
-    static const char* const KAC_ACHIEVEMENTICON_NAME = "AchievementIcon_mc";
+    // "AchievementIcon_mc"); the DWARF class static KAC_ACHIEVEMENTICON_NAME (h:114, char[]).
+    const char AchievementPopupComponent::KAC_ACHIEVEMENTICON_NAME[] = "AchievementIcon_mc";
+
+    // The clip frame labels (DWARF class statics h:94..96, `const char *`): ARTIST keeps the three
+    // pointers in .data (0x82F24F80 "AnimIn", 0x82F24F84 "AnimOut", 0x82F24F88 "Blank") and Update
+    // reloads KAPC_ANIM_OUT_FRAME from its word (0x82424B0C).
+    const char* AchievementPopupComponent::KAPC_ANIM_IN_FRAME  = "AnimIn";
+    const char* AchievementPopupComponent::KAPC_ANIM_OUT_FRAME = "AnimOut";
+    const char* AchievementPopupComponent::KAPC_BLANK_FRAME    = "Blank";
 
     // "None showing" sentinel for miCurrentAchievementShowing -- one past the last
     // valid achievement id (== the bit-set capacity). Construct / Initialize / the
@@ -124,8 +131,11 @@ namespace BrnGui
     // @ 0x82424A98 -- advance the pop-up's two-shot animation state machine.
     void AchievementPopupComponent::Update()
     {
-        if (meComponentState == E_CS_VISIBLE)
+        // A switch on the state: ARTIST tests VISIBLE first with a `beq` to its arm placed
+        // last and falls into the INTERVAL arm (0x82424AAC..0x82424AD8).
+        switch (meComponentState)
         {
+        case E_CS_VISIBLE:
             // While visible: once the game time passes the anim-out time, play the
             // "AnimOut" clip, switch to the post-display interval, and clear the
             // achievement that was on screen.
@@ -133,7 +143,7 @@ namespace BrnGui
             {
                 meComponentState       = E_CS_INTERVAL;
                 mfIntervalTime_Seconds = mfCurrentGameTime_Seconds + KF_TIME_BETWEEN_POPUPS_SECS;
-                mAptRef.GotoAndPlayLabel("AnimOut");
+                mAptRef.GotoAndPlayLabel(KAPC_ANIM_OUT_FRAME);   // the class static's .data word (0x82F24F84)
 
                 // Inlined BitArray<60>::IsBitSet (its bound assert CgsBitArray.h:203) + probe.
                 CGS_ASSERT_AT(mAchievementsToShow.IsBitSet(
@@ -144,14 +154,18 @@ namespace BrnGui
                 mAchievementsToShow.UnSetBit(static_cast<u32>(miCurrentAchievementShowing));
                 miCurrentAchievementShowing = KI_NO_ACHIEVEMENT_SHOWING;
             }
-        }
-        else if (meComponentState == E_CS_INTERVAL)
-        {
+            break;
+
+        case E_CS_INTERVAL:
             // After the interval gap elapses, return to invisible.
             if (mfCurrentGameTime_Seconds > mfIntervalTime_Seconds)
             {
                 meComponentState = E_CS_INVISIBLE;
             }
+            break;
+
+        default:
+            break;
         }
     }
 }

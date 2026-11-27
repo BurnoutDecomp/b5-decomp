@@ -420,9 +420,14 @@ void OnlinePlay::SelectOnlineMenuOption(EMainMenuOptions leOption)
 // ------------------------------------------------ ShowMainMenuOptions @ 0x8249BF58
 void OnlinePlay::ShowMainMenuOptions()
 {
+    // DWARF locals liIndex / lpStats (cpp:652/653; lpStats starts NULL, ARTIST 0x8249BF78) and
+    // lLocalPlayerStatsRequest (cpp:689).
+    int32_t liIndex;
+    const BrnNetwork::NetworkPlayerStats* lpStats = NULL;
+
     mMainMenuComponent.SetupMenu(E_MAIN_MENU_OPTIONS_COUNT, true);
-    for (s32 liRow = 0; liRow < E_MAIN_MENU_OPTIONS_COUNT; ++liRow)
-        mMainMenuComponent.SetText(liRow, KAPC_MAIN_MENU_TEXT[liRow]);
+    for (liIndex = 0; liIndex < E_MAIN_MENU_OPTIONS_COUNT; ++liIndex)
+        mMainMenuComponent.SetText(liIndex, KAPC_MAIN_MENU_TEXT[liIndex]);
 
     // With no hard disk the online / gallery / challenge / (un)ranked options are unavailable.
     if (!CgsSystem::HardwareInit::IsHardDiskAvailable())
@@ -441,16 +446,16 @@ void OnlinePlay::ShowMainMenuOptions()
     mPlayerStatsDisplay.SetState(GuiNetworkPlayerStats::E_STATE_VISIBLE);
 
     // Show the local player's own record only once a name has been set.
-    const BrnNetwork::NetworkPlayerStats* lpStats =
-        (mPlayerStatsEvent.macPlayerName[0] != '\0') ? &mPlayerStatsEvent : NULL;
+    if (mPlayerStatsEvent.macPlayerName[0] != '\0')
+        lpStats = &mPlayerStatsEvent;
     mPlayerStatsDisplay.SetInfo(mPlayerStatsEvent.macPlayerName, mPlayerStatsEvent.miWorldRank,
                                 lpStats, 0, false, mpGuiCache);
 
-    // GuiEvent<259> { 1, 259, 12, payload=0 } -- channel 40, 16 bytes.
-    CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue =
-        mpStateInterface->GetOutputEventQueue();
-    u32 lauRecord[4] = { 1u, 259u, 12u, 0u };
-    lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecord), 40, 16);
+    // The empty GuiEventNetworkLocalPlayerStatsRequest (DWARF GuiEvent<257> typedef, X360 id 259):
+    // the inlined OutputGuiEvent queues {1, 259, 12} on channel 40 with no payload store
+    // (ARTIST 0x8249C058..0x8249C080).
+    GuiEventNetworkLocalPlayerStatsRequest lLocalPlayerStatsRequest;
+    mpStateInterface->OutputGuiEvent(lLocalPlayerStatsRequest);
 }
 
 // ------------------------------------------------ ShowMainMenuScreen @ 0x8249BE98

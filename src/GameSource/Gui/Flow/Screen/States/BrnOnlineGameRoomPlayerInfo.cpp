@@ -3275,9 +3275,9 @@ namespace BrnGui
 
         // The accessor carries the "mpChallengeManager" assert (BrnGuiCache.h:2390) the
         // X360 inlined here ahead of the state read.
-        const FreeburnChallengeManager* lpChallengeManager =
-            mpGuiCache->GetFreeburnChallengeManager();
-        if (!lpChallengeManager->IsRunning() && !lpChallengeManager->IsShowingResults())
+        // IsStarted (running or showing results) as one inlined bool (ARTIST materialises it,
+        // 0x8248C134..0x8248C154).
+        if (!mpGuiCache->GetFreeburnChallengeManager()->IsStarted())
         {
             lau64OptionIds[liOptionIndex] = E_PAUSE_OPTIONS_VIEW_CHALLENGES;
             ++liOptionIndex;
@@ -3289,11 +3289,11 @@ namespace BrnGui
             ++liOptionIndex;
         }
 
-        lau64OptionIds[liOptionIndex]     = E_PAUSE_OPTIONS_VIEW_LOBBY;
-        lau64OptionIds[liOptionIndex + 1] = E_PAUSE_OPTIONS_VIEW_MAP;
-        lau64OptionIds[liOptionIndex + 2] = E_PAUSE_OPTIONS_SETTINGS;
-        lau64OptionIds[liOptionIndex + 3] = E_PAUSE_OPTIONS_LEAVE_GAME;
-        liOptionIndex += 4;
+        // Four appends, each stepping the index (ARTIST 0x8248C1A4..0x8248C1F4).
+        lau64OptionIds[liOptionIndex++] = E_PAUSE_OPTIONS_VIEW_LOBBY;
+        lau64OptionIds[liOptionIndex++] = E_PAUSE_OPTIONS_VIEW_MAP;
+        lau64OptionIds[liOptionIndex++] = E_PAUSE_OPTIONS_SETTINGS;
+        lau64OptionIds[liOptionIndex++] = E_PAUSE_OPTIONS_LEAVE_GAME;
 
         // Both asserts fire from the one overflow test in the asm (`cmpwi r28, 0xB` at
         // 0x8248C1F0), cpp:3102 then cpp:3103. Both bounds are 11 on ARTIST.

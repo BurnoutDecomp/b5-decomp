@@ -812,6 +812,11 @@ namespace BrnGui
     typedef CgsGui::GuiEvent<261> GuiEventNetworkReadyToJoinGameSession;
     typedef CgsGui::GuiEvent<145> GuiEventStartedGame;
 
+    // DWARF CgsGuiEvent.h:8523 `typedef GuiEvent<257> GuiEventNetworkLocalPlayerStatsRequest` (PS3 id);
+    // 259 on the X360 (OnlinePlay::ShowMainMenuOptions posts {1, 0x103, 12} @0x8249C058; DWARF local
+    // lLocalPlayerStatsRequest at BrnOnlinePlay.cpp:689).
+    typedef CgsGui::GuiEvent<259> GuiEventNetworkLocalPlayerStatsRequest;
+
     // DWARF BrnGuiEventTypeDefs.h `struct GuiNetworkPrepareGameEvent : public GuiEvent<266> {}` (PS3
     // id); 268 on the X360 (InGame::SelectOnlineMenuOption posts {1, 268, 12} @0x824D0C80).
     struct GuiNetworkPrepareGameEvent : public CgsGui::GuiEvent<268>
