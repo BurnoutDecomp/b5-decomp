@@ -1647,9 +1647,9 @@ void CrashNavIconRenderer::GetIconInformation(u32 luIndex, bool* lpbFiltered,
 
     case GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_ONLINE_EVENT_PRESETS:
     {
-        const PresetEvent* lpPresetEvent = mpGuiCache->GetPresetEvent(static_cast<s32>(luIndex));
+        const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event* lpPresetEvent = mpGuiCache->GetPresetEvent(static_cast<s32>(luIndex));
         const SatNavEventDisplayInfo* lpDisplayInfo =
-            mpGuiCache->GetPresetEventDisplayInfo(lpPresetEvent->GetPositionLookupId());
+            mpGuiCache->GetPresetEventDisplayInfo(lpPresetEvent->GetTrafficLightTriggerId());
 
         // Again made for its asserts; the result is dropped.
         mpGuiCache->GetWorldDataController()->GetOnlineEventInfoFromEventId(
@@ -1657,7 +1657,7 @@ void CrashNavIconRenderer::GetIconInformation(u32 luIndex, bool* lpbFiltered,
 
         // The console re-fetches the preset record for the id store (`bl GetPresetEvent`
         // twice); reproduced through the one pointer -- the accessor is pure.
-        *lpuEventID        = lpPresetEvent->GetEventId();
+        *lpuEventID        = lpPresetEvent->GetEventID();
         *lpbFiltered       = false;
         *lpeIconType       = E_CRASHNAVICON_EVENT_NOTATTEMPTED;
         *lpbUseMiniIcon    = false;

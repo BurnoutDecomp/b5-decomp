@@ -153,7 +153,7 @@ namespace BrnGui
     GuiCache::GuiCache()
     {
         miEventStartsCount = -1;
-        mEventsCtorSentinel = -1;
+        // mEvents: its Array ctor (implicit).
         // mOfflinePostEventData: its DerivedCarArray's two Array ctors (implicit).
         miProfileEventsCount = -1;
     }
@@ -400,7 +400,7 @@ namespace BrnGui
         //  +77576/+77577, +79320, +80728..+80734, the +80736 eight-entry seed, +80788 --
         //  remains the documented partial this slice always was; these two are the pair the
         //  icon path reads.)
-        mEventsCtorSentinel  = 0;   // X360 `*(v47 + 40532) = 0`  (mEvents / GetNumPresetEvents)
+        mEvents.mEvents.Construct();   // X360 `*(v47 + 40532) = 0`  (mEvents / GetNumPresetEvents)
         mPreRaceData.Construct();   // ARTIST Construct count+0x135D8.
         miProfileEventsCount = 0;   // X360 `*(v47 + 80724) = 0`  (GetNumProfileEvents)
 
@@ -3104,15 +3104,7 @@ namespace BrnGui
 
 namespace BrnGui
 {
-    // @ 0x8241E778 -- live count of preset (online) events. mEvents is a CgsArray whose
-    // count/ctor sentinel lives at +0x9E54 (mEventsCtorSentinel); -1 means the array was
-    // used before Construct/Clear. The X360 reads the same field for the assert and the
-    // return (base maEventsStorage @0x8040 + 7700).
-    s32 GuiCache::GetNumPresetEvents() const
-    {
-        CGS_ASSERT(mEventsCtorSentinel != -1, "Array used before Construct/Clear was called");
-        return mEventsCtorSentinel;
-    }
+    // GuiCache::GetNumPresetEvents (ARTIST COMDAT 0x8241E778) is header-inline in BrnGuiCache.h.
 
     // @ 0x8240FB50 -- landmark index for the given online checkpoint slot in the current
     // online round. Bounds-checks the checkpoint against KI_MAX_LANDMARKS_IN_MODE, asserts
@@ -3490,31 +3482,7 @@ void GuiCache::GetOnlineLandmarkInfoAtPositionInList(
     lpOutIconInfo->SetDesignIndex(lpLandmark->GetDesignIndex());        // -> +0x22
 }
 
-// @ 0x8241E520 (the GuiCache face over the mEvents CgsArray element accessor
-// @0x8241E430 -> CgsContainers::Arr). Stride 0x2C (the 7700-byte storage / 175 cap).
-// The preset event table lives in maEventsStorage. This is the shared accessor.
-
-
-const PresetEvent* GuiCache::GetPresetEvent(s32 liIndex) const
-{
-    CGS_ASSERT(mEventsCtorSentinel != -1,
-               "Array used before Construct/Clear was called");   // CgsArray.h:336 (non-gating)
-    CGS_ASSERT(liIndex >= 0 && liIndex < mEventsCtorSentinel,
-               "luEventIndex < maEvents.GetLength()");            // BrnGameStateSharedIO.h:2014 (non-gating)
-    return reinterpret_cast<const PresetEvent*>(&maEventsStorage[0x2C * liIndex]);
-}
-
-// The two preset-event record reads (X360 words +0x20 / +0x28 of the 0x2C-stride mEvents
-// element; offsets proven by the renderer's GetIconInformation preset branch).
-u32 PresetEvent::GetPositionLookupId() const
-{
-    return muPositionLookupId;
-}
-
-u32 PresetEvent::GetEventId() const
-{
-    return muEventId;
-}
+// GuiCache::GetPresetEvent (ARTIST 0x8241E520) is header-inline in BrnGuiCache.h (asserts h:4639/4640).
 
 } // namespace BrnGui
 
@@ -4344,7 +4312,8 @@ namespace BrnGui
                        "::KI_INVALID_BITINDEX");                               // cpp:3703
         }
 
-        const PresetEvent* lpEventWithUniqueFinish = GetPresetEvent(liSetBit);
+        const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event* lpEventWithUniqueFinish =
+            GetPresetEvent(liSetBit);
         CGS_ASSERT(lpEventWithUniqueFinish != 0, "lpEventWithUniqueFinish");    // cpp:3708
         if (lpEventWithUniqueFinish == 0)
         {
@@ -4457,25 +4426,6 @@ BrnGameState::LandmarkIndex GuiCache::GetEventFinishLandmark() const
 
 namespace BrnGui
 {
-    // The record's live landmark count (the console streams it as "GetNumLandmarks()" into
-    // the indexed read's bound assert).
-    s32 PresetEvent::GetNumLandmarks() const
-    {
-        return miNumLandmarks;
-    }
-
-    // One of the record's landmark indices by value, bounds-asserted into [0, count).
-    // Asserts: BrnGameStateSharedIO.h:1929 / :1930 (both non-gating in this build; the
-    // console streams the index and the live count into the second message).
-    BrnGameState::LandmarkIndex PresetEvent::GetLandmark(s32 liIndex) const
-    {
-        CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
-        CGS_ASSERT(liIndex < miNumLandmarks, "liIndex < GetNumLandmarks()");
-
-        return BrnGameState::LandmarkIndex(static_cast<s32>(
-            static_cast<s16>(mau16LandmarkIndices[liIndex])));
-    }
-
     // The map-event exit handler: RecEvent arm 194, BrnGui::GuiEventSpecificPresetRaces.
     // The queued payload is a verbatim 7704-byte copy of the game-state output buffer's own
     // SpecificGameModeEventInterface (the bridge copies and posts it whenever the buffer's
@@ -4484,7 +4434,7 @@ namespace BrnGui
     //
     //   1. assert the payload pointer (BrnGuiCache.cpp:4095 -- the console's own message
     //      still names the producer, OnlinePlay::HandleAllPreSetRacesEvent);
-    //   2. adopt the WHOLE interface by value over maEventsStorage + mEventsCtorSentinel
+    //   2. adopt the WHOLE interface by value over mEvents.mEvents
     //      (one 7704-byte copy: the 175 x 44 element buffer AND the trailing count word,
     //      so the array's constructed-ness travels with the payload);
     //   3. zero the four doublewords of maOnlineFinishPointsMask;
@@ -4505,19 +4455,15 @@ namespace BrnGui
         typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface
             PresetEventInterface;
 
-        // The adopted block is exactly the cache's mEvents pair -- element buffer plus the
-        // CgsArray count word that follows it.
-        CGS_STATIC_ASSERT((sizeof(PresetEventInterface)
-                          == sizeof(maEventsStorage) + sizeof(mEventsCtorSentinel)),
-                      "the preset-event payload is the cache's mEvents storage + count");
+        // The adopted block is exactly the cache's mEvents.mEvents (element buffer plus the
+        // CgsArray count word that follows it).
+        CGS_STATIC_ASSERT((sizeof(PresetEventInterface) == sizeof(mEvents.mEvents)),
+                      "the preset-event payload is the cache's mEvents interface");
 
         CGS_ASSERT(lpEvent != 0,
                    "Invalid event in OnlinePlay::HandleAllPreSetRacesEvent");   // cpp:4095
 
-        std::memcpy(maEventsStorage, lpEvent, sizeof(maEventsStorage));
-        std::memcpy(&mEventsCtorSentinel,
-                    reinterpret_cast<const u8*>(lpEvent) + sizeof(maEventsStorage),
-                    sizeof(mEventsCtorSentinel));
+        std::memcpy(&mEvents.mEvents, lpEvent, sizeof(mEvents.mEvents));
 
         mEventsWithUniqueFinishPoints.SetBitField(0, 0);
         mEventsWithUniqueFinishPoints.SetBitField(1, 0);
@@ -4685,79 +4631,13 @@ namespace BrnGui
     {
         typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event Event;
 
-        // ARTIST sub_8241E5D0 starts at unsigned index zero, checks the array's
-        // constructed sentinel, then compares the unsigned index against live count.
-        for (u32 luIndex = 0; ; ++luIndex)
+        // ARTIST sub_8241E5D0: an unsigned walk over mEvents' live count (the inlined GetNumEvents
+        // re-read each pass) through the inlined GetEvent and Array::operator[] (their asserts
+        // BrnGameStateSharedIO.h:2014, CgsArray.h:538/539).
+        for (u32 luIndex = 0; luIndex < mEvents.mEvents.GetNumEvents(); ++luIndex)
         {
-            if (mEventsCtorSentinel == -1)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "Array used before Construct/Clear was called",
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_CGSARRAY_H_FILE,
-                    336));
-                CgsDev::Assert::EndAssert();
-            }
-
-            if (luIndex >= static_cast<u32>(mEventsCtorSentinel))
-                break;
-
-            // ARTIST 0x8241E430: the generic array accessor repeats the constructed
-            // and unsigned bounds checks before calling CgsContainers::Arr.
-            if (mEventsCtorSentinel == -1)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "Array used before Construct/Clear was called",
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_CGSARRAY_H_FILE,
-                    336));
-                CgsDev::Assert::EndAssert();
-            }
-            if (luIndex >= static_cast<u32>(mEventsCtorSentinel))
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "luEventIndex < maEvents.GetLength()",
-                    CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h",
-                    2014));
-                CgsDev::Assert::EndAssert();
-            }
-
-            // ARTIST 0x8241D4F8: CgsContainers::Arr repeats the CgsArray checks.
-            if (mEventsCtorSentinel == -1)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "Array used before Construct/Clear was called",
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_CGSARRAY_H_FILE,
-                    538));
-                CgsDev::Assert::EndAssert();
-            }
-            if (luIndex >= static_cast<u32>(mEventsCtorSentinel))
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::StrStream lBoundsMessage(CgsDev::Assert::gpcMessageBuffer,
-                                                 CgsDev::Assert::giMessageBufferSize);
-                lBoundsMessage << "Array index out of bounds. Index: " << luIndex
-                               << ", length: " << static_cast<u32>(mEventsCtorSentinel);
-                CgsDev::Assert::FireAssert(
-                    CgsDev::Assert::gpcMessageBuffer,
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_CGSARRAY_H_FILE,
-                    539));
-                CgsDev::Assert::EndAssert();
-            }
-
-            const Event* lpEvent =
-                reinterpret_cast<const Event*>(&maEventsStorage[0x2C * luIndex]);
-            if (lpEvent == 0)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "lpEvent",
-                    CGS_ASSERT_LOCATION(CGS_ARTIST_BRNGUICACHE_FILE,
-                    4664));
-                CgsDev::Assert::EndAssert();
-            }
+            const Event* lpEvent = mEvents.mEvents.GetEvent(luIndex);
+            CGS_ASSERT_AT(lpEvent, "lpEvent", CGS_ARTIST_BRNGUICACHE_FILE, 4664);
 
             if (lpEvent->GetEventID() == liEventID)
                 return lpEvent;

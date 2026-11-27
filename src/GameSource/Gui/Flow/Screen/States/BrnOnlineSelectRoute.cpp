@@ -161,18 +161,6 @@ namespace
     // This is a typed view of that named storage member, matching OnlineGameOptionsSummary.
     typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event OnlineModeEvent;
 
-    const PresetEvent* FindPresetEventById(const GuiCache* lpGuiCache, u32 luEventId)
-    {
-        for (s32 liIndex = 0; liIndex < static_cast<s32>(lpGuiCache->GetNumPresetEvents()); ++liIndex)
-        {
-            const PresetEvent* lpPreset = lpGuiCache->GetPresetEvent(liIndex);
-            if (lpPreset->GetEventId() == luEventId)
-                return lpPreset;
-        }
-        CGS_FAIL("Unable to find preset event with event id");
-        return 0;
-    }
-
     void PostAudio(CgsGui::StateInterface* lpStateInterface, const char* lpacLabel)
     {
         GuiAudioTriggerEvent lEvent;
@@ -505,7 +493,7 @@ namespace
         for (s32 liRound = 0; liRound < mpGuiCache->GetOnlineGameModeOptions()->miNumRounds; ++liRound)
         {
             const u32 luStartPresetEventIndex = mSelectRoutes.GetStartPointEventIndex(liRound);
-            const PresetEvent* lpStartPresetEvent =
+            const OnlineModeEvent* lpStartPresetEvent =
                 mpGuiCache->GetPresetEvent(static_cast<s32>(luStartPresetEventIndex));
 
             const s32 liNumCheckpoints = mSelectRoutes.GetNumberCheckpoints(liRound);
@@ -521,7 +509,7 @@ namespace
             }
 
             lpParams->maEvents[liRound].Construct(
-                static_cast<s32>(lpStartPresetEvent->GetEventId()),
+                lpStartPresetEvent->GetEventID(),
                 mSelectRoutes.GetStartLightTriggerID(liRound),
                 laLandmarks, liNumCheckpoints - 1);
         }
@@ -887,14 +875,11 @@ namespace
             GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_ONLINE_EVENT_PRESETS,
             mpStateInterface, KF_EVENT_ICON_FADE_TIME, 0, 0);
 
-        const u32 luPresetEventIndex =
-            mSelectRoutes.GetStartPointEventIndex(mSelectRoutes.GetCurrentRound());
-        const PresetEvent* lpPresetEvent = mpGuiCache->GetPresetEvent(static_cast<s32>(luPresetEventIndex));
-        muCurrentPresetEventID = lpPresetEvent->GetEventId();
-
-        const f32 lfInitialZoomFactor = CalculateZoomFactor();
-        mMainMapComponent.SetZoom(MainMapComponent::E_ZOOMFACTOR_CUSTOM,
-                                  lfInitialZoomFactor, false);
+        // DWARF lists no locals here: the preset id and the zoom factor are used in place (ARTIST
+        // forms &mMainMapComponent before the CalculateZoomFactor call, 0x82493390).
+        muCurrentPresetEventID = mpGuiCache->GetPresetEvent(
+            mSelectRoutes.GetStartPointEventIndex(mSelectRoutes.GetCurrentRound()))->GetEventID();
+        mMainMapComponent.SetZoom(MainMapComponent::E_ZOOMFACTOR_CUSTOM, CalculateZoomFactor(), false);
         mCursor.SetActive();
         mbEditingNewCheckpoint = false;
         mCheckpointMenuAnimator.AddOutputAptViewState(
@@ -904,12 +889,9 @@ namespace
         mEventNameAnimator.AddOutputAptViewState(
             "apt_Transition", KAPC_ANIMATION_STATES[0], false);
 
-        const s32 liMode = mpGuiCache->GetOnlineGameMode();
-        const bool lbSpecialMode =
-            liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN ||
-            liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FUGITIVE ||
-            liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_MODE_END;
-        if (lbSpecialMode)
+        // GsmIO::IsOnlineStuntRun, inlined as its materialised bool (14, 12, 17; 0x82493420..40).
+        if (BrnGameState::GameStateModuleIO::IsOnlineStuntRun(
+                static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(mpGuiCache->GetOnlineGameMode())))
         {
             mInfoBackgroundAnimator.AddOutputAptViewState("apt_Transition", KAPC_ANIMATION_STATES[2], false);
         }
@@ -923,9 +905,7 @@ namespace
 
         if (mpGuiCache != 0 && meSubState > E_SUBSTATE_LOADING_COMPONENTS)
         {
-            const f32 lfZoomFactor = CalculateZoomFactor();
-            mMainMapComponent.SetZoom(MainMapComponent::E_ZOOMFACTOR_CUSTOM,
-                                      lfZoomFactor, false);
+            mMainMapComponent.SetZoom(MainMapComponent::E_ZOOMFACTOR_CUSTOM, CalculateZoomFactor(), false);
         }
         else
         {
@@ -1175,9 +1155,9 @@ namespace
             const s32 liSelectedIndex = mSelectRoutes.GetCurrentlySelectedCheckpointIndex();
             if (liSelectedIndex == -1 || liSelectedIndex == 0)
             {
-                const PresetEvent* lpPreset = mpGuiCache->GetPresetEvent(liIndex);
+                const OnlineModeEvent* lpPreset = mpGuiCache->GetPresetEvent(liIndex);
                 const SatNavEventDisplayInfo* lpEventStart =
-                    mpGuiCache->GetPresetEventDisplayInfo(lpPreset->GetPositionLookupId());
+                    mpGuiCache->GetPresetEventDisplayInfo(lpPreset->GetTrafficLightTriggerId());
                 CGS_ASSERT_AT(lpEventStart != 0, "lpEventStart", CGS_ARTIST_FILE, 1995);
                 lv3Position = lpEventStart->mv3Position;
             }
@@ -1193,9 +1173,9 @@ namespace
 
         if (meSubState == E_SUBSTATE_SELECTING_PRESET_EVENT)
         {
-            const PresetEvent* lpPreset = mpGuiCache->GetPresetEvent(liIndex);
+            const OnlineModeEvent* lpPreset = mpGuiCache->GetPresetEvent(liIndex);
             const SatNavEventDisplayInfo* lpEventStart =
-                mpGuiCache->GetPresetEventDisplayInfo(lpPreset->GetPositionLookupId());
+                mpGuiCache->GetPresetEventDisplayInfo(lpPreset->GetTrafficLightTriggerId());
             CGS_ASSERT_AT(lpEventStart != 0, "lpEventStart", CGS_ARTIST_FILE, 2012);
             return lpEventStart->mv3Position;
         }
@@ -1284,10 +1264,10 @@ namespace
         }
         else if (meSubState == E_SUBSTATE_SELECTING_PRESET_EVENT)
         {
-            const PresetEvent* lpPreset = FindPresetEventById(mpGuiCache, muCurrentPresetEventID);
+            const OnlineModeEvent* lpPreset = mpGuiCache->GetPresetEventFromEventID(muCurrentPresetEventID);
             CGS_ASSERT(lpPreset != 0, "lpPresetEvent");
             const SatNavEventDisplayInfo* lpEventStart =
-                mpGuiCache->GetPresetEventDisplayInfo(lpPreset->GetPositionLookupId());
+                mpGuiCache->GetPresetEventDisplayInfo(lpPreset->GetTrafficLightTriggerId());
             CGS_ASSERT(lpEventStart != 0, "lpEventStart");
             lv3WorldPosition = lpEventStart->mv3Position;
             lbPlaceCursor = true;
@@ -1314,14 +1294,14 @@ namespace
     {
         s32 liNumTrackedItems = 0;
         u32 luStartTriggerId = 0;
-        const PresetEvent* lpPresetEvent = 0;
+        const OnlineModeEvent* lpPresetEvent = 0;
 
         if (meSubState == E_SUBSTATE_SELECTING_PRESET_EVENT)
         {
-            lpPresetEvent = FindPresetEventById(mpGuiCache, muCurrentPresetEventID);
+            lpPresetEvent = mpGuiCache->GetPresetEventFromEventID(muCurrentPresetEventID);
             CGS_ASSERT_AT(lpPresetEvent != 0, "lpPresetEvent", CGS_ARTIST_FILE, 1305);
             liNumTrackedItems = lpPresetEvent->GetNumLandmarks() + 1;
-            luStartTriggerId = lpPresetEvent->GetPositionLookupId();
+            luStartTriggerId = lpPresetEvent->GetTrafficLightTriggerId();
         }
         else
         {
@@ -1447,22 +1427,25 @@ namespace
         if (mpGuiCache == 0 || mpIconManager == 0)
             return;
 
-        mpIconManager->meIconFilterMode = MapIconManager::E_ICONFILTER_ALL;
-        mpIconManager->mbIsDisplayingEventInfo = false;
+        // The MapIconManager accessors DWARF lists here (SetIconFilter, SetIsDisplayingEvent,
+        // SetSelectedCheckpointInMenu x2, ClearIconInfo).
+        mpIconManager->SetIconFilter(MapIconManager::E_ICONFILTER_ALL);
+        mpIconManager->SetIsDisplayingEvent(false);
         if (meSubState == E_SUBSTATE_SELECTING_PRESET_EVENT)
         {
-            const PresetEvent* lpPreset = FindPresetEventById(mpGuiCache, muCurrentPresetEventID);
-            mpIconManager->miSelectedCheckpoint = 0;
-            mpIconManager->mSelectedLightTriggerID = lpPreset->GetPositionLookupId();
+            // The checkpoint is cleared before the lookup (ARTIST 0x824A95D4, then the call 0x824A95E0).
+            mpIconManager->SetSelectedCheckpointInMenu(0);
+            mpIconManager->mSelectedLightTriggerID =
+                mpGuiCache->GetPresetEventFromEventID(muCurrentPresetEventID)->GetTrafficLightTriggerId();
         }
         else
         {
-            const s32 liSelectedCheckpoint = mSelectRoutes.GetCurrentlySelectedCheckpointIndex();
-            mpIconManager->miSelectedCheckpoint = liSelectedCheckpoint < 0 ? 0 : liSelectedCheckpoint;
+            // The inlined header accessors, no clamp (ARTIST 0x824A95FC..0x824A9648).
+            mpIconManager->SetSelectedCheckpointInMenu(mSelectRoutes.GetCurrentlySelectedCheckpointIndex());
             mpIconManager->mSelectedLightTriggerID =
                 mSelectRoutes.GetStartLightTriggerID(mSelectRoutes.GetCurrentRound());
         }
-        mpIconManager->miNumUsedIcons = 0;
+        mpIconManager->ClearIconInfo();
         mpIconManager->Update();
 
         if ((meSubState == E_SUBSTATE_SELECTING_POINT ||

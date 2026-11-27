@@ -21,7 +21,7 @@
 
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnSatNavRenderer.h"
 
-#include "GameSource/Gui/BrnGuiCache.h"                 // BrnGui::GuiCache, BrnGui::PresetEvent
+#include "GameSource/Gui/BrnGuiCache.h"                 // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"         // BrnGui::GuiEventJunctionInfo (the case-311 typed read)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"   // BrnGui::WorldDataController
 #include "GameSource/GameState/Progression/BrnProfile.h"// BrnProgression::ProfileEvent
@@ -498,8 +498,8 @@ void SatNavRenderer::GetIconInformation(u32 luIndex, IconRendererSatNavIconInfo*
 
     case GuiEventEnableSatNavIcons::E_ICON_DISPLAY_TYPE_ONLINE_EVENT_STARTS: // 1 (preset)
     {
-        const PresetEvent* const lpPresetEvent = mpGuiCache->GetPresetEvent(static_cast<s32>(luIndex));
-        const u32 luLookupId = lpPresetEvent->GetPositionLookupId();          // presetEvent[+0x20]
+        const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event* const lpPresetEvent = mpGuiCache->GetPresetEvent(static_cast<s32>(luIndex));
+        const u32 luLookupId = lpPresetEvent->GetTrafficLightTriggerId();          // presetEvent[+0x20]
 
         const SatNavEventDisplayInfo* const lpDisplay = mpGuiCache->GetPresetEventDisplayInfo(luLookupId);
 
@@ -510,7 +510,7 @@ void SatNavRenderer::GetIconInformation(u32 luIndex, IconRendererSatNavIconInfo*
             lpWdc->GetEventInfoFromEventId(lpDisplay->muEventInstanceId);
 
         lpInfo->mv3Position      = lpDisplay->mv3Position;
-        lpInfo->miEventId        = static_cast<s32>(lpPresetEvent->GetEventId());     // presetEvent[+0x28]
+        lpInfo->miEventId        = lpPresetEvent->GetEventID();     // presetEvent[+0x28]
         lpInfo->meSatNavIconType = E_SATNAVICON_EVENT_NOTATTEMPTED;
         break;
     }

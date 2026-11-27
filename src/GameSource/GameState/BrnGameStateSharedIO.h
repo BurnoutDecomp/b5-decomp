@@ -390,6 +390,16 @@ namespace BrnGameState
             // side reads the same count word off its own copy of the record.
             u32 GetNumEvents() const { return maEvents.GetLength(); }
 
+            // DWARF h:919, header-inline: ARTIST's COMDAT 0x8241E430 asserts the index against the
+            // live length (BrnGameStateSharedIO.h:2014) and calls Array<Event,175>::operator[]
+            // const 0x8241D4F8 (GuiCache::GetPresetEvent 0x8241E5C4 calls it).
+            const Event* GetEvent(u32 luEventIndex) const
+            {
+                CGS_ASSERT_AT(luEventIndex < maEvents.GetLength(), "luEventIndex < maEvents.GetLength()",
+                              "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 2014);
+                return &maEvents[luEventIndex];
+            }
+
             // The producer's local interface is Construct'd (count -1 -> 0) before its first
             // AddEvent, which is what keeps the CgsArray "Array used before Construct/Clear was
             // called" guard silent. Same shape as SetUpAllEventStartsInterface::Construct below.

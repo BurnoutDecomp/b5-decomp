@@ -180,6 +180,18 @@ namespace BrnGui
         return miCurrentRound;
     }
 
+    // DWARF h:209, header-inline: listed without a line in the BrnGuiComponentUnity and
+    // BrnGuiOnlineScreenUnity CUs; ARTIST inlines it into OnlineSelectRoute::UpdateIconManager
+    // (0x824A95FC..0x824A9618) and keeps the COMDAT 0x82418B90 for HandleControllerInput.
+    // Absolute menu index = first-checkpoint item + highlighted row; 0 when unselected.
+    inline s32 SelectRoutes::GetCurrentlySelectedCheckpointIndex() const
+    {
+        if (mMenuOptions.GetHighlightedIndex() == -1)
+            return 0;
+
+        return miStartItem + mMenuOptions.GetHighlightedIndex();
+    }
+
     // DWARF h:438.
     inline SelectRoutes::EMenuItemType SelectRoutes::GetCurrentMenuItemType() const
     {

@@ -51,7 +51,7 @@ namespace BrnProgression { struct Race; }         // GetPresetRace return (point
 namespace BrnProgression { class Profile; }       // DetermineCarUnlockPending arg (pointer only; class per BrnProfile.h:208)
 namespace BrnGameState { class LandmarkIndex; }    // GetLandmarkInfoFromIndex arg (by value)
 // HandleSpecificPreSetRacesEvent arg (pointer only; the whole per-mode preset-event
-// interface the cache adopts by value into maEventsStorage/mEventsCtorSentinel). Home:
+// interface the cache adopts by value into mEvents.mEvents). Home:
 // GameSource/GameState/BrnGameStateSharedIO.h -- NOT included here, that header pulls the
 // whole game-state IO tree into this GUI boundary header.
 namespace BrnGameState { namespace GameStateModuleIO { class SpecificGameModeEventInterface; } }
@@ -124,9 +124,7 @@ namespace BrnGui
     struct OnlineTeamSelection;      // friend of GuiCache (reads the lobby mirror rows by name)
     struct OnlineLoading;            // friend of GuiCache (reads the params mirror by name)
     struct OnlineGameOptionsSummary; // friend of GuiCache (reads the params mirror by name)
-    // Defined later in this header (minimal-slice records returned by GetPresetEvent /
-    // the inlined event-display helpers).
-    struct PresetEvent;
+    // Defined later in this header (the record the inlined event-display helpers return).
     struct SatNavEventDisplayInfo;
     // [p0 map-event wave, 2026-09-08] `PresetRace` IS `BrnProgression::Race` -- it is not an
     // un-homed record. The recovered declaration outline of every consumer spells the result
@@ -573,19 +571,19 @@ namespace BrnGui
         u32                              GetNumProfileEvents() const;
         const BrnProgression::ProfileEvent* GetProfileEvent(u32 luIndex) const;
 
-        // DWARF h:1392/1398 -- the preset (online) event list. GetPresetEvent (X360 @0x8241E520)
-        // indexes it (asserts liIndex >= 0 / array-constructed / in-bounds); GetNumPresetEvents is
-        // the live count. The element is the game-state preset Event; only the two ids the renderer
-        // reads off it are exposed (by name) via PresetEvent below.
-        const PresetEvent*   GetPresetEvent(s32 liIndex) const;
-        s32                  GetNumPresetEvents() const;
+        // DWARF h:1392/1398 -- the preset (online) event list mEvents (h:461). GetPresetEvent is
+        // header-inline below (ARTIST COMDAT 0x8241E520, asserts h:4639/4640); GetNumPresetEvents
+        // is the live count (0x8241E778, the inlined Array::GetLength).
+        const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event*
+                             GetPresetEvent(int32_t liIndex) const;
+        int32_t              GetNumPresetEvents() const;
         // The preset event whose event id is liEventID (asserts when there is none).
         const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event*
             GetPresetEventFromEventID(s32 liEventID) const;
 
         // The PRODUCER of that list, and of the online finish-point bitmask. Adopts a whole
         // SpecificGameModeEventInterface by value (the payload is copied over
-        // maEventsStorage + mEventsCtorSentinel verbatim), then rebuilds
+        // mEvents.mEvents verbatim), then rebuilds
         // maOnlineFinishPointsMask: bit i is set for preset event i when event i's LAST
         // landmark (its finish point) is not already the last landmark of some EARLIER
         // event, so each distinct finish point is counted once. Reached from the RecEvent
@@ -653,7 +651,7 @@ namespace BrnGui
         // CrashNavIconRenderer::GetIconInformation's ONLINE_FINISH_POINTS arm, which then
         // reads the record's leading position lane and its sign-extended @+0x20 half-word.
         // The body walks maOnlineFinishPointsMask @+0x7770 to its liIndex-th set bit, takes
-        // that bit as an index into the adopted preset-event list (maEventsStorage @+0x8040),
+        // that bit as an index into the adopted preset-event list (mEvents @+0x8040),
         // reads the event's LAST landmark and fills the record from that landmark.
         // Return type is `void`: the record is the out parameter, and neither the caller nor
         // the recovered image returns the out pointer (the twin GetLandmarkInfoAtPositionInList
@@ -1881,8 +1879,7 @@ namespace BrnGui
         bool mbSatNavEventFilterEnabled;                 // +0x8038 (32824)
         u8  mPad_8039[3];                                // +0x8039..+0x803B
         s32 miSatNavZoomLevel;                           // +0x803C (32828) ZoomSatNavOut @0x82472FD0 (result[8207]); clamp [0,1], assert <= E_SAT_NAV_ZOOM_COUNT
-        u8  maEventsStorage[7700];                       // +0x8040 (32832) mEvents preset-event CgsArray storage (GetPresetEvent @0x8241E520 forwards 32832; count is mEventsCtorSentinel @+7700)
-        s32 mEventsCtorSentinel;                         // +0x9E54 (40532) mEvents array ctor marker / GetNumPresetEvents count (-1 = not constructed)
+        GuiEventSpecificPresetRaces mEvents;             // +0x8040 (32832) DWARF h:461; its Array count word at +0x9E54 (GetPresetEvent / GetNumPresetEvents read mEvents.mEvents)
         BrnGameState::GameStateModuleIO::EGameModeType meGameModeType; // +0x9E58 (40536) DWARF h:1729
         // ADDITIVE CARVE (wave J): the two ids the DWARF member run places IMMEDIATELY after
         // meGameModeType (DWARF BrnGuiCache.h:467 muEventID, :470 muJunctionID -- the order
@@ -2457,6 +2454,24 @@ namespace BrnGui
         return meTrophyCarUnlockType;
     }
 
+    // DWARF h:1392; ARTIST's COMDAT 0x8241E520 asserts h:4639 / h:4640 and calls the out-of-line
+    // SpecificGameModeEventInterface::GetEvent 0x8241E430.
+    inline const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event*
+        GuiCache::GetPresetEvent(int32_t liIndex) const
+    {
+        CGS_ASSERT_AT(liIndex >= 0, "liIndex >= 0", CGS_ARTIST_BRNGUICACHE_H_FILE, 4639);
+        CGS_ASSERT_AT(((uint32_t)liIndex) < mEvents.mEvents.GetNumEvents(),
+                      "((uint32_t)liIndex) < mEvents.mEvents.GetNumEvents()", CGS_ARTIST_BRNGUICACHE_H_FILE, 4640);
+        return mEvents.mEvents.GetEvent(liIndex);
+    }
+
+    // DWARF h:1398; header-inline: SelectRoutes::GetStartPointEventIndex 0x82426220 inlines it (the
+    // Array::GetLength assert at CgsArray.h:336), the other callers use the COMDAT 0x8241E778.
+    inline int32_t GuiCache::GetNumPresetEvents() const
+    {
+        return mEvents.mEvents.GetNumEvents();
+    }
+
     // @ 0x8240F890  ( maPlayerInfo @+0xAC80, stride 312 == sizeof(InGamePlayerStatusData) )
     inline const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
         GuiCache::GetOnlinePlayerInfoByIndex(s32 liPlayerInfoIndex)
@@ -2848,36 +2863,4 @@ namespace BrnGui
     }
 
 
-    // Minimal slice of the preset/online event record the cache hands back from GetPresetEvent.
-    // The sat-nav renderer only reads two ids off it (X360 GetIconInformation preset branch):
-    //   * GetPositionLookupId -- X360 word +0x20; passed to GetPresetEventWorldPosition.
-    //   * GetEventId          -- X360 word +0x28; stored as the cached icon's miEventId and used
-    //                            for the WorldDataController event-info lookup.
-    // The real element is BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event
-    // (uncommitted); modelled here as a named-accessor boundary type. Bodies link from the
-    // GuiCache / game-state TU. FLAG: minimal-slice preset-event record.
-    struct PresetEvent
-    {
-        u32 GetPositionLookupId() const;  // +0x20
-        u32 GetEventId() const;           // +0x28
-
-        // [map-event exit wave] The record's landmark set, carved out of the former
-        // mauHead/mauPad24 pads at the offsets HandleSpecificPreSetRacesEvent proves:
-        // it reads the count word at +0x24 and then the half-word at +0x00 + 2*index,
-        // exactly as the game-state record's own GetLandmark does. Bodies:
-        // GameSource/Gui/BrnGuiCache_wB_13.cpp.
-        s32                         GetNumLandmarks() const;          // +0x24
-        BrnGameState::LandmarkIndex GetLandmark(s32 liIndex) const;   // +0x00 + 2*i
-
-    private:
-        // [H3b] named storage over the documented offsets so the accessor bodies
-        // (BrnGuiCache_wH3b.cpp) read by name. Stride 0x2C: the mEvents CgsArray's
-        // 7700-byte storage / its 175-entry landmark cap == 44, consistent with the
-        // +0x28 id being the record's last word.
-        u16 mau16LandmarkIndices[16];  // +0x00..+0x1F (16 == KI_MAX_LANDMARKS_IN_MODE)
-        u32 muPositionLookupId;        // +0x20
-        s32 miNumLandmarks;            // +0x24
-        u32 muEventId;                 // +0x28
-    };
-    CGS_STATIC_ASSERT((sizeof(PresetEvent) == 0x2C), "preset-event record stride (7700/175)");
 }

@@ -38,15 +38,7 @@ namespace BrnGui
     // DWARF BrnSelectRoutes.cpp:48; ARTIST .data 0x82F25298 -> 0x8204B4F8 / 0x82049C28 / 0x820490C8.
     const char* SelectRoutes::KPC_ARROW_ANIMATION_STATES[3] = { "invisible", "visible", "animate" };
 
-    // ---- GetCurrentlySelectedCheckpointIndex @ 0x82418B90 -------------------------
-    // Absolute menu index = first-checkpoint item + highlighted row; 0 when unselected.
-    s32 SelectRoutes::GetCurrentlySelectedCheckpointIndex() const
-    {
-        if (mMenuOptions.GetHighlightedIndex() == -1)
-            return 0;
-
-        return miStartItem + mMenuOptions.GetHighlightedIndex();
-    }
+    // GetCurrentlySelectedCheckpointIndex (ARTIST COMDAT 0x82418B90) is header-inline in BrnSelectRoutes.h.
 
     // ---- GetCheckpointLandmark @ 0x824837B8 ---------------------------------------
     BrnGameState::LandmarkIndex SelectRoutes::GetCheckpointLandmark(s32 liRoundNumber,
@@ -551,16 +543,19 @@ namespace BrnGui
     // ARTIST 82426208. No matching preset returns index 0, as the original does.
     u32 SelectRoutes::GetStartPointEventIndex(s32 liRoundNumber) const
     {
-        const u32 luCount = static_cast<u32>(mpGuiCache->GetNumPresetEvents());
-        for (u32 luEvent = 0; luEvent < luCount; ++luEvent)
+        // DWARF locals luEventIndex / luNumEvents / lpEventStart (cpp:565..567); GetNumPresetEvents
+        // is inlined (ARTIST 0x82426220). Left (88.3): the two compared loads take r11/r10 the other way
+        // round (0x824262C4); both operand orders tried.
+        uint32_t luEventIndex;
+        uint32_t luNumEvents = mpGuiCache->GetNumPresetEvents();
+        for (luEventIndex = 0; luEventIndex < luNumEvents; ++luEventIndex)
         {
-            const PresetEvent* lpPreset = mpGuiCache->GetPresetEvent(static_cast<s32>(luEvent));
             const SatNavEventDisplayInfo* lpEventStart =
-                mpGuiCache->GetPresetEventDisplayInfo(lpPreset->GetPositionLookupId());
+                mpGuiCache->GetPresetEventDisplayInfo(mpGuiCache->GetPresetEvent(luEventIndex)->GetTrafficLightTriggerId());
             CGS_ASSERT_AT(lpEventStart, "lpEventStart", CGS_ARTIST_FILE, 574);
-            if (mpGuiCache->GetPresetEvent(static_cast<s32>(luEvent))->GetPositionLookupId() ==
+            if (mpGuiCache->GetPresetEvent(luEventIndex)->GetTrafficLightTriggerId() ==
                 maCheckpointData[0].maStartLightTriggerID[liRoundNumber])
-                return luEvent;
+                return luEventIndex;
         }
         return 0;
     }
@@ -643,12 +638,12 @@ namespace BrnGui
             if (mpGuiCache->GetOnlineGameMode() != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE ||
                 (liRound % 2) == 0)
                 luRandomPreset = static_cast<u32>(lRandom.RandomInt(0, static_cast<s32>(luPresetCount) - 1));
-            const PresetEvent* lpPreset = mpGuiCache->GetPresetEvent(static_cast<s32>(luRandomPreset));
+            const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event* lpPreset = mpGuiCache->GetPresetEvent(static_cast<s32>(luRandomPreset));
             const GuiEventNetworkGameParams::Event& lrRequested = lpGameParams->maEvents[liRound];
             bool lbUseRequested = false;
             for (u32 luPreset = 0; luPreset < luPresetCount; ++luPreset)
             {
-                if (mpGuiCache->GetPresetEvent(static_cast<s32>(luPreset))->GetEventId() ==
+                if (mpGuiCache->GetPresetEvent(static_cast<s32>(luPreset))->GetEventID() ==
                     static_cast<u32>(lrRequested.GetEventID()))
                 {
                     lbUseRequested = true;
@@ -663,7 +658,7 @@ namespace BrnGui
                 if (GetMenuItemType(liCheckpoint) == E_MENU_ITEM_TYPE_START_POINT)
                 {
                     const u32 luStart = lbUseRequested ? lrRequested.GetTrafficLightTriggerId()
-                                                       : lpPreset->GetPositionLookupId();
+                                                       : lpPreset->GetTrafficLightTriggerId();
                     lrCheckpoint.maStartLightTriggerID[liRound] = luStart;
                     const SatNavEventDisplayInfo* lpEventStart = mpGuiCache->GetPresetEventDisplayInfo(luStart);
                     CGS_ASSERT(lpEventStart, "lpEventStart");
