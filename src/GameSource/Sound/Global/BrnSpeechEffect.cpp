@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Language/CgsSku.h"             // CgsLanguage::ELanguage (GetLanguage's cases)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"          // CgsCore::SPrintf (the event-intro name builder)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"       // [DIAG] the BRN_SPEECH_DIAG witness only
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
@@ -24,6 +25,8 @@
 
 // ARTIST's assert path for this unity member (__FILE__ inside BrnSoundUnity).
 #define BRN_SPEECHEFFECT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Global/BrnSpeechEffect.cpp"
+// The header's own path, as its inline CompassDirectionToString bakes it (string 0x820ACD48).
+#define BRN_SPEECHEFFECT_H_FILE "..\\..\\..\\GameSource\\Sound/Global/BrnSpeechEffect.h"
 
 namespace BrnSound
 {
@@ -467,16 +470,21 @@ bool SpeechEffect::IsLocalPlayerRunner() const
     return reinterpret_cast<const s32*>(lpcOnline)[luLocalPlayer + 24] == 2;
 }
 
+// ARTIST 0x82687F80: the jump table spans E_LANGUAGE_ENGLISH_US (7) .. E_LANGUAGE_SPANISH (22), so
+// English US is its own (first) case, merged with the default's English; the return blocks follow
+// the AttribSys eLanguage order English, French, German, Italian, Spanish, Japanese (DWARF
+// AttribSys/Enums/eLanguage.h:26; that enum is not in this tree, its values are spelled).
 s32 SpeechEffect::GetLanguage(s32 aeCgsLanguage)
 {
     switch (aeCgsLanguage)
     {
-    case 10: return 1;
-    case 11: return 2;
-    case 15: return 3;
-    case 16: return 5;
-    case 22: return 4;
-    default: return 0;
+    case CgsLanguage::E_LANGUAGE_ENGLISH_US: return 0;   // English
+    case CgsLanguage::E_LANGUAGE_FRENCH:     return 1;   // French
+    case CgsLanguage::E_LANGUAGE_GERMAN:     return 2;   // German
+    case CgsLanguage::E_LANGUAGE_ITALIAN:    return 3;   // Italian
+    case CgsLanguage::E_LANGUAGE_SPANISH:    return 4;   // Spanish
+    case CgsLanguage::E_LANGUAGE_JAPANESE:   return 5;   // Japanese
+    default:                                 return 0;   // English
     }
 }
 
@@ -613,8 +621,8 @@ void SpeechEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
         {
         case 0:   // race -- "<mode><compass>_<n>[_ooo]_<l|s>"
             CgsCore::SPrintf(laName, KU_MAX_SPEECH_NAME_LENGTH, "%s%s_%d%s_%s",
-                             GameModeToString(0, liGameMode),
-                             CompassDirectionToString(liCompass),
+                             GameModeToString(liGameMode),
+                             CompassDirectionToString(static_cast<BrnGui::ECompassPoints>(liCompass)),
                              liEventIndex,
                              IsOneOnOne() ? "_ooo" : "",
                              lbLong ? "l" : "s");
@@ -624,8 +632,8 @@ void SpeechEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
         case 5:   // burning route
         case 8:   // marked man -- "<mode><compass>_<n>_<l|s>"
             CgsCore::SPrintf(laName, KU_MAX_SPEECH_NAME_LENGTH, "%s%s_%d_%s",
-                             GameModeToString(0, liGameMode),
-                             CompassDirectionToString(liCompass),
+                             GameModeToString(liGameMode),
+                             CompassDirectionToString(static_cast<BrnGui::ECompassPoints>(liCompass)),
                              liEventIndex,
                              lbLong ? "l" : "s");
             PlaySpeechMapping(static_cast<u32>(CgsSound::Playback::Name::MakeHash(laName)), false);
@@ -792,18 +800,29 @@ void SpeechEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
     }
 }
 
-const char* SpeechEffect::CompassDirectionToString(int aiDirection)
+// ARTIST 0x82687000: a switch returning one literal per point (jump table 0x8268702C), the
+// default asserting on BrnSpeechEffect.h:321 (the function's DWARF home is the header).
+const char* SpeechEffect::CompassDirectionToString(BrnGui::ECompassPoints leCompassPoint)
 {
-    static const char* const kapDirections[] = { "n", "nw", "w", "sw", "s", "se", "e", "ne" };
-    if (aiDirection >= 0 && aiDirection < 8)
-        return kapDirections[aiDirection];
-    CGS_FAIL("Unknown compass direction");
-    return "";
+    switch (leCompassPoint)
+    {
+    case BrnGui::E_COMPASS_POINTS_N:  return "n";
+    case BrnGui::E_COMPASS_POINTS_NW: return "nw";
+    case BrnGui::E_COMPASS_POINTS_W:  return "w";
+    case BrnGui::E_COMPASS_POINTS_SW: return "sw";
+    case BrnGui::E_COMPASS_POINTS_S:  return "s";
+    case BrnGui::E_COMPASS_POINTS_SE: return "se";
+    case BrnGui::E_COMPASS_POINTS_E:  return "e";
+    case BrnGui::E_COMPASS_POINTS_NE: return "ne";
+    default:
+        CGS_FAIL_AT("Unknown compass direction", BRN_SPEECHEFFECT_H_FILE, 321);
+        return "";
+    }
 }
 
-const char* SpeechEffect::GameModeToString(int, int aiMode)
+const char* SpeechEffect::GameModeToString(s32 leGameMode)
 {
-    switch (aiMode)
+    switch (leGameMode)
     {
     case 0: return "r";
     case 3: return "rr";

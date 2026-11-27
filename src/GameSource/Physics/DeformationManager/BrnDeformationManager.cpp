@@ -81,8 +81,9 @@ namespace Deformation
     // and never a friction coefficient. So the fact that nothing in this tree consumes them is
     // the console's own state; do not "connect" them to anything.
     // -----------------------------------------------------------------------------------
-    const f32      KF_PART_DYNAMIC_FRICTION         = 0.30000001f;                // RECOVERED 0x82F2A140 (3E99999A)
-    const f32      KF_PART_STATIC_FRICTION          = 0.30000001f;                // RECOVERED 0x82F2A144 (3E99999A)
+    // DWARF BrnDeformationManager.h:57/58: plain float32_t (ARTIST writable .data).
+    f32            KF_PART_DYNAMIC_FRICTION         = 0.30000001f;                // RECOVERED 0x82F2A140 (3E99999A)
+    f32            KF_PART_STATIC_FRICTION          = 0.30000001f;                // RECOVERED 0x82F2A144 (3E99999A)
     const VecFloat KVF_PROJECTSPHERE_RADIUS_PADDING(0.05f); // ARTIST initializer 0x82C5B7E0, flt_820047C8
 
     // The packed-entity-id owner tags this TU's asserts test against (BrnWorld::E_ENTITYTYPE_*;
@@ -712,7 +713,9 @@ namespace Deformation
         // BrnPhysics::KI_MAX_NUM_OF_IK_AND_LOCATOR_UPDATES -- the per-frame IK budget for
         // non-player models. IMAGE-READ ground truth: X360 .data dword_82F2A238 == 2 (the manager
         // Update's `lwz r11, dword_82F2A238` compare operand); PS3 names the global verbatim.
-        const s32 KI_MAX_NUM_OF_IK_AND_LOCATOR_UPDATES = 2;
+        // DWARF BrnPhysicsPerformanceLimits.h:25 declares it a plain int32_t (not const), which is
+        // why ARTIST loads it from .data rather than folding the 2.
+        s32 KI_MAX_NUM_OF_IK_AND_LOCATOR_UPDATES = 2;
     }
 
     // =============================================================================================

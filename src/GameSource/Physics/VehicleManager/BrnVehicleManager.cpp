@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                    // CgsContainers::BitArray<N> (crash-data free-list + taken-down bitset)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"     // CgsDev::PerfMonCpu::AddMonitor -- Construct's thirty monitors
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT -- the two asserts Construct fires
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"                     // CgsCore::KF_MPH_TO_MPS (flt_82F31928)
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                  // KU_INVALID_ENTITY_ID (dword_82F2A3A4)
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"                      // K_INVALID_RIGID_BODY_ID (qword_82F2A3A8)
 #include "rw/math/vpu/vector3_operation.h"                                    // vpu::Dot (T-bone side-speed gates, wave B3b)
@@ -876,7 +877,8 @@ namespace Vehicle
     // never fired. flt_82F31928 == 0.44704 was already triple-witnessed in-tree
     // (TrafficPhysics.h:177, BrnSimpleVehiclePhysics.h:422, RaceCarPhysics.cpp:489).
     // The global speed-unit scale that multiplies every tuning speed threshold (flt_82F31928).
-    static const f32 KF_SPEED_UNIT_SCALE       = 0.44704f;   // flt_82F31928 (image-read): MPH -> m/s
+    // The speed-unit scale every tuning threshold multiplies by is CgsCore::KF_MPH_TO_MPS itself
+    // (flt_82F31928, read from memory at each use: 0x8261A500, 0x8263D220, 0x8263D568, ...).
     // Stationary-target speed thresholds (flt_82FB8298 asymmetry gate, 829C slow cap, 7F18 fast floor).
     static const f32 KF_STATIONARY_MIN_SPEED_DIFF = 0.44704f * 40.0f; // flt_82FB8298 <- init 0x82C5B950 (17.8816 m/s)
     static const f32 KF_STATIONARY_SLOW_CAP        = 0.44704f * 20.0f; // flt_82FB829C <- init 0x82C5B970 (8.9408 m/s)
@@ -928,7 +930,7 @@ namespace Vehicle
             < mfTBoneTakedownMaxAngle * lfDegToRad)
         {
             const f32 KF_SLAB_INSET     = 1.0f;   // 0x82FB8280 <- splat(flt_82001C98)
-            const f32 lfMinLateralSpeed = mfTBoneTakedownSpeed * KF_SPEED_UNIT_SCALE;   // flt_82F31928
+            const f32 lfMinLateralSpeed = mfTBoneTakedownSpeed * CgsCore::KF_MPH_TO_MPS;   // flt_82F31928
 
             RaceCarPhysics* const lpCarA =
                 &maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexA)];
@@ -1005,7 +1007,7 @@ namespace Vehicle
             return false;
         if (std::fabs(lpInfo->mfAngleBetweenCars) < (180.0f - mfMaxHeadToHeadAngle) * 0.017453292f)
             return false;
-        const f32 lfMinimumSpeed = mfMinHeadToHeadIndividualSpeed * KF_SPEED_UNIT_SCALE;
+        const f32 lfMinimumSpeed = mfMinHeadToHeadIndividualSpeed * CgsCore::KF_MPH_TO_MPS;
         if (!(lpInfo->mfRaceCarASpeed > lfMinimumSpeed) && !(lpInfo->mfRaceCarBSpeed > lfMinimumSpeed))
             return false;
         const f32 lfMomentumA = lpInfo->mpRaceCarA->GetMass() * lpInfo->mfRaceCarASpeed;
@@ -1164,13 +1166,13 @@ namespace Vehicle
         if (maRaceCarVehicles[lpInfo->meAggressorActiveRaceCarIndex].IsBeingSlamedOrShuntedByRaceCar(
                 static_cast<s8>(lpInfo->meVictimActiveRaceCarIndex)))
             return false;
-        if (lpInfo->mfClosingSpeed > mfFatalShuntSpeed * KF_SPEED_UNIT_SCALE)
+        if (lpInfo->mfClosingSpeed > mfFatalShuntSpeed * CgsCore::KF_MPH_TO_MPS)
         {
             if (!lpInfo->mbRaceCarAIsNetworkCar) lpInfo->mbCrashRaceCarA = true;
             if (!lpInfo->mbRaceCarBIsNetworkCar) lpInfo->mbCrashRaceCarB = true;
             return true;
         }
-        lpInfo->meImpactType = lpInfo->mfClosingSpeed > mfMinShuntSpeed * KF_SPEED_UNIT_SCALE
+        lpInfo->meImpactType = lpInfo->mfClosingSpeed > mfMinShuntSpeed * CgsCore::KF_MPH_TO_MPS
                             ? E_IMPACT_SHUNT : E_IMPACT_NUDGE;
         if (maRaceCarDrivers[lpInfo->meAggressorActiveRaceCarIndex].mControls.mbBoost
             && lpInfo->meImpactType == E_IMPACT_SHUNT)
@@ -1211,9 +1213,9 @@ namespace Vehicle
         // the branch to `li r3, 0` is TAKEN whenever GT is clear -- an ordered closing at or under the
         // minimum AND an unordered (NaN) one -- so only an ordered closing ABOVE it falls through to the
         // fatal test. (`closing <= min` let a NaN closing through to the arms.)
-        if (!(lpInfo->mfClosingSpeed > mfMinTradingPaintSpeed * KF_SPEED_UNIT_SCALE))
+        if (!(lpInfo->mfClosingSpeed > mfMinTradingPaintSpeed * CgsCore::KF_MPH_TO_MPS))
             return false;
-        if (lpInfo->mfClosingSpeed > mfFatalSlamSpeed * KF_SPEED_UNIT_SCALE)
+        if (lpInfo->mfClosingSpeed > mfFatalSlamSpeed * CgsCore::KF_MPH_TO_MPS)
         {
             if (!lpInfo->mbRaceCarAIsNetworkCar) lpInfo->mbCrashRaceCarA = true;
             if (!lpInfo->mbRaceCarBIsNetworkCar) lpInfo->mbCrashRaceCarB = true;
@@ -4511,7 +4513,6 @@ namespace
     // contact normal, above which a traffic-vs-traffic contact CRASHES both cars instead of
     // slamming them. 60 mph, converted at the call site, not a pre-baked m/s literal.
     const f32 KF_TRAFFIC_TRAFFIC_CRASH_SPEED_MPH = 60.0f;          // flt_82092BC4
-    const f32 KF_TRAFFIC_MPH_TO_MPS              = 0.447039992f;   // flt_82F31928
 
     // The world arm's two dead thresholds (see the banner).
     const f32 KF_TRAFFIC_WORLD_UPRIGHT_COSINE    = 0.800000012f;   // flt_8208F9C8
@@ -4593,7 +4594,7 @@ void VehicleManager::HandleTrafficCarTrafficCarPotentialContact(
     // 60 mph in m/s. `bgt` -> lbHardHit (r30, later r22).
     const Vector3 lvRelativeVelocity = lpBodyB->GetLinearVelocity() - lpBodyA->GetLinearVelocity();   // v12 - v13
     const f32  lfClosingSpeed = rw::math::vpu::Dot(lvRelativeVelocity, lContact.mNormal);           // f31
-    const bool lbHardHit      = lfClosingSpeed > (KF_TRAFFIC_TRAFFIC_CRASH_SPEED_MPH * KF_TRAFFIC_MPH_TO_MPS);
+    const bool lbHardHit      = lfClosingSpeed > (KF_TRAFFIC_TRAFFIC_CRASH_SPEED_MPH * CgsCore::KF_MPH_TO_MPS);
 
     // 0x8263EEFC..0x8263EF3C: `cntlzw(species - 2) >> 5` == (species == E_SPECIES_TRAILER), on the
     // GLOBAL index of each car. A trailer half never takes the slam arm.

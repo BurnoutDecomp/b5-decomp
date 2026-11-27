@@ -211,11 +211,12 @@ namespace GameState { namespace GameStateModuleIO {
 namespace Deformation
 {
     // ---- DWARF BrnDeformationManager.h namespace-scope constants (:57-58, :752) ----------------
-    // KF_PART_DYNAMIC_FRICTION / KF_PART_STATIC_FRICTION and KVF_PROJECTSPHERE_RADIUS_PADDING are
-    // rodata (the float / VecFloat VALUES are not in the DWARF); they are owned/defined by the
-    // DeformationManager TU, not here. Declared extern so the body TU can define them once.
-    extern const f32      KF_PART_DYNAMIC_FRICTION;          // DWARF :57
-    extern const f32      KF_PART_STATIC_FRICTION;           // DWARF :58
+    // KF_PART_DYNAMIC_FRICTION / KF_PART_STATIC_FRICTION are plain float32_t in the DWARF (:57/:58,
+    // not const: ARTIST holds them in writable .data 0x82F2A140/0x82F2A144) and
+    // KVF_PROJECTSPHERE_RADIUS_PADDING a const VecFloat (:752); the DeformationManager TU defines
+    // them once, so they are declared extern here.
+    extern f32            KF_PART_DYNAMIC_FRICTION;          // DWARF :57
+    extern f32            KF_PART_STATIC_FRICTION;           // DWARF :58
     extern const VecFloat KVF_PROJECTSPHERE_RADIUS_PADDING;  // DWARF :752
 
     // Pool capacity -- up to 28 deformable models (the BitArray<28> width, maGlobalEntityIDs[28],

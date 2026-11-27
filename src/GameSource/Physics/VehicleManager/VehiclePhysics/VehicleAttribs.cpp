@@ -260,18 +260,10 @@ const f32 KF_BOOST_KICK_HEIGHT_OFFSET          = -0.899999976f; // flt_8200D5A4
 using namespace EngineDefaults;
 using namespace HandlingDefaults;
 
-namespace
-{
-// The console builds every scalar-to-lane setter argument with `lfs` + `vspltw` -- a broadcast of
-// one float across the whole register -- and the setter then `vrlimi`s lane 0 into place. This
-// helper is that vspltw.
-inline VecFloat KVF(f32 lfValue)
-{
-    VecFloat lResult;
-    lResult.SetFloat(lfValue);
-    return lResult;
-}
-}
+// The console builds every scalar-to-lane setter argument as VecFloat(const float&) -- `lfs`, a
+// stack temporary, `lvlx` + `vspltw` (EngineAttribs::Construct 0x825B7BB4..0x825B7BEC) -- and the
+// setter then inserts its lane with Vector4::SetX..W (`vrlimi`). The arguments are written that way
+// below; the named defaults above stay as the record of the image values.
 
 // @0x825B7B90 (267 instrs)  BrnPhysics::Vehicle::VehicleAttribs::EngineAttribs::Construct
 //
@@ -284,35 +276,35 @@ inline VecFloat KVF(f32 lfValue)
 // behavioural -- it is recorded because it is what the console does.
 void VehicleAttribs::EngineAttribs::Construct()
 {
-    SetGearRatio(0, KVF(KF_DEFAULT_GEAR_RATIO_0));     // 0x825B7C6C  [this+0x40].x
-    SetGearRatio(1, KVF(KF_DEFAULT_GEAR_RATIO_1));     // 0x825B7C88  [this+0x50].x
-    SetGearRatio(2, KVF(KF_DEFAULT_GEAR_RATIO_2));     // 0x825B7CA0  [this+0x60].x
-    SetGearRatio(3, KVF(KF_DEFAULT_GEAR_RATIO_3));     // 0x825B7CB8  [this+0x70].x
-    SetGearRatio(4, KVF(KF_DEFAULT_GEAR_RATIO_4));     // 0x825B7CCC  [this+0x80].x
-    SetGearRatio(5, KVF(KF_DEFAULT_GEAR_RATIO_5));     // 0x825B7CD8  [this+0x90].x
+    SetGearRatio(0, VecFloat(-2.5f /* KF_DEFAULT_GEAR_RATIO_0 */));     // 0x825B7C6C  [this+0x40].x
+    SetGearRatio(1, VecFloat(3.20999998f /* KF_DEFAULT_GEAR_RATIO_1 */));     // 0x825B7C88  [this+0x50].x
+    SetGearRatio(2, VecFloat(1.92999995f /* KF_DEFAULT_GEAR_RATIO_2 */));     // 0x825B7CA0  [this+0x60].x
+    SetGearRatio(3, VecFloat(1.29999995f /* KF_DEFAULT_GEAR_RATIO_3 */));     // 0x825B7CB8  [this+0x70].x
+    SetGearRatio(4, VecFloat(1.0f /* KF_DEFAULT_GEAR_RATIO_4 */));     // 0x825B7CCC  [this+0x80].x
+    SetGearRatio(5, VecFloat(0.75f /* KF_DEFAULT_GEAR_RATIO_5 */));     // 0x825B7CD8  [this+0x90].x
 
-    SetDifferential(KVF(KF_DEFAULT_DIFFERENTIAL));                       // 0x825B7D04  [+0x10].x
-    SetTransmissionEfficiency(KVF(KF_DEFAULT_TRANSMISSION_EFFICIENCY));  // 0x825B7D40  [+0x10].y
-    SetEngineResistance(KVF(KF_DEFAULT_ENGINE_RESISTANCE));              // 0x825B7D84  [+0x10].z
+    SetDifferential(VecFloat(4.11000013f /* KF_DEFAULT_DIFFERENTIAL */));                       // 0x825B7D04  [+0x10].x
+    SetTransmissionEfficiency(VecFloat(1.0f /* KF_DEFAULT_TRANSMISSION_EFFICIENCY */));  // 0x825B7D40  [+0x10].y
+    SetEngineResistance(VecFloat(0.0f /* KF_DEFAULT_ENGINE_RESISTANCE */));              // 0x825B7D84  [+0x10].z
 
-    SetGearUpRPM(0, KVF(KF_DEFAULT_GEAR_UP_RPM_0));    // 0x825B7DA4  [this+0x40].z
-    SetGearUpRPM(1, KVF(KF_DEFAULT_GEAR_UP_RPM_1));    // 0x825B7DC4  [this+0x50].z
-    SetGearUpRPM(2, KVF(KF_DEFAULT_GEAR_UP_RPM_2));    // 0x825B7DE0  [this+0x60].z
-    SetGearUpRPM(3, KVF(KF_DEFAULT_GEAR_UP_RPM_3));    // 0x825B7DF8  [this+0x70].z
-    SetGearUpRPM(4, KVF(KF_DEFAULT_GEAR_UP_RPM_4));    // 0x825B7E10  [this+0x80].z
-    SetGearUpRPM(5, KVF(KF_DEFAULT_GEAR_UP_RPM_5));    // 0x825B7E50  [this+0x90].z
+    SetGearUpRPM(0, VecFloat(6000.0f /* KF_DEFAULT_GEAR_UP_RPM_0 */));    // 0x825B7DA4  [this+0x40].z
+    SetGearUpRPM(1, VecFloat(7000.0f /* KF_DEFAULT_GEAR_UP_RPM_1 */));    // 0x825B7DC4  [this+0x50].z
+    SetGearUpRPM(2, VecFloat(5853.0f /* KF_DEFAULT_GEAR_UP_RPM_2 */));    // 0x825B7DE0  [this+0x60].z
+    SetGearUpRPM(3, VecFloat(5945.0f /* KF_DEFAULT_GEAR_UP_RPM_3 */));    // 0x825B7DF8  [this+0x70].z
+    SetGearUpRPM(4, VecFloat(6000.0f /* KF_DEFAULT_GEAR_UP_RPM_4 */));    // 0x825B7E10  [this+0x80].z
+    SetGearUpRPM(5, VecFloat(6000.0f /* KF_DEFAULT_GEAR_UP_RPM_5 */));    // 0x825B7E50  [this+0x90].z
 
-    SetGearDownRPM(KVF(KF_DEFAULT_GEAR_DOWN_RPM));                                  // 0x825B7E78 [+0x10].w
-    SetMaxTorque(KVF(KF_DEFAULT_MAX_TORQUE));                                       // 0x825B7E8C [+0x20].x
-    SetTorqueFallOffRPM(KVF(KF_DEFAULT_TORQUE_FALL_OFF_RPM));                       // 0x825B7E94 [+0x20].y
-    SetLSDMSpeedToAllowGearChanges(KVF(KF_DEFAULT_LSDM_SPEED_TO_ALLOW_GEAR_CHANGES)); // 0x825B7E9C [+0x20].w
+    SetGearDownRPM(VecFloat(1500.0f /* KF_DEFAULT_GEAR_DOWN_RPM */));                                  // 0x825B7E78 [+0x10].w
+    SetMaxTorque(VecFloat(370.0f /* KF_DEFAULT_MAX_TORQUE */));                                       // 0x825B7E8C [+0x20].x
+    SetTorqueFallOffRPM(VecFloat(4400.0f /* KF_DEFAULT_TORQUE_FALL_OFF_RPM */));                       // 0x825B7E94 [+0x20].y
+    SetLSDMSpeedToAllowGearChanges(VecFloat(20.0f /* KF_DEFAULT_LSDM_SPEED_TO_ALLOW_GEAR_CHANGES */)); // 0x825B7E9C [+0x20].w
 
-    SetTorqueScale(0, KVF(KF_DEFAULT_TORQUE_SCALE_0)); // 0x825B7EA8  [this+0x40].y
-    SetTorqueScale(1, KVF(KF_DEFAULT_TORQUE_SCALE_1)); // 0x825B7EBC  [this+0x50].y
-    SetTorqueScale(2, KVF(KF_DEFAULT_TORQUE_SCALE_2)); // 0x825B7ED8  [this+0x60].y
-    SetTorqueScale(3, KVF(KF_DEFAULT_TORQUE_SCALE_3)); // 0x825B7EEC  [this+0x70].y
-    SetTorqueScale(4, KVF(KF_DEFAULT_TORQUE_SCALE_4)); // 0x825B7EF8  [this+0x80].y
-    SetTorqueScale(5, KVF(KF_DEFAULT_TORQUE_SCALE_5)); // 0x825B7F04  [this+0x90].y
+    SetTorqueScale(0, VecFloat(1.60000002f /* KF_DEFAULT_TORQUE_SCALE_0 */)); // 0x825B7EA8  [this+0x40].y
+    SetTorqueScale(1, VecFloat(1.0f /* KF_DEFAULT_TORQUE_SCALE_1 */)); // 0x825B7EBC  [this+0x50].y
+    SetTorqueScale(2, VecFloat(1.0f /* KF_DEFAULT_TORQUE_SCALE_2 */)); // 0x825B7ED8  [this+0x60].y
+    SetTorqueScale(3, VecFloat(1.0f /* KF_DEFAULT_TORQUE_SCALE_3 */)); // 0x825B7EEC  [this+0x70].y
+    SetTorqueScale(4, VecFloat(1.0f /* KF_DEFAULT_TORQUE_SCALE_4 */)); // 0x825B7EF8  [this+0x80].y
+    SetTorqueScale(5, VecFloat(1.0f /* KF_DEFAULT_TORQUE_SCALE_5 */)); // 0x825B7F04  [this+0x90].y
 
     // 0x825B7F08 / 0x825B7F24 -- both called with r3 == this, because mTorqueCurve is the leading
     // member of EngineAttribs (&mTorqueCurve == this).
@@ -322,10 +314,10 @@ void VehicleAttribs::EngineAttribs::Construct()
         KF_DEFAULT_TORQUE_CURVE_INPUT_MAX,
         KF_DEFAULT_TORQUE_CURVE_OUTPUT_AT_MIN);
 
-    SetMaxRPM(KVF(KF_DEFAULT_MAX_RPM));                       // 0x825B7F84  [+0x20].z
-    SetFlyWheelInertia(KVF(KF_DEFAULT_FLYWHEEL_INERTIA));     // 0x825B7F90  [+0x30].x
-    SetFlyWheelFriction(KVF(KF_DEFAULT_FLYWHEEL_FRICTION));   // 0x825B7F98  [+0x30].y
-    SetGearChangeTime(KVF(KF_DEFAULT_GEAR_CHANGE_TIME));      // 0x825B7FAC  [+0x30].z
+    SetMaxRPM(VecFloat(8000.0f /* KF_DEFAULT_MAX_RPM */));                       // 0x825B7F84  [+0x20].z
+    SetFlyWheelInertia(VecFloat(0.200000003f /* KF_DEFAULT_FLYWHEEL_INERTIA */));     // 0x825B7F90  [+0x30].x
+    SetFlyWheelFriction(VecFloat(500.0f /* KF_DEFAULT_FLYWHEEL_FRICTION */));   // 0x825B7F98  [+0x30].y
+    SetGearChangeTime(VecFloat(0.0f /* KF_DEFAULT_GEAR_CHANGE_TIME */));      // 0x825B7FAC  [+0x30].z
 }
 
 // @0x825CF278  BrnPhysics::Vehicle::VehicleAttribs::EngineAttribs::InitializeFromAttribs
@@ -450,20 +442,20 @@ void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWr
     // ---- end [engine-attribs] -----------------------------------------------------------------
 
     // --- per-gear gear ratios (gear[g].x) : src+0x50 -> 0,1,2 ; src+0x40 -> 3,4,5 ---
-    SetGearRatio(0, KVF(BP_SRC_F(0x50)));
-    SetGearRatio(1, KVF(BP_SRC_F(0x54)));
-    SetGearRatio(2, KVF(BP_SRC_F(0x58)));
-    SetGearRatio(3, KVF(BP_SRC_F(0x40)));
-    SetGearRatio(4, KVF(BP_SRC_F(0x44)));
-    SetGearRatio(5, KVF(BP_SRC_F(0x48)));
+    SetGearRatio(0, VecFloat(BP_SRC_F(0x50)));
+    SetGearRatio(1, VecFloat(BP_SRC_F(0x54)));
+    SetGearRatio(2, VecFloat(BP_SRC_F(0x58)));
+    SetGearRatio(3, VecFloat(BP_SRC_F(0x40)));
+    SetGearRatio(4, VecFloat(BP_SRC_F(0x44)));
+    SetGearRatio(5, VecFloat(BP_SRC_F(0x48)));
 
     // --- inline scalar lanes streamed before the torque-curve prepare ---
-    SetDifferential(KVF(BP_SRC_F(0x8C)));            // @+0x10.x (mask 8)
-    SetTransmissionEfficiency(KVF(BP_SRC_F(0x60)));  // @+0x10.y (mask 4)
-    SetEngineResistance(KVF(BP_SRC_F(0x80)));        // @+0x10.z (mask 2)
+    SetDifferential(VecFloat(BP_SRC_F(0x8C)));            // @+0x10.x (mask 8)
+    SetTransmissionEfficiency(VecFloat(BP_SRC_F(0x60)));  // @+0x10.y (mask 4)
+    SetEngineResistance(VecFloat(BP_SRC_F(0x80)));        // @+0x10.z (mask 2)
     // (@+0x10.w GearDownRPM: the console stores NOTHING here -- no mask-1 insert to this+0x10.)
-    SetMaxTorque(KVF(BP_SRC_F(0x68)));               // @+0x20.x (mask 8, lvlx r6=0x68)
-    SetTorqueFallOffRPM(KVF(BP_SRC_F(0x64)));        // @+0x20.y (mask 4, lvlx r5=0x64)
+    SetMaxTorque(VecFloat(BP_SRC_F(0x68)));               // @+0x20.x (mask 8, lvlx r6=0x68)
+    SetTorqueFallOffRPM(VecFloat(BP_SRC_F(0x64)));        // @+0x20.y (mask 4, lvlx r5=0x64)
 
     // --- the torque curve (InterpedParam3::Prepare @0x825CF4CC). The three Bezier control points
     //     are built from the JUST-STREAMED MaxTorque and the record's EngineLowEndTorqueFactor
@@ -478,27 +470,27 @@ void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWr
                          0.0f);                           // flt_82001CC0
 
     // --- per-gear up-RPMs (gear[g].z, mask 2) : src+0x30 -> 0,1,2 ; src+0x20 -> 3,4,5 ---
-    SetGearUpRPM(0, KVF(BP_SRC_F(0x30)));
-    SetGearUpRPM(1, KVF(BP_SRC_F(0x34)));
-    SetGearUpRPM(2, KVF(BP_SRC_F(0x38)));
-    SetGearUpRPM(3, KVF(BP_SRC_F(0x20)));
-    SetGearUpRPM(4, KVF(BP_SRC_F(0x24)));
-    SetGearUpRPM(5, KVF(BP_SRC_F(0x28)));
+    SetGearUpRPM(0, VecFloat(BP_SRC_F(0x30)));
+    SetGearUpRPM(1, VecFloat(BP_SRC_F(0x34)));
+    SetGearUpRPM(2, VecFloat(BP_SRC_F(0x38)));
+    SetGearUpRPM(3, VecFloat(BP_SRC_F(0x20)));
+    SetGearUpRPM(4, VecFloat(BP_SRC_F(0x24)));
+    SetGearUpRPM(5, VecFloat(BP_SRC_F(0x28)));
 
     // --- per-gear torque scales (gear[g].y, mask 4) : src+0x10 -> 0,1,2 ; src+0x00 -> 3,4,5 ---
-    SetTorqueScale(0, KVF(BP_SRC_F(0x10)));
-    SetTorqueScale(1, KVF(BP_SRC_F(0x14)));
-    SetTorqueScale(2, KVF(BP_SRC_F(0x18)));
-    SetTorqueScale(3, KVF(BP_SRC_F(0x00)));
-    SetTorqueScale(4, KVF(BP_SRC_F(0x04)));
-    SetTorqueScale(5, KVF(BP_SRC_F(0x08)));
+    SetTorqueScale(0, VecFloat(BP_SRC_F(0x10)));
+    SetTorqueScale(1, VecFloat(BP_SRC_F(0x14)));
+    SetTorqueScale(2, VecFloat(BP_SRC_F(0x18)));
+    SetTorqueScale(3, VecFloat(BP_SRC_F(0x00)));
+    SetTorqueScale(4, VecFloat(BP_SRC_F(0x04)));
+    SetTorqueScale(5, VecFloat(BP_SRC_F(0x08)));
 
     // --- trailing scalar lanes (@+0x20.z/.w and @+0x30.x/.y/.z) ---
-    SetMaxRPM(KVF(BP_SRC_F(0x6C)));                  // @+0x20.z (lvlx r9=0x6C, mask2)
-    SetLSDMSpeedToAllowGearChanges(KVF(BP_SRC_F(0x70)));  // @+0x20.w (lvlx r10=0x70, mask1)
-    SetFlyWheelInertia(KVF(BP_SRC_F(0x78)));        // @+0x30.x (lvlx r8=0x78, mask8)
-    SetFlyWheelFriction(KVF(BP_SRC_F(0x7C)));       // @+0x30.y (lvlx r7=0x7C, mask4)
-    SetGearChangeTime(KVF(BP_SRC_F(0x74)));         // @+0x30.z (lvlx r6=0x74, mask2)
+    SetMaxRPM(VecFloat(BP_SRC_F(0x6C)));                  // @+0x20.z (lvlx r9=0x6C, mask2)
+    SetLSDMSpeedToAllowGearChanges(VecFloat(BP_SRC_F(0x70)));  // @+0x20.w (lvlx r10=0x70, mask1)
+    SetFlyWheelInertia(VecFloat(BP_SRC_F(0x78)));        // @+0x30.x (lvlx r8=0x78, mask8)
+    SetFlyWheelFriction(VecFloat(BP_SRC_F(0x7C)));       // @+0x30.y (lvlx r7=0x7C, mask4)
+    SetGearChangeTime(VecFloat(BP_SRC_F(0x74)));         // @+0x30.z (lvlx r6=0x74, mask2)
 
     #undef BP_SRC_F
 }

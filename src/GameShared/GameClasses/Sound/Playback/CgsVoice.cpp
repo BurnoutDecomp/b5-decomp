@@ -333,33 +333,29 @@ bool Voice::Connect(Name akName, Handle<SubmixVoice>& arhSubmix)
 }
 
 // @ 0x826ACAF8. Linear search the slot table for a name match.
+// DWARF CgsVoice.h:985/1005 (header-inline in the original, lu32I h:987/1007): a plain for loop,
+// the name compared as `entry.GetName() == lName` (Name::operator== tests its argument first: ARTIST
+// cmplw lName, entry at 0x826ACB30 / 0x826ACBA0).
 Slot* Voice::FindNamedSlot(Name akName)
 {
-    if (mu32SlotCount != 0)                     // *(this+0x14)
+    for (uint32_t lu32I = 0; lu32I < mu32SlotCount; ++lu32I)   // *(this+0x14)
     {
-        u32 lu32I = 0;
-        while (akName != GetSlot(lu32I).GetName())
-        {
-            if (++lu32I >= mu32SlotCount)
-                return 0;
-        }
-        return &GetSlot(lu32I);
+        if (GetSlot(lu32I).GetName() == akName)
+            return &GetSlot(lu32I);
     }
     return 0;
 }
 
 // @ 0x826ACB68. Linear search the send table for a name match.
+// DWARF CgsVoice.h:985/1005 (header-inline in the original, lu32I h:987/1007): a plain for loop,
+// the name compared as `entry.GetName() == lName` (Name::operator== tests its argument first: ARTIST
+// cmplw lName, entry at 0x826ACB30 / 0x826ACBA0).
 Send* Voice::FindNamedSend(Name akName)
 {
-    if (mu32SendCount != 0)                     // *(this+0x18)
+    for (uint32_t lu32I = 0; lu32I < mu32SendCount; ++lu32I)   // *(this+0x18)
     {
-        u32 lu32I = 0;
-        while (akName != GetSend(lu32I).GetName())
-        {
-            if (++lu32I >= mu32SendCount)
-                return 0;
-        }
-        return &GetSend(lu32I);
+        if (GetSend(lu32I).GetName() == akName)
+            return &GetSend(lu32I);
     }
     return 0;
 }
@@ -380,17 +376,12 @@ InputParameter* Voice::FindNamedInputParameter(Name akName)
 // @ 0x826ACC30. Linear search the output-parameter table for a name match.
 OutputParameter* Voice::FindNamedOutputParameter(Name akName)
 {
-    if (mu32OutputParameterCount != 0)         // *(this+0x20)
+    // DWARF CgsVoice.h:1040 (lu32I h:1042): the same loop as FindNamedInputParameter.
+    for (uint32_t lu32I = 0; lu32I < mu32OutputParameterCount; ++lu32I)   // *(this+0x20)
     {
-        u32 lu32I = 0;
-        while (true)
-        {
-            OutputParameter* lpParam = &GetOutputParameter(lu32I);
-            if (akName == lpParam->GetName())
-                return lpParam;
-            if (++lu32I >= mu32OutputParameterCount)
-                break;
-        }
+        OutputParameter* lpParam = &GetOutputParameter(lu32I);
+        if (lpParam->GetName() == akName)
+            return lpParam;
     }
     return 0;
 }
@@ -398,15 +389,10 @@ OutputParameter* Voice::FindNamedOutputParameter(Name akName)
 // @ 0x826ACE60. Return the index of the named slot, or (u32)-1 if absent.
 u32 Voice::GetIndexOfSlot(Name akName) const
 {
-    if (mu32SlotCount != 0)                      // *(this+0x14)
+    for (uint32_t lu32I = 0; lu32I < mu32SlotCount; ++lu32I)                      // *(this+0x14)
     {
-        u32 lu32I = 0;
-        while (akName != GetSlot(lu32I).GetName())
-        {
-            if (++lu32I >= mu32SlotCount)
-                return static_cast<u32>(-1);
-        }
-        return lu32I;
+        if (GetSlot(lu32I).GetName() == akName)
+            return lu32I;
     }
     return static_cast<u32>(-1);
 }
@@ -414,15 +400,10 @@ u32 Voice::GetIndexOfSlot(Name akName) const
 // @ 0x826ACEC8. Return the index of the named input parameter, or (u32)-1 if absent.
 u32 Voice::GetIndexOfInputParameter(Name akName) const
 {
-    if (mu32InputParameterCount != 0)           // *(this+0x1C)
+    for (uint32_t lu32I = 0; lu32I < mu32InputParameterCount; ++lu32I)           // *(this+0x1C)
     {
-        u32 lu32I = 0;
-        while (akName != GetInputParameter(lu32I).GetName())
-        {
-            if (++lu32I >= mu32InputParameterCount)
-                return static_cast<u32>(-1);
-        }
-        return lu32I;
+        if (GetInputParameter(lu32I).GetName() == akName)
+            return lu32I;
     }
     return static_cast<u32>(-1);
 }
@@ -430,15 +411,10 @@ u32 Voice::GetIndexOfInputParameter(Name akName) const
 // @ 0x826ACF30. Return the index of the named output parameter, or (u32)-1.
 u32 Voice::GetIndexOfOutputParameter(Name akName) const
 {
-    if (mu32OutputParameterCount != 0)          // *(this+0x20)
+    for (uint32_t lu32I = 0; lu32I < mu32OutputParameterCount; ++lu32I)          // *(this+0x20)
     {
-        u32 lu32I = 0;
-        while (akName != GetOutputParameter(lu32I).GetName())
-        {
-            if (++lu32I >= mu32OutputParameterCount)
-                return static_cast<u32>(-1);
-        }
-        return lu32I;
+        if (GetOutputParameter(lu32I).GetName() == akName)
+            return lu32I;
     }
     return static_cast<u32>(-1);
 }

@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"
+#include "GameSource/Gui/BrnGuiShared.h"   // BrnGui::ECompassPoints (CompassDirectionToString's DWARF parameter)
 
 namespace Attrib
 {
@@ -54,8 +55,12 @@ public:
     bool PlaySpeechMapping(u32 auMappingName, bool abFirstTimeTip = false);
     bool PlayFirstTimeTip(s32 aiTrainingType);
     void PlayStream(u32 auContentSpec, bool abFirstTimeTip = false);
-    const char* CompassDirectionToString(int aiDirection);
-    const char* GameModeToString(int aiUnused, int aiMode);
+    // DWARF (_compile/BrnSoundUnity.cpp): CompassDirectionToString(BrnGui::ECompassPoints) and
+    // GameModeToString(GuiEventStopMode::EGameModeType), one parameter each (ARTIST reads it in r4).
+    // The mode enum's home does not include cleanly here, so it is carried as s32 as in
+    // BrnGuiDemangledEventTypes.h (GuiEventStopMode::meStoppedGameModeType).
+    const char* CompassDirectionToString(BrnGui::ECompassPoints leCompassPoint);
+    const char* GameModeToString(s32 leGameMode);
 
     // DWARF BrnSpeechEffect.cpp:344 -- CgsLanguage::ELanguage -> AttribSys::Enums::eLanguage.
     // X360 @0x82687F80 (a bare switch; the console calls it on the message payload).
