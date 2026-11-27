@@ -285,10 +285,30 @@ void SkidEffect::ProcessUpdate()
     mSkidsVoice.Update();
 }
 
+// ARTIST 0x826F3F10: the detach-state switch every BrnEffectObject leaf uses (InAirEffect::Detach,
+// TrafficSkid::Detach), falling through the valid states; the base Detach's result is ignored
+// (`li r3,1` after it) and an out-of-range state returns false (0x826F3FA0).
 bool SkidEffect::Detach()
 {
-    mSkidsVoice.Release();
-    return BrnSound::Logic::BrnEffectObject::Detach();
+    switch (meDetachState)
+    {
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_NONE:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_NONE;
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_BEGIN:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_BEGIN;
+        mSkidsVoice.Release();
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_UPDATING:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_UPDATING;
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED;
+        BrnSound::Logic::BrnEffectObject::Detach();
+        return true;
+    default:
+        return false;
+    }
 }
 
 void SkidEffect::OnPostInit(CgsSound::Logic::VoiceWrapper& arVoice)

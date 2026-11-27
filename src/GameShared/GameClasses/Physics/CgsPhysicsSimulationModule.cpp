@@ -826,7 +826,7 @@ namespace CgsPhysics
             // fall through -- the console has no branch here
         case RELEASESTAGE_MANAGER:                 // beq cr6 (meReleaseStage == 1)
             if (!ModuleSingleBuffered::Release())  // bl @0x828A20AC; clrlwi/cmplwi/bne
-                return false;                      // li r3, 0 @0x828A20BC
+                break;                             // li r3, 0 @0x828A20BC
 
             // The same twelve `std 0` + three `stw 0` block Construct writes.
             // BitArray::Release on each in PS3 0xC32B14's order (+0x47E8, +0x4828, +0x4808 on
@@ -843,16 +843,20 @@ namespace CgsPhysics
         case RELEASESTAGE_DONE:                    // blt cr6 (meReleaseStage < 3)
             mePrepareStage = PREPARESTAGE_START;   // stw r30(=0), 0x228(r31)
             return true;                           // li r3, 1 @0x828A2110
-        }
 
-        // The console's out-of-range arm fires an assert whose message/file operands are both
-        // literal 0 and whose line operand is literal -1 (`li r3,0 ; li r4,0 ; li r5,-1` at
-        // 0x828A207C..0x828A2084; the PS3 build has the same FireAssert(0, 0, -1)) -- it carries
-        // no text or location of its own, so the sequence is written out as the console has it.
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(0, 0, -1);
-        CgsDev::Assert::EndAssert();
-        return false;                              // li r3, 0 @0x828A2090
+        default:
+            // The console's out-of-range arm fires an assert whose message/file operands are both
+            // literal 0 and whose line operand is literal -1 (`li r3,0 ; li r4,0 ; li r5,-1` at
+            // 0x828A207C..0x828A2084; the PS3 build has the same FireAssert(0, 0, -1)) -- it carries
+            // no text or location of its own, so the sequence is written out as the console has it.
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(0, 0, -1);
+            CgsDev::Assert::EndAssert();
+        }
+        // The staged idiom of the partial source's module Release bodies (PropEntityModule::Release):
+        // a failed base `break`s out to this one `return false`; ARTIST gives each path its own copy
+        // (0x828A2090, 0x828A20BC).
+        return false;
     }
 
     // X360 @0x828A2120. Console vtable slot 3.
@@ -1021,13 +1025,6 @@ namespace CgsPhysics
     {
         switch (mePrepareStage)
         {
-        default:
-            // `if (v4 >= 3) { BeginAssert; FireAssert(0, 0, -1); EndAssert; return 0; }`
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(0, 0, -1);   // ARTIST 0x828A6A50..58, as Release
-            CgsDev::Assert::EndAssert();
-            return false;
-
         case PREPARESTAGE_DONE:
             // The console's `*(a1 + 552) = 0` before it falls into the START arm: a module
             // that already finished preparing restarts from the top.
@@ -1040,7 +1037,7 @@ namespace CgsPhysics
 
         case PREPARESTAGE_MANAGER:
             if (!CgsModule::ModuleSingleBuffered::Prepare())
-                return false;                       // cursor stays on MANAGER; retried next frame
+                break;                              // cursor stays on MANAGER; retried next frame
 
             // The same twelve `std 0` block Construct and Release write, at +0x47E8.
             // BitArray::Prepare on each in PS3 0xC35304's order (+0x47E8, +0x4828, +0x4808).
@@ -1057,7 +1054,16 @@ namespace CgsPhysics
             meReleaseStage = RELEASESTAGE_START;    // stw 0, 0x22C(r31)
             mePrepareStage++;
             return true;
+
+        default:
+            // `if (v4 >= 3) { BeginAssert; FireAssert(0, 0, -1); EndAssert; return 0; }`
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(0, 0, -1);   // ARTIST 0x828A6A50..58, as Release
+            CgsDev::Assert::EndAssert();
         }
+        // As Release: a failed base `break`s out to the one `return false` (the partial source's
+        // module Prepare idiom); ARTIST gives each path its own copy (0x828A6A64, 0x828A6AB4).
+        return false;
     }
 
     namespace

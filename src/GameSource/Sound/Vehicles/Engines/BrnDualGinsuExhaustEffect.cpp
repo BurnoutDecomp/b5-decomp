@@ -203,10 +203,12 @@ bool DualGinsuExhaustEffect::Detach()
         meState = E_DETACHING_BASE_CLASS;
         // ARTIST falls through and detaches the base in the same tick.
     case E_DETACHING_BASE_CLASS:
+        // The partial source's staged idiom: a failed base `break`s out to the one `return false`
+        // after the switch (ARTIST 0x826F2854 gives it its own `li r3,0`).
         if (!DualGinsuEffect::Detach())
-            return false;
+            break;
         meState = E_DETACHED;
-        return true;
+        // fall through
     case E_DETACHED:
         return true;
     default:
@@ -214,8 +216,8 @@ bool DualGinsuExhaustEffect::Detach()
         CGS_FAIL_AT("Unhandled state",
             CGS_ARTIST_FILE,
             1421);
-        return false;
     }
+    return false;
 }
 
 void DualGinsuExhaustEffect::ProcessUpdate()

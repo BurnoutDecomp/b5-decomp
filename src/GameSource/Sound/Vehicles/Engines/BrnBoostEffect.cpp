@@ -368,15 +368,17 @@ bool BoostEffect::Detach()
         return false;
     mBoostVoice.Release();
 
-    BrnSound::Module::SoundLogicModule* lpModule =
-        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-    BrnSound::Logic::Streaming::StreamingStateManager* lpStreamingManager =
-        lpModule ? static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
-            lpModule->GetEnvironment().GetStateManager(6)) : 0;
-    CGS_ASSERT(lpStreamingManager != 0, "lpStreamingStateMan");
-    if (lpStreamingManager)
-        lpStreamingManager->PostStreamRequest(
-            BrnSound::Logic::Streaming::StreamStopRequest(this, 0.25f));
+    // ARTIST 0x826F2A50: module+0x296C, the Environment's streaming state manager read straight
+    // from mpLogicModule (PresentationEffect::Detach's expression); the assert (cpp:358) is not a
+    // guard, the request is posted unconditionally. DWARF lpStreamingStateMan cpp:356, lRequest cpp:361.
+    BrnSound::Logic::Streaming::StreamingStateManager* lpStreamingStateMan =
+        static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
+            static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
+                ->GetEnvironment().GetStateManager(6));
+    CGS_ASSERT_AT(lpStreamingStateMan, "lpStreamingStateMan", BRN_BOOSTEFFECT_CPP_FILE, 358);
+
+    BrnSound::Logic::Streaming::StreamStopRequest lRequest(this, 0.25f);
+    lpStreamingStateMan->PostStreamRequest(lRequest);
     return true;
 }
 

@@ -285,12 +285,29 @@ void AISkidEffect::ProcessUpdate()
 }
 
 // @ 0x826F4E98: the four-stage detach switch (0/1: Release; 2; 3: BrnEffectObject::
-// Detach; return 1) falls straight through in one call.
+// Detach; return 1) falls straight through in one call; each state is stored as it is
+// passed (InAirEffect::Detach's form) and an out-of-range state returns false (0x826F4F28).
 bool AISkidEffect::Detach()
 {
-    mSkidsVoice.Release();
-    BrnSound::Logic::BrnEffectObject::Detach();
-    return true;
+    switch (meDetachState)
+    {
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_NONE:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_NONE;
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_BEGIN:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_BEGIN;
+        mSkidsVoice.Release();
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_UPDATING:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_UPDATING;
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED;
+        BrnSound::Logic::BrnEffectObject::Detach();
+        return true;
+    default:
+        return false;
+    }
 }
 
 // ---------------------------------------------------------------------------

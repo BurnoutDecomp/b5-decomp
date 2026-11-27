@@ -398,13 +398,33 @@ void RoadnoiseEffect::ProcessUpdate()
     }
 }
 
+// ARTIST 0x826F4C28: the BrnEffectObject leaves' detach-state switch (InAirEffect::Detach), each
+// state stored as it is passed; the base Detach (inlined here) result is ignored and an
+// out-of-range state returns false (0x826F4D10).
 bool RoadnoiseEffect::Detach()
 {
-    for (s32 liVoice = 0; liVoice < KI_NUMBER_OF_TRANSITION_VOICES; ++liVoice)
-        mTransitionsSounds[liVoice].mTransitionVoice.Release();
-    for (s32 liSide = 0; liSide < E_MAX_SIDES; ++liSide)
-        mRoadNoiseVoice[liSide].Release();
-    return BrnSound::Logic::BrnEffectObject::Detach();
+    switch (meDetachState)
+    {
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_NONE:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_NONE;
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_BEGIN:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_BEGIN;
+        for (s32 liVoice = 0; liVoice < KI_NUMBER_OF_TRANSITION_VOICES; ++liVoice)
+            mTransitionsSounds[liVoice].mTransitionVoice.Release();
+        for (s32 liSide = 0; liSide < E_MAX_SIDES; ++liSide)
+            mRoadNoiseVoice[liSide].Release();
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_UPDATING:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_UPDATING;
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED;
+        BrnSound::Logic::BrnEffectObject::Detach();
+        return true;
+    default:
+        return false;
+    }
 }
 
 void RoadnoiseEffect::PlayTransitionSound(EWheelSide aeSide,

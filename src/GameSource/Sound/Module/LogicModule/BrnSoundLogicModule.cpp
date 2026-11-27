@@ -295,18 +295,16 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
 {
     mpBrnAllocator = apAllocator;   // X360 a1[19777] = a2
 
-    CGS_ASSERT(apInputBuffer, "lpInputBuffer");
-    CGS_ASSERT(apOutputBuffer, "lpOutputBuffer");
+    CGS_ASSERT_AT(apInputBuffer, "lpInputBuffer", CGS_ARTIST_FILE, 200);
+    CGS_ASSERT_AT(apOutputBuffer, "lpOutputBuffer", CGS_ARTIST_FILE, 201);
 
-    // The ENGINE AttachBuffers (X360 vtbl+0x50): pin the engine-side buffer pointers.
-    // FLAG (host note): the Brn-side mpBrnLogic* members (+0x4C94/+0x4C98) are pinned
-    // beside them -- their console writer is the un-dumped Brn override side; the store
-    // keeps GetBrnInputStructure() live exactly as before.
+    // The ENGINE AttachBuffers (X360 vtbl+0x50). ARTIST stores nothing else here: the
+    // Brn-side buffer pointers are not written by Prepare.
     AttachBuffers(apInputBuffer, apOutputBuffer);
-    mpBrnLogicInputBuffer  = reinterpret_cast<Io::LogicInputBuffer*>(apInputBuffer);
-    mpBrnLogicOutputBuffer = reinterpret_cast<Io::LogicOutputBuffer*>(apOutputBuffer);
 
-    bool lbPrepared = false;
+    // ARTIST 0x82703CAC..0x82703F14: no result local. Each stage that is not finished
+    // `break`s to the shared DetachBuffers + `return false`; DONE detaches and returns true
+    // in its own arm (0x82703EB4).
     switch (meBrnPrepareStage)
     {
     case E_PREPSTAGE_PERFMON:
@@ -323,37 +321,43 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
             meBrnPrepareStage = E_PREPSTAGE_VOICES;
             meBrnReleaseStage = E_BRN_RELEASE_SELF;
         }
-        break;   // one chunk per call (console LABEL_20: detach + return 0)
+        break;   // one chunk per call
     case E_PREPSTAGE_VOICES:
         meBrnPrepareStage = E_PREPSTAGE_VOICES;
-        if (!mMasterVoice.GetVoiceObject())
+        if (!mMasterVoice.IsCreated())
         {
-            const u32 luFactoryName = static_cast<u32>(
-                CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue());
+            // ARTIST re-reads GenericRwacFactory::SK_NAME for each call (0x82703D9C /
+            // 0x82703DB8 / 0x82703DDC) after hashing that call's spec name. DWARF
+            // (_compile/BrnSoundUnity.cpp) lists the spec-name locals lVoiceSpecName (cpp:249)
+            // and lGlobalReverbSpecName (cpp:254) in this block.
+            CgsSound::Playback::Name lVoiceSpecName("SubmixVoiceSpec");
             mSubmixVoice.Construct(
-                this, CgsSound::Playback::KU_INIT_SND9_SUBMIX_IDENT, luFactoryName,
-                static_cast<u32>(CgsSound::Playback::Name::MakeHash("SubmixVoiceSpec")));
+                this, CgsSound::Playback::KU_INIT_SND9_SUBMIX_IDENT,
+                static_cast<u32>(CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue()),
+                static_cast<u32>(lVoiceSpecName.GetValue()));
+            lVoiceSpecName = CgsSound::Playback::Name("MasterVoiceSpec");
             mMasterVoice.Construct(
-                this, 1, luFactoryName,
-                static_cast<u32>(CgsSound::Playback::Name::MakeHash("MasterVoiceSpec")));
+                this, 1,
+                static_cast<u32>(CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue()),
+                static_cast<u32>(lVoiceSpecName.GetValue()));
+            CgsSound::Playback::Name lGlobalReverbSpecName("GlobalReverbVoiceSpec");
             mGlobalReverbVoice.Construct(
-                this, 2, luFactoryName,
-                static_cast<u32>(CgsSound::Playback::Name::MakeHash("GlobalReverbVoiceSpec")));
+                this, 2,
+                static_cast<u32>(CgsSound::Playback::GenericRwacFactory::SK_NAME.GetValue()),
+                static_cast<u32>(lGlobalReverbSpecName.GetValue()));
             break; // console returns after the construct pass and re-enters stage 2.
         }
-        {
-            const u32 luSend01 = static_cast<u32>(
-                CgsSound::Playback::Name::MakeHash("Send01"));
-            mSubmixVoice.Connect(luSend01, 1);
-            mGlobalReverbVoice.Connect(luSend01, 1);
-            meBrnReleaseStage = E_BRN_RELEASE_MASTER_VOICE;
-            LoadAsset("Sound\\BurnoutGlobalData.bin", "BurnoutGlobalData",
-                      BrnSound::Logic::ResourceRegistrar::E_ATTRIBSYS);
-        }
+        // ARTIST hashes "Send01" once per Connect (0x82703DFC / 0x82703E14): a Name temporary
+        // per call (DWARF lists the inlined Name::Name / GetValue in this function).
+        mSubmixVoice.Connect(static_cast<u32>(CgsSound::Playback::Name("Send01").GetValue()), 1);
+        mGlobalReverbVoice.Connect(static_cast<u32>(CgsSound::Playback::Name("Send01").GetValue()), 1);
+        meBrnReleaseStage = E_BRN_RELEASE_MASTER_VOICE;
+        LoadAsset("Sound\\BurnoutGlobalData.bin", "BurnoutGlobalData",
+                  BrnSound::Logic::ResourceRegistrar::E_ATTRIBSYS);
         // fall through
     case E_PREPSTAGE_BRIDGE:
         meBrnPrepareStage = E_PREPSTAGE_BRIDGE;
-        // X360 case 3 / LABEL_12: ResourceBridging under the output write lock.
+        // X360 case 3: ResourceBridging under the output write lock.
         apOutputBuffer->LockForWrite();
         ResourceBridging();
         apOutputBuffer->UnlockForWrite();
@@ -371,26 +375,23 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
         apOutputBuffer->LockForWrite();
         if (!PrepareStateManagersOnBoot(4))
         {
-            ResourceBridging();              // console LABEL_13 on the retry path
+            ResourceBridging();
             apOutputBuffer->UnlockForWrite();
             break;
         }
         apOutputBuffer->UnlockForWrite();
-        meBrnPrepareStage = E_PREPSTAGE_DONE;
         // fall through
     case E_PREPSTAGE_DONE:
         meBrnPrepareStage = E_PREPSTAGE_DONE;
-        lbPrepared = true;
-        break;
+        DetachBuffers();
+        return true;
     default:
-        CGS_FAIL("Invalid Stage\n");
-        break;
+        CGS_FAIL_AT("Invalid Stage\n", CGS_ARTIST_FILE, 348);   // li r5,0x15C
     }
 
-    // Console: every exit detaches the per-call buffers (vtbl+0x54).
+    // Console: every unfinished exit detaches the per-call buffers (vtbl+0x54).
     DetachBuffers();
-
-    return lbPrepared;
+    return false;
 }
 
 // ARTIST 0x826C97B0. Preserve the base release retry and both stage words.
@@ -398,11 +399,17 @@ bool SoundLogicModule::Release()
 {
     switch (meBrnReleaseStage)
     {
+    // The staged-release idiom of the partial source's module Release bodies (PropEntityModule::
+    // Release): an empty START arm falling into the next, a failed base `break`ing out of the switch
+    // to the one `return false`. ARTIST 0x826C97D4 tests START and SELF apart (`cmplwi 1; blt; beq`)
+    // and gives the failed base its own `li r3,0` + epilogue (0x826C9830).
     case E_BRN_RELEASE_START:
+    {
+    }
     case E_BRN_RELEASE_SELF:
         meBrnReleaseStage = E_BRN_RELEASE_SELF;
         if (!CgsSound::Logic::Module::Release())
-            return false;
+            break;
         meBrnPrepareStage = E_PREPSTAGE_BASE;
         // fall through
     case E_BRN_RELEASE_DONE:
@@ -411,8 +418,8 @@ bool SoundLogicModule::Release()
         return true;
     default:
         CGS_FAIL_AT("Invalid Stage\n", CGS_ARTIST_FILE, 450);   // li r5,0x1C2
-        return false;
     }
+    return false;
 }
 
 // ARTIST 0x82697850. The serialiser Destruct call (0x82697870) folds to the shared blr 0x8284CB38.

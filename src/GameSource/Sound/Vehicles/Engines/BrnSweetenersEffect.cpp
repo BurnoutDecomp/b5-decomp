@@ -684,20 +684,36 @@ void SweetenersEffect::ProcessUpdate()
         mfDamagePopVolume * GetRWACMixerOutputValue(4, Nicotine::DMixIO::DMX_VOL));
 }
 
+// ARTIST 0x826F3208: the detach-state switch of the BrnEffectObject leaves (TrafficSkid::Detach's
+// form: NONE and BEGIN share the release arm, each state stored as it is passed, a failed base
+// Detach and an out-of-range state return false at 0x826F32D8).
 bool SweetenersEffect::Detach()
 {
-    mExhaustPopsVoice.Release();
-    mSweetenerVoice.Release();
-    mCarStarting.Release();
-    mDamageBangVoice.Release();
-    mDamagePopVoice.Release();
-
-    if (!BrnSound::Logic::BrnEffectObject::Detach())
+    switch (meDetachState)
+    {
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_NONE:
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_BEGIN:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_BEGIN;
+        mExhaustPopsVoice.Release();
+        mSweetenerVoice.Release();
+        mCarStarting.Release();
+        mDamageBangVoice.Release();
+        mDamagePopVoice.Release();
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_UPDATING:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_UPDATING;
+        if (!BrnSound::Logic::BrnEffectObject::Detach())
+            return false;
+        if (mSweetenersBank.IsCreated())
+            mSweetenersBank.Destruct();
+        SetUpdateState(E_SWEETENER_STATE_NONE);
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED;
+        return true;
+    default:
         return false;
-    if (mSweetenersBank.IsCreated())
-        mSweetenersBank.Destruct();
-    SetUpdateState(E_SWEETENER_STATE_NONE);
-    return true;
+    }
 }
 
 } // namespace Engines
