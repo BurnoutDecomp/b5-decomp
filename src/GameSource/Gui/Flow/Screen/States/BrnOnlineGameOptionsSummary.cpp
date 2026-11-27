@@ -625,8 +625,10 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptionsSummary::HandleInGameFailedEvent(const CgsModule::Event* lpEvent)
     {
-        // The console's text names OnlineSelectRoute::HandleInGameEvent (the same pooled string).
-        CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");
+        // The console's text names OnlineSelectRoute::HandleInGameEvent (the same pooled string),
+        // streamed at cpp:1055 (ARTIST 0x8249D924..0x8249D994: StrStream over the message buffer).
+        CGS_ASSERT_STREAM_AT(lpEvent, "Invalid event sent to OnlineSelectRoute::HandleInGameEvent",
+                             CGS_ARTIST_FILE, 1055);
 
         meSubState     = E_SUBSTATE_LOADING_SCREEN;
         miCurrentRound = 0;

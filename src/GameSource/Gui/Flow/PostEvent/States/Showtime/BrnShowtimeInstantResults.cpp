@@ -57,6 +57,20 @@
 
 namespace BrnGui
 {
+    // The tuning globals (DWARF BrnShowtimeInstantResults.cpp:37..43, namespace BrnGui; the dump
+    // marks every const `extern const` and these carry none). ARTIST keeps all six in writable
+    // .data 0x82F26BA0..0x82F26BB4. The two ints are plain globals: ARTIST loads them
+    // (HandleIncomingEvents 0x824D5CF8 `lwz`, UpdateScoreTotalling 0x824C62C4 `lwz` + `divw`).
+    // The floats stay const: TickSubstateAndEndIfDone 0x824B4C40 is exact only when the
+    // KF_CRASH_EXTENSION load is free to move (the non-const form reorders its decrement), so
+    // their X360 form (non-const as on PS3, or a const from an expression) is left open.
+    int32_t   KI_NUM_CRASH_EXTENSIONS_ALLOWED   = 3;      // 0x82F26BA0
+    const f32 KF_CRASH_EXTENSION                = 2.0f;   // 0x82F26BA4
+    const f32 KF_TIME_FOR_DISTANCE_DOLLARS      = 8.0f;   // 0x82F26BA8
+    const f32 KF_TIME_FOR_DISTANCE_BANKING      = 6.0f;   // 0x82F26BAC
+    const f32 KF_TIME_FOR_MULTIPLIER_BANKING    = 3.0f;   // 0x82F26BB0
+    int32_t   KI_SCORE_MULTIPLIER_BANKING_SPEED = 120;    // 0x82F26BB4
+
     namespace
     {
         // The state's inbound GUI queue. CgsGui::State only holds an INCOMPLETE
@@ -157,16 +171,6 @@ namespace BrnGui
         // tree passes; the component name is the empty string (&unk_820046A7 -- the image byte
         // there is 0, read not assumed).
         const s32  KI_AUDIO_ACTION                 = 7;
-
-        // ---- .rdata tuning constants (BrnShowtimeInstantResults.cpp:37..43) -----------------
-        // Read with tools/re/x360rd.py at the exact addresses the asm loads from; the DWARF
-        // names the run and the six values sit consecutively, which is the corroboration.
-        const s32 KI_NUM_CRASH_EXTENSIONS_ALLOWED  = 3;      // dword_82F26BA0
-        const f32 KF_CRASH_EXTENSION               = 2.0f;   // flt_82F26BA4
-        const f32 KF_TIME_FOR_DISTANCE_DOLLARS     = 8.0f;   // flt_82F26BA8
-        const f32 KF_TIME_FOR_DISTANCE_BANKING     = 6.0f;   // flt_82F26BAC
-        const f32 KF_TIME_FOR_MULTIPLIER_BANKING   = 3.0f;   // flt_82F26BB0
-        const s32 KI_SCORE_MULTIPLIER_BANKING_SPEED = 120;   // dword_82F26BB4 (0x78)
 
         // flt_820DB5A8 -- metres to yards. The image word is 0x3F8BFB85 == 1.0936133f, which
         // is the standard conversion to five places, so the identification is arithmetic

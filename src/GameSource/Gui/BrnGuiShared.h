@@ -94,6 +94,7 @@ namespace BrnGui
 
         // Past 154 the X360 table drifts from the PS3 enum (its replay screens are inserted at
         // 155..163): DWARF names, X360 values read back from gGuiResourceIdentifier[].
+        E_GUI_RESOURCEID_APT_ENTER_ONLINE = 165,       // "ON_CONN" (PS3 157; 0x82F278E0 + 0x294)
         E_GUI_RESOURCEID_APT_HUD_RACE = 192,           // "B5RaceHud" (PS3 183)
         E_GUI_RESOURCEID_APT_HUD_CRASHED = 193,        // "B5CrashedHud" (PS3 184)
         E_GUI_RESOURCEID_APT_HUD_CRASHED_STUNT = 194,  // "B5CrashedStuntHud" (PS3 185)

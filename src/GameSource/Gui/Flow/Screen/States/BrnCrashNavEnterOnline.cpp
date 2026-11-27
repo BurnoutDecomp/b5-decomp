@@ -1274,6 +1274,8 @@ namespace BrnGui
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // BrnGui::GuiEventNetworkConnect
+#include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
+#include "GameSource/Network/Managers/BrnNetworkLoginManagerBase.h"      // LoginManagerBase::ESignInType
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiFlow (E_GUIFLOW_SCREEN)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::Event
@@ -1291,13 +1293,6 @@ namespace BrnGui
         // not a class static of this one.
         const s32  KI_CONNECTING_MOVIE_LEVEL = 3;
 
-        // The GuiEventNetworkConnect payload word this screen produces. FLAG: the
-        // producer-side enum is not recovered -- these are the two raw values the X360
-        // stores (@0x824DD684 `li r10, 2`, reusing the register the sub-state store left
-        // set, and @0x824DD6A8 `li r11, 0`), named after the sign-in flavour each goes
-        // with.
-        const s32 KI_CONNECT_TYPE_FULL     = 0;
-        const s32 KI_CONNECT_TYPE_NO_TITLE = 2;
 
 
     }
@@ -1317,7 +1312,10 @@ namespace BrnGui
             if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
                                                      static_cast<u32>(miNumResourcesToLoad)))
             {
-                mpStateInterface->PlayAptMovie("ON_CONN", KI_CONNECTING_MOVIE_LEVEL);
+                // The movie name is read from the resource-name table (ARTIST 0x824DD5F0/F4:
+                // gGuiResourceIdentifier + 0x294, "ON_CONN").
+                mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_ENTER_ONLINE],
+                                               KI_CONNECTING_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_COMPONENTS;
             }
         }
@@ -1345,29 +1343,25 @@ namespace BrnGui
                     return;
                 }
 
-                s32 liConnectType;
-                if (meSignInType == E_SIGN_IN_TYPE_NO_TITLE)
+                // DWARF local lConnectEvent (cpp:784): the event carries the network
+                // LoginManagerBase sign-in type (DWARF BrnGuiEventTypeDefs.h:2925). ARTIST tests
+                // FULL first (`beq` into the normal store it shares with the unknown arm's tail),
+                // then NO_TITLE (0x824DD674..0x824DD6AC); an unknown flavour complains at cpp:794.
+                GuiEventNetworkConnect lConnectEvent;
+                if (meSignInType == E_SIGN_IN_TYPE_FULL)
                 {
-                    liConnectType = KI_CONNECT_TYPE_NO_TITLE;
+                    lConnectEvent.miConnectType = BrnNetwork::LoginManagerBase::E_SIGN_IN_TYPE_NORMAL;
+                }
+                else if (meSignInType == E_SIGN_IN_TYPE_NO_TITLE)
+                {
+                    lConnectEvent.miConnectType = BrnNetwork::LoginManagerBase::E_SIGN_IN_TYPE_FREE_BURN_LOBBY;
                 }
                 else
                 {
-                    // cpp:794 -- anything that is not one of the two known flavours
-                    // complains and then carries on into the full-sign-in value, which is
-                    // exactly what the X360 does (the assert arm at @0x824DD68C runs
-                    // straight on into `li r11, 0` at @0x824DD6A8).
-                    if (meSignInType != E_SIGN_IN_TYPE_FULL)
-                    {
-                        CGS_FAIL_AT("Unknown sign in type", CGS_ARTIST_FILE, 794);
-                    }
-                    liConnectType = KI_CONNECT_TYPE_FULL;
+                    CGS_FAIL_AT("Unknown sign in type", CGS_ARTIST_FILE, 794);
+                    lConnectEvent.miConnectType = BrnNetwork::LoginManagerBase::E_SIGN_IN_TYPE_NORMAL;
                 }
-
-                // The console posts { 4, 272, 12, type } on channel 40 (16 bytes): the
-                // inlined OutputGuiEvent<GuiEventNetworkConnect>.
-                GuiEventNetworkConnect lConnect;
-                lConnect.miConnectType = liConnectType;
-                mpStateInterface->OutputGuiEvent(lConnect);
+                mpStateInterface->OutputGuiEvent(lConnectEvent);
             }
         }
     }
