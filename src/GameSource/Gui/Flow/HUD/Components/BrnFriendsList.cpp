@@ -1145,7 +1145,8 @@ bool FriendsListComponent::SelectPrevious()
 // ARTIST 0x82441A80.
 bool FriendsListComponent::SelectNext()
 {
-    if (miTotalOptions == 0 || miCurrentlyHighlightedOption == static_cast<s32>(miTotalOptions) - 1) return false;
+    // The last-option test comes first (ARTIST 0x82441AA8, then the empty-list test 0x82441AB0).
+    if (static_cast<s32>(miTotalOptions) - 1 == miCurrentlyHighlightedOption || miTotalOptions == 0) return false;
     if (miCurrentlyHighlightedSlot < 4)
     {
         ++miCurrentlyHighlightedOption;
@@ -1720,19 +1721,21 @@ void FriendsListComponent::UpdateAllChallengesEntryData()
 // ARTIST 0x82438760.
 void FriendsListComponent::HandleDPadRightChallenges()
 {
-    GuiChallengeSelectedEvent lSelected;
-    lSelected.mChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
-    lSelected.meAction = 0;
-    lSelected.meFreeburnChallengeStyle = mpGuiCache->GetFreeburnChallengeList()
-        ->GetChallengeData(lSelected.mChallengeID)->GetChallengeStyle();
-    mpStateInterface->OutputGuiEvent(lSelected);
-    lSelected.meAction = 3;
-    mpStateInterface->OutputGuiEvent(lSelected);
+    // DWARF locals lChallengeID / lChallengeSelected (cpp:1339/1341) and lGameOptions (cpp:1353).
+    CgsID lChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
+    GuiChallengeSelectedEvent lChallengeSelected;
+    lChallengeSelected.mChallengeID = lChallengeID;
+    lChallengeSelected.meAction = GuiChallengeSelectedEvent::E_ACTION_CHOSEN;
+    lChallengeSelected.meFreeburnChallengeStyle = static_cast<s32>(
+        mpGuiCache->GetFreeburnChallengeList()->GetChallengeData(lChallengeID)->GetChallengeStyle());
+    mpStateInterface->OutputGuiEvent(lChallengeSelected);
+    lChallengeSelected.meAction = GuiChallengeSelectedEvent::E_ACTION_HIDDEN;
+    mpStateInterface->OutputGuiEvent(lChallengeSelected);
     if (mpGuiCache->GetOnlineGameModeOptions()->meGameMode != 15)
     {
-        GuiEventNetworkGameParams event = *mpGuiCache->GetOnlineGameModeOptions();
-        event.meGameMode = 15;
-        mpStateInterface->OutputGuiEvent(event);
+        GuiEventNetworkGameParams lGameOptions = *mpGuiCache->GetOnlineGameModeOptions();
+        lGameOptions.meGameMode = 15;
+        mpStateInterface->OutputGuiEvent(lGameOptions);
     }
     meCurrentState = 5;
     SetDirty();
