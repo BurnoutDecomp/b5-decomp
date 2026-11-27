@@ -118,7 +118,7 @@ namespace
     const f32 KF_MPH_TO_MPS = 0.44704f;
     const f32 KF_MPS_TO_MPH = 1.0f / KF_MPH_TO_MPS;
 
-    const CgsDev::RGBA KRGBA_TEXT_WHITE = 0xFFFFFFFFu;
+    // KRGBA_TEXT_WHITE retired (no DWARF name): its 5 use(s) spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
 
 }
 
@@ -522,7 +522,7 @@ void RaceCarEntityModuleDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender
 
             lpRender->DrawText(lLine.GetBuffer(), KF_CAR_TABLE_X,
                                static_cast<f32>(leIndex) * KF_CAR_TABLE_LINE_SPACE + KF_CAR_TABLE_Y,
-                               KF_CAR_TABLE_TEXT_SIZE, KRGBA_TEXT_WHITE);
+                               KF_CAR_TABLE_TEXT_SIZE, rw::RGBA(255, 255, 255, 255));
         }
     }
 
@@ -569,7 +569,7 @@ void RaceCarEntityModuleDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender
 
             lpRender->DrawText(lLine.GetBuffer(), KF_CAR_TABLE_X,
                                static_cast<f32>(liActiveRaceCar) * KF_CAR_TABLE_LINE_SPACE + KF_CAR_TABLE_Y,
-                               KF_CAR_TABLE_TEXT_SIZE, KRGBA_TEXT_WHITE);
+                               KF_CAR_TABLE_TEXT_SIZE, rw::RGBA(255, 255, 255, 255));
         }
     }
 
@@ -581,7 +581,7 @@ void RaceCarEntityModuleDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender
         lLine << "Average speed: " << static_cast<s32>(mfAverageSpeed * KF_MPS_TO_MPH) << " mph";
 
         lpRender->DrawText(lLine.GetBuffer(), KF_AVERAGE_SPEED_X, KF_AVERAGE_SPEED_Y,
-                           KF_AVERAGE_SPEED_TEXT_SIZE, KRGBA_TEXT_WHITE);
+                           KF_AVERAGE_SPEED_TEXT_SIZE, rw::RGBA(255, 255, 255, 255));
     }
 
     if (mbShowEngineState)
@@ -609,19 +609,19 @@ void RaceCarEntityModuleDebugComponent::RenderEngineState(CgsDev::Debug2DImmedia
     switch (lpPlayerCar->GetEngineState())
     {
         case RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_OFF:
-            lpRender->DrawText("ENGINE OFF", lPosition, KF_ENGINE_STATE_TEXT_SIZE, skEngineStateColour.m_rgba, false);
+            lpRender->DrawText("ENGINE OFF", lPosition, KF_ENGINE_STATE_TEXT_SIZE, skEngineStateColour, false);
             break;
 
         case RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_STARTING:
-            lpRender->DrawText("ENGINE STARTING", lPosition, KF_ENGINE_STATE_TEXT_SIZE, skEngineStateColour.m_rgba, false);
+            lpRender->DrawText("ENGINE STARTING", lPosition, KF_ENGINE_STATE_TEXT_SIZE, skEngineStateColour, false);
             break;
 
         case RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING:
-            lpRender->DrawText("ENGINE RUNNING", lPosition, KF_ENGINE_STATE_TEXT_SIZE, skEngineStateColour.m_rgba, false);
+            lpRender->DrawText("ENGINE RUNNING", lPosition, KF_ENGINE_STATE_TEXT_SIZE, skEngineStateColour, false);
             break;
 
         case RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_STOPPING:
-            lpRender->DrawText("ENGINE STOPPING", lPosition, KF_ENGINE_STATE_TEXT_SIZE, skEngineStateColour.m_rgba, false);
+            lpRender->DrawText("ENGINE STOPPING", lPosition, KF_ENGINE_STATE_TEXT_SIZE, skEngineStateColour, false);
             break;
 
         default:
@@ -706,7 +706,7 @@ void RaceCarEntityModuleDebugComponent::DrawTextWithOffsets(CgsDev::Debug2DImmed
     {
         if (lcChar == '\n' || (liLineLength > KI_WRAPPED_TEXT_BREAK_LENGTH && lcChar == ' '))
         {
-            lpRender->DrawText(lLine.GetBuffer(), lfX, lfY, KF_WRAPPED_TEXT_SIZE, KRGBA_TEXT_WHITE);
+            lpRender->DrawText(lLine.GetBuffer(), lfX, lfY, KF_WRAPPED_TEXT_SIZE, rw::RGBA(255, 255, 255, 255));
             lLine.Reset();
             lfY += KF_WRAPPED_TEXT_SIZE;
             liLineLength = 0;
@@ -718,7 +718,7 @@ void RaceCarEntityModuleDebugComponent::DrawTextWithOffsets(CgsDev::Debug2DImmed
         lLine.AppendFormat("%c", lcChar);
     }
 
-    lpRender->DrawText(lLine.GetBuffer(), lfX, lfY, KF_WRAPPED_TEXT_SIZE, KRGBA_TEXT_WHITE);
+    lpRender->DrawText(lLine.GetBuffer(), lfX, lfY, KF_WRAPPED_TEXT_SIZE, rw::RGBA(255, 255, 255, 255));
     lLine.Reset();
 }
 

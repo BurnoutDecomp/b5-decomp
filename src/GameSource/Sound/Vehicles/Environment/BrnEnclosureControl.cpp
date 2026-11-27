@@ -191,7 +191,7 @@ void EnclosureControl::DrawDebug() const
         if (maTriggerInfo[E_TRIGGER_POSITION_AT_ENTITY].IsTypeActive(
             static_cast<BrnTrigger::GenericRegion::Type>(liType)))
         {
-            lrRender.Draw2DText(kaNames[liType - 19], 900.0f, lfY, 25.0f, 0xFFFFFFFFu);
+            lrRender.Draw2DText(kaNames[liType - 19], 900.0f, lfY, 25.0f, rw::RGBA(255, 255, 255, 255));
             lfY += 30.0f;
         }
 }

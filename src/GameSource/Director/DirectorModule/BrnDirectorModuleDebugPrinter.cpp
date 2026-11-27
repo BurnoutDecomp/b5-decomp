@@ -38,9 +38,9 @@ namespace BrnDirector
         mDebugPrinterInfo.mfLineSize      = 17.6f;   // flt_82004174
         mDebugPrinterInfo.mfX             = lMetrics.mfScreenWidth  * 0.25f;  // flt_82003F40
         mDebugPrinterInfo.mfY             = lMetrics.mfScreenHeight * 0.1f;   // flt_82004014
-        mDebugPrinterInfo.muColour         = 0xFFFFFFFF;  // white
-        mDebugPrinterInfo.muActiveColour   = 0xFF00FF00;  // green
-        mDebugPrinterInfo.muInactiveColour = 0xFF0000FF;  // red
+        mDebugPrinterInfo.muColour         = rw::RGBA(255, 255, 255, 255);  // white
+        mDebugPrinterInfo.muActiveColour   = rw::RGBA(0, 255, 0, 255);  // green
+        mDebugPrinterInfo.muInactiveColour = rw::RGBA(255, 0, 0, 255);  // red
         mDebugPrinterInfo.mJustification   = CgsDev::DebugRender::E_JUSTIFY_LEFT;
         mbEnabled = true;
 

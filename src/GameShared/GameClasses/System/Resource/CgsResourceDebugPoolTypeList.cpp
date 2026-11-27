@@ -211,10 +211,10 @@ namespace CgsResource
         u32 lauTotals[3] = { 0, 0, 0 };
         const f32 lfX = GetX();
         f32 lfY = GetY() + 5.0f;
-        lpRender->DrawText("NAME", KF_NAME_X + lfX, lfY, 14.0f, 0xFF000000u);
-        lpRender->DrawText("MAIN MEM", KF_MAIN_X + lfX, lfY, 14.0f, 0xFF000000u);
-        lpRender->DrawText("GRSYS(PS3/X360)", KF_SECOND_X + lfX, lfY, 14.0f, 0xFF000000u);
-        lpRender->DrawText("GRLOCAL(PS3 ONLY)", KF_THIRD_X + lfX, lfY, 14.0f, 0xFF000000u);
+        lpRender->DrawText("NAME", KF_NAME_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawText("MAIN MEM", KF_MAIN_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawText("GRSYS(PS3/X360)", KF_SECOND_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawText("GRLOCAL(PS3 ONLY)", KF_THIRD_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
         lfY += 15.0f;
         const f32 lfHeaderLineY = lfY;
         lfY += 4.0f;
@@ -224,7 +224,7 @@ namespace CgsResource
         {
             const TypeEntry& lrEntry = maTypes[liType];
             CgsCore::SPrintf(lacText, sizeof(lacText), "%s(%d)", lrEntry.mpcTypeName, lrEntry.miCount);
-            lpRender->DrawText(lacText, KF_NAME_X + lfX, lfY, 14.0f, 0xFF000000u);
+            lpRender->DrawText(lacText, KF_NAME_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
             for (s32 liColumn = 0; liColumn < 3; ++liColumn)
             {
                 const s32 liMemType = laiMemTypes[liColumn];
@@ -236,13 +236,13 @@ namespace CgsResource
                     {
                         GetSizeString(luBytes, lacSize);
                         CgsCore::SPrintf(lacText, sizeof(lacText), "%s", lacSize);
-                        lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                        lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
                         // ARTIST converts unsigned words to f64, performs the
                         // multiply/divide in f64, then rounds once to f32.
                         const f32 lfPercent = static_cast<f32>((static_cast<f64>(luBytes) * 100.0) /
                                                                static_cast<f64>(luCapacity));
                         CgsCore::SPrintf(lacText, sizeof(lacText), "%.2f%%", lfPercent);
-                        lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                        lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
                         lauTotals[liMemType] += luBytes;
                     }
                 }
@@ -251,15 +251,15 @@ namespace CgsResource
         }
         const f32 lfTotalLineY = lfY;
         lfY += 4.0f;
-        lpRender->DrawText("TOTAL", KF_NAME_X + lfX, lfY, 14.0f, 0xFF000000u);
+        lpRender->DrawText("TOTAL", KF_NAME_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
         for (s32 liColumn = 0; liColumn < 3; ++liColumn)
         {
             const s32 liMemType = laiMemTypes[liColumn];
             if (liMemType == E_MEMCAT_INVALID ||
                 mPoolDescriptor.m_baseResourceDescriptors[liMemType].m_size == 0)
             {
-                lpRender->DrawText("0MB", lafSizeX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
-                lpRender->DrawText("0%", lafPercentX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                lpRender->DrawText("0MB", lafSizeX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+                lpRender->DrawText("0%", lafPercentX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
             }
             else
             {
@@ -267,26 +267,26 @@ namespace CgsResource
                 const u32 luCapacity = mPoolDescriptor.m_baseResourceDescriptors[liMemType].m_size;
                 GetSizeString(luBytes, lacSize);
                 CgsCore::SPrintf(lacText, sizeof(lacText), "%s", lacSize);
-                lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
                 const f32 lfPercent = static_cast<f32>((static_cast<f64>(luBytes) * 100.0) /
                                                        static_cast<f64>(luCapacity));
                 CgsCore::SPrintf(lacText, sizeof(lacText), "%.2f%%", lfPercent);
-                lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
             }
         }
         lfY += 20.0f;
         const Vector2 lvHeaderStart = Vector2(KF_NAME_X + lfX, lfHeaderLineY);
         const Vector2 lvHeaderEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfHeaderLineY);
-        lpRender->DrawLine(lvHeaderStart, lvHeaderEnd, 0xFF000000u);
+        lpRender->DrawLine(lvHeaderStart, lvHeaderEnd, rw::RGBA(0, 0, 0, 255));
         const Vector2 lvTotalStart = Vector2(KF_NAME_X + lfX, lfTotalLineY);
         const Vector2 lvTotalEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfTotalLineY);
-        lpRender->DrawLine(lvTotalStart, lvTotalEnd, 0xFF000000u);
+        lpRender->DrawLine(lvTotalStart, lvTotalEnd, rw::RGBA(0, 0, 0, 255));
         for (s32 liColumn = 0; liColumn < 3; ++liColumn)
         {
             const f32 lfColumnX = (lafSizeX[liColumn] + lfX) - 3.0f;
             const Vector2 lvStart = Vector2(lfColumnX, GetY());
             const Vector2 lvEnd = Vector2(lfColumnX, lfY);
-            lpRender->DrawLine(lvStart, lvEnd, 0xFF000000u);
+            lpRender->DrawLine(lvStart, lvEnd, rw::RGBA(0, 0, 0, 255));
         }
         SetSize(KF_WINDOW_WIDTH, lfY - GetY());
     }
@@ -309,10 +309,10 @@ namespace CgsResource
         u32 lauTotals[3] = { 0, 0, 0 };
         const f32 lfX = GetX();
         f32 lfY = GetY() + 5.0f;
-        lpRender->DrawText("NAME", KF_NAME_X + lfX, lfY, 14.0f, 0xFF000000u);
-        lpRender->DrawText("MAIN MEM", KF_MAIN_X + lfX, lfY, 14.0f, 0xFF000000u);
-        lpRender->DrawText("VIDEO", KF_SECOND_X + lfX, lfY, 14.0f, 0xFF000000u);
-        lpRender->DrawText("GRSYS(PS3 ONLY)", KF_THIRD_X + lfX, lfY, 14.0f, 0xFF000000u);
+        lpRender->DrawText("NAME", KF_NAME_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawText("MAIN MEM", KF_MAIN_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawText("VIDEO", KF_SECOND_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawText("GRSYS(PS3 ONLY)", KF_THIRD_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
         lfY += 15.0f;
         const f32 lfHeaderLineY = lfY;
         lfY += 4.0f;
@@ -322,7 +322,7 @@ namespace CgsResource
         {
             const TypeEntry& lrEntry = maTypes[liType];
             CgsCore::SPrintf(lacText, sizeof(lacText), "%s(%d)", lrEntry.mpcTypeName, lrEntry.miCount);
-            lpRender->DrawText(lacText, KF_NAME_X + lfX, lfY, 14.0f, 0xFF000000u);
+            lpRender->DrawText(lacText, KF_NAME_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
             for (s32 liColumn = 0; liColumn < 3; ++liColumn)
             {
                 const s32 liMemType = laiMemTypes[liColumn];
@@ -334,13 +334,13 @@ namespace CgsResource
                     {
                         GetSizeString(luBytes, lacSize);
                         CgsCore::SPrintf(lacText, sizeof(lacText), "%s", lacSize);
-                        lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                        lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
                         // ARTIST converts unsigned words to f64, performs the
                         // multiply/divide in f64, then rounds once to f32.
                         const f32 lfPercent = static_cast<f32>((static_cast<f64>(luBytes) * 100.0) /
                                                                static_cast<f64>(luCapacity));
                         CgsCore::SPrintf(lacText, sizeof(lacText), "%.2f%%", lfPercent);
-                        lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                        lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
                         lauTotals[liMemType] += luBytes;
                     }
                 }
@@ -349,15 +349,15 @@ namespace CgsResource
         }
         const f32 lfTotalLineY = lfY;
         lfY += 4.0f;
-        lpRender->DrawText("TOTAL", KF_NAME_X + lfX, lfY, 14.0f, 0xFF000000u);
+        lpRender->DrawText("TOTAL", KF_NAME_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
         for (s32 liColumn = 0; liColumn < 3; ++liColumn)
         {
             const s32 liMemType = laiMemTypes[liColumn];
             if (liMemType == E_MEMCAT_INVALID ||
                 mPoolDescriptor.m_baseResourceDescriptors[liMemType].m_size == 0)
             {
-                lpRender->DrawText("0MB", lafSizeX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
-                lpRender->DrawText("0%", lafPercentX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                lpRender->DrawText("0MB", lafSizeX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+                lpRender->DrawText("0%", lafPercentX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
             }
             else
             {
@@ -365,26 +365,26 @@ namespace CgsResource
                 const u32 luCapacity = mPoolDescriptor.m_baseResourceDescriptors[liMemType].m_size;
                 GetSizeString(luBytes, lacSize);
                 CgsCore::SPrintf(lacText, sizeof(lacText), "%s", lacSize);
-                lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
                 const f32 lfPercent = static_cast<f32>((static_cast<f64>(luBytes) * 100.0) /
                                                        static_cast<f64>(luCapacity));
                 CgsCore::SPrintf(lacText, sizeof(lacText), "%.2f%%", lfPercent);
-                lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
             }
         }
         lfY += 20.0f;
         const Vector2 lvHeaderStart = Vector2(KF_NAME_X + lfX, lfHeaderLineY);
         const Vector2 lvHeaderEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfHeaderLineY);
-        lpRender->DrawLine(lvHeaderStart, lvHeaderEnd, 0xFF000000u);
+        lpRender->DrawLine(lvHeaderStart, lvHeaderEnd, rw::RGBA(0, 0, 0, 255));
         const Vector2 lvTotalStart = Vector2(KF_NAME_X + lfX, lfTotalLineY);
         const Vector2 lvTotalEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfTotalLineY);
-        lpRender->DrawLine(lvTotalStart, lvTotalEnd, 0xFF000000u);
+        lpRender->DrawLine(lvTotalStart, lvTotalEnd, rw::RGBA(0, 0, 0, 255));
         for (s32 liColumn = 0; liColumn < 3; ++liColumn)
         {
             const f32 lfColumnX = (lafSizeX[liColumn] + lfX) - 3.0f;
             const Vector2 lvStart = Vector2(lfColumnX, GetY());
             const Vector2 lvEnd = Vector2(lfColumnX, lfY);
-            lpRender->DrawLine(lvStart, lvEnd, 0xFF000000u);
+            lpRender->DrawLine(lvStart, lvEnd, rw::RGBA(0, 0, 0, 255));
         }
         SetSize(KF_WINDOW_WIDTH, lfY - GetY());
     }
@@ -410,10 +410,10 @@ namespace CgsResource
         u32 lauTotals[3] = { 0, 0, 0 };
         const f32 lfX = GetX();
         f32 lfY = GetY() + 5.0f;
-        lpRender->DrawText("NAME", KF_NAME_X + lfX, lfY, 14.0f, 0xFF000000u);
-        lpRender->DrawText("MAIN MEM", KF_MAIN_X + lfX, lfY, 14.0f, 0xFF000000u);
-        lpRender->DrawText("VIDEO", KF_SECOND_X + lfX, lfY, 14.0f, 0xFF000000u);
-        lpRender->DrawText("GRSYS(PS3 ONLY)", KF_THIRD_X + lfX, lfY, 14.0f, 0xFF000000u);
+        lpRender->DrawText("NAME", KF_NAME_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawText("MAIN MEM", KF_MAIN_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawText("VIDEO", KF_SECOND_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawText("GRSYS(PS3 ONLY)", KF_THIRD_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
         lfY += 15.0f;
         const f32 lfHeaderLineY = lfY;
         lfY += 4.0f;
@@ -422,7 +422,7 @@ namespace CgsResource
         for (s32 liCategory = 0; liCategory < E_DEBUGRESOURCECATEGORY_COUNT; ++liCategory)
         {
             CgsCore::SPrintf(lacText, sizeof(lacText), "%s", KAPC_CATEGORY_NAMES[liCategory]);
-            lpRender->DrawText(lacText, KF_NAME_X + lfX, lfY, 14.0f, 0xFF000000u);
+            lpRender->DrawText(lacText, KF_NAME_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
             for (s32 liColumn = 0; liColumn < 3; ++liColumn)
             {
                 const s32 liMemType = laiMemTypes[liColumn];
@@ -434,14 +434,14 @@ namespace CgsResource
                     {
                         GetSizeString(luBytes, lacSize);
                         CgsCore::SPrintf(lacText, sizeof(lacText), "%s", lacSize);
-                        lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                        lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
                         const f32 lfPercent = static_cast<f32>((static_cast<f64>(luBytes) * 100.0) /
                                                                static_cast<f64>(luCapacity));
                         CgsCore::SPrintf(lacText, sizeof(lacText), "%.2f%%", lfPercent);
-                        lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                        lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
                         const Vector2 lvMin = Vector2(lafSizeX[liColumn] + GetX(), lfY + 15.0f);
                         const Vector2 lvMax = Vector2((lafSizeX[liColumn] + GetX()) + 150.0f, lfY + 25.0f);
-                        lpRender->DrawHorizontalBar(lvMin, lvMax, lfPercent, 100.0f, 0x8000B400u, 0x80640064u);
+                        lpRender->DrawHorizontalBar(lvMin, lvMax, lfPercent, 100.0f, rw::RGBA(0, 180, 0, 128), rw::RGBA(100, 0, 100, 128));
                         lauTotals[liMemType] += luBytes;
                     }
                 }
@@ -450,15 +450,15 @@ namespace CgsResource
         }
         const f32 lfTotalLineY = lfY;
         lfY += 4.0f;
-        lpRender->DrawText("TOTAL", KF_NAME_X + lfX, lfY, 14.0f, 0xFF000000u);
+        lpRender->DrawText("TOTAL", KF_NAME_X + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
         for (s32 liColumn = 0; liColumn < 3; ++liColumn)
         {
             const s32 liMemType = laiMemTypes[liColumn];
             if (liMemType == E_MEMCAT_INVALID ||
                 mPoolDescriptor.m_baseResourceDescriptors[liMemType].m_size == 0)
             {
-                lpRender->DrawText("0MB", lafSizeX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
-                lpRender->DrawText("0%", lafPercentX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                lpRender->DrawText("0MB", lafSizeX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
+                lpRender->DrawText("0%", lafPercentX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
             }
             else
             {
@@ -466,29 +466,29 @@ namespace CgsResource
                 const u32 luCapacity = mPoolDescriptor.m_baseResourceDescriptors[liMemType].m_size;
                 GetSizeString(luBytes, lacSize);
                 CgsCore::SPrintf(lacText, sizeof(lacText), "%s", lacSize);
-                lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                lpRender->DrawText(lacText, lafSizeX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
                 const f32 lfPercent = static_cast<f32>((static_cast<f64>(luBytes) * 100.0) /
                                                        static_cast<f64>(luCapacity));
                 CgsCore::SPrintf(lacText, sizeof(lacText), "%.2f%%", lfPercent);
-                lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
+                lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, rw::RGBA(0, 0, 0, 255));
                 const Vector2 lvMin = Vector2(lafSizeX[liColumn] + GetX(), lfY + 15.0f);
                 const Vector2 lvMax = Vector2((lafSizeX[liColumn] + GetX()) + 150.0f, lfY + 25.0f);
-                lpRender->DrawHorizontalBar(lvMin, lvMax, lfPercent, 100.0f, 0x8000B400u, 0x80640064u);
+                lpRender->DrawHorizontalBar(lvMin, lvMax, lfPercent, 100.0f, rw::RGBA(0, 180, 0, 128), rw::RGBA(100, 0, 100, 128));
             }
         }
         lfY += 35.0f;
         const Vector2 lvHeaderStart = Vector2(KF_NAME_X + lfX, lfHeaderLineY);
         const Vector2 lvHeaderEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfHeaderLineY);
-        lpRender->DrawLine(lvHeaderStart, lvHeaderEnd, 0xFF000000u);
+        lpRender->DrawLine(lvHeaderStart, lvHeaderEnd, rw::RGBA(0, 0, 0, 255));
         const Vector2 lvTotalStart = Vector2(KF_NAME_X + lfX, lfTotalLineY);
         const Vector2 lvTotalEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfTotalLineY);
-        lpRender->DrawLine(lvTotalStart, lvTotalEnd, 0xFF000000u);
+        lpRender->DrawLine(lvTotalStart, lvTotalEnd, rw::RGBA(0, 0, 0, 255));
         for (s32 liColumn = 0; liColumn < 3; ++liColumn)
         {
             const f32 lfColumnX = (lafSizeX[liColumn] + lfX) - 3.0f;
             const Vector2 lvStart = Vector2(lfColumnX, GetY());
             const Vector2 lvEnd = Vector2(lfColumnX, lfY);
-            lpRender->DrawLine(lvStart, lvEnd, 0xFF000000u);
+            lpRender->DrawLine(lvStart, lvEnd, rw::RGBA(0, 0, 0, 255));
         }
         SetSize(KF_WINDOW_WIDTH, lfY - GetY());
     }

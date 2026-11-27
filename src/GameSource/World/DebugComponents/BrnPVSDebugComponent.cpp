@@ -50,14 +50,14 @@ namespace BrnWorld
 
         const CgsDev::RGBA KAU_ZONE_COLOUR_WHEEL[8] =
         {
-            0xFF0000FFu,
-            0xFF00FF00u,
-            0xFFFF0000u,
-            0xFFFF00FFu,
-            0xFF00FFFFu,
-            0xFFFFFF00u,
-            0xFFFFFFFFu,
-            0xFF0088FFu,
+            rw::RGBA(255, 0, 0, 255),
+            rw::RGBA(0, 255, 0, 255),
+            rw::RGBA(0, 0, 255, 255),
+            rw::RGBA(255, 0, 255, 255),
+            rw::RGBA(255, 255, 0, 255),
+            rw::RGBA(0, 255, 255, 255),
+            rw::RGBA(255, 255, 255, 255),
+            rw::RGBA(255, 136, 0, 255),
         };
 
         // INFERRED projection constants. The X360 maps the world XZ plane to the debug overlay with a
@@ -223,34 +223,34 @@ namespace BrnWorld
                 mpWorldEntityModule->mWorldGraphicsStreamer.DebugGetAssetStatus(
                     BrnResource::MakeTrackUnitId(static_cast<u32>(lrZone.GetId())));
 
-            CgsDev::RGBA lFillColour = 0;
+            CgsDev::RGBA lFillColour(0, 0, 0, 0);
             if (_miColourMode == 0)
             {
                 if (liPvsIndex == 0)
-                    lFillColour = 0x1400FF00u;
+                    lFillColour = rw::RGBA(0, 255, 0, 20);
                 else if (liPvsIndex > 0)
-                    lFillColour = 0x14FF0000u;
+                    lFillColour = rw::RGBA(0, 0, 255, 20);
             }
             else
             {
                 switch (leStatus)
                 {
-                    case InternalBaseStreamer::E_AS_PENDING_LOAD:       lFillColour = 0x140000FFu; break;
-                    case InternalBaseStreamer::E_AS_LOADING:            lFillColour = 0x1400FFFFu; break;
+                    case InternalBaseStreamer::E_AS_PENDING_LOAD:       lFillColour = rw::RGBA(255, 0, 0, 20); break;
+                    case InternalBaseStreamer::E_AS_LOADING:            lFillColour = rw::RGBA(255, 255, 0, 20); break;
                     case InternalBaseStreamer::E_AS_READY:
-                    case InternalBaseStreamer::E_AS_UNLOADING:          lFillColour = 0x14FF0000u; break;
-                    case InternalBaseStreamer::E_AS_PENDING_ABORT_LOAD: lFillColour = 0x14FF00FFu; break;
-                    case InternalBaseStreamer::E_AS_PENDING_UNLOAD:     lFillColour = 0x14FFFF00u; break;
-                    default:                                             lFillColour = 0; break;
+                    case InternalBaseStreamer::E_AS_UNLOADING:          lFillColour = rw::RGBA(0, 0, 255, 20); break;
+                    case InternalBaseStreamer::E_AS_PENDING_ABORT_LOAD: lFillColour = rw::RGBA(255, 0, 255, 20); break;
+                    case InternalBaseStreamer::E_AS_PENDING_UNLOAD:     lFillColour = rw::RGBA(0, 255, 255, 20); break;
+                    default:                                             lFillColour = rw::RGBA(0, 0, 0, 0); break;
                 }
             }
 
-            if ((lFillColour >> 24) != 0)
+            if (lFillColour.GetAlpha() != 0)
                 lpRender->DrawSolidConvexPolygon(laPoints, static_cast<u32>(liPointCount), lFillColour);
 
             if (mbDrawPVSWireFrame)
             {
-                lpRender->DrawWirePolygon(laPoints, static_cast<u32>(liPointCount), 0xFFFFFFFFu);
+                lpRender->DrawWirePolygon(laPoints, static_cast<u32>(liPointCount), rw::RGBA(255, 255, 255, 255));
 
                 if (lMinimum.mV.x >= 0.0f && lMinimum.mV.x <= 1000.0f &&
                     lMinimum.mV.y >= 0.0f && lMinimum.mV.y <= 1000.0f)
@@ -259,7 +259,7 @@ namespace BrnWorld
                     const char* lpcStatus = KAPC_ASSET_STATUS_NAMES[static_cast<s32>(leStatus)];
                     CgsCore::SPrintf(lacLabel, sizeof(lacLabel), "%d: %s",
                                      static_cast<s32>(static_cast<u32>(lrZone.GetId())), lpcStatus);
-                    lpRender->DrawText(lacLabel, lMinimum.mV.x, lMinimum.mV.y, 15.0f, 0xFFFFFFFFu);
+                    lpRender->DrawText(lacLabel, lMinimum.mV.x, lMinimum.mV.y, 15.0f, rw::RGBA(255, 255, 255, 255));
                 }
             }
         }
@@ -345,6 +345,6 @@ namespace BrnWorld
         const Vector2 lMaximum(lScreenSize.mV.x * 0.5f + 5.0f,
                                lScreenSize.mV.y * 0.5f + 10.0f);
         // ARTIST 827BFC68 uses the scalar two-corner wrapper.
-        lpRender->DrawBox(lMinimum.mV.x, lMinimum.mV.y, lMaximum.mV.x, lMaximum.mV.y, 0xFFFFFFFFu);
+        lpRender->DrawBox(lMinimum.mV.x, lMinimum.mV.y, lMaximum.mV.x, lMaximum.mV.y, rw::RGBA(255, 255, 255, 255));
     }
 }

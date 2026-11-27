@@ -482,7 +482,7 @@ namespace BrnResource
     {
         if (g_DLCFeatureAvailability.mBeatTheTeamGame.IsEnabled())   // byte_82FFA7F1
         {
-            lpRender->DrawText("Beat the team mode", 700.0f, 40.0f, 16.0f, 0xFFFFFFC8u);
+            lpRender->DrawText("Beat the team mode", 700.0f, 40.0f, 16.0f, rw::RGBA(200, 255, 255, 255));
         }
     }
 

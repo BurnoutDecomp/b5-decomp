@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "rw/core/base/detail/hosttype.h"   // rw::RGBA
 
 // CgsDev::DebugUI core value types. Recovered from the DecFIGS DWARF
 // (Development/DebugSystem/Core/UI/CgsTypes.h). This is the incremental subset the debug
@@ -11,9 +12,11 @@
 
 namespace CgsDev
 {
-    // Packed RGBA8 colour (matches the debug renderer's RGBA typedef; a redundant typedef
-    // to the same type is legal). The Palette below is RGBA-valued.
-    typedef u32 RGBA;
+    // The DWARF types every colour here as rw::RGBA (spelled bare `RGBA` under rw's imported
+    // namespaces: DecFIGS CgsTypes.h:95-143 Palette, CgsDebug2DImmediateRender.h:99-205); ARTIST
+    // returns it through a hidden result pointer, as a class (DebugPoolWindow::CalculateColour
+    // 0x828E3AE8 stores the word through r3).
+    using rw::RGBA;
 
     namespace DebugUI
     {

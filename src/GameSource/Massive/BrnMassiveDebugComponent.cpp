@@ -12,12 +12,12 @@
 namespace BrnMassive
 {
 
-static const CgsDev::RGBA KU_COLOUR_WHITE     = 0xFFFFFFFFu;
-static const CgsDev::RGBA KU_COLOUR_TITLE     = 0xFF0000FFu;
-static const CgsDev::RGBA KU_COLOUR_PAUSED    = 0xFFFF0000u;
-static const CgsDev::RGBA KU_COLOUR_COUNT     = 0xFF00FF00u;
-static const CgsDev::RGBA KU_COLOUR_BAR_BACK  = 0x96FF0000u;
-static const CgsDev::RGBA KU_COLOUR_BAR_FRONT = 0xFF000000u;
+// KU_COLOUR_WHITE retired (no DWARF name): its 4 use(s) spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
+// KU_COLOUR_TITLE retired (no DWARF name): its 1 use(s) spell rw::RGBA(255, 0, 0, 255), the immediate the u32 constant gave
+// KU_COLOUR_PAUSED retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 0, 255, 255), the immediate the u32 constant gave
+// KU_COLOUR_COUNT retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 255, 0, 255), the immediate the u32 constant gave
+// KU_COLOUR_BAR_BACK retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 0, 255, 150), the immediate the u32 constant gave
+// KU_COLOUR_BAR_FRONT retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 0, 0, 255), the immediate the u32 constant gave
 
 // The highest debug state code (the bar's full-scale value).
 static const f32 KF_MAX_STATE = 5.0f;
@@ -73,9 +73,9 @@ const char* BrnMassiveDebugComponent::GetState(s32 liState) const
 void BrnMassiveDebugComponent::DrawText(CgsDev::Debug2DImmediateRender* lpRender, const char* lpcLabel,
                                         const char* lpcValue, f32 lfX, f32* lpfY)
 {
-    lpRender->DrawText(lpcLabel, lfX, *lpfY, mfTextScale, KU_COLOUR_WHITE);
+    lpRender->DrawText(lpcLabel, lfX, *lpfY, mfTextScale, rw::RGBA(255, 255, 255, 255));
     const f32 lfLabelWidth = lpRender->CalcTextWidth(lpcLabel, mfTextScale);
-    lpRender->DrawText(lpcValue, lfLabelWidth + lfX, *lpfY, mfTextScale, KU_COLOUR_WHITE);
+    lpRender->DrawText(lpcValue, lfLabelWidth + lfX, *lpfY, mfTextScale, rw::RGBA(255, 255, 255, 255));
     *lpfY = mfLineSpacing * mfTextScale + *lpfY;
 }
 
@@ -118,14 +118,14 @@ void BrnMassiveDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRende
 
     DrawSubscriber(mpDebugSubscriber, lpRender, 550.0f, 300.0f);
 
-    lpRender->DrawText("Massive Debug", 100.0f, 100.0f, 32.0f, KU_COLOUR_TITLE);
+    lpRender->DrawText("Massive Debug", 100.0f, 100.0f, 32.0f, rw::RGBA(255, 0, 0, 255));
 
     CGS_ASSERT(mpMassiveNames, "mpMassiveNames");
     CGS_ASSERT(mpSubscriberStates, "mpSubscriberStates");
 
     if (mbPaused)
     {
-        lpRender->DrawText("PAUSED", 300.0f, 100.0f, 32.0f, KU_COLOUR_PAUSED);
+        lpRender->DrawText("PAUSED", 300.0f, 100.0f, 32.0f, rw::RGBA(0, 0, 255, 255));
     }
 
     char lacText[64];
@@ -140,23 +140,23 @@ void BrnMassiveDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRende
         }
 
         CgsCore::SPrintf(lacText, 64, "%s (%d)", mpMassiveNames[liName], liInvElementID);
-        lpRender->DrawText(lacText, 100.0f, lfY, 12.0f, KU_COLOUR_WHITE);
+        lpRender->DrawText(lacText, 100.0f, lfY, 12.0f, rw::RGBA(255, 255, 255, 255));
 
         const f32 lfNextY = lfY + 15.0f;
 
         const Vector2 lv2BarMin(300.0f, lfY);
         const Vector2 lv2BarMax(450.0f, lfNextY);
         lpRender->DrawHorizontalBar(lv2BarMin, lv2BarMax, static_cast<f32>(mpSubscriberStates[liName]),
-                                    KF_MAX_STATE, KU_COLOUR_BAR_BACK, KU_COLOUR_BAR_FRONT);
+                                    KF_MAX_STATE, rw::RGBA(0, 0, 255, 150), rw::RGBA(0, 0, 0, 255));
 
         lpRender->DrawTextInBox(GetState(mpSubscriberStates[liName]), 310.0f, lfY + 4.0f, 440.0f, lfNextY,
-                                10.0f, KU_COLOUR_WHITE, 0.0f);
+                                10.0f, rw::RGBA(255, 255, 255, 255), 0.0f);
 
         lfY = lfNextY;
     }
 
     CgsCore::SPrintf(lacText, 64, "Number of Impressions           : %d", miNumImpressions);
-    lpRender->DrawText(lacText, 100.0f, lfY, 16.0f, KU_COLOUR_COUNT);
+    lpRender->DrawText(lacText, 100.0f, lfY, 16.0f, rw::RGBA(0, 255, 0, 255));
 }
 
 } // namespace BrnMassive

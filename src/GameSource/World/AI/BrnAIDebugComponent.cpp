@@ -794,14 +794,14 @@ void AIDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
         AICar* lpAICar = mpAIModule->GetPlayerCar();   // DWARF :389
         if (lpAICar->muBestSectionIndex == 0x7FFF)
         {
-            lpDisplay->DrawText("Invalid", K_DRIFT_TEXT_POSITION, 40.0f, 0xFFFFFFFFu, false);
+            lpDisplay->DrawText("Invalid", K_DRIFT_TEXT_POSITION, 40.0f, rw::RGBA(255, 255, 255, 255), false);
         }
         else
         {
             CgsDev::SimpleStrStream lStream;
             lStream.Reset();
             lStream << static_cast<s32>(lpAICar->muBestSectionIndex);
-            lpDisplay->DrawText(lStream.GetBuffer(), K_DRIFT_TEXT_POSITION, 40.0f, 0xFFFFFFFFu, false);
+            lpDisplay->DrawText(lStream.GetBuffer(), K_DRIFT_TEXT_POSITION, 40.0f, rw::RGBA(255, 255, 255, 255), false);
         }
     }
 
@@ -828,7 +828,7 @@ void AIDebugComponent::DrawDriftingDebug(CgsDev::Debug2DImmediateRender* lpDispl
     if (lrCar.meCarState == E_AI_CAR_STATE_IN_RANGE)
     {
         lpDisplay->DrawText(KAAC_DRIFT_BEHAVIOUR[lrCar.GetDriver()->GetDriftState()], K_DRIFT_TEXT_POSITION,
-                            KF_DRIFT_TEXT_SIZE, 0xFFFFFFFFu, false);
+                            KF_DRIFT_TEXT_SIZE, rw::RGBA(255, 255, 255, 255), false);
     }
 }
 
@@ -939,7 +939,7 @@ void AIDebugComponent::StateTableDrawEntry(CgsDev::Debug2DImmediateRender* lpDis
         lColour = rw::RGBA(lColour.GetRed() * 2 / 3, lColour.GetGreen() * 2 / 3, lColour.GetBlue() * 2 / 3, 255);
     }
 
-    lpDisplay->DrawText(lpcText, mfStateTableX, mfStateTableY, KF_STATE_TABLE_FONT_SIZE, lColour.m_rgba);
+    lpDisplay->DrawText(lpcText, mfStateTableX, mfStateTableY, KF_STATE_TABLE_FONT_SIZE, lColour);
     mfStateTableY += KF_STATE_TABLE_SPACING_Y;
 }
 

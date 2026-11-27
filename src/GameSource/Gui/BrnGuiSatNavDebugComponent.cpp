@@ -205,7 +205,7 @@ namespace BrnGui
         const f32 lfX1 = static_cast<f32>(lrv4Rect.GetZ()) * KF_SATNAV_HUD_WIDTH;   // BottomRightX * 1280
         const f32 lfY1 = static_cast<f32>(lrv4Rect.GetW()) * KF_SATNAV_HUD_HEIGHT;  // BottomRightY *  720
 
-        lpRender->DrawFrame( lfX0, lfY0, lfX1, lfY1, 0xFFFF0000u, KF_SATNAV_OUTLINE_BORDER );
+        lpRender->DrawFrame( lfX0, lfY0, lfX1, lfY1, rw::RGBA(0, 0, 255, 255), KF_SATNAV_OUTLINE_BORDER );
     }
 
     // =============================================================================================

@@ -13,9 +13,9 @@
 
 namespace CgsGraphics
 {
-    // X360 dword_82F30FDC -- the default text/background colour the TextObject ctor fills in
-    // (opaque white). NOTE: value assumed from the global's default; verify against init data.
-    static const RGBA KU_DEFAULT_COLOUR = 0xFFFFFFFFu;
+    // DWARF CgsFontRenderer.cpp:41 K_COLOUR_BLACK: the colour the TextObject ctor fills in, read from
+    // .data 0x82F30FDC = 0xFF000000 (opaque black) at every store of TextObject::Construct 0x827EEEC4..
+    const RGBA K_COLOUR_BLACK(0, 0, 0, 255);
 
     // Faithful port of X360 0x827EEE70. Fills the default state: alignment LEFT, char-spacing 1.0,
     // string-width -1 (unmeasured), current-height -> mfFontHeight, all colours = default white,
@@ -31,7 +31,7 @@ namespace CgsGraphics
         mfAutosizedFontHeight = 0.0f;
         mpfCurrentFontHeight  = &mfFontHeight;
 
-        mTextColour = KU_DEFAULT_COLOUR;
+        mTextColour = K_COLOUR_BLACK;
 
         mv2TopLeft.mX = 0.0f;
         mv2TopLeft.mY = 0.0f;
@@ -50,14 +50,14 @@ namespace CgsGraphics
         mbDropShadow = false;
         mbEmbossed   = false;
 
-        mBackgroundColours.mTopLeft     = KU_DEFAULT_COLOUR;
-        mBackgroundColours.mTopRight    = KU_DEFAULT_COLOUR;
-        mBackgroundColours.mBottomLeft  = KU_DEFAULT_COLOUR;
-        mBackgroundColours.mBottomRight = KU_DEFAULT_COLOUR;
-        mDropShadowColour = KU_DEFAULT_COLOUR;
-        mBorderColour     = KU_DEFAULT_COLOUR;
-        mGradientColour1  = KU_DEFAULT_COLOUR;
-        mGradientColour2  = KU_DEFAULT_COLOUR;
+        mBackgroundColours.mTopLeft     = K_COLOUR_BLACK;
+        mBackgroundColours.mTopRight    = K_COLOUR_BLACK;
+        mBackgroundColours.mBottomLeft  = K_COLOUR_BLACK;
+        mBackgroundColours.mBottomRight = K_COLOUR_BLACK;
+        mDropShadowColour = K_COLOUR_BLACK;
+        mBorderColour     = K_COLOUR_BLACK;
+        mGradientColour1  = K_COLOUR_BLACK;
+        mGradientColour2  = K_COLOUR_BLACK;
 
         mpAlternateTextColours = lpAlternateColours;
         miNumAlternateColours  = liNumAlternateColours;
@@ -202,7 +202,7 @@ namespace CgsGraphics
             lrVtx.mv2Pos.y    = lfY;
             lrVtx.mv2Tex0UV.x = lfU;
             lrVtx.mv2Tex0UV.y = lfV;
-            *reinterpret_cast<u32*>(&lrVtx.mv4Colour) = lColour;
+            *reinterpret_cast<RGBA*>(&lrVtx.mv4Colour) = lColour;
         }
 
 
@@ -449,7 +449,7 @@ namespace CgsGraphics
             {
                 lpOut3d[luI].mv3Pos = rw::math::vpu::Vector3(rw::math::vpu::Vector4(
                     lpInVert[luI].mv2Pos.x + 0.03f, lpInVert[luI].mv2Pos.y + 0.03f, 0.001f, 0.0f).mV);
-                *reinterpret_cast<u32*>(&lpOut3d[luI].mv4Colour) = *lpDropShadowColour;
+                *reinterpret_cast<RGBA*>(&lpOut3d[luI].mv4Colour) = *lpDropShadowColour;
                 lpOut3d[luI].mv2Tex0UV.x = lpInVert[luI].mv2Tex0UV.x;
                 lpOut3d[luI].mv2Tex0UV.y = lpInVert[luI].mv2Tex0UV.y;
             }
@@ -467,7 +467,7 @@ namespace CgsGraphics
         {
             lpOutVert[luI].mv2Pos.x  = lpInVert[luI].mv2Pos.x + KF_DROPSHADOW_OFFSET_X;
             lpOutVert[luI].mv2Pos.y  = lpInVert[luI].mv2Pos.y + KF_DROPSHADOW_OFFSET_Y;
-            *reinterpret_cast<u32*>(&lpOutVert[luI].mv4Colour) = *lpDropShadowColour;
+            *reinterpret_cast<RGBA*>(&lpOutVert[luI].mv4Colour) = *lpDropShadowColour;
             lpOutVert[luI].mv2Tex0UV = lpInVert[luI].mv2Tex0UV;
         }
 
@@ -638,9 +638,9 @@ namespace CgsGraphics
                             ? lrTextObject.mpAlternateTextColours[liColourIndex]
                             : lrTextObject.mTextColour;
 
-                    const u32 luBaseAlpha = (lBase >> 24) & 0xFFu;
-                    const u32 luAlpha = (luBaseAlpha * luFadeAlpha) / 255u;
-                    const CgsGraphics::RGBA lColour = (lBase & 0x00FFFFFFu) | (luAlpha << 24);
+                    const u32 luBaseAlpha = lBase.GetAlpha();
+                    CgsGraphics::RGBA lColour = lBase;
+                    lColour.SetAlpha(static_cast<u8>((luBaseAlpha * luFadeAlpha) / 255u));
 
                     lEmitVertex(lpVtx[0], lfLeftX,  lfBottomY, lfLeftU,  lfBottomV, lColour);
                     lEmitVertex(lpVtx[1], lfLeftX,  lfBottomY, lfLeftU,  lfBottomV, lColour);

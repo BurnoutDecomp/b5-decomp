@@ -78,13 +78,13 @@ namespace
 
     // Render's colours (0xAARRGGBB): each square run is black with its start row * 15 in blue;
     // the square under the viewer is green.
-    const CgsDev::RGBA KRGBA_HNG_SQUARE_BASE  = 0xFF000000u;
+    // KRGBA_HNG_SQUARE_BASE retired (no DWARF name): its 0 use(s) spell rw::RGBA(0, 0, 0, 255), the immediate the u32 constant gave
     const s32          KI_HNG_ROW_BLUE_STEP   = 15;
-    const CgsDev::RGBA KRGBA_HNG_VIEWER_SQUARE = 0xFF00FF00u;
+    // KRGBA_HNG_VIEWER_SQUARE retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 255, 0, 255), the immediate the u32 constant gave
 
     // RenderHNGSquare's edge colours: the section's right edge blue, its left edge green.
-    const CgsDev::RGBA KRGBA_HNG_RIGHT_EDGE = 0xFF0000FFu;
-    const CgsDev::RGBA KRGBA_HNG_LEFT_EDGE  = 0xFF00FF00u;
+    // KRGBA_HNG_RIGHT_EDGE retired (no DWARF name): its 1 use(s) spell rw::RGBA(255, 0, 0, 255), the immediate the u32 constant gave
+    // KRGBA_HNG_LEFT_EDGE retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 255, 0, 255), the immediate the u32 constant gave
 
     // GetHNGInterpXY's binary search: `li r11, 5` @0x82777BAC, seeded at t = 0.5 with a
     // 0.25 step (vcfsx v13, 1, 1 == 0.5; v12 = 0.5 * 0.5) that halves every pass.
@@ -876,7 +876,7 @@ void HardNoGoMap::Render(Vector3 lPosition)
             }
 
             const CgsDev::RGBA lColour =
-                KRGBA_HNG_SQUARE_BASE | static_cast<u8>(liHeight * KI_HNG_ROW_BLUE_STEP);
+                rw::RGBA(static_cast<u8>(liHeight * KI_HNG_ROW_BLUE_STEP), 0, 0, 255);   // black, the row in the low byte
             RenderHNGSquare(liWidth, liHeight, liEndHeight, lfHeight, lColour);
 
             liHeight = liEndHeight - 1;
@@ -896,7 +896,7 @@ void HardNoGoMap::Render(Vector3 lPosition)
         s32 liWidth  = 0;
         s32 liHeight = 0;
         ConvertInterpToIndex(lfInterpX, lfInterpY, liWidth, liHeight);
-        RenderHNGSquare(liWidth, liHeight, liHeight + 1, lfHeight, KRGBA_HNG_VIEWER_SQUARE);
+        RenderHNGSquare(liWidth, liHeight, liHeight + 1, lfHeight, rw::RGBA(0, 255, 0, 255));
     }
 }
 
@@ -926,7 +926,7 @@ void HardNoGoMap::RenderHNGSquare(s32 liWidth, s32 liStartHeight, s32 liEndHeigh
     const Vector3 lPreviousRight3( lPreviousRight.mV.x, lfHeight, lPreviousRight.mV.y);
     const Vector3 lCurrentLeft3( lCurrentLeft.mV.x, lfHeight, lCurrentLeft.mV.y);
     const Vector3 lPreviousLeft3( lPreviousLeft.mV.x, lfHeight, lPreviousLeft.mV.y);
-    lDebugInterface.GetRender().DrawLine(lCurrentRight3, lPreviousRight3, KRGBA_HNG_RIGHT_EDGE);
-    lDebugInterface.GetRender().DrawLine(lCurrentLeft3, lPreviousLeft3, KRGBA_HNG_LEFT_EDGE);
+    lDebugInterface.GetRender().DrawLine(lCurrentRight3, lPreviousRight3, rw::RGBA(255, 0, 0, 255));
+    lDebugInterface.GetRender().DrawLine(lCurrentLeft3, lPreviousLeft3, rw::RGBA(0, 255, 0, 255));
 }
 }

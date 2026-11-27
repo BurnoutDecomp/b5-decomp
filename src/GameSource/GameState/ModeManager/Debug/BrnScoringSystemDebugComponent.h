@@ -61,7 +61,7 @@ namespace BrnGameState
     private:
         friend class ModeManager;
         // @ 0x82329D60 - fill one table cell. Produces the cell text in lpcOutBuffer (200-byte) and the
-        // cell colour in *lpuOutColour for the (liColumn, liRow) cell. liColumn 0 = the row-header
+        // cell colour in *lpOutColour for the (liColumn, liRow) cell. liColumn 0 = the row-header
         // column (a fixed label per row); liColumn>=1 = a player column (liColumn-1 indexes the network
         // player list). liRow 0 = the player-name header; liRow>=1 = a chainable-stunt-multiplier band.
         void GetChainableTableEntry(s32 liColumn, s32 liRow,
@@ -70,7 +70,7 @@ namespace BrnGameState
                                     s32 liMaxMultiplier,
                                     bool lbSimTimerAt50Hz,
                                     char* lpcOutBuffer,
-                                    u32* lpuOutColour);
+                                    CgsDev::RGBA* lpOutColour);
 
         // Layout (after the CgsDev::DebugComponent base): mpScoringSystem at +0x0C, mbShowChainableStunts
         // at +0x10.

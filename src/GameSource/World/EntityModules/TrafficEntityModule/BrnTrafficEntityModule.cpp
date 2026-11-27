@@ -15226,8 +15226,8 @@ namespace
     // rw::RGBA::RGBA @0x821F05B0 packs (a<<24)|(b<<16)|(g<<8)|r, and DEBUG_RenderContactPoint
     // passes the folded words in r4 (`lis r4,-0x100 ; ori 0xFF00 / 0xFFFF`):
     // RGBA(0,255,0,255) against the world, RGBA(255,255,0,255) against anything else.
-    const CgsDev::RGBA KU_DEBUG_CONTACT_WORLD_COLOUR = 0xFF00FF00u;
-    const CgsDev::RGBA KU_DEBUG_CONTACT_OTHER_COLOUR = 0xFF00FFFFu;
+    // KU_DEBUG_CONTACT_WORLD_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 255, 0, 255), the immediate the u32 constant gave
+    // KU_DEBUG_CONTACT_OTHER_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(255, 255, 0, 255), the immediate the u32 constant gave
 
     // [DIAG] NOT IN THE X360 BINARY. BRN_TRAFFIC_DIAG witnesses for the live check: the side
     // flags this detector raises and the frames that carried traffic contacts at all (so a run
@@ -15422,8 +15422,8 @@ void TrafficEntityModule::DEBUG_RenderContactPoint(const BrnPhysics::ContactSpy:
 
     const bool lbContactWithWorld =
         EntityOwnerOf(lpContact->mEntityIdB) == static_cast<u32>(BrnWorld::E_ENTITYTYPE_WORLD);
-    const CgsDev::RGBA lArrowColour = lbContactWithWorld ? KU_DEBUG_CONTACT_WORLD_COLOUR
-                                                         : KU_DEBUG_CONTACT_OTHER_COLOUR;
+    CgsDev::RGBA lArrowColour;   // DWARF cpp:6581, default-constructed (the CU lists rw::RGBA::RGBA())
+    if (lbContactWithWorld) { lArrowColour = rw::RGBA(0, 255, 0, 255); } else { lArrowColour = rw::RGBA(255, 255, 0, 255); }
 
     lDebugRender.DrawArrow(lpContact->mPointOnA,
                            lpContact->mNormal * KF_DEBUG_CONTACT_ARROW_LENGTH + lpContact->mPointOnA,
@@ -19532,9 +19532,9 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
             CgsDev::DebugInterface lDebugInterface;
             CgsDev::DebugRender&   lDebugRender = lDebugInterface.GetRender();
             lDebugRender.DrawSphere(lpPlayerRaceCarState->mTransform.Pos(),
-                                    KF_TRAFFIC_STOMP_DISTANCE, 0x46006400u);
+                                    KF_TRAFFIC_STOMP_DISTANCE, rw::RGBA(0, 100, 0, 70));
             lDebugRender.DrawSphere(lpPlayerRaceCarState->mTransform.Pos(),
-                                    std::sqrt(KF_SHOWTIME_CRASHMAGNET_DISTANCESQ), 0x46006464u);
+                                    std::sqrt(KF_SHOWTIME_CRASHMAGNET_DISTANCESQ), rw::RGBA(100, 100, 0, 70));
         }
 
         // 0x8271F608..0x8271F618 `bl sub_82710BD8` ; `bl sub_823102F0` (GetPlayerPosition) -> v126.

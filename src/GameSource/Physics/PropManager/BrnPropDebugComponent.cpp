@@ -220,7 +220,7 @@ namespace Props
         const s32 KI_STAT_BUFFER_SIZE = 100;
         const f32 KF_STAT_TEXT_SCALE  = 15.0f;
         const f32 KF_STAT_LINE_STEP   = 10.0f;
-        const CgsDev::RGBA KC_STAT_COLOUR = 0xFFFFFFFF;
+        const CgsDev::RGBA KC_STAT_COLOUR(255, 255, 255, 255);
 
         char lacBuffer[KI_STAT_BUFFER_SIZE];
         CgsDev::StrStream lStream(lacBuffer, KI_STAT_BUFFER_SIZE);

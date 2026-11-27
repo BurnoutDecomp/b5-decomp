@@ -245,7 +245,7 @@ void AISkidEffect::UpdateParams( f32 afTimeStep )
         lDrawPosition.SetY( lDrawPosition.GetY().GetFloat() + 2.0f );
         const bool lbNoDrift = !(mfDriftFactor > 1.1920929e-7f ||
                                  mfDriftFactor < -1.1920929e-7f);
-        const CgsDev::RGBA lColour = lbNoDrift ? 0xFFFFFFFFu : 0xFF0000FFu;
+        const CgsDev::RGBA lColour = lbNoDrift ? rw::RGBA(255, 255, 255, 255) : rw::RGBA(255, 0, 0, 255);
         CgsDev::DebugInterface lDebugInterface;
         lDebugInterface.GetRender().DrawText(lDrawPosition, lacText, 16.0f, lColour);
     }

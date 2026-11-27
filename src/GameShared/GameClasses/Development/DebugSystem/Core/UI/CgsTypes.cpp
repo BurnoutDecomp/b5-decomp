@@ -68,23 +68,23 @@ namespace CgsDev
         // X360 DebugUI::Construct copies these 17 packed RGBA words from 0x82F32E20.
         const Palette Palette::DEFAULT =
         {
-            0xFF000000u, // mColourText
-            0xFFFFFFFFu, // mColourWindow
-            0xFF000000u, // mColourBorder
-            0xFF804020u, // mColourCaption
-            0xFFFFFFFFu, // mColourCaptionText
-            0xFFC08000u, // mColourActiveCaption
-            0xFFFFFFC0u, // mColourHighlight (ARTIST 82F32E38)
-            0xFF000000u, // mColourHighlightText (ARTIST 82F32E3C)
-            0xFF808080u, // mColourDisabled
-            0xFF404040u, // mColourDisabledText
-            0xFFC0FFFFu, // mColourPinned
-            0xFF000000u, // mColourPinnedText
-            0xFF00C0FFu, // mColourBar
-            0xFF004080u, // mColourBarBackground
-            0xFF0000FFu, // mColourErrorText
-            0xFF000000u, // mColourErrorWindow
-            0xC0FFFFFFu, // mColourTextScreen
+            rw::RGBA(0, 0, 0, 255), // mColourText
+            rw::RGBA(255, 255, 255, 255), // mColourWindow
+            rw::RGBA(0, 0, 0, 255), // mColourBorder
+            rw::RGBA(32, 64, 128, 255), // mColourCaption
+            rw::RGBA(255, 255, 255, 255), // mColourCaptionText
+            rw::RGBA(0, 128, 192, 255), // mColourActiveCaption
+            rw::RGBA(192, 255, 255, 255), // mColourHighlight (ARTIST 82F32E38)
+            rw::RGBA(0, 0, 0, 255), // mColourHighlightText (ARTIST 82F32E3C)
+            rw::RGBA(128, 128, 128, 255), // mColourDisabled
+            rw::RGBA(64, 64, 64, 255), // mColourDisabledText
+            rw::RGBA(255, 255, 192, 255), // mColourPinned
+            rw::RGBA(0, 0, 0, 255), // mColourPinnedText
+            rw::RGBA(255, 192, 0, 255), // mColourBar
+            rw::RGBA(128, 64, 0, 255), // mColourBarBackground
+            rw::RGBA(255, 0, 0, 255), // mColourErrorText
+            rw::RGBA(0, 0, 0, 255), // mColourErrorWindow
+            rw::RGBA(255, 255, 255, 192), // mColourTextScreen
         };
 
         Variant::Variant()

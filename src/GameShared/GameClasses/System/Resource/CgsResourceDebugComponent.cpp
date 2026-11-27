@@ -242,14 +242,14 @@ namespace CgsResource
     // original bounds assertions; callbacks/draws may change the live length.
     void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRenderer)
     {
-        lpRenderer->DrawText("Resource Module Debug Component Active", 30.0f, 30.0f, 10.0f, 0xFFFFFFFFu);
+        lpRenderer->DrawText("Resource Module Debug Component Active", 30.0f, 30.0f, 10.0f, rw::RGBA(255, 255, 255, 255));
         if (mbPoolShareTestVisible)
         {
-            lpRenderer->DrawText("Share Test Results", 200.0f, 60.0f, 14.0f, 0xFFFFFFFFu);
+            lpRenderer->DrawText("Share Test Results", 200.0f, 60.0f, 14.0f, rw::RGBA(255, 255, 255, 255));
             for (s32 liIndex = 0; liIndex < 3; ++liIndex)
             {
                 lpRenderer->DrawValue(maiPoolShareTestResults[liIndex],
-                                      220.0f, static_cast<f32>(liIndex) * 16.0f + 76.0f, 14.0f, 0xFFFFFFFFu);
+                                      220.0f, static_cast<f32>(liIndex) * 16.0f + 76.0f, 14.0f, rw::RGBA(255, 255, 255, 255));
             }
         }
         if (mbShowBundleLoaderQueue)
@@ -260,8 +260,8 @@ namespace CgsResource
             static f32 _lfYStart = 150.0f;
             static f32 _lfXGap = 400.0f;
             f32 lfYPos = _lfYStart;
-            lpRenderer->DrawText("FileName", _lfXStart, lfYPos, 18.0f, 0xFFFFFFFFu);
-            lpRenderer->DrawText("Priority", _lfXStart + _lfXGap, lfYPos, 18.0f, 0xFFFFFFFFu);
+            lpRenderer->DrawText("FileName", _lfXStart, lfYPos, 18.0f, rw::RGBA(255, 255, 255, 255));
+            lpRenderer->DrawText("Priority", _lfXStart + _lfXGap, lfYPos, 18.0f, rw::RGBA(255, 255, 255, 255));
             lfYPos += 20.0f;
             for (s32 liIndex = 0;
                  liIndex < mpResourceModule->mBundleLoaderModule.mLoadRequestQueue.GetLength();
@@ -271,8 +271,8 @@ namespace CgsResource
                     mpResourceModule->mBundleLoaderModule.mLoadRequestQueue.GetEntry(liIndex);
                 s32 liPriority =
                     mpResourceModule->mBundleLoaderModule.mLoadRequestQueue.GetEntryPriority(liIndex);
-                lpRenderer->DrawText(lRequest.macFileName, _lfXStart, lfYPos, 16.0f, 0xFFFFFFFFu);
-                lpRenderer->DrawValue(liPriority, _lfXStart + _lfXGap, lfYPos, 16.0f, 0xFFFFFFFFu);
+                lpRenderer->DrawText(lRequest.macFileName, _lfXStart, lfYPos, 16.0f, rw::RGBA(255, 255, 255, 255));
+                lpRenderer->DrawValue(liPriority, _lfXStart + _lfXGap, lfYPos, 16.0f, rw::RGBA(255, 255, 255, 255));
                 lfYPos += 18.0f;
             }
         }

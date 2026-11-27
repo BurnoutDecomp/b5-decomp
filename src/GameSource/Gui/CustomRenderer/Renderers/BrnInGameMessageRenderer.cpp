@@ -62,8 +62,8 @@ namespace
 
     // dword_82F25BC0 / dword_82F25BC4 -- the two text colours (packed RGBA, PC byte order per
     // the lEmitVertex convention: r in the low byte). White, and the wide-glyph orange.
-    const u32 KU_TEXT_COLOUR         = 0xFFFFFFFFu;   // dword_82F25BC0
-    const u32 KU_TEXT_COLOUR_WIDE    = 0xFF00B4FFu;   // dword_82F25BC4 (r=FF g=B4 b=00 = orange)
+    const rw::RGBA KU_TEXT_COLOUR(255, 255, 255, 255);   // dword_82F25BC0
+    const rw::RGBA KU_TEXT_COLOUR_WIDE(255, 180, 0, 255);   // dword_82F25BC4 (r=FF g=B4 b=00 = orange)
 
     // flt_82054F40 -- per-ticker-mode scroll speed (px/s; negative = leftward).
     const f32 KAF_MESSAGE_SCROLL_SPEED[8] =
@@ -649,7 +649,7 @@ void InGameMessageRenderer::DrawMessages(CgsGraphics::Im2dRenderBuffer* lpBuffer
     InGameMessage* lpMessage = mpCurrentMessage;
 
     // Text colour: the wide-glyph language draws the ticker in the alternate colour.
-    const u32 luBaseColour =
+    const rw::RGBA luBaseColour =
         (mpLanguageManager != 0 &&
          mpLanguageManager->GetCurrentLanguage() == KI_WIDE_GLYPH_LANGUAGE)
             ? KU_TEXT_COLOUR_WIDE : KU_TEXT_COLOUR;
@@ -670,8 +670,8 @@ void InGameMessageRenderer::DrawMessages(CgsGraphics::Im2dRenderBuffer* lpBuffer
         // colour = base RGB with the animated text alpha in the top byte
         // (the console's rlwimi insert of mu8TextAlpha).
         mTextObject.mfFontHeight   = gfTickerFontHeight;                 // flt_82F25818
-        mTextObject.mTextColour    = (luBaseColour & 0x00FFFFFFu) |
-                                     (static_cast<u32>(mu8TextAlpha) << 24);
+        mTextObject.mTextColour    = luBaseColour;
+        mTextObject.mTextColour.SetAlpha(mu8TextAlpha);
         mTextObject.mv2TopLeft.mX  = lfPosX;
         mTextObject.mv2TopLeft.mY  = mfTextPosY;
         mTextObject.mv2BottomRight.mX = 1280.0f;
@@ -705,8 +705,8 @@ void InGameMessageRenderer::DrawMessages(CgsGraphics::Im2dRenderBuffer* lpBuffer
             mTextObject.CalculateAutosizing();
         }
         mTextObject.mfFontHeight   = gfTickerFontHeight;
-        mTextObject.mTextColour    = (luBaseColour & 0x00FFFFFFu) |
-                                     (static_cast<u32>(mu8TextAlpha) << 24);
+        mTextObject.mTextColour    = luBaseColour;
+        mTextObject.mTextColour.SetAlpha(mu8TextAlpha);
         mTextObject.mv2TopLeft.mX  = lfPosX;
         mTextObject.mv2TopLeft.mY  = mfTextPosY;
         mTextObject.mv2BottomRight.mX = 1280.0f;

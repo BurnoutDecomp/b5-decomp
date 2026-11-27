@@ -45,20 +45,20 @@ namespace CgsGui
 
         // Gradient colour pairs {top, bottom}, packed RGBA8 -- read verbatim from the X360
         // ARTIST rodata (dword_82F33298 .. dword_82F332C4).
-        const CgsGraphics::RGBA K_COLOUR_GRADIENT_GREEN_BLUE[2] = { 0xFF69A569u, 0xFFE58F8Du };
-        const CgsGraphics::RGBA K_COLOUR_GRADIENT_ORANGE[2]     = { 0xFF4040FFu, 0xFF8080FFu };
-        const CgsGraphics::RGBA K_COLOUR_GRADIENT_RED[2]        = { 0xFF074DDCu, 0xFF0A0B66u };
-        const CgsGraphics::RGBA K_COLOUR_GRADIENT_GOLD[2]       = { 0xFFB8ECF7u, 0xFF45AAB7u };
-        const CgsGraphics::RGBA K_COLOUR_GRADIENT_SILVER[2]     = { 0xFFE2DEC6u, 0xFFF5F6EDu };
-        const CgsGraphics::RGBA K_COLOUR_GRADIENT_BLUEWHITE[2]  = { 0xFFFFFBE3u, 0xFFBCA58Du };
+        const CgsGraphics::RGBA K_COLOUR_GRADIENT_GREEN_BLUE[2] = { rw::RGBA(105, 165, 105, 255), rw::RGBA(141, 143, 229, 255) };
+        const CgsGraphics::RGBA K_COLOUR_GRADIENT_ORANGE[2]     = { rw::RGBA(255, 64, 64, 255), rw::RGBA(255, 128, 128, 255) };
+        const CgsGraphics::RGBA K_COLOUR_GRADIENT_RED[2]        = { rw::RGBA(220, 77, 7, 255), rw::RGBA(102, 11, 10, 255) };
+        const CgsGraphics::RGBA K_COLOUR_GRADIENT_GOLD[2]       = { rw::RGBA(247, 236, 184, 255), rw::RGBA(183, 170, 69, 255) };
+        const CgsGraphics::RGBA K_COLOUR_GRADIENT_SILVER[2]     = { rw::RGBA(198, 222, 226, 255), rw::RGBA(237, 246, 245, 255) };
+        const CgsGraphics::RGBA K_COLOUR_GRADIENT_BLUEWHITE[2]  = { rw::RGBA(227, 251, 255, 255), rw::RGBA(141, 165, 188, 255) };
 
-        const CgsGraphics::RGBA K_COLOUR_BLACK = 0xFF000000u;   // dword_82F33290 (drop-shadow)
-        const CgsGraphics::RGBA K_COLOUR_WHITE = 0xFFFFFFFFu;   // dword_82F33294 (case-3 compare)
+        const CgsGraphics::RGBA K_COLOUR_BLACK(0, 0, 0, 255);   // dword_82F33290 (drop-shadow)
+        const CgsGraphics::RGBA K_COLOUR_WHITE(255, 255, 255, 255);   // dword_82F33294 (case-3 compare)
 
         // The embossed default text colour (X360 sets mTextColour = -7194056 when the colour is
         // not already white) and the B5DotMat/dfheic special-case colour (mTextColour = -16730881).
-        const CgsGraphics::RGBA K_COLOUR_EMBOSSED_DEFAULT = 0xFF923A38u;  // -7194056
-        const CgsGraphics::RGBA K_COLOUR_B5DOTMAT_DFHEIC  = 0xFF00B4FFu;  // -16730881
+        // K_COLOUR_EMBOSSED_DEFAULT retired (no DWARF name): its 1 use(s) spell rw::RGBA(56, 58, 146, 255), the immediate the u32 constant gave
+        // K_COLOUR_B5DOTMAT_DFHEIC retired (no DWARF name): its 1 use(s) spell rw::RGBA(255, 180, 0, 255), the immediate the u32 constant gave
 
         // The X360 PRESERVES the high (alpha) byte and byte-reverses only the low three bytes of each
         // param colour (clrlwi/srwi/inslwi/insrwi chain @0x82854EBC-0x82854F10): byte0 and byte2 swap,
@@ -66,10 +66,10 @@ namespace CgsGui
         // byteswap -- the alpha byte is kept; verified against the PPC rlwimi semantics over the asm.
         inline CgsGraphics::RGBA SwizzleParamColour(u32 luColour)
         {
-            return  (luColour & 0xFF000000u)          // byte3 (alpha) kept in place
-                 | ((luColour & 0x000000FFu) << 16)   // byte0 -> byte2
-                 |  (luColour & 0x0000FF00u)          // byte1 kept in place
-                 | ((luColour & 0x00FF0000u) >> 16);  // byte2 -> byte0
+            // = the rw::RGBA(r, g, b, a) constructor over the Apt word's channels (0xAARRGGBB):
+            return CgsGraphics::RGBA(static_cast<u8>(luColour >> 16),
+                                     static_cast<u8>(luColour >> 8),
+                                     static_cast<u8>(luColour), static_cast<u8>(luColour >> 24));
         }
     }
 
@@ -220,7 +220,7 @@ namespace CgsGui
             mTextObject.mbEmbossed = true;
             // X360 (asm 0x82855060-94): if the text colour IS white, stamp the default embossed grey.
             if (mTextObject.mTextColour == K_COLOUR_WHITE)
-                mTextObject.mTextColour = K_COLOUR_EMBOSSED_DEFAULT;
+                mTextObject.mTextColour = rw::RGBA(56, 58, 146, 255);
             break;
         case E_EFFECT_ALL:
             mTextObject.mbDropShadow = true;
@@ -327,7 +327,7 @@ namespace CgsGui
         if (std::strstr(lpParams->szFontName, "B5DotMat") &&
             std::strstr(mTextObject.mpFont.operator->()->macTypefaceFamilyName, "dfheic"))
         {
-            mTextObject.mTextColour   = K_COLOUR_B5DOTMAT_DFHEIC;
+            mTextObject.mTextColour   = rw::RGBA(255, 180, 0, 255);
             mTextObject.mfFontHeight *= 1.2f;
         }
 

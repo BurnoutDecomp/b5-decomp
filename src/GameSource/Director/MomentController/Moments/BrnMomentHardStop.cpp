@@ -50,8 +50,8 @@ namespace
     // SetFlag(8) is raised each valid frame; IsFlagSet(1) gates staying valid.
 
     // The debug-log colours (packed RGBA words the console build passes literally).
-    const u32 KU_LOG_COLOUR_RED    = 0xFFFF0000u;   // candidate-failed lines
-    const u32 KU_LOG_COLOUR_ORANGE = 0xFF80FF00u;   // selection lines
+    // KU_LOG_COLOUR_RED retired (no DWARF name): its 2 use(s) spell rw::RGBA(0, 0, 255, 255), the immediate the u32 constant gave
+    // KU_LOG_COLOUR_ORANGE retired (no DWARF name): its 5 use(s) spell rw::RGBA(0, 255, 128, 255), the immediate the u32 constant gave
 
     // ⭐ CORRECTED 2026-09-25 (FX-DIRECTOR2): KF_MAX_DOT_PRODUCT_FOR_HARD_STOP (the PS3 build names it,
     // Update @0x7EF80) -- the "still upright" gate SEARCHING tests the player car's up vector against
@@ -346,7 +346,7 @@ void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
                              (luFlags & AttribSys::Enums::CrashEvents::LeftImpact)  ? "Left "  : "",
                              (luFlags & AttribSys::Enums::CrashEvents::RightImpact) ? "Right " : "",
                              mCrashAnalysisUsedAtSelection.mbSuggestLeftOfLineOfAction ? "Use L" : "Use R");
-            lpDebugLog->Append(lacLine, KU_LOG_COLOUR_ORANGE);
+            lpDebugLog->Append(lacLine, rw::RGBA(0, 255, 128, 255));
         }
         break;
     }
@@ -362,15 +362,15 @@ void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
         if (mRigCameraHandleA.Get()->HasFailed())
         {
             Camera::Behaviour* lpBehaviourA = mRigCameraHandleA.Get();
-            lpDebugLog->Append("Hardstop: Camera A failed", KU_LOG_COLOUR_RED);
-            lpDebugLog->Append(lpBehaviourA->GetDebugParametersName(), 0xFFFFFFFFu);
+            lpDebugLog->Append("Hardstop: Camera A failed", rw::RGBA(0, 0, 255, 255));
+            lpDebugLog->Append(lpBehaviourA->GetDebugParametersName(), rw::RGBA(255, 255, 255, 255));
             mRigCameraHandleA.GetCamera().GetValidityAccount().Print(*lpDebugLog);
         }
         if (mRigCameraHandleB.Get()->HasFailed())
         {
             Camera::Behaviour* lpBehaviourB = mRigCameraHandleB.Get();
-            lpDebugLog->Append("Hardstop: Camera B failed", KU_LOG_COLOUR_RED);
-            lpDebugLog->Append(lpBehaviourB->GetDebugParametersName(), 0xFFFFFFFFu);
+            lpDebugLog->Append("Hardstop: Camera B failed", rw::RGBA(0, 0, 255, 255));
+            lpDebugLog->Append(lpBehaviourB->GetDebugParametersName(), rw::RGBA(255, 255, 255, 255));
             mRigCameraHandleB.GetCamera().GetValidityAccount().Print(*lpDebugLog);
         }
 
@@ -388,10 +388,10 @@ void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
             SetState(E_STATE_VALID);
             CgsCore::SPrintf(lacLine, 64, "HardstopA: %s",
                              mRigCameraHandleA.Get()->GetDebugParametersName());
-            lpDebugLog->Append(lacLine, KU_LOG_COLOUR_ORANGE);
+            lpDebugLog->Append(lacLine, rw::RGBA(0, 255, 128, 255));
             CgsCore::SPrintf(lacLine, 64, "HardstopB: %s",
                              mRigCameraHandleB.Get()->GetDebugParametersName());
-            lpDebugLog->Append(lacLine, KU_LOG_COLOUR_ORANGE);
+            lpDebugLog->Append(lacLine, rw::RGBA(0, 255, 128, 255));
             mRigCameraHandleB.Release();
         }
         else if (mRigCameraHandleB.Get()->CanSwitchToMeNow())
@@ -400,10 +400,10 @@ void MomentHardStop::Update(f32 lfTimeStep, Camera::BehaviourManager& lrBehaviou
             SetState(E_STATE_VALID);
             CgsCore::SPrintf(lacLine, 64, "HardstopA: %s",
                              mRigCameraHandleA.Get()->GetDebugParametersName());
-            lpDebugLog->Append(lacLine, KU_LOG_COLOUR_ORANGE);
+            lpDebugLog->Append(lacLine, rw::RGBA(0, 255, 128, 255));
             CgsCore::SPrintf(lacLine, 64, "HardstopB: %s",
                              mRigCameraHandleB.Get()->GetDebugParametersName());
-            lpDebugLog->Append(lacLine, KU_LOG_COLOUR_ORANGE);
+            lpDebugLog->Append(lacLine, rw::RGBA(0, 255, 128, 255));
             mRigCameraHandleA.Release();
         }
         else

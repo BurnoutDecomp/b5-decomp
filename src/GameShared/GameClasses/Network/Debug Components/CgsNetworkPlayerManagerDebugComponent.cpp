@@ -296,11 +296,11 @@ namespace CgsNetwork
                                               f32 lfMax, f32 lfX, f32 lfMaxOnGraph,
                                               CgsDev::Debug2DImmediateRender* lpRender)
     {
-        const CgsDev::RGBA KU_TEXT_COLOUR = 0xFFFFFFFFu;   // white (X360 r26 = -1)
+        const CgsDev::RGBA KU_TEXT_COLOUR(255, 255, 255, 255);   // white (X360 r26 = -1)
 
         // Bar fill: green under the max-bandwidth threshold, red once value >= lfMax.
         // (X360: 0xFF000000 | (lfMaxOnGraph >= lfMax ? 0x0000FF : 0x008000).)
-        const CgsDev::RGBA lBarColour = (lfMaxOnGraph >= lfMax) ? 0xFF0000FFu : 0xFF008000u;
+        const CgsDev::RGBA lBarColour = (lfMaxOnGraph >= lfMax) ? rw::RGBA(255, 0, 0, 255) : rw::RGBA(0, 128, 0, 255);
 
         // Horizontal scale: 1 / graph-full-scale; the plot area is the virtual screen width less a
         // 100px inset. (X360 reads mfVirtualScreenWidth @0x34 directly; reached here by name.)
@@ -330,6 +330,6 @@ namespace CgsNetwork
         const f32     lfMaxLength   = lfPlotWidth * (lfMax * lfInvMaxGraph);
         const Vector2 lv2LineTop(lfMaxLength, lfBottomY);
         const Vector2 lv2LineBottom(lfMaxLength, lfRowY);
-        lpRender->DrawLine(lv2LineTop, lv2LineBottom, 0xFFFF0000u);
+        lpRender->DrawLine(lv2LineTop, lv2LineBottom, rw::RGBA(0, 0, 255, 255));
     }
 }

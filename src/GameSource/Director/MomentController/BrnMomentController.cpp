@@ -103,7 +103,7 @@ void MomentController::UpdateAllMoments(Camera::BehaviourManager& lrBehaviourMan
         }
         else if (lpMoment->ConditionsAreMet() && lpMoment->IsInhibited())
         {
-            lrDebugPrinter.Print(lacMessage, 0xFF00FFFFu);   // lis r5, -0x100 ; ori r5, r5, 0xFFFF
+            lrDebugPrinter.Print(lacMessage, rw::RGBA(255, 255, 0, 255));   // lis r5, -0x100 ; ori r5, r5, 0xFFFF
         }
         else
         {

@@ -18,9 +18,9 @@ namespace CgsDev
     {
         rw::RGBA MakeImmediateColour(RGBA lColour)
         {
-            rw::RGBA lResult;
-            lResult.m_rgba = lColour;
-            return lResult;
+            // CgsDev::RGBA is rw::RGBA itself (DWARF CgsDebugRenderCommon.h): the queued
+            // event colour passes straight through.
+            return lColour;
         }
 
         Vector3 MakeVector3(f32 lfX, f32 lfY, f32 lfZ)

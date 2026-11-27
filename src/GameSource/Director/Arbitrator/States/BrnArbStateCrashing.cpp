@@ -120,9 +120,9 @@ namespace BrnDirector
         const f32         KF_EFFECT_BLEND            = 1.0f;   // flt_82001C98
 
         // The debug-log / debug-print colours (the raw RGBA immediates the asm passes).
-        const CgsDev::RGBA KU_LOG_COLOUR_MOMENT = static_cast<CgsDev::RGBA>(-16776961);  // 0xFF0000FF
-        const CgsDev::RGBA KU_LOG_COLOUR_TEXT   = static_cast<CgsDev::RGBA>(-1);         // 0xFFFFFFFF
-        const CgsDev::RGBA KU_PRINT_COLOUR_OK   = static_cast<CgsDev::RGBA>(-16711936);  // 0xFF00FF00
+        // KU_LOG_COLOUR_MOMENT retired (no DWARF name): its 4 use(s) spell rw::RGBA(255, 0, 0, 255), the immediate the u32 constant gave
+        // KU_LOG_COLOUR_TEXT retired (no DWARF name): its 3 use(s) spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
+        // KU_PRINT_COLOUR_OK retired (no DWARF name): its 2 use(s) spell rw::RGBA(0, 255, 0, 255), the immediate the u32 constant gave
 
         // The source-file string every assert in this TU cites.
 #define CGS_ARTIST_FILE \
@@ -451,7 +451,7 @@ namespace BrnDirector
             if (IsDebugDisplayActive())
             {
                 const Moment* lpMoment = mMomentSelector.GetSelectedMoment();
-                lrSharedInfo.mpDebugLog->AppendName(*lpMoment, KU_LOG_COLOUR_MOMENT);
+                lrSharedInfo.mpDebugLog->AppendName(*lpMoment, rw::RGBA(255, 0, 0, 255));
                 lpMoment->GetCamera().GetValidityAccount().Print(*lrSharedInfo.mpDebugLog);
             }
 
@@ -477,9 +477,9 @@ namespace BrnDirector
                     if (IsDebugDisplayActive())
                     {
                         const Moment* lpMoment = mMomentSelector.GetSelectedMoment();
-                        lrSharedInfo.mpDebugLog->AppendName(*lpMoment, KU_LOG_COLOUR_MOMENT);
+                        lrSharedInfo.mpDebugLog->AppendName(*lpMoment, rw::RGBA(255, 0, 0, 255));
                         lpMoment->GetCamera().GetValidityAccount().Print(*lrSharedInfo.mpDebugLog);
-                        lrSharedInfo.mpDebugLog->Append("Got bored", KU_LOG_COLOUR_TEXT);
+                        lrSharedInfo.mpDebugLog->Append("Got bored", rw::RGBA(255, 255, 255, 255));
                     }
 
                     mMomentSelector.SelectNewBestMoment(
@@ -491,7 +491,7 @@ namespace BrnDirector
             else if (IsDebugDisplayActive())
             {
                 const Moment* lpMoment = mMomentSelector.GetSelectedMoment();
-                lrSharedInfo.mpDebugPrinter->PrintName(*lpMoment, KU_PRINT_COLOUR_OK);
+                lrSharedInfo.mpDebugPrinter->PrintName(*lpMoment, rw::RGBA(0, 255, 0, 255));
                 lpMoment->GetCamera().GetValidityAccount().Print(*lrSharedInfo.mpDebugPrinter);
                 if (lbTooLateToSwitchCameras)
                 {
@@ -521,7 +521,7 @@ namespace BrnDirector
             }
             else if (IsDebugDisplayActive())
             {
-                lrSharedInfo.mpDebugPrinter->Print("Failsafe", KU_PRINT_COLOUR_OK);
+                lrSharedInfo.mpDebugPrinter->Print("Failsafe", rw::RGBA(0, 255, 0, 255));
                 GetCamera().GetValidityAccount().Print(*lrSharedInfo.mpDebugPrinter);
                 if (mMomentSelector.GetNumValidMoments() == 0)
                 {
@@ -598,9 +598,9 @@ namespace BrnDirector
                     if (IsDebugDisplayActive())
                     {
                         const Moment* lpMoment = mMomentSelector.GetSelectedMoment();
-                        lrSharedInfo.mpDebugLog->AppendName(*lpMoment, KU_LOG_COLOUR_MOMENT);
+                        lrSharedInfo.mpDebugLog->AppendName(*lpMoment, rw::RGBA(255, 0, 0, 255));
                         lpMoment->GetCamera().GetValidityAccount().Print(*lrSharedInfo.mpDebugLog);
-                        lrSharedInfo.mpDebugLog->Append("Switching to crash mode", KU_LOG_COLOUR_TEXT);
+                        lrSharedInfo.mpDebugLog->Append("Switching to crash mode", rw::RGBA(255, 255, 255, 255));
                     }
 
                     mMomentSelector.CancelSelection();
@@ -662,9 +662,9 @@ namespace BrnDirector
                         if (IsDebugDisplayActive() && mMomentSelector.HasSelectedMoment())
                         {
                             const Moment* lpMoment = mMomentSelector.GetSelectedMoment();
-                            lrSharedInfo.mpDebugLog->AppendName(*lpMoment, KU_LOG_COLOUR_MOMENT);
+                            lrSharedInfo.mpDebugLog->AppendName(*lpMoment, rw::RGBA(255, 0, 0, 255));
                             lpMoment->GetCamera().GetValidityAccount().Print(*lrSharedInfo.mpDebugLog);
-                            lrSharedInfo.mpDebugLog->Append("End of crash", KU_LOG_COLOUR_TEXT);
+                            lrSharedInfo.mpDebugLog->Append("End of crash", rw::RGBA(255, 255, 255, 255));
                         }
 
                         if (mMomentSelector.HasSelectedMoment())

@@ -48,20 +48,20 @@ namespace BrnReplays
 
     // --- recovered overlay palette + layout metrics (de-optimised lazy globals) ---
     // Packed 0xAABBGGRR-style u32 colours read off the X360 lazy-init stores.
-    static const RGBA KU_COL_MAIN_BG       = 0x294000u;   // main-window background (flt_82FFA7E0 path: 0x78FFFFFF semi-transp white frame is separate)
-    static const RGBA KU_COL_WINDOW_FRAME  = 0x78FFFFFFu; // RenderHUD frame fill (dword_82FFA7E0)
-    static const RGBA KU_COL_GRAPH_FILL     = 0x64009600u; // RenderGraph box fill   (dword_82FFA7C8)
-    static const RGBA KU_COL_GRAPH_LINE     = 0x64000096u; // RenderGraph plot line  (dword_82FFA7C4)
-    static const RGBA KU_COL_LABEL          = 0xFF32326Eu; // status/serialiser label (dword_82FFA778/784/7D4)
-    static const RGBA KU_COL_VALUE          = 0xFF323232u; // status/serialiser value (dword_82FFA774/780/7D0)
+    static const RGBA KU_COL_MAIN_BG(0, 64, 41, 0);   // main-window background (flt_82FFA7E0 path: 0x78FFFFFF semi-transp white frame is separate)
+    static const RGBA KU_COL_WINDOW_FRAME(255, 255, 255, 120); // RenderHUD frame fill (dword_82FFA7E0)
+    static const RGBA KU_COL_GRAPH_FILL(0, 150, 0, 100); // RenderGraph box fill   (dword_82FFA7C8)
+    static const RGBA KU_COL_GRAPH_LINE(150, 0, 0, 100); // RenderGraph plot line  (dword_82FFA7C4)
+    static const RGBA KU_COL_LABEL(110, 50, 50, 255); // status/serialiser label (dword_82FFA778/784/7D4)
+    static const RGBA KU_COL_VALUE(50, 50, 50, 255); // status/serialiser value (dword_82FFA774/780/7D0)
 
     // Block-view per-state colours (RenderWrite/ReadStreamBlocks lazy-init table).
-    static const RGBA KU_COL_BLOCK_EMPTY    = 0x64969696u; // dword_82FFA7A0 / 82FFA7BC
-    static const RGBA KU_COL_BLOCK_KEYFRAME  = 0x64009696u; // dword_82FFA79C / 82FFA7B8
-    static const RGBA KU_COL_BLOCK_NORMAL    = 0x64960096u; // dword_82FFA798 / 82FFA7B4
-    static const RGBA KU_COL_BLOCK_CURRENT   = 0x6400C800u; // dword_82FFA794 / 82FFA7B0
-    static const RGBA KU_COL_BLOCK_FIRST     = 0x64C80000u; // dword_82FFA790 / 82FFA7AC (lis 0x64C8)
-    static const RGBA KU_COL_BLOCK_VOID      = 0x64000096u; // dword_82FFA78C / 82FFA7A8
+    static const RGBA KU_COL_BLOCK_EMPTY(150, 150, 150, 100); // dword_82FFA7A0 / 82FFA7BC
+    static const RGBA KU_COL_BLOCK_KEYFRAME(150, 150, 0, 100); // dword_82FFA79C / 82FFA7B8
+    static const RGBA KU_COL_BLOCK_NORMAL(150, 0, 150, 100); // dword_82FFA798 / 82FFA7B4
+    static const RGBA KU_COL_BLOCK_CURRENT(0, 200, 0, 100); // dword_82FFA794 / 82FFA7B0
+    static const RGBA KU_COL_BLOCK_FIRST(0, 0, 200, 100); // dword_82FFA790 / 82FFA7AC (lis 0x64C8)
+    static const RGBA KU_COL_BLOCK_VOID(150, 0, 0, 100); // dword_82FFA78C / 82FFA7A8
 
     // Layout metrics (virtual-screen units). RenderTitle/Status/Serialisers spacing.
     static const f32 KF_TEXT_SCALE      = 12.0f;   // flt_82013FB0 title scale (small text == 5.0f via flt_8200426C below)

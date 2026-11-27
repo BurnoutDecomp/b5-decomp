@@ -175,13 +175,13 @@ namespace BrnProgression
         CgsDev::RGBA lColour, Vector2 lv2Position, const char* lpcName)
     {
         const f32 lfRank = mpProgressionManager->GetProgressionRankForGameModeNormalised(leGameModeType);
-        lpDisplay->DrawText(lpcName, lv2Position, 16.0f, 0xFFFFFFFFu, false);
+        lpDisplay->DrawText(lpcName, lv2Position, 16.0f, rw::RGBA(255, 255, 255, 255), false);
 
         lv2Position.mV.y = AddRankBarVectorLane(lv2Position.mV.y, 15.0f);
         char lacText[KI_HUD_TEXT_LENGTH];
         CgsDev::StrStream lText(lacText, sizeof(lacText));
         lText << "\nDifficulty : " << TruncateRankBarPercentage(lfRank * 100.0f) << "%\n";
-        lpDisplay->DrawText(lText.GetBuffer(), lv2Position, 16.0f, 0xFFFFFFFFu, false);
+        lpDisplay->DrawText(lText.GetBuffer(), lv2Position, 16.0f, rw::RGBA(255, 255, 255, 255), false);
 
         lv2Position.mV.y = AddRankBarVectorLane(lv2Position.mV.y, 15.0f);
         const f32 lfMaxX = AddRankBarVectorLane(lv2Position.mV.x, 140.0f);
@@ -192,7 +192,7 @@ namespace BrnProgression
         lv2Max.mV.y = lfMaxY;
         lv2Max.mV.z = lfMaxX;
         lv2Max.mV.w = lfMaxX;
-        lpDisplay->DrawHorizontalBar(lv2Position, lv2Max, lfRank, 1.0f, lColour, 0xFF000000u);
+        lpDisplay->DrawHorizontalBar(lv2Position, lv2Max, lfRank, 1.0f, lColour, rw::RGBA(0, 0, 0, 255));
     }
 
     // ARTIST 8235A1D0: append before checking the current character, retain the
@@ -211,7 +211,7 @@ namespace BrnProgression
         {
             if (liChar == '\n' || (liLineLength > 128 && liChar == ' '))
             {
-                lpDisplay->DrawText(lLine.GetBuffer(), lfX, lfY, 12.0f, 0xFFFFFFFFu);
+                lpDisplay->DrawText(lLine.GetBuffer(), lfX, lfY, 12.0f, rw::RGBA(255, 255, 255, 255));
                 lLine.Reset();
                 lfY += 12.0f;
                 liLineLength = 0;
@@ -222,7 +222,7 @@ namespace BrnProgression
             lLine.AppendFormat("%c", static_cast<s32>(liChar));
         }
 
-        lpDisplay->DrawText(lLine.GetBuffer(), lfX, lfY, 12.0f, 0xFFFFFFFFu);
+        lpDisplay->DrawText(lLine.GetBuffer(), lfX, lfY, 12.0f, rw::RGBA(255, 255, 255, 255));
         lLine.Reset();
     }
 
@@ -853,13 +853,13 @@ namespace BrnProgression
             DrawTextWithOffsets(lpDisplay, &lStream, 60.0f, 40.0f);
 
             Vector2 lv2BarPosition = MakeVector2(1000.0f, 250.0f);
-            DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_RACE, 0xFFFF0000u, lv2BarPosition, "RACE");
+            DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_RACE, rw::RGBA(0, 0, 255, 255), lv2BarPosition, "RACE");
             lv2BarPosition.mV.y += KF_RANK_BAR_SPACING;
-            DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE, 0xFF0000FFu, lv2BarPosition, "ROAD RAGE");
+            DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE, rw::RGBA(255, 0, 0, 255), lv2BarPosition, "ROAD RAGE");
             lv2BarPosition.mV.y += KF_RANK_BAR_SPACING;
-            DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN, 0xFF00FFFFu, lv2BarPosition, "MARKED MAN");
+            DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN, rw::RGBA(255, 255, 0, 255), lv2BarPosition, "MARKED MAN");
             lv2BarPosition.mV.y += KF_RANK_BAR_SPACING;
-            DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK, 0xFF00FF00u, lv2BarPosition, "STUNT RUN");
+            DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK, rw::RGBA(0, 255, 0, 255), lv2BarPosition, "STUNT RUN");
 
             RenderProfileEvents(lpDisplay, lpProfile);
             if (mbShowProfileRivalInfo)
@@ -879,7 +879,7 @@ namespace BrnProgression
             CgsDev::StrStream lStream(lacText, sizeof(lacText));
             lStream.Reset();
             lStream << "Rivals:\n";
-            lpDisplay->DrawText(lStream.GetBuffer(), 32.0f, 46.0f, 12.0f, 0xFFFFFFFFu);
+            lpDisplay->DrawText(lStream.GetBuffer(), 32.0f, 46.0f, 12.0f, rw::RGBA(255, 255, 255, 255));
 
             for (s32 liRival = 0; liRival < mpProgressionManager->mpProgressionData->GetRivalCount(); ++liRival)
             {
@@ -922,7 +922,7 @@ namespace BrnProgression
                 lStream << ")";
 
                 lpDisplay->DrawText(lStream.GetBuffer(), 100.0f,
-                              static_cast<f32>(luSet) * 20.0f + 100.0f, 16.0f, 0xFFFFFFFFu);
+                              static_cast<f32>(luSet) * 20.0f + 100.0f, 16.0f, rw::RGBA(255, 255, 255, 255));
             }
         }
     }

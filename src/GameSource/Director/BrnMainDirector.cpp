@@ -2914,9 +2914,9 @@ namespace BrnDirector
         lInfo.mfLineSize       = 17.6f;
         lInfo.mfX              = lrMetrics.mfScreenWidth * 0.1f;
         lInfo.mfY              = lrMetrics.mfScreenHeight * 0.1f;
-        lInfo.muColour         = 0xFFFFFFFFu;
-        lInfo.muActiveColour   = 0xFF00FF00u;
-        lInfo.muInactiveColour = 0xFF0000FFu;
+        lInfo.muColour         = rw::RGBA(255, 255, 255, 255);
+        lInfo.muActiveColour   = rw::RGBA(0, 255, 0, 255);
+        lInfo.muInactiveColour = rw::RGBA(255, 0, 0, 255);
         lInfo.mJustification   = CgsDev::DebugRender::E_JUSTIFY_LEFT;
 
         reinterpret_cast<DebugPrinter*>(maDebugPrinterMain)->SetDebugPrinterInfo(lInfo);
@@ -2981,15 +2981,15 @@ namespace BrnDirector
         const f32 lfY = lrMetrics.mfScreenHeight * 0.125f;
         Vector2 lv2Position(lfX, lfY);
         lrRender.Draw2DTextJustified(lacMessage, lv2Position, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
-                                     16.0f, 0xFF000000u);
+                                     16.0f, rw::RGBA(0, 0, 0, 255));
 
         lv2Position = Vector2(lfX + 2.0f, lfY + 2.0f);
         lrRender.Draw2DTextJustified(lacMessage, lv2Position, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
-                                     16.0f, 0xFF000000u);
+                                     16.0f, rw::RGBA(0, 0, 0, 255));
 
         lv2Position = Vector2(lfX + 1.0f, lfY + 1.0f);
         lrRender.Draw2DTextJustified(lacMessage, lv2Position, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
-                                     16.0f, 0xFFFFFFFFu);
+                                     16.0f, rw::RGBA(255, 255, 255, 255));
     }
 
     void MainDirector::Update(const DirectorInputOutput* lpIO)
@@ -3194,7 +3194,7 @@ namespace BrnDirector
                     Vector3 lPredictedPosition;
                     __stvx(__vaddfp(__lvx(&lPosition, 0), __lvx(&lVelocity, 0)),
                             &lPredictedPosition, 0);
-                    lrDebugRender.DrawArrow(lPredictedPosition, lSafePosition, 0xFF00FF00u);
+                    lrDebugRender.DrawArrow(lPredictedPosition, lSafePosition, rw::RGBA(0, 255, 0, 255));
                 }
 
                 const Vector3 lPosition = mVehicleTracker.GetPositionJournal()[0];
@@ -3204,7 +3204,7 @@ namespace BrnDirector
                         &lPredictedPosition, 0);
                 const Vector3 lCurrentPositionForArrow = mVehicleTracker.GetPositionJournal()[0];
                 lrDebugRender.DrawArrow(lCurrentPositionForArrow, lPredictedPosition,
-                                        lbHasSafePosition ? 0xFF00FF00u : 0xFF0000FFu);
+                                        lbHasSafePosition ? rw::RGBA(0, 255, 0, 255) : rw::RGBA(255, 0, 0, 255));
             }
 
             // ⚠️ GATE: the rest of the VMX / ICE-editor remainder in MainDirector::Update.

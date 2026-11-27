@@ -38,7 +38,7 @@ namespace CgsNetwork
     };
 
     // The banner text colour (an initialised data word, 0xE0FFFFFF) and the text size (12).
-    static const RGBA KU_TEXT_COLOUR = 0xE0FFFFFFu;
+    static const RGBA KU_TEXT_COLOUR(255, 255, 255, 224);
     static const f32  KF_TEXT_SIZE   = 12.0f;
 
     // Two-phase init, inlined into NetworkManager::Construct: the base first, then no version

@@ -958,7 +958,7 @@ namespace BrnGame
             const Vector2 lPosition(200.0f, 40.0f);
             lDebug.Get2dRender().Draw2DText(
                 "STREAM STALL: Stalling game while streaming catches up",
-                lPosition, 16.0f, 0xFF0000FFu);
+                lPosition, 16.0f, rw::RGBA(255, 0, 0, 255));
         }
 
         lpNetworkOutput->LockForRead();
@@ -2801,7 +2801,7 @@ namespace BrnGame
 
         lpDebugManager->RenderFrameRateColouredWithAverage(
             lfCurrentFps, mfDebugFpsAverage,
-            0xFF00FF00u /*high: green*/, 0xFF0000FFu /*low: red*/, 0xFF00FFFFu /*mid: yellow*/,
+            rw::RGBA(0, 255, 0, 255) /*high: green*/, rw::RGBA(255, 0, 0, 255) /*low: red*/, rw::RGBA(255, 255, 0, 255) /*mid: yellow*/,
             60.0f, 30.0f,   // flt_82004C6C / flt_82004F5C
             "over last minute", lfAverageHighlight, mFrameRateManager.mbIsSimulationRunningInRealTime);
 

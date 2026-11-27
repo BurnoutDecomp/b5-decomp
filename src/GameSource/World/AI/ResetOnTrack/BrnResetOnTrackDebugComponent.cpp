@@ -4,7 +4,7 @@
 #include "GameSource/World/AI/BrnAICar.h"
 #include "GameSource/World/AI/BrnAIDriver.h"
 #include "GameSource/World/AI/BrnAISharedConstants.h"
-#include "GameSource/World/AI/BrnAIDebugUtils.h"     // K_WHITE / K_GREEN / K_BLUE
+#include "GameSource/World/AI/BrnAIDebugUtils.h"     // rw::RGBA(255, 255, 255, 255) / rw::RGBA(0, 255, 0, 255) / rw::RGBA(255, 0, 0, 255)
 #include "GameSource/World/AI/BrnHNGTest.h"
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
 #include "SharedClasses/AI/AISectionsResourceType.h"
@@ -26,14 +26,14 @@ namespace
     const f32 KF_DEGREES_PER_RADIAN = 57.295780181884766f; // flt_820C3B48
 
     // K_WHITE / K_GREEN / K_BLUE: BrnAIDebugUtils.h (shared with the RaceBalancing component).
-    const CgsDev::RGBA K_CYAN  = 0xFF00FFFFu;
+    // K_CYAN retired (no DWARF name): its 3 use(s) spell rw::RGBA(255, 255, 0, 255), the immediate the u32 constant gave
 
-    rw::RGBA RenderColour(u32 luPacked)
-    {
-        rw::RGBA lColour;
-        lColour.m_rgba = luPacked;
-        return lColour;
-    }
+    // (RenderColour retired: the colours are rw::RGBA already, so they pass
+    //  straight to the renderer; no DWARF name, no ARTIST body.)
+
+
+
+
 
     const char* const K_RESET_TYPE_NAMES[E_RESET_TYPE_COUNT] =
     {
@@ -240,7 +240,7 @@ void ResetOnTrackDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDis
         {
             lStream << ", AI Driven";
         }
-        lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 50.0f, 12.0f, K_WHITE);
+        lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 50.0f, 12.0f, rw::RGBA(255, 255, 255, 255));
     }
 
     if (mbShowResetInfo)
@@ -290,7 +290,7 @@ void ResetOnTrackDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDis
 
             lpDisplay->DrawText(lStream.GetBuffer(), 50.0f,
                           100.0f + static_cast<f32>(liDisplayedRow) * 14.0f,
-                          12.0f, lbIsPlayerRequest ? K_WHITE : K_CYAN);
+                          12.0f, lbIsPlayerRequest ? rw::RGBA(255, 255, 255, 255) : rw::RGBA(255, 255, 0, 255));
             ++liDisplayedRow;
         }
     }
@@ -329,19 +329,19 @@ void ResetOnTrackDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpD
                 mpResetOnTrackManager->mpAISectionData->GetAISection(
                     lpCar->muResetOnTrackSectionIndex);
 
-            CgsDev::RGBA luColour = K_GREEN;
+            CgsDev::RGBA luColour = rw::RGBA(0, 255, 0, 255);
             if (LineTestSectionHNG(lpSection, lStart2D, lEnd2D))
             {
-                luColour = K_BLUE;
+                luColour = rw::RGBA(255, 0, 0, 255);
             }
             else if (lpCar->GetDriver() != 0 &&
                      LineTestTrafficHNG(lpCar->GetDriver()->GetNearbyVehicles(),
                                         lStart2D, lEnd2D))
             {
-                luColour = K_CYAN;
+                luColour = rw::RGBA(255, 255, 0, 255);
             }
 
-            lpDisplay->DrawLine(lPosition, lEndPosition, RenderColour(luColour));
+            lpDisplay->DrawLine(lPosition, lEndPosition, luColour);
         }
 
         const s32 liHngEntryCount = mHngTestRingBuffer.GetLength();
@@ -350,7 +350,7 @@ void ResetOnTrackDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpD
             const HngTestEntry& lrEntry =
                 mHngTestRingBuffer[static_cast<u32>(liIndex)];
             lpDisplay->DrawLine(lrEntry.mStartPosition, lrEntry.mEndPosition,
-                                RenderColour(lrEntry.mbHit ? K_BLUE : K_GREEN));
+                                lrEntry.mbHit ? rw::RGBA(255, 0, 0, 255) : rw::RGBA(0, 255, 0, 255));
         }
     }
 
@@ -388,7 +388,7 @@ void ResetOnTrackDebugComponent::DrawResetOnTrackAISection(
         const Vector3 lEnd =
             lpSection->GetPortal(lpCar->muResetOnTrackEndPortal)->GetPosition();
 
-        lpDisplay->DrawLine(lStart, lEnd, RenderColour(lbIsPlayer ? K_GREEN : K_CYAN));
+        lpDisplay->DrawLine(lStart, lEnd, lbIsPlayer ? rw::RGBA(0, 255, 0, 255) : rw::RGBA(255, 255, 0, 255));
 
         const Vector3 lStartExtent(3.0f, 3.0f, 3.0f);
         const Vector3 lEndExtent(0.25f, 0.25f, 0.25f);
@@ -396,8 +396,8 @@ void ResetOnTrackDebugComponent::DrawResetOnTrackAISection(
         const Vector3 lStartMax(__vaddfp(lStart.mV, lStartExtent.mV));
         const Vector3 lEndMin(__vsubfp(lEnd.mV, lEndExtent.mV));
         const Vector3 lEndMax(__vaddfp(lEnd.mV, lEndExtent.mV));
-        lpDisplay->DrawSolidBox(lStartMin, lStartMax, RenderColour(0x800000FFu));
-        lpDisplay->DrawSolidBox(lEndMin, lEndMax, RenderColour(0x80FF0000u));
+        lpDisplay->DrawSolidBox(lStartMin, lStartMax, rw::RGBA(255, 0, 0, 128));
+        lpDisplay->DrawSolidBox(lEndMin, lEndMax, rw::RGBA(0, 0, 255, 128));
     }
 }
 

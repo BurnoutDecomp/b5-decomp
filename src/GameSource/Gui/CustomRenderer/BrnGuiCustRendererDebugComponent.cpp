@@ -20,7 +20,7 @@ namespace
 {
     const f32 KF_TEXT_SCALE = 16.0f;          // flt_82004000
 
-    const CgsDev::RGBA K_WHITE = 0xFFFFFFFFu;  // li r30, -1  (the colour every label/value uses)
+    // K_WHITE retired (no DWARF name): its 10 use(s) spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
 
     // Boost-colour debug-screen column/row anchors.
     const f32 KF_LABEL_X_RED      =  50.0f;   // "Red Channel"
@@ -175,19 +175,19 @@ void GuiCustRendererDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lp
 
     if (mbBoostBarDebugScreenEnabled)
     {
-        lpDisplay->DrawText("Red Channel",               KF_LABEL_X_RED,      KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE);
-        lpDisplay->DrawText("Green Channel",             KF_LABEL_X_GREEN,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE);
-        lpDisplay->DrawText("Inner Flame",               KF_LABEL_X_INNER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE);
-        lpDisplay->DrawText("(Red * Inner Colour)",      KF_LABEL_X_INNER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, K_WHITE);
-        lpDisplay->DrawText("Outer Flame",               KF_LABEL_X_OUTER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE);
-        lpDisplay->DrawText("(Green * Outer Colour)",    KF_LABEL_X_OUTER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, K_WHITE);
-        lpDisplay->DrawText("Outer Flame + Inner Flame", KF_LABEL_X_COMBINED, KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE);
+        lpDisplay->DrawText("Red Channel",               KF_LABEL_X_RED,      KF_ROW_Y_TOP,    KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("Green Channel",             KF_LABEL_X_GREEN,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("Inner Flame",               KF_LABEL_X_INNER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("(Red * Inner Colour)",      KF_LABEL_X_INNER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("Outer Flame",               KF_LABEL_X_OUTER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("(Green * Outer Colour)",    KF_LABEL_X_OUTER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("Outer Flame + Inner Flame", KF_LABEL_X_COMBINED, KF_ROW_Y_TOP,    KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
     }
 
     if (mbShowCustomRenderStatus)
     {
         lpDisplay->DrawText("Currently active renderers (number of textures):",
-                      KF_LIST_X, KF_LIST_HEADER_Y, KF_TEXT_SCALE, K_WHITE);
+                      KF_LIST_X, KF_LIST_HEADER_Y, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
         s32 liVisibleRow = 0;
         for (s32 liComponent = 0; liComponent < KI_CUSTOM_RENDER_TYPE_COUNT; ++liComponent)
@@ -213,11 +213,11 @@ void GuiCustRendererDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lp
             }
 
             const f32 lfRowY = static_cast<f32>(liVisibleRow) * KF_LIST_ROW_STEP;
-            lpDisplay->DrawText(lpcName, KF_LIST_X, lfRowY, KF_TEXT_SCALE, K_WHITE);
+            lpDisplay->DrawText(lpcName, KF_LIST_X, lfRowY, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
             const s32 liTextureCount = mpCustRenderManager->GetNumTexturesForComponent(liComponent);
             lpDisplay->DrawValue(static_cast<u32>(liTextureCount),
-                                 KF_LIST_VALUE_X, lfRowY, KF_TEXT_SCALE, K_WHITE);
+                                 KF_LIST_VALUE_X, lfRowY, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
             ++liVisibleRow;
         }

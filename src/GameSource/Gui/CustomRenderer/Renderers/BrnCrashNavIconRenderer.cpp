@@ -2732,9 +2732,9 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
     // v13, 1.0 / vmulfp v0, v127, unk_8305A950`) is exactly PackVertexColour's fold, and
     // unk_8305A950 is the same all-255 vector that helper already documents.
     const CgsGraphics::RGBA8 lTextRgba = PackVertexColour(lrv4SignColour);
-    const u32 lTextColour = (static_cast<u32>(lTextRgba.a) << 24) |
-        (static_cast<u32>(lTextRgba.b) << 16) |
-        (static_cast<u32>(lTextRgba.g) << 8) | lTextRgba.r;
+    const CgsGraphics::RGBA lTextColour(lTextRgba.r,
+        lTextRgba.g,
+        lTextRgba.b, lTextRgba.a);
 
     const f32 lfTextAnchorX = lv2Device.mV.v[0] + lfScale * lrSign.mvTextOffset.x;
     const f32 lfTextAnchorY = lv2Device.mV.v[1] + lfScale * lrSign.mvTextOffset.y;

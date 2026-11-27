@@ -63,9 +63,9 @@ namespace BrnNetwork
         const s32          KI_TRAFFIC_DEBUG_TEXT_LENGTH         = 1024;
         const s32          KI_IN_THE_PAST_REPORT_THRESHOLD      = 2;
         const f32          KF_TRAFFIC_UPDATE_PERIOD             = 0.1f;
-        const CgsDev::RGBA KU_TRAFFIC_DIVERGENCE_TEXT_COLOUR    = 0xFF0000E6u;
-        const CgsDev::RGBA KU_IN_THE_PAST_TEXT_COLOUR           = 0xFF0064C8u;
-        const CgsDev::RGBA KU_RESTART_PENDING_TEXT_COLOUR       = 0xFFC86400u;
+        // KU_TRAFFIC_DIVERGENCE_TEXT_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(230, 0, 0, 255), the immediate the u32 constant gave
+        // KU_IN_THE_PAST_TEXT_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(200, 100, 0, 255), the immediate the u32 constant gave
+        // KU_RESTART_PENDING_TEXT_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 100, 200, 255), the immediate the u32 constant gave
         const Vector2      KV2_TRAFFIC_DIVERGENCE_TEXT_POSITION(251.3f, 158.0f);
         const Vector2      KV2_IN_THE_PAST_TEXT_POSITION(586.9f, 158.0f);
         const Vector2      KV2_RESTART_PENDING_TEXT_POSITION(536.85f, 133.0f);
@@ -1280,7 +1280,7 @@ namespace BrnNetwork
             {
                 CgsDev::DebugInterface lDebugInterface;
                 lDebugInterface.Get2dRender().Draw2DText("Traffic Divergence", KV2_TRAFFIC_DIVERGENCE_TEXT_POSITION,
-                                                         KF_TRAFFIC_DEBUG_TEXT_SIZE, KU_TRAFFIC_DIVERGENCE_TEXT_COLOUR);
+                                                         KF_TRAFFIC_DEBUG_TEXT_SIZE, rw::RGBA(230, 0, 0, 255));
             }
 
             if (mbIsThisMachineInThePast && miInThePastAmount > KI_IN_THE_PAST_REPORT_THRESHOLD)
@@ -1291,7 +1291,7 @@ namespace BrnNetwork
 
                 CgsDev::DebugInterface lDebugInterface;
                 lDebugInterface.Get2dRender().Draw2DText(lacText, KV2_IN_THE_PAST_TEXT_POSITION,
-                                                         KF_TRAFFIC_DEBUG_TEXT_SIZE, KU_IN_THE_PAST_TEXT_COLOUR);
+                                                         KF_TRAFFIC_DEBUG_TEXT_SIZE, rw::RGBA(200, 100, 0, 255));
             }
         }
 
@@ -1304,7 +1304,7 @@ namespace BrnNetwork
                               static_cast<u32>(mBufferedRestartTrafficMessage.mu16RestartFrame));
 
             lDebugInterface.Get2dRender().Draw2DText(lacText, KV2_RESTART_PENDING_TEXT_POSITION,
-                                                     KF_TRAFFIC_DEBUG_TEXT_SIZE, KU_RESTART_PENDING_TEXT_COLOUR);
+                                                     KF_TRAFFIC_DEBUG_TEXT_SIZE, rw::RGBA(0, 100, 200, 255));
         }
     }
 

@@ -73,14 +73,14 @@ namespace Vehicle
         mLatGripCurveGraph.SetLocation(lLatLocation);
         mLongGripCurveGraph.Render(lpDisplay);
         mLatGripCurveGraph.Render(lpDisplay);
-        mLongGripCurveGraph.PlotCurrentValue(lpDisplay, mpLeftWheel->mSlipVariables.GetVector().y, 0xFF0000FFu);
-        mLongGripCurveGraph.PlotCurrentValue(lpDisplay, mpRightWheel->mSlipVariables.GetVector().y, 0xFFFF0000u);
-        mLatGripCurveGraph.PlotCurrentValue(lpDisplay, mpLeftWheel->mSlipVariables.GetVector().x, 0xFF0000FFu);
-        mLatGripCurveGraph.PlotCurrentValue(lpDisplay, mpRightWheel->mSlipVariables.GetVector().x, 0xFFFF0000u);
+        mLongGripCurveGraph.PlotCurrentValue(lpDisplay, mpLeftWheel->mSlipVariables.GetVector().y, rw::RGBA(255, 0, 0, 255));
+        mLongGripCurveGraph.PlotCurrentValue(lpDisplay, mpRightWheel->mSlipVariables.GetVector().y, rw::RGBA(0, 0, 255, 255));
+        mLatGripCurveGraph.PlotCurrentValue(lpDisplay, mpLeftWheel->mSlipVariables.GetVector().x, rw::RGBA(255, 0, 0, 255));
+        mLatGripCurveGraph.PlotCurrentValue(lpDisplay, mpRightWheel->mSlipVariables.GetVector().x, rw::RGBA(0, 0, 255, 255));
         const rw::math::vpu::Vector2 lLongTitle = mLongGripCurveGraph.GetTitleLocation();
-        lpDisplay->DrawText("Long grip curve", lLongTitle.mV.x, lLongTitle.mV.y, 18.0f, 0xFF000000u);
+        lpDisplay->DrawText("Long grip curve", lLongTitle.mV.x, lLongTitle.mV.y, 18.0f, rw::RGBA(0, 0, 0, 255));
         const rw::math::vpu::Vector2 lLatTitle = mLatGripCurveGraph.GetTitleLocation();
-        lpDisplay->DrawText("Lateral grip curve", lLatTitle.mV.x, lLatTitle.mV.y, 18.0f, 0xFF000000u);
+        lpDisplay->DrawText("Lateral grip curve", lLatTitle.mV.x, lLatTitle.mV.y, 18.0f, rw::RGBA(0, 0, 0, 255));
     }
 
     // Construct: seat both graphs, clear the wheel pair and start hidden. The console inlines the

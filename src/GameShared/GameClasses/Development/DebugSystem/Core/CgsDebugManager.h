@@ -140,9 +140,9 @@ namespace CgsDev
 
         // X360 0x8282D998. Queue the on-screen frame-rate readout ("%d fps") into the buffered renderer,
         // coloured by framerate (low->mid->high, e.g. red->yellow->green) via _InterpolateColour. Colours
-        // are packed RGBA (u32). Positioned from the screen metrics (bottom debug bar). RenderHUD flushes it.
+        // are const RGBA& (DWARF h:122; ARTIST's caller passes stack addresses, 0x823BCEA4..). RenderHUD flushes it.
         void RenderFrameRateColouredWithAverage(f32 lfFramerate, f32 lfAverageFramerate,
-                                                u32 lHighColour, u32 lLowColour, u32 lMidColour,
+                                                const RGBA& lHighColour, const RGBA& lLowColour, const RGBA& lMidColour,
                                                 f32 lfHighFramerate, f32 lfLowFramerate,
                                                 const char* lpcAverageText, f32 lfAverageHighlight, bool lbIsRealtime);
 

@@ -538,7 +538,7 @@ void AIVehicleStateManager::UpdateParams( f32 /*af32DeltaTime*/ )
                 const rw::RGBA lColour(0x00, 0xFF, 0x00, 0xFF); // ARTIST -16711776
                 CgsDev::DebugInterface lDebugInterface;
                 lDebugInterface.GetRender().DrawSphere(
-                    lDrawPosition, 2.0f, lColour.m_rgba);
+                    lDrawPosition, 2.0f, lColour);
             }
         }
     }

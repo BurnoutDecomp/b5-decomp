@@ -307,27 +307,27 @@ namespace BrnResource
         if ((guResourceHudColourInitFlags & 1u) == 0)
         {
             guResourceHudColourInitFlags |= 1u;
-            guResourceHudTextColour = 0xFFFFFFFFu;
+            guResourceHudTextColour = rw::RGBA(255, 255, 255, 255);
         }
         if ((guResourceHudColourInitFlags & 2u) == 0)
         {
             guResourceHudColourInitFlags |= 2u;
-            guResourceHudMainBackColour = 0x4B64C864u;
+            guResourceHudMainBackColour = rw::RGBA(100, 200, 100, 75);
         }
         if ((guResourceHudColourInitFlags & 4u) == 0)
         {
             guResourceHudColourInitFlags |= 4u;
-            guResourceHudMainForeColour = 0x4BC8C8C8u;
+            guResourceHudMainForeColour = rw::RGBA(200, 200, 200, 75);
         }
         if ((guResourceHudColourInitFlags & 8u) == 0)
         {
             guResourceHudColourInitFlags |= 8u;
-            guResourceHudVideoBackColour = 0x963232C8u;
+            guResourceHudVideoBackColour = rw::RGBA(200, 50, 50, 150);
         }
         if ((guResourceHudColourInitFlags & 0x10u) == 0)
         {
             guResourceHudColourInitFlags |= 0x10u;
-            guResourceHudVideoForeColour = 0x4B6464C8u;
+            guResourceHudVideoForeColour = rw::RGBA(200, 100, 100, 75);
         }
 
         const f32 lfNameX = 75.0f;
@@ -495,26 +495,26 @@ namespace BrnResource
         }
     }
 
-    u32 DebugComponent::InterpolateColours(u32 luColourT, u32 luColour0, f32 lfFactor)
+    CgsDev::RGBA DebugComponent::InterpolateColours(CgsDev::RGBA lColourT, CgsDev::RGBA lColour0, f32 lfFactor)
     {
-        const u8 lu8AlphaT = static_cast<u8>(luColourT >> 24);
-        const u8 lu8RedT   = static_cast<u8>(luColourT >> 16);
-        const u8 lu8GreenT = static_cast<u8>(luColourT >> 8);
-        const u8 lu8BlueT  = static_cast<u8>(luColourT);
+        const u8 lu8AlphaT = lColourT.GetAlpha();
+        const u8 lu8BlueT  = lColourT.GetBlue();
+        const u8 lu8GreenT = lColourT.GetGreen();
+        const u8 lu8RedT   = lColourT.GetRed();
 
-        const u8 lu8Alpha0 = static_cast<u8>(luColour0 >> 24);
-        const u8 lu8Red0   = static_cast<u8>(luColour0 >> 16);
-        const u8 lu8Green0 = static_cast<u8>(luColour0 >> 8);
-        const u8 lu8Blue0  = static_cast<u8>(luColour0);
+        const u8 lu8Alpha0 = lColour0.GetAlpha();
+        const u8 lu8Blue0  = lColour0.GetBlue();
+        const u8 lu8Green0 = lColour0.GetGreen();
+        const u8 lu8Red0   = lColour0.GetRed();
 
         const u8 lu8Alpha = LerpChannel(lu8AlphaT, lu8Alpha0, lfFactor);
-        const u8 lu8Red   = LerpChannel(lu8RedT,   lu8Red0,   lfFactor);
-        const u8 lu8Green = LerpChannel(lu8GreenT, lu8Green0, lfFactor);
         const u8 lu8Blue  = LerpChannel(lu8BlueT,  lu8Blue0,  lfFactor);
+        const u8 lu8Green = LerpChannel(lu8GreenT, lu8Green0, lfFactor);
+        const u8 lu8Red   = LerpChannel(lu8RedT,   lu8Red0,   lfFactor);
 
-        return (static_cast<uint32_t>(lu8Alpha) << 24) |
-               (static_cast<uint32_t>(lu8Red)   << 16) |
-               (static_cast<uint32_t>(lu8Green) << 8)  |
-                static_cast<uint32_t>(lu8Blue);
+        // The Xenon word packs red in the low byte (rw::RGBA's constructor):
+        return CgsDev::RGBA(lu8Red,
+                            lu8Green,
+                            lu8Blue, lu8Alpha);
     }
 }

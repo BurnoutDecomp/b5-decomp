@@ -2582,9 +2582,9 @@ namespace BrnGui
     void InstantResultsState::RenderDebug(CgsDev::Debug2DImmediateRender* lpDisplay)
     {
         char lacText[1024];
-        const CgsDev::RGBA KU_WHITE = static_cast<CgsDev::RGBA>(-1);
-        const CgsDev::RGBA KU_GREEN = static_cast<CgsDev::RGBA>(-16711936);
-        const CgsDev::RGBA KU_RED = static_cast<CgsDev::RGBA>(-65536);
+        const CgsDev::RGBA KU_WHITE(255, 255, 255, 255);
+        const CgsDev::RGBA KU_GREEN(0, 255, 0, 255);
+        const CgsDev::RGBA KU_RED(0, 0, 255, 255);
 
         CgsCore::SPrintf(lacText, 1024, "OFFLINE RESULTS DEBUGGING");
         lpDisplay->DrawText(lacText, 80.0f, 100.0f, 15.0f, KU_WHITE);

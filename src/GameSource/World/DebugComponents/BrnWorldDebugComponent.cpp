@@ -22,7 +22,7 @@ namespace
     const f32 KF_VELOCITY_MIN = 0.0f;
     const f32 KF_VELOCITY_MAX = 500.0f;
     const f32 KF_VELOCITY_STEP = 10.0f;
-    const CgsDev::RGBA KU_WHITE = 0xFFFFFFFFu;
+    // KU_WHITE retired (no DWARF name): its 2 use(s) spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
 
     const char KAC_INACTIVE_TEXT[2][255] =
     {
@@ -221,7 +221,7 @@ void WorldDebugComponent::DrawInactiveMessage(CgsDev::Debug2DImmediateRender* lp
     for (u32 luLine = 0; luLine < 2; ++luLine)
     {
         lpDisplay->DrawText(KAC_INACTIVE_TEXT[luLine], KF_TEXT_POSITION_SCREEN_X,
-                            lfY, KF_TEXT_HEIGHT, KU_WHITE);
+                            lfY, KF_TEXT_HEIGHT, rw::RGBA(255, 255, 255, 255));
         lfY += KF_TEXT_LINE_HEIGHT;
     }
 }
@@ -234,7 +234,7 @@ void WorldDebugComponent::DrawActiveMessage(CgsDev::Debug2DImmediateRender* lpDi
     for (u32 luLine = 0; luLine < 5; ++luLine)
     {
         lpDisplay->DrawText(KAC_ACTIVE_TEXT[luLine], KF_TEXT_POSITION_SCREEN_X,
-                            lfY, KF_TEXT_HEIGHT, KU_WHITE);
+                            lfY, KF_TEXT_HEIGHT, rw::RGBA(255, 255, 255, 255));
         lfY += KF_TEXT_LINE_HEIGHT;
     }
 }

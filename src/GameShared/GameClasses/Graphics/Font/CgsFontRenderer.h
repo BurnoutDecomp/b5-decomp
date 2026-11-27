@@ -2,6 +2,7 @@
 #define CGS_FONT_RENDERER_H
 
 #include "types.hpp"
+#include "rw/core/base/detail/hosttype.h"                      // rw::RGBA
 #include "GameShared/GameClasses/Fonts/CgsFont.h"   // CgsResource::Font, CgsUtf8
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"  // Im2dVertex
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // Im2dRenderBuffer (RenderStart/SetState/RenderEnd)
@@ -20,7 +21,7 @@ namespace renderengine { class TextureState; }   // RenderBufferSetTextureState 
 
 namespace CgsGraphics
 {
-    typedef u32 RGBA;   // packed RGBA8 colour
+    using rw::RGBA;     // DWARF CgsFontRenderer.h:34-221: the colours are rw::RGBA
 
     // BasicColouredTexturedVertex::Vector2U_32 -- a 2-component screen-space vector.
     struct TextVector2

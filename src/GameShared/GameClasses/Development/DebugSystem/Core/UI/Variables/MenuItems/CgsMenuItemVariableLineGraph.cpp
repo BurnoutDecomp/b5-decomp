@@ -21,7 +21,7 @@ namespace CgsDev
         const u32 KN_NUM_COLOURS = 6;
         RGBA      KA_COLOURS_ARRAY[KN_NUM_COLOURS] =
         {
-            0xFFFF0000u, 0xFF00FF00u, 0xFF0000FFu, 0xFFFFFF00u, 0xFF00FFFFu, 0xFFFF00FFu,
+            rw::RGBA(0, 0, 255, 255), rw::RGBA(0, 255, 0, 255), rw::RGBA(255, 0, 0, 255), rw::RGBA(0, 255, 255, 255), rw::RGBA(255, 255, 0, 255), rw::RGBA(255, 0, 255, 255),
         };
 
         // X360 0x82823610. Bind a live float into the first free plot slot: clear that line's

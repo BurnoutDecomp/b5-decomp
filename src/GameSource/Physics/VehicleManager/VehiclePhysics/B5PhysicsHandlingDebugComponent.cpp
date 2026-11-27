@@ -198,7 +198,7 @@ namespace Vehicle
             }
             // Original vaddfp followed by a Y-lane-only insert, before draw.
             lfY = HandlingAdd(lfY, 18.0f);
-            lpDisplay->DrawText(lOutputStream.GetBuffer(), 50.0f, lfY, 15.0f, 0xFFFFFFFFu);
+            lpDisplay->DrawText(lOutputStream.GetBuffer(), 50.0f, lfY, 15.0f, rw::RGBA(255, 255, 255, 255));
             lOutputStream.Reset();
         }
 
@@ -294,7 +294,7 @@ namespace Vehicle
         CgsCore::SPrintf(lacText, 128, "Average deformation: %f (limit: %f)",
                         static_cast<double>(msPlayerParams.mfDeformationScale),
                         static_cast<double>(msPlayerParams.mfDamageBudget));
-        lpDisplay->DrawText(lacText, 100.0f, 100.0f, 20.0f, 0xFFFFFFFFu);
+        lpDisplay->DrawText(lacText, 100.0f, 100.0f, 20.0f, rw::RGBA(255, 255, 255, 255));
     }
 
     // ARTIST 825B92A8: the stored triangle is offset along its normal even
@@ -444,30 +444,30 @@ namespace Vehicle
             const Vector3 lLatDirection = HandlingWorldToBodyDirection(lTransform, lrWheel.mWheelLatDirection);
             CGS_ASSERT(lrWheel.mpTireAttribs != 0, "mpTireAttribs != NULL");
             const Wheel::TireAttribs& lrTire = *lrWheel.mpTireAttribs;
-            CgsDev::RGBA lWheelColour = 0xFFFF0000u;
+            CgsDev::RGBA lWheelColour = rw::RGBA(0, 0, 255, 255);
             if (lrWheel.mRoadContact.mbIsOnGround)
-                lWheelColour = lrWheel.mbBrokenAdhesiveLimit ? 0xFF0000FFu : 0xFF00FF00u;
+                lWheelColour = lrWheel.mbBrokenAdhesiveLimit ? rw::RGBA(255, 0, 0, 255) : rw::RGBA(0, 255, 0, 255);
             const f32 lfX = (liWheel & 1) ? lfMidX - 100.0f : lfMidX + 100.0f;
             const f32 lfY = static_cast<f32>(liWheel >> 1) * 250.0f + lfBaseY;
             lpDisplay->DrawBox(lfX - 5.0f, lfY - 15.0f, lfX + 5.0f, lfY + 15.0f, lWheelColour);
             const Vector2 lCentre(lfX, lfY);
             lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLongDirection, lrWheel.mForceVariables.GetVector().x),
-                                  0xFF000000u);
+                                  rw::RGBA(0, 0, 0, 255));
             const f32 lfNormalLoad = HandlingMultiplyAdd(lrWheel.mSpeedAndMassOnWheelVariables.GetVector().z,
                                                           9.81f, mpRaceCarPhysics->GetDownForce().GetFloat());
             // These radius stages are scalar fmuls, after the VMX load FMA.
             const f32 lfFrictionRadius = ((lrTire.maPackedVariables.GetVector().x * lfNormalLoad) * 0.0001f) * 30.0f;
-            lpDisplay->DrawCircle(lCentre, lfFrictionRadius, 64, 0xFFFF0000u);
+            lpDisplay->DrawCircle(lCentre, lfFrictionRadius, 64, rw::RGBA(0, 0, 255, 255));
             const f32 lfAdhesiveRadius = (lrTire.maPackedVariables.GetVector().z * 0.0001f) * 30.0f;
-            lpDisplay->DrawCircle(lCentre, lfAdhesiveRadius, 64, 0xFF0000FFu);
+            lpDisplay->DrawCircle(lCentre, lfAdhesiveRadius, 64, rw::RGBA(255, 0, 0, 255));
             lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLatDirection, lrWheel.mForceVariables.GetVector().y),
-                                  0xFF000000u);
+                                  rw::RGBA(0, 0, 0, 255));
             if (lrWheel.mbBrokenAdhesiveLimit)
             {
                 lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLongDirection, lrWheel.mForceVariables.GetVector().z),
-                                      0xFF0000FFu);
+                                      rw::RGBA(255, 0, 0, 255));
                 lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLatDirection, lrWheel.mForceVariables.GetVector().w),
-                                      0xFF0000FFu);
+                                      rw::RGBA(255, 0, 0, 255));
             }
         }
     }
@@ -545,8 +545,8 @@ namespace Vehicle
     // followed by the floor plateau. The axes and every tick remain separate.
     void GripCurveDebugGraph::Render(CgsDev::Debug2DImmediateRender* lpDisplay)
     {
-        const CgsDev::RGBA lAxisColour = 0xFF000000u;
-        const CgsDev::RGBA lCurveColour = 0xFFFF0000u; // dword_82FBA2A4
+        const CgsDev::RGBA lAxisColour = rw::RGBA(0, 0, 0, 255);
+        const CgsDev::RGBA lCurveColour = rw::RGBA(0, 0, 255, 255); // dword_82FBA2A4
         const Vector2 lOrigin = GetPointOnGraph(0.0f, 0.0f);
         lpDisplay->DrawLine(GetPointOnGraph(0.0f, mAxisRanges.mV.y), lOrigin, lAxisColour);
         lpDisplay->DrawLine(lOrigin, GetPointOnGraph(mAxisRanges.mV.x, 0.0f), lAxisColour);
@@ -576,7 +576,7 @@ namespace Vehicle
         Vector2 lEnd = lPoint;
         lStart.mV.x -= 3.0f;
         lEnd.mV.x += 3.0f;
-        lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
+        lpDisplay->DrawLine(lStart, lEnd, rw::RGBA(0, 0, 0, 255));
         lpDisplay->DrawText(lacText, lPoint.mV.x - 36.0f, lPoint.mV.y - 9.0f, 18.0f, lColour);
     }
 
@@ -593,7 +593,7 @@ namespace Vehicle
         Vector2 lEnd = lPoint;
         lStart.mV.y -= 3.0f;
         lEnd.mV.y += 3.0f;
-        lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
+        lpDisplay->DrawLine(lStart, lEnd, rw::RGBA(0, 0, 0, 255));
         lpDisplay->DrawText(lacText, lPoint.mV.x - 18.0f, lPoint.mV.y + 9.0f, 18.0f, lColour);
     }
 

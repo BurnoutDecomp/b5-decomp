@@ -845,9 +845,9 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // ActualPrint. See the RETIRED note at the top of this file.
     BrnDirector::DebugPrinter* lpDebugPrinter = lrSharedInfo.GetDebugPrinter();
     if (!IsLookingAtTarget(lrCamera, lrSharedInfo.GetEyeTarget(), lrSharedInfo.GetLookTarget()))
-        lpDebugPrinter->Print("Can't see player", static_cast<CgsDev::RGBA>(0xFFF0F0FF));
+        lpDebugPrinter->Print("Can't see player", static_cast<CgsDev::RGBA>(rw::RGBA(255, 240, 240, 255)));
     else
-        lpDebugPrinter->Print("Can see player", static_cast<CgsDev::RGBA>(0xFFF0FFF0));
+        lpDebugPrinter->Print("Can see player", static_cast<CgsDev::RGBA>(rw::RGBA(240, 255, 240, 255)));
 
     return true;
 }

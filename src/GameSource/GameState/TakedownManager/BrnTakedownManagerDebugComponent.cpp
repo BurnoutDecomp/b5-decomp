@@ -52,7 +52,7 @@ namespace BrnGameState
                 }
             }
 
-            lpRender->DrawText(lStream.GetBuffer(), 100.0f, 50.0f, 20.0f, 0xFFFFFFFFu);
+            lpRender->DrawText(lStream.GetBuffer(), 100.0f, 50.0f, 20.0f, rw::RGBA(255, 255, 255, 255));
         }
     }
 

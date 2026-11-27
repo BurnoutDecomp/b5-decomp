@@ -8,6 +8,7 @@
 #include <coreallocator/icoreallocator_interface.h>
 #include "rwcore_enums.h"
 #include "rw/core/debug/DebugCriticalSection.h"  // canonical DebugCriticalSection (SKIP_EMIT_BODY)
+#include "rw/core/base/detail/hosttype.h"        // rw::RGBA
 
 // Host-layout verification is meaningful only on a 64-bit build.
 #if defined(RW_VERIFY_LAYOUT) && (UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFull)
@@ -316,26 +317,7 @@ struct LinearResourceAllocator_vtbl {  // Paradise seven-slot vtable image on x6
 };
 RW_SIZE_ASSERT(rw::LinearResourceAllocator_vtbl, 56);
 
-struct RGBA {  // sizeof = 4
-    RGBA() : m_rgba(0) {}
-    struct NoInitTag {};
-    explicit RGBA(NoInitTag) {}
-    // ARTIST821F05B0: native ABGR input word. Inline placement preserves static colors.
-    RGBA(uint8_t lu8Red, uint8_t lu8Green, uint8_t lu8Blue, uint8_t lu8Alpha)
-        : m_rgba((static_cast<uint32_t>(lu8Alpha) << 24) |
-                 (static_cast<uint32_t>(lu8Blue) << 16) |
-                 (static_cast<uint32_t>(lu8Green) << 8) | static_cast<uint32_t>(lu8Red)) {}
-
-    // DWARF rw/core/base/detail/hosttype.h:188/:204/:220/:236 (inline). The Xenon word is the native
-    // ABGR order the constructor above packs: red in the low byte (AIDebugComponent::StateTableDrawEntry
-    // 0x827673B4..0x827673D8 extracts each channel as a u8 and divides the promoted int: divw).
-    uint8_t GetRed() const   { return static_cast<uint8_t>(m_rgba); }
-    uint8_t GetGreen() const { return static_cast<uint8_t>(m_rgba >> 8); }
-    uint8_t GetBlue() const  { return static_cast<uint8_t>(m_rgba >> 16); }
-    uint8_t GetAlpha() const { return static_cast<uint8_t>(m_rgba >> 24); }
-
-    uint32_t m_rgba;  // +0
-};
+// struct RGBA: rw/core/base/detail/hosttype.h (its DWARF home), included above.
 RW_SIZE_ASSERT(rw::RGBA, 4);
 
 struct IResourceAllocator;  // fwd (defined above)

@@ -802,7 +802,7 @@ namespace CgsDev
         SetDrawingMode(E_DRAWING_LINES);
         mVectorFont.SetSize(Make2(lfTextSize, lfTextSize, 0.0f, 0.0f));
         mVectorFont.Print(lfProjectedX, lfProjectedY,
-                          lpcText, lColour.m_rgba);
+                          lpcText, lColour);
     }
 
     void Debug3DImmediateRender::Draw2DLineForVectorFont(rw::math::vpu::Vector3 lFrom,

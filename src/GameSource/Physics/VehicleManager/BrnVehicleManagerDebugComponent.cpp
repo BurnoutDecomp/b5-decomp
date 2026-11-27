@@ -413,7 +413,7 @@ namespace Vehicle
     {
         static const f32 KF_X          = 100.0f;
         static const f32 KF_TEXT_SCALE = 20.0f;
-        static const u32 KU_COLOUR     = 0xFFFFFFFFu;
+        // KU_COLOUR retired (no DWARF name): its 2 use(s) spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
 
         if (mbSlamDebugRenderEnabled)
         {
@@ -437,7 +437,7 @@ namespace Vehicle
                 lStream << "Situation scale: " << KAF_SLAM_SITUATION_SCALE[meLastSlamImpactSituation] << ") ";
             }
 
-            lpRender->DrawText(lStream.GetBuffer(), KF_X, 50.0f, KF_TEXT_SCALE, KU_COLOUR);
+            lpRender->DrawText(lStream.GetBuffer(), KF_X, 50.0f, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
         }
 
         if (mbDrawLastShuntInfo)
@@ -455,7 +455,7 @@ namespace Vehicle
                 lStream << "(Closing speed: " << mfLastShuntClosingSpeed << ")";
             }
 
-            lpRender->DrawText(lStream.GetBuffer(), KF_X, 80.0f, KF_TEXT_SCALE, KU_COLOUR);
+            lpRender->DrawText(lStream.GetBuffer(), KF_X, 80.0f, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
         }
     }
 
@@ -531,19 +531,19 @@ namespace Vehicle
         {
             CgsCore::SPrintf(lacText, sizeof(lacText), "Grinding %u: %.1f", luGrindingCar, lfGrindingDuration);
             lrRender.Draw2DTextJustified(lacText, lPosition, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
-                                         16.0f, 0xFF00FFFFu);
+                                         16.0f, rw::RGBA(255, 255, 0, 255));
         }
         if (lfGroundingDuration > 0.0f)
         {
             CgsCore::SPrintf(lacText, sizeof(lacText), "Ground by %u! %.1f", luGroundingCar, lfGroundingDuration);
             lrRender.Draw2DTextJustified(lacText, MakeVector2(lPosition.mV.x, 380.0f),
-                                         CgsDev::DebugRender::E_JUSTIFY_RIGHT, 16.0f, 0xFF00FF80u);
+                                         CgsDev::DebugRender::E_JUSTIFY_RIGHT, 16.0f, rw::RGBA(128, 255, 0, 255));
         }
         if (lfRubbingDuration > 0.0f)
         {
             CgsCore::SPrintf(lacText, sizeof(lacText), "Rubbing %u: %.1f", luRubbingCar, lfRubbingDuration);
             lrRender.Draw2DTextJustified(lacText, MakeVector2(lPosition.mV.x, 400.0f),
-                                         CgsDev::DebugRender::E_JUSTIFY_RIGHT, 16.0f, 0xFF80FF00u);
+                                         CgsDev::DebugRender::E_JUSTIFY_RIGHT, 16.0f, rw::RGBA(0, 255, 128, 255));
         }
     }
 
@@ -791,13 +791,13 @@ namespace Vehicle
         const f32 lfScreenWidth = lMetrics.mfScreenWidth;
 
         rw::math::vpu::Vector2 lv2Position = MakeVector2(lfScreenWidth - 80.0f, 60.0f);
-        RenderCarDiagram(lpRender, lv2Position, 0xFFFF0000u,
+        RenderCarDiagram(lpRender, lv2Position, rw::RGBA(0, 0, 255, 255),
                          mbDisplayContact ? &mPlayerCarContactPosition : 0,
                          mbDisplayContact ? &mClosingVelocityPlayerCarSpace : 0,
                          mbDisplayContact ? &mPlayerCarVelocity : 0);
 
         lv2Position.mV.y += 120.0f;
-        RenderCarDiagram(lpRender, lv2Position, 0xFF00FF00u,
+        RenderCarDiagram(lpRender, lv2Position, rw::RGBA(0, 255, 0, 255),
                          mbDisplayContact ? &mOtherCarContactPosition : 0,
                          mbDisplayContact ? &mClosingVelocityOtherCarSpace : 0,
                          mbDisplayContact ? &mOtherCarVelocity : 0);
@@ -808,7 +808,7 @@ namespace Vehicle
             CgsCore::SPrintf(lacAngleText, sizeof(lacAngleText), "%d deg",
                              static_cast<s32>(mfOtherCarContactAngleRad * KF_RADIANS_TO_DEGREES));
             lpRender->DrawText(lacAngleText, MakeVector2(lfScreenWidth - 100.0f, 330.0f), 16.0f,
-                               0xFF0080FFu, false);
+                               rw::RGBA(255, 128, 0, 255), false);
         }
     }
 
@@ -830,7 +830,7 @@ namespace Vehicle
         static const f32 KF_WHEEL_FRONT    = 10.0f;
         static const f32 KF_WHEEL_REAR     = 30.0f;
         static const f32 KF_VELOCITY_SCALE = 1.0f;
-        static const u32 KU_WHEEL_COLOUR   = 0xFF000000u;
+        // KU_WHEEL_COLOUR retired (no DWARF name): its 4 use(s) spell rw::RGBA(0, 0, 0, 255), the immediate the u32 constant gave
 
         const rw::math::vpu::Vector2 lv2WheelSize = MakeVector2(KF_WHEEL_WIDTH, KF_WHEEL_LENGTH);
 
@@ -840,17 +840,17 @@ namespace Vehicle
         const f32 lfRearWheelY  = lrPosition.mV.y + KF_CAR_LENGTH - KF_WHEEL_REAR;
 
         lpRender->DrawBox(lrPosition, MakeVector2(KF_CAR_WIDTH, KF_CAR_LENGTH), lColour);
-        lpRender->DrawBox(MakeVector2(lfLeftWheelX, lfFrontWheelY), lv2WheelSize, KU_WHEEL_COLOUR);
-        lpRender->DrawBox(MakeVector2(lfRightWheelX, lfFrontWheelY), lv2WheelSize, KU_WHEEL_COLOUR);
-        lpRender->DrawBox(MakeVector2(lfLeftWheelX, lfRearWheelY), lv2WheelSize, KU_WHEEL_COLOUR);
-        lpRender->DrawBox(MakeVector2(lfRightWheelX, lfRearWheelY), lv2WheelSize, KU_WHEEL_COLOUR);
+        lpRender->DrawBox(MakeVector2(lfLeftWheelX, lfFrontWheelY), lv2WheelSize, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawBox(MakeVector2(lfRightWheelX, lfFrontWheelY), lv2WheelSize, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawBox(MakeVector2(lfLeftWheelX, lfRearWheelY), lv2WheelSize, rw::RGBA(0, 0, 0, 255));
+        lpRender->DrawBox(MakeVector2(lfRightWheelX, lfRearWheelY), lv2WheelSize, rw::RGBA(0, 0, 0, 255));
 
         if (lpContactPosition != 0)
         {
             const f32 lfContactX = (lpContactPosition->GetVector().x + 0.5f) * (lfRightWheelX - lfLeftWheelX) + lfLeftWheelX;
             const f32 lfContactY = (-lpContactPosition->GetVector().z + 0.5f) * (lfRearWheelY - lfFrontWheelY) + lfFrontWheelY;
 
-            lpRender->DrawBox(MakeVector2(lfContactX, lfContactY), lv2WheelSize, 0xFF0000FFu);
+            lpRender->DrawBox(MakeVector2(lfContactX, lfContactY), lv2WheelSize, rw::RGBA(255, 0, 0, 255));
         }
 
         if (lpClosingVelocity != 0)
@@ -862,10 +862,10 @@ namespace Vehicle
 
             lpRender->DrawLine(MakeVector2(lv2Centre.mV.x - lpClosingVelocity->GetVector().x * KF_VELOCITY_SCALE,
                                            lv2Centre.mV.y - lpClosingVelocity->GetVector().z * KF_VELOCITY_SCALE),
-                               lv2Centre, 0xFFFFFF00u);
+                               lv2Centre, rw::RGBA(0, 255, 255, 255));
             lpRender->DrawLine(MakeVector2(lv2Centre.mV.x - lpCarVelocity->GetVector().x * KF_VELOCITY_SCALE,
                                            lv2Centre.mV.y - lpCarVelocity->GetVector().z * KF_VELOCITY_SCALE),
-                               lv2Centre, 0xFF00FFFFu);
+                               lv2Centre, rw::RGBA(255, 255, 0, 255));
         }
     }
 

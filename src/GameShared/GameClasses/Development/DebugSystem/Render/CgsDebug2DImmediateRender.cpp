@@ -274,8 +274,8 @@ namespace CgsDev
         lrVertex.mv2Pos.y = lfY;
         lrVertex.mv2Tex0UV.x = 0.0f;
         lrVertex.mv2Tex0UV.y = 0.0f;
-        // RGBA is the packed u32 colour; the vertex carries it as RGBA8 (same 4 bytes).
-        *reinterpret_cast<u32*>(&lrVertex.mv4Colour) = lColour;
+        // The vertex carries the rw::RGBA word as its RGBA8 (same 4 bytes).
+        *reinterpret_cast<RGBA*>(&lrVertex.mv4Colour) = lColour;
         ++miIm2dVertsHead;
     }
 

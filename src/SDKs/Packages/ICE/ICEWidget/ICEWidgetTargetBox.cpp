@@ -45,7 +45,7 @@ namespace ICE
         // `this+0x10` (the transform matrix base) directly as the DrawBox transform.
         CgsDev::DebugInterface lDebugInterface;
         lDebugInterface.GetRender().DrawBox(reinterpret_cast<const f32*>(&mTransform),
-                                            (CgsDev::RGBA)0xFFFFFFFFu,
+                                            rw::RGBA(255, 255, 255, 255),
                                             lv4MinCorner, lv4MaxCorner);
     }
 }

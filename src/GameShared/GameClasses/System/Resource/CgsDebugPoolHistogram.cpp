@@ -92,7 +92,7 @@ namespace CgsResource
     void DebugPoolHistogram::DrawBar(CgsDev::Debug2DImmediateRender* lpRender, char* lpcText,
                                      s32 liCount, f32 lfY)
     {
-        lpRender->DrawText(lpcText, GetX() + 5.0f, lfY + GetY(), 10.0f, 0xFF000000u);
+        lpRender->DrawText(lpcText, GetX() + 5.0f, lfY + GetY(), 10.0f, rw::RGBA(0, 0, 0, 255));
         if (miLoadedResources > 0)
         {
             const s32 liValue = mauValues[liCount];
@@ -101,9 +101,9 @@ namespace CgsResource
             char lacText[32];
             CgsCore::SPrintf(lacText, sizeof(lacText), "%d", liValue);
             lpRender->DrawBox(GetX() + 60.0f, GetY() + lfY,
-                              (GetX() + 60.0f) + lfWidth, (GetY() + lfY) + 11.0f, 0xFF0000FFu);
+                              (GetX() + 60.0f) + lfWidth, (GetY() + lfY) + 11.0f, rw::RGBA(255, 0, 0, 255));
             lpRender->DrawText(lacText, (GetX() + 60.0f) + 2.0f,
-                               (lfY + GetY()) + 0.5f, 10.0f, 0x88000000u);
+                               (lfY + GetY()) + 0.5f, 10.0f, rw::RGBA(0, 0, 0, 136));
         }
     }
 }

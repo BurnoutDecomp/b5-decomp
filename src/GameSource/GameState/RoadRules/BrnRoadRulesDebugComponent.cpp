@@ -138,22 +138,22 @@ namespace BrnGameState
             }
 
             lInfoStream << lpcRoadName << " \n";
-            lpRender->DrawText(lInfoStream.GetBuffer(), 50.0f, 32.0f, 30.0f, 0xFFFFFFC8u);
+            lpRender->DrawText(lInfoStream.GetBuffer(), 50.0f, 32.0f, 30.0f, rw::RGBA(200, 255, 255, 255));
             lInfoStream.Reset();
 
             if (mpRoadRulesManager->maiChallengeRoadIndex[BrnStreetData::E_SCORE_TYPE_TIME] != BrnStreetData::KI_INVALID_ROAD_INDEX)
             {
                 lInfoStream << "Road Rule TIME: " << mpRoadRulesManager->mfTime << "s \n";
-                lpRender->DrawText(lInfoStream.GetBuffer(), 50.0f, 96.0f, 30.0f, 0xFFFFC8FFu);
+                lpRender->DrawText(lInfoStream.GetBuffer(), 50.0f, 96.0f, 30.0f, rw::RGBA(255, 200, 255, 255));
                 lInfoStream.Reset();
             }
         }
 
         if (mbRenderTimes)
         {
-            lpRender->DrawText("Par",    KF_PAR_SCORES_X,    KF_SCORES_Y, 20.0f, 0xFFFFFFFFu);
-            lpRender->DrawText("Player", KF_PLAYER_SCORES_X, KF_SCORES_Y, 20.0f, 0xFFFFFFFFu);
-            lpRender->DrawText("Net",    KF_NET_SCORES_X,    KF_SCORES_Y, 20.0f, 0xFFFFFFFFu);
+            lpRender->DrawText("Par",    KF_PAR_SCORES_X,    KF_SCORES_Y, 20.0f, rw::RGBA(255, 255, 255, 255));
+            lpRender->DrawText("Player", KF_PLAYER_SCORES_X, KF_SCORES_Y, 20.0f, rw::RGBA(255, 255, 255, 255));
+            lpRender->DrawText("Net",    KF_NET_SCORES_X,    KF_SCORES_Y, 20.0f, rw::RGBA(255, 255, 255, 255));
 
             for (s32 liRoad = 0; liRoad < KI_MAX_CHALLENGES; ++liRoad)
             {
@@ -166,7 +166,7 @@ namespace BrnGameState
 
                 // Row label: the road's debug name.
                 lCellStream << mpRoadRulesManager->mpStreetManager->GetStreetData()->GetRoad(liRoad)->GetDebugName();
-                lpRender->DrawText(lCellStream.GetBuffer(), KF_ROAD_NAME_X, lfRowY, 14.0f, 0xFFFFFFFFu);
+                lpRender->DrawText(lCellStream.GetBuffer(), KF_ROAD_NAME_X, lfRowY, 14.0f, rw::RGBA(255, 255, 255, 255));
                 lCellStream.Reset();
 
                 // Par: the compiled par score.
@@ -174,7 +174,7 @@ namespace BrnGameState
                 {
                     liScore = lpParScores->GetScore(BrnStreetData::E_SCORE_TYPE_TIME);
                     lCellStream << liScore;
-                    lpRender->DrawText(lCellStream.GetBuffer(), KF_PAR_SCORES_X, lfRowY, 14.0f, 0xFFFFFFFFu);
+                    lpRender->DrawText(lCellStream.GetBuffer(), KF_PAR_SCORES_X, lfRowY, 14.0f, rw::RGBA(255, 255, 255, 255));
                 }
                 lCellStream.Reset();
 
@@ -184,7 +184,7 @@ namespace BrnGameState
                 if (lpPlayerScores->ContainsData(BrnStreetData::E_SCORE_TYPE_TIME))
                 {
                     lCellStream << lpPlayerScores->GetScore(BrnStreetData::E_SCORE_TYPE_TIME);
-                    lpRender->DrawText(lCellStream.GetBuffer(), KF_PLAYER_SCORES_X, lfRowY, 14.0f, 0xFFFFFFFFu);
+                    lpRender->DrawText(lCellStream.GetBuffer(), KF_PLAYER_SCORES_X, lfRowY, 14.0f, rw::RGBA(255, 255, 255, 255));
                 }
                 lCellStream.Reset();
 
@@ -194,7 +194,7 @@ namespace BrnGameState
                 if (lpNetScores->ContainsData(BrnStreetData::E_SCORE_TYPE_TIME))
                 {
                     lCellStream << liScore;
-                    lpRender->DrawText(lCellStream.GetBuffer(), KF_NET_SCORES_X, lfRowY, 14.0f, 0xFFFFFFFFu);
+                    lpRender->DrawText(lCellStream.GetBuffer(), KF_NET_SCORES_X, lfRowY, 14.0f, rw::RGBA(255, 255, 255, 255));
                 }
             }
         }

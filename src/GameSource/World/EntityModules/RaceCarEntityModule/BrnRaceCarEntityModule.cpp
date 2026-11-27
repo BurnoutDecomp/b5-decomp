@@ -6658,7 +6658,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
     {
         const Vector2 lTextPosition(lfTextX, 30.0f);
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
-                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, rw::RGBA(255, 255, 255, 255) );
     }
 
     const Vector3& lvPlayerForward = lpPhysicsState->mTransform.zAxis;
@@ -6667,7 +6667,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
     {
         const Vector2 lTextPosition(lfTextX, 45.0f);
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
-                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, rw::RGBA(255, 255, 255, 255) );
     }
 
     const Vector3& lvLinearVelocity = lpPhysicsState->mLinearVelocity;
@@ -6676,7 +6676,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
     {
         const Vector2 lTextPosition(lfTextX, 60.0f);
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
-                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, rw::RGBA(255, 255, 255, 255) );
     }
 
     const Vector3& lvAngularVelocity = lpPhysicsState->mAngularVelocity;
@@ -6685,7 +6685,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
     {
         const Vector2 lTextPosition(lfTextX, 75.0f);
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
-                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+                                  CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, rw::RGBA(255, 255, 255, 255) );
     }
 
     if( mbRivalDebug )
@@ -6713,7 +6713,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
         {
             const Vector2 lTextPosition(lfTextX, 90.0f);
             lrRender.Draw2DTextJustified( lacText, lTextPosition,
-                                      CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+                                      CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, rw::RGBA(255, 255, 255, 255) );
         }
 
         f32 lfClosestDistanceSquared = (std::numeric_limits<f32>::max)();
@@ -6751,7 +6751,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
             {
                 const Vector2 lTextPosition(lfTextX, 110.0f);
                 lrRender.Draw2DTextJustified( lacText, lTextPosition,
-                                          CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+                                          CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, rw::RGBA(255, 255, 255, 255) );
             }
         }
     }

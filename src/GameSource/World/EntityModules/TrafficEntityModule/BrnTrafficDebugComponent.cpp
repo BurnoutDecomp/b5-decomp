@@ -2155,7 +2155,7 @@ void DebugComponent::RenderPerfmon(CgsDev::Debug2DImmediateRender* lpDisplay,
                                     const CgsDev::PerfMonCpuMonitorData* lpData,
                                     f32 lfX, f32 lfY, f32 lfScale)
 {
-    const CgsDev::RGBA lColour = 0xFFFFFFFFu;
+    const CgsDev::RGBA lColour = rw::RGBA(255, 255, 255, 255);
     lpDisplay->DrawText(lpData->mpcName, lfX, lfY, lfScale, lColour);
     char lacText[32];
     CgsCore::SPrintf(lacText, sizeof(lacText), "%.03f", lpData->mfCurrentValue);
@@ -2173,7 +2173,7 @@ void DebugComponent::RenderPerfmon(CgsDev::Debug2DImmediateRender* lpDisplay,
 void DebugComponent::RenderPerformanceTable(CgsDev::Debug2DImmediateRender* lpDisplay)
 {
     const f32 lfX = lpDisplay->GetVirtualScreenSize().mV.x * 0.5f + 50.0f;
-    const CgsDev::RGBA lColour = 0xFFFFFFFFu;
+    const CgsDev::RGBA lColour = rw::RGBA(255, 255, 255, 255);
     lpDisplay->DrawText("Traffic [special]", lfX, 76.0f, 24.0f, lColour);
     lpDisplay->DrawText("Current", lfX + 200.0f, 84.0f, 16.0f, lColour);
     lpDisplay->DrawText("Average", lfX + 270.0f, 84.0f, 16.0f, lColour);
@@ -2209,7 +2209,7 @@ void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) 
             (static_cast<f32>(luHull % luHullColumns) * lfStepX + 80.0f),
             (static_cast<f32>(luHull / luHullColumns) * lfStepY + 80.0f));
         // Vector DrawBox takes position+size; scalar DrawBox takes min/max.
-        lpDisplay->DrawBox(lPosition, lSize, 0x88FFFF00u);
+        lpDisplay->DrawBox(lPosition, lSize, rw::RGBA(0, 255, 255, 136));
     }
 
     Vector2 lStart(80.0f, 80.0f);
@@ -2217,7 +2217,7 @@ void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) 
     u32 luLines = luColumns + 1;
     do
     {
-        lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
+        lpDisplay->DrawLine(lStart, lEnd, rw::RGBA(0, 0, 0, 255));
         --luLines;
         lStart.mV.x += lfStepX;
         lEnd.mV.x += lfStepX;
@@ -2228,7 +2228,7 @@ void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) 
     luLines = luRows + 1;
     do
     {
-        lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
+        lpDisplay->DrawLine(lStart, lEnd, rw::RGBA(0, 0, 0, 255));
         --luLines;
         lStart.mV.y += lfStepY;
         lEnd.mV.y += lfStepY;
@@ -2246,11 +2246,11 @@ void DebugComponent::DrawPlayerCarHullId(CgsDev::Debug2DImmediateRender* lpDispl
     // 0x8275C9B4); DWARF :3329 names the buffer lacBuffer, the hull read goes through Array<u16,9>::operator[].
     if (mpModule->mbIsOnlineGameMode)
         lpDisplay->DrawText("Warning: Hull ID is for car zero, not player",
-                      40.0f, 100.0f, 16.0f, 0xFF0000FFu);
+                      40.0f, 100.0f, 16.0f, rw::RGBA(255, 0, 0, 255));
     char lacBuffer[256];
     CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "Traf Hull: %u",
                     static_cast<u32>(mpModule->maaRaceCarHulls[0][0]));
-    lpDisplay->DrawText(lacBuffer, K_TRAFFIC_DEBUG_DISPLAY.mfDrawSize, 100.0f, 16.0f, 0xFFFFFFFFu);
+    lpDisplay->DrawText(lacBuffer, K_TRAFFIC_DEBUG_DISPLAY.mfDrawSize, 100.0f, 16.0f, rw::RGBA(255, 255, 255, 255));
 }
 
 // ARTIST 0x82750AE8. stwu allocates 0x10C0 and the stream's capacity is 0x1000:
@@ -2269,7 +2269,7 @@ void DebugComponent::DrawTextWithOffsets(CgsDev::DebugRender& lrDisplay,
     {
         if (liCharacter == '\n' || (liLineCount > 128 && liCharacter == ' '))
         {
-            lrDisplay.Draw2DText(lLine.GetBuffer(), lfX, lfY, 12.0f, 0xFFFFFFFFu);
+            lrDisplay.Draw2DText(lLine.GetBuffer(), lfX, lfY, 12.0f, rw::RGBA(255, 255, 255, 255));
             lLine.Reset();
             lfY += 12.0f;
             liLineCount = 0;
@@ -2279,7 +2279,7 @@ void DebugComponent::DrawTextWithOffsets(CgsDev::DebugRender& lrDisplay,
         liCharacter = static_cast<s8>(lpStream->GetBuffer()[liInputIndex]);
         lLine.AppendFormat("%c", liCharacter);
     }
-    lrDisplay.Draw2DText(lLine.GetBuffer(), lfX, lfY, 12.0f, 0xFFFFFFFFu);
+    lrDisplay.Draw2DText(lLine.GetBuffer(), lfX, lfY, 12.0f, rw::RGBA(255, 255, 255, 255));
     lLine.Reset();
 }
 

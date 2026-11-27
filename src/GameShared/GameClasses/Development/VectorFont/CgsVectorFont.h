@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector2 (rw::math::vpu::Vector2)
+#include "rw/core/base/detail/hosttype.h"   // rw::RGBA
 
 // CgsDev::VectorFont - the debug VECTOR font. Each glyph is a set of line strokes (CompressedFontData,
 // carved from the X360 into CgsVectorFontData.h); Print walks a string and draws each glyph's strokes
@@ -11,6 +12,7 @@
 
 namespace CgsDev
 {
+    using rw::RGBA;   // DWARF CgsVectorFont.h:39-115: the colours are rw::RGBA
     struct Debug2DImmediateRender;
     struct Debug3DImmediateRender;
 
@@ -19,12 +21,12 @@ namespace CgsDev
     public:
         void Construct();
         void SetSize(Vector2 lSize);                       // text size in px; cell-normalised internally
-        void SetColour(u32 luColour) { mColour = luColour; }
+        void SetColour(RGBA lColour) { mColour = lColour; }
         void SetRenderer(Debug2DImmediateRender* lpRenderer) { mp2DRenderer = lpRenderer; mp3DRenderer = 0; }
         void SetRenderer(Debug3DImmediateRender* lpRenderer) { mp2DRenderer = 0; mp3DRenderer = lpRenderer; }
 
-        // Draw lpcString at (lfX, lfY) in luColour; returns the final baseline plus one font-height step.
-        f32 Print(f32 lfX, f32 lfY, const char* lpcString, u32 luColour);
+        // Draw lpcString at (lfX, lfY) in lColour; returns the final baseline plus one font-height step.
+        f32 Print(f32 lfX, f32 lfY, const char* lpcString, RGBA lColour);
         // DecFIGS h79; ARTIST8281FEC0 forwards this exact stored colour.
         f32 Print(f32 lfX, f32 lfY, const char* lpcString)
         { return Print(lfX, lfY, lpcString, mColour); }
@@ -38,10 +40,10 @@ namespace CgsDev
         }
 
     private:
-        void DrawLine(Vector2 lP1, Vector2 lP2, u32 luColour);
+        void DrawLine(Vector2 lP1, Vector2 lP2, RGBA lColour);
 
         Vector2                 mSize;          // per-coord scale (lSize / KF_CHAR*)
-        u32                     mColour;
+        RGBA                    mColour;
         Debug2DImmediateRender* mp2DRenderer;
         Debug3DImmediateRender* mp3DRenderer;
     };

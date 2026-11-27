@@ -300,7 +300,7 @@ namespace
         }
         const s32 liLeftRoadNameIndex = FindRoadNameIndexFromId(lLeftRoadId);
         lpRender->DrawText(KAA_DEBUG_ROAD_NAMES[liLeftRoadNameIndex],
-                           370.0f, 70.0f, 30.0f, 0xFF14B414u);
+                           370.0f, 70.0f, 30.0f, rw::RGBA(20, 180, 20, 255));
 
         const BrnStreetData::RoadIndex liRightRoadIndex = lpStreetManager->mRightRoadIndex;
         CgsID lRightRoadId = 0;
@@ -311,7 +311,7 @@ namespace
         }
         const s32 liRightRoadNameIndex = FindRoadNameIndexFromId(lRightRoadId);
         lpRender->DrawText(KAA_DEBUG_ROAD_NAMES[liRightRoadNameIndex],
-                           870.0f, 70.0f, 30.0f, 0xFF14B414u);
+                           870.0f, 70.0f, 30.0f, rw::RGBA(20, 180, 20, 255));
     }
 
     // X360 0x82357538. The profile's per-county counts are completed elements; the StuntManager
@@ -327,7 +327,7 @@ namespace
         {
             lpRender->DrawText(KAA_DEBUG_COUNTY_NAMES[liCounty],
                                80.0f, 50.0f + 100.0f * static_cast<f32>(liCounty),
-                               16.0f, 0xFFFFFFFFu);
+                               16.0f, rw::RGBA(255, 255, 255, 255));
 
             for (s32 liElementType = 0; liElementType < 3; ++liElementType)
             {
@@ -348,7 +348,7 @@ namespace
                 lpRender->DrawText(lacCountText,
                                    80.0f, 70.0f + 100.0f * static_cast<f32>(liCounty) +
                                               20.0f * static_cast<f32>(liElementType),
-                                   16.0f, 0xFFFFFFFFu);
+                                   16.0f, rw::RGBA(255, 255, 255, 255));
             }
         }
     }
@@ -366,7 +366,7 @@ namespace
             if (lpScoringSystem->HasModeTimeExpired(lCurrentTime))
             {
                 lpRender->DrawText("Come in number 5, your time is up!",
-                                   120.0f, 80.0f, 20.0f, 0xFF0000FFu);
+                                   120.0f, 80.0f, 20.0f, rw::RGBA(255, 0, 0, 255));
             }
             else if (lpScoringSystem->IsTimeLimitActive())
             {
@@ -378,7 +378,7 @@ namespace
                 CgsCore::SPrintf(macScoreText, KI_SCORE_TEXT_LENGTH,
                                  "Time remaining %d.%d",
                                  liRemainingSeconds / 60, liRemainingSeconds % 60);
-                lpRender->DrawText(macScoreText, 120.0f, 80.0f, 20.0f, 0xFF0000FFu);
+                lpRender->DrawText(macScoreText, 120.0f, 80.0f, 20.0f, rw::RGBA(255, 0, 0, 255));
             }
 
             if (lpModeManager->GetCurrentGameModeType() == GameStateModuleIO::E_MODE_ROAD_RAGE)
@@ -389,7 +389,7 @@ namespace
                                  "Takedowns %d of %d",
                                  lpRoadRageScoring->GetNumTakedownsAchieved(),
                                  lpRoadRageScoring->GetTargetNumTakedowns());
-                lpRender->DrawText(macScoreText, 120.0f, 50.0f, 20.0f, 0xFF0000FFu);
+                lpRender->DrawText(macScoreText, 120.0f, 50.0f, 20.0f, rw::RGBA(255, 0, 0, 255));
             }
         }
 
@@ -460,7 +460,7 @@ namespace
         const Vector2 lv2Position(lrMetrics.mfScreenWidth - 30.0f, 145.0f);
         lrRender.Draw2DTextJustified(lacLandmarkText, lv2Position,
                                      CgsDev::DebugRender::E_JUSTIFY_RIGHT,
-                                     18.0f, 0xFF0080FFu);
+                                     18.0f, rw::RGBA(255, 128, 0, 255));
         if (liRegionIndex != -1 && liRegionIndex != -2)
         {
             CgsCore::SPrintf(lacLandmarkText, KI_LANDMARK_TEXT_LENGTH,
@@ -468,7 +468,7 @@ namespace
             const Vector2 lv2RegionIndexPosition(lrMetrics.mfScreenWidth - 30.0f, 165.0f);
             lrRender.Draw2DTextJustified(lacLandmarkText, lv2RegionIndexPosition,
                                          CgsDev::DebugRender::E_JUSTIFY_RIGHT,
-                                         18.0f, 0xFF0080FFu);
+                                         18.0f, rw::RGBA(255, 128, 0, 255));
 
             const BrnTrigger::TriggerRegion* lpRegion = lpTriggerData->GetRegion(liRegionIndex);
             CgsCore::SPrintf(lacLandmarkText, KI_LANDMARK_TEXT_LENGTH,
@@ -476,7 +476,7 @@ namespace
             const Vector2 lv2RegionIdPosition(lrMetrics.mfScreenWidth - 30.0f, 185.0f);
             lrRender.Draw2DTextJustified(lacLandmarkText, lv2RegionIdPosition,
                                          CgsDev::DebugRender::E_JUSTIFY_RIGHT,
-                                         18.0f, 0xFF0080FFu);
+                                         18.0f, rw::RGBA(255, 128, 0, 255));
         }
     }
 
@@ -517,7 +517,7 @@ namespace
             const Vector2 lv2LabelPosition(lrMetrics.mfScreenWidth - 30.0f, 125.0f);
             lrRender.Draw2DTextJustified(lacLandmarkText, lv2LabelPosition,
                                          CgsDev::DebugRender::E_JUSTIFY_RIGHT,
-                                         18.0f, 0xFF0080FFu);
+                                         18.0f, rw::RGBA(255, 128, 0, 255));
         }
 
         const BrnTrigger::Landmark* lpLandmark =
@@ -553,7 +553,7 @@ namespace
         const Vector2 lv2ArrowTail(
             vmx::Subtract(vmx::Multiply(lfArrowCentreX, 2.0f), lfArrowTipX),
             vmx::Subtract(vmx::Multiply(lfArrowCentreY, 2.0f), lfArrowTipY));
-        lrRender.Draw2DArrow(lv2ArrowTail, lv2ArrowTip, 0xFF00FFFFu);
+        lrRender.Draw2DArrow(lv2ArrowTail, lv2ArrowTip, rw::RGBA(255, 255, 0, 255));
 
         // ARTIST8236C710..75C computes the displayed magnitude separately,
         // with two refinements and its final zero selection.
@@ -566,7 +566,7 @@ namespace
         const Vector2 lv2DistancePosition(lrMetrics.mfScreenWidth - 50.0f, 105.0f);
         lrRender.Draw2DTextJustified(lacDistanceText, lv2DistancePosition,
                                      CgsDev::DebugRender::E_JUSTIFY_CENTRE,
-                                     18.0f, 0xFF0080FFu);
+                                     18.0f, rw::RGBA(255, 128, 0, 255));
     }
 
 }

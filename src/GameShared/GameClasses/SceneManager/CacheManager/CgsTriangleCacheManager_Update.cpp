@@ -314,7 +314,7 @@ namespace CgsSceneManager
                       static_cast<int>(lrSlot.miOverflow));
 
             lDebugInterface.Get2dRender().Draw2DText(lacMessage, 100.0f, lfTextY, 20.0f,
-                                                     0xFF0000FFu);
+                                                     rw::RGBA(255, 0, 0, 255));
             lfTextY += 22.0f;   // flt_820F56B8
 
         }

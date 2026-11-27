@@ -30,9 +30,9 @@ namespace BrnAI
     // Packed debug-render colours (AARRGGBB, the li/lis/ori immediates the AI debug components
     // pass to the 2D/3D renderers). Shared by the RaceBalancing and ResetOnTrack debug components,
     // which ARTIST compiles in one unity TU (BrnWorldAIUnity), so they are defined once here.
-    const u32 K_WHITE = 0xFFFFFFFFu;
-    const u32 K_GREEN = 0xFF00FF00u;
-    const u32 K_BLUE  = 0xFF0000FFu;
+    // K_WHITE retired (no DWARF name): its uses spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
+    // K_GREEN retired (no DWARF name): its uses spell rw::RGBA(0, 255, 0, 255), the immediate the u32 constant gave
+    // K_BLUE retired (no DWARF name): its uses spell rw::RGBA(255, 0, 0, 255), the immediate the u32 constant gave
 
     namespace BrnAIDebugUtils
     {

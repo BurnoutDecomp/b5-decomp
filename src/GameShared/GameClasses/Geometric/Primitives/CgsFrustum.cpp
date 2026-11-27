@@ -506,7 +506,7 @@ namespace CgsGeometric
     {
         CgsDev::DebugInterface lDebugInterface;
         CgsDev::DebugRender& lRender = lDebugInterface.GetRender();
-        const CgsDev::RGBA lWhite = static_cast<CgsDev::RGBA>(0xFFFFFFFFu);
+        const CgsDev::RGBA lWhite = static_cast<CgsDev::RGBA>(rw::RGBA(255, 255, 255, 255));
 
         static const u32 KAA_PLANE_TRIPLES[8][3] =
         {
@@ -570,7 +570,7 @@ namespace CgsGeometric
     {
         CgsDev::DebugInterface lDebugInterface;
         CgsDev::DebugRender& lRender = lDebugInterface.GetRender();
-        const CgsDev::RGBA lWhite = static_cast<CgsDev::RGBA>(0xFFFFFFFFu);
+        const CgsDev::RGBA lWhite = static_cast<CgsDev::RGBA>(rw::RGBA(255, 255, 255, 255));
 
         // ARTIST 0x82845BE0..0x82845BF4: this target object is reset on every
         // entry. The raw global has no proven semantic name or other consumer.

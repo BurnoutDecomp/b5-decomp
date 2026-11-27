@@ -359,7 +359,7 @@ void SoundWorldScene::QuerySoundMap(QueryInfo& lrQuery,
                     CgsDev::DebugRender& lrRender = lDebugInterface.GetRender();
                     const Vector3 lDebugPosition = lrEntity.GetPos();
                     const f32 lfDebugRadius = lrEntity.GetRadius();
-                    lrRender.DrawSphere(lDebugPosition, lfDebugRadius, lColour.m_rgba);
+                    lrRender.DrawSphere(lDebugPosition, lfDebugRadius, lColour);
                 }
 
                 // ARTIST checks output capacity after the optional debug draw, so a full

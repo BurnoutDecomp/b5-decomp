@@ -6101,7 +6101,7 @@ namespace Vehicle
             const Vector3 lvVertex0 = vpu::MultAdd(lTriangle.mNormal, lvScale, lTriangle.mVertex0);
             const Vector3 lvVertex1 = vpu::MultAdd(lTriangle.mNormal, lvScale, lTriangle.mVertex1);
             const Vector3 lvVertex2 = vpu::MultAdd(lTriangle.mNormal, lvScale, lTriangle.mVertex2);
-            const CgsDev::RGBA luColour = lbIsWall ? 0xFF0000FFu : 0xFF00FF00u;
+            const CgsDev::RGBA luColour = lbIsWall ? rw::RGBA(255, 0, 0, 255) : rw::RGBA(0, 255, 0, 255);
             CgsDev::DebugInterface lDebugInterface;
             CgsDev::DebugRender& lrRender = lDebugInterface.GetRender();
             lrRender.DrawTriangle(lvVertex0, lvVertex1, lvVertex2, luColour);

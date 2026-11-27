@@ -16,7 +16,7 @@ namespace BrnGameState
 {
     // File-scope debug-HUD text colour (X360 dword_82CDB850, referenced only here). Packed RGBA8;
     // the X360 stores a single constant word -- white for the readout text.
-    static const CgsDev::RGBA KU_INFO_TEXT_COLOUR = 0xFFFFFFFFu;
+    static const CgsDev::RGBA KU_INFO_TEXT_COLOUR(255, 255, 255, 255);
 
     // The inlined owner construction at ScoringSystem::Construct @0x82337FE0 stores exactly the
     // scoring-owner pointer at component+0x0C and clears the local display byte at component+0x10.

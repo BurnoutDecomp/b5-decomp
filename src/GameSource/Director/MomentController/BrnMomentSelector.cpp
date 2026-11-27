@@ -758,43 +758,43 @@ void MomentSelector::ActualDebugRender(DebugPrinter& lrDebugPrinter) const
         if (lrMoment.GetState() == Moment::E_STATE_VALID && lrMoment.CanSwitchToMeNow())
         {
             lrDebugPrinter.Print(lrMoment.GetName(),
-                                 static_cast<CgsDev::RGBA>((liAlpha << 24) | 0xFF00));
+                                 rw::RGBA(0, 255, 0, static_cast<u8>(liAlpha)));
         }
         else if (lrMoment.GetState() == Moment::E_STATE_VALID && !lrMoment.CanSwitchToMeNow())
         {
             lrDebugPrinter.Print(lrMoment.GetName(),
-                                 static_cast<CgsDev::RGBA>((liAlpha << 24) | 0x8000));
+                                 rw::RGBA(0, 128, 0, static_cast<u8>(liAlpha)));
         }
         else if (lrMoment.ConditionsAreMet() && !lrMoment.IsInhibited())
         {
             lrDebugPrinter.Print(lrMoment.GetName(),
-                                 static_cast<CgsDev::RGBA>((liAlpha << 24) | 0x80FF));
+                                 rw::RGBA(255, 128, 0, static_cast<u8>(liAlpha)));
         }
         else if (!lrMoment.ConditionsAreMet() && !lrMoment.IsInhibited()
                  && mMomentDescriptionArray[luI].mbCanBeInhibited)
         {
             lrDebugPrinter.PrintName(lrMoment,
-                                     static_cast<CgsDev::RGBA>((liAlpha << 24) | 0xFF));
+                                     rw::RGBA(255, 0, 0, static_cast<u8>(liAlpha)));
         }
         else if (lrMoment.ConditionsAreMet() && lrMoment.IsInhibited())
         {
             lrDebugPrinter.PrintName(lrMoment,
-                                     static_cast<CgsDev::RGBA>((liAlpha << 24) | 0xFFFF));
+                                     rw::RGBA(255, 255, 0, static_cast<u8>(liAlpha)));
         }
         else if (!lrMoment.ConditionsAreMet() && lrMoment.IsInhibited())
         {
             lrDebugPrinter.PrintName(lrMoment,
-                                     static_cast<CgsDev::RGBA>((liAlpha << 24) | 0x808080));
+                                     rw::RGBA(128, 128, 128, static_cast<u8>(liAlpha)));
         }
         else if (lrMoment.ConditionsAreMet() || lrMoment.IsInhibited())
         {
             lrDebugPrinter.Print(lrMoment.GetName(),
-                                 static_cast<CgsDev::RGBA>((liAlpha << 24) | 0xFFFF00));
+                                 rw::RGBA(0, 255, 255, static_cast<u8>(liAlpha)));
         }
         else
         {
             lrDebugPrinter.PrintName(lrMoment,
-                                     static_cast<CgsDev::RGBA>((liAlpha << 24) | 0x404040));
+                                     rw::RGBA(64, 64, 64, static_cast<u8>(liAlpha)));
         }
     }
 }

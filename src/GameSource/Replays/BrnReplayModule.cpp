@@ -1133,13 +1133,13 @@ namespace BrnReplays
             char lacText[256];
             CgsCore::SPrintf(lacText, 0x100, "Recording: %.1f complete",
                              static_cast<double>(lfPercentComplete));
-            const u32 luColour = (static_cast<u32>(luAlpha) << 24) | 0x0044FF44u;
+            const CgsDev::RGBA luColour(68, 255, 68, static_cast<u8>(luAlpha));
             lrRender.Draw2DText(lacText, 300.0f, 50.0f, 16.0f, luColour);
             mfDebugHudAlpha = 0.0f;
         }
         else
         {
-            const u32 luColour = (static_cast<u32>(luAlpha) << 24) | 0x004444FFu;
+            const CgsDev::RGBA luColour(255, 68, 68, static_cast<u8>(luAlpha));
             lrRender.Draw2DText("Can't record - no space", 300.0f, 50.0f, 16.0f, luColour);
             mfDebugHudAlpha -= 0.02f;
         }

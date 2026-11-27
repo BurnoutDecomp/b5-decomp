@@ -72,7 +72,7 @@ namespace
     };
 
     // The colour every Print line is appended with (the console passes -1).
-    const CgsDev::RGBA KU_PRINT_COLOUR = static_cast<CgsDev::RGBA>(-1);
+    // KU_PRINT_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
 
     // The self-check slot's index, named so SetupFailFlagMask reads the way the console reads.
     const u32 KU_FLAG_CONSISTENCY_TEST = 31;
@@ -129,7 +129,7 @@ void ValidityAccount::Print(DebugLog& lrDebugLog) const
          liFlag != CgsContainers::BitArray<32u>::KI_INVALID_BITINDEX;
          liFlag = mFailedFlags.GetNextNonZeroBit(liFlag))
     {
-        lrDebugLog.Append(KAAC_FLAG_NAMES[liFlag], KU_PRINT_COLOUR);
+        lrDebugLog.Append(KAAC_FLAG_NAMES[liFlag], rw::RGBA(255, 255, 255, 255));
     }
 }
 

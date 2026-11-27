@@ -57,7 +57,7 @@ namespace BrnGameState
     {
         static const f32 KF_X = 50.0f;
         static const f32 KF_TEXT_SCALE = 16.0f;
-        static const u32 KU_TEXT_COLOUR = 0xFFFFFFFFu;
+        // KU_TEXT_COLOUR retired (no DWARF name): its 5 use(s) spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
 
         if (mbShowModeInfo)
         {
@@ -68,12 +68,12 @@ namespace BrnGameState
             {
                 lStream << lpCurrentMode->GetName() << " state: " << lpCurrentMode->GetCurrentState() << "\n";
                 lpRender->DrawText(lStream.GetBuffer(), KF_X, 100.0f,
-                              KF_TEXT_SCALE, KU_TEXT_COLOUR);
+                              KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
                 lStream.Reset();
                 lStream << "Traffic level: " << mpModeManager->mCurrentGameModeParams.mfTrafficDensityScale;
                 lpRender->DrawText(lStream.GetBuffer(), KF_X, 120.0f,
-                              KF_TEXT_SCALE, KU_TEXT_COLOUR);
+                              KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
                 lStream.Reset();
                 lStream << "Rank ratio: " << mpModeManager->mCurrentGameModeParams.mfProgressionRankAsRatio;
@@ -84,7 +84,7 @@ namespace BrnGameState
             }
 
             lpRender->DrawText(lStream.GetBuffer(), KF_X, 140.0f,
-                          KF_TEXT_SCALE, KU_TEXT_COLOUR);
+                          KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
             const GameStateModuleIO::EGameModeType leMode = mpModeManager->meCurrentGameModeType;
             bool lbDrawModeLine = false;
@@ -117,7 +117,7 @@ namespace BrnGameState
             if (lbDrawModeLine)
             {
                 lpRender->DrawText(lStream.GetBuffer(), KF_X, 160.0f,
-                              KF_TEXT_SCALE, KU_TEXT_COLOUR);
+                              KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
             }
 
             if (leMode == GameStateModuleIO::E_MODE_ONLINE_FUGITIVE ||
@@ -136,7 +136,7 @@ namespace BrnGameState
                     }
                 }
                 lpRender->DrawText(lStream.GetBuffer(), KF_X, 160.0f,
-                              KF_TEXT_SCALE, KU_TEXT_COLOUR);
+                              KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
             }
         }
 

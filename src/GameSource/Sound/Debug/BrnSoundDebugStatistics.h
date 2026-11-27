@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "rw/core/base/detail/hosttype.h"   // rw::RGBA
 #include "GameShared/GameClasses/Sound/Playback/CgsVoiceProfilingData.h"
 
 namespace CgsSound { namespace Playback { namespace Module { class Module; } } }
@@ -47,7 +48,7 @@ namespace Debug
                         const char* lpFormat, ...);
         void DrawGraph(CgsDev::Debug2DImmediateRender* lpRender,
                        CgsSound::Playback::VoiceProfilingData<128>* lpVoiceProfilingData,
-                       u32 lColour);
+                       rw::RGBA lColour);   // DWARF BrnSoundStatistics.h:113
 
         struct NamedVoiceProfilingData
         {

@@ -48,7 +48,7 @@ namespace
     const f32 KF_DISPLAY_INSET  = 100.0f;  // flt_820049E0  texture-display box inset from the window edges
 
     // The X360 packs an opaque-black text colour (li r8, 0xFF000000 == -16777216) for the stat lines.
-    const CgsDev::RGBA KU_TEXT_COLOUR = 0xFF000000u;
+    // KU_TEXT_COLOUR retired (no DWARF name): its 7 use(s) spell rw::RGBA(0, 0, 0, 255), the immediate the u32 constant gave
 
 }
 
@@ -226,29 +226,29 @@ namespace CgsResource
         f32  lfY = GetY();
 
         CgsCore::SPrintf(lacText, sizeof(lacText), "Texture %d of %d", miTextureIndex, miTotalTextures);
-        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, rw::RGBA(0, 0, 0, 255));
 
         lfY += KF_TEXT_LINE_STEP;
         CgsCore::SPrintf(lacText, sizeof(lacText), "Width: %d", lpTexture->GetWidth());
-        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, rw::RGBA(0, 0, 0, 255));
 
         lfY += KF_TEXT_LINE_STEP;
         CgsCore::SPrintf(lacText, sizeof(lacText), "Height: %d", lpTexture->GetHeight());
-        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, rw::RGBA(0, 0, 0, 255));
 
         lfY += KF_TEXT_LINE_STEP;
         CgsCore::SPrintf(lacText, sizeof(lacText), "Models: %d", miNumModelsThatUseCurrentTexture);
-        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, rw::RGBA(0, 0, 0, 255));
 
         lfY += KF_TEXT_LINE_STEP;
         CgsCore::SPrintf(lacText, sizeof(lacText), "Instances: %d", miNumInstancesThatUseCurrentTexture);
-        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, rw::RGBA(0, 0, 0, 255));
 
         // "MM" = main-memory size (descriptor[0]); the X360 reads it straight off the selected entry.
         lfY += KF_TEXT_LINE_STEP;
         const u32 luMainMemSize = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size;
         CgsCore::SPrintf(lacText, sizeof(lacText), "MM: %u", luMainMemSize);
-        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, rw::RGBA(0, 0, 0, 255));
 
         // "VM" = graphics-system (video) memory, formatted MB/KB/B.
         const u32 luVideoMemSize = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[1].m_size;
@@ -258,7 +258,7 @@ namespace CgsResource
         char lacVideoMem[256];
         CgsCore::SPrintf(lacVideoMem, sizeof(lacVideoMem), "%uMB %uKB %uB", luMB, luKB, luB);
         CgsCore::SPrintf(lacText, sizeof(lacText), "VM: %s", lacVideoMem);
-        lpRender->DrawText(lacText, GetX(), lfY + KF_TEXT_LINE_STEP, KF_TEXT_SCALE, KU_TEXT_COLOUR);
+        lpRender->DrawText(lacText, GetX(), lfY + KF_TEXT_LINE_STEP, KF_TEXT_SCALE, rw::RGBA(0, 0, 0, 255));
 
         // Draw the selected texture into the display box: from (mfX + 100, mfY) to (mfWidth - 100, mfHeight).
         const Vector2 lv2Position = Vector2(GetX() + KF_DISPLAY_INSET, GetY());
@@ -467,7 +467,7 @@ namespace CgsResource
                         // 0xFF0000FF) spanning the full cell stride from its top-left corner.
                         lpRender->DrawBox(lv2CellOrigin.mV.x, lv2CellOrigin.mV.y,
                                           lv2CellOrigin.mV.x + lv2CellStride.mV.x,
-                                          lv2CellOrigin.mV.y + lv2CellStride.mV.y, 0xFF0000FFu);
+                                          lv2CellOrigin.mV.y + lv2CellStride.mV.y, rw::RGBA(255, 0, 0, 255));
                     }
 
                     // Draw this cell's texture, centred in its stride region (origin + inset, size =

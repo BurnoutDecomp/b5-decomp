@@ -520,17 +520,17 @@ namespace BrnAI
         if (mbIsInGameMode || mbIsInJunkyard)
         {
             lStream << "In game mode or JYard";
-            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), 80.0f, 80.0f, 16.0f, 0xFF8080C8u);
+            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), 80.0f, 80.0f, 16.0f, rw::RGBA(200, 128, 128, 255));
         }
         else
         {
             lStream << miCarsAwaitingCollection << " for collection, ";
             lStream << "Free burn time " << static_cast<s32>(mfTimeInFreeRoam);
-            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), 80.0f, 80.0f, 16.0f, 0xFF8080C8u);
+            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), 80.0f, 80.0f, 16.0f, rw::RGBA(200, 128, 128, 255));
 
             lStream.Reset();
             lStream << "Num cars in buzz list " << miNumActiveCars;
-            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), 80.0f, 100.0f, 16.0f, 0xFFC88080u);
+            lDebugInterface.GetRender().Draw2DText(lStream.GetBuffer(), 80.0f, 100.0f, 16.0f, rw::RGBA(128, 128, 200, 255));
         }
     }
 

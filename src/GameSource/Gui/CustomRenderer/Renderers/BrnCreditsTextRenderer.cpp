@@ -240,7 +240,7 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
                     mTitleTextObject.CalculateAutosizing();
 
                 const u32 luAlpha = static_cast<u32>(KF_DROPSHADOW_ALPHA * mfFade + 0.5f);
-                mTitleTextObject.mTextColour = static_cast<CgsGraphics::RGBA>(luAlpha << 24);
+                mTitleTextObject.mTextColour = CgsGraphics::RGBA(0, 0, 0, static_cast<u8>(luAlpha));
                 lpObject = &mTitleTextObject;
             }
             else
@@ -254,7 +254,7 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
                 if (mNormalTextObject.mbWordWrap == 1)
                     mNormalTextObject.CalculateAutosizing();
                 const u32 luAlpha = static_cast<u32>(KF_DROPSHADOW_ALPHA * mfFade + 0.5f);
-                mNormalTextObject.mTextColour = static_cast<CgsGraphics::RGBA>(luAlpha << 24);
+                mNormalTextObject.mTextColour = CgsGraphics::RGBA(0, 0, 0, static_cast<u8>(luAlpha));
                 lpObject = &mNormalTextObject;
             }
 
@@ -284,8 +284,8 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
 
                 const u32 luAlpha = static_cast<u32>(mfFade * 255.0f + 0.5f) & 0xFF;
                 const u32 luBrightness = 255u;
-                mTitleTextObject.mTextColour = static_cast<CgsGraphics::RGBA>(
-                    (luAlpha << 24) | (luBrightness * 0x010101u));
+                mTitleTextObject.mTextColour = CgsGraphics::RGBA(static_cast<u8>(luBrightness), static_cast<u8>(luBrightness),
+                    static_cast<u8>(luBrightness), static_cast<u8>(luAlpha));
                 lpObject = &mTitleTextObject;
             }
             else
@@ -300,8 +300,8 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
                     mNormalTextObject.CalculateAutosizing();
                 const u32 luAlpha = static_cast<u32>(mfFade * 255.0f + 0.5f) & 0xFF;
                 const u32 luBrightness = 255u;
-                mNormalTextObject.mTextColour = static_cast<CgsGraphics::RGBA>(
-                    (luAlpha << 24) | (luBrightness * 0x010101u));
+                mNormalTextObject.mTextColour = CgsGraphics::RGBA(static_cast<u8>(luBrightness), static_cast<u8>(luBrightness),
+                    static_cast<u8>(luBrightness), static_cast<u8>(luAlpha));
                 lpObject = &mNormalTextObject;
             }
 

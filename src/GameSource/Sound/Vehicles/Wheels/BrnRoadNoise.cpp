@@ -351,7 +351,7 @@ void RoadnoiseEffect::DrawDebug() const
     {
         CgsCore::SPrintf(lacText, static_cast<u32>(sizeof(lacText)), "%d",
                          muRoadnoiseLoop[liSide].GetCurrent());
-        lrRender.Draw2DText(lacText, 900.0f, lfY, 25.0f, 0xFF00FFA0u);
+        lrRender.Draw2DText(lacText, 900.0f, lfY, 25.0f, rw::RGBA(160, 255, 0, 255));
         lfY += 30.0f; // flt_82004F5C
     }
 }

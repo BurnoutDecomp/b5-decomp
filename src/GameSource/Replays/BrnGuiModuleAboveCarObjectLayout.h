@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"
+#include "rw/core/base/detail/hosttype.h"   // rw::RGBA
 
 namespace BrnReplays
 {
@@ -14,7 +15,7 @@ public:
     GuiModuleAboveCarObjectLayout* Clear();
 
     Vector3 mWorldPosition;
-    u32 mColour;
+    rw::RGBA mColour;   // the colour AboveCarRenderer passes to its text object
     u32 muRacePosition;
     bool mbVisible;
 };

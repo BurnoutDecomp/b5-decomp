@@ -1933,14 +1933,14 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         if (mbEnableDebugRender)
         {
             CgsDev::DebugInterface lDebugInterface;
-            lDebugInterface.GetRender().DrawBox(&lrEyeTarget.xAxis.GetVector().x, 0xFF00FF00u,
+            lDebugInterface.GetRender().DrawBox(&lrEyeTarget.xAxis.GetVector().x, rw::RGBA(0, 255, 0, 255),
                                                 Vector4(0.0f, lrCameraAttribs.mrPivotY,
                                                         -lrCameraAttribs.mrPivotZ, 0.0f),
                                                 Vector4(0.0f, 0.0f,
                                                         lrCameraAttribs.mrPivotZOffset, 0.0f));
 
             const Vector3 lDebugFrom = rw::math::vpu::TransformPoint(lrEyeTarget, lPivot);
-            lDebugInterface.GetRender().DrawLine(0xFF00FF00u, lDebugFrom,
+            lDebugInterface.GetRender().DrawLine(rw::RGBA(0, 255, 0, 255), lDebugFrom,
                                                  lDebugFrom + Vector3(0.0f, 2.0f, 0.0f));
         }
 

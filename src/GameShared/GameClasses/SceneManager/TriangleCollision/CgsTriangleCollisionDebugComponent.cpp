@@ -973,7 +973,7 @@ namespace CgsSceneManager
         {
             lp2DRenderer->DrawText("Testing polygon soup swept sphere collision",
                                    50.0f, 50.0f, 12.0f,
-                                   0xFFFFFFFFu);
+                                   rw::RGBA(255, 255, 255, 255));
         }
 
         const rw::math::vpu::Vector3 lvStartPosition(MakeVector4(

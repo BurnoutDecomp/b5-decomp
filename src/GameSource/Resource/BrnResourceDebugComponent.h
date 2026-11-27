@@ -73,7 +73,7 @@ namespace BrnResource
         // nearest (add 0.5, truncate). X360 0x82661410.
         // DecFIGS declares a non-static RGBA-returning member; RGBA is the packed u32
         // host representation. ARTIST 0x82661410 receives this plus its hidden result slot.
-        u32 InterpolateColours(u32 luColourT, u32 luColour0, f32 lfFactor);
+        CgsDev::RGBA InterpolateColours(CgsDev::RGBA lColourT, CgsDev::RGBA lColour0, f32 lfFactor);   // DWARF h:106
 
     private:
         // ARTIST 0x826627A8 passes this address as GeneralAllocator::ReportHeap's

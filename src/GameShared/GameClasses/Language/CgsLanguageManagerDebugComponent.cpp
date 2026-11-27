@@ -25,8 +25,8 @@ namespace CgsLanguage
             "..\\..\\..\\GameShared\\GameClasses\\Language/CgsLanguageManagerDebugComponent.cpp";
 
         // HUD colours (X360 packed u32): white text, opaque-black full-screen backdrop.
-        const u32 KU_TEXT_COLOUR       = 0xFFFFFFFFu;   // X360 -1
-        const u32 KU_BACKGROUND_COLOUR = 0xFF000000u;   // X360 -16777216
+        // KU_TEXT_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
+        // KU_BACKGROUND_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 0, 0, 255), the immediate the u32 constant gave
 
 
     }
@@ -121,7 +121,7 @@ namespace CgsLanguage
         // DWARF (CgsLanguageUnity) local lTextColour (cpp:333), held in one register across both
         // calls (ARTIST r27); the second call's arguments are read right to left, the scale and Y
         // before the label width (0x82860EBC..0x82860ED0).
-        CgsDev::RGBA lTextColour = KU_TEXT_COLOUR;
+        CgsDev::RGBA lTextColour = rw::RGBA(255, 255, 255, 255);
         lpRender->DrawText( lpcLabel, lfX, lrY, mrTextSize, lTextColour );
         lpRender->DrawText( lpcValue, lfX + lpRender->CalcTextWidth( lpcLabel, mrTextSize ), lrY,
                             mrTextSize, lTextColour );
@@ -141,7 +141,7 @@ namespace CgsLanguage
         const f32 lfX = mrPosX;
         f32 lfY = mrPosY;
         const Vector2 lv2Origin(0.0f, 0.0f);
-        lpRender->DrawBox(lv2Origin, lpRender->GetVirtualScreenSize(), KU_BACKGROUND_COLOUR);
+        lpRender->DrawBox(lv2Origin, lpRender->GetVirtualScreenSize(), rw::RGBA(0, 0, 0, 255));
 
         char acValue[32];
 

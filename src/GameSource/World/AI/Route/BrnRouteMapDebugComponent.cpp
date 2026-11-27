@@ -41,12 +41,12 @@ namespace
 {
     // World-space RenderWare primitives take the vendor RGBA record; preserve ARTIST's packed
     // immediate word verbatim (the debug renderer interprets the low byte as red).
-    inline rw::RGBA ToWorldColour(u32 luPackedColour)
-    {
-        rw::RGBA lColour;
-        lColour.m_rgba = luPackedColour;
-        return lColour;
-    }
+    // (ToWorldColour retired: the 2D and 3D renderers take the same rw::RGBA, so the
+    //  colours pass straight through; no DWARF name, no ARTIST body.)
+
+
+
+
 
     // Section/colour-mode tuning constants (BrnRouteMapDebugComponent.cpp:34-55 in the DWARF). Only
     // the ones this TU's bodies actually load are pinned to their X360 literal values.
@@ -64,25 +64,25 @@ namespace
     // fall-through arm reads it (`lwz r11, 0x404(r11)` @0x827681B8, r11 = 0x82F30000) and the
     // .data image word at dword_82F30404 is 0xFF00FFFF. The renderer's channel extraction makes
     // this yellow (R=255,G=255,B=0), not cyan. The same word feeds the section draw at 0x82775550.
-    const RGBA K_NORMAL_COLOUR        = 0xFF00FFFFu;  // dword_82F30404 (.data image word; yellow)
+    const RGBA K_NORMAL_COLOUR(255, 255, 0, 255);  // dword_82F30404 (.data image word; yellow)
 
     // Type-colour table (GetSectionTypeColour @0x82768120).
-    const RGBA K_TYPE_JUNCTION_COLOUR = 0xFFFFFF00u;  // bit 0x04 -> -256
-    const RGBA K_TYPE_BIT0_COLOUR     = 0xFF0000FFu;  // bit 0x01 -> -16776961
-    const RGBA K_TYPE_BIT1_COLOUR     = 0xFFFF0000u;  // bit 0x02 -> -65536
-    const RGBA K_TYPE_PORTAL_COLOUR   = 0xFFFF00FFu;  // bit 0x20 / 0x40 -> -65281
-    const RGBA K_TYPE_BIT3_COLOUR     = 0xFF0080FFu;  // bit 0x08 -> -16744193
+    // K_TYPE_JUNCTION_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 255, 255, 255), the immediate the u32 constant gave
+    // K_TYPE_BIT0_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(255, 0, 0, 255), the immediate the u32 constant gave
+    // K_TYPE_BIT1_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 0, 255, 255), the immediate the u32 constant gave
+    // K_TYPE_PORTAL_COLOUR retired (no DWARF name): its 2 use(s) spell rw::RGBA(255, 0, 255, 255), the immediate the u32 constant gave
+    // K_TYPE_BIT3_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(255, 128, 0, 255), the immediate the u32 constant gave
 
     // Speed-band table (GetSectionSpeedColour @0x827681C8), indexed by muSpeed.
     const RGBA K_SPEED_COLOUR[5] =
     {
-        0xFF0000FFu,  // 0 -> -16776961
-        0xFF0080FFu,  // 1 -> -16744193
-        0xFF00FFFFu,  // 2 -> -16711681
-        0xFF00FFC0u,  // 3 -> -16711744
-        0xFF00FF00u,  // 4 -> -16711936
+        rw::RGBA(255, 0, 0, 255),  // 0 -> -16776961
+        rw::RGBA(255, 128, 0, 255),  // 1 -> -16744193
+        rw::RGBA(255, 255, 0, 255),  // 2 -> -16711681
+        rw::RGBA(192, 255, 0, 255),  // 3 -> -16711744
+        rw::RGBA(0, 255, 0, 255),  // 4 -> -16711936
     };
-    const RGBA K_SPEED_DEFAULT_COLOUR = 0xFFFFFFFFu;  // -1
+    // K_SPEED_DEFAULT_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
 
     // X360 flt_82F303FC is the squared-distance threshold loaded by DrawPortalIds @0x82767F40
     // and DrawPortals @0x82775280. The image word is 0x47742400 == 62500.0f (a 250-unit radius).
@@ -184,17 +184,17 @@ RGBA RouteMapDebugComponent::GetSectionTypeColour(const AISection* lpSection) co
     const u8 lu8Flags = lpSection->mx8Flags;
 
     if (lu8Flags & 0x04)
-        return K_TYPE_JUNCTION_COLOUR;
+        return rw::RGBA(0, 255, 255, 255);
     if (lu8Flags & 0x01)
-        return K_TYPE_BIT0_COLOUR;
+        return rw::RGBA(255, 0, 0, 255);
     if (lu8Flags & 0x02)
-        return K_TYPE_BIT1_COLOUR;
+        return rw::RGBA(0, 0, 255, 255);
     if (lu8Flags & 0x40)
-        return K_TYPE_PORTAL_COLOUR;
+        return rw::RGBA(255, 0, 255, 255);
     if (lu8Flags & 0x08)
-        return K_TYPE_BIT3_COLOUR;
+        return rw::RGBA(255, 128, 0, 255);
     if (lu8Flags & 0x20)
-        return K_TYPE_PORTAL_COLOUR;
+        return rw::RGBA(255, 0, 255, 255);
 
     return K_NORMAL_COLOUR;
 }
@@ -210,7 +210,7 @@ RGBA RouteMapDebugComponent::GetSectionSpeedColour(const AISection* lpSection) c
     if (lu8Speed < E_SECTION_SPEED_COUNT)
         return K_SPEED_COLOUR[lu8Speed];
 
-    return K_SPEED_DEFAULT_COLOUR;
+    return rw::RGBA(255, 255, 255, 255);
 }
 
 // ====================================================================================================
@@ -301,9 +301,9 @@ void RouteMapDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay
         const char* lpcDistanceFunction = KAPC_ASTAR_DISTANCE_FUNCTION_NAMES[
             mpAIModule->mRouteRequestManager.meDefaultAStarDistanceFunction];
         lStream << "Default distance function: " << lpcDistanceFunction;
-        lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, 0xFFFFFFFFu);
+        lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, rw::RGBA(255, 255, 255, 255));
 
-        DrawRouteInMap(lpDisplay, mpAIModule->GetMasterRoute(), 0xFF0000FFu /* -16776961 */);
+        DrawRouteInMap(lpDisplay, mpAIModule->GetMasterRoute(), rw::RGBA(255, 0, 0, 255) /* -16776961 */);
     }
 
     if (mbDrawAStarInMap)
@@ -474,10 +474,10 @@ void RouteMapDebugComponent::DrawRouteInMap(CgsDev::Debug2DImmediateRender* lpDi
 void RouteMapDebugComponent::DrawAStarInMap(CgsDev::Debug2DImmediateRender* lpDisplay) const
 {
     static const f32  KF_NODE_POINT_SIZE    = 2.0f;
-    static const RGBA KU_OPEN_NODE_COLOUR   = 0xFF00FF00u;
-    static const RGBA KU_CLOSED_NODE_COLOUR = 0xFF0000C8u;
+    // KU_OPEN_NODE_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 255, 0, 255), the immediate the u32 constant gave
+    // KU_CLOSED_NODE_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(200, 0, 0, 255), the immediate the u32 constant gave
     static const f32  KF_BLOCK_X_SIZE       = 5.0f;
-    static const RGBA KU_BLOCK_X_COLOUR     = 0xFF0000FFu;
+    // KU_BLOCK_X_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(255, 0, 0, 255), the immediate the u32 constant gave
 
     AStar&         lrAStar     = mpRouteMapModule->mAStar;
     AStarNodePool& lrNodePool  = lrAStar.mAStarNodePool;
@@ -500,7 +500,7 @@ void RouteMapDebugComponent::DrawAStarInMap(CgsDev::Debug2DImmediateRender* lpDi
             const Vector2 lv2Position(lPosition.X(), lPosition.Y());
 
             DrawPoint(lpDisplay, ToMapCoords(lv2Position), KF_NODE_POINT_SIZE,
-                      lpNode->IsOpen() ? KU_OPEN_NODE_COLOUR : KU_CLOSED_NODE_COLOUR);
+                      lpNode->IsOpen() ? rw::RGBA(0, 255, 0, 255) : rw::RGBA(200, 0, 0, 255));
         }
     }
 
@@ -544,14 +544,14 @@ void RouteMapDebugComponent::DrawAStarInMap(CgsDev::Debug2DImmediateRender* lpDi
             if (mpAISectionsData->GetAISection(liSection)->mId == luBlockSectionId)
             {
                 const Vector3 lv3Middle = mpAISectionsData->GetAISection(liSection)->GetMiddle();
-                DrawX(lpDisplay, ToMapCoords(lv3Middle), KF_BLOCK_X_SIZE, KU_BLOCK_X_COLOUR);
+                DrawX(lpDisplay, ToMapCoords(lv3Middle), KF_BLOCK_X_SIZE, rw::RGBA(255, 0, 0, 255));
                 break;
             }
         }
     }
 
     lStream << ")";
-    lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 70.0f, 16.0f, 0xFFFFFFFFu);
+    lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 70.0f, 16.0f, rw::RGBA(255, 255, 255, 255));
 }
 
 // ====================================================================================================
@@ -565,7 +565,7 @@ void RouteMapDebugComponent::DrawAISectionInfo(CgsDev::Debug2DImmediateRender* l
     const AISection* lpSection = mpAISectionsData->GetAISection(luSectionIndex);
 
     CgsDev::SimpleStrStream lStream;
-    lpDisplay->DrawCircle(ToMapCoords(lpSection->GetMiddle()), 2.0f, 5, 0xFFFFFFFFu);
+    lpDisplay->DrawCircle(ToMapCoords(lpSection->GetMiddle()), 2.0f, 5, rw::RGBA(255, 255, 255, 255));
 
     lStream << "Index: " << static_cast<s32>(luSectionIndex) << ", ID: " << lpSection->mId << ", Links: ";
 
@@ -582,7 +582,7 @@ void RouteMapDebugComponent::DrawAISectionInfo(CgsDev::Debug2DImmediateRender* l
                          lv3Middle.GetY().GetFloat(),
                          lv3Middle.GetZ().GetFloat());
 
-    lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, 0xFFFFFFFFu);
+    lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, rw::RGBA(255, 255, 255, 255));
 }
 
 
@@ -691,7 +691,7 @@ void RouteMapDebugComponent::DrawAISectionMap(CgsDev::Debug2DImmediateRender* lp
     }
     lStream << "Section count: " << static_cast<s32>(mpAISectionsData->muNumSections)
             << ", Line count: " << liLineCount;
-    lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 50.0f, 16.0f, 0xFFFFFFFFu);
+    lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 50.0f, 16.0f, rw::RGBA(255, 255, 255, 255));
 }
 
 // ARTIST 0x8278D7B0; DWARF BrnRouteMapDebugComponent.cpp:582.
@@ -713,13 +713,13 @@ void RouteMapDebugComponent::DrawCarsInMap(CgsDev::Debug2DImmediateRender* lpDis
                                  lFlatDirection.mV.y * lfInverseLength);
         const Vector2 lRight(lDirection.mV.y, -lDirection.mV.x);
 
-        RGBA lColour = 0xFF000000u;
+        RGBA lColour = rw::RGBA(0, 0, 0, 255);
         if (lpCar->mbIsPlayer)
-            lColour = 0xC8FF8000u;
+            lColour = rw::RGBA(0, 128, 255, 200);
         else if (lpCar->meCarState == E_AI_CAR_STATE_OUT_OF_RANGE)
-            lColour = 0xC80000FFu;
+            lColour = rw::RGBA(255, 0, 0, 200);
         else if (lpCar->meCarState == E_AI_CAR_STATE_IN_RANGE)
-            lColour = lpCar->mbIsCrashing ? 0xC8202020u : 0xC800FF00u;
+            lColour = lpCar->mbIsCrashing ? rw::RGBA(32, 32, 32, 200) : rw::RGBA(0, 255, 0, 200);
 
         const Vector2 lBack(lPosition.mV.x - lDirection.mV.x * 4.0f,
                             lPosition.mV.y - lDirection.mV.y * 4.0f);
@@ -734,19 +734,19 @@ void RouteMapDebugComponent::DrawCarsInMap(CgsDev::Debug2DImmediateRender* lpDis
                     lRight.mV.y * 5.0f + lBack.mV.y),
         };
         lpDisplay->DrawSolidConvexPolygon(laArrow, 4, lColour);
-        lpDisplay->DrawWirePolygon(laArrow, 4, 0xFF000000u);
+        lpDisplay->DrawWirePolygon(laArrow, 4, rw::RGBA(0, 0, 0, 255));
 
         if (mbCarInfoInMap)
         {
             CgsDev::SimpleStrStream lStream;
             lStream << static_cast<s32>(lpCar->mfDistanceToCheckpoint) << "m";
             lpDisplay->DrawText(lStream.GetBuffer(), lPosition.mV.x, lPosition.mV.y - 10.0f,
-                          10.0f, 0xFFFFFFFFu);
+                          10.0f, rw::RGBA(255, 255, 255, 255));
             const u16 luDestination = lpCar->GetDestinationSectionIndex();
             if (luDestination != AICar::KI_INVALID_SECTION_INDEX)
             {
                 lpDisplay->DrawLine(lPosition,
-                    ToMapCoords(mpAISectionsData->GetAISection(luDestination)->GetMiddle()), 0xFFFFFFFFu);
+                    ToMapCoords(mpAISectionsData->GetAISection(luDestination)->GetMiddle()), rw::RGBA(255, 255, 255, 255));
             }
         }
 
@@ -756,11 +756,11 @@ void RouteMapDebugComponent::DrawCarsInMap(CgsDev::Debug2DImmediateRender* lpDis
             if (luDestination != AICar::KI_INVALID_SECTION_INDEX)
             {
                 lpDisplay->DrawCircle(ToMapCoords(mpAISectionsData->GetAISection(luDestination)->GetMiddle()),
-                                      5.0f, 6, 0xFFFFFFFFu);
+                                      5.0f, 6, rw::RGBA(255, 255, 255, 255));
             }
             const Route* lpRoute = lpCar->GetRoute();
             if (lpRoute->GetStatus() != Route::E_STATUS_UNINITIALISED && lpRoute->GetNodeCount() > 0)
-                DrawRouteInMap(lpDisplay, lpRoute, lpCar->mbIsPlayer ? 0xFF8000FFu : 0xFFFF00FFu);
+                DrawRouteInMap(lpDisplay, lpRoute, lpCar->mbIsPlayer ? rw::RGBA(255, 0, 128, 255) : rw::RGBA(255, 0, 255, 255));
         }
     }
 }
@@ -788,7 +788,7 @@ void RouteMapDebugComponent::DrawEventBlockSectionsInMap(CgsDev::Debug2DImmediat
                 if (mpAISectionsData->GetAISection(luSection)->mId == luSectionId)
                 {
                     DrawX(lpDisplay, ToMapCoords(mpAISectionsData->GetAISection(luSection)->GetMiddle()),
-                          5.0f, 0xFF0000FFu);
+                          5.0f, rw::RGBA(255, 0, 0, 255));
                     break;
                 }
             }
@@ -796,7 +796,7 @@ void RouteMapDebugComponent::DrawEventBlockSectionsInMap(CgsDev::Debug2DImmediat
         lStream << " )";
         lpDisplay->DrawText(lStream.GetBuffer(), 50.0f,
                       static_cast<f32>(liCheckpoint) * 20.0f + 100.0f,
-                      16.0f, 0xFFFFFFFFu);
+                      16.0f, rw::RGBA(255, 255, 255, 255));
     }
 }
 
@@ -830,7 +830,7 @@ void RouteMapDebugComponent::DrawPortals(CgsDev::Debug3DImmediateRender* lpDispl
                                lPosition.GetY().GetFloat() + 1.0f,
                                lPosition.GetZ().GetFloat() + 1.0f);
             // ARTIST's unnamed 0x8281E548 is the actual AA solid-box renderer.
-            lpDisplay->DrawSolidBox(lMin, lMax, ToWorldColour(0xFF00FF00u));
+            lpDisplay->DrawSolidBox(lMin, lMax, rw::RGBA(0, 255, 0, 255));
 
             const AISection* lpLinkedSection = mpAISectionsData->GetAISection(lpPortal->GetLinkSectionIndex());
             const u8 luLinkedPortalCount = lpLinkedSection->mu8NumPortals;
@@ -838,7 +838,7 @@ void RouteMapDebugComponent::DrawPortals(CgsDev::Debug3DImmediateRender* lpDispl
             {
                 const Vector3 lLinkedPosition = lpLinkedSection->GetPortal(luLinkedPortal)->GetPosition();
                 const RGBA lColour = GetSectionTypeColour(lpLinkedSection);
-                lpDisplay->DrawLine(lPosition, lLinkedPosition, ToWorldColour(lColour));
+                lpDisplay->DrawLine(lPosition, lLinkedPosition, lColour);
             }
         }
     }
@@ -887,9 +887,9 @@ void RouteMapDebugComponent::DrawHNGSectionAsPlanes(CgsDev::Debug3DImmediateRend
         const Vector3 lTopEnd(lrLine.mfEndX, lfMiddleY + 10.0f, lrLine.mfEndY);
         const Vector3 lBottomEnd(lrLine.mfEndX, lfMiddleY - 20.0f, lrLine.mfEndY);
         lpDisplay->DrawSolidQuad(lBottomStart, lTopStart, lTopEnd, lBottomEnd,
-                                 ToWorldColour(0x800040FFu));
+                                 rw::RGBA(255, 64, 0, 128));
         lpDisplay->DrawSolidQuad(lBottomEnd, lTopEnd, lTopStart, lBottomStart,
-                                 ToWorldColour(0x804000FFu));
+                                 rw::RGBA(255, 0, 64, 128));
     }
 }
 
@@ -949,17 +949,17 @@ void RouteMapDebugComponent::DrawDeadEndsInMap(CgsDev::Debug2DImmediateRender* l
         const AISection* lpSection = mpAISectionsData->GetAISection(luSectionIndex);
         const u8 luPortalCount = lpSection->mu8NumPortals;
         bool lbDrawSection = false;
-        RGBA lColour = 0xFFFFFFFFu;
+        RGBA lColour = rw::RGBA(255, 255, 255, 255);
 
         if (luPortalCount < 2)
         {
             // ARTIST tests NO_RESET before SHORTCUT and selects these three original colours.
             if ((lpSection->mx8Flags & 0x02u) != 0)
-                lColour = 0xFFFF0000u;
+                lColour = rw::RGBA(0, 0, 255, 255);
             else if ((lpSection->mx8Flags & 0x01u) != 0)
-                lColour = 0xFF0000FFu;
+                lColour = rw::RGBA(255, 0, 0, 255);
             else
-                lColour = 0xFF00FF00u;
+                lColour = rw::RGBA(0, 255, 0, 255);
 
             lbDrawSection = true;
         }
@@ -985,7 +985,7 @@ void RouteMapDebugComponent::DrawDeadEndsInMap(CgsDev::Debug2DImmediateRender* l
             if (!lbBackPortalFound)
             {
                 lbDrawSection = true;
-                lColour = 0xFFFFFF00u;
+                lColour = rw::RGBA(0, 255, 255, 255);
             }
         }
 
@@ -1003,7 +1003,7 @@ void RouteMapDebugComponent::DrawDeadEndsInMap(CgsDev::Debug2DImmediateRender* l
                 if (luLink0 == luLink1)
                 {
                     lbDrawSection = true;
-                    lColour = 0xFFFFFFFFu;
+                    lColour = rw::RGBA(255, 255, 255, 255);
                 }
             }
         }
@@ -1019,7 +1019,7 @@ void RouteMapDebugComponent::DrawDeadEndsInMap(CgsDev::Debug2DImmediateRender* l
 
         if (mbHighDetailMap)
             lpDisplay->DrawText(lStream.GetBuffer(), lv2MapPosition.mV.x, lv2MapPosition.mV.y,
-                          12.0f, 0xFFFFFFFFu);
+                          12.0f, rw::RGBA(255, 255, 255, 255));
     }
 }
 

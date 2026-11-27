@@ -445,14 +445,14 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
         lDebug.GetRender().DrawSolidQuad(
             Utils::ConsoleVpu::MultiplyAdd(lrView.Up(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lFarLeft),
             Utils::ConsoleVpu::MultiplyAdd(lrView.Up(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lFarRight),
-            lFarRight - lUp, lFarLeft - lUp, (static_cast<CgsDev::RGBA>(lu8Alpha) << 24) | 0x00FF0000u);
+            lFarRight - lUp, lFarLeft - lUp, rw::RGBA(0, 0, 255, lu8Alpha));
         const rw::math::vpu::Vector3 lNear      = Utils::ConsoleVpu::MultiplyAdd(lrView.At(), lrTweaked.mfDOFNear, lrView.Pos());
         const rw::math::vpu::Vector3 lNearLeft  = lNear - lRight;
         const rw::math::vpu::Vector3 lNearRight = Utils::ConsoleVpu::MultiplyAdd(lrView.Right(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lNear);
         lDebug.GetRender().DrawSolidQuad(
             Utils::ConsoleVpu::MultiplyAdd(lrView.Up(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lNearLeft),
             Utils::ConsoleVpu::MultiplyAdd(lrView.Up(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lNearRight),
-            lNearRight - lUp, lNearLeft - lUp, (static_cast<CgsDev::RGBA>(lu8Alpha) << 24) | 0x000000FFu);
+            lNearRight - lUp, lNearLeft - lUp, rw::RGBA(255, 0, 0, lu8Alpha));
     }
 
     lrCamera.GetDepthOfField().SetParams(mpParameters->mfDOFNear, mpParameters->mfDOFFar,

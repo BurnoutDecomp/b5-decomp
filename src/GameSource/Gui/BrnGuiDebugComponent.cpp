@@ -846,7 +846,7 @@ void GuiDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     static const Vector4 lFullArea(0.0f, 0.0f, 1280.0f, 720.0f);
     static const Vector4 lFourThreeArea(160.0f, 0.0f, 1120.0f, 720.0f);
     if (mbShow43Area)
-        DrawDebugFrame1280(lpRender, lFourThreeArea, 0xFF00FF00u, 1.0f);
+        DrawDebugFrame1280(lpRender, lFourThreeArea, rw::RGBA(0, 255, 0, 255), 1.0f);
     if (mbShowSafeArea)
     {
         const Vector4& lrArea = mbShow43Area ? lFourThreeArea : lFullArea;
@@ -861,7 +861,7 @@ void GuiDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
         const Vector4 lvSafePercent(lfPercent, lfPercent, lfPercent, lfPercent);
         const Vector4 lvSafeArea(
             __vmaddfp(lvSafeAreaOffsets.mV, lvSafePercent.mV, lvSafeAreaOrigins.mV));
-        DrawDebugFrame1280(lpRender, lvSafeArea, 0xFF0000FFu, 1.0f);
+        DrawDebugFrame1280(lpRender, lvSafeArea, rw::RGBA(255, 0, 0, 255), 1.0f);
     }
     if (mpGuiModule->mScreenFlow.mpStateOnlineInstantResults && mbDebugOnlineInstantResults)
         mpGuiModule->mScreenFlow.mpStateOnlineInstantResults->RenderDebug(lpRender);
@@ -872,13 +872,13 @@ void GuiDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
         char lacBuffer[1024];
         CgsDev::StrStream lStream(lacBuffer, sizeof(lacBuffer));
         lStream << "SPEED : " << mSpeedoInfo.miPlayerMPH << "mph \n";
-        lpRender->DrawText(lStream.GetBuffer(), 50.0f, 50.0f, 30.0f, 0xFFFFFFC8u);
+        lpRender->DrawText(lStream.GetBuffer(), 50.0f, 50.0f, 30.0f, rw::RGBA(200, 255, 255, 255));
         lStream.Reset();
         lStream << "RPM : " << mSpeedoInfo.miPlayerRPM << " \n";
-        lpRender->DrawText(lStream.GetBuffer(), 50.0f, 80.0f, 30.0f, 0xFFFFFFC8u);
+        lpRender->DrawText(lStream.GetBuffer(), 50.0f, 80.0f, 30.0f, rw::RGBA(200, 255, 255, 255));
         lStream.Reset();
         lStream << "GEAR : " << mSpeedoInfo.miPlayerGear << " \n";
-        lpRender->DrawText(lStream.GetBuffer(), 50.0f, 110.0f, 30.0f, 0xFFFFFFC8u);
+        lpRender->DrawText(lStream.GetBuffer(), 50.0f, 110.0f, 30.0f, rw::RGBA(200, 255, 255, 255));
         lStream.Reset();
     }
 }

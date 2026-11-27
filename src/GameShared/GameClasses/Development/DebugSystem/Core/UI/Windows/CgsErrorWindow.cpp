@@ -54,13 +54,13 @@ namespace CgsDev
             // of the packed colour and scale each of the three low channel bytes by lfScale.
             RGBA ScalePulseColour(RGBA lColour, f32 lfScale)
             {
-                const u32 luB0 = (u32)((f32)( lColour        & 0xFFu) * lfScale);
-                const u32 luB1 = (u32)((f32)((lColour >>  8) & 0xFFu) * lfScale);
-                const u32 luB2 = (u32)((f32)((lColour >> 16) & 0xFFu) * lfScale);
-                return (lColour & 0xFF000000u)          // preserve the top (alpha) byte
-                     | ((luB2 & 0xFFu) << 16)
-                     | ((luB1 & 0xFFu) <<  8)
-                     |  (luB0 & 0xFFu);
+                const u32 luB0 = (u32)((f32)(lColour.GetRed()) * lfScale);
+                const u32 luB1 = (u32)((f32)(lColour.GetGreen()) * lfScale);
+                const u32 luB2 = (u32)((f32)(lColour.GetBlue()) * lfScale);
+                lColour.SetRed(static_cast<u8>(luB0));     // the alpha byte is kept
+                lColour.SetGreen(static_cast<u8>(luB1));
+                lColour.SetBlue(static_cast<u8>(luB2));
+                return lColour;
             }
         }
 

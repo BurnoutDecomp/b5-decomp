@@ -253,7 +253,7 @@ void ReverbEffect::UpdateParams(f32 afTimeStep)
             "ReverbTypeUrban", "ReverbTypeRural", "ReverbTypeImpactTime", "ReverbTypeSuperSloMo", "ReverbTypeCount"
         };
         CgsDev::DebugInterface lDebug;
-        lDebug.Get2dRender().Draw2DText(kaNames[mReverbType.GetCurrent()], 900.0f, 50.0f, 40.0f, 0xFF00FFA0u);
+        lDebug.Get2dRender().Draw2DText(kaNames[mReverbType.GetCurrent()], 900.0f, 50.0f, 40.0f, rw::RGBA(160, 255, 0, 255));
     }
 }
 

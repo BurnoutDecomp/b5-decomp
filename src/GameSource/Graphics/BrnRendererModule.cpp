@@ -1292,8 +1292,8 @@ void BrnRendererModule::DebugDisplayRenderTarget(renderengine::Texture* texture,
     const f32 y0 = position.mV.y;
     const f32 x1 = x0 + size.mV.x;
     const f32 y1 = y0 + size.mV.y;
-    const RGBA8 rgba = { static_cast<u8>(colour), static_cast<u8>(colour >> 8),
-        static_cast<u8>(colour >> 16), static_cast<u8>(colour >> 24) };
+    const RGBA8 rgba = { colour.GetRed(), colour.GetGreen(),
+        colour.GetBlue(), colour.GetAlpha() };
     const Basic2dColouredTexturedVertex vertices[] = {
         { { x0, y0 }, rgba, { 0.0f, 0.0f } },
         { { x0, y1 }, rgba, { 0.0f, 1.0f } },
@@ -2059,7 +2059,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* effects,
             miShowShadowMapIndex %= 4;
             renderengine::Texture* const texture = mAllocatedRenderTargets
                 .GetShadowMapBuffer(miShowShadowMapIndex)->GetDepthTexture();
-            DebugDisplayRenderTarget(texture, ::Vector2(0.7f, 0.0f), ::Vector2(0.3f, 0.3f), 0xffffffffu);
+            DebugDisplayRenderTarget(texture, ::Vector2(0.7f, 0.0f), ::Vector2(0.3f, 0.3f), rw::RGBA(255, 255, 255, 255));
         }
         PerfMonCpu::StopMonitor(mCpuMonitors.miRenderDebugData);
         PerfMonCpu::StartMonitor(mCpuMonitors.miRenderHUD);

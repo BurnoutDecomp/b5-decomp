@@ -47,7 +47,7 @@ namespace ICE
             const u32 luG = (u32)(s32)ClampColourChannel(lrColour.mV.y);
             const u32 luB = (u32)(s32)ClampColourChannel(lrColour.mV.z);
             const u32 luA = (u32)(s32)ClampColourChannel(lrColour.mV.w);
-            return (CgsDev::RGBA)((luR << 24) | (luG << 16) | (luB << 8) | luA);
+            return CgsDev::RGBA(static_cast<u8>(luA), static_cast<u8>(luB), static_cast<u8>(luG), static_cast<u8>(luR));   // the same word
         }
 
         inline Vector2 MakeVector2(f32 lfX, f32 lfY)

@@ -17,7 +17,7 @@ namespace CgsDev
     void VectorFont::Construct()
     {
         mSize = Vector2(1.0f, 1.0f);
-        mColour = 0xFFFFFFFFu;
+        mColour = rw::RGBA(255, 255, 255, 255);
         mp2DRenderer = 0;
         mp3DRenderer = 0;
     }
@@ -30,17 +30,17 @@ namespace CgsDev
         mSize.mV = __vmulfp(lSize.mV, lvScale);
     }
 
-    void VectorFont::DrawLine(Vector2 lP1, Vector2 lP2, u32 luColour)
+    void VectorFont::DrawLine(Vector2 lP1, Vector2 lP2, RGBA lColour)
     {
         if (mp2DRenderer)
-            mp2DRenderer->DrawLine(lP1, lP2, luColour);
+            mp2DRenderer->DrawLine(lP1, lP2, lColour);
         else
         {
             // ARTIST 8281F18C..8281F244 widens the screen-space endpoints
             // with zero Z/W and keeps the strokes in the owning 3D debug bank.
             CGS_ASSERT(mp3DRenderer != 0, "mp3DRenderer");
-            rw::RGBA lColour;
-            lColour.m_rgba = luColour;
+            // The 3D bank takes the same rw::RGBA (DWARF Debug3DImmediateRender::Draw2DLineForVectorFont),
+            // so the colour passes straight through.
             mp3DRenderer->Draw2DLineForVectorFont(
                 rw::math::vpu::Vector3(lP1.mV.x, lP1.mV.y, 0.0f),
                 rw::math::vpu::Vector3(lP2.mV.x, lP2.mV.y, 0.0f), lColour);
@@ -106,12 +106,12 @@ namespace CgsDev
         return Vector2(lfLongestLine, lfHeight);
     }
 
-    f32 VectorFont::Print(f32 lfX, f32 lfY, const char* lpcString, u32 luColour)
+    f32 VectorFont::Print(f32 lfX, f32 lfY, const char* lpcString, RGBA lColour)
     {
         if (!lpcString)
             return lfY + mSize.mV.y * KF_CHARHEIGHT;
 
-        mColour = luColour;
+        mColour = lColour;
         f32 lfPenX = lfX;
         f32 lfPenY = lfY;
 
@@ -149,7 +149,7 @@ namespace CgsDev
                                   lfPenY + static_cast<f32>(lrLine.miStartY) * mSize.mV.y);
                 const Vector2 lP2(lfPenX + static_cast<f32>(lrLine.miEndX) * mSize.mV.x,
                                   lfPenY + static_cast<f32>(lrLine.miEndY) * mSize.mV.y);
-                DrawLine(lP1, lP2, luColour);
+                DrawLine(lP1, lP2, lColour);
             }
 
             lfPenX += static_cast<f32>(KAN_CHARWIDTH[liIndex]) * mSize.mV.x;

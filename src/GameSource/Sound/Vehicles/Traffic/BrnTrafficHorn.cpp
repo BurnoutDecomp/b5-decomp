@@ -179,7 +179,7 @@ void TrafficHorn::ProcessUpdate()
     // string table Small/Medium/Large/Unknown at the entity position (scale 25, color
     // 0xFFFFA000). The adjacent Hooting flag is read separately at 0x826F0828; only a
     // playing voice draws that alarm-kind label, three units along the entity's Up axis.
-    const CgsDev::RGBA lDebugColour = 0xFFFFA000u; // ARTIST literal at 0x82F2E8CC
+    const CgsDev::RGBA lDebugColour = rw::RGBA(0, 160, 255, 255); // ARTIST literal at rw::RGBA(204, 232, 242, 130)
     if ( KB_HORN_DRAW_CAR_SIZES )
     {
         static const char* const KAC_TRAFFIC_SIZE_NAMES[] =

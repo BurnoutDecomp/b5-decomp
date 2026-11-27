@@ -112,7 +112,7 @@ namespace BrnGameState
         {
             lpRender->DrawText(maStrStreams[liIndex].GetBuffer(),
                           100.0f, 100.0f + static_cast<f32>(liIndex) * 20.0f,
-                          16.0f, 0xFFFFFFFFu);
+                          16.0f, rw::RGBA(255, 255, 255, 255));
         }
     }
 

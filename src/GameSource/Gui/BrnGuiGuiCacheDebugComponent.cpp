@@ -117,7 +117,7 @@ namespace BrnGui
 
         // ARTIST calls the scalar DrawBox wrapper with RGBA 0xC8000000.
         lpRender->DrawBox(50.0f, 30.0f, 1250.0f, 2695.5999f,
-                          static_cast<CgsDev::RGBA>(0xC8000000u));
+                          static_cast<CgsDev::RGBA>(rw::RGBA(0, 0, 0, 200)));
 
         u32 luLoadedCount = 0;
         u32 luDisplayedCount = 0;
@@ -130,7 +130,7 @@ namespace BrnGui
             const char* lpcEntry = lStrStream.GetBuffer();
 
             bool lbDisplayEntry = false;
-            CgsDev::RGBA luColour = static_cast<CgsDev::RGBA>(0xFF00B9F5u);
+            CgsDev::RGBA luColour = static_cast<CgsDev::RGBA>(rw::RGBA(245, 185, 0, 255));
             if (lpcEntry[0] == 'L')
             {
                 if (lpcEntry[4] == 'E')
@@ -140,18 +140,18 @@ namespace BrnGui
                 }
                 else
                 {
-                    luColour = static_cast<CgsDev::RGBA>(0xFF0000F5u);
+                    luColour = static_cast<CgsDev::RGBA>(rw::RGBA(245, 0, 0, 255));
                     lbDisplayEntry = miDisplayMode == 0 || miDisplayMode == 1 || miDisplayMode == 3;
                 }
             }
             else if (lpcEntry[6] == 'E')
             {
-                luColour = static_cast<CgsDev::RGBA>(0xFFF500B9u);
+                luColour = static_cast<CgsDev::RGBA>(rw::RGBA(185, 0, 245, 255));
                 lbDisplayEntry = miDisplayMode == 0 || miDisplayMode == 2;
             }
             else
             {
-                luColour = static_cast<CgsDev::RGBA>(0xFF00F500u);
+                luColour = static_cast<CgsDev::RGBA>(rw::RGBA(0, 245, 0, 255));
                 lbDisplayEntry = miDisplayMode == 0 || miDisplayMode == 1 || miDisplayMode == 4;
             }
 
@@ -171,7 +171,7 @@ namespace BrnGui
         lStrStream.Reset();
         lStrStream << "Loadcount: " << luLoadedCount;
         lpRender->DrawText(lStrStream.GetBuffer(), 50.0f, 15.0f, 12.0f,
-                      static_cast<CgsDev::RGBA>(0xFF00B9F5u));
+                      static_cast<CgsDev::RGBA>(rw::RGBA(245, 185, 0, 255)));
         lStrStream.Reset();
     }
 
@@ -189,7 +189,7 @@ namespace BrnGui
 
         // ARTIST calls the scalar DrawBox wrapper with RGBA 0xC8000000.
         lpRender->DrawBox(50.0f, 50.0f, 1250.0f, 629.0f,
-                          static_cast<CgsDev::RGBA>(0xC8000000u));
+                          static_cast<CgsDev::RGBA>(rw::RGBA(0, 0, 0, 200)));
 
         u32 luLoadedCount = 0;
         u32 luGridRow = 0;
@@ -208,7 +208,7 @@ namespace BrnGui
             lStrStream << lpcFlowName;
             lpRender->DrawText(lStrStream.GetBuffer(), 50.0f,
                           static_cast<f32>(luGridRow) * 3.0f + 50.0f, 12.0f,
-                          static_cast<CgsDev::RGBA>(0xFFF5B9F5u));
+                          static_cast<CgsDev::RGBA>(rw::RGBA(245, 185, 245, 255)));
             lStrStream.Reset();
 
             const StateLoadingHelper::ComponentsToWatch& lrComponents =
@@ -234,8 +234,8 @@ namespace BrnGui
                 const bool lbLoaded = lrComponents.mabComponentsLoaded[luComponentIndex];
                 const u32 luComponentNameHash = lrComponents.mauComponentsToWatchIds[luComponentIndex];
                 const CgsDev::RGBA luColour = lbLoaded
-                    ? static_cast<CgsDev::RGBA>(0xFF00B9F5u)
-                    : static_cast<CgsDev::RGBA>(0xFFF500B9u);
+                    ? static_cast<CgsDev::RGBA>(rw::RGBA(245, 185, 0, 255))
+                    : static_cast<CgsDev::RGBA>(rw::RGBA(185, 0, 245, 255));
                 if (lbLoaded)
                     ++luLoadedCount;
 
@@ -259,7 +259,7 @@ namespace BrnGui
         lStrStream.Reset();
         lStrStream << "Loadcount: " << luLoadedCount << "    L = LOADED    U = UNLOADED";
         lpRender->DrawText(lStrStream.GetBuffer(), 50.0f, 25.0f, 12.0f,
-                      static_cast<CgsDev::RGBA>(0xFF00B9F5u));
+                      static_cast<CgsDev::RGBA>(rw::RGBA(245, 185, 0, 255)));
         lStrStream.Reset();
     }
 

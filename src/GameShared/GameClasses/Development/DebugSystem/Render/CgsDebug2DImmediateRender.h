@@ -1,7 +1,8 @@
 #pragma once
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                                                       // Vector2 (rw::math::vpu::Vector2)
+#include "rw/core/base/detail/hosttype.h"                                                    // rw::RGBA
+#include "BrnCommonTypes.h"                                                     // Vector2 (rw::math::vpu::Vector2)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"               // CgsGraphics::Im2d, Basic2dColouredTexturedVertex
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"         // renderengine::PrimitiveType
@@ -30,7 +31,7 @@ namespace rw { struct IResourceAllocator; }   // struct -- must match rwcore_str
 
 namespace CgsDev
 {
-    typedef u32 RGBA;   // packed RGBA8 colour (matches the debug render's RGBA param)
+    using rw::RGBA;     // DWARF CgsDebug2DImmediateRender.h:99-205: every colour parameter is rw::RGBA
 
     struct Debug2DImmediateRender
     {

@@ -68,7 +68,7 @@ namespace BrnNetwork
         // Every cell in the connection-status table is drawn white (X360 r29 = -1 == 0xFFFFFFFF,
         // the constant colour argument to every DrawText call). Matches the sibling
         // CgsNetworkPlayerManagerDebugComponent KU_TEXT_COLOUR.
-        const CgsDev::RGBA KU_TEXT_COLOUR = 0xFFFFFFFFu;   // white (X360 r29 = -1)
+        // KU_TEXT_COLOUR retired (no DWARF name): its 24 use(s) spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
 
         const u8 KU_CONN_FLAG_GAMESERVER = 2;        // conn-flags bit 1
 
@@ -261,7 +261,7 @@ namespace BrnNetwork
         {
             lpDisplay->DrawText("Local Player not in game",
                           lfBaseX + KF_COL_MESSAGE, lfBaseY - (lfTextSize * 1.5f), lfTextSize * 1.5f,
-                          KU_TEXT_COLOUR);
+                          rw::RGBA(255, 255, 255, 255));
             return;
         }
 
@@ -281,14 +281,14 @@ namespace BrnNetwork
 
         // Column headers, one text line above the first data row.
         const f32 lfHeaderY = lfBaseY - lfTextSize;
-        lpDisplay->DrawText("Player",         lfBaseX + KF_COL_PLAYER,         lfHeaderY, lfTextSize, KU_TEXT_COLOUR);
-        lpDisplay->DrawText("Local",          lfBaseX + KF_COL_LOCAL,          lfHeaderY, lfTextSize, KU_TEXT_COLOUR);
-        lpDisplay->DrawText("Game Status",    lfBaseX + KF_COL_GAME_STATUS,    lfHeaderY, lfTextSize, KU_TEXT_COLOUR);
-        lpDisplay->DrawText("Game Demang",    lfBaseX + KF_COL_GAME_DEMANGLE,  lfHeaderY, lfTextSize, KU_TEXT_COLOUR);
-        lpDisplay->DrawText("Voip Status",    lfBaseX + KF_COL_VOIP_STATUS,    lfHeaderY, lfTextSize, KU_TEXT_COLOUR);
-        lpDisplay->DrawText("Voip Demang",    lfBaseX + KF_COL_VOIP_DEMANGLE,  lfHeaderY, lfTextSize, KU_TEXT_COLOUR);
-        lpDisplay->DrawText("Game Conn Type", lfBaseX + KF_COL_GAME_CONN_TYPE, lfHeaderY, lfTextSize, KU_TEXT_COLOUR);
-        lpDisplay->DrawText("Voip Conn Type", lfBaseX + KF_COL_VOIP_CONN_TYPE, lfHeaderY, lfTextSize, KU_TEXT_COLOUR);
+        lpDisplay->DrawText("Player",         lfBaseX + KF_COL_PLAYER,         lfHeaderY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("Local",          lfBaseX + KF_COL_LOCAL,          lfHeaderY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("Game Status",    lfBaseX + KF_COL_GAME_STATUS,    lfHeaderY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("Game Demang",    lfBaseX + KF_COL_GAME_DEMANGLE,  lfHeaderY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("Voip Status",    lfBaseX + KF_COL_VOIP_STATUS,    lfHeaderY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("Voip Demang",    lfBaseX + KF_COL_VOIP_DEMANGLE,  lfHeaderY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("Game Conn Type", lfBaseX + KF_COL_GAME_CONN_TYPE, lfHeaderY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+        lpDisplay->DrawText("Voip Conn Type", lfBaseX + KF_COL_VOIP_CONN_TYPE, lfHeaderY, lfTextSize, rw::RGBA(255, 255, 255, 255));
 
         f32 lfRowY = lfBaseY;
         for (s32 liIndex = 0; liIndex < lpClientList->iNumClients; ++liIndex)
@@ -296,49 +296,49 @@ namespace BrnNetwork
             const ConnApiClientT& lrClient = lpClientList->Clients[liIndex];
 
             // The client's lobby name.
-            lpDisplay->DrawText(lrClient.UserInfo.strName, lfBaseX + KF_COL_PLAYER, lfRowY, lfTextSize, KU_TEXT_COLOUR);
+            lpDisplay->DrawText(lrClient.UserInfo.strName, lfBaseX + KF_COL_PLAYER, lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
 
             if (LobbyNameCmp(lLocalPlayerInfo.GetName(), lrClient.UserInfo.strName) != 0)
             {
                 // A remote peer: show the full connection status.
-                lpDisplay->DrawText("No", lfBaseX + KF_COL_LOCAL, lfRowY, lfTextSize, KU_TEXT_COLOUR);
+                lpDisplay->DrawText("No", lfBaseX + KF_COL_LOCAL, lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
 
                 const char* lpcGameStatus = GetConnApiStatusLabel(lrClient.GameInfo.eStatus);
                 if (lpcGameStatus != 0)
                 {
-                    lpDisplay->DrawText(lpcGameStatus, lfBaseX + KF_COL_GAME_STATUS, lfRowY, lfTextSize, KU_TEXT_COLOUR);
+                    lpDisplay->DrawText(lpcGameStatus, lfBaseX + KF_COL_GAME_STATUS, lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
                 }
 
                 lpDisplay->DrawText((lrClient.GameInfo.bDemangling != 0) ? "Yes" : "No",
-                              lfBaseX + KF_COL_GAME_DEMANGLE, lfRowY, lfTextSize, KU_TEXT_COLOUR);
+                              lfBaseX + KF_COL_GAME_DEMANGLE, lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
 
                 const char* lpcVoipStatus = GetConnApiStatusLabel(lrClient.VoipInfo.eStatus);
                 if (lpcVoipStatus != 0)
                 {
-                    lpDisplay->DrawText(lpcVoipStatus, lfBaseX + KF_COL_VOIP_STATUS, lfRowY, lfTextSize, KU_TEXT_COLOUR);
+                    lpDisplay->DrawText(lpcVoipStatus, lfBaseX + KF_COL_VOIP_STATUS, lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
                 }
 
                 lpDisplay->DrawText((lrClient.VoipInfo.bDemangling != 0) ? "Yes" : "No",
-                              lfBaseX + KF_COL_VOIP_DEMANGLE, lfRowY, lfTextSize, KU_TEXT_COLOUR);
+                              lfBaseX + KF_COL_VOIP_DEMANGLE, lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
 
                 lpDisplay->DrawText(
                               ((lrClient.GameInfo.uConnFlags & KU_CONN_FLAG_GAMESERVER) == KU_CONN_FLAG_GAMESERVER) ? "GameServer" : "Peer-peer",
-                              lfBaseX + KF_COL_GAME_CONN_TYPE, lfRowY, lfTextSize, KU_TEXT_COLOUR);
+                              lfBaseX + KF_COL_GAME_CONN_TYPE, lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
 
                 lpDisplay->DrawText(
                               ((lrClient.VoipInfo.uConnFlags & KU_CONN_FLAG_GAMESERVER) == KU_CONN_FLAG_GAMESERVER) ? "GameServer" : "Peer-peer",
-                              lfBaseX + KF_COL_VOIP_CONN_TYPE, lfRowY, lfTextSize, KU_TEXT_COLOUR);
+                              lfBaseX + KF_COL_VOIP_CONN_TYPE, lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
             }
             else
             {
                 // The local player: mark the row local and dash out the peer-only columns.
-                lpDisplay->DrawText("Yes", lfBaseX + KF_COL_LOCAL,          lfRowY, lfTextSize, KU_TEXT_COLOUR);
-                lpDisplay->DrawText("-",   lfBaseX + KF_COL_GAME_STATUS,    lfRowY, lfTextSize, KU_TEXT_COLOUR);
-                lpDisplay->DrawText("-",   lfBaseX + KF_COL_GAME_DEMANGLE,  lfRowY, lfTextSize, KU_TEXT_COLOUR);
-                lpDisplay->DrawText("-",   lfBaseX + KF_COL_VOIP_STATUS,    lfRowY, lfTextSize, KU_TEXT_COLOUR);
-                lpDisplay->DrawText("-",   lfBaseX + KF_COL_VOIP_DEMANGLE,  lfRowY, lfTextSize, KU_TEXT_COLOUR);
-                lpDisplay->DrawText("-",   lfBaseX + KF_COL_GAME_CONN_TYPE, lfRowY, lfTextSize, KU_TEXT_COLOUR);
-                lpDisplay->DrawText("-",   lfBaseX + KF_COL_VOIP_CONN_TYPE, lfRowY, lfTextSize, KU_TEXT_COLOUR);
+                lpDisplay->DrawText("Yes", lfBaseX + KF_COL_LOCAL,          lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+                lpDisplay->DrawText("-",   lfBaseX + KF_COL_GAME_STATUS,    lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+                lpDisplay->DrawText("-",   lfBaseX + KF_COL_GAME_DEMANGLE,  lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+                lpDisplay->DrawText("-",   lfBaseX + KF_COL_VOIP_STATUS,    lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+                lpDisplay->DrawText("-",   lfBaseX + KF_COL_VOIP_DEMANGLE,  lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+                lpDisplay->DrawText("-",   lfBaseX + KF_COL_GAME_CONN_TYPE, lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
+                lpDisplay->DrawText("-",   lfBaseX + KF_COL_VOIP_CONN_TYPE, lfRowY, lfTextSize, rw::RGBA(255, 255, 255, 255));
             }
 
             lfRowY += lfTextSize;

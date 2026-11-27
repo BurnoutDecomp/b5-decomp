@@ -101,7 +101,7 @@ namespace
     const f32          KF_LINE_SIZE         = 17.6f;
     const f32          KF_X_INSET_FRACTION  = 0.1f;
     const f32          KF_Y_OFFSET_FRACTION = 0.125f;
-    const CgsDev::RGBA KU_TEXT_COLOUR       = 0xFF00FF00u;
+    // KU_TEXT_COLOUR retired (no DWARF name): its 7 use(s) spell rw::RGBA(0, 255, 0, 255), the immediate the u32 constant gave
     const s32          KI_MESSAGE_LENGTH    = 64;
 
     // The panorama grid: 5 pitch rows of 10 yaw steps. Row 0 looks 45 degrees up, each row tilts
@@ -171,34 +171,34 @@ void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     char lacMessage[KI_MESSAGE_LENGTH];
 
     CgsCore::SPrintf(lacMessage, KI_MESSAGE_LENGTH, "%.2f : Camera X", static_cast<f64>(lrInfo.mfX));
-    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, KU_TEXT_COLOUR, KF_TEXT_JUSTIFICATION);
+    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, rw::RGBA(0, 255, 0, 255), KF_TEXT_JUSTIFICATION);
     lfY += KF_LINE_SIZE;
 
     CgsCore::SPrintf(lacMessage, KI_MESSAGE_LENGTH, "%.2f : Camera Y", static_cast<f64>(lrInfo.mfY));
-    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, KU_TEXT_COLOUR, KF_TEXT_JUSTIFICATION);
+    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, rw::RGBA(0, 255, 0, 255), KF_TEXT_JUSTIFICATION);
     lfY += KF_LINE_SIZE;
 
     CgsCore::SPrintf(lacMessage, KI_MESSAGE_LENGTH, "%.2f : Camera Z", static_cast<f64>(lrInfo.mfZ));
-    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, KU_TEXT_COLOUR, KF_TEXT_JUSTIFICATION);
+    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, rw::RGBA(0, 255, 0, 255), KF_TEXT_JUSTIFICATION);
     lfY += KF_LINE_SIZE;
 
     CgsCore::SPrintf(lacMessage, KI_MESSAGE_LENGTH, "%.2f : FOV     ", static_cast<f64>(lrInfo.mfFOV));
-    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, KU_TEXT_COLOUR, KF_TEXT_JUSTIFICATION);
+    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, rw::RGBA(0, 255, 0, 255), KF_TEXT_JUSTIFICATION);
     lfY += KF_LINE_SIZE;
 
     CgsCore::SPrintf(lacMessage, KI_MESSAGE_LENGTH, "%.2f : Lens    ",
                      static_cast<f64>(Camera::Utils::ConvertFOVDegsToLensLength(lrInfo.mfFOV,
                                                                                 lrInfo.mfAspectRatio)));
-    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, KU_TEXT_COLOUR, KF_TEXT_JUSTIFICATION);
+    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, rw::RGBA(0, 255, 0, 255), KF_TEXT_JUSTIFICATION);
     lfY += KF_LINE_SIZE;
 
     CgsCore::SPrintf(lacMessage, KI_MESSAGE_LENGTH, "%.2f %.2f %.2f : LookAt ",
                      static_cast<f64>(lrInfo.mAt.GetX()), static_cast<f64>(lrInfo.mAt.GetY()),
                      static_cast<f64>(lrInfo.mAt.GetZ()));
-    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, KU_TEXT_COLOUR, KF_TEXT_JUSTIFICATION);
+    lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, rw::RGBA(0, 255, 0, 255), KF_TEXT_JUSTIFICATION);
 
     CgsCore::SPrintf(lacMessage, KI_MESSAGE_LENGTH, "%.2f : N Clip  ", static_cast<f64>(lrInfo.mfNearClip));
-    lpRender->DrawAlignedText(lacMessage, lfX, lfY + KF_LINE_SIZE, KF_TEXT_SIZE, KU_TEXT_COLOUR,
+    lpRender->DrawAlignedText(lacMessage, lfX, lfY + KF_LINE_SIZE, KF_TEXT_SIZE, rw::RGBA(0, 255, 0, 255),
                               KF_TEXT_JUSTIFICATION);
 }
 

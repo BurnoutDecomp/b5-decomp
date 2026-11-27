@@ -2,6 +2,7 @@
 #define BRN_AI_DEBUG_COMPONENT_H
 
 #include "types.hpp"
+#include "rw/core/base/detail/hosttype.h"   // rw::RGBA
 #include "GameSource/World/AI/PID/BrnAutoTunedPIDDebugData.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/MenuItems/CgsMenuItemVariableLineGraph.h"
 #include "BrnCommonTypes.h"                                                       // Vector2 / Vector3 (rw::math::vpu aliases)
@@ -43,7 +44,7 @@ namespace BrnAI
     // the packed RGBA8 u32 (same as the renderer's DrawLine/DrawText take). Alias it into this scope
     // (as u32, to avoid pulling the heavy renderer header into this declaration surface) so the
     // declarations read like the source.
-    typedef u32 RGBA;
+    using rw::RGBA;   // the DWARF colour type, rw::RGBA (rw/core/base/detail/hosttype.h)
 }
 
 

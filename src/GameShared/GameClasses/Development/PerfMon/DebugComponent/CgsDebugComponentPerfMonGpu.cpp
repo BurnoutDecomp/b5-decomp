@@ -49,10 +49,10 @@ namespace CgsDev
         const f32 KF_TABLETITLEHEIGHT = 1.5f;                    // flt_82004D04
         const f32 KF_TABLEVALUEOFFSET = 270.0f;                  // flt_82058984
 
-        const RGBA KC_GRAPHGRID     = 0xFFFFFFFFu;               // li r26,-1
-        const RGBA KC_GRAPHFRAME    = 0x80000000u;               // lis r8,-0x8000
-        const RGBA KC_GRAPHLABEL    = 0xFF6666FFu;               // lis/ori immediate in 0x8282CEA0
-        const RGBA KC_GRAPHSCALEBAR = 0x80252525u;               // lis/ori immediate in 0x8282CEA0
+        // KC_GRAPHGRID retired (no DWARF name): its 1 uses spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
+        // KC_GRAPHFRAME retired (no DWARF name): its 1 uses spell rw::RGBA(0, 0, 0, 128), the immediate the u32 constant gave
+        // KC_GRAPHLABEL retired (no DWARF name): its 1 uses spell rw::RGBA(255, 102, 102, 255), the immediate the u32 constant gave
+        // KC_GRAPHSCALEBAR retired (no DWARF name): its 1 uses spell rw::RGBA(37, 37, 37, 128), the immediate the u32 constant gave
 
     }
 
@@ -113,7 +113,7 @@ namespace CgsDev
         // The title sits 1.5 text rows above the first monitor row (fnmsubs, flt_82004D04).
         const Vector2 lv2TitlePos(lrMetrics.mfScreenBorderLeft,
                                   lrMetrics.mfScreenBorderTop - lfRowHeight * KF_TABLETITLEHEIGHT);
-        lpDebug2DRender->DrawText( "GPU Render Cost", lv2TitlePos, lfRowHeight, 0xFFFFFFFFu, false );
+        lpDebug2DRender->DrawText( "GPU Render Cost", lv2TitlePos, lfRowHeight, rw::RGBA(255, 255, 255, 255), false );
 
         PerfMonGpu::ReportMonitors( &RenderTableCallback, &lParameter, /*lbReportTotal*/ true );
     }
@@ -137,7 +137,7 @@ namespace CgsDev
         // sub_8281C960 is DrawFrame(x0,y0,x1,y1,colour,border); r8 carries packed color 0x80000000.
         lpDebug2DRender->DrawFrame( KF_GRAPHORIGINX, KF_GRAPHORIGINY,
                                     KF_GRAPHFRAMERIGHT, KF_GRAPHFRAMEBOTTOM,
-                                    KC_GRAPHFRAME, KF_GRAPHFRAMEBORDER );
+                                    rw::RGBA(0, 0, 0, 128), KF_GRAPHFRAMEBORDER );
 
         // Five 10-pixel-wide grid bars. Their y span is (originY+4) through (originY+7).
         for ( u32 luLine = 0; luLine < 5u; ++luLine )
@@ -148,7 +148,7 @@ namespace CgsDev
             const Vector2 lv2Min(lfGridLeft, lfGridY);
             const Vector2 lv2Size((lfGridX + KF_GRAPHGRIDHALF) - lfGridLeft,
                                   (KF_GRAPHORIGINY + KF_GRAPHGRIDEND) - lfGridY);
-            lpDebug2DRender->DrawBox( lv2Min, lv2Size, KC_GRAPHGRID );
+            lpDebug2DRender->DrawBox( lv2Min, lv2Size, rw::RGBA(255, 255, 255, 255) );
         }
 
         // The first two raw strings are "0%" (unk_820DDC54) and "50%" (unk_820DDC50).
@@ -164,7 +164,7 @@ namespace CgsDev
         {
             const f32 lfLabelX = KAF_LABELX[luLabel];
             const Vector2 lv2Pos(lfLabelX, KF_GRAPHORIGINY + KF_GRAPHLABELDROP);
-            lpDebug2DRender->DrawText( KAPCLABELS[luLabel], lv2Pos, KF_GRAPHLABELSIZE, KC_GRAPHLABEL, false );
+            lpDebug2DRender->DrawText( KAPCLABELS[luLabel], lv2Pos, KF_GRAPHLABELSIZE, rw::RGBA(255, 102, 102, 255), false );
         }
 
         // The translucent reference bar showing the current vertical scale (mfMaxGpu).
@@ -173,7 +173,7 @@ namespace CgsDev
             const Vector2 lv2Min(KF_GRAPHORIGINX, KF_GRAPHORIGINY);
             const Vector2 lv2Size(lfBarRight - KF_GRAPHORIGINX,
                                   (KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT) - KF_GRAPHORIGINY);
-            lpDebug2DRender->DrawBox( lv2Min, lv2Size, KC_GRAPHSCALEBAR );
+            lpDebug2DRender->DrawBox( lv2Min, lv2Size, rw::RGBA(37, 37, 37, 128) );
         }
 
         // Draw every monitor's segment (report-total suppressed: last arg false).
@@ -199,13 +199,13 @@ namespace CgsDev
 
         const f32 lfRowHeight = DebugManager::GetInstance()->GetUI().GetMetrics().mfTextSize;   // metrics @ +0x5C
 
-        const RGBA lColour = lParameters.mbOverBudget
-                                 ? 0xFF0000FFu                                    // red - over budget
-                                 : ( lParameters.mColour.m_rgba | 0xFF000000u );  // monitor colour, opaque
+        RGBA lRealColour;   // DWARF CgsDebugComponentPerfMonGpu.cpp:295; the CU lists rw::RGBA::SetAlpha
+        if (lParameters.mbOverBudget) lRealColour = rw::RGBA(255, 0, 0, 255);                   // red - over budget
+        else { lRealColour = lParameters.mColour; lRealColour.SetAlpha(255); }                  // monitor colour, opaque (oris 0xFF00)
 
         // The monitor name.
         const Vector2 lv2NamePos(lpParameter->mfDrawX, lpParameter->mfDrawY);
-        lpParameter->mpRender->DrawText( lParameters.mpcName, lv2NamePos, lfRowHeight, lColour, false );
+        lpParameter->mpRender->DrawText( lParameters.mpcName, lv2NamePos, lfRowHeight, lRealColour, false );
 
         // The cost value.
         char lacValue[32];
@@ -213,7 +213,7 @@ namespace CgsDev
 
         const Vector2 lv2ValuePos(lpParameter->mfDrawX + KF_TABLEVALUEOFFSET,
                                   lpParameter->mfDrawY);
-        lpParameter->mpRender->DrawText( lacValue, lv2ValuePos, lfRowHeight, lColour, false );
+        lpParameter->mpRender->DrawText( lacValue, lv2ValuePos, lfRowHeight, lRealColour, false );
 
         // Advance to the next row.
         lpParameter->mfDrawY += lfRowHeight;
@@ -231,8 +231,8 @@ namespace CgsDev
 
         // Percentage-of-frame -> pixels along the bar (flt_820DC614, word 0x403851EC).
         const f32 lfBarLength = lrData.mfCurrentValue * KF_GRAPHSEGMENTSCALE;
-        // Force the segment opaque (mColour | 0xFF000000).
-        const RGBA lColour = static_cast<RGBA>( lrData.mColour.m_rgba ) | 0xFF000000u;
+        RGBA lRealColour = lrData.mColour;   // DWARF CgsDebugComponentPerfMonGpu.cpp:335
+        lRealColour.SetAlpha(255);           // force the segment opaque (the CU lists rw::RGBA::SetAlpha)
 
         const f32 lfX = lpParam->mfDrawX;
         const f32 lfY = lpParam->mfDrawY;
@@ -241,7 +241,7 @@ namespace CgsDev
         const Vector2 lv2Min(lfX, lfY);
         const Vector2 lv2Size((lfX + lfBarLength) - lfX,
                               (lfY + KF_GRAPHBARHEIGHT) - lfY);
-        lpParam->mpRender->DrawBox( lv2Min, lv2Size, lColour );
+        lpParam->mpRender->DrawBox( lv2Min, lv2Size, lRealColour );
 
         lpParam->mfDrawX    += lfBarLength;
         lpParam->mfTotalGpu += lrData.mfCurrentValue;

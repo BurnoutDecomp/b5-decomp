@@ -54,9 +54,9 @@ namespace BrnGameState
         const s32 KAI_ROW_BIT_INDEX[6] = { 2, 0, 1, 4, 6, 16 };
 
         // Exact ARTIST words at dword_82CDB878 / _87C / _880.
-        const CgsDev::RGBA KU_BOX_COLOUR          = 0x80000000u;
-        const CgsDev::RGBA KU_CELL_DEFAULT_COLOUR = 0xFFFFFFFFu;
-        const CgsDev::RGBA KU_CELL_ACTIVE_COLOUR  = 0xFF5000FFu;
+        const CgsDev::RGBA KU_BOX_COLOUR(0, 0, 0, 128);
+        const CgsDev::RGBA KU_CELL_DEFAULT_COLOUR(255, 255, 255, 255);
+        const CgsDev::RGBA KU_CELL_ACTIVE_COLOUR(255, 0, 80, 255);
 
         inline Vector2 MakeVector2(f32 lfX, f32 lfY)
         {
@@ -93,13 +93,13 @@ namespace BrnGameState
                                                              s32 liMaxMultiplier,
                                                              bool lbSimTimerAt50Hz,
                                                              char* lpcOutBuffer,
-                                                             u32* lpuOutColour)
+                                                             CgsDev::RGBA* lpOutColour)
     {
         CGS_ASSERT_AT(mpScoringSystem != 0, "mpScoringSystem", CGS_ARTIST_FILE, 267);
         CGS_ASSERT_AT(lpPlayerStatusInterface != 0, "lpPlayerStatusInterface", CGS_ARTIST_FILE, 268);
 
         // Default: an empty cell drawn in the default (white) colour.
-        *lpuOutColour = KU_CELL_DEFAULT_COLOUR;
+        *lpOutColour = KU_CELL_DEFAULT_COLOUR;
         CgsCore::StrCpy(lpcOutBuffer, 200, "");
 
         if (liColumn == 0)
@@ -197,7 +197,7 @@ namespace BrnGameState
         const f32 lfSeconds = static_cast<f32>(liFrames) * lfFramePeriod;
         CgsCore::SPrintf(lpcOutBuffer, 200, "%.3fs", static_cast<f64>(lfSeconds));
         if (lfSeconds <= 1.0f)
-            *lpuOutColour = KU_CELL_ACTIVE_COLOUR;
+            *lpOutColour = KU_CELL_ACTIVE_COLOUR;
     }
 
     // @ 0x82337C38 - draw the live chainable-stunt multiplier table.
@@ -240,7 +240,7 @@ namespace BrnGameState
             f32 lfPenY = KF_TABLE_ORIGIN_Y;
             for (s32 liColumn = 0; liColumn < liNumColumns; ++liColumn)
             {
-                u32 luCellColour = KU_CELL_DEFAULT_COLOUR;
+                CgsDev::RGBA luCellColour = KU_CELL_DEFAULT_COLOUR;
                 GetChainableTableEntry(liColumn, liRow, lpActiveCarOutput,
                                        lpPlayerStatusInterface, liMaxMultiplier, lbSimTimerAt50Hz,
                                        lacCell, &luCellColour);

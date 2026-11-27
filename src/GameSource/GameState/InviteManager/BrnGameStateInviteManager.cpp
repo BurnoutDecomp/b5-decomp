@@ -61,7 +61,7 @@ namespace BrnGameState
     // Invite-overlay debug text style. KF_INVITE_MANAGER_TEXT_SIZE is the X360 immediate
     // value (flt_8202AC78 == 26.0f) passed as the Draw2DText scale; the colour is the
     // data-resident packed RGBA used as the text colour (the image holds 0xFF0000FF).
-    static const CgsDev::RGBA KU_INVITE_MANAGER_TEXT_COLOUR = 0xFF0000FFu;
+    static const CgsDev::RGBA KU_INVITE_MANAGER_TEXT_COLOUR(255, 0, 0, 255);
     static const f32          KF_INVITE_MANAGER_TEXT_SIZE   = 26.0f;
 
     // The two re-bind controller-event player indices (DWARF :41/:42). The unbind request

@@ -86,11 +86,11 @@ void Statistics::RenderLine(CgsDev::Debug2DImmediateRender* lpRender, bool lbRed
     va_end(lList);
 
     // ARTIST 0x82689574: white first, overwritten for a red alert (DWARF lColour, cpp:70).
-    CgsDev::RGBA lColour = 0xFFFFFFFFu;
+    CgsDev::RGBA lColour = rw::RGBA(255, 255, 255, 255);
     if (lbRedAlert)
-        lColour = 0xFF0000FFu;
+        lColour = rw::RGBA(255, 0, 0, 255);
     lpRender->DrawTextWithBackground(lacBuffer, mfX, mfY, 20.0f,
-                                     lColour, 0x80000000u, 0.0f);
+                                     lColour, rw::RGBA(0, 0, 0, 128), 0.0f);
     mfY += 16.0f;
 }
 
@@ -99,7 +99,7 @@ void Statistics::RenderLine(CgsDev::Debug2DImmediateRender* lpRender, bool lbRed
 // then all 128 samples are drawn left-to-right, ending at x=1000.
 void Statistics::DrawGraph(CgsDev::Debug2DImmediateRender* lpRender,
                            CgsSound::Playback::VoiceProfilingData<128>* lpVoiceProfilingData,
-                           u32 lColour)
+                           rw::RGBA lColour)
 {
     CGS_ASSERT(lpVoiceProfilingData, "lpVoiceProfilingData");
     Vector2 lv2LineStart(120.0f,
@@ -110,7 +110,7 @@ void Statistics::DrawGraph(CgsDev::Debug2DImmediateRender* lpRender,
         const f32 lfTime = lpVoiceProfilingData->GetTimeByIndex(luHistoryIndex - 1);
         const Vector2 lv2LineEnd(lfX, 700.0f - lfTime * 6.0f);
         lpRender->DrawLine(lv2LineStart, lv2LineEnd,
-                           lfTime < 99.0f ? lColour : 0xFF0000FFu);
+                           lfTime < 99.0f ? lColour : rw::RGBA(255, 0, 0, 255));
         lv2LineStart = lv2LineEnd;
         lfX += 6.875f;
     }
@@ -146,7 +146,7 @@ void Statistics::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender, bool lbDraw
     mPpuProfile[3].SubmitNewTime(0.000375f, static_cast<f32>(lpSystem->muBalanceCycles));
 
     if (lbDrawDacGraph)
-        DrawGraph(lpRender, &mMixerProfile, 0xFFFFFFFFu);
+        DrawGraph(lpRender, &mMixerProfile, rw::RGBA(255, 255, 255, 255));
     RenderLine(lpRender, false, "");
     RenderLine(lpRender, false, "SPU Costs:");
     RenderLine(lpRender, !(mMixerProfile.GetMostRecentTime() < 99.0f),

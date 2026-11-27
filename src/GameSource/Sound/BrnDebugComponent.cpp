@@ -673,7 +673,7 @@ void DebugComponent::Render3dControl(
     Vector3 lPosition = lp3dControl->GetEmitterPosition().GetCurrent();
     lPosition.SetY(lPosition.GetY().GetFloat() + lrMessage.mfYOffset);
 
-    lRender.DrawSphere(lPosition, lrMessage.mfRadius, 0xFF00FFA0u);
+    lRender.DrawSphere(lPosition, lrMessage.mfRadius, rw::RGBA(160, 255, 0, 255));
 }
 
 // ARTIST 0x82689200 / DecFIGS BrnPhysicsControl.cpp:42-44. The menu gate is the s32
@@ -693,7 +693,7 @@ void DebugComponent::UpdateMaxRpmDisplay()
     const Vector2 lPosition(40.0f, 30.0f);
     lRender.Draw2DTextJustified(lacText, lPosition,
                                 CgsDev::DebugRender::E_JUSTIFY_LEFT,
-                                12.0f, 0xFFFFFFFFu);
+                                12.0f, rw::RGBA(255, 255, 255, 255));
 }
 
 // ARTIST 0x826A12C0. i=0..24 corresponds to the highest set bit of (1u << i) in

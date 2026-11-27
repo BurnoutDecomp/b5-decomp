@@ -169,7 +169,7 @@ namespace BrnWorld
 
         CgsDev::SimpleStrStream lStream;
         lStream << "Total trigger count: " << (miBoxTriggerCount + miSphereTriggerCount + miPlaneTriggerCount);
-        lpRenderer->DrawText(lStream.GetBuffer(), 50.0f, 80.0f, 16.0f, 0xFFFFFFFFu);
+        lpRenderer->DrawText(lStream.GetBuffer(), 50.0f, 80.0f, 16.0f, rw::RGBA(255, 255, 255, 255));
 
         // ARTIST reads the string-pointer table at off_82F2C8EC for liType 0..3. The raw
         // big-endian table pins those labels as Landmark, Blackspot, GenericRegion, and VFXBoxRegion.
@@ -214,7 +214,7 @@ namespace BrnWorld
 
             lStream.Reset();
             lStream << lpcTypeName << ": " << liCount;
-            lpRenderer->DrawText(lStream.GetBuffer(), 50.0f, (static_cast<f32>(liType) * 16.0f) + 120.0f, 16.0f, 0xFFFFFFFFu);
+            lpRenderer->DrawText(lStream.GetBuffer(), 50.0f, (static_cast<f32>(liType) * 16.0f) + 120.0f, 16.0f, rw::RGBA(255, 255, 255, 255));
         }
     }
 }

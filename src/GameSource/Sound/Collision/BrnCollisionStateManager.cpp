@@ -832,7 +832,7 @@ AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
                                 lMin.GetVector().z+lComOffset.GetVector().z, lMin.GetVector().w+lComOffset.GetVector().w));
         const Vector3 lBoxMax(XMVectorSet(lMax.GetVector().x+lComOffset.GetVector().x, lMax.GetVector().y+lComOffset.GetVector().y,
                                 lMax.GetVector().z+lComOffset.GetVector().z, lMax.GetVector().w+lComOffset.GetVector().w));
-        lDebug.GetRender().DrawBox(lBoxMin, lBoxMax, lTransform, 0xFF00FFA0u);
+        lDebug.GetRender().DrawBox(lBoxMin, lBoxMax, lTransform, rw::RGBA(160, 255, 0, 255));
         const Vector3 lLocal(XMVectorSet(lfLocalX, lfLocalY, lfLocalZ, 0.0f));
         const __vector4 lvLocal = __lvx(&lLocal, 0);
         __vector4 lvDrawPosition = __vmaddfp(__lvx(&lTransform.Right(), 0),
@@ -843,8 +843,8 @@ AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
         __stvx(lvDrawPosition, &lDrawPosition, 0);
         const Vector3 lArrowEnd(XMVectorSet(lDrawPosition.GetVector().x+lNormal.GetVector().x, lDrawPosition.GetVector().y+lNormal.GetVector().y,
                                   lDrawPosition.GetVector().z+lNormal.GetVector().z, lDrawPosition.GetVector().w+lNormal.GetVector().w));
-        lDebug.GetRender().DrawSphere(lDrawPosition, 0.33f, 0xFFFFFFFFu);
-        lDebug.GetRender().DrawArrow(lDrawPosition, lArrowEnd, 0xFFFFFFFFu);
+        lDebug.GetRender().DrawSphere(lDrawPosition, 0.33f, rw::RGBA(255, 255, 255, 255));
+        lDebug.GetRender().DrawArrow(lDrawPosition, lArrowEnd, rw::RGBA(255, 255, 255, 255));
     }
     if (KI_DEBUG_SPEW_ORIENTATION)
     {

@@ -273,8 +273,8 @@ void TextFieldRef::SetColour(Vector4 lv4Colour)
 
     CgsGraphics::TextObject& lrTextObject =
         static_cast<TextFieldInstance*>(mpTextFieldInst)->GetTextObject();
-    lrTextObject.mTextColour = (lrTextObject.mTextColour & 0xFF000000u)
-                             | (luBlue << 16) | (luGreen << 8) | luRed;
+    lrTextObject.mTextColour.SetRed(static_cast<u8>(luRed));   // the alpha byte stays
+    lrTextObject.mTextColour.SetGreen(static_cast<u8>(luGreen)); lrTextObject.mTextColour.SetBlue(static_cast<u8>(luBlue));
 }
 
 // ---- GetText @ 0x8246E0C0 ---------------------------------------------------

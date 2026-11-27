@@ -537,11 +537,11 @@ void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
     BuildTimeOfDay(acTime, mpEnvironmentManager->mfTimeOfDay);
 
     CgsCore::SPrintf(acText, sizeof(acText), "TOD: %s", acTime);
-    lpDisplay->DrawText(acText, 360.0f, 535.0f, 15.0f, 0xFFFFFFFFu);
+    lpDisplay->DrawText(acText, 360.0f, 535.0f, 15.0f, rw::RGBA(255, 255, 255, 255));
     CgsCore::SPrintf(acText, sizeof(acText), "Season: %s", lpcSeason);
-    lpDisplay->DrawText(acText, 360.0f, 550.0f, 15.0f, 0xFFFFFFFFu);
+    lpDisplay->DrawText(acText, 360.0f, 550.0f, 15.0f, rw::RGBA(255, 255, 255, 255));
     CgsCore::SPrintf(acText, sizeof(acText), "CCubes: %s", lpcColourCubes);
-    lpDisplay->DrawText(acText, 360.0f, 565.0f, 15.0f, 0xFFFFFFFFu);
+    lpDisplay->DrawText(acText, 360.0f, 565.0f, 15.0f, rw::RGBA(255, 255, 255, 255));
 }
 
 } // namespace EnvironmentSettings

@@ -686,17 +686,17 @@ namespace BrnWorld
         lOutputStream << " Used props: "   << muUsedProps;
         lOutputStream << " Used parts: "   << muUsedParts;
         lOutputStream << " Zones loaded: " << mpPropEntityModule->muNumberOfLoadedZones;
-        lpDisplay->DrawText(lOutputStream.GetBuffer(), 500.0f, 80.0f, KF_TEXT_SIZE, 0xFFFFFFFFu);
+        lpDisplay->DrawText(lOutputStream.GetBuffer(), 500.0f, 80.0f, KF_TEXT_SIZE, rw::RGBA(255, 255, 255, 255));
         CGS_ASSERT(strlen(lOutputStream.GetBuffer()) < KU_STRING_BUFFER_SIZE,
                    "strlen(lOutputStream.GetBuffer()) < KU_STRING_BUFFER_SIZE");
         lOutputStream.Reset();
-        lpDisplay->DrawText(lOutputStream.GetBuffer(), 500.0f, 80.0f, KF_TEXT_SIZE, 0xFFFFFFFFu);
+        lpDisplay->DrawText(lOutputStream.GetBuffer(), 500.0f, 80.0f, KF_TEXT_SIZE, rw::RGBA(255, 255, 255, 255));
 
         // --- the per-zone table header, drawn at (500, 100) ---
         lOutputStream.Reset();
         lOutputStream << "              Zone ID    Number of Props    Number of Parts \n";
         lOutputStream << "Loaded Zones:    ";
-        lpDisplay->DrawText(lOutputStream.GetBuffer(), 500.0f, 100.0f, KF_TEXT_SIZE, 0xFFFFFFFFu);
+        lpDisplay->DrawText(lOutputStream.GetBuffer(), 500.0f, 100.0f, KF_TEXT_SIZE, rw::RGBA(255, 255, 255, 255));
         CGS_ASSERT(strlen(lOutputStream.GetBuffer()) < KU_STRING_BUFFER_SIZE,
                    "strlen(lOutputStream.GetBuffer()) < KU_STRING_BUFFER_SIZE");
         lOutputStream.Reset();
@@ -721,7 +721,7 @@ namespace BrnWorld
                     << "\n"
                     << "                 ";
 
-                const u32 luColour = (luProps > 300u) ? 0xFF0000FFu : 0xFFFFFFFFu;
+                const CgsDev::RGBA luColour = (luProps > 300u) ? rw::RGBA(255, 0, 0, 255) : rw::RGBA(255, 255, 255, 255);
                 lpDisplay->DrawText(lOutputStream.GetBuffer(), 500.0f, lfRowY, 16.0f, luColour);
                 CGS_ASSERT(strlen(lOutputStream.GetBuffer()) < KU_STRING_BUFFER_SIZE,
                            "strlen(lOutputStream.GetBuffer()) < KU_STRING_BUFFER_SIZE");
@@ -767,9 +767,9 @@ namespace BrnWorld
                 ToCellGridScreenCoords(__lvx(&lCorner2, 0)), ToCellGridScreenCoords(__lvx(&lCorner3, 0))
             };
             if (lCell.IsActive())
-                lpDisplay->DrawSolidConvexPolygon(laPoints, 4, 0x3200FF00u);
+                lpDisplay->DrawSolidConvexPolygon(laPoints, 4, rw::RGBA(0, 255, 0, 50));
             else
-                lpDisplay->DrawWirePolygon(laPoints, 4, 0xFFFFFFFFu);
+                lpDisplay->DrawWirePolygon(laPoints, 4, rw::RGBA(255, 255, 255, 255));
         }
 
         s32 liProp = lrZoneManager.maUsedProps.GetFirstNonZeroBit();
@@ -778,15 +778,15 @@ namespace BrnWorld
             while (liProp != -1)
             {
                 const PropEntityInstance& lrProp = lrZoneManager.maProps[liProp];
-                const u32 luColour = (lrProp.mu8Flags & KU_ADDED_TO_CONTACT_GEN_BIT)
-                    ? 0xFF0000FFu : 0xFFFFFFFFu;
+                const CgsDev::RGBA luColour = (lrProp.mu8Flags & KU_ADDED_TO_CONTACT_GEN_BIT)
+                    ? rw::RGBA(255, 0, 0, 255) : rw::RGBA(255, 255, 255, 255);
                 const Vector2 lPosition = ToCellGridScreenCoords(__lvx(&lrProp.GetWorldTransform().Pos(), 0));
                 lpDisplay->DrawCircle(lPosition, 2.0f, 3, luColour);
                 liProp = lrZoneManager.maUsedProps.GetNextNonZeroBit(liProp);
             }
         }
         const Vector2 lPlayer = ToCellGridScreenCoords(__lvx(&mpPropEntityModule->mPlayerPosition, 0));
-        lpDisplay->DrawCircle(lPlayer, 5.0f, 5, 0xFF0000FFu);
+        lpDisplay->DrawCircle(lPlayer, 5.0f, 5, rw::RGBA(255, 0, 0, 255));
     }
 
     // @ 0x822DC3D8. Translate into player-relative XZ space, shift the map by

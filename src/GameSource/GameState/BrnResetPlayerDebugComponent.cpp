@@ -136,7 +136,7 @@ namespace BrnGameState
     {
         static const f32  KF_X          = 400.0f;
         static const f32  KF_TEXT_SCALE = 20.0f;
-        static const u32  KU_COLOUR     = 0xFF0000FFu;
+        // KU_COLOUR retired (no DWARF name): its 6 use(s) spell rw::RGBA(255, 0, 0, 255), the immediate the u32 constant gave
 
         if (!GetUI().IsVisible() || !mbShowCarInfo)
         {
@@ -151,13 +151,13 @@ namespace BrnGameState
 
         lStream.Reset();
         lStream << "Vehicle name: " << lpVehicle->GetVehicleName();
-        lpRender->DrawText(lStream.GetBuffer(), KF_X, 200.0f, KF_TEXT_SCALE, KU_COLOUR);
+        lpRender->DrawText(lStream.GetBuffer(), KF_X, 200.0f, KF_TEXT_SCALE, rw::RGBA(255, 0, 0, 255));
 
         char lacIdText[16];
         CgsIDUnCompress(lpVehicle->GetId(), lacIdText);
         lStream.Reset();
         lStream << "Vehicle id: " << lacIdText;
-        lpRender->DrawText(lStream.GetBuffer(), KF_X, 225.0f, KF_TEXT_SCALE, KU_COLOUR);
+        lpRender->DrawText(lStream.GetBuffer(), KF_X, 225.0f, KF_TEXT_SCALE, rw::RGBA(255, 0, 0, 255));
 
         lStream.Reset();
         lStream << "Default wheel name: " << lpVehicle->GetDefaultWheelName();
@@ -165,15 +165,15 @@ namespace BrnGameState
         {
             lStream << " - WHEEL NOT FOUND IN GAME";
         }
-        lpRender->DrawText(lStream.GetBuffer(), KF_X, 250.0f, KF_TEXT_SCALE, KU_COLOUR);
+        lpRender->DrawText(lStream.GetBuffer(), KF_X, 250.0f, KF_TEXT_SCALE, rw::RGBA(255, 0, 0, 255));
 
         lStream.Reset();
         lStream << "Is race vehicle: " << ((GetGamePlayFlags(lpVehicle) & KU_FLAG_RACE_VEHICLE) != 0);
-        lpRender->DrawText(lStream.GetBuffer(), KF_X, 275.0f, KF_TEXT_SCALE, KU_COLOUR);
+        lpRender->DrawText(lStream.GetBuffer(), KF_X, 275.0f, KF_TEXT_SCALE, rw::RGBA(255, 0, 0, 255));
 
         lStream.Reset();
         lStream << "Is trailer: " << ((GetGamePlayFlags(lpVehicle) & KU_FLAG_TRAILER) != 0);
-        lpRender->DrawText(lStream.GetBuffer(), KF_X, 300.0f, KF_TEXT_SCALE, KU_COLOUR);
+        lpRender->DrawText(lStream.GetBuffer(), KF_X, 300.0f, KF_TEXT_SCALE, rw::RGBA(255, 0, 0, 255));
 
         if ((GetGamePlayFlags(lpVehicle) & KU_FLAG_RACE_VEHICLE) != 0)
         {
@@ -182,7 +182,7 @@ namespace BrnGameState
                     << ", Speed: "     << GetGamePlayStat(lpVehicle, E_PLAYERSTATS_SPEED)
                     << ", Control: "   << GetGamePlayStat(lpVehicle, E_PLAYERSTATS_CONTROL)
                     << ", Strength: "  << GetGamePlayStat(lpVehicle, E_PLAYERSTATS_STRENGTH);
-            lpRender->DrawText(lStream.GetBuffer(), KF_X, 325.0f, KF_TEXT_SCALE, KU_COLOUR);
+            lpRender->DrawText(lStream.GetBuffer(), KF_X, 325.0f, KF_TEXT_SCALE, rw::RGBA(255, 0, 0, 255));
         }
     }
 

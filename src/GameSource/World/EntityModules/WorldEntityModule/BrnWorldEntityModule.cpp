@@ -2032,8 +2032,8 @@ namespace
     const BrnUpdateSet KU_UPDATE_SET_MASSIVE_PAUSE = 0x1;
     const BrnUpdateSet KU_UPDATE_SET_IN_GAME       = 0x8;
 
-    const CgsDev::RGBA KU_ADVERT_DEBUG_COLOUR      = 0xFFFF0000u;
-    const CgsDev::RGBA KU_ADVERT_OUT_OF_RANGE_COLOUR = 0xFF0000FFu;
+    // KU_ADVERT_DEBUG_COLOUR retired (no DWARF name): its 3 use(s) spell rw::RGBA(0, 0, 255, 255), the immediate the u32 constant gave
+    // KU_ADVERT_OUT_OF_RANGE_COLOUR retired (no DWARF name): its 1 use(s) spell rw::RGBA(255, 0, 0, 255), the immediate the u32 constant gave
 
     // The header helper that requests a fixed table of named resources and collects the
     // responses by event id.
@@ -2421,10 +2421,10 @@ WorldEntityModule::DEBUG_RenderAdvert( Matrix44Affine::InParam lTransform,
     // in place.
     Matrix44Affine lBoxTransform = lTransform;
     lBoxTransform.Pos() += lTransform.At() * 0.25f;
-    lrRender.DrawBox( lBoundingBoxMin, lBoundingBoxMax, lBoxTransform, KU_ADVERT_DEBUG_COLOUR );
+    lrRender.DrawBox( lBoundingBoxMin, lBoundingBoxMax, lBoxTransform, rw::RGBA(0, 0, 255, 255) );
 
     const Vector3 lNormal(1.0f, 0.0f, 0.0f);
-    lrRender.DrawCircle( lTransform.Pos(), lNormal, 1.0f, KU_ADVERT_DEBUG_COLOUR );
+    lrRender.DrawCircle( lTransform.Pos(), lNormal, 1.0f, rw::RGBA(0, 0, 255, 255) );
 }
 
 // =============================================================================
@@ -2439,8 +2439,8 @@ WorldEntityModule::DEBUG_RenderAdvertLineTest( f32 lfDistance, Vector3::InParam 
     CgsDev::DebugRender& lrRender = lDebugInterface.GetRender();
 
     const CgsDev::RGBA lColour = ( lfDistance > mfMassiveImpressionDebugDistance )
-                               ? KU_ADVERT_OUT_OF_RANGE_COLOUR
-                               : KU_ADVERT_DEBUG_COLOUR;
+                               ? rw::RGBA(255, 0, 0, 255)
+                               : rw::RGBA(0, 0, 255, 255);
     lrRender.DrawLine( lCameraPosition + lCameraDirection, lAdvertPosition, lColour );
 }
 

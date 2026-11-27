@@ -28,8 +28,8 @@ namespace CgsDev
     namespace
     {
         const f32 KAF_COLUMN_OFFSETS[6] = { 0.0f, 270.0f, 340.0f, 410.0f, 510.0f, 580.0f };
-        const RGBA KC_WHITE       = 0xFFFFFFFFu;
-        const RGBA KC_OVER_BUDGET = 0xFF6496DCu;
+        // KC_WHITE retired (no DWARF name): its 12 uses spell rw::RGBA(255, 255, 255, 255), the immediate the u32 constant gave
+        // KC_OVER_BUDGET retired (no DWARF name): its 4 uses spell rw::RGBA(220, 150, 100, 255), the immediate the u32 constant gave
     }
 
     // Faithful port of PS3 DecFIGS Construct @0xB21C44 (X360 wrapper @0x8282CC98, called by
@@ -156,17 +156,17 @@ namespace CgsDev
 
         lpDebug2DRender->DrawText(maStringList[miCurrentPage + 1].mpcName,
                                   lfX + KAF_COLUMN_OFFSETS[0],
-                                  lfY - lfFontSize * 1.5f, lfFontSize * 1.5f, KC_WHITE);
+                                  lfY - lfFontSize * 1.5f, lfFontSize * 1.5f, rw::RGBA(255, 255, 255, 255));
         lpDebug2DRender->DrawText("Current", lfX + KAF_COLUMN_OFFSETS[1],
-                                  lfY - lfFontSize, lfFontSize, KC_WHITE);
+                                  lfY - lfFontSize, lfFontSize, rw::RGBA(255, 255, 255, 255));
         lpDebug2DRender->DrawText("Average", lfX + KAF_COLUMN_OFFSETS[2],
-                                  lfY - lfFontSize, lfFontSize, KC_WHITE);
+                                  lfY - lfFontSize, lfFontSize, rw::RGBA(255, 255, 255, 255));
         lpDebug2DRender->DrawText("Min/Max", lfX + KAF_COLUMN_OFFSETS[3],
-                                  lfY - lfFontSize, lfFontSize, KC_WHITE);
+                                  lfY - lfFontSize, lfFontSize, rw::RGBA(255, 255, 255, 255));
         lpDebug2DRender->DrawText("Calls", lfX + KAF_COLUMN_OFFSETS[4],
-                                  lfY - lfFontSize, lfFontSize, KC_WHITE);
+                                  lfY - lfFontSize, lfFontSize, rw::RGBA(255, 255, 255, 255));
         lpDebug2DRender->DrawText("Max Calls", lfX + KAF_COLUMN_OFFSETS[5],
-                                  lfY - lfFontSize, lfFontSize, KC_WHITE);
+                                  lfY - lfFontSize, lfFontSize, rw::RGBA(255, 255, 255, 255));
 
         const s32 liCount = PerfMonCpu::GetMonitorCount();
         for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
@@ -179,25 +179,25 @@ namespace CgsDev
 
             char acValue[32];
             const RGBA lNameColour = (lData.mfAverageValue > lData.mfCpuBudget)
-                ? KC_OVER_BUDGET : KC_WHITE;
+                ? rw::RGBA(220, 150, 100, 255) : rw::RGBA(255, 255, 255, 255);
             lpDebug2DRender->DrawText(lData.mpcName, lfX + KAF_COLUMN_OFFSETS[0],
                                       lfY, lfFontSize, lNameColour);
 
             CgsCore::SPrintf(acValue, sizeof(acValue), "%.03f", lData.mfCurrentValue);
             lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[1], lfY, lfFontSize,
-                                      lData.mfCurrentValue > lData.mfCpuBudget ? KC_OVER_BUDGET : KC_WHITE);
+                                      lData.mfCurrentValue > lData.mfCpuBudget ? rw::RGBA(220, 150, 100, 255) : rw::RGBA(255, 255, 255, 255));
             CgsCore::SPrintf(acValue, sizeof(acValue), "%.03f", lData.mfAverageValue);
             lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[2], lfY, lfFontSize,
-                                      lData.mfAverageValue > lData.mfCpuBudget ? KC_OVER_BUDGET : KC_WHITE);
+                                      lData.mfAverageValue > lData.mfCpuBudget ? rw::RGBA(220, 150, 100, 255) : rw::RGBA(255, 255, 255, 255));
             CgsCore::SPrintf(acValue, sizeof(acValue), "%.03f", lData.mfMinMaxValue);
             lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[3], lfY, lfFontSize,
-                                      lData.mfMinMaxValue > lData.mfCpuBudget ? KC_OVER_BUDGET : KC_WHITE);
+                                      lData.mfMinMaxValue > lData.mfCpuBudget ? rw::RGBA(220, 150, 100, 255) : rw::RGBA(255, 255, 255, 255));
             CgsCore::SPrintf(acValue, sizeof(acValue), "%d", lData.miNumCalls);
             lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[4],
-                                      lfY, lfFontSize, KC_WHITE);
+                                      lfY, lfFontSize, rw::RGBA(255, 255, 255, 255));
             CgsCore::SPrintf(acValue, sizeof(acValue), "%d", lData.miMaxCalls);
             lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[5],
-                                      lfY, lfFontSize, KC_WHITE);
+                                      lfY, lfFontSize, rw::RGBA(255, 255, 255, 255));
             lfY += lfFontSize;
         }
     }
@@ -210,10 +210,10 @@ namespace CgsDev
             return;
 
         lpDebug2DRender->DrawFrame(32.0f, 408.0f, 608.0f, 412.0f,
-                                   0xFF000000u, 2.0f);
+                                   rw::RGBA(0, 0, 0, 255), 2.0f);
         const Vector2 lv2TrackPosition(32.0f, 408.0f);
         const Vector2 lv2TrackSize(mfMaxCpu * 2.8799999f, 4.0f);
-        lpDebug2DRender->DrawBox(lv2TrackPosition, lv2TrackSize, 0xFF252525u);
+        lpDebug2DRender->DrawBox(lv2TrackPosition, lv2TrackSize, rw::RGBA(37, 37, 37, 255));
 
         f32 lfX = 32.0f;
         f32 lfTotal = 0.0f;
@@ -232,7 +232,7 @@ namespace CgsDev
             const f32 lfWidth = lData.mfCurrentValue * 2.8800001f;
             const Vector2 lv2BarPosition(lfX, 408.0f);
             const Vector2 lv2BarSize(lfWidth, 4.0f);
-            lpDebug2DRender->DrawBox(lv2BarPosition, lv2BarSize, 0xFFCC59CCu);
+            lpDebug2DRender->DrawBox(lv2BarPosition, lv2BarSize, rw::RGBA(204, 89, 204, 255));
             lfX += lfWidth;
             lfTotal += lData.mfCurrentValue;
         }

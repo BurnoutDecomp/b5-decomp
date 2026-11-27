@@ -96,29 +96,29 @@ namespace CgsDev
         }
     }
 
-    // Lerp the RGB of two packed colours (0xAARRGGBB) by lfInLerp,
+    // Lerp the RGB of two rw::RGBA colours (DWARF cpp:4; Xenon word 0xAABBGGRR) by lfInLerp,
     // clamped to [0,1]; each channel is clamped to [0,255] and truncated. The result is always
     // opaque: the console builds it through RGBA(r, g, b) and its default alpha of 255, so neither
     // input alpha is read.
-    u32 _InterpolateColour(const u32& lColour0, const u32& lColour1, f32 lfInLerp)
+    RGBA _InterpolateColour(const RGBA& lColour0, const RGBA& lColour1, f32 lfInLerp)
     {
         const f32 lfLerp = ClampChannel(lfInLerp, 0.0f, 1.0f);
 
-        const f32 lfLowR  = static_cast<f32>((lColour0 >> 16) & 0xFFu);
-        const f32 lfLowG  = static_cast<f32>((lColour0 >> 8) & 0xFFu);
-        const f32 lfLowB  = static_cast<f32>(lColour0 & 0xFFu);
-        const f32 lfHighR = static_cast<f32>((lColour1 >> 16) & 0xFFu);
-        const f32 lfHighG = static_cast<f32>((lColour1 >> 8) & 0xFFu);
-        const f32 lfHighB = static_cast<f32>(lColour1 & 0xFFu);
+        const f32 lfLowB  = static_cast<f32>(lColour0.GetBlue());
+        const f32 lfLowG  = static_cast<f32>(lColour0.GetGreen());
+        const f32 lfLowR  = static_cast<f32>(lColour0.GetRed());
+        const f32 lfHighB = static_cast<f32>(lColour1.GetBlue());
+        const f32 lfHighG = static_cast<f32>(lColour1.GetGreen());
+        const f32 lfHighR = static_cast<f32>(lColour1.GetRed());
 
-        const f32 lfOutR = ClampChannel((lfHighR - lfLowR) * lfLerp + lfLowR, 0.0f, 255.0f);
-        const f32 lfOutG = ClampChannel((lfHighG - lfLowG) * lfLerp + lfLowG, 0.0f, 255.0f);
         const f32 lfOutB = ClampChannel((lfHighB - lfLowB) * lfLerp + lfLowB, 0.0f, 255.0f);
+        const f32 lfOutG = ClampChannel((lfHighG - lfLowG) * lfLerp + lfLowG, 0.0f, 255.0f);
+        const f32 lfOutR = ClampChannel((lfHighR - lfLowR) * lfLerp + lfLowR, 0.0f, 255.0f);
 
-        const u32 luRed   = static_cast<u32>(static_cast<s32>(lfOutR)) & 0xFFu;
-        const u32 luGreen = static_cast<u32>(static_cast<s32>(lfOutG)) & 0xFFu;
         const u32 luBlue  = static_cast<u32>(static_cast<s32>(lfOutB)) & 0xFFu;
-        return 0xFF000000u | (luRed << 16) | (luGreen << 8) | luBlue;
+        const u32 luGreen = static_cast<u32>(static_cast<s32>(lfOutG)) & 0xFFu;
+        const u32 luRed   = static_cast<u32>(static_cast<s32>(lfOutR)) & 0xFFu;
+        return RGBA(static_cast<u8>(luRed), static_cast<u8>(luGreen), static_cast<u8>(luBlue), 255);
     }
 
     // X360 CgsDebugManager.cpp:113 DebugManagerConstructParameters::DEFAULT - the built-in debug
@@ -490,7 +490,7 @@ namespace CgsDev
     //      lfAverageHighlight*255 - the flash that fades as the average ages.
     // Both SPrintf results are asserted under KU_STACK_STRING_LENGTH (:559/:582).
     void DebugManager::RenderFrameRateColouredWithAverage(f32 lfFramerate, f32 lfAverageFramerate,
-            u32 lHighColour, u32 lLowColour, u32 lMidColour,
+            const RGBA& lHighColour, const RGBA& lLowColour, const RGBA& lMidColour,
             f32 lfHighFramerate, f32 lfLowFramerate,
             const char* lpcAverageText, f32 lfAverageHighlight, bool lbIsRealtime)
     {
@@ -504,7 +504,7 @@ namespace CgsDev
         const f32 lfMidpoint = lfLowFramerate + lfRange;
 
         // 1. the current frame rate.
-        const u32 luColour = (lfFramerate >= lfMidpoint)
+        const RGBA luColour = (lfFramerate >= lfMidpoint)
             ? _InterpolateColour(lMidColour, lHighColour, (lfFramerate - lfMidpoint) / lfRange)
             : _InterpolateColour(lLowColour, lMidColour, (lfFramerate - lfLowFramerate) / lfRange);
 
@@ -518,7 +518,7 @@ namespace CgsDev
                                      lrMetrics.mfScreenHeight - (lfLineHeight + 10.0f), 20.0f, luColour);
 
         // 2. the average, one line below.
-        const u32 luAverageColour = (lfAverageFramerate >= lfMidpoint)
+        const RGBA luAverageColour = (lfAverageFramerate >= lfMidpoint)
             ? _InterpolateColour(lMidColour, lHighColour, (lfAverageFramerate - lfMidpoint) / lfRange)
             : _InterpolateColour(lLowColour, lMidColour, (lfAverageFramerate - lfLowFramerate) / lfRange);
 
@@ -530,9 +530,9 @@ namespace CgsDev
                                      lrMetrics.mfScreenHeight - (lfLineHeight - 10.0f), 20.0f, luAverageColour);
 
         // 3. the "UPDATED" flash: the average colour's RGB under an alpha driven by the highlight.
-        const u32 luUpdatedColour =
-            (static_cast<u32>(static_cast<u8>(static_cast<s32>(lfAverageHighlight * 255.0f))) << 24)
-            | (luAverageColour & 0x00FFFFFFu);
+        RGBA luUpdatedColour = luAverageColour;
+        luUpdatedColour.SetAlpha(static_cast<u8>(static_cast<s32>(lfAverageHighlight * 255.0f)));
+        // (the average colour's RGB under the highlight alpha)
         mBufferedRenderer.Draw2DText("UPDATED", lfX - lrMetrics.mfTextSize * 5.0f,
                                      lrMetrics.mfScreenHeight - (lfLineHeight - 10.0f), 20.0f, luUpdatedColour);
     }
@@ -546,13 +546,13 @@ namespace CgsDev
         const f32 lfX = lrMetrics.mfScreenBorderLeft;
         const f32 lfY = lrMetrics.mfScreenHeight - lrMetrics.mfScreenBorderBottom;
 
-        mBufferedRenderer.Draw2DText(macBuildDate, lfX, lfY, 12.0f, 0xFFFFFFFFu);
+        mBufferedRenderer.Draw2DText(macBuildDate, lfX, lfY, 12.0f, rw::RGBA(255, 255, 255, 255));
 
         // [PC] Not on the console: the b5-decomp commit this exe was built from, one line under
         // the build date, so a screenshot or recording attached to an issue names the exact
         // build. B5_BUILD_COMMIT comes from BrnBuildVersion.h, which tools/build/compile_exe.py
         // generates per build; compile-only gates don't have it and show "unknown".
-        mBufferedRenderer.Draw2DText("Commit: " B5_BUILD_COMMIT, lfX, lfY + 14.0f, 12.0f, 0xFFFFFFFFu);
+        mBufferedRenderer.Draw2DText("Commit: " B5_BUILD_COMMIT, lfX, lfY + 14.0f, 12.0f, rw::RGBA(255, 255, 255, 255));
     }
 
     // X360 0x8282DD28. Queue the available-memory readout "%uMB %uKB %uB" (bottom centre-right). Memory
@@ -571,7 +571,7 @@ namespace CgsDev
 
         char lacText[512];
         CgsCore::SPrintf(lacText, sizeof(lacText), "%uMB %uKB %uB", luMB, luKB, luB);
-        mBufferedRenderer.Draw2DText(lacText, lfX, lfY, 16.0f, 0xFFFFFFFFu);
+        mBufferedRenderer.Draw2DText(lacText, lfX, lfY, 16.0f, rw::RGBA(255, 255, 255, 255));
     }
 
     // X360 0x8282DE28 DebugManager::RenderAssert - the on-screen assert OVERLAY (what the real ARTIST
@@ -584,7 +584,7 @@ namespace CgsDev
         if (!lpData)
             return;
 
-        const u32 luColour = 0xFF32FFFFu;   // carved (dword_82F32268)
+        const RGBA luColour(255, 255, 50, 255);   // carved (dword_82F32268)
         char lacBuffer[1024];
 
         CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "%d:%s",

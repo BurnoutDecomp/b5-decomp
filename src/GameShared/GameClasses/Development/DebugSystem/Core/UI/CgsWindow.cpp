@@ -278,7 +278,7 @@ namespace CgsDev
         {
             // ARTIST 828160D0..82816124 rounds each scalar operation in f32:
             // normalize the alpha, apply state/opacity, then multiply by 255.
-            f32 lfAlpha = static_cast<f32>((lColour >> 24) & 0xFFu) * 0.0039215689f;
+            f32 lfAlpha = static_cast<f32>(lColour.GetAlpha()) * 0.0039215689f;
             if (!IsActiveWindow())
                 lfAlpha *= 0.9f;
             if (!IsEnabled())
@@ -289,8 +289,8 @@ namespace CgsDev
             // fctidz then lbz retains the low byte, without saturation. Finite
             // s64-representable inputs are modeled here; invalid conversion and
             // hardware floating status remain outside this scalar lowering.
-            const u32 luAlpha = static_cast<u32>(static_cast<u64>(static_cast<s64>(lfAlpha)) & 0xFFu);
-            return (lColour & 0x00FFFFFFu) | (luAlpha << 24);
+            lColour.SetAlpha(static_cast<u8>(static_cast<u64>(static_cast<s64>(lfAlpha))));   // rlwimi, 0x82816134
+            return lColour;
         }
 
         // The base virtuals. Update/OnGetFocus/OnLostFocus are empty in the X360 image (no out-of-line

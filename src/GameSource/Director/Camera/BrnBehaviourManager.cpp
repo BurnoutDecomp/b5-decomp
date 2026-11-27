@@ -897,7 +897,7 @@ namespace Camera
                 const Camera& lrCamera = lrHelper.GetCamera();
                 lDebugInterface.Get2dRender().DrawAxis(lrCamera.GetTransform());
                 lDebugInterface.Get2dRender().DrawText(lrCamera.mSubject, lacDebugFullName,
-                                                       16.0f, 0xFFFFFFFFu);
+                                                       16.0f, rw::RGBA(255, 255, 255, 255));
             }
         }
 
@@ -992,7 +992,7 @@ namespace Camera
                 const Camera& lrCamera = lrHelper.GetCamera();
                 lDebugInterface.Get2dRender().DrawAxis(lrCamera.GetTransform());
                 lDebugInterface.Get2dRender().DrawText(lrCamera.mSubject, lacDebugFullName,
-                                                       16.0f, 0xFFFFFFFFu);
+                                                       16.0f, rw::RGBA(255, 255, 255, 255));
             }
         }
     }

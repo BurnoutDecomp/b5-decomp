@@ -2,6 +2,7 @@
 #define BRN_RACE_BALANCING_DEBUG_COMPONENT_H
 
 #include "types.hpp"
+#include "rw/core/base/detail/hosttype.h"   // rw::RGBA
 #include "BrnCommonTypes.h"                                                       // Vector2 / Vector3 (rw::math::vpu aliases)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent (base), Debug2D/3DImmediateRender fwd
 
@@ -33,7 +34,7 @@ namespace BrnAI
     // the 2D debug renderer is the packed RGBA8 u32 (same as CgsDev::RGBA). Alias it into this scope
     // (as u32, to avoid pulling the heavy renderer header into this declaration) so the declarations
     // read like the source.
-    typedef u32 RGBA;
+    using rw::RGBA;   // the DWARF colour type, rw::RGBA (rw/core/base/detail/hosttype.h)
 }
 
 namespace BrnAI

@@ -149,7 +149,7 @@ void AmbienceControl::DrawDebug(Vector3 lrPosition) const
 
     CgsDev::DebugInterface lDebugInterface;
     CgsDev::DebugRender& lrRender = lDebugInterface.Get2dRender();
-    const CgsDev::RGBA KU_DEBUG_COLOUR = 0xFF00FFA0u; // ARTIST dword_82F2F794
+    const CgsDev::RGBA KU_DEBUG_COLOUR(160, 255, 0, 255); // ARTIST dword_82F2F794
     char lacText[16];
 
     CgsCore::SPrintf(lacText, static_cast<u32>(sizeof(lacText)), "%d",

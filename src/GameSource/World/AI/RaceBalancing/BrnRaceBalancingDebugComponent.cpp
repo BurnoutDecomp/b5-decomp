@@ -2,7 +2,7 @@
 
 #include "GameSource/World/AI/BrnAIModule.h"                                      // BrnAI::AIModule (GetAICar / GetAISectionsData)
 #include "GameSource/World/AI/BrnAICar.h"                                         // BrnAI::AICar
-#include "GameSource/World/AI/BrnAIDebugUtils.h"                                  // K_WHITE / K_GREEN / K_BLUE
+#include "GameSource/World/AI/BrnAIDebugUtils.h"                                  // rw::RGBA(255, 255, 255, 255) / rw::RGBA(0, 255, 0, 255) / rw::RGBA(255, 0, 0, 255)
 #include "GameSource/World/AI/Route/BrnRoute.h"                                   // BrnAI::Route / RouteNode
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h"            // BrnAI::RaceBalancingManager / Graph / Route
 #include "SharedClasses/AI/AISectionsResourceType.h"                             // BrnAI::AISectionsData / AISection
@@ -80,7 +80,7 @@ namespace
     // Packed RGBA8 colours (read off the X360 li/lis/ori immediates; the 2D renderer takes AARRGGBB).
     // K_WHITE (-1), K_BLUE (-16776961, par / ahead line), K_GREEN (-16711936, target / behind
     // line): BrnAIDebugUtils.h (shared with the ResetOnTrack component).
-    const CgsDev::RGBA K_RED   = 0xFFFF0000u;  // -65536     (current-time marker)
+    // K_RED retired (no DWARF name): its 1 use(s) spell rw::RGBA(0, 0, 255, 255), the immediate the u32 constant gave
 
     // The DWARF lists FindAICar's slot sweep as 0..34 (35 race-car slots).
     const s32 KI_MAX_AI_CARS = 35;
@@ -187,24 +187,24 @@ void RaceBalancingDebugComponent::DrawGraphFrame(CgsDev::Debug2DImmediateRender*
 {
     // X axis: a horizontal white line along the bottom of the frame.
     const Vector2 lv2XAxisEnd(lv2Origin.mV.x + lv2Size.mV.x, lv2Origin.mV.y);
-    lpDisplay->DrawLine(lv2Origin, lv2XAxisEnd, K_WHITE);
+    lpDisplay->DrawLine(lv2Origin, lv2XAxisEnd, rw::RGBA(255, 255, 255, 255));
 
     // Y axis: a vertical white line up the left edge (screen-y decreases upward).
     const Vector2 lv2YAxisEnd(lv2Origin.mV.x, lv2Origin.mV.y - lv2Size.mV.y);
-    lpDisplay->DrawLine(lv2Origin, lv2YAxisEnd, K_WHITE);
+    lpDisplay->DrawLine(lv2Origin, lv2YAxisEnd, rw::RGBA(255, 255, 255, 255));
 
     // ARTIST 0x827748E0 calls the scalar-corner DrawBox overload at 0x8281C3E0.
     lpDisplay->DrawBox(lv2Origin.mV.x, lv2Origin.mV.y, lv2XAxisEnd.mV.x, lv2YAxisEnd.mV.y,
-                       0x40FFFFFFu);
+                       rw::RGBA(255, 255, 255, 64));
 
     // The two axis-name labels, offset from the origin (DrawGraphFrame @0x827747F8). X-label:
     // (origin.x + 50, origin.y + 10) -- vaddfp, asm-confirmed. Y-label: (origin.x - 50,
     // origin.y - flt_820C3FAC) -- vsubfp origin.x - var_70(=50.0) @0x827749F0, vsubfp origin.y -
     // flt_820C3FAC @0x827749FC. Raw word 0x42C80000 pins flt_820C3FAC as 100.0.
     lpDisplay->DrawText(lpcXAxisLabel, lv2Origin.mV.x + 50.0f, lv2Origin.mV.y + 10.0f,
-                  KF_TEXT_SCALE, K_WHITE);
+                  KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
     lpDisplay->DrawText(lpcYAxisLabel, lv2Origin.mV.x - 50.0f, lv2Origin.mV.y - 100.0f,
-                  KF_TEXT_SCALE, K_WHITE);
+                  KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 }
 
 // ====================================================================================================
@@ -243,7 +243,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
 
     if (miCurrentRival >= lpManager->maRaceBalancingGraphs.GetCount())
     {
-        lpDisplay->DrawText("No graph", 200.0f, 180.0f, KF_TEXT_SCALE, K_WHITE);
+        lpDisplay->DrawText("No graph", 200.0f, 180.0f, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
     }
     else
     {
@@ -275,11 +275,11 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
 
             const Vector2 lv2BehindA(lfXA, KF_SPEED_GRAPH_ORIGIN_Y - lfBehindA);
             const Vector2 lv2BehindB(lfXB, KF_SPEED_GRAPH_ORIGIN_Y - lfBehindB);
-            lpDisplay->DrawLine(lv2BehindA, lv2BehindB, K_BLUE);
+            lpDisplay->DrawLine(lv2BehindA, lv2BehindB, rw::RGBA(255, 0, 0, 255));
 
             const Vector2 lv2AheadA(lfXA, KF_SPEED_GRAPH_ORIGIN_Y - lfAheadA);
             const Vector2 lv2AheadB(lfXB, KF_SPEED_GRAPH_ORIGIN_Y - lfAheadB);
-            lpDisplay->DrawLine(lv2AheadA, lv2AheadB, K_GREEN);
+            lpDisplay->DrawLine(lv2AheadA, lv2AheadB, rw::RGBA(0, 255, 0, 255));
         }
 
         // --- 2a. difficulty % --------------------------------------------------------------------
@@ -288,7 +288,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         const f32 lfDifficultyPercent = mpAIModule->GetProgressionRankAsRatio() * 100.0f;
         lOut << static_cast<s32>(lfDifficultyPercent); //ARTIST82796EE4: fctiwz, signed%d
         lOut << "%";
-        lpDisplay->DrawText(lStream.GetBuffer(), 200.0f, 280.0f, KF_TEXT_SCALE, K_WHITE);
+        lpDisplay->DrawText(lStream.GetBuffer(), 200.0f, 280.0f, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
         // --- 2b. live completion ratio -----------------------------------------------------------
         if (lpCar != 0 && lpCar->HasValidRoute())
@@ -311,12 +311,12 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
             const f32 lfX = lfCompletionRatio * KF_SPEED_GRAPH_WIDTH + KF_SPEED_GRAPH_ORIGIN_X;
             const Vector2 lv2TickTop(lfX, 80.0f);
             const Vector2 lv2TickBottom(lfX, KF_SPEED_GRAPH_ORIGIN_Y);
-            lpDisplay->DrawLine(lv2TickTop, lv2TickBottom, K_WHITE);
+            lpDisplay->DrawLine(lv2TickTop, lv2TickBottom, rw::RGBA(255, 255, 255, 255));
 
             lStream.Reset();
             lOut << (lfCompletionRatio * 100.0f);
             lOut << "%";
-            lpDisplay->DrawText(lStream.GetBuffer(), lfX, 60.0f, KF_TEXT_SCALE, K_WHITE);
+            lpDisplay->DrawText(lStream.GetBuffer(), lfX, 60.0f, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
         }
     }
 
@@ -327,7 +327,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
     if (miCurrentRival >= lpManager->maRaceBalancingRoutes.GetCount())
     {
         lpDisplay->DrawText("No balancing route", 700.0f, 480.0f, KF_NO_GRAPH_TEXT_SCALE,
-                      K_WHITE);
+                      rw::RGBA(255, 255, 255, 255));
         return;
     }
 
@@ -351,7 +351,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
             lStatus << "Not in race";
         }
         lpDisplay->DrawText(lStatus.GetBuffer(), 700.0f, 480.0f, KF_NO_GRAPH_TEXT_SCALE,
-                      K_WHITE);
+                      rw::RGBA(255, 255, 255, 255));
         return;
     }
 
@@ -391,13 +391,13 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
     const f32 lfCompletionRatio =
         lrRoute.ComputeRaceCompletionRatio(lfDistToCheckpoint, lpManager->miCheckpointCount);
     lOut << "Completion ratio: " << lfCompletionRatio;
-    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 530.0f, KF_TEXT_SCALE, K_WHITE);
+    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 530.0f, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
     // ROUTE: distance / checkpoint.
     lStream.Reset();
     lOut << "ROUTE: Distance: " << static_cast<s32>(lrRoute.mfDistance) << "m ";
     lOut << ", Checkpoint: " << lrRoute.miCurrentCheckpointIndex << "/" << lpManager->miCheckpointCount;
-    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 550.0f, KF_TEXT_SCALE, K_WHITE);
+    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 550.0f, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
     // The time-graph frame.
     DrawGraphFrame(lpDisplay, KV2_TIME_GRAPH_ORIGIN, KV2_TIME_GRAPH_SIZE, "Distance", "Time");
@@ -414,7 +414,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
     lOut << "-";
     lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_AHEAD, lpCar->GetNextRouteNodeIndex()));
     lOut << "s";
-    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 570.0f, KF_TEXT_SCALE, K_WHITE);
+    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 570.0f, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
     // CAR LOCATION: distance ahead / which graph / range / takedown count.
     lStream.Reset();
@@ -437,7 +437,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         lOut << "In range, ";
     }
     lOut << " Taken down " << lrRoute.miTakenDownCount << " times";
-    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 590.0f, KF_TEXT_SCALE, K_WHITE);
+    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 590.0f, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
     // SPEEDS: target / par bands / max player / min.
     lStream.Reset();
@@ -461,7 +461,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
     lOut << ", Max player: " << static_cast<s32>(lpCar->GetMaxPlayerSpeed() * KF_MS_TO_MPH);
     lOut << ", Min: " << static_cast<s32>(lpCar->GetDecentSpeed() * KF_MS_TO_MPH);
     lOut << "mph";
-    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 610.0f, KF_TEXT_SCALE, K_WHITE);
+    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 610.0f, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
     // SPEED MATCHING (only when the car is speed-matching).
     if (lbSpeedMatching)
@@ -469,7 +469,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         lStream.Reset();
         lOut << "SPEED MATCHING: " << static_cast<s32>(lpCar->GetSpeedMatchSpeed() * KF_MS_TO_MPH);
         lOut << "mph";
-        lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 630.0f, KF_TEXT_SCALE, K_WHITE);
+        lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 630.0f, KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
     }
 
     // --- 5. the time graph itself -------------------------------------------------------------------
@@ -479,14 +479,14 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
 
     const Vector2 lv2MarkerVTop(lfMarkerX, 80.0f);
     const Vector2 lv2MarkerVBottom(lfMarkerX, KF_TIME_GRAPH_ORIGIN_Y);
-    lpDisplay->DrawLine(lv2MarkerVTop, lv2MarkerVBottom, K_WHITE);
+    lpDisplay->DrawLine(lv2MarkerVTop, lv2MarkerVBottom, rw::RGBA(255, 255, 255, 255));
 
     const Vector2 lv2MarkerHLeft(KF_TIME_GRAPH_ORIGIN_X, lfMarkerY);
     const Vector2 lv2MarkerHRight(1100.0f, lfMarkerY);
-    lpDisplay->DrawLine(lv2MarkerHLeft, lv2MarkerHRight, K_WHITE);
+    lpDisplay->DrawLine(lv2MarkerHLeft, lv2MarkerHRight, rw::RGBA(255, 255, 255, 255));
 
     const Vector2 lv2MarkerCentre(lfMarkerX, lfMarkerY);
-    lpDisplay->DrawCircle(lv2MarkerCentre, KF_RACE_MARKER_RADIUS, KI_RACE_MARKER_SEGMENTS, K_RED);
+    lpDisplay->DrawCircle(lv2MarkerCentre, KF_RACE_MARKER_RADIUS, KI_RACE_MARKER_SEGMENTS, rw::RGBA(0, 0, 255, 255));
 
     if (liTimeCount <= 0)
     {
@@ -514,12 +514,12 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         // AHEAD curve -> green.
         const Vector2 lv2AheadPrev(lfXPrev, KF_TIME_GRAPH_ORIGIN_Y - lfPrevAhead * lfYStep);
         const Vector2 lv2AheadCur(lfXCur, KF_TIME_GRAPH_ORIGIN_Y - lfAhead * lfYStep);
-        lpDisplay->DrawLine(lv2AheadPrev, lv2AheadCur, K_GREEN);
+        lpDisplay->DrawLine(lv2AheadPrev, lv2AheadCur, rw::RGBA(0, 255, 0, 255));
 
         // BEHIND curve -> blue.
         const Vector2 lv2BehindPrev(lfXPrev, KF_TIME_GRAPH_ORIGIN_Y - lfPrevBehind * lfYStep);
         const Vector2 lv2BehindCur(lfXCur, KF_TIME_GRAPH_ORIGIN_Y - lfBehind * lfYStep);
-        lpDisplay->DrawLine(lv2BehindPrev, lv2BehindCur, K_BLUE);
+        lpDisplay->DrawLine(lv2BehindPrev, lv2BehindCur, rw::RGBA(255, 0, 0, 255));
 
         lfPrevBehind = lfBehind;
         lfPrevAhead = lfAhead;
@@ -530,12 +530,12 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
             lStream.Reset();
             lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_AHEAD, liIndex)) << "s";
             lpDisplay->DrawText(lStream.GetBuffer(), lfXPrev, lv2AheadPrev.mV.y - 24.0f,
-                          KF_TEXT_SCALE, K_WHITE);
+                          KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
 
             lStream.Reset();
             lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_BEHIND, liIndex)) << "s";
             lpDisplay->DrawText(lStream.GetBuffer(), lfXPrev, lv2BehindPrev.mV.y + 8.0f,
-                          KF_TEXT_SCALE, K_WHITE);
+                          KF_TEXT_SCALE, rw::RGBA(255, 255, 255, 255));
         }
     }
 }

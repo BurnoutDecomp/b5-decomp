@@ -276,7 +276,7 @@ namespace BrnGui
 
         CgsCore::SPrintf(lacText, 1024, "HELLO!");
         lpDisplay->DrawText(lacText, 80.0f, 100.0f, 20.0f,
-                      static_cast<CgsDev::RGBA>(-1));
+                      rw::RGBA(255, 255, 255, 255));
 
         const s32 liNumPlayers = mOnlinePostEvent.miNumPlayersInEvent;
         if (liNumPlayers > 0)
@@ -336,17 +336,17 @@ namespace BrnGui
                                          lpcStatus, static_cast<s32>(lrRecord.miResultsTablePosition));
                     }
                     lpDisplay->DrawText(lacText, 80.0f, lfRowY, 20.0f,
-                                  static_cast<CgsDev::RGBA>(-1));
+                                  rw::RGBA(255, 255, 255, 255));
                 }
                 lfRowY += 24.0f;
             }
 
             CgsCore::SPrintf(lacText, 1024, "%d PLAYERS IN GAME", liNumPlayers);
             lpDisplay->DrawText(lacText, 80.0f, lfRowY, 20.0f,
-                          static_cast<CgsDev::RGBA>(-1));
+                          rw::RGBA(255, 255, 255, 255));
             CgsCore::SPrintf(lacText, 1024, "STATE=%d", static_cast<s32>(meCurrentState));
             lpDisplay->DrawText(lacText, 80.0f, lfRowY + 24.0f, 20.0f,
-                          static_cast<CgsDev::RGBA>(-1));
+                          rw::RGBA(255, 255, 255, 255));
         }
     }
 

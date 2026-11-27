@@ -35,9 +35,9 @@ const char* const KAP_POSITION_STRINGS[8] = {
     "POSITION_SEVENTH_LOWERCASE", "POSITION_EIGHTH_LOWERCASE"}; //82F27800
 const char* const KAP_POSITION_FALLBACK[8] = {"$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8"}; //82F257F8
 const CgsGraphics::RGBA KAU_ONLINE_COLOURS[12] = {
-    0xFF3070FFu, 0xFF00FFFFu, 0xFF0000FFu, 0xFFFF6C00u,
-    0xFFFF75FDu, 0xFF24E960u, 0xFF187FF4u, 0xFFFF3A97u,
-    0xFFE2F91Bu, 0xFFFFFFFFu, 0xFF404040u, 0xFF000000u}; //82F25BE4; entry0 fixed by CRT82C51C20
+    rw::RGBA(255, 112, 48, 255), rw::RGBA(255, 255, 0, 255), rw::RGBA(255, 0, 0, 255), rw::RGBA(0, 108, 255, 255),
+    rw::RGBA(253, 117, 255, 255), rw::RGBA(96, 233, 36, 255), rw::RGBA(244, 127, 24, 255), rw::RGBA(151, 58, 255, 255),
+    rw::RGBA(27, 249, 226, 255), rw::RGBA(255, 255, 255, 255), rw::RGBA(64, 64, 64, 255), rw::RGBA(0, 0, 0, 255)}; //82F25BE4; entry0 fixed by CRT82C51C20
 
 // (FindOnlinePlayer was a local re-build of GuiCache::GetOnlinePlayerInfo(EActiveRaceCarIndex),
 // the DWARF h:775 header-inline scan; the callers use it directly.)
@@ -88,7 +88,7 @@ void AboveCarRenderer::UpdateCachedInfoForRival(EActiveRaceCarIndex leIndex)
     PlayerGamerTagAboveCarInfo& lrInfo = maCachedPlayerGameTagInfos[leIndex];
     lrInfo.mbUsed = true;
     char lacName[KI_RIVALNAME_LENGTH] = {0};
-    CgsGraphics::RGBA luColour = 0xFF3070FFu;
+    CgsGraphics::RGBA luColour = rw::RGBA(255, 112, 48, 255);
     const u32 luPosition = mpGuiCache->GetEventPositionOfRaceCar(leIndex);
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = mpGuiCache->GetOnlinePlayerInfo(leIndex);
     if (lpPlayer)
@@ -103,8 +103,8 @@ void AboveCarRenderer::UpdateCachedInfoForRival(EActiveRaceCarIndex leIndex)
             luColour = KAU_ONLINE_COLOURS[mpGuiCache->GetOnlinePlayerColourFromARCI(leIndex)];
             break;
         case 11: case 13:
-            if (mpGuiCache->GetCurrentOnlinePlayerTeam(leIndex) == 1) luColour = 0xFF0040FFu;
-            else if (mpGuiCache->GetCurrentOnlinePlayerTeam(leIndex) == 2) luColour = 0xFFFF4000u;
+            if (mpGuiCache->GetCurrentOnlinePlayerTeam(leIndex) == 1) luColour = rw::RGBA(255, 64, 0, 255);
+            else if (mpGuiCache->GetCurrentOnlinePlayerTeam(leIndex) == 2) luColour = rw::RGBA(0, 64, 255, 255);
             break;
         default: break;
         }
@@ -374,7 +374,7 @@ void AboveCarRenderer::RenderTrafficCarScores(CgsGui::ImRendererSet* lpRendererS
     mTextObject.mpFont = mpScoreFont;
     mTextObject.mfFontHeight = 0.5f; // 82F257B8
     mTextObject.mbDropShadow = true;
-    mTextObject.mTextColour = mpLanguageManager->GetCurrentLanguage() == 16 ? 0xFF00B4FFu : 0xFFFFFFFFu;
+    mTextObject.mTextColour = mpLanguageManager->GetCurrentLanguage() == 16 ? rw::RGBA(255, 180, 0, 255) : rw::RGBA(255, 255, 255, 255);
     // CRT82C51BE4 initializes82FB35C0 to1280,720.
     mTextObject.mv2TopLeft.mX = -1280.0f; mTextObject.mv2TopLeft.mY = -0.5f;
     mTextObject.mv2BottomRight.mX = 1280.0f; mTextObject.mv2BottomRight.mY = 720.0f;
@@ -565,7 +565,7 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
                 if (lfFraction > 0.75f)
                 {
                     const u32 luAlpha = static_cast<u8>((1.0f - lfFraction) * 1020.0f);
-                    lrInfo.mColour = (lrInfo.mColour & 0x00FFFFFFu) | (luAlpha << 24);
+                    lrInfo.mColour.SetAlpha(static_cast<u8>(luAlpha));
                 }
                 lrRecord.mColour = lrInfo.mColour;
                 const f32 lfHeight = AboveCarFontHeight(lpRendererSet->mCamera.maProjectionScalars[3], lfFraction);
@@ -616,7 +616,7 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
     mTextObject.mfFontHeight = 0.5f; //82F257B8 KF_SCORE_FONT_SIZE_3D
     mTextObject.mbDropShadow = true;
     mTextObject.mTextColour = mpLanguageManager->GetCurrentLanguage() == 16
-        ? 0xFF00B4FFu : 0xFFFFFFFFu; //82F25BA8/82F25BA4
+        ? rw::RGBA(255, 180, 0, 255) : rw::RGBA(255, 255, 255, 255); //82F25BA8/82F25BA4
     mTextObject.mv2TopLeft.mX = -1280.0f; mTextObject.mv2TopLeft.mY = -0.5f;
     mTextObject.mv2BottomRight.mX = 1280.0f; mTextObject.mv2BottomRight.mY = 720.0f; //82FB35C0, CRT82C51BE4
     mTextObject.meAlignment = CgsGraphics::TextObject::E_ALIGNMENT_CENTER;
@@ -728,8 +728,8 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
             mTextObject.mv2TopLeft.mX = lrScore.mv2ScreenSpacePosition.mV.x; mTextObject.mv2TopLeft.mY = lrScore.mv2ScreenSpacePosition.mV.y;
             mTextObject.mfStringWidth = mTextObject.mpFont->GetStringWidth(mTextObject.mpUtf8String);
             if (mTextObject.mbAutosize) mTextObject.CalculateAutosizing();
-            mTextObject.mTextColour = (mTextObject.mTextColour & 0x00FFFFFFu) |
-                                     (static_cast<u32>(luAlpha) << 24);
+            mTextObject.mTextColour.SetAlpha(luAlpha);
+
             mpTextRenderer->RenderString(lpIm2d, mTextObject);
             mTextObject.mbMultiLine = 0;
             // bgt tests: unordered deltas follow the erase branch in ARTIST.

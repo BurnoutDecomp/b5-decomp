@@ -18,7 +18,7 @@ WidgetLineGraph::WidgetLineGraph()
     , miFirstValueIndex(0)
     , mpColoursArray(0)
     , miColoursArraySize(0)
-    , mColourBackground(0)
+    , mColourBackground(0, 0, 0, 0)
 {
 }
 

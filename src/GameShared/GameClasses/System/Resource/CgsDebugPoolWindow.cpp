@@ -147,8 +147,8 @@ namespace CgsResource
             lfFirst = static_cast<f32>(std::cos(static_cast<f64>(lfAngle)));
             lfSecond = 0.0f;
         }
-        return 0xFF000000u | (ColourByte(lfFirst) << 16) |
-               (ColourByte(lfSecond) << 8) | ColourByte(lfThird);
+        return CgsDev::RGBA(static_cast<u8>(ColourByte(lfThird)), static_cast<u8>(ColourByte(lfSecond)),
+                            static_cast<u8>(ColourByte(lfFirst)), 255);   // 0xFF | First | Second | Third
     }
 
     // DecFIGS CgsDebugPoolWindow.cpp:387; inlined throughout ARTIST828F7250.
@@ -170,16 +170,16 @@ namespace CgsResource
         const s32 liUsedResources = static_cast<s32>(mpPool->GetMaxResources()) - liFreeResources;
         CgsCore::SPrintf(lacText, sizeof(lacText), "Resources: %d used, %d free",
                         liUsedResources, liFreeResources);
-        AddTextLine(lpRender, lacText, 0xFF000000u);
+        AddTextLine(lpRender, lacText, rw::RGBA(0, 0, 0, 255));
         CgsCore::SPrintf(lacText, sizeof(lacText), "DefragMode: SrcCopy, MM_LO");
-        AddTextLine(lpRender, lacText, 0xFF000000u);
+        AddTextLine(lpRender, lacText, rw::RGBA(0, 0, 0, 255));
         mrTextDrawPos += 2.0f;
         CgsCore::SPrintf(lacText, sizeof(lacText), "Selected Heap: %s", maHeaps[miSelectedHeap].macName);
-        AddTextLine(lpRender, lacText, 0xFF000000u);
+        AddTextLine(lpRender, lacText, rw::RGBA(0, 0, 0, 255));
         CgsCore::SPrintf(lacText, sizeof(lacText), "    Pos: %d, BytesPerPixel: %d",
                         static_cast<s32>(maHeaps[miSelectedHeap].muScroll),
                         static_cast<s32>(maHeaps[miSelectedHeap].muBytesPerSegment));
-        AddTextLine(lpRender, lacText, 0xFF000000u);
+        AddTextLine(lpRender, lacText, rw::RGBA(0, 0, 0, 255));
         if (mpPool->IsValid())
         {
             Heap* lpHeap = maHeaps[miSelectedHeap].mpHeap;
@@ -193,11 +193,11 @@ namespace CgsResource
                             static_cast<s32>(luTotal), static_cast<f32>(luTotal) * 0.0009765625f,
                             luUsed, static_cast<f32>(luUsed) * 0.0009765625f,
                             static_cast<s32>(luFree), static_cast<f32>(luFree) * 0.0009765625f);
-            AddTextLine(lpRender, lacText, 0xFF000000u);
+            AddTextLine(lpRender, lacText, rw::RGBA(0, 0, 0, 255));
             CgsCore::SPrintf(lacText, sizeof(lacText),
                             "    LargestBlock: %.2fkb, Fragmentation: %.2f",
                             static_cast<f32>(luLargestFree) * 0.0009765625f, lfFragmentation * 100.0f);
-            AddTextLine(lpRender, lacText, 0xFF000000u);
+            AddTextLine(lpRender, lacText, rw::RGBA(0, 0, 0, 255));
             f32 lfHeapY = mrTextDrawPos + 4.0f;
             const f32 lfHeapHeight = ((GetHeight() + GetY()) - lfHeapY) /
                                       static_cast<f32>(miNumHeaps) - 2.0f;
@@ -218,7 +218,7 @@ namespace CgsResource
     {
         Heap* lpHeap = lpInfo->mpHeap;
         lpRender->DrawText(lpInfo->macShortName, lfX,
-                           (lfHeight * 0.5f + lfY) - 4.0f, 14.0f, 0xFF000000u);
+                           (lfHeight * 0.5f + lfY) - 4.0f, 14.0f, rw::RGBA(0, 0, 0, 255));
         const u32 luBytesPerSegment = lpInfo->muBytesPerSegment;
         // The original unsigned divides have zero-divisor traps. No extra
         // range, validity, or empty-list guards are placed ahead of them.
@@ -240,7 +240,7 @@ namespace CgsResource
                 luBackgroundColumns = luColumns;
             const f32 lfBottom = lfY + lfHeight;
             const CgsDev::RGBA lBackground = lpInfo == &maHeaps[miSelectedHeap]
-                ? 0xFF555555u : 0xFF222222u;
+                ? rw::RGBA(85, 85, 85, 255) : rw::RGBA(34, 34, 34, 255);
             lpRender->DrawBox(lfBarX, lfY,
                               static_cast<f32>(luBackgroundColumns << 1) + lfBarX, lfBottom, lBackground);
             u32 luPixelX = 0;

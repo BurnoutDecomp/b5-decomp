@@ -1788,8 +1788,8 @@ namespace BrnWorld
                                          const Matrix44& lrLightToWorld,
                                          f32 lfPlaneZ)
         {
-            const CgsDev::RGBA lAxisColour = static_cast<CgsDev::RGBA>(0xFF804040u);
-            const CgsDev::RGBA lPlaneColour = static_cast<CgsDev::RGBA>(0xFF804080u);
+            const CgsDev::RGBA lAxisColour = static_cast<CgsDev::RGBA>(rw::RGBA(64, 64, 128, 255));
+            const CgsDev::RGBA lPlaneColour = static_cast<CgsDev::RGBA>(rw::RGBA(128, 64, 128, 255));
             const Vector4 KAA_AXIS_LINES[3][2] =
             {
                 { MakeShadowVector4( -20.0f,   0.0f,   0.0f, 0.0f ), MakeShadowVector4(  20.0f,   0.0f,   0.0f, 0.0f ) },
@@ -2665,14 +2665,14 @@ namespace BrnWorld
     {
         CgsDev::DebugInterface lDebugInterface;
         CgsDev::DebugRender& lRender = lDebugInterface.GetRender();
-        const CgsDev::RGBA lCyan = static_cast<CgsDev::RGBA>(0xFF00FFFFu);
-        const CgsDev::RGBA lStageRed = static_cast<CgsDev::RGBA>(0xFFFF2020u);
-        const CgsDev::RGBA lBlue = static_cast<CgsDev::RGBA>(0xFF0000FFu);
-        const CgsDev::RGBA lGreen = static_cast<CgsDev::RGBA>(0xFF00FF00u);
-        const CgsDev::RGBA lEyeColour = static_cast<CgsDev::RGBA>(0xFFFF0000u);
-        const CgsDev::RGBA lMidPointColour = static_cast<CgsDev::RGBA>(0xFFFF00FFu);
-        const CgsDev::RGBA lSilhouetteColour = static_cast<CgsDev::RGBA>(0xFF808000u);
-        const CgsDev::RGBA lPerpendicularColour = static_cast<CgsDev::RGBA>(0xFF800080u);
+        const CgsDev::RGBA lCyan = static_cast<CgsDev::RGBA>(rw::RGBA(255, 255, 0, 255));
+        const CgsDev::RGBA lStageRed = static_cast<CgsDev::RGBA>(rw::RGBA(32, 32, 255, 255));
+        const CgsDev::RGBA lBlue = static_cast<CgsDev::RGBA>(rw::RGBA(255, 0, 0, 255));
+        const CgsDev::RGBA lGreen = static_cast<CgsDev::RGBA>(rw::RGBA(0, 255, 0, 255));
+        const CgsDev::RGBA lEyeColour = static_cast<CgsDev::RGBA>(rw::RGBA(0, 0, 255, 255));
+        const CgsDev::RGBA lMidPointColour = static_cast<CgsDev::RGBA>(rw::RGBA(255, 0, 255, 255));
+        const CgsDev::RGBA lSilhouetteColour = static_cast<CgsDev::RGBA>(rw::RGBA(0, 128, 128, 255));
+        const CgsDev::RGBA lPerpendicularColour = static_cast<CgsDev::RGBA>(rw::RGBA(128, 0, 128, 255));
         const ShadowMapType leDebugType = maShadowMapTypes[luIndex];
 
         if (leDebugType == E_SHADOWMAP_TYPE_TSM)
@@ -2770,7 +2770,7 @@ namespace BrnWorld
             cornerSum = __vaddfp(cornerSum, __lvx(&lrCorner3, 0));
             __stvx(__vmulfp(cornerSum, XMVectorReplicate(0.25f)), &lvTextPosition, 0);
             lRender.DrawText(ToShadowDebugVector3(lvTextPosition), lacAspectText, 16.0f,
-                             static_cast<CgsDev::RGBA>(0xFFFFFFFFu));
+                             static_cast<CgsDev::RGBA>(rw::RGBA(255, 255, 255, 255)));
 
             if (mbShowLightFrustumInDebugRender)
             {
