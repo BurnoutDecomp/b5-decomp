@@ -32,6 +32,25 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                          // rw::math::vpu Vector4 / Matrix44
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"  // CgsGeometric::Frustum
+#include "rw/math/fpu/constants.h"                                   // rw::math::fpu::HALF_PI
+
+// The camera defaults: file-scope constants of this header (DWARF CgsCamera.h:26-36, internal
+// linkage; the reference header :20-31 spells them `static const float32_t`). Initialised from an
+// expression or another constant, so each including TU that reads one holds its own .data copy:
+// CgsCamera's KF_DEFAULT_FOVHORIZONTAL / KF_DEFAULT_ASPECTRATIO at 0x82F30FD4 / 0x82F30FD8 (read by
+// the reset thunk 0x827F94F8..0x827F9504), the widescreen aspect at 0x82F30FD0 and in
+// MainMapComponent::SetZoom's TU at 0x82F25AD4; the literal near/far planes sit in .rdata 0x820D1704/08.
+static const f32 KF_ASPECTRATIO_WIDESCREEN = ( 16.0f / 9.0f );
+static const f32 KF_ASPECTRATIO_STANDARD = ( 4.0f / 3.0f );
+static const f32 KF_ASPECTRATIO_SQUARE = ( 1.0f );
+
+static const f32 KF_ASPECTRATIO_STAND_IN_PLEASE_REMOVE_ME = KF_ASPECTRATIO_WIDESCREEN;
+
+static const f32 KF_DEFAULT_FOVHORIZONTAL = rw::math::fpu::HALF_PI;
+static const f32 KF_DEFAULT_ASPECTRATIO = KF_ASPECTRATIO_WIDESCREEN;
+static const f32 KF_DEFAULT_NEARCLIPPLANE = 0.1f;
+static const f32 KF_DEFAULT_FARCLIPPLANE = 1000.0f;
+static const f32 KF_DEFAULT_DEPTHOFFIELD = 1.0f;
 
 namespace CgsGraphics
 {

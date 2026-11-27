@@ -49,10 +49,10 @@
 // Diagnostic signature, if this ever regresses: fitHalfW / slabFar is a CONSTANT
 // across all cascades, and that constant is tanf(float(pi/2)) = 2.2877e7.
 // ----------------------------------------------------------------------------
-const f32 KF_DEFAULT_FOVHORIZONTAL = 1.5707964f;  // flt_82F30FD4 (.i64-recovered, pi/2)
-const f32 KF_DEFAULT_ASPECTRATIO   = 1.7777778f;  // flt_82F30FD8 (.i64-recovered, 16/9)
-const f32 KF_DEFAULT_NEARCLIPPLANE = 0.1f;        // flt_820D1704 (.i64-recovered)
-const f32 KF_DEFAULT_FARCLIPPLANE  = 1000.0f;     // flt_820D1708 (.i64-recovered)
+// KF_DEFAULT_FOVHORIZONTAL / ASPECTRATIO (flt_82F30FD4 / flt_82F30FD8) and KF_DEFAULT_NEAR/FARCLIPPLANE
+// (flt_820D1704 / flt_820D1708) are CgsCamera.h's header constants (DWARF CgsCamera.h:32-35), with the
+// rest of the DWARF set; HALF_PI and KF_ASPECTRATIO_WIDESCREEN = 16/9 give the two .data words their
+// values (0x3FC90FDB, 0x3FE38E39).
 
 namespace CgsGraphics
 {
