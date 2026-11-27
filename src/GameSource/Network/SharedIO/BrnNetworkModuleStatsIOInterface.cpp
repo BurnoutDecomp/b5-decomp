@@ -33,10 +33,5 @@ namespace BrnNetwork
             reinterpret_cast<StatsInputQueue*>(&maStatsEventQueueStorage[0])->Clear();
         }
 
-        // The read twin of StatsOutputInterface::GetStatsOutputQueue.
-        const StatsInputInterface::StatsInputQueue* StatsInputInterface::GetStatsInputQueue() const
-        {
-            return reinterpret_cast<const StatsInputQueue*>(&maStatsEventQueueStorage[0]);
-        }
     } // namespace BrnNetworkModuleIO
 } // namespace BrnNetwork

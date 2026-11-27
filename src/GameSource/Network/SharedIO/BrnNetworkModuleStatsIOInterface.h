@@ -49,7 +49,13 @@ namespace BrnNetwork
             typedef CgsModule::EventQueue<StatsRequestEvent, KI_STATS_EVENT_QUEUE_SIZE> StatsInputQueue;
 
             void AppendStatsEvent(StatsRequestEvent* lpEvent);
-            const StatsInputQueue* GetStatsInputQueue() const;
+            // Header inline (DWARF h:61; ARTIST NetworkPlayerStatsManager::ProcessAfterSimulation
+            // 0x8255F630..34 uses the interface address as the queue): the read twin of
+            // StatsOutputInterface::GetStatsOutputQueue. A pointer cast needs no complete element.
+            const StatsInputQueue* GetStatsInputQueue() const
+            {
+                return reinterpret_cast<const StatsInputQueue*>(&maStatsEventQueueStorage[0]);
+            }
             void Construct();   // body in BrnNetworkModuleStatsIOInterface.cpp
             void Clear();       // body in BrnNetworkModuleStatsIOInterface.cpp
 
@@ -71,7 +77,9 @@ namespace BrnNetwork
             // trips the assert.
             void AppendStatsEvent(NetworkPlayerStats* lpStats)
             {
-                CGS_ASSERT(mStatsEventQueue.AddEventSafe(*lpStats), "mStatsEventQueue.AddEventSafe(*lpStats)");
+                // ARTIST's location (CopyResultsToOutputBuffer 0x8255A1D0).
+                CGS_ASSERT_AT(mStatsEventQueue.AddEventSafe(*lpStats), "mStatsEventQueue.AddEventSafe(*lpStats)",
+                              "..\\..\\..\\GameSource\\Network/SharedIO/BrnNetworkModuleStatsIOInterface.h", 125);
             }
             const StatsOutputQueue* GetStatsOutputQueue() const { return &mStatsEventQueue; }
             // Header inlines: OutputBuffer::Construct emits the queue's Construct, then its

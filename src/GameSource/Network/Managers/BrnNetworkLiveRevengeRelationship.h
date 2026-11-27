@@ -149,7 +149,10 @@ namespace BrnNetwork
 
         // Header inlines: the console reads the +112 score word directly at every call site.
         s32  GetCurrentScoreForLocalPlayer() const { return miCurrentScoreForPlayersPointOfView; }
-        s32  GetCurrentScoreForRival() const       { return -miCurrentScoreForPlayersPointOfView; }
+        // The rival's score is the negated local one (DWARF h:151 after h:148): ARTIST keeps the
+        // loaded score live across DisplayRivalTakedownMessage's GetNetworkToGuiInterface call and
+        // negates it after (0x825601B0 / 0x825601B8), the negation of an inlined call's result.
+        s32  GetCurrentScoreForRival() const       { return -GetCurrentScoreForLocalPlayer(); }
         ERelationshipStatus GetRelationshipStatus() const;  // own TU
         s32  GetTotalEvents() const { return static_cast<s32>(miTotalEvents); }
         const CommonRelationship* GetLastGameStats() const; // own TU

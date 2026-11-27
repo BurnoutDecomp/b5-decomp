@@ -676,15 +676,16 @@ namespace BrnNetwork
             }
             else if (!ServerBusy(CgsNetwork::E_COMPONENTS_PLAYER_INFO) && CopyNextValidEventOutOfQueue())
             {
-                if (mpServerInterfacePlayerInfo->HasStatViewInfoBeenDownloaded())
-                {
-                    mpServerInterfacePlayerInfo->SelectStatView(KPC_VIEW_STATS);
-                    meCurrentStatus = E_STATS_STATUS_SELECTING_VIEW;
-                }
-                else
+                // The download arm first: ARTIST falls into it (bne past it, 0x82568088).
+                if (!mpServerInterfacePlayerInfo->HasStatViewInfoBeenDownloaded())
                 {
                     mpServerInterfacePlayerInfo->DownloadStatViews();
                     meCurrentStatus = E_STATS_STATUS_DOWNLOADING_VIEWS;
+                }
+                else
+                {
+                    mpServerInterfacePlayerInfo->SelectStatView(KPC_VIEW_STATS);
+                    meCurrentStatus = E_STATS_STATUS_SELECTING_VIEW;
                 }
             }
             break;

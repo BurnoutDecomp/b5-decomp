@@ -5,6 +5,7 @@
 #include "GameSource/Network/BrnNetworkManager.h"                                       // BrnNetworkManager::PackOrUnpack (NetworkPlayerID field primitive)
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"               // CgsNetwork::PackOrUnpack* field primitives
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/World/BrnWorldSharedConstants.h"   // BrnWorld::KF_INVALID_DISTANCE (the unset distance)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::PlayerFinishedRoundMessage::Construct            @ 0x8257A188
@@ -32,7 +33,7 @@
 // FLAGGED constants -- exact .rdata float bits were not dumpable from the work packet, so
 // the values below are the semantically-justified best estimates (the raw X360 addresses
 // are documented per constant). A reviewer should pin them against a .rdata dump:
-//   KF_INVALID_NETWORK_DISTANCE (flt_82F29A48), KF_UNSET_DISTANCE (flt_82F299C8),
+//   KF_INVALID_NETWORK_DISTANCE (flt_82F29A48), BrnWorld::KF_INVALID_DISTANCE (flt_82F299C8),
 //   KF_MIN_RACE_DISTANCE (-1.0), KF_MAX_RACE_DISTANCE (200000.0), the distance resolution
 //   (flt_82085510) and the finish-time resolution (flt_8208550C == 1/600).
 
@@ -58,11 +59,17 @@ namespace BrnNetwork
     static const f32 KF_FINISH_TIME_RESOLUTION  = 1.0f / 600.0f; // flt_8208550C (pseudocode 0.0016666667)
 
     // Distance sentinels. KF_INVALID_NETWORK_DISTANCE is the wire/in-range "no valid
-    // distance" marker the assert guards against (== flt_82F29A48). KF_UNSET_DISTANCE is the
+    // distance" marker the assert guards against (== flt_82F29A48). BrnWorld::KF_INVALID_DISTANCE is the
     // in-RAM default Construct seeds (== flt_82F299C8); PackOrUnpack maps unset<->invalid
     // across the wire so the default survives a quantise round-trip. FLAGGED values.
-    static const f32 KF_INVALID_NETWORK_DISTANCE = -1.0f;     // flt_82F29A48 (FLAGGED bits)
-    static const f32 KF_UNSET_DISTANCE           = -2.0f;     // flt_82F299C8 (FLAGGED bits)
+    //
+    // Both are read from .data, not from the literal pool, so both are consts initialised from
+    // another constant (DECISIONS D18). ARTIST 0x82F29A48 holds -1.0 (DWARF cpp:37 and the
+    // BrnNetworkMessageUnity CU give KF_INVALID_NETWORK_DISTANCE = -1.0, KF_MIN_RACE_DISTANCE's
+    // value); 0x82F299C8 holds 0x7F7FFFFF, BrnWorld::KF_INVALID_DISTANCE (DWARF
+    // BrnWorldSharedConstants.h:48, = MAX_FLOAT; the same CU lists it), which the message uses as
+    // its unset distance. The invented KF_UNSET_DISTANCE = -2.0f it replaces had the wrong value.
+    static const f32 KF_INVALID_NETWORK_DISTANCE = KF_MIN_RACE_DISTANCE;
 
     // EMessageType id stamped onto the reliable wrapper (asm `li r4, 0xC`).
     static const s32 KI_PLAYER_FINISHED_ROUND_MESSAGE_TYPE = 12;
@@ -86,7 +93,7 @@ namespace BrnNetwork
         mbTimedOut                 = 0;                      // stb  0, +0x3D
         miEliminations             = 0;                      // stw  0, +0x34
         mbWonRound                 = 0;                      // stb  0, +0x3E
-        mfDistanceFromFinish       = KF_UNSET_DISTANCE;      // stfs flt_82F299C8, +0x38
+        mfDistanceFromFinish       = BrnWorld::KF_INVALID_DISTANCE;      // stfs flt_82F299C8, +0x38
     }
 
     // BrnNetwork::PlayerFinishedRoundMessage::GetPackedMessageSize @ 0x8257A348
@@ -98,13 +105,13 @@ namespace BrnNetwork
     // it does NOT reset the player ids (those are reliable-base state).
     s32 PlayerFinishedRoundMessage::GetPackedMessageSize()
     {
-        mEliminatorNetworkPlayerID = KI_INVALID_PLAYER_ID;  // stw -1, +0x30
-        mu8RoundNumber             = 0;                      // stb  0, +0x3C
+        mu8RoundNumber             = 0;                      // stb  0, +0x3C (ARTIST 0x8257A374)
+        mEliminatorNetworkPlayerID = KI_INVALID_PLAYER_ID;  // stw -1, +0x30 (ARTIST 0x8257A378)
         mFinishTime.SetFloatVal(0.0f);                       // SetFloatVal(&+0x28, 0.0)
         mbTimedOut                 = 0;                      // stb  0, +0x3D
         miEliminations             = 0;                      // stw  0, +0x34
         mbWonRound                 = 0;                      // stb  0, +0x3E
-        mfDistanceFromFinish       = KF_UNSET_DISTANCE;      // stfs flt_82F299C8, +0x38
+        mfDistanceFromFinish       = BrnWorld::KF_INVALID_DISTANCE;      // stfs flt_82F299C8, +0x38
 
         // Reliable-base size probe (identically folded with
         // TestConnectionMessage::GetPackedMessageSize).
@@ -132,7 +139,7 @@ namespace BrnNetwork
             CGS_ARTIST_FILE, 199 /* ARTIST 0x8257A28C */);
 
         // Map the in-RAM unset default onto its serialisable wire equivalent before packing.
-        if (mfDistanceFromFinish == KF_UNSET_DISTANCE)
+        if (mfDistanceFromFinish == BrnWorld::KF_INVALID_DISTANCE)
             mfDistanceFromFinish = KF_INVALID_NETWORK_DISTANCE;
 
         lxResult |= CgsNetwork::PackOrUnpackFloat(this, &mfDistanceFromFinish,
@@ -141,7 +148,7 @@ namespace BrnNetwork
 
         // Restore the in-RAM unset default after the (un)pack round-trip.
         if (mfDistanceFromFinish == KF_INVALID_NETWORK_DISTANCE)
-            mfDistanceFromFinish = KF_UNSET_DISTANCE;
+            mfDistanceFromFinish = BrnWorld::KF_INVALID_DISTANCE;
 
         lxResult |= CgsNetwork::Message::PackOrUnpack(&miEliminations,
                                                 KI_MIN_ELIMINATIONS, KI_MAX_ELIMINATIONS);
@@ -165,14 +172,12 @@ namespace BrnNetwork
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
 
-        // Distance range asserts (asm: ble/bge vs flt_82085640 / flt_82085620). The original
-        // streamed the offending value into the assert buffer ("Bad distance in message #N!
-        // lfDistanceFromFinish=<value>"); the streamed value is a debug-only formatting
-        // detail, so the condition is reproduced here without the value interpolation.
-        CGS_ASSERT(lfDistanceFromFinish <= KF_MAX_RACE_DISTANCE,
-                   "Bad distance in message #1! lfDistanceFromFinish=");
-        CGS_ASSERT(lfDistanceFromFinish >= KF_MIN_RACE_DISTANCE,
-                   "Bad distance in message #2! lfDistanceFromFinish=");
+        // Distance range asserts (ARTIST 0x8257DA10 / 0x8257DA88): the offending value is streamed
+        // after the text (StrStreamBase::operator<<(float) 0x821F0F40), lines 116 / 117.
+        CGS_ASSERT_STREAM_AT(lfDistanceFromFinish <= KF_MAX_RACE_DISTANCE,
+            "Bad distance in message #1! lfDistanceFromFinish=" << lfDistanceFromFinish, CGS_ARTIST_FILE, 116);
+        CGS_ASSERT_STREAM_AT(lfDistanceFromFinish >= KF_MIN_RACE_DISTANCE,
+            "Bad distance in message #2! lfDistanceFromFinish=" << lfDistanceFromFinish, CGS_ARTIST_FILE, 117);
 
         mu8RoundNumber             = lu8RoundNumber;             // stb,  +0x3C
         mEliminatorNetworkPlayerID = lEliminatorNetworkPlayerID; // stw,  +0x30
@@ -186,7 +191,7 @@ namespace BrnNetwork
                                                     lu16Frame);
 
         // @0x8257DB30: virtual call through vtable slot 0 -> IsReliable().
-        CGS_ASSERT(IsReliable(), "IsReliable()");
+        CGS_ASSERT_AT(IsReliable(), "IsReliable()", CGS_ARTIST_FILE, 129);
     }
 
     // BrnNetwork::PlayerFinishedRoundMessage::Retrieve @ 0x8257DB78
