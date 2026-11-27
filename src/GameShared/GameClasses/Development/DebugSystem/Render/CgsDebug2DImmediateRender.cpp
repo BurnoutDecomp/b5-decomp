@@ -46,96 +46,104 @@ namespace CgsDev
         mpRenderBuffer = lpRenderBuffer;
     }
 
-    // X360 0x82818838 -- screen-bounds test for a virtual-screen point. The asm runs four
-    // sequential single-lane vcmpgefp. compares, each short-circuiting to a 0 return on
-    // failure, and returns 1 only if all four pass:
-    //   1) point.x >= 0            (vcmpgefp v12[=splat point.x], 0)
-    //   2) point.y >= 0            (vcmpgefp splat point.y, 0)
-    //   3) mfVirtualScreenWidth  >= point.x   (member @0x34 vs point.x)
-    //   4) mfVirtualScreenHeight >= point.y   (member @0x38 vs point.y)
-    // The two compared members are the virtual-screen extents, reached here by name
-    // (mfVirtualScreenWidth / mfVirtualScreenHeight) rather than by the X360 0x34/0x38 offsets.
-    // ARTIST rotates the CR6 all-true bit from bit 7 to bit 0 before each test.
-    bool Debug2DImmediateRender::Is2DPointOnScreen(Vector2 lv2Point) const
+    // X360 0x82818838 -- screen-bounds test for a virtual-screen point: four single-lane
+    // rwmath compares (DecFIGS cpp:1027: operator>=<VectorAxisX,VectorAxisX>, <Y,Y>, then
+    // operator<=<X,X>, <Y,Y>; locals lZero :1029, lScreen :1030), each a vcmpgefp. that
+    // short-circuits to a 0 return.
+    bool Debug2DImmediateRender::Is2DPointOnScreen(const Vector2 lPosition) const
     {
         Vector2 lZero;
         lZero.SetZero();
-        const Vector2 lScreen = GetVirtualScreenSize();
-        const __vector4 lvX = __vspltw(lv2Point.mV, 0);
-
-        unsigned int luCondition = 0;
-        __vcmpgefpR(lvX, __vspltw(lZero.mV, 0), &luCondition);
-        if ((_rotl(luCondition, 25) & 1u) != 0)
+        Vector2 lScreen = GetVirtualScreenSize();
+        // ARTIST's tail (li r3,1 / bnelr / li r3,0) is the if-return-true form.
+        if (lPosition.X() >= lZero.X() && lPosition.Y() >= lZero.Y() &&
+            lPosition.X() <= lScreen.X() && lPosition.Y() <= lScreen.Y())
         {
-            const __vector4 lvY = __vspltw(lv2Point.mV, 1);
-            luCondition = 0;
-            __vcmpgefpR(lvY, __vspltw(lZero.mV, 1), &luCondition);
-            if ((_rotl(luCondition, 25) & 1u) != 0)
-            {
-                luCondition = 0;
-                __vcmpgefpR(__vspltw(lScreen.mV, 0), lvX, &luCondition);
-                if ((_rotl(luCondition, 25) & 1u) != 0)
-                {
-                    luCondition = 0;
-                    __vcmpgefpR(__vspltw(lScreen.mV, 1), lvY, &luCondition);
-                    if ((_rotl(luCondition, 25) & 1u) != 0)
-                        return true;
-                }
-            }
+            return true;
         }
         return false;
     }
 
-    // ARTIST 82818988: calculate both segment parameters using the original
-    // vector reciprocal estimate and its two refinement steps.
-    bool Debug2DImmediateRender::Do2DLinesIntersect(Vector2 lv2StartA, Vector2 lv2EndA,
-                                                    Vector2 lv2StartB, Vector2 lv2EndB) const
+    // ARTIST 82818988: the two segment parameters in rwmath VecFloats (DecFIGS cpp:1214-1238: lfAX..lfDY,
+    // lfDenominator, lfR, lfS; VecFloat<VectorAxisX/Y> from the lane references, operator/=, == and the
+    // >= / <= compares against float literals, each a { f } fill: 0.0f 0x82001CC0, 1.0f 0x82001C98).
+    bool Debug2DImmediateRender::Do2DLinesIntersect(const Vector2 lLineOneStartPos, const Vector2 lLineOneEndPos,
+                                                    const Vector2 lLineTwoStartPos, const Vector2 lLineTwoEndPos) const
     {
-        const __vector4 ax = __vspltw(lv2StartA.mV, 0), ay = __vspltw(lv2StartA.mV, 1);
-        const __vector4 bx = __vspltw(lv2EndA.mV, 0), by = __vspltw(lv2EndA.mV, 1);
-        const __vector4 cx = __vspltw(lv2StartB.mV, 0), cy = __vspltw(lv2StartB.mV, 1);
-        const __vector4 dx = __vspltw(lv2EndB.mV, 0), dy = __vspltw(lv2EndB.mV, 1);
-        const __vector4 daX = __vsubfp(bx, ax), daY = __vsubfp(by, ay);
-        const __vector4 dbX = __vsubfp(dx, cx), dbY = __vsubfp(dy, cy);
-        const __vector4 determinant = __vsubfp(__vmulfp(daX, dbY), __vmulfp(daY, dbX));
-        const __vector4 zero = __vspltisw(0);
-        unsigned int condition = 0;
-        __vcmpeqfpR(determinant, zero, &condition);
-        if ((_rotl(condition, 25) & 1u) != 0) return false;
+        VecFloat lfAX = lLineOneStartPos.X();
+        VecFloat lfAY = lLineOneStartPos.Y();
 
-        const __vector4 acX = __vsubfp(ax, cx), acY = __vsubfp(ay, cy);
-        const __vector4 numeratorA = __vsubfp(__vmulfp(acY, dbX), __vmulfp(acX, dbY));
-        const __vector4 numeratorB = __vsubfp(__vmulfp(acY, daX), __vmulfp(acX, daY));
-        const __vector4 one = __vcfsx(__vspltisw(1), 0);
-        __vector4 reciprocal = __vrefp(determinant);
-        reciprocal = __vmaddfp(reciprocal, __vnmsubfp(reciprocal, determinant, one), reciprocal);
-        reciprocal = __vmaddfp(reciprocal, __vnmsubfp(reciprocal, determinant, one), reciprocal);
-        const __vector4 parameterA = __vmulfp(reciprocal, numeratorA);
-        const __vector4 parameterB = __vmulfp(reciprocal, numeratorB);
-        condition = 0; __vcmpgefpR(parameterA, zero, &condition);
-        if ((_rotl(condition, 25) & 1u) == 0) return false;
-        condition = 0; __vcmpgefpR(one, parameterA, &condition);
-        if ((_rotl(condition, 25) & 1u) == 0) return false;
-        condition = 0; __vcmpgefpR(parameterB, zero, &condition);
-        if ((_rotl(condition, 25) & 1u) == 0) return false;
-        condition = 0; __vcmpgefpR(one, parameterB, &condition);
-        return (_rotl(condition, 25) & 1u) != 0;
+        VecFloat lfBX = lLineOneEndPos.X();
+        VecFloat lfBY = lLineOneEndPos.Y();
+
+        VecFloat lfCX = lLineTwoStartPos.X();
+        VecFloat lfCY = lLineTwoStartPos.Y();
+
+        VecFloat lfDX = lLineTwoEndPos.X();
+        VecFloat lfDY = lLineTwoEndPos.Y();
+
+        VecFloat lfDenominator = (lfBX - lfAX) * (lfDY - lfCY) - (lfBY - lfAY) * (lfDX - lfCX);
+        if (lfDenominator == 0.0f)
+        {
+            return false;
+        }
+
+        VecFloat lfR = (lfAY - lfCY) * (lfDX - lfCX) - (lfAX - lfCX) * (lfDY - lfCY);
+        lfR /= lfDenominator;
+        VecFloat lfS = (lfAY - lfCY) * (lfBX - lfAX) - (lfAX - lfCX) * (lfBY - lfAY);
+        lfS /= lfDenominator;
+
+        return lfR >= 0.0f && lfR <= 1.0f && lfS >= 0.0f && lfS <= 1.0f;
     }
 
     // ARTIST 8281A318: test endpoints, then the four viewport edges in order.
-    bool Debug2DImmediateRender::Is2DLineOnScreen(Vector2 lv2Start, Vector2 lv2End) const
+    // The screen edges walk from the origin through lEdgeStart/lEdgeEnd, one lane set per edge (DecFIGS
+    // cpp:1079-1086: lZero, lScreen, lEdgeStart, lEdgeEnd; SetY<VectorAxisY> / SetX<VectorAxisX>, the
+    // vrlimi128 lane inserts at 0x8281A39C/0x8281A3DC/0x8281A410/0x8281A444).
+    bool Debug2DImmediateRender::Is2DLineOnScreen(const Vector2 lPoint1, const Vector2 lPoint2) const
     {
-        if (Is2DPointOnScreen(lv2Start) || Is2DPointOnScreen(lv2End))
+        if (Is2DPointOnScreen(lPoint1) || Is2DPointOnScreen(lPoint2))
+        {
             return true;
+        }
 
-        const Vector2 topLeft = rw::math::vpu::Vector2(0.0f, 0.0f);
-        const Vector2 bottomLeft = rw::math::vpu::Vector2(0.0f, mfVirtualScreenHeight);
-        const Vector2 bottomRight = rw::math::vpu::Vector2(mfVirtualScreenWidth, mfVirtualScreenHeight);
-        const Vector2 topRight = rw::math::vpu::Vector2(mfVirtualScreenWidth, 0.0f);
-        return Do2DLinesIntersect(lv2Start, lv2End, topLeft, bottomLeft) ||
-               Do2DLinesIntersect(lv2Start, lv2End, bottomLeft, bottomRight) ||
-               Do2DLinesIntersect(lv2Start, lv2End, bottomRight, topRight) ||
-               Do2DLinesIntersect(lv2Start, lv2End, topRight, topLeft);
+        Vector2 lZero;
+        lZero.SetZero();
+        Vector2 lScreen = GetVirtualScreenSize();
+
+        // Both edge points start from their own SetZero (ARTIST builds lEdgeEnd from the zero register before
+        // the screen size, 0x8281A36C, and passes the zero itself as the first lEdgeStart).
+        Vector2 lEdgeStart;
+        lEdgeStart.SetZero();
+        Vector2 lEdgeEnd;
+        lEdgeEnd.SetZero();
+        lEdgeEnd.SetY(lScreen.Y());
+        if (Do2DLinesIntersect(lPoint1, lPoint2, lEdgeStart, lEdgeEnd))
+        {
+            return true;
+        }
+
+        lEdgeStart = lEdgeEnd;
+        lEdgeEnd.SetX(lScreen.X());
+        if (Do2DLinesIntersect(lPoint1, lPoint2, lEdgeStart, lEdgeEnd))
+        {
+            return true;
+        }
+
+        lEdgeStart = lEdgeEnd;
+        lEdgeEnd.SetY(lZero.Y());
+        if (Do2DLinesIntersect(lPoint1, lPoint2, lEdgeStart, lEdgeEnd))
+        {
+            return true;
+        }
+
+        lEdgeStart = lEdgeEnd;
+        lEdgeEnd.SetX(lZero.X());
+        if (Do2DLinesIntersect(lPoint1, lPoint2, lEdgeStart, lEdgeEnd))
+        {
+            return true;
+        }
+        return false;
     }
 
     bool Debug2DImmediateRender::Is2DBoxOnScreen(Vector2 lv2Min, Vector2 lv2Max) const
@@ -283,27 +291,18 @@ namespace CgsDev
         DispatchVertices();
     }
 
-    // ARTIST 82816E50: reject only a strict separating comparison. Reversed
+    // ARTIST 82816E50: reject only a strict separating comparison per lane (DecFIGS cpp:1257-1259:
+    // the loop index liIndex and rwmath operator< / operator> on the lane references). Reversed
     // corners are not sorted, and an unordered comparison does not separate.
-    bool Debug2DImmediateRender::Do2DBoxesIntersect(Vector2 lv2MinA, Vector2 lv2MaxA,
-                                                   Vector2 lv2MinB, Vector2 lv2MaxB) const
+    bool Debug2DImmediateRender::Do2DBoxesIntersect(const Vector2 lBox0Min, const Vector2 lBox0Max,
+                                                   const Vector2 lBox1Min, const Vector2 lBox1Max) const
     {
-        for (s32 liOffset = 0; liOffset < 8; liOffset += 4)
+        for (int32_t liIndex = 0; liIndex < 2; ++liIndex)
         {
-            const __vector4 lvLane = __vspltw(__lvsl(0, liOffset), 0);
-            const __vector4 lvMaxA = __vperm(lv2MaxA.mV, lv2MaxA.mV, lvLane);
-            const __vector4 lvMinB = __vperm(lv2MinB.mV, lv2MinB.mV, lvLane);
-            unsigned int luCondition = 0;
-            __vcmpgtfpR(lvMinB, lvMaxA, &luCondition);
-            if ((_rotl(luCondition, 25) & 1u) != 0)
+            if (lBox0Max[liIndex] < lBox1Min[liIndex] || lBox0Min[liIndex] > lBox1Max[liIndex])
+            {
                 return false;
-
-            const __vector4 lvMaxB = __vperm(lv2MaxB.mV, lv2MaxB.mV, lvLane);
-            const __vector4 lvMinA = __vperm(lv2MinA.mV, lv2MinA.mV, lvLane);
-            luCondition = 0;
-            __vcmpgtfpR(lvMinA, lvMaxB, &luCondition);
-            if ((_rotl(luCondition, 25) & 1u) != 0)
-                return false;
+            }
         }
         return true;
     }
