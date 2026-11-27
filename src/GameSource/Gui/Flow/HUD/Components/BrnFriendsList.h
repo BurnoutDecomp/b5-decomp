@@ -46,22 +46,48 @@ namespace BrnGui
     const s32 KI_MAX_FRIEND_RECORDS = 100;   // maeDisplayTypes capacity (SortFullList bound)
     const s32 KI_VISIBLE_ROWS       = 5;
 
-    // Consumer-carved shortcut-option vocabulary (assert strings spell
-    // E_SHORTCUT_OPTION_COUNT / maeAvailableShortcutOptions).
-    enum EShortCutOption
-    {
-        E_SHORTCUT_OPTION_NONE     = -1,
-        E_SHORTCUTOPTION_FRIENDS   = 0,
-        // ids 2..20 are posted verbatim from BuildShortcutOptions' rodata-driven
-        // order; display spellings are not DWARF-attested so no names are invented.
-        E_SHORTCUTOPTION_COUNT     = 21,
-    };
-
     // [friends wave] base corrected: the X360 Construct stores the interface at +0x00
     // and invalidates the clip pair at +0x04/+0x08 -- the BrnFlaptComponent shape.
     class FriendsListComponent : public BrnFlaptComponent
     {
     public:
+        // DWARF BrnFriendsList.h:117 (the asserts spell E_SHORTCUT_OPTIONS_COUNT).
+        enum EShortcutOptions
+        {
+            E_SHORTCUT_OPTIONS_SHOW_FRIENDS     = 0,
+            E_SHORTCUT_OPTIONS_ROAD_RULES       = 1,
+            E_SHORTCUT_OPTIONS_FREEBURN         = 2,
+            E_SHORTCUT_OPTIONS_IMAGE_GALLERY    = 3,
+            E_SHORTCUT_OPTIONS_VIEW_CHALLENGES  = 4,
+            E_SHORTCUT_OPTIONS_UNRANKED         = 5,
+            E_SHORTCUT_OPTIONS_RANKED           = 6,
+            E_SHORTCUT_OPTIONS_SCOREBOARDS      = 7,
+            E_SHORTCUT_OPTIONS_NEWS             = 8,
+            E_SHORTCUT_OPTIONS_LAUNCH           = 9,
+            E_SHORTCUT_OPTIONS_CREATE_EVENT     = 10,
+            E_SHORTCUT_OPTIONS_CHANGE_TEAMS     = 11,
+            E_SHORTCUT_OPTIONS_VIEW_LOBBY       = 12,
+            E_SHORTCUT_OPTIONS_LEAVE_GAME       = 13,
+            E_SHORTCUT_OPTIONS_CANCEL_CHALLENGE = 14,
+            E_SHORTCUT_OPTIONS_SELECT_CHALLENGE = 15,
+            E_SHORTCUT_OPTIONS_VIEW_EVENT       = 16,
+            E_SHORTCUT_OPTIONS_CANCEL_EVENT     = 17,
+            E_SHORTCUT_OPTIONS_VIEW_MAP         = 18,
+            E_SHORTCUT_OPTIONS_CHANGE_SECURITY  = 19,
+            E_SHORTCUT_OPTIONS_SETTINGS         = 20,
+            E_SHORTCUT_OPTIONS_COUNT            = 21,
+        };
+
+        // DWARF BrnFriendsList.h:306.
+        enum EListType
+        {
+            E_LIST_TYPE_NONE       = 0,
+            E_LIST_TYPE_FRIENDS    = 1,
+            E_LIST_TYPE_SHORTCUTS  = 2,
+            E_LIST_TYPE_CHALLENGES = 3,
+            E_LIST_TYPE_COUNT      = 4,
+        };
+
         // DWARF BrnFriendsList.h:13 -- friends-list branch/transition state; drives the
         // post-inc/post-dec operators (@0x82410958 / @0x824109B8) that step through it.
         enum EFriendListBranchState
@@ -122,9 +148,9 @@ namespace BrnGui
         void ShowFriendsList();                                                         // 0x8243FF68
         void ShowShortcutList();                                                        // 0x824417E0
         void ShowChallengesList();                                                      // 0x824418D0
-        void ShowSpecificFriend(const char* lpcName);                                   // 0x8242BBE8
-        void ShowSpecificShortcut(s32 leOption);                                        // 0x82441C90
-        void ShowSpecificChallenge(CgsID lu64Uid);                                      // 0x82441B78
+        void ShowSpecificFriend(CgsNetwork::PlayerName* lpName);                                 // 0x8242BBE8 (DWARF cpp:3674)
+        void ShowSpecificShortcut(EShortcutOptions leShortcutOption);                   // 0x82441C90
+        void ShowSpecificChallenge(CgsID lChallengeID);                                    // 0x82441B78
         void UpdateAllEntryData();                                                      // 0x82440020
         void UpdateAllFriendsEntryData();                                               // 0x8242B498
         void UpdateAllShortcutsEntryData();                                             // 0x8242B628
@@ -141,6 +167,7 @@ namespace BrnGui
         void ShowShortcutsBranch();                                                     // 0x82423120
         void Highlight(s8 li8Row);                                                      // 0x82414960 (DWARF h: Highlight(int8_t))
         void SetEntryData(s8 liRow, const char* lpcText, s32 leStatus, bool lbLocalise); // 0x82422CB0 (DWARF int8_t index)
+        bool HasMultiplayerPrivileges();                                                // DWARF h:588 (no ARTIST copy)
         void HandleNotConnected();                                                      // 0x8242B948
         void HandleNoFriends();                                                         // 0x8242BA40
         void HandleDPadLeft();                                                          // 0x82442868
@@ -174,11 +201,11 @@ namespace BrnGui
     private:
         // ---- data members: DWARF BrnFriendsList.h:132 order and names (the X360 offsets each
         // one lands on are the ones the ARTIST bodies use; widths follow the DWARF types) ----
-        s32   maeAvailableShortcutOptions[E_SHORTCUTOPTION_COUNT];  // +0x00C EShortcutOptions[21] (sentinel NONE)
+        EShortcutOptions maeAvailableShortcutOptions[E_SHORTCUT_OPTIONS_COUNT]; // +0x00C (DWARF h:383; sentinel COUNT)
         s32   maeAvailableShortcutBranchOptions[3];                 // +0x060 EShortcutBranchOptions[3] (Construct seeds 15)
         CgsID maChallengesAvailable[256];                           // +0x070 ((idx+14)*8 addressing)
         s32   miPlayerCount;                                        // +0x870 (SetGuiCachePointer: cache +0xAC74)
-        s32   meListType;                                           // +0x874 EListType: 1 friends / 2 shortcuts / 3 challenges
+        EListType meListType;                                       // +0x874 (DWARF h:389)
         s32   meCurrentState;                                       // +0x878 EFriendListState: 0 invisible / 1 transin / 2 idle / 5 transout
         s32   meBranchState;                                        // +0x87C EFriendListBranchState
         s8    miCurrentlyActiveSlots;                               // +0x880
@@ -210,11 +237,18 @@ namespace BrnGui
         // ---- the dirty snapshot the renderer picks up (SetDirty) ----
         s32   meDirtyCurrentState;                                  // +0x4108
         s32   meDirtyBranchState;                                   // +0x410C
-        s32   meDirtyListType;                                      // +0x4110
+        EListType meDirtyListType;                                  // +0x4110 (DWARF h:432)
         EArrowConfigurations meDirtyArrowConfiguration;             // +0x4114 (DWARF type)
         bool  mbDirty;                                              // +0x4118
         s8    miDirtyCurrentlyActiveSlots;                          // +0x4119
         s8    miDirtyCurrentlyHighlightedSlot;                      // +0x411A
+
+        // ---- the restore slots SaveCurrentState / AttemptStateRestore keep (DWARF h:439..443) ----
+        static bool sbRestoreDataAvailable;                         // ARTIST .bss 0x82FB27E0
+        static EListType seStoredListType;                          // 0x82FB27E4
+        static CgsID sStoredChallenge;                              // 0x82FB27E8
+        static CgsNetwork::PlayerName sStoredFriend;                // 0x82FB00C0
+        static EShortcutOptions seShortcutOption;                   // 0x82FB27F0
     };
 
     // DWARF: defined in the header (listed without a line in the BrnGuiComponentUnity CU, as the

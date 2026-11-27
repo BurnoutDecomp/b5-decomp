@@ -101,15 +101,16 @@ operator--(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int)
     return leOld;
 }
 
+// The restore slots (DWARF class statics BrnFriendsList.h:439..443; ARTIST .bss).
+bool FriendsListComponent::sbRestoreDataAvailable;                                  // 0x82FB27E0
+FriendsListComponent::EListType FriendsListComponent::seStoredListType;            // 0x82FB27E4
+CgsID FriendsListComponent::sStoredChallenge;                                       // 0x82FB27E8
+CgsNetwork::PlayerName FriendsListComponent::sStoredFriend;                         // 0x82FB00C0
+FriendsListComponent::EShortcutOptions FriendsListComponent::seShortcutOption;     // 0x82FB27F0
+
 namespace
 {
-    // Per-list static save slots (X360 .bss) backing SaveCurrentState/AttemptStateRestore.
-    u8     s_abStateSavedFlag = 0;                            // byte_82FB27E0
-    s32    s_aiSavedListType  = 0;                            // dword_82FB27E4
-    CgsID  s_u64SavedChallengeUid = 0;                         // qword_82FB27E8
-    s32    s_aiSavedShortcutOption = 0;                       // dword_82FB27F0
-    CgsNetwork::PlayerName s_amabSavedNames[1];   // unk_82FB00C0 (stride 0x84)
-    bool   s_sbHddOverlayShown = false;                       // byte_82FB27E1
+    bool   s_sbHddOverlayShown = false;                       // byte_82FB27E1 (X360-only HDD overlay; no DWARF name)
 }
 
 // @0x82422B20 --------------------------------------------------------------------
@@ -125,11 +126,11 @@ void FriendsListComponent::Construct(const char* /*lacName*/, CgsGui::StateInter
     memset(maFullBuddyList, 0, 0x3390);                                // @0x82422BD0
 
     for (s32 i = 0; i < KI_MAX_FRIEND_RECORDS; ++i) maeFullBuddyEntryState[i] = 0;
-    for (s32 i = 0; i < E_SHORTCUTOPTION_COUNT; ++i)
-        maeAvailableShortcutOptions[i] = E_SHORTCUTOPTION_COUNT;
+    for (s32 i = 0; i < E_SHORTCUT_OPTIONS_COUNT; ++i)
+        maeAvailableShortcutOptions[i] = E_SHORTCUT_OPTIONS_COUNT;
 
     maeAvailableShortcutBranchOptions[0] = maeAvailableShortcutBranchOptions[1] = maeAvailableShortcutBranchOptions[2] = 15;
-    meListType = 1;   meCurrentState = 0;   meBranchState = 0;
+    meListType = E_LIST_TYPE_FRIENDS;   meCurrentState = 0;   meBranchState = 0;
     miCurrentlyActiveSlots = 0;   miCurrentlyHighlightedSlot = 0;   miCurrentlyHighlightedOption = 0;
     miCurrentlyHighlightedBranch = 0;
     miTotalOptions = 0;
@@ -163,19 +164,19 @@ void FriendsListComponent::SaveCurrentState()
     // The saving arm first, the clear in the else (ARTIST 0x824149F4 beq to 0x82414A8C).
     if (meCurrentState != 0)
     {
-        s_abStateSavedFlag = 1;
-        s_aiSavedListType = meListType;
+        sbRestoreDataAvailable = true;
+        seStoredListType = meListType;
         switch (meListType)
         {
-            case 1:
-                s_amabSavedNames[0].Construct(
+            case E_LIST_TYPE_FRIENDS:
+                sStoredFriend.Construct(
                     maFullBuddyList[miCurrentlyHighlightedOption].mPlayerName.macName);
                 break;
-            case 2:
-                s_aiSavedShortcutOption = maeAvailableShortcutOptions[miCurrentlyHighlightedOption];
+            case E_LIST_TYPE_SHORTCUTS:
+                seShortcutOption = maeAvailableShortcutOptions[miCurrentlyHighlightedOption];
                 break;
-            case 3:
-                s_u64SavedChallengeUid = maChallengesAvailable[miCurrentlyHighlightedOption];
+            case E_LIST_TYPE_CHALLENGES:
+                sStoredChallenge = maChallengesAvailable[miCurrentlyHighlightedOption];
                 break;
             default:
                 break;
@@ -183,7 +184,7 @@ void FriendsListComponent::SaveCurrentState()
     }
     else
     {
-        s_abStateSavedFlag = 0;
+        sbRestoreDataAvailable = false;
     }
 }
 
@@ -250,32 +251,45 @@ int FriendsListComponent::BuddySortFunction(const void* lpA, const void* lpB)
 // @0x82414868 --------------------------------------------------------------------
 bool FriendsListComponent::MoveHighlightDueToBranchOpen()
 {
-    u32 luIdx = 0;
-    while (luIdx < miTotalOptions &&
-           LobbyNameCmp(mCurrentlySelectedName.macName, maFullBuddyList[luIdx].mPlayerName.macName) != 0)
-        ++luIdx;
-
-    if (luIdx != miTotalOptions)
+    // DWARF local liIndex (cpp:3436) and the inlined PlayerName::IsEqualTo (ARTIST 0x8241489C:
+    // LobbyNameCmp(mCurrentlySelectedName, record name)).
+    int32_t liIndex;
+    for (liIndex = 0; liIndex < miTotalOptions; ++liIndex)
     {
-        miCurrentlyHighlightedOption = static_cast<s8>(luIdx);
+        if (mCurrentlySelectedName.IsEqualTo(maFullBuddyList[liIndex].mPlayerName))
+            break;
+    }
+
+    if (liIndex != miTotalOptions)
+    {
+        miCurrentlyHighlightedOption = static_cast<s8>(liIndex);
+        // The member cursor, not liIndex, is compared and subtracted (ARTIST 0x824148EC `extsb r8, r9`).
         if (miTotalOptions <= KI_VISIBLE_ROWS)
         {
-            miCurrentlyHighlightedSlot = static_cast<s8>(luIdx);
+            miCurrentlyHighlightedSlot = miCurrentlyHighlightedOption;
             return true;
         }
-        if (static_cast<s32>(luIdx) <= miCurrentlyHighlightedSlot)
+        if (miCurrentlyHighlightedOption <= miCurrentlyHighlightedSlot)
         {
-            miCurrentlyHighlightedSlot = static_cast<s8>(luIdx);
+            miCurrentlyHighlightedSlot = miCurrentlyHighlightedOption;
             return true;
         }
-        const s32 excess = static_cast<s32>(luIdx) - miCurrentlyHighlightedSlot
-                         - static_cast<s32>(miTotalOptions) + KI_VISIBLE_ROWS;
-        if (excess > 0) miCurrentlyHighlightedSlot += static_cast<s8>(excess);
+        // DWARF locals liSlotsBelow / liFriendsBelow / liNumberToShiftDown (cpp:3472/3475/3478).
+        // Remaining difference (96.8): ARTIST sets the `true` before this arithmetic (0x82414900) and
+        // its no-shift path joins the `return false` epilogue (0x82414958); the if/else-if, ||, early-
+        // return and not-found-first spellings were tried.
+        int32_t liSlotsBelow = KI_VISIBLE_ROWS - miCurrentlyHighlightedSlot;
+        int32_t liFriendsBelow = miTotalOptions - miCurrentlyHighlightedOption;
+        int32_t liNumberToShiftDown = liSlotsBelow - liFriendsBelow;
+        if (liNumberToShiftDown > 0)
+        {
+            miCurrentlyHighlightedSlot += liNumberToShiftDown;
+        }
         return true;
     }
 
     meBranchState = 0;
-    mCurrentlySelectedName.macName[0] = 0;
+    mCurrentlySelectedName.Clear();
     if (miCurrentlyHighlightedOption >= static_cast<s32>(miTotalOptions))
         miCurrentlyHighlightedOption = static_cast<s8>(miTotalOptions - 1);
     if (miTotalOptions <= KI_VISIBLE_ROWS)
@@ -291,20 +305,20 @@ bool FriendsListComponent::MoveHighlightDueToBranchOpen()
 void FriendsListComponent::BuildShortcutOptions()
 {
     miTotalOptions = 0;
-    maeAvailableShortcutOptions[0] = E_SHORTCUTOPTION_FRIENDS;      // always first @0x824142A0
+    maeAvailableShortcutOptions[0] = E_SHORTCUT_OPTIONS_SHOW_FRIENDS;      // always first @0x824142A0
     ++miTotalOptions;
 
     if (!mpGuiCache->IsOnlineStartInProgress())                     // offline arm @0x82414588
     {
-        maeAvailableShortcutOptions[miTotalOptions++] = 2;            // @0x82414594
+        maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_FREEBURN;            // @0x82414594
         if (mpGuiCache->GetOfflineShortcutProgressGate())           // far byte +0x13B9A @0x824145B0
-            maeAvailableShortcutOptions[miTotalOptions++] = 1;        // @0x824145C0
-        maeAvailableShortcutOptions[miTotalOptions++] = 3;            // @0x824145DC block
-        maeAvailableShortcutOptions[miTotalOptions++] = 4;
-        maeAvailableShortcutOptions[miTotalOptions++] = 5;
-        maeAvailableShortcutOptions[miTotalOptions++] = 6;
-        maeAvailableShortcutOptions[miTotalOptions++] = 7;
-        maeAvailableShortcutOptions[miTotalOptions++] = 8;
+            maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_ROAD_RULES;        // @0x824145C0
+        maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_IMAGE_GALLERY;            // @0x824145DC block
+        maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_VIEW_CHALLENGES;
+        maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_UNRANKED;
+        maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_RANKED;
+        maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_SCOREBOARDS;
+        maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_NEWS;
     }
     else                                                            // online arm @0x824142C0
     {
@@ -315,10 +329,10 @@ void FriendsListComponent::BuildShortcutOptions()
         if (!mpGuiCache->mbIsOnlineHost)                            // +0xB864 == 0 @0x8241444C
         {
             if (!(lbRunning || lbResults))
-                maeAvailableShortcutOptions[miTotalOptions++] = 1;    // @0x82414480
+                maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_ROAD_RULES;    // @0x82414480
             if (!(mpGuiCache->GetOnlineGameModeOptions()->meGameMode == 15 ||
                   mpGuiCache->GetOnlineGameModeOptions()->meGameMode == 16))
-                maeAvailableShortcutOptions[miTotalOptions++] = 16;   // @0x824144CC..D0
+                maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_VIEW_EVENT;   // @0x824144CC..D0
         }
         else                                                        // host arm @0x82414304
         {
@@ -326,34 +340,34 @@ void FriendsListComponent::BuildShortcutOptions()
                                     mpGuiCache->GetOnlineGameModeOptions()->meGameMode == 16);
             if (!lbInLobby)                                         // @0x82414304..54
             {
-                maeAvailableShortcutOptions[miTotalOptions++] = 9;
-                maeAvailableShortcutOptions[miTotalOptions++] = 16;
-                maeAvailableShortcutOptions[miTotalOptions++] = 17;
+                maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_LAUNCH;
+                maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_VIEW_EVENT;
+                maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_CANCEL_EVENT;
             }
             if (lbRunning)
-                maeAvailableShortcutOptions[miTotalOptions++] = 14;   // @0x8241436C
+                maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_CANCEL_CHALLENGE;   // @0x8241436C
             else if (!lbResults)
             {
                 if (static_cast<s32>(mpGuiCache->muNumActivePlayers) > 1)   // +0xAC74
-                    maeAvailableShortcutOptions[miTotalOptions++] = 15;
-                maeAvailableShortcutOptions[miTotalOptions++] = 1;    // @0x824143D0
+                    maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_SELECT_CHALLENGE;
+                maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_ROAD_RULES;    // @0x824143D0
             }
             if (lbInLobby)
-                maeAvailableShortcutOptions[miTotalOptions++] = 10;   // @0x82414414
+                maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_CREATE_EVENT;   // @0x82414414
         }
         if (mpGuiCache->mbIsOnlineHost && !mpGuiCache->GetOnlineGameModeOptions()->mbRanked) // +0xA9DF @0x82414438
-            maeAvailableShortcutOptions[miTotalOptions++] = 19;       // @0x824144D0
+            maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_CHANGE_SECURITY;       // @0x824144D0
         if (mpGuiCache->GetOnlineGameModeOptions()->meGameMode == 11)                     // @0x824144EC..F8
-            maeAvailableShortcutOptions[miTotalOptions++] = 11;
-        maeAvailableShortcutOptions[miTotalOptions++] = 12;           // always @0x8241451C..
-        maeAvailableShortcutOptions[miTotalOptions++] = 18;           // ..58 block
-        maeAvailableShortcutOptions[miTotalOptions++] = 20;
-        maeAvailableShortcutOptions[miTotalOptions++] = 13;
+            maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_CHANGE_TEAMS;
+        maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_VIEW_LOBBY;           // always @0x8241451C..
+        maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_VIEW_MAP;           // ..58 block
+        maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_SETTINGS;
+        maeAvailableShortcutOptions[miTotalOptions++] = E_SHORTCUT_OPTIONS_LEAVE_GAME;
     }
 
     // The final store is already counted by the append above.
-    for (s32 i = miTotalOptions; i < E_SHORTCUTOPTION_COUNT; ++i)     // sentinel pad @0x82414684
-        maeAvailableShortcutOptions[i] = E_SHORTCUTOPTION_COUNT;
+    for (s32 i = miTotalOptions; i < E_SHORTCUT_OPTIONS_COUNT; ++i)     // sentinel pad @0x82414684
+        maeAvailableShortcutOptions[i] = E_SHORTCUT_OPTIONS_COUNT;
 }
 
 // @0x824234B8 WithdrawBranches ---------------------------------------------------------
@@ -399,7 +413,7 @@ void FriendsListComponent::SetEntryData(s8 liRow, const char* lpcText, s32 leSta
 // @0x82439248 RequestRefreshedData -----------------------------------------------------
 void FriendsListComponent::RequestRefreshedData()
 {
-    if (meCurrentState == 0 || meListType != 1)                    // @0x82439258..6C
+    if (meCurrentState == 0 || meListType != E_LIST_TYPE_FRIENDS)                    // @0x82439258..6C
         return;
 
     meDataCollectionState = 0;                                             // @0x82439288
@@ -467,75 +481,92 @@ void FriendsListComponent::HandleNotConnected()
     SetDirty();   // inlined by ARTIST (the snapshot tail, e.g. 0x8242B9CC)
 }
 
+// DWARF cpp:2086 (h:588); no ARTIST copy: HandleNoFriends and SortFullList inline it with its
+// assert (ARTIST line 2089, 0x8242BA70; PS3 0x39C698 line 2088).
+bool FriendsListComponent::HasMultiplayerPrivileges()
+{
+    CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 2089);
+    return mpGuiCache->IsMultiplayerAllowed();
+}
+
 // @0x8242BA40 HandleNoFriends -------------------------------------------------------------------
 void FriendsListComponent::HandleNoFriends()
 {
-    const bool lbBlocked = mpGuiCache->IsOnlineStartInProgress() ||
-                           !mpGuiCache->IsMultiplayerAllowed() ||
-                           !CgsSystem::HardwareInit::IsHardDiskAvailable();
-
-    if (!lbBlocked)
+    // The privilege test is HasMultiplayerPrivileges (DWARF cpp:2086), inlined with its
+    // cpp:2089 "mpGuiCache" assert (ARTIST 0x8242BA60..0x8242BA8C).
+    if (!mpGuiCache->IsOnline() && HasMultiplayerPrivileges() &&
+        CgsSystem::HardwareInit::IsHardDiskAvailable())
     {
-        // multiplayer-capable arm: NO_FRIENDS row + INSTANT_FREEBURN row
-        miCurrentlyHighlightedSlot = 1;                                 // @0x8242BAB8..AC8
-        miCurrentlyActiveSlots = 2;
+        // multiplayer-capable arm: NO_FRIENDS row + INSTANT_FREEBURN row (stores @0x8242BAC8..ADC)
+        miCurrentlyHighlightedSlot = 1;
         miCurrentlyHighlightedOption = 1;
-        meBranchState = 0;
+        miCurrentlyActiveSlots = 2;
+        meBranchState = E_FRIENDLISTBRANCH_INVISIBLE;
         SetEntryData(0, "FRIENDSLIST_NO_FRIENDS",
                      FriendsListEntry::E_FRIENDLISTENTRYSTATE_NOFRIENDS,
                      true);
         SetEntryData(1, "FRIENDSLIST_INSTANT_FREEBURN",
                      FriendsListEntry::E_FRIENDLISTENTRYSTATE_FRIENDJOINABLE,
-                     true);                                      // status 6 @0x82442BAFC
+                     true);                                      // status 6 @0x8242BAFC
         Highlight(miCurrentlyHighlightedSlot);
     }
     else
     {
+        // The single-row arm highlights nothing (ARTIST 0x8242BB40 goes straight to the loop).
         miCurrentlyHighlightedSlot = 0;                                 // @0x8242BB28
         miCurrentlyActiveSlots = 1;
         miCurrentlyHighlightedOption = 0;
-        meBranchState = 0;
+        meBranchState = E_FRIENDLISTBRANCH_INVISIBLE;
         SetEntryData(0, "FRIENDSLIST_NO_FRIENDS",
                      FriendsListEntry::E_FRIENDLISTENTRYSTATE_NOFRIENDS,
                      true);                                      // @0x8242BB40
-        Highlight(miCurrentlyHighlightedSlot);
     }
 
-    for (s32 liRow = miCurrentlyActiveSlots; liRow < KI_VISIBLE_ROWS; ++liRow)
-        maEntries[liRow].Invalidate();                           // @0x8242BB64
+    // DWARF local liScreenEntryIndex (cpp:3240).
+    for (int32_t liScreenEntryIndex = miCurrentlyActiveSlots; liScreenEntryIndex < KI_VISIBLE_ROWS; ++liScreenEntryIndex)
+        maEntries[liScreenEntryIndex].Invalidate();               // @0x8242BB64
 
-    SetDirty();   // inlined by ARTIST (the snapshot tail, e.g. 0x8242B9CC)
+    SetDirty();   // inlined by ARTIST (the snapshot tail)
 }
 
 // @0x8242BBE8 ShowSpecificFriend ------------------------------------------------------------------
-void FriendsListComponent::ShowSpecificFriend(const char* lpcName)
+void FriendsListComponent::ShowSpecificFriend(CgsNetwork::PlayerName* lpName)
 {
     const s32 leMode = mpGuiCache->GetGameMode();
     if (leMode != -1 && leMode != 15)                            // @0x8242BC10
         return;
 
-    u32 luIdx = 0;
-    while (luIdx < miTotalOptions &&
-           LobbyNameCmp(maFullBuddyList[luIdx].mPlayerName.macName, lpcName) != 0)
-        ++luIdx;                                                 // @0x8242BC34
-
-    if (luIdx == miTotalOptions)                                   // @0x8242BCA4
+    // DWARF local liIndex (cpp:3682) and the inlined PlayerName::IsEqualTo (ARTIST 0x8242BC3C:
+    // LobbyNameCmp(record name, lpName)); the found arm is the fall-through (0x8242BC64 `beq` to
+    // the not-found stores placed last), as in ShowSpecificShortcut / ShowSpecificChallenge.
+    int32_t liIndex;
+    for (liIndex = 0; liIndex < miTotalOptions; ++liIndex)
     {
-        miCurrentlyHighlightedOption = 0;
-        miCurrentlyHighlightedSlot = 0;
-        UpdateAllFriendsEntryData();
-        return;
+        if (maFullBuddyList[liIndex].mPlayerName.IsEqualTo(*lpName))
+            break;
     }
 
-    miCurrentlyHighlightedOption = static_cast<s8>(luIdx);                   // @0x8242BC6C
-    if (miTotalOptions <= KI_VISIBLE_ROWS)
+    if (liIndex != miTotalOptions)
     {
-        miCurrentlyHighlightedSlot = static_cast<s8>(luIdx);            // @0x82442BC90
+        miCurrentlyHighlightedOption = static_cast<s8>(liIndex);                   // @0x8242BC70
+        if (miTotalOptions <= KI_VISIBLE_ROWS)
+        {
+            miCurrentlyHighlightedSlot = miCurrentlyHighlightedOption;            // @0x8242BC94
+        }
+        else
+        {
+            // DWARF local liSlotsUsedAfterCurrent (cpp:3701).
+            int32_t liSlotsUsedAfterCurrent = miTotalOptions - miCurrentlyHighlightedOption - 1;
+            if (liSlotsUsedAfterCurrent >= KI_VISIBLE_ROWS)
+                miCurrentlyHighlightedSlot = 0;
+            else
+                miCurrentlyHighlightedSlot = static_cast<s8>(4 - liSlotsUsedAfterCurrent);
+        }
     }
     else
     {
-        const s32 liFromBottom = static_cast<s32>(miTotalOptions) - static_cast<s32>(luIdx) - 1;
-        miCurrentlyHighlightedSlot = liFromBottom >= KI_VISIBLE_ROWS ? 0 : static_cast<s8>(4 - liFromBottom);
+        miCurrentlyHighlightedOption = 0;                                          // @0x8242BCA4
+        miCurrentlyHighlightedSlot = 0;
     }
     UpdateAllFriendsEntryData();
 }
@@ -610,31 +641,31 @@ namespace
 // state lives in the file-local .bss slots at the top of this TU.
 //
 // CONSOLE QUIRK, PRESERVED: the friends arm (type 1) tail-calls ShowFriendsList and
-// returns WITHOUT clearing s_abStateSavedFlag / s_aiSavedListType (@0x82441E6C falls
+// returns WITHOUT clearing sbRestoreDataAvailable / seStoredListType (@0x82441E6C falls
 // straight into the epilogue at 0x82441E70) -- so a saved friends list is restored on
 // every subsequent AttemptStateRestore until something else overwrites the slots. The
 // other three arms all clear both. Do not "fix" this into a shared clear.
 void FriendsListComponent::AttemptStateRestore()
 {
-    if (!s_abStateSavedFlag)                                     // byte_82FB27E0 @0x82441D88
+    if (!sbRestoreDataAvailable)                                     // byte_82FB27E0 @0x82441D88
         return;
 
-    if (s_aiSavedListType == 1)                                  // @0x82441D9C
+    if (seStoredListType == E_LIST_TYPE_FRIENDS)                                  // @0x82441D9C
     {
         ShowFriendsList();                                       // @0x82441E6C
         return;                                                  // no clear -- see banner
     }
 
-    if (s_aiSavedListType == 2)                                  // @0x82441DA4
+    if (seStoredListType == E_LIST_TYPE_SHORTCUTS)                                  // @0x82441DA4
     {
-        ShowSpecificShortcut(s_aiSavedShortcutOption);           // @0x82441E54 (dword_82FB27F0 kept)
+        ShowSpecificShortcut(seShortcutOption);           // @0x82441E54 (dword_82FB27F0 kept)
     }
-    else if (s_aiSavedListType == 3)                             // @0x82441DAC
+    else if (seStoredListType == E_LIST_TYPE_CHALLENGES)                             // @0x82441DAC
     {
         // `ld r4, qword_82FB27E8` -- ONE 64-bit CgsID argument. Hex-Rays renders it as the
         // (HIDWORD, LODWORD) pair a 32-bit ABI would use; the asm is a single ld.
-        ShowSpecificChallenge(s_u64SavedChallengeUid);            // @0x82441E30
-        s_u64SavedChallengeUid = 0;                              // @0x82441E38
+        ShowSpecificChallenge(sStoredChallenge);            // @0x82441E30
+        sStoredChallenge = 0;                              // @0x82441E38
     }
     else
     {
@@ -643,14 +674,14 @@ void FriendsListComponent::AttemptStateRestore()
         // idiom and drops the X360-baked file/line (cpp:3873) per convention. Text verbatim.
         char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
         CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-        lStrStream << "Invalid list type : " << s_aiSavedListType << "\n";
+        lStrStream << "Invalid list type : " << seStoredListType << "\n";
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);   // X360 cpp:3873
         CgsDev::Assert::EndAssert();
     }
 
-    s_abStateSavedFlag = 0;                                      // @0x82441E3C / @0x82441E5C / @0x82441E18
-    s_aiSavedListType  = 0;                                      // @0x82441E40 / @0x82441E60 / @0x82441E1C
+    sbRestoreDataAvailable = false;                                      // @0x82441E3C / @0x82441E5C / @0x82441E18
+    seStoredListType  = E_LIST_TYPE_NONE;                                      // @0x82441E40 / @0x82441E60 / @0x82441E1C
 }
 
 // @0x82423558 UpdateAptVariables ---------------------------------------------------
@@ -736,7 +767,7 @@ void FriendsListComponent::ShowFriendsList()
 {
     miCurrentlyHighlightedSlot = 0;                                     // @0x8243FF8C
     miCurrentlyHighlightedOption = 0;                                        // @0x8243FF90
-    meListType = 1;                                              // @0x8243FF98 (friends)
+    meListType = E_LIST_TYPE_FRIENDS;                                              // @0x8243FF98 (friends)
     meCurrentState = 1;                                            // @0x8243FF9C (opening)
     meBranchState = E_FRIENDLISTBRANCH_INVISIBLE;                // @0x8243FFA0
 
@@ -757,7 +788,7 @@ void FriendsListComponent::ShowFriendsList()
 // Re-open the panel on the SHORTCUTS list with one named option pre-selected. The gate
 // is the ShowSpecificFriend gate plus "the panel is closed": only the offline (-1) and
 // online-lobby (15) game modes may re-open it.
-void FriendsListComponent::ShowSpecificShortcut(s32 leOption)
+void FriendsListComponent::ShowSpecificShortcut(EShortcutOptions leShortcutOption)
 {
     const s32 leMode = mpGuiCache->GetGameMode();                // cache +0x9E58 @0x82441CB8
     if (leMode != -1 && leMode != 15)                            // @0x82441CBC..C8
@@ -767,34 +798,38 @@ void FriendsListComponent::ShowSpecificShortcut(s32 leOption)
 
     ShowShortcutList();
 
-    const s32 liNumEntries = static_cast<s32>(miTotalOptions);     // +0x894, signed compares
-    s32 liIndex = 0;                                             // @0x82441CE4
-    while (liIndex < liNumEntries &&
-           maeAvailableShortcutOptions[liIndex] != leOption)     // +0x00C stride 4 @0x82441CF8
-        ++liIndex;
-
-    if (liIndex == liNumEntries)                                 // not found @0x82441D18
+    // DWARF local liIndex (cpp:3744); as ShowSpecificChallenge: the loop re-reads miTotalOptions
+    // (ARTIST 0x82441D04), the option is the left operand (`cmpw r30, r7` 0x82441CFC).
+    int32_t liIndex;
+    for (liIndex = 0; liIndex < miTotalOptions; ++liIndex)
     {
-        miCurrentlyHighlightedOption = 0;                                    // @0x82441D50
-        miCurrentlyHighlightedSlot = 0;                                 // @0x82441D54
+        if (leShortcutOption == maeAvailableShortcutOptions[liIndex])
+            break;
     }
-    else
+
+    // The found arm is the fall-through (ARTIST 0x82441D1C `beq` to the not-found stores placed last).
+    if (liIndex != miTotalOptions)
     {
         miCurrentlyHighlightedOption = static_cast<s8>(liIndex);             // extsb+stb @0x82441D20/28
-        if (liNumEntries <= KI_VISIBLE_ROWS)
+        if (miTotalOptions <= KI_VISIBLE_ROWS)
         {
             miCurrentlyHighlightedSlot = miCurrentlyHighlightedOption;              // @0x82441D48
         }
         else
         {
-            // The console re-sign-extends the STORED byte before this subtract
-            // (`extsb r11, r11` @0x82441D30), so the truncated cursor is what feeds it.
-            const s32 liFromBottom = liNumEntries - miCurrentlyHighlightedOption - 1;   // @0x82441D34/38
-            if (liFromBottom >= KI_VISIBLE_ROWS)                 // @0x82441D3C/40
+            // DWARF local liSlotsUsedAfterCurrent (cpp:3763); the console re-sign-extends the
+            // STORED byte before this subtract (`extsb r11, r11` @0x82441D30).
+            int32_t liSlotsUsedAfterCurrent = miTotalOptions - miCurrentlyHighlightedOption - 1;   // @0x82441D34/38
+            if (liSlotsUsedAfterCurrent >= KI_VISIBLE_ROWS)                 // @0x82441D3C/40
                 miCurrentlyHighlightedSlot = 0;                         // @0x82441D54
             else
-                miCurrentlyHighlightedSlot = static_cast<s8>(4 - liFromBottom);    // subfic @0x82441D44
+                miCurrentlyHighlightedSlot = static_cast<s8>(4 - liSlotsUsedAfterCurrent);    // subfic @0x82441D44
         }
+    }
+    else
+    {
+        miCurrentlyHighlightedOption = 0;                                    // @0x82441D50
+        miCurrentlyHighlightedSlot = 0;                                 // @0x82441D54
     }
 
     UpdateAllShortcutsEntryData();
@@ -809,7 +844,7 @@ void FriendsListComponent::ShowSpecificShortcut(s32 leOption)
 // into the saved-challenge .bss slot -- and it runs on BOTH arms, including the
 // "id not found -> cursor 0" arm, so a stale saved uid is rewritten to whatever challenge
 // now sits at index 0. AttemptStateRestore then zeroes the slot on its way out.
-void FriendsListComponent::ShowSpecificChallenge(CgsID lu64Uid)
+void FriendsListComponent::ShowSpecificChallenge(CgsID lChallengeID)
 {
     const s32 leMode = mpGuiCache->GetGameMode();                // cache +0x9E58 @0x82441BA0
     if (leMode != -1 && leMode != 15)                            // @0x82441BA4..B0
@@ -821,41 +856,45 @@ void FriendsListComponent::ShowSpecificChallenge(CgsID lu64Uid)
 
     ShowChallengesList();
 
-    const s32 liNumEntries = static_cast<s32>(miTotalOptions);     // +0x894 @0x82441BDC
-    s32 liIndex = 0;
-    // `ld r7, 0(r10)` from this+0x70, stride 8, compared with cmpld -- ONE 64-bit id per
-    // slot. (Hex-Rays renders it as the `*(v8 + 4)` low half a 32-bit ABI would use.)
-    while (liIndex < liNumEntries &&
-           maChallengesAvailable[liIndex] != lu64Uid)                // +0x070 @0x82441BF4..FC
-        ++liIndex;
-
-    if (liIndex == liNumEntries)                                 // not found @0x82441C14
+    // DWARF local liIndex (cpp:3621); the loop re-reads miTotalOptions (ARTIST 0x82441C00) and the
+    // id is the left operand (`cmpld r30, r7` 0x82441BF8). `ld r7, 0(r10)` from this+0x70, stride 8:
+    // ONE 64-bit id per slot (Hex-Rays renders the `*(v8 + 4)` low half a 32-bit ABI would use).
+    int32_t liIndex;
+    for (liIndex = 0; liIndex < miTotalOptions; ++liIndex)
     {
-        miCurrentlyHighlightedOption = 0;                                    // @0x82441C4C
-        miCurrentlyHighlightedSlot = 0;                                 // @0x82441C50
+        if (lChallengeID == maChallengesAvailable[liIndex])
+            break;
     }
-    else
+
+    // The found arm is the fall-through (ARTIST 0x82441C18 `beq` to the not-found stores placed last).
+    if (liIndex != miTotalOptions)
     {
         miCurrentlyHighlightedOption = static_cast<s8>(liIndex);             // extsb+stb @0x82441C1C/24
-        if (liNumEntries <= KI_VISIBLE_ROWS)
+        if (miTotalOptions <= KI_VISIBLE_ROWS)
         {
             miCurrentlyHighlightedSlot = miCurrentlyHighlightedOption;              // @0x82441C44
         }
         else
         {
-            const s32 liFromBottom = liNumEntries - miCurrentlyHighlightedOption - 1;   // @0x82441C2C..34
-            if (liFromBottom >= KI_VISIBLE_ROWS)                 // @0x82441C38/3C
+            // DWARF local liSlotsUsedAfterCurrent (cpp:3640).
+            int32_t liSlotsUsedAfterCurrent = miTotalOptions - miCurrentlyHighlightedOption - 1;   // @0x82441C2C..34
+            if (liSlotsUsedAfterCurrent >= KI_VISIBLE_ROWS)                 // @0x82441C38/3C
                 miCurrentlyHighlightedSlot = 0;                         // @0x82441C50
             else
-                miCurrentlyHighlightedSlot = static_cast<s8>(4 - liFromBottom);    // subfic @0x82441C40
+                miCurrentlyHighlightedSlot = static_cast<s8>(4 - liSlotsUsedAfterCurrent);    // subfic @0x82441C40
         }
+    }
+    else
+    {
+        miCurrentlyHighlightedOption = 0;                                    // @0x82441C4C
+        miCurrentlyHighlightedSlot = 0;                                 // @0x82441C50
     }
 
     UpdateAllChallengesEntryData();
 
     // `lbz +0x882 ; extsb ; addi 14 ; slwi 3 ; ldx ; std qword_82FB27E8` -- the cursor is
     // re-read from memory and (idx + 14) * 8 is &maChallengesAvailable[idx] (+0x70 == 14 * 8).
-    s_u64SavedChallengeUid = maChallengesAvailable[miCurrentlyHighlightedOption];               // @0x82441C5C..74
+    sStoredChallenge = maChallengesAvailable[miCurrentlyHighlightedOption];               // @0x82441C5C..74
 }
 
 namespace {
@@ -980,7 +1019,7 @@ void FriendsListComponent::UpdateAllShortcutsEntryData()
         {
             ++miCurrentlyActiveSlots;
             const s32 option = maeAvailableShortcutOptions[first + i];
-            CGS_ASSERT_AT(option != E_SHORTCUTOPTION_COUNT, "Trying to display an invalid option", CGS_ARTIST_FILE, 2768);
+            CGS_ASSERT_AT(option != E_SHORTCUT_OPTIONS_COUNT, "Trying to display an invalid option", CGS_ARTIST_FILE, 2768);
             const bool disabled = !CgsSystem::HardwareInit::IsHardDiskAvailable()
                                && option >= 2 && option <= 6;
             SetEntryData(i, KAPC_SHORTCUT_TEXT[option], disabled ? 3 : 17, true);
@@ -1012,7 +1051,7 @@ void FriendsListComponent::ShowShortcutList()
     if (mode != -1 && mode != 15) return;
     miCurrentlyHighlightedSlot   = 0;
     miCurrentlyHighlightedOption = 0;
-    meListType = 2;
+    meListType = E_LIST_TYPE_SHORTCUTS;
     meCurrentState = 1;
     meBranchState = 0;
     SetDirty();
@@ -1034,7 +1073,7 @@ void FriendsListComponent::ShowChallengesList()
 {
     miCurrentlyHighlightedSlot   = 0;
     miCurrentlyHighlightedOption = 0;
-    meListType = 3;
+    meListType = E_LIST_TYPE_CHALLENGES;
     meCurrentState = 1;
     meBranchState = 0;
     SetDirty();
@@ -1049,9 +1088,9 @@ void FriendsListComponent::UpdateAllEntryData()
 {
     switch (meListType)
     {
-    case 1: UpdateAllFriendsEntryData(); break;
-    case 2: UpdateAllShortcutsEntryData(); break;
-    case 3: UpdateAllChallengesEntryData(); break;
+    case E_LIST_TYPE_FRIENDS: UpdateAllFriendsEntryData(); break;
+    case E_LIST_TYPE_SHORTCUTS: UpdateAllShortcutsEntryData(); break;
+    case E_LIST_TYPE_CHALLENGES: UpdateAllChallengesEntryData(); break;
     default: CGS_FAIL_AT("Unknown list type\n", CGS_ARTIST_FILE, 2656 /* ARTIST 0x82440060 */); break;
     }
 }
@@ -1060,7 +1099,7 @@ void FriendsListComponent::UpdateAllEntryData()
 void FriendsListComponent::Close()
 {
     if (meCurrentState == 0) return;
-    if (meListType == 3)
+    if (meListType == E_LIST_TYPE_CHALLENGES)
     {
         CgsID lChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
         GuiChallengeSelectedEvent lChallengeSelected;
@@ -1087,10 +1126,10 @@ void FriendsListComponent::HandleDPadLeft()
     // inline, the challenge case after it and the shared ShowShortcutList tail last.
     switch (meListType)
     {
-    case 1:
+    case E_LIST_TYPE_FRIENDS:
         ShowShortcutList();
         break;
-    case 3:
+    case E_LIST_TYPE_CHALLENGES:
     {
         CgsID lChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
         GuiChallengeSelectedEvent lChallengeSelected;
@@ -1121,7 +1160,7 @@ bool FriendsListComponent::SelectPrevious()
         --miCurrentlyHighlightedOption;
         --miCurrentlyHighlightedSlot;
         Highlight(miCurrentlyHighlightedSlot);
-        if (meListType == 3)
+        if (meListType == E_LIST_TYPE_CHALLENGES)
             {
                 CgsID lChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
                 GuiChallengeSelectedEvent lChallengeSelected;
@@ -1152,7 +1191,7 @@ bool FriendsListComponent::SelectNext()
         ++miCurrentlyHighlightedOption;
         ++miCurrentlyHighlightedSlot;
         Highlight(miCurrentlyHighlightedSlot);
-        if (meListType == 3)
+        if (meListType == E_LIST_TYPE_CHALLENGES)
             {
                 CgsID lChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
                 GuiChallengeSelectedEvent lChallengeSelected;
@@ -1179,9 +1218,9 @@ void FriendsListComponent::HandleDPadRight()
     if (meCurrentState == 0) { ShowShortcutList(); return; }
     switch (meListType)
     {
-    case 1: HandleDPadRightFriends(); break;
-    case 2: HandleDPadRightShortcuts(); break;
-    case 3: HandleDPadRightChallenges(); break;
+    case E_LIST_TYPE_FRIENDS: HandleDPadRightFriends(); break;
+    case E_LIST_TYPE_SHORTCUTS: HandleDPadRightShortcuts(); break;
+    case E_LIST_TYPE_CHALLENGES: HandleDPadRightChallenges(); break;
     default: CGS_FAIL_AT("unknown list type\n", CGS_ARTIST_FILE, 1066 /* ARTIST 0x82442DF8 */); break;
     }
 }
@@ -1201,8 +1240,8 @@ void FriendsListComponent::HandleTableInteraction(s32 liAction)
                 lEvent.Construct(2, "", "EasyDriveEntry", "");
                 mpStateInterface->OutputGuiEvent(lEvent);
             }
-            if (meListType == 3)
-                s_u64SavedChallengeUid = maChallengesAvailable[miCurrentlyHighlightedOption];
+            if (meListType == E_LIST_TYPE_CHALLENGES)
+                sStoredChallenge = maChallengesAvailable[miCurrentlyHighlightedOption];
         }
         break;
     case E_GAMEINPUTACTIONS_GUI_DPAD_DOWN:
@@ -1215,8 +1254,8 @@ void FriendsListComponent::HandleTableInteraction(s32 liAction)
                 lEvent.Construct(2, "", "EasyDriveEntry", "");
                 mpStateInterface->OutputGuiEvent(lEvent);
             }
-            if (meListType == 3)
-                s_u64SavedChallengeUid = maChallengesAvailable[miCurrentlyHighlightedOption];
+            if (meListType == E_LIST_TYPE_CHALLENGES)
+                sStoredChallenge = maChallengesAvailable[miCurrentlyHighlightedOption];
         }
         break;
     case E_GAMEINPUTACTIONS_GUI_DPAD_LEFT:
@@ -1234,7 +1273,7 @@ void FriendsListComponent::HandleControllerInput(const s32* input)
     CGS_ASSERT_AT(input != 0, "lpControllerInput", CGS_ARTIST_FILE, 849 /* ARTIST 0x824432B8 */);
     CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 856 /* ARTIST 0x824432E0 */);
     // Host diagnostic: one record per GUI press, disabled in normal play.
-    if (!mpGuiCache->GetGameplayHudReady() || (meListType == 1 && meDataCollectionState != 2)) return;
+    if (!mpGuiCache->GetGameplayHudReady() || (meListType == E_LIST_TYPE_FRIENDS && meDataCollectionState != 2)) return;
     if (meCurrentState == 2 && meBranchState != 0) HandleBranchInteraction(input[1]);
     else HandleTableInteraction(input[1]);
 }
@@ -1255,8 +1294,8 @@ void FriendsListComponent::Update()
     {
         if (meCurrentState != 0)
         {
-            if (meListType == 2 && (count <= 1 || miPlayerCount <= 1)) ShowShortcutList();
-            else if (meListType == 3)
+            if (meListType == E_LIST_TYPE_SHORTCUTS && (count <= 1 || miPlayerCount <= 1)) ShowShortcutList();
+            else if (meListType == E_LIST_TYPE_CHALLENGES)
             {
                 if (count > 1) ShowChallengesList();
                 else HandleDPadLeft();
@@ -1269,19 +1308,40 @@ void FriendsListComponent::Update()
 // ARTIST 0x82441E78.
 void FriendsListComponent::ReshowShortcuts()
 {
-    if (meCurrentState == 0 || meListType != 2) return;
-    const s32 option = maeAvailableShortcutOptions[miCurrentlyHighlightedOption];
+    if (meCurrentState == 0 || meListType != E_LIST_TYPE_SHORTCUTS) return;
+
+    // DWARF locals leShortcutOption (cpp:3922), liIndex (cpp:3926), liSlotsUsedAfterCurrent
+    // (cpp:3945): ShowSpecificShortcut's search over the rebuilt list (ARTIST 0x82441ED8..0x82441F34).
+    EShortcutOptions leShortcutOption = maeAvailableShortcutOptions[miCurrentlyHighlightedOption];
     ShowShortcutList();
-    s32 index = 0;
-    while (index < static_cast<s32>(miTotalOptions) && maeAvailableShortcutOptions[index] != option) ++index;
-    miCurrentlyHighlightedSlot = 0;
-    if (index == static_cast<s32>(miTotalOptions)) miCurrentlyHighlightedOption = 0;
+
+    int32_t liIndex;
+    for (liIndex = 0; liIndex < miTotalOptions; ++liIndex)
+    {
+        if (leShortcutOption == maeAvailableShortcutOptions[liIndex])
+            break;
+    }
+
+    if (liIndex != miTotalOptions)
+    {
+        miCurrentlyHighlightedOption = static_cast<s8>(liIndex);
+        if (miTotalOptions <= KI_VISIBLE_ROWS)
+        {
+            miCurrentlyHighlightedSlot = miCurrentlyHighlightedOption;
+        }
+        else
+        {
+            int32_t liSlotsUsedAfterCurrent = miTotalOptions - miCurrentlyHighlightedOption - 1;
+            if (liSlotsUsedAfterCurrent >= KI_VISIBLE_ROWS)
+                miCurrentlyHighlightedSlot = 0;
+            else
+                miCurrentlyHighlightedSlot = static_cast<s8>(4 - liSlotsUsedAfterCurrent);
+        }
+    }
     else
     {
-        miCurrentlyHighlightedOption = static_cast<s8>(index);
-        if (miTotalOptions <= 5) miCurrentlyHighlightedSlot = static_cast<s8>(index);
-        else if (static_cast<s32>(miTotalOptions) - index - 1 < 5)
-            miCurrentlyHighlightedSlot = static_cast<s8>(4 - (static_cast<s32>(miTotalOptions) - index - 1));
+        miCurrentlyHighlightedOption = 0;
+        miCurrentlyHighlightedSlot = 0;
     }
     UpdateAllShortcutsEntryData();
 }
@@ -1348,9 +1408,9 @@ const s32 KAA_FRIEND_BRANCHES[17][3] = {
 // ARTIST 0x82423120.
 void FriendsListComponent::ShowShortcutsBranch()
 {
-    CGS_ASSERT_AT(miCurrentlyHighlightedOption < E_SHORTCUTOPTION_COUNT, "miCurrentlyHighlightedOption < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1835);
+    CGS_ASSERT_AT(miCurrentlyHighlightedOption < E_SHORTCUT_OPTIONS_COUNT, "miCurrentlyHighlightedOption < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1835);
     const s32 option = maeAvailableShortcutOptions[miCurrentlyHighlightedOption];
-    CGS_ASSERT_AT(option < E_SHORTCUTOPTION_COUNT, "maeAvailableShortcutOptions[ miCurrentlyHighlightedOption ] < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1836);
+    CGS_ASSERT_AT(option < E_SHORTCUT_OPTIONS_COUNT, "maeAvailableShortcutOptions[ miCurrentlyHighlightedOption ] < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1836);
     s32 count = 0;
     s32 first = -1;
     switch (option)
@@ -1405,9 +1465,9 @@ void FriendsListComponent::HandleBranchInteraction(s32 action)
     {
         switch (meListType)
         {
-        case 1: HandleBranchDPadRightFriends(); break;
-        case 2: HandleBranchDPadRightShortcuts(); break;
-        case 3: break;
+        case E_LIST_TYPE_FRIENDS: HandleBranchDPadRightFriends(); break;
+        case E_LIST_TYPE_SHORTCUTS: HandleBranchDPadRightShortcuts(); break;
+        case E_LIST_TYPE_CHALLENGES: break;
         default: CGS_FAIL_AT("unknown list type", CGS_ARTIST_FILE, 2197); break;
         }
     }
@@ -1451,9 +1511,9 @@ void FriendsListComponent::HandleBranchDPadRightShortcuts()
 // ARTIST 0x82442938.
 void FriendsListComponent::HandleDPadRightShortcuts()
 {
-    CGS_ASSERT_AT(miCurrentlyHighlightedOption < E_SHORTCUTOPTION_COUNT, "miCurrentlyHighlightedOption < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1125);
+    CGS_ASSERT_AT(miCurrentlyHighlightedOption < E_SHORTCUT_OPTIONS_COUNT, "miCurrentlyHighlightedOption < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1125);
     const s32 option = maeAvailableShortcutOptions[miCurrentlyHighlightedOption];
-    CGS_ASSERT_AT(option < E_SHORTCUTOPTION_COUNT, "maeAvailableShortcutOptions[ miCurrentlyHighlightedOption ] < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1126);
+    CGS_ASSERT_AT(option < E_SHORTCUT_OPTIONS_COUNT, "maeAvailableShortcutOptions[ miCurrentlyHighlightedOption ] < E_SHORTCUT_OPTIONS_COUNT", CGS_ARTIST_FILE, 1126);
     if (!CgsSystem::HardwareInit::IsHardDiskAvailable() && option >= 2 && option <= 6) return;
     switch (option)
     {
@@ -1484,7 +1544,7 @@ void FriendsListComponent::HandleDPadRightShortcuts()
     }
     case 15:
         meCurrentState = 0;
-        ShowSpecificChallenge(s_u64SavedChallengeUid);
+        ShowSpecificChallenge(sStoredChallenge);
         return;
     default: CGS_FAIL_AT("Unknown shortcut option", CGS_ARTIST_FILE, 1313); break;
     }
@@ -1535,35 +1595,89 @@ void FriendsListComponent::UpdateAllFriendsEntryData()
 // ARTIST 0x82423708.
 void FriendsListComponent::SortFullList()
 {
-    for (s32 i = 0; i < static_cast<s32>(miTotalOptions); ++i)
+    // DWARF locals (cpp:3062..3065, 3076, 3135); remaining difference (97.1): the second loop's index
+    // and the hoisted GuiCache+0x9E58 offset take r29/r28 where ARTIST has r28/r29.
+    // the privilege test is the inlined
+    // HasMultiplayerPrivileges (ARTIST 0x82423890..0x824238B8, assert cpp:2089).
+    int32_t liCurrentIndex;
+    int32_t liBuddyIndex;
+    int32_t liPlayerIndex;
+    SFriendRecord* lpBuddy;
+
+    for (liBuddyIndex = 0; liBuddyIndex < miTotalOptions; ++liBuddyIndex)
     {
-        SFriendRecord& record = maFullBuddyList[i];
-        record.mbIsInSameLobby = false;
-        if (record.mbIsOnline)
-            for (s32 player = 0; player < 8; ++player)
+        lpBuddy = &maFullBuddyList[liBuddyIndex];
+        lpBuddy->mbIsInSameLobby = false;
+        if (lpBuddy->mbIsOnline)
+        {
+            for (liPlayerIndex = 0; liPlayerIndex < 8; ++liPlayerIndex)   // KI_MAX_PLAYERS (stride 0x138 to 0x9C0)
             {
-                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* info = mpGuiCache->GetOnlinePlayerInfoByIndex(player);
-                if (info->mNetworkPlayerID != -1 && LobbyNameCmp(info->mPlayerName.macName, record.mPlayerName.macName) == 0)
-                { record.mbIsInSameLobby = true; break; }
+                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerStatusData =
+                    mpGuiCache->GetOnlinePlayerInfoByIndex(liPlayerIndex);
+                if (lpPlayerStatusData->mNetworkPlayerID != -1 &&
+                    lpPlayerStatusData->mPlayerName.IsEqualTo(lpBuddy->mPlayerName))
+                {
+                    lpBuddy->mbIsInSameLobby = true;
+                    break;
+                }
             }
+        }
     }
+
     qsort(maFullBuddyList, miTotalOptions, sizeof(SFriendRecord), &BuddySortFunction);
-    for (s32 i = 0; i < static_cast<s32>(miTotalOptions); ++i)
+
+    for (liCurrentIndex = 0, lpBuddy = maFullBuddyList; liCurrentIndex < miTotalOptions; ++liCurrentIndex, ++lpBuddy)
     {
-        const SFriendRecord& record = maFullBuddyList[i];
-        s32 status;
-        if (!record.mbIsOnline) status = 5;
-        else if (record.mbIsInSameLobby) status = 4;
-        else if (!mpGuiCache->IsMultiplayerAllowed() || !CgsSystem::HardwareInit::IsHardDiskAvailable()) status = 13;
-        else if (record.miInviteStatus == 2) status = 10;
-        else if (record.miInviteStatus == 1) status = record.mbIsJoinable ? 8 : 9;
+        if (!lpBuddy->mbIsOnline)
+        {
+            maeFullBuddyEntryState[liCurrentIndex] = FriendsListEntry::E_FRIENDLISTENTRYSTATE_FRIENDOFFLINE;
+        }
+        else if (lpBuddy->mbIsInSameLobby == true)                                  // cmplwi 1 @0x82423880
+        {
+            maeFullBuddyEntryState[liCurrentIndex] = FriendsListEntry::E_FRIENDLISTENTRYSTATE_FRIENDINLOBBY;
+        }
+        // Two arms with the same store (ARTIST 0x824238C8 and 0x824238E0, each its own `b`).
+        else if (!HasMultiplayerPrivileges())
+        {
+            maeFullBuddyEntryState[liCurrentIndex] = FriendsListEntry::E_FRIENDLISTENTRYSTATE_NOMULTIPLAYERPRIVILEGE;
+        }
+        else if (!CgsSystem::HardwareInit::IsHardDiskAvailable())
+        {
+            maeFullBuddyEntryState[liCurrentIndex] = FriendsListEntry::E_FRIENDLISTENTRYSTATE_NOMULTIPLAYERPRIVILEGE;
+        }
+        else if (lpBuddy->miInviteStatus == 2)                                      // E_INVITED_LOCAL_PLAYER_TO_GAME
+        {
+            maeFullBuddyEntryState[liCurrentIndex] = FriendsListEntry::E_FRIENDLISTENTRYSTATE_FRIENDRECEIVED;
+        }
+        else if (lpBuddy->miInviteStatus == 1)                                      // E_INVITED_TO_LOCAL_PLAYERS_GAME
+        {
+            if (lpBuddy->mbIsJoinable == true)
+                maeFullBuddyEntryState[liCurrentIndex] = FriendsListEntry::E_FRIENDLISTENTRYSTATE_FRIENDSENTJOINABLE;
+            else
+                maeFullBuddyEntryState[liCurrentIndex] = FriendsListEntry::E_FRIENDLISTENTRYSTATE_FRIENDSENTNOTJOINABLE;
+        }
         else
         {
-            const s32 mode = mpGuiCache->GetGameMode();
-            const bool canInvite = mode == -1 || ((mode == 15 || mode == 16) && !mpGuiCache->GetOnlineGameModeOptions()->mbRanked);
-            status = canInvite ? (record.mbIsJoinable ? 6 : 7) : (record.mbIsJoinable ? 12 : 11);
+            // The lobby test is the header-inline GsmIO::IsOnlineFreeBurnLobby (ARTIST materialises
+            // its bool, 0x82423930..0x82423948).
+            BrnGameState::GameStateModuleIO::EGameModeType leGameMode = mpGuiCache->GetGameMode();
+            if (leGameMode == BrnGameState::GameStateModuleIO::E_MODE_NONE ||
+                (BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(leGameMode) &&
+                 !mpGuiCache->GetOnlineGameModeOptions()->mbRanked))
+            {
+                if (lpBuddy->mbIsJoinable == true)
+                    maeFullBuddyEntryState[liCurrentIndex] = FriendsListEntry::E_FRIENDLISTENTRYSTATE_FRIENDJOINABLE;
+                else
+                    maeFullBuddyEntryState[liCurrentIndex] = FriendsListEntry::E_FRIENDLISTENTRYSTATE_FRIENDNOTJOINABLE;
+            }
+            else
+            {
+                if (lpBuddy->mbIsJoinable == true)
+                    maeFullBuddyEntryState[liCurrentIndex] = FriendsListEntry::E_FRIENDLISTENTRYSTATE_FRIENDNOTINVITABLEJOINABLE;
+                else
+                    maeFullBuddyEntryState[liCurrentIndex] = FriendsListEntry::E_FRIENDLISTENTRYSTATE_FRIENDNOTINVITABLENOTJOINABLE;
+            }
         }
-        maeFullBuddyEntryState[i] = status;
     }
 }
 
@@ -1571,7 +1685,7 @@ void FriendsListComponent::SortFullList()
 void FriendsListComponent::ProcessNewEntryData(const GuiEventOnlineReceiveFriendInfo* lpFriendInfo)
 {
     CGS_ASSERT_AT(lpFriendInfo != 0, "lpFriendInfo", CGS_ARTIST_FILE, 706 /* ARTIST 0x82443104 */);
-    if (meListType != 1) return;
+    if (meListType != E_LIST_TYPE_FRIENDS) return;
     // DWARF (BrnFriendsList.cpp:736/:779) names the locals liEventIndex and lbShouldAnimateOut; no local holds the event.
     if (!lpFriendInfo->mbConnected) { HandleNotConnected(); meDataCollectionState = 2; return; }
     if (lpFriendInfo->miNumberOfBuddiesInEvent == 0) { HandleNoFriends(); meDataCollectionState = 2; return; }
@@ -1587,11 +1701,11 @@ void FriendsListComponent::ProcessNewEntryData(const GuiEventOnlineReceiveFriend
         lbShouldAnimateOut = MoveHighlightDueToBranchOpen();
     UpdateAllEntryData();
     if (lbShouldAnimateOut) { meBranchState = 0; HandleTableInteraction(40); }
-    else if (s_abStateSavedFlag && s_aiSavedListType == 1)
+    else if (sbRestoreDataAvailable && seStoredListType == E_LIST_TYPE_FRIENDS)
     {
-        ShowSpecificFriend(s_amabSavedNames[0].macName);
-        s_abStateSavedFlag = 0;
-        s_aiSavedListType = 0;
+        ShowSpecificFriend(&sStoredFriend);
+        sbRestoreDataAvailable = false;
+        seStoredListType = E_LIST_TYPE_NONE;
     }
 }
 
