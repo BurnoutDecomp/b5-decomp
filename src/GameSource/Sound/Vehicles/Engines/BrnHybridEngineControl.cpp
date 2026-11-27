@@ -45,8 +45,9 @@ namespace Engines
 // ---------------------------------------------------------------------------
 void HybridEngineControl::UpdateGinsuRPM()
 {
-    mGinsuRpm.mPreviousValue = mGinsuRpm.mCurrentValue;               // previous = old current
-    mGinsuRpm.mCurrentValue  = mpHybridExhaustControl->GetGinsuRPM(); // current  = the paired exhaust's sample
+    // DataPoint::Update (previous = current, current = the paired exhaust's sample): the argument
+    // is read before either store, as ARTIST loads both values first (0x82699B9C / 0x82699BA0).
+    mGinsuRpm.Update(mpHybridExhaustControl->GetGinsuRPM());
 }
 
 // ---------------------------------------------------------------------------

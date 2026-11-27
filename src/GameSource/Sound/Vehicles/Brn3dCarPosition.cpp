@@ -40,6 +40,15 @@ namespace BrnSound
 namespace Vehicles
 {
 
+// DWARF Brn3dCarPosition.cpp:20..27: plain (non-const) Vector3 globals, the original's 'POSIITON'
+// spelling kept. ARTIST builds each in a dynamic initialiser (0x82C625B0, 0x82C625F0, 0x82C62630,
+// 0x82C62670, 0x82C626B8: the three-float aggregate fill, w zeroed), with these values.
+Vector3 K_ENGINE_POSIITON_OFFSET(0.0f, 0.0f, 1.0f);           // 0x82FFBDE0
+Vector3 K_EXHAUST_POSIITON_OFFSET(0.0f, 0.0f, -1.0f);         // 0x83005FE0
+Vector3 K_ENGINE_POSIITON_IN_CAR_OFFSET(0.0f, 0.0f, 4.0f);    // 0x83005F40
+Vector3 K_LEFTSIDE_POSIITON_OFFSET(2.0f, 0.0f, 1.0f);         // 0x82FFBE00
+Vector3 K_RIGHTSIDE_POSIITON_OFFSET(-2.0f, 0.0f, 1.0f);       // 0x82FFBE10
+
 // ARTIST 0x82F2F690: {0x10070, "Car3DControl", Brn3DEffectControl, CreateObject}, registered by
 // its startup thunk through ClassTypeInfo<EffectControl>::AddToClassTypeInfoArray.
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> Car3DControl::sTypeInfo(
@@ -136,33 +145,54 @@ void Car3DControl::UpdateParams(f32 afDeltaTime)
     BrnSound::Logic::Brn3DEffectControl::UpdateParams(afDeltaTime);
 }
 
+// ARTIST 0x826858A0: the three-float Vector3 fill (DWARF inlines Vector3::Vector3 here).
 Vector3 Car3DControl::GetPositionOffset() const
 {
-    Vector3 lOffset;
-    lOffset.SetZero();
-    return lOffset;
+    return Vector3(0.0f, 0.0f, 0.0f);
 }
 
+// ARTIST 0x8269A860: the bumper camera (CameraState flag bit 4 at state+8, ld 0x140 of the director
+// camera) moves the engine to K_ENGINE_POSIITON_IN_CAR_OFFSET. DWARF inlines GetBrnLogicModule,
+// GetBrnInputStructure (the BrnSoundLogicModule.h:432 assert) and calls GetDirectorCamera.
 Vector3 Engine3dControl::GetPositionOffset() const
 {
-    // Both ARTIST constants (external and in-car) are zero vectors.
-    return Car3DControl::GetPositionOffset();
+    BrnSound::Module::SoundLogicModule* lpLogicModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    if (lpLogicModule->GetBrnInputStructure()->GetDirectorCamera()->GetState().IsFlagSet(
+            BrnDirector::Camera::CameraState::E_FLAG_BUMPER_CAM))
+    {
+        return K_ENGINE_POSIITON_IN_CAR_OFFSET;
+    }
+    return K_ENGINE_POSIITON_OFFSET;
 }
 
+// ARTIST 0x8269A910: a stereo exhaust (mbIsStereo, lbz 0xE4) under the bumper camera takes the engine's
+// in-car offset; otherwise K_EXHAUST_POSIITON_OFFSET. Two exhaust returns: ARTIST copies the result
+// pointer on each path (mr r3,r31 at 0x8269A988 and 0x8269A9A0) and merges only their tails.
 Vector3 Exhaust3dControl::GetPositionOffset() const
 {
-    // K_EXHAUST_POSITION_OFFSET and the stereo in-car alternative are zero.
-    return Car3DControl::GetPositionOffset();
+    if (mbIsStereo)
+    {
+        BrnSound::Module::SoundLogicModule* lpLogicModule =
+            static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+        if (lpLogicModule->GetBrnInputStructure()->GetDirectorCamera()->GetState().IsFlagSet(
+                BrnDirector::Camera::CameraState::E_FLAG_BUMPER_CAM))
+        {
+            return K_ENGINE_POSIITON_IN_CAR_OFFSET;
+        }
+        return K_EXHAUST_POSIITON_OFFSET;
+    }
+    return K_EXHAUST_POSIITON_OFFSET;
 }
 
 Vector3 LeftSide3dControl::GetPositionOffset() const
 {
-    return Car3DControl::GetPositionOffset();
+    return K_LEFTSIDE_POSIITON_OFFSET;
 }
 
 Vector3 RightSide3dControl::GetPositionOffset() const
 {
-    return Car3DControl::GetPositionOffset();
+    return K_RIGHTSIDE_POSIITON_OFFSET;
 }
 
 // ~Car3DControl  @ 0x826CF838  (the X360 `scalar deleting destructor')
