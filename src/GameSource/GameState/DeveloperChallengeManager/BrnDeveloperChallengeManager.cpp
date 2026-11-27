@@ -189,9 +189,9 @@ void DeveloperChallengeManager::OnStuntOffenceComplete(const u8* lpStuntOffence)
         CGS_ASSERT_AT(mpProgressionManager != 0,               "mpProgressionManager", CGS_ARTIST_FILE, 664);
         CGS_ASSERT_AT(mpProgressionManager->GetProfile() != 0, "mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 665);
 
-        const f32 lfScore = *reinterpret_cast<const f32*>(lpStuntOffence + 104); // FLAG: StuntOffence score @+104
+        // FLAG: StuntOffence score @+104, read after the completion test (ARTIST 0x823733F0; no local).
         if (!mpProgressionManager->GetProfile()->IsDeveloperChallengeComplete(E_DEV_CHALLENGE_STUNT_OFFENCE)
-            && !(lfScore < KF_DEV_CHALLENGE_STUNT_OFFENCE_MIN_SCORE))   // `fcmpu ; blt` skips
+            && !(*reinterpret_cast<const f32*>(lpStuntOffence + 104) < KF_DEV_CHALLENGE_STUNT_OFFENCE_MIN_SCORE))   // `fcmpu ; blt` skips
         {
             SetChallengeCompleted(E_DEV_CHALLENGE_STUNT_OFFENCE);
         }

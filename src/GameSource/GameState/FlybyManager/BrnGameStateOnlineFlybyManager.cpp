@@ -266,12 +266,12 @@ void OnlineFlybyManager::CalculateTeamRating(FlybyManager::RivalRating* lpRating
     const BrnNetwork::NetworkPlayerID lLocalPlayerID = GetGameStateModule()->GetLocalPlayerNetworkID();
     const ScoringSystem* lpScoringSystem = GetGameStateModule()->GetModeManager()->GetScoringSystem();
     const CarData* lpCarData = lpScoringSystem->GetCarData(lLocalPlayerID);
-    CGS_ASSERT(lpCarData, "lpCarData");
+    CGS_ASSERT_AT(lpCarData, "lpCarData", CGS_ARTIST_FILE, 1289);   // ARTIST li r5, 0x509 @0x82364790
     const GameStateModuleIO::EPlayerTeam leLocalTeam = lpCarData->GetTeam();
 
     lpScoringSystem = GetGameStateModule()->GetModeManager()->GetScoringSystem();
     lpCarData = lpScoringSystem->GetCarData(lpRating->mPlayerID);
-    CGS_ASSERT(lpCarData, "lpCarData");
+    CGS_ASSERT_AT(lpCarData, "lpCarData", CGS_ARTIST_FILE, 1294);   // ARTIST li r5, 0x50E @0x823647EC
     if (leLocalTeam != lpCarData->GetTeam())
         lpRating->miRivalWeighting += 20;
 }

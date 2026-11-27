@@ -23,7 +23,7 @@
 // ===================================================================================
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp"
 #include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"
-
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // BrnGui::GuiEventDirtyTrickAvailable / GuiEventUpdateDirtyTrickCountdown
 #include "GameSource/GameState/BrnGameStateModule.h"                     // GameStateModule::Get{Player...,OutputGuiEventQueue}
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                   // PreWorldInputBuffer / OutputBuffer accessors
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h" // GameStateToGuiInterface (complete)
@@ -43,9 +43,9 @@ namespace BrnGameState
     // local constants and the payloads as small PODs.
     namespace
     {
-        // module output-GUI-event queue (VariableEventQueue<18432,16>) tags
-        const s32 KI_GUI_EVENT_PAYBACK_STATE_CHANGE = 176; // 0xB0, 4-byte s32 flag payload
-        const s32 KI_GUI_EVENT_PAYBACK_COUNTDOWN    = 235; // 0xEB, 4-byte f32 payload
+        // (The GUI posts are the DWARF BrnGui::GuiEventDirtyTrickAvailable (X360 id 176) and
+        // GuiEventUpdateDirtyTrickCountdown (235) through the module's GuiEventQueue.)
+
 
 
         // The dirty-trick statuses the manager broadcasts. BrnNetwork::EDirtyTrickStatus's shared
@@ -59,18 +59,18 @@ namespace BrnGameState
         const BrnNetwork::EDirtyTrickStatus KE_DIRTY_TRICK_STATUS_CRASHED  =
             static_cast<BrnNetwork::EDirtyTrickStatus>(4);   // `li r7,4` @0x82397E14
 
-        // A "payback HUD element shown/hidden" flag record (the type-176 s32 payload). The X360
-        // posts an s32 0/1 toggle; modelled as a named POD so the queue write is not a bare int.
-        struct PaybackStateChangeEvent : public CgsModule::Event
-        {
-            s32 miShow;
-        };
 
-        // The type-235 record: the remaining countdown time (f32).
-        struct PaybackCountdownEvent : public CgsModule::Event
-        {
-            f32 mfRemaining;
-        };
+
+
+
+
+
+
+
+
+
+
+
 
     }
 
@@ -272,25 +272,25 @@ namespace BrnGameState
         mpGameStateModule = 0;
     }
 
-    // -----------------------------------------------------------------------------------
-    // ChangeState (aggressor overload)  @ 0x823919B0
-    // Cancel any aggressor timer, set the new aggressor state, clear the payback-awarded flag and
-    // post the "payback HUD shown" state-change event onto the module's output GUI queue.
-    // -----------------------------------------------------------------------------------
+    // ShowDTAvailableHudNotification (cpp:816) and ChangeState (aggressor overload) @ 0x823919B0.
     void
-    PaybackManager::ChangeState(EPaybackAggressorState leNewPaybackAggState)
+    PaybackManager::ShowDTAvailableHudNotification(bool lbShowMessage)   // DWARF cpp:816
     {
-        GameStateModule* lpModule = mpGameStateModule;
-
-        mfPaybackAggTimer        = -1.0f;
-        mePaybackAggressorState  = leNewPaybackAggState;
-        mbPaybackAwarded         = false;
-
-        PaybackStateChangeEvent lStateChange;
-        lStateChange.miShow = 1;
-        lpModule->GetOutputGuiEventQueue()->AddEvent(
-            &lStateChange, KI_GUI_EVENT_PAYBACK_STATE_CHANGE, sizeof(s32));
+        BrnGui::GuiEventDirtyTrickAvailable lDTAvailableNotification;   // cpp:818
+        lDTAvailableNotification.meAvailable = lbShowMessage ? BrnGui::GuiEventDirtyTrickAvailable::E_AVAILABLE_TRUE
+                                                             : BrnGui::GuiEventDirtyTrickAvailable::E_AVAILABLE_FALSE;
+        mpGameStateModule->GetOutputGuiEventQueue()->AddGuiEvent(lDTAvailableNotification);
     }
+
+    void
+    PaybackManager::ChangeState(EPaybackAggressorState leNewPaybackAggState)   // PS3 0x267C54
+    {
+        mePaybackAggressorState = leNewPaybackAggState;
+        mbPaybackAwarded        = false;
+        mfPaybackAggTimer       = -1.0f;
+        ShowDTAvailableHudNotification(false);
+    }
+
 
     // -----------------------------------------------------------------------------------
     // UpdateCountdown  @ 0x82391938
@@ -307,10 +307,10 @@ namespace BrnGameState
 
         if (mfCountdownTimer > 0.0f)
         {
-            PaybackCountdownEvent lCountdown;
-            lCountdown.mfRemaining = mfCountdownTimer;
-            mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
-                &lCountdown, KI_GUI_EVENT_PAYBACK_COUNTDOWN, sizeof(f32));
+            BrnGui::GuiEventUpdateDirtyTrickCountdown lCountdown;   // DWARF cpp:926
+            lCountdown.mrSecsRemaining = mfCountdownTimer;
+            mpGameStateModule->GetOutputGuiEventQueue()->AddGuiEvent(lCountdown);
+
         }
         else
         {
@@ -352,10 +352,10 @@ namespace BrnGameState
     {
         mfCountdownTimer = -1.0f;
 
-        PaybackCountdownEvent lCountdown;
-        lCountdown.mfRemaining = -1.0f;
-        mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
-            &lCountdown, KI_GUI_EVENT_PAYBACK_COUNTDOWN, sizeof(f32));
+        BrnGui::GuiEventUpdateDirtyTrickCountdown lCountdown;   // DWARF cpp:958
+        lCountdown.mrSecsRemaining = -1.0f;
+        mpGameStateModule->GetOutputGuiEventQueue()->AddGuiEvent(lCountdown);
+
     }
 
     // DirtyTrickTriggered, PS3 0x2592B8: the GUI "dirty trick triggered" record. X360 inline at
@@ -407,19 +407,19 @@ namespace BrnGameState
         CGS_ASSERT_AT(meAwardedDirtyTrick != KE_NO_DIRTY_TRICK,
                    "meAwardedDirtyTrick != BrnNetwork::E_PAYBACK_TYPE_COUNT", CGS_ARTIST_FILE, 762);
 
-        PaybackStateChangeEvent lHide;
-        lHide.miShow = 0;
-        mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
-            &lHide, KI_GUI_EVENT_PAYBACK_STATE_CHANGE, sizeof(s32));
+        ShowDTAvailableHudNotification(true);
+        ChangeState(E_PAYBACK_AGGRESSOR_STATE_YOU_TRIGGERED_DT);
 
-        mbPaybackAwarded        = false;
-        mfPaybackAggTimer       = -1.0f;
-        mePaybackAggressorState = E_PAYBACK_AGGRESSOR_STATE_YOU_TRIGGERED_DT;
 
-        PaybackStateChangeEvent lShow;
-        lShow.miShow = 1;
-        mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
-            &lShow, KI_GUI_EVENT_PAYBACK_STATE_CHANGE, sizeof(s32));
+
+
+
+
+
+
+
+
+
     }
 
     // -----------------------------------------------------------------------------------
@@ -479,14 +479,14 @@ namespace BrnGameState
 
         if (lCrashingRaceCars.IsCrashing(liPlayerRaceCarIndex))
         {
-            mfPaybackAggTimer       = -1.0f;                                 // +588
-            mePaybackAggressorState = E_PAYBACK_AGGRESSOR_STATE_AWARD_DT;    // +604 = 2
-            mbPaybackAwarded        = false;                                 // +614 = 0
+            ChangeState(E_PAYBACK_AGGRESSOR_STATE_AWARD_DT);
 
-            PaybackStateChangeEvent lStateChange;
-            lStateChange.miShow = 1;
-            mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
-                &lStateChange, KI_GUI_EVENT_PAYBACK_STATE_CHANGE, sizeof(s32));
+
+
+
+
+
+
         }
     }
 
@@ -857,16 +857,16 @@ namespace BrnGameState
             if (mpGameStateModule->GetPlayerActiveRaceCarIndex() != leTakedownVictimRaceCarIndex)
                 continue;
 
-            mfPaybackAggTimer              = -1.0f;
             mePaybackAggressorRaceCarIndex = leTakedownVictimRaceCarIndex;
             mePaybackVictimRaceCarIndex    = leTakedownAggressorRaceCarIndex;
-            mePaybackAggressorState        = E_PAYBACK_AGGRESSOR_STATE_WAIT_AWARD_PAYBACK;
-            mbPaybackAwarded               = false;
+            ChangeState(E_PAYBACK_AGGRESSOR_STATE_WAIT_AWARD_PAYBACK);
 
-            PaybackStateChangeEvent lShow;
-            lShow.miShow = 1;
-            mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
-                &lShow, KI_GUI_EVENT_PAYBACK_STATE_CHANGE, sizeof(s32));
+
+
+
+
+
+
         }
     }
 

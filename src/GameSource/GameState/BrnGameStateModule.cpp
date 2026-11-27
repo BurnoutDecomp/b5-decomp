@@ -1383,7 +1383,7 @@ bool GameStateModule::IsSimPaused(bool lbCheckGameMode, bool lbStrictMask) const
 // X360 @ 0x823566F8. Hands back the module's per-frame output GUI event queue (the
 // CgsModule::VariableEventQueue<18432,16> that the PaybackManager and other managers publish their
 // HUD/GUI events onto). May only be called while the module is updating (asserts mbIsUpdating).
-CgsModule::VariableEventQueue<18432, 16>* GameStateModule::GetOutputGuiEventQueue()
+CgsGui::GuiEventQueueBase<18432, 16>* GameStateModule::GetOutputGuiEventQueue()
 {
     CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
     return &mOutputGuiEventQueue;
@@ -5017,11 +5017,11 @@ void GameStateModule::CopyInputDataToPaybackManager(
     mPaybackManager.SetDirtyTrickButtonState(
         lpPreWorldInputBuffer->GetControllerInput()->mbDirtyTrickPressed);
 
-    // [diag] BRN_MODEMGR_DIAG -- NOT IN THE X360 BINARY. One line, the first time a running game
-    // timer arrives: the witness that the copy is dispatched and carries a live frame count.
-    static bool       sbReported    = false;
-    const CgsSystem::TimerStatus* const lpGameTimer =
-        lpPreWorldInputBuffer->GetTimerStatusInterface()->GetGameTimerStatus();
+    // (A PC [diag] witness that re-read the timer interface stood here; ARTIST 0x8239AB58 returns
+    // straight after the inlined SetDirtyTrickButtonState.)
+
+
+
 }
 
 }

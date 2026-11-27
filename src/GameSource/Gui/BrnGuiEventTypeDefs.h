@@ -1788,6 +1788,28 @@ public:
 };
 CGS_STATIC_ASSERT((sizeof(GuiDirtyTrickEndedEvent) == 16), "X360 AddGuiEvent size 16 (id 181)");
 
+// DWARF :1497..:1506 -- the "dirty trick available" HUD notification (PS3 GuiEvent<174>; X360 id
+// 176: PaybackManager::ChangeState 0x823919B0 posts AddEvent(&rec, 0xB0, 4) with meAvailable 1).
+struct GuiEventDirtyTrickAvailable : public CgsGui::GuiEvent<176>
+{
+    enum EAvailable                     // :1500
+    {
+        E_AVAILABLE_TRUE  = 0,
+        E_AVAILABLE_FALSE = 1
+    };
+
+    EAvailable meAvailable;             // :1506
+};
+CGS_STATIC_ASSERT((sizeof(GuiEventDirtyTrickAvailable) == 4), "X360 AddGuiEvent size 4 (id 176)");
+
+// DWARF :2204..:2206 -- the dirty-trick countdown (PS3 GuiEvent<232>; X360 id 235:
+// PaybackManager::RemoveCountdown / UpdateCountdown post AddEvent(&rec, 0xEB, 4)).
+struct GuiEventUpdateDirtyTrickCountdown : public CgsGui::GuiEvent<235>
+{
+    f32 mrSecsRemaining;                // :2206
+};
+CGS_STATIC_ASSERT((sizeof(GuiEventUpdateDirtyTrickCountdown) == 4), "X360 AddGuiEvent size 4 (id 235)");
+
 // DWARF :3812/:3828 (PS3 GuiEvent<479/480>; X360 ids 484/485, records 16 bytes).
 // HandleTookLead/HandleTookLast read the index @+0x08 (bounds < 8).
 class GuiTookLeadEvent

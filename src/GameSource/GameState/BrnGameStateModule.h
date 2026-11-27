@@ -11,7 +11,7 @@
 #include "GameSource/GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h"
-
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEventQueueBase (DWARF InputBuffer::GuiEventQueue)
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameSource/BurnoutConstants.h"
@@ -287,7 +287,7 @@ public:
 
     DeveloperChallengeManager* GetDeveloperChallengeManager();
 
-    CgsModule::VariableEventQueue<18432, 16>* GetOutputGuiEventQueue();
+    CgsGui::GuiEventQueueBase<18432, 16>* GetOutputGuiEventQueue();   // DWARF h:933 InputBuffer::GuiEventQueue*
 
     ModeManager* GetModeManager() { return &mModeManager; }   // header-inline (DWARF h:1068)
 
@@ -528,7 +528,7 @@ private:
     DeveloperChallengeManager mDeveloperChallengeManager;               //2D570
     OfflineFlybyManager mOfflineFlybyManager;                           //2D630
     OnlineFlybyManager mOnlineFlybyManager;                             //2D8E0
-    CgsModule::VariableEventQueue<18432, 16> mOutputGuiEventQueue;       //2E580
+    CgsGui::GuiEventQueueBase<18432, 16> mOutputGuiEventQueue;           //2E580  DWARF h:791 InputBuffer::GuiEventQueue
     f32 mafRivalTailingTimes[7];                                        //32D90
     u32 muNetworkGameRandomSeed;                                        //32DAC
     EActiveRaceCarIndex mePlayerActiveRaceCarIndex;                     //32DB0
