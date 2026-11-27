@@ -25,6 +25,7 @@ namespace fpu
     extern __declspec(selectany) const float MAX_FLOAT          = 3.402823466e+38f;   // constants.h:43
     extern __declspec(selectany) const float DEGREES_TO_RADIANS = 0.01745329252f;     // constants.h:56
     extern __declspec(selectany) const float RADIANS_TO_DEGREES = 57.29577951f;       // constants.h:59
+    extern __declspec(selectany) const float HALF_PI            = 1.57079632679489661923f; // constants.h:71; 0x82001754 = 0x3FC90FDB
     extern __declspec(selectany) const float EPSILON            = 1.192092896e-07f;   // constants.h:131
 }
 }

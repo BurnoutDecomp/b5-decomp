@@ -25,14 +25,13 @@ namespace vpu
         __vector4 mV;
         typedef const Vector2 InParam;
         Vector2() {}
-        // ARTIST821F0DB0 body; the SDK declares this constructor inline.
-        Vector2(float lfX, float lfY)
+        // rwmath vector2_type_inline.h:29 (DecFIGS :36, its union local :39) fills x and y of a vector and assigns it;
+        // the Xenon fill is the aggregate initialiser, as Vector3's (0x821F0DD8), whose zeroed z/w words go through
+        // their own address in one doubleword store (ARTIST's out-of-line copy 0x821F0DB0: addi r11,r1,-8 ...
+        // std r10,0(r11)).
+        Vector2(float x, float y)
         {
-            __vector4 lValue;
-            lValue.x = lfX;
-            lValue.y = lfY;
-            lValue.u[2] = 0;
-            lValue.u[3] = 0;
+            const VectorIntrinsic lValue = { x, y };
             mV = lValue;
         }
         // rwmath vector2.h / vector2_type_inline.h: the raw-register constructor the
@@ -52,6 +51,41 @@ namespace vpu
 
         void SetX(float lfX) { SetComponent(0, lfX); }
         void SetY(float lfY) { SetComponent(1, lfY); }
+
+        // rwmath vector2_type_inline.h:249/:277 (DecFIGS vector2.h:89-97): a constant lane from a lane reference, the
+        // Xenon vrlimi128 lane insert as Vector3's (mask 8 >> D, rotate (S - D) & 3; Debug2DImmediateRender::
+        // Is2DLineOnScreen 0x8281A39C SetY<VectorAxisY> mask 4 / 0x8281A3DC SetX<VectorAxisX> mask 8, rotate 0).
+        template<VectorAxis INDEX>
+        void SetX(VecFloatRef<INDEX> x)
+        {
+            mV = __vrlimi(mV, x.mV, (0x8 >> (VectorAxisX)), (((int)(INDEX)) - (VectorAxisX)) & 3);
+        }
+        template<VectorAxis INDEX>
+        void SetY(VecFloatRef<INDEX> y)
+        {
+            mV = __vrlimi(mV, y.mV, (0x8 >> (VectorAxisY)), (((int)(INDEX)) - (VectorAxisY)) & 3);
+        }
+
+        // rwmath vector2.h:117-125 / vector2_type_inline.h:219-227 (DecFIGS vector2.h:117-125, inline :230-238):
+        // the lane references the rwmath operators take (Debug2DImmediateRender::Is2DPointOnScreen's
+        // operator>=<VectorAxisX,VectorAxisX>, DecFIGS CgsDebug2DImmediateRender.cpp:1027).
+        VecFloatRefX X() { return VecFloatRefX(mV); }
+        const VecFloatRefX X() const { return VecFloatRefX(const_cast<Vector2*>(this)->mV); }
+        VecFloatRefY Y() { return VecFloatRefY(mV); }
+        const VecFloatRefY Y() const { return VecFloatRefY(const_cast<Vector2*>(this)->mV); }
+
+        VecFloatRefX GetX() { return VecFloatRefX(mV); }
+        const VecFloatRefX GetX() const { return VecFloatRefX(const_cast<Vector2*>(this)->mV); }
+        VecFloatRefY GetY() { return VecFloatRefY(mV); }
+        const VecFloatRefY GetY() const { return VecFloatRefY(const_cast<Vector2*>(this)->mV); }
+
+        // rwmath vector2.h:101-104 / vector2_type_inline.h:193-211: the runtime-lane references
+        // (Debug2DImmediateRender::Do2DBoxesIntersect 0x82816E50 compares lBox0Max[liIndex] through them:
+        // one lvsl/vspltw permute per index, DecFIGS cpp:1257-1259).
+        VecFloatRefIndex GetComponent(int i) { return VecFloatRefIndex(mV, i); }
+        const VecFloatRefIndex GetComponent(int i) const { return VecFloatRefIndex(const_cast<Vector2*>(this)->mV, i); }
+        VecFloatRefIndex operator[](int i) { return VecFloatRefIndex(mV, i); }
+        const VecFloatRefIndex operator[](int i) const { return VecFloatRefIndex(const_cast<Vector2*>(this)->mV, i); }
     };
 
     // ADDITIVE GROW (rw-physics solver group): the SDK quaternion -- one 16-byte lane
