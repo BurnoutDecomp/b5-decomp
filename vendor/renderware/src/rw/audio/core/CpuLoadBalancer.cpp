@@ -10,6 +10,11 @@
 //   FindLowestPriorityVoice @0x82B67658
 // =====================================================================================
 
+// ARTIST built the governor for size, like the other rw::audio::core members: CullVoices tests
+// FindLowestPriorityVoice's result with the record-form cr0 compare (0x82B6E450 `cmplwi r3,0`).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 #include "rw/audio/core/CpuLoadBalancer.h"
 #include "rw/audio/core/PlugIn.h" // rw::audio::core::System (voice array + CPU-load fields)
 #include "rw/audio/core/Voice.h"  // rw::audio::core::Voice / VoiceActiveNode
@@ -29,7 +34,6 @@ u32 GetCpuCycle();
 static const f32 KF_MAX_LOAD            = 100.0f;         // flt_8214AED0 -- load ceiling / priority floor
 static const f32 KF_VOICE_COST_SCALE    = 64.0f;         // flt_8214AED8 -- per-voice cost multiplier
 static const f32 KF_BUDGET_SCALE        = 170666.67f;    // flt_8214B280 -- load% -> cycle-budget scale
-static const f32 KF_ZERO                = 0.0f;          // flt_82001CC0
 static const f32 KF_CPU_CLOCK_RATE      = 3200000000.0f; // flt_820AA80C -- 3.2 GHz (Init seed)
 static const f32 KF_FLT_MAX             = FLT_MAX; // ARTIST flt_8204F664: 0x7F7FFFFF
 
@@ -50,7 +54,7 @@ void CpuLoadBalancer::Init(System *system)
 void CpuLoadBalancer::Reset()
 {
     mOverheadCounter.Reset();
-    mOverheadAverager.OverRide(KF_ZERO);
+    mOverheadAverager.OverRide(0.0f);
 }
 
 // -------------------------------------------------------------------------------------
@@ -97,7 +101,7 @@ void CpuLoadBalancer::Balance()
             } while (luVoiceCount != 0);
         }
 
-        if (lfProjected - lfBudget > KF_ZERO)
+        if (lfProjected - lfBudget > 0.0f)
             CullVoices(lfProjected - lfBudget);
     }
 
@@ -169,7 +173,7 @@ Voice *CpuLoadBalancer::FindLowestPriorityVoice()
 // -------------------------------------------------------------------------------------
 void CpuLoadBalancer::CullVoices(f32 afExcessCycles)
 {
-    while (afExcessCycles > KF_ZERO)
+    while (afExcessCycles > 0.0f)
     {
         Voice* lpVoice = FindLowestPriorityVoice();
         if (!lpVoice)

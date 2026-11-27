@@ -22,7 +22,7 @@
 
 #include <cmath>
 #include <vectorintrinsics.h>
-#include <cstring> // memset / memcpy (the X360 XMemSet / XMemCpy)
+#include <xtl.h> // XMemSet / XMemCpy, the XDK block fill and copy ARTIST calls
 
 namespace rw
 {
@@ -33,10 +33,6 @@ namespace core
 
 namespace
 {
-// XMemSet / XMemCpy @ the X360 build == byte-wise memset / memcpy. They return the
-// destination pointer (like the C library), matching the asm's r3 carry-out.
-inline void *XMemSet(void *dst, int value, u32 bytes) { return std::memset(dst, value, bytes); }
-inline void *XMemCpy(void *dst, const void *src, u32 bytes) { return std::memcpy(dst, src, bytes); }
 
 // flt_8214AED0 == 100.0f -- Configure scales the partition-overlap ratio into a percentage.
 const f32 KF_HUNDRED = 100.0f;
@@ -44,7 +40,6 @@ const f32 KF_HUNDRED = 100.0f;
 // The cost model's rodata (LoadDistributionCalc / EstimateLoad / MultiplyAccumulateComplex),
 // dumped from the image.
 const f32 KF_ONE = 1.0f;
-const f32 KF_ZERO = 0.0f;
 const f32 KF_HALF = 0.5f;
 const f32 KF_PERCENT = 0.01f;          // 0x3C23D70A
 const f32 KF_FFT_COST = 25.15f;        // 0x41C93333 -- per channel per (N log2 N)
@@ -472,7 +467,7 @@ void FastFirEngine::LoadDistributionCalc(FastFirEngine *self, s32 sizeLog2, s32 
                 }
                 else
                 {
-                    lfLeft = KF_ZERO;
+                    lfLeft = 0.0f;
                 }
             } while (lfLeft >= lfNextCost * KF_HALF);
         }

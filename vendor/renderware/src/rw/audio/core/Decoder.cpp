@@ -32,7 +32,7 @@ namespace core
 {
 
 // Xbox platform interleaved block copy (declaration only for the per-TU compile gate).
-extern "C" void *XMemCpy(void *pDest, const void *pSrc, unsigned int uiCount);
+#include <xtl.h> // XMemCpy (xbox.h: PVOID XMemCpy(PVOID, CONST VOID*, SIZE_T))
 
 // --- layout pins for the inline request ring ---
 //

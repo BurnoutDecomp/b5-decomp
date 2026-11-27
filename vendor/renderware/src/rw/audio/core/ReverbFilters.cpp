@@ -34,7 +34,6 @@ namespace core
 {
 
 // flt_82001CC0 == 0.0f (the float-zero immediate every ctor stores).
-static const f32 KF_ZERO = 0.0f;
 // flt_8214B108 == 1e-18f, the engine's denormal-flush bias (round +1e-18 then -1e-18),
 // identical to the Iir2 kernel.
 static const f32 KF_DENORMAL_FLUSH = 1.0e-18f;
@@ -44,9 +43,9 @@ static const f32 KF_DENORMAL_FLUSH = 1.0e-18f;
 // -------------------------------------------------------------------------------------
 AllPassFilter *AllPassFilter::AllPassFilter_ctor(AllPassFilter *self)
 {
-    self->mfGain1 = KF_ZERO;  // stfs flt @ +0x10
+    self->mfGain1 = 0.0f;  // stfs flt @ +0x10
     self->mpApplyFunc = 0;      // stw r10 (0) @ +0x00
-    self->mfGain2 = KF_ZERO;  // stfs flt @ +0x14
+    self->mfGain2 = 0.0f;  // stfs flt @ +0x14
     self->mpResetFunc = 0;      // stw r10 (0) @ +0x04
     self->miChannels = 1;      // stw r11 (1) @ +0x0C
     self->miReadLength = 1;         // stw r11 (1) @ +0x08
@@ -134,7 +133,7 @@ AllPassFilter *AllPassFilter::SetGains(AllPassFilter *self, f32 g1, f32 g2)
 // CombFilter::CombFilter @0x82B6C6B0
 // -------------------------------------------------------------------------------------
 CombFilter::CombFilter()
-    : mfGain1(KF_ZERO), mfGain2(KF_ZERO), mfGain3(KF_ZERO), mfGain4(KF_ZERO), mfState(KF_ZERO)
+    : mfGain1(0.0f), mfGain2(0.0f), mfGain3(0.0f), mfGain4(0.0f), mfState(0.0f)
 {
     miChannels = 1;
     miReadLength = 2;
@@ -232,7 +231,7 @@ void CombFilter::CombFilterApplyFunc(IFilter *filter, s32 count, FilterOutputMod
 void CombFilter::CombFilterResetFunc(IFilter *filter)
 {
     CombFilter *self = static_cast<CombFilter *>(filter);
-    self->mfState = KF_ZERO; // stfs flt @ +0x20
+    self->mfState = 0.0f; // stfs flt @ +0x20
 }
 
 // -------------------------------------------------------------------------------------

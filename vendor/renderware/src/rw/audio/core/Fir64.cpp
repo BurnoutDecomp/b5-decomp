@@ -16,10 +16,11 @@
 // =====================================================================================
 
 #include "rw/audio/core/Fir64.h"
+#include "rw/audio/core/Mixer.h" // SampleBuffer: the graph node, sample base +0x04 and stride +0x0E
 
 #include <cmath>   // cos (the X360 cos)
 #include <cstring> // memcpy
-#include <xtl.h>   // XMemSet
+#include <xtl.h>   // XMemSet / XMemCpy
 
 namespace rw
 {
@@ -30,18 +31,6 @@ namespace core
 
 namespace
 {
-inline void XMemCpy(void *dst, const void *src, u32 bytes) { std::memcpy(dst, src, bytes); }
-
-// One source/destination channel-buffer node read out of the rwaudio Process graph: the
-// channel-0 sample base at +0x04 and the 16-bit inter-channel stride at +0x0E (the asm
-// `lwz r,4(node)` / `lhz r,0xE(node)`). Same node shape Filter and RawPuller2 read.
-struct ChannelNode
-{
-    char *mpReserved0; // +0x00
-    f32  *mpBase;      // +0x04 -- channel/phase-0 sample base
-    char  mGap08[0x0E - 0x08];
-    u16   mu16Stride;  // +0x0E -- inter-phase stride in samples
-};
 
 // The rwaudio Process context (IDA's `a2`). Filter touches the two ping-pong channel
 // slots at +0x3000C / +0x30010 (the same slots the Iir2/RawPuller2 graph nodes use).
@@ -227,10 +216,10 @@ Fir64 *Fir64::MultiplyAccumulate(Fir64 *self, f32 *pOut, const f32 *pSamples,
 Fir64 *Fir64::Filter(Fir64 *self, void *ctx, const f32 *coeffs)
 {
     char *const ctxBase = reinterpret_cast<char *>(ctx);
-    ChannelNode **const srcSlot = reinterpret_cast<ChannelNode **>(ctxBase + KU_CTX_SLOT_SRC); // v8
-    ChannelNode **const dstSlot = reinterpret_cast<ChannelNode **>(ctxBase + KU_CTX_SLOT_DST); // v9
-    ChannelNode *const srcNode = *srcSlot; // v13 (r27)
-    ChannelNode *const dstNode = *dstSlot; // v14 (r29)
+    SampleBuffer **const srcSlot = reinterpret_cast<SampleBuffer **>(ctxBase + KU_CTX_SLOT_SRC); // v8
+    SampleBuffer **const dstSlot = reinterpret_cast<SampleBuffer **>(ctxBase + KU_CTX_SLOT_DST); // v9
+    SampleBuffer *const srcNode = *srcSlot; // v13 (r27)
+    SampleBuffer *const dstNode = *dstSlot; // v14 (r29)
 
     f32 *const scratch = reinterpret_cast<f32 *>(
         reinterpret_cast<char *>(self) + self->mInHistoryOffset); // v12 = self + *self
@@ -247,10 +236,10 @@ Fir64 *Fir64::Filter(Fir64 *self, void *ctx, const f32 *coeffs)
         f32 *row = scratch; // i
         for (int phase = 0; phase < numPhases; ++phase)
         {
-            f32 *dstSamples = dstNode->mpBase + dstNode->mu16Stride * phase; // 4*stride*phase + base
+            f32 *dstSamples = dstNode->mpSamples + dstNode->muStride * phase; // 4*stride*phase + base
             XMemCpy(dstSamples, row, rowBytes);
 
-            f32 *srcSamples = srcNode->mpBase + srcNode->mu16Stride * phase;
+            f32 *srcSamples = srcNode->mpSamples + srcNode->muStride * phase;
             XMemCpy(reinterpret_cast<char *>(dstSamples) + rowFloats * 4, srcSamples, rowBytes);
             row += rowFloats;
         }
@@ -259,7 +248,7 @@ Fir64 *Fir64::Filter(Fir64 *self, void *ctx, const f32 *coeffs)
     // ---- pass 2: MultiplyAccumulate the leading numTaps phases (count = numTaps) ----
     for (int phase = 0; phase < numPhases; ++phase)
     {
-        f32 *out = dstNode->mpBase + dstNode->mu16Stride * phase; // v23
+        f32 *out = dstNode->mpSamples + dstNode->muStride * phase; // v23
         result = MultiplyAccumulate(self, out, out + numTaps, coeffs, numTaps);
     }
 
@@ -271,8 +260,8 @@ Fir64 *Fir64::Filter(Fir64 *self, void *ctx, const f32 *coeffs)
         f32 *scratchRow = scratch; // v12 / r28 (advances by numTaps floats per phase)
         for (int phase = 0; phase < numPhases; ++phase)
         {
-            f32 *srcPtr = srcNode->mpBase + srcNode->mu16Stride * phase;            // r26 = base27 + stride27*phase
-            f32 *out    = dstNode->mpBase + (dstNode->mu16Stride * phase + numTaps); // r4 = base29 + stride29*phase + numTaps
+            f32 *srcPtr = srcNode->mpSamples + srcNode->muStride * phase;            // r26 = base27 + stride27*phase
+            f32 *out    = dstNode->mpSamples + (dstNode->muStride * phase + numTaps); // r4 = base29 + stride29*phase + numTaps
             MultiplyAccumulate(self, out, srcPtr + numTaps, coeffs, 256 - numTaps);
 
             // Stage the (256-numTaps)-shifted tail of the src row back into the scratch row.
@@ -282,7 +271,7 @@ Fir64 *Fir64::Filter(Fir64 *self, void *ctx, const f32 *coeffs)
     }
 
     // ---- ping-pong the ctx src/dst channel-buffer slots ----
-    ChannelNode *const tmp = *srcSlot;
+    SampleBuffer *const tmp = *srcSlot;
     *srcSlot = *dstSlot;
     *dstSlot = tmp;
 

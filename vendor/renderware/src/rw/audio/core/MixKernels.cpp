@@ -37,7 +37,7 @@
 #pragma optimize("s", on)
 
 #include <cmath>   // std::sin / std::sqrt (the X360 CRT sin / fsqrts)
-#include <cstring> // std::memset / std::memcpy (the X360 XMemSet / XMemCpy)
+#include <cstring>
 
 namespace rw
 {
@@ -48,9 +48,6 @@ namespace core
 
 namespace
 {
-// XMemSet / XMemCpy @ the X360 build = byte-wise memset / memcpy.
-inline void XMemSet(void *dst, int value, u32 bytes) { std::memset(dst, value, bytes); }
-inline void XMemCpy(void *dst, const void *src, u32 bytes) { std::memcpy(dst, src, bytes); }
 
 // _blkmov -- the X360 CRT ASCENDING byte copy the GainVector fillers exploit as a
 // "replicate the first element forward" idiom (dst == src + 4, overlapping). A memmove
@@ -61,18 +58,6 @@ inline void BlkMovAscending(u8 *dst, const u8 *src, u32 bytes)
     for (u32 i = 0; i < bytes; ++i)
         dst[i] = src[i];
 }
-
-// One source/destination channel-buffer node read out of the rwaudio Process graph: the
-// channel-0 sample base at +0x04 and the 16-bit inter-channel stride (in samples) at
-// +0x0E (the asm `lwz r,4(node)` / `lhz r,0xE(node)`). Same node shape Fir64::Filter
-// and RawPuller2 read.
-struct ChannelNode
-{
-    char *mpReserved0; // +0x00
-    f32  *mpBase;      // +0x04 -- channel-0 sample base
-    char  mGap08[0x0E - 0x08];
-    u16   muStride16;  // +0x0E -- inter-channel stride, in samples
-};
 
 // flt_82011C14 == 0.70700002f -- the centre/mono fold-down gain scale.
 const f32 KF_CHANNEL_FOLD = 0.70700002f;
@@ -308,9 +293,9 @@ void DeClick(SampleBuffer *pSampleBuffer, f32 *pDeClickValue, u32 numChannels, u
 void ReOrderRwAudioCoreToWave(f32 *pDst, void *pSampleBuffer, s32 numChannels,
                               s32 numSamples)
 {
-    ChannelNode *node = static_cast<ChannelNode *>(pSampleBuffer);
-    const u32 stride = node->muStride16; // lhz 0xE -- inter-channel stride in samples
-    const f32 *base = node->mpBase;      // lwz 4
+    SampleBuffer *node = static_cast<SampleBuffer *>(pSampleBuffer);
+    const u32 stride = node->muStride; // lhz 0xE -- inter-channel stride in samples
+    const f32 *base = node->mpSamples;      // lwz 4
 
     switch (numChannels)
     {

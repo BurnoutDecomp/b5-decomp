@@ -30,15 +30,16 @@ namespace BrnPhysics
     // -------------------------------------------------------------------------------------
     // Construct @0x8259CF28 / Destruct @0x8259CFF8 / Prepare @0x8259D0C0 / Release @0x8259D190
     //
-    // FIDELITY: CLEAN, and recovered store-for-store. All four X360 bodies are the same 50-51
-    // instructions with the same stores; Prepare alone also sets r3 = 1 (its return value).
+    // FIDELITY: CLEAN, and recovered store-for-store. The four X360 bodies build the same pose
+    // and zero velocities; only Construct and Prepare also clear mbFrozen (stb 0x8259CFA4 /
+    // 0x8259D144; Destruct and Release have no byte store), and Prepare sets r3 = 1.
     // Each builds the identity affine on the stack from flt_82001C98 (== 1.0f, already
     // rodata-verified by ReadPropertiesFromRenderware) and flt_82001CC0 (== 0.0f) --
     //     row0 {1,0,0,0}  row1 {0,1,0,0}  row2 {0,0,1,0}  row3 {0,0,0,0}
     // note row3.w is ZERO, which is exactly what Matrix44Affine::SetIdentity() writes -- then:
     //     stvx128 zero, this+0x40      -> mLinearVelocity  = 0
     //     stvx128 zero, this+0x50      -> mAngularVelocity = 0
-    //     stb     0,    this+0x60      -> mbFrozen         = false
+    //     stb     0,    this+0x60      -> mbFrozen         = false   (Construct / Prepare)
     //     the four identity rows       -> mTransform (this+0x00/0x10/0x20/0x30)
     // (the byte store to +0x60 and the two register stores to +0x40/+0x50 are what pin this
     // class's own frame -- see the LAYOUT note in the header).
@@ -60,7 +61,6 @@ namespace BrnPhysics
         mTransform.SetIdentity();
         mLinearVelocity.SetZero();
         mAngularVelocity.SetZero();
-        mbFrozen = false;
     }
 
     bool ExternallySimulatedBody::Prepare()
@@ -77,7 +77,6 @@ namespace BrnPhysics
         mTransform.SetIdentity();
         mLinearVelocity.SetZero();
         mAngularVelocity.SetZero();
-        mbFrozen = false;
     }
 
     // DWARF ExternallySimulatedBody.h:105 -- console-INLINED (no X360 symbol). Its two callers,

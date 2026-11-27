@@ -29,16 +29,15 @@ namespace core
 
 // flt_82001CC0 == 0.0f (the float-zero immediate the ctor / reset store, and the
 // clamp's sign test comparand).
-static const f32 KF_ZERO = 0.0f;
 
 // -------------------------------------------------------------------------------------
 // DelayFilter::DelayFilter @0x82B67D10 -- clear the record, mark the read-length slot.
 // -------------------------------------------------------------------------------------
 DelayFilter *DelayFilter::DelayFilter_ctor(DelayFilter *self)
 {
-    self->mfFeedback = KF_ZERO;     // stfs flt @ +0x10
+    self->mfFeedback = 0.0f;     // stfs flt @ +0x10
     self->mpApplyFunc = 0;          // stw r11 (0) @ +0x00
-    self->mfPrevFeedback = KF_ZERO; // stfs flt @ +0x14
+    self->mfPrevFeedback = 0.0f; // stfs flt @ +0x14
     self->mpResetFunc = 0;          // stw r11 (0) @ +0x04
     self->miChannels = 0;           // stw r11 (0) @ +0x0C
     self->miReadLength = 1;         // stw r10 (1) @ +0x08
@@ -118,8 +117,8 @@ void DelayFilterCrossFadeFunc(s32 count, f32 feedback, f32 prevFeedback,
 void DelayFilter::DelayFilterResetFunc(IFilter *filter)
 {
     DelayFilter *self = static_cast<DelayFilter *>(filter);
-    self->mfFeedback = KF_ZERO;     // stfs flt @ +0x10
-    self->mfPrevFeedback = KF_ZERO; // stfs flt @ +0x14
+    self->mfFeedback = 0.0f;     // stfs flt @ +0x10
+    self->mfPrevFeedback = 0.0f; // stfs flt @ +0x14
 }
 
 // -------------------------------------------------------------------------------------

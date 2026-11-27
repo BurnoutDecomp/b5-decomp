@@ -35,7 +35,7 @@
 
 // XMemCpy -- the Xbox 360 platform block copy (defined in the platform CRT; declared here,
 // as in Decoder.cpp). Byte-wise copy, dst/src/count.
-extern "C" void *XMemCpy(void *pDest, const void *pSrc, unsigned int uiCount);
+#include <xtl.h> // XMemCpy (xbox.h: PVOID XMemCpy(PVOID, CONST VOID*, SIZE_T))
 
 namespace rw
 {

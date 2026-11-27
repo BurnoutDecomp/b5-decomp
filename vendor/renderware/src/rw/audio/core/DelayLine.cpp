@@ -35,7 +35,7 @@ namespace core
 {
 
 // Xbox platform interleaved block copy (declaration only for the per-TU compile gate).
-extern "C" void *XMemCpy(void *pDest, const void *pSrc, unsigned int uiCount);
+#include <xtl.h> // XMemCpy (xbox.h: PVOID XMemCpy(PVOID, CONST VOID*, SIZE_T))
 
 namespace
 {
@@ -43,7 +43,6 @@ namespace
 const char KA_DELAY_BUFFER[] = "rw::audio::core::DelayLine::DelayBuffer";
 
 // flt_82001CC0 == 0.0f (the zero the clean loops store).
-const f32 KF_ZERO = 0.0f;
 // The crossfade ramp seed / step: flt_8214B27C == 0.9921875 (127/128) and
 // flt_8214B278 == 0.0078125 (1/128). The 128-entry ramp descends 127/128 .. 0.
 const s32 KI_RAMP_LEN   = 128;
@@ -307,7 +306,7 @@ void DelayLine::IncrementalClean(s32 numMarshaled, s32 numProcessed, IFilter::Lo
     {
         // ARTIST reloads the tap pointer each iteration at 0x82B67FDC.
         f32 *pDelayFull = pParams->pDelayFull;
-        pDelayFull[sample] = KF_ZERO;
+        pDelayFull[sample] = 0.0f;
     }
 
     if (pParams->pDelayCross)
@@ -322,7 +321,7 @@ void DelayLine::IncrementalClean(s32 numMarshaled, s32 numProcessed, IFilter::Lo
         if (numCrossToClean <= 0)
             numCrossToClean = 0;
         for (s32 sample = 0; sample < numCrossToClean; ++sample)
-            pParams->pDelayCross[sample] = KF_ZERO;
+            pParams->pDelayCross[sample] = 0.0f;
     }
 }
 
