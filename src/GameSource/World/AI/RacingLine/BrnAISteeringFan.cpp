@@ -3,6 +3,8 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::Abs (GetSpeedRatio, DWARF)
+#include "rw/math/fpu/trig.h"                        // rw::math::fpu::DegToRad (KF_STEER_AT_LOW_SPEED)
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h" // CgsCore::KF_MPH_TO_MPS (KF_GUESSED_MAX_SPEED)
 
 #include <cfloat>   // FLT_MAX (0x7F7FFFFF)
 #include <cmath>    // std::cos (XMVectorCos), std::fabs
@@ -23,12 +25,48 @@
 
 namespace BrnAI
 {
-    // GetSpeedRatio's knee: |((best/16 - 0.5)*2)^3| >= K -> ratio drops from 1.0 to 0.0 as the
-    // best fan ray moves from the knee to the fan edge. DWARF :48 `float32_t KF_START_TO_SLOW`, a
-    // non-const tunable: initialised .data @0x82F302BC == 0.5, read from memory (0x82779BE4).
-    f32 KF_START_TO_SLOW = 0.5f;
-    // The fan's half-angle. Initialised .data @0x82F30428 == 1.3962634 rad.
-    const f32 KF_STEERING_FAN_ANGLE = 1.3962634f;
+    // DWARF BrnAISteeringFan.cpp:24..:62, the file-scope set in declaration order (kfBias :68 is
+    // defined with its table below). The `const`s with a literal value fold; KF_STEER_AT_LOW_SPEED
+    // is rwmath's DegToRad folded into .data (0x82F30428 == 3FB2B8C2 == 80 * DEGREES_TO_RADIANS,
+    // no CRT writer; read from memory by Prepare 0x82778E88 and CalculateFanAngle 0x82768CD8);
+    // KF_GUESSED_MAX_SPEED reads the extern CgsCore::KF_MPH_TO_MPS, so it is a dynamic initialiser
+    // (.bss 0x8300D78C, written at 0x82C692F0 as 100.0 * [0x82F31928]). The plain `float32_t`s
+    // (no `extern` in the dump: internal) are the .data run 0x82F30298..0x82F302D4 in this order
+    // (no CRT writer; ARTIST hoists their loads out of loops that store through `this`, e.g.
+    // 0x8277A4C4, which only an internal object whose address is never taken allows), and
+    // KF_TRAFFIC_IMPACT_TIME_SQUARED (:56) is their one dynamic member (.bss 0x8300DB00, written
+    // at 0x82C69330 as [0x82F302C8] squared). :28 / :64 / :66 are not recovered yet.
+    const f32 KF_STEER_AT_LOW_SPEED     = rw::math::fpu::DegToRad(80.0f);       // :24
+    const f32 KF_STEER_AT_HIGH_SPEED    = 0.5f;                                 // :25
+    const f32 KF_GUESSED_MAX_SPEED      = 100.0f * CgsCore::KF_MPH_TO_MPS;      // :26
+    // :28, dynamic: .bss 0x8300D75C, written at 0x82C69310 as [0x82F31928] * 10.0 (10 mph). Read
+    // by FindNeabyAIInTraffic 0x82787DE8 against the closing speed on a rival.
+    const f32 KF_SLAM_FROM_BEHIND_RELATIVE_SPEED = 10.0f * CgsCore::KF_MPH_TO_MPS;
+    const f32 KF_LOOK_AHEAD_RADIUS_SLOW = 10.0f;                                // :30
+    const f32 KF_LOOK_AHEAD_RADIUS_FAST = 25.0f;                                // :31
+
+    static f32 KF_CENTRE_TRACKING_MAX             =   20.0f;   // :33  0x82F30298
+    static f32 KF_HARD_NO_GO_BAD_MAX              = -300.0f;   // :34  0x82F3029C
+    static f32 KF_HARD_NO_GO_GOOD_MAX             =   50.0f;   // :36  0x82F302A0
+    static f32 KF_TRAFFIC_MAX                     = -100.0f;   // :37  0x82F302A4
+    static f32 KF_ONCOMING_TRAFFIC_MAX            = -400.0f;   // :38  0x82F302A8
+    static f32 KF_EDGE_INTERSECTION_MAX           = -200.0f;   // :39  0x82F302AC
+    static f32 KF_PARALLEL_MAX                    = -200.0f;   // :40  0x82F302B0
+    static f32 KF_SLAM_PLAYER_MAX                 =  300.0f;   // :43  0x82F302B4
+    static f32 KF_MAX_DISTANCE_FOR_EDGE_INTERCEPT =   30.0f;   // :47  0x82F302B8 (IncludeRouteEdgeIntersection 0x8277A4C4)
+    static f32 KF_START_TO_SLOW                   =    0.5f;   // :48  0x82F302BC (GetSpeedRatio 0x82779BE4)
+    static f32 KF_HNG_AHEAD                       =   15.0f;   // :50  0x82F302C0 (CalculateFanAngle 0x82768CEC)
+    static f32 KF_SLOW_PASSING_SPACE              =    4.0f;   // :53  0x82F302C4 (IncludeConstantBearing 0x82787410)
+    static f32 KF_TRAFFIC_IMPACT_TIME             =    4.0f;   // :55  0x82F302C8
+    static f32 KF_TRAFFIC_IMPACT_TIME_SQUARED     = KF_TRAFFIC_IMPACT_TIME * KF_TRAFFIC_IMPACT_TIME;   // :56
+    static f32 KF_CLOSENESS_TO_BRAKE              =    0.95f;  // :59  0x82F302CC
+    static f32 KF_STEP_AWAY_FROM_HNG              =    0.0625f; // :61 0x82F302D0 (IncludeHardNoGo 0x82779F00)
+    static f32 KF_STEP_AWAY_FROM_HNG_WHEN_HUGGING =    0.125f;  // :62 0x82F302D4 (IncludeHardNoGo 0x82779E64)
+    // :66, dynamic: .bss 0x8300D6F8, written at 0x82C69348 by the CRT cos of the double
+    // 1.0471975430846214 (DegToRad(60) folded) then frsp -- the LegacySrc tweak-constant idiom
+    // `fpu::Cos(DegToRad(n))` (BrnTrafficTweakConstants.h:88; BrnAIDriver.cpp's KF_TRIGGER_TURN).
+    // Read by FindNeabyAIInTraffic 0x82787DF0 as the "dead ahead" cosine.
+    const f32 KF_SLAM_AHEADNESS = rw::math::fpu::Cos(rw::math::fpu::DegToRad(60.0f));
 
     // ====================================================================================
     // Prepare @0x82778E40
@@ -50,7 +88,7 @@ namespace BrnAI
         mfReciprocalSteps = 0.0625f;                  // +2036 (1 / (KI_FAN_STEPS - 1))
         miStateCounter    = 0;                        // +2052
         mfLookAheadRadius = 10.0f;                    // +2040
-        mfFanAngle        = KF_STEERING_FAN_ANGLE;    // +2048 (flt_82F30428)
+        mfFanAngle        = KF_STEER_AT_LOW_SPEED;    // +2048 (flt_82F30428)
 
         // 17 columns x (1 cumulative + 14 contributor rows) cleared (the X360 walks the columns
         // in the outer loop, rows inner; same final state).
@@ -787,18 +825,10 @@ namespace BrnAI
 namespace
 {
 
-    // IncludeHardNoGo @0x82779F00 / @0x82779F3C -- flt_82F302D0 / flt_82F302D4.
-    const f32 KF_HNG_EDGE_MARGIN   = 0.0625f;
-    const f32 KF_HNG_DANGER_MARGIN = 0.125f;
-
     // IncludeHardNoGo @0x82779F98 / @0x82779FA4 -- flt_8204F664 / flt_82035570, the seeds of the
     // eFan_ExitHNG min/max scan. The +FLT_MAX seed is compared against again at 0x8277A0D8 to
     // detect "the row was entirely zero", so it must be this exact value.
     const f32 KF_FAN_FLOAT_MAX = FLT_MAX;
-
-    // IncludeRouteEdgeIntersection @0x8277A4C4 -- flt_82F302B8. An edge hit at this distance or
-    // beyond contributes nothing.
-    const f32 KF_ROUTE_EDGE_RANGE = 30.0f;
 
     // IncludeRouteEdgeIntersection: `cmpwi cr6, r30, 0x30` @0x8277A480 caps the gather loop at
     // three 16-byte entries; the tail append at 0x8277A490 can add a fourth, which is why both
@@ -909,7 +939,7 @@ void SteeringFan::IncludeHardNoGo(RacingLineGenerator* lpRacingLineGenerator,
                                                                                lfDistance);
         if (!lbInsideHardNoGo)
         {
-            lfDistance -= KF_HNG_EDGE_MARGIN;                    // 0x82779F04
+            lfDistance -= KF_STEP_AWAY_FROM_HNG;                    // 0x82779F04
             if (lfDistance < 0.0f)
             {
                 lfDistance       = 0.0f;                         // 0x82779F14
@@ -925,7 +955,7 @@ void SteeringFan::IncludeHardNoGo(RacingLineGenerator* lpRacingLineGenerator,
         }
         else
         {
-            const f32 lfOverDanger = lfDistance - KF_HNG_DANGER_MARGIN;
+            const f32 lfOverDanger = lfDistance - KF_STEP_AWAY_FROM_HNG_WHEN_HUGGING;
             mfWeighting[eFan_FavourHNGDanger][liStep] =
                 (lfOverDanger < 0.0f) ? 0.0f : (1.0f - lfOverDanger);
             mfWeighting[eFan_AvoidHNG][liStep]        = lfDistance;
@@ -1196,7 +1226,7 @@ void SteeringFan::IncludeRouteEdgeIntersection(RacingLineGenerator* lpRacingLine
             // its THIRD operand on an unordered test, so a NaN range is 1.0 (closeness 0, a zero
             // weight) -- spelt as the fsel (FX-AINAN2; `if (r > 1) r = 1` kept the NaN). The low
             // clamp (fneg + fsel 0x8277A550/0x8277A554) keeps a NaN either way.
-            f32 lfRange = lfDistance / KF_ROUTE_EDGE_RANGE;
+            f32 lfRange = lfDistance / KF_MAX_DISTANCE_FOR_EDGE_INTERCEPT;
             if (lfRange <= 0.0f) lfRange = 0.0f;                 // 0x8277A550 fneg + fsel
             lfRange = ((1.0f - lfRange) >= 0.0f) ? lfRange : 1.0f;   // 0x8277A558 fsubs + fsel
             const f32 lfCloseness = 1.0f - lfRange;
@@ -1271,14 +1301,6 @@ namespace BrnAI
 //   The table is NOT const on the console (the DWARF spells it `float32_t`, and the dynamic
 //   initialiser writes it), so it is not const here either.
 // ========================================================================================
-const f32 KF_CENTRE_TRACKING_MAX   =   20.0f;   // 0x82F30298
-const f32 KF_HARD_NO_GO_BAD_MAX    = -300.0f;   // 0x82F3029C
-const f32 KF_HARD_NO_GO_GOOD_MAX   =   50.0f;   // 0x82F302A0
-const f32 KF_TRAFFIC_MAX           = -100.0f;   // 0x82F302A4
-const f32 KF_ONCOMING_TRAFFIC_MAX  = -400.0f;   // 0x82F302A8
-const f32 KF_EDGE_INTERSECTION_MAX = -200.0f;   // 0x82F302AC
-const f32 KF_PARALLEL_MAX          = -200.0f;   // 0x82F302B0
-const f32 KF_SLAM_PLAYER_MAX       =  300.0f;   // 0x82F302B4
 
 f32 kfBias[E_BIAS_MODE_COUNT][E_FAN_CONTRIBUTORS_COUNT] =
 {
@@ -1994,34 +2016,20 @@ namespace
 //   stfs (f10 * ratio + f0)        -> +0x800            mfFanAngle: 80 deg at rest -> 0.5 rad flat out
 //   stfs (ratio * 15.0 + 10.0)     -> +0x7F8            mfLookAheadRadius: 10 m -> 25 m
 // ========================================================================================
-namespace
-{
-    const f32 KF_STEER_AT_LOW_SPEED    = 1.3962633609771729f;   // flt_82F30428 (80 deg)
-    const f32 KF_STEER_AT_HIGH_SPEED   = 0.5f;                  // flt_820C4168
-    const f32 KF_FAN_LOOK_AHEAD_BASE   = 10.0f;                 // flt_820C4150
-    const f32 KF_FAN_LOOK_AHEAD_GROWTH = 15.0f;                 // flt_820C4238
-    const f32 KF_FAN_LOOK_AHEAD_HNG    = 15.0f;                 // flt_82F302C0
-}
 
 void SteeringFan::CalculateFanAngle(AICar* lpCar)
 {
     const f32 lfSpeed = lpCar->GetSpeed();
 
-    mfLookAheadHNGRadius = KF_FAN_LOOK_AHEAD_HNG;                                   // stfs 0x7FC
+    mfLookAheadHNGRadius = KF_HNG_AHEAD;                                            // stfs 0x7FC
 
-    // The saturate is `fneg t,r ; fsel r,t,0.0,r` 0x82768D0C/0x82768D10 then `fsubs u,1.0,r ;
-    // fsel r,u,r,1.0` 0x82768D18/0x82768D1C: fsel takes its THIRD operand on an unordered test, so
-    // a NaN speed ratio is 1.0 (flat-out fan) -- spelt as the fsels (FX-AINAN2; the if/if kept NaN).
-    f32 lfRatio = lfSpeed / KF_GUESSED_MAX_SPEED;                                    // fdivs
-    lfRatio = (-lfRatio >= 0.0f) ? 0.0f : lfRatio;                                   // fsel vs 0.0
-    lfRatio = ((1.0f - lfRatio) >= 0.0f) ? lfRatio : 1.0f;                           // fsel vs 1.0
-
-    // Both lerps are ONE rounding (ROUNDING_RULE 3): 0x82768D20 `fmadds f0, f10, f13, f0` (f10 = high - low, the
-    // fsubs at 0x82768CE4, rule 4; f13 = the ratio; f0 = low) and 0x82768D2C `fmadds f0, f13, f11, f0` (the
-    // ratio, 15.0, 10.0). fmadds frD = frA*frC + frB == std::fmaf(frA, frC, frB).
-    volatile f32 lfFanRange = KF_STEER_AT_HIGH_SPEED - KF_STEER_AT_LOW_SPEED;
-    mfFanAngle        = lfFanRange * lfRatio + KF_STEER_AT_LOW_SPEED;                            // stfs 0x800
-    mfLookAheadRadius = lfRatio * KF_FAN_LOOK_AHEAD_GROWTH + KF_FAN_LOOK_AHEAD_BASE; // stfs 0x7F8
+    // The saturate is rwmath's fpu::Clamp(x, 0, 1): `fneg ; fsel` against 0.0 (0x82768D0C) then
+    // `fsubs ; fsel` against 1.0 (0x82768D18), so a NaN ratio is 1.0 (FX-AINAN2). The two lerps are
+    // fpu::Lerp(a, b, t) = a + (b - a) * t: HIGH - LOW is a runtime fsubs (0x82768CE4) because
+    // KF_STEER_AT_LOW_SPEED is folded .data, FAST - SLOW folds to 15.0 (0x820C4238).
+    const f32 lfRatio = rw::math::fpu::Clamp(lfSpeed / KF_GUESSED_MAX_SPEED, 0.0f, 1.0f);
+    mfFanAngle        = rw::math::fpu::Lerp(KF_STEER_AT_LOW_SPEED, KF_STEER_AT_HIGH_SPEED, lfRatio);         // stfs 0x800
+    mfLookAheadRadius = rw::math::fpu::Lerp(KF_LOOK_AHEAD_RADIUS_SLOW, KF_LOOK_AHEAD_RADIUS_FAST, lfRatio); // stfs 0x7F8
 }
 
 // ========================================================================================

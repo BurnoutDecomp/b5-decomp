@@ -122,8 +122,9 @@ namespace BrnAI
                             Vector2 lAttemptStartPos, Vector2 lAttemptEndPos)
     {
         // flt_82F30698 == 0x40A00000 (x360rd): a function-local static in .data; findinit finds no
-        // CRT writer, only this function's reader at 0x8277A998.
-        static const f32 KF_TOO_CLOSE_TOO_TRAFFIC = 5.0f;
+        // CRT writer, only this function's reader at 0x8277A998. DWARF BrnHNGTest.cpp:125 types it
+        // `float32_t` (not const).
+        static f32 KF_TOO_CLOSE_TOO_TRAFFIC = 5.0f;
 
         const f32 lfAX          = lAttemptStartPos.mV.x;
         const f32 lfAY          = lAttemptStartPos.mV.y;

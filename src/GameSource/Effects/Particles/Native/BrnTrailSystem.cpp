@@ -69,13 +69,14 @@ namespace Native
         //     0x82C4AF08  stvx128 v0 -> unk_82FAC1E0
         // i.e. exactly {0, 0.03, 0, 0} -- a 3 cm lift along WORLD +Y (not along the contact
         // normal), read out of the X360 image. The committed value was right.
-        const f32     KR_TRAIL_HEIGHT_ADJUSTMENT = 0.03f;
-        const ::Vector3 K_TRAIL_HEIGHT_ADJUSTMENT(0.0f, KR_TRAIL_HEIGHT_ADJUSTMENT, 0.0f);
+        const f32     krTrailHeightAdjustment = 0.03f;
+        const ::Vector3 kTrailHeightAdjustment(0.0f, krTrailHeightAdjustment, 0.0f);
 
         // krTrailsMinSegmentLength / krTrailsMinSegmentLengthSquared (:35/36). Only the square is
-        // read by the binary (flt_82CDB3E0 == 0.09f); the length is its root.
-        const f32 KR_TRAILS_MIN_SEGMENT_LENGTH         = 0.3f;
-        const f32 KR_TRAILS_MIN_SEGMENT_LENGTH_SQUARED = 0.09f;
+        // read by the binary: the product of the two lengths, folded into .data (0x82CDB3E0 ==
+        // 3DB851EC == 0.3f * 0.3f, no CRT writer), so it is loaded from memory.
+        const f32 krTrailsMinSegmentLength        = 0.3f;
+        const f32 krTrailsMinSegmentLengthSquared = krTrailsMinSegmentLength * krTrailsMinSegmentLength;
 
         // flt_82010C18 (TrailEmitter::AddTrailSegment @0x8227AB34): the cosine above which a new
         // direction is treated as a continuation of the previous segment.
@@ -202,7 +203,7 @@ namespace Native
         using namespace rw::math::vpu;
 
         // v126: the segment position -- the contact point lifted off the road.
-        const ::Vector3 lPosition = lContactPoint + K_TRAIL_HEIGHT_ADJUSTMENT;
+        const ::Vector3 lPosition = lContactPoint + kTrailHeightAdjustment;
         ::Vector3       lTangent;                                              // v127
         const s32     lnNumSegments = mn8NumSegments;
 
@@ -213,7 +214,7 @@ namespace Native
             const ::Vector3 lDirectionVec = lPosition - lPrevPos;
 
             // Too close to the previous segment: nothing laid (vcmpgefp 0.09 >= |d|^2, all lanes).
-            if (KR_TRAILS_MIN_SEGMENT_LENGTH_SQUARED >= MagnitudeSquared(lDirectionVec))
+            if (krTrailsMinSegmentLengthSquared >= MagnitudeSquared(lDirectionVec))
             {
                 // [trailseg] THE CALLS THAT LAY NOTHING -- the half no existing probe records.
                 // dist is the plain distance so the histogram is in metres; d2 is what the

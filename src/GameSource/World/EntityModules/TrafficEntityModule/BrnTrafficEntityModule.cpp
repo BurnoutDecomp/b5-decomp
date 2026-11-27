@@ -16,6 +16,7 @@
 #define CGS_ARTIST_ABS_BRNTRAFFICPARAM_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficParam.h"
 #define CGS_ARTIST_CGSFASTBITARRAY_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h"
 #define CGS_ARTIST_ABS_BRNTRAFFICHULL_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h"
+#include "rw/math/fpu/trig.h"   // rw::math::fpu::DegToRad (KF_TRAFFIC_AVOIDANCE_FEELERS_ANGLE)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #undef CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
 
@@ -13118,7 +13119,9 @@ namespace
     // flt_82F2FDFC == 0x3E860A92 (15 degrees in radians), the DWARF's
     // BrnTraffic::KF_TRAFFIC_AVOIDANCE_FEELERS_ANGLE (PS3 bytes 3E 86 0A 92).
     const f32 KF_AVOIDANCE_FEELERS_START_ANGLE   = 1.57079637f;    // flt_820BA254
-    const f32 KF_TRAFFIC_AVOIDANCE_FEELERS_ANGLE = 0.261799395f;   // flt_82F2FDFC
+    // DWARF BrnTrafficConstants.h:118 `const float32_t`; ARTIST holds it in .data with no CRT
+    // writer, rwmath's DegToRad folded at compile time (15 * DEGREES_TO_RADIANS == 3E860A92).
+    const f32 KF_TRAFFIC_AVOIDANCE_FEELERS_ANGLE = rw::math::fpu::DegToRad(15.0f);   // flt_82F2FDFC
 
     // Avoidance_GetBestVehicleDirection's mean: unk_8300CF40 == splat(flt_82004744 == 0.2f), the
     // dyn-init thunk at 0x82C65CE0 (0.2 == 1 / KI_TRAFFIC_AVOIDANCE_FEELERS), read at 0x8272C710.

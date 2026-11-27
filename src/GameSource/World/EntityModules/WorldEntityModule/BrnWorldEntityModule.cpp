@@ -2417,8 +2417,10 @@ WorldEntityModule::DEBUG_RenderAdvert( Matrix44Affine::InParam lTransform,
     CgsDev::DebugInterface lDebugInterface;
     CgsDev::DebugRender& lrRender = lDebugInterface.GetRender();
 
+    // The copy's Pos is stored (0x822A8994) and then added to: the box origin is pushed along At
+    // in place.
     Matrix44Affine lBoxTransform = lTransform;
-    lBoxTransform.Pos() = lTransform.At() * 0.25f + lTransform.Pos();
+    lBoxTransform.Pos() += lTransform.At() * 0.25f;
     lrRender.DrawBox( lBoundingBoxMin, lBoundingBoxMax, lBoxTransform, KU_ADVERT_DEBUG_COLOUR );
 
     const Vector3 lNormal(1.0f, 0.0f, 0.0f);

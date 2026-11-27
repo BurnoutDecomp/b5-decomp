@@ -34,36 +34,8 @@
 
 namespace BrnAI
 {
-    // ================================================================================
-    // BrnAISteeringFan.cpp:66 -- KF_SLAM_AHEADNESS
-    //
-    // .bss 0x8300D6F8, sole writer 0x82C69348 (findinit.py: exactly one site):
-    //     lfd f1, 0x820C8C38            ; the double 1.0471975430846214
-    //     bl  0x82C096A0                ; the CRT `cos` kernel -- 0x82F93F00 == pi/2,
-    //                                   ; 0x82F93F08 == 1/pi, 0x82F93F24 == 0.5,
-    //                                   ; 0x82F93F28/30 == the two-part pi reduction
-    //     frsp f0, f1 ; stfs f0, 0x8300D6F8
-    // 1.0471975430846214 is EXACTLY 60.0 * float(pi/180), i.e. KF_ANGLE_TO_SLAM_FROM (DWARF :64,
-    // .bss 0x8300D6F4, writer 0x82C68B28: <deg-to-rad> * flt_820C4158 == 60) promoted to double.
-    // cos(1.0471975430846214) == 0.5000000070251776 -> float == 0.5f exactly.
-    //
-    // ROLE (FindNeabyAIInTraffic @0x82787DF0): a rival is REJECTED when its relative speed is at
-    // or below KF_SLAM_FROM_BEHIND_RELATIVE_SPEED *and* the cosine between the unit vector to it
-    // and our useful direction is greater than this -- i.e. do not line up a slam on something
-    // dead ahead unless we are actually closing on it.
-    const f32 KF_SLAM_AHEADNESS = 0.5f;
-
-    // ================================================================================
-    // BrnAISteeringFan.cpp:28 -- KF_SLAM_FROM_BEHIND_RELATIVE_SPEED
-    //
-    // .bss 0x8300D75C, sole writer 0x82C69310:
-    //     lfs f0, flt_82F31928 (0.44704, the mph -> m/s factor)
-    //     lfs f13, flt_820C4150 (10.0)
-    //     fmuls f0, f0, f13 ; stfs f0, 0x8300D75C          -> 10 mph == 4.4704 m/s
-    //
-    // ROLE (FindNeabyAIInTraffic @0x82787DE8): compared against
-    // `lpCar->GetSpeed() - Magnitude(lpRival->mVelocity)`, our CLOSING speed on the rival.
-    const f32 KF_SLAM_FROM_BEHIND_RELATIVE_SPEED = 4.47039986f;
+    // KF_SLAM_AHEADNESS (:66) and KF_SLAM_FROM_BEHIND_RELATIVE_SPEED (:28) are defined in
+    // BrnAISteeringFan.cpp's file-scope block with their original (dynamic) initialisers.
 
     // ================================================================================
     // BrnAISteeringFan.cpp:2181 -- KF_DESIRED_CLOSE_PASSING_SEPERATION (sic, DWARF spelling)

@@ -44,44 +44,9 @@
 
 namespace BrnAI
 {
-    // ================================================================================
-    // .bss -- SILENT ZERO IN THE IMAGE, written by a CRT initialiser. RECOVERED.
-    // ================================================================================
-
-    // Speed normaliser: IncludeConstantBearing @0x827873E8 divides AICar::GetSpeed() by it and
-    // clamps the quotient to [0,1]. DWARF BrnAISteeringFan.cpp:26 (const float32_t
-    // KF_GUESSED_MAX_SPEED). The name is pinned by the SECOND reader: findinit reports exactly
-    // three sites for 0x8300D78C -- the writer, our load, and 0x82768CF8, which is inside
-    // CalculateFanAngle @0x82768CB0, the one other function the DWARF says consumes
-    // KF_STEER_AT_LOW_SPEED / KF_STEER_AT_HIGH_SPEED / KF_GUESSED_MAX_SPEED (:24..:26). It is
-    // the only SPEED among those three, and both readers use it as a divisor of a car speed.
-    // Same value (100 mph) as BrnAICar_Constants.h's KF_DESIRED_PURSUIT_FLOOR, different slot.
-    const f32 KF_GUESSED_MAX_SPEED = 44.7039986f;   // 0x8300D78C = init 0x82C692F0, flt_820C3FAC (100 mph) * flt_82F31928 (0.44704)
-
-    // DWARF BrnAISteeringFan.cpp:56. The initialiser is literally x = x * x over
-    // KF_TRAFFIC_IMPACT_TIME below -- 0x82C69330 loads flt_82F302C8, fmuls f0, f0, f0, stores
-    // 0x8300DB00 -- so the ":55 X / :56 X_SQUARED" pairing in the DWARF is proved by the asm, not
-    // inferred from the name. Read at 0x827876C4 as the cut-off on (distance/closing speed)^2.
-    const f32 KF_TRAFFIC_IMPACT_TIME_SQUARED = 16.0f;  // 0x8300DB00 = init 0x82C69330, KF_TRAFFIC_IMPACT_TIME * itself
-
-    // ================================================================================
-    // .data -- statically initialised, and findinit finds NO writer anywhere in the image for
-    // any of the three, so the value baked into image.bin is the value the console runs with.
-    // ================================================================================
-
-    // The lateral room the AI insists on when passing. Read at 0x82787410. Its "is zero" test at
-    // 0x82787418 is the assert whose text is "Passing Space is zero" (BrnAISteeringFan.cpp:1512),
-    // which is what ties this slot to the *_PASSING_SPACE family. DWARF :53.
-    const f32 KF_SLOW_PASSING_SPACE = 4.0f;         // 0x82F302C4 (static; no writer)
-
-    // Seconds. Read at 0x827876E8 as the divisor that turns a time-to-collision into the 0..1
-    // "risk" the contribution is scaled by. DWARF :55.
-    const f32 KF_TRAFFIC_IMPACT_TIME = 4.0f;        // 0x82F302C8 (static; no writer)
-
-    // Read at 0x82787844: only a collision whose 0..1 closeness exceeds this updates the racing
-    // line's mfImmediateDistanceToTrafficImpact / mfImmmediateApproachSpeedOfTrafficAhead, i.e.
-    // this is the threshold at which the driver is told to brake. DWARF :59.
-    const f32 KF_CLOSENESS_TO_BRAKE = 0.949999988f; // 0x82F302CC (static; no writer)
+    // The DWARF-named members of this set (KF_GUESSED_MAX_SPEED :26, KF_SLOW_PASSING_SPACE :53,
+    // KF_TRAFFIC_IMPACT_TIME :55, KF_TRAFFIC_IMPACT_TIME_SQUARED :56, KF_CLOSENESS_TO_BRAKE :59)
+    // are defined in BrnAISteeringFan.cpp's file-scope block in their DWARF form.
 
     // ================================================================================
     // [FLAG name-unattested] UNNAMED .rdata LITERALS the compiler folded into the shared pool.
