@@ -66,13 +66,13 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
         GameStateModuleIO::E_IMAGE_GALLERY_TYPE_VICTORY_MUGSHOT,  // E_IMAGE_TYPE_VICTORY_MUGSHOT  (5) -> 3
     };
 
-    // The GameActionQueue concrete type (forward-declared in BrnGameStateModuleIO.h) is the variable
-    // event queue the X360 calls VariableEventQueue<13312,16>::AddEvent straight on. Bridge the
-    // opaque return to that queue type (mirrors the BrnMugshotManager AsVeq precedent).
-    inline CgsModule::VariableEventQueue<13312, 16>* AsVeq(GameStateModuleIO::GameActionQueue* lpQueue)
-    {
-        return reinterpret_cast<CgsModule::VariableEventQueue<13312, 16>*>(lpQueue);
-    }
+    // (invented queue cast retired: GameStateModuleIO::GameActionQueue is DWARF BaseGameActionQueue<13312>)
+
+
+
+
+
+
 
     // ---- the GUI event payloads the X360 builds on the stack and memcpy's into the queue --------
     // Each layout is grounded by the per-field stack stores in the X360 asm (the field offsets in
@@ -276,20 +276,20 @@ void GameStateImageManagerBase::HandleImageGalleryCountRequest(const ImageGaller
                "lpImageGalleryCountReqEvent->meImageGalleryImageType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 1354);
     CGS_ASSERT_AT(mpProgression != 0, "mpProgression", CGS_ARTIST_FILE, 1355);
 
-    struct CountReply { s32 meImageGalleryType; s32 miCount; } lReply;
-    CGS_STATIC_ASSERT((sizeof(CountReply) == sizeof(GameStateModuleIO::ImageGalleryCountAction)),
-                  "producer count reply matches typed action 291");
-    CGS_STATIC_ASSERT((offsetof(CountReply, meImageGalleryType) ==
-                  offsetof(GameStateModuleIO::ImageGalleryCountAction, meImageType)),
-                  "producer gallery type matches action +0x00");
-    CGS_STATIC_ASSERT((offsetof(CountReply, miCount) ==
-                  offsetof(GameStateModuleIO::ImageGalleryCountAction, miUsedCount)),
-                  "producer gallery count matches action +0x04");
-    lReply.meImageGalleryType = lpImageGalleryCountReqEvent->meImageGalleryImageType;
-    lReply.miCount            = mpProgression->GetProfile()->GetNumMugshots(lpImageGalleryCountReqEvent->meImageGalleryImageType);
+    GameStateModuleIO::ImageGalleryCountAction lCountAction;   // DWARF cpp:1351
+    lCountAction.meImageType = lpImageGalleryCountReqEvent->meImageGalleryImageType;
+    lCountAction.miUsedCount = mpProgression->GetProfile()->GetNumMugshots(lpImageGalleryCountReqEvent->meImageGalleryImageType);
 
-    AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lReply), KI_EVENT_GALLERY_COUNT, (s32)sizeof(lReply));
+    lpOutput->GetGameActionQueue()->AddGameAction(lCountAction);   // DWARF AddGameAction<ImageGalleryCountAction>
+
+
+
+
+
+
+
+
+
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +316,7 @@ void GameStateImageManagerBase::HandleImageGalleryDataRequest(const ImageGallery
         lImageData.mu64LiveBits |= (static_cast<u64>(1) << (liMugshotIndex & 0x3F));
     }
 
-    AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
+    lpOutput->GetGameActionQueue()->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lImageData), KI_EVENT_LOAD_COMPLETE, (s32)sizeof(lImageData));
 }
 
@@ -326,29 +326,29 @@ void GameStateImageManagerBase::HandleImageGalleryDataRequest(const ImageGallery
 // ---------------------------------------------------------------------------
 void GameStateImageManagerBase::UpdateImagesToRender(GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    struct ImageToRenderEvent
-    {
-        CgsNetwork::NetworkTexture* mpTexture;     // +0x00 (null when the slot is not rendered)
-        s32                         miSlotIndex;   // +0x04
-    };
-    CGS_STATIC_ASSERT((sizeof(ImageToRenderEvent) ==
-                  sizeof(GameStateModuleIO::ImageGalleryRenderImageAction)),
-                  "producer render record matches typed action 289");
-    CGS_STATIC_ASSERT((offsetof(ImageToRenderEvent, miSlotIndex) ==
-                  offsetof(GameStateModuleIO::ImageGalleryRenderImageAction, miTextureIndex)),
-                  "render slot follows the native-width texture pointer");
+
+
+
+
+
+
+
+
+
+
+
 
     for (s32 liSlotIndex = 0; liSlotIndex < KI_NUM_PICTURES; ++liSlotIndex)
     {
-        ImageToRenderEvent lImageToRender;
-        lImageToRender.mpTexture   = mImagesToRenderBitArray.IsBitSet(static_cast<u32>(liSlotIndex))
-                                         ? &maImageGalleryMugshots[liSlotIndex]
-                                         : 0;
-        lImageToRender.miSlotIndex = liSlotIndex;
+        GameStateModuleIO::ImageGalleryRenderImageAction lRenderImageAction;   // DWARF cpp:431
+        lRenderImageAction.mpTexture      = mImagesToRenderBitArray.IsBitSet(static_cast<u32>(liSlotIndex))
+                                                ? &maImageGalleryMugshots[liSlotIndex]
+                                                : 0;
+        lRenderImageAction.miTextureIndex = liSlotIndex;
 
-        AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lImageToRender), KI_EVENT_IMAGE_TO_RENDER,
-            (s32)sizeof(lImageToRender));
+        lpOutput->GetGameActionQueue()->AddGameAction(lRenderImageAction);
+
+
     }
 }
 
@@ -392,7 +392,7 @@ void GameStateImageManagerBase::HandleImageFilesLoadedEvent(const ImageFilesLoad
     maImageLoadRequests.Clear();
 
     char lEmptyMarker = 0;
-    AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
+    lpOutput->GetGameActionQueue()->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lEmptyMarker), KI_EVENT_EMPTY_SLOT, 1);
     mbLoadInProgress = false;
 }
@@ -482,7 +482,7 @@ void GameStateImageManagerBase::RequestImageSave(s32 liFileID, CgsNetwork::Netwo
     lSaveRequest.mpTextureBuffer = lSaveSlot.GetTexture();
     // The X360 +0x0C word is unwritten. Pointer widening moves it to host +0x10, where
     // GUI358 reads its first byte as ImageFileInfo::mbIsCorrupt; preserve the original residue.
-    AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
+    lpOutput->GetGameActionQueue()->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lSaveRequest), KI_EVENT_IMAGE_SAVE, (s32)sizeof(lSaveRequest));
 
     CGS_ASSERT_AT(maiImagesLockedForSave[miMugshotToSaveIndex] < 0,
@@ -585,14 +585,14 @@ void GameStateImageManagerBase::ProcessShowGamerCardRequest(const ImageGalleryRe
         lpImageGalleryReqEvent->meImageGalleryImageType, lpImageGalleryReqEvent->miImageIndex);
     if (lpMugshotInfo != 0)
     {
-        // The X360 posts the 8-byte qword at MugshotInfo +0x10 (ld r11,0x10(r3); std @var_30), the
-        // gamercard XUID -- NOT the unique-player-id at +0x00.
-        u64 lu64GamerCardXuid = lpMugshotInfo->mUniquePlayerID.mqXuid;
+        // The 8-byte gamercard XUID at MugshotInfo +0x10 (ld r11,0x10(r3)), action 299.
+        GameStateModuleIO::ShowGamerCardForXuidAction lShowGamerCardAction;
+        lShowGamerCardAction.mu64Xuid = lpMugshotInfo->mUniquePlayerID.mqXuid;
 
         CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 1331);
         CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 1332);
-        AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lu64GamerCardXuid), KI_EVENT_SHOW_GAMERCARD, 8);
+        lpOutput->GetGameActionQueue()->AddGameAction(lShowGamerCardAction);
+
     }
 }
 
@@ -728,7 +728,7 @@ void GameStateImageManagerBase::ProcessScrollImagesEvent(const ImageGalleryReque
                "( GsmIO::E_IMAGE_GALLERY_REQUEST_SCROLL_RIGHT == lpImageGalleryReqEvent->meImageGalleryRequest )");
     CGS_ASSERT(mpProgression != 0, "mpProgression");
 
-    CgsModule::VariableEventQueue<13312, 16>* lpQueue = AsVeq(lpOutput->GetGameActionQueue());
+    GameStateModuleIO::GameActionQueue* lpQueue = lpOutput->GetGameActionQueue();
     BrnProgression::Profile* lpProfile = mpProgression->GetProfile();
     const GameStateModuleIO::EImageGalleryType leGalleryType = lpImageGalleryReqEvent->meImageGalleryImageType;
 
@@ -852,14 +852,14 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
     CGS_ASSERT_AT(lpImageGalleryReqEvent->miSlotIndex >= 0, "lpImageGalleryReqEvent->miSlotIndex >= 0", CGS_ARTIST_FILE, 1088);
     CGS_ASSERT(mpProgression != 0, "mpProgression");
 
-    CgsModule::VariableEventQueue<13312, 16>* lpQueue = AsVeq(lpOutput->GetGameActionQueue());
+    GameStateModuleIO::GameActionQueue* lpQueue = lpOutput->GetGameActionQueue();
     BrnProgression::Profile* lpProfile = mpProgression->GetProfile();
     const GameStateModuleIO::EImageGalleryType leGalleryType = lpImageGalleryReqEvent->meImageGalleryImageType;
 
     if (lpProfile->DeleteMugshot(leGalleryType, lpImageGalleryReqEvent->miImageIndex) < 0)
     {
         char lEmptyMarker[16] = { 0 };
-        AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
+        lpOutput->GetGameActionQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(lEmptyMarker), KI_EVENT_EMPTY_SLOT, 1);
         return;
     }
@@ -959,7 +959,7 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
     CGS_ASSERT_AT(lpOutput != 0, "lpOutput", CGS_ARTIST_FILE, 286);
     CGS_ASSERT_AT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 287);
 
-    CgsModule::VariableEventQueue<13312, 16>* lpQueue = AsVeq(lpOutput->GetGameActionQueue());
+    GameStateModuleIO::GameActionQueue* lpQueue = lpOutput->GetGameActionQueue();
     BrnProgression::Profile* lpProfile = (mpProgression != 0) ? mpProgression->GetProfile() : 0;
 
     // Local scratch list of slots whose textures need loading from disk. The X360 record is

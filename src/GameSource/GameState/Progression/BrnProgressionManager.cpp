@@ -42,7 +42,7 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"  // CgsModule::EventReceiverQueue<3072,16>
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // CgsResource::Events::AcquireResourceResponse
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
-
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"   // CgsCore::KF_MPH_TO_MPS (ARTIST .data 0x82F31928)
 #include <string.h>   // memcpy (X360 XMemCpy)
 
 namespace BrnProgression
@@ -4891,7 +4891,7 @@ namespace
     //                  cite; RaceCarState::mfSpeedMPH * this * simStep == metres this step.
     //   flt_82001D9C = 0x40000000 == 2.0f  -- the two HUD-message holds (seconds of sim time).
     //   flt_82001CC0 = 0x00000000 == 0.0f  -- the hold reset.
-    const f32 KF_MPH_TO_METRES_PER_SECOND     = 0.447039992f;   // flt_82F31928
+    // KF_MPH_TO_METRES_PER_SECOND is CgsCore::KF_MPH_TO_MPS (DWARF CgsCoreConstants.h:58; ARTIST .data 0x82F31928, loaded by 97 functions).
     const f32 KF_HUD_MESSAGE_HOLD_SECONDS     = 2.0f;           // flt_82001D9C
 
     // One-shot park reporters (campaign house rule: a park must be visible, not silent). The
@@ -5011,7 +5011,7 @@ void ProgressionManager::PreWorldUpdate(
         {
             // `lfs f13, 0x3CC(rcs)` (RaceCarState::mfSpeedMPH) * flt_82F31928 * f31 (the SIM
             // step) -> metres this step; the online flag rides r5.
-            AddDistanceDriven(lpRaceCarState->mfSpeedMPH * KF_MPH_TO_METRES_PER_SECOND * lfSimTimeStep,
+            AddDistanceDriven(lpRaceCarState->mfSpeedMPH * CgsCore::KF_MPH_TO_MPS * lfSimTimeStep,
                               lbOnlineGameMode);
         }
     }

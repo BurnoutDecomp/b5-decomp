@@ -15,7 +15,7 @@
 #include <vectorintrinsics.h>
 #define CGS_ARTIST_FILE_BURNOUTCONSTANTS "..\\..\\..\\GameSource\\BurnoutConstants.h"
 // ============================================================================
-// b5-decomp/src/GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"   // CgsCore::KF_MPH_TO_MPS (ARTIST .data 0x82F31928)
 // ============================================================================
 // BrnGameState::HUDMessageLogic -- the object's lifecycle + per-frame entry points
 // (Construct 0x8236F530 / Prepare 0x82366478 / PreWorldUpdate 0x82389248 /
@@ -74,9 +74,9 @@ namespace
     // flt_82FADF1C, a .bss float the TU initialiser @0x82C4D820..0x82C4D838 sets to
     // flt_82F31928 (0x3EE4E26D, 0.44704 -- one mph in m/s) `fmuls` flt_82020A70 (0x43200000, 160.0):
     // 160 mph in m/s, 0x428F0D84. Spelt as the same single-precision product.
-    const f32 KF_MPH_TO_METRES_PER_SECOND   = 0.44704f;                                   // flt_82F31928
+    // KF_MPH_TO_METRES_PER_SECOND is CgsCore::KF_MPH_TO_MPS (DWARF CgsCoreConstants.h:58; ARTIST .data 0x82F31928, loaded by 97 functions).
     const f32 KF_LEADER_SPLIT_SPEED_MPH     = 160.0f;                                     // flt_82020A70
-    const f32 KF_LEADER_SPLIT_SPEED         = KF_MPH_TO_METRES_PER_SECOND * KF_LEADER_SPLIT_SPEED_MPH; // flt_82FADF1C
+    const f32 KF_LEADER_SPLIT_SPEED         = CgsCore::KF_MPH_TO_MPS * KF_LEADER_SPLIT_SPEED_MPH; // flt_82FADF1C
     // The split is announced only between 1 s and 1000 s: flt_82001C98 (0x3F800000) and
     // flt_82009E10 (0x447A0000), `blt` / `bgt` @0x82394204 / @0x82394214.
     const f32 KF_MIN_LEADER_SPLIT_SECONDS   = 1.0f;                                       // flt_82001C98

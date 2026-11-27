@@ -5,8 +5,8 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (AddMessage dynamic assert text)
 #include <cstring>  // memcpy, memset, strncpy, strlen
 #define CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h"
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp";
+// (the file-path array is the CGS_ARTIST_FILE macro above: one definition per path)
+
 #define CGS_ARTIST_BRNGAMESTATESHAREDIO_FILE_ABSOLUTE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateSharedIO.h"
 namespace BrnGameState
 {
@@ -274,20 +274,20 @@ bool FlybyData::Prepare()
 void FlybyData::AddCar(EActiveRaceCarIndex leRaceCarIndex, const CgsNetwork::PlayerName* lpPlayerName)
 {
     CGS_ASSERT_AT(miNumberOfCars >= 0,
-        "miNumberOfCars >= 0", KAC_ARTIST_ASSERT_FILE, 242 /* ARTIST 0x82356F24 */);
+        "miNumberOfCars >= 0", CGS_ARTIST_FILE, 242 /* ARTIST 0x82356F24 */);
     CGS_ASSERT_AT(miNumberOfCars < FlybyRivalData::KI_MAX_CARS_IN_FLYBY,
-        "miNumberOfCars < FlybyRivalData::KI_MAX_CARS_IN_FLYBY", KAC_ARTIST_ASSERT_FILE, 243 /* ARTIST 0x82356F4C */);
+        "miNumberOfCars < FlybyRivalData::KI_MAX_CARS_IN_FLYBY", CGS_ARTIST_FILE, 243 /* ARTIST 0x82356F4C */);
 
     CGS_ASSERT_AT(lpPlayerName,
-        "lpPlayerName", KAC_ARTIST_ASSERT_FILE, 244 /* ARTIST 0x82356F70 */);
+        "lpPlayerName", CGS_ARTIST_FILE, 244 /* ARTIST 0x82356F70 */);
     CGS_ASSERT_AT(lpPlayerName,
-        "lpPlayerName->GetPlayerName()", KAC_ARTIST_ASSERT_FILE, 245 /* ARTIST 0x82356F8C */);
+        "lpPlayerName->GetPlayerName()", CGS_ARTIST_FILE, 245 /* ARTIST 0x82356F8C */);
 
     CGS_ASSERT_AT(std::strlen(lpPlayerName->GetPlayerName()) != 0,
-        "strlen( lpPlayerName->GetPlayerName() ) > 0", KAC_ARTIST_ASSERT_FILE, 246 /* ARTIST 0x82356FD4 */);
+        "strlen( lpPlayerName->GetPlayerName() ) > 0", CGS_ARTIST_FILE, 246 /* ARTIST 0x82356FD4 */);
 
     CGS_ASSERT_AT(std::strlen(lpPlayerName->GetPlayerName()) < static_cast<u32>(CgsNetwork::PlayerName::KI_USERNAME_LENGTH),
-        "strlen( lpPlayerName->GetPlayerName() ) < static_cast<uint32_t>(CgsNetwork::KI_USERNAME_LENGTH )", KAC_ARTIST_ASSERT_FILE, 247 /* ARTIST 0x8235701C */);
+        "strlen( lpPlayerName->GetPlayerName() ) < static_cast<uint32_t>(CgsNetwork::KI_USERNAME_LENGTH )", CGS_ARTIST_FILE, 247 /* ARTIST 0x8235701C */);
 
 
     mRivalsToShow[miNumberOfCars].meRaceCarIndex = leRaceCarIndex;

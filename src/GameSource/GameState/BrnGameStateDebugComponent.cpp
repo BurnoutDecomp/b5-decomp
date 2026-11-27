@@ -20,6 +20,7 @@
 #include "SharedClasses/Trigger/BrnTriggerBase.h"
 #include "SharedClasses/Trigger/BrnTriggerData.h"
 #include "SDKs/XboxMath/XMVectorACos.h"
+#include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Dot (vmsum3fp)
 
 #include <cmath>
 #include <xtl.h>
@@ -28,7 +29,6 @@ namespace vmx
     inline f32 Subtract(f32 a, f32 b) { return __vsubfp(XMVectorReplicate(a), XMVectorReplicate(b)).x; }
     inline f32 Multiply(f32 a, f32 b) { return __vmulfp(XMVectorReplicate(a), XMVectorReplicate(b)).x; }
     inline f32 Maximum(f32 a, f32 b) { return __vmaxfp(XMVectorReplicate(a), XMVectorReplicate(b)).x; }
-    inline f32 Dot3(const Vector3& a, const Vector3& b) { return __vmsum3fp(__lvx(&a, 0), __lvx(&b, 0)).x; }
     inline Vector3 Subtract(const Vector3& a, const Vector3& b) { Vector3 r; __stvx(__vsubfp(__lvx(&a, 0), __lvx(&b, 0)), &r, 0); return r; }
     inline __vector4 Refine(__vector4 length, u32 steps)
     {
@@ -531,7 +531,7 @@ namespace
         // each normalization, then the original VMX max/min and XDK ACos.
         const Vector3 lv3Forward = vmx::Normalize3Unconditional(lrPlayerCarTransform.zAxis, 1);
         const Vector3 lv3Direction = vmx::Normalize3Unconditional(lv3Displacement, 1);
-        const f32 lfLowerClampedDot = vmx::Maximum(vmx::Dot3(lv3Forward, lv3Direction), -1.0f);
+        const f32 lfLowerClampedDot = vmx::Maximum(rw::math::vpu::Dot(lv3Forward, lv3Direction), -1.0f);
         const f32 lfForwardDot = (lfLowerClampedDot != lfLowerClampedDot) || lfLowerClampedDot < 1.0f
             ? lfLowerClampedDot : 1.0f;
         const f32 lfRelativeAngle = XboxMath::XMVectorACos(lfForwardDot);
@@ -541,7 +541,7 @@ namespace
         // not the normalized direction, and vsel has a distinct zero arm.
         const f32 lfSin = static_cast<f32>(std::sin(static_cast<f64>(lfRelativeAngle)));
         const f32 lfCos = static_cast<f32>(std::cos(static_cast<f64>(lfRelativeAngle)));
-        const f32 lfRightDot = vmx::Dot3(lrPlayerCarTransform.xAxis, lv3Displacement);
+        const f32 lfRightDot = rw::math::vpu::Dot(lrPlayerCarTransform.xAxis, lv3Displacement);
         const f32 lfSide = lfRightDot > 0.0f ? 1.0f : (lfRightDot >= 0.0f ? 0.0f : -1.0f);
         const f32 lfArrowHalfX = (lfSide * lfSin) * 30.0f;
         const f32 lfArrowHalfY = lfCos * 30.0f;

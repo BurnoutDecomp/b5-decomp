@@ -57,7 +57,7 @@ typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
 static const f32 KF_DRIVE_THRU_INACTIVE_TIME         = -1.0f;  // flt_82001CC0
 static const f32 KF_DRIVE_THRU_REARM_TIME            =  1.0f;  // flt_82001C98
 static const f32 KF_DRIVE_THRU_PRESENTATION_TIME     =  3.0f;  // flt_8202AC20
-static const f32 KF_TRAINING_TIP_SETTLE_TIME         =  5.0f;  // flt_8200426C
+// KF_TRAINING_TIP_SETTLE_TIME retired: ARTIST loads the shared literal-pool 5.0 (0x8200426C, read by 112 functions), a literal at the use.
 static const f32 KF_DRIVE_THRU_ACTIVATION_TIME       =  2.1f;  // flt_82CDBD90
 static const f32 KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ =  5625.0f;       // flt_82CDBD94
 static const f32 KF_DRIVE_THRU_DISCOVERY_MAX_Y       =  5.0f;  // X360 literal 5.0
@@ -232,7 +232,7 @@ static void TryPlayTrainingTip(TrainingManager* lpTrainingManager, s32 liTrainin
     BrnProgression::Profile* lpProfile = lpTrainingManager->GetProfile();
     if (lpProfile->HasPlayerSeenTrainingType(leType))
         return;
-    if (lpTrainingManager->GetTimeSinceLastTip() < KF_TRAINING_TIP_SETTLE_TIME)
+    if (lpTrainingManager->GetTimeSinceLastTip() < 5.0f)
         return;
     lpTrainingManager->RequestTip(leType);
 }

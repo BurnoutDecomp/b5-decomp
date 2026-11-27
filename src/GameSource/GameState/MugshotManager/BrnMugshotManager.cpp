@@ -124,13 +124,13 @@ namespace
                   offsetof(GameStateModuleIO::AbortMugshotCaptureAction, mbIsTakedownAggressorLocalPlayer)),
                   "abort-mugshot producer bytes match the shared action offsets");
 
-    // The GameActionQueue concrete type (forward-declared in BrnGameStateModuleIO.h) is the variable
-    // event queue the GameStateModuleIO TU returns; the console calls VariableEventQueue<13312,16>::AddEvent
-    // straight on it. Bridge the opaque return to the queue type the console invokes the method on.
-    inline CgsModule::VariableEventQueue<13312, 16>* AsVeq(GameStateModuleIO::GameActionQueue* lpQueue)
-    {
-        return reinterpret_cast<CgsModule::VariableEventQueue<13312, 16>*>(lpQueue);
-    }
+    // (invented queue cast retired: GameStateModuleIO::GameActionQueue is DWARF BaseGameActionQueue<13312>)
+
+
+
+
+
+
 }
 
 // ---------------------------------------------------------------------------
@@ -343,7 +343,7 @@ void MugshotManager::StartMugshotCapture(GameStateModuleIO::OutputBuffer* lpOutp
 
                 CGS_ASSERT(lpOutput != 0, "lpOutput");
                 CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
-                AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
+                lpOutput->GetGameActionQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lAbortMugshotAction),
                     KI_GAME_ACTION_ABORT_MUGSHOT, (s32)sizeof(AbortMugshotGameAction));
             }
@@ -386,7 +386,7 @@ void MugshotManager::StartMugshotCapture(GameStateModuleIO::OutputBuffer* lpOutp
 
     CGS_ASSERT(lpOutput != 0, "lpOutput");
     CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
-    AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
+    lpOutput->GetGameActionQueue()->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lMugshotPrepareCaptureAction),
         KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
 }

@@ -53,12 +53,12 @@ namespace
     const char* const KAC_FILE =
         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnStuntManager.cpp";
 
-    // The action queue handed to Update/UpdateJumps/ProcessStuntElement/CompleteAllStuntType is the
-    // OutputBuffer's game-action queue == CgsModule::VariableEventQueue<13312,16> (the GameStateModuleIO
-    // action queue). The DWARF spells the param type GameActionQueue (an incomplete alias); the X360
-    // AddEvent calls target the <13312,16> queue directly, so we reinterpret_cast through, exactly as
-    // BurnoutSkillzManager does (GameActionQueueImpl precedent).
-    typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
+    // (invented queue cast retired: GameStateModuleIO::GameActionQueue is DWARF BaseGameActionQueue<13312>)
+
+
+
+
+
 
     // Event-type ids posted onto the action queue (X360 li r5 immediates). These are slots of the
     // GameStateModuleIO action-event enum; only the four this TU emits are named here.
@@ -444,7 +444,7 @@ void StuntManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
         CgsDev::Assert::EndAssert();
     }
 
-    GameActionQueueImpl* lpActionQueueImpl = reinterpret_cast<GameActionQueueImpl*>(lpActionQueue);
+
 
     // First-attempt -> failed transition: the X360 tests the player car's "crashing" flag
     // (*(1120*idx + base + 1914), the RaceCarState crash bit). When crashing while a first-time jump
@@ -465,7 +465,7 @@ void StuntManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
         // FLAG: payload contents not recovered (the X360 passes an uninitialised 1-byte stack slot);
         // emitted as a single zero byte.
         u8 lJumpFailedAction = 0;
-        lpActionQueueImpl->AddEvent(
+        lpActionQueue->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lJumpFailedAction), KI_EVENT_HUD_JUMP_FAILED, 1);
         mbNeedToSendJumpFailureMessage = false;
     }
@@ -671,7 +671,7 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
         CgsDev::Assert::EndAssert();
     }
 
-    GameActionQueueImpl* lpActionQueueImpl = reinterpret_cast<GameActionQueueImpl*>(lpActionQueue);
+
 
     // The X360 reads a per-car "is crashing" byte (the same 1120*idx + 1914 RaceCarState bit). When the
     // player is crashing mid-jump, abandon the jump.
@@ -812,7 +812,7 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
                 lSelectJumpCameraTypeCut(mpLastJumpElement, lbEnteredJumpForwards, &lJumpStartAction.miCameraCut);
             lJumpStartAction.mbFirstTime = lbHasBeenDoneBefore ? 0u : 1u;   // X360: extrwi(cntlzw(doneBefore),1,26)
 
-            lpActionQueueImpl->AddEvent(
+            lpActionQueue->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lJumpStartAction), KI_EVENT_ON_JUMP_START, 24);
 
             mbShowJumpNameNextFrame = true;                    // +1558
@@ -834,7 +834,7 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
             if (lJumpGroupId == 0)
                 lJumpKey = mpLastJumpElement->GetId();
 
-            lpActionQueueImpl->AddEvent(
+            lpActionQueue->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lJumpKey), KI_EVENT_SHOW_JUMP_NAME, 8);
             mbShowJumpNameNextFrame = false;
         }
@@ -1195,9 +1195,9 @@ namespace
 
 
 
-    // Same cast-through as BrnStuntManager.cpp: the DWARF spells the parameter GameActionQueue (an
-    // incomplete alias) while the X360 AddEvent calls target the <13312,16> queue directly.
-    typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
+    // (invented queue cast retired: GameStateModuleIO::GameActionQueue is DWARF BaseGameActionQueue<13312>)
+
+
 
     // Source path baked into the inlined TrainingManager::GetProfile assert (the tip arm).
     const char* const KAC_TRAINING_MANAGER_FILE =
@@ -1205,7 +1205,7 @@ namespace
 
     // The 5.0 s gap a new training tip waits after the last one finished (the value
     // BrnDriveThruManager.cpp and GameStateModule_gRR_00.cpp name the same way).
-    const f32 KF_TRAINING_TIP_SETTLE_TIME = 5.0f;
+    // KF_TRAINING_TIP_SETTLE_TIME retired: ARTIST loads the shared literal-pool 5.0 (0x8200426C, read by 112 functions), a literal at the use.
 
 }
 
@@ -1254,7 +1254,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     // away. Reproduced literally: accepted, unread.
     (void)lbIsAGameModeActive;
 
-    GameActionQueueImpl* lpActionQueueImpl = reinterpret_cast<GameActionQueueImpl*>(lpActionQueue);
+
 
     // ---- 1) pick the latch ---------------------------------------------------------------
     const BrnTrigger::GenericRegion* lpElement;
@@ -1290,7 +1290,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     GameStateModuleIO::WorldStuntAction lWorldStuntAction;
     lWorldStuntAction.mId                = lElementKey;
     lWorldStuntAction.meStuntElementType = leElementType;
-    lpActionQueueImpl->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWorldStuntAction),
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWorldStuntAction),
                                 GameStateModuleIO::E_ACTION_WORLD_STUNT_PERFORMED, 16);
 
     // ---- 4) the scorer --------------------------------------------------------------------
@@ -1403,7 +1403,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
         }
         // The console skips the request on `blt`, so an unordered (NaN) gap still requests.
         if (!lpProfile->HasPlayerSeenTrainingType(leTrainingType)
-            && !(mpTrainingManager->GetTimeSinceLastTip() < KF_TRAINING_TIP_SETTLE_TIME))
+            && !(mpTrainingManager->GetTimeSinceLastTip() < 5.0f))
         {
             mpTrainingManager->RequestTip(leTrainingType);
 
@@ -1448,7 +1448,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     {
         GameStateModuleIO::StuntElementBoostAction lBoostAction;
         lBoostAction.meStuntElementType = leElementType;
-        lpActionQueueImpl->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBoostAction),
+        lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBoostAction),
                                     GameStateModuleIO::E_ACTION_STUNT_ELEMENT_BOOST, 4);
     }
 
@@ -1514,7 +1514,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     // `lCompleteAction` is built below and neither writes any of its five fields, so the action-58
     // HUD popup is unaffected either way.
     mpProgressionManager->CheckForSpecialCarUnlocks();                    // X360 0x82396058
-    mpProgressionManager->SendGameCompletionResults(lpActionQueueImpl);   // X360 0x82395C28
+    mpProgressionManager->SendGameCompletionResults(lpActionQueue);   // X360 0x82395C28
 
 
     // ---- the action-58 record: THE HUD POPUP ----------------------------------------------
@@ -1545,7 +1545,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     // 8-aligned on both), and everything past +0x18 is the X360-only convoy block that belongs to
     // a DIFFERENT action's consumer (StuntModeScoring::DealWithInProgressStunt). Posting sizeof()
     // here would copy 0x68 bytes of zeroed convoy padding the case-58 consumer never reads.
-    lpActionQueueImpl->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCompleteAction),
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCompleteAction),
                                 GameStateModuleIO::E_ACTION_ON_STUNT_ELEMENT_COMPLETE, 24);
 
 
@@ -1571,7 +1571,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
             GameStateModuleIO::OnStuntElementCompleteForCountyAction lCountyAction;
             lCountyAction.meStuntElementType = leElementType;
             lCountyAction.meCounty           = leCounty;
-            lpActionQueueImpl->AddEvent(
+            lpActionQueue->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lCountyAction),
                 GameStateModuleIO::E_ACTION_ON_STUNT_ELEMENT_COMPLETE_FOR_COUNTY, 8);
 
@@ -1584,7 +1584,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     {
         GameStateModuleIO::OnStuntElementCompleteByTypeAction lAllAction;
         lAllAction.meStuntElementType = leElementType;
-        lpActionQueueImpl->AddEvent(
+        lpActionQueue->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAllAction),
             GameStateModuleIO::E_ACTION_ON_STUNT_ELEMENT_COMPLETE_BY_TYPE, 4);
 
@@ -1639,9 +1639,9 @@ namespace
 
 
 
-    // Same cast-through as the rest of the TU: the DWARF spells the parameter GameActionQueue (an
-    // incomplete alias) while the X360 AddEvent call targets the <13312,16> queue directly.
-    typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
+    // (invented queue cast retired: GameStateModuleIO::GameActionQueue is DWARF BaseGameActionQueue<13312>)
+
+
 }
 
 // ----------------------------------------------------------------------------
@@ -1719,17 +1719,17 @@ void StuntManager::CompleteAllStuntType(StuntElementType                    leSt
         mpProgressionManager->GetProfile()->AddStuntElement(leStuntElementType, lElementKey, leCounty);
     }
 
-    GameActionQueueImpl* lpActionQueueImpl = reinterpret_cast<GameActionQueueImpl*>(lpActionQueue);
+
 
     GameStateModuleIO::OnStuntElementCompleteByTypeAction lAllAction;
     lAllAction.meStuntElementType = leStuntElementType;
-    lpActionQueueImpl->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAllAction),
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAllAction),
                                 GameStateModuleIO::E_ACTION_ON_STUNT_ELEMENT_COMPLETE_BY_TYPE, 4);
 
     mpProgressionManager->GetAchievementManager()->OnCollectAllStunts(leStuntElementType);
     mpProgressionManager->OnTrophyUnlock(liTrophyId);
     mpProgressionManager->CheckForSpecialCarUnlocks();
-    mpProgressionManager->SendGameCompletionResults(lpActionQueueImpl);
+    mpProgressionManager->SendGameCompletionResults(lpActionQueue);
 
 }
 

@@ -3333,7 +3333,7 @@ namespace
 {
     // flt_8200426C -- the console's 5.0 s "settle" gap between two training tips, the same literal
     // BrnDriveThruManager.cpp names KF_TRAINING_TIP_SETTLE_TIME.
-    const f32 KF_TRAINING_TIP_SETTLE_TIME = 5.0f;
+    // KF_TRAINING_TIP_SETTLE_TIME retired: ARTIST loads the shared literal-pool 5.0 (0x8200426C, read by 112 functions), a literal at the use.
 
 }
 
@@ -3541,7 +3541,7 @@ void GameStateModule::ProcessTakedownEvents(
             CGS_ASSERT_AT(lpProfile != 0, "lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 382);   // BrnTrainingManager.cpp:382
             if (lpProfile != 0 &&
                 !lpProfile->HasPlayerSeenTrainingType(BrnProgression::E_TRAINING_TYPE_TAKEN_DOWN_IN_MARKED_MAN) &&
-                mTrainingManager.GetTimeSinceLastTip() >= KF_TRAINING_TIP_SETTLE_TIME)   // fcmpu/blt @0x823900AC
+                mTrainingManager.GetTimeSinceLastTip() >= 5.0f)   // fcmpu/blt @0x823900AC
             {
                 mTrainingManager.RequestTip(BrnProgression::E_TRAINING_TYPE_TAKEN_DOWN_IN_MARKED_MAN);
             }
@@ -3647,7 +3647,7 @@ void GameStateModule::ProcessTakedownEvents(
 #include <xtl.h>
 namespace vmx
 {
-    inline f32 Dot3(const Vector3& a, const Vector3& b) { return __vmsum3fp(__lvx(&a, 0), __lvx(&b, 0)).x; }
+    // Dot3 retired: rw::math::vpu::Dot (vector3_operation.h) is the rwmath call ARTIST's vmsum3fp is.
     inline f32 Flush(f32 x) { return __vmulfp(XMVectorReplicate(x), XMVectorReplicate(1.0f)).x; }
 }
 
@@ -4332,7 +4332,7 @@ void GameStateModule::DetectModeStarts(const GameStateModuleIO::PreWorldInputBuf
                     {
                         const Vector3& lrVelocity =
                             mLastActiveRaceCarInterface.GetPlayerRaceCarState()->mLinearVelocity;
-                        lbMayStartIntro = vmx::Dot3(lrVelocity, lrVelocity) >=
+                        lbMayStartIntro = rw::math::vpu::Dot(lrVelocity, lrVelocity) >=
                             vmx::Flush(KF_SHOWTIME_MIN_SPEED * KF_SHOWTIME_MIN_SPEED);
                     }
                     if (lbMayStartIntro)
@@ -4357,7 +4357,7 @@ void GameStateModule::DetectModeStarts(const GameStateModuleIO::PreWorldInputBuf
             {
                 mfShowtimeIntroTimeLeft -= mfSimTimeStep;
                 mbShowtimeIntroHasTouchedGround |= !mLastActiveRaceCarInterface.IsPlayerInAir();
-                const f32 lfHeadingDot = vmx::Dot3(mLastActiveRaceCarInterface.GetPlayerDirection(),
+                const f32 lfHeadingDot = rw::math::vpu::Dot(mLastActiveRaceCarInterface.GetPlayerDirection(),
                                                   mShowtimeIntroOriginalDirection);
                 if (!(mfShowtimeIntroTimeLeft > 0.0f) ||
                     mLastActiveRaceCarInterface.IsPlayerInAir() ||
@@ -5421,7 +5421,7 @@ void GameStateModule::PostWorldUpdate(CgsModule::IOBufferStack*                 
             BrnProgression::Profile* lpTipProfile = mTrainingManager.GetProfile();
             CGS_ASSERT(lpTipProfile != 0, "lpProfile");
             if (!lpTipProfile->HasPlayerSeenTrainingType(BrnProgression::E_TRAINING_TYPE_DANGER_BOOST_FULL) &&
-                !(mTrainingManager.GetTimeSinceLastTip() < KF_TRAINING_TIP_SETTLE_TIME))
+                !(mTrainingManager.GetTimeSinceLastTip() < 5.0f))
             {
                 mTrainingManager.RequestTip(BrnProgression::E_TRAINING_TYPE_DANGER_BOOST_FULL);
             }
@@ -5446,6 +5446,1109 @@ void GameStateModule::PostWorldUpdate(CgsModule::IOBufferStack*                 
 }
 
 }
+
+
+// The folded functions' includes.
+#include "GameSource/GameState/BrnGameStateTypes.h"                         // EShowtimeBehaviour
+#include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h" // CrashModeScoring
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h" // TrafficTypeResponse
+#include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                // CgsModule::BaseEventQueue
+#include "SharedClasses/Traffic/BrnTrafficHull.h"                       // Hull::muNumLightTriggers
+#include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"            // BrnTraffic::KU_MAX_HULLS
+#include "SharedClasses/Trigger/BrnLandmark.h"                          // Landmark -> TriggerRegion::GetRegionIndex
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"              // CgsMemory::LinearMalloc
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"   // CgsResource::ResourceHandle
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h" // CgsResource::BinaryFileResource::GetData
+// ================================================================================================
+// Folded back from the x360 tree's split GameStateModule_Showtime.cpp (functions of this file, the
+// original BrnGameStateModule.cpp; one TU in ARTIST's BrnGameStateUnity).
+// ================================================================================================
+// =================================================================================================
+// GameStateModule_Showtime.cpp
+//
+// The SHOWTIME (crash-mode) start leg. Started 2026-08-27 (showtime S7b-a wave) with StartCrashMode
+// alone plus a harness stand-in; CLOSED the same day (S7b-b) by landing the two console gates that
+// stand above it, and the harness leg was deleted with them.
+//
+// ⭐⭐⭐ WHY S7b-b EXISTS: A PLAYER REPORTED SHOWTIME DOES NOT WORK ON THE PUBLISHED BUILD.
+// "i don't think showtime works ... unless you have to activate it in a crash, but just driving
+// around the buttons to activate it do nothing." They were right, and the reason was structural:
+// what shipped in place of the two missing upper links was HarnessInjectShowtimeBringUp, gated on
+// getenv("BRN_START_SHOWTIME"), which the published build does not set. Holding both bumpers
+// reached a one-shot that was switched off. The fix is not a wider hook -- it is the console's own
+// gate stack, which is what this file now carries.
+//
+// THE CONSOLE CHAIN, COMPLETE:
+//     DetectModeStarts @0x8239A428 (the `else` arm, 0x8239A568..0x8239A8EC)  <-- GameStateModule_gSR_00.cpp
+//       -> ShouldStartShowtimeMode @0x82356B18 (166 insns)                   <-- HERE
+//         -> StartCrashMode @0x8236B580 (80 insns)                           <-- HERE
+//           -> StartGameModeParams::Construct @0x8231C1F8   (mounted)
+//           -> ModeManager::StartGameMode      @0x8234FCE8   (mounted)
+// plus the two showtime-intro accessors the arm's latch pair backs:
+//     IsInShowtimeIntro        @0x82356A60 (11 insns)
+//     GetShowtimeIntroSteering @0x82356A90 (33 insns)
+//
+// ⭐⭐ THE GESTURE WAS ALWAYS REAL AND IS UNCHANGED. `ControllerInput::mbCrashModePressed` (+0x42)
+// is the console's own both-bumpers-held byte, written every frame by BrnGameStateModuleIO.cpp:92
+// from action rows 54 and 55, which are bound to LSHOULDER/RSHOULDER (and to the keyboard) in
+// CgsInputPadsPC.cpp's KA_BINDINGS. Nothing in this wave touched the input path; what was missing
+// was everything ABOVE it.
+// =================================================================================================
+// [FX-SHOWTIME2 2026-09-24] UpdateShowtimeMode's action records, its scorer and its answer queue.
+
+namespace BrnGameState
+{
+namespace
+{
+    // [FX-SHOWTIME2 2026-09-24] The console's two file-scope constants for the showtime traffic
+    // hand-off, DWARF BrnGameStateModule.cpp:154/:155 (the console's own TU; this file is a split
+    // of it). Both are immediates in UpdateShowtimeMode: `ori r27, r10, 0xFFFF` @0x82380F98 /
+    // `cmplwi cr6, r11, 0xFFFF` @0x82380F88, and `li r11, 2` @0x82381124.
+    // K_INVALID_VEHICLE_INDEX (DWARF BrnGameStateModule.cpp:76) is defined once, above ClearData.
+    const s32 KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES = 2;
+
+    // [DIAG] NOT IN THE X360 BINARY. The UpdateShowtimeMode witness, under the same opt-in the
+    // ProcessContacts half uses (BRN_SHOWTIME_WATCH). One line per pop / answer / miss / toggle,
+    // capped, so a run can COUNT the hand-off's hops: ProcessContacts' `[showtime-crash]` pushes
+    // -> `pop` (action 116) -> `answer` (DealWithScoreForVehicleClass + action 140) or `MISS`.
+    // [DIAG] NOT IN THE X360 BINARY. Names the gate that refused a both-bumpers press. It exists
+    // because the defect this file closes was reported by a player as "the buttons do nothing",
+    // and a gate stack with ten terms has ten ways to look exactly like a dead button.
+    // Deliberately NOT env-gated (see the call sites); bounded to one line PER DISTINCT REASON.
+    void LogShowtimeRefusal(const char* lpcReason)
+    {
+        // ⚠️ ONCE PER **REASON**, NOT ONCE PER PROCESS -- and the difference is the whole point.
+        // A plain one-shot reports the gate that happened to be down on the FIRST frame the
+        // gesture was seen, and then goes quiet for ever. Measured this session: that first frame
+        // is the junkyard-exit frame, where a term that clears seconds later still reads as down,
+        // so the run's only line named a transient. Every distinct reason now gets exactly one
+        // line, so the log shows the gate stack PEELING rather than a single snapshot -- and the
+        // volume is still bounded, because there are only ten reasons and they are literals.
+        // [[diagnostics-that-lie]] -- ask what the probe cannot see, then make it see that.
+        static const char* spcLastReason = 0;
+        if (spcLastReason != lpcReason && CgsDev::Log::gpDebugPrint != 0)
+        {
+            spcLastReason = lpcReason;
+            *CgsDev::Log::gpDebugPrint
+                << "[showtime] BOTH BUMPERS held, but ShouldStartShowtimeMode @0x82356B18 refused: "
+                << lpcReason << "\n";
+        }
+    }
+}
+
+    // =============================================================================================
+    // GameStateModule::StartCrashMode  @0x8236B580  (80 insns)
+    //   source BrnGameStateModule.cpp:5579/5580/5582 (the three baked assert line numbers)
+    //
+    // Build a StartGameModeParams at the player's current position for the SHOWTIME mode -- offline
+    // (2) or online (16) -- and hand it to ModeManager::StartGameMode. That is the whole function.
+    //
+    // ASM SPINE (0x8236B580..0x8236B6BC), in order:
+    //   0x8236B594  the `li r11,0xF / stw -1 / addi r10,0x2C` do-while over var_338 -- SIXTEEN
+    //               44-byte CheckpointData slots seeded to the CgsArray -1 sentinel, plus one more
+    //               -1 at var_A0. That is the INLINED default construction of the local
+    //               StartGameModeParams' embedded Array<CheckpointData,16>; on the host the
+    //               declaration below runs the same constructors for free. Not transcribed.
+    //   0x8236B5BC  assert lpInput  != NULL   (:5579)
+    //   0x8236B5E4  assert lpOutput != NULL   (:5580)
+    //   0x8236B60C  assert !IsOnlineGameMode() || mModeManager.IsOnlineFreeBurnLobby()   (:5582)
+    //               -- the second half is the `*(this+7604) == 15 || == 16` pair, i.e.
+    //               GameStateModuleIO::IsOnlineFreeBurnLobby(mModeManager.GetCurrentGameModeType()),
+    //               which is already a committed free predicate over exactly those two enumerators.
+    //   0x8236B664  IsOnlineGameMode() again (the console calls it twice; not CSE'd)
+    //   0x8236B66C  `addis r4,r30,4 ; addi r4,r4,-0x6820` == this + 235488 ==
+    //               mLastActiveRaceCarInterface, then sub_823102F0 == GetPlayerPosition
+    //   0x8236B684  li r4, 0x10  (online)   /   0x8236B690  li r4, 2  (offline)
+    //   0x8236B698  li r5, 0                 == E_GAMEMODESTARTMECHANISM_DEFAULT
+    //   0x8236B6A0  lvx128 v1, r0, r11       == the returned position, into Construct's Vector3 arg
+    //   0x8236B6A4  StartGameModeParams::Construct(&params, mode, mechanism, position)
+    //   0x8236B6B4  ModeManager::StartGameMode(this + 0x1020 /* 4128 */, lpOutput, &params)
+    //
+    // ⚠️ lpInput IS ASSERTED AND THEN NEVER USED. After the null test at 0x8236B5BC, r4 is
+    // immediately reloaded (0x8236B66C) with the race-car interface address and the incoming
+    // pointer is gone. The parameter is kept because the console's signature keeps it and because
+    // the assert is a real behaviour; it is (void)-cast rather than deleted.
+    // [[invented-arms-and-the-c4715-ratchet]] -- do not "clean this up" by dropping the argument.
+    //
+    // ⚠️ THE THREE ASSERTS ARE THE CONSOLE'S, INCLUDING THE ONLINE ONE, and none of them returns.
+    // The console fires the assert and carries straight on into the start. Reproduced with
+    // CGS_ASSERT, which has the same non-returning shape here.
+    // =============================================================================================
+    void GameStateModule::StartCrashMode(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                                         GameStateModuleIO::OutputBuffer*              lpOutput)
+    {
+        // The local. Its embedded Array<CheckpointData,16> is default-constructed by this
+        // declaration -- that IS the asm's -1-sentinel do-while at 0x8236B594.
+        StartGameModeParams lStartGameModeParams;
+
+        CGS_ASSERT_AT(lpInput  != 0, "lpInput != NULL", CGS_ARTIST_FILE, 5579);    // :5579
+        CGS_ASSERT_AT(lpOutput != 0, "lpOutput != NULL", CGS_ARTIST_FILE, 5580);   // :5580
+        CGS_ASSERT_AT(!IsOnlineGameMode() || mModeManager.IsOnlineFreeBurnLobby(),
+                   "!IsOnlineGameMode() || mModeManager.IsOnlineFreeBurnLobby()", CGS_ARTIST_FILE, 5582);   // :5582
+
+        (void)lpInput;   // asserted above and then never read -- see the banner
+
+        // Two Construct calls: ARTIST 0x8236B670..0x8236B694 calls GetPlayerPosition in each arm
+        // (li r4, 0x10 / li r4, 2) and shares the Construct tail.
+        if (IsOnlineGameMode())
+        {
+            lStartGameModeParams.Construct(GameStateModuleIO::E_MODE_ONLINE_SHOWTIME,
+                                           mLastActiveRaceCarInterface.GetPlayerPosition(),
+                                           E_GAMEMODESTARTMECHANISM_DEFAULT);
+        }
+        else
+        {
+            lStartGameModeParams.Construct(GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME,
+                                           mLastActiveRaceCarInterface.GetPlayerPosition(),
+                                           E_GAMEMODESTARTMECHANISM_DEFAULT);
+        }
+
+        mModeManager.StartGameMode(lpOutput, &lStartGameModeParams);
+    }
+
+    // =============================================================================================
+    // GameStateModule::ShouldStartShowtimeMode  @0x82356B18  (166 insns)
+    //
+    // ⭐⭐⭐ THE GATE STACK. Called twice per frame by the DetectModeStarts else arm and returns
+    // true on the ONE frame the crash-start hold expires with every condition satisfied. Every
+    // refusal below the timer arms re-arms that hold, so a gesture that is interrupted starts over.
+    //
+    // ARGUMENTS -- and the phantom-parameter trap, resolved two ways.
+    //   Hex-Rays renders this `(int a1, double a2, int a3, char a4, unsigned int* a5)`: FIVE
+    //   arguments. It is THREE. The f32 rides f1 and consumes the r4 GPR slot, so r4 is never read
+    //   in the body; the bool is r5 (`clrlwi r11, r5, 24` @0x82356C18) and the pointer is r6
+    //   (`lwz r11, 0(r6)` @0x82356BF0). DecFIGS agrees independently -- BrnGameStateModule.h:781
+    //   spells `bool ShouldStartShowtimeMode(float32_t, bool, TimerRequests*)`. Rung 1 and rung 2
+    //   give the same three arguments in the same order, which is why this is stated rather than
+    //   flagged. [[invented-arms-and-the-c4715-ratchet]] -- do not "restore" a fourth argument.
+    //
+    // ASM SPINE (0x82356B18..0x82356DAC), in the console's own order:
+    //   0x82356B38  mModeManager.mpCurrentGameMode ? GameMode::mbIsOnline (+0xAC) : 0
+    //   0x82356B5C  when NOT online: the inlined ProgressionManager::AreRoadRulesAvailable()
+    //               (`>= 4u` on Profile+42512 || pm+133456 || pm+133460) -- refuse if false
+    //   0x82356BB4  mfTimeSinceLastCrashMode > 0 -> decrement, re-arm the hold, refuse
+    //   0x82356BF0  any of the SIM TimerRequests bits 0/1/2 set -> refuse (WITHOUT re-arming)
+    //   0x82356C18  the and-chain, every failure branching to the shared re-arm tail loc_82356D7C
+    //   0x82356D50  hold -= dt ; return hold <= 0.0f
+    //
+    // ⚠️ THE SIM-TIMER REFUSAL IS THE ONE ARM THAT DOES **NOT** RE-ARM THE HOLD (@0x82356BFC /
+    // 0x82356C08 / 0x82356C14 all jump to loc_82356D90 == `li r3,0 ; blr`, not to loc_82356D7C).
+    // That asymmetry is the console's and it is deliberate: a frame in which something else has
+    // already asked the sim timer to start/stop/retime is skipped, not treated as a broken hold.
+    // =============================================================================================
+    bool GameStateModule::ShouldStartShowtimeMode(f32                       lfGameTimestep,
+                                                  bool                      lbCrashModePressed,
+                                                  CgsSystem::TimerRequests* lpSimTimerRequests)
+    {
+        // The console's own re-arm literal: flt_82029F24, image-read 0x3C23D70A == 0.0099999998f.
+        const f32 KF_CRASH_START_HOLD_SECONDS = 0.0099999998f;
+
+        const GameMode* const lpCurrentGameMode = mModeManager.GetCurrentGameMode();
+        const bool lbOnlineModeRunning =
+            (lpCurrentGameMode != 0) && lpCurrentGameMode->IsOnline();
+
+        if (!lbOnlineModeRunning && !mProgressionManager.AreRoadRulesAvailable())
+        {
+            if (lbCrashModePressed)
+            {
+                // [DIAG] the three NUMBERS, not just the name of the gate: a bare "road rules are
+                // not available" cannot be told apart from "the profile never loaded", and those
+                // want opposite fixes. Printed once, through the same one-shot as every other
+                // refusal reason. (The accessors are the public console ones.)
+                // Re-armed on a CHANGE of the junkyard term, for the reason spelled out on
+                // LogShowtimeRefusal above: the first press lands on the junkyard-exit frame, and
+                // a snapshot taken there reports a term that may clear seconds later.
+                static s32 siLastJunkyardTerm = -1;
+                const s32  liJunkyardTerm = (mCarSelectManager.GetJunkyardId() != 0) ? 1 : 0;
+                if (siLastJunkyardTerm != liJunkyardTerm && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    siLastJunkyardTerm = liJunkyardTerm;
+                    const BrnProgression::Profile* const lpProfile = mProgressionManager.GetProfile();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime] AreRoadRulesAvailable @0x82311520 terms: medalsFromTheStart="
+                        << ((lpProfile != 0)
+                                ? static_cast<s32>(lpProfile->GetMedalCountFromTheStart()) : -1)
+                        << " (needs >= 4) parCrashRoadsRuled="
+                        << static_cast<s32>(
+                               mProgressionManager.GetNumberOfParCrashRoadRulesRuledByPlayer())
+                        << " parTimeRoadsRuled="
+                        << static_cast<s32>(
+                               mProgressionManager.GetNumberOfParTimeRoadRulesRuledByPlayer())
+                        << " (either > 0 also opens the gate)\n";
+
+                    // ⭐ AND THE NINE TERMS BELOW IT, so the line answers "is the progression
+                    // gate the ONLY thing in the way" rather than just "it is the FIRST thing".
+                    // The console short-circuits and never evaluates these when road rules are
+                    // unavailable; every one is a pure read, so evaluating them HERE (in a
+                    // one-shot diagnostic, off the decision path) changes nothing.
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime] the nine gates BELOW it, evaluated for the record: "
+                        << "playerCarActive=" << (mLastActiveRaceCarInterface.IsPlayerCarActive() ? 1 : 0)
+                        << " simPaused="      << (IsSimPaused(false, false) ? 1 : 0)
+                        << " junkyardId="     << ((mCarSelectManager.GetJunkyardId() != 0) ? 1 : 0)
+                        << " modeState="      << ((lpCurrentGameMode != 0)
+                                                     ? lpCurrentGameMode->GetCurrentState() : -1)
+                        << " showtimeBehaviour=" << static_cast<s32>(meShowtimeBehaviour)
+                        << " modeType="       << static_cast<s32>(mModeManager.GetCurrentGameModeType())
+                        << " postModeLockout=" << mfTimeSinceLastCrashMode
+                        << " crashStartHold=" << mfTimeSpentDoingCrashStartAction
+                        << "  (want: active=1 paused=0 junkyard=0 modeState=-1or2 behaviour!=0"
+                           " modeType!=2and!=16)\n";
+                }
+                LogShowtimeRefusal("road rules are not available yet -- the profile needs "
+                                       "4 medals from the start, or one ruled road "
+                                       "(ProgressionManager::AreRoadRulesAvailable @0x82311520)");
+            }
+            return false;
+        }
+
+        // @0x82356BB4..0x82356BEC. The two-second post-mode lockout.
+        if (mfTimeSinceLastCrashMode > 0.0f)
+        {
+            if (lbCrashModePressed)
+            {
+                LogShowtimeRefusal("the 2 s post-mode lockout (mfTimeSinceLastCrashMode) "
+                                       "has not expired");
+            }
+            mfTimeSinceLastCrashMode        -= lfGameTimestep;
+            mfTimeSpentDoingCrashStartAction = KF_CRASH_START_HOLD_SECONDS;
+            return false;
+        }
+
+        // @0x82356BF0..0x82356C14. See the warning in the banner -- no re-arm on this path.
+        if (lpSimTimerRequests == 0)
+        {
+            // [GUARD] Not X360. The console dereferences r6 unconditionally; both of its call
+            // sites hand it OutputBuffer::GetTimerRequest() + 8, which cannot be null. Refusing
+            // here is the same shape of guard StartCrashMode carries for lpOutput.
+            return false;
+        }
+        if (lpSimTimerRequests->IsStartRequested()  ||
+            lpSimTimerRequests->IsStopRequested()   ||
+            lpSimTimerRequests->IsMultiplierRequested())
+        {
+            return false;
+        }
+
+        // -----------------------------------------------------------------------------------------
+        // @0x82356C18..0x82356D4C. Nine tests, in the console's order, each of which branches to the
+        // SAME tail (loc_82356D7C: re-arm the hold, return false). Written as one short-circuiting
+        // chain because that is exactly what the branch structure is; the address on each line is
+        // the console instruction that tests it.
+        // -----------------------------------------------------------------------------------------
+
+        // [X][X] DIVERGENCE at the fourth test (@0x82356C50..0x82356C60): the console reads
+        // gsm+35880, which is mModeManager.mChallengeManager.meChallengeManagerStatus -- the
+        // ChallengeManager sits at ModeManager+28160 and the status word at ChallengeManager+3592
+        // (0xE08), pinned by twenty-one of its own methods, of which Construct @0x82332DB0 stores 0,
+        // BeginChallenge stores 1, TriggerFreeburnChallenge stores 2 and EndChallenge stores 3.
+        // ModeManager does NOT embed the ChallengeManager on this build (the divergence is recorded
+        // at its console seat in BrnModeManager.h: 29 TUs, ~35 unresolved externals), so no freeburn
+        // challenge can be begun and the status can only ever hold its Construct value.
+        // => The term is written as the constant the object's absence forces, NOT as a convenient
+        // one: it is false because nothing on this build can make it true, and the moment the
+        // ChallengeManager mount lands this line must become the real read.
+        // DELETE-WHEN ModeManager embeds mChallengeManager.
+        const bool lbFreeburnChallengeRunning = false;
+
+        const GameStateModuleIO::EGameModeType leCurrentGameModeType =
+            mModeManager.GetCurrentGameModeType();
+
+        const bool lbConditionsMet =
+               lbCrashModePressed                                                   // @0x82356C18
+            && mLastActiveRaceCarInterface.IsPlayerCarActive()                      // @0x82356C2C
+            && !IsSimPaused(false, false)                                           // @0x82356C44 (raw miSimPauseFlags == 0)
+            && !lbFreeburnChallengeRunning                                          // @0x82356C58 [X][X] see above
+            && (mCarSelectManager.GetJunkyardId() == 0)                             // @0x82356C6C (an 8-byte `ldx`: no junkyard flow)
+            && (lpCurrentGameMode == 0 ||
+                lpCurrentGameMode->GetCurrentState() ==
+                    GameStateModuleIO::E_GMS_IN_PROGRESS)                           // @0x82356C8C
+            && (meShowtimeBehaviour != E_SHOWTIME_MODE_OFF)                         // @0x82356CC8
+            && (!lbOnlineModeRunning ||
+                leCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
+                leCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME) // @0x82356CDC
+            && (leCurrentGameModeType != GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME &&
+                leCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);// @0x82356D28
+
+        if (!lbConditionsMet)
+        {
+            // [DIAG] one line, once, naming the FIRST gate that said no. Not behind an env guard,
+            // for the same reason StartModeAtLights' wrong-car line is not (GameStateModule_gSR_00
+            // .cpp): from the outside a refusal and a dead input channel print the same thing --
+            // nothing -- and that is exactly the ambiguity the player report started from. The
+            // terms are re-evaluated here, not captured above, so the decision path stays the
+            // console's short-circuit chain; every one of them is a pure read.
+            // [[diagnostics-that-lie]] -- a probe must say what it could not see.
+            if (lbCrashModePressed)
+            {
+                const char* lpcReason =
+                    (!mLastActiveRaceCarInterface.IsPlayerCarActive())      ? "no active player car"
+                  : (IsSimPaused(false, false))                             ? "the sim is paused (miSimPauseFlags != 0)"
+                  : (lbFreeburnChallengeRunning)                            ? "a freeburn challenge is running"
+                  : (mCarSelectManager.GetJunkyardId() != 0)                ? "a junkyard flow is active"
+                  : (lpCurrentGameMode != 0 &&
+                     lpCurrentGameMode->GetCurrentState() !=
+                         GameStateModuleIO::E_GMS_IN_PROGRESS)              ? "a game mode is running and is not IN_PROGRESS"
+                  : (meShowtimeBehaviour == E_SHOWTIME_MODE_OFF)            ? "meShowtimeBehaviour is E_SHOWTIME_MODE_OFF"
+                  : (leCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
+                     leCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME) ? "showtime is already running"
+                  :                                                           "the online mode type is not a lobby/showtime";
+                LogShowtimeRefusal(lpcReason);
+            }
+            mfTimeSpentDoingCrashStartAction = KF_CRASH_START_HOLD_SECONDS;   // loc_82356D7C
+            return false;
+        }
+
+        // @0x82356D50..0x82356D74. `f0 = hold - dt ; store ; return f0 <= 0.0f`.
+        mfTimeSpentDoingCrashStartAction -= lfGameTimestep;
+        return mfTimeSpentDoingCrashStartAction <= 0.0f;
+    }
+
+    // =============================================================================================
+    // GameStateModule::IsInShowtimeIntro  @0x82356A60  (11 insns)
+    //
+    // The whole body is `lfsx f13, this, 0x45720 ; fcmpu f13, flt_82001CC0 (0.0f) ; bgt -> 1`.
+    // =============================================================================================
+    bool GameStateModule::IsInShowtimeIntro() const
+    {
+        return mfShowtimeIntroTimeLeft > 0.0f;
+    }
+
+    // =============================================================================================
+    // GameStateModule::GetShowtimeIntroSteering  @0x82356A90  (33 insns)
+    //
+    // The same `> 0.0f` test, this time as a NON-RETURNING assert (BrnGameStateModule.cpp:5050),
+    // then `lfsx f1, this, 0x45724`. The console fires the assert and reads the word anyway; that
+    // is reproduced -- an early return would invent a value the binary never has.
+    // ⓘ ITS CONSUMER IS ALREADY WAITING: GameBridgeControllerToX.cpp carries a FLAG'd leg that
+    // wants exactly this pair to force the player's steering during the intro window.
+    // =============================================================================================
+    f32 GameStateModule::GetShowtimeIntroSteering() const
+    {
+        CGS_ASSERT_AT(IsInShowtimeIntro(), "IsInShowtimeIntro()", CGS_ARTIST_FILE, 5050);   // :5050
+        return mfShowtimeIntroSteering;
+    }
+
+    // =============================================================================================
+    // GameStateModule::UpdateShowtimeMode  @0x82380EF8  (163 insns; DWARF BrnGameStateModule.h:691,
+    // source BrnGameStateModule.cpp:1484..1611)  [FX-SHOWTIME2 2026-09-24]
+    //
+    // THE PRE-WORLD HALF OF THE SHOWTIME "CARS CRASHED" CHAIN. ProcessContacts (post-world) pushes
+    // each newly-crashed traffic car's index onto mShowtimePendingTrafficIndexStack; this function
+    // turns them, one every KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES frames, into traffic-type REQUESTS
+    // (action 116) and, on the next frame, the traffic module's ANSWER into a score
+    // (CrashModeScoring::DealWithScoreForVehicleClass -- the only writer of maiNumCarsCrashed) and a
+    // VehicleHitAction (140) for the director's close-up, crash play and the GUI. Until this body
+    // landed nothing popped the stack: it filled to eight and the count never moved.
+    //
+    // ARGUMENTS (prologue @0x82380F04..0x82380F14): r3 = this (r30), r5 = lpOutput (r25),
+    // r7 = lpResponseQueue (r26). r4 (lpInput) and r6 (lpContacts) are never read -- the DWARF
+    // names them and the caller passes them; the X360 body has no load through either.
+    //
+    // THE FOUR LEGS, in the console's order:
+    //   1. 0x82380F0C..0x82380F78  the debug toggle: mbToggleShowtimeBehaviour set ->
+    //      meShowtimeBehaviour = (x + 1) % 3 (`mulhw 0x55555556` + sign fix: a signed % 3), stored to
+    //      the record AND the module, action 138 (size 4), then the flag cleared.
+    //   2. 0x82380F7C..0x82381084  the outstanding request: while muShowtimeRequestedTrafficIndex is
+    //      not K_INVALID_VEHICLE_INDEX, walk the response queue (GetEvent per index, length re-read
+    //      every iteration) for the FIRST element whose muVehicleIndex matches; score it
+    //      (r4 = lhz +0, r5 = lwz +4 class, r6 = ld +8 CgsID, r7..r10 + the stack slot = the record's
+    //      five out-fields) and post action 140 (size 0x24) with the four fields the caller fills
+    //      itself (+0x00 class, +0x08 GetNumCarsCrashed() -- the four-word sum at scorer+0x2E8,
+    //      +0x18 miScoreMultiplier, +0x20 the index), then invalidate the index. Then, match or not,
+    //      assert that it IS invalid (BrnGameStateModule.cpp:1611 -- a missing answer is a console
+    //      assert, not a retry) and invalidate it unconditionally.
+    //   3. 0x82381088..0x82381128  the next request: the inlined IsEmpty (with its
+    //      "Stack used before Construct/Clear was called" tripwire, CgsStack.h:177); non-empty ->
+    //      `addic. -1 ; bgt`: decrement miShowtimePendingFrameDelay and, once it is no longer
+    //      positive, Peek -> action 116 (size 2) -> muShowtimeRequestedTrafficIndex -> Pop -> re-seed
+    //      the delay to KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES. So the first victim goes the frame after
+    //      its push, the rest every second frame, and each answer is consumed the frame after its
+    //      request -- which is why the answer MUST come back within one frame.
+    //   4. 0x8238112C..0x82381178  AchievementManagerBase::OnShowTimeMultiplier(miScoreMultiplier),
+    //      inlined (x10 -> console achievement 13). Runs every frame, showtime or not.
+    // =============================================================================================
+    void GameStateModule::UpdateShowtimeMode(
+            const GameStateModuleIO::PreWorldInputBuffer*       lpInput,
+            GameStateModuleIO::OutputBuffer*                    lpOutput,
+            const BrnPhysics::ContactSpy::ContactSpyInterface*  lpContacts,
+            const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpResponseQueue)
+    {
+        (void)lpInput;      // r4 -- never read by the console body
+        (void)lpContacts;   // r6 -- never read by the console body
+
+        // ---- 1. the debug behaviour toggle (0x82380F0C..0x82380F78) ---------------------------
+        if (mbToggleShowtimeBehaviour)
+        {
+            GameStateModuleIO::ToggleShowtimeBehaviourAction lToggleAction;
+            meShowtimeBehaviour =
+                static_cast<EShowtimeBehaviour>((meShowtimeBehaviour + 1) % E_SHOWTIME_MODE_COUNT);
+            lToggleAction.meShowtimeBehaviour = meShowtimeBehaviour;
+            lpOutput->GetGameActionQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lToggleAction),
+                GameStateModuleIO::E_ACTION_TOGGLE_SHOWTIME_BEHAVIOUR,
+                static_cast<s32>(sizeof(lToggleAction)));
+            mbToggleShowtimeBehaviour = false;
+
+        }
+
+        // ---- 2. the answer to the outstanding request (0x82380F7C..0x82381084) ----------------
+        if (muShowtimeRequestedTrafficIndex != K_INVALID_VEHICLE_INDEX)
+        {
+            for (s32 liResponseIndex = 0; liResponseIndex < lpResponseQueue->GetLength(); ++liResponseIndex)
+            {
+                const BrnTraffic::BrnTrafficIO::TrafficTypeResponse& lResponse =
+                    lpResponseQueue->GetEvent(liResponseIndex);
+                if (lResponse.muVehicleIndex != muShowtimeRequestedTrafficIndex)
+                {
+                    continue;
+                }
+
+                CrashModeScoring* const lpCrashScorer = mModeManager.GetScoringSystem()->GetCrashScorer();
+
+                GameStateModuleIO::VehicleHitAction lHitAction = GameStateModuleIO::VehicleHitAction();   // +0x22..+0x23 never written by the console
+                lpCrashScorer->DealWithScoreForVehicleClass(lResponse.muVehicleIndex,
+                                                            lResponse.meType,
+                                                            lResponse.mTypeId,
+                                                            &lHitAction.miVehicleTypeCrashed,
+                                                            &lHitAction.miVehicleBaseScore,
+                                                            &lHitAction.meVehicleScoreCategory,
+                                                            &lHitAction.miScoreMultiplierEarned,
+                                                            &lHitAction.miComboBonusEarned);
+                lHitAction.muTrafficEntityIndex   = lResponse.muVehicleIndex;           // sth var_50
+                lHitAction.meVehicleClass         = lResponse.meType;                   // stw var_70
+                lHitAction.miTotalVehiclesCrashed = lpCrashScorer->GetNumCarsCrashed(); // stw var_68
+                lHitAction.miTotalScoreMultiplier = lpCrashScorer->GetScoreMultiplier();// stw var_58
+                lpOutput->GetGameActionQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lHitAction),
+                    GameStateModuleIO::E_ACTION_VEHICLE_HIT,
+                    static_cast<s32>(sizeof(lHitAction)));
+
+                muShowtimeRequestedTrafficIndex = K_INVALID_VEHICLE_INDEX;
+                break;
+            }
+
+            CGS_ASSERT_AT(muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX,
+                       "muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX", CGS_ARTIST_FILE, 1611);   // :1611 (li r5, 0x64B)
+            muShowtimeRequestedTrafficIndex = K_INVALID_VEHICLE_INDEX;
+        }
+
+        // ---- 3. the next pending victim (0x82381088..0x82381128) ------------------------------
+        // The inlined IsEmpty's constructed-check (CgsStack.h:177, li r5, 0xB1) is the console's
+        // own; this tree's Stack::IsEmpty() carries no assert, so it is spelled at the call site.
+        CGS_ASSERT_AT(mShowtimePendingTrafficIndexStack.GetLength() != CgsContainers::KI_STACK_UNCONSTRUCTED,
+                   "Stack used before Construct/Clear was called", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsStack.h", 177);                   // CgsStack.h:177
+        if (!mShowtimePendingTrafficIndexStack.IsEmpty())
+        {
+            --miShowtimePendingFrameDelay;
+            if (miShowtimePendingFrameDelay <= 0)
+            {
+                GameStateModuleIO::TrafficTypeRequestAction lRequest;
+                lRequest.muTrafficVehicleIndex = mShowtimePendingTrafficIndexStack.Peek();
+                lpOutput->GetGameActionQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRequest),
+                    GameStateModuleIO::E_ACTION_TRAFFIC_TYPE_REQUEST,
+                    static_cast<s32>(sizeof(lRequest)));
+                muShowtimeRequestedTrafficIndex = lRequest.muTrafficVehicleIndex;
+                mShowtimePendingTrafficIndexStack.Pop();
+                miShowtimePendingFrameDelay = KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES;
+
+            }
+        }
+
+        // ---- 4. the x10 multiplier achievement (0x8238112C..0x82381178, inlined) --------------
+        mAchievementManager.OnShowTimeMultiplier(
+            mModeManager.GetScoringSystem()->GetCrashScorer()->GetScoreMultiplier());
+    }
+}
+
+// ================================================================================================
+// Folded back from the x360 tree's split GameStateModule_SendSpecificPreSetRacesModes.cpp (functions of this file, the
+// original BrnGameStateModule.cpp; one TU in ARTIST's BrnGameStateUnity).
+// ================================================================================================
+// ============================================================================
+// b5-decomp/src/GameSource/GameState/GameStateModule_SendSpecificPreSetRacesModes.cpp
+//
+// THE MAP MENU PRESET-RACES PRODUCER --
+//     BrnGameState::GameStateModule::SendSpecificPreSetRacesModesAction
+//
+// This is the ONE function in the shipped image that ever reaches
+// SpecificGameModeEventInterface::AddEvent, i.e. the ONE thing that ever puts a record in a
+// preset-event table -- the GameState-side one it builds here, and, one copy hop later, the
+// GUI cache's own. Until it landed that table was permanently empty on this build:
+// GuiCache::HandleSpecificPreSetRacesEvent never ran, the cache's online-finish-point bitmask
+// stayed zero, and the map menu's "which junctions can I start THIS event type from" list was
+// empty on every boot.
+//
+// THE CHAIN, end to end:
+//   GameStateModule::ProcessGameEvents, game-event 28 (the GUI preset-races request)
+//       -> liEventType = the request payload's first word, lpOutput = the output buffer
+//       -> SendSpecificPreSetRacesModesAction  (this function)
+//       -> OutputBuffer::SetSpecificGameModeEventInterfaceIsValid(true)
+//   BrnGameModule::BridgeGameStateToGui copies the whole interface out of the buffer and
+//       queues it as GuiEventSpecificPresetRaces
+//   GuiCache::RecEvent -> GuiCache::HandleSpecificPreSetRacesEvent
+//
+// THE GUI EVENT ID IS 194. Recorded here because the previous wave wrote 190 into
+// GuiCache::RecEvent's arm for it. The queue-side event id is baked into the
+// AddGuiEvent<GuiEventSpecificPresetRaces> instantiation and it is 194; 190 is the id of a
+// different, 8-byte record (GuiOverlayShowingNotification, whose own instantiation bakes it).
+// See this lane's report for the evidence and the consequence.
+//
+// WHAT IT DOES, leg by leg:
+//   * ProgressionManager::GetProgressionData() -- and note it is the NULL-TOLERANT accessor:
+//     the shipped code tests the resource slot's raw word first and yields NULL rather than
+//     firing the resource container's own assert.
+//   * TriggerQueryManager::GetTrafficData() and ::GetTriggerData().
+//   * the three "lp<Resource>" asserts on those three answers (cpp:5992/5993/5994).
+//   * the local interface is Construct'd (count sentinel -> 0) before the first AddEvent.
+//   then, for every LIGHT TRIGGER of every HULL of the loaded TrafficData:
+//     * id = LightTriggerId::Set(hull, triggerIndex), inlined, with its two baked bounds
+//       asserts (BrnTrafficLightTrigger.h:211/:212)
+//     * box = TrafficData::GetJunctionLogicBoxForTrafficLight(id)   [assert cpp:6011]
+//     * eventJunctionId = box->GetEventJunctionID() -- KEEP ONLY junctions that carry one. The
+//       test is SIGNED, so the -1 "this junction has no event" sentinel and every other
+//       negative word drop out together.
+//     * the open-coded EventJunction scan of ProgressionData's junction table for that id
+//       (the same scan three other bodies in the tree carry), then:
+//           liEventType <  10 -> junction->GetOfflineEvent(), and GetEvent(event->GetMode())
+//                                (see THE OVERRIDE WORD below)
+//           liEventType >= 10 -> junction->GetOnlineEvent(),  and
+//                                GetOnlin(event->GetOnlineMode())
+//     * KEEP ONLY the junctions whose mapped id == liEventType.
+//     * liNumCheckpoints = event->GetCheckpointCount()   [assert <= 16, cpp:6040]
+//     * for each checkpoint: landmark = TriggerData::FindLandmark(checkpoint.GetLandmarkId())
+//       [assert cpp:6045], and the landmark's REGION INDEX is the LandmarkIndex that goes in.
+//     * AddEvent(eventJunctionId, lightTriggerId, landmarks, liNumCheckpoints)
+//   then the whole interface is copied into the output buffer and its valid flag raised.
+//
+// THE LANDMARK STORED IS THE REGION INDEX, NOT THE CHECKPOINT'S LANDMARK ID. Easy to get
+// backwards: the checkpoint record carries a CgsID-shaped landmark id, which is only the KEY
+// into the track's trigger table; the halfword that goes into the event record is the resolved
+// Landmark's TriggerRegion::miRegionIndex at +0x28. That is what makes the GUI side's
+// LandmarkIndex a small dense index it can look a map icon up by, and it is why the lookup
+// through TriggerData has to happen here rather than on the GUI side.
+//
+// THE EVENT TYPE IS BOTH THE FILTER AND THE ANSWER SPACE. liEventType is an already-mapped
+// event id -- the same space ProgressionManager::GetEvent / GetOnlin answer in (0/3/4/5/7/8
+// offline, 10/11/13 online) -- NOT a raw RaceEventData mode byte. The ">= 10" test is what
+// picks the offline vs the online slot of each junction, and it works precisely because the
+// online ids start at 10.
+//
+// THE OVERRIDE WORD, and it is not a deviation this lane invented. The offline arm reads a
+// game-type word off the module first and only falls back to the event's own mode when that
+// word holds 6:
+//     liGameType = <the module's game-type override>;
+//     if (liGameType == 6) liGameType = lpRaceEvent->GetMode();
+//     liMappedEventType = ProgressionManager::GetEvent(liGameType);
+// That word has no member and no writer anywhere in the image -- this function,
+// CheckIfPlayerIsAtJunctionWithAnEvent and StartModeAtLights are its only appearances, and
+// GameStateModule_gSR_00.cpp already carries the full FLAG for it. Its retail value is the 6
+// sentinel ("no override": RaceEventData::EModeType tops out at 5). Reproduced the same way
+// that TU reproduces it -- the sentinel path taken unconditionally, the expression written out
+// above. DELETE-WHEN ProgressionDebugComponent is reconstructed.
+//
+// A SHIPPED QUIRK REPRODUCED, NOT CORRECTED: when the mapped id matches but the event has ZERO
+// checkpoints, the record is still added, with an empty landmark set. The GUI consumer's own
+// finish-point scan is what then reads such a record at index -1 (documented on its side);
+// "fixing" either half would change which bits the online-finish-point mask carries.
+//
+
+
+namespace BrnGameState
+{
+
+namespace
+{
+    // Verbatim baked assert paths for this function's asserts.
+    const char* const KAC_LIGHT_TRIGGER_H =
+        "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficLightTrigger.h";
+    const char* const KAC_RACE_EVENT_DATA_H =
+        "..\\..\\..\\SharedClasses\\Progression/BrnRaceEventData.h";
+    const char* const KAC_GAMESTATEMODULE_CPP =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp";
+
+    // The ">= 10" split between the junction's offline and online event slot. 10 is the
+    // first online id ProgressionManager::GetOnlin answers with.
+    const s32 KI_FIRST_ONLINE_EVENT_TYPE = 10;
+
+    // FindEventJunctionById: the same helper as the one defined above CheckIfPlayerIsAtJunctionWithAnEvent.
+
+    // ========================================================================
+    // The per-junction record build. Written once because the shipped code emits it once --
+    // both the offline and the online arm fall into the same tail; inlining it twice would be
+    // a transcription of the branch layout, not of the code. A file-static free helper rather
+    // than a member, because the shipped image publishes no symbol for it.
+    // ========================================================================
+    void AddPreSetRaceEvent(GameStateModuleIO::SpecificGameModeEventInterface& lrEvents,
+                            const BrnProgression::RaceEventData&               lrRaceEvent,
+                            const BrnTrigger::TriggerData&                     lrTriggerData,
+                            s32                                                liEventJunctionID,
+                            u32                                                luLightTriggerId)
+    {
+        // The record's landmark array is 16 wide, and this is the assert that says so.
+        const s32 liNumCheckpoints = lrRaceEvent.GetCheckpointCount();
+        if (liNumCheckpoints > GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("liNumCheckpoints<=KI_MAX_LANDMARKS_IN_MODE",
+                                       CGS_ASSERT_LOCATION(KAC_GAMESTATEMODULE_CPP, 6040));
+            CgsDev::Assert::EndAssert();
+        }
+
+        s32 liCount = liNumCheckpoints;
+        if (liCount > GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE)
+        {
+            liCount = GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE;
+        }
+
+        // The 32-byte landmark scratch: 16 LandmarkIndex, filled front to back.
+        LandmarkIndex laLandmarkIndices[GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE];
+
+        // ZERO CHECKPOINTS IS NOT A REJECTION -- see the banner. The loop is skipped
+        // and the record is still added, with an empty landmark set.
+        for (s32 liCheckpoint = 0; liCheckpoint < liCount; ++liCheckpoint)
+        {
+            // The bound assert GetCheckpointData owns, baked at BrnRaceEventData.h:953. The
+            // shipped code open-codes it at this site and then reads the table directly, so it
+            // is restated here rather than delegated.
+            if (liCheckpoint < 0 || liCheckpoint >= lrRaceEvent.GetCheckpointCount())
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount",
+                    CGS_ASSERT_LOCATION(KAC_RACE_EVENT_DATA_H, 953));
+                CgsDev::Assert::EndAssert();
+            }
+
+            const BrnProgression::CheckpointData* const lpCheckpoint =
+                lrRaceEvent.GetCheckpointData(liCheckpoint);
+
+            const BrnTrigger::Landmark* const lpLandmark =
+                (lpCheckpoint != 0)
+                    ? lrTriggerData.FindLandmark(static_cast<CgsID>(lpCheckpoint->GetLandmarkId()))
+                    : 0;
+            CGS_ASSERT_AT(lpLandmark != 0, "lpLandmark", CGS_ARTIST_FILE, 6045);   // DWARF :6045
+
+        }
+
+        // The record: the event junction id, the packed light-trigger id, the scratch array
+        // and the landmark count.
+        lrEvents.AddEvent(liEventJunctionID, luLightTriggerId, laLandmarkIndices, liCount);
+    }
+}
+
+// ============================================================================
+// SendSpecificPreSetRacesModesAction. See the file banner.
+// ============================================================================
+void GameStateModule::SendSpecificPreSetRacesModesAction(
+        s32                              liEventType,
+        GameStateModuleIO::OutputBuffer* lpOutput)
+{
+    // The three resource fetches, in the shipped order.
+    const BrnProgression::ProgressionData* const lpProgressionData =
+        mProgressionManager.GetProgressionData();
+    const BrnTraffic::TrafficData* const lpTrafficData  = mTriggerQueryManager.GetTrafficData();
+    const BrnTrigger::TriggerData* const lpTriggerData  = mTriggerQueryManager.GetTriggerData();
+
+    CGS_ASSERT_AT(lpProgressionData != 0, "lpProgressionData", CGS_ARTIST_FILE, 5992);   // :5992
+    CGS_ASSERT_AT(lpTrafficData     != 0, "lpTrafficData", CGS_ARTIST_FILE, 5993);       // :5993
+    CGS_ASSERT_AT(lpTriggerData     != 0, "lpTriggerData", CGS_ARTIST_FILE, 5994);       // :5994
+
+    if (lpOutput == 0 || lpProgressionData == 0 || lpTrafficData == 0 || lpTriggerData == 0)
+    {
+        static bool sbNoResourcesLogged = false;
+        if (!sbNoResourcesLogged && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbNoResourcesLogged = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[preset-races] SKIPPED: SendSpecificPreSetRacesModesAction is missing a "
+                   "resource (progression/traffic/trigger); the GUI preset-event table stays "
+                   "empty this request.\n";
+        }
+        return;
+    }
+
+    // The stack-local interface: the Array's unconstructed sentinel is stamped at entry and
+    // cleared to a live length of zero once the three asserts are past. Both lines below.
+    GameStateModuleIO::SpecificGameModeEventInterface lEvents;
+    lEvents.Construct();
+
+    const u32 luNumHulls = lpTrafficData->muNumHulls;   // +0x02
+    for (u32 luHull = 0; luHull < luNumHulls; ++luHull)
+    {
+        const BrnTraffic::Hull* const lpHull = lpTrafficData->GetHull(luHull);
+        if (lpHull == 0)
+        {
+            continue;   // [GUARD] GetHull carries the shipped bounds assert
+        }
+
+        const u32 luNumLightTriggers = lpHull->muNumLightTriggers;   // +0x0E
+        for (u32 luTrigger = 0; luTrigger < luNumLightTriggers; ++luTrigger)
+        {
+            // BrnTraffic::LightTriggerId::Set(luHull, luTrigger), inlined. Both bounds asserts
+            // are baked at BrnTrafficLightTrigger.h:211/:212 and both are reproduced -- this
+            // code PACKS the handle, so a fire means the shipped lane graph changed shape.
+            // (The shipped compare is against the SCALED index, luHull * 4 vs 1600, i.e. the
+            // same KU_MAX_HULLS == 400.)
+            if (luHull >= BrnTraffic::KU_MAX_HULLS)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("luHull < KU_MAX_HULLS", CGS_ASSERT_LOCATION(KAC_LIGHT_TRIGGER_H, 211));
+                CgsDev::Assert::EndAssert();
+            }
+            if (luTrigger >= 256u)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("luLightTriggerIndex < 256", CGS_ASSERT_LOCATION(KAC_LIGHT_TRIGGER_H, 212));
+                CgsDev::Assert::EndAssert();
+            }
+
+            const u32 luLightTriggerId =
+                (luHull << 8) | BrnTraffic::KU_LIGHT_TRIGGER_ID_OWNER_TAG | luTrigger;
+
+            const BrnTraffic::JunctionLogicBox* const lpJunctionLogicBox =
+                lpTrafficData->GetJunctionLogicBoxForTrafficLight(luLightTriggerId);
+            CGS_ASSERT_AT(lpJunctionLogicBox != 0, "lpJunctionLogicBox", CGS_ARTIST_FILE, 6011);   // DWARF :6011
+            if (lpJunctionLogicBox == 0)
+            {
+                continue;   // [GUARD] -- the shipped code reads +0x38 right after its assert
+            }
+
+            // The +0x38 compare is SIGNED, so the -1 "this junction has no event" sentinel and
+            // any other negative word both drop out.
+            const s32 liEventJunctionID = static_cast<s32>(lpJunctionLogicBox->GetEventJunctionID());
+            if (liEventJunctionID <= -1)
+            {
+                continue;
+            }
+
+            const BrnProgression::EventJunction* const lpEventJunction =
+                FindEventJunctionById(lpProgressionData, static_cast<u32>(liEventJunctionID));
+            if (lpEventJunction == 0)
+            {
+                continue;   // the shipped scan simply falls out of the loop
+            }
+
+            // The offline / online slot choice, and the mode -> event-id map on each side.
+            s32 liMappedEventType = -1;
+            if (liEventType >= KI_FIRST_ONLINE_EVENT_TYPE)
+            {
+                const BrnProgression::RaceEventData* const lpRaceEvent =
+                    lpEventJunction->GetOnlineEvent();                    // +0x08
+                if (lpRaceEvent == 0)
+                {
+                    continue;
+                }
+                liMappedEventType = mProgressionManager.GetOnlin(
+                    static_cast<u32>(lpRaceEvent->GetOnlineMode()));      // +0xED
+                if (liMappedEventType != liEventType)
+                {
+                    continue;
+                }
+                AddPreSetRaceEvent(lEvents, *lpRaceEvent, *lpTriggerData,
+                                   liEventJunctionID, luLightTriggerId);
+            }
+            else
+            {
+                const BrnProgression::RaceEventData* const lpRaceEvent =
+                    lpEventJunction->GetOfflineEvent();                   // +0x04
+                if (lpRaceEvent == 0)
+                {
+                    continue;
+                }
+                // THE OVERRIDE WORD -- see the banner. 6 is the retail sentinel, so the
+                // fallback (the event's own mode byte) is the path taken.
+                const s32 liDataGameType = static_cast<s32>(lpRaceEvent->GetMode());
+                liMappedEventType        = mProgressionManager.GetEvent(liDataGameType);
+                if (liMappedEventType != liEventType)
+                {
+                    continue;
+                }
+                AddPreSetRaceEvent(lEvents, *lpRaceEvent, *lpTriggerData,
+                                   liEventJunctionID, luLightTriggerId);
+            }
+        }
+    }
+
+    // The publish copy, spelled as the assignment of the named member it lands on (the
+    // interface is a pointer-free POD; its _AssertLayout pins the 0x1E18 width that both the
+    // producer's copy and the bridge's use).
+    lpOutput->GetSpecificGameModeEventInterface() = lEvents;
+
+    // And the flag the GameState->Gui bridge polls.
+    lpOutput->SetSpecificGameModeEventInterfaceIsValid(true);
+
+    // [DIAG] NOT IN THE SHIPPED BUILD -- the one line that proves the table filled, once per
+    // request. DELETE-WHEN the preset-races path has a regression test behind it.
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[preset-races] published " << static_cast<s32>(lEvents.GetNumEvents())
+            << " preset events for event type " << liEventType
+            << " from " << static_cast<s32>(luNumHulls) << " hulls\n";
+    }
+}
+
+// ARTIST82381CD8; DecFIGS BrnGameStateModule.h:766. All original asserts are non-gating.
+void GameStateModule::SendSetLandmarkRacesAction(GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    const LandmarkIndex lCurrentLandmarkIndex = mModeManager.GetPlayerCurrentLandmark();
+    CGS_ASSERT_AT(static_cast<s32>(lCurrentLandmarkIndex) != -1,
+               "lCurrentLandmarkIndex != K_INVALID_LANDMARK", CGS_ARTIST_FILE, 5862);
+    CGS_ASSERT_AT(static_cast<s32>(lCurrentLandmarkIndex) != -2,
+               "lCurrentLandmarkIndex != K_MULTIPLE_LANDMARKS", CGS_ARTIST_FILE, 5863);
+    GameStateModuleIO::SetLandmarkRacesAction lSlamAction;
+    lSlamAction.muNumRaces = mProgressionManager.GetRacesAtLandmark(
+        lSlamAction.maRaces, 6, lCurrentLandmarkIndex, true);
+    CGS_ASSERT_AT(lSlamAction.muNumRaces > 0, "lSlamAction.muNumRaces > 0", CGS_ARTIST_FILE, 5869);
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSlamAction),
+                           GameStateModuleIO::E_ACTION_SET_LANDMARK_RACES, sizeof(lSlamAction));
+}
+
+} // namespace BrnGameState
+
+// ================================================================================================
+// Folded back from the x360 tree's split GameStateModule_SendSetUpAllEventStarts.cpp (functions of this file, the
+// original BrnGameStateModule.cpp; one TU in ARTIST's BrnGameStateUnity).
+// ================================================================================================
+// ============================================================================
+// b5-decomp/src/GameSource/GameState/GameStateModule_SendSetUpAllEventStarts.cpp
+//
+// ⭐⭐ THE EVENT-START TABLE PRODUCER -- BrnGameState::GameStateModule::
+//     SendSetUpAllEventStartsMessage @ 0x823759D0
+//
+// This is the ONE function in the image that ever reaches
+// SetUpAllEventStartsInterface::AddEventStart @0x82361398, i.e. the ONE thing that ever puts a
+// record in an event-start table -- the GameState-side one it builds here, and, one memcpy hop
+// later, the GUI cache's copy at GuiCache+0x5690. Until it landed, that table was permanently
+// empty on this build and BrnGui::GuiCache::GetProfileEventDisplayInfo -- reached every drive
+// from SatNavRenderer::RefreshSatNavIconInfo -- walked a zero-length array and fired the
+// console's own "Unable to find event start with event id: " assert on every attempt. That is
+// the FLAG BrnGameStateModule.cpp's PreWorldUpdateSetupPlayerCarBringUp used to carry and which
+// this TU retires; the storm's other half (the WorldDataController readiness gate) is a
+// separate wire, named at the bottom of this banner.
+//
+// WHAT IT DOES, leg by leg, from the ARTIST asm (r31 == this, r29 == lpOutput):
+//   0x82375A08  TrafficData_::GetMemor(this + 43920)  -- 43920 == mTriggerQueryManager
+//               (this + 42320) + 0x640, i.e. the inlined TriggerQueryManager::GetTrafficData()
+//               (the SAME adjust GameStateModule_gSR_00.cpp:305 already names).
+//   0x82375A14  operator new[](0x40000)               -- a 256 KB scratch arena, adopted by a
+//   0x82375A24  LinearMalloc::Construct/Create           stack LinearMalloc.
+//   0x82375A48  ResourcePtr<AISectionsData>::operator->(this + 181300) then
+//   0x82375A50  AISectionsData::BuildAISectionPointMap(&arena) -- the spatial index the
+//               per-junction nearest-section query below needs. [FLAG: the OWNER of that
+//               resource pointer differs on this build -- see THE ONE DEVIATION below.]
+//   0x82375A8C  WorldMap2D::Construct(districtBlob->GetData(), ORIGIN, SIZE) over the
+//               StreetManager's "Districts" handle (this + 0x47470 == mStreetManager +0x1D08).
+//               The two vectors are the SAME dynamic-initialiser pair BrnStuntManager.cpp
+//               recovered (unk_82FADED0 == origin, unk_82FAE140 == size) -- both call sites
+//               load v1 <- unk_82FADED0 and v2 <- unk_82FAE140, byte for byte.
+//   then, for every LIGHT TRIGGER of every HULL of the loaded TrafficData:
+//     0x82375BB4  id = (hull << 8) | 0x39000000 | triggerIndex   (LightTriggerId::Set, inlined)
+//     0x82375BC0  box = TrafficData::GetJunctionLogicBoxForTrafficLight(id)
+//     0x82375BD4  KEEP ONLY junctions that have BOTH start grids:
+//                 GetStartDataForTrafficLight(id, false) && GetStartDataForTrafficLight(id, true)
+//                 -- an event can be raced offline AND online from these lights. The miss arm is
+//                 the console's own gated WARNING print, reproduced below.
+//     0x82375C04  pos = ExpandPosPlusYRotToTransform(trigger.mPosPlusYRot).Pos()
+//     0x82375C28  district = WorldMap2D::GetValue(pos)   [assert != 255, cpp:5764]
+//     0x82375C74  section  = AISectionsData::FindNearestAISection(pos, pointMap)
+//     0x82375CAC  AddEventStart(box->GetPosition(), box->GetID(), box->GetEventJunctionID(),
+//                               id, DistrictToCounty(district), section)
+//   0x82375E3C  operator delete[](arena)
+//   0x82375E50  memcpy(lpOutput + 0x2B0F0, &localInterface, 0x20E0)
+//   0x82375E5C  lpOutput->SetSetUpAllEventStartsInterfaceIsValid(true)
+//
+// ⚠️ THE POSITION IN THE RECORD IS THE JUNCTION'S, NOT THE TRIGGER'S. Easy to get backwards:
+// the light-trigger transform is used ONLY to sample the district map and to find the nearest AI
+// section; the vector that goes INTO the record (and therefore onto the sat-nav map) is
+// `lvx128 v127, r30, r16` with r16 == 0x110 and r30 == the JunctionLogicBox, i.e.
+// JunctionLogicBox::GetPosition(). Two different positions, two different jobs.
+//
+// ⚠️ THE DISTRICT SAMPLE IS (x, z), NOT (x, y). The console vperms the Vector3 through
+// unk_82CDA450 into a two-lane vector before calling WorldMap2D::GetValue @0x82375C20; the
+// ground-plane pair is what every other district sample in the tree uses too
+// (BoxRegion::GetPosition2D() == { x, z }, BrnRegion.h:103). Spelled as an explicit Vector2 here
+// so the lane choice is readable instead of hidden in a permute mask.
+//
+// ARTIST reads the AI sections resource from the embedded ProgressionManager.
+// ============================================================================
+
+
+
+namespace BrnGameState
+{
+
+namespace
+{
+    // KAC_LIGHT_TRIGGER_H / KAC_GAMESTATEMODULE_CPP: defined once, with SendSpecificPreSetRacesModesAction's.
+
+    // The scratch arena the AI-section point map is built out of: `lis r3, 4` @0x82375A10, i.e.
+    // operator new[](0x40000). Freed at 0x82375E3C before the publish.
+    const size_t KN_AI_POINT_MAP_ARENA_BYTES = 0x40000;
+
+    // ⭐ The district-map world rect. THE SAME PAIR BrnStuntManager.cpp recovered from the MSVC
+    // dynamic-initialiser thunks (0x82C4CD88 -> unk_82FADED0, 0x82C4CDC8 -> unk_82FAE140); both
+    // are zero in the static image, which is why they are absent from the JSON export set. The
+    // argument registers settle which is which and BOTH call sites agree byte for byte:
+    //     StuntManager::Prepare           @0x8239CA70  lvx128 v1 <- unk_82FADED0  (== ORIGIN)
+    //     SendSetUpAllEventStartsMessage  @0x82375A78  lvx128 v1 <- unk_82FADED0
+    //                                     @0x82375A6C  lvx128 v2 <- unk_82FAE140  (== SIZE)
+    // Duplicated here rather than shared because StuntManager's copies are TU-local file statics;
+    // if either pair is ever re-tuned, both must move together.
+    const Vector2 KV2_DISTRICT_MAP_WORLD_ORIGIN(-4208.0f, -3846.0f); // unk_82FADED0
+    const Vector2 KV2_DISTRICT_MAP_WORLD_SIZE( 8270.0f,  6101.0f); // unk_82FAE140
+}
+
+// ============================================================================
+// X360 0x823759D0 -- SendSetUpAllEventStartsMessage. See the file banner.
+// ============================================================================
+void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBuffer* lpOutput)
+{
+    // The console's `GetMemor(this + 43920)` -- TriggerQueryManager::GetTrafficData(), inlined.
+    const BrnTraffic::TrafficData* const lpTrafficData = mTriggerQueryManager.GetTrafficData();
+
+    // ---- the AI-section point map (0x82375A14..0x82375A50) ---------------------------------
+    // ARTIST82375A40 reads ProgressionManager +0x20904.
+    const BrnAI::AISectionsData* const lpAISectionsData = mProgressionManager.GetAISectionsData();
+
+    u8* const lpArena = new u8[KN_AI_POINT_MAP_ARENA_BYTES];
+    CgsMemory::LinearMalloc lArena;
+    lArena.Construct();
+    lArena.Create(lpArena, KN_AI_POINT_MAP_ARENA_BYTES);
+
+    BrnAI::AISectionPointMap* const lpAISectionPointMap =
+        lpAISectionsData->BuildAISectionPointMap(&lArena);
+
+    // ---- the district map (0x82375A54..0x82375A8C) ------------------------------------------
+    // ARTIST constructs it unconditionally from the StreetManager's "Districts" handle.
+    CgsWorld::WorldMap2D lDistrictMap;
+    const CgsResource::ResourceHandle* const lpHandle =
+        mStreetManager.GetDistrictMapResourceHandle();
+    const CgsResource::BinaryFileResource* const lpBlob =
+        *reinterpret_cast<const CgsResource::BinaryFileResource* const*>(
+            lpHandle->mpResourceMemory);
+    lDistrictMap.Construct(lpBlob->GetData(),
+                           KV2_DISTRICT_MAP_WORLD_ORIGIN,
+                           KV2_DISTRICT_MAP_WORLD_SIZE);
+
+    // ---- the table itself (the console's var_2190 stack local) ------------------------------
+    // `li r11, -1 / stw r11, var_C0` is the Array ctor's sentinel; `li r11, 0 / stw r11, var_C0`
+    // @0x82375A90 is the Construct that clears it. Both are reproduced by these two lines.
+    GameStateModuleIO::SetUpAllEventStartsInterface lEventStarts;
+    lEventStarts.Construct();
+
+    const u32 luNumHulls = lpTrafficData->muNumHulls;   // `lhz r10, 2(r21)`
+    for (u32 luHull = 0; luHull < luNumHulls; ++luHull)
+    {
+        const BrnTraffic::Hull* const lpHull = lpTrafficData->GetHull(luHull);
+        const u32 luNumLightTriggers = lpHull->muNumLightTriggers;   // `lbz r27, 0xE(r18)`
+        for (u32 luTrigger = 0; luTrigger < luNumLightTriggers; ++luTrigger)
+        {
+            // BrnTraffic::LightTriggerId::Set(luHull, luTrigger), inlined by the console at
+            // 0x82375B74..0x82375BB4. Both bounds asserts are baked at BrnTrafficLightTrigger.h
+            // :211/:212 and both are reproduced -- this code PACKS the handle, so a fire means
+            // the shipped lane graph changed shape. (The console compares the SCALED index
+            // `luHull * 4` against 0x640; 0x640 / 4 == KU_MAX_HULLS == 400.)
+            if (luHull >= BrnTraffic::KU_MAX_HULLS)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("luHull < KU_MAX_HULLS", CGS_ASSERT_LOCATION(KAC_LIGHT_TRIGGER_H, 211));
+                CgsDev::Assert::EndAssert();
+            }
+            if (luTrigger >= 256u)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("luLightTriggerIndex < 256", CGS_ASSERT_LOCATION(KAC_LIGHT_TRIGGER_H, 212));
+                CgsDev::Assert::EndAssert();
+            }
+
+            const u32 luLightTriggerId =
+                (luHull << 8) | BrnTraffic::KU_LIGHT_TRIGGER_ID_OWNER_TAG | luTrigger;
+
+            const BrnTraffic::JunctionLogicBox* const lpJunctionLogicBox =
+                lpTrafficData->GetJunctionLogicBoxForTrafficLight(luLightTriggerId);
+
+            // THE EVENT FILTER: keep the junction only if it has BOTH start grids. `li r5, 0`
+            // then `li r5, 1` @0x82375BC8/@0x82375BE0 -- offline first, online second, and a
+            // null from EITHER drops straight into the WARNING arm below.
+            const bool lbHasEventData =
+                (lpTrafficData->GetStartDataForTrafficLight(luLightTriggerId, false) != 0) &&
+                (lpTrafficData->GetStartDataForTrafficLight(luLightTriggerId, true)  != 0);
+
+            if (!lbHasEventData)
+            {
+                // The console's own gated diagnostic (0x82375CB8..0x82375D94), streamed into
+                // gpDebugPrint behind `CgsDev::Message::gxMessageFilterFlags & 1`. It prints the
+                // trigger id in hex and the two junction ids -- which is exactly the information
+                // needed to find a junction whose lane data and progression data disagree.
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "WARNING: Missing event data for junction. Light trigger = "
+                        << luLightTriggerId;
+                    *CgsDev::Log::gpDebugPrint
+                        << ", junction id=" << lpJunctionLogicBox->GetID()
+                        << ", event junction id=" << lpJunctionLogicBox->GetEventJunctionID();
+                    *CgsDev::Log::gpDebugPrint << "\n";
+                }
+                continue;
+            }
+
+            // The light trigger's own world pose. ExpandPosPlusYRotToTransform(mPosPlusYRot) is
+            // LightTrigger::GetTransform(); its translation row IS the packed lane, so Pos() is
+            // the trigger centre with no extra accessor (the TriggerQueryManager precedent).
+            // The console calls it TWICE with identical arguments (0x82375C04 and 0x82375C58) --
+            // the compiler could not keep the result live across the WorldMap2D::GetValue call.
+            // One call, one local: same inputs, same answer.
+            const BrnTraffic::LightTrigger& lrTrigger = lpHull->mpaLightTriggers[luTrigger];
+            const Vector3 lv3TriggerPosition = lrTrigger.GetTransform().Pos();
+
+            // The district sample -- ground-plane lanes, see the banner's ⚠️.
+            const Vector2 lv2Ground(lv3TriggerPosition.mV.x, lv3TriggerPosition.mV.z);
+            const u8 luMapValue = lDistrictMap.GetValue(lv2Ground);
+            if (luMapValue == CgsWorld::KU_INVALID_WORLD_MAP_VALUE)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "luMapValue != CgsWorld::KU_INVALID_WORLD_MAP_VALUE",
+                    CGS_ASSERT_LOCATION(KAC_GAMESTATEMODULE_CPP, 5764));
+                CgsDev::Assert::EndAssert();
+            }
+            // The console passes the raw sample straight through, INCLUDING the 255 it just
+            // asserted about (`mr r3, r27` @0x82375C7C is the untouched byte).
+            const BrnWorld::ECounty leCounty = BrnWorld::WorldRegion::DistrictToCounty(
+                static_cast<BrnWorld::EDistrict>(luMapValue));
+
+            // The nearest AI section to the trigger (0x82375C74).
+            const s16 li16AISectionIndex = static_cast<s16>(
+                lpAISectionsData->FindNearestAISection(lv3TriggerPosition, lpAISectionPointMap));
+
+            // 0x82375CAC -- the record. See the ⚠️ in the banner: the POSITION is the junction's
+            // (+0x110), not the trigger's.
+            lEventStarts.AddEventStart(lpJunctionLogicBox->GetPosition(),
+                                       static_cast<s32>(lpJunctionLogicBox->GetID()),
+                                       static_cast<s32>(lpJunctionLogicBox->GetEventJunctionID()),
+                                       luLightTriggerId,
+                                       static_cast<s32>(leCounty),
+                                       li16AISectionIndex);
+        }
+    }
+
+    delete[] lpArena;   // 0x82375E3C `operator delete__`
+
+    // 0x82375E50 -- `memcpy(out + 0x2B0F0, &local, 0x20E0)`, spelled as the assignment of the
+    // named member it lands on (the interface is a pointer-free POD; its _AssertLayout pins the
+    // 0x20E0 the console's literal names).
+    lpOutput->GetSetUpAllEventStartsInterface() = lEventStarts;
+
+    // 0x82375E5C -- and the flag the GameState->Gui bridge polls.
+    lpOutput->SetSetUpAllEventStartsInterfaceIsValid(true);
+
+}
+
+} // namespace BrnGameState
 
 #undef CGS_ARTIST_FILE
 #undef CGS_ARTIST_FILE_BRNRACECARENTITYMODULEOUTPUTINTERFACE

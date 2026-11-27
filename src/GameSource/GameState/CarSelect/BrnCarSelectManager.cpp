@@ -23,17 +23,17 @@
 
 namespace BrnGameState
 {
-// The game-action queue the callers hand us is an GameStateModuleIO::GameActionQueue* (X360 == the
-// OutputBuffer's embedded queue at this+4). Reinterpret it to the real backing type and post events
-// via AddEvent (established precedent: BrnDriveThruManager.cpp / BrnTriggerQueryManager.cpp).
-typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
+// (The invented AsActionQueue / GameActionQueueImpl cast is retired: GameStateModuleIO::GameActionQueue is
+// DWARF BaseGameActionQueue<13312>, and each post is its AddGameAction<T>, BrnGameActions.h:501.)
 
-static inline GameActionQueueImpl* AsActionQueue(GameStateModuleIO::GameActionQueue* lpQueue)
-{
-    // IDENTITY. GameStateModuleIO::GameActionQueue IS CgsModule::VariableEventQueue<13312,16>
-    // (BrnGameStateSharedIO.h). The helper survives only as the call-site vocabulary.
-    return lpQueue;
-}
+
+
+
+
+
+
+
+
 
 // The verbatim X360-baked source path the asserts reference (every assert in this TU shares it).
 static const char* const KAC_CSM_FILE =
@@ -69,43 +69,43 @@ static const f32 KF_CARSELECT_DELAY_BEFORE_CHANGE_CAR  =  1.0f;  // flt_82001C98
 static const f32 KF_LIVERYSELECT_DELAY_BEFORE_CHANGE   =  0.85f; // flt_82029BB8
 static const f32 KF_CARSELECT_CHANGE_CAR_TELEPORT_DELAY=  1.5f;  // flt_82029F18
 static const f32 KF_STARTOFGAME_DEFORM_SENTINEL        = -1.0f;  // flt_820037C8
+// (The file-local EGameAction id list is retired: the posts name the DWARF action types, whose mseType
+// is the X360 id; BrnGameActions.h.)
 
-// ----------------------------------------------------------------------------
-// X360-attested game-action event-type ids + payload sizes (the literal `li r5,<type>` /
-// `li r6,<size>` immediates each AddEvent is given). Names mirror the GameStateModuleIO action
-// structs the DWARF cpp lists; their field layouts are NOT in the exports, so each payload is
-// posted as a sized opaque buffer (see `flagged`). The few payload bytes the X360 does write are
-// reproduced at their attested in-payload offsets.
-// ----------------------------------------------------------------------------
-enum EGameAction
-{
-    KI_ACTION_RESET_PLAYER_CAR          = 0,    // size 80 (0x50)  -- ResetPlayerCarAction
-    KI_ACTION_CAR_CHANGED_SUFFIX        = 2,    // size 8          -- CarSelectionChanged (post-set id)
-    KI_ACTION_PAUSED_IN_CAR_SELECT      = 80,   // size 1          -- PausedInCarSelectAction
-    KI_ACTION_TRANSITION_IN             = 73,   // size 2          -- CarSelectTransitionInAction
-    KI_ACTION_CAR_SELECT_READY          = 75,   // size 4          -- CarSelectReadyAction
-    KI_ACTION_CAR_MOD_SCREEN            = 76,   // size 8          -- CarSelectModificationScreen
-    KI_ACTION_CAR_SELECT_EXIT           = 74,   // size 1          -- CarSelectExitAction
-    KI_ACTION_FORCE_EXIT                = 78,   // size 1          -- CarSelectAbortAction
-    KI_ACTION_NEW_CAR_UNLOCKED          = 62,   // size 16         -- NewCarUnlockedAction
-    // ⚠️ RENAMED 2026-08-03. This is DWARF `CarSelectChangeColourAction`
-    // (GameAction<E_ACTION_CAR_SELECT_CHANGE_COLOUR>, PS3 id 74 -> X360 79), whose payload is
-    // {u32 muPaletteIndex, u32 muColourIndex} -- PALETTE FIRST. The old name `CarUnlockAction`
-    // belongs to a DIFFERENT record: GameAction<E_ACTION_GUI_CAR_UNLOCK> (PS3 id 2), a single
-    // `CgsID mCurrentCarToUnlock`, which is what KI_ACTION_CAR_CHANGED_SUFFIX below posts.
-    KI_ACTION_CAR_SELECT_CHANGE_COLOUR  = 79,   // size 8          -- CarSelectChangeColourAction
-    KI_ACTION_CAR_UNLOCK_END            = 63,   // size 1          -- CarUnlockEndAction
-    KI_ACTION_CAR_SELECTION_CHANGED     = 64,   // size 64 (0x40)  -- CarSelectionChangedAction
-    KI_ACTION_CAR_SELECTION_DROPIN      = 65,   // size 16         -- CarSelectionChangedDropInAction
-    KI_ACTION_CAR_SELECTION_DROPIN_DONE = 66,   // size 16         -- CarSelectionDropInCompleteAction
-    KI_ACTION_JUNKYARD_DRIVE_THRU       = 7,    // size 48 (0x30)  -- JunkYardDriveThruAction
-    KI_ACTION_RESET_PLAYER_DRIVER       = 70,   // size 1          -- SetPlayerCarDriverAction (exit)
-    KI_ACTION_SET_INPUT_ENABLED         = 71,   // size 1          -- (enter junkyard input enable)
-    KI_ACTION_JUNKYARD_ENTERED          = 99,   // size 1          -- (junkyard entered flag)
-    KI_ACTION_AUTOSAVE                  = 55,   // size 1          -- RequestAutoSaveAction
-    KI_ACTION_REQUEST_GAME_TRAINING     = 149,  // size 4          -- RequestGameTrainingAction
-    KI_ACTION_STARTUP_DEFORM            = 106,  // size 1          -- (ReallyEnter start-of-game deform)
-};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // The pause-reason bit the junkyard exit clears (X360 UpdateExitState @0x82398C20 passes `li r4,1`
 // to GameStateModule::RequestUnpause). The enum's real name is GameStateModuleIO::EPauseModule
@@ -461,12 +461,12 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
         *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: Car Modification\n";
 
     {
-        GameStateModuleIO::CarSelectModificationScreen lModScreen;
-        lModScreen.meCarSelectType = GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD;
-        lModScreen.mbEntering = true;
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lModScreen),
-            KI_ACTION_CAR_MOD_SCREEN, sizeof(lModScreen));
+        GameStateModuleIO::CarSelectModificationScreen lModScreenAction;   // DWARF cpp:393
+        lModScreenAction.meCarSelectType = GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD;
+        lModScreenAction.mbEntering = true;
+        lpActionQueue->AddGameAction(lModScreenAction);
+
+
     }
 
     // X360: if (mDesiredCarId == 0) mDesiredCarId = mStartCarId; then assert it is non-null.
@@ -544,9 +544,9 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
             }
             lRequestAction.mauExtraInfoFlags[0] = 5;
 
-            AsActionQueue(lpActionQueue)->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRequestAction),
-                GameStateModuleIO::E_ACTION_CAR_SELECTION_REQUEST_STREAMING, sizeof(lRequestAction));
+            lpActionQueue->AddGameAction(lRequestAction);
+
+
         }
     }
 }
@@ -856,8 +856,8 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
         lChanged.mDirection = lpSpawnLocation->mDirection;
         lChanged.mbIsLeft = lpSpawnLocation->GetType() == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
         lChanged.mbPlayCraneDropAudio = true;
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lChanged), KI_ACTION_CAR_SELECTION_CHANGED, sizeof(lChanged));
+        lpActionQueue->AddGameAction(lChanged);
+
     }
 
     if (!mbInCarModScreen)
@@ -1276,10 +1276,10 @@ void CarSelectManager::ForceExitJunkyard(GameStateModuleIO::GameActionQueue* lpA
     UpdateExitState(lpActionQueue);
 
     {
-        const bool lbAbortToOnlineEvent = lbToOnlineEvent;
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lbAbortToOnlineEvent),
-            KI_ACTION_FORCE_EXIT, sizeof(lbAbortToOnlineEvent));
+        GameStateModuleIO::CarSelectAbortAction lAbortAction;   // DWARF cpp:544
+        lAbortAction.mbToOnlineEvent = lbToOnlineEvent;
+        lpActionQueue->AddGameAction(lAbortAction);
+
     }
 
     mbCarUnlockEnabled = true;   // X360 *(this+117) = 1 == byte 0x75 == mbCarUnlockEnabled (re-enable car unlock on exit)

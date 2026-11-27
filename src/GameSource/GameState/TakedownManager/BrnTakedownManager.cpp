@@ -14,7 +14,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h" // BrnPhysics::Vehicle::RaceCarState (+ the embedded Slam/ShuntEffect)
 #include "GameSource/World/BrnWorldSharedConstants.h"                   // BrnWorld::E_CAR_CONTROL_*
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // the active race-car accessors
-
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"   // CgsCore::KF_MPH_TO_MPS (ARTIST .data 0x82F31928)
 // ============================================================================================
 // BrnGameState::TakedownManager -- lifecycle / timers / camera / player reset.
 //
@@ -41,7 +41,7 @@ namespace BrnGameState
         // flt_82F31928 -- the console's mph -> m/s factor, loaded by every speed compare in this TU
         // (UpdatePlayerResetStatus @0x82388B90, ProcessQueuedTakedowns @0x82399BE0, the static
         // initialisers below). TrafficPhysics.h carries the same word as its own KF_MPH_TO_MPS.
-        const f32 KF_MPH_TO_METRES_PER_SECOND = 0.447039992f;
+        // KF_MPH_TO_METRES_PER_SECOND is CgsCore::KF_MPH_TO_MPS (DWARF CgsCoreConstants.h:58; ARTIST .data 0x82F31928, loaded by 97 functions).
     }
 
     // StartTakedownCamera @0x82388EB4..EB8: PlayerInvulnerable time = camera time + flt_8202AEB8 (2.5)
@@ -64,9 +64,9 @@ namespace BrnGameState
     //   0x82C4D7A0  flt_82FADF10 = flt_82F31928 * flt_82029F30 (30.0)   read @0x82388C90
     //   0x82C4D7C0  flt_82FADF14 = flt_82F31928 * flt_82004D0C (40.0)   read @0x82388C78
     //   0x82C4D7E0  flt_82FAE05C = flt_82F31928 * flt_82013FBC (140.0)  read @0x82388D90
-    const f32 TakedownManager::KF_SPEED_DROP_FOR_PLAYER_RESET           = 30.0f  * KF_MPH_TO_METRES_PER_SECOND;   // 0x82FADF10
-    const f32 TakedownManager::KF_MIN_SPEED_FOR_PLAYER_RESET            = 40.0f  * KF_MPH_TO_METRES_PER_SECOND;   // 0x82FADF14
-    const f32 TakedownManager::KF_MAX_SPEED_FOR_PLAYER_RESET            = 140.0f * KF_MPH_TO_METRES_PER_SECOND;   // 0x82FAE05C
+    const f32 TakedownManager::KF_SPEED_DROP_FOR_PLAYER_RESET           = 30.0f  * CgsCore::KF_MPH_TO_MPS;   // 0x82FADF10
+    const f32 TakedownManager::KF_MIN_SPEED_FOR_PLAYER_RESET            = 40.0f  * CgsCore::KF_MPH_TO_MPS;   // 0x82FADF14
+    const f32 TakedownManager::KF_MAX_SPEED_FOR_PLAYER_RESET            = 140.0f * CgsCore::KF_MPH_TO_MPS;   // 0x82FAE05C
     // UpdatePlayerResetStatus @0x82388CD4: the tilt angle vs flt_82CDBDC0 (0x3F490FDB == pi/4)
     const f32 TakedownManager::KF_MIN_ANGLE_FOR_PLAYER_RESET            = 0.785398185f; // 0x82CDBDC0
     // UpdatePlayerResetStatus @0x82388D00: |angular velocity| vs flt_8202AEB8 (2.5)
@@ -81,7 +81,7 @@ namespace BrnGameState
     const f32 TakedownManager::KF_INVALID_TIME                          = -1.0f;     // 0x820037C8
     // ProcessQueuedTakedowns @0x82399BE0 reads flt_82FADECC; static initialiser @0x82C4D800:
     //   flt_82FADECC = flt_82F31928 * flt_820138DC (50.0)
-    const f32 TakedownManager::KF_MIN_TAKEDOWN_SPEED                    = 50.0f  * KF_MPH_TO_METRES_PER_SECOND;   // 0x82FADECC
+    const f32 TakedownManager::KF_MIN_TAKEDOWN_SPEED                    = 50.0f  * CgsCore::KF_MPH_TO_MPS;   // 0x82FADECC
     // KF_FRONT_CONTACT_TOLERANCE (DWARF :227): NO X360 READER anywhere in the 22 bodies. Declared-only.
 
     // -----------------------------------------------------------------------------------------
@@ -378,7 +378,7 @@ namespace BrnGameState
         const f32 lfTiltAngle = static_cast<f32>(std::asin(static_cast<double>(lfSign * rw::math::vpu::Magnitude(lCrossProduct))));
 
         // 0x82388B64/0x82388B9C: mfSpeedMPH (+972) in m/s
-        const f32 lfPlayerSpeed = lpPlayerState->mfSpeedMPH * KF_MPH_TO_METRES_PER_SECOND;
+        const f32 lfPlayerSpeed = lpPlayerState->mfSpeedMPH * CgsCore::KF_MPH_TO_MPS;
 
         // 0x82388C04..0x82388C64: count the wheels off the ground (WheelLite+40 == mRoadContact.mbIsOnGround)
         s32 liWheelsOffGround = 0;
@@ -1020,7 +1020,7 @@ namespace BrnGameState
                 const RaceCarState* lpRaceCarState = lpActiveCarInterface->GetRaceCarState(GlobalIndex(leRaceCarIndex));
                 if (!lpRaceCarState->mbCrashing)
                 {
-                    if (lpRaceCarState->mfSpeedMPH * KF_MPH_TO_METRES_PER_SECOND > KF_MIN_TAKEDOWN_SPEED ||
+                    if (lpRaceCarState->mfSpeedMPH * CgsCore::KF_MPH_TO_MPS > KF_MIN_TAKEDOWN_SPEED ||
                         mpModeManager->IsOnlineGameMode())
                     {
                         ProcessTakedownEvent(lpInput, lpActiveCarInterface, lpOutput, &lpRaceCarData->mPendingTakedownEvent);
@@ -1081,7 +1081,7 @@ namespace BrnGameState
             if (leAggressorActiveRaceCarIndex == LocalIndex(lpActiveCarInterface->GetPlayerActiveRaceCarIndex()))
             {
                 StartTakedownCamera(lpOutput->GetGameActionQueue(), leVictimActiveRaceCarIndex, lpTakedownEvent->meType);
-                mfPlayerSpeedAtTakedown = lpActiveCarInterface->GetPlayerRaceCarState()->mfSpeedMPH * KF_MPH_TO_METRES_PER_SECOND;
+                mfPlayerSpeedAtTakedown = lpActiveCarInterface->GetPlayerRaceCarState()->mfSpeedMPH * CgsCore::KF_MPH_TO_MPS;
             }
         }
 

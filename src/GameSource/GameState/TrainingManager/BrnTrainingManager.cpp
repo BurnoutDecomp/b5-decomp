@@ -57,14 +57,14 @@ namespace BrnGameState
 {
 namespace
 {
-    // The GameActionQueue concrete type (forward-declared in BrnGameStateModuleIO.h) is the
-    // OutputBuffer's variable-size event queue. The X360 invokes
-    // VariableEventQueue<13312,16>::AddEvent straight on the GameActionQueue pointer the manager
-    // is handed; bridge the opaque queue type to the concrete VEQ (same pattern as MugshotManager).
-    inline CgsModule::VariableEventQueue<13312, 16>* AsVeq(GameStateModuleIO::GameActionQueue* lpQueue)
-    {
-        return reinterpret_cast<CgsModule::VariableEventQueue<13312, 16>*>(lpQueue);
-    }
+    // (invented queue cast retired: GameStateModuleIO::GameActionQueue is DWARF BaseGameActionQueue<13312>)
+
+
+
+
+
+
+
 
     // ---- GameAction payload type ids the X360 passes to AddEvent (the liType immediates) ----
     // These select which GameAction the gui/sound layer runs when it drains the queue. The records
@@ -201,7 +201,7 @@ void TrainingManager::ForceUnpause(GameStateModuleIO::GameActionQueue* lpGameAct
     if (DoesTrainingPauseGame(meCurrentTrainingType))
     {
         TrainingFlagGameAction lAction;
-        AsVeq(lpGameActionQueue)->AddEvent(
+        lpGameActionQueue->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAction),
             KI_GAME_ACTION_TRAINING_UNPAUSE, (s32)sizeof(TrainingFlagGameAction));
     }
@@ -227,7 +227,7 @@ void TrainingManager::TriggerAnyFollowOnTrainingTips(
 
         TrainingFlagGameAction lShowSatNavAction;
         lShowSatNavAction.mbFlag = 1;
-        AsVeq(lpGameActionQueue)->AddEvent(
+        lpGameActionQueue->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lShowSatNavAction),
             KI_GAME_ACTION_SHOW_SATNAV, (s32)sizeof(TrainingFlagGameAction));
     }
@@ -249,7 +249,7 @@ void TrainingManager::TriggerAnyFollowOnTrainingTips(
                 mpGameStateModule->RequestPause(KI_PAUSE_REASON_TRAINING, lpGameActionQueue, 0, 0);
 
                 TrainingFlagGameAction lAction;
-                AsVeq(lpGameActionQueue)->AddEvent(
+                lpGameActionQueue->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lAction),
                     KI_GAME_ACTION_TRAINING_PAUSE, (s32)sizeof(TrainingFlagGameAction));
             }
@@ -282,7 +282,7 @@ void TrainingManager::SendTrainingTickerMessage(GameStateModuleIO::GameActionQue
 {
     // The payload is the training type itself (4 bytes), not a flag record.
     BrnProgression::ETrainingType leTrainingType = meCurrentTrainingType;
-    AsVeq(lpGameActionQueue)->AddEvent(
+    lpGameActionQueue->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&leTrainingType),
         KI_GAME_ACTION_TRAINING_TICKER, (s32)sizeof(leTrainingType));
 
@@ -430,7 +430,7 @@ void TrainingManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInp
                     if (DoesTrainingPauseGame(meCurrentTrainingType))
                     {
                         TrainingFlagGameAction lAction;   // 1 byte, console-uninitialised
-                        AsVeq(lpGameActionQueue)->AddEvent(
+                        lpGameActionQueue->AddEvent(
                             reinterpret_cast<const CgsModule::Event*>(&lAction),
                             KI_GAME_ACTION_TRAINING_PAUSE, (s32)sizeof(TrainingFlagGameAction));
                     }
@@ -463,7 +463,7 @@ void TrainingManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInp
                     !DoesTrainingPauseGame(meCurrentTrainingType))
                 {
                     TrainingFlagGameAction lAction;
-                    AsVeq(lpGameActionQueue)->AddEvent(
+                    lpGameActionQueue->AddEvent(
                         reinterpret_cast<const CgsModule::Event*>(&lAction),
                         KI_GAME_ACTION_TRAINING_UNPAUSE, (s32)sizeof(TrainingFlagGameAction));
                 }
@@ -474,7 +474,7 @@ void TrainingManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInp
                     u8 lacDriveThru[48];
                     std::memset(lacDriveThru, 0, sizeof(lacDriveThru));
                     *reinterpret_cast<s32*>(lacDriveThru) = 1;   // v28[0] = 1 (v29/byte 44 = 0)
-                    AsVeq(lpGameActionQueue)->AddEvent(
+                    lpGameActionQueue->AddEvent(
                         reinterpret_cast<const CgsModule::Event*>(lacDriveThru),
                         KI_GAME_ACTION_JUNKYARD_DRIVE_THRU, 48);
                 }
@@ -493,7 +493,7 @@ void TrainingManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInp
             {
                 u8 lacDriveThru[48];
                 std::memset(lacDriveThru, 0, sizeof(lacDriveThru));   // v28[0] = 0, v29 = 0
-                AsVeq(lpGameActionQueue)->AddEvent(
+                lpGameActionQueue->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(lacDriveThru),
                     KI_GAME_ACTION_JUNKYARD_DRIVE_THRU, 48);
 

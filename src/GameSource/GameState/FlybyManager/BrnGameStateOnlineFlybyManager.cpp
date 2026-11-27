@@ -21,9 +21,9 @@
 // "lpRelationship" assert.
 // ===========================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-    "../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp";
+// (the file-path array is the CGS_ARTIST_FILE macro above: one definition per path)
+
+
 
 namespace BrnGameState
 {
@@ -246,7 +246,7 @@ const CgsNetwork::PlayerName* OnlineFlybyManager::GetRivalName(BrnNetwork::Netwo
 {
     CGS_ASSERT_AT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
         "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            KAC_ARTIST_ASSERT_FILE, 715 /* ARTIST 0x82358224 */);
+            CGS_ARTIST_FILE, 715 /* ARTIST 0x82358224 */);
 
 
     return &mPlayerInputInterface.GetPlayerStatusDataByPlayerID(lPlayerID)->mPlayerName;
@@ -404,7 +404,7 @@ s32 OnlineFlybyManager::GetOngoingStat(FlybyManager::RivalRating* lpRating,
                                        EOngoingRivalryCompare leStatType, EMessageStyle leStyle)
 {
     CGS_ASSERT_AT(lpRating,
-        "lpRating", KAC_ARTIST_ASSERT_FILE, 983 /* ARTIST 0x823582D4 */);
+        "lpRating", CGS_ARTIST_FILE, 983 /* ARTIST 0x823582D4 */);
 
     const BrnNetwork::LiveRevengeRelationship* lpRelationship =
         GetLiveRevengeRelationship(lpRating->mPlayerID);
@@ -414,7 +414,7 @@ s32 OnlineFlybyManager::GetOngoingStat(FlybyManager::RivalRating* lpRating,
                                               : &lpRelationship->GetOverallStats()->mPlayerStats;
 
     CGS_ASSERT_AT(lpCommonRelationship,
-        "lpCommonRelationship", KAC_ARTIST_ASSERT_FILE, 996 /* ARTIST 0x82358344 */);
+        "lpCommonRelationship", CGS_ARTIST_FILE, 996 /* ARTIST 0x82358344 */);
 
     switch (leStatType)
     {
@@ -432,7 +432,7 @@ s32 OnlineFlybyManager::GetOngoingStat(FlybyManager::RivalRating* lpRating,
         return lpCommonRelationship->miPaybacksDealt - lpCommonRelationship->miPaybacksScored;
     default:
         CGS_FAIL_AT(
-            "Unknow stat type", KAC_ARTIST_ASSERT_FILE, 1041 /* ARTIST 0x823583F4 */);
+            "Unknow stat type", CGS_ARTIST_FILE, 1041 /* ARTIST 0x823583F4 */);
         return 0;
     }
 }
@@ -500,7 +500,7 @@ s32 OnlineFlybyManager::GetNoRivalryStat(FlybyManager::RivalRating* lpRating,
         return GetPlayerStats(lPlayerID)->GetStatAsInt(BrnNetwork::NetworkPlayerStats::E_STATS_VALUE_WINS);
     default:
         CGS_FAIL_AT(
-            "Unknown stat type", KAC_ARTIST_ASSERT_FILE, 1198 /* ARTIST 0x823646B0 */);
+            "Unknown stat type", CGS_ARTIST_FILE, 1198 /* ARTIST 0x823646B0 */);
         return 0;
     }
 }
