@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Network/CgsNetworkUtils.h"   // CgsNetwork::UsernameCompare (IsEqualTo)
 
 // Shared home for CgsNetwork::PlayerName at the X360-authoritative width.
 //
@@ -32,6 +33,11 @@ namespace CgsNetwork
 
         // DWARF CgsPlayerName.h:49; LegacySrc CgsPlayerName.h:98 defines it inline in the header.
         void Clear() { macName[0] = '\0'; }
+
+        // DWARF CgsPlayerName.h:54; LegacySrc CgsPlayerName.h:125 defines it inline in the header
+        // (ARTIST inlines it: FriendsListComponent::ShowSpecificFriend 0x8242BC3C calls
+        // LobbyNameCmp(macName, lRhs.macName) and tests the result with 0).
+        bool IsEqualTo(const PlayerName& lRhs) const { return ( UsernameCompare( macName, lRhs.macName ) == 0 ); }
 
         // DWARF CgsPlayerName.h:58; LegacySrc CgsPlayerName.h:139 defines it inline in the header.
         bool IsEmpty() const { return ( macName[0] == '\0' ); }
