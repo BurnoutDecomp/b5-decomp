@@ -1350,16 +1350,16 @@ namespace BrnGui
                 GuiEventNetworkConnect lConnectEvent;
                 if (meSignInType == E_SIGN_IN_TYPE_FULL)
                 {
-                    lConnectEvent.miConnectType = BrnNetwork::LoginManagerBase::E_SIGN_IN_TYPE_NORMAL;
+                    lConnectEvent.meSignInType = BrnNetwork::LoginManagerBase::E_SIGN_IN_TYPE_NORMAL;
                 }
                 else if (meSignInType == E_SIGN_IN_TYPE_NO_TITLE)
                 {
-                    lConnectEvent.miConnectType = BrnNetwork::LoginManagerBase::E_SIGN_IN_TYPE_FREE_BURN_LOBBY;
+                    lConnectEvent.meSignInType = BrnNetwork::LoginManagerBase::E_SIGN_IN_TYPE_FREE_BURN_LOBBY;
                 }
                 else
                 {
                     CGS_FAIL_AT("Unknown sign in type", CGS_ARTIST_FILE, 794);
-                    lConnectEvent.miConnectType = BrnNetwork::LoginManagerBase::E_SIGN_IN_TYPE_NORMAL;
+                    lConnectEvent.meSignInType = BrnNetwork::LoginManagerBase::E_SIGN_IN_TYPE_NORMAL;
                 }
                 mpStateInterface->OutputGuiEvent(lConnectEvent);
             }

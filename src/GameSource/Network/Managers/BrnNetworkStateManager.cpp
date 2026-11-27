@@ -1350,7 +1350,7 @@ namespace BrnNetwork
         // FLAG: the console logs "HandleConnectEvent() - NOT connected. SignInType=" <type>
         // " Still Signing In=" "true"/"false" "\n" to the same unhomed debug stream here.
 
-        StartLogIn(static_cast<LoginManagerBase::ESignInType>(lpConnectEvent->miConnectType));
+        StartLogIn(lpConnectEvent->meSignInType);
     }
 
     // -----------------------------------------------------------------------------------

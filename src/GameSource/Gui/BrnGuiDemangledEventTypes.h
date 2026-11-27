@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // image-gallery capture date (518)
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // EImageGalleryType (520 / 522)
 #include "SharedClasses/World/BrnWorldRegion.h" // BrnWorld::WorldRegion (518)
+#include "GameSource/Network/Managers/BrnNetworkLoginManagerBase.h" // LoginManagerBase::ESignInType (GuiEventNetworkConnect)
 #include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"   // GuiEventAudioTraxPreview (460)
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"   // GuiPFXHookEvent / ...StopEvent / ...Background... / GuiPFXHookEnumeration (495..501, RECOVERED 2026-09-17)
 #include "GameSource/Gui/Events/BrnGuiEventSetBlackBars.h"
@@ -1104,7 +1105,8 @@ namespace BrnGui
     // only. The posted size is the HOST sizeof, never a console immediate.
     struct GuiEventNetworkConnect : public CgsGui::GuiEvent<272>
     {
-        s32 miConnectType;   // payload +0x00 (no constructor: OutputGuiEvent boxes a copy)
+        // DWARF BrnGuiEventTypeDefs.h:2925 (payload +0x00; no constructor: OutputGuiEvent boxes a copy).
+        BrnNetwork::LoginManagerBase::ESignInType meSignInType;
     };
     struct GuiEventNetworkCustomMatchJoin { u8 maData[4]; s32 GetEventType() const { return 255; } };  // id 255 size 4
     // id 254, record 604 bytes -- HEADERLESS, and deliberately so. MEASURED: the only
